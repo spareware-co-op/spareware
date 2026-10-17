@@ -192,7 +192,7 @@ Everything stays in one repo and one workspace, so a change to the kit is checke
 
 | Decision | Options | Lean |
 | --- | --- | --- |
-| Legal entity | NZ co-operative company; incorporated society; charitable trust | Research first (piece K01) |
+| Legal entity | NZ co-operative company; incorporated society; charitable trust | A federation: a steward society holds the code and name; NZ co-operative company runs the platforms; a local co-op per country ([K01 note](projects/kit/notes/K01-legal-entity.md), in review) |
 | Licence | MPL-2.0 core with Apache-2.0 SDK; Apache-2.0 for all; MIT | MPL-2.0 core, Apache-2.0 SDK |
 | Payment provider | Stripe Connect; local NZ providers | Research first (piece K02) |
 | Phone apps | Web apps installed from the browser; Tauri mobile; native | Research first (piece K04) |
