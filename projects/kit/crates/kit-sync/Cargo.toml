@@ -1,0 +1,10 @@
+[package]
+name = "kit-sync"
+version = "0.0.0"
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+kit-core = { path = "../kit-core" }
+kit-ops = { path = "../kit-ops" }
+kit-store = { path = "../kit-store" }
