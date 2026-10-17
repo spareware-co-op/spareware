@@ -1,0 +1,50 @@
+/* Spareware design tokens: the one shared look for every Spareware app.
+   Read design/DESIGN.md first. An app sets data-app="<name>" on <html> to get its own colour.
+   Text is always ink on light colours; white text appears only on Spareware red. */
+:root {
+  /* Spareware (the co-op) */
+  --spare-red: #C8102E;
+  --spare-red-hover: #A80D26;
+  --spare-red-tint: #FCE9EC;
+
+  /* Neutrals */
+  --ink: #1A1A1A;
+  --ink-2: #595959;
+  --ink-3: #8A8A8A;
+  --page: #FAF8F5;
+  --panel: #FFFFFF;
+  --panel-alt: #F7F6F3;
+  --sink: #F1EFEA;
+  --hairline: #E5E5E3;
+  --rule: #C9C9C9;
+
+  /* States (always paired: strong for borders and icons, tint for backgrounds) */
+  --danger: #B91C1C;  --danger-tint: #FDE8E8;
+  --success: #15803D; --success-tint: #E3F6E8;
+  --info: #1D4ED8;    --info-tint: #E3ECFD;
+
+  /* Type and shape */
+  --font-ui: system-ui, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  --text: 13px;
+  --radius: 3px;
+  --space: 8px;
+
+  /* The current app's colours (default: Spareware itself) */
+  --app: var(--spare-red-tint);
+  --app-strong: var(--spare-red);
+  --app-tint: var(--spare-red-tint);
+}
+
+/* One light colour per app: --app is the fill for its mark, primary buttons and active items
+   (ink text on it), --app-strong is for thin borders and icons, --app-tint for quiet backgrounds. */
+[data-app="arch"]   { --app: #8EC5FF; --app-strong: #1F5FA8; --app-tint: #EAF4FF; }
+[data-app="studio"] { --app: #C4B2FF; --app-strong: #5B3FB8; --app-tint: #F3EFFF; }
+[data-app="social"] { --app: #FFB27A; --app-strong: #9E4A14; --app-tint: #FFF1E6; }
+[data-app="ride"]   { --app: #7FD8CF; --app-strong: #13756B; --app-tint: #E8F8F6; }
+[data-app="food"]   { --app: #A9DE8A; --app-strong: #3E7C1F; --app-tint: #EFF9E8; }
+[data-app="stay"]   { --app: #80D4F0; --app-strong: #11708F; --app-tint: #E7F7FD; }
+[data-app="home"]   { --app: #E8C99A; --app-strong: #8A5A1C; --app-tint: #FBF4EA; }
+[data-app="rent"]   { --app: #F2B8E0; --app-strong: #94306F; --app-tint: #FCEEF8; }
+[data-app="work"]   { --app: #B8C4D6; --app-strong: #3D4F6B; --app-tint: #EEF1F6; }
+[data-app="market"] { --app: #D8E36A; --app-strong: #66700F; --app-tint: #F7F9DF; }

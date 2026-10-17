@@ -107,6 +107,7 @@ Every line of Spareware is our own work or used under a licence that allows it. 
 - Measured, not assumed: tests and benchmarks with every change; a slower change does not merge.
 - Every change is an operation: one path for the interface, AI, plugins, undo and sync.
 - Open formats: our own files are documented and readable without our apps.
+- One look: every app follows the [design guide](design/DESIGN.md), Spareware red for the co-op and its own light colour per app.
 
 ## Licence
 
