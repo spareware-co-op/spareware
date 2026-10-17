@@ -14,7 +14,7 @@ Every program sits on one shared kit, so each new app gets accounts, payments, A
 flowchart TB
   subgraph PROGRAMS["Programs"]
     direction LR
-    DESIGN["Design tools<br/>Spare Arch"]
+    DESIGN["Design tools<br/>Spare Arch, Spare Studio"]
     MOVE["Getting around and eating<br/>Spare Ride, Spare Food"]
     LIVE["Places to live and stay<br/>Spare Stay, Spare Home, Spare Rent"]
     WORKS["Work and trade<br/>Spare Work, Spare Market"]
@@ -31,6 +31,7 @@ flowchart TB
 | --- | --- | --- | --- |
 | Shared kit | The parts every platform rebuilds | Mapping | [Map](ARCHITECTURE.md) · [Work board](projects/kit/STATUS.md) |
 | Spare Arch | Revit, and the add-ins people buy for it | Mapping | [Map](projects/spare-arch/ARCHITECTURE.md) · [Work board](projects/spare-arch/STATUS.md) |
+| Spare Studio (working name) | Adobe's apps: Photoshop, Illustrator, InDesign, Premiere, After Effects, Lightroom, Acrobat and more | Mapping | [Map](projects/spare-studio/ARCHITECTURE.md) · [Work board](projects/spare-studio/STATUS.md) |
 | Spare Ride | Uber | Idea | Not mapped yet |
 | Spare Food | Uber Eats, DoorDash | Idea | Not mapped yet |
 | Spare Stay | Airbnb, Booking.com | Idea | Not mapped yet |
