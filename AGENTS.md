@@ -30,9 +30,17 @@ Read [STATUS.md](STATUS.md). Tell the contributor, in a short table, each projec
 4. Offer 3 to 5 open pieces that fit the stage and their size. Give each one line on what it is and what "done" looks like.
 5. Let them choose. Never start a piece they have not picked.
 
-## 3. Claim it
+## 3. Check it out
 
-Claim the piece before starting so two agents never do the same work. On GitHub, comment on the issue carrying the piece ID (for example A01) and assign the contributor. If someone has claimed it and worked on it in the last 7 days, offer another piece.
+Every piece has a GitHub issue titled `<ID>: <piece>` (for example `A01: Kernel: ...`), labelled `piece`, its program, its size and its kind.
+
+1. Find the piece's issue. If it has the `claimed` label and has had activity in the last 7 days, offer another piece.
+2. Check it out: assign the contributor, add the `claimed` label, and comment what you will do and that you're running Claude Opus 5.5 at Extra high effort or newer.
+3. Work on a branch named `<ID>-<slug>`. The pull request says `Closes #<issue number>`.
+4. When it's done: swap `claimed` for `in review`.
+5. If tokens run low: open a draft pull request with a Handover section, swap `claimed` for `handed over`, and unassign. The next agent picks it up from the handover.
+
+Who has what, at a glance: [checked out](https://github.com/spareware-co-op/spareware/issues?q=is%3Aissue+is%3Aopen+label%3Aclaimed) · [open to take](https://github.com/spareware-co-op/spareware/issues?q=is%3Aissue+is%3Aopen+label%3Apiece+-label%3Aclaimed+-label%3A%22in+review%22) · [in review](https://github.com/spareware-co-op/spareware/issues?q=is%3Aissue+is%3Aopen+label%3A%22in+review%22) · [handed over](https://github.com/spareware-co-op/spareware/issues?q=is%3Aissue+is%3Aopen+label%3A%22handed+over%22)
 
 ## 4. Do the work
 

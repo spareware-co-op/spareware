@@ -2,6 +2,8 @@
 
 Updated 2026-10-18. How the programs fit together: [ARCHITECTURE.md](ARCHITECTURE.md).
 
+Every piece is a GitHub issue. See who's working on what: [checked out](https://github.com/spareware-co-op/spareware/issues?q=is%3Aissue+is%3Aopen+label%3Aclaimed) · [open to take](https://github.com/spareware-co-op/spareware/issues?q=is%3Aissue+is%3Aopen+label%3Apiece+-label%3Aclaimed+-label%3A%22in+review%22) · [in review](https://github.com/spareware-co-op/spareware/issues?q=is%3Aissue+is%3Aopen+label%3A%22in+review%22) · [handed over](https://github.com/spareware-co-op/spareware/issues?q=is%3Aissue+is%3Aopen+label%3A%22handed+over%22)
+
 | Project | Stage | Open pieces | Folder |
 | --- | --- | --- | --- |
 | Shared kit | Mapping | 6 | [projects/kit](projects/kit/STATUS.md) |
