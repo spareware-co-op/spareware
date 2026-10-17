@@ -10,7 +10,7 @@ flowchart TB
     direction LR
     subgraph Design[Design tools]
       ARCH[Spare Arch<br/>Revit replacement]
-      CREATIVE[Creative tools<br/>linked partner]
+      CREATIVE[Spare Studio<br/>Adobe replacement]
     end
     subgraph Markets[Marketplaces]
       RIDE[Spare Ride]
@@ -43,10 +43,10 @@ flowchart TB
 
 | Family | Products | What they need most |
 | --- | --- | --- |
-| Design tools | Spare Arch; creative tools through a linked partner such as [ArtCraft](https://github.com/storytold) | Heavy local computing, a geometry kernel, desktop and browser, huge files, drawings |
+| Design tools | Spare Arch; [Spare Studio](projects/spare-studio/ARCHITECTURE.md) (working name), ideally with [ArtCraft](https://github.com/storytold) under the umbrella | Heavy local computing, a geometry kernel or GPU image pipeline, desktop and browser, huge files, drawings and print |
 | Marketplaces | Spare Ride, Food, Stay, Home, Rent, Work, Market | Two-sided matching, payments, trust and safety, phones, real-time location, each industry's rules |
 
-Design tools lean on the Rust core pattern mapped in [Spare Arch's ARCHITECTURE.md](projects/spare-arch/ARCHITECTURE.md). Marketplaces lean on the shared kit. Both use the same command layer, plugins, sync and AI access.
+Design tools lean on the Rust core pattern mapped in [Spare Arch's ARCHITECTURE.md](projects/spare-arch/ARCHITECTURE.md), and share its renderer, 2D drawing engine and PDF output with Spare Studio. Marketplaces lean on the shared kit. Both use the same command layer, plugins, sync and AI access.
 
 ## Rules every program follows
 

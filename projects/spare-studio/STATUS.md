@@ -1,0 +1,18 @@
+# Spare Studio status
+
+**Stage: Mapping.** Working name. Map: [ARCHITECTURE.md](ARCHITECTURE.md). No code yet. An owner is inviting ArtCraft's author to come under the Spareware umbrella; the answer shapes the Design stage.
+
+## Work board
+
+Sizes: Small fits a little spare, Medium a fair amount, Large a lot. Status: Open, Claimed, In review, Handed over, Done.
+
+| ID | Piece | Kind | Size | Done when | Status |
+| --- | --- | --- | --- | --- | --- |
+| S01 | ArtCraft's architecture compared with ours | Research note | Medium | How their apps are built (crates, rendering, document model, licences), what could be shared, from reading their source | Open |
+| S02 | Studio document model: layers and non-destructive edits as operations | Design note | Large | One model that photo, vector, layout and video can all use, with how undo, history and sync work | Open |
+| S03 | Colour management: ICC and OpenColorIO | Research note | Medium | How open tools do it, licences, and a recommended approach for print, photo and video | Open |
+| S04 | Video and audio: decoding, encoding and codec licensing | Research note | Medium | Options compared (FFmpeg linked separately, platform codecs, pure-Rust decoders) with licence and patent risks | Open |
+| S05 | Text engine: fonts, shaping and page layout | Research note | Medium | Recommended open libraries with licences, and what Spare Layout needs on top | Open |
+| S06 | File formats: what we can legally read and write | Research note | Small | Each Adobe format checked against a published specification, with links | Open |
+| S07 | AI tools policy | Decision note | Small | Options for models, cost and consent; an owner decides | Open |
+| S08 | First app to build | Decision note | Small | Spare Photo, PDF and Draw ranked on demand, effort and what ArtCraft already covers | Open |
