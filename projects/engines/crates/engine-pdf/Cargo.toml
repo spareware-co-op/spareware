@@ -1,0 +1,10 @@
+[package]
+name = "engine-pdf"
+version = "0.0.0"
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+kit-core = { path = "../../../kit/crates/kit-core" }
+engine-draw2d = { path = "../engine-draw2d" }
+engine-text = { path = "../engine-text" }

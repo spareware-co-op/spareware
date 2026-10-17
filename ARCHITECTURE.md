@@ -21,6 +21,9 @@ flowchart TB
       WORK[Spare Work]
       MARKET[Spare Market]
     end
+    subgraph Social[Sharing and talking]
+      SOCIALAPP[Spare Social<br/>video, photos, posts, groups]
+    end
   end
   API[One command and query API per app<br/>every change is an operation; AI, plugins and people use the same path]
   subgraph Kit[Shared kit]
@@ -39,12 +42,13 @@ flowchart TB
   Products --> API --> Kit --> HOST
 ```
 
-## Two families of product
+## Three families of product
 
 | Family | Products | What they need most |
 | --- | --- | --- |
 | Design tools | Spare Arch; [Spare Studio](projects/spare-studio/ARCHITECTURE.md) (working name), ideally with [ArtCraft](https://github.com/storytold) under the umbrella | Heavy local computing, a geometry kernel or GPU image pipeline, desktop and browser, huge files, drawings and print |
 | Marketplaces | Spare Ride, Food, Stay, Home, Rent, Work, Market | Two-sided matching, payments, trust and safety, phones, real-time location, each industry's rules |
+| Social | [Spare Social](projects/spare-social/ARCHITECTURE.md) (working name) | Video storage and delivery at cost, feeds people choose, moderation that removes only what the law requires, open social protocols |
 
 Design tools lean on the Rust core pattern mapped in [Spare Arch's ARCHITECTURE.md](projects/spare-arch/ARCHITECTURE.md), and share its renderer, 2D drawing engine and PDF output with Spare Studio. Marketplaces lean on the shared kit. Both use the same command layer, plugins, sync and AI access.
 
@@ -104,9 +108,36 @@ Software is the easy part. Each marketplace has rules that must be researched be
 | `AGENTS.md`, `CLAUDE.md` | What a contributor's agent follows |
 | `ARCHITECTURE.md` | This map: how all the programs fit |
 | `STATUS.md` | Every project's stage and open work |
-| `projects/<name>/` | Each project's `STATUS.md` (work board), `ARCHITECTURE.md` and `notes/` |
+| `Cargo.toml` | One Rust workspace for every program |
+| `projects/kit/` | The shared kit: `crates/` compiled into every app, `services/` that run once for all apps |
+| `projects/engines/` | Shared engines for the design tools: renderer, 2D drawing, text, PDF, video and audio |
+| `projects/spare-<name>/` | One folder per program: `README.md`, `ARCHITECTURE.md`, `STATUS.md`, `notes/`, `crates/`, `app/` |
+| `projects/_template/` | The starting folder copied for each new program |
 
-Everything lives in one repo while the projects are small. A project moves to its own repo once it reaches the Build stage and needs its own releases.
+```text
+spareware/
+├─ Cargo.toml                 one workspace for all Rust code
+├─ projects/
+│  ├─ kit/
+│  │  ├─ crates/              kit-core, kit-ops, kit-store, kit-sync, kit-plugin, kit-mcp
+│  │  └─ services/            accounts, payments, matching, maps, messaging, trust, voting, ledger
+│  ├─ engines/crates/         engine-render, engine-draw2d, engine-text, engine-pdf, engine-media
+│  ├─ spare-arch/
+│  │  ├─ crates/              arch-model, arch-kernel, arch-solver, arch-regen, arch-elements,
+│  │  │                       arch-families, arch-views, arch-clash, arch-versions,
+│  │  │                       arch-interop, arch-api, arch-cli
+│  │  ├─ app/                 interface and desktop shell
+│  │  └─ notes/
+│  ├─ spare-studio/           crates and app added at its Design stage
+│  ├─ spare-ride/ … spare-market/
+│  └─ _template/
+```
+
+**Layering rule:** a program depends on `projects/kit` and `projects/engines`, never on another program. Anything two programs both need moves down into the kit or an engine. The kit and engines never depend on a program. This is what lets the co-op add program after program without them tangling.
+
+Every crate exists now as an empty library describing its job, the part of the map it implements, and the piece of work it waits on. Code starts in a crate only once its program reaches the Design stage.
+
+Everything stays in one repo and one workspace, so a change to the kit is checked against every program at once. A program only moves out if it needs its own release cycle, and then uses the kit as published crates.
 
 ## Open decisions for the whole co-op
 
