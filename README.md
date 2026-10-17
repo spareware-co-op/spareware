@@ -16,34 +16,45 @@ Every program sits on one shared kit, so each new app gets accounts, payments, A
 flowchart TB
   subgraph TRADE["`**Work and trade**`"]
     direction LR
-    WORK["Spare Work<br/>trades and freelance"]
-    MARKET["Spare Market<br/>buy and sell"]
+    WORK["`**Spare Work**
+*trades and freelance*`"]
+    MARKET["`**Spare Market**
+*buy and sell*`"]
   end
   subgraph LIVE["`**Places to live and stay**`"]
     direction LR
-    STAY["Spare Stay<br/>replaces Airbnb"]
-    HOME["Spare Home<br/>selling a home"]
-    RENT["Spare Rent<br/>renting a home"]
+    STAY["`**Spare Stay**
+*replaces Airbnb*`"]
+    HOME["`**Spare Home**
+*selling a home*`"]
+    RENT["`**Spare Rent**
+*renting a home*`"]
   end
   subgraph MOVE["`**Getting around and eating**`"]
     direction LR
-    RIDE["Spare Ride<br/>replaces Uber"]
-    FOOD["Spare Food<br/>replaces food delivery apps"]
+    RIDE["`**Spare Ride**
+*replaces Uber*`"]
+    FOOD["`**Spare Food**
+*replaces food delivery apps*`"]
   end
   subgraph DESIGN["`**Design tools**`"]
     direction LR
-    ARCH["Spare Arch<br/>replaces Revit"]
-    STUDIO["Spare Studio<br/>replaces Adobe"]
+    ARCH["`**Spare Arch**
+*replaces Revit*`"]
+    STUDIO["`**Spare Studio**
+*replaces Adobe*`"]
   end
   subgraph SHARE["`**Sharing and talking**`"]
     direction LR
-    SOCIAL["Spare Social<br/>replaces TikTok, YouTube,<br/>Instagram, Facebook"]
+    SOCIAL["`**Spare Social**
+*replaces TikTok, YouTube, Instagram, Facebook*`"]
   end
-  CMD["One command layer per app<br/>people, AI agents and add-ins all use the same path"]
+  CMD["`**One command layer per app**
+*people, AI agents and add-ins all use the same path*`"]
   KIT["`**Shared kit**
-  accounts, payments, matching, maps, messaging,
-  ratings, member voting, open cost ledger, sync, plugins`"]
-  RUN["Servers run at cost, and any member group can host its own"]
+*accounts, payments, matching, maps, messaging, ratings, member voting, open cost ledger, sync, plugins*`"]
+  RUN["`**Servers run at cost**
+*any member group can host its own*`"]
   SHARE --> CMD
   TRADE --> CMD
   LIVE --> CMD

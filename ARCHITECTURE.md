@@ -9,8 +9,10 @@ flowchart TB
   subgraph Products
     direction LR
     subgraph Design[Design tools]
-      ARCH[Spare Arch<br/>Revit replacement]
-      CREATIVE[Spare Studio<br/>Adobe replacement]
+      ARCH["`**Spare Arch**
+*Revit replacement*`"]
+      CREATIVE["`**Spare Studio**
+*Adobe replacement*`"]
     end
     subgraph Markets[Marketplaces]
       RIDE[Spare Ride]
@@ -22,10 +24,12 @@ flowchart TB
       MARKET[Spare Market]
     end
     subgraph Social[Sharing and talking]
-      SOCIALAPP[Spare Social<br/>video, photos, posts, groups]
+      SOCIALAPP["`**Spare Social**
+*video, photos, posts, groups*`"]
     end
   end
-  API[One command and query API per app<br/>every change is an operation; AI, plugins and people use the same path]
+  API["`**One command and query API per app**
+*every change is an operation; AI, plugins and people use the same path*`"]
   subgraph Kit[Shared kit]
     ID[Accounts and ID checks]
     PAY[Payments and payouts]
