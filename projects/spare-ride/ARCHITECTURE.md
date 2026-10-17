@@ -55,10 +55,27 @@ Accounts and ID checks (driver licence and vehicle checks), payments, matching a
 
 **Discuss:** recording of trips; women-driver options.
 
+## What it's up against and the rules (researched 2026-10-18)
+
+Not legal advice. Items marked *unverified* need checking before anyone relies on them.
+
+| Topic | Finding | Source |
+| --- | --- | --- |
+| Uber's cut | Uber's NZ driver guide illustrates a 28% service fee on the fare (incl. GST), plus a separate rider fee; the current real rate is *unverified* | [Uber NZ](https://www.uber.com/nz/en/blog/understanding-earnings-post-1-april-2024/) |
+| Platform licence | Anyone running a driver-passenger app needs a small passenger service licence; NZTA checks the people in control are fit and proper; a NZ-resident representative is required | [NZTA](https://nzta.govt.nz/commercial-driving/transport-service-licences/small-passenger-service/) |
+| Drivers | A P endorsement (full licence held 2 years, medical, fit and proper) and a vehicle with a Certificate of Fitness | [Consumer Protection](https://consumerprotection.govt.nz/help-product-service/cars/taxis-and-other-ride-share-services) |
+| Employee or contractor | The Supreme Court held Uber drivers are employees (2025 NZSC 162). The Employment Relations Amendment Act 2026 adds a five-part gateway test for contractors; whether app drivers pass it is *unverified* | [Simpson Grierson](https://www.simpsongrierson.com/insights-news/legal-updates/from-rideshare-to-rights-the-supreme-courts-uber-decision), [Lane Neave](https://www.laneneave.co.nz/news-events/major-reform-to-employment-law-the-employment-relations-amendment-act-2026/) |
+| GST | Ride-sharing is a "listed service": the platform collects 15% GST | [IRD](https://www.ird.govt.nz/sharing-economy/online-marketplaces/gst-on-listed-services/gst-obligations-for-marketplaces) |
+| Learn from | The Drivers Cooperative (New York, Denver) is operating; Namma Yatri (India) runs zero-commission and its code is AGPL, so we learn from it but never copy it | [Drivers Cooperative](https://drivers.coop/), [Namma Yatri](https://github.com/nammayatri/nammayatri) |
+| Hardest problems | Drivers' employment status; enough riders and drivers at once; insurance and ACC (*unverified*) | |
+
+**What this changes:** the co-op itself needs the small passenger service licence, and the drivers' status is a first-order decision: drivers as worker-members employed by the co-op, or independent contractors meeting the gateway test. Added to the open decisions.
+
 ## Open decisions
 
 | Decision | Options | Lean |
 | --- | --- | --- |
+| Drivers' status | Worker-members employed by the co-op; independent contractors meeting the 2026 gateway test | Research first, with a lawyer (piece RD01) |
 | Busy-time pricing | None; capped; voted multiplier | Voted, capped and shown upfront |
 | Routing engine | OSRM; Valhalla; GraphHopper | Research first (piece RD03) |
 | First city | Auckland; Wellington; Christchurch; a smaller city | Research first (piece RD05) |

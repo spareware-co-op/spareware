@@ -51,10 +51,25 @@ Accounts and ID checks, payments, matching and dispatch, maps and live location,
 
 **Discuss:** small-order fees; tipping.
 
+## What it's up against and the rules (researched 2026-10-18)
+
+Not legal advice. Items marked *unverified* need checking before anyone relies on them.
+
+| Topic | Finding | Source |
+| --- | --- | --- |
+| Uber Eats' cut | 30% with Uber delivery, 16% with the restaurant's own staff, 8% for pickup | [Uber Eats NZ](https://merchants.ubereats.com/nz/en/pricing/) |
+| Delivereasy | About 20% (2020-21 figure; current *unverified*) | [Re: News](https://renews.co.nz/restaurants-are-begging-us-not-to-order-through-delivery-companies/) |
+| Food safety | The Food Act 2014 duties sit with the kitchens (registration, safe and suitable food); whether a pure software platform must register is *unverified* | [MPI](https://www.mpi.govt.nz/dmsdocument/3634/send) |
+| GST | Food delivery is a "listed service": the platform collects GST | [IRD](https://www.ird.govt.nz/sharing-economy/online-marketplaces/gst-on-listed-services/gst-obligations-for-marketplaces) |
+| Couriers | The same employee-or-contractor law as Spare Ride applies | See Spare Ride |
+| Learn from | CoopCycle's software uses the "Coopyleft" licence: not open source by the usual definition and limited to worker-owned co-ops whose couriers are employees. Learn from it only, unless a lawyer clears its terms | [CoopCycle](https://github.com/coopcycle/coopcycle-web), [Coopyleft](https://coopcycle.org/en/coopyleft/) |
+| Hardest problems | Enough restaurants and couriers at once; courier status; a three-way payment split | |
+
 ## Open decisions
 
 | Decision | Options | Lean |
 | --- | --- | --- |
+| Couriers' status | Worker-members employed by the co-op; independent contractors meeting the 2026 gateway test | Research first, with a lawyer (piece FD02) |
 | Courier pay | Per job by distance and time; hourly guarantee | Per job, voted, with a published minimum |
 | Pickup orders | Free to restaurants; tiny fee | Payment cost only |
 | Shared couriers with Spare Ride | Same drivers can do both; separate | Same people, one account |

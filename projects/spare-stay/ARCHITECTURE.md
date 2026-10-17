@@ -43,6 +43,20 @@ Accounts and ID checks, payments (deposits and refunds), matching (dates and sea
 
 **Discuss:** host insurance offered through the co-op.
 
+## What it's up against and the rules (researched 2026-10-18)
+
+Not legal advice. Items marked *unverified* need checking before anyone relies on them.
+
+| Topic | Finding | Source |
+| --- | --- | --- |
+| Airbnb's cut | Most hosts on the single-fee structure pay 15.5% | [Airbnb](https://www.airbnb.co.nz/help/article/1857) |
+| Others | GST plus Bookabach's fee adds about 30% to the advertised rate (owners quoted); Booking.com's host rate is *unverified* | [OneRoof](https://www.oneroof.co.nz/news/bach-owners-say-airbnb-booking-fees-and-app-tax-are-crushing-them-its-just-not-worth-it-46337) |
+| GST | Since 1 April 2024 the platform collects 15% GST on short stays; unregistered hosts get 8.5% back as a flat credit | [IRD](https://www.ird.govt.nz/sharing-economy/online-marketplaces/gst-on-listed-services/gst-obligations-for-marketplaces) |
+| Reporting | Since 1 January 2024 platforms report hosts' income to IRD | [IRD](https://ird.govt.nz/international-tax/exchange-of-information/digital-platform-information) |
+| Councils | Rules differ by council: Queenstown requires registration, with night caps by zone and records the council can see; Auckland's rules are by zone (*unverified* against council text) | [QLDC](https://www.qldc.govt.nz/services/rates/short-term-accommodation/) |
+| Learn from | Fairbnb.coop (reported 15%, half to community projects); its site was offline when checked | [The News](https://www.thenews.coop/?p=171501) |
+| Hardest problems | Damage cover (*unverified*); getting guests when Airbnb holds the demand | |
+
 ## Open decisions
 
 | Decision | Options | Lean |
