@@ -1,3 +1,5 @@
+<p><img src="assets/logo.svg" width="96" alt="Spareware logo"></p>
+
 # Spareware
 
 Free software for working people, built from spare AI tokens. Owned by its members.
