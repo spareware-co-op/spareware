@@ -30,15 +30,24 @@ Read [STATUS.md](STATUS.md). Tell the contributor, in a short table, each projec
 4. Offer 3 to 5 open pieces that fit the stage and their size. Give each one line on what it is and what "done" looks like.
 5. Let them choose. Never start a piece they have not picked.
 
-## 3. Check it out
+## 3. Check it out (so nobody works over anyone else)
 
-Every piece has a GitHub issue titled `<ID>: <piece>` (for example `A01: Kernel: ...`), labelled `piece`, its program, its size and its kind.
+Every piece has a GitHub issue titled `<ID>: <piece>`. The lock is the branch `piece/<ID>`: GitHub lets only one person create a branch name, so two agents can never hold the same piece. Use the tool; it needs the GitHub CLI (`gh`) signed in as the contributor.
 
-1. Find the piece's issue. If it has the `claimed` label and has had activity in the last 7 days, offer another piece.
-2. Check it out: assign the contributor, add the `claimed` label, and comment what you will do and that you're running Claude Opus 5.5 at Extra high effort or newer.
-3. Work on a branch named `<ID>-<slug>`. The pull request says `Closes #<issue number>`.
-4. When it's done: swap `claimed` for `in review`.
-5. If tokens run low: open a draft pull request with a Handover section, swap `claimed` for `handed over`, and unassign. The next agent picks it up from the handover.
+```bash
+python tools/piece.py list                 # open pieces (add a program, e.g. spare-arch)
+python tools/piece.py status A01           # who has it and its state
+python tools/piece.py checkout A01         # check it out, or take over a handed-over piece
+git fetch origin && git switch piece/A01   # all work for the piece happens on this branch
+```
+
+1. **Check out before touching anything.** If `checkout` says someone has it, pick another piece. Never work on a piece you haven't checked out.
+2. **Only work inside your piece.** If you need a part of a big piece, split it first: `python tools/piece.py split A01 "Part title"` makes `A01a`, which you then check out on its own.
+3. **Finished:** open a pull request from `piece/<ID>` that says `Closes #<issue number>`, then `python tools/piece.py release <ID> --review`.
+4. **Out of tokens:** commit and push to `piece/<ID>`, open a draft pull request with a **Handover** section, then `python tools/piece.py release <ID> --handover`. The next agent's `checkout` takes over from your branch.
+5. **Changed your mind before doing anything:** `python tools/piece.py release <ID>`.
+
+GitHub enforces it: a pull request from `piece/<ID>` fails its check unless its author has that piece checked out. Pieces idle for 7 days are released automatically, and any work stays on the branch.
 
 Who has what, at a glance: [checked out](https://github.com/spareware-co-op/spareware/issues?q=is%3Aissue+is%3Aopen+label%3Aclaimed) · [open to take](https://github.com/spareware-co-op/spareware/issues?q=is%3Aissue+is%3Aopen+label%3Apiece+-label%3Aclaimed+-label%3A%22in+review%22) · [in review](https://github.com/spareware-co-op/spareware/issues?q=is%3Aissue+is%3Aopen+label%3A%22in+review%22) · [handed over](https://github.com/spareware-co-op/spareware/issues?q=is%3Aissue+is%3Aopen+label%3A%22handed+over%22)
 
@@ -53,7 +62,7 @@ Who has what, at a glance: [checked out](https://github.com/spareware-co-op/spar
 - Read how the best open project does it before designing; name the method you are following.
 - Research before stating anything you are unsure of, and mark anything unverified.
 - Stay inside the piece. If something else looks broken, note it on the pull request; do not fix it.
-- Work on a branch named `<ID>-<slug>`. Never push to `main`.
+- Work only on your piece's branch, `piece/<ID>`. Never push to `main`.
 
 ## 5. Stay legal (no exceptions)
 
@@ -66,9 +75,9 @@ Who has what, at a glance: [checked out](https://github.com/spareware-co-op/spar
 
 ## 6. Finish or hand over
 
-**Done:** open a pull request with the piece ID, what changed, how it was checked, and every outside source used. Set the piece's row on the work board to "In review".
+**Done:** a pull request from `piece/<ID>` with the piece ID, what changed, how it was checked, every outside source used, and `Closes #<issue number>`. Then `python tools/piece.py release <ID> --review`.
 
-**Tokens running low:** stop at a clean point, commit, and open a draft pull request with a **Handover** section: what is done, what is left, the next step, the files touched and anything learned. Set the row to "Handed over".
+**Tokens running low:** stop at a clean point, commit and push to `piece/<ID>`, open a draft pull request with a **Handover** section (what is done, what is left, the next step, files touched, anything learned), then `python tools/piece.py release <ID> --handover`.
 
 ## 7. Never
 
