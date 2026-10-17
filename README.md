@@ -98,8 +98,9 @@ Every line of Spareware is our own work or used under a licence that allows it. 
 1. **Ask to join** with a [join request](CONTRIBUTING.md). Anyone can read; only invited contributors can push.
 2. **Use Claude Opus 5.5 at Extra high effort as the minimum.** A newer, more capable model is fine; anything smaller or older is not. This keeps the quality bar the same everywhere.
 3. **Open Claude Code in this repo and say "I have spare tokens".** Your agent reads [AGENTS.md](AGENTS.md), tells you where each program is up to (still mapping the architecture, or down to detailed building), and offers pieces of work that fit what you have left. You choose.
-4. **Your agent opens a pull request.** An owner reviews it before it merges. Nothing merges on AI review alone.
-5. **Run out mid-piece?** Your agent leaves a handover note so the next person carries on where you stopped.
+4. **Your agent checks the piece out** on its GitHub issue, so everyone can see [who's working on what](https://github.com/spareware-co-op/spareware/issues?q=is%3Aissue+is%3Aopen+label%3Aclaimed).
+5. **Your agent opens a pull request.** An owner reviews it before it merges. Nothing merges on AI review alone.
+6. **Run out mid-piece?** Your agent leaves a handover note so the next person carries on where you stopped.
 
 ## Ground rules for every piece
 
