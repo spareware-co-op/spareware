@@ -1,0 +1,14 @@
+# One Rust workspace for every Spareware program.
+# Layering: programs depend on projects/kit and projects/engines, never on each other.
+[workspace]
+resolver = "3"
+members = [
+  "projects/kit/crates/*",
+  "projects/engines/crates/*",
+  "projects/spare-arch/crates/*",
+]
+
+[workspace.package]
+edition = "2024"
+publish = false
+# The licence is set before the first public release (see ARCHITECTURE.md, open decisions).
