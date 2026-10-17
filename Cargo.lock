@@ -156,6 +156,14 @@ name = "kit-core"
 version = "0.0.0"
 
 [[package]]
+name = "kit-market"
+version = "0.0.0"
+dependencies = [
+ "kit-core",
+ "kit-ops",
+]
+
+[[package]]
 name = "kit-mcp"
 version = "0.0.0"
 dependencies = [
