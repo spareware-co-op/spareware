@@ -32,7 +32,18 @@ The kit is two things: libraries compiled into every app (`crates/`), and servic
 
 **Low level:** each payment is an operation linked to the job; payouts batch daily; refunds and disputes follow the marketplace loop; fees pass through at cost.
 
-**Waits on:** piece K02 (which providers support NZ marketplace payouts and what the law requires for held money).
+**Researched 2026-10-18 (not legal advice; *unverified* items need checking):**
+
+| Topic | Finding | Source |
+| --- | --- | --- |
+| GST on listed services | For ride-sharing, food delivery and short stays the platform collects 15% GST and must tell unregistered sellers their flat-rate credits at least monthly. The payments service needs a GST engine | [IRD](https://www.ird.govt.nz/sharing-economy/online-marketplaces/gst-on-listed-services/gst-obligations-for-marketplaces) |
+| Reporting income | Platforms report sellers' income to IRD (since 1 January 2024) | [IRD](https://ird.govt.nz/international-tax/exchange-of-information/digital-platform-information) |
+| Licensing to hold money | NZ has no general payments licence: Financial Service Providers Register registration plus anti-money-laundering law. Whether holding funds makes the co-op a reporting entity is *unverified*. Safest design: a regulated payment provider holds the money | [Interest.co.nz](https://interest.co.nz/opinion/79619/plugging-anti-money-laundering-loophole-should-be-key-plank-combating-misuse) |
+| Anti-money-laundering | Online marketplaces must comply since 1 June 2025; DIA has been the sole supervisor since 1 July 2026 | [DIA](https://www.dia.govt.nz/AML-CFT-Information-for-Online-Marketplaces), [Simpson Grierson](https://www.simpsongrierson.com/insights-news/legal-updates/dia-takes-the-reins-what-reporting-entities-need-to-know-about-the-new-amlcft-guidance-package) |
+| Stripe Connect (NZ) | Cards 2.7% + 30c domestic, 3.7% + 30c international; payouts free when Stripe handles pricing, or NZ$2 per active account plus 0.25% + NZ$0.25 per payout when the platform does | [Stripe](https://stripe.com/en-nz/connect/pricing) |
+| Bank payments | Open banking went live with the big banks on 1 December 2025; Akahu's payment endpoint is limited to approved apps paying into their own accounts; Windcave's marketplace payouts are *unverified* | [Akahu](https://developers.akahu.nz/docs/making-a-payment) |
+
+**Lean:** a regulated provider (Stripe Connect is the proven option) holds and splits every payment; the kit adds the GST engine, IRD reporting and the at-cost fee. Piece K02 confirms this with a lawyer.
 
 ### Matching and dispatch
 

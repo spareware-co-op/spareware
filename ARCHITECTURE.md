@@ -134,17 +134,19 @@ flowchart LR
 
 ## Each industry's hard parts
 
-Software is the easy part. Each marketplace has rules that must be researched before it is mapped. The NZ laws below are starting points to check, not legal advice.
+Software is the easy part. Researched on 2026-10-18 (not legal advice; each program's map has the sources and marks what is unverified):
 
-| Product | Hard part to research first |
-| --- | --- |
-| Spare Ride | Small passenger service licences and driver checks (Land Transport rules), passenger insurance, enough drivers and riders in one town at once |
-| Spare Food | Food safety rules for restaurants, courier safety and pay, restaurant sign-up |
-| Spare Stay | Council rules on short stays, guest and host insurance |
-| Spare Home | Selling privately is allowed; anyone acting as an agent must be licensed (Real Estate Agents Act 2008); listing site reach |
-| Spare Rent | Residential Tenancies Act duties, bond lodgement, tenant screening limits |
-| Spare Work | Contractor law, holding payments until a job is done, trade licences |
-| Spare Market | Consumer law (Fair Trading Act, Consumer Guarantees Act), fraud and scams |
+| Product | Incumbent's cut | The hard part |
+| --- | --- | --- |
+| Spare Ride | Uber illustrates 28% of the fare plus a rider fee | The co-op needs a small passenger service licence; the Supreme Court found Uber drivers are employees, so drivers' status is a first decision |
+| Spare Food | Uber Eats 30% (16% own staff, 8% pickup) | Courier status as for rides; enough restaurants and couriers at once |
+| Spare Stay | Airbnb 15.5% for most hosts | Platform collects GST and reports hosts' income to IRD; council rules differ |
+| Spare Home | Agents commonly 3-4% plus GST (*unverified*) | Never act as an agent without a licence; buyers' attention lives on the big sites |
+| Spare Rent | Property managers 7-10% of rent plus a letting fee | Bonds go only to Tenancy Services; notice periods and Healthy Homes built in as rules |
+| Spare Work | Builderscrack $79-149 a month for leads; Fiverr 20% | Licence checks; people going around the platform after the first job |
+| Spare Market | Trade Me 2.19% to sellers plus buyer fees since March 2026 | Anti-money-laundering rules apply to marketplaces; Trade Me's network effect |
+
+Across all of them: for ride-sharing, food delivery and short stays the platform itself must collect GST, and money should be held by a regulated payment provider (see the [kit map](projects/kit/ARCHITECTURE.md)).
 
 ## How the repo is laid out
 

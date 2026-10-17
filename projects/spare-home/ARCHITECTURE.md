@@ -41,6 +41,19 @@ Accounts and ID checks, payments (for services, never the house price), maps, me
 
 Anyone acting as an agent for someone else in a sale must be licensed. Spare Home provides tools and lets sellers book licensed professionals; it never negotiates or acts on a seller's behalf (piece HM01).
 
+## What it's up against and the rules (researched 2026-10-18)
+
+Not legal advice. Items marked *unverified* need checking before anyone relies on them.
+
+| Topic | Finding | Source |
+| --- | --- | --- |
+| Agents' cut | Commonly 3-4% plus GST with minimums around $11,000 (calculator sites; *unverified*) | [calculate.co.nz](https://www.calculate.co.nz/flat-fee-vs-commission-calculator.php) |
+| Selling privately | Allowed, with no commission | [Settled](https://www.settled.govt.nz/selling-a-home/preparing-to-sell/deciding-to-sell-with-an-agent-or-privately/) |
+| Agent licensing | Real estate agency work done in trade for someone else needs a licence under the Real Estate Agents Act 2008. Whether a listing-only service counts is *unverified*: get legal advice (piece HM01) | [REA](https://www.rea.govt.nz/news/media-releases/rea-warns-that-undertaking-real-estate-agency-work-without-a-license-from-rea-is-an-offence/) |
+| Identity checks | Agents and lawyers must verify sellers' identity (anti-money-laundering law); sellers must disclose weathertightness issues and missing consents | [Settled](https://www.settled.govt.nz/selling-a-home/preparing-to-sell/deciding-to-sell-with-an-agent-or-privately/) |
+| Listing sites | Current prices for Trade Me Property, realestate.co.nz and OneRoof are *unverified* | |
+| Hardest problems | Buyers' attention lives on the big listing sites; deposits and conveyancing (trust-account rules *unverified*) | |
+
 ## Open decisions
 
 | Decision | Options | Lean |
