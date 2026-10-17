@@ -47,6 +47,19 @@ Accounts and ID checks (licence and registration checks), payments (held stage p
 
 **High level:** GST-correct invoices, receipts and records generated from each job.
 
+## What it's up against and the rules (researched 2026-10-18)
+
+Not legal advice. Items marked *unverified* need checking before anyone relies on them.
+
+| Topic | Finding | Source |
+| --- | --- | --- |
+| Builderscrack | Owned by hipages since 2021; trades pay $79, $99 or $149 plus GST a month for lead tokens | [SmartCompany](https://www.smartcompany.com.au/finance/mergers-and-acquisitions/hipages-acquires-new-zealand-tradie-platform-builderscrack/), [plans](https://builderscrack.co.nz/subscription) |
+| Upwork and Fiverr | Reportedly 0-15% from freelancers plus about 5% from clients (Upwork) and 20% from sellers plus 5.5% from buyers (Fiverr); secondary sources | [Golance](https://golance.com/blogs/upwork-fees-explained-2026), [VaultLeap](https://vaultleap.com/blog/fiverr-fees-explained-2026) |
+| Licensed work | Restricted building work must be done or supervised by a licensed building practitioner (Building Act 2004); electrical, plumbing and gas registration and the Construction Contracts Act are *unverified* | [Hutt City](https://www.huttcity.govt.nz/property-and-building/building-consents/before-you-start/restricted-building-work-that-needs-to-be-done-by-professionals) |
+| Employee or contractor | The 2026 gateway test applies (see Spare Ride) | See Spare Ride |
+| Learn from | Up & Go cleaning co-op (worker keeps 95 cents in the dollar); Loconomics (MPL-2.0, archived January 2026); Stocksy photo co-op (artists get 50-75% of sales) | [Up & Go](https://upandgo.coop/), [Loconomics](https://github.com/loconomics/loconomics), [Stocksy](https://www.stocksy.com/ideas/?p=6290) |
+| Hardest problems | Vetting and licence checks; customers and trades going around the platform after the first job | |
+
 ## Open decisions
 
 | Decision | Options | Lean |
