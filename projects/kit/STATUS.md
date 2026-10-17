@@ -1,6 +1,6 @@
 # Shared kit status
 
-**Stage: Mapping.** The kit's map is the root [ARCHITECTURE.md](../../ARCHITECTURE.md). No code yet.
+**Stage: Mapping.** Map: [ARCHITECTURE.md](ARCHITECTURE.md), one level deeper than the overview in the root [ARCHITECTURE.md](../../ARCHITECTURE.md). No code yet.
 
 ## Work board
 
