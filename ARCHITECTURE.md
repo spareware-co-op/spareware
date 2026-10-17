@@ -80,6 +80,49 @@ Design tools lean on the Rust core pattern mapped in [Spare Arch's ARCHITECTURE.
 | Open cost ledger | Monthly public record of what each app cost to run and what the fee paid for | All |
 | Sync, history, storage | Operation log, offline work, version history, chunked storage | All; heaviest in Spare Arch |
 | Plugins and MCP server | Sandboxed add-ins and AI access on every app | All |
+| Marketplace engine | Listings, requests, orders, pricing rules and the at-cost fee, as one shared loop | All marketplaces |
+
+## The marketplace pattern
+
+Every marketplace is the same loop: someone lists or asks, the kit matches, the money is held, the job happens, both sides rate, the worker is paid, and the fee covers only the running cost. The loop is built once in the kit's marketplace engine (`kit-market`); each app adds only its own rules.
+
+```mermaid
+flowchart LR
+  LIST["`**List or ask**
+*a ride, a meal, a stay, a home, a job, an item*`"]
+  MATCH["`**Match**
+*nearest, available, best fit*`"]
+  AGREE["`**Agree**
+*price, time, terms*`"]
+  HOLD["`**Pay and hold**
+*held by a regulated payment provider*`"]
+  DO["`**Do it**
+*live tracking, messages*`"]
+  DONE["`**Confirm**
+*both sides*`"]
+  PAYOUT["`**Pay out**
+*worker gets everything except the at-cost fee*`"]
+  RATE["`**Rate**
+*both ways*`"]
+  DISPUTE["`**Dispute**
+*money stays held until a member panel decides*`"]
+  LIST --> MATCH --> AGREE --> HOLD --> DO --> DONE --> PAYOUT --> RATE
+  DO -.-> DISPUTE -.-> PAYOUT
+```
+
+| Step | Kit part | What each app adds |
+| --- | --- | --- |
+| List or ask | Accounts, marketplace engine | What a listing is: a trip, a menu, a calendar, a property, a tenancy, a job, an item |
+| Match | Matching and dispatch, maps | How to match: nearest driver, free courier, open dates, search, quotes |
+| Agree | Marketplace engine (pricing rules) | How price is set: metered fare, menu price, nightly rate, sale offers, weekly rent, quote, fixed price or auction |
+| Pay and hold | Payments | When money moves and what the law says about holding it (piece K02) |
+| Do it | Maps, messaging, safety | Live tracking for rides and deliveries; check-in for stays; viewings for homes |
+| Confirm and pay out | Payments, open cost ledger | When a job counts as done |
+| Rate and resolve | Ratings, disputes, member voting | The industry's own safety rules |
+
+**The at-cost fee.** Each app's fee is its last period's running cost divided by its jobs, published on the open cost ledger, and voted on by that app's members. Payment-processor charges are passed through at cost. No margin is added; any surplus lowers the next period's fee.
+
+**Who decides.** Workers on each app are members of the co-op and vote on that app's fees and rules. Co-op-wide matters, such as the kit, the legal rules and the licence, go to every member.
 
 ## Shared technology
 
@@ -123,7 +166,7 @@ spareware/
 ├─ Cargo.toml                 one workspace for all Rust code
 ├─ projects/
 │  ├─ kit/
-│  │  ├─ crates/              kit-core, kit-ops, kit-store, kit-sync, kit-plugin, kit-mcp
+│  │  ├─ crates/              kit-core, kit-ops, kit-store, kit-sync, kit-plugin, kit-mcp, kit-market
 │  │  └─ services/            accounts, payments, matching, maps, messaging, trust, voting, ledger
 │  ├─ engines/crates/         engine-render, engine-draw2d, engine-text, engine-pdf, engine-media
 │  ├─ spare-arch/
