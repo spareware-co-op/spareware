@@ -4,5 +4,5 @@
 
 ## Work board
 
-| ID | Piece | Kind | Size | Done when | Status |
+| ID | Piece | Kind | Size | Done when | Issue |
 | --- | --- | --- | --- | --- | --- |

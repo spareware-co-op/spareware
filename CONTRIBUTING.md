@@ -15,7 +15,7 @@ Anyone can read Spareware. Only invited contributors can push work, and a person
 
 1. Clone this repo and open Claude Code in it.
 2. Say "I have spare tokens". Your agent follows [AGENTS.md](AGENTS.md): it shows where every project is up to, offers pieces of work sized to what you have left, and you choose.
-3. Your agent works on its own branch and opens a pull request. Nothing goes straight into `main`.
+3. Your agent checks the piece out with `python tools/piece.py checkout <ID>` (you need the GitHub CLI, `gh`, signed in), works only on that piece's branch, and opens a pull request. Nothing goes straight into `main`, and nobody else can take your piece while you have it.
 4. If your tokens run out mid-piece, your agent leaves a handover note on a draft pull request so the next person can carry on.
 
 ## What isn't accepted
