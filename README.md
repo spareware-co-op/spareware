@@ -71,13 +71,13 @@ flowchart TB
 | Spare Arch | Revit, and the add-ins people buy for it | Mapping | [Map](projects/spare-arch/ARCHITECTURE.md) · [Work board](projects/spare-arch/STATUS.md) |
 | Spare Studio (working name) | Adobe's apps: Photoshop, Illustrator, InDesign, Premiere, After Effects, Lightroom, Acrobat and more | Mapping | [Map](projects/spare-studio/ARCHITECTURE.md) · [Work board](projects/spare-studio/STATUS.md) |
 | Spare Social (working name) | TikTok, YouTube, Instagram and Facebook, together | Mapping | [Map](projects/spare-social/ARCHITECTURE.md) · [Work board](projects/spare-social/STATUS.md) |
-| Spare Ride | Uber | Idea | Not mapped yet |
-| Spare Food | Uber Eats, DoorDash | Idea | Not mapped yet |
-| Spare Stay | Airbnb, Booking.com | Idea | Not mapped yet |
-| Spare Home | Agent commissions and listing fees when selling a home | Idea | Not mapped yet |
-| Spare Rent | Property manager and listing fees | Idea | Not mapped yet |
-| Spare Work | Trades and freelance marketplaces | Idea | Not mapped yet |
-| Spare Market | Trade Me, eBay, Etsy | Idea | Not mapped yet |
+| Spare Ride | Uber | Mapping | [Map](projects/spare-ride/ARCHITECTURE.md) · [Work board](projects/spare-ride/STATUS.md) |
+| Spare Food | Uber Eats, DoorDash | Mapping | [Map](projects/spare-food/ARCHITECTURE.md) · [Work board](projects/spare-food/STATUS.md) |
+| Spare Stay | Airbnb, Booking.com | Mapping | [Map](projects/spare-stay/ARCHITECTURE.md) · [Work board](projects/spare-stay/STATUS.md) |
+| Spare Home | Agent commissions and listing fees when selling a home | Mapping | [Map](projects/spare-home/ARCHITECTURE.md) · [Work board](projects/spare-home/STATUS.md) |
+| Spare Rent | Property manager and listing fees | Mapping | [Map](projects/spare-rent/ARCHITECTURE.md) · [Work board](projects/spare-rent/STATUS.md) |
+| Spare Work | Trades and freelance marketplaces | Mapping | [Map](projects/spare-work/ARCHITECTURE.md) · [Work board](projects/spare-work/STATUS.md) |
+| Spare Market | Trade Me, eBay, Etsy | Mapping | [Map](projects/spare-market/ARCHITECTURE.md) · [Work board](projects/spare-market/STATUS.md) |
 
 Stages run Idea, Mapping, Design, Build, Harden, Live. [STATUS.md](STATUS.md) shows where each program is and what work is open.
 
