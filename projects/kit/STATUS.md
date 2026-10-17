@@ -8,7 +8,7 @@ Sizes: Small fits a little spare, Medium a fair amount, Large a lot. Status: Ope
 
 | ID | Piece | Kind | Size | Done when | Status |
 | --- | --- | --- | --- | --- | --- |
-| K01 | Legal entity: NZ co-operative company, incorporated society or trust | Research note | Medium | Each option compared on member ownership, voting, tax and set-up cost, with sources; flags what needs a lawyer | Open |
+| K01 | Legal entity: NZ co-operative company, incorporated society or trust | Research note | Medium | Each option compared on member ownership, voting, tax and set-up cost, with sources; flags what needs a lawyer | In review: [note](notes/K01-legal-entity.md) |
 | K02 | Payments at cost: payment providers that pay out to workers in NZ | Research note | Medium | Providers compared on fees, payouts, NZ support and what Spareware must never handle itself | Open |
 | K03 | Study platform co-ops that already exist (rides, couriers, holiday rentals) | Research note | Medium | What worked, what failed and why, with sources and current status | Open |
 | K04 | Phone apps: web apps, Tauri mobile or native | Decision note | Medium | Recommendation covering live location, push notifications and app store rules | Open |
