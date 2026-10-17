@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="Spareware">
+  <circle cx="100" cy="100" r="92" fill="#C8102E"/>
+  <path d="M140 66 C140 50 124 42 100 42 C72 42 58 54 58 72 C58 92 76 98 100 101 C124 104 142 110 142 130 C142 148 126 158 100 158 C74 158 60 150 58 134" fill="none" stroke="#ffffff" stroke-width="24" stroke-linecap="round"/>
+</svg>
