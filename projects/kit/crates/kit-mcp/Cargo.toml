@@ -1,0 +1,9 @@
+[package]
+name = "kit-mcp"
+version = "0.0.0"
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+kit-core = { path = "../kit-core" }
+kit-ops = { path = "../kit-ops" }

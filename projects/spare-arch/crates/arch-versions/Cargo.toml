@@ -1,0 +1,10 @@
+[package]
+name = "arch-versions"
+version = "0.0.0"
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+kit-sync = { path = "../../../kit/crates/kit-sync" }
+arch-model = { path = "../arch-model" }
+arch-views = { path = "../arch-views" }

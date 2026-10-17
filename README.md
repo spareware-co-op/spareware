@@ -12,17 +12,42 @@ Every program sits on one shared kit, so each new app gets accounts, payments, A
 
 ```mermaid
 flowchart TB
-  subgraph PROGRAMS["Programs"]
+  subgraph TRADE["`**Work and trade**`"]
     direction LR
-    DESIGN["Design tools<br/>Spare Arch, Spare Studio"]
-    MOVE["Getting around and eating<br/>Spare Ride, Spare Food"]
-    LIVE["Places to live and stay<br/>Spare Stay, Spare Home, Spare Rent"]
-    WORKS["Work and trade<br/>Spare Work, Spare Market"]
+    WORK["Spare Work<br/>trades and freelance"]
+    MARKET["Spare Market<br/>buy and sell"]
+  end
+  subgraph LIVE["`**Places to live and stay**`"]
+    direction LR
+    STAY["Spare Stay<br/>replaces Airbnb"]
+    HOME["Spare Home<br/>selling a home"]
+    RENT["Spare Rent<br/>renting a home"]
+  end
+  subgraph MOVE["`**Getting around and eating**`"]
+    direction LR
+    RIDE["Spare Ride<br/>replaces Uber"]
+    FOOD["Spare Food<br/>replaces food delivery apps"]
+  end
+  subgraph DESIGN["`**Design tools**`"]
+    direction LR
+    ARCH["Spare Arch<br/>replaces Revit"]
+    STUDIO["Spare Studio<br/>replaces Adobe"]
+  end
+  subgraph SHARE["`**Sharing and talking**`"]
+    direction LR
+    SOCIAL["Spare Social<br/>replaces TikTok, YouTube,<br/>Instagram, Facebook"]
   end
   CMD["One command layer per app<br/>people, AI agents and add-ins all use the same path"]
-  KIT["Shared kit<br/>accounts, payments, matching, maps, messaging,<br/>ratings, member voting, open cost ledger, sync, plugins"]
+  KIT["`**Shared kit**
+  accounts, payments, matching, maps, messaging,
+  ratings, member voting, open cost ledger, sync, plugins`"]
   RUN["Servers run at cost, and any member group can host its own"]
-  PROGRAMS --> CMD --> KIT --> RUN
+  SHARE --> CMD
+  TRADE --> CMD
+  LIVE --> CMD
+  MOVE --> CMD
+  DESIGN --> CMD
+  CMD --> KIT --> RUN
 ```
 
 ## The programs
@@ -32,6 +57,7 @@ flowchart TB
 | Shared kit | The parts every platform rebuilds | Mapping | [Map](ARCHITECTURE.md) · [Work board](projects/kit/STATUS.md) |
 | Spare Arch | Revit, and the add-ins people buy for it | Mapping | [Map](projects/spare-arch/ARCHITECTURE.md) · [Work board](projects/spare-arch/STATUS.md) |
 | Spare Studio (working name) | Adobe's apps: Photoshop, Illustrator, InDesign, Premiere, After Effects, Lightroom, Acrobat and more | Mapping | [Map](projects/spare-studio/ARCHITECTURE.md) · [Work board](projects/spare-studio/STATUS.md) |
+| Spare Social (working name) | TikTok, YouTube, Instagram and Facebook, together | Mapping | [Map](projects/spare-social/ARCHITECTURE.md) · [Work board](projects/spare-social/STATUS.md) |
 | Spare Ride | Uber | Idea | Not mapped yet |
 | Spare Food | Uber Eats, DoorDash | Idea | Not mapped yet |
 | Spare Stay | Airbnb, Booking.com | Idea | Not mapped yet |
