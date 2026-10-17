@@ -75,7 +75,7 @@ The kit is two things: libraries compiled into every app (`crates/`), and servic
 
 **Low level:** one member, one vote; eligibility from membership records; proposals have published quorum and timing; results become operations that change the app's settings.
 
-**Waits on:** piece K01 (the legal entity sets what voting must look like).
+**Waits on:** piece K01, now in review: [the note](notes/K01-legal-entity.md) recommends a NZ co-operative company with one member, one $1 share, one vote.
 
 ### Open cost ledger
 
