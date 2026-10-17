@@ -37,6 +37,19 @@ Accounts and ID checks, payments (rent, if both sides choose), maps, messaging, 
 
 **High level:** a checklist and evidence store for the rental standards the law requires.
 
+## What it's up against and the rules (researched 2026-10-18)
+
+Not legal advice. Items marked *unverified* need checking before anyone relies on them.
+
+| Topic | Finding | Source |
+| --- | --- | --- |
+| Property managers' cut | Typically 7-10% of rent plus GST, plus about a week's rent as a letting fee charged to the landlord; tenants can't be charged letting fees | [Property Brokers](https://www.propertybrokers.co.nz/news/how-much-does-property-management-cost-in-new-zealand) |
+| Bonds | Capped at 4 weeks' rent and lodged with Tenancy Services within 23 working days; no other security allowed. **The platform never holds bonds** | [Tenancy Services](https://tenancy.govt.nz/rent-bond-and-bills/bond), [lodging](https://www.tenancy.govt.nz/rent-bond-and-bills/bond/lodging-a-bond/about-lodging-a-bond) |
+| Ending tenancies | Since 30 January 2025: 90 days' notice without cause, 42 days for stated reasons, 21 days from tenants | [Tenancy Services](https://www.tenancy.govt.nz/about-tenancy-services/news/changes-to-tenancy-terminations-now-in-force/) |
+| Healthy Homes | Heating, insulation, ventilation, moisture and drainage, draught stopping | [Tenancy Services](https://www.tenancy.govt.nz/healthy-homes/) |
+| Property-manager licensing | The bill was dropped in May 2024; nothing newer found (*unverified*) | [Newshub](https://newshub.co.nz/home/politics/2024/05/chl-e-swarbrick-calls-out-government-for-ministerial-overstep-after-it-asks-select-committee-to-drop-bill-regulating-property-managers.html) |
+| Hardest problems | Collecting and holding rent (client-money rules *unverified*); Tenancy Tribunal disputes | |
+
 ## Open decisions
 
 | Decision | Options | Lean |
