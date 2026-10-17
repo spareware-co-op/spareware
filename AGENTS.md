@@ -25,7 +25,7 @@ Read [STATUS.md](STATUS.md). Tell the contributor, in a short table, each projec
 ## 2. Offer options
 
 1. Ask which project they want, or recommend the one with the most open work.
-2. Read the root [ARCHITECTURE.md](ARCHITECTURE.md) (how all the programs fit together), then that project's `projects/<name>/STATUS.md` and `ARCHITECTURE.md`. The shared kit's map is the root `ARCHITECTURE.md`.
+2. Read the root [ARCHITECTURE.md](ARCHITECTURE.md) (how all the programs fit together), then that project's `projects/<name>/STATUS.md` and `ARCHITECTURE.md`. The shared kit's own map is `projects/kit/ARCHITECTURE.md`.
 3. Ask roughly how many tokens they have left: a little, a fair amount, or a lot. These match the Small, Medium and Large sizes on the work board.
 4. Offer 3 to 5 open pieces that fit the stage and their size. Give each one line on what it is and what "done" looks like.
 5. Let them choose. Never start a piece they have not picked.
