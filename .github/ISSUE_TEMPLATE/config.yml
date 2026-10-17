@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ideas, questions and introductions
+    url: https://github.com/spareware-co-op/spareware/discussions
+    about: Talk with the community in Discussions.

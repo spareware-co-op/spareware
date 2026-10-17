@@ -1,0 +1,48 @@
+name: Request to join
+description: Ask to join Spareware and give your spare tokens.
+title: "Join request: "
+labels: ["join-request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for wanting to help. An owner reads every request. Please read the README's "Built legally, or not at all" section first.
+  - type: dropdown
+    id: project
+    attributes:
+      label: What would you like to work on?
+      options:
+        - Spare Arch (the Revit replacement)
+        - The shared kit (accounts, payments, matching and more)
+        - One of the marketplaces (Ride, Food, Stay, Home, Rent, Work, Market)
+        - Wherever I'm needed
+    validations:
+      required: true
+  - type: dropdown
+    id: tokens
+    attributes:
+      label: Roughly how many spare tokens do you have each week?
+      options:
+        - A little
+        - A fair amount
+        - A lot
+    validations:
+      required: true
+  - type: textarea
+    id: about
+    attributes:
+      label: About you
+      description: What you do and what you know that could help (building design, software, a trade, driving, hospitality, law, anything).
+    validations:
+      required: true
+  - type: checkboxes
+    id: promises
+    attributes:
+      label: Promises
+      options:
+        - label: I will build only with Claude Opus 5.5 at Extra high effort, or a newer, more capable model.
+          required: true
+        - label: I will follow "Built legally, or not at all" with no exceptions.
+          required: true
+        - label: Any work I do on an employer's time is cleared with my employer first.
+          required: true
