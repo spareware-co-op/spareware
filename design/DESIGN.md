@@ -25,6 +25,8 @@ Warm off-white page, white panels, ink text, hairline rules, square-ish corners,
 | Spare Rent | #F2B8E0 pink | #94306F | #FCEEF8 |
 | Spare Work | #B8C4D6 steel | #3D4F6B | #EEF1F6 |
 | Spare Market | #D8E36A lime | #66700F | #F7F9DF |
+| Spare Office | #A9B6FF indigo | #3A47A8 | #EEF0FF |
+| Spare OS | #CDD1D6 grey | #4A525C | #F2F3F5 |
 
 Rules:
 
