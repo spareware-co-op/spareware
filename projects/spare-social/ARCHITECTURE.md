@@ -26,6 +26,7 @@ Spare Social removes only what the law requires to be removed, by published rule
 | Posts and groups | Facebook | Text posts, comments, groups, pages, events |
 | Messages | Messenger, DMs | One-to-one and group chat |
 | Live | YouTube Live, TikTok Live | Live streaming (later) |
+| Human and AI sections | Mixed feeds | Separate sections for human-made and AI-made posts; each person picks what they see |
 | Creator support | Platform revenue shares | Members tip or subscribe to creators directly; creators keep everything except payment fees |
 
 ## What it uses from the shared kit
@@ -40,6 +41,15 @@ Accounts (one Spareware login), payments (creator support), messaging, trust (re
 - **Feeds:** time order by default; custom feeds anyone can publish and anyone can choose, with their rules visible (piece M05).
 - **Safety tooling:** matching uploads against known illegal material, age checks, reporting and appeal flows, built as kit services so every app benefits (piece M07).
 - **Learn from:** PeerTube, Pixelfed and Mastodon are AGPL, so we read how they work and write our own code; we never copy it. Bluesky's AT Protocol libraries need their licences checked before any use (piece M08).
+
+## Human and AI sections
+
+Every feed has two sections: **Human**, for things people made themselves, and **AI**, for things made with AI. Each person chooses to see one, the other, or both, and the choice is theirs to change at any time.
+
+- **Declared by the creator:** every post says whether AI was used. Accounts that are AI agents or bots are labelled and can post only in the AI section.
+- **Checked, not assumed:** uploads are checked for content credentials (C2PA, an open standard for recording how media was made) and for AI-detection signals. Signals are hints for moderators, never automatic verdicts.
+- **Fixable in the open:** members can flag a post in the wrong section; moderators move it with the reason in the public log, and the creator can appeal.
+- **Fair to creators:** using AI isn't a penalty; it just goes in its own section, so human work isn't buried.
 
 ## The hard parts
 

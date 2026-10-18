@@ -9,7 +9,7 @@ Buying and selling where sellers pay only the at-cost fee, buyers' money is held
 - Listing is free; selling costs only the at-cost fee.
 - Buyers are protected: payment is held until they confirm the item arrived as described.
 - Scams are hard: no taking deals off the platform to avoid protection, verified sellers, clear warnings.
-- Makers and small businesses can run a shop page.
+- Any business can run its own online shop and in-store till at cost, replacing Shopify.
 
 ## What it uses from the shared kit
 
@@ -31,9 +31,13 @@ Accounts and ID checks, payments (held until delivery), matching (search), maps 
 
 **Discuss:** auctions, and the consumer law that applies to them (piece MK02).
 
-### Shops
+### Shops (replacing Shopify)
 
-**High level:** a shop page for makers and small businesses with their own listings, branding and reviews.
+**High level:** any business can run its own online shop on Spare Market at cost: its own web address, its own look, products and stock, checkout, shipping, discounts, and a till for its physical shop. Its products can also appear in the Spare Market search, so a small shop gets buyers on day one.
+
+**Low level:** a shop is a set of listings plus a storefront built from the design guide's themes; checkout uses the kit's payments; stock is shared between the online shop, Spare Market and the in-store till; card readers in physical shops come from the payment provider; add-ins (for example accounting links) run as kit plugins. The price is the hosting cost, never a cut of sales beyond payment fees.
+
+**Discuss:** custom web addresses and themes; which accounting software to link first.
 
 ### Trust
 
