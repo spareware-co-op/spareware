@@ -48,3 +48,5 @@
 [data-app="rent"]   { --app: #F2B8E0; --app-strong: #94306F; --app-tint: #FCEEF8; }
 [data-app="work"]   { --app: #B8C4D6; --app-strong: #3D4F6B; --app-tint: #EEF1F6; }
 [data-app="market"] { --app: #D8E36A; --app-strong: #66700F; --app-tint: #F7F9DF; }
+[data-app="office"] { --app: #A9B6FF; --app-strong: #3A47A8; --app-tint: #EEF0FF; }
+[data-app="os"]     { --app: #CDD1D6; --app-strong: #4A525C; --app-tint: #F2F3F5; }
