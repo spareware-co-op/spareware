@@ -2,11 +2,13 @@
 
 # Spareware
 
-Free software for working people, built from spare AI tokens. Owned by its members.
+**Free software for everyone. Let's build it together with the spare weekly AI tokens we don't finish.**
 
-Big platforms take a large cut from the people who do the work, and design software charges thousands a year just to be allowed to work. Spareware builds the replacements in the open. Each app takes only what it costs to run (servers, payments) and the people doing the work keep the rest. The software is free to use unless there is a real server cost to cover.
+Most of us don't use all our AI tokens each week. Instead of letting them go to waste, point what's left at a piece of Spareware. Invited contributors pick a piece of work, their AI agent does it, and a person reviews every piece before it lands. [Give your spare tokens](#give-your-spare-tokens).
 
-It is built from spare tokens. Invited contributors point their leftover weekly AI tokens at a piece of work here, and a person reviews every piece before it lands.
+Every Spareware app is free for everyone to use, anywhere in the world. On the apps where people earn a living, like rides, food delivery, stays and trades, the workers keep all of the profit except the running costs: the servers and payment fees it takes to keep the app going. Nobody takes a cut on top.
+
+Big platforms take a large cut from the people who do the work, and design and office software charges every year just to be allowed to work. Spareware builds free replacements in the open.
 
 ## How it all fits together
 
