@@ -23,6 +23,12 @@ flowchart TB
       WORK[Spare Work]
       MARKET[Spare Market]
     end
+    subgraph Compute[Everyday computing]
+      OFFICEAPP["`**Spare Office**
+*replaces Microsoft 365*`"]
+      OSAPP["`**Spare OS**
+*replaces paying for Windows*`"]
+    end
     subgraph Social[Sharing and talking]
       SOCIALAPP["`**Spare Social**
 *video, photos, posts, groups*`"]
@@ -46,12 +52,13 @@ flowchart TB
   Products --> API --> Kit --> HOST
 ```
 
-## Three families of product
+## Four families of product
 
 | Family | Products | What they need most |
 | --- | --- | --- |
 | Design tools | Spare Arch; [Spare Studio](projects/spare-studio/ARCHITECTURE.md) (working name), ideally with [ArtCraft](https://github.com/storytold) under the umbrella | Heavy local computing, a geometry kernel or GPU image pipeline, desktop and browser, huge files, drawings and print |
 | Marketplaces | Spare Ride, Food, Stay, Home, Rent, Work, Market | Two-sided matching, payments, trust and safety, phones, real-time location, each industry's rules |
+| Everyday computing | [Spare Office](projects/spare-office/ARCHITECTURE.md), [Spare OS](projects/spare-os/ARCHITECTURE.md) | Open file formats and protocols, live co-editing, a proven Linux base, a painless move from Windows |
 | Social | [Spare Social](projects/spare-social/ARCHITECTURE.md) (working name) | Video storage and delivery at cost, feeds people choose, moderation that removes only what the law requires, open social protocols |
 
 Design tools lean on the Rust core pattern mapped in [Spare Arch's ARCHITECTURE.md](projects/spare-arch/ARCHITECTURE.md), and share its renderer, 2D drawing engine and PDF output with Spare Studio. Marketplaces lean on the shared kit. Both use the same command layer, plugins, sync and AI access.
