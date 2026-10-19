@@ -21,11 +21,11 @@ A free operating system for desktops and laptops, so nobody has to pay for Windo
 
 ### Spare apps built in
 
-**High level:** Spare Office, Spare Studio, Spare Arch and the rest come preinstalled, signed in with one Spareware login, and update through the same channel as the system.
+**High level:** Spare Office, Spare Studio, Spare Construct and the rest come preinstalled, signed in with one Spareware login, and update through the same channel as the system.
 
 ### Running Windows programs
 
-**High level:** many Windows programs run through compatibility layers (Wine, and Proton for games). Some won't, for example programs that need Windows-only drivers or anti-cheat. The plan is to replace those with Spare apps over time, starting with Spare Arch for Revit.
+**High level:** many Windows programs run through compatibility layers (Wine, and Proton for games). Some won't, for example programs that need Windows-only drivers or anti-cheat. The plan is to replace those with Spare apps over time, starting with Spare Construct for Revit.
 
 **Low level:** a published, tested list of what runs and what doesn't (piece OS03).
 

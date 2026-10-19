@@ -15,7 +15,7 @@ Warm off-white page, white panels, ink text, hairline rules, square-ish corners,
 
 | App | Light colour | Deeper shade | Tint |
 | --- | --- | --- | --- |
-| Spare Arch | #8EC5FF blue | #1F5FA8 | #EAF4FF |
+| Spare Construct | #8EC5FF blue | #1F5FA8 | #EAF4FF |
 | Spare Studio | #C4B2FF violet | #5B3FB8 | #F3EFFF |
 | Spare Social | #FFB27A orange | #9E4A14 | #FFF1E6 |
 | Spare Ride | #7FD8CF teal | #13756B | #E8F8F6 |

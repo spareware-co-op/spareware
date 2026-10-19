@@ -12,7 +12,7 @@ body:
     attributes:
       label: What would you like to work on?
       options:
-        - Spare Arch (the Revit replacement)
+        - Spare Construct (the Revit replacement)
         - The shared kit (accounts, payments, matching and more)
         - One of the marketplaces (Ride, Food, Stay, Home, Rent, Work, Market)
         - Wherever I'm needed

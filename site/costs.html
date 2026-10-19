@@ -47,7 +47,7 @@
 
 /* One light colour per app: --app is the fill for its mark, primary buttons and active items
    (ink text on it), --app-strong is for thin borders and icons, --app-tint for quiet backgrounds. */
-[data-app="arch"]   { --app: #8EC5FF; --app-strong: #1F5FA8; --app-tint: #EAF4FF; }
+[data-app="construct"] { --app: #8EC5FF; --app-strong: #1F5FA8; --app-tint: #EAF4FF; }
 [data-app="studio"] { --app: #C4B2FF; --app-strong: #5B3FB8; --app-tint: #F3EFFF; }
 [data-app="social"] { --app: #FFB27A; --app-strong: #9E4A14; --app-tint: #FFF1E6; }
 [data-app="ride"]   { --app: #7FD8CF; --app-strong: #13756B; --app-tint: #E8F8F6; }
@@ -365,7 +365,7 @@ details > summary { cursor: pointer; font-weight: 600; margin-top: calc(var(--sp
    "List apps (Stay, Home, Rent, Work, Market): 10 active users a month for each booking, listing, letting, job or sale, so the browsing costs of people who look but do not buy are counted. Our assumption, not researched.",
    "Spare Rent: the one-off letting cost is spread over a 12-month tenancy. Our assumption.",
    "Each app is costed as if it runs on its own deployment. Ride and Food can share one, and so can the five list apps, which lowers each app's fixed cost.",
-   "Member apps (Social, Office, Arch, Studio, OS) carry a per-member server share sized for capacity as well as the small fixed set of servers, so the fixed servers are counted twice at small scale. This errs high.",
+   "Member apps (Social, Office, Construct, Studio, OS) carry a per-member server share sized for capacity as well as the small fixed set of servers, so the fixed servers are counted twice at small scale. This errs high.",
    "Free tiers are ignored, as in the research, except where noted. They make a small first deployment cheaper than shown.",
    "Driver, courier, host and trade ID checks are one-off per worker, not per job, and are left out of the per-job figures (US$0 to US$1.35 each).",
    "Paid map APIs are not in the planned design (the kit map uses open map data). If the apps used them, a ride would cost US$0.02 to US$0.29 more with Mapbox or US$0.06 to US$0.67 more with Google Maps Platform (research workings)."
@@ -2642,8 +2642,8 @@ details > summary { cursor: pointer; font-weight: 600; margin-top: calc(var(--sp
    }
   },
   {
-   "id": "arch",
-   "name": "Spare Arch",
+   "id": "construct",
+   "name": "Spare Construct",
    "family": "design",
    "kind": "member",
    "unit": "active user",
@@ -3314,7 +3314,7 @@ details > summary { cursor: pointer; font-weight: 600; margin-top: calc(var(--sp
  ],
  "unverified": [
   "Which Stripe card rate a Connect marketplace pays (2.65% or 2.7% domestic) and whether the 0.25% funds-routing fee stacks.",
-  "Hetzner showed 'This product is currently unavailable' on every cloud plan on 18 Oct 2026, so the Hetzner setups (Office low, Arch and Studio low) may not be orderable today.",
+  "Hetzner showed 'This product is currently unavailable' on every cloud plan on 18 Oct 2026, so the Hetzner setups (Office low, Construct and Studio low) may not be orderable today.",
   "OVHcloud: which OVH company bills a buyer outside Australia (its other catalogues list the same VPS at US$10 a month), and the price of the IPv4 address that Auckland Local Zone servers must pay for (shown only in the control panel).",
   "Server capacity per user (marketplace servers, Social app servers, Office co-editing, mail and video, the design tools' sync servers) is not load tested.",
   "Spare Social low case: serving video from Cloudflare R2 under Cloudflare's CDN terms, and free PhotoDNA scanning (needs an application).",

@@ -1,9 +1,0 @@
-[package]
-name = "arch-model"
-version = "0.0.0"
-edition.workspace = true
-publish.workspace = true
-
-[dependencies]
-kit-core = { path = "../../../kit/crates/kit-core" }
-kit-store = { path = "../../../kit/crates/kit-store" }

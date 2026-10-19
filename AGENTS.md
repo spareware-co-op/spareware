@@ -35,7 +35,7 @@ Read [STATUS.md](STATUS.md). Tell the contributor, in a short table, each projec
 Every piece has a GitHub issue titled `<ID>: <piece>`. The lock is the branch `piece/<ID>`: GitHub lets only one person create a branch name, so two agents can never hold the same piece. Use the tool; it needs the GitHub CLI (`gh`) signed in as the contributor.
 
 ```bash
-python tools/piece.py list                 # open pieces (add a program, e.g. spare-arch)
+python tools/piece.py list                 # open pieces (add a program, e.g. spare-construct)
 python tools/piece.py status A01           # who has it and its state
 python tools/piece.py checkout A01         # check it out, or take over a handed-over piece
 git fetch origin && git switch piece/A01   # all work for the piece happens on this branch

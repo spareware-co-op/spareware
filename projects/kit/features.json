@@ -412,7 +412,7 @@
             {
               "id": "KIT-A1-F7-P7",
               "name": "Organisation audit log",
-              "what": "Lets an organisation's admins see who did what across every app the organisation uses, built from the operation log, searchable and exportable, with its own retention. Spare Office, Spare Studio and Spare Arch need the same log.",
+              "what": "Lets an organisation's admins see who did what across every app the organisation uses, built from the operation log, searchable and exportable, with its own retention. Spare Office, Spare Studio and Spare Construct need the same log.",
               "kind": "service",
               "size": "medium",
               "depends_on": [
@@ -599,7 +599,7 @@
             {
               "id": "KIT-A1-F15-P1",
               "name": "Local profile without an account",
-              "what": "Keeps preferences, recent files and libraries on the device with no account at all, and moves them into the account if the person later signs up. Spare Arch and Spare Studio both work this way.",
+              "what": "Keeps preferences, recent files and libraries on the device with no account at all, and moves them into the account if the person later signs up. Spare Construct and Spare Studio both work this way.",
               "kind": "library",
               "size": "small",
               "depends_on": [
@@ -652,7 +652,7 @@
             {
               "id": "KIT-A1-F17-P1",
               "name": "Ownership transfer",
-              "what": "Hands an organisation, or a project with its history, to another member, who accepts before anything changes, with both told and every step logged. Spare Office and Spare Arch need the same hand-over.",
+              "what": "Hands an organisation, or a project with its history, to another member, who accepts before anything changes, with both told and every step logged. Spare Office and Spare Construct need the same hand-over.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -4121,7 +4121,7 @@
             {
               "id": "KIT-A7-F11-P1",
               "name": "Area data sources",
-              "what": "Which open sources exist for natural hazards, such as flood, liquefaction and coastal hazards, and for zoning, school zones and transport, under what licence and at what cost. Spare Arch, Spare Home and Spare Rent need the same answer.",
+              "what": "Which open sources exist for natural hazards, such as flood, liquefaction and coastal hazards, and for zoning, school zones and transport, under what licence and at what cost. Spare Construct, Spare Home and Spare Rent need the same answer.",
               "kind": "research",
               "size": "medium",
               "depends_on": [
@@ -4145,7 +4145,7 @@
             {
               "id": "KIT-A7-F11-P3",
               "name": "Council rules as data",
-              "what": "Each council's rules that apps apply, such as short-stay registration and night caps, sign rules and planning rules, kept as dated data with sources. Spare Stay, Spare Home and Spare Arch need them.",
+              "what": "Each council's rules that apps apply, such as short-stay registration and night caps, sign rules and planning rules, kept as dated data with sources. Spare Stay, Spare Home and Spare Construct need them.",
               "kind": "data",
               "size": "medium",
               "depends_on": [
@@ -4165,7 +4165,7 @@
             {
               "id": "KIT-A7-F12-P1",
               "name": "Aerial photos and boundary lines",
-              "what": "Adds open aerial imagery and property boundary lines from LINZ to the kit's maps under their licences. Spare Home and Spare Arch both need them.",
+              "what": "Adds open aerial imagery and property boundary lines from LINZ to the kit's maps under their licences. Spare Home and Spare Construct both need them.",
               "kind": "integration",
               "size": "medium",
               "depends_on": [
@@ -4607,7 +4607,7 @@
             {
               "id": "KIT-A8-F12-P2",
               "name": "Anchored comments",
-              "what": "Comments pinned to a point, region, page, video frame or text range, with replies and mentions, that map to and from PDF annotations. Spare Studio, Spare Office and Spare Arch's markups need the same model.",
+              "what": "Comments pinned to a point, region, page, video frame or text range, with replies and mentions, that map to and from PDF annotations. Spare Studio, Spare Office and Spare Construct's markups need the same model.",
               "kind": "library",
               "size": "medium",
               "depends_on": [
@@ -7865,7 +7865,7 @@
             {
               "id": "KIT-A15-F16-P1",
               "name": "Preview service",
-              "what": "Makes thumbnails and previews for every supported format, such as photos, video, PDF, office files and 3D, in a sandbox, using the shared engines. Spare Office, Spare Studio, Spare Social, Spare OS and Spare Arch need the same service.",
+              "what": "Makes thumbnails and previews for every supported format, such as photos, video, PDF, office files and 3D, in a sandbox, using the shared engines. Spare Office, Spare Studio, Spare Social, Spare OS and Spare Construct need the same service.",
               "kind": "service",
               "size": "medium",
               "depends_on": [
@@ -7887,7 +7887,7 @@
             {
               "id": "KIT-A15-F17-P1",
               "name": "Web viewer",
-              "what": "A read-only browser viewer for PDFs, images, video, audio, layouts, sheets and 3D, with no account or install. Spare Arch and Spare Studio both need it.",
+              "what": "A read-only browser viewer for PDFs, images, video, audio, layouts, sheets and 3D, with no account or install. Spare Construct and Spare Studio both need it.",
               "kind": "interface",
               "size": "medium",
               "depends_on": [
@@ -7908,7 +7908,7 @@
             {
               "id": "KIT-A15-F18-P1",
               "name": "Content library service",
-              "what": "One versioned library of reusable content, such as families, materials, fonts, brand kits and templates, loaded by reference, with organisation and public collections, stored on the file service and metered to the ledger. Spare Arch and Spare Studio both need it.",
+              "what": "One versioned library of reusable content, such as families, materials, fonts, brand kits and templates, loaded by reference, with organisation and public collections, stored on the file service and metered to the ledger. Spare Construct and Spare Studio both need it.",
               "kind": "service",
               "size": "large",
               "depends_on": [
@@ -7934,7 +7934,7 @@
             {
               "id": "KIT-A15-F18-P3",
               "name": "Open collections with licences",
-              "what": "Collections of materials, textures, sounds and music under open licences, each with its licence and credit recorded and shown. Spare Arch, Spare Studio and Spare Social need them.",
+              "what": "Collections of materials, textures, sounds and music under open licences, each with its licence and credit recorded and shown. Spare Construct, Spare Studio and Spare Social need them.",
               "kind": "data",
               "size": "medium",
               "depends_on": [
@@ -8095,7 +8095,7 @@
             {
               "id": "KIT-A16-F3-P5",
               "name": "Command-line tool",
-              "what": "One command-line tool generated from each app's command schemas, for scripts, batch conversion and checks from a terminal. Spare Arch, Spare Studio and Spare OS need it.",
+              "what": "One command-line tool generated from each app's command schemas, for scripts, batch conversion and checks from a terminal. Spare Construct, Spare Studio and Spare OS need it.",
               "kind": "library",
               "size": "medium",
               "depends_on": [
@@ -8165,7 +8165,7 @@
             {
               "id": "KIT-A16-F5-P4",
               "name": "Plugin panels",
-              "what": "Lets plugins add panels and buttons built with HTML and TypeScript, inside the sandbox and with declared permissions. Spare Arch, Spare Studio and Spare Office need them.",
+              "what": "Lets plugins add panels and buttons built with HTML and TypeScript, inside the sandbox and with declared permissions. Spare Construct, Spare Studio and Spare Office need them.",
               "kind": "library",
               "size": "medium",
               "depends_on": [
@@ -8315,7 +8315,7 @@
             {
               "id": "KIT-A16-F11-P1",
               "name": "Action recorder",
-              "what": "Records a person's operations as a script they can edit, replay and run on many files. Spare Arch, Spare Studio and Spare Office need the same recorder.",
+              "what": "Records a person's operations as a script they can edit, replay and run on many files. Spare Construct, Spare Studio and Spare Office need the same recorder.",
               "kind": "library",
               "size": "medium",
               "depends_on": [
@@ -8335,7 +8335,7 @@
             {
               "id": "KIT-A16-F12-P1",
               "name": "Script console",
-              "what": "A console and editor inside each app to write, run and debug scripts against its command API, with time and memory limits. Spare Arch, Spare Studio and Spare Office need it.",
+              "what": "A console and editor inside each app to write, run and debug scripts against its command API, with time and memory limits. Spare Construct, Spare Studio and Spare Office need it.",
               "kind": "interface",
               "size": "medium",
               "depends_on": [
@@ -8355,7 +8355,7 @@
             {
               "id": "KIT-A16-F13-P1",
               "name": "Safe expression language",
-              "what": "A small, sandboxed expression language with units checked and a library of common functions, for parameter formulas and animation expressions. Spare Arch and Spare Studio both need it.",
+              "what": "A small, sandboxed expression language with units checked and a library of common functions, for parameter formulas and animation expressions. Spare Construct and Spare Studio both need it.",
               "kind": "library",
               "size": "medium",
               "depends_on": [
@@ -9604,7 +9604,7 @@
             {
               "id": "KIT-A20-F2-P4",
               "name": "Desktop shell choice",
-              "what": "A decision note on the desktop wrapper, such as Tauri or our own web view host, with native code in the same process for heavy apps. Spare Arch, Spare Office, Spare Studio and Spare Social need the same shell.",
+              "what": "A decision note on the desktop wrapper, such as Tauri or our own web view host, with native code in the same process for heavy apps. Spare Construct, Spare Office, Spare Studio and Spare Social need the same shell.",
               "kind": "research",
               "size": "medium",
               "depends_on": [
@@ -9615,7 +9615,7 @@
             {
               "id": "KIT-A20-F2-P5",
               "name": "Desktop installers",
-              "what": "Signed installers for Windows, macOS and Linux that add or remove single apps, with automatic updates and roll back. Spare Arch, Spare Studio and Spare Office need them.",
+              "what": "Signed installers for Windows, macOS and Linux that add or remove single apps, with automatic updates and roll back. Spare Construct, Spare Studio and Spare Office need them.",
               "kind": "service",
               "size": "medium",
               "depends_on": [
@@ -9698,7 +9698,7 @@
             {
               "id": "KIT-A20-F5-P2",
               "name": "Preferences that follow me",
-              "what": "Typed preferences per person, organisation and project, with a clear order of which wins, saved as operations so they reach every device and can be exported. Spare Arch, Spare Studio, Spare Office and Spare Ride need them.",
+              "what": "Typed preferences per person, organisation and project, with a clear order of which wins, saved as operations so they reach every device and can be exported. Spare Construct, Spare Studio, Spare Office and Spare Ride need them.",
               "kind": "library",
               "size": "small",
               "depends_on": [
@@ -9730,7 +9730,7 @@
             {
               "id": "KIT-A20-F6-P2",
               "name": "Tips in context",
-              "what": "Short tips on a tool or setting the first time it is used, which can be turned off. Spare Arch and Spare Studio both need them.",
+              "what": "Short tips on a tool or setting the first time it is used, which can be turned off. Spare Construct and Spare Studio both need them.",
               "kind": "interface",
               "size": "small",
               "depends_on": [
@@ -9761,7 +9761,7 @@
             {
               "id": "KIT-A20-F7-P2",
               "name": "Update channels",
-              "what": "Stable, preview and long-support channels, with pause, skip, pinned versions and roll back. Spare Arch, Spare Studio and Spare OS need them.",
+              "what": "Stable, preview and long-support channels, with pause, skip, pinned versions and roll back. Spare Construct, Spare Studio and Spare OS need them.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -9819,7 +9819,7 @@
             {
               "id": "KIT-A20-F10-P1",
               "name": "Command search and shortcuts",
-              "what": "Type to find and run any command, with shortcut sets that start from the ones people already know and can be changed, exported and shared. Spare Arch, Spare Studio, Spare Office and Spare OS need the same.",
+              "what": "Type to find and run any command, with shortcut sets that start from the ones people already know and can be changed, exported and shared. Spare Construct, Spare Studio, Spare Office and Spare OS need the same.",
               "kind": "interface",
               "size": "small",
               "depends_on": [
@@ -10211,7 +10211,7 @@
             {
               "id": "KIT-A22-F2-P6",
               "name": "Name and interface review",
-              "what": "Checks before each release that names, icons and interface designs are our own, and that other companies' names appear only to say what we replace. Spare Arch and Spare Office both map it.",
+              "what": "Checks before each release that names, icons and interface designs are our own, and that other companies' names appear only to say what we replace. Spare Construct and Spare Office both map it.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -10466,7 +10466,7 @@
             {
               "id": "KIT-A22-F10-P1",
               "name": "Many-machine installs",
-              "what": "Installs, updates and sets up apps on many machines at once through an organisation's own device tools and set-up files. Spare Arch and Spare OS both need it.",
+              "what": "Installs, updates and sets up apps on many machines at once through an organisation's own device tools and set-up files. Spare Construct and Spare OS both need it.",
               "kind": "integration",
               "size": "medium",
               "depends_on": [
@@ -11283,7 +11283,7 @@
             {
               "id": "KIT-A26-F9-P2",
               "name": "Plan import",
-              "what": "Imports a plan exported in an open format, such as one from Spare Arch, or a PDF or image with its copyright owner and licence recorded.",
+              "what": "Imports a plan exported in an open format, such as one from Spare Construct, or a PDF or image with its copyright owner and licence recorded.",
               "kind": "library",
               "size": "small",
               "depends_on": [
@@ -11344,7 +11344,7 @@
             {
               "id": "KIT-A27-F1-P1",
               "name": "Renderer choice",
-              "what": "Our own renderer on wgpu, or a web renderer first, covering instancing, culling and browser support, decided once for Spare Arch and Spare Studio.",
+              "what": "Our own renderer on wgpu, or a web renderer first, covering instancing, culling and browser support, decided once for Spare Construct and Spare Studio.",
               "kind": "research",
               "size": "medium",
               "depends_on": [],
@@ -11365,7 +11365,7 @@
             {
               "id": "KIT-A27-F1-P3",
               "name": "3D viewport",
-              "what": "A fast viewport with lighting, materials and camera controls, shared by Spare Arch and Spare Studio, with a plain fallback for slow devices that Spare Home's tours can use.",
+              "what": "A fast viewport with lighting, materials and camera controls, shared by Spare Construct and Spare Studio, with a plain fallback for slow devices that Spare Home's tours can use.",
               "kind": "library",
               "size": "medium",
               "depends_on": [
@@ -11376,7 +11376,7 @@
             {
               "id": "KIT-A27-F1-P4",
               "name": "Path-traced rendering",
-              "what": "Realistic path-traced still images with an open denoiser, shared by Spare Arch and Spare Studio.",
+              "what": "Realistic path-traced still images with an open denoiser, shared by Spare Construct and Spare Studio.",
               "kind": "library",
               "size": "large",
               "depends_on": [
@@ -11437,7 +11437,7 @@
             {
               "id": "KIT-A27-F3-P1",
               "name": "2D drawing core",
-              "what": "The engine-draw2d core: lines with true weights, fills, patterns, paths and shapes drawn on the GPU, used by Spare Arch drawings, Spare Studio vectors and Spare Office shapes.",
+              "what": "The engine-draw2d core: lines with true weights, fills, patterns, paths and shapes drawn on the GPU, used by Spare Construct drawings, Spare Studio vectors and Spare Office shapes.",
               "kind": "library",
               "size": "large",
               "depends_on": [
@@ -11449,7 +11449,7 @@
             {
               "id": "KIT-A27-F3-P2",
               "name": "Path booleans",
-              "what": "Robust 2D boolean operations on curves, shared by Spare Studio and Spare Arch.",
+              "what": "Robust 2D boolean operations on curves, shared by Spare Studio and Spare Construct.",
               "kind": "library",
               "size": "medium",
               "depends_on": [
@@ -11500,7 +11500,7 @@
             {
               "id": "KIT-A27-F5-P1",
               "name": "Text shaping and layout",
-              "what": "Font loading, shaping, bidirectional and complex scripts, vertical text, colour and emoji fonts, line breaking and paragraph layout, shared by Spare Studio, Spare Office, Spare Arch and Spare Social.",
+              "what": "Font loading, shaping, bidirectional and complex scripts, vertical text, colour and emoji fonts, line breaking and paragraph layout, shared by Spare Studio, Spare Office, Spare Construct and Spare Social.",
               "kind": "library",
               "size": "large",
               "depends_on": [
@@ -11523,7 +11523,7 @@
             {
               "id": "KIT-A27-F5-P3",
               "name": "Input methods for drawn text",
-              "what": "IME composition, dead keys, compose keys and easy macron typing for text drawn on a canvas, on desktop and in the browser. Spare Studio, Spare Office and Spare Arch need it.",
+              "what": "IME composition, dead keys, compose keys and easy macron typing for text drawn on a canvas, on desktop and in the browser. Spare Studio, Spare Office and Spare Construct need it.",
               "kind": "library",
               "size": "medium",
               "depends_on": [
@@ -11534,7 +11534,7 @@
             {
               "id": "KIT-A27-F5-P4",
               "name": "Open font catalogue",
-              "what": "One catalogue of fonts under open licences, such as the SIL Open Font License, covering every major script, with what each licence allows for embedding, print and the web. Spare Studio, Spare Office, Spare OS and Spare Arch share it.",
+              "what": "One catalogue of fonts under open licences, such as the SIL Open Font License, covering every major script, with what each licence allows for embedding, print and the web. Spare Studio, Spare Office, Spare OS and Spare Construct share it.",
               "kind": "data",
               "size": "medium",
               "depends_on": [
@@ -11599,7 +11599,7 @@
             {
               "id": "KIT-A27-F6-P4",
               "name": "PDF markup",
-              "what": "Clouds, text, arrows, stamps and every standard PDF annotation type, read and written to the specification. Spare Arch, Spare Studio and Spare Office share it.",
+              "what": "Clouds, text, arrows, stamps and every standard PDF annotation type, read and written to the specification. Spare Construct, Spare Studio and Spare Office share it.",
               "kind": "library",
               "size": "medium",
               "depends_on": [
@@ -11646,7 +11646,7 @@
             {
               "id": "KIT-A27-F6-P8",
               "name": "Printing",
-              "what": "Sends what an app shows to the system's print service through engine-pdf, with preview, page choices, paper sizes and scaling. Spare Arch, Spare Studio, Spare Office and Spare OS need it.",
+              "what": "Sends what an app shows to the system's print service through engine-pdf, with preview, page choices, paper sizes and scaling. Spare Construct, Spare Studio, Spare Office and Spare OS need it.",
               "kind": "library",
               "size": "small",
               "depends_on": [
@@ -11665,7 +11665,7 @@
             {
               "id": "KIT-A27-F7-P1",
               "name": "True redaction and hidden data removal",
-              "what": "Removes chosen content for good, including any text under it, and strips hidden data, metadata and scripts before a file is shared. Spare Arch, Spare Studio and Spare Office need it.",
+              "what": "Removes chosen content for good, including any text under it, and strips hidden data, metadata and scripts before a file is shared. Spare Construct, Spare Studio and Spare Office need it.",
               "kind": "library",
               "size": "medium",
               "depends_on": [
@@ -11790,7 +11790,7 @@
             {
               "id": "KIT-A27-F10-P1",
               "name": "Office formats engine",
-              "what": "Reads and writes DOCX, XLSX, PPTX, ODT, ODS, ODP and RTF from their published standards, below Spare Office, Spare Studio and Spare Arch's spreadsheet export, so none depends on another. Proposed as engine-formats (KIT-A16-F10-P1).",
+              "what": "Reads and writes DOCX, XLSX, PPTX, ODT, ODS, ODP and RTF from their published standards, below Spare Office, Spare Studio and Spare Construct's spreadsheet export, so none depends on another. Proposed as engine-formats (KIT-A16-F10-P1).",
               "kind": "library",
               "size": "large",
               "depends_on": [
@@ -12146,7 +12146,7 @@
     "Paying on account (KIT-A3-F17) and regular payments (KIT-A3-F12) are now core because Spare Office's core billing depends on them; should Spare Office's billing wait instead, so the first release stays small?",
     "Which core research and legal parts listed as waiting for a work-board piece should become kit pieces first?",
     "Kit core now includes every kit feature a program's core feature depends on; should some programs lower their own features instead, so the first release stays small?",
-    "Should the programs that still map their own copies of kit parts switch to the kit's: translation frameworks (ARCH-A22-F4-P1, MKT-A19-F1-P1, OFF-A17-F8-P1, SOC-A21-F5-P1, STAY-A17-F2-P1, STU-A19-F3-P1), status pages (SOC-A22-F4-P3, MKT-A17-F7-P1), Office's chat server (OFF-A13-F1-P2), at-cost pricing (OFF-A20, STU-A1-F5, SOC-A22-F3) and the other copies the review listed?",
+    "Should the programs that still map their own copies of kit parts switch to the kit's: translation frameworks (CON-A22-F4-P1, MKT-A19-F1-P1, OFF-A17-F8-P1, SOC-A21-F5-P1, STAY-A17-F2-P1, STU-A19-F3-P1), status pages (SOC-A22-F4-P3, MKT-A17-F7-P1), Office's chat server (OFF-A13-F1-P2), at-cost pricing (OFF-A20, STU-A1-F5, SOC-A22-F3) and the other copies the review listed?",
     "Should the kit pieces now tracked on other programs' boards (A05, A08, A14, MK01, MK04, MK05, OF05, M04 and RD03) move to the kit's own board?",
     "Can a member panel's decision move held money without binding consumers in a way the Arbitration Act forbids, and what do the order terms need to say?",
     "Is a member-funded protection pool an insurance business that needs a licence, and if so, is outside insurance the better route?",

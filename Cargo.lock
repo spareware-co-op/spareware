@@ -3,75 +3,75 @@
 version = 4
 
 [[package]]
-name = "arch-api"
+name = "construct-api"
 version = "0.0.0"
 dependencies = [
- "arch-clash",
- "arch-elements",
- "arch-families",
- "arch-interop",
- "arch-model",
- "arch-versions",
- "arch-views",
+ "construct-clash",
+ "construct-elements",
+ "construct-families",
+ "construct-interop",
+ "construct-model",
+ "construct-versions",
+ "construct-views",
  "kit-mcp",
  "kit-ops",
  "kit-plugin",
 ]
 
 [[package]]
-name = "arch-clash"
+name = "construct-clash"
 version = "0.0.0"
 dependencies = [
- "arch-kernel",
- "arch-model",
+ "construct-kernel",
+ "construct-model",
  "kit-store",
 ]
 
 [[package]]
-name = "arch-cli"
+name = "construct-cli"
 version = "0.0.0"
 dependencies = [
- "arch-api",
+ "construct-api",
 ]
 
 [[package]]
-name = "arch-elements"
+name = "construct-elements"
 version = "0.0.0"
 dependencies = [
- "arch-kernel",
- "arch-model",
- "arch-regen",
- "arch-solver",
+ "construct-kernel",
+ "construct-model",
+ "construct-regen",
+ "construct-solver",
  "kit-core",
 ]
 
 [[package]]
-name = "arch-families"
+name = "construct-families"
 version = "0.0.0"
 dependencies = [
- "arch-kernel",
- "arch-model",
- "arch-regen",
- "arch-solver",
+ "construct-kernel",
+ "construct-model",
+ "construct-regen",
+ "construct-solver",
 ]
 
 [[package]]
-name = "arch-interop"
+name = "construct-interop"
 version = "0.0.0"
 dependencies = [
- "arch-elements",
- "arch-model",
+ "construct-elements",
+ "construct-model",
 ]
 
 [[package]]
-name = "arch-kernel"
+name = "construct-kernel"
 version = "0.0.0"
 dependencies = [
  "kit-core",
 ]
 
 [[package]]
-name = "arch-model"
+name = "construct-model"
 version = "0.0.0"
 dependencies = [
  "kit-core",
@@ -79,36 +79,36 @@ dependencies = [
 ]
 
 [[package]]
-name = "arch-regen"
+name = "construct-regen"
 version = "0.0.0"
 dependencies = [
- "arch-model",
+ "construct-model",
  "kit-core",
  "kit-ops",
 ]
 
 [[package]]
-name = "arch-solver"
+name = "construct-solver"
 version = "0.0.0"
 dependencies = [
  "kit-core",
 ]
 
 [[package]]
-name = "arch-versions"
+name = "construct-versions"
 version = "0.0.0"
 dependencies = [
- "arch-model",
- "arch-views",
+ "construct-model",
+ "construct-views",
  "kit-sync",
 ]
 
 [[package]]
-name = "arch-views"
+name = "construct-views"
 version = "0.0.0"
 dependencies = [
- "arch-elements",
- "arch-model",
+ "construct-elements",
+ "construct-model",
  "engine-draw2d",
  "engine-pdf",
  "engine-text",

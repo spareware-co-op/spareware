@@ -1,0 +1,17 @@
+[package]
+name = "construct-api"
+version = "0.0.0"
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+kit-ops = { path = "../../../kit/crates/kit-ops" }
+kit-plugin = { path = "../../../kit/crates/kit-plugin" }
+kit-mcp = { path = "../../../kit/crates/kit-mcp" }
+construct-model = { path = "../construct-model" }
+construct-elements = { path = "../construct-elements" }
+construct-families = { path = "../construct-families" }
+construct-views = { path = "../construct-views" }
+construct-clash = { path = "../construct-clash" }
+construct-versions = { path = "../construct-versions" }
+construct-interop = { path = "../construct-interop" }
