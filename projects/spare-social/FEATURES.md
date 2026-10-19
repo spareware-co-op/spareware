@@ -467,7 +467,7 @@ The time-order feed of people you follow, feeds anyone can make and publish with
 | SOC-A10-F1-P2 | **Feed screens**: Feeds mixed or split by type (videos, photos, posts), switchable at the top. | interface | medium | SOC-A10-F1-P1 |  |
 | SOC-A10-F1-P3 | **Caught-up marker**: Remember where you got to and say when you are all caught up. | data | small | kit-sync |  |
 | SOC-A10-F2-P1 | **Feed definition format**: A published format for a feed's rules that anyone can read before choosing it. | data | medium | kit-core | [M05](STATUS.md) |
-| SOC-A10-F2-P2 | **Feed plugins**: Custom feed logic runs as sandboxed plugins with declared permissions. | library | large | kit-plugin, SOC-A10-F2-P1 | [A08](../spare-arch/STATUS.md) |
+| SOC-A10-F2-P2 | **Feed plugins**: Custom feed logic runs as sandboxed plugins with declared permissions. | library | large | kit-plugin, SOC-A10-F2-P1 | [A08](../spare-construct/STATUS.md) |
 | SOC-A10-F2-P3 | **Feed directory**: Browse, preview and pin feeds, with each feed's rules and maker shown. | interface | medium | SOC-A10-F2-P1 |  |
 | SOC-A10-F2-P4 | **No-code feed builder**: Build a feed from people, tags, lengths, languages, places and the human or AI section. | interface | medium | SOC-A10-F2-P1 |  |
 | SOC-A10-F3-P1 | **Published discovery ranking**: The default discovery ranking with its signals and weights open for anyone to read and check. | service | large | SOC-A10-F2-P1 | [M05](STATUS.md) |
@@ -991,7 +991,7 @@ How members run Spare Social: who belongs and votes, protected core promises, th
 | SOC-A22-F5-P3 | **Backups and tested restores**: The kit's backups and restore drills (KIT-A22-F3-P1) extended to media storage, with restores tested on a schedule. | integration | medium | KIT-A22-F3-P1, SOC-A17-F4-P1 |  |
 | SOC-A22-F5-P4 | **Security reviews and reporting**: Outside security reviews of Spare Social before launch, through the kit's security reviews and reporting page (KIT-A22-F5-P3). | integration | small | KIT-A22-F5-P3 |  |
 | SOC-A22-F6-P1 | **Terms of use**: Plain-language terms that match the published rules and the co-op's legal entity. | legal | medium | SOC-A13-F2-P1 | [K01](../kit/STATUS.md) |
-| SOC-A22-F6-P2 | **Licence register**: Spare Social's entries in the repository's one licence register (piece A14): every open-source dependency, its licence and where it came from. | legal | small |  | [A14](../spare-arch/STATUS.md) |
+| SOC-A22-F6-P2 | **Licence register**: Spare Social's entries in the repository's one licence register (piece A14): every open-source dependency, its licence and where it came from. | legal | small |  | [A14](../spare-construct/STATUS.md) |
 | SOC-A22-F7-P1 | **Performance budgets**: Targets for feed load time, video start time and upload speed, measured on real NZ connections. | research | small |  |  |
 | SOC-A22-F8-P1 | **Media liability insurance**: Insurance for defamation and copyright claims over what members post, compared on cost and cover, with the premium on the cost ledger (KIT-A14-F17-P1). | research | small | KIT-A14-F17-P1 |  |
 | SOC-A22-F8-P2 | **Overseas duties on the ledger**: Costs of overseas legal representatives, regulator fees and compliance work shown as their own lines on the cost ledger. | data | small | SOC-A22-F2-P1, SOC-A13-F3-P11 | [K06](../kit/STATUS.md) |

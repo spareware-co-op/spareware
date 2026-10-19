@@ -9,7 +9,7 @@ flowchart TB
   subgraph Products
     direction LR
     subgraph Design[Design tools]
-      ARCH["`**Spare Arch**
+      CONSTRUCT["`**Spare Construct**
 *Revit replacement*`"]
       CREATIVE["`**Spare Studio**
 *Adobe replacement*`"]
@@ -56,12 +56,12 @@ flowchart TB
 
 | Family | Products | What they need most |
 | --- | --- | --- |
-| Design tools | Spare Arch; [Spare Studio](projects/spare-studio/ARCHITECTURE.md) (working name), ideally with [ArtCraft](https://github.com/storytold) under the umbrella | Heavy local computing, a geometry kernel or GPU image pipeline, desktop and browser, huge files, drawings and print |
+| Design tools | Spare Construct; [Spare Studio](projects/spare-studio/ARCHITECTURE.md) (working name), ideally with [ArtCraft](https://github.com/storytold) under the umbrella | Heavy local computing, a geometry kernel or GPU image pipeline, desktop and browser, huge files, drawings and print |
 | Marketplaces | Spare Ride, Food, Stay, Home, Rent, Work, Market | Two-sided matching, payments, trust and safety, phones, real-time location, each industry's rules |
 | Everyday computing | [Spare Office](projects/spare-office/ARCHITECTURE.md), [Spare OS](projects/spare-os/ARCHITECTURE.md) | Open file formats and protocols, live co-editing, a proven Linux base, a painless move from Windows |
 | Social | [Spare Social](projects/spare-social/ARCHITECTURE.md) (working name) | Video storage and delivery at cost, feeds people choose, moderation that removes only what the law requires, open social protocols |
 
-Design tools lean on the Rust core pattern mapped in [Spare Arch's ARCHITECTURE.md](projects/spare-arch/ARCHITECTURE.md), and share its renderer, 2D drawing engine and PDF output with Spare Studio. Marketplaces lean on the shared kit. Both use the same command layer, plugins, sync and AI access.
+Design tools lean on the Rust core pattern mapped in [Spare Construct's ARCHITECTURE.md](projects/spare-construct/ARCHITECTURE.md), and share its renderer, 2D drawing engine and PDF output with Spare Studio. Marketplaces lean on the shared kit. Both use the same command layer, plugins, sync and AI access.
 
 ## Rules every program follows
 
@@ -71,7 +71,7 @@ Design tools lean on the Rust core pattern mapped in [Spare Arch's ARCHITECTURE.
 4. **Headless.** Everything a person can do in an app, an AI agent or a script can do through the same commands.
 5. **Open formats and open data.** Members can take their data and their history with them.
 6. **Built legally, or not at all.** See the README. No exceptions.
-7. **Port proven methods; measure everything.** The same ground rules as Spare Arch.
+7. **Port proven methods; measure everything.** The same ground rules as Spare Construct.
 
 ## The shared kit
 
@@ -85,7 +85,7 @@ Design tools lean on the Rust core pattern mapped in [Spare Arch's ARCHITECTURE.
 | Ratings, disputes, safety | Two-way ratings, dispute handling, emergency and reporting tools | All marketplaces |
 | Member voting | Proposals and votes on fees and rules, per app and co-op-wide | All |
 | Open cost ledger | Monthly public record of what each app cost to run and what the fee paid for | All |
-| Sync, history, storage | Operation log, offline work, version history, chunked storage | All; heaviest in Spare Arch |
+| Sync, history, storage | Operation log, offline work, version history, chunked storage | All; heaviest in Spare Construct |
 | Plugins and MCP server | Sandboxed add-ins and AI access on every app | All |
 | Marketplace engine | Listings, requests, orders, pricing rules and the at-cost fee, as one shared loop | All marketplaces |
 
@@ -178,10 +178,10 @@ spareware/
 │  │  ├─ crates/              kit-core, kit-ops, kit-store, kit-sync, kit-plugin, kit-mcp, kit-market
 │  │  └─ services/            accounts, payments, matching, maps, messaging, trust, voting, ledger
 │  ├─ engines/crates/         engine-render, engine-draw2d, engine-text, engine-pdf, engine-media
-│  ├─ spare-arch/
-│  │  ├─ crates/              arch-model, arch-kernel, arch-solver, arch-regen, arch-elements,
-│  │  │                       arch-families, arch-views, arch-clash, arch-versions,
-│  │  │                       arch-interop, arch-api, arch-cli
+│  ├─ spare-construct/
+│  │  ├─ crates/              construct-model, construct-kernel, construct-solver, construct-regen, construct-elements,
+│  │  │                       construct-families, construct-views, construct-clash, construct-versions,
+│  │  │                       construct-interop, construct-api, construct-cli
 │  │  ├─ app/                 interface and desktop shell
 │  │  └─ notes/
 │  ├─ spare-office/

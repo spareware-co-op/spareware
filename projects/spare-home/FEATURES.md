@@ -144,13 +144,13 @@ A listing starts from a property record filled in from open data. The seller add
 
 ## HOME-A3 Photos, floor plans, video and tours
 
-Buyers decide on photos and plans first. Sellers get the same quality buyers expect, with honest labels on anything edited, a record of who owns each file and what it may be used for, and floor plans straight from a Spare Arch model.
+Buyers decide on photos and plans first. Sellers get the same quality buyers expect, with honest labels on anything edited, a record of who owns each file and what it may be used for, and floor plans straight from a Spare Construct model.
 
 | Feature | What a person can do | Priority | Parts |
 | --- | --- | --- | --- |
 | **HOME-A3-F1** Add and arrange photos | Upload photos from a phone or camera, put them in order and add captions. | core | P1, P2, P3, P4 |
 | **HOME-A3-F2** Label edited photos honestly | Mark any edited, staged or AI-changed photo so buyers know what they are looking at. | core | P1, P2, P3 |
-| **HOME-A3-F3** Add a floor plan | Draw a floor plan in the app, upload one you already have, or bring one in from Spare Arch. | core | P1, P2, P4, P5, P6 |
+| **HOME-A3-F3** Add a floor plan | Draw a floor plan in the app, upload one you already have, or bring one in from Spare Construct. | core | P1, P2, P4, P5, P6 |
 | **HOME-A3-F4** Add video | Upload a walk-through video with captions. | next | P1, P2 |
 | **HOME-A3-F5** Offer a 3D walk-through | Let buyers walk through the home in 3D on any device. | later | P1, P2, P3 |
 | **HOME-A3-F6** Add aerial photos | Add drone or aerial photos taken by a booked professional. | later | P1 |
@@ -171,14 +171,14 @@ Buyers decide on photos and plans first. Sellers get the same quality buyers exp
 | HOME-A3-F2-P2 | **Virtually furnished photos**: Labels photos furnished by a stager or another tool as virtually furnished and keeps the bare photo one tap away. | library | small | HOME-A3-F2-P1 |  |
 | HOME-A3-F2-P3 | **Content credentials**: Reads content credentials on uploaded photos before hidden data is stripped, and labels edited or AI-changed images automatically, alongside the seller's own declaration. | library | small | HOME-A3-F2-P1, KIT-A15-F7-P1 |  |
 | HOME-A3-F3-P1 | **Simple plan drawer**: Lets a seller trace rooms with set sizes, doors and windows with no design skills needed, built once on engine-draw2d and shared with Spare Rent and Spare Stay. | interface | large | engine-draw2d, kit-ops |  |
-| HOME-A3-F3-P2 | **Plans from Spare Arch**: Imports the listing plan Spare Arch exports in an open format and places it on the listing. Spare Arch owns the conversion from a model (ARCH-A11-F7-P3) and Spare Home only imports; the importer is built on engine-draw2d and shared with Spare Rent and Spare Stay. | integration | small | engine-draw2d, HOME-A3-F3-P4 | [HM04](STATUS.md) |
+| HOME-A3-F3-P2 | **Plans from Spare Construct**: Imports the listing plan Spare Construct exports in an open format and places it on the listing. Spare Construct owns the conversion from a model (CON-A11-F7-P3) and Spare Home only imports; the importer is built on engine-draw2d and shared with Spare Rent and Spare Stay. | integration | small | engine-draw2d, HOME-A3-F3-P4 | [HM04](STATUS.md) |
 | HOME-A3-F3-P4 | **Plan output**: Draws a plan as an image, a PDF and a plain text room list for screen readers. | library | medium | engine-draw2d, engine-pdf, engine-text, HOME-A17-F1-P4 |  |
 | HOME-A3-F3-P5 | **Room and floor areas**: Works out room and floor areas from a drawn, imported or uploaded plan, with how they were measured stated beside them. | library | small | HOME-A3-F3-P1, HOME-A2-F2-P3, HOME-A3-F3-P2, HOME-A3-F3-P6 |  |
 | HOME-A3-F3-P6 | **Upload an existing plan**: Takes a PDF or image of a plan from a draughtsperson, builder or the council property file, records its copyright owner and licence, and lets the seller add room names and sizes. | library | small | kit-store, HOME-A3-F8-P2, HOME-A3-F3-P4 |  |
 | HOME-A3-F4-P1 | **Home video settings**: Converts and streams walk-through videos through engine-media and the kit's storage at cost, keeping the original. | service | medium | engine-media, KIT-A15-F7-P2 |  |
 | HOME-A3-F4-P2 | **Captions**: Uses the kit's captions to draft captions from the soundtrack for the seller to fix and approve. | library | small | KIT-A19-F4-P1, HOME-A3-F4-P1 |  |
 | HOME-A3-F5-P1 | **3D walk-through viewer**: Shows a 3D tour in the browser and on phones, with a plain fallback for slow devices. | interface | large | engine-render |  |
-| HOME-A3-F5-P2 | **Walk-through from a Spare Arch model**: Makes a walk-through from an exported Spare Arch model without a camera visit. | integration | medium | engine-render, HOME-A3-F3-P2 |  |
+| HOME-A3-F5-P2 | **Walk-through from a Spare Construct model**: Makes a walk-through from an exported Spare Construct model without a camera visit. | integration | medium | engine-render, HOME-A3-F3-P2 |  |
 | HOME-A3-F5-P3 | **Capturing tours from photos**: Finds open methods for building a tour from 360 photos or phone scans, and what they cost to run. | research | medium |  |  |
 | HOME-A3-F6-P1 | **Drone rules**: Sets out aviation and privacy rules for drone photos over homes and neighbours. | research | small |  |  |
 | HOME-A3-F7-P1 | **Media archive rule**: Moves sold listings' media to cheaper storage through the kit's storage at cost, with the cost shown in the ledger. | service | medium | KIT-A15-F7-P2, svc-ledger |  |
@@ -822,7 +822,7 @@ A program never depends on another program, so anything two programs both need m
 | HOME-A2-F8-P2 | **Record hand-over to the buyer** | Spare Rent |
 | HOME-A3-F1-P3 | **Privacy check on photos** | Spare Rent, Spare Stay |
 | HOME-A3-F3-P1 | **Simple plan drawer** | Spare Rent, Spare Stay |
-| HOME-A3-F3-P2 | **Plans from Spare Arch** | Spare Rent, Spare Stay |
+| HOME-A3-F3-P2 | **Plans from Spare Construct** | Spare Rent, Spare Stay |
 | HOME-A3-F8-P2 | **Licence on each file** | Spare Rent, Spare Stay |
 | HOME-A5-F3-P4 | **Aerial photos and boundary lines** | Spare Rent, Spare Stay, Spare Work |
 | HOME-A6-F1-P2 | **Shared listing feed service** | Spare Rent, Spare Stay, Spare Market |

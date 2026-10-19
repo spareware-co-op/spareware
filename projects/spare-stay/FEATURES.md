@@ -117,7 +117,7 @@ Hosts describe a place truthfully and fully: what it is, where it is, what it ha
 | STAY-A2-F9-P2 | **Host's own translations**: Hosts write or correct the text in other languages. | interface | small | STAY-A2-F9-P1 |  |
 | STAY-A2-F10-P1 | **Move-in helper**: Stay's use of the kit's bulk import: hosts bring their own photos, words and calendar links from another booking site in one flow, checked before anything goes live. | interface | medium | KIT-A5-F17-P2, STAY-A2-F1-P2, STAY-A3-F3-P2 |  |
 | STAY-A2-F10-P2 | **What can be brought across**: Stay's cases for the kit's import terms: hosts bring their own photos, words and calendar links, never other sites' data or reviews. | legal | small | KIT-A5-F17-P1 |  |
-| STAY-A2-F11-P1 | **Floor plans**: A simple floor plan drawn on the 2D drawing engine, or brought in from a Spare Arch model file through the kit. The plan drawer and the import should move down into the kit or an engine, since Spare Home and Spare Rent map the same; Stay never links to another program directly. | interface | medium | `engine-draw2d`, STAY-A2-F1-P1 |  |
+| STAY-A2-F11-P1 | **Floor plans**: A simple floor plan drawn on the 2D drawing engine, or brought in from a Spare Construct model file through the kit. The plan drawer and the import should move down into the kit or an engine, since Spare Home and Spare Rent map the same; Stay never links to another program directly. | interface | medium | `engine-draw2d`, STAY-A2-F1-P1 |  |
 
 ## STAY-A3 Calendar and channel sync
 

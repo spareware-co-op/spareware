@@ -48,7 +48,7 @@
 
 /* One light colour per app: --app is the fill for its mark, primary buttons and active items
    (ink text on it), --app-strong is for thin borders and icons, --app-tint for quiet backgrounds. */
-[data-app="arch"]   { --app: #8EC5FF; --app-strong: #1F5FA8; --app-tint: #EAF4FF; }
+[data-app="construct"] { --app: #8EC5FF; --app-strong: #1F5FA8; --app-tint: #EAF4FF; }
 [data-app="studio"] { --app: #C4B2FF; --app-strong: #5B3FB8; --app-tint: #F3EFFF; }
 [data-app="social"] { --app: #FFB27A; --app-strong: #9E4A14; --app-tint: #FFF1E6; }
 [data-app="ride"]   { --app: #7FD8CF; --app-strong: #13756B; --app-tint: #E8F8F6; }
@@ -286,7 +286,7 @@ details > summary:hover .name { text-decoration: underline; text-decoration-colo
   // Every program on the site. "app" is its colour key in tokens.css; the kit has none, so it is Spareware red.
   var PROGRAMS = {
     'kit':          { name: 'Shared kit and co-op portal', app: '', replaces: 'The parts every platform rebuilds: sign-in, payments, maps, messages, voting and the open cost ledger' },
-    'spare-arch':   { name: 'Spare Arch',   app: 'arch',   replaces: 'Revit, and the add-ins people buy for it' },
+    'spare-construct':   { name: 'Spare Construct',   app: 'construct',   replaces: 'Revit, and the add-ins people buy for it' },
     'spare-studio': { name: 'Spare Studio', app: 'studio', replaces: "Adobe's apps: Photoshop, Illustrator, InDesign, Premiere, After Effects, Lightroom, Acrobat and more" },
     'spare-office': { name: 'Spare Office', app: 'office', replaces: 'Microsoft 365: Word, Excel, PowerPoint, Outlook, Teams, OneNote, OneDrive' },
     'spare-os':     { name: 'Spare OS',     app: 'os',     replaces: 'Paying for Windows' },
@@ -302,7 +302,7 @@ details > summary:hover .name { text-decoration: underline; text-decoration-colo
 
   var GROUPS = [
     { name: 'The shared kit',      slugs: ['kit'] },
-    { name: 'Design tools',        slugs: ['spare-arch', 'spare-studio'] },
+    { name: 'Design tools',        slugs: ['spare-construct', 'spare-studio'] },
     { name: 'Everyday computing',  slugs: ['spare-office', 'spare-os'] },
     { name: 'Sharing and talking', slugs: ['spare-social'] },
     { name: 'Marketplaces',        slugs: ['spare-ride', 'spare-food', 'spare-stay', 'spare-home', 'spare-rent', 'spare-work', 'spare-market'] }

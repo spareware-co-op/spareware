@@ -9,7 +9,7 @@ Selling a home yourself, with everything an agent's commission pays for availabl
 - A seller can list, show, take offers and sell without paying a percentage commission.
 - Buyers see the same listing quality they're used to, with more honest data.
 - Every professional the seller needs (photographer, lawyer, valuer, building inspector, licensed agent if they want one) is booked through Spare Work at a published price.
-- Floor plans can come straight from Spare Arch.
+- Floor plans can come straight from Spare Construct.
 
 ## What it uses from the shared kit
 
@@ -21,7 +21,7 @@ Accounts and ID checks, payments (for services, never the house price), maps, me
 
 **High level:** photos, floor plans, description, open homes, documents (title, LIM, building reports), price or price indication, history.
 
-**Low level:** listings searchable by map, price, size and features; alerts for buyers; floor plans imported from Spare Arch drawings.
+**Low level:** listings searchable by map, price, size and features; alerts for buyers; floor plans imported from Spare Construct drawings.
 
 **Discuss:** feeding listings to other property sites so sellers keep their reach.
 

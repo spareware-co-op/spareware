@@ -2308,7 +2308,7 @@
         {
           "id": "OS-A8-F1",
           "name": "Use every Spare app straight away",
-          "does": "Open Spare Office, Spare Studio, Spare Arch, Spare Social and the marketplace apps from the start menu, already signed in.",
+          "does": "Open Spare Office, Spare Studio, Spare Construct, Spare Social and the marketplace apps from the start menu, already signed in.",
           "priority": "core",
           "parts": [
             {
@@ -3203,7 +3203,7 @@
             {
               "id": "OS-A10-F6-P2",
               "name": "Replacement roadmap",
-              "what": "Public list linking each top blocker to a Spare program or open project that replaces it, starting with Spare Arch for Revit.",
+              "what": "Public list linking each top blocker to a Spare program or open project that replaces it, starting with Spare Construct for Revit.",
               "kind": "data",
               "size": "small",
               "depends_on": [

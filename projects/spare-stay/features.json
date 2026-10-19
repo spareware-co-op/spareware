@@ -693,7 +693,7 @@
             {
               "id": "STAY-A2-F11-P1",
               "name": "Floor plans",
-              "what": "A simple floor plan drawn on the 2D drawing engine, or brought in from a Spare Arch model file through the kit. The plan drawer and the import should move down into the kit or an engine, since Spare Home and Spare Rent map the same; Stay never links to another program directly.",
+              "what": "A simple floor plan drawn on the 2D drawing engine, or brought in from a Spare Construct model file through the kit. The plan drawer and the import should move down into the kit or an engine, since Spare Home and Spare Rent map the same; Stay never links to another program directly.",
               "kind": "interface",
               "size": "medium",
               "depends_on": [

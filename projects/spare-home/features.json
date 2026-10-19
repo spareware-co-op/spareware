@@ -943,7 +943,7 @@
     {
       "id": "HOME-A3",
       "name": "Photos, floor plans, video and tours",
-      "summary": "Buyers decide on photos and plans first. Sellers get the same quality buyers expect, with honest labels on anything edited, a record of who owns each file and what it may be used for, and floor plans straight from a Spare Arch model.",
+      "summary": "Buyers decide on photos and plans first. Sellers get the same quality buyers expect, with honest labels on anything edited, a record of who owns each file and what it may be used for, and floor plans straight from a Spare Construct model.",
       "features": [
         {
           "id": "HOME-A3-F1",
@@ -1045,7 +1045,7 @@
         {
           "id": "HOME-A3-F3",
           "name": "Add a floor plan",
-          "does": "Draw a floor plan in the app, upload one you already have, or bring one in from Spare Arch.",
+          "does": "Draw a floor plan in the app, upload one you already have, or bring one in from Spare Construct.",
           "priority": "core",
           "parts": [
             {
@@ -1062,8 +1062,8 @@
             },
             {
               "id": "HOME-A3-F3-P2",
-              "name": "Plans from Spare Arch",
-              "what": "Imports the listing plan Spare Arch exports in an open format and places it on the listing. Spare Arch owns the conversion from a model (ARCH-A11-F7-P3) and Spare Home only imports; the importer is built on engine-draw2d and shared with Spare Rent and Spare Stay.",
+              "name": "Plans from Spare Construct",
+              "what": "Imports the listing plan Spare Construct exports in an open format and places it on the listing. Spare Construct owns the conversion from a model (CON-A11-F7-P3) and Spare Home only imports; the importer is built on engine-draw2d and shared with Spare Rent and Spare Stay.",
               "kind": "integration",
               "size": "small",
               "depends_on": [
@@ -1166,8 +1166,8 @@
             },
             {
               "id": "HOME-A3-F5-P2",
-              "name": "Walk-through from a Spare Arch model",
-              "what": "Makes a walk-through from an exported Spare Arch model without a camera visit.",
+              "name": "Walk-through from a Spare Construct model",
+              "what": "Makes a walk-through from an exported Spare Construct model without a camera visit.",
               "kind": "integration",
               "size": "medium",
               "depends_on": [
