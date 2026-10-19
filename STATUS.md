@@ -10,12 +10,12 @@ Every piece is a GitHub issue. See who's working on what: [checked out](https://
 | Spare Construct | Mapping | 14 | [projects/spare-construct](projects/spare-construct/STATUS.md) |
 | Spare Studio (working name) | Mapping | 8 | [projects/spare-studio](projects/spare-studio/STATUS.md) |
 | Spare Social (working name) | Mapping | 9 | [projects/spare-social](projects/spare-social/STATUS.md) |
-| Spare Music | Mapping | 0 | [projects/spare-music](projects/spare-music/STATUS.md) |
-| Spare Movies | Mapping | 0 | [projects/spare-movies](projects/spare-movies/STATUS.md) |
-| Spare Research | Mapping | 0 | [projects/spare-research](projects/spare-research/STATUS.md) |
+| Spare Music | Mapping | 5 | [projects/spare-music](projects/spare-music/STATUS.md) |
+| Spare Movies | Mapping | 5 | [projects/spare-movies](projects/spare-movies/STATUS.md) |
+| Spare Research | Mapping | 5 | [projects/spare-research](projects/spare-research/STATUS.md) |
 | Spare Office | Mapping | 7 | [projects/spare-office](projects/spare-office/STATUS.md) |
 | Spare OS | Mapping | 6 | [projects/spare-os](projects/spare-os/STATUS.md) |
-| Spare Keys | Idea | 0 | [projects/spare-keys](projects/spare-keys/STATUS.md) |
+| Spare Keys | Idea | 2 | [projects/spare-keys](projects/spare-keys/STATUS.md) |
 | Spare Ride | Mapping | 6 | [projects/spare-ride](projects/spare-ride/STATUS.md) |
 | Spare Food | Mapping | 5 | [projects/spare-food](projects/spare-food/STATUS.md) |
 | Spare Stay | Mapping | 5 | [projects/spare-stay](projects/spare-stay/STATUS.md) |
