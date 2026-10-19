@@ -95,9 +95,9 @@ flowchart TB
 | Spare Construct | Revit, and the add-ins people buy for it | Mapping | [Map](projects/spare-construct/ARCHITECTURE.md) · [Work board](projects/spare-construct/STATUS.md) |
 | Spare Studio (working name) | Adobe's apps: Photoshop, Illustrator, InDesign, Premiere, After Effects, Lightroom, Acrobat and more | Mapping | [Map](projects/spare-studio/ARCHITECTURE.md) · [Work board](projects/spare-studio/STATUS.md) |
 | Spare Social (working name) | TikTok, YouTube, Instagram and Facebook, together | Mapping | [Map](projects/spare-social/ARCHITECTURE.md) · [Work board](projects/spare-social/STATUS.md) |
-| Spare Music | Spotify | Idea | [Map](projects/spare-music/ARCHITECTURE.md) · [Work board](projects/spare-music/STATUS.md) |
+| Spare Music | Spotify | Mapping | [Map](projects/spare-music/ARCHITECTURE.md) · [Work board](projects/spare-music/STATUS.md) |
 | Spare Movies | Netflix | Idea | [Map](projects/spare-movies/ARCHITECTURE.md) · [Work board](projects/spare-movies/STATUS.md) |
-| Spare Research | Journal paywalls and the fees scientists pay to publish | Idea | [Map](projects/spare-research/ARCHITECTURE.md) · [Work board](projects/spare-research/STATUS.md) |
+| Spare Research | Journal paywalls and the fees scientists pay to publish | Mapping | [Map](projects/spare-research/ARCHITECTURE.md) · [Work board](projects/spare-research/STATUS.md) |
 | Spare Office | Microsoft 365: Word, Excel, PowerPoint, Outlook, Teams, OneNote, OneDrive | Mapping | [Map](projects/spare-office/ARCHITECTURE.md) · [Work board](projects/spare-office/STATUS.md) |
 | Spare OS | Paying for Windows | Mapping | [Map](projects/spare-os/ARCHITECTURE.md) · [Work board](projects/spare-os/STATUS.md) |
 | Spare Ride | Uber | Mapping | [Map](projects/spare-ride/ARCHITECTURE.md) · [Work board](projects/spare-ride/STATUS.md) |
@@ -142,7 +142,7 @@ Any major change, such as starting or dropping a program, changing an architectu
 - Measured, not assumed: tests and benchmarks with every change; a slower change does not merge.
 - Every change is an operation: one path for the interface, AI, plugins, undo and sync.
 - Open formats: our own files are documented and readable without our apps.
-- One look: every app follows the [design guide](design/DESIGN.md), Spareware red for the co-op and its own light colour per app.
+- One look: every app follows the [design guide](design/DESIGN.md), Spareware red for the co-op and its own light colour per app. The shared look only changes by member vote, or when a unique situation truly needs it.
 
 ## Licence
 

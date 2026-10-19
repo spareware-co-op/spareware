@@ -60,6 +60,9 @@
 [data-app="market"] { --app: #D8E36A; --app-strong: #66700F; --app-tint: #F7F9DF; }
 [data-app="office"] { --app: #A9B6FF; --app-strong: #3A47A8; --app-tint: #EEF0FF; }
 [data-app="os"]     { --app: #CDD1D6; --app-strong: #4A525C; --app-tint: #F2F3F5; }
+[data-app="music"]  { --app: #EB8EEB; --app-strong: #B82EB8; --app-tint: #FBE9FB; }
+[data-app="movies"] { --app: #EB8E8E; --app-strong: #B82E2E; --app-tint: #FBE9E9; }
+[data-app="research"] { --app: #C2DBB3; --app-strong: #458321; --app-tint: #F0FBE9; }
 </style>
 <style>
 /* Hub styles. They use only the tokens above. The hub belongs to the co-op, so it is Spareware red;
@@ -291,6 +294,8 @@ details > summary:hover .name { text-decoration: underline; text-decoration-colo
     'spare-office': { name: 'Spare Office', app: 'office', replaces: 'Microsoft 365: Word, Excel, PowerPoint, Outlook, Teams, OneNote, OneDrive' },
     'spare-os':     { name: 'Spare OS',     app: 'os',     replaces: 'Paying for Windows' },
     'spare-social': { name: 'Spare Social', app: 'social', replaces: 'TikTok, YouTube, Instagram and Facebook, together' },
+    'spare-music':  { name: 'Spare Music',  app: 'music',  replaces: 'Spotify, Apple Music, SoundCloud and Bandcamp' },
+    'spare-research': { name: 'Spare Research', app: 'research', replaces: 'Journal paywalls and the fees researchers pay to publish' },
     'spare-ride':   { name: 'Spare Ride',   app: 'ride',   replaces: 'Uber and taxi booking apps' },
     'spare-food':   { name: 'Spare Food',   app: 'food',   replaces: 'Uber Eats and DoorDash' },
     'spare-stay':   { name: 'Spare Stay',   app: 'stay',   replaces: 'Airbnb and Booking.com' },
@@ -304,7 +309,8 @@ details > summary:hover .name { text-decoration: underline; text-decoration-colo
     { name: 'The shared kit',      slugs: ['kit'] },
     { name: 'Design tools',        slugs: ['spare-construct', 'spare-studio'] },
     { name: 'Everyday computing',  slugs: ['spare-office', 'spare-os'] },
-    { name: 'Sharing and talking', slugs: ['spare-social'] },
+    { name: 'Sharing and talking', slugs: ['spare-social', 'spare-music'] },
+    { name: 'Research',            slugs: ['spare-research'] },
     { name: 'Marketplaces',        slugs: ['spare-ride', 'spare-food', 'spare-stay', 'spare-home', 'spare-rent', 'spare-work', 'spare-market'] }
   ];
 
