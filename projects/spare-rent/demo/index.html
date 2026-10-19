@@ -612,7 +612,7 @@ const COUNTRIES = {
     hol:[], closure:false, clockNote:'These clocks count calendar days.',
     bond:{ name:'Deposit', max:[1,'month'], adv:[1,'month'], advLabel:'Rent in advance, at most 1 month', advShort:"1 month's rent", body:'the Residential Tenancies Board (RTB)',
       clock:{ n:1, u:'m', from:'start' }, amt:false, todo:'Register the tenancy with the RTB', done:'Tenancy registered with the RTB',
-      must:'Must be registered within 1 month of the start. Hana holds the deposit.', verb:'Register the tenancy', ref:'registration number', tick:'Tenancy registered with the RTB',
+      must:'The tenancy must be registered with the RTB within 1 month of the start. Hana holds the deposit.', verb:'Register the tenancy', ref:'registration number', tick:'Tenancy registered with the RTB',
       recv:['held by her; the tenancy is to be registered with the RTB', 'held by her; the tenancy is registered with the RTB'], safe:"Deposits are capped at 1 month's rent.",
       paidTo:"Hana's bank", bring:'Add the RTB registration number',
       lodgeNote:'Hana holds the deposit. This registers the tenancy with the RTB, as the law asks.', you:'Hana must register your tenancy with the RTB',
@@ -766,7 +766,7 @@ const S = {
   access:[ ['Tom Wilson','Co-owner, full access'], ['Ana Lee','Accountant, money only, read only'], ['Northside Pipeworks','This repair job only, until it is done','rintoul'] ],
   homes:3, receipts:2, costsExtra:0, enquiriesAnswered:0, listingLive:true,
   msgs:[
-    { k:'formal', who:'Hana Wilson', me:true, t:'Fri 16 Oct, 4:05pm', x:() => `Notice of the ${CT.stdShort} gap found at the entry inspection: ${CT.gap}. A fix is booked for Thu 22 Oct.`, served:() => `Served ${CT.end.served}, Fri 16 Oct${S.country === 'nz' ? ', before 5pm' : ''}` },
+    { k:'formal', who:'Hana Wilson', me:true, t:'Fri 16 Oct, 4:05pm', x:() => `Notice of a gap in the ${CT.std} found at the entry inspection: ${CT.gap}. A fix is booked for Thu 22 Oct.`, served:() => `Served ${CT.end.served}, Fri 16 Oct${S.country === 'nz' ? ', before 5pm' : ''}` },
     { k:'chat', who:'Jess Turner', me:false, t:'Sat 17 Oct, 8:12am', x:'Hot water cylinder in the hall cupboard is dripping. Photos are in the repair.' },
     { k:'chat', who:'Hana Wilson', me:true, t:'Sun 18 Oct, 9:40am', x:'Thanks Jess. Approved it and sent it to plumbers on Spare Work. Quotes are in.' },
   ], msgFilter:'all',
@@ -1238,7 +1238,7 @@ R.inspections = () => {
   if (t === 'entry') {
     body = `<section class="panel"><div class="panel-h"><b>Entry inspection</b><span class="badge ok">${I('check')} Signed by all</span></div>
       <div class="pad small muted">Tue 13 Oct 2026 · 10 rooms · 46 photos (6 rooms shown here) · each photo keeps the time it was taken and is fingerprinted, so it can't be swapped later. Signed by Hana, Jess and Wiremu (by private link).</div></section>
-      ${ROOMS.map(([n, k, c], i) => `<section class="panel"><div class="panel-h"><b>${n}</b><span class="small muted">${c.includes('already') || c.includes('gap') || c.includes('Gap') || c.includes('mark') ? 'Note' : 'OK'}</span></div><div class="pad small">${c}</div>
+      ${ROOMS.map(([n, k, c], i) => `<section class="panel"><div class="panel-h"><b>${n}</b><span class="small muted">${c.includes('already') || c.includes('gap') || c.includes('Gap') || c.includes('mark') ? 'Note' : 'OK'}</span></div><div class="pad small">${c.replace('Healthy Homes', CT.stdShort)}</div>
         <div class="shots">${[0,1,2].map(j => shot(k, '13 Oct ' + clockTime(600 + i * 9 + j * 3))).join('')}</div></section>`).join('')}
       <section class="panel"><div class="panel-h"><span class="label">Tenants' additions</span></div>
         ${S.insp.comments.length ? S.insp.comments.map((c, i) => `<div class="row small ${i === 0 ? 'first' : ''}">${I('msg')}<span class="grow">${c}</span></div>`).join('') : '<div class="empty">No comments yet. Tenants can add photos and comments, kept with the signed report.</div>'}
@@ -1599,7 +1599,7 @@ SH.calc = () => {
     <p class="tiny faint">A sample sum for the demo. The real calculator applies the official formula for each kind of home and is tested against worked examples.</p>`];
 };
 SH.statement = () => { const n = HH.filter(h => hhMet(h.k)).length;
-  return ['Healthy Homes compliance statement', `<p class="small muted">Filled from the checklist and its evidence, for the agreement at ${H.r}.</p>
+  return ['Healthy Homes compliance statement', `${exNZ('documents')}<p class="small muted">Filled from the checklist and its evidence, for the agreement at ${H.r}.</p>
     <div class="panel">${HH.map((h, i) => `<div class="row small ${i === 0 ? 'first' : ''}">${I(hhMet(h.k) ? 'check' : 'alert', hhMet(h.k) ? 'ok' : 'warn')}<span class="grow"><b>${h.t}</b><div class="muted">${hhMet(h.k) ? 'Meets the standard. Evidence held.' : 'Not met yet. Fix booked Thu 22 Oct.'}</div></span></div>`).join('')}</div>
     <p class="small">The insulation statement is filled from the same records.</p>
     <button class="btn btn-p btn-block" data-act="toast" data-arg="${n === 5 ? 'Statement added to the agreement for both sides to see.' : 'Draft saved. It can be added once all five standards are met.'}">${n === 5 ? 'Add to the agreement' : 'Save draft'}</button>`]; };

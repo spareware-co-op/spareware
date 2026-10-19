@@ -76,7 +76,7 @@ Design tools lean on the Rust core pattern mapped in [Spare Construct's ARCHITEC
 
 1. **At cost.** Each app charges only what it costs to run: servers, payment processing, and insurance or licences where the law requires them. The fee is published on the open cost ledger. The people doing the work keep the rest.
 2. **Free to use** unless there is a real running cost to cover.
-3. **Members own it.** Spareware Co-op is owned by its members. Workers in each app have a vote on that app's fees and rules.
+3. **Free to join, workers decide.** Spareware is free to join and use, with no member shares; the only charge is running costs. Workers in each app vote on that app's fees and rules, and major changes go to a vote of members.
 4. **Headless.** Everything a person can do in an app, an AI agent or a script can do through the same commands.
 5. **Open formats and open data.** Members can take their data and their history with them.
 6. **Built legally, or not at all.** See the README. No exceptions.
@@ -215,7 +215,7 @@ Everything stays in one repo and one workspace, so a change to the kit is checke
 
 | Decision | Options | Lean |
 | --- | --- | --- |
-| Legal entity | NZ co-operative company; incorporated society; charitable trust | A federation: a steward society holds the code and name; NZ co-operative company runs the platforms; a local co-op per country ([K01 note](projects/kit/notes/K01-legal-entity.md), in review) |
+| Legal entity | NZ co-operative company; incorporated society; charitable trust | A federation: a steward society holds the code and name; NZ co-operative company runs the platforms; a local co-op per country ([K01 note](projects/kit/notes/K01-legal-entity.md), in review). To be reworked: the owner decided on 2026-10-19 there are no member shares and the only charge is running costs |
 | Licence | MPL-2.0 core with Apache-2.0 SDK; Apache-2.0 for all; MIT | MPL-2.0 core, Apache-2.0 SDK |
 | Payment provider | Stripe Connect; local NZ providers | Research first (piece K02) |
 | Phone apps | Web apps installed from the browser; Tauri mobile; native | Research first (piece K04) |

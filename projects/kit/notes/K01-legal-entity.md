@@ -2,6 +2,8 @@
 
 *Decision note. Researched 2026-10-18. Not legal advice: a lawyer must check the constitution and every item marked* unverified.
 
+> **Owner decision, 2026-10-19:** Spareware is free to join and free to use. There are no member shares, no "$1 to join", and it is not "owned by its members"; the only charge anywhere is running costs. It is international, not a New Zealand project. Workers vote on their own app's fees and rules, and major changes go to a vote of members. The structure below was researched before this decision and must be reworked to fit it (for example, a form where members vote without buying shares) before anything is registered.
+
 ## The question
 
 What legal form should Spareware take so that it is owned by its members, can run at-cost platforms in New Zealand and other countries, keeps the code and the name safe for everyone, and never pays surplus to outside investors?
