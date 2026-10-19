@@ -1,0 +1,10 @@
+[package]
+name = "office-automation"
+version = "0.0.0"
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+office-core = { path = "../office-core" }
+kit-plugin = { path = "../../../kit/crates/kit-plugin" }
+kit-mcp = { path = "../../../kit/crates/kit-mcp" }

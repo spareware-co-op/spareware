@@ -53,6 +53,32 @@ Accounts (one login for every app), sync and history (live co-editing and versio
 
 **High level:** files stored and shared at cost, with version history and offline sync.
 
+## Where the code goes
+
+Each app and shared part has its own folder under `crates/`. Each folder's `src/lib.rs` says what it is for and which area of [FEATURES.md](FEATURES.md) it builds. Build an app's code only in its own folder; anything two apps both need goes in `office-core`, and anything other programs need too moves down into the kit or an engine.
+
+| Folder | What it builds | Feature map area |
+| --- | --- | --- |
+| `crates/office-core` | The shared document core under Write, Sheets, Slides and Notes | OFF-A2 |
+| `crates/office-formats` | OpenDocument, and Word, Excel, PowerPoint and PDF from published standards | OFF-A3 |
+| `crates/office-collab` | Co-editing, comments, history and offline | OFF-A4 |
+| `crates/office-write` | Spare Write: documents | OFF-A5 |
+| `crates/office-sheets` | Spare Sheets: spreadsheets | OFF-A6 |
+| `crates/office-slides` | Spare Slides: presentations | OFF-A7 |
+| `crates/office-notes` | Spare Notes: notebooks | OFF-A8 |
+| `crates/office-forms` | Spare Forms: forms, surveys and quizzes | OFF-A9 |
+| `crates/office-drive` | Spare Drive: files, sharing and sync | OFF-A10 |
+| `crates/office-mail` | Spare Mail: email | OFF-A11 |
+| `crates/office-calendar` | Calendar, contacts, tasks and bookings | OFF-A12 |
+| `crates/office-chat` | Spare Chat: chat, channels and teams | OFF-A13 |
+| `crates/office-meet` | Meetings, calls and events | OFF-A14 |
+| `crates/office-automation` | Search, AI help, automation and add-ins | OFF-A15 |
+| `crates/office-app` | Home screen and the apps on every device, accessibility and languages | OFF-A1, OFF-A16, OFF-A17 |
+| `crates/office-admin` | Organisation admin, the Office side of costs, and safety duties | OFF-A18, OFF-A20, OFF-A21 |
+| `crates/office-migrate` | Moving in from other suites and taking data out | OFF-A19 |
+
+No code yet: the folders wait until Spare Office reaches the Design stage and piece OF01 (partner or build) is decided.
+
 ## Learn from (licences to confirm in piece OF01)
 
 | Project | What it is | How we can use it |

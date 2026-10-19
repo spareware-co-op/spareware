@@ -201,3 +201,136 @@ dependencies = [
  "kit-ops",
  "kit-store",
 ]
+
+[[package]]
+name = "office-admin"
+version = "0.0.0"
+dependencies = [
+ "office-core",
+]
+
+[[package]]
+name = "office-app"
+version = "0.0.0"
+dependencies = [
+ "office-core",
+]
+
+[[package]]
+name = "office-automation"
+version = "0.0.0"
+dependencies = [
+ "kit-mcp",
+ "kit-plugin",
+ "office-core",
+]
+
+[[package]]
+name = "office-calendar"
+version = "0.0.0"
+dependencies = [
+ "office-core",
+]
+
+[[package]]
+name = "office-chat"
+version = "0.0.0"
+dependencies = [
+ "office-core",
+]
+
+[[package]]
+name = "office-collab"
+version = "0.0.0"
+dependencies = [
+ "kit-sync",
+ "office-core",
+]
+
+[[package]]
+name = "office-core"
+version = "0.0.0"
+dependencies = [
+ "engine-text",
+ "kit-core",
+ "kit-ops",
+ "kit-store",
+]
+
+[[package]]
+name = "office-drive"
+version = "0.0.0"
+dependencies = [
+ "kit-store",
+ "kit-sync",
+ "office-core",
+]
+
+[[package]]
+name = "office-formats"
+version = "0.0.0"
+dependencies = [
+ "office-core",
+]
+
+[[package]]
+name = "office-forms"
+version = "0.0.0"
+dependencies = [
+ "office-core",
+]
+
+[[package]]
+name = "office-mail"
+version = "0.0.0"
+dependencies = [
+ "office-core",
+]
+
+[[package]]
+name = "office-meet"
+version = "0.0.0"
+dependencies = [
+ "engine-media",
+ "office-core",
+]
+
+[[package]]
+name = "office-migrate"
+version = "0.0.0"
+dependencies = [
+ "office-core",
+ "office-formats",
+]
+
+[[package]]
+name = "office-notes"
+version = "0.0.0"
+dependencies = [
+ "office-core",
+]
+
+[[package]]
+name = "office-sheets"
+version = "0.0.0"
+dependencies = [
+ "office-core",
+]
+
+[[package]]
+name = "office-slides"
+version = "0.0.0"
+dependencies = [
+ "engine-draw2d",
+ "engine-media",
+ "office-core",
+]
+
+[[package]]
+name = "office-write"
+version = "0.0.0"
+dependencies = [
+ "engine-pdf",
+ "engine-text",
+ "office-core",
+]
