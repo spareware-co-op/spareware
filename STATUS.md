@@ -15,6 +15,7 @@ Every piece is a GitHub issue. See who's working on what: [checked out](https://
 | Spare Research | Mapping | 0 | [projects/spare-research](projects/spare-research/STATUS.md) |
 | Spare Office | Mapping | 7 | [projects/spare-office](projects/spare-office/STATUS.md) |
 | Spare OS | Mapping | 6 | [projects/spare-os](projects/spare-os/STATUS.md) |
+| Spare Keys | Idea | 0 | [projects/spare-keys](projects/spare-keys/STATUS.md) |
 | Spare Ride | Mapping | 6 | [projects/spare-ride](projects/spare-ride/STATUS.md) |
 | Spare Food | Mapping | 5 | [projects/spare-food](projects/spare-food/STATUS.md) |
 | Spare Stay | Mapping | 5 | [projects/spare-stay](projects/spare-stay/STATUS.md) |

@@ -34,6 +34,7 @@ Warm off-white page, white panels, ink text, hairline rules, square-ish corners,
 | Spare Music | #EB8EEB orchid | #B82EB8 | #FBE9FB |
 | Spare Movies | #EB8E8E coral | #B82E2E | #FBE9E9 |
 | Spare Research | #C2DBB3 sage | #458321 | #F0FBE9 |
+| Spare Keys | #70EB70 green | #228722 | #E9FBE9 |
 
 Rules:
 

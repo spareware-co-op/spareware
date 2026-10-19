@@ -53,3 +53,4 @@
 [data-app="music"]  { --app: #EB8EEB; --app-strong: #B82EB8; --app-tint: #FBE9FB; }
 [data-app="movies"] { --app: #EB8E8E; --app-strong: #B82E2E; --app-tint: #FBE9E9; }
 [data-app="research"] { --app: #C2DBB3; --app-strong: #458321; --app-tint: #F0FBE9; }
+[data-app="keys"]   { --app: #70EB70; --app-strong: #228722; --app-tint: #E9FBE9; }
