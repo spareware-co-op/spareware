@@ -1,6 +1,6 @@
 # Spare Music status
 
-**Stage: Idea.** Not mapped yet. The open decisions are in [ARCHITECTURE.md](ARCHITECTURE.md).
+**Stage: Mapping.** Not mapped yet. The open decisions are in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Work board
 

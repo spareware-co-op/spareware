@@ -1,0 +1,5006 @@
+{
+  "program": "spare-research",
+  "name": "Spare Research",
+  "replaces": "Journal paywalls and the fees researchers pay to publish openly",
+  "summary": "Research that is free to read and free to publish, with open peer review and permanent links for citing. Papers are posted, screened, reviewed in the open and gathered into journals that editors run on top. It hosts only papers the authors have the right to share, keeps every version, and shows corrections and retractions openly. People, scripts and AI agents all use the same commands.",
+  "areas": [
+    {
+      "id": "RES-A1",
+      "name": "Getting started: accounts, researcher profiles and ORCID",
+      "summary": "One Spareware login, a researcher profile linked to ORCID and ROR, reading with no account at all, and the first steps for readers, authors, reviewers and editors.",
+      "features": [
+        {
+          "id": "RES-A1-F1",
+          "name": "Sign up and sign in",
+          "does": "Create one Spareware login and use it to submit, review and edit on any device.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A1-F1-P1",
+              "name": "Kit sign-in in Spare Research",
+              "what": "Uses the kit's sign-up, passkeys and sign-in screens, and asks for the second sign-in step from editors, screeners and moderators.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A1-F1-P2",
+                "KIT-A1-F2-P1",
+                "KIT-A1-F2-P4",
+                "KIT-A1-F3-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A1-F1-P2",
+              "name": "Research roles",
+              "what": "Reader, author, reviewer, editor, screener and moderator roles on the kit's roles per app, each with its own checks.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "KIT-A1-F5-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A1-F2",
+          "name": "Read without an account",
+          "does": "Read, download, search and cite any paper with no account, no sign-in wall and no tracking.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A1-F2-P1",
+              "name": "Open reading with no account",
+              "what": "Every paper page, file and published review is public and served without tracking cookies or a sign-in; an account is needed only to submit, review, follow or comment.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "KIT-A28-F2-P1",
+                "KIT-A22-F8-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A1-F2-P2",
+              "name": "Reading settings without an account",
+              "what": "Keeps reading settings and a saved list on the device with no account, and moves them in if the reader signs up later.",
+              "kind": "interface",
+              "size": "small",
+              "depends_on": [
+                "KIT-A1-F15-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A1-F3",
+          "name": "Link my ORCID iD",
+          "does": "Prove my ORCID iD once, so my papers and reviews are credited to me everywhere.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A1-F3-P1",
+              "name": "ORCID sign-in link",
+              "what": "Proves a person holds an ORCID iD through ORCID's own sign-in (OAuth), so nobody can claim someone else's iD by typing it in.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A1-F5-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A1-F3-P2",
+              "name": "ORCID terms and membership",
+              "what": "ORCID's free public API is for non-commercial use with daily read limits; adding works and reviews to records needs the member API, about USD 4,775 a year for a non-profit in 2026. Which fits a co-op running at cost.",
+              "kind": "research",
+              "size": "small",
+              "depends_on": [],
+              "piece": null
+            },
+            {
+              "id": "RES-A1-F3-P3",
+              "name": "ORCID record sync",
+              "what": "With the person's permission, adds their papers and reviews to their ORCID record, and reads their affiliations and past works in.",
+              "kind": "integration",
+              "size": "medium",
+              "depends_on": [
+                "RES-A1-F3-P1",
+                "RES-A1-F3-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A1-F4",
+          "name": "Researcher profile",
+          "does": "Show my name, affiliations, fields, papers and reviews on one public page.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A1-F4-P1",
+              "name": "Researcher profile model",
+              "what": "Adds name variants, the ORCID iD, affiliations with dates, fields and languages to the kit's profile, with who can see each set by the person.",
+              "kind": "data",
+              "size": "small",
+              "depends_on": [
+                "KIT-A1-F5-P1",
+                "RES-A1-F3-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A1-F4-P2",
+              "name": "Profile page",
+              "what": "A public page with the person's papers, the reviews they chose to sign, the journals they edit and a way to contact them through the app.",
+              "kind": "interface",
+              "size": "small",
+              "depends_on": [
+                "RES-A1-F4-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A1-F5",
+          "name": "Affiliations from an open list",
+          "does": "Pick my university or institute from an open list, so my affiliation is written the same way everywhere.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A1-F5-P1",
+              "name": "ROR registry data",
+              "what": "Loads the open Research Organization Registry (ROR, CC0 data) and keeps it current, with names in several languages.",
+              "kind": "data",
+              "size": "small",
+              "depends_on": [],
+              "piece": null
+            },
+            {
+              "id": "RES-A1-F5-P2",
+              "name": "Affiliation picker",
+              "what": "Type-ahead search over ROR, with past affiliations kept by date and a free-text option for places not yet listed, offered to ROR as a suggestion.",
+              "kind": "interface",
+              "size": "small",
+              "depends_on": [
+                "RES-A1-F5-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A1-F6",
+          "name": "Change my name with care",
+          "does": "Change my name on every paper and review I wrote, without the old name staying on show.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A1-F6-P1",
+              "name": "Name change across the record",
+              "what": "Updates the author name on every version, review and metadata record, sends corrected metadata to the DOI agency, and leaves no public trace of the old name unless the person asks.",
+              "kind": "service",
+              "size": "medium",
+              "depends_on": [
+                "RES-A1-F4-P1",
+                "KIT-A15-F1-P6"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A1-F7",
+          "name": "First steps for each role",
+          "does": "Get a short guide the first time I read, submit, review or run a journal.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A1-F7-P1",
+              "name": "Role guides",
+              "what": "Short first-run screens and helpful empty pages for readers, authors, reviewers and editors, on the kit's first-run guide.",
+              "kind": "interface",
+              "size": "small",
+              "depends_on": [
+                "KIT-A20-F6-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A1-F8",
+          "name": "Help and support",
+          "does": "Find plain help on submitting, rights, reviewing and citing, and reach support from any screen.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A1-F8-P1",
+              "name": "Research help articles",
+              "what": "Short how-to pages for every feature, translated, in the kit's help centre, with glossary entries for terms such as preprint, accepted manuscript and DOI.",
+              "kind": "data",
+              "size": "medium",
+              "depends_on": [
+                "KIT-A21-F1-P1",
+                "KIT-A21-F1-P2"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A1-F8-P2",
+              "name": "Support for authors and editors",
+              "what": "Support cases linked to a submission or a journal, on the kit's support cases.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A21-F2-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A1-F9",
+          "name": "Institution accounts",
+          "does": "Let a library or department set up an organisation, see its researchers' papers and help cover running costs.",
+          "priority": "next",
+          "parts": [
+            {
+              "id": "RES-A1-F9-P1",
+              "name": "Institutions on the kit's organisation model",
+              "what": "Adds institution types (university, institute, library, department, funder) with their ROR ID to the kit's organisations.",
+              "kind": "data",
+              "size": "small",
+              "depends_on": [
+                "KIT-A1-F7-P1",
+                "RES-A1-F5-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A1-F9-P2",
+              "name": "Institution sign-in",
+              "what": "Lets researchers sign in through their institution's own identity provider, through the kit's organisation sign-in.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A1-F7-P4",
+                "RES-A1-F9-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A1-F10",
+          "name": "Let a helper prepare my submissions",
+          "does": "Let a co-author or research assistant fill in a submission for me, while I approve and post it myself.",
+          "priority": "later",
+          "parts": [
+            {
+              "id": "RES-A1-F10-P1",
+              "name": "Submission helpers",
+              "what": "Scoped access for a helper to fill in a submission; the author still makes the rights declaration and posts.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "KIT-A1-F8-P1",
+                "RES-A5-F2-P3"
+              ],
+              "piece": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "RES-A2",
+      "name": "Search, browse and following",
+      "summary": "Finding research: full-text search with plain filters, browsing by field, following people, fields and journals, feeds for other tools, and separate human and AI sections.",
+      "features": [
+        {
+          "id": "RES-A2-F1",
+          "name": "Search papers",
+          "does": "Search titles, abstracts, full text, authors and references, and filter by field, date, status, licence and language.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A2-F1-P1",
+              "name": "Research search index",
+              "what": "Declares papers, versions, reviews, authors and journals to the kit's search service, with full text from the reading view and fields for status, licence, data and code.",
+              "kind": "service",
+              "size": "medium",
+              "depends_on": [
+                "KIT-A6-F1-P1",
+                "KIT-A6-F1-P2",
+                "RES-A3-F2-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A2-F1-P2",
+              "name": "Search screen and filters",
+              "what": "A search box with filters for field, date, reviewed or not, has data, has code, licence and language, and results that show each paper's status in words, on the kit's search screens.",
+              "kind": "interface",
+              "size": "medium",
+              "depends_on": [
+                "KIT-A6-F1-P5",
+                "RES-A2-F1-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A2-F1-P3",
+              "name": "Published ranking rules",
+              "what": "Results ranked by match and date under rules anyone can read, with no paid placement and no boost for any journal or institution.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "KIT-A6-F1-P3"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A2-F1-P4",
+              "name": "Search by ID",
+              "what": "Finds a paper straight from a pasted DOI, permanent link, preprint server ID or ORCID iD, and supports author: and title: terms.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "RES-A2-F1-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A2-F2",
+          "name": "Browse by field",
+          "does": "Browse new and reviewed papers in a field, a subfield or a journal.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A2-F2-P1",
+              "name": "Field list",
+              "what": "An open list of research fields and subfields under a licence that allows reuse, mapped to the fields open catalogues use, so papers line up across services.",
+              "kind": "data",
+              "size": "medium",
+              "depends_on": [],
+              "piece": null
+            },
+            {
+              "id": "RES-A2-F2-P2",
+              "name": "Field pages",
+              "what": "New this week, recently reviewed, journals in the field and recent updates, for each field.",
+              "kind": "interface",
+              "size": "small",
+              "depends_on": [
+                "RES-A2-F2-P1",
+                "RES-A2-F1-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A2-F3",
+          "name": "Follow people, fields and journals",
+          "does": "Follow people, fields and journals and get their new papers by email, in the app or in a feed.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A2-F3-P1",
+              "name": "Follows and alerts",
+              "what": "Follows kept for each person, with new papers sent through the kit's notification router as single alerts or daily and weekly digests.",
+              "kind": "service",
+              "size": "small",
+              "depends_on": [
+                "KIT-A8-F3-P2",
+                "KIT-A8-F5-P3"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A2-F4",
+          "name": "Save a search",
+          "does": "Save a search and be told when new papers match it.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A2-F4-P1",
+              "name": "Saved research searches",
+              "what": "Uses the kit's saved searches with the research filters and the person's chosen channels.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A6-F8-P1",
+                "RES-A2-F1-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A2-F5",
+          "name": "Feeds for other tools",
+          "does": "Get any field, journal, author or search as a feed, and let other archives harvest our records.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A2-F5-P1",
+              "name": "Atom and RSS feeds",
+              "what": "A feed for every field, journal, author and saved search, with no tracking.",
+              "kind": "service",
+              "size": "small",
+              "depends_on": [
+                "RES-A2-F1-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A2-F5-P2",
+              "name": "OAI-PMH endpoint",
+              "what": "Serves all metadata over OAI-PMH, the open protocol archives and catalogues use to harvest each other, in Dublin Core and JATS.",
+              "kind": "service",
+              "size": "medium",
+              "depends_on": [
+                "RES-A4-F4-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A2-F6",
+          "name": "Human and AI sections",
+          "does": "Choose to see papers written by people, papers generated by AI, or both.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A2-F6-P1",
+              "name": "Human and AI sections",
+              "what": "Every paper declares its AI use; papers whose text or results were generated by an AI system go in the AI section, and each reader picks which sections they see.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "RES-A4-F6-P2",
+                "KIT-A10-F13-P1",
+                "KIT-A10-F13-P2"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A2-F6-P2",
+              "name": "Wrong-section reports",
+              "what": "Anyone can flag a paper in the wrong section; moderators move it with the reason in the public log, and the authors can appeal.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A10-F3-P2",
+                "KIT-A10-F7-P1",
+                "KIT-A11-F5-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A2-F7",
+          "name": "Find related work",
+          "does": "See what a paper cites, what cites it, and papers on similar topics with the reason shown.",
+          "priority": "next",
+          "parts": [
+            {
+              "id": "RES-A2-F7-P1",
+              "name": "Citation links",
+              "what": "Shows each paper's references and cited-by list from open citation data and our own extracted references.",
+              "kind": "service",
+              "size": "medium",
+              "depends_on": [
+                "RES-A10-F5-P1",
+                "RES-A10-F8-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A2-F7-P2",
+              "name": "Similar papers",
+              "what": "Suggests papers with similar text and references, says why, and runs only when the reader turns suggestions on.",
+              "kind": "library",
+              "size": "medium",
+              "depends_on": [
+                "RES-A2-F1-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A2-F8",
+          "name": "Reading lists",
+          "does": "Keep private or shared reading lists and export them to a reference manager.",
+          "priority": "next",
+          "parts": [
+            {
+              "id": "RES-A2-F8-P1",
+              "name": "Reading lists",
+              "what": "Saved papers in named lists, private or shared by link, on the kit's favourites and sharing.",
+              "kind": "interface",
+              "size": "small",
+              "depends_on": [
+                "KIT-A5-F12-P1",
+                "KIT-A15-F8-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A2-F8-P2",
+              "name": "List export",
+              "what": "Exports a list as BibTeX, RIS or CSL-JSON.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "RES-A10-F3-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A2-F9",
+          "name": "Search in my language",
+          "does": "Search in my language and find papers whose titles and abstracts were written or translated into it.",
+          "priority": "next",
+          "parts": [
+            {
+              "id": "RES-A2-F9-P1",
+              "name": "Search across languages",
+              "what": "Indexes every language a title and abstract is given in, with accent- and macron-aware matching.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "KIT-A19-F1-P4",
+                "RES-A17-F3-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A2-F10",
+          "name": "Search other open archives",
+          "does": "Search papers held elsewhere from the same box, each result linking to where it lives.",
+          "priority": "later",
+          "parts": [
+            {
+              "id": "RES-A2-F10-P1",
+              "name": "Search beyond Spare Research",
+              "what": "Adds results from open catalogues whose terms allow it, labelled with their source, and links out to the paper where it lives.",
+              "kind": "integration",
+              "size": "medium",
+              "depends_on": [
+                "RES-A10-F6-P2"
+              ],
+              "piece": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "RES-A3",
+      "name": "Reading a paper",
+      "summary": "The paper page and the reading experience: a clear landing page, a reflowing web view built from open XML, the PDF, figures, maths and references, readable on any screen and counted without tracking.",
+      "features": [
+        {
+          "id": "RES-A3-F1",
+          "name": "Paper page",
+          "does": "Open one page with the title, authors, abstract, status, licence, versions, files, reviews and how to cite.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A3-F1-P1",
+              "name": "Paper landing page",
+              "what": "A fast, server-rendered public page for every paper and version on the kit's public pages, showing its status (preprint, under review, reviewed, corrected, retracted) in words, not only colour.",
+              "kind": "interface",
+              "size": "medium",
+              "depends_on": [
+                "KIT-A28-F2-P1",
+                "RES-A9-F1-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A3-F1-P2",
+              "name": "Machine-readable metadata",
+              "what": "Adds the citation meta tags scholar search engines read, schema.org ScholarlyArticle data and Signposting links to every paper page, so tools find the PDF, licence and authors.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "KIT-A28-F2-P2",
+                "RES-A4-F4-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A3-F1-P3",
+              "name": "Share cards",
+              "what": "Preview cards with the title, authors and status when a paper link is shared, built without tracking.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A28-F2-P3"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A3-F2",
+          "name": "Read in the browser",
+          "does": "Read the full paper as a web page that reflows on a phone, with sections, figures, tables and references.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A3-F2-P1",
+              "name": "Full text as JATS XML",
+              "what": "Keeps each version's full text as JATS XML, the open NISO standard most journals use, as the one source for the reading view, search and archive copies.",
+              "kind": "data",
+              "size": "medium",
+              "depends_on": [
+                "RES-A4-F4-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A3-F2-P2",
+              "name": "Web reading view",
+              "what": "Renders JATS as a clean, reflowing page with a contents list, figure and table views, reference popups and links to each section.",
+              "kind": "interface",
+              "size": "large",
+              "depends_on": [
+                "RES-A3-F2-P1",
+                "KIT-A27-F5-P1",
+                "KIT-A20-F1-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A3-F2-P3",
+              "name": "Maths in the reading view",
+              "what": "Shows equations as MathML with the TeX source copyable, using an openly licensed renderer whose licence suits the core.",
+              "kind": "library",
+              "size": "medium",
+              "depends_on": [
+                "RES-A3-F2-P2"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A3-F2-P4",
+              "name": "Linked references",
+              "what": "Each reference shows its DOI link, an open copy where one exists, and whether it was corrected or retracted.",
+              "kind": "interface",
+              "size": "small",
+              "depends_on": [
+                "RES-A3-F2-P2",
+                "RES-A10-F5-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A3-F3",
+          "name": "Read and download the PDF",
+          "does": "Read the PDF in the page or download it, with the paper's permanent link on it.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A3-F3-P1",
+              "name": "PDF viewer",
+              "what": "Shows the PDF in the page through the shared PDF engine, with page thumbnails and search.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A27-F6-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A3-F3-P2",
+              "name": "Download with a stamp",
+              "what": "Adds a small line on each page with the permanent link, version and licence; the authors' original file stays available unchanged.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "KIT-A27-F6-P1",
+                "RES-A10-F1-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A3-F4",
+          "name": "Accessible papers",
+          "does": "Read papers with a screen reader, a keyboard, large text or high contrast.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A3-F4-P1",
+              "name": "Accessible reading view",
+              "what": "The reading view built and tested to WCAG 2.2 AA on the kit's components, with MathML that screen readers can speak and figures that carry descriptions.",
+              "kind": "library",
+              "size": "medium",
+              "depends_on": [
+                "KIT-A19-F2-P1",
+                "KIT-A19-F2-P2",
+                "RES-A3-F2-P2"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A3-F4-P2",
+              "name": "Figure descriptions at submission",
+              "what": "Asks authors for a short description of each figure and flags missing ones, on the kit's image descriptions.",
+              "kind": "interface",
+              "size": "small",
+              "depends_on": [
+                "KIT-A19-F2-P3"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A3-F4-P3",
+              "name": "Accessible PDF from the reading view",
+              "what": "Makes a tagged, accessible PDF from the JATS when the authors' PDF is not accessible.",
+              "kind": "integration",
+              "size": "medium",
+              "depends_on": [
+                "KIT-A27-F6-P2",
+                "RES-A3-F2-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A3-F5",
+          "name": "Read on a phone or a slow connection",
+          "does": "Read comfortably on an old phone or a slow link, with figures loading only when wanted.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A3-F5-P1",
+              "name": "Light reading mode",
+              "what": "Text first, figures on tap and small pages, on the kit's light mode.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A19-F5-P1",
+                "RES-A3-F2-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A3-F6",
+          "name": "Reads and downloads without tracking",
+          "does": "See how often a paper is read and downloaded, counted without tracking anyone.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A3-F6-P1",
+              "name": "Private usage counts",
+              "what": "Views and downloads counted in totals only, with robots removed by a published rule, on the kit's private usage counts.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A22-F8-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A3-F6-P2",
+              "name": "Usage counting rules",
+              "what": "Whether to follow the COUNTER Code of Practice so counts compare with other publishers, and how to do it without personal data (*unverified* fit).",
+              "kind": "research",
+              "size": "small",
+              "depends_on": [],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A3-F7",
+          "name": "Plain-language summary",
+          "does": "Read a short summary in plain words written by the authors.",
+          "priority": "next",
+          "parts": [
+            {
+              "id": "RES-A3-F7-P1",
+              "name": "Plain-language summary",
+              "what": "An optional summary shown above the abstract, which can be translated.",
+              "kind": "data",
+              "size": "small",
+              "depends_on": [
+                "RES-A4-F4-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A3-F8",
+          "name": "Notes on a paper",
+          "does": "Highlight and note a paper privately or share the notes with a group.",
+          "priority": "next",
+          "parts": [
+            {
+              "id": "RES-A3-F8-P1",
+              "name": "Notes on papers",
+              "what": "Private and group notes anchored to text, kept on the W3C Web Annotation model so they can be exported.",
+              "kind": "library",
+              "size": "medium",
+              "depends_on": [
+                "KIT-A8-F12-P2",
+                "RES-A3-F2-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A3-F9",
+          "name": "Listen to a paper",
+          "does": "Have a paper read aloud, skipping references and reading equations sensibly.",
+          "priority": "next",
+          "parts": [
+            {
+              "id": "RES-A3-F9-P1",
+              "name": "Read aloud",
+              "what": "Reads the web view aloud with the kit's open voices.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A27-F12-P5",
+                "RES-A3-F2-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A3-F10",
+          "name": "Print and read offline",
+          "does": "Print a clean copy or save papers to read offline.",
+          "priority": "next",
+          "parts": [
+            {
+              "id": "RES-A3-F10-P1",
+              "name": "Offline papers",
+              "what": "Saves chosen papers on the device for reading offline, with a print layout.",
+              "kind": "interface",
+              "size": "small",
+              "depends_on": [
+                "KIT-A20-F2-P2",
+                "RES-A3-F2-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A3-F11",
+          "name": "Read a translation",
+          "does": "Read a machine translation of a paper, clearly labelled, with the original one tap away.",
+          "priority": "later",
+          "parts": [
+            {
+              "id": "RES-A3-F11-P1",
+              "name": "Paper translation",
+              "what": "Machine translation of the web view through the kit's translation service, never replacing the original.",
+              "kind": "integration",
+              "size": "medium",
+              "depends_on": [
+                "KIT-A19-F10-P2",
+                "RES-A3-F2-P2"
+              ],
+              "piece": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "RES-A4",
+      "name": "Submitting a paper",
+      "summary": "From files to a posted paper: upload in common formats, details and authors with ORCID and ROR, a licence, declarations and the rights check, by a person or through the same commands a script uses.",
+      "features": [
+        {
+          "id": "RES-A4-F1",
+          "name": "Start a submission",
+          "does": "Start a submission, save it and come back later.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A4-F1-P1",
+              "name": "Submission model",
+              "what": "A submission with its files, details, authors, licence, declarations and rights answers, every change an operation.",
+              "kind": "data",
+              "size": "medium",
+              "depends_on": [
+                "KIT-A15-F1-P2",
+                "KIT-A15-F1-P3"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A4-F1-P2",
+              "name": "Submission steps",
+              "what": "A short flow (files, details, licence, rights, declarations, check and post) that saves as it goes and works on a phone.",
+              "kind": "interface",
+              "size": "medium",
+              "depends_on": [
+                "RES-A4-F1-P1",
+                "KIT-A20-F1-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A4-F2",
+          "name": "Upload the manuscript",
+          "does": "Upload a PDF, a Word or OpenDocument file, or LaTeX source.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A4-F2-P1",
+              "name": "Manuscript upload",
+              "what": "Resumable uploads with safety scanning and checksums, on the kit's file uploads.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A15-F7-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A4-F2-P2",
+              "name": "PDF checks",
+              "what": "Checks a PDF opens, has real text, embeds its fonts and is not locked, and says in plain words how to fix it.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "KIT-A27-F6-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A4-F2-P3",
+              "name": "LaTeX build service",
+              "what": "Builds LaTeX source in a locked-down sandbox with no network, as a separate service, so TeX's many licences stay out of the core.",
+              "kind": "service",
+              "size": "large",
+              "depends_on": [],
+              "piece": null
+            },
+            {
+              "id": "RES-A4-F2-P4",
+              "name": "Word and OpenDocument upload",
+              "what": "Reads .docx and .odt files through the shared office formats engine.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A27-F10-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A4-F3",
+          "name": "A web version made for me",
+          "does": "Get a readable web version of my paper made automatically, and fix it before posting.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A4-F3-P1",
+              "name": "Conversion method",
+              "what": "How to turn LaTeX, Word and PDF into JATS: which open converters exist, their licences and the quality each reaches. Pandoc is GPL, so it can only run as a separate tool or be learned from.",
+              "kind": "research",
+              "size": "medium",
+              "depends_on": [],
+              "piece": null
+            },
+            {
+              "id": "RES-A4-F3-P2",
+              "name": "Conversion to JATS",
+              "what": "Converts each upload to JATS with the chosen method, keeping figures, tables, maths and references.",
+              "kind": "service",
+              "size": "large",
+              "depends_on": [
+                "RES-A4-F3-P1",
+                "RES-A3-F2-P1",
+                "KIT-A27-F6-P6"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A4-F3-P3",
+              "name": "Check the web version",
+              "what": "Shows the author the web version beside the PDF before posting, lists any problems, and lets them fix headings, figures and references.",
+              "kind": "interface",
+              "size": "medium",
+              "depends_on": [
+                "RES-A4-F3-P2",
+                "RES-A3-F2-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A4-F4",
+          "name": "Details and authors",
+          "does": "Enter the title, abstract, field, keywords and funding, and list every author with their part in the work.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A4-F4-P1",
+              "name": "Paper metadata",
+              "what": "Title, abstract, keywords, field, language, funders and grant numbers, and dates, in one model that maps to Crossref, DataCite, JATS and Dublin Core.",
+              "kind": "data",
+              "size": "medium",
+              "depends_on": [
+                "RES-A2-F2-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A4-F4-P2",
+              "name": "Author list",
+              "what": "Authors in order with ORCID iDs, ROR affiliations, the corresponding author and each person's contribution from the CRediT roles (an ANSI/NISO standard).",
+              "kind": "interface",
+              "size": "medium",
+              "depends_on": [
+                "RES-A1-F4-P1",
+                "RES-A1-F5-P2"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A4-F4-P3",
+              "name": "Co-author confirmation",
+              "what": "Tells every co-author and asks them to confirm they agree to posting; the paper waits until all confirm or a set time passes with no objection.",
+              "kind": "service",
+              "size": "small",
+              "depends_on": [
+                "KIT-A8-F4-P1",
+                "KIT-A15-F14-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A4-F4-P4",
+              "name": "Details read from the file",
+              "what": "Fills in the title, authors, abstract and references from the upload for the author to check.",
+              "kind": "library",
+              "size": "medium",
+              "depends_on": [
+                "RES-A10-F5-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A4-F5",
+          "name": "Choose a licence",
+          "does": "Pick how others may reuse my paper, with each choice explained in plain words.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A4-F5-P1",
+              "name": "Licence records",
+              "what": "The chosen licence kept as a machine-readable link in every metadata record and on every file.",
+              "kind": "data",
+              "size": "small",
+              "depends_on": [],
+              "piece": null
+            },
+            {
+              "id": "RES-A4-F5-P2",
+              "name": "Licence chooser",
+              "what": "Creative Commons licences explained plainly, with CC BY 4.0 suggested because many funders ask for it, and any funder's requirement shown.",
+              "kind": "interface",
+              "size": "small",
+              "depends_on": [
+                "RES-A4-F5-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A4-F6",
+          "name": "Declarations",
+          "does": "Declare funding, competing interests, ethics approval, data availability and AI use.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A4-F6-P1",
+              "name": "Declaration forms",
+              "what": "Funding, competing interests, ethics approval, trial registration, and data and code availability, on the kit's form model and shown on the paper page.",
+              "kind": "interface",
+              "size": "medium",
+              "depends_on": [
+                "KIT-A25-F3-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A4-F6-P2",
+              "name": "AI use statement",
+              "what": "Every paper states whether and how AI tools were used: none, help with language or code, or text or results generated by AI. This also sets its section.",
+              "kind": "data",
+              "size": "small",
+              "depends_on": [],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A4-F7",
+          "name": "Check and post",
+          "does": "See everything in one place, fix anything missing, and post.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A4-F7-P1",
+              "name": "Final check",
+              "what": "One page listing anything missing or failing, with links back to fix it.",
+              "kind": "interface",
+              "size": "small",
+              "depends_on": [
+                "RES-A4-F1-P2"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A4-F7-P2",
+              "name": "Post a paper",
+              "what": "Posts version 1: gives it a permanent ID, queues its DOI, sends it to screening, and tells the authors what happens next.",
+              "kind": "service",
+              "size": "medium",
+              "depends_on": [
+                "RES-A10-F1-P1",
+                "RES-A10-F2-P3",
+                "RES-A6-F1-P1",
+                "RES-A9-F1-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A4-F8",
+          "name": "Who can publish",
+          "does": "Know the rule for who can post a paper, and ask for an endorsement if I need one.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A4-F8-P1",
+              "name": "Who-can-publish rule",
+              "what": "The rule members choose (any account, a linked ORCID iD, or endorsement by someone already publishing in the field), kept as a setting changed only by vote.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "KIT-A12-F4-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A4-F8-P2",
+              "name": "Endorsements",
+              "what": "A new author asks someone who has published in the field to endorse them; the endorser sees the paper first and is named in the record.",
+              "kind": "service",
+              "size": "medium",
+              "depends_on": [
+                "RES-A4-F8-P1",
+                "RES-A1-F4-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A4-F9",
+          "name": "Submit from a script or agent",
+          "does": "Prepare a submission from a script or an AI agent, with a person making the declarations and posting.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A4-F9-P1",
+              "name": "Submission commands",
+              "what": "Every submission step as a command in the kit's command API and MCP server; declarations and posting are people-only actions.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A16-F1-P1",
+                "KIT-A17-F1-P1",
+                "KIT-A17-F9-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A4-F10",
+          "name": "Send to a journal",
+          "does": "Ask a journal run on Spare Research to review my posted paper.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A4-F10-P1",
+              "name": "Send to a journal",
+              "what": "Sends a posted paper to a chosen journal, showing its scope, review model and typical times first.",
+              "kind": "interface",
+              "size": "small",
+              "depends_on": [
+                "RES-A8-F1-P1",
+                "RES-A7-F1-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A4-F11",
+          "name": "Bring a paper from another archive",
+          "does": "Bring in a paper I already posted elsewhere, linked to the original.",
+          "priority": "next",
+          "parts": [
+            {
+              "id": "RES-A4-F11-P1",
+              "name": "Import terms",
+              "what": "What each preprint server's terms and licences let us copy, and when only a link is allowed.",
+              "kind": "research",
+              "size": "small",
+              "depends_on": [],
+              "piece": null
+            },
+            {
+              "id": "RES-A4-F11-P2",
+              "name": "Import from other preprint servers",
+              "what": "Brings in an author's own paper by its ID through the other server's published API, once the author proves it is theirs, and links back to the original.",
+              "kind": "integration",
+              "size": "medium",
+              "depends_on": [
+                "RES-A4-F1-P1",
+                "RES-A4-F11-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A4-F12",
+          "name": "Notebook papers",
+          "does": "Post a paper with live figures or notebooks readers can open.",
+          "priority": "later",
+          "parts": [
+            {
+              "id": "RES-A4-F12-P1",
+              "name": "Notebook papers",
+              "what": "Accepts Jupyter notebooks and shows them as static pages, with running them at cost as a later step.",
+              "kind": "library",
+              "size": "large",
+              "depends_on": [
+                "RES-A11-F2-P1"
+              ],
+              "piece": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "RES-A5",
+      "name": "Rights, licences and publisher agreements",
+      "summary": "Hosting only what authors have the right to share: plain guidance on each version, publisher policies looked up, each country's rules, a recorded declaration, embargoes, rights retention, and takedowns that leave a clear notice.",
+      "features": [
+        {
+          "id": "RES-A5-F1",
+          "name": "Know what I may share",
+          "does": "See in plain words which version of my paper I may post, and on what conditions.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A5-F1-P1",
+              "name": "Versions explained",
+              "what": "Explains the preprint, the accepted manuscript and the published version, and that usually only the first two are the author's to share.",
+              "kind": "data",
+              "size": "small",
+              "depends_on": [],
+              "piece": null
+            },
+            {
+              "id": "RES-A5-F1-P2",
+              "name": "Policy data terms",
+              "what": "Jisc's Open Policy Finder (formerly Sherpa Romeo) needs an API key and licenses its data under CC BY-NC-ND 4.0: get Jisc's written confirmation that a non-profit may show it, and decide what to do when a journal is missing.",
+              "kind": "research",
+              "size": "small",
+              "depends_on": [],
+              "piece": null
+            },
+            {
+              "id": "RES-A5-F1-P3",
+              "name": "Publisher policy lookup",
+              "what": "Looks up the journal a paper went to in Open Policy Finder where its terms allow, and shows the version, embargo, licence and conditions it lists.",
+              "kind": "integration",
+              "size": "medium",
+              "depends_on": [
+                "RES-A5-F1-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A5-F2",
+          "name": "Rights check before posting",
+          "does": "Answer a few questions so the app can tell me whether I can post, and what I must add.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A5-F2-P1",
+              "name": "Rights questions",
+              "what": "Who wrote it, was it accepted or published, which version is this, was an agreement signed, is any figure someone else's; the answers lead to post now, post on a date, or do not post.",
+              "kind": "interface",
+              "size": "medium",
+              "depends_on": [
+                "RES-A5-F1-P1",
+                "RES-A5-F1-P3",
+                "RES-A5-F3-P2"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A5-F2-P2",
+              "name": "Rights declaration wording",
+              "what": "Plain wording for what authors confirm and what the co-op relies on, checked by a lawyer.",
+              "kind": "legal",
+              "size": "small",
+              "depends_on": [],
+              "piece": null
+            },
+            {
+              "id": "RES-A5-F2-P3",
+              "name": "Rights declaration",
+              "what": "The submitting author confirms they have the right to share this version under the chosen licence; the statement and its wording version are kept with the paper. A person must make it, never an agent.",
+              "kind": "legal",
+              "size": "small",
+              "depends_on": [
+                "RES-A5-F2-P2",
+                "KIT-A18-F4-P1",
+                "KIT-A17-F9-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A5-F3",
+          "name": "Country rules for rights",
+          "does": "See what my country's law adds, such as a right to share publicly funded work after a set time.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A5-F3-P1",
+              "name": "Secondary publication rights research",
+              "what": "Which countries give authors a legal right to share their work after a period, which contracts cannot override, and the conditions in each: Germany and Austria (accepted manuscript after 12 months), France and Belgium (6 months, 12 in the humanities), the Netherlands (a reasonable period), and countries with none found, such as New Zealand (*to confirm*).",
+              "kind": "legal",
+              "size": "medium",
+              "depends_on": [],
+              "piece": null
+            },
+            {
+              "id": "RES-A5-F3-P2",
+              "name": "Rights rules packs",
+              "what": "Each country's rights rules as data in its country pack, so the rights check can say what the law allows there.",
+              "kind": "data",
+              "size": "small",
+              "depends_on": [
+                "KIT-A19-F6-P1",
+                "RES-A5-F3-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A5-F4",
+          "name": "Funder and institution policies",
+          "does": "See what my funder or institution asks, such as immediate open access or a set licence.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A5-F4-P1",
+              "name": "Funder policy data",
+              "what": "Open access rules of funders and institutions as data, each with its source and date, starting with policies published openly.",
+              "kind": "data",
+              "size": "medium",
+              "depends_on": [
+                "RES-A5-F3-P2"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A5-F4-P2",
+              "name": "Rights retention helper",
+              "what": "Adds a rights retention statement to a manuscript before it goes to an outside journal, so the author keeps the right to post the accepted version, as some funders ask.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "RES-A5-F4-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A5-F5",
+          "name": "Embargoes",
+          "does": "Post now and have a version go public on a set date.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A5-F5-P1",
+              "name": "Embargo timer",
+              "what": "Holds a version private until a date and then publishes it on the kit's durable timers, with the date shown on the page.",
+              "kind": "service",
+              "size": "small",
+              "depends_on": [
+                "KIT-A15-F14-P1",
+                "RES-A4-F7-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A5-F6",
+          "name": "No paywalled copies",
+          "does": "Trust that the archive holds only papers their authors may share.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A5-F6-P1",
+              "name": "Publisher-version check",
+              "what": "Flags uploads that look like a publisher's typeset version (layout, running heads, publisher marks) for a screener to check against the rights answers.",
+              "kind": "library",
+              "size": "medium",
+              "depends_on": [
+                "RES-A6-F1-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A5-F6-P2",
+              "name": "Already-published check",
+              "what": "Matches the title and authors against open DOI metadata and warns when a published version exists, linking to it.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "RES-A10-F5-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A5-F7",
+          "name": "Keep my copyright",
+          "does": "Read a short agreement that leaves my copyright with me.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A5-F7-P1",
+              "name": "Author agreement",
+              "what": "A short non-exclusive licence: authors keep their copyright, and the co-op may host, convert formats and copy to preservation archives.",
+              "kind": "legal",
+              "size": "small",
+              "depends_on": [
+                "KIT-A18-F4-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A5-F8",
+          "name": "Licence shown everywhere",
+          "does": "See how I may reuse a paper on its page, in its files and in its metadata.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A5-F8-P1",
+              "name": "Reuse guide",
+              "what": "Shows the licence with what it allows in plain words and how to credit the authors.",
+              "kind": "interface",
+              "size": "small",
+              "depends_on": [
+                "RES-A4-F5-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A5-F9",
+          "name": "Copyright complaints and takedowns",
+          "does": "Have a rights complaint about a paper handled fairly, with a notice left in its place.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A5-F9-P1",
+              "name": "Copyright notice flow",
+              "what": "Notices and counter-notices about papers on the kit's copyright notice handling, with the authors told and heard.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A10-F21-P2",
+                "KIT-A10-F9-P2"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A5-F9-P2",
+              "name": "Tombstone pages",
+              "what": "When files must come down, the page and its permanent link stay with the metadata and a plain reason, so citations never break.",
+              "kind": "interface",
+              "size": "small",
+              "depends_on": [
+                "RES-A3-F1-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A5-F10",
+          "name": "Material reused from others",
+          "does": "Record permission for figures or text reused from others.",
+          "priority": "next",
+          "parts": [
+            {
+              "id": "RES-A5-F10-P1",
+              "name": "Reused material log",
+              "what": "Lists reused figures with their source and permission or licence, shown in the caption.",
+              "kind": "data",
+              "size": "small",
+              "depends_on": [
+                "RES-A4-F1-P1"
+              ],
+              "piece": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "RES-A6",
+      "name": "Screening before posting",
+      "summary": "Quick checks by trained members before a paper goes live: in scope, complete, not copied, safe, lawful and careful with people in the data. Screening is not peer review, and every decision has a reason.",
+      "features": [
+        {
+          "id": "RES-A6-F1",
+          "name": "Screening queue",
+          "does": "Have my paper checked by a trained member within a published time.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A6-F1-P1",
+              "name": "Screening queue",
+              "what": "Papers wait in the kit's review queue for screening, with published target times and a reason for every hold or decline.",
+              "kind": "integration",
+              "size": "medium",
+              "depends_on": [
+                "KIT-A10-F6-P2",
+                "KIT-A10-F8-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A6-F1-P2",
+              "name": "Screening rules",
+              "what": "A published, member-voted checklist: research, not advertising; in a listed field; complete, with authors and an abstract; readable; lawful.",
+              "kind": "data",
+              "size": "small",
+              "depends_on": [
+                "KIT-A10-F5-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A6-F1-P3",
+              "name": "Screeners and their training",
+              "what": "Member screeners for each field, trained and certified on the kit's training module, with conflicts checked.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A14-F6-P1",
+                "KIT-A25-F2-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A6-F2",
+          "name": "Copied text check",
+          "does": "Know my paper was checked for copied text.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A6-F2-P1",
+              "name": "Overlap check method",
+              "what": "Compares open methods for finding copied text with paid services, such as Crossref's Similarity Check, which costs extra on top of membership, on accuracy, cost and what text each can compare against.",
+              "kind": "research",
+              "size": "medium",
+              "depends_on": [],
+              "piece": null
+            },
+            {
+              "id": "RES-A6-F2-P2",
+              "name": "Overlap check",
+              "what": "Checks new papers against our own archive and openly licensed full text, showing matches to the screener as hints, never automatic verdicts.",
+              "kind": "service",
+              "size": "large",
+              "depends_on": [
+                "RES-A6-F2-P1",
+                "RES-A2-F1-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A6-F3",
+          "name": "Safety and ethics checks",
+          "does": "Know papers that could put people at risk are held for a closer look.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A6-F3-P1",
+              "name": "Ethics and trial checks",
+              "what": "Checks that studies on people or animals state ethics approval, and that clinical trials give a registry number, before posting.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "RES-A4-F6-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A6-F3-P2",
+              "name": "Personal details check",
+              "what": "Flags papers and files that may identify patients or participants, such as names, faces or exact dates, for the screener.",
+              "kind": "library",
+              "size": "medium",
+              "depends_on": [
+                "KIT-A15-F7-P4"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A6-F3-P3",
+              "name": "Dangerous research rules",
+              "what": "What to do with papers that could help cause serious harm, such as weapons or dangerous pathogen work: who reviews them and which laws apply (*needs a lawyer*).",
+              "kind": "legal",
+              "size": "medium",
+              "depends_on": [],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A6-F4",
+          "name": "Health research posted with care",
+          "does": "See a clear notice that unreviewed health research is not yet checked by experts.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A6-F4-P1",
+              "name": "Health preprint notice",
+              "what": "A plain notice on unreviewed health research saying it should not guide treatment, as health preprint servers do.",
+              "kind": "interface",
+              "size": "small",
+              "depends_on": [
+                "RES-A3-F1-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A6-F5",
+          "name": "Holds and appeals",
+          "does": "Know why my paper was held or declined and ask for another look.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A6-F5-P1",
+              "name": "Screening appeals",
+              "what": "The author gets the reason and can appeal to different members through the kit's appeals.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A11-F5-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A6-F6",
+          "name": "No junk in the archive",
+          "does": "Not see adverts, junk or nonsense papers in the archive.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A6-F6-P1",
+              "name": "Junk submission limits",
+              "what": "Limits on new accounts' submissions and signals for generated nonsense, on the kit's spam limits and fraud signals.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A10-F11-P1",
+                "KIT-A10-F12-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A6-F7",
+          "name": "Screening figures in public",
+          "does": "See how many papers were screened, held and declined, and how fast.",
+          "priority": "next",
+          "parts": [
+            {
+              "id": "RES-A6-F7-P1",
+              "name": "Screening figures",
+              "what": "Counts and times through the kit's public reporting pipeline.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A13-F9-P1"
+              ],
+              "piece": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "RES-A7",
+      "name": "Open peer review",
+      "summary": "Review in the open: authors or journals ask for review, conflicts are checked, reviewers comment on the paper itself, and reviews, author replies and assessments are published with their own DOIs. Whether reviewers are named is an open decision.",
+      "features": [
+        {
+          "id": "RES-A7-F1",
+          "name": "Ask for review",
+          "does": "Ask for my posted paper to be reviewed, by a journal or by the community.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A7-F1-P1",
+              "name": "Review requests",
+              "what": "A request for review linked to one version, from the authors or from a journal's editor.",
+              "kind": "service",
+              "size": "small",
+              "depends_on": [
+                "RES-A9-F1-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A7-F2",
+          "name": "Find and invite reviewers",
+          "does": "Invite people with the right knowledge and no conflict with the authors.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A7-F2-P1",
+              "name": "Reviewer pool",
+              "what": "People who offer to review, with their fields, languages and how many reviews they will take.",
+              "kind": "data",
+              "size": "small",
+              "depends_on": [
+                "RES-A1-F4-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A7-F2-P2",
+              "name": "Conflict of interest checks",
+              "what": "Flags recent co-authorship, a shared institution and declared conflicts, from ORCID and our own records, and asks each reviewer to confirm.",
+              "kind": "library",
+              "size": "medium",
+              "depends_on": [
+                "RES-A1-F3-P3",
+                "RES-A1-F5-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A7-F2-P3",
+              "name": "Reviewer suggestions",
+              "what": "Suggests reviewers from fields and past papers, explains each suggestion, and leaves out anyone with a conflict.",
+              "kind": "library",
+              "size": "medium",
+              "depends_on": [
+                "RES-A7-F2-P1",
+                "RES-A7-F2-P2"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A7-F2-P4",
+              "name": "Invitations and replies",
+              "what": "Invites with the abstract and due date, accept or decline in one step, and reminders.",
+              "kind": "service",
+              "size": "small",
+              "depends_on": [
+                "KIT-A8-F4-P1",
+                "KIT-A15-F14-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A7-F3",
+          "name": "Write a review",
+          "does": "Write a clear review, with comments on the exact lines they refer to.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A7-F3-P1",
+              "name": "Review form",
+              "what": "Summary, strengths, concerns, questions for the authors, and an assessment of how well the evidence supports the claims, set by each journal or the default.",
+              "kind": "interface",
+              "size": "medium",
+              "depends_on": [
+                "KIT-A25-F3-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A7-F3-P2",
+              "name": "Comments on the paper",
+              "what": "Comments pinned to text, figures and equations in the web view, on the kit's anchored comments.",
+              "kind": "integration",
+              "size": "medium",
+              "depends_on": [
+                "KIT-A8-F12-P2",
+                "RES-A3-F2-P2"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A7-F3-P3",
+              "name": "Reviewer guide",
+              "what": "Short guidance on fair, specific and kind reviews, and what not to do.",
+              "kind": "data",
+              "size": "small",
+              "depends_on": [],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A7-F4",
+          "name": "Named or anonymous reviews",
+          "does": "Know whether my name will be shown, and choose where the journal allows.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A7-F4-P1",
+              "name": "Review identity modes",
+              "what": "Named; anonymous to the public but known to the editor; or kept private: as each journal or the members decide, shown on every review.",
+              "kind": "library",
+              "size": "medium",
+              "depends_on": [
+                "RES-A8-F1-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A7-F4-P2",
+              "name": "Anonymity protection",
+              "what": "Strips names and hidden data from review files and keeps anonymous reviewers out of public metadata and exports.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "KIT-A15-F7-P3"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A7-F5",
+          "name": "Published reviews",
+          "does": "Read the reviews, the authors' reply and the editor's assessment next to the paper.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A7-F5-P1",
+              "name": "Publish reviews",
+              "what": "Reviews, author replies and assessments published with the version they refer to once the round closes.",
+              "kind": "service",
+              "size": "medium",
+              "depends_on": [
+                "RES-A7-F3-P1",
+                "RES-A9-F1-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A7-F5-P2",
+              "name": "Review DOIs",
+              "what": "Registers each published review as peer review content with the DOI agency, linked to the paper, so reviews can be cited.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "RES-A10-F2-P3",
+                "RES-A7-F5-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A7-F6",
+          "name": "Reply and revise",
+          "does": "Answer each review point and post a revised version.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A7-F6-P1",
+              "name": "Author reply",
+              "what": "A reply linked to each review point, published with the reviews.",
+              "kind": "interface",
+              "size": "medium",
+              "depends_on": [
+                "RES-A7-F5-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A7-F7",
+          "name": "Credit for reviewing",
+          "does": "Get credit for reviewing on my profile and my ORCID record.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A7-F7-P1",
+              "name": "Review records",
+              "what": "Reviews listed on the reviewer's profile, signed or counted only, and added to their ORCID record with consent.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "RES-A1-F3-P3",
+                "RES-A1-F4-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A7-F8",
+          "name": "Due dates and reminders",
+          "does": "Know when a review is due and be reminded.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A7-F8-P1",
+              "name": "Review due dates",
+              "what": "Due dates, reminders and gentle chasers on the kit's durable timers, with extensions on request.",
+              "kind": "service",
+              "size": "small",
+              "depends_on": [
+                "KIT-A15-F14-P1",
+                "KIT-A8-F3-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A7-F9",
+          "name": "Reviews by people",
+          "does": "Trust that reviews are written by people, with any AI help declared.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A7-F9-P1",
+              "name": "People-only reviews",
+              "what": "Sending a review is a people-only action; reviewers declare any AI help and agree never to paste unpublished papers into outside AI tools.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "KIT-A17-F9-P2",
+                "RES-A4-F6-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A7-F10",
+          "name": "Respectful reviews",
+          "does": "Know reviews are checked for personal attacks before they are published.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A7-F10-P1",
+              "name": "Review conduct check",
+              "what": "The editor sees each review before it is published and can send back one that attacks people, under published conduct rules.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "KIT-A10-F5-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A7-F11",
+          "name": "Reviews from other services",
+          "does": "See reviews of the paper from other open review services.",
+          "priority": "next",
+          "parts": [
+            {
+              "id": "RES-A7-F11-P1",
+              "name": "Review links with other services",
+              "what": "Sends and receives COAR Notify messages, so reviews from other open review services show on the paper and ours show there.",
+              "kind": "integration",
+              "size": "medium",
+              "depends_on": [
+                "RES-A7-F5-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A7-F12",
+          "name": "Comments from readers",
+          "does": "Comment on a paper and read others' comments, with moderation.",
+          "priority": "next",
+          "parts": [
+            {
+              "id": "RES-A7-F12-P1",
+              "name": "Comments on papers",
+              "what": "Signed comments on the kit's threads, with reports and member moderation.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A8-F12-P1",
+                "KIT-A10-F3-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A7-F13",
+          "name": "Reviewer workload",
+          "does": "Set how many reviews I take on, and let editors see who is overloaded.",
+          "priority": "next",
+          "parts": [
+            {
+              "id": "RES-A7-F13-P1",
+              "name": "Review load limits",
+              "what": "Each reviewer sets a limit, invites stop when it is reached, and editors see the load across their journal.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "RES-A7-F2-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A7-F14",
+          "name": "Learn to review",
+          "does": "Learn to review with a short course and examples.",
+          "priority": "next",
+          "parts": [
+            {
+              "id": "RES-A7-F14-P1",
+              "name": "Reviewer course",
+              "what": "A short course with sample papers and published reviews, on the kit's training module.",
+              "kind": "data",
+              "size": "small",
+              "depends_on": [
+                "KIT-A25-F2-P1"
+              ],
+              "piece": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "RES-A8",
+      "name": "Journals on top and editorial work",
+      "summary": "Editors run journals as lists of papers they reviewed and accepted, on top of papers already posted: set-up, scope and policies, an editorial queue, decisions and assessments, issues where wanted, and protected journal names.",
+      "features": [
+        {
+          "id": "RES-A8-F1",
+          "name": "Start a journal",
+          "does": "Set up a journal with its name, scope, editors, review model and policies.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A8-F1-P1",
+              "name": "Journal model",
+              "what": "A journal with its scope, fields, editors, review model, review identity mode, policies and accepted papers, as an organisation on the kit's model.",
+              "kind": "data",
+              "size": "medium",
+              "depends_on": [
+                "KIT-A1-F7-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A8-F1-P2",
+              "name": "Journal set-up",
+              "what": "A guided set-up with plain choices and the policies a journal must publish.",
+              "kind": "interface",
+              "size": "medium",
+              "depends_on": [
+                "RES-A8-F1-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A8-F1-P3",
+              "name": "Protected journal names",
+              "what": "Checks new journal names against existing journals' titles and ISSNs, and holds lookalikes for a person to review, so nobody passes off a journal as another.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "KIT-A10-F6-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A8-F2",
+          "name": "Editors and roles",
+          "does": "Invite editors and give each a role, with conflicts declared.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A8-F2-P1",
+              "name": "Editorial roles",
+              "what": "Editor-in-chief, handling editor, managing editor and screener roles on the kit's roles and team management, each with conflict declarations.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "KIT-A1-F5-P2",
+                "KIT-A1-F7-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A8-F3",
+          "name": "Editorial queue",
+          "does": "See every paper sent to the journal, its stage and what it waits on.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A8-F3-P1",
+              "name": "Editorial queue",
+              "what": "Papers by stage with due dates, reviewer status and the next step, filtered by editor.",
+              "kind": "interface",
+              "size": "medium",
+              "depends_on": [
+                "RES-A7-F1-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A8-F3-P2",
+              "name": "Assign a handling editor",
+              "what": "Gives a paper to an editor after checking conflicts.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "RES-A7-F2-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A8-F4",
+          "name": "Decisions and assessments",
+          "does": "Make a decision or write an assessment, and tell the authors.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A8-F4-P1",
+              "name": "Decision types",
+              "what": "Accept into the journal, ask for changes, or decline; or, for journals that do not accept or reject, a published assessment of how important the work is and how strong its evidence.",
+              "kind": "library",
+              "size": "medium",
+              "depends_on": [
+                "RES-A8-F1-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A8-F4-P2",
+              "name": "Decision letters",
+              "what": "Templates for decision letters that link to the reviews, sent through the kit's messages.",
+              "kind": "interface",
+              "size": "small",
+              "depends_on": [
+                "KIT-A8-F4-P3"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A8-F5",
+          "name": "Journal pages",
+          "does": "Read a journal's scope, editors, policies and accepted papers on one page.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A8-F5-P1",
+              "name": "Journal home page",
+              "what": "Scope, editors, review model, policies and papers, with feeds, on the kit's public pages.",
+              "kind": "interface",
+              "size": "medium",
+              "depends_on": [
+                "KIT-A28-F2-P1",
+                "RES-A8-F1-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A8-F5-P2",
+              "name": "Policy pages",
+              "what": "Peer review, ethics, corrections, conflicts, licence and preservation policies written once from templates and shown on the journal page, as directories of open journals ask.",
+              "kind": "data",
+              "size": "small",
+              "depends_on": [
+                "KIT-A15-F18-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A8-F6",
+          "name": "A journal's own web address",
+          "does": "Run a journal under its own web address.",
+          "priority": "next",
+          "parts": [
+            {
+              "id": "RES-A8-F6-P1",
+              "name": "Journal domains",
+              "what": "Connects a journal's own domain on the kit's custom domains.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A28-F1-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A8-F7",
+          "name": "Issues and volumes",
+          "does": "Group accepted papers into volumes and issues where the field expects them.",
+          "priority": "next",
+          "parts": [
+            {
+              "id": "RES-A8-F7-P1",
+              "name": "Issues and volumes",
+              "what": "Optional volumes, issues and article numbers, kept in the metadata.",
+              "kind": "data",
+              "size": "small",
+              "depends_on": [
+                "RES-A8-F1-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A8-F8",
+          "name": "An ISSN for the journal",
+          "does": "Get an ISSN, with my country's steps shown.",
+          "priority": "next",
+          "parts": [
+            {
+              "id": "RES-A8-F8-P1",
+              "name": "ISSN steps",
+              "what": "How to apply to each country's national ISSN centre, kept in its country pack, and where the number is recorded.",
+              "kind": "data",
+              "size": "small",
+              "depends_on": [
+                "RES-A17-F4-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A8-F9",
+          "name": "Themed collections",
+          "does": "Gather papers on a theme with guest editors.",
+          "priority": "next",
+          "parts": [
+            {
+              "id": "RES-A8-F9-P1",
+              "name": "Collections",
+              "what": "Themed collections with guest editors and their own page.",
+              "kind": "interface",
+              "size": "small",
+              "depends_on": [
+                "RES-A8-F5-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A8-F10",
+          "name": "Move a journal in",
+          "does": "Bring an existing journal with its papers, DOIs and history.",
+          "priority": "next",
+          "parts": [
+            {
+              "id": "RES-A8-F10-P1",
+              "name": "Import from other journal systems",
+              "what": "Imports papers, public reviews and metadata from other open journal systems through their published export formats and OAI-PMH.",
+              "kind": "integration",
+              "size": "large",
+              "depends_on": [
+                "RES-A3-F2-P1",
+                "RES-A4-F4-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A8-F10-P2",
+              "name": "DOI transfer",
+              "what": "Points a journal's existing DOIs at Spare Research through the DOI agency's own transfer process.",
+              "kind": "integration",
+              "size": "medium",
+              "depends_on": [
+                "RES-A10-F2-P3"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A8-F11",
+          "name": "Journal figures",
+          "does": "See open figures such as time to decision and reviews per paper, never one ranking number.",
+          "priority": "later",
+          "parts": [
+            {
+              "id": "RES-A8-F11-P1",
+              "name": "Journal figures",
+              "what": "Time to first review and to decision, reviews per paper and corrections, through the public reporting pipeline.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A13-F9-P1"
+              ],
+              "piece": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "RES-A9",
+      "name": "Versions, corrections and retractions",
+      "summary": "The record stays honest: every version kept and compared, corrections and expressions of concern linked to what they correct, retractions that leave the paper readable with a clear notice, and one public log of every change.",
+      "features": [
+        {
+          "id": "RES-A9-F1",
+          "name": "Post a new version",
+          "does": "Post a new version with a short note on what changed.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A9-F1-P1",
+              "name": "Version model",
+              "what": "Versions v1, v2 and on, each with its own files, date and note, kept for good; the permanent link leads to the latest and each version has its own link.",
+              "kind": "data",
+              "size": "medium",
+              "depends_on": [
+                "KIT-A15-F3-P1",
+                "RES-A10-F1-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A9-F1-P2",
+              "name": "New version flow",
+              "what": "The submission flow for a new version, carrying the details over and asking what changed.",
+              "kind": "interface",
+              "size": "small",
+              "depends_on": [
+                "RES-A4-F1-P2",
+                "RES-A9-F1-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A9-F2",
+          "name": "See and compare versions",
+          "does": "See every version and what changed between them.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A9-F2-P1",
+              "name": "Version list",
+              "what": "Every version with its date and note on the paper page, and a clear notice when reading an older one.",
+              "kind": "interface",
+              "size": "small",
+              "depends_on": [
+                "RES-A9-F1-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A9-F2-P2",
+              "name": "Compare versions",
+              "what": "Shows the text changes between two versions from their JATS.",
+              "kind": "library",
+              "size": "medium",
+              "depends_on": [
+                "RES-A3-F2-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A9-F3",
+          "name": "Corrections",
+          "does": "Read a correction linked to the paper it corrects.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A9-F3-P1",
+              "name": "Correction notices",
+              "what": "A correction with its own page and DOI, linked both ways to the version it corrects, issued by the authors or editors with a reason.",
+              "kind": "service",
+              "size": "medium",
+              "depends_on": [
+                "RES-A9-F1-P1",
+                "RES-A10-F2-P3"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A9-F3-P2",
+              "name": "Update metadata",
+              "what": "Sends corrections, retractions and new versions to the DOI agency as updates, so other services show them too.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "RES-A10-F2-P3"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A9-F4",
+          "name": "Expressions of concern",
+          "does": "See when editors have a concern under investigation.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A9-F4-P1",
+              "name": "Expression of concern",
+              "what": "A notice that an investigation is open, shown on the paper and in its metadata, and closed by a later notice.",
+              "kind": "service",
+              "size": "small",
+              "depends_on": [
+                "RES-A9-F3-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A9-F5",
+          "name": "Retractions",
+          "does": "Know a retracted paper at once, with the reason and who decided.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A9-F5-P1",
+              "name": "Retraction process",
+              "what": "A published process following COPE's retraction guidelines (updated in 2025) and NISO's recommended practice for retractions: who can decide, how the authors are heard, and what the notice must explain.",
+              "kind": "legal",
+              "size": "small",
+              "depends_on": [],
+              "piece": null
+            },
+            {
+              "id": "RES-A9-F5-P2",
+              "name": "Retraction notices",
+              "what": "A notice with the reason, who decided and when; the paper stays readable with a clear banner and a mark on every PDF page.",
+              "kind": "service",
+              "size": "medium",
+              "depends_on": [
+                "RES-A9-F5-P1",
+                "RES-A9-F3-P1",
+                "RES-A3-F3-P2"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A9-F5-P3",
+              "name": "Honest error label",
+              "what": "Says plainly when authors retracted their own paper over an honest error, so correcting the record is not treated as misconduct.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "RES-A9-F5-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A9-F6",
+          "name": "Withdraw a preprint",
+          "does": "Withdraw my preprint, leaving a notice and the earlier versions on record.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A9-F6-P1",
+              "name": "Withdrawal",
+              "what": "Authors withdraw a preprint with a reason; a withdrawal notice becomes the latest version and earlier versions stay, as preprint servers do.",
+              "kind": "service",
+              "size": "small",
+              "depends_on": [
+                "RES-A9-F1-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A9-F7",
+          "name": "Removal for legal reasons",
+          "does": "Know when content was removed for a legal reason, and why.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A9-F7-P1",
+              "name": "Legal removals",
+              "what": "Files removed only for a legal reason or a serious risk to people, leaving a tombstone, the rule and an entry in the public log.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "RES-A5-F9-P2",
+                "KIT-A10-F7-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A9-F8",
+          "name": "One log of every change",
+          "does": "Browse every correction, concern, retraction and withdrawal across the archive.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A9-F8-P1",
+              "name": "Public updates log",
+              "what": "Every notice by date, field and journal with its reason, through the kit's public reporting pipeline.",
+              "kind": "interface",
+              "size": "small",
+              "depends_on": [
+                "KIT-A13-F9-P1",
+                "RES-A9-F3-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A9-F9",
+          "name": "Updates reach readers",
+          "does": "Be told when a paper I saved, cited or followed is corrected or retracted.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A9-F9-P1",
+              "name": "Update alerts",
+              "what": "Alerts to people who saved or followed a paper, and a status check on every reference in new submissions.",
+              "kind": "service",
+              "size": "small",
+              "depends_on": [
+                "KIT-A8-F3-P2",
+                "RES-A10-F5-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A9-F10",
+          "name": "Retractions elsewhere",
+          "does": "See when a paper I cite was retracted by another publisher.",
+          "priority": "next",
+          "parts": [
+            {
+              "id": "RES-A9-F10-P1",
+              "name": "Outside retraction data",
+              "what": "Uses the Retraction Watch data, which Crossref makes openly available under CC0, to flag retracted references.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "RES-A10-F6-P2"
+              ],
+              "piece": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "RES-A10",
+      "name": "Citing, DOIs and permanent links",
+      "summary": "Every paper, version, review and dataset gets a link that never breaks: our own permanent IDs, DOIs from a registration agency, ORCID and ROR in the metadata, references linked and shared openly, and citations in any style.",
+      "features": [
+        {
+          "id": "RES-A10-F1",
+          "name": "Permanent links",
+          "does": "Cite a link that will always lead to the paper.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A10-F1-P1",
+              "name": "Permanent IDs",
+              "what": "Our own short, permanent ID for every paper, version and review, built on the kit's permanent IDs and never reused or changed.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "KIT-A15-F1-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A10-F1-P2",
+              "name": "Link resolver",
+              "what": "Resolves permanent links after pages or servers move, and keeps working from a simple static copy if the app is down.",
+              "kind": "service",
+              "size": "medium",
+              "depends_on": [
+                "RES-A10-F1-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A10-F2",
+          "name": "DOIs",
+          "does": "Get a DOI for my paper so it can be cited and found anywhere.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A10-F2-P1",
+              "name": "DOI agency choice",
+              "what": "Crossref (yearly membership from USD 200, plus a fee for each DOI such as USD 0.25 for a preprint and USD 1 for a journal article in 2026) or DataCite (EUR 2,000 a year plus an infrastructure fee, with no fee for each DOI), or both, and what fits papers, reviews and data.",
+              "kind": "research",
+              "size": "medium",
+              "depends_on": [],
+              "piece": null
+            },
+            {
+              "id": "RES-A10-F2-P2",
+              "name": "Which things get DOIs",
+              "what": "Whether each version gets its own DOI or one DOI leads to the latest, following how preprint servers and data archives do it.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "RES-A10-F2-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A10-F2-P3",
+              "name": "DOI deposits",
+              "what": "Builds and sends metadata deposits for papers, versions, reviews and updates, retries failures and checks every DOI resolves.",
+              "kind": "service",
+              "size": "large",
+              "depends_on": [
+                "RES-A10-F2-P1",
+                "RES-A4-F4-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A10-F3",
+          "name": "How to cite",
+          "does": "Copy a citation in my style and export it to my reference manager.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A10-F3-P1",
+              "name": "Citation export",
+              "what": "BibTeX, RIS and CSL-JSON for any paper, list or search.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "RES-A4-F4-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A10-F3-P2",
+              "name": "Citation styles",
+              "what": "Formats citations in common styles from the open Citation Style Language styles (CC BY-SA 3.0, credited as they ask), with a processor whose licence suits the core, such as hayagriva (MIT or Apache-2.0).",
+              "kind": "library",
+              "size": "medium",
+              "depends_on": [
+                "RES-A10-F3-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A10-F3-P3",
+              "name": "Cite box",
+              "what": "A cite box on every paper with the permanent link, the DOI, the version and a copy button.",
+              "kind": "interface",
+              "size": "small",
+              "depends_on": [
+                "RES-A10-F3-P2",
+                "RES-A10-F1-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A10-F4",
+          "name": "Author and organisation IDs",
+          "does": "See ORCID iDs and ROR IDs in every citation record.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A10-F4-P1",
+              "name": "IDs in metadata",
+              "what": "ORCID iDs, ROR IDs, funder IDs and grant numbers carried in every deposit and export.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "RES-A4-F4-P1",
+                "RES-A1-F3-P1",
+                "RES-A1-F5-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A10-F5",
+          "name": "References linked and shared",
+          "does": "See each reference linked, and have my references shared openly.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A10-F5-P1",
+              "name": "Reference extraction",
+              "what": "Pulls references and structure from uploads with an openly licensed extractor, such as GROBID (Apache-2.0), run as a separate service.",
+              "kind": "service",
+              "size": "medium",
+              "depends_on": [],
+              "piece": null
+            },
+            {
+              "id": "RES-A10-F5-P2",
+              "name": "Reference matching",
+              "what": "Matches references to DOIs through open metadata APIs and lets authors fix mismatches.",
+              "kind": "service",
+              "size": "medium",
+              "depends_on": [
+                "RES-A10-F5-P1",
+                "RES-A10-F6-P2"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A10-F5-P3",
+              "name": "Open references",
+              "what": "Deposits every paper's references openly with its DOI metadata, so citation data stays free.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "RES-A10-F2-P3",
+                "RES-A10-F5-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A10-F6",
+          "name": "Open metadata",
+          "does": "Reuse all our metadata freely.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A10-F6-P1",
+              "name": "Metadata under CC0",
+              "what": "All metadata (titles, authors, abstracts, references) published under CC0, apart from each paper's own licence.",
+              "kind": "legal",
+              "size": "small",
+              "depends_on": [],
+              "piece": null
+            },
+            {
+              "id": "RES-A10-F6-P2",
+              "name": "Open metadata sources",
+              "what": "Which open sources we read and on what terms: DOI agency metadata, ORCID, ROR (CC0), OpenAlex (CC0 data, an API with a free daily allowance and charges for heavy use), OpenCitations and the Retraction Watch data (CC0).",
+              "kind": "research",
+              "size": "small",
+              "depends_on": [],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A10-F7",
+          "name": "Cite data and code",
+          "does": "Cite the exact dataset and code version behind a paper.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A10-F7-P1",
+              "name": "Data and code citations",
+              "what": "Dataset DOIs and code archive IDs (SWHIDs) shown in the cite box and in the paper's metadata as related items.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "RES-A11-F1-P2",
+                "RES-A11-F2-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A10-F8",
+          "name": "Who cited a paper",
+          "does": "See who cited a paper, from open data.",
+          "priority": "next",
+          "parts": [
+            {
+              "id": "RES-A10-F8-P1",
+              "name": "Cited-by from open data",
+              "what": "Cited-by lists from open citation data and our own references.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "RES-A10-F6-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A10-F9",
+          "name": "Backup identifiers",
+          "does": "Know links still work if a DOI agency fails.",
+          "priority": "later",
+          "parts": [
+            {
+              "id": "RES-A10-F9-P1",
+              "name": "Backup identifiers",
+              "what": "Whether to also make free ARK identifiers as a backup to DOIs, and how to keep both pointing at the same place.",
+              "kind": "research",
+              "size": "small",
+              "depends_on": [],
+              "piece": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "RES-A11",
+      "name": "Data, code and supplementary files",
+      "summary": "The evidence behind a paper: datasets with their own DOIs, code archived for good, previews of common files, care with personal and Indigenous data, and links to the specialist archives researchers already use.",
+      "features": [
+        {
+          "id": "RES-A11-F1",
+          "name": "Attach data",
+          "does": "Upload my data with the paper or link to where it already lives.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A11-F1-P1",
+              "name": "Data uploads",
+              "what": "Data files with checksums and a free allowance per paper, larger sets at cost, on the kit's file uploads and storage.",
+              "kind": "integration",
+              "size": "medium",
+              "depends_on": [
+                "KIT-A15-F7-P1",
+                "KIT-A15-F7-P2"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A11-F1-P2",
+              "name": "Dataset DOIs",
+              "what": "A DOI for each dataset with its own metadata and licence, through the chosen agency.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "RES-A10-F2-P3",
+                "RES-A11-F7-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A11-F1-P3",
+              "name": "Links to data elsewhere",
+              "what": "Links to datasets in other archives by DOI, checked to resolve.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "RES-A10-F5-P2"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A11-F1-P4",
+              "name": "Data availability statement",
+              "what": "A required statement saying where the data are, or why they cannot be shared.",
+              "kind": "data",
+              "size": "small",
+              "depends_on": [
+                "RES-A4-F6-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A11-F2",
+          "name": "Attach code",
+          "does": "Link my code and have the exact version archived for good.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A11-F2-P1",
+              "name": "Code links",
+              "what": "Links a public code repository at a tagged version, with its licence read from the repository.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [],
+              "piece": null
+            },
+            {
+              "id": "RES-A11-F2-P2",
+              "name": "Code archiving",
+              "what": "Asks Software Heritage to archive the repository and records its permanent SWHID.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "RES-A11-F2-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A11-F3",
+          "name": "Preview files",
+          "does": "Look at tables, images and notebooks in the browser before downloading.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A11-F3-P1",
+              "name": "File previews",
+              "what": "Previews for CSV, spreadsheets, images, notebooks and plain text on the kit's preview service.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A15-F16-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A11-F4",
+          "name": "Supplementary files",
+          "does": "Add supplementary files that stay with each version.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A11-F4-P1",
+              "name": "Supplementary files",
+              "what": "Extra files tied to a version, each with a description, size and checksum.",
+              "kind": "data",
+              "size": "small",
+              "depends_on": [
+                "RES-A9-F1-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A11-F5",
+          "name": "Data about people",
+          "does": "Share data about people only in ways that protect them.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A11-F5-P1",
+              "name": "Data about people",
+              "what": "Rules for data from participants and patients: remove identifying details before sharing, record consent, and never post raw personal data, checked by a lawyer in each country.",
+              "kind": "legal",
+              "size": "medium",
+              "depends_on": [
+                "KIT-A18-F18-P1",
+                "KIT-A18-F18-P2"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A11-F5-P2",
+              "name": "Controlled access",
+              "what": "Data described openly but released only to approved people under a signed agreement, decided by the authors or a data committee.",
+              "kind": "service",
+              "size": "large",
+              "depends_on": [
+                "KIT-A25-F1-P2",
+                "RES-A11-F5-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A11-F6",
+          "name": "Indigenous data",
+          "does": "Have Indigenous data cared for as its communities ask.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A11-F6-P1",
+              "name": "Indigenous data principles",
+              "what": "Applies the CARE principles and each country's own principles, with the kit's Māori data principles in the New Zealand example, and shows Local Contexts labels on the data.",
+              "kind": "legal",
+              "size": "small",
+              "depends_on": [
+                "KIT-A18-F16-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A11-F7",
+          "name": "Describe data well",
+          "does": "Describe data so others can find and reuse it.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A11-F7-P1",
+              "name": "Dataset metadata",
+              "what": "Dataset details mapped to the DataCite schema: creators, dates, formats, sizes and methods.",
+              "kind": "data",
+              "size": "small",
+              "depends_on": [
+                "RES-A4-F4-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A11-F8",
+          "name": "Large datasets",
+          "does": "Share large datasets without running out of space.",
+          "priority": "next",
+          "parts": [
+            {
+              "id": "RES-A11-F8-P1",
+              "name": "Large data at cost",
+              "what": "Chunked uploads and storage at cost for very large sets, or a link to a specialist archive.",
+              "kind": "integration",
+              "size": "medium",
+              "depends_on": [
+                "KIT-A13-F3-P6",
+                "RES-A11-F1-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A11-F9",
+          "name": "Open data and code badges",
+          "does": "See whether data and code were checked by a reviewer.",
+          "priority": "next",
+          "parts": [
+            {
+              "id": "RES-A11-F9-P1",
+              "name": "Open data and code badges",
+              "what": "Badges for open data, open code and results reproduced, given by reviewers under published criteria.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "RES-A7-F3-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A11-F10",
+          "name": "Run the code",
+          "does": "Run a paper's code in the browser.",
+          "priority": "later",
+          "parts": [
+            {
+              "id": "RES-A11-F10-P1",
+              "name": "Run code at cost",
+              "what": "Runs archived code in a sandboxed container, charged at cost.",
+              "kind": "service",
+              "size": "large",
+              "depends_on": [
+                "RES-A11-F2-P2"
+              ],
+              "piece": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "RES-A12",
+      "name": "Author, reviewer and editor dashboards",
+      "summary": "One place for my work: my papers and their stage, what is waiting on me, reviews to write, messages with editors and plain counts, on a phone or a desk.",
+      "features": [
+        {
+          "id": "RES-A12-F1",
+          "name": "My papers",
+          "does": "See every paper I wrote or submitted and its stage.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A12-F1-P1",
+              "name": "My papers",
+              "what": "Drafts, in screening, posted, under review, revised, accepted, corrected; each with its next step.",
+              "kind": "interface",
+              "size": "medium",
+              "depends_on": [
+                "RES-A4-F1-P1",
+                "RES-A9-F1-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A12-F2",
+          "name": "What is waiting on me",
+          "does": "See every task in one list: confirm authorship, answer reviews, fix a check.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A12-F2-P1",
+              "name": "To-do list",
+              "what": "Tasks across papers, reviews and journals, with due dates.",
+              "kind": "interface",
+              "size": "small",
+              "depends_on": [
+                "RES-A7-F8-P1",
+                "RES-A4-F4-P3"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A12-F3",
+          "name": "A paper's progress",
+          "does": "See each step a paper went through and what comes next.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A12-F3-P1",
+              "name": "Paper timeline",
+              "what": "Every step with its date and who acted, drawn from the operation log.",
+              "kind": "interface",
+              "size": "small",
+              "depends_on": [
+                "KIT-A15-F3-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A12-F4",
+          "name": "Messages with editors",
+          "does": "Talk to the editor or screener about my paper in one thread.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A12-F4-P1",
+              "name": "Paper messages",
+              "what": "A message thread for each paper with its authors and editors, on the kit's chat service.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A8-F1-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A12-F5",
+          "name": "My reviews",
+          "does": "See reviews I was asked for, am writing and have finished.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A12-F5-P1",
+              "name": "My reviews",
+              "what": "Invites, drafts, due dates and published reviews.",
+              "kind": "interface",
+              "size": "small",
+              "depends_on": [
+                "RES-A7-F2-P4",
+                "RES-A7-F3-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A12-F6",
+          "name": "Reads and citations of my papers",
+          "does": "See reads, downloads and citations of my papers, with no tracking.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A12-F6-P1",
+              "name": "My figures",
+              "what": "Reads, downloads and open citations for each paper and version.",
+              "kind": "interface",
+              "size": "small",
+              "depends_on": [
+                "RES-A3-F6-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A12-F7",
+          "name": "Notifications",
+          "does": "Choose which alerts I get and how.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A12-F7-P1",
+              "name": "Research notifications",
+              "what": "Alerts for screening, reviews, decisions and updates on the kit's notification settings and inbox.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A8-F5-P1",
+                "KIT-A8-F3-P3"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A12-F8",
+          "name": "Editor dashboard",
+          "does": "As an editor, see my journal's queue, late reviews and decisions to make.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A12-F8-P1",
+              "name": "Editor dashboard",
+              "what": "The journal's queue, load and due dates at a glance.",
+              "kind": "interface",
+              "size": "small",
+              "depends_on": [
+                "RES-A8-F3-P1"
+              ],
+              "piece": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "RES-A13",
+      "name": "Research integrity and fraud",
+      "summary": "Keeping the record trustworthy: signals for paper mills, fake reviewers, image and citation tricks, all treated as hints for trained people, a way for anyone to raise a concern, and an integrity panel that decides in the open.",
+      "features": [
+        {
+          "id": "RES-A13-F1",
+          "name": "Raise a concern",
+          "does": "Report a possible problem with any paper, even without an account.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A13-F1-P1",
+              "name": "Integrity reports",
+              "what": "A report form on every paper and review, open to anyone, on the kit's reports, with the reporter's name kept from the authors on request.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A10-F3-P1",
+                "KIT-A10-F3-P3"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A13-F2",
+          "name": "Integrity panel",
+          "does": "Know concerns are looked into by trained members, fairly and on time.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A13-F2-P1",
+              "name": "Integrity panel",
+              "what": "Trained members drawn with conflict checks, following COPE's published guidance and hearing the authors before deciding.",
+              "kind": "integration",
+              "size": "medium",
+              "depends_on": [
+                "KIT-A11-F4-P1",
+                "KIT-A11-F4-P2",
+                "RES-A9-F5-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A13-F2-P2",
+              "name": "Published outcomes",
+              "what": "Each outcome becomes a correction, a concern, a retraction or no action, with reasons in the public log.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "RES-A9-F8-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A13-F3",
+          "name": "Paper mill signals",
+          "does": "Know papers are checked for signs of mass-produced fake research.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A13-F3-P1",
+              "name": "Paper mill methods",
+              "what": "How published, open methods spot paper mills (odd stock phrases, template text, reused images, sudden author changes) and which suit us.",
+              "kind": "research",
+              "size": "medium",
+              "depends_on": [],
+              "piece": null
+            },
+            {
+              "id": "RES-A13-F3-P2",
+              "name": "Paper mill signals",
+              "what": "Signals from the chosen methods shown to screeners and editors as hints with their evidence, never automatic verdicts.",
+              "kind": "library",
+              "size": "large",
+              "depends_on": [
+                "RES-A13-F3-P1",
+                "KIT-A10-F12-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A13-F4",
+          "name": "Real reviewers",
+          "does": "Trust that reviewers are who they say they are.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A13-F4-P1",
+              "name": "Reviewer identity checks",
+              "what": "Reviewers link a proven ORCID iD and, for journal reviews, an institutional email or a record of past papers; reviewers suggested by authors are checked before they are invited.",
+              "kind": "library",
+              "size": "medium",
+              "depends_on": [
+                "RES-A1-F3-P1",
+                "RES-A7-F2-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A13-F5",
+          "name": "Author list changes",
+          "does": "Know late changes to the author list are checked.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A13-F5-P1",
+              "name": "Author list changes",
+              "what": "Adding or removing authors after posting needs every author's agreement and a reason, shown in the history.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "RES-A4-F4-P3"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A13-F6",
+          "name": "AI-generated text",
+          "does": "Know AI use is declared, and that undeclared generated text can be flagged.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A13-F6-P1",
+              "name": "AI text hints",
+              "what": "Signals for undeclared generated text shown as hints only, because detectors are often wrong, with the authors always heard.",
+              "kind": "library",
+              "size": "medium",
+              "depends_on": [
+                "RES-A4-F6-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A13-F7",
+          "name": "Integrity figures",
+          "does": "See how many concerns were raised and what happened.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A13-F7-P1",
+              "name": "Integrity figures",
+              "what": "Counts and outcomes in the kit's transparency reports.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A10-F15-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A13-F8",
+          "name": "Image checks",
+          "does": "Know figures are checked for duplication.",
+          "priority": "next",
+          "parts": [
+            {
+              "id": "RES-A13-F8-P1",
+              "name": "Image duplication hints",
+              "what": "Finds reused or duplicated images within and across papers, starting from the kit's reused photo checks.",
+              "kind": "integration",
+              "size": "large",
+              "depends_on": [
+                "KIT-A10-F12-P3"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A13-F9",
+          "name": "Citation tricks",
+          "does": "Know citation rings and forced citations are watched for.",
+          "priority": "next",
+          "parts": [
+            {
+              "id": "RES-A13-F9-P1",
+              "name": "Citation pattern hints",
+              "what": "Flags unusual self-citation and citation rings for editors to look at.",
+              "kind": "library",
+              "size": "medium",
+              "depends_on": [
+                "RES-A10-F5-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A13-F10",
+          "name": "Share signals with other publishers",
+          "does": "Know fraud found here can be shared with other publishers in a lawful way.",
+          "priority": "later",
+          "parts": [
+            {
+              "id": "RES-A13-F10-P1",
+              "name": "Sharing integrity signals",
+              "what": "Which shared integrity services exist, who may join them, and what privacy law lets us share.",
+              "kind": "research",
+              "size": "small",
+              "depends_on": [],
+              "piece": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "RES-A14",
+      "name": "Long-term preservation",
+      "summary": "Papers that outlive any server: open archive packages, copies held by outside preservation archives and national libraries, checked copies, bulk exports anyone can mirror, and a plan if Spare Research ever closes.",
+      "features": [
+        {
+          "id": "RES-A14-F1",
+          "name": "Copies kept outside",
+          "does": "Know copies of every paper are held by archives outside the co-op.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A14-F1-P1",
+              "name": "Preservation archive choice",
+              "what": "Compares outside preservation archives, such as CLOCKSS, Portico, LOCKSS networks and the Internet Archive, on cost, terms and what they take (*costs to confirm*).",
+              "kind": "research",
+              "size": "medium",
+              "depends_on": [],
+              "piece": null
+            },
+            {
+              "id": "RES-A14-F1-P2",
+              "name": "Archive packages",
+              "what": "Each version packed with its files, JATS, metadata and checksums in an open package format any archive can take.",
+              "kind": "library",
+              "size": "medium",
+              "depends_on": [
+                "RES-A3-F2-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A14-F1-P3",
+              "name": "Archive deposits",
+              "what": "Sends packages to the chosen archives and records each receipt.",
+              "kind": "service",
+              "size": "medium",
+              "depends_on": [
+                "RES-A14-F1-P1",
+                "RES-A14-F1-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A14-F2",
+          "name": "Legal deposit",
+          "does": "Know papers are deposited with national libraries where the law asks.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A14-F2-P1",
+              "name": "Legal deposit rules",
+              "what": "Each country's legal deposit duties for online publications, as data in its country pack. In the New Zealand example the National Library harvests online documents under a 2006 notice and publishers help when asked (*to confirm against the Act*).",
+              "kind": "legal",
+              "size": "small",
+              "depends_on": [
+                "RES-A17-F4-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A14-F2-P2",
+              "name": "Deposits to national libraries",
+              "what": "Sends papers to national libraries in the way each asks.",
+              "kind": "integration",
+              "size": "medium",
+              "depends_on": [
+                "RES-A14-F2-P1",
+                "RES-A14-F1-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A14-F3",
+          "name": "Checked copies",
+          "does": "Know stored files are checked and never silently damaged.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A14-F3-P1",
+              "name": "Fixity checks",
+              "what": "Regular checksum checks on every file and backup, with repair from another copy.",
+              "kind": "service",
+              "size": "small",
+              "depends_on": [
+                "KIT-A22-F3-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A14-F4",
+          "name": "Formats that last",
+          "does": "Know papers are kept in formats that will still open in fifty years.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A14-F4-P1",
+              "name": "Preservation formats",
+              "what": "Keeps the authors' files plus JATS and archival PDF, and records each file's format.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "KIT-A27-F6-P2",
+                "RES-A3-F2-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A14-F5",
+          "name": "Whole-archive export",
+          "does": "Download the whole archive, so anyone can keep a copy.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A14-F5-P1",
+              "name": "Bulk exports",
+              "what": "Regular full exports of metadata (CC0) and openly licensed papers, with checksums, so others can mirror the archive.",
+              "kind": "service",
+              "size": "medium",
+              "depends_on": [
+                "RES-A10-F6-P1",
+                "RES-A3-F2-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A14-F6",
+          "name": "If Spare Research closes",
+          "does": "Know what happens to papers if the service ever ends.",
+          "priority": "next",
+          "parts": [
+            {
+              "id": "RES-A14-F6-P1",
+              "name": "Closing plan",
+              "what": "Links keep working through archives and mirrors, DOIs are pointed at the archive copies, and the steward holds the data, on the kit's wind-down plan.",
+              "kind": "legal",
+              "size": "small",
+              "depends_on": [
+                "KIT-A14-F19-P1",
+                "RES-A14-F1-P3"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A14-F7",
+          "name": "Mirrors",
+          "does": "Run a mirror of the archive.",
+          "priority": "next",
+          "parts": [
+            {
+              "id": "RES-A14-F7-P1",
+              "name": "Mirrors",
+              "what": "A read-only mirror package for member groups and libraries, on the kit's self-host package.",
+              "kind": "integration",
+              "size": "medium",
+              "depends_on": [
+                "KIT-A22-F7-P1",
+                "RES-A14-F5-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A14-F8",
+          "name": "Format migration",
+          "does": "Know old files move to newer formats when needed.",
+          "priority": "later",
+          "parts": [
+            {
+              "id": "RES-A14-F8-P1",
+              "name": "Format watch",
+              "what": "Watches for formats at risk and converts copies, keeping the originals.",
+              "kind": "service",
+              "size": "medium",
+              "depends_on": [
+                "RES-A14-F4-P1"
+              ],
+              "piece": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "RES-A15",
+      "name": "Indexing and being found",
+      "summary": "Getting papers into the places researchers look: web and scholar search engines, open catalogues, directories of open journals, subject indexes and library systems, with metadata checked before it leaves.",
+      "features": [
+        {
+          "id": "RES-A15-F1",
+          "name": "Found in web search",
+          "does": "Find our papers in web and scholar search engines.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A15-F1-P1",
+              "name": "Scholar search readiness",
+              "what": "Pages, meta tags, site maps and PDF links laid out as scholar search engines' published inclusion guidelines ask.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "RES-A3-F1-P2"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A15-F1-P2",
+              "name": "Site maps",
+              "what": "Site maps of every paper and version, updated as papers are posted.",
+              "kind": "service",
+              "size": "small",
+              "depends_on": [
+                "KIT-A28-F2-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A15-F2",
+          "name": "In open catalogues",
+          "does": "Find our papers in open research catalogues.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A15-F2-P1",
+              "name": "Open catalogue feeds",
+              "what": "DOI deposits and OAI-PMH that open catalogues and repository aggregators harvest, with a check that papers appear.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "RES-A2-F5-P2",
+                "RES-A10-F2-P3"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A15-F3",
+          "name": "Metadata checks",
+          "does": "Know our metadata is complete before it goes out.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A15-F3-P1",
+              "name": "Metadata checks",
+              "what": "Checks each deposit for an abstract, ORCID iDs, ROR IDs, references, licence and funders, and shows gaps to the authors.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "RES-A4-F4-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A15-F4",
+          "name": "Directories of open journals",
+          "does": "Get a journal listed in directories of open journals.",
+          "priority": "next",
+          "parts": [
+            {
+              "id": "RES-A15-F4-P1",
+              "name": "Directory application helper",
+              "what": "Checks a journal against the published criteria of open journal directories and gathers what the application needs.",
+              "kind": "interface",
+              "size": "small",
+              "depends_on": [
+                "RES-A8-F5-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A15-F5",
+          "name": "Subject indexes",
+          "does": "Get papers into the indexes my field uses.",
+          "priority": "next",
+          "parts": [
+            {
+              "id": "RES-A15-F5-P1",
+              "name": "Subject index research",
+              "what": "What subject indexes in life sciences, physics, computing, economics and other fields ask for, such as full-text XML or a publishing record.",
+              "kind": "research",
+              "size": "medium",
+              "depends_on": [],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A15-F6",
+          "name": "Library systems",
+          "does": "Find our papers through my library's search and link tools.",
+          "priority": "next",
+          "parts": [
+            {
+              "id": "RES-A15-F6-P1",
+              "name": "Library link support",
+              "what": "OpenURL support, title lists for libraries, and links that send readers to the open copy.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "RES-A4-F4-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A15-F7",
+          "name": "Commercial citation indexes",
+          "does": "Know whether our journals can be listed in commercial citation indexes.",
+          "priority": "later",
+          "parts": [
+            {
+              "id": "RES-A15-F7-P1",
+              "name": "Commercial index research",
+              "what": "What commercial citation indexes ask of journals and whether their terms fit us.",
+              "kind": "research",
+              "size": "small",
+              "depends_on": [],
+              "piece": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "RES-A16",
+      "name": "Commands, AI agents and integrations",
+      "summary": "Everything a person can do, a script or AI agent can do through the same commands, with people-only actions kept for people; plus webhooks, fair bulk access, reference manager support and deposits to institutional repositories.",
+      "features": [
+        {
+          "id": "RES-A16-F1",
+          "name": "Use Spare Research from a script",
+          "does": "Search, read, submit and review from a script through the same commands as the app.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A16-F1-P1",
+              "name": "Research command schemas",
+              "what": "Every action described once as a command for the kit's command API, SDKs and command-line tool.",
+              "kind": "library",
+              "size": "medium",
+              "depends_on": [
+                "KIT-A15-F1-P3",
+                "KIT-A16-F1-P1",
+                "KIT-A16-F3-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A16-F1-P2",
+              "name": "Headless check",
+              "what": "The kit's release check that every action on every screen maps to a command.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A16-F1-P5"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A16-F2",
+          "name": "Connect an AI agent",
+          "does": "Let my AI agent search, read and draft for me, asking me before anything is posted or sent.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A16-F2-P1",
+              "name": "Research tools for agents",
+              "what": "The MCP server for Spare Research, built from the command schemas, with paper text marked as outside content.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A17-F1-P1",
+                "KIT-A17-F5-P1",
+                "RES-A16-F1-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A16-F2-P2",
+              "name": "What agents may not do",
+              "what": "Agents cannot be authors or reviewers, make declarations, post, vote or decide; other actions ask the person where it matters.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "KIT-A17-F9-P2",
+                "KIT-A17-F2-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A16-F3",
+          "name": "Reference managers",
+          "does": "Save any paper straight into my reference manager.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A16-F3-P1",
+              "name": "Reference manager support",
+              "what": "Meta tags, embedded citation data and export links that common reference managers already read, with nothing to install.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "RES-A3-F1-P2",
+                "RES-A10-F3-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A16-F4",
+          "name": "Webhooks",
+          "does": "Be told when papers, reviews or updates are posted.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A16-F4-P1",
+              "name": "Research webhooks",
+              "what": "Signed webhooks for new papers, versions, reviews and updates.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A16-F2-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A16-F5",
+          "name": "Fair bulk access",
+          "does": "Download metadata and papers in bulk, fairly.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A16-F5-P1",
+              "name": "Fair bulk access",
+              "what": "Published rate limits and bulk exports instead of scraping, with personal details limited by the kit's bulk copy limits.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A16-F1-P3",
+                "KIT-A16-F1-P4",
+                "RES-A14-F5-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A16-F6",
+          "name": "Institutional repositories",
+          "does": "Have my papers copied to my institution's repository automatically.",
+          "priority": "next",
+          "parts": [
+            {
+              "id": "RES-A16-F6-P1",
+              "name": "Repository deposits",
+              "what": "Sends papers to institutional repositories through the SWORD protocol and COAR Notify, with the author's consent.",
+              "kind": "integration",
+              "size": "medium",
+              "depends_on": [
+                "RES-A14-F1-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A16-F7",
+          "name": "Add-ins",
+          "does": "Add field-specific checks and review forms as add-ins.",
+          "priority": "later",
+          "parts": [
+            {
+              "id": "RES-A16-F7-P1",
+              "name": "Research add-ins",
+              "what": "Sandboxed add-ins for checks, review forms and viewers on the kit's plugin host.",
+              "kind": "integration",
+              "size": "medium",
+              "depends_on": [
+                "KIT-A16-F5-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A16-F8",
+          "name": "Writing tools",
+          "does": "Send a paper straight from my writing tool.",
+          "priority": "later",
+          "parts": [
+            {
+              "id": "RES-A16-F8-P1",
+              "name": "Writing tool links",
+              "what": "Submits from open writing tools through the command API.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "RES-A4-F9-P1"
+              ],
+              "piece": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "RES-A17",
+      "name": "Accessibility, languages and countries",
+      "summary": "For researchers everywhere: every screen accessible, the interface and papers in any language and script, titles and abstracts in several languages, and a rules pack for each country's law and institutions.",
+      "features": [
+        {
+          "id": "RES-A17-F1",
+          "name": "Accessible screens",
+          "does": "Use every screen with a screen reader or a keyboard.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A17-F1-P1",
+              "name": "Accessible components",
+              "what": "Every screen on the kit's accessible components, tested with disabled researchers before release.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A19-F2-P1",
+                "KIT-A19-F2-P2"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A17-F1-P2",
+              "name": "Accessibility statement",
+              "what": "An accessibility statement and barrier reports for Spare Research.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A19-F2-P4"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A17-F2",
+          "name": "Use it in my language",
+          "does": "Use the app in my language, with local dates and numbers.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A17-F2-P1",
+              "name": "Research interface translations",
+              "what": "All words on screen on the kit's translation framework, with research terms in the glossary for translators.",
+              "kind": "integration",
+              "size": "medium",
+              "depends_on": [
+                "KIT-A19-F1-P1",
+                "KIT-A19-F1-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A17-F3",
+          "name": "Papers in any language",
+          "does": "Post a paper in any language, with its title and abstract in more than one.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A17-F3-P1",
+              "name": "Titles and abstracts in several languages",
+              "what": "Authors give titles and abstracts in as many languages as they like, each marked with its language.",
+              "kind": "data",
+              "size": "small",
+              "depends_on": [
+                "RES-A4-F4-P1",
+                "KIT-A19-F1-P6"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A17-F3-P2",
+              "name": "Every script",
+              "what": "Right-to-left and non-Latin scripts in the web view and PDFs, on the kit's text engine.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A19-F7-P1",
+                "KIT-A27-F5-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A17-F4",
+          "name": "Country rules packs",
+          "does": "Use Spare Research with my country's law and institutions.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A17-F4-P1",
+              "name": "Research rules in country packs",
+              "what": "Adds rights, legal deposit, ethics, ISSN centre and funder rules to each kit country pack, with New Zealand as the first worked example and others added as members ask.",
+              "kind": "data",
+              "size": "medium",
+              "depends_on": [
+                "KIT-A19-F6-P1",
+                "KIT-A19-F9-P1",
+                "RES-A5-F3-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A17-F5",
+          "name": "Display settings",
+          "does": "Change text size, contrast and motion.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A17-F5-P1",
+              "name": "Display settings",
+              "what": "The kit's display settings applied to the web view and every screen.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A19-F3-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A17-F6",
+          "name": "Easy read",
+          "does": "Read the submission and rights steps in easy-read form.",
+          "priority": "next",
+          "parts": [
+            {
+              "id": "RES-A17-F6-P1",
+              "name": "Easy-read guides",
+              "what": "Easy-read versions of the submission and rights steps, on the kit's easy-read pages.",
+              "kind": "data",
+              "size": "small",
+              "depends_on": [
+                "KIT-A19-F8-P1"
+              ],
+              "piece": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "RES-A18",
+      "name": "Apps on every device",
+      "summary": "The shared Spareware frame in the research colour: in any browser, installable on phones and computers, with links that open the right screen and a command search.",
+      "features": [
+        {
+          "id": "RES-A18-F1",
+          "name": "Use it in any browser",
+          "does": "Use Spare Research in any modern browser, on a phone or a desk.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A18-F1-P1",
+              "name": "Research app shell",
+              "what": "The header, navigation, account menu and research colour on the kit's app frame, laid out for phones first.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A20-F1-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A18-F2",
+          "name": "Install the app",
+          "does": "Install Spare Research on a phone or computer.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A18-F2-P1",
+              "name": "Installable app",
+              "what": "The kit's installable app wrappers for Spare Research.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A20-F2-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A18-F3",
+          "name": "Links that open the right screen",
+          "does": "Open a paper, review or journal link in the app or the browser.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A18-F3-P1",
+              "name": "Deep links",
+              "what": "Paper, review and journal links open the right screen, on the kit's deep links.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A20-F4-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A18-F4",
+          "name": "Find any command",
+          "does": "Type to find and run any action.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A18-F4-P1",
+              "name": "Command search",
+              "what": "Every research action in the kit's command search.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A20-F10-P1",
+                "RES-A16-F1-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A18-F5",
+          "name": "Licences and credits",
+          "does": "See every open library, style and data set the app uses, with its licence.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A18-F5-P1",
+              "name": "Licences and credits screen",
+              "what": "Lists the open libraries, citation styles, fonts and data sets Spare Research uses, with each licence, on the kit's credits screen.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A20-F1-P3"
+              ],
+              "piece": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "RES-A19",
+      "name": "Running costs, the cost ledger and members' say",
+      "summary": "Free to read and free to publish: the only costs are running costs (servers, storage, DOIs, preservation), shown on the open cost ledger, with members voting on the rules and on how costs are covered.",
+      "features": [
+        {
+          "id": "RES-A19-F1",
+          "name": "Free to read and to publish",
+          "does": "Read and publish without paying anything.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A19-F1-P1",
+              "name": "No reading or publishing fees",
+              "what": "A rule, changed only by member vote, that reading and posting are free; running costs are covered in the way members decide.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "KIT-A12-F4-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A19-F1-P2",
+              "name": "Research costs on the ledger",
+              "what": "Servers, storage, DOI fees, preservation archives and screening support as monthly lines on the kit's ledger.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A13-F1-P2",
+                "KIT-A13-F1-P3"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A19-F2",
+          "name": "What a paper costs to run",
+          "does": "See the running cost of one paper, from storage to its DOI.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A19-F2-P1",
+              "name": "Cost per paper",
+              "what": "Works out the cost of a paper from the ledger and usage metering, and shows it on the ledger page.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "KIT-A13-F2-P2",
+                "KIT-A13-F3-P6"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A19-F3",
+          "name": "Who pays for DOIs",
+          "does": "Know who pays for DOIs, and vote on it.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A19-F3-P1",
+              "name": "DOI fee rule",
+              "what": "The members' choice on DOI fees, a shared running cost or paid by each journal; until they decide, shown as a running cost.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "RES-A10-F2-P1",
+                "KIT-A12-F4-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A19-F4",
+          "name": "Free storage allowance",
+          "does": "Know how much data I can attach for free.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A19-F4-P1",
+              "name": "Free storage allowance",
+              "what": "A free allowance per paper set by member vote, storage at cost above it, and a hardship rule.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A13-F3-P7",
+                "KIT-A15-F7-P5"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A19-F5",
+          "name": "Help from institutions and funders",
+          "does": "Let libraries, institutions and funders help cover running costs, in the open.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A19-F5-P1",
+              "name": "Running cost support",
+              "what": "Donations, grants and institutional support taken through the kit's funding records, each shown on the ledger and giving no say over what is published.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A13-F12-P1",
+                "KIT-A13-F12-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A19-F6",
+          "name": "Members decide the rules",
+          "does": "Vote on who can publish, how reviews work and how costs are covered.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A19-F6-P1",
+              "name": "Research proposals and votes",
+              "what": "Settings for who can publish, review identity, screening rules and fees, changed only through the kit's proposals and votes.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A12-F1-P1",
+                "KIT-A12-F3-P1",
+                "KIT-A12-F4-P1"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A19-F6-P2",
+              "name": "Who votes on research rules",
+              "what": "Which members vote on Spare Research's rules: authors, reviewers, editors, readers, or all members.",
+              "kind": "legal",
+              "size": "small",
+              "depends_on": [
+                "KIT-A12-F5-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A19-F7",
+          "name": "Elected screeners and panels",
+          "does": "Know screeners and integrity panels are chosen by members.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A19-F7-P1",
+              "name": "Elected screeners and panels",
+              "what": "Screeners and integrity panel members elected on the kit's elections.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A12-F6-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A19-F8",
+          "name": "Journal staff paid at cost",
+          "does": "Let a journal pay a managing editor, with the cost shown openly.",
+          "priority": "later",
+          "parts": [
+            {
+              "id": "RES-A19-F8-P1",
+              "name": "Journal staff costs",
+              "what": "Whether and how journals pay staff, recorded as their own ledger lines.",
+              "kind": "legal",
+              "size": "small",
+              "depends_on": [
+                "KIT-A13-F11-P3"
+              ],
+              "piece": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "RES-A20",
+      "name": "Safety, moderation and legal duties",
+      "summary": "Reports, moderation with a public log, care with personal details in a permanent record, defamation in reviews, legal requests, sanctions, and every part of Spare Research built legally.",
+      "features": [
+        {
+          "id": "RES-A20-F1",
+          "name": "Report anything",
+          "does": "Report a paper, review, comment or profile.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A20-F1-P1",
+              "name": "Report from every page",
+              "what": "The kit's report forms on every paper, review, comment and profile.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A10-F3-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A20-F2",
+          "name": "Moderation in the open",
+          "does": "Know every removal is logged with its rule, and appeal it.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A20-F2-P1",
+              "name": "Removals and appeals",
+              "what": "Every removal in the kit's public log with its rule, the reason sent to the person, and appeals.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A10-F7-P1",
+                "KIT-A10-F8-P1",
+                "KIT-A11-F5-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A20-F3",
+          "name": "Privacy in a permanent record",
+          "does": "Have my personal data handled lawfully, even in a record meant to last.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A20-F3-P1",
+              "name": "Erasure and the research record",
+              "what": "How deletion requests sit beside a permanent record: what research and archiving exemptions allow, what is removed (contact details, accounts) and what stays (authorship), in each country (*needs a lawyer*).",
+              "kind": "legal",
+              "size": "medium",
+              "depends_on": [
+                "KIT-A18-F12-P1",
+                "KIT-A15-F1-P5"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A20-F3-P2",
+              "name": "Research privacy notices",
+              "what": "Collection notices for authors, reviewers and people named in papers.",
+              "kind": "legal",
+              "size": "small",
+              "depends_on": [
+                "KIT-A18-F5-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A20-F4",
+          "name": "No attacks in reviews",
+          "does": "Know reviews and comments cannot be used to attack people.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A20-F4-P1",
+              "name": "Defamation in reviews and comments",
+              "what": "What published reviews and comments may say about people, and how complaints are handled under each country's law.",
+              "kind": "legal",
+              "size": "small",
+              "depends_on": [
+                "KIT-A9-F2-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A20-F5",
+          "name": "Legal requests",
+          "does": "Know court and police requests are handled by a published process.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A20-F5-P1",
+              "name": "Legal requests",
+              "what": "Court and police requests about papers and accounts on the kit's published process, counted in reports.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A10-F9-P3"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A20-F6",
+          "name": "Illegal content",
+          "does": "Know illegal material is removed as the law requires.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A20-F6-P1",
+              "name": "Illegal content duties",
+              "what": "What the kit's research on hosts' duties means for papers and data, with known-content matching on uploaded images.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A10-F9-P1",
+                "KIT-A10-F10-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A20-F7",
+          "name": "Terms in plain words",
+          "does": "Read short terms and conduct rules before submitting or reviewing.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A20-F7-P1",
+              "name": "Research terms",
+              "what": "Plain terms and conduct rules for authors, reviewers and editors on the kit's versioned terms.",
+              "kind": "legal",
+              "size": "small",
+              "depends_on": [
+                "KIT-A18-F4-P1",
+                "KIT-A18-F4-P2"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A20-F8",
+          "name": "Built legally",
+          "does": "Know every part of Spare Research is our own work or used under a licence that allows it, and that it copies no publisher's site.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A20-F8-P1",
+              "name": "Research licence register",
+              "what": "Every library, style, font and data set in the kit's dependency and licence checks, with no GPL or AGPL code in the core.",
+              "kind": "legal",
+              "size": "small",
+              "depends_on": [
+                "KIT-A22-F5-P2"
+              ],
+              "piece": null
+            },
+            {
+              "id": "RES-A20-F8-P2",
+              "name": "Name and interface review",
+              "what": "Checks that names, icons and pages are our own and that no publisher's or preprint server's interface is imitated.",
+              "kind": "legal",
+              "size": "small",
+              "depends_on": [
+                "KIT-A22-F2-P6"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A20-F9",
+          "name": "Sanctions and export rules",
+          "does": "Know researchers in every country can publish wherever the law allows.",
+          "priority": "next",
+          "parts": [
+            {
+              "id": "RES-A20-F9-P1",
+              "name": "Sanctions and publishing",
+              "what": "How sanctions laws treat publishing and reviewing with people in sanctioned countries, and export rules on some research (*needs a lawyer*).",
+              "kind": "legal",
+              "size": "medium",
+              "depends_on": [],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A20-F10",
+          "name": "Duties in other countries",
+          "does": "Use Spare Research with each country's platform duties met.",
+          "priority": "later",
+          "parts": [
+            {
+              "id": "RES-A20-F10-P1",
+              "name": "Platform duties by country",
+              "what": "What the kit's overseas privacy and platform duties mean for a research archive.",
+              "kind": "legal",
+              "size": "medium",
+              "depends_on": [
+                "KIT-A18-F13-P1"
+              ],
+              "piece": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "RES-A21",
+      "name": "Moving in and taking data out",
+      "summary": "No lock-in: authors take every paper, review and history with them, journals leave with all their content and DOIs, and past papers come in from ORCID and other archives.",
+      "features": [
+        {
+          "id": "RES-A21-F1",
+          "name": "Take my work out",
+          "does": "Download every paper, review and message I have, in open formats.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A21-F1-P1",
+              "name": "Author export",
+              "what": "Every paper, version, review and message in open formats, on the kit's data export.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A18-F1-P1",
+                "RES-A3-F2-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A21-F2",
+          "name": "Move a journal out",
+          "does": "Move a journal elsewhere with all its papers, reviews and DOIs.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A21-F2-P1",
+              "name": "Journal export",
+              "what": "The whole journal in JATS and open formats, with help pointing its DOIs at the new host.",
+              "kind": "service",
+              "size": "medium",
+              "depends_on": [
+                "RES-A3-F2-P1",
+                "RES-A10-F2-P3"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A21-F3",
+          "name": "Close my account",
+          "does": "Close my account and know what stays in the record.",
+          "priority": "core",
+          "parts": [
+            {
+              "id": "RES-A21-F3-P1",
+              "name": "Closing an account",
+              "what": "Closes the account on the kit's account deletion, keeping authorship on posted papers as the terms say.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A18-F2-P1",
+                "RES-A20-F3-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A21-F4",
+          "name": "Bring my past papers",
+          "does": "List my past papers from my ORCID record and link open copies.",
+          "priority": "next",
+          "parts": [
+            {
+              "id": "RES-A21-F4-P1",
+              "name": "Past papers from ORCID",
+              "what": "Reads the person's works from ORCID, links open copies, and hosts only those they may share.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "RES-A1-F3-P3",
+                "RES-A5-F2-P1"
+              ],
+              "piece": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "RES-A22",
+      "name": "Conference and workshop review",
+      "summary": "Later: reviewing many papers at once for a conference or workshop, with calls for papers, bidding, deadlines, discussion and decisions, as open review platforms for conferences do.",
+      "features": [
+        {
+          "id": "RES-A22-F1",
+          "name": "Call for papers",
+          "does": "Run a call for papers with deadlines and tracks.",
+          "priority": "later",
+          "parts": [
+            {
+              "id": "RES-A22-F1-P1",
+              "name": "Calls for papers",
+              "what": "A conference or workshop as a venue like a journal, with deadlines and tracks.",
+              "kind": "data",
+              "size": "medium",
+              "depends_on": [
+                "RES-A8-F1-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A22-F2",
+          "name": "Reviewer bidding",
+          "does": "Let reviewers bid on papers and get a fair assignment.",
+          "priority": "later",
+          "parts": [
+            {
+              "id": "RES-A22-F2-P1",
+              "name": "Bidding and assignment",
+              "what": "Reviewers bid on papers; assignment balances bids, expertise, load and conflicts.",
+              "kind": "library",
+              "size": "large",
+              "depends_on": [
+                "RES-A7-F2-P3",
+                "RES-A7-F13-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A22-F3",
+          "name": "Discussion among reviewers",
+          "does": "Let reviewers and chairs discuss each paper.",
+          "priority": "later",
+          "parts": [
+            {
+              "id": "RES-A22-F3-P1",
+              "name": "Reviewer discussion",
+              "what": "A private or public discussion for each paper among reviewers and chairs, on the kit's threads.",
+              "kind": "integration",
+              "size": "small",
+              "depends_on": [
+                "KIT-A8-F12-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A22-F4",
+          "name": "Decisions for a whole round",
+          "does": "Make and send decisions for a whole round at once.",
+          "priority": "later",
+          "parts": [
+            {
+              "id": "RES-A22-F4-P1",
+              "name": "Decisions in bulk",
+              "what": "Accept and decline lists for a whole round, with letters.",
+              "kind": "interface",
+              "size": "medium",
+              "depends_on": [
+                "RES-A8-F4-P1"
+              ],
+              "piece": null
+            }
+          ]
+        },
+        {
+          "id": "RES-A22-F5",
+          "name": "Proceedings",
+          "does": "Publish accepted papers as proceedings.",
+          "priority": "later",
+          "parts": [
+            {
+              "id": "RES-A22-F5-P1",
+              "name": "Proceedings",
+              "what": "Accepted papers as a proceedings volume with its own page and DOIs.",
+              "kind": "library",
+              "size": "small",
+              "depends_on": [
+                "RES-A10-F2-P3"
+              ],
+              "piece": null
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "assess": [
+    "Walk through a researcher's month (post a preprint, get it screened, be invited to review, review on a phone, reply to reviews, cite a paper, read a retraction notice): does every step land on a core feature, or is something missing?",
+    "Are the core features the smallest set for a first usable release? Should the first release be a preprint server with open reviews, and journals on top come next?",
+    "Peer review (open decision): reviews published with reviewers' names, published anonymously, or kept private as most journals do now. Should each journal choose, or members set one rule? Does the demo make each choice and its effect clear?",
+    "Who can publish (open decision): anyone with an account, researchers with an ORCID iD, or endorsement by someone already publishing, as arXiv does. What does each mean for junk, paper mills and new researchers with no network, and does the endorsement step in the demo feel fair?",
+    "DOIs (open decision): Crossref, DataCite or both; one DOI for each version or one for the paper; covered as a running cost or paid by each journal. What would the first year cost at 1,000, 10,000 and 100,000 papers?",
+    "Rights: does the rights check in the demo keep paywalled copies out without blocking authors who may legally post? Who keeps each country's rules pack (secondary publication rights, funder policies) up to date?",
+    "Existing publisher agreements: what happens when an author signed their rights away, or the journal is missing from Open Policy Finder?",
+    "Screening: who screens, how fast, and with what checklist? Will readers ever mistake a screened preprint for a reviewed paper in the demo?",
+    "Review quality and fraud: are the reviewer identity checks, conflict checks and paper mill signals enough, and are signals always hints for a person rather than automatic verdicts?",
+    "Corrections and retractions: does the demo show updates openly and fairly, including the difference between an honest error and misconduct, and do updates reach other indexes?",
+    "Preservation: which outside archives and national libraries will hold copies, what do they cost, and do links keep working if Spare Research closes?",
+    "Indexing: what does it take for papers to show in scholar search engines, open catalogues, directories of open journals and subject indexes from the first release?",
+    "Health research: is the 'not yet reviewed' notice strong enough for unreviewed clinical work, and should health papers get extra screening?",
+    "Data about people and Indigenous data: are the rules for participants' data, controlled access and Indigenous data (CARE, and in the New Zealand example Māori data principles) right, and who are our partners in each country?",
+    "AI: does the demo make clear that every paper declares its AI use, AI-generated papers sit in their own section, agents can never be authors or reviewers, and unpublished papers never go into outside AI tools?",
+    "Legal: in each country, which parts need a lawyer before launch (the rights declaration, erasure beside a permanent record, defamation in published reviews, dangerous research, sanctions, legal deposit)?",
+    "Licences: can the tools we plan to use (reference extractor, citation processor and styles, maths renderer, LaTeX build, format converters) be used under our rules, with GPL and AGPL kept out of the core?",
+    "Does the demo use only our own names, look and icons, imitate no publisher's or preprint server's interface, and name other organisations only to say what we replace or work with?",
+    "Headless: can a script and an agent do everything in the demo through the same commands, with declarations, posting, reviews and votes kept for people?",
+    "Kit dependencies: Spare Research's first release needs the kit's search service, anchored comments, durable timers, public pages, review queue, preview service and PDF engine. Are they all core in the kit, and should anything here move down into the kit, such as the JATS store, reference extraction or citation styles?",
+    "Are the part sizes believable? Which large parts (conversion to JATS, the LaTeX build, DOI deposits, overlap checks, paper mill signals, the web reading view) should become work-board pieces first?"
+  ]
+}

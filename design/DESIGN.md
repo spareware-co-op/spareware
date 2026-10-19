@@ -4,6 +4,10 @@ Every Spareware app looks like part of one family: calm, plain and fast to read.
 
 ![Each app in its own colour](preview.png)
 
+## Keep the one look
+
+The shared look is settled. Do not change it: this guide, `tokens.css`, the shared colours, type, spacing and components stay as they are unless a **member vote** agrees a change, or a **unique situation truly needs it** (for example an accessibility need or a legal requirement). In that case, say why in the pull request and keep the change as small as possible. Things only one app needs stay inside that app and still use the tokens.
+
 ## The look in one line
 
 Warm off-white page, white panels, ink text, hairline rules, square-ish corners, small uppercase section labels, and colour used sparingly where it means something.
@@ -27,6 +31,9 @@ Warm off-white page, white panels, ink text, hairline rules, square-ish corners,
 | Spare Market | #D8E36A lime | #66700F | #F7F9DF |
 | Spare Office | #A9B6FF indigo | #3A47A8 | #EEF0FF |
 | Spare OS | #CDD1D6 grey | #4A525C | #F2F3F5 |
+| Spare Music | #EB8EEB orchid | #B82EB8 | #FBE9FB |
+| Spare Movies | #EB8E8E coral | #B82E2E | #FBE9E9 |
+| Spare Research | #C2DBB3 sage | #458321 | #F0FBE9 |
 
 Rules:
 
