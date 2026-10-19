@@ -849,7 +849,7 @@ The co-op's own home: joining once per person, the share register and the co-ope
 | **KIT-A14-F13** See contributors credited | See contributions to the code credited to the members who made them. | later | P1 |
 | **KIT-A14-F14** Have a fair hearing before suspension or expulsion | Know a member is suspended or expelled only under the constitution, after a hearing, and separately from any app ban. | next | P1, P2 |
 | **KIT-A14-F15** Run the steward society | As a member of the steward society, see its register, committee, annual meeting, accounts and disputes procedure. | next | P1, P2 |
-| **KIT-A14-F16** Contribute with clear rights | Sign off my contributions so the co-op can use them, with my employer's consent where I worked on their time. | core | P1, P2 |
+| **KIT-A14-F16** Contribute with clear rights | Sign off my contributions with the Developer Certificate of Origin, keep the copyright to my work, and know Spareware will never be relicensed, with my employer's consent where I worked on their time. | core | P1, P2 |
 | **KIT-A14-F17** Know the co-op is insured | Know the co-op and its board carry the insurance they need, with the cost in the ledger. | core | P1 |
 | **KIT-A14-F18** Know the name is protected | Know Spareware's names, domains and accounts are held by the co-op's steward, not by any one person. | core | P1, P2 |
 | **KIT-A14-F19** Know what happens if an app or the co-op closes | Know I will get notice, my data and any money owed if an app or the co-op closes. | next | P1 |
@@ -886,7 +886,7 @@ The co-op's own home: joining once per person, the share register and the co-ope
 | KIT-A14-F14-P2 | **Suspension and expulsion**: Notice, hearing, decision and appeal recorded against the register, kept apart from app bans and restrictions. | service | medium | KIT-A14-F14-P1, KIT-A14-F2-P1 |  |
 | KIT-A14-F15-P1 | **Steward society rules**: The constitution, committee, disputes procedure and yearly duties the Incorporated Societies Act 2022 requires of the steward. | legal | small | KIT-A14-F1-P1 | [K01](STATUS.md) |
 | KIT-A14-F15-P2 | **Steward register and meetings**: The society's own member register, committee records, annual meeting and financial statements, reusing the co-op's register, meetings and books. | service | medium | KIT-A14-F15-P1, KIT-A14-F2-P1, KIT-A12-F7-P1, KIT-A13-F11-P2 |  |
-| KIT-A14-F16-P1 | **Contributor sign-off**: A developer certificate of origin or a contributor licence agreement, and employer consent for work done on an employer's time. | legal | small | KIT-A16-F4-P1 | [A14](../spare-construct/STATUS.md) |
+| KIT-A14-F16-P1 | **Contributor sign-off**: Developer Certificate of Origin sign-off on every commit, with no contributor licence agreement, and employer consent for work done on an employer's time. | legal | small | KIT-A16-F4-P1 | [A14](../spare-construct/STATUS.md) |
 | KIT-A14-F16-P2 | **Sign-off check**: A repository check that every contribution carries the sign-off before it is merged. | service | small | KIT-A14-F16-P1, KIT-A22-F2-P1 |  |
 | KIT-A14-F17-P1 | **Co-op insurance**: Directors and officers, cyber and public liability cover for the co-op across all apps, compared on cost and what each covers. | research | medium |  |  |
 | KIT-A14-F18-P1 | **Trade marks**: Registers Spareware and the product names as trade marks, in NZ first, held by the steward and licensed to local co-ops. | legal | small | KIT-A14-F1-P1 |  |

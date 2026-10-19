@@ -12,4 +12,5 @@ members = [
 [workspace.package]
 edition = "2024"
 publish = false
-# The licence is set before the first public release (see ARCHITECTURE.md, open decisions).
+# Licence: MPL-2.0 for the core, Apache-2.0 for the SDK and plugins (README.md, Licence). Never relicensed.
+license = "MPL-2.0"

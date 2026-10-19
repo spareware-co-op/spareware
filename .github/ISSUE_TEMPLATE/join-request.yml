@@ -44,3 +44,5 @@ body:
           required: true
         - label: Any work I do on an employer's time is cleared with my employer first.
           required: true
+        - label: I will sign off my commits (Developer Certificate of Origin), and my work is licensed under Spareware's licences, which never change.
+          required: true
