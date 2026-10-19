@@ -11,6 +11,15 @@ Replaces Spotify. Musicians sell their music the way they want, and listeners co
 - Musicians keep everything except running costs, shown on the open cost ledger.
 - Music is hard to copy and pass around without paying.
 
+## Human and AI sections
+
+The catalogue has two sections: **Human**, for music people made themselves, and **AI**, for music made with AI. Each listener chooses to see one, the other, or both, and can change it at any time.
+
+- **Declared by the musician:** every track says whether AI was used. Accounts that are AI agents are labelled and can publish only in the AI section.
+- **Checked, not assumed:** uploads are checked for content credentials (C2PA, an open standard for recording how media was made) and for AI-detection signals. Signals are hints for moderators, never automatic verdicts.
+- **Fixable in the open:** members can flag a track in the wrong section; moderators move it with the reason in the public log, and the musician can appeal.
+- **Fair to musicians:** using AI isn't a penalty; it just goes in its own section, so human work isn't buried.
+
 ## Open decisions
 
 | Decision | Options | Lean |

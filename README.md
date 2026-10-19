@@ -57,6 +57,11 @@ flowchart TB
     MOVIES["`**Spare Movies**
 *replaces Netflix*`"]
   end
+  subgraph SCIENCE["`**Research**`"]
+    direction LR
+    RESEARCH["`**Spare Research**
+*free to read and publish research*`"]
+  end
   subgraph COMPUTE["`**Everyday computing**`"]
     direction LR
     OFFICE["`**Spare Office**
@@ -72,6 +77,7 @@ flowchart TB
 *any member group can host its own*`"]
   COMPUTE --> CMD
   SHARE --> CMD
+  SCIENCE --> CMD
   TRADE --> CMD
   LIVE --> CMD
   MOVE --> CMD
@@ -89,6 +95,7 @@ flowchart TB
 | Spare Social (working name) | TikTok, YouTube, Instagram and Facebook, together | Mapping | [Map](projects/spare-social/ARCHITECTURE.md) · [Work board](projects/spare-social/STATUS.md) |
 | Spare Music | Spotify | Idea | [Map](projects/spare-music/ARCHITECTURE.md) · [Work board](projects/spare-music/STATUS.md) |
 | Spare Movies | Netflix | Idea | [Map](projects/spare-movies/ARCHITECTURE.md) · [Work board](projects/spare-movies/STATUS.md) |
+| Spare Research | Journal paywalls and the fees scientists pay to publish | Idea | [Map](projects/spare-research/ARCHITECTURE.md) · [Work board](projects/spare-research/STATUS.md) |
 | Spare Office | Microsoft 365: Word, Excel, PowerPoint, Outlook, Teams, OneNote, OneDrive | Mapping | [Map](projects/spare-office/ARCHITECTURE.md) · [Work board](projects/spare-office/STATUS.md) |
 | Spare OS | Paying for Windows | Mapping | [Map](projects/spare-os/ARCHITECTURE.md) · [Work board](projects/spare-os/STATUS.md) |
 | Spare Ride | Uber | Mapping | [Map](projects/spare-ride/ARCHITECTURE.md) · [Work board](projects/spare-ride/STATUS.md) |
