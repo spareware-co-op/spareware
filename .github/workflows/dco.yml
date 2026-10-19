@@ -1,0 +1,33 @@
+name: Sign-off
+
+# Every commit in a pull request must carry a Developer Certificate of Origin sign-off
+# ("Signed-off-by:", added by `git commit -s`). Contributors keep their copyright; there is no
+# contributor licence agreement, and Spareware is never relicensed (README, Licence).
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  dco:
+    name: Every commit is signed off
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check each commit for a sign-off
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          missing=$(gh api "repos/$REPO/pulls/$PR/commits?per_page=100" --paginate \
+            --jq '.[] | select(.commit.message | test("(?m)^Signed-off-by: .+ <.+>$") | not) | .sha[0:7] + " " + (.commit.message | split("\n")[0])')
+          if [ -n "$missing" ]; then
+            echo "::error::These commits have no sign-off. Add one with: git commit --amend -s (or git rebase --signoff), then push again."
+            echo "$missing"
+            exit 1
+          fi
+          echo "Every commit is signed off."
