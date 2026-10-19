@@ -132,6 +132,22 @@ textarea.inp{height:auto;padding:6px 8px}
 .app-h{display:flex;align-items:center;gap:12px;min-height:44px;padding:0 12px;background:var(--panel);border-bottom:1px solid var(--hairline)}
 .brand{display:flex;align-items:center;gap:8px;font-weight:700;white-space:nowrap}
 .brand .mark{width:14px;height:14px;background:var(--app);border-radius:2px}
+/* Disciplines: each has its own light colour, so the buttons, tabs and selection always show which one you're in. Architecture keeps Spare Construct's own colour. */
+[data-dsw="architecture"]{--app:#8EC5FF;--app-strong:#1F5FA8;--app-tint:#EAF4FF}
+html[data-disc="structure"],[data-dsw="structure"]{--app:#F4A6A0;--app-strong:#9E2F28;--app-tint:#FDEDEB}
+html[data-disc="mep"],[data-dsw="mep"]{--app:#93D9A6;--app-strong:#1F7A45;--app-tint:#EAF8EE}
+html[data-disc="civil"],[data-dsw="civil"]{--app:#DCC196;--app-strong:#7A5626;--app-tint:#F9F1E4}
+html[data-disc="coord"],[data-dsw="coord"]{--app:#C9B8F5;--app-strong:#5A3FB0;--app-tint:#F3EFFE}
+.disc-wrap{position:relative;flex:none}
+.disc-btn{background:var(--app);border-color:var(--app-strong);color:var(--ink);font-weight:600}
+.disc-btn:hover{border-color:var(--ink)}
+.disc-btn .icon{transform:rotate(90deg)}
+.disc-menu{position:absolute;top:calc(100% + 6px);left:0;z-index:88;width:290px;padding:4px 0;background:var(--panel);border:1px solid var(--ink);border-radius:var(--radius)}
+.disc-menu button{display:flex;align-items:flex-start;gap:8px;width:100%;padding:6px 10px;border:0;border-left:3px solid transparent;background:none;color:var(--ink);text-align:left}
+.disc-menu button:hover{background:var(--app-tint)}
+.disc-menu button[aria-checked="true"]{background:var(--app-tint);border-left-color:var(--app-strong);font-weight:600}
+.disc-menu small{display:block;font-size:12px;font-weight:400;color:var(--ink-2)}
+.dsw{width:12px;height:12px;flex:none;margin-top:3px;background:var(--app);border:1px solid var(--app-strong);border-radius:2px}
 .crumb{display:flex;align-items:center;gap:8px;min-width:0;color:var(--ink-2)}
 .crumb b{color:var(--ink);font-weight:600;white-space:nowrap}
 .crumb .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -497,6 +513,10 @@ button.badge:hover{background:var(--hairline);color:var(--ink)}
  <pre class="errlog" id="errlog" hidden></pre>
  <header class="app-h">
   <div class="brand"><span class="mark" aria-hidden="true"></span>Spare Construct</div>
+  <div class="disc-wrap">
+   <button class="btn sm disc-btn" data-act="discmenu" id="b-disc" aria-haspopup="true" aria-expanded="false" aria-controls="disc-menu" aria-label="Discipline: Architecture"><span id="disc-name">Architecture</span><svg class="icon sm" aria-hidden="true"><use href="#i-chev"/></svg></button>
+   <div class="disc-menu" id="disc-menu" role="menu" aria-label="Discipline" hidden></div>
+  </div>
   <div class="crumb"><b>Kōwhai Lane house</b><span aria-hidden="true">/</span><span class="t" id="h-view">Ground floor plan</span><button class="badge n" data-act="packinfo">Sample data<span class="hide-s"> · example country: New Zealand</span></button></div>
   <div class="h-act">
    <button class="btn cmdk" data-act="palette" aria-label="Search commands">${ic}<span class="l">Search commands</span><kbd class="hide-s">Ctrl K</kbd></button>
@@ -722,6 +742,17 @@ function renderTabs(){$('#tabs').innerHTML=SCREENS.map(([k,l,i])=>`<button class
 ACT.go=b=>go(b.dataset.a);
 ACT.view=b=>{S.view=b.dataset.a;S.zoom=1;S.zc=null;go('plan:'+b.dataset.a)};
 ACT.browser=()=>{S.bopen=!S.bopen;$('#work').classList.toggle('bopen',S.bopen)};
+
+/* ---------- disciplines ---------- */
+const DISCS=[['architecture','Architecture','Walls, doors, windows, rooms and sheets'],['structure','Structure','Framing, bracing and foundations'],['mep','MEP','Ducts, pipes, drainage and electrical'],['civil','Civil','Survey, ground, roads and pipe networks'],['coord','Coordination','Linked models, clash and issues']];
+let DISC='architecture';
+function renderDisc(){const d=DISCS.find(x=>x[0]===DISC);document.documentElement.dataset.disc=DISC;$('#disc-name').textContent=d[1];$('#b-disc').setAttribute('aria-label','Discipline: '+d[1]);$('#disc-menu').innerHTML=DISCS.map(([k,l,w])=>`<button type="button" role="menuitemradio" aria-checked="${k===DISC}" data-act="disc" data-a="${k}" data-dsw="${k}"><span class="dsw" aria-hidden="true"></span><span>${l}<small>${w}</small></span></button>`).join('')}
+function discMenu(open){const m=$('#disc-menu');m.hidden=!open;$('#b-disc').setAttribute('aria-expanded',String(open));if(open){const c=m.querySelector('[aria-checked="true"]');if(c)c.focus()}}
+ACT.discmenu=()=>discMenu($('#disc-menu').hidden);
+ACT.disc=b=>{DISC=b.dataset.a;renderDisc();discMenu(false);$('#b-disc').focus()};
+document.addEventListener('click',e=>{if(!$('#disc-menu').hidden&&!e.target.closest('.disc-wrap'))discMenu(false)});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#disc-menu').hidden){discMenu(false);$('#b-disc').focus()}});
+renderDisc();
 
 /* ---------- project browser ---------- */
 const SCHEDS=[['doors','Door schedule'],['windows','Window schedule'],['rooms','Room schedule'],['walls','Wall quantities'],['materials','Materials and carbon']];
