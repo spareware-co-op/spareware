@@ -1,0 +1,1161 @@
+<!doctype html>
+<html lang="en" data-app="movies">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spare Movies demo</title>
+<style>
+/* copied from design/tokens.css */
+/* Spareware design tokens: the one shared look for every Spareware app.
+   Read design/DESIGN.md first. An app sets data-app="<name>" on <html> to get its own colour.
+   Text is always ink on light colours; white text appears only on Spareware red. */
+:root {
+  /* Spareware (the co-op) */
+  --spare-red: #C8102E;
+  --spare-red-hover: #A80D26;
+  --spare-red-tint: #FCE9EC;
+
+  /* Neutrals */
+  --ink: #1A1A1A;
+  --ink-2: #595959;
+  --ink-3: #8A8A8A;
+  --page: #FAF8F5;
+  --panel: #FFFFFF;
+  --panel-alt: #F7F6F3;
+  --sink: #F1EFEA;
+  --hairline: #E5E5E3;
+  --rule: #C9C9C9;
+
+  /* States (always paired: strong for borders and icons, tint for backgrounds) */
+  --danger: #B91C1C;  --danger-tint: #FDE8E8;
+  --success: #15803D; --success-tint: #E3F6E8;
+  --info: #1D4ED8;    --info-tint: #E3ECFD;
+
+  /* Type and shape */
+  --font-ui: system-ui, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  --text: 13px;
+  --radius: 3px;
+  --space: 8px;
+
+  /* The current app's colours (default: Spareware itself) */
+  --app: var(--spare-red-tint);
+  --app-strong: var(--spare-red);
+  --app-tint: var(--spare-red-tint);
+}
+
+/* One light colour per app: --app is the fill for its mark, primary buttons and active items
+   (ink text on it), --app-strong is for thin borders and icons, --app-tint for quiet backgrounds. */
+[data-app="construct"] { --app: #8EC5FF; --app-strong: #1F5FA8; --app-tint: #EAF4FF; }
+[data-app="studio"] { --app: #C4B2FF; --app-strong: #5B3FB8; --app-tint: #F3EFFF; }
+[data-app="social"] { --app: #FFB27A; --app-strong: #9E4A14; --app-tint: #FFF1E6; }
+[data-app="ride"]   { --app: #7FD8CF; --app-strong: #13756B; --app-tint: #E8F8F6; }
+[data-app="food"]   { --app: #A9DE8A; --app-strong: #3E7C1F; --app-tint: #EFF9E8; }
+[data-app="stay"]   { --app: #80D4F0; --app-strong: #11708F; --app-tint: #E7F7FD; }
+[data-app="home"]   { --app: #E8C99A; --app-strong: #8A5A1C; --app-tint: #FBF4EA; }
+[data-app="rent"]   { --app: #F2B8E0; --app-strong: #94306F; --app-tint: #FCEEF8; }
+[data-app="work"]   { --app: #B8C4D6; --app-strong: #3D4F6B; --app-tint: #EEF1F6; }
+[data-app="market"] { --app: #D8E36A; --app-strong: #66700F; --app-tint: #F7F9DF; }
+[data-app="office"] { --app: #A9B6FF; --app-strong: #3A47A8; --app-tint: #EEF0FF; }
+[data-app="os"]     { --app: #CDD1D6; --app-strong: #4A525C; --app-tint: #F2F3F5; }
+[data-app="music"]  { --app: #EB8EEB; --app-strong: #B82EB8; --app-tint: #FBE9FB; }
+[data-app="movies"] { --app: #EB8E8E; --app-strong: #B82E2E; --app-tint: #FBE9E9; }
+[data-app="research"] { --app: #C2DBB3; --app-strong: #458321; --app-tint: #F0FBE9; }
+</style>
+<style>
+/* Spare Movies demo styles. Only the tokens above set colour, type, corners and spacing. */
+:root { --s1: var(--space); --s2: calc(var(--space) * 2); --s3: calc(var(--space) * 3); --half: calc(var(--space) / 2); }
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--page); color: var(--ink); font-family: var(--font-ui); font-size: var(--text); line-height: 1.45; -webkit-text-size-adjust: 100%; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+input, select, textarea { background: var(--panel); border: 1px solid var(--rule); border-radius: var(--radius); padding: 6px 8px; min-height: 32px; width: 100%; }
+input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; accent-color: var(--app-strong); }
+input[type="range"] { padding: 0; border: 0; min-height: 0; accent-color: var(--app-strong); background: none; }
+a { color: var(--ink); text-decoration-color: var(--app-strong); text-underline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--app-strong); outline-offset: 2px; }
+[hidden] { display: none !important; }
+h1, h2, h3 { margin: 0; font-weight: 700; }
+h1 { font-size: 18px; }
+h2 { font-size: 15px; }
+h3 { font-size: 13px; }
+p { margin: 0; }
+.mono { font-family: var(--font-mono); }
+.muted { color: var(--ink-2); }
+.small { font-size: 12px; }
+.grow { flex: 1; min-width: 0; }
+.mt { margin-top: var(--s1); }
+.mt2 { margin-top: var(--s2); }
+.label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-3); font-weight: 600; margin: 0 0 var(--s1); }
+.mark { display: inline-block; width: 14px; height: 14px; background: var(--app); border: 1px solid var(--app-strong); border-radius: var(--radius); flex: none; }
+.ic { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; vertical-align: middle; }
+.ic.sm { width: 14px; height: 14px; }
+.ic.app { color: var(--app-strong); }
+.ic.ok { color: var(--success); }
+.ic.dan { color: var(--danger); }
+.ic.inf { color: var(--info); }
+
+/* Demo chrome */
+.demohead { min-height: 48px; display: flex; align-items: center; flex-wrap: wrap; gap: var(--s1); padding: 6px var(--s2); background: var(--panel); border-bottom: 1px solid var(--hairline); position: sticky; top: 0; z-index: 50; }
+.demohead .sep { color: var(--ink-3); }
+.demohead select { width: auto; min-height: 30px; padding: 3px 6px; }
+.demohead .ctry { display: inline-flex; align-items: center; gap: 6px; }
+.demohead .ctry label { margin: 0; }
+.screens-btn { display: none !important; }
+.stage { display: grid; grid-template-columns: 220px minmax(0, 1fr) 270px; gap: var(--s2); padding: var(--s2); max-width: 1500px; margin: 0 auto; align-items: start; }
+.nav, .about { background: var(--panel); border: 1px solid var(--hairline); border-radius: var(--radius); position: sticky; top: 64px; max-height: calc(100vh - 80px); overflow-y: auto; }
+.nav { padding: var(--s2) 0; }
+.nav .label { padding: 0 var(--s2); margin-top: var(--s2); }
+.nav .label:first-child { margin-top: 0; }
+.nav a { display: flex; gap: var(--s1); align-items: baseline; padding: 6px var(--s2); text-decoration: none; color: var(--ink); border-left: 3px solid transparent; }
+.nav a .num { font-family: var(--font-mono); color: var(--ink-2); font-size: 11px; width: 18px; flex: none; }
+.nav a:hover { background: var(--panel-alt); }
+.nav a[aria-current="page"] { background: var(--app-tint); border-left-color: var(--app); font-weight: 600; }
+.nav .navfoot { margin: var(--s2) var(--s2) 0; padding-top: var(--s2); border-top: 1px solid var(--hairline); font-size: 12px; color: var(--ink-2); }
+.about { padding: var(--s2); }
+.about h3 { margin: 0 0 var(--half); }
+.about p { margin: 0 0 var(--s2); color: var(--ink-2); }
+.about ul { margin: 0 0 var(--s2); padding: 0; list-style: none; }
+.about li { padding: 5px 0; border-bottom: 1px solid var(--hairline); }
+.about li .mono { font-size: 11px; color: var(--app-strong); display: block; }
+.about .try li { padding-left: var(--s2); position: relative; }
+.about .try li::before { content: ""; position: absolute; left: 0; top: 11px; width: 6px; height: 6px; background: var(--app); border: 1px solid var(--app-strong); }
+
+/* The app frame */
+.app { background: var(--panel); border: 1px solid var(--ink); border-radius: var(--radius); min-width: 0; position: relative; }
+.apphead { display: flex; align-items: center; gap: var(--s1); padding: 8px var(--s2); border-bottom: 1px solid var(--hairline); }
+.apphead b { white-space: nowrap; }
+.apphead .crumb { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
+.apphead .crumb::before { content: "/"; color: var(--ink-3); margin-right: var(--s1); }
+.who { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--panel); padding: 3px 8px 3px 4px; min-height: 32px; white-space: nowrap; }
+.who .av { width: 14px; height: 14px; }
+.avatar { width: 32px; height: 32px; display: inline-grid; place-items: center; flex: none; background: var(--sink); border: 1px solid var(--rule); border-radius: var(--radius); font-weight: 700; font-size: 11px; }
+.cols3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s1); }
+.apptabs { display: flex; border-bottom: 1px solid var(--hairline); overflow-x: auto; scrollbar-width: none; }
+.apptabs button { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border: 0; background: none; color: var(--ink-2); font-weight: 600; }
+.apptabs button[aria-current="page"] { background: var(--app); color: var(--ink); }
+.view { min-height: 560px; }
+.appfoot { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 10px var(--s2); border-top: 1px solid var(--hairline); font-size: 12px; color: var(--ink-2); background: var(--panel-alt); }
+.appfoot button { background: none; border: 0; padding: 0; color: var(--ink-2); text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 2px; font-size: 12px; }
+
+/* Buttons, badges, fields */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 34px; padding: 0 12px; border-radius: var(--radius); border: 1px solid var(--ink); background: var(--panel); color: var(--ink); font-weight: 600; white-space: nowrap; text-decoration: none; }
+.btn:hover { background: var(--panel-alt); }
+.btn.primary { background: var(--app); border-color: var(--app); }
+.btn.primary:hover { border-color: var(--app-strong); }
+.btn.quiet { border-color: var(--rule); color: var(--ink-2); font-weight: 500; }
+.btn.small { min-height: 28px; padding: 0 9px; font-size: 12px; }
+.btn.on { background: var(--app-tint); border-color: var(--app-strong); }
+.btn.dan { border-color: var(--danger); color: var(--danger); }
+.btn:disabled { opacity: .55; cursor: default; }
+.btns { display: flex; flex-wrap: wrap; gap: var(--s1); }
+.link { background: none; border: 0; padding: 0; color: var(--ink); text-decoration: underline; text-decoration-color: var(--app-strong); text-underline-offset: 2px; font-weight: 600; }
+.iconbtn { width: 34px; height: 34px; display: inline-grid; place-items: center; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--panel); color: var(--ink); padding: 0; flex: none; }
+.iconbtn:hover { background: var(--panel-alt); }
+.badge { display: inline-flex; align-items: center; gap: 4px; min-height: 20px; padding: 0 8px; border-radius: 999px; background: var(--app-tint); color: var(--app-strong); font-size: 11px; font-weight: 600; white-space: nowrap; vertical-align: middle; }
+.badge .ic { width: 12px; height: 12px; }
+.badge.n { background: var(--sink); color: var(--ink-2); }
+.badge.inf { background: var(--info-tint); color: var(--info); box-shadow: inset 0 0 0 1px var(--info); }
+.badge.ok { background: var(--success-tint); color: var(--success); box-shadow: inset 0 0 0 1px var(--success); }
+.badge.dan { background: var(--danger-tint); color: var(--danger); box-shadow: inset 0 0 0 1px var(--danger); }
+.rating { display: inline-flex; align-items: center; min-height: 22px; padding: 0 7px; border: 1px solid var(--ink); border-radius: var(--radius); background: var(--panel); font-weight: 700; font-size: 12px; font-family: var(--font-mono); white-space: nowrap; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { min-height: 28px; padding: 0 10px; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--panel); color: var(--ink); font-size: 12px; display: inline-flex; align-items: center; gap: 4px; }
+.chip[aria-pressed="true"] { background: var(--app); border-color: var(--app-strong); font-weight: 600; }
+.seg { display: inline-flex; border: 1px solid var(--rule); border-radius: var(--radius); overflow: hidden; background: var(--panel); }
+.seg button { border: 0; border-left: 1px solid var(--rule); background: var(--panel); padding: 5px 12px; font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+.seg button:first-child { border-left: 0; }
+.seg button[aria-pressed="true"] { background: var(--app); color: var(--ink); font-weight: 700; }
+.sw { position: relative; width: 38px; height: 22px; border-radius: 999px; border: 1px solid var(--rule); background: var(--sink); padding: 0; flex: none; }
+.sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--panel); border: 1px solid var(--ink-2); transition: left .15s; }
+.sw[aria-checked="true"] { background: var(--app); border-color: var(--app-strong); }
+.sw[aria-checked="true"]::after { left: 19px; border-color: var(--app-strong); }
+.subtabs { display: flex; border-bottom: 1px solid var(--hairline); overflow-x: auto; scrollbar-width: none; background: var(--panel-alt); }
+.subtabs button { flex: none; padding: 8px 12px; border: 0; background: none; color: var(--ink-2); font-weight: 600; font-size: 12px; }
+.subtabs button[aria-current="page"] { background: var(--app-tint); color: var(--ink); box-shadow: inset 0 -3px 0 var(--app); }
+.note { background: var(--app-tint); border-left: 3px solid var(--app); padding: 8px 10px; border-radius: 0 var(--radius) var(--radius) 0; }
+.note.inf { background: var(--info-tint); border-left-color: var(--info); }
+.note.ok { background: var(--success-tint); border-left-color: var(--success); }
+.note.dan { background: var(--danger-tint); border-left-color: var(--danger); }
+.note.n { background: var(--panel-alt); border-left-color: var(--rule); }
+.field { display: block; }
+.field > span:first-child { display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+.field + .field { margin-top: 10px; }
+.hint { display: block; font-size: 12px; margin-top: 4px; color: var(--ink-2); }
+.check { display: flex; gap: var(--s1); align-items: flex-start; }
+.check input { margin-top: 3px; }
+.bar { height: 6px; background: var(--sink); border-radius: 999px; overflow: hidden; }
+.bar > span { display: block; height: 100%; background: var(--app); }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; font-size: 12px; }
+.kv dt { color: var(--ink-2); }
+.kv dd { margin: 0; }
+
+/* Blocks */
+.pad { padding: var(--s2); }
+.sect { padding: 14px var(--s2); border-bottom: 1px solid var(--hairline); }
+.sect.alt { background: var(--panel-alt); }
+.sect > * + * { margin-top: var(--s1); }
+.sect > .label + * { margin-top: 0; }
+.sect-title { display: flex; align-items: center; gap: var(--s1); flex-wrap: wrap; }
+.sect-title h2 { flex: 1; min-width: 160px; }
+.row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 0; border: 0; border-bottom: 1px solid var(--hairline); background: none; text-align: left; color: var(--ink); text-decoration: none; }
+.row:last-child { border-bottom: 0; }
+.row .sub, .grow > .sub { display: block; font-size: 12px; color: var(--ink-2); font-weight: 400; }
+button.row:hover { background: var(--panel-alt); }
+.row.sel { background: var(--app-tint); box-shadow: inset 3px 0 0 var(--app); padding-left: 10px; }
+.cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--s2); }
+.card { border: 1px solid var(--hairline); border-radius: var(--radius); padding: 10px 12px; background: var(--panel); }
+.card.sel { background: var(--app-tint); border-color: var(--app-strong); }
+.card.dim { background: var(--panel-alt); }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--hairline); border: 1px solid var(--hairline); border-radius: var(--radius); overflow: hidden; }
+.stat { background: var(--panel); padding: 8px 10px; min-width: 0; }
+.stat b { display: block; font-family: var(--font-mono); font-size: 16px; }
+.stat span { font-size: 11px; color: var(--ink-2); }
+.chart { display: flex; align-items: flex-end; gap: 3px; height: 90px; border-bottom: 1px solid var(--rule); }
+.chart i { flex: 1; background: var(--app); border: 1px solid var(--app-strong); border-bottom: 0; border-radius: 2px 2px 0 0; min-height: 2px; }
+.chart-x { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 10px; color: var(--ink-2); margin-top: 3px; }
+.tblwrap { overflow-x: auto; }
+.tbl { width: 100%; border-collapse: collapse; font-size: 12px; }
+.tbl th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); font-weight: 600; padding: 4px 8px 4px 0; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+.tbl td { padding: 6px 8px 6px 0; border-bottom: 1px solid var(--hairline); vertical-align: top; }
+.tbl .n { text-align: right; font-family: var(--font-mono); white-space: nowrap; }
+.tbl tr.total td { font-weight: 700; border-bottom: 0; border-top: 1px solid var(--rule); }
+.tbl tr.sub td { color: var(--ink-2); }
+.votebar { display: grid; grid-template-columns: 90px 1fr 44px; gap: var(--s1); align-items: center; font-size: 12px; }
+.votebar + .votebar { margin-top: 4px; }
+.votebar output { font-family: var(--font-mono); text-align: right; }
+.stepper { list-style: none; margin: 0; padding: 0; }
+.stepper li { position: relative; padding: 0 0 12px 24px; }
+.stepper li::before { content: ""; position: absolute; left: 2px; top: 3px; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--rule); background: var(--panel); }
+.stepper li::after { content: ""; position: absolute; left: 8px; top: 17px; bottom: 1px; width: 2px; background: var(--hairline); }
+.stepper li:last-child { padding-bottom: 0; }
+.stepper li:last-child::after { display: none; }
+.stepper li.done::before { background: var(--app); border-color: var(--app-strong); }
+.stepper li.now::before { border-color: var(--app-strong); box-shadow: 0 0 0 3px var(--app-tint); }
+.stepper li.todo { color: var(--ink-2); }
+.stepper .sub { display: block; font-size: 12px; color: var(--ink-2); }
+.code { font-family: var(--font-mono); font-size: 11px; background: var(--panel-alt); border: 1px solid var(--hairline); border-radius: var(--radius); padding: 8px 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Poster scenes: plain shapes in token colours */
+.k-sky { fill: var(--info-tint); }
+.k-dawn { fill: var(--app-tint); }
+.k-paper { fill: var(--panel-alt); }
+.k-sun, .k-app, .k-ember { fill: var(--app); }
+.k-kite { stroke: var(--app-strong); stroke-width: 1.5; }
+.k-red { fill: var(--app-strong); }
+.k-sea { fill: color-mix(in srgb, var(--info) 28%, var(--panel)); }
+.k-sea2 { fill: color-mix(in srgb, var(--info) 46%, var(--panel)); }
+.k-night { fill: color-mix(in srgb, var(--info) 45%, var(--ink-3)); }
+.k-hill { fill: color-mix(in srgb, var(--success) 38%, var(--panel)); }
+.k-hill2 { fill: color-mix(in srgb, var(--success) 60%, var(--panel)); }
+.k-sand { fill: color-mix(in srgb, var(--app) 30%, var(--panel)); }
+.k-rock { fill: var(--rule); }
+.k-rock2 { fill: var(--ink-3); }
+.k-white { fill: var(--panel); }
+.k-ink { fill: var(--ink-2); }
+.k-ai { fill: color-mix(in srgb, var(--info) 14%, var(--app-tint)); }
+.k-glass { fill: color-mix(in srgb, var(--info) 16%, var(--panel)); stroke: var(--info); stroke-width: 1.5; }
+.k-shelf { fill: color-mix(in srgb, var(--app-strong) 40%, var(--rule)); }
+.k-line { fill: none; stroke: var(--panel); stroke-width: 3; stroke-linecap: round; }
+.k-thin { fill: none; stroke: var(--ink-3); stroke-width: 1.5; stroke-linecap: round; }
+.k-string { fill: none; stroke: var(--ink-2); stroke-width: 1.2; }
+.k-bird { fill: none; stroke: var(--ink-2); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.k-dash { fill: none; stroke: var(--info); stroke-width: 2; stroke-dasharray: 6 5; }
+.k-edge { stroke: var(--rule); stroke-width: 1.5; }
+
+/* Posters and film tiles */
+.scene { display: block; width: 100%; height: 100%; }
+.poster { position: relative; aspect-ratio: 2 / 3; border: 1px solid var(--hairline); border-radius: var(--radius); overflow: hidden; background: var(--sink); }
+.poster .scene { position: absolute; inset: 0; }
+.poster .pbadge { position: absolute; left: 4px; top: 4px; display: flex; flex-wrap: wrap; gap: 3px; }
+.poster .pbadge span { background: var(--panel); border: 1px solid var(--ink); border-radius: var(--radius); font-size: 10px; font-weight: 700; padding: 0 4px; }
+.poster .pbadge span.ai { background: var(--info-tint); border-color: var(--info); color: var(--ink); }
+.shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 12px var(--s2); }
+.tile { display: flex; flex-direction: column; align-self: start; border: 0; background: none; padding: 0; text-align: left; color: var(--ink); min-width: 0; }
+.tile b { display: block; margin-top: 6px; font-size: 13px; line-height: 1.25; }
+.tile .sub { display: block; font-size: 11px; color: var(--ink-2); margin-top: 2px; }
+.tile .prog { height: 4px; background: var(--sink); margin-top: 4px; border-radius: 2px; overflow: hidden; }
+.tile .prog span { display: block; height: 100%; background: var(--app-strong); }
+.tile:hover b { text-decoration: underline; text-decoration-color: var(--app-strong); }
+.locked .poster .scene { filter: blur(6px); }
+.locked .poster::after { content: "Locked for this profile"; position: absolute; left: 6px; right: 6px; bottom: 6px; background: var(--panel); border: 1px solid var(--ink); border-radius: var(--radius); font-size: 10px; font-weight: 700; text-align: center; padding: 2px; }
+.hero { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: var(--s2); padding: var(--s2); border-bottom: 1px solid var(--hairline); }
+.hero .facts { display: flex; flex-wrap: wrap; gap: 4px 10px; color: var(--ink-2); font-size: 12px; }
+.ways { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s1); }
+.way { border: 1px solid var(--rule); border-radius: var(--radius); background: var(--panel); padding: 8px 10px; text-align: left; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.way b { font-family: var(--font-mono); font-size: 15px; }
+.way span { font-size: 11px; color: var(--ink-2); }
+.way:hover { border-color: var(--app-strong); }
+.way.sel { background: var(--app-tint); border-color: var(--app-strong); box-shadow: inset 0 0 0 1px var(--app-strong); }
+.way.dim { background: var(--panel-alt); cursor: default; }
+
+/* The player */
+.screen { position: relative; aspect-ratio: 16 / 9; overflow: hidden; background: var(--sink); border-bottom: 1px solid var(--hairline); }
+.screen .scene { position: absolute; inset: 0; }
+.screen .tag { position: absolute; left: 8px; top: 8px; background: var(--panel); border: 1px solid var(--ink); border-radius: var(--radius); font-size: 11px; font-weight: 700; padding: 1px 6px; }
+.screen .bigplay { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 58px; height: 58px; display: grid; place-items: center; background: var(--panel); border: 1px solid var(--ink); border-radius: 50%; }
+.screen .cap { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); width: max-content; max-width: 90%; background: var(--panel); border: 1px solid var(--ink); border-radius: var(--radius); padding: 3px 10px; font-weight: 600; text-align: center; }
+.screen.cap-lg .cap { font-size: 18px; }
+.screen.cap-tint .cap { background: var(--app-tint); border-color: var(--app-strong); }
+.screen .adline { position: absolute; left: 8px; right: 8px; top: 38px; background: var(--info-tint); border: 1px solid var(--info); border-radius: var(--radius); padding: 3px 8px; font-size: 12px; display: flex; gap: 6px; align-items: center; }
+.pctl { display: flex; align-items: center; gap: 6px; padding: 6px var(--s1); border-bottom: 1px solid var(--hairline); flex-wrap: wrap; }
+.pctl .time { font-family: var(--font-mono); font-size: 11px; white-space: nowrap; }
+.pctl input[type="range"] { flex: 1; min-width: 120px; }
+.pbtn { min-height: 32px; min-width: 32px; padding: 0 8px; border: 1px solid var(--rule); background: var(--panel); border-radius: var(--radius); font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
+.pbtn[aria-pressed="true"] { background: var(--app); border-color: var(--app-strong); }
+.pmenus { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--s1); }
+.pmenus select { font-size: 12px; }
+.pmenus .field + .field { margin-top: 0; }
+
+/* Sheet, scrim and toast */
+.scrim { position: fixed; inset: 0; background: color-mix(in srgb, var(--ink) 30%, transparent); z-index: 80; }
+.sheet { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(520px, calc(100vw - 24px)); max-height: calc(100vh - 40px); display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--ink); border-radius: var(--radius); z-index: 81; }
+.sheet-head { display: flex; align-items: center; gap: var(--s1); padding: 10px var(--s2); border-bottom: 1px solid var(--hairline); }
+.sheet-head b { flex: 1; font-size: 14px; }
+.sheet-body { overflow-y: auto; padding: var(--s2); }
+.sheet-body > * + * { margin-top: 12px; }
+.toast { position: fixed; left: 50%; bottom: 64px; transform: translate(-50%, 8px); width: min(460px, calc(100vw - 24px)); background: var(--panel); color: var(--ink); border: 1px solid var(--ink); border-left: 4px solid var(--app); border-radius: var(--radius); padding: 10px 12px; z-index: 90; opacity: 0; transition: opacity .18s, transform .18s; pointer-events: none; }
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+body.large .app { font-size: 15px; }
+body.contrast { --ink-2: var(--ink); --ink-3: var(--ink); --hairline: var(--rule); }
+
+/* Removal log */
+.logent { padding: 10px 0; border-bottom: 1px solid var(--hairline); }
+.logent .top { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.logent .lid { font-family: var(--font-mono); font-size: 11px; color: var(--ink-2); margin-left: auto; }
+.logent p { margin-top: 4px; }
+.logent .law { font-size: 12px; color: var(--ink-2); margin-top: 2px; }
+
+/* Assess panel */
+.assess-btn { position: fixed; right: var(--s2); bottom: var(--s2); z-index: 60; display: inline-flex; align-items: center; gap: var(--s1); min-height: 36px; padding: 0 14px; background: var(--panel); color: var(--ink); border: 1px solid var(--ink); border-radius: var(--radius); font-weight: 700; }
+.assess-btn:hover { background: var(--app-tint); }
+.assess-scrim { position: fixed; inset: 0; background: color-mix(in srgb, var(--ink) 25%, transparent); z-index: 70; }
+.assess { position: fixed; top: 0; right: 0; bottom: 0; width: min(520px, 100%); background: var(--panel); border-left: 1px solid var(--ink); z-index: 71; display: flex; flex-direction: column; }
+.assess-head { display: flex; align-items: center; gap: var(--s1); padding: 10px var(--s2); border-bottom: 1px solid var(--hairline); }
+.assess-head b { flex: 1; font-size: 14px; }
+.assess-body { overflow-y: auto; padding: var(--s2); }
+.assess-body > p { margin-bottom: var(--s2); }
+.assess-body ol { margin: 0 0 var(--s2); padding-left: 22px; }
+.assess-body ol li { padding: 4px 0; }
+.assess-body .scrcov { border-top: 1px solid var(--hairline); padding: 10px 0; }
+.assess-body .scrcov a { font-weight: 700; }
+.assess-body .scrcov ul { margin: 6px 0 0; padding: 0; list-style: none; }
+.assess-body .scrcov li { font-size: 12px; padding: 2px 0; color: var(--ink-2); }
+.assess-body .scrcov li .mono { color: var(--app-strong); margin-right: 6px; font-size: 11px; }
+.cov { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: var(--s2); }
+.cov td { padding: 4px 0; border-bottom: 1px solid var(--hairline); vertical-align: top; }
+.cov td.mono { text-align: right; white-space: nowrap; padding-left: var(--s1); }
+.cov td.id { font-family: var(--font-mono); color: var(--app-strong); font-size: 11px; width: 62px; }
+
+/* Narrower screens */
+@media (max-width: 1180px) { .stage { grid-template-columns: 210px minmax(0, 1fr); } .about { display: none; } }
+@media (max-width: 760px) {
+  .demohead { padding: 6px var(--s1); }
+  .demohead .wide-only { display: none; }
+  .screens-btn { display: inline-flex !important; }
+  .stage { display: block; padding: 0; }
+  .nav { position: fixed; top: 0; left: 0; right: 0; bottom: 0; max-height: none; z-index: 75; border: 0; border-radius: 0; display: none; padding-top: 56px; }
+  .nav.open { display: block; }
+  .nav .closenav { position: absolute; top: 10px; right: 10px; }
+  .app { border: 0; border-radius: 0; border-top: 1px solid var(--hairline); }
+  .assess-btn { top: 8px; bottom: auto; right: var(--s1); min-height: 32px; padding: 0 10px; position: fixed; }
+  .cols, .cols3 { grid-template-columns: minmax(0, 1fr); }
+  .demohead .ctry { width: 100%; }
+  .hero { grid-template-columns: 112px minmax(0, 1fr); padding: 12px; }
+  .ways { grid-template-columns: minmax(0, 1fr); }
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pmenus { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .shelf { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .apphead .appname { display: none; }
+  .apphead .crumb::before { display: none; }
+  .apptabs button { padding: 9px 10px; }
+  .apptabs .ic { display: none; }
+}
+@media (min-width: 761px) { .nav .closenav { display: none; } }
+</style>
+</head>
+<body>
+<header class="demohead">
+  <button class="btn quiet small screens-btn" data-act="drawer" aria-controls="nav"><i data-i="menu"></i>Screens</button>
+  <span class="mark"></span><b>Spare Movies</b><span class="sep wide-only">/</span>
+  <span class="muted wide-only">Demo with sample data</span>
+  <span class="grow"></span>
+  <span class="ctry"><label class="label" for="ctry">Example country</label><select id="ctry" title="Example country: each country gets its own rules pack"></select></span>
+  <span class="badge n wide-only">Stage: Mapping</span>
+</header>
+
+<div class="stage">
+  <nav class="nav" id="nav" aria-label="Demo screens"></nav>
+  <main class="app" id="app" aria-label="Spare Movies, sample app">
+    <div class="apphead">
+      <span class="mark"></span><b class="appname">Spare Movies</b><span class="crumb" id="crumb">Browse</span>
+      <button class="iconbtn" data-go="search" aria-label="Search"><i data-i="search"></i></button>
+      <button class="who" data-go="you" id="who" aria-label="Profile"></button>
+    </div>
+    <div class="apptabs" id="apptabs" aria-label="App sections"></div>
+    <div class="view" id="view"></div>
+    <div class="appfoot">
+      <button data-act="rules">Rules in plain words</button>
+      <button data-go="log">Public removal log</button>
+      <button data-go="coop">Costs, fees and votes</button>
+      <button data-go="coop" data-anchor="help">Help and status</button>
+      <button data-act="a11y">Accessibility statement</button>
+      <span>No adverts. No tracking. Run at cost.</span>
+    </div>
+  </main>
+  <aside class="about" id="about" aria-label="About this screen"></aside>
+</div>
+
+<button class="assess-btn" data-act="assess"><span class="mark"></span>Assess this demo</button>
+<div class="assess-scrim" id="assessScrim" data-act="assessclose" hidden></div>
+<section class="assess" id="assess" hidden aria-label="Assess this demo">
+  <div class="assess-head"><b>Assess this demo</b><button class="iconbtn" data-act="assessclose" aria-label="Close"><i data-i="close"></i></button></div>
+  <div class="assess-body" id="assessBody"></div>
+</section>
+<div class="scrim" id="scrim" data-act="closesheet" hidden></div>
+<section class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+  <div class="sheet-head"><b id="sheetTitle"></b><button class="iconbtn" data-act="closesheet" aria-label="Close"><i data-i="close"></i></button></div>
+  <div class="sheet-body" id="sheetBody"></div>
+</section>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+const DATA = /*FEAT*/{"feats":{"A1-F1":["Sign up with one Spareware login","core"],"A1-F2":["Watch free films before joining","core"],"A1-F3":["Become a filmmaker","core"],"A1-F4":["Share one account at home","core"],"A1-F5":["Get back into your account","core"],"A1-F6":["Sign in on a TV","next"],"A1-F7":["Pause or leave","core"],"A1-F8":["Hand your films on","next"],"A2-F1":["Browse the catalogue","core"],"A2-F2":["Filter by what matters to you","core"],"A2-F3":["Search everything","core"],"A2-F4":["See what is new and coming","core"],"A2-F5":["Collections made by people","next"],"A2-F6":["Find films from your own country","next"],"A2-F7":["Suggestions you can switch off","later"],"A3-F1":["See everything about a film","core"],"A3-F2":["Watch the trailer","core"],"A3-F3":["See who made it","core"],"A3-F4":["Know how to watch it","core"],"A3-F5":["Series, seasons and episodes","core"],"A3-F6":["Extras and other versions","next"],"A3-F7":["Reviews from people who watched","next"],"A4-F1":["Press play and it starts fast","core"],"A4-F2":["Pick up where you left off","core"],"A4-F3":["Captions and audio description your way","core"],"A4-F4":["Audio languages","core"],"A4-F5":["Quality that fits your connection","core"],"A4-F6":["Next episode you control","core"],"A4-F7":["Chapters, speed and skipping","next"],"A4-F8":["Watch on your TV","next"],"A4-F9":["Download to watch offline","next"],"A4-F10":["Picture-in-picture","later"],"A4-F11":["Watch together","later"],"A4-F12":["Report a playback problem","core"],"A5-F1":["Declare AI use on every film","core"],"A5-F2":["Choose Human, AI or both","core"],"A5-F3":["Labelled AI agents","core"],"A5-F4":["Checked, not assumed","core"],"A5-F5":["Fix wrong sections in the open","core"],"A5-F6":["Fair to both sections","core"],"A5-F7":["Credentials from our own tools","later"],"A6-F1":["See the price and the fee before you pay","core"],"A6-F2":["Buy to keep","core"],"A6-F3":["Rent","core"],"A6-F4":["Support a filmmaker","core"],"A6-F5":["Watch free films","core"],"A6-F6":["Pay once, safely","core"],"A6-F7":["Refunds when it will not play","core"],"A6-F8":["Tax done right","core"],"A6-F9":["Sell to viewers in other countries","next"],"A6-F10":["Pay in phone and TV apps","next"],"A6-F11":["Limits on young profiles","core"],"A6-F12":["Give a film as a gift","later"],"A7-F1":["Watch everything in the pass","next"],"A7-F2":["Shared out by watch time","next"],"A7-F3":["Guarded against fake viewing","next"],"A7-F4":["Passes for people who cannot pay","later"],"A7-F5":["Passes for libraries and schools","later"],"A7-F6":["Give a pass","later"],"A8-F1":["Age rules for each country","core"],"A8-F2":["Profiles with an age limit","core"],"A8-F3":["Age checks for restricted films","core"],"A8-F4":["Children's safety checked by design","core"],"A8-F5":["Parents and carers","next"],"A9-F1":["Keep a watchlist","core"],"A9-F2":["Continue watching and history","core"],"A9-F3":["Follow filmmakers","core"],"A9-F4":["Notifications you choose","core"],"A9-F5":["Share a film","core"],"A9-F6":["Public lists","later"],"A10-F1":["Upload a film","core"],"A10-F2":["Quality checks before publishing","core"],"A10-F3":["Artwork and trailer","core"],"A10-F4":["Captions and audio description before publishing","core"],"A10-F5":["Set the release","core"],"A10-F6":["Series and episodes","core"],"A10-F7":["Fix a published film","core"],"A10-F8":["Private screeners","next"],"A10-F9":["Bulk delivery from distributors","next"],"A10-F10":["Publish from Spare Studio","later"],"A11-F1":["Declare your rights","core"],"A11-F2":["Films only where rights allow","core"],"A11-F3":["Release dates and windows","core"],"A11-F4":["Travellers keep paid access","core"],"A11-F5":["When rights end","core"],"A11-F6":["Rights disputes","core"],"A11-F7":["Music clearances","core"],"A11-F8":["Screening licences","later"],"A12-F1":["See the right rating for your country","core"],"A12-F2":["Rate your film","core"],"A12-F3":["Content advice in plain words","core"],"A12-F4":["Wrong ratings reported and checked","core"],"A12-F5":["Flashing lights warning","next"],"A13-F1":["Captions on every film","core"],"A13-F2":["Caption drafts from speech","core"],"A13-F3":["Audio description","core"],"A13-F4":["Audio languages and dubbing","core"],"A13-F5":["Subtitles in other languages","next"],"A13-F6":["Access law for every country","core"],"A13-F7":["Sign language versions","later"],"A14-F1":["See your earnings","core"],"A14-F2":["Get paid out","core"],"A14-F3":["Split earnings with your team","core"],"A14-F4":["Tax statements and reporting","core"],"A14-F5":["Money held only with a reason","core"],"A14-F6":["Pay back investors first","next"],"A14-F7":["Pre-orders","later"],"A15-F1":["One dashboard for your films","core"],"A15-F2":["See how your films are doing","core"],"A15-F3":["Work as a team","core"],"A15-F4":["Promote your film","next"],"A15-F5":["Reply to viewers","next"],"A15-F6":["Online premieres","later"],"A16-F1":["Protect playback","core"],"A16-F2":["Fingerprints that spot stolen uploads","core"],"A16-F3":["A plain promise to viewers","core"],"A16-F4":["Hidden watermark per viewer","next"],"A16-F5":["Help with copies on other sites","next"],"A17-F1":["Report a film or account","core"],"A17-F2":["Read the rules","core"],"A17-F3":["Illegal material removed fast","core"],"A17-F4":["Copyright notices","core"],"A17-F5":["See every removal in public","core"],"A17-F6":["Appeal any decision","core"],"A17-F7":["Moderators filmmakers elect","core"],"A17-F8":["Government and police requests","core"],"A17-F9":["Fake filmmakers stopped","core"],"A18-F1":["Take in a master safely","core"],"A18-F2":["Every size from one master","core"],"A18-F3":["Streaming on any connection","core"],"A18-F4":["Delivered at cost","core"],"A18-F5":["The fee from real costs","core"],"A18-F6":["Media handled safely","core"],"A18-F7":["Deleted means deleted","core"],"A18-F8":["Viewers share pieces of popular films","later"],"A18-F9":["HDR and surround sound","later"],"A19-F1":["Watch in a browser","core"],"A19-F2":["Install on your phone","core"],"A19-F3":["Settings that follow you","core"],"A19-F4":["Slow connections and old devices","core"],"A19-F5":["Apps for TVs","next"],"A19-F6":["Computer app","later"],"A20-F1":["Works with screen readers, keyboards and remotes","core"],"A20-F2":["Comfortable to use","core"],"A20-F3":["Your language","core"],"A20-F4":["Local formats","core"],"A20-F5":["Accessibility statement","core"],"A20-F6":["Easy-read help","next"],"A20-F7":["Right-to-left languages","next"],"A21-F1":["No adverts, no tracking","core"],"A21-F2":["What you watch stays yours","core"],"A21-F3":["Download all your data","core"],"A21-F4":["Consents you can change","core"],"A21-F5":["Your rights under the law","core"],"A21-F6":["Films kept out of AI training","core"],"A21-F7":["Data kept in the right place","next"],"A22-F1":["Filmmakers set the fees and rules","core"],"A22-F2":["See what it costs","core"],"A22-F3":["Get help","core"],"A22-F4":["Run the servers safely","core"],"A22-F5":["Legal set-up","core"],"A22-F6":["Measured performance","core"],"A22-F7":["Insurance","next"],"A23-F1":["Everything by command","core"],"A23-F2":["Use your own AI","core"],"A23-F3":["See where Spare Movies uses AI","core"],"A23-F4":["Plugins","next"],"A23-F5":["Developer API","next"],"A23-F6":["Webhooks","later"]},"areas":[["A1","Joining, accounts and profiles"],["A2","Browse, search and discovery"],["A3","Film and series pages"],["A4","The player"],["A5","Human and AI sections"],["A6","Paying for films: rent, buy, support or free"],["A7","The viewer pass"],["A8","Young viewers and age limits"],["A9","Your lists, history and following"],["A10","Publishing a film"],["A11","Rights, territories and release windows"],["A12","Age ratings and content advice"],["A13","Captions, audio description and dubbing"],["A14","Filmmaker earnings and payouts"],["A15","Filmmaker studio and stats"],["A16","Stopping copies"],["A17","Moderation, legal removals and transparency"],["A18","Video pipeline and delivery at cost"],["A19","Apps and devices"],["A20","Accessible apps and languages"],["A21","Your data and privacy"],["A22","Running Spare Movies: rules, costs, votes and help"],["A23","Headless API, plugins and AI agents"]],"assess":["Would the core features alone make a credible switch for someone leaving Netflix, Prime Video, Disney+ or a film rental store, when the first catalogue will be independent films rather than studio titles?","Is paying per film (rent, buy, support or free) enough for a first release, or must the viewer pass be core, and should a pass be shared out by each viewer's own watch time or by one pool of all watch time (MOV-A7-F2-P1)?","Can the at-cost fee stay small and easy to understand when delivery cost depends on a film's length, its quality and the viewer's country, and should it be a fixed amount per sale, an amount per hour watched, or both (MOV-A6-F1-P3, MOV-A18-F5-P1)?","Which way of stopping copies should come first: locked playback with the agreements it needs, a hidden watermark per viewer, or no lock, and what do filmmakers and their investors actually require (MOV-A16-F1-P1)?","Can fingerprints catch stolen uploads well enough with a person deciding every match, and fast enough that nobody collects money for a film they did not make (MOV-A16-F2)?","How does a filmmaker prove they hold the rights in each country, and what happens to buyers when rights end or two people claim the same film (MOV-A11)?","Which countries require official age ratings for on-demand films, which allow rating with an approved tool, and what would rating one film in every launch country cost a small filmmaker (MOV-A12-F1-P3)?","Do local content rules and levies, such as the EU's share of European works, Canada's streaming contributions or Australia's local content rules, reach a small at-cost service, and from what size (MOV-A22-F5-P4)?","Is asking for captions before publishing fair to filmmakers with no budget, and are checked caption drafts and descriptions read by a synthetic voice good enough for Deaf and blind viewers (MOV-A13)?","Who is the seller of record for each sale, the filmmaker or the co-op, and can tax on films sold online be handled in every launch country without a tax team (MOV-A6-F8)?","Does Spare Movies need its own licences from music collecting societies to stream films whose makers already cleared the music, and what would that cost (MOV-A11-F7-P2)?","Can filmmakers really keep everything except running costs in phone and TV apps, given the app stores' rules for selling films (MOV-A6-F10)?","Where is the line between AI-assisted and AI-made in film, for example AI dubbing, de-ageing or generated shots, and is a filmmakers' vote the right way to set it (MOV-A5-F1-P3)?","Should sexually explicit films be allowed with full age checks and kept out of store apps, or ruled out (MOV-A8-F3-P2)?","Selling to viewers in other countries rests on kit parts marked later (KIT-A3-F14, KIT-A4-F7); should the kit move them up for an international film service?","Which parts should move down to the kit because Spare Social and Spare Music need them too: the Human and AI sections, fingerprinting, the pass share-out engine, rights by country, and encrypted delivery with a key service?","Spare Movies has no work-board pieces yet. Which research and legal parts gate core features and should become pieces first: protection, fingerprinting, the ratings packs, rights proof, seller of record and tax, local content duties, collecting societies and access law?","Is every open project used in the core under a licence that allows it, and are PeerTube (AGPL-3.0), Jellyfin and Kodi (GPL) kept to learning from how they work, with none of their code copied?","What numbers would prove the demo works, such as time to first frame, stalls per hour, delivery cost per hour watched in each region, and the share of films with captions and audio description?"]}/*END*/;
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const pressed = b => 'aria-pressed="' + (b ? 'true' : 'false') + '"';
+const norm = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+/* ---------- Example countries ----------
+   Spare Movies is for everyone, anywhere. Each country gets its own rules pack: money, tax, age ratings, rights rules
+   and the law named on screen. Amounts, rates and fees here are samples; every pack is checked by a lawyer before launch. */
+const COUNTRIES = {
+  nz: { in: 'New Zealand', name: 'New Zealand', loc: 'en-NZ', cur: 'NZ$', tax: 'GST', incl: true, rate: 0.15, taxOffice: 'Inland Revenue', region: 'Oceania',
+    ratings: ['G', 'PG', 'M', 'R13', 'R15', 'R16', 'R18'], restrictFrom: 3, ratingSys: 'New Zealand classification labels', src: 'Label from the Film and Video Labelling Body (sample).',
+    body: 'the Film and Video Labelling Body', how: 'Large on-demand services named in the law must label every film and may use an approved self-rating system; Spare Movies would not be named at first. Its films get labels through the Film and Video Labelling Body, and restricted films must show their classification. Official guidance differs on what services not named must do (see the ratings pack).', fee: 'labelling fee shown before applying',
+    consumer: 'the Consumer Guarantees Act 1993', copyright: 'the Copyright Act 1994', classLaw: 'the Films, Videos, and Publications Classification Act 1993', privacy: 'the Privacy Act 2020',
+    deliv: 0.15, share: 0.18, card: [0.029, 0.30], p: { rent: 6.99, buy: 19.99, season: 29.99, ep: 2.49, pass: 12.99, sugg: 8 }, langs: 'English and te reo Māori' },
+  au: { in: 'Australia', name: 'Australia', loc: 'en-AU', cur: 'A$', tax: 'GST', incl: true, rate: 0.10, taxOffice: 'the ATO', region: 'Oceania',
+    ratings: ['G', 'PG', 'M', 'M', 'MA15+', 'MA15+', 'R18+'], restrictFrom: 4, ratingSys: 'the National Classification Scheme', src: 'Classified by an accredited classifier (sample).',
+    body: 'the Classification Board', how: 'Films offered online get an Australian classification from the Classification Board, an approved classification tool or an accredited classifier. Whether a small service must classify every film is not yet confirmed (see the ratings pack).', fee: 'fee shown before applying',
+    consumer: 'the Australian Consumer Law', copyright: 'the Copyright Act 1968', classLaw: 'the Classification (Publications, Films and Computer Games) Act 1995', privacy: 'the Privacy Act 1988',
+    deliv: 0.14, share: 0.17, card: [0.029, 0.30], p: { rent: 6.99, buy: 19.99, season: 29.99, ep: 2.49, pass: 11.99, sugg: 8 }, langs: 'English, and community languages' },
+  uk: { in: 'the United Kingdom', name: 'United Kingdom', loc: 'en-GB', cur: '£', tax: 'VAT', incl: true, rate: 0.20, taxOffice: 'HMRC', region: 'Europe',
+    ratings: ['All ages', '8+', '12+', '12+', '15+', '15+', '18+'], restrictFrom: 6, ratingSys: "the filmmaker's own age advice", src: 'Not BBFC rated; a BBFC rating is optional for on-demand films.',
+    body: 'the BBFC (optional)', how: 'BBFC ratings are voluntary for on-demand films. A UK-based on-demand service must tell Ofcom before it starts and keep R18 material from under-18s; services with over 500,000 UK users a month also follow the Ofcom standards code (see the ratings pack).', fee: 'BBFC fee only if the filmmaker chooses one',
+    consumer: 'the Consumer Rights Act 2015', copyright: 'the Copyright, Designs and Patents Act 1988', classLaw: 'the Communications Act 2003 rules for on-demand services', privacy: 'the UK GDPR',
+    deliv: 0.025, share: 0.09, card: [0.029, 0.20], p: { rent: 3.99, buy: 11.99, season: 17.99, ep: 1.49, pass: 6.99, sugg: 5 }, langs: 'English and Welsh' },
+  us: { in: 'the United States', name: 'United States', loc: 'en-US', cur: 'US$', tax: 'sales tax', incl: false, rate: 0.07, taxOffice: 'the state tax office', region: 'North America',
+    ratings: ['TV-G', 'TV-PG', 'TV-14', 'TV-14', 'TV-MA', 'TV-MA', 'TV-MA'], restrictFrom: 7, ratingSys: 'the voluntary TV guidelines', src: 'Voluntary guideline chosen by the filmmaker.',
+    body: 'no government body', how: 'Ratings are voluntary. A film shows an MPA rating only if it has one; otherwise the filmmaker picks a TV guideline and content advice (sample wording).', fee: 'no fee for a guideline',
+    consumer: 'state consumer protection law', copyright: 'the DMCA (section 512)', classLaw: 'court orders', privacy: 'the Video Privacy Protection Act',
+    deliv: 0.03, share: 0.11, card: [0.029, 0.30], p: { rent: 4.99, buy: 14.99, season: 21.99, ep: 1.99, pass: 8.99, sugg: 6 }, langs: 'English and Spanish' },
+  ca: { in: 'Canada', name: 'Canada', loc: 'en-CA', cur: 'C$', tax: 'GST/HST', incl: false, rate: 0.13, taxOffice: 'the CRA', region: 'North America',
+    ratings: ['G', 'G', 'PG', '14A', '14A', '18A', 'R'], restrictFrom: 6, ratingSys: 'provincial film ratings (example: British Columbia)', src: 'Provincial rating (sample).',
+    body: 'each province', how: 'Film ratings are set by the provinces. Whether their rules reach streaming is not yet confirmed; this example uses the British Columbia ratings (see the ratings pack).', fee: 'fee shown before applying',
+    consumer: 'provincial consumer protection law', copyright: 'the Copyright Act', classLaw: 'provincial film law', privacy: 'PIPEDA',
+    deliv: 0.04, share: 0.15, card: [0.029, 0.30], p: { rent: 5.99, buy: 17.99, season: 26.99, ep: 2.29, pass: 10.99, sugg: 7 }, langs: 'English and French' },
+  eu: { in: 'the European Union', name: 'European Union', loc: 'en-IE', cur: '€', tax: 'VAT', incl: true, rate: 0.21, taxOffice: "each member state's tax office (through the One Stop Shop)", region: 'Europe',
+    ratings: ['0', '6', '12', '12', '16', '16', '18'], restrictFrom: 6, ratingSys: 'German age levels (example member state)', src: 'Rated through a recognised self-regulation body (sample).',
+    body: "each member state's rating body", how: 'Each member state sets its own rules. In Germany, film platforms with over 1 million German users must show an age rating from the official process, a recognised self-regulation body or a recognised automated system; this example uses German age levels (see the ratings pack).', fee: 'fee shown before applying',
+    consumer: 'EU consumer law', copyright: 'the Copyright in the Digital Single Market Directive', classLaw: 'national youth protection law', privacy: 'the GDPR',
+    deliv: 0.03, share: 0.10, card: [0.029, 0.25], p: { rent: 4.99, buy: 13.99, season: 19.99, ep: 1.79, pass: 7.99, sugg: 6 }, langs: 'English and the local language' }
+};
+let CY = COUNTRIES.nz;
+const money = n => CY.cur + Number(n).toLocaleString(CY.loc, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtDate = (iso, wd) => new Date(iso + 'T12:00:00').toLocaleDateString(CY.loc, wd ? { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' } : { day: 'numeric', month: 'long', year: 'numeric' });
+const hm = m => (m >= 60 ? Math.floor(m / 60) + ' h ' : '') + (m % 60 ? (m % 60) + ' min' : '');
+const clock = s => { s = Math.max(0, Math.round(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = String(s % 60).padStart(2, '0'); return h ? h + ':' + String(m).padStart(2, '0') + ':' + x : m + ':' + x; };
+const rating = f => CY.ratings[f.rank];
+const flag = (f) => f.sec === 'ai' ? '<span class="badge inf"><i data-i="spark"></i>AI section</span>' : '<span class="badge n"><i data-i="user"></i>Human section</span>';
+
+/* ---------- Icons: simple strokes drawn for this demo ---------- */
+const ICONS = {
+  menu: '<path d="M4 6h16M4 12h16M4 18h16"/>', close: '<path d="M6 6l12 12M18 6L6 18"/>', search: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-5-5"/>',
+  play: '<path d="M7 4l13 8-13 8z"/>', pause: '<path d="M7 4h3v16H7zM14 4h3v16h-3z"/>', back: '<path d="M15 5l-7 7 7 7"/>', chev: '<path d="M9 5l7 7-7 7"/>',
+  rew: '<path d="M11 6l-7 6 7 6zM20 6l-7 6 7 6z"/>', fwd: '<path d="M13 6l7 6-7 6zM4 6l7 6-7 6z"/>', full: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
+  bookmark: '<path d="M6 3h12v18l-6-4-6 4z"/>', share: '<path d="M12 3v12M7 8l5-5 5 5M5 13v7h14v-7"/>', flag: '<path d="M5 21V4h11l-2 4 2 4H5"/>',
+  check: '<path d="M5 12l5 5 9-10"/>', lock: '<rect x="5" y="11" width="14" height="10" rx="1"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>', info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/>',
+  warn: '<path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18h.01"/>', coin: '<circle cx="12" cy="12" r="9"/><path d="M15 9.5c0-1-1.3-1.8-3-1.8s-3 .8-3 1.9 1.2 1.6 3 1.9 3 .9 3 2-1.3 1.9-3 1.9-3-.8-3-1.8M12 6v1.7M12 16.3V18"/>',
+  chart: '<path d="M4 20V4M4 20h16M8 16v-5M12 16V8M16 16v-3"/>', upload: '<path d="M12 20V8M7 13l5-5 5 5M5 4h14"/>', download: '<path d="M12 3v12M7 10l5 5 5-5M5 20h14"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/>', shield: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/>', users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.5 3.3-5.5 6.5-5.5s5.7 2 6.5 5.5"/><path d="M15.5 4.8a3.5 3.5 0 0 1 0 6.4M17.5 14.8c2 .7 3.4 2.5 4 5.2"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9L7 7M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>', bell: '<path d="M6 16v-5a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>', film: '<rect x="3" y="4" width="18" height="16" rx="1"/><path d="M7 4v16M17 4v16M3 8h4M3 12h4M3 16h4M17 8h4M17 12h4M17 16h4"/>',
+  tv: '<rect x="3" y="5" width="18" height="12" rx="1"/><path d="M8 21h8M12 17v4"/>', phone: '<rect x="7" y="3" width="10" height="18" rx="1.5"/><path d="M11 18h2"/>',
+  spark: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>', bot: '<rect x="5" y="8" width="14" height="11" rx="2"/><path d="M12 4v4M9 13h.01M15 13h.01M9.5 16h5"/>',
+  ballot: '<rect x="4" y="12" width="16" height="8" rx="1"/><path d="M8 12V4h8v8M10 8l1.5 1.5L14 7"/>', scale: '<path d="M12 3v18M6 7h12M6 7l-3 6a3 3 0 0 0 6 0zM18 7l-3 6a3 3 0 0 0 6 0zM8 21h8"/>',
+  history: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>', file: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/>', heart: '<path d="M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.3a4.3 4.3 0 0 1 7.5 2.5C19.5 15.4 12 20 12 20z"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>', ear: '<path d="M7 10a5 5 0 0 1 10 0c0 3-3 4-3 7a3 3 0 0 1-5 2"/><path d="M10 10a2 2 0 0 1 4 0"/>', eye: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  cc: '<rect x="3" y="5" width="18" height="14" rx="1"/><path d="M10 10.5a2.5 2.5 0 1 0 0 3M17 10.5a2.5 2.5 0 1 0 0 3"/>', fp: '<path d="M12 4a7 7 0 0 0-7 7v2M19 11a7 7 0 0 0-3-5.7M8 20c1-2 1.5-4 1.5-7a2.5 2.5 0 0 1 5 0c0 3-.5 5-1.5 8M12 13c0 3-.5 5-2 8M16.5 14c0 2.5-.4 4.5-1.2 6.5"/>',
+  map: '<path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"/><path d="M9 4v14M15 6v14"/>', doc: '<path d="M6 3h12v18H6z"/><path d="M9 8h6M9 12h6M9 16h4"/>'
+};
+const ic = (n, cls) => '<svg class="ic ' + (cls || '') + '" viewBox="0 0 24 24" aria-hidden="true">' + (ICONS[n] || '') + '</svg>';
+function paint(root) { $$('i[data-i]', root || document).forEach(i => { i.outerHTML = ic(i.dataset.i, i.className); }); }
+
+/* ---------- Posters: plain illustrations in token colours, drawn for this demo ---------- */
+const SCENES = {
+  kite: '<rect class="k-sky" width="400" height="260"/><circle class="k-sun" cx="196" cy="44" r="16"/><rect class="k-sea" y="182" width="400" height="78"/><path class="k-line" d="M40 206h60M150 224h70M250 210h80M90 244h80"/><rect class="k-white k-edge" x="146" y="112" width="26" height="72"/><rect class="k-red" x="146" y="132" width="26" height="10"/><path class="k-red" d="M142 112h34l-6-14h-22z"/><path class="k-string" d="M240 106 Q215 150 170 128"/><path class="k-app k-kite" d="M240 38l22 32-22 36-22-36z"/><path class="k-thin" d="M240 38v68M218 70h44"/>',
+  swim: '<rect class="k-dawn" width="400" height="260"/><circle class="k-sun" cx="200" cy="136" r="34"/><rect class="k-sea2" y="138" width="400" height="122"/><path class="k-line" d="M30 160h70M140 172h40M220 168h70M300 184h60M60 200h90M200 214h80"/><circle class="k-ink" cx="176" cy="186" r="7"/><path class="k-red" d="M169 184a7 7 0 0 1 14 0z"/><circle class="k-ink" cx="226" cy="198" r="7"/><path class="k-app" d="M219 196a7 7 0 0 1 14 0z"/><path class="k-line" d="M160 192h32M210 204h32"/>',
+  garden: '<rect class="k-paper" width="400" height="260"/><ellipse class="k-thin" cx="200" cy="140" rx="150" ry="90"/><ellipse class="k-thin" cx="200" cy="140" rx="110" ry="64"/><ellipse class="k-thin" cx="200" cy="140" rx="70" ry="40"/><path class="k-dash" d="M120 230 Q160 170 200 160 T290 70"/><g class="k-hill2"><circle cx="140" cy="110" r="14"/><circle cx="250" cy="170" r="16"/><circle cx="180" cy="200" r="11"/><circle cx="270" cy="96" r="10"/><circle cx="210" cy="118" r="9"/></g><circle class="k-red" cx="290" cy="70" r="6"/><rect class="k-ink" x="196" y="150" width="8" height="18"/><circle class="k-app" cx="200" cy="146" r="6"/>',
+  night: '<rect class="k-night" width="400" height="260"/><circle class="k-white" cx="276" cy="48" r="14"/><rect class="k-white k-edge" x="128" y="104" width="144" height="96"/><path class="k-rock" d="M120 104h160l-12-18H132z"/><g class="k-sky"><rect x="142" y="120" width="18" height="14"/><rect x="172" y="120" width="18" height="14"/><rect x="232" y="120" width="18" height="14"/><rect x="142" y="150" width="18" height="14"/><rect x="202" y="150" width="18" height="14"/><rect x="232" y="150" width="18" height="14"/></g><rect class="k-app" x="202" y="120" width="18" height="14"/><rect class="k-app" x="172" y="150" width="18" height="14"/><rect class="k-ink" x="190" y="176" width="20" height="24"/><rect class="k-sea2" y="210" width="400" height="50"/><path class="k-line" d="M40 228h50M160 236h70M280 226h60"/>',
+  birds: '<rect class="k-paper" width="400" height="260"/><path class="k-thin" d="M0 60h400M0 84h400M0 108h400M0 132h400M0 156h400"/><rect class="k-sea" y="190" width="400" height="70"/><path class="k-hill2" d="M0 190 Q120 170 200 186 T400 180 V196 H0Z"/><g class="k-bird"><path d="M150 90l12 8 12-8"/><path d="M190 70l14 9 14-9"/><path d="M230 100l10 7 10-7"/><path d="M170 124l9 6 9-6"/><path d="M215 140l12 8 12-8"/></g>',
+  choir: '<rect class="k-dawn" width="400" height="260"/><rect class="k-sea" y="150" width="400" height="60"/><path class="k-sand" d="M0 196 Q200 180 400 198 V260 H0Z"/><g class="k-ink"><rect x="130" y="170" width="16" height="30" rx="6"/><circle cx="138" cy="162" r="7"/><rect x="160" y="166" width="16" height="34" rx="6"/><circle cx="168" cy="158" r="7"/><rect x="220" y="166" width="16" height="34" rx="6"/><circle cx="228" cy="158" r="7"/><rect x="250" y="170" width="16" height="30" rx="6"/><circle cx="258" cy="162" r="7"/></g><rect class="k-red" x="190" y="164" width="16" height="36" rx="6"/><circle class="k-red" cx="198" cy="156" r="7"/><path class="k-thin" d="M150 120q10-12 20 0M200 108q10-12 20 0M240 124q8-10 16 0"/>',
+  kettle: '<rect class="k-sky" width="400" height="260"/><path class="k-thin" d="M60 20l-10 30M110 30l-10 30M300 20l-10 30M350 40l-10 30M80 90l-10 30M330 100l-10 30"/><rect class="k-white k-edge" x="110" y="120" width="180" height="110"/><path class="k-rock2" d="M100 122l100-60 100 60z"/><path class="k-red" d="M168 200a32 30 0 0 1 64 0v14h-64z"/><path class="k-red" d="M232 196l22-14 4 6-22 16z"/><rect class="k-ink" x="186" y="164" width="28" height="8" rx="3"/><path class="k-thin" d="M196 150q-6-10 0-18M206 146q-6-10 0-18"/><rect class="k-hill" y="230" width="400" height="30"/>',
+  cliff: '<rect class="k-dawn" width="400" height="260"/><path class="k-rock2" d="M0 90 L140 80 L170 130 L230 140 L260 260 H0Z"/><rect class="k-sea2" x="0" y="200" width="400" height="60"/><path class="k-rock2" d="M0 90 L140 80 L170 130 L230 140 L250 210 L0 210Z"/><g class="k-ember"><circle cx="200" cy="100" r="3"/><circle cx="214" cy="80" r="2.5"/><circle cx="228" cy="96" r="2"/><circle cx="190" cy="70" r="2"/><circle cx="244" cy="70" r="3"/></g><rect class="k-ink" x="150" y="62" width="8" height="18"/><circle class="k-ink" cx="154" cy="57" r="5"/>',
+  glass: '<rect class="k-ai" width="400" height="260"/><path class="k-dash" d="M12 12H388V248H12Z"/><path class="k-hill" d="M0 210 Q200 190 400 210 V260 H0Z"/><g class="k-glass"><path d="M140 200l24-80 24 80z"/><path d="M188 200l30-110 30 110z"/><path d="M240 200l20-64 20 64z"/></g><path class="k-thin" d="M164 200v14M218 200v14M260 200v14"/><path class="k-thin" d="M320 44l6 14 14 6-14 6-6 14-6-14-14-6 14-6z"/>',
+  library: '<rect class="k-sea2" width="400" height="260"/><g class="k-shelf"><rect x="110" y="70" width="180" height="8"/><rect x="110" y="130" width="180" height="8"/><rect x="110" y="190" width="180" height="8"/><rect x="104" y="60" width="8" height="150"/><rect x="288" y="60" width="8" height="150"/></g><g class="k-app"><rect x="122" y="40" width="10" height="30"/><rect x="136" y="46" width="8" height="24"/><rect x="170" y="44" width="12" height="26"/><rect x="230" y="40" width="10" height="30"/><rect x="128" y="104" width="10" height="26"/><rect x="200" y="100" width="12" height="30"/><rect x="250" y="106" width="8" height="24"/><rect x="150" y="160" width="10" height="30"/><rect x="236" y="164" width="12" height="26"/></g><g class="k-white" opacity=".7"><circle cx="80" cy="200" r="5"/><circle cx="90" cy="160" r="3"/><circle cx="330" cy="120" r="6"/><circle cx="320" cy="70" r="3"/></g><path class="k-dash" d="M12 12H388V248H12Z"/>',
+  draft: '<rect class="k-dawn" width="400" height="260"/><rect class="k-sea" y="150" width="400" height="110"/><path class="k-sand" d="M0 150 Q200 120 400 156 V180 Q200 160 0 186Z"/><path class="k-line" d="M60 210h80M200 226h90"/><circle class="k-sun" cx="120" cy="70" r="22"/>'
+};
+const scene = k => '<svg class="scene" viewBox="0 0 400 260" preserveAspectRatio="xMidYMid slice" aria-hidden="true">' + (SCENES[k] || SCENES.kite) + '</svg>';
+
+/* ---------- Sample films and filmmakers (all made up) ---------- */
+const FILMS = [
+  { id: 'tinkite', t: 'Tin Kite', year: 2026, kind: 'Drama', min: 102, sec: 'human', by: 'Lantern Yard Films', dir: 'Ana Quillfeather', rank: 2, ways: ['rent', 'buy', 'support'], scene: 'kite', pass: true, isNew: true,
+    syn: 'A lighthouse mechanic and her nine-year-old son build a kite from a biscuit tin to send a letter out to sea.', adv: ['Coarse language', 'Grief and loss'],
+    cc: ['English', 'English (Deaf and hard of hearing)', 'Spanish'], ad: 'English, recorded', audio: ['English (original)', 'Spanish (dubbed by voice actors)'],
+    cast: [['Odile Saltmarsh', 'June'], ['Pip Kettleby', 'Arlo'], ['Rangi Harbourne', 'The harbourmaster']],
+    crew: [['Director and writer', 'Ana Quillfeather'], ['Producer', 'Hollis Wrenfield'], ['Cinematography', 'Yusuf Arclight'], ['Music', 'Liesl Brightwater'], ['Editor', 'Benny Splicewood'], ['Audio description', 'Clare Murmurly']],
+    ai: { film: 'None', trailer: 'None', poster: 'None' }, cred: 'Camera content credentials on the master. No AI edits recorded.', laurels: ['Selected: Kettlebay Film Festival 2026 (sample)'] },
+  { id: 'swim', t: 'Weather for Swimming', year: 2025, kind: 'Documentary', min: 78, sec: 'human', by: 'Brackish Light', dir: 'Tomasz Coldbrook', rank: 0, ways: ['free', 'support'], scene: 'swim', isNew: true,
+    syn: 'A year with a winter sea-swimming club that never misses a morning, whatever the forecast says.', adv: ['No advice needed'],
+    cc: ['English', 'English (Deaf and hard of hearing)'], ad: 'English, read aloud from text by a synthetic voice', audio: ['English (original)', 'French (dubbed with AI voices, labelled)'],
+    cast: [['The Gull Point Swimmers', 'Themselves']], crew: [['Director', 'Tomasz Coldbrook'], ['Producer', 'Brackish Light']], ai: { film: 'None', trailer: 'None', poster: 'None', track: 'French audio: AI voices, swimmers agreed' }, cred: 'No content credentials on the master.' },
+  { id: 'garden', t: "The Cartographer's Garden", year: 2026, kind: 'Animation, family', min: 84, sec: 'human', by: 'Fernhall Animation', dir: 'Juno Mapleworth', rank: 0, ways: ['rent', 'buy'], scene: 'garden', pass: true,
+    syn: "A girl finds that her late grandfather's garden is a map, and every plant marks a place he promised to show her.", adv: ['Mild peril'],
+    cc: ['English', 'Spanish', 'French'], ad: 'English, recorded', audio: ['English (original)'], cast: [['Mae Thistledown', 'Wren (voice)'], ['Osric Fernvale', 'Grandad (voice)']], crew: [['Director', 'Juno Mapleworth'], ['Studio', 'Fernhall Animation']],
+    ai: { film: 'None', trailer: 'None', poster: 'None' }, cred: 'Content credentials from the animation software on every shot.' },
+  { id: 'night', t: 'Night Shift at Hollow Bay', year: 2026, kind: 'Thriller series, 6 episodes', min: 44, series: true, eps: 6, sec: 'human', by: 'Harrowpike Pictures', dir: 'Saoirse Lowtide', rank: 4, ways: ['rent', 'buy'], scene: 'night', pass: true,
+    syn: 'A night nurse at a small coastal hospital notices the same patient admitted on three different nights, under three different names.', adv: ['Violence', 'Coarse language', 'Medical scenes'],
+    cc: ['English', 'English (Deaf and hard of hearing)'], ad: 'English, recorded', audio: ['English (original)'], cast: [['Imogen Ravelstone', 'Nurse Tolley'], ['Felix Grimsworth', 'The patient']], crew: [['Created by', 'Saoirse Lowtide'], ['Company', 'Harrowpike Pictures']],
+    ai: { film: 'None', trailer: 'None', poster: 'None' }, cred: 'No content credentials on the master.' },
+  { id: 'ledger', t: 'A Ledger of Birds', year: 2026, kind: 'Documentary short', min: 24, sec: 'human', by: 'Kiri Tallyfield', dir: 'Kiri Tallyfield', rank: 0, ways: ['free'], scene: 'birds', isNew: true,
+    syn: 'A retired bookkeeper has counted the birds on one estuary every Sunday for forty years.', adv: ['No advice needed'], cc: ['English'], ad: '', audio: ['English (original)'],
+    cast: [['Bramwell Oakcount', 'Himself']], crew: [['Director', 'Kiri Tallyfield']], ai: { film: 'None', trailer: 'None', poster: 'None' }, cred: 'No content credentials on the master.' },
+  { id: 'choir', t: 'Saltwater Choir', year: 2025, kind: 'Music documentary', min: 91, sec: 'human', by: 'Dev Shorewell', dir: 'Dev Shorewell', rank: 1, ways: ['pwyl'], scene: 'choir', noRights: ['us'],
+    syn: "A fishing town's choir rehearses for one last concert in the old cannery before it is pulled down.", adv: ['Mild language'], cc: ['English', 'English (Deaf and hard of hearing)'], ad: 'English, recorded', audio: ['English (original)'],
+    cast: [['The Cannery Voices', 'Themselves']], crew: [['Director', 'Dev Shorewell']], ai: { film: 'None', trailer: 'None', poster: 'None' }, cred: 'No content credentials on the master.' },
+  { id: 'kettle', t: 'Kettle Weather', year: 2026, kind: 'Comedy', min: 95, sec: 'human', by: 'Wren Hearthstone', dir: 'Wren Hearthstone', rank: 2, ways: ['rent', 'buy'], scene: 'kettle', soon: '2026-11-06',
+    syn: "Two sisters who have not spoken in years are snowed into their mother's holiday cottage with one working kettle.", adv: ['Coarse language', 'Sexual references'], cc: ['English'], ad: 'English, recorded', audio: ['English (original)'],
+    cast: [['Tamsin Copperkettle', 'Bea'], ['Clem Frostwick', 'Nora']], crew: [['Director', 'Wren Hearthstone']], ai: { film: 'None', trailer: 'None', poster: 'None' }, cred: 'No content credentials on the master.' },
+  { id: 'cinder', t: 'The Cinder Ledge', year: 2026, kind: 'Thriller', min: 110, sec: 'human', by: 'Ivo Emberlund', dir: 'Ivo Emberlund', rank: 6, ways: ['rent', 'buy'], scene: 'cliff',
+    syn: 'Two climbers stranded on a ledge above a wildfire must decide which of them goes for help.', adv: ['Strong violence', 'Injury detail', 'Coarse language'], cc: ['English'], ad: 'English, recorded', audio: ['English (original)'],
+    cast: [['Leander Cragg', 'Huw'], ['Sefa Ashfall', 'Marta']], crew: [['Director', 'Ivo Emberlund']], ai: { film: 'None', trailer: 'None', poster: 'None' }, cred: 'No content credentials on the master.' },
+  { id: 'glass', t: 'Glass Orchard', year: 2026, kind: 'Animated short', min: 12, sec: 'ai', by: 'Hana Glasswyn', dir: 'Hana Glasswyn', rank: 1, ways: ['pwyl'], scene: 'glass', pass: true, isNew: true,
+    syn: 'An orchard of glass trees rings like bells in the first frost.', adv: ['No advice needed'], cc: ['English'], ad: 'English, read aloud from text by a synthetic voice', audio: ['English (original)'],
+    cast: [], crew: [['Made by', 'Hana Glasswyn'], ['Music', 'Hana Glasswyn']], ai: { film: 'AI-made: shots generated with a video model; music and edit by the filmmaker', trailer: 'AI-made', poster: 'AI-made' }, cred: 'Content credentials say the shots were generated by an AI model.' },
+  { id: 'drowned', t: 'The Drowned Library', year: 2026, kind: 'Science fiction', min: 97, sec: 'ai', by: 'Brackwater Collective', dir: 'Rook Deepwater', rank: 3, ways: ['rent', 'buy'], scene: 'library', moved: true,
+    syn: 'A librarian in a flooded city dives each night to save one more book.', adv: ['Violence', 'Threat'], cc: ['English', 'Spanish'], ad: 'English, recorded', audio: ['English (original)'],
+    cast: [['Perpetua Inkwell', 'Isolde']], crew: [['Director', 'Rook Deepwater'], ['Company', 'Brackwater Collective']], ai: { film: 'AI-assisted: generated backgrounds in 40 shots, AI de-ageing of one actor', trailer: 'AI-assisted', poster: 'None' }, cred: 'Content credentials on 40 shots record generated backgrounds.' }
+];
+const FILM = id => FILMS.find(f => f.id === id);
+
+/* ---------- State ---------- */
+const S = {
+  screen: 'browse', sec: 'both', guest: false, profile: 'robin', filters: {}, film: 'tinkite', q: '', sfilt: {}, list: { night: true, kettle: true }, follows: { 'Lantern Yard Films': true },
+  owned: { night: 'buy' }, pay: { way: 'rent', amount: 0, cover: true, done: null, unlocked: false }, history: true, histItems: ['tinkite', 'night', 'swim'],
+  p: { film: 'tinkite', t: 2472, playing: false, cc: 'English', ad: false, audio: 0, q: 'auto', speed: 1, capLg: false, capTint: false, autoplay: false, ep: 3, trailer: false, reported: false },
+  passWay: 'viewer', studio: 'publish', up: { pct: 0, run: false, paused: false, checks: false, ai: 'none', capDraft: 0, ad: 'none', rated: false, rights: true, published: false, kind: 'film' },
+  rights: { DE: false }, match: 'open', vote: null, logFilter: 'all', appealStep: 0, flags: [], cdx: false, aiTrain: false, large: false, contrast: false, notif: { release: true, rental: true, receipts: true, news: false },
+  devices: ['This computer, browser', 'Phone, installed app', 'Living room TV'], ageChecked: false, aiAgent: true
+};
+const PROFILES = { robin: { name: 'Robin', init: 'R', limit: 6, adult: true }, sam: { name: 'Sam', init: 'S', limit: 6, adult: true }, juniper: { name: 'Juniper', init: 'J', limit: 1, adult: false } };
+const prof = () => PROFILES[S.profile];
+const allowed = f => f.rank <= prof().limit;
+const inSec = f => S.sec === 'both' || f.sec === S.sec;
+const available = f => !(f.noRights || []).includes(CYKEY());
+const CYKEY = () => Object.keys(COUNTRIES).find(k => COUNTRIES[k] === CY);
+
+
+/* ---------- Screens and the features each one shows ---------- */
+const GROUPS = { watch: 'Watching', pay: 'Paying', makers: 'Filmmakers', trust: 'Trust and running it' };
+const SCREENS = [
+  { id: 'browse', g: 'watch', t: 'Browse: Human and AI', crumb: 'Browse', tab: 'browse', about: 'The catalogue in plain lists, each with its order rule shown. Pick Human, AI or both, filter by what matters, and see only films you can watch in your country.', try: ['Switch between Human, AI and Both', 'Turn on the Audio description filter', 'Switch to Guest and see free films need no account', 'Change the example country and watch the ratings and dates change'], f: ['A2-F1', 'A2-F2', 'A2-F4', 'A5-F2', 'A5-F6', 'A1-F2', 'A1-F4', 'A9-F1', 'A9-F2', 'A3-F5', 'A6-F5', 'A19-F1', 'A20-F4'], x: ['A2-F5', 'A2-F6'] },
+  { id: 'search', g: 'watch', t: 'Search', crumb: 'Search', tab: 'search', about: 'Search titles, people and the words spoken in a film. Spelling slips and missing accents still find it, and films not available in your country say why.', try: ['Search: fold it smaller', 'Search: quilfeather (one l short)', 'Search: choir with the example country set to United States'], f: ['A2-F3', 'A2-F2', 'A13-F3', 'A11-F2', 'A3-F3'], x: [] },
+  { id: 'film', g: 'watch', t: 'Film page', crumb: 'Tin Kite', tab: 'browse', about: 'Everything about one film: the trailer, the rating and advice for your country, captions, audio description and languages, how AI was used, the ways to watch, and who made it.', try: ['Play the trailer', 'Change the example country and see the rating and its body change', 'Follow the filmmaker, then share the film', 'Report the film'], f: ['A3-F1', 'A3-F2', 'A3-F3', 'A3-F4', 'A12-F1', 'A12-F3', 'A13-F1', 'A13-F3', 'A13-F4', 'A5-F1', 'A5-F4', 'A9-F1', 'A9-F3', 'A9-F5', 'A17-F1', 'A6-F1', 'A6-F4', 'A11-F2', 'A20-F3'], x: ['A3-F7'] },
+  { id: 'player', g: 'watch', t: 'The player', crumb: 'Watching', tab: 'browse', about: 'The film picks up where you stopped on another device. Captions, audio description, audio language and quality are one tap away, and your choices follow you.', try: ['Press play, then turn on audio description', 'Switch captions to Spanish, then make them large', 'Pick the series and see the next episode wait for you', 'Report a playback problem'], f: ['A4-F1', 'A4-F2', 'A4-F3', 'A4-F4', 'A4-F5', 'A4-F6', 'A4-F12', 'A16-F3', 'A20-F1', 'A19-F3', 'A13-F1', 'A13-F3'], x: ['A4-F7', 'A4-F8', 'A4-F9'] },
+  { id: 'sections', g: 'watch', t: 'Human and AI sections', crumb: 'Human and AI', tab: 'sections', about: 'Every film declares how AI was used. The answer decides its section, content credentials are shown when a film has them, and wrong placements are fixed in the public log.', try: ['Choose AI only, then go to Browse', 'Flag a film as being in the wrong section', 'Read why The Drowned Library moved'], f: ['A5-F1', 'A5-F2', 'A5-F3', 'A5-F4', 'A5-F5', 'A5-F6'], x: ['A5-F7'] },
+  { id: 'you', g: 'watch', t: 'Profiles, young viewers and privacy', crumb: 'You', tab: 'you', about: 'Household profiles with age limits from your country\'s ratings, the history you control, devices, display settings, and every privacy choice in one place.', try: ['Switch to Juniper and see films above the limit hidden', 'Run the age check for The Cinder Ledge', 'Pause your history', 'Turn on Larger text'], f: ['A1-F4', 'A1-F5', 'A1-F7', 'A8-F1', 'A8-F2', 'A8-F3', 'A8-F4', 'A6-F11', 'A9-F2', 'A9-F4', 'A20-F2', 'A20-F3', 'A20-F5', 'A21-F1', 'A21-F2', 'A21-F3', 'A21-F4', 'A21-F5', 'A21-F6', 'A19-F2', 'A19-F4', 'A23-F2'], x: ['A8-F5', 'A1-F6'] },
+  { id: 'pay', g: 'pay', t: 'Rent, buy or support', crumb: 'Pay', tab: 'browse', about: 'The filmmaker chose these ways to pay. Before paying you see the tax, the card charge, delivery and the running-cost share, and what the filmmaker gets.', try: ['Switch between Rent, Buy and Support', 'Change the example country and watch tax and money change', 'Switch the profile to Juniper and try to pay', 'Pay, then read the receipt'], f: ['A6-F1', 'A6-F2', 'A6-F3', 'A6-F4', 'A6-F6', 'A6-F7', 'A6-F8', 'A6-F11', 'A1-F1'], x: ['A6-F9', 'A6-F10'] },
+  { id: 'pass', g: 'pay', t: 'Viewer pass (next)', crumb: 'Viewer pass', tab: 'pass', about: 'One monthly pass for films whose filmmakers opt in, shared out by watch time. How it is shared out is an open decision, so both methods are shown side by side.', try: ['Switch between Your own watch time and One pool', 'Read the guards against fake viewing', 'See which films are in the pass'], f: [], x: ['A7-F1', 'A7-F2', 'A7-F3'] },
+  { id: 'publish', g: 'makers', t: 'Studio: publish a film', crumb: 'Studio', tab: 'studio', about: 'One checklist from master file to release: upload that resumes, plain quality checks, the AI-use answer, captions and audio description, ratings for each country, and release dates.', try: ['Start the upload, then drop the connection', 'Make a caption draft from the soundtrack', 'Answer the rating questions', 'Publish when the checklist is complete'], f: ['A1-F3', 'A10-F1', 'A10-F2', 'A10-F3', 'A10-F4', 'A10-F5', 'A10-F6', 'A10-F7', 'A5-F1', 'A12-F2', 'A13-F1', 'A13-F2', 'A13-F3', 'A13-F6', 'A18-F1', 'A18-F2', 'A18-F3', 'A18-F6', 'A16-F2', 'A23-F1'], x: ['A10-F8'] },
+  { id: 'rights', g: 'makers', t: 'Studio: rights and territories', crumb: 'Studio', tab: 'studio', about: 'Where a film may be shown, by country and way of watching, with release windows, proof kept privately, the music list, and the rating and price status in each country.', try: ['Tick Germany and see the holdback warning', 'Read what happens when rights end', 'Open the proof of rights'], f: ['A11-F1', 'A11-F2', 'A11-F3', 'A11-F4', 'A11-F5', 'A11-F7', 'A12-F1', 'A6-F1'], x: ['A6-F9', 'A7-F1'] },
+  { id: 'earnings', g: 'makers', t: 'Studio: earnings and payouts', crumb: 'Studio', tab: 'studio', about: 'Every sale with the fee on its own line, payouts on a schedule, splits paid straight to each person on the team, tax statements, and honest numbers that track nobody.', try: ['Open the fee lines for October', 'Look at the team splits and who signed', 'Change the example country to see payout money and tax change'], f: ['A14-F1', 'A14-F2', 'A14-F3', 'A14-F4', 'A14-F5', 'A15-F1', 'A15-F2', 'A15-F3', 'A6-F1'], x: ['A14-F6'] },
+  { id: 'protection', g: 'makers', t: 'Studio: stopping copies', crumb: 'Studio', tab: 'studio', about: 'Encrypted delivery with expiring links, fingerprints that catch stolen uploads before they earn anything, and the open decision on locked playback or a hidden watermark.', try: ['Review the fingerprint match', 'Mark it Not authorised and see it reach the public log', 'Read the three protection options'], f: ['A16-F1', 'A16-F2', 'A16-F3', 'A17-F4', 'A11-F6'], x: ['A16-F4', 'A16-F5'] },
+  { id: 'log', g: 'trust', t: 'Public removal log', crumb: 'Removal log', about: 'Every removal, country block, section move and rating change, with the rule and the law behind it, and appeals anyone acted on can make. Only what the law requires is removed.', try: ['Filter to Section moves', 'Step through the appeal on The Drowned Library', 'Read how government requests are handled'], f: ['A17-F1', 'A17-F2', 'A17-F3', 'A17-F4', 'A17-F5', 'A17-F6', 'A17-F7', 'A17-F8', 'A17-F9', 'A5-F5', 'A12-F4'], x: [] },
+  { id: 'coop', g: 'trust', t: 'Costs, fees and votes', crumb: 'Costs and votes', about: 'What Spare Movies cost to run last month, how the fee follows from it, filmmakers\' votes on fees and rules, help and status, and where Spare Movies uses AI.', try: ['Vote on the open proposal', 'See how the fee per sale is worked out', 'Check the status page'], f: ['A22-F1', 'A22-F2', 'A22-F3', 'A22-F4', 'A22-F5', 'A22-F6', 'A18-F4', 'A18-F5', 'A18-F7', 'A23-F3', 'A21-F1'], x: ['A22-F7'] }
+];
+const TABS = [['browse', 'Browse', 'film'], ['search', 'Search', 'search'], ['sections', 'Human and AI', 'spark'], ['pass', 'Pass', 'ballot'], ['you', 'You', 'user'], ['studio', 'Studio', 'upload']];
+const STUDIO = [['publish', 'Publish'], ['rights', 'Rights and territories'], ['earnings', 'Earnings and payouts'], ['protection', 'Stopping copies']];
+const fname = id => (DATA && DATA.feats && DATA.feats[id] ? DATA.feats[id][0] : id);
+const fpri = id => (DATA && DATA.feats && DATA.feats[id] ? DATA.feats[id][1] : '');
+
+/* ---------- Shared bits ---------- */
+function tile(f, extra) {
+  const lock = !allowed(f);
+  const badges = [];
+  if (f.ways.includes('free')) badges.push('<span>Free</span>');
+  if (f.ad) badges.push('<span>AD</span>');
+  if (f.cc.length) badges.push('<span>CC</span>');
+  if (f.sec === 'ai') badges.push('<span class="ai">AI</span>');
+  return '<button class="tile' + (lock ? ' locked' : '') + '" data-film="' + f.id + '"><div class="poster">' + scene(f.scene) + '<div class="pbadge">' + badges.join('') + '</div></div><b>' + esc(f.t) + '</b><span class="sub">' + (f.series ? 'Series' : f.year) + ' · ' + (f.series ? f.eps + ' episodes' : hm(f.min)) + ' · <span class="mono">' + rating(f) + '</span></span>' + (extra || '') + '</button>';
+}
+function shelf(title, rule, films, extra) {
+  if (!films.length) return '';
+  return '<div class="sect"><div class="sect-title"><h2>' + title + '</h2><span class="small muted">' + rule + '</span></div><div class="shelf mt">' + films.map(f => tile(f, extra && extra(f))).join('') + '</div></div>';
+}
+function secSwitch() {
+  return '<div class="seg" role="group" aria-label="Section">' + [['human', 'Human'], ['ai', 'AI'], ['both', 'Both']].map(([v, l]) => '<button data-act="sec" data-v="' + v + '" ' + pressed(S.sec === v) + '>' + l + '</button>').join('') + '</div>';
+}
+function wayPrice(f, w) {
+  if (w === 'rent') return f.series ? CY.p.ep : CY.p.rent;
+  if (w === 'buy') return f.series ? CY.p.season : CY.p.buy;
+  if (w === 'support' || w === 'pwyl') return S.pay.amount || CY.p.sugg;
+  return 0;
+}
+function wayName(w, f) { return { rent: f && f.series ? 'Rent an episode' : 'Rent', buy: f && f.series ? 'Buy the season' : 'Buy to keep', support: 'Support', pwyl: 'Pay what you like', free: 'Free' }[w]; }
+function breakdown(f, w) {
+  const price = wayPrice(f, w);
+  let gross, tax, ex;
+  if (CY.incl) { gross = price; tax = price * CY.rate / (1 + CY.rate); ex = price - tax; } else { ex = price; tax = price * CY.rate; gross = price + tax; }
+  const card = price ? gross * CY.card[0] + CY.card[1] : 0;
+  const hours = f.series ? f.min / 60 : f.min / 60;
+  const deliv = (w === 'rent' || w === 'buy' || w === 'pwyl') ? CY.deliv * hours : 0;
+  const share = (w === 'rent' || w === 'buy' || w === 'pwyl') ? CY.share : 0;
+  const covered = w === 'support' && S.pay.cover ? card : 0;
+  return { price, gross: gross + covered, tax, ex, card, deliv, share, covered, maker: ex - card - deliv - share + covered };
+}
+function ratingBlock(f, full) {
+  const r = rating(f);
+  let h = '<div class="row" style="align-items:flex-start"><span class="rating">' + r + '</span><span class="grow"><b>' + esc(f.adv.join(', ')) + '</b><span class="sub">' + CY.name + ': ' + CY.ratingSys + '. ' + CY.src + '</span></span><span class="badge n">Example: ' + CY.name + '</span></div>';
+  if (full) h += '<p class="small muted">' + CY.how + ' Each country gets its own rules pack.</p>';
+  if (f.rank >= CY.restrictFrom) h += '<div class="note dan small"><b>Restricted in ' + CY.in + '.</b> Profiles with an age limit cannot see it, and an age check is needed before watching (sample rule).</div>';
+  return h;
+}
+
+/* ---------- Browse ---------- */
+function renderBrowse() {
+  const vis = FILMS.filter(f => inSec(f) && available(f));
+  const shown = vis.filter(allowed);
+  const hidden = vis.length - shown.length;
+  const F = S.filters;
+  const pass = f => (!F.free || f.ways.includes('free')) && (!F.pay || f.ways.some(w => w === 'rent' || w === 'buy')) && (!F.ad || f.ad) && (!F.short || f.min < 120);
+  const list = shown.filter(pass);
+  let h = '<div class="sect alt"><div class="sect-title"><h2>' + (S.guest ? 'Watching as a guest' : 'Hello, ' + prof().name) + '</h2>' + secSwitch() + '</div>';
+  h += '<div class="chips mt">' + [['free', 'Free'], ['pay', 'Rent or buy'], ['ad', 'Audio description'], ['short', 'Under 2 hours']].map(([k, l]) => '<button class="chip" data-act="filter" data-v="' + k + '" ' + pressed(!!F[k]) + '>' + l + '</button>').join('') + '<button class="chip" data-act="guest" ' + pressed(S.guest) + '><i data-i="user" class="sm"></i>Guest</button></div>';
+  h += '<p class="small muted mt">' + (S.sec === 'both' ? 'Showing both sections.' : 'Showing the ' + (S.sec === 'ai' ? 'AI' : 'Human') + ' section only.') + ' Only films you can watch in ' + CY.in + ' are listed, with the ratings that apply there. ' + (hidden ? hidden + ' film' + (hidden > 1 ? 's are' : ' is') + ' hidden by ' + prof().name + '\'s age limit.' : '') + '</p>';
+  if (S.guest) h += '<div class="note mt small">No account needed for free films and trailers. Join only to pay, follow or keep a list on every device. <button class="link" data-act="join">Join with one Spareware login</button></div>';
+  h += '</div>';
+  if (!S.guest) {
+    const cont = list.filter(f => S.histItems.includes(f.id) && (f.id === 'tinkite' || f.id === 'night'));
+    h += shelf('Continue watching', 'Where you stopped, on any device', cont, f => '<div class="prog"><span style="width:' + (f.id === 'tinkite' ? 40 : 66) + '%"></span></div><span class="sub">' + (f.id === 'tinkite' ? '41:12 of 1:42:00' : 'Episode 3 next') + '</span>');
+    h += shelf('My list', 'In the order you added them', list.filter(f => S.list[f.id]));
+  }
+  h += shelf('New this week', 'Newest first. Nobody can pay to be placed higher.', list.filter(f => f.isNew && !f.soon));
+  const soon = list.filter(f => f.soon);
+  if (soon.length) h += '<div class="sect"><div class="sect-title"><h2>Coming soon in ' + CY.in + '</h2><span class="small muted">By release date</span></div>' + soon.map(f => '<div class="row"><span class="mono small">' + fmtDate(f.soon, true) + '</span><span class="grow"><b>' + esc(f.t) + '</b><span class="sub">' + esc(f.by) + ' · ' + f.kind + '</span></span><button class="btn small ' + (S.list[f.id] ? 'on' : 'quiet') + '" data-act="list" data-id="' + f.id + '">' + (S.list[f.id] ? 'Will tell you' : 'Tell me') + '</button></div>').join('') + '</div>';
+  h += shelf('Free to watch', 'No adverts, ever. Support the filmmaker if you like.', list.filter(f => f.ways.includes('free')));
+  h += shelf('Series', 'Newest first', list.filter(f => f.series));
+  h += shelf('All films', 'A to Z', list.filter(f => !f.soon).slice().sort((a, b) => a.t.localeCompare(b.t)));
+  h += '<div class="sect"><div class="sect-title"><h2>Collections</h2><span class="badge n">next</span></div><p class="small muted">Collections made by festivals, libraries and filmmakers, and a shelf of films made in ' + CY.in + ', come after the first release.</p></div>';
+  if (!list.length) h += '<p class="pad muted" style="text-align:center">Nothing matches these filters. Turn one off to see more.</p>';
+  return h;
+}
+
+/* ---------- Search ---------- */
+const CAPLINES = [
+  { t: 2472, en: 'Fold it smaller. The wind will take it further.', es: 'Dóblala más pequeña. El viento la llevará más lejos.', sdh: '[JUNE] Fold it smaller. The wind will take it further.', ad: 'June kneels on the jetty and folds the letter into the tin.' },
+  { t: 2476, en: 'Will he know it is from us?', es: '¿Sabrá que es nuestra?', sdh: '[ARLO] Will he know it is from us?', ad: 'Arlo ties the string with a sailor\'s knot.' },
+  { t: 2480, en: 'He will know.', es: 'Lo sabrá.', sdh: '[JUNE, quietly] He will know.', ad: 'Gulls lift off the breakwater.' },
+  { t: 2484, en: '', es: '', sdh: '[Wind rattles the tin]', ad: 'The kite jerks upward and the tin flashes in the sun.' },
+  { t: 2488, en: 'Let go when I say.', es: 'Suéltala cuando te diga.', sdh: '[JUNE] Let go when I say.', ad: 'The harbourmaster watches from the window of his hut.' },
+  { t: 2492, en: 'Now!', es: '¡Ahora!', sdh: '[ARLO, shouting] Now!', ad: 'The kite climbs out over the open water.' }
+];
+function lev(a, b) { const m = a.length, n = b.length; const d = Array.from({ length: m + 1 }, (_, i) => [i]); for (let j = 1; j <= n; j++) d[0][j] = j; for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); return d[m][n]; }
+function fuzzy(text, q) { const t = norm(text), w = norm(q).trim(); if (!w) return false; if (t.includes(w)) return true; return w.split(/\s+/).every(x => t.split(/[^a-z0-9]+/).some(y => y && (y.startsWith(x) || (x.length > 3 && lev(x, y.slice(0, x.length + 1)) <= 1) || (x.length > 3 && lev(x, y) <= 1)))); }
+function renderSearch() {
+  let h = '<div class="sect alt"><label class="field"><span>Search films, people and words said in films</span><input id="q" value="' + esc(S.q) + '" placeholder="Try: fold it smaller" autocomplete="off"></label>';
+  h += '<div class="chips mt">' + [['cc', 'Captions'], ['ad', 'Audio description'], ['free', 'Free']].map(([k, l]) => '<button class="chip" data-act="sfilt" data-v="' + k + '" ' + pressed(!!S.sfilt[k]) + '>' + l + '</button>').join('') + '<span class="small muted" style="align-self:center">Section: ' + { both: 'Both', human: 'Human', ai: 'AI' }[S.sec] + '</span></div></div><div id="results">' + searchResults() + '</div>';
+  return h;
+}
+function searchResults() {
+  const q = S.q.trim();
+  if (!q) return '<p class="pad muted">Type a title, a person, a genre, or a line someone says in a film. Try <button class="link" data-act="try" data-v="fold it smaller">fold it smaller</button>, <button class="link" data-act="try" data-v="quilfeather">quilfeather</button> or <button class="link" data-act="try" data-v="choir">choir</button>.</p>';
+  const fil = f => inSec(f) && (!S.sfilt.cc || f.cc.length) && (!S.sfilt.ad || f.ad) && (!S.sfilt.free || f.ways.includes('free'));
+  const films = FILMS.filter(f => fil(f) && fuzzy([f.t, f.kind, f.by, f.dir, f.syn].join(' '), q));
+  const people = [];
+  FILMS.forEach(f => [...f.cast.map(c => c[0]), ...f.crew.map(c => c[1])].forEach(n => { if (fuzzy(n, q) && !people.find(p => p[0] === n)) people.push([n, f]); }));
+  const lines = norm(q).length > 5 ? CAPLINES.filter(l => norm(l.en).includes(norm(q))) : [];
+  let h = '';
+  if (lines.length) h += '<div class="sect"><div class="label">Said in a film</div>' + lines.map(l => '<button class="row" data-act="jump" data-t="' + l.t + '"><i data-i="cc" class="app"></i><span class="grow"><b>"' + esc(l.en) + '"</b><span class="sub">Tin Kite at ' + clock(l.t) + ', from its English captions</span></span><i data-i="play"></i></button>').join('') + '</div>';
+  if (films.length) h += '<div class="sect"><div class="label">Films and series</div>' + films.map(f => {
+    const ok = available(f);
+    return '<button class="row" data-film="' + f.id + '"><span style="width:44px;flex:none"><span class="poster" style="display:block">' + scene(f.scene) + '</span></span><span class="grow"><b>' + esc(f.t) + '</b><span class="sub">' + f.kind + ' · ' + f.year + ' · ' + esc(f.by) + '</span>' + (ok ? '' : '<span class="sub" style="color:var(--danger)">Not available in ' + CY.in + ': the filmmaker does not hold the rights here. Follow to be told if that changes.</span>') + '</span><span class="rating">' + rating(f) + '</span></button>';
+  }).join('') + '</div>';
+  if (people.length) h += '<div class="sect"><div class="label">People</div>' + people.map(([n, f]) => '<button class="row" data-film="' + f.id + '"><span class="avatar">' + n.split(' ').map(x => x[0]).join('').slice(0, 2) + '</span><span class="grow"><b>' + esc(n) + '</b><span class="sub">' + esc(f.t) + '</span></span></button>').join('') + '</div>';
+  if (!h) h = '<p class="pad muted">No match for "' + esc(q) + '". Check the section switch: it is set to ' + { both: 'Both', human: 'Human', ai: 'AI' }[S.sec] + '.</p>';
+  return h;
+}
+
+/* ---------- Film page ---------- */
+function renderFilm() {
+  const f = FILM(S.film);
+  const ok = available(f);
+  let h = '<div class="hero"><div class="poster">' + scene(f.scene) + '</div><div><div class="row" style="padding:0;border:0;align-items:flex-start"><span class="grow"><h1>' + esc(f.t) + '</h1><span class="sub">' + esc(f.by) + (f.dir && f.dir !== f.by ? ' · directed by ' + esc(f.dir) : '') + '</span></span></div>';
+  h += '<div class="facts mt"><span>' + f.year + '</span><span>' + f.kind + '</span><span>' + (f.series ? f.eps + ' episodes of about ' + f.min + ' min' : hm(f.min)) + '</span><span class="rating">' + rating(f) + '</span>' + flag(f) + '</div>';
+  h += '<p class="mt">' + esc(f.syn) + '</p>';
+  h += '<div class="btns mt"><button class="btn primary" data-act="trailer"><i data-i="play"></i>Trailer</button>' + (S.owned[f.id] || f.ways.includes('free') ? '<button class="btn" data-act="watch" data-id="' + f.id + '"><i data-i="play"></i>' + (f.ways.includes('free') ? 'Watch free' : 'Watch') + '</button>' : '') + '<button class="btn ' + (S.list[f.id] ? 'on' : 'quiet') + '" data-act="list" data-id="' + f.id + '"><i data-i="bookmark"></i>' + (S.list[f.id] ? 'On my list' : 'My list') + '</button><button class="btn quiet" data-act="share"><i data-i="share"></i>Share</button><button class="btn quiet" data-act="report" data-id="' + f.id + '"><i data-i="flag"></i>Report</button></div>';
+  if (S.p.trailer) h += '<div class="screen mt" style="border:1px solid var(--hairline)">' + scene(f.scene) + '<span class="tag">Trailer, 2:04 · free</span><span class="cap">' + (f.id === 'tinkite' ? 'Some letters only the sea can deliver.' : 'Trailer captions show here.') + '</span></div><p class="small muted">Trailers play for everyone with captions, and never start on their own with sound. Rated ' + rating(f) + ' in ' + CY.in + ' like the film (sample).</p>';
+  h += '</div></div>';
+  if (!ok) h += '<div class="sect"><div class="note dan"><b>Not available in ' + CY.in + '.</b> The filmmaker does not hold the rights here, so it cannot be watched or bought here. <button class="link" data-act="list" data-id="' + f.id + '">Tell me if that changes</button></div></div>';
+  else if (CY.key === 'eu' && f.id === 'tinkite') h += '<div class="sect"><div class="note n small">Available in most EU countries. <b>Not in Germany until 1 April 2027</b>: the filmmaker declared another deal there (see Studio, Rights).</div></div>';
+  // ways to watch
+  h += '<div class="sect"><div class="sect-title"><h2>Ways to watch</h2><span class="small muted">Chosen by the filmmaker. Prices in ' + CY.name + ' money, ' + CY.tax + (CY.incl ? ' included' : ' added at checkout') + '.</span></div>';
+  if (S.owned[f.id]) h += '<div class="note ok small">' + (S.owned[f.id] === 'buy' ? 'You own this. Watch any time on any of your devices.' : 'Rented. Start within 30 days; 48 hours to finish once started.') + '</div>';
+  h += '<div class="ways mt">' + f.ways.map(w => w === 'free' ? '<div class="way"><b>Free</b><span>No adverts, no account needed</span></div>' : '<button class="way" data-act="payway" data-v="' + w + '" ' + (ok ? '' : 'disabled') + '><b>' + (w === 'support' ? 'Any amount' : w === 'pwyl' ? 'You choose' : money(wayPrice(f, w))) + '</b><span>' + wayName(w, f) + (w === 'support' || w === 'pwyl' ? ', suggested ' + money(CY.p.sugg) : '') + '</span></button>').join('') + (f.pass ? '<div class="way dim"><b>Pass</b><span>In the viewer pass (next)</span></div>' : '') + '</div>';
+  h += '<p class="small muted mt">Every price shows the at-cost fee before you pay. The filmmaker keeps everything except running costs.</p></div>';
+  // rating and advice
+  h += '<div class="sect"><div class="label">Age rating and content advice</div>' + ratingBlock(f, true) + '</div>';
+  // access
+  h += '<div class="sect"><div class="label">Captions, audio description and languages</div><dl class="kv"><dt>Captions</dt><dd>' + f.cc.join(', ') + '</dd><dt>Audio description</dt><dd>' + (f.ad || 'None yet. <button class="link" data-act="toast" data-msg="Asked. The filmmaker sees how many viewers asked for audio description.">Ask for it</button>') + '</dd><dt>Audio</dt><dd>' + f.audio.join(', ') + '</dd><dt>Details in</dt><dd>English, Spanish <span class="muted">(title and synopsis)</span></dd></dl></div>';
+  // ai use
+  h += '<div class="sect"><div class="label">How AI was used</div><dl class="kv"><dt>Film</dt><dd>' + esc(f.ai.film) + '</dd><dt>Trailer</dt><dd>' + esc(f.ai.trailer) + '</dd><dt>Poster</dt><dd>' + esc(f.ai.poster) + '</dd>' + (f.ai.track ? '<dt>Extra tracks</dt><dd>' + esc(f.ai.track) + '</dd>' : '') + '<dt>Content credentials</dt><dd>' + esc(f.cred) + '</dd></dl><p class="small muted">Declared by the filmmaker and checked, not assumed: credentials and detection signals are hints for moderators, never verdicts. ' + (f.moved ? '<b>Moved from Human to AI after review;</b> see the public log.' : '') + '</p></div>';
+  // credits
+  h += '<div class="sect"><div class="sect-title"><h2>Who made it</h2><button class="btn small ' + (S.follows[f.by] ? 'on' : '') + '" data-act="follow" data-v="' + esc(f.by) + '">' + (S.follows[f.by] ? 'Following ' : 'Follow ') + esc(f.by) + '</button></div>';
+  h += '<div class="cols mt"><div>' + (f.cast.length ? '<div class="label">Cast</div>' + f.cast.map(c => '<div class="row"><span class="grow"><b>' + esc(c[0]) + '</b><span class="sub">' + esc(c[1]) + '</span></span></div>').join('') : '') + '</div><div><div class="label">Crew</div>' + f.crew.map(c => '<div class="row"><span class="grow"><b>' + esc(c[1]) + '</b><span class="sub">' + esc(c[0]) + '</span></span></div>').join('') + '</div></div>';
+  if (f.laurels) h += '<p class="small muted">' + f.laurels.join('. ') + '. Reviews from people who watched come next.</p>';
+  h += '</div>';
+  return h;
+}
+
+/* ---------- Player ---------- */
+const PLAYABLE = { tinkite: { len: 6120, start: 2472, label: 'Tin Kite' }, night: { len: 2640, start: 2580, label: 'Night Shift at Hollow Bay, episode 3' }, swim: { len: 4680, start: 300, label: 'Weather for Swimming' } };
+function capLine() {
+  const i = Math.floor(Math.max(0, S.p.t - 2472) / 4) % CAPLINES.length;
+  const l = CAPLINES[i];
+  if (S.p.film === 'swim') return { txt: S.p.cc === 'Off' ? '' : ['The water was eight degrees this morning.', 'We go in whatever the forecast says.', '[Waves break on the shingle]'][Math.floor(S.p.t / 4) % 3], ad: 'Two swimmers in red and coral caps wade out past the breakers.' };
+  if (S.p.film === 'night') return { txt: S.p.cc === 'Off' ? '' : ['Who signed him in tonight?', '[Monitor beeps steadily]', 'Same scar. Different name.'][Math.floor(S.p.t / 4) % 3], ad: 'Nurse Tolley holds two admission forms side by side.' };
+  if (S.p.film !== 'tinkite') return { txt: S.p.cc === 'Off' ? '' : 'Captions show here in time with the film.', ad: 'Descriptions of what is on screen are read in the gaps in the dialogue.' };
+  const txt = S.p.cc === 'Off' ? '' : S.p.cc === 'Spanish' ? (S.p.audio === 1 ? '' : l.es) : S.p.cc.indexOf('Deaf') > -1 ? l.sdh : l.en;
+  return { txt, ad: l.ad };
+}
+function renderPlayer() {
+  const f = FILM(S.p.film), P = PLAYABLE[S.p.film];
+  const c = capLine();
+  const qMap = { auto: 'Auto, 1080p now', '1080': '1080p', '720': '720p', '480': '480p', saver: 'Data saver' };
+  const qGB = { auto: 'Follows your connection: up to 3 GB an hour in HD', '1080': 'Up to 3 GB an hour', '720': 'About 1.5 GB an hour (sample)', '480': 'Up to 1 GB an hour', saver: 'About 0.5 GB an hour (sample)' };
+  let h = '<div class="sect alt" style="padding:8px var(--s2)"><label class="field" style="max-width:420px"><span>Sample to play</span><select data-input="pfilm">' + Object.keys(PLAYABLE).map(k => '<option value="' + k + '"' + (k === S.p.film ? ' selected' : '') + '>' + PLAYABLE[k].label + '</option>').join('') + '</select></label></div>';
+  h += '<div class="screen' + (S.p.capLg ? ' cap-lg' : '') + (S.p.capTint ? ' cap-tint' : '') + '" id="screen">' + scene(f.scene) + '<span class="tag" id="ptag">' + (S.p.playing ? 'Playing' : 'Paused') + ' · ' + esc(P.label) + '</span>' + (S.p.ad ? '<div class="adline" id="adline"><i data-i="ear"></i><span>' + esc(c.ad) + '</span></div>' : '') + (!S.p.playing ? '<button class="bigplay" data-act="play" aria-label="Play"><i data-i="play"></i></button>' : '') + (c.txt ? '<span class="cap" id="cap">' + esc(c.txt) + '</span>' : '<span class="cap" id="cap" hidden></span>') + '</div>';
+  h += '<div class="pctl"><button class="pbtn" data-act="play" aria-label="' + (S.p.playing ? 'Pause' : 'Play') + '"><i data-i="' + (S.p.playing ? 'pause' : 'play') + '"></i></button><button class="pbtn" data-act="seek" data-v="-10" aria-label="Back 10 seconds"><i data-i="rew" class="sm"></i>10</button><button class="pbtn" data-act="seek" data-v="10" aria-label="Forward 10 seconds">10<i data-i="fwd" class="sm"></i></button><span class="time" id="ptime">' + clock(S.p.t) + ' / ' + clock(P.len) + '</span><input type="range" id="pseek" min="0" max="' + P.len + '" value="' + Math.round(S.p.t) + '" aria-label="Seek"><button class="pbtn" data-act="cc" ' + pressed(S.p.cc !== 'Off') + ' aria-label="Captions"><i data-i="cc"></i></button><button class="pbtn" data-act="ad" ' + pressed(S.p.ad) + ' aria-label="Audio description"><i data-i="ear"></i>AD</button><button class="pbtn" data-act="toast" data-msg="Full screen in the real app." aria-label="Full screen"><i data-i="full"></i></button></div>';
+  h += '<div class="sect"><div class="pmenus">';
+  h += '<label class="field"><span>Captions</span><select data-input="pcc"><option>Off</option>' + f.cc.map(x => '<option' + (x === S.p.cc ? ' selected' : '') + '>' + x + '</option>').join('') + '</select></label>';
+  h += '<label class="field"><span>Audio</span><select data-input="paudio">' + f.audio.map((x, i) => '<option value="' + i + '"' + (i === S.p.audio ? ' selected' : '') + '>' + x + '</option>').join('') + '</select></label>';
+  h += '<label class="field"><span>Quality</span><select data-input="pq">' + Object.keys(qMap).map(k => '<option value="' + k + '"' + (k === S.p.q ? ' selected' : '') + '>' + qMap[k] + '</option>').join('') + '</select></label>';
+  h += '<label class="field"><span>Audio description</span><select data-input="pad"><option value="0"' + (S.p.ad ? '' : ' selected') + '>Off</option><option value="1"' + (S.p.ad ? ' selected' : '') + '>' + esc(f.ad || 'None for this film') + '</option></select></label>';
+  h += '</div><p class="small muted mt">Quality: ' + qGB[S.p.q] + '.</p><div class="chips mt"><span class="small muted" style="align-self:center">Caption style:</span><button class="chip" data-act="capLg" ' + pressed(S.p.capLg) + '>Large</button><button class="chip" data-act="capTint" ' + pressed(S.p.capTint) + '>Tinted box</button><span class="small muted" style="align-self:center">Your caption, description and language choices follow you to every device.</span></div></div>';
+  h += '<div class="sect"><div class="note small"><b>Picked up at ' + clock(P.start) + '</b>, where you stopped on your phone yesterday.</div>';
+  if (f.series) h += '<div class="row"><span class="grow"><b>Next: episode ' + (S.p.ep + 1) + '</b><span class="sub">' + (S.p.autoplay ? 'Starts on its own after the credits, because you turned that on.' : 'Waits for you. Nothing starts on its own unless you turn it on, and never on a young person\'s profile.') + '</span></span><button class="sw" role="switch" aria-checked="' + S.p.autoplay + '" data-act="autoplay" aria-label="Autoplay next episode"></button></div>';
+  h += '<div class="row"><span class="grow"><b>Chapters, speed and skipping</b><span class="sub">Opening, The jetty, The letter, The storm, Credits</span></span><span class="badge n">next</span></div>';
+  h += '<div class="btns mt"><button class="btn quiet small" data-act="toast" data-msg="Casting to a TV comes next, after the casting research (MOV-A4-F8-P1).">' + ic('tv', 'sm') + 'Watch on TV <span class="badge n">next</span></button><button class="btn quiet small" data-act="toast" data-msg="Downloads come next, within the limits each filmmaker sets.">' + ic('download', 'sm') + 'Download <span class="badge n">next</span></button><button class="btn small" data-act="preport"><i data-i="flag"></i>Report a playback problem</button></div></div>';
+  h += '<div class="sect"><div class="label">How this stream is protected</div><p class="small">Encrypted delivery with links that expire and work only for this session. Locked playback or a hidden per-viewer watermark is still an open decision (MOV-A16-F1-P1). Nothing is installed and nothing about you is tracked. Nothing can stop someone filming the screen.</p></div>';
+  return h;
+}
+function updatePlayer() {
+  const P = PLAYABLE[S.p.film]; if (!P || S.screen !== 'player') return;
+  const t = $('#ptime'), sk = $('#pseek'), cap = $('#cap'), ad = $('#adline span');
+  if (t) t.textContent = clock(S.p.t) + ' / ' + clock(P.len);
+  if (sk) sk.value = Math.round(S.p.t);
+  const c = capLine();
+  if (cap) { cap.hidden = !c.txt; cap.textContent = c.txt; }
+  if (ad) ad.textContent = c.ad;
+}
+
+/* ---------- Human and AI ---------- */
+function renderSections() {
+  let h = '<div class="sect alt"><div class="sect-title"><h2>What do you want to see?</h2>' + secSwitch() + '</div><p class="small muted">Your choice applies to Browse, Search and suggestions on this profile, and you can change it any time.</p></div>';
+  h += '<div class="sect"><div class="cols"><div class="card"><h3>' + ic('user', 'app') + ' Human</h3><p class="small mt">Films people made themselves. Ordinary tools, captions made from speech and colour grading do not count as AI use (draft rule).</p></div><div class="card"><h3>' + ic('spark', 'inf') + ' AI</h3><p class="small mt">Films made with AI, whether AI helped or made them. Using AI is not a penalty: same order rules, same fee, same pay.</p></div></div></div>';
+  h += '<div class="sect"><div class="label">How each film is declared</div><div class="tblwrap"><table class="tbl"><tr><th>Film</th><th>Answer</th><th>Section</th><th>Credentials</th><th></th></tr>' + FILMS.filter(f => ['tinkite', 'swim', 'garden', 'glass', 'drowned'].includes(f.id)).map(f => '<tr><td><b>' + esc(f.t) + '</b></td><td>' + esc(f.ai.film) + (f.ai.track ? '<br><span class="muted">' + esc(f.ai.track) + '</span>' : '') + '</td><td>' + (f.sec === 'ai' ? 'AI' : 'Human') + (f.moved ? ' <span class="badge n">moved</span>' : '') + '</td><td class="muted">' + esc(f.cred) + '</td><td><button class="btn quiet small" data-act="wrongsec" data-id="' + f.id + '">Wrong section?</button></td></tr>').join('') + '</table></div>';
+  h += '<p class="small muted">An extra track, such as a dub with AI voices, is labelled on its own and does not move the film (draft rule for the filmmakers\' vote, MOV-A5-F1-P3).</p></div>';
+  h += '<div class="sect"><div class="label">The rules</div><ul class="stepper">' +
+    '<li class="done"><b>Declared by the filmmaker</b><span class="sub">Every film, episode, trailer and poster answers: None, AI-assisted or AI-made, with the tools named. It cannot be skipped.</span></li>' +
+    '<li class="done"><b>AI agents are labelled</b><span class="sub">An account that is an AI agent shows who is responsible for it, and publishes only in the AI section, whatever app or tool it uses.</span></li>' +
+    '<li class="done"><b>Checked, not assumed</b><span class="sub">Content credentials are read and shown. Detection signals go to a moderator as hints, never as verdicts.</span></li>' +
+    '<li class="done"><b>Fixed in the open</b><span class="sub">Anyone can flag a film in the wrong section. A moderator moves it with the reason in the public log, and the filmmaker can appeal.</span></li></ul></div>';
+  h += '<div class="sect"><div class="row"><span class="grow"><b>Why did The Drowned Library move?</b><span class="sub">Its answer said None. Its content credentials recorded generated backgrounds in 40 shots. A moderator moved it to AI; the collective appealed; the appeal panel agreed with the move.</span></span><button class="btn small" data-go="log">Public log</button></div></div>';
+  return h;
+}
+
+/* ---------- You: profiles, young viewers, privacy ---------- */
+function renderYou() {
+  const P = prof();
+  let h = '<div class="sect alt"><div class="sect-title"><h2>Who is watching?</h2><span class="small muted">Profiles on this account</span></div><div class="cols mt" style="grid-template-columns:repeat(3,minmax(0,1fr))">' + Object.keys(PROFILES).map(k => { const p = PROFILES[k]; return '<button class="card' + (k === S.profile ? ' sel' : '') + '" data-act="profile" data-v="' + k + '" style="text-align:left"><b>' + p.name + '</b><span class="sub small muted" style="display:block">' + (p.adult ? 'Adult, no limit' : 'Child: up to ' + CY.ratings[p.limit] + ' in ' + CY.in) + '</span></button>'; }).join('') + '</div>';
+  h += '<p class="small muted mt">' + (P.adult ? 'Leaving a child\'s profile needs the account holder\'s PIN or passkey.' : 'Juniper sees simpler screens: no paying, no reviews, no autoplay, no outside links. Films above ' + CY.ratings[P.limit] + ' are hidden.') + '</p></div>';
+  h += '<div class="sect"><div class="sect-title"><h2>Age rules in ' + CY.in + '</h2><span class="badge n">Example: ' + CY.name + '</span></div><p class="small">Ratings follow ' + CY.ratingSys + '. Films rated ' + (CY.restrictFrom < CY.ratings.length ? CY.ratings[CY.restrictFrom] + ' and above are restricted: an age check is needed before watching (sample rule).' : 'here are guidelines, not legal limits; profile limits still apply.') + ' Only an age band is kept, never your birth date. Each country gets its own rules pack.</p>';
+  const cinder = FILM('cinder');
+  h += '<div class="row"><span class="rating">' + rating(cinder) + '</span><span class="grow"><b>The Cinder Ledge</b><span class="sub">' + (S.ageChecked ? 'Age check passed: over 18. Only that answer was kept.' : 'An age check through an accredited provider returns only over or under.') + '</span></span>' + (S.ageChecked ? '<span class="badge ok"><i data-i="check"></i>Checked</span>' : '<button class="btn small" data-act="agecheck">Check my age</button>') + '</div>';
+  h += '<p class="small muted">Whether sexually explicit films are allowed at all is a decision for a vote with legal advice (MOV-A8-F3-P2). Children\'s privacy and safety were assessed before launch. Linking a child\'s own account to a parent comes next.</p></div>';
+  h += '<div class="sect"><div class="sect-title"><h2>History</h2><button class="sw" role="switch" aria-checked="' + S.history + '" data-act="history" aria-label="Keep watch history"></button></div><p class="small muted">' + (S.history ? 'Kept only for picking up where you left off, your own lists and the pass share-out, then deleted on a published schedule.' : 'History is paused. Nothing new is kept; resume points stay on this device only.') + '</p>' + (S.histItems.length ? S.histItems.map(id => '<div class="row"><span class="grow"><b>' + esc(FILM(id).t) + '</b><span class="sub">Watched this week</span></span><button class="btn quiet small" data-act="histdel" data-id="' + id + '">Remove</button></div>').join('') + '<button class="btn quiet small mt" data-act="histclear">Clear all history</button>' : '<p class="small muted">History is empty.</p>') + '</div>';
+  h += '<div class="sect"><div class="label">Notices you choose</div>' + [['release', 'New films from filmmakers you follow'], ['rental', 'A rental is about to end'], ['receipts', 'Receipts'], ['news', 'News from Spare Movies']].map(([k, l]) => '<div class="row"><span class="grow">' + l + '</span><button class="sw" role="switch" aria-checked="' + S.notif[k] + '" data-act="notif" data-v="' + k + '" aria-label="' + l + '"></button></div>').join('') + '<p class="small muted">Nothing is ever sent to sell you more.</p></div>';
+  h += '<div class="sect"><div class="label">Display and language</div><div class="row"><span class="grow">Larger text</span><button class="sw" role="switch" aria-checked="' + S.large + '" data-act="large" aria-label="Larger text"></button></div><div class="row"><span class="grow">Higher contrast</span><button class="sw" role="switch" aria-checked="' + S.contrast + '" data-act="contrast" aria-label="Higher contrast"></button></div><div class="row"><span class="grow">No moving previews or trailers that start on their own</span><span class="badge ok">On</span></div><label class="field mt"><span>Language</span><select data-input="lang"><option>English</option><option>Español</option><option>Français</option><option>Te reo Māori</option><option>العربية (right to left, next)</option></select></label><p class="small muted mt">Dates, times and money follow ' + CY.name + ' formats: ' + fmtDate('2026-10-22', true) + ', ' + money(1234.5) + '. <button class="link" data-act="a11y">Accessibility statement</button></p></div>';
+  h += '<div class="sect"><div class="label">Devices</div>' + S.devices.map((d, i) => '<div class="row"><i data-i="' + (d.indexOf('TV') > -1 ? 'tv' : d.indexOf('Phone') > -1 ? 'phone' : 'globe') + '"></i><span class="grow">' + d + (i === 0 ? ' <span class="badge n">this one</span>' : '') + '</span>' + (i ? '<button class="btn quiet small" data-act="devout" data-i="' + i + '">Sign out</button>' : '') + '</div>').join('') + '<div class="btns mt"><button class="btn quiet small" data-act="toast" data-msg="Installed from the browser. No app store needed.">' + ic('phone', 'sm') + 'Install on this phone</button><button class="btn quiet small" data-act="toast" data-msg="Light mode on: small images, the smallest video sizes, less data.">Light mode for slow connections</button><button class="btn quiet small" data-act="toast" data-msg="Recovery codes, a backup passkey and assisted recovery keep you from being locked out.">Recovery options</button></div></div>';
+  h += '<div class="sect"><div class="label">Privacy</div><div class="note ok small"><b>No adverts and no tracking, ever.</b> What you watch is never shared or sold. It is protected under ' + CY.privacy + ' and Spare Movies\' own rules.</div>';
+  h += '<div class="row"><span class="grow"><b>Let my data train AI</b><span class="sub">Off by default. No film is used to train AI unless its filmmaker says yes.</span></span><button class="sw" role="switch" aria-checked="' + S.aiTrain + '" data-act="aitrain" aria-label="Let my data train AI"></button></div>';
+  h += '<div class="row"><span class="grow"><b>Your AI assistant</b><span class="sub">' + (S.aiAgent ? 'Connected. It can search and keep your list. It must ask you before it rents, buys or pays.' : 'Not connected.') + '</span></span><button class="btn quiet small" data-act="agent">' + (S.aiAgent ? 'Disconnect' : 'Connect') + '</button></div>';
+  h += '<div class="btns mt"><button class="btn quiet small" data-act="toast" data-msg="Your data is being packed: purchases, lists, history and settings. You will get a link when it is ready.">' + ic('download', 'sm') + 'Download all my data</button><button class="btn quiet small" data-act="toast" data-msg="Consents: card saved for next time, release notices, AI training off. Each can be changed here.">See my consents</button><button class="btn quiet small" data-act="toast" data-msg="A privacy request goes to the privacy officer and is answered within the time ' + CY.privacy + ' allows.">Ask what you hold</button><button class="btn dan small" data-act="toast" data-msg="Pause hides your profile; delete removes it after a short grace period. Films you bought stay yours until then.">Pause or delete account</button></div></div>';
+  return h;
+}
+
+/* ---------- Pay ---------- */
+function renderPay() {
+  const f = FILM(S.film);
+  const ways = f.ways.filter(w => w !== 'free');
+  if (!ways.includes(S.pay.way)) S.pay.way = ways[0];
+  const w = S.pay.way;
+  const b = breakdown(f, w);
+  let h = '<div class="sect alt"><div class="row" style="padding:0;border:0"><span style="width:56px;flex:none"><span class="poster" style="display:block">' + scene(f.scene) + '</span></span><span class="grow"><h2>' + esc(f.t) + '</h2><span class="sub">' + esc(f.by) + ' · <span class="rating">' + rating(f) + '</span> · <span style="white-space:nowrap">' + (f.series ? 'Season 1' : hm(f.min)) + '</span></span></span><span class="badge n">Example: ' + CY.name + '</span></div></div>';
+  if (!prof().adult && !S.pay.unlocked) {
+    h += '<div class="sect"><div class="note dan"><b>Juniper\'s profile cannot pay.</b> Ask the account holder to enter their PIN or use their passkey.</div><label class="field mt" style="max-width:240px"><span>Account holder\'s PIN (sample: any four digits)</span><input id="pin" inputmode="numeric" maxlength="4" placeholder="4 digits"></label><button class="btn mt" data-act="unlock">Unlock this payment</button></div>';
+    return h;
+  }
+  h += '<div class="sect"><div class="seg" role="group" aria-label="Way to pay">' + ways.map(x => '<button data-act="payway" data-v="' + x + '" ' + pressed(x === w) + '>' + wayName(x, f) + '</button>').join('') + '</div>';
+  if (w === 'rent') h += '<p class="small mt">Start within 30 days. Once you press play you have 48 hours to finish. The filmmaker set these within published limits. If it will not play, your money comes back automatically.</p>';
+  if (w === 'buy') h += '<p class="small mt">Watch any time on any of your devices. <b>Keep-access promise (draft):</b> if the filmmaker withdraws the film or rights end in ' + CY.in + ', you keep it for at least five years or get your money back.</p>';
+  if (w === 'support' || w === 'pwyl') h += '<label class="field mt" style="max-width:220px"><span>Amount</span><input id="amt" inputmode="decimal" value="' + (S.pay.amount || CY.p.sugg) + '"></label><p class="small muted mt">' + (w === 'pwyl' ? 'The filmmaker set no minimum. Suggested: ' + money(CY.p.sugg) + '.' : 'Support goes straight to the filmmaker, on top of any price you paid.') + '</p>' + (w === 'support' ? '<label class="check mt small"><input type="checkbox" data-act="cover" ' + (S.pay.cover ? 'checked' : '') + '> Add the card charge so the filmmaker gets it all</label>' : '');
+  h += '</div>';
+  h += '<div class="sect"><div class="label">Before you pay</div><div class="tblwrap"><table class="tbl">';
+  h += '<tr><td>You pay</td><td class="n">' + money(b.gross) + '</td></tr>';
+  h += '<tr class="sub"><td>' + CY.tax + ' (' + Math.round(CY.rate * 100) + '%' + (CY.key === 'us' ? ', sample state rate' : CY.key === 'eu' ? ', sample rate; each member state sets its own' : CY.key === 'ca' ? ', sample HST rate' : '') + '), ' + (CY.incl ? 'included' : 'added') + ', paid to ' + CY.taxOffice + '</td><td class="n">-' + money(b.tax) + '</td></tr>';
+  h += '<tr class="sub"><td>Card charge, passed through at cost (sample rate ' + (CY.card[0] * 100).toFixed(1) + '% + ' + money(CY.card[1]) + ')</td><td class="n">-' + money(b.card) + '</td></tr>';
+  if (b.covered) h += '<tr class="sub"><td>Card charge you chose to add</td><td class="n">+' + money(b.covered) + '</td></tr>';
+  if (b.deliv) h += '<tr class="sub"><td>Delivery, about ' + (f.min / 60 * 3).toFixed(1) + ' GB in HD at ' + CY.region + ' rates (sample)</td><td class="n">-' + money(b.deliv) + '</td></tr>';
+  if (b.share) h += '<tr class="sub"><td>Share of last month\'s running costs: storage, encoding, moderation, support (sample)</td><td class="n">-' + money(b.share) + '</td></tr>';
+  h += '<tr class="total"><td>' + esc(f.by) + ' gets</td><td class="n">' + money(b.maker) + '</td></tr></table></div>';
+  h += '<p class="small muted">No margin is added. The running-cost share comes from the <button class="link" data-go="coop">open cost ledger</button>; filmmakers vote on it. Seller of record: still to be decided (MOV-A6-F8-P1). This example shows Spare Movies collecting ' + CY.tax + ' for the filmmaker.</p></div>';
+  if (S.pay.done) {
+    h += '<div class="sect"><div class="note ok"><b>Paid ' + money(S.pay.done.gross) + '.</b> Receipt sent to your email. It names the seller and shows ' + CY.tax + ' as ' + CY.taxOffice + ' requires. If the film will not play, your money comes back automatically; anything else follows ' + CY.consumer + '.</div><div class="btns mt"><button class="btn primary" data-act="watch" data-id="' + f.id + '"><i data-i="play"></i>Watch now</button><button class="btn quiet" data-film="' + f.id + '">Back to the film</button></div></div>';
+  } else {
+    h += '<div class="sect"><div class="row" style="padding-top:0"><i data-i="lock" class="app"></i><span class="grow"><b>Card ending 4242, saved</b><span class="sub">Paid through a regulated payment provider. Spare Movies never sees your card number.</span></span><button class="btn quiet small" data-act="toast" data-msg="Bank payments and other cards are offered where the payment provider supports them.">Change</button></div>';
+    h += '<button class="btn primary mt" data-act="paynow">' + (S.guest ? 'Join to pay' : 'Pay ' + money(b.gross) + ' (sample, no money moves)') + '</button>';
+    h += '<p class="small muted mt">Selling to viewers in other countries in their own money, and paying inside phone and TV apps, come next.</p></div>';
+  }
+  return h;
+}
+
+/* ---------- Viewer pass (next) ---------- */
+function renderPass() {
+  const price = CY.p.pass;
+  const ex = CY.incl ? price / (1 + CY.rate) : price;
+  const tax = CY.incl ? price - ex : price * CY.rate;
+  const card = (CY.incl ? price : price + tax) * CY.card[0] + CY.card[1];
+  const watched = [['tinkite', 102], ['night', 132], ['garden', 84], ['glass', 12]];
+  const mins = watched.reduce((a, x) => a + x[1], 0);
+  const deliv = CY.deliv * mins / 60;
+  const run = CY.share * 3;
+  const shared = ex - card - deliv - run;
+  const avgMins = 250;
+  let h = '<div class="sect alt"><div class="sect-title"><h2>One pass, shared out by watch time</h2><span class="badge n">next</span></div><p class="small">Every film whose filmmaker opts in, for one monthly price. Filmmakers keep rent and buy open beside it. This comes after the first release; how the money is shared out is an open decision, so both ways are shown.</p></div>';
+  h += '<div class="sect"><div class="label">Your pass, this month (sample, ' + CY.name + ')</div><div class="tblwrap"><table class="tbl"><tr><td>Pass price</td><td class="n">' + money(CY.incl ? price : price + tax) + '</td></tr><tr class="sub"><td>' + CY.tax + (CY.incl ? ' included' : ' added') + ', paid to ' + CY.taxOffice + '</td><td class="n">-' + money(tax) + '</td></tr><tr class="sub"><td>Card charge at cost</td><td class="n">-' + money(card) + '</td></tr><tr class="sub"><td>Delivery for your ' + mins + ' minutes</td><td class="n">-' + money(deliv) + '</td></tr><tr class="sub"><td>Running-cost share per viewer</td><td class="n">-' + money(run) + '</td></tr><tr class="total"><td>Shared out to filmmakers</td><td class="n">' + money(shared) + '</td></tr></table></div></div>';
+  h += '<div class="sect"><div class="sect-title"><h2>Where your money goes</h2><div class="seg" role="group" aria-label="Share-out method">' + [['viewer', 'Your own watch time'], ['pool', 'One pool']].map(([v, l]) => '<button data-act="passway" data-v="' + v + '" ' + pressed(S.passWay === v) + '>' + l + '</button>').join('') + '</div></div>';
+  if (S.passWay === 'viewer') {
+    h += '<p class="small">Your fee goes only to the films you watched, by your minutes.</p><div class="tblwrap"><table class="tbl mt"><tr><th>Film</th><th class="n">Minutes</th><th class="n">Gets</th></tr>' + watched.map(([id, m]) => '<tr><td>' + esc(FILM(id).t) + (FILM(id).sec === 'ai' ? ' <span class="badge inf">AI</span>' : '') + '</td><td class="n">' + m + '</td><td class="n">' + money(shared * m / mins) + '</td></tr>').join('') + '<tr class="total"><td>Total</td><td class="n">' + mins + '</td><td class="n">' + money(shared) + '</td></tr></table></div>';
+  } else {
+    const val = shared / avgMins * mins;
+    h += '<p class="small">All pass money goes into one pool, shared by each film\'s share of everyone\'s minutes. The average viewer watched ' + avgMins + ' minutes, so a minute is worth ' + money(shared / avgMins) + '.</p><div class="note n small mt">Your ' + mins + ' minutes steer <b>' + money(val) + '</b> of the pool, though your own fee shared out ' + money(shared) + '. Heavy viewers, and anyone faking views, steer other people\'s money. Research finds a per-viewer share resists fake viewing better; a pool is simpler (sources in ARCHITECTURE.md).</div>';
+  }
+  h += '<p class="small muted mt">Decision open: MOV-A7-F2-P1, for an owner and the filmmakers\' vote. Both methods are built so the vote decides.</p></div>';
+  h += '<div class="sect"><div class="label">Guards against fake viewing</div><ul class="stepper"><li class="done"><b>Counted after two minutes</b><span class="sub">Short plays do not count.</span></li><li class="done"><b>Capped per profile per day</b><span class="sub">Played-on-repeat films stop counting.</span></li><li class="done"><b>Device and pattern checks</b><span class="sub">Suspicious shares are held for a person to review, and taken back if proven fake.</span></li></ul></div>';
+  h += '<div class="sect"><div class="label">Films in the pass</div><div class="shelf">' + FILMS.filter(f => f.pass && inSec(f)).map(f => tile(f)).join('') + '</div><button class="btn primary mt" data-act="toast" data-msg="The pass is a next feature, shown here for assessment. Nothing was charged.">Join the pass (sample)</button></div>';
+  return h;
+}
+
+/* ---------- Studio ---------- */
+function studioHead() {
+  return '<div class="sect alt" style="padding:10px var(--s2)"><div class="row" style="padding:0;border:0"><span class="avatar" style="width:32px;height:32px;display:inline-grid;place-items:center;border:1px solid var(--app-strong);background:var(--app-tint);border-radius:var(--radius);font-weight:700">LY</span><span class="grow"><b>Lantern Yard Films</b><span class="sub">Sample filmmaker account: a production company with three people on the team</span></span><span class="badge ok"><i data-i="check"></i>Checked for payouts</span></div></div><div class="subtabs" role="tablist">' + STUDIO.map(([k, l]) => '<button data-go="' + k + '"' + (S.screen === k ? ' aria-current="page"' : '') + '>' + l + '</button>').join('') + '</div>';
+}
+const CHECKS = [['ok', 'Picture', '3840 × 2160, 24 frames a second'], ['ok', 'Sound', 'Stereo and 5.1 mixes, in step with the picture'], ['inf', 'Loudness', '3 dB above the published target; it will be levelled for you'], ['warn', 'Black frames', '4 seconds at 1:12:03. Check this is meant.'], ['ok', 'File safety', 'Opened in a locked-down sandbox; nothing harmful found']];
+function renderPublish() {
+  const U = S.up;
+  const done = { file: U.pct >= 100, details: true, ai: true, caps: U.capDraft === 2, rating: U.rated, rights: U.rights };
+  const ready = Object.values(done).every(Boolean);
+  let h = studioHead();
+  h += '<div class="sect"><div class="sect-title"><h2>New draft: The Long Low Tide</h2><div class="seg" role="group" aria-label="Kind">' + [['film', 'Film'], ['episode', 'Series episode']].map(([v, l]) => '<button data-act="upkind" data-v="' + v + '" ' + pressed(U.kind === v) + '>' + l + '</button>').join('') + '</div></div>';
+  h += '<div class="chips mt">' + [['file', 'Master file'], ['details', 'Details, poster and trailer'], ['ai', 'AI use'], ['caps', 'Captions and audio description'], ['rating', 'Ratings for each country'], ['rights', 'Rights, prices and release']].map(([k, l], i) => '<span class="badge ' + (done[k] ? 'ok' : 'n') + '">' + (done[k] ? '<i data-i="check"></i>' : 'To do: ') + (i + 1) + '. ' + l + '</span>').join('') + '</div></div>';
+  // file
+  h += '<div class="sect"><div class="label">1. Master file</div><div class="row" style="padding-top:0"><i data-i="film" class="app"></i><span class="grow"><b>long-low-tide_master.mov</b><span class="sub">' + (U.pct >= 100 ? '148 GB uploaded. Kept in the master archive so it can be encoded again later.' : (U.paused ? 'Connection dropped. It will carry on from ' + U.pct + '%.' : U.run ? 'Uploading: ' + U.pct + '% of 148 GB' : 'Not started')) + '</span></span>' + (U.pct >= 100 ? '<span class="badge ok"><i data-i="check"></i>Uploaded</span>' : U.run ? '<button class="btn quiet small" data-act="updrop">Drop the connection</button>' : '<button class="btn primary small" data-act="upstart">' + (U.paused ? 'Resume' : 'Start upload') + '</button>') + '</div><div class="bar"><span style="width:' + U.pct + '%"></span></div>';
+  if (U.pct >= 100) h += '<div class="mt">' + CHECKS.map(([k, a, b]) => '<div class="row"><i data-i="' + (k === 'ok' ? 'check' : k === 'warn' ? 'warn' : 'info') + '" class="' + (k === 'ok' ? 'ok' : k === 'warn' ? 'dan' : 'inf') + '"></i><span class="grow"><b>' + a + '</b><span class="sub">' + b + '</span></span></div>').join('') + '<p class="small muted">Every size is made from this master: AV1 where devices play it, H.264 for everything else, packaged once for streaming. A fingerprint is made so stolen uploads can be spotted.</p></div>';
+  h += '</div>';
+  h += '<div class="sect"><div class="label">2. Details, poster and trailer</div><div class="row" style="padding-top:0"><span style="width:44px;flex:none"><span class="poster" style="display:block">' + scene('draft') + '</span></span><span class="grow"><b>Poster added</b><span class="sub">Image description: "A wide estuary at low tide under a pale sun."</span></span><span class="badge ok">Done</span></div><div class="row"><i data-i="play"></i><span class="grow"><b>Trailer, 1:58</b><span class="sub">Captions added; same AI answer as the film</span></span><span class="badge ok">Done</span></div></div>';
+  h += '<div class="sect"><div class="label">3. AI use (every film answers this)</div><div class="chips">' + [['none', 'None'], ['assist', 'AI-assisted'], ['made', 'AI-made']].map(([v, l]) => '<button class="chip" data-act="upai" data-v="' + v + '" ' + pressed(U.ai === v) + '>' + l + '</button>').join('') + '</div><p class="small mt">' + (U.ai === 'none' ? 'Goes in the <b>Human</b> section.' : 'Goes in the <b>AI</b> section, marked "' + (U.ai === 'made' ? 'AI-made' : 'AI-assisted') + '". Name the tasks and tools, for example generated shots, AI voices or de-ageing.') + ' Ordinary tools and captions made from speech do not count (draft rule).</p></div>';
+  h += '<div class="sect"><div class="label">4. Captions and audio description</div>';
+  h += U.capDraft === 0 ? '<div class="btns"><button class="btn" data-act="capdraft">Make a caption draft from the soundtrack</button><button class="btn quiet" data-act="toast" data-msg="WebVTT or TTML caption files are checked for timing and reading speed.">Upload a caption file</button></div><p class="small muted mt">Captions in the film\'s main language are needed before publishing.</p>' : U.capDraft === 1 ? '<p class="small">Draft ready: 1,284 lines from an openly licensed speech model, run at cost. Check it before publishing.</p><div class="code">00:41:12.000 --> 00:41:15.500\nFold it smaller. The wind will take it further.\n\n00:41:16.000 --> 00:41:18.200\nWill he know it is from <b>as</b>?</div><button class="btn mt" data-act="capfix">Fix "as" to "us" and mark checked</button>' : '<div class="note ok small">English captions checked by a person. Reading speed and timing pass.</div>';
+  h += '<div class="row"><i data-i="ear" class="app"></i><span class="grow"><b>Audio description</b><span class="sub">' + (U.ad === 'none' ? 'Optional. A recorded track, or a timed text script read aloud by a synthetic voice, marked as synthetic.' : 'Text descriptions added: 212 of them, fitted into gaps in the dialogue.') + '</span></span>' + (U.ad === 'none' ? '<button class="btn quiet small" data-act="upad">Write descriptions</button>' : '<span class="badge ok">Added</span>') + '</div>';
+  h += '<p class="small muted">The access law in ' + CY.in + ' for on-demand captions and audio description is in its rules pack (MOV-A13-F6-P1).</p></div>';
+  h += '<div class="sect"><div class="label">5. Ratings for each country</div>' + (U.rated ? '<div class="tblwrap"><table class="tbl"><tr><th>Country</th><th>Rating</th><th>How</th></tr>' + Object.keys(COUNTRIES).map(k => { const c = COUNTRIES[k]; return '<tr><td>' + c.name + '</td><td><span class="rating">' + c.ratings[2] + '</span></td><td class="muted">' + c.fee + '</td></tr>'; }).join('') + '</table></div><p class="small muted">From your answers, through each country\'s rules pack. Where a country needs an official rating, you apply to its body, and the fee is shown before you start.</p>' : '<button class="btn" data-act="rate">Answer the rating questions</button><p class="small muted mt">Plain questions about violence, language, sex, drugs and themes. We never invent an official rating.</p>') + '</div>';
+  h += '<div class="sect"><div class="label">6. Rights, prices and release</div><div class="row" style="padding-top:0"><span class="grow"><b>Worldwide except Germany</b><span class="sub">Rent ' + money(CY.p.rent) + ', buy ' + money(CY.p.buy) + ' in ' + CY.in + '. Release ' + fmtDate('2026-12-04', true) + ' everywhere it is shown.</span></span><button class="btn quiet small" data-go="rights">Edit</button></div></div>';
+  h += '<div class="sect"><button class="btn primary" data-act="publish" ' + (ready && !U.published ? '' : 'disabled') + '>' + (U.published ? 'Published, releases on ' + fmtDate('2026-12-04') : 'Publish') + '</button> <span class="small muted">' + (ready ? '' : 'Finish the steps marked To do first.') + '</span>';
+  h += '<div class="row mt"><span class="grow"><b>Tin Kite: replace the file</b><span class="sub">Encoded beside the old one and swapped in when ready; viewers keep their access; the change is logged.</span></span><button class="btn quiet small" data-act="toast" data-msg="New file encoding. Tin Kite stays watchable; the swap is logged in its public history.">Replace</button></div>';
+  h += '<p class="label mt2">Or by command (same path for people, scripts and AI agents)</p><div class="code">movies publish --draft long-low-tide --release 2026-12-04 --countries all-except:DE</div></div>';
+  return h;
+}
+const REGIONS = [['Oceania', [['NZ', 'New Zealand'], ['AU', 'Australia'], ['FJ', 'Fiji']]], ['Europe', [['GB', 'United Kingdom'], ['IE', 'Ireland'], ['FR', 'France'], ['DE', 'Germany'], ['NL', 'Netherlands']]], ['Americas', [['US', 'United States'], ['CA', 'Canada'], ['MX', 'Mexico'], ['BR', 'Brazil']]], ['Asia and Africa', [['JP', 'Japan'], ['IN', 'India'], ['ZA', 'South Africa'], ['KE', 'Kenya']]]];
+function renderRights() {
+  let h = studioHead();
+  h += '<div class="sect"><div class="sect-title"><h2>Tin Kite: where it may be shown</h2><span class="badge n">sample</span></div><div class="chips"><button class="chip" aria-pressed="false" data-act="toast" data-msg="Worldwide: every country ticked.">Worldwide</button><button class="chip" aria-pressed="true">Worldwide except</button><button class="chip" aria-pressed="false" data-act="toast" data-msg="Pick countries one by one.">Pick countries</button></div>';
+  h += '<div class="cols mt">' + REGIONS.map(([r, cs]) => '<div class="card"><b>' + r + '</b>' + cs.map(([k, n]) => { const on = k === 'DE' ? S.rights.DE : true; return '<label class="check small mt"><input type="checkbox" data-act="rightc" data-v="' + k + '" ' + (on ? 'checked' : '') + '> ' + n + (k === 'DE' && !on ? ' <span class="badge n">holdback</span>' : '') + '</label>'; }).join('') + '</div>').join('') + '</div>';
+  h += S.rights.DE ? '<div class="note dan small mt">You ticked Germany, but you declared an exclusive TV deal there until 31 March 2027. Untick it, or attach proof the deal allows this.</div>' : '<div class="note n small mt"><b>Germany: not until 1 April 2027.</b> Declared deal: exclusive TV licence until 31 March 2027. Viewers in Germany see a plain reason and can ask to be told.</div>';
+  h += '</div>';
+  h += '<div class="sect"><div class="label">Release windows</div><div class="tblwrap"><table class="tbl"><tr><th>Way to watch</th><th>Opens</th><th>Closes</th></tr><tr><td>Rent and buy</td><td>' + fmtDate('2026-10-02') + '</td><td>Open</td></tr><tr><td>Viewer pass <span class="badge n">next</span></td><td>' + fmtDate('2027-02-01') + '</td><td>Open</td></tr><tr><td>Free</td><td>Not planned</td><td></td></tr></table></div><p class="small muted">Windows open and close on time by themselves, and every change is logged.</p></div>';
+  h += '<div class="sect"><div class="label">Status in each example country</div><div class="tblwrap"><table class="tbl"><tr><th>Country</th><th>Rights</th><th>Rating</th><th>Rent</th><th>Captions</th></tr>' + Object.keys(COUNTRIES).map(k => { const c = COUNTRIES[k]; return '<tr' + (c === CY ? ' style="background:var(--app-tint)"' : '') + '><td>' + c.name + '</td><td>' + (k === 'eu' ? 'All but Germany' : 'Yes') + '</td><td><span class="rating">' + c.ratings[2] + '</span></td><td class="n">' + c.cur + c.p.rent.toFixed(2) + '</td><td>English' + (k === 'us' || k === 'eu' ? ', Spanish' : '') + '</td></tr>'; }).join('') + '</table></div><p class="small muted">Each country gets its own rules pack: who rates films, what the law asks, and the money and tax.</p></div>';
+  h += '<div class="sect"><div class="label">Proof of rights (private)</div>' + [['Chain of title: producer agreement', 'Signed 2025'], ['Actors\' releases (11)', 'Signed 2025'], ['Music licences and cue sheet', '4 cues']].map(([a, b]) => '<div class="row"><i data-i="doc"></i><span class="grow"><b>' + a + '</b><span class="sub">' + b + '. Opened only by a moderator if someone makes a claim.</span></span></div>').join('');
+  h += '<div class="tblwrap"><table class="tbl mt"><tr><th>Music cue</th><th>Writer</th><th>Publisher</th><th class="n">Length</th></tr><tr><td>Tin Roof Waltz</td><td>Liesl Brightwater</td><td>Self-published</td><td class="n">2:41</td></tr><tr><td>The Letter</td><td>Liesl Brightwater</td><td>Self-published</td><td class="n">3:05</td></tr><tr><td>Harbour Bell (archive)</td><td>Traditional</td><td>None</td><td class="n">0:22</td></tr><tr><td>Northerly</td><td>Rua Northwind</td><td>Copperwire Tunes</td><td class="n">1:50</td></tr></table></div><p class="small muted">Whether Spare Movies also needs licences from music collecting societies in each country is being researched (MOV-A11-F7-P2, unverified).</p></div>';
+  h += '<div class="sect"><div class="label">Travellers and the end of rights</div><p class="small">Paid viewers who are only visiting another EU country keep their access, as the EU\'s portability rules ask; other countries follow their packs. If rights end in a country, viewers there are told 30 days ahead, buyers keep the film as the keep-access promise says, and anyone who cannot keep it gets a refund.</p></div>';
+  return h;
+}
+function renderEarnings() {
+  const r = CY.p.rent, bu = CY.p.buy;
+  const rows = [['Tin Kite', 'Rent', 412, r], ['Tin Kite', 'Buy', 96, bu], ['Tin Kite', 'Support', 38, CY.p.sugg], ['The Long Low Tide', 'Pre-release', 0, 0]];
+  let gross = 0, tax = 0, card = 0, deliv = 0, share = 0;
+  rows.forEach(([, w, n, p]) => { if (!n) return; const g = CY.incl ? p : p * (1 + CY.rate); const t = CY.incl ? p - p / (1 + CY.rate) : p * CY.rate; gross += g * n; tax += t * n; card += (g * CY.card[0] + CY.card[1]) * n; if (w !== 'Support') { deliv += CY.deliv * 1.7 * n; share += CY.share * n; } });
+  const net = gross - tax - card - deliv - share;
+  let h = studioHead();
+  h += '<div class="sect"><div class="sect-title"><h2>October 2026</h2><span class="badge n">Example: ' + CY.name + ' payouts</span></div><div class="stats"><div class="stat"><b>' + money(net) + '</b><span>Earned this month</span></div><div class="stat"><b>' + money(net * 0.7) + '</b><span>Paid out so far</span></div><div class="stat"><b>' + money(42.1) + '</b><span>Held: rental refund window</span></div><div class="stat"><b>' + fmtDate('2026-10-22') + '</b><span>Next weekly payout</span></div></div>';
+  h += '<div class="tblwrap"><table class="tbl mt"><tr><th>Film</th><th>Way</th><th class="n">Count</th><th class="n">Viewers paid</th></tr>' + rows.map(([t, w, n, p]) => '<tr><td>' + t + '</td><td>' + w + '</td><td class="n">' + n + '</td><td class="n">' + money((CY.incl ? p : p * (1 + CY.rate)) * n) + '</td></tr>').join('') + '<tr class="sub"><td colspan="3">' + CY.tax + ' collected, paid to ' + CY.taxOffice + '</td><td class="n">-' + money(tax) + '</td></tr><tr class="sub"><td colspan="3">Card charges, passed through at cost</td><td class="n">-' + money(card) + '</td></tr><tr class="sub"><td colspan="3">Delivery, by hours watched</td><td class="n">-' + money(deliv) + '</td></tr><tr class="sub"><td colspan="3">Running-cost share, per sale</td><td class="n">-' + money(share) + '</td></tr><tr class="total"><td colspan="3">Yours</td><td class="n">' + money(net) + '</td></tr></table></div><p class="small muted">Money is held only for a reason shown: the 48-hour refund window on new rentals, a rights dispute or a fake viewing check. <button class="link" data-act="toast" data-msg="Export ready: a CSV for your accounting software.">Export for accounting</button></p></div>';
+  h += '<div class="sect"><div class="label">Splits on Tin Kite (each person paid directly)</div><div class="tblwrap"><table class="tbl"><tr><th>Who</th><th class="n">Share</th><th class="n">October</th><th>Signed</th></tr>' + [['Lantern Yard Films (producer)', 45], ['Ana Quillfeather (director and writer)', 20], ['Cast pool, 6 people', 15], ['Crew pool, 14 people', 15], ['Liesl Brightwater (music)', 5]].map(([n, p]) => '<tr><td>' + n + '</td><td class="n">' + p + '%</td><td class="n">' + money(net * p / 100) + '</td><td><span class="badge ok"><i data-i="check"></i>Yes</span></td></tr>').join('') + '</table></div><p class="small muted">A change to the splits needs everyone in them to sign again. Paying investors back first comes next.</p></div>';
+  h += '<div class="sect"><div class="label">Payouts</div>' + [['2026-10-15', 0.4, ''], ['2026-10-08', 0.3, ''], ['2026-10-01', 0.22, ', for September']].map(([d, k, x]) => '<div class="row"><i data-i="coin" class="app"></i><span class="grow"><b>' + money(net * k) + '</b><span class="sub">' + fmtDate(d, true) + ' to the account ending 0912' + x + '</span></span><span class="badge ok">Paid</span></div>').join('') + '<p class="small muted">Bank details can only change after a fresh sign-in, with a notice to every owner. Payouts never reach sanctioned people.</p></div>';
+  h += '<div class="sect"><div class="label">Tax</div><div class="row" style="padding-top:0"><i data-i="file"></i><span class="grow"><b>Yearly statement 2025 to 2026</b><span class="sub">Sales, ' + CY.tax + ', fees and payouts, for ' + CY.taxOffice + '. Income is reported where platform reporting rules ask.</span></span><button class="btn quiet small" data-act="toast" data-msg="Statement downloaded (sample).">Download</button></div></div>';
+  h += '<div class="sect"><div class="label">How your films are doing</div><div class="chart">' + [20, 34, 28, 52, 61, 44, 70, 66].map(v => '<i style="height:' + v + '%"></i>').join('') + '</div><div class="chart-x"><span>Aug</span><span>Sep</span><span>Oct</span></div><div class="stats mt"><div class="stat"><b>1,204</b><span>Plays</span></div><div class="stat"><b>71%</b><span>Watched to the end</span></div><div class="stat"><b>23</b><span>Countries</span></div><div class="stat"><b>1,688</b><span>Hours watched</span></div></div><p class="small muted mt">Counted privately and never per person. Numbers under 10 are hidden.</p></div>';
+  h += '<div class="sect"><div class="label">Team</div>' + [['Hollis Wrenfield', 'Owner'], ['Ana Quillfeather', 'Editor: films and details'], ['Marlow Ledgerton', 'Finance: earnings and payouts']].map(([n, r]) => '<div class="row"><span class="grow"><b>' + n + '</b><span class="sub">' + r + '</span></span></div>').join('') + '</div>';
+  return h;
+}
+function renderProtection() {
+  let h = studioHead();
+  h += '<div class="sect"><div class="label">Stopping copies: the open decision</div><div class="cols3">' + [['Locked playback', 'Widevine, FairPlay and PlayReady are closed systems; each needs an agreement with its company. Stops simple copying on supported devices.'], ['Hidden watermark', 'Each stream carries a unique hidden pattern, so a leaked copy leads back to the account. Heavily patented field (unverified).'], ['No lock', 'Encrypted delivery and expiring links only. Simplest, works everywhere, easiest to copy.']].map(([a, b]) => '<div class="card"><b>' + a + '</b><p class="small mt">' + b + '</p></div>').join('') + '</div><p class="small muted mt">Today every option starts the same way: films encrypted once with the Common Encryption standard, and links that expire and work only for one session. Decision open: MOV-A16-F1-P1. Nothing stops someone filming the screen.</p></div>';
+  h += '<div class="sect"><div class="label">Fingerprints</div>' + [['Tin Kite', 'Fingerprint made 2 October 2026'], ['The Long Low Tide', 'Made when the upload finishes']].map(([a, b]) => '<div class="row"><i data-i="fp" class="app"></i><span class="grow"><b>' + a + '</b><span class="sub">' + b + '</span></span></div>').join('') + '</div>';
+  if (S.match === 'open') {
+    h += '<div class="sect"><div class="note dan"><b>Possible copy of Tin Kite.</b> An upload called "Kite Over Water" by a new account matched 94 of its 102 minutes. Publishing is paused and nothing has been paid. A moderator will decide; you can help.</div><div class="cols mt"><div class="card"><span class="poster" style="display:block;aspect-ratio:16/9">' + scene('kite') + '</span><p class="small mt"><b>Tin Kite</b> (yours)</p></div><div class="card"><span class="poster" style="display:block;aspect-ratio:16/9"><span style="position:absolute;inset:0;transform:scaleX(-1) scale(1.25)">' + scene('kite') + '</span></span><p class="small mt"><b>Kite Over Water</b> (upload, cropped and mirrored)</p></div></div><div class="btns mt"><button class="btn primary" data-act="match" data-v="no">Not authorised</button><button class="btn quiet" data-act="match" data-v="yes">I licensed it</button></div></div>';
+  } else h += '<div class="sect"><div class="note ' + (S.match === 'no' ? 'ok' : 'n') + ' small">' + (S.match === 'no' ? 'Thank you. A moderator confirmed it and removed the upload; the entry is in the <button class="link" data-go="log">public removal log</button>. The uploader can send a counter-notice.' : 'Marked as licensed. The upload goes ahead, and the match is noted on both films.') + '</div></div>';
+  h += '<div class="sect"><div class="label">Copyright notices and disputes</div><p class="small">Notices and counter-notices run on legal deadlines, with earnings held while one is open. When two people claim the same film, it is decided on evidence, with the money held until then. Checking a copy on another site and preparing a notice comes next.</p></div>';
+  h += '<div class="sect"><div class="label">What viewers are told</div><p class="small">"This film is delivered encrypted, through links that expire. Nothing is installed on your device and nothing about you is tracked."</p></div>';
+  return h;
+}
+
+/* ---------- Public removal log ---------- */
+const LOG = [
+  { id: 'MOV-RL-0148', k: 'copy', what: 'Upload "Kite Over Water" removed', why: 'Copyright: matched 94 minutes of Tin Kite; the rights holder confirmed no licence; no counter-notice yet.', law: 'Copyright law in every country it was offered', where: 'All countries', appeal: 'Counter-notice open until 2 November' },
+  { id: 'MOV-RL-0147', k: 'section', what: 'The Drowned Library moved from Human to AI', why: 'Wrong section: the answer said None; content credentials recorded generated backgrounds in 40 shots.', law: 'Spare Movies rule: Human and AI sections', where: 'All countries', appeal: 'Appeal decided: move upheld', mine: true },
+  { id: 'MOV-RL-0146', k: 'country', what: 'A film blocked in one country', why: 'Classified as objectionable there by the official body. Still available where it is lawful.', law: 'That country\'s classification law', where: 'One country', appeal: 'No appeal made' },
+  { id: 'MOV-RL-0145', k: 'rating', what: 'Night Shift at Hollow Bay: rating raised one step in one country', why: 'Wrong rating: viewers reported missing advice; the filmmaker agreed and added it.', law: 'Ratings rules pack', where: 'One country', appeal: 'No appeal made' },
+  { id: 'MOV-RL-0144', k: 'court', what: 'A documentary blocked in one country', why: 'Court order about one scene. The filmmaker may offer a cut version there.', law: 'Court order', where: 'One country', appeal: 'Filmmaker appealing in court' },
+  { id: 'MOV-RL-0143', k: 'illegal', what: 'Upload removed and reported', why: 'Matched an approved list of known illegal material. Reported to the right agency. No details are published.', law: 'Law on illegal material', where: 'All countries', appeal: 'None' },
+  { id: 'MOV-RL-0141', k: 'copy', what: 'Upload "Hollow Bay, all episodes" removed', why: 'Copyright: a full copy of Night Shift at Hollow Bay uploaded by another account; matched by fingerprint before it earned anything.', law: 'Copyright law in every country it was offered', where: 'All countries', appeal: 'No counter-notice' },
+  { id: 'MOV-RL-0142', k: 'gov', what: 'Request for account details refused', why: 'A government request came without a court order, so nothing was given.', law: 'Requests are answered only as the law requires', where: 'One country', appeal: 'n/a' }
+];
+const LOGK = { all: 'All', copy: 'Copyright', section: 'Section moves', rating: 'Ratings', country: 'Blocked in one country', court: 'Court orders', illegal: 'Illegal material', gov: 'Government requests' };
+function renderLog() {
+  const list = LOG.filter(e => S.logFilter === 'all' || e.k === S.logFilter).filter(e => S.match === 'no' || e.id !== 'MOV-RL-0148');
+  let h = '<div class="sect alt"><div class="sect-title"><h2>Public removal log</h2><span class="small muted">Anyone can read it. No personal details.</span></div><p class="small">Spare Movies removes only what the law requires. Lawful films stay up. Every decision here names the rule or law behind it, and anyone acted on can appeal.</p>';
+  h += '<div class="stats mt"><div class="stat"><b>' + (S.match === 'no' ? 3 : 2) + '</b><span>Removed this month</span></div><div class="stat"><b>2</b><span>Blocked in one country</span></div><div class="stat"><b>' + (1 + S.flags.length) + '</b><span>Section moves and flags</span></div><div class="stat"><b>1</b><span>Government requests (0 answered)</span></div></div></div>';
+  h += '<div class="sect"><div class="chips">' + Object.keys(LOGK).map(k => '<button class="chip" data-act="logf" data-v="' + k + '" ' + pressed(S.logFilter === k) + '>' + LOGK[k] + '</button>').join('') + '</div>';
+  h += S.flags.map(f => '<div class="logent"><div class="top"><span class="badge n">Flag received</span><b>' + esc(f) + '</b><span class="lid">pending</span></div><p class="small">A moderator will look at it. If the film moves, the reason will be logged here.</p></div>').join('');
+  h += list.map(e => '<div class="logent"><div class="top"><span class="badge ' + (e.k === 'section' ? 'inf' : e.k === 'gov' ? 'n' : 'dan') + '">' + LOGK[e.k] + '</span><b>' + esc(e.what) + '</b><span class="lid">' + e.id + '</span></div><p class="small">' + esc(e.why) + '</p><p class="law">Rule or law: ' + esc(e.law) + ' · Where: ' + e.where + ' · ' + esc(e.appeal) + '</p>' + (e.mine ? '<button class="link small" data-act="appeal">' + (S.appealStep ? 'Hide the appeal steps' : 'See the appeal steps') + '</button>' + (S.appealStep ? '<ul class="stepper mt"><li class="done"><b>Flag from a viewer</b><span class="sub">Wrong section</span></li><li class="done"><b>Moderator review</b><span class="sub">Credentials and the filmmaker\'s notes read; moved with a statement of reasons</span></li><li class="done"><b>Appeal by the collective</b><span class="sub">"The backgrounds are paintings we scanned."</span></li><li class="done"><b>Appeal panel of three elected moderators</b><span class="sub">Upheld the move: the credentials show the backgrounds were generated, not scanned</span></li></ul>' : '') : '') + '</div>').join('');
+  if (!list.length && !S.flags.length) h += '<p class="small muted mt">Nothing in this group this month.</p>';
+  h += '</div><div class="sect"><div class="label">How it works</div><div class="btns"><button class="btn quiet small" data-act="report" data-id="tinkite"><i data-i="flag"></i>Report something</button><button class="btn quiet small" data-act="rules">Read the rules</button><button class="btn quiet small" data-act="toast" data-msg="Transparency report for July to September 2026: 9 removals, 4 country blocks, 3 section moves, 2 government requests, 0 answered (sample).">Transparency report</button></div><p class="small muted mt">Reports go to trained moderators elected by filmmakers; decisions are sampled for consistency and moderators get support for distressing work. Accounts pretending to be a filmmaker are stopped before any money moves. Next moderator election: ' + fmtDate('2026-12-03') + '.</p></div>';
+  return h;
+}
+
+/* ---------- Costs, fees and votes ---------- */
+function renderCoop() {
+  const hours = 137000, sales = 61900, dl = CY.deliv * hours, other = CY.share * sales;
+  const L = [['Delivery: 412 TB, about 137,000 hours watched', dl], ['Storage: 86 TB, masters and every size', other * 0.15], ['Encoding: 2,140 machine hours', other * 0.10], ['Moderation: 310 paid hours', other * 0.30], ['Support and help: 260 hours', other * 0.25], ['Servers, security and backups', other * 0.12], ['Rating fees passed on', other * 0.03], ['Reserve for next month', other * 0.05]];
+  const tot = L.reduce((s, x) => s + x[1], 0);
+  let h = '<div class="sect alt"><div class="sect-title"><h2>What Spare Movies cost in September 2026</h2><span class="badge n">sample, shown in ' + CY.name + ' money</span></div><div class="tblwrap"><table class="tbl">' + L.map(([a, b]) => '<tr><td>' + a + '</td><td class="n">' + money(b) + '</td></tr>').join('') + '<tr class="total"><td>Running costs</td><td class="n">' + money(tot) + '</td></tr></table></div><p class="small muted">Card charges are passed through on each payment at cost, so they are not in this total. No margin anywhere; any surplus lowers next month\'s fee.</p></div>';
+  h += '<div class="sect"><div class="label">How the fee follows</div><div class="code">delivery ' + money(L[0][1]) + ' ÷ 137,000 hours delivered = ' + money(L[0][1] / 137000) + ' an hour\neverything else ' + money(tot - L[0][1]) + ' ÷ 61,900 sales = ' + money((tot - L[0][1]) / 61900) + ' a sale</div><p class="small muted mt">Every sale shows these lines before you pay. Films and copies taken down for good are gone from storage and caches within 30 days (published time); only evidence the law requires is kept, sealed.</p></div>';
+  const v = S.vote;
+  const base = { yes: 312, no: 141, abst: 22 };
+  if (v) base[v] += 1;
+  const n = base.yes + base.no + base.abst;
+  h += '<div class="sect"><div class="sect-title"><h2>Open vote: keep-access promise of five years</h2><span class="badge n">filmmakers vote</span></div><p class="small">Proposal: when a filmmaker withdraws a film, buyers keep it for at least five years, or get their money back. Closes ' + fmtDate('2026-10-30') + '. One vote per person, never per profile, company or agent.</p>' + [['yes', 'Yes'], ['no', 'No'], ['abst', 'Abstain']].map(([kk, l]) => '<div class="votebar mt"><span>' + l + '</span><div class="bar"><span style="width:' + (base[kk] / n * 100).toFixed(0) + '%"></span></div><output>' + (base[kk] / n * 100).toFixed(0) + '%</output></div>').join('') + '<div class="btns mt">' + [['yes', 'Vote yes'], ['no', 'Vote no'], ['abst', 'Abstain']].map(([kk, l]) => '<button class="btn small ' + (v === kk ? 'on' : 'quiet') + '" data-act="vote" data-v="' + kk + '">' + l + '</button>').join('') + '</div><p class="small muted mt">Filmmakers vote on Spare Movies\' fees and rules. Major changes, such as the promises of no adverts, removing only what the law requires and filmmakers keeping everything except running costs, go to a vote of members.</p></div>';
+  h += '<div class="sect" id="help"><div class="label">Help and status</div><div class="row" style="padding-top:0"><i data-i="check" class="ok"></i><span class="grow"><b>All systems working</b><span class="sub">Films start in 1.2 seconds on average; 0.3 stalls an hour (sample, measured on real connections).</span></span></div><div class="btns"><button class="btn quiet small" data-act="toast" data-msg="Help centre: plain answers on paying, watching, captions and publishing.">Help centre</button><button class="btn quiet small" data-act="toast" data-msg="A person will answer. Urgent cases reach someone on call.">Ask a person</button><button class="btn quiet small" data-act="rules">Terms in plain words</button></div></div>';
+  h += '<div class="sect"><div class="label">Where Spare Movies uses AI</div>' + [['Caption drafts from speech', 'Openly licensed model at cost; a person checks before publishing'], ['Descriptions read aloud', 'Synthetic voices, always marked'], ['Detection hints', 'For moderators only; never verdicts']].map(([a, b]) => '<div class="row"><i data-i="spark" class="inf"></i><span class="grow"><b>' + a + '</b><span class="sub">' + b + '</span></span></div>').join('') + '<p class="small muted">Ask for a person to review any AI decision. Every open-source part and its licence is in the licence register.</p></div>';
+  return h;
+}
+
+/* ---------- Router ---------- */
+const RENDER = { browse: renderBrowse, search: renderSearch, film: renderFilm, player: renderPlayer, sections: renderSections, you: renderYou, pay: renderPay, pass: renderPass, publish: renderPublish, rights: renderRights, earnings: renderEarnings, protection: renderProtection, log: renderLog, coop: renderCoop };
+function renderNav() {
+  let h = '<button class="iconbtn closenav" data-act="drawer" aria-label="Close"><i data-i="close"></i></button>', g = '';
+  SCREENS.forEach((s, i) => { if (s.g !== g) { g = s.g; h += '<div class="label">' + GROUPS[g] + '</div>'; } h += '<a href="#' + s.id + '" data-id="' + s.id + '"><span class="num">' + String(i + 1).padStart(2, '0') + '</span><span>' + s.t + '</span></a>'; });
+  h += '<div class="navfoot">A demo with sample data: made-up films and filmmakers, and no real money. Use <b>Assess this demo</b> for the questions to judge it by.<p class="mt">Spare Movies is for every country. Money, tax, age ratings and rights rules follow the example country at the top; each country gets its own rules pack.</p></div>';
+  $('#nav').innerHTML = h;
+}
+function renderAbout(s) {
+  let h = '<div class="label">This screen</div><h3>' + s.t + '</h3><p>' + s.about + '</p><div class="label">Try this</div><ul class="try">' + s.try.map(x => '<li>' + x + '</li>').join('') + '</ul>';
+  if (s.f.length) h += '<div class="label">Core features shown</div><ul>' + s.f.map(id => '<li><span class="mono">MOV-' + id + '</span>' + fname(id) + '</li>').join('') + '</ul>';
+  if (s.x.length) h += '<div class="label">Also shown (next or later)</div><ul>' + s.x.map(id => '<li><span class="mono">MOV-' + id + ' · ' + fpri(id) + '</span>' + fname(id) + '</li>').join('') + '</ul>';
+  $('#about').innerHTML = h;
+}
+function renderTabs() {
+  const s = SCREENS.find(x => x.id === S.screen);
+  const cur = ['publish', 'rights', 'earnings', 'protection'].includes(S.screen) ? 'studio' : s && s.tab;
+  $('#apptabs').innerHTML = TABS.map(([k, l, i]) => '<button data-go="' + (k === 'studio' ? 'publish' : k) + '"' + (cur === k ? ' aria-current="page"' : '') + '><i data-i="' + i + '" class="sm"></i>' + l + '</button>').join('');
+  const P = prof();
+  if (['publish', 'rights', 'earnings', 'protection'].includes(S.screen)) { $('#who').innerHTML = '<span class="mark av"></span>Lantern Yard Films'; return; }
+  $('#who').innerHTML = S.guest ? '<span class="mark av"></span>Guest' : '<span class="mark av"></span>' + P.name + (P.adult ? '' : ' <span class="badge n">up to ' + CY.ratings[P.limit] + '</span>');
+}
+function show(id, keepScroll) {
+  if (!RENDER[id]) id = 'browse';
+  S.screen = id;
+  const s = SCREENS.find(x => x.id === id);
+  $('#crumb').textContent = id === 'film' || id === 'pay' ? FILM(S.film).t : s.crumb;
+  $('#view').innerHTML = RENDER[id]();
+  $$('#nav a').forEach(a => a.dataset.id === id ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current'));
+  renderTabs();
+  renderAbout(s);
+  paint(document.body);
+  $('#nav').classList.remove('open');
+  if (!keepScroll) { const app = $('#app'); if (app.getBoundingClientRect().top < 0) app.scrollIntoView(); }
+  if (location.hash.slice(1) !== id) history.replaceState(null, '', '#' + id);
+}
+const rerender = () => show(S.screen, true);
+function renderAssess() {
+  const shown = new Set(); SCREENS.forEach(s => s.f.forEach(id => shown.add(id)));
+  const core = Object.keys(DATA.feats).filter(id => DATA.feats[id][1] === 'core');
+  const missing = core.filter(id => !shown.has(id));
+  let h = '<p>A clickable demo with sample data, for judging the design and how much of the map it covers. It is not the real app, and no money moves. <a href="https://github.com/spareware-co-op/spareware/blob/main/projects/spare-movies/FEATURES.md" target="_blank" rel="noopener">Feature map: FEATURES.md</a></p>';
+  h += '<p class="small muted">Spare Movies is for every country. Money, tax, age ratings, rating bodies and rights rules follow the example country at the top (now ' + CY.name + '); each country gets its own rules pack. All films, filmmakers and numbers are made up.</p>';
+  h += '<div class="label">Questions to assess (from the feature map)</div><ol>' + DATA.assess.map(q => '<li>' + esc(q) + '</li>').join('') + '</ol>';
+  h += '<div class="label">Core features shown, by area</div><table class="cov">' + DATA.areas.map(a => { const c = core.filter(id => id.startsWith(a[0] + '-')); const n = c.filter(id => shown.has(id)).length; return '<tr><td class="id">MOV-' + a[0] + '</td><td>' + a[1] + '</td><td class="mono">' + (c.length ? n + ' of ' + c.length : 'no core features') + '</td></tr>'; }).join('') + '</table>';
+  h += '<p class="small">' + (missing.length ? 'Core features not shown yet: ' + missing.map(id => 'MOV-' + id + ' ' + fname(id)).join('; ') + '.' : 'All ' + core.length + ' core features appear on at least one screen. The viewer pass (MOV-A7) has no core features; it is shown as a next feature.') + '</p>';
+  h += '<div class="label mt2">What each screen shows</div>' + SCREENS.map((s, i) => '<div class="scrcov"><a href="#' + s.id + '" data-act="assessclose">' + (i + 1) + '. ' + s.t + '</a> <span class="badge n">' + GROUPS[s.g] + '</span><ul>' + s.f.map(id => '<li><span class="mono">MOV-' + id + '</span>' + fname(id) + '</li>').join('') + s.x.map(id => '<li><span class="mono">MOV-' + id + '</span>' + fname(id) + ' <span class="badge n">' + fpri(id) + '</span></li>').join('') + '</ul></div>').join('');
+  $('#assessBody').innerHTML = h;
+}
+
+/* ---------- Sheets and toasts ---------- */
+let toastT;
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 4200); }
+function sheet(title, body) { $('#sheetTitle').textContent = title; $('#sheetBody').innerHTML = body; paint($('#sheetBody')); $('#sheet').hidden = false; $('#scrim').hidden = false; const b = $('#sheet button, #sheet input, #sheet select'); if (b) b.focus(); }
+function closeSheet() { $('#sheet').hidden = true; $('#scrim').hidden = true; }
+
+/* ---------- Actions ---------- */
+let upTimer = null;
+function tickUpload() {
+  if (!S.up.run) return;
+  S.up.pct = Math.min(100, S.up.pct + 7);
+  if (S.up.pct >= 100) { S.up.run = false; toast('Upload finished. Quality checks done; every size is being made from the master.'); }
+  if (S.screen === 'publish') rerender();
+}
+const ACT = {
+  drawer() { $('#nav').classList.toggle('open'); },
+  sec(el) { S.sec = el.dataset.v; rerender(); },
+  filter(el) { S.filters[el.dataset.v] = !S.filters[el.dataset.v]; rerender(); },
+  guest() { S.guest = !S.guest; rerender(); toast(S.guest ? 'Guest: free films and trailers play with no account.' : 'Signed in as ' + prof().name + '.'); },
+  join() { sheet('Join Spare Movies', '<p class="small">One Spareware login for every Spareware app. Free to join; no member shares.</p><label class="field"><span>Display name</span><input value="Robin"></label><label class="field"><span>Country</span><input value="' + CY.name + '" readonly></label><label class="field"><span>Date of birth</span><input value="1990-04-12"><span class="hint">Only your age band is kept, never this date.</span></label><label class="check small"><input type="checkbox" checked> I have read the rules in plain words</label><button class="btn primary" data-act="joined">Create a passkey (sample)</button>'); },
+  joined() { S.guest = false; closeSheet(); rerender(); toast('Welcome, Robin. Your list from this device came with you.'); },
+  list(el) { const id = el.dataset.id; S.list[id] = !S.list[id]; rerender(); toast(S.list[id] ? 'Added to your list.' : 'Removed from your list.'); },
+  follow(el) { const v = el.dataset.v; S.follows[v] = !S.follows[v]; rerender(); toast(S.follows[v] ? 'Following ' + v + '. You will be told when they release a film in ' + CY.in + '.' : 'Unfollowed ' + v + '.'); },
+  share() { toast('Link copied: a short link that opens in the app or the browser. Nothing tracks who clicks it.'); },
+  trailer() { S.p.trailer = !S.p.trailer; rerender(); },
+  watch(el) { const id = el.dataset.id, f = FILM(id); if (!PLAYABLE[id]) PLAYABLE[id] = { len: f.min * 60, start: 0, label: f.t }; S.p.film = id; S.p.t = PLAYABLE[id].start; S.p.cc = f.cc[0]; S.p.audio = 0; S.p.ad = false; S.p.playing = true; show('player'); },
+  payway(el) { S.pay.way = el.dataset.v; S.pay.done = null; if (S.screen !== 'pay') show('pay'); else rerender(); },
+  cover(el) { S.pay.cover = el.checked; rerender(); },
+  paynow() {
+    if (S.guest) { ACT.join(); return; }
+    const amt = $('#amt'); if (amt) S.pay.amount = Math.max(0, Number(amt.value) || 0);
+    const f = FILM(S.film); const b = breakdown(f, S.pay.way);
+    if (S.pay.way === 'rent' || S.pay.way === 'buy' || S.pay.way === 'pwyl') S.owned[f.id] = S.pay.way === 'buy' ? 'buy' : 'rent';
+    S.pay.done = b; rerender(); toast('Paid (sample). ' + f.by + ' gets ' + money(b.maker) + '.');
+  },
+  unlock() { const v = ($('#pin') || {}).value || ''; if (/^\d{4}$/.test(v)) { S.pay.unlocked = true; rerender(); toast('Unlocked for this one payment.'); } else toast('Enter four digits (sample).'); },
+  play() { S.p.playing = !S.p.playing; rerender(); },
+  seek(el) { S.p.t = Math.max(0, Math.min(PLAYABLE[S.p.film].len, S.p.t + Number(el.dataset.v))); updatePlayer(); },
+  cc() { S.p.cc = S.p.cc === 'Off' ? FILM(S.p.film).cc[0] : 'Off'; rerender(); },
+  ad() { if (!FILM(S.p.film).ad) { toast('This film has no audio description yet.'); return; } S.p.ad = !S.p.ad; rerender(); toast(S.p.ad ? 'Audio description on: ' + FILM(S.p.film).ad + '.' : 'Audio description off.'); },
+  capLg() { S.p.capLg = !S.p.capLg; rerender(); },
+  capTint() { S.p.capTint = !S.p.capTint; rerender(); },
+  autoplay() { S.p.autoplay = !S.p.autoplay; rerender(); },
+  jump(el) { S.p.film = 'tinkite'; S.p.t = Number(el.dataset.t); S.p.cc = 'English'; S.p.playing = false; show('player'); toast('Jumped to ' + clock(S.p.t) + ' in Tin Kite, where the line is said.'); },
+  preport() { const f = FILM(S.p.film); sheet('Report a playback problem', '<div class="chips"><button class="chip" aria-pressed="true">Stalls or stops</button><button class="chip" aria-pressed="false">Captions wrong</button><button class="chip" aria-pressed="false">Sound out of step</button><button class="chip" aria-pressed="false">Audio description</button></div><div class="code">Film: ' + esc(f.t) + '\nMoment: ' + clock(S.p.t) + '\nDevice: browser on this computer\nStream: ' + (S.p.q === 'auto' ? 'auto, 1080p' : S.p.q) + ', AV1, delivered from ' + CY.region + '</div><p class="small muted">These details are filled in for you. If a rental could not play, it is refunded automatically.</p><button class="btn primary" data-act="preportsend">Send report</button>'); },
+  preportsend() { closeSheet(); toast('Report sent to support with the details. You will hear back here.'); },
+  report(el) { const f = FILM(el.dataset.id); sheet('Report ' + f.t, '<p class="small">What is wrong? Lawful films are never removed for being unpopular; only what the law requires comes down.</p>' + ['Illegal material', 'Copyright: this is my film', 'Wrong section (Human or AI)', 'Wrong age rating or missing advice', 'Privacy', 'Pretending to be someone'].map((r, i) => '<label class="check small"><input type="radio" name="rr" ' + (i === 2 ? 'checked' : '') + '> ' + r + '</label>').join('') + '<button class="btn primary" data-act="reportsend" data-v="' + esc(f.t) + '">Send report</button><p class="small muted">Reports can be made without an account. The result goes in the public log.</p>'); },
+  reportsend(el) { S.flags.push('Report about ' + el.dataset.v); closeSheet(); toast('Report sent. A moderator elected by filmmakers will look at it.'); },
+  wrongsec(el) { const f = FILM(el.dataset.id); S.flags.push(f.t + ': flagged as possibly in the wrong section'); toast('Flag sent for ' + f.t + '. If it moves, the reason goes in the public log, and the filmmaker can appeal.'); },
+  profile(el) { S.profile = el.dataset.v; S.pay.unlocked = false; S.guest = false; rerender(); toast('Now watching as ' + prof().name + '.'); },
+  agecheck() { sheet('Age check', '<p class="small">An accredited age check provider confirms only whether you are over 18. Spare Movies never sees your documents or your birth date.</p><button class="btn primary" data-act="agedone">Check with the provider (sample)</button>'); },
+  agedone() { S.ageChecked = true; closeSheet(); rerender(); toast('Over 18: confirmed. Only that answer was kept.'); },
+  history() { S.history = !S.history; rerender(); },
+  histdel(el) { S.histItems = S.histItems.filter(x => x !== el.dataset.id); rerender(); },
+  histclear() { S.histItems = []; rerender(); toast('History cleared.'); },
+  notif(el) { S.notif[el.dataset.v] = !S.notif[el.dataset.v]; rerender(); },
+  large() { S.large = !S.large; document.body.classList.toggle('large', S.large); rerender(); },
+  contrast() { S.contrast = !S.contrast; document.body.classList.toggle('contrast', S.contrast); rerender(); },
+  devout(el) { const d = S.devices[Number(el.dataset.i)]; S.devices.splice(Number(el.dataset.i), 1); rerender(); toast('Signed out: ' + d + '.'); },
+  aitrain() { S.aiTrain = !S.aiTrain; rerender(); },
+  agent() { S.aiAgent = !S.aiAgent; rerender(); },
+  passway(el) { S.passWay = el.dataset.v; rerender(); },
+  upkind(el) { S.up.kind = el.dataset.v; rerender(); if (S.up.kind === 'episode') toast('Series episode: it joins a season, with its own release date.'); },
+  upstart() { S.up.run = true; S.up.paused = false; rerender(); },
+  updrop() { S.up.run = false; S.up.paused = true; rerender(); toast('Connection dropped. The upload will carry on from ' + S.up.pct + '%, not from the start.'); },
+  upai(el) { S.up.ai = el.dataset.v; rerender(); },
+  capdraft() { S.up.capDraft = 1; rerender(); },
+  capfix() { S.up.capDraft = 2; rerender(); toast('Captions checked and saved.'); },
+  upad() { S.up.ad = 'text'; rerender(); },
+  rate() { sheet('Rating questions', '<p class="small">Plain questions, answered once. Each country\'s rules pack turns them into its own rating, or tells you where an official rating is needed.</p>' + [['Violence', 'Brief, not detailed'], ['Language', 'Some strong words'], ['Sex and nudity', 'None'], ['Drug use', 'None'], ['Themes', 'Grief']].map(([q, a]) => '<label class="field"><span>' + q + '</span><select><option>' + a + '</option><option>None</option><option>Strong</option></select></label>').join('') + '<button class="btn primary" data-act="rated">Work out the ratings</button>'); },
+  rated() { S.up.rated = true; closeSheet(); rerender(); toast('Ratings worked out for each example country.'); },
+  publish() { S.up.published = true; rerender(); toast('Published. It releases on its date in each country; a fingerprint was made.'); },
+  rightc(el) { if (el.dataset.v === 'DE') { S.rights.DE = el.checked; rerender(); } else toast('Rights updated and logged (sample).'); },
+  match(el) { S.match = el.dataset.v; rerender(); },
+  logf(el) { S.logFilter = el.dataset.v; rerender(); },
+  appeal() { S.appealStep = S.appealStep ? 0 : 1; rerender(); },
+  vote(el) { S.vote = el.dataset.v; rerender(); toast('Vote recorded. You can change it until the vote closes.'); },
+  rules() { sheet('Rules in plain words', '<ol class="small" style="padding-left:18px;margin:0"><li>Spare Movies removes only what the law requires, in the country where the law requires it.</li><li>Every film says how AI was used. AI films go in the AI section.</li><li>Upload only films you hold the rights to, in the countries you choose.</li><li>Ratings follow each country\'s rules. Never invent an official rating.</li><li>No adverts, no tracking, no selling data.</li><li>Filmmakers keep everything except running costs.</li></ol><p class="small muted">Sample wording. The full terms follow the co-op\'s legal set-up.</p>'); },
+  a11y() { sheet('Accessibility statement', '<p class="small">Every screen works with a screen reader, a keyboard and a TV remote. Every film has captions in its main language; many have audio description. Known gaps: sign language versions come later. Report a barrier and a person will answer.</p><button class="btn primary" data-act="closesheet">Close</button>'); },
+  toast(el) { toast(el.dataset.msg); },
+  try(el) { S.q = el.dataset.v; rerender(); const q = $('#q'); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } },
+  sfilt(el) { S.sfilt[el.dataset.v] = !S.sfilt[el.dataset.v]; rerender(); },
+  assess() { renderAssess(); $('#assess').hidden = false; $('#assessScrim').hidden = false; $('#assess .iconbtn').focus(); },
+  assessclose() { $('#assess').hidden = true; $('#assessScrim').hidden = true; },
+  closesheet() { closeSheet(); }
+};
+document.addEventListener('click', e => {
+  const film = e.target.closest('[data-film]');
+  if (film) { S.film = film.dataset.film; S.p.trailer = false; S.pay.done = null; closeSheet(); show('film'); return; }
+  const go = e.target.closest('[data-go]');
+  if (go) { closeSheet(); show(go.dataset.go); if (go.dataset.anchor) { const a = document.getElementById(go.dataset.anchor); if (a) a.scrollIntoView(); } return; }
+  const a = e.target.closest('[data-act]');
+  if (a && ACT[a.dataset.act]) { if (a.tagName === 'A') e.preventDefault(); ACT[a.dataset.act](a); }
+  const nav = e.target.closest('#nav a');
+  if (nav) { e.preventDefault(); show(nav.dataset.id); }
+});
+document.addEventListener('input', e => {
+  if (e.target.id === 'q') { S.q = e.target.value; $('#results').innerHTML = searchResults(); paint($('#results')); }
+  if (e.target.id === 'pseek') { S.p.t = Number(e.target.value); updatePlayer(); }
+});
+document.addEventListener('change', e => {
+  const k = e.target.dataset.input;
+  if (e.target.id === 'amt') { S.pay.amount = Math.max(0, Number(e.target.value) || 0); rerender(); return; }
+  if (e.target.id === 'ctry') { CY = COUNTRIES[e.target.value]; rerender(); toast('Example country: ' + CY.name + '. Money, tax, age ratings and rights rules now follow its rules pack.'); return; }
+  if (!k) return;
+  if (k === 'pfilm') { S.p.film = e.target.value; S.p.t = PLAYABLE[S.p.film].start; S.p.cc = FILM(S.p.film).cc[0]; S.p.audio = 0; S.p.ad = false; rerender(); }
+  if (k === 'pcc') { S.p.cc = e.target.value; rerender(); }
+  if (k === 'paudio') { S.p.audio = Number(e.target.value); rerender(); if (FILM(S.p.film).audio[S.p.audio].indexOf('AI') > -1) toast('This track was dubbed with AI voices, and it says so.'); }
+  if (k === 'pq') { S.p.q = e.target.value; rerender(); }
+  if (k === 'pad') { if (e.target.value === '1') ACT.ad(); else { S.p.ad = false; rerender(); } }
+  if (k === 'lang') toast('Language changed for the demo text that is translated; the rest stays in English.');
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeSheet(); ACT.assessclose(); $('#nav').classList.remove('open'); } });
+setInterval(() => {
+  if (S.screen === 'player' && S.p.playing) { S.p.t = Math.min(PLAYABLE[S.p.film].len, S.p.t + 0.25 * S.p.speed); updatePlayer(); }
+}, 250);
+setInterval(tickUpload, 400);
+window.addEventListener('hashchange', () => { const id = location.hash.slice(1); if (RENDER[id] && id !== S.screen) show(id); });
+
+/* ---------- Start ---------- */
+Object.keys(COUNTRIES).forEach(k => { COUNTRIES[k].key = k; });
+$('#ctry').innerHTML = Object.keys(COUNTRIES).map(k => '<option value="' + k + '">' + COUNTRIES[k].name + '</option>').join('');
+renderNav();
+show(location.hash.slice(1) || 'browse', true);
+</script>
+</body>
+</html>

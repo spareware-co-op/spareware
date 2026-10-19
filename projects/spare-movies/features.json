@@ -1,0 +1,5432 @@
+{
+ "program": "spare-movies",
+ "name": "Spare Movies",
+ "replaces": "Netflix, Prime Video, Disney+ and film rental stores",
+ "summary": "One place where independent filmmakers sell their films and series the way they choose (rent, buy, pay what you like, free or a viewer pass) and viewers come to watch, replacing Netflix, Prime Video, Disney+ and film rental stores. Free to use and join, no adverts, run at cost: filmmakers keep everything except running costs, the catalogue has Human and AI sections, and only what the law requires is removed.",
+ "areas": [
+  {
+   "id": "MOV-A1",
+   "name": "Joining, accounts and profiles",
+   "summary": "Signing up with one Spareware login, watching free films before joining, turning on the filmmaker side for a person, company or collective, household profiles, signing in on a TV, getting back in, and leaving cleanly.",
+   "features": [
+    {
+     "id": "MOV-A1-F1",
+     "name": "Sign up with one Spareware login",
+     "does": "Join in under a minute with a passkey and a display name, using the same login as every other Spareware app.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A1-F1-P1",
+       "name": "Spareware login hook-up",
+       "what": "Use the kit's account service and passkey sign-in (KIT-A1-F2-P1), passwords as a fallback.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A1-F1-P1",
+        "KIT-A1-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A1-F1-P2",
+       "name": "Sign-up flow",
+       "what": "Screens for a display name, the viewer's country and agreeing to the published rules, plus a date of birth checked against that country's age rules; only the age band is kept, never the full date (KIT-A2-F8).",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MOV-A1-F1-P1",
+        "MOV-A8-F1-P1",
+        "MOV-A17-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A1-F1-P3",
+       "name": "Sign-up spam guard",
+       "what": "Uses the kit's sign-up abuse protection (KIT-A1-F1-P4), with limits set by Spare Movies' rules.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A1-F1-P4"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A1-F2",
+     "name": "Watch free films before joining",
+     "does": "Browse the catalogue and watch free films and trailers with no account, and join only to pay, follow or keep a list.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A1-F2-P1",
+       "name": "Local profile without an account",
+       "what": "Uses the kit's local profile (KIT-A1-F15-P1) so a visitor can browse, watch free films and keep a list on the device, then carry it into a new account.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A1-F15-P1",
+        "MOV-A2-F1-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A1-F3",
+     "name": "Become a filmmaker",
+     "does": "Turn on the filmmaker side of your account, alone or as a company or collective, with a public page for your work.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A1-F3-P1",
+       "name": "Filmmaker role",
+       "what": "A filmmaker role on the account (KIT-A1-F5-P2) for a person, a production company or a collective, with the country it is based in.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "kit-core",
+        "KIT-A1-F5-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A1-F3-P2",
+       "name": "Companies and collectives",
+       "what": "Production companies and collectives as organisations on the kit (KIT-A1-F7-P1), with members and roles (KIT-A1-F7-P2).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A1-F7-P1",
+        "KIT-A1-F7-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A1-F3-P3",
+       "name": "Filmmaker page",
+       "what": "A public page with the films, a short bio, links, the team and a follow button.",
+       "kind": "interface",
+       "size": "medium",
+       "depends_on": [
+        "MOV-A1-F3-P1",
+        "MOV-A3-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A1-F3-P4",
+       "name": "Checks before the first payout",
+       "what": "Before any money is paid out, the person or company is checked through the kit's identity and business checks (KIT-A2-F1-P2, KIT-A2-F7-P1), including people overseas (KIT-A2-F1-P6), keeping only the result.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A2-F1-P2",
+        "KIT-A2-F7-P1",
+        "KIT-A2-F1-P6"
+       ],
+       "piece": "K02"
+      }
+     ]
+    },
+    {
+     "id": "MOV-A1-F4",
+     "name": "Share one account at home",
+     "does": "Give each person in a household a profile with their own list, history, section choice and age limit.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A1-F4-P1",
+       "name": "Profiles on an account",
+       "what": "Up to a published number of profiles per account, each with its own list, history, Human and AI choice, caption settings and age limit.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "kit-core",
+        "KIT-A1-F5-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A1-F4-P2",
+       "name": "Profile picker",
+       "what": "Pick a profile when the app opens, with the age limit shown on each.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MOV-A1-F4-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A1-F4-P3",
+       "name": "Profile lock",
+       "what": "A PIN or passkey on a profile, asked for before leaving a young person's profile and before films above a profile's age limit, using the kit's fresh sign-in for risky commands (KIT-A1-F3-P4).",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MOV-A1-F4-P1",
+        "KIT-A1-F3-P4"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A1-F5",
+     "name": "Get back into your account",
+     "does": "Recover a lost login and sign out of phones, computers and TVs you no longer use.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A1-F5-P1",
+       "name": "Recovery options",
+       "what": "Recovery codes, a backup passkey and assisted recovery from the kit (KIT-A1-F4).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A1-F4-P1",
+        "KIT-A1-F4-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A1-F5-P2",
+       "name": "Devices list",
+       "what": "Every signed-in phone, computer and TV, with sign-out for any or all, on the kit's sessions and devices (KIT-A1-F3-P2).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A1-F3-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A1-F5-P3",
+       "name": "Sign-in alerts",
+       "what": "Uses the kit's new sign-in alerts (KIT-A1-F3-P3).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A1-F3-P3"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A1-F6",
+     "name": "Sign in on a TV",
+     "does": "Sign in on a TV or games console by typing a short code shown on the TV into your phone.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MOV-A1-F6-P1",
+       "name": "TV code sign-in",
+       "what": "Uses the kit's device sign-in (KIT-A1-F12-P1), the open OAuth device flow, so no password is typed with a remote.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A1-F12-P1",
+        "MOV-A1-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A1-F7",
+     "name": "Pause or leave",
+     "does": "Pause or delete your account, knowing what happens to films you bought and, for filmmakers, to the films you published.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A1-F7-P1",
+       "name": "Pause and delete",
+       "what": "Uses the kit's account deletion and settling up before closing (KIT-A18-F2), so a filmmaker's last earnings are paid out first.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A18-F2-P1",
+        "KIT-A18-F2-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A1-F7-P2",
+       "name": "Films stay for buyers",
+       "what": "When a filmmaker leaves, people who bought their films keep watching for the time the keep-access promise gives (A6-F2-P3), with the earnings still paid out.",
+       "kind": "legal",
+       "size": "small",
+       "depends_on": [
+        "MOV-A6-F2-P3"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A1-F8",
+     "name": "Hand your films on",
+     "does": "Pass a catalogue to a new rights holder when rights are sold, a company changes hands or a filmmaker dies.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MOV-A1-F8-P1",
+       "name": "Rights holder change",
+       "what": "Moves films, their rights records and future earnings to a new owner with both sides' confirmation (KIT-A1-F17-P1), or to an estate (KIT-A18-F11-P1), with past earnings kept where they were.",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "MOV-A11-F1-P1",
+        "KIT-A1-F17-P1",
+        "KIT-A18-F11-P1"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MOV-A2",
+   "name": "Browse, search and discovery",
+   "summary": "Finding something to watch: a catalogue in an order whose rules are published, filters for what matters (price, captions, audio description, age rating, language, length and section), search across titles, people and words spoken, release calendars, collections made by people, and suggestions that stay off unless you turn them on.",
+   "features": [
+    {
+     "id": "MOV-A2-F1",
+     "name": "Browse the catalogue",
+     "does": "Browse films and series by newest, genre, length, country and language, with the rule for each list shown above it.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A2-F1-P1",
+       "name": "Catalogue index",
+       "what": "Every film and series on the kit's search service (KIT-A6-F1-P2), updated as films are published, changed or taken down.",
+       "kind": "service",
+       "size": "large",
+       "depends_on": [
+        "MOV-A3-F1-P1",
+        "KIT-A6-F1-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A2-F1-P2",
+       "name": "Browse screens",
+       "what": "Plain lists and grids by genre, newest, length and language, in our own design; no endless autoplaying rows.",
+       "kind": "interface",
+       "size": "medium",
+       "depends_on": [
+        "MOV-A2-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A2-F1-P3",
+       "name": "Published order rules",
+       "what": "Every list says how it is ordered, on the kit's published ranking rules (KIT-A6-F1-P3); no one can pay to be placed higher.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "KIT-A6-F1-P3"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A2-F1-P4",
+       "name": "Only what you can watch here",
+       "what": "Lists show only films available in the viewer's country, with that country's age rating, so nothing appears that cannot be played.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MOV-A11-F2-P1",
+        "MOV-A12-F1-P1",
+        "MOV-A2-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A2-F2",
+     "name": "Filter by what matters to you",
+     "does": "Narrow any list by free, pass, rent or buy, captions, audio description, age rating, spoken language, length and section.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A2-F2-P1",
+       "name": "Filters",
+       "what": "One filter panel for price type, captions, audio description, rating, language, length and Human or AI section.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MOV-A2-F1-P1",
+        "MOV-A13-F1-P1",
+        "MOV-A13-F3-P4",
+        "MOV-A12-F1-P1",
+        "MOV-A5-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A2-F2-P2",
+       "name": "Saved filters",
+       "what": "A profile can keep its filters, for example always audio description, or always free films first.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MOV-A2-F2-P1",
+        "MOV-A1-F4-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A2-F3",
+     "name": "Search everything",
+     "does": "Search titles, people, genres and the words spoken in a film, and find it even with a misspelling or a missing accent.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A2-F3-P1",
+       "name": "Search service",
+       "what": "Titles, people, genres, collections and filmmakers on the kit's search service (KIT-A6-F1-P2).",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A6-F1-P1",
+        "KIT-A6-F1-P2",
+        "MOV-A2-F1-P1"
+       ],
+       "piece": "MK05"
+      },
+      {
+       "id": "MOV-A2-F3-P2",
+       "name": "Search inside captions",
+       "what": "Find a film by a line someone says in it, using its caption text, with a jump to that moment.",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "MOV-A13-F1-P1",
+        "MOV-A2-F3-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A2-F3-P3",
+       "name": "Search screen",
+       "what": "One search box with results grouped by films, series, people and filmmakers.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MOV-A2-F3-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A2-F3-P4",
+       "name": "Forgiving search",
+       "what": "Typo-tolerant matching and the kit's accent and macron-aware matching (KIT-A19-F1-P4), so names in any language are found.",
+       "kind": "library",
+       "size": "small",
+       "depends_on": [
+        "KIT-A19-F1-P4",
+        "MOV-A2-F3-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A2-F4",
+     "name": "See what is new and coming",
+     "does": "See new releases this week and a calendar of coming films, and follow one to be told when it opens in your country.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A2-F4-P1",
+       "name": "Release calendar",
+       "what": "Coming films by date for the viewer's country, from each film's release windows.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MOV-A11-F3-P1",
+        "MOV-A2-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A2-F4-P2",
+       "name": "Coming soon pages",
+       "what": "A film page before release with the trailer, the date in your country and a button to be told.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MOV-A3-F1-P2",
+        "MOV-A9-F3-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A2-F5",
+     "name": "Collections made by people",
+     "does": "Browse collections put together by filmmakers, festivals, libraries, critics and viewers, and follow the ones you like.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MOV-A2-F5-P1",
+       "name": "Collections",
+       "what": "A named list of films with a short note for each, made by anyone, with the maker shown.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MOV-A3-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A2-F5-P2",
+       "name": "Collection pages",
+       "what": "A page per collection with a follow button and a share link.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MOV-A2-F5-P1",
+        "MOV-A9-F3-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A2-F6",
+     "name": "Find films from your own country",
+     "does": "Find films made in your country or in your languages on their own shelf.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MOV-A2-F6-P1",
+       "name": "Local shelves",
+       "what": "Shelves for films made in the viewer's country and in its languages, from the country pack (KIT-A19-F6-P1).",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MOV-A2-F1-P1",
+        "KIT-A19-F6-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A2-F7",
+     "name": "Suggestions you can switch off",
+     "does": "Turn on suggestions worked out on your own device, each with its reason shown, and switch them off again any time.",
+     "priority": "later",
+     "parts": [
+      {
+       "id": "MOV-A2-F7-P1",
+       "name": "Suggestions on the device",
+       "what": "Suggestions worked out on the viewer's device from their own history, with the reason shown, on the kit's explainable suggestions (KIT-A6-F10-P1); off unless turned on, and nothing leaves the device.",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A6-F10-P1",
+        "MOV-A9-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MOV-A3",
+   "name": "Film and series pages",
+   "summary": "Everything about a film on one page: the trailer, synopsis, cast and crew, the age rating and content advice for your country, captions, audio description and languages, how AI was used, the ways to watch and what each costs, extras, and series with seasons and episodes.",
+   "features": [
+    {
+     "id": "MOV-A3-F1",
+     "name": "See everything about a film",
+     "does": "Open one page with the trailer, synopsis, length, year, genre, languages, the age rating for your country and the ways to watch.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A3-F1-P1",
+       "name": "Film record",
+       "what": "Title, synopsis, genres, length, year, country of origin, spoken languages, team, artwork, trailer and versions, stored as operations so every change has a history.",
+       "kind": "data",
+       "size": "medium",
+       "depends_on": [
+        "kit-core",
+        "kit-ops"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A3-F1-P2",
+       "name": "Film page",
+       "what": "One page with the trailer at the top, then the facts, the rating and advice, the access tracks, the AI-use answer, the ways to watch and the credits.",
+       "kind": "interface",
+       "size": "medium",
+       "depends_on": [
+        "MOV-A3-F1-P1",
+        "MOV-A12-F1-P2",
+        "MOV-A3-F4-P1",
+        "MOV-A5-F4-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A3-F1-P3",
+       "name": "Public pages found by web search",
+       "what": "Film pages anyone can open without an account, with share cards and web search basics from the kit (KIT-A28-F2).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A28-F2-P1",
+        "KIT-A28-F2-P3",
+        "MOV-A3-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A3-F2",
+     "name": "Watch the trailer",
+     "does": "Play the trailer free, with captions, before deciding.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A3-F2-P1",
+       "name": "Trailer playback",
+       "what": "Trailers play free for everyone in the main player with captions, and never start on their own with sound.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MOV-A4-F1-P1",
+        "MOV-A13-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A3-F2-P2",
+       "name": "Trailer rating rules",
+       "what": "Some countries rate trailers on their own; a trailer carries its own rating or is shown only to profiles allowed to see the film, as each country's pack says.",
+       "kind": "legal",
+       "size": "small",
+       "depends_on": [
+        "MOV-A12-F1-P3"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A3-F3",
+     "name": "See who made it",
+     "does": "See the cast and crew with their roles, and open a page for each person.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A3-F3-P1",
+       "name": "Credits record",
+       "what": "Cast and crew with their roles in the order the filmmaker sets, from a published list of film roles.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MOV-A3-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A3-F3-P2",
+       "name": "People pages",
+       "what": "A page for each person listing the films they worked on here.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MOV-A3-F3-P1",
+        "MOV-A1-F3-P3"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A3-F3-P3",
+       "name": "Claim your credit",
+       "what": "A person can claim a credit and link it to their account once the filmmaker confirms; a disputed credit goes to moderators.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MOV-A3-F3-P1",
+        "MOV-A17-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A3-F4",
+     "name": "Know how to watch it",
+     "does": "See every way to watch, what each costs in your money with the fee shown, and what you already have.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A3-F4-P1",
+       "name": "Ways to watch panel",
+       "what": "Free, in the pass, rent or buy, each with its price in local money, what it gives you and whether you already have it.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MOV-A6-F1-P2",
+        "MOV-A11-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A3-F5",
+     "name": "Series, seasons and episodes",
+     "does": "Open a series, pick a season and an episode, and buy a whole season at once.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A3-F5-P1",
+       "name": "Series model",
+       "what": "Series made of seasons and episodes, each episode with its own length, rating and access tracks.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MOV-A3-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A3-F5-P2",
+       "name": "Series page",
+       "what": "Seasons as tabs, episodes in order with what you have watched marked.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MOV-A3-F5-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A3-F6",
+     "name": "Extras and other versions",
+     "does": "Watch extras such as commentary and behind-the-scenes, and pick another cut such as the director's or a festival version.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MOV-A3-F6-P1",
+       "name": "Extras and versions",
+       "what": "Extras and alternate versions linked to the main film, each with its own rating and access tracks.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MOV-A3-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A3-F7",
+     "name": "Reviews from people who watched",
+     "does": "Read and write reviews, open only to people who watched the film here, and see festival selections and awards.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MOV-A3-F7-P1",
+       "name": "Watched-only reviews",
+       "what": "Reviews on the kit's reviews (KIT-A9-F2-P1) and fake review checks (KIT-A9-F8-P1), open only to profiles with watch time on the film.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A9-F2-P1",
+        "KIT-A9-F8-P1",
+        "MOV-A9-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A3-F7-P2",
+       "name": "Festivals and awards",
+       "what": "Festival selections and awards the filmmaker lists, each with a link to the festival as proof.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MOV-A3-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MOV-A4",
+   "name": "The player",
+   "summary": "Watching: a fast start that adjusts to your connection, picking up where you left off, captions and audio description your way, audio languages, next episodes you control, chapters and speed, casting to a TV, downloads for offline, picture-in-picture, watching together, and reporting a playback problem.",
+   "features": [
+    {
+     "id": "MOV-A4-F1",
+     "name": "Press play and it starts fast",
+     "does": "Press play and the film starts quickly and keeps playing as your connection changes.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A4-F1-P1",
+       "name": "Player engine",
+       "what": "Adaptive playback built on an openly licensed player core (A18-F3-P2), with our own controls on top.",
+       "kind": "library",
+       "size": "large",
+       "depends_on": [
+        "MOV-A18-F3-P2",
+        "engine-media"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A4-F1-P2",
+       "name": "Player controls",
+       "what": "Play, pause, seek with a preview, volume, full screen, captions, audio, quality and help, all in our own design and all reachable by keyboard and remote.",
+       "kind": "interface",
+       "size": "medium",
+       "depends_on": [
+        "MOV-A4-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A4-F1-P3",
+       "name": "Start-time budget",
+       "what": "Targets for time to first frame and stalls per hour, measured on real connections in each launch country.",
+       "kind": "research",
+       "size": "small",
+       "depends_on": [],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A4-F2",
+     "name": "Pick up where you left off",
+     "does": "Stop on one device and carry on from the same moment on another.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A4-F2-P1",
+       "name": "Resume points",
+       "what": "The last position per profile and film, synced across devices and cleared with the history.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MOV-A9-F2-P1",
+        "kit-sync"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A4-F3",
+     "name": "Captions and audio description your way",
+     "does": "Turn on captions or audio description in one tap, choose the language and caption style, and have the choice remembered.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A4-F3-P1",
+       "name": "Caption display",
+       "what": "Shows the chosen caption track in time with the film, including captions for Deaf and hard of hearing viewers.",
+       "kind": "library",
+       "size": "small",
+       "depends_on": [
+        "MOV-A13-F1-P1",
+        "MOV-A4-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A4-F3-P2",
+       "name": "Caption style",
+       "what": "Size, colour, background and position, from the kit's display settings (KIT-A19-F3-P1).",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "KIT-A19-F3-P1",
+        "MOV-A4-F3-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A4-F3-P3",
+       "name": "Audio description switch",
+       "what": "Switches to the audio description track, or reads text descriptions aloud (A13-F3-P2), without restarting the film.",
+       "kind": "library",
+       "size": "small",
+       "depends_on": [
+        "MOV-A13-F3-P1",
+        "MOV-A4-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A4-F3-P4",
+       "name": "Remembered choices",
+       "what": "Each profile's caption, audio description and language choices follow it to every device (KIT-A20-F5-P2).",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "KIT-A20-F5-P2",
+        "MOV-A1-F4-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A4-F4",
+     "name": "Audio languages",
+     "does": "Switch the spoken language when the filmmaker has added other language tracks.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A4-F4-P1",
+       "name": "Audio track switch",
+       "what": "Lists and switches audio tracks, marking dubbed tracks and AI-made voices (A13-F4-P2).",
+       "kind": "library",
+       "size": "small",
+       "depends_on": [
+        "MOV-A4-F1-P1",
+        "MOV-A13-F4-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A4-F5",
+     "name": "Quality that fits your connection",
+     "does": "Let quality follow your connection, or cap it to save data, and see how much data an hour uses.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A4-F5-P1",
+       "name": "Quality choice",
+       "what": "Auto, or a fixed size, with the data used per hour shown for each.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MOV-A4-F1-P1",
+        "MOV-A18-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A4-F5-P2",
+       "name": "Data saver",
+       "what": "A data cap per profile and the kit's light mode for slow connections (KIT-A19-F5-P1).",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MOV-A4-F5-P1",
+        "KIT-A19-F5-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A4-F6",
+     "name": "Next episode you control",
+     "does": "Have the next episode start only if you turned that on, and never on a young person's profile.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A4-F6-P1",
+       "name": "Next episode",
+       "what": "Offers the next episode at the end; starts it on its own only if the profile turned autoplay on; off for young viewers.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MOV-A3-F5-P1",
+        "MOV-A4-F2-P1",
+        "MOV-A8-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A4-F7",
+     "name": "Chapters, speed and skipping",
+     "does": "Jump between chapters, skip opening titles, and change the playback speed.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MOV-A4-F7-P1",
+       "name": "Chapters and markers",
+       "what": "Chapters and markers for opening titles and end credits, set by the filmmaker.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MOV-A10-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A4-F7-P2",
+       "name": "Speed and skip controls",
+       "what": "Chapter list, skip buttons and speeds from half to double.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MOV-A4-F7-P1",
+        "MOV-A4-F1-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A4-F8",
+     "name": "Watch on your TV",
+     "does": "Send a film from your phone to a TV.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MOV-A4-F8-P1",
+       "name": "Casting research",
+       "what": "Compare ways to send video to a TV on licences, terms and reach: the casting kits phone makers offer, the open DLNA and UPnP standards, and our own TV apps (A19-F5).",
+       "kind": "research",
+       "size": "small",
+       "depends_on": [],
+       "piece": null
+      },
+      {
+       "id": "MOV-A4-F8-P2",
+       "name": "Cast to a TV",
+       "what": "Casting by the method the research picks, carrying captions and audio description to the TV.",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "MOV-A4-F8-P1",
+        "MOV-A4-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A4-F9",
+     "name": "Download to watch offline",
+     "does": "Download a film to watch on a plane or with no signal, within limits the filmmaker sets.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MOV-A4-F9-P1",
+       "name": "Offline downloads",
+       "what": "Downloads kept protected on the device (KIT-A15-F4-P4), with a rental's clock still running and the access checked again when back online.",
+       "kind": "library",
+       "size": "large",
+       "depends_on": [
+        "MOV-A4-F1-P1",
+        "MOV-A16-F1-P3",
+        "KIT-A15-F4-P4"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A4-F9-P2",
+       "name": "Download rules",
+       "what": "Which films may be downloaded, in which countries and for how long, set by the filmmaker within the rights they hold.",
+       "kind": "legal",
+       "size": "small",
+       "depends_on": [
+        "MOV-A11-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A4-F10",
+     "name": "Picture-in-picture",
+     "does": "Keep a film playing in a small window while you use another app.",
+     "priority": "later",
+     "parts": [
+      {
+       "id": "MOV-A4-F10-P1",
+       "name": "Picture-in-picture",
+       "what": "The player's picture-in-picture mode on phones and computers that offer it.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MOV-A4-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A4-F11",
+     "name": "Watch together",
+     "does": "Watch in step with friends in other homes, each with their own access to the film.",
+     "priority": "later",
+     "parts": [
+      {
+       "id": "MOV-A4-F11-P1",
+       "name": "Watch party",
+       "what": "Keeps players in step with the kit's live updates (KIT-A15-F5-P1) and a chat beside the film (KIT-A8-F1-P2); each person needs their own access.",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "MOV-A4-F1-P1",
+        "KIT-A15-F5-P1",
+        "KIT-A8-F1-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A4-F12",
+     "name": "Report a playback problem",
+     "does": "Tell us when a film stalls, captions are wrong or the sound is out of step, with the details filled in for you.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A4-F12-P1",
+       "name": "Playback problem report",
+       "what": "A report that attaches the film, the moment, the device and the stream details, on the kit's support cases (KIT-A21-F2-P1), and refunds a rental that could not play (A6-F7-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A21-F2-P1",
+        "MOV-A4-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MOV-A5",
+   "name": "Human and AI sections",
+   "summary": "The catalogue has a Human section and an AI section. Filmmakers declare AI use for every film, episode, trailer and poster, the section follows that answer whatever tool published it, AI agent accounts are labelled and publish only in the AI section, uploads are checked for content credentials and detection signals as hints only, each viewer chooses Human, AI or both, and wrong placements are fixed in the open.",
+   "features": [
+    {
+     "id": "MOV-A5-F1",
+     "name": "Declare AI use on every film",
+     "does": "Say for every film, episode, trailer and poster whether AI was used and how, in plain categories.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A5-F1-P1",
+       "name": "AI-use answer",
+       "what": "None, AI-assisted (with the tasks named, such as clean-up, upscaling, dubbing or visual effects) or AI-made, with the tools named, for the film and separately for its trailer and poster.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MOV-A3-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A5-F1-P2",
+       "name": "Declaration step",
+       "what": "The publishing steps ask every time, with plain examples of each answer; it cannot be skipped.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MOV-A5-F1-P1",
+        "MOV-A10-F1-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A5-F1-P3",
+       "name": "Where the line falls",
+       "what": "Published rules for what counts as AI-assisted or AI-made in film, for example AI voices, AI dubbing, de-ageing an actor or generated shots, set and changed by the filmmakers' vote.",
+       "kind": "legal",
+       "size": "small",
+       "depends_on": [
+        "MOV-A17-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A5-F2",
+     "name": "Choose Human, AI or both",
+     "does": "Switch the catalogue, search and lists to the Human section, the AI section or both, and change it any time.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A5-F2-P1",
+       "name": "Section filter",
+       "what": "Every list, search and filmmaker page filters by section on the server.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MOV-A5-F1-P1",
+        "MOV-A2-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A5-F2-P2",
+       "name": "Section switch",
+       "what": "A clear Human, AI, Both switch at the top of browse and search.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MOV-A5-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A5-F2-P3",
+       "name": "Choice per profile",
+       "what": "Each household profile keeps its own choice.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MOV-A1-F4-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A5-F3",
+     "name": "Labelled AI agents",
+     "does": "Know at a glance when an account is an AI agent and who is responsible for it.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A5-F3-P1",
+       "name": "Agent account type",
+       "what": "AI agent accounts carry the kit's agent label (KIT-A17-F9-P1) and the person or organisation responsible, and publish only in the AI section.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "svc-accounts",
+        "KIT-A17-F9-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A5-F3-P2",
+       "name": "Section follows the answer, not the route",
+       "what": "A film goes to the section its AI-use answer gives, whether it came from the app, the command API, MCP, a bulk import or Spare Studio; an agent acting for a filmmaker carries a label without changing the film's section.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MOV-A5-F1-P1",
+        "MOV-A5-F3-P1",
+        "MOV-A23-F1-P1",
+        "kit-mcp"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A5-F4",
+     "name": "Checked, not assumed",
+     "does": "See content credentials when a film or trailer carries them, while moderators get detection signals as hints, never verdicts.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A5-F4-P1",
+       "name": "Content credentials reader",
+       "what": "Reads C2PA content credentials on upload with the kit's openly licensed library (KIT-A27-F8-P6).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A27-F8-P6",
+        "MOV-A18-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A5-F4-P2",
+       "name": "Credentials on the film page",
+       "what": "A plain summary of how the film says it was made, from its credentials, beside the AI-use answer.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MOV-A5-F4-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A5-F4-P3",
+       "name": "Detection signals research",
+       "what": "Compare open AI-detection methods for long video on accuracy, bias and licence, for use as moderator hints only.",
+       "kind": "research",
+       "size": "medium",
+       "depends_on": [],
+       "piece": null
+      },
+      {
+       "id": "MOV-A5-F4-P4",
+       "name": "Hints to the review queue",
+       "what": "A strong signal against a Human answer puts the film in the review queue for a person; nothing is moved automatically.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MOV-A5-F4-P3",
+        "MOV-A17-F7-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A5-F5",
+     "name": "Fix wrong sections in the open",
+     "does": "Flag a film in the wrong section; a moderator moves it with the reason logged in public, and the filmmaker can appeal.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A5-F5-P1",
+       "name": "Wrong-section report",
+       "what": "A report type for films in the wrong section.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MOV-A17-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A5-F5-P2",
+       "name": "Section move and appeal",
+       "what": "Moderators move a film with a logged reason; the filmmaker can appeal.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MOV-A17-F5-P1",
+        "MOV-A17-F6-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A5-F6",
+     "name": "Fair to both sections",
+     "does": "Know that neither section is buried, and that films are paid the same way whichever section they are in.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A5-F6-P1",
+       "name": "Same rules in both sections",
+       "what": "Both sections use the same published order rules and the same at-cost fee; using AI is not a penalty.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MOV-A2-F1-P3",
+        "MOV-A6-F1-P3"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A5-F7",
+     "name": "Credentials from our own tools",
+     "does": "Keep the content credentials Spare Studio adds when a film is exported, so the record of how it was made travels with it.",
+     "priority": "later",
+     "parts": [
+      {
+       "id": "MOV-A5-F7-P1",
+       "name": "Keep Studio credentials",
+       "what": "Films exported from Spare Studio keep their C2PA credentials, signed with the co-op's certificate (KIT-A27-F8-P7), through encoding.",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A27-F8-P6",
+        "KIT-A27-F8-P7",
+        "MOV-A5-F4-P1"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MOV-A6",
+   "name": "Paying for films: rent, buy, support or free",
+   "summary": "Each filmmaker chooses how each film is sold: rent, buy to keep, pay what you like, support, free, or in the viewer pass. Viewers see the price in their own money with tax and the at-cost fee shown, pay through a regulated payment provider, and get receipts, refunds when a film will not play, and limits on young profiles.",
+   "features": [
+    {
+     "id": "MOV-A6-F1",
+     "name": "See the price and the fee before you pay",
+     "does": "See what you pay, the tax in it, the at-cost fee and what the filmmaker gets, before you pay.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A6-F1-P1",
+       "name": "Price rules per film",
+       "what": "The filmmaker's chosen ways and prices for each film and each country, in exact money amounts (KIT-A3-F1-P4).",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MOV-A3-F1-P1",
+        "KIT-A3-F1-P4"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A6-F1-P2",
+       "name": "Price breakdown",
+       "what": "Price, tax, the payment provider's charge, Spare Movies' running-cost share and what the filmmaker gets, on the kit's fee breakdown (KIT-A3-F4-P2).",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MOV-A6-F1-P1",
+        "MOV-A6-F1-P3",
+        "KIT-A3-F4-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A6-F1-P3",
+       "name": "At-cost fee for films",
+       "what": "The fee on each sale: the payment provider's charge passed through, plus the last period's running cost per sale and per hour delivered (A18-F5-P1), published on the ledger; no margin.",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A3-F4-P1",
+        "KIT-A13-F3-P6",
+        "MOV-A18-F5-P1"
+       ],
+       "piece": "K06"
+      }
+     ]
+    },
+    {
+     "id": "MOV-A6-F2",
+     "name": "Buy to keep",
+     "does": "Buy a film or a season and watch it any time, on any of your devices, for as long as the promise on the page says.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A6-F2-P1",
+       "name": "Purchases and access",
+       "what": "Purchases recorded as orders on the kit's marketplace engine (KIT-A5-F4-P1), giving the account the right to watch.",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "kit-market",
+        "KIT-A5-F4-P1",
+        "MOV-A6-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A6-F2-P2",
+       "name": "Buy flow",
+       "what": "Buy in two steps from the film page, with the breakdown and the keep-access promise shown.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MOV-A6-F2-P1",
+        "MOV-A6-F6-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A6-F2-P3",
+       "name": "Keep-access promise",
+       "what": "What 'buy' means in plain words: how long access lasts, what happens if the filmmaker withdraws the film, if rights end in your country or if Spare Movies closes, checked against consumer law in each country (KIT-A18-F8-P1).",
+       "kind": "legal",
+       "size": "small",
+       "depends_on": [
+        "KIT-A18-F8-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A6-F3",
+     "name": "Rent",
+     "does": "Rent a film, start it within a set time, and finish it within a set time after starting.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A6-F3-P1",
+       "name": "Rental clocks",
+       "what": "Start and finish windows set by the filmmaker within published limits, run on the kit's durable timers (KIT-A15-F14-P1).",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MOV-A6-F2-P1",
+        "KIT-A15-F14-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A6-F3-P2",
+       "name": "Rent flow",
+       "what": "Rent in two steps, with the clocks stated plainly before paying and shown on the film afterwards.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MOV-A6-F3-P1",
+        "MOV-A6-F6-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A6-F4",
+     "name": "Support a filmmaker",
+     "does": "Pay what you like for a film, add support on top of a price, or support a filmmaker after a free film.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A6-F4-P1",
+       "name": "Support payments",
+       "what": "Support on the kit's tips (KIT-A3-F6-P1); the filmmaker gets it all except the provider's charge, which the viewer can choose to cover.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A3-F6-P1",
+        "MOV-A6-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A6-F4-P2",
+       "name": "Pay what you like",
+       "what": "A film can have a minimum price chosen by the filmmaker, which can be zero, and a suggested amount.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MOV-A6-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A6-F5",
+     "name": "Watch free films",
+     "does": "Watch films the filmmaker made free, with no adverts.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A6-F5-P1",
+       "name": "Free films",
+       "what": "A free way to watch, for everyone or for one country, with an optional support button.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MOV-A6-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A6-F6",
+     "name": "Pay once, safely",
+     "does": "Pay by card or bank through a regulated payment provider, save a card for next time, and get a receipt.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A6-F6-P1",
+       "name": "Checkout link",
+       "what": "The kit's checkout (KIT-A3-F1-P3) through the chosen payment provider (KIT-A3-F1-P2); Spare Movies never handles card numbers.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A3-F1-P2",
+        "KIT-A3-F1-P3"
+       ],
+       "piece": "K02"
+      },
+      {
+       "id": "MOV-A6-F6-P2",
+       "name": "Saved payment methods",
+       "what": "Uses the kit's saved payment methods (KIT-A3-F8-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A3-F8-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A6-F6-P3",
+       "name": "Receipts",
+       "what": "Receipts and tax invoices from the kit (KIT-A3-F7-P1, KIT-A4-F2-P1), naming the seller of record (A6-F8-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A3-F7-P1",
+        "KIT-A4-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A6-F6-P4",
+       "name": "Fraud screening",
+       "what": "The provider's fraud screening with the kit's published risk rules (KIT-A3-F13).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A3-F13-P1",
+        "KIT-A3-F13-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A6-F7",
+     "name": "Refunds when it will not play",
+     "does": "Get your money back automatically when a rental fails to play, and know your rights for everything else.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A6-F7-P1",
+       "name": "Refund rules",
+       "what": "Published refund rules: an automatic refund when a film could not play, and what consumer law gives in each country (KIT-A18-F8-P1).",
+       "kind": "legal",
+       "size": "small",
+       "depends_on": [
+        "KIT-A18-F8-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A6-F7-P2",
+       "name": "Refunds and card disputes",
+       "what": "Uses the kit's refunds and card disputes (KIT-A3-F5), taking a refunded amount back from the filmmaker's next payout.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A3-F5-P1",
+        "KIT-A3-F5-P2",
+        "MOV-A6-F7-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A6-F8",
+     "name": "Tax done right",
+     "does": "Know the right tax is in the price and goes to the right tax office, whoever is the seller.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A6-F8-P1",
+       "name": "Seller of record for films",
+       "what": "Decide for each kind of sale whether the filmmaker or the co-op is the seller (KIT-A3-F1-P5), which sets who charges tax, whose name is on the receipt and who answers card disputes.",
+       "kind": "legal",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A3-F1-P5"
+       ],
+       "piece": "K01"
+      },
+      {
+       "id": "MOV-A6-F8-P2",
+       "name": "Tax on digital sales",
+       "what": "Each launch country's rules for tax on films sold online, including the rules that make a platform collect tax on digital services sold through it, kept in its country pack (KIT-A19-F6-P1).",
+       "kind": "legal",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A4-F1-P1",
+        "KIT-A19-F6-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A6-F8-P3",
+       "name": "Tax in the price",
+       "what": "The kit's tax engine (KIT-A4-F1-P2) adds or includes tax as each country shows prices.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A4-F1-P2",
+        "MOV-A6-F8-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A6-F9",
+     "name": "Sell to viewers in other countries",
+     "does": "Sell a film to viewers anywhere the filmmaker holds the rights, in each viewer's money, with that country's tax.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MOV-A6-F9-P1",
+       "name": "Tax across borders",
+       "what": "Tax on films sold to viewers in other countries, on the kit's tax on services sold across borders (KIT-A4-F7-P2).",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A4-F7-P2",
+        "MOV-A6-F8-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A6-F9-P2",
+       "name": "Prices in each currency",
+       "what": "Prices set or converted per country on the kit's currencies (KIT-A3-F14-P1), with the filmmaker paid in their own money.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A3-F14-P1",
+        "MOV-A6-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A6-F10",
+     "name": "Pay in phone and TV apps",
+     "does": "Buy or rent inside phone and TV apps where store rules allow it, at the same price.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MOV-A6-F10-P1",
+       "name": "App store payment rules",
+       "what": "Each app store's rules for selling films inside an app, and where buying on the web and watching in the app is allowed, country by country (KIT-A20-F8-P1).",
+       "kind": "legal",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A20-F8-P1"
+       ],
+       "piece": "K04"
+      },
+      {
+       "id": "MOV-A6-F10-P2",
+       "name": "Store billing where required",
+       "what": "Store billing only where a store requires it, with the store's charge shown as a running cost and never hidden.",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "MOV-A6-F10-P1",
+        "MOV-A19-F2-P2"
+       ],
+       "piece": "K04"
+      }
+     ]
+    },
+    {
+     "id": "MOV-A6-F11",
+     "name": "Limits on young profiles",
+     "does": "Know that nothing is bought, rented or paid from a young person's profile without the account holder.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A6-F11-P1",
+       "name": "Purchase lock on profiles",
+       "what": "Buying, renting or support from a profile with an age limit needs the account holder's PIN or passkey (A1-F4-P3).",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MOV-A1-F4-P3",
+        "MOV-A8-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A6-F12",
+     "name": "Give a film as a gift",
+     "does": "Send a film to someone as a gift, or give a gift code.",
+     "priority": "later",
+     "parts": [
+      {
+       "id": "MOV-A6-F12-P1",
+       "name": "Gift a film",
+       "what": "Gift codes on the kit's gift cards (KIT-A3-F15-P2), turned into a purchase when used.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A3-F15-P2",
+        "MOV-A6-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MOV-A7",
+   "name": "The viewer pass",
+   "summary": "One monthly pass for every film whose filmmaker puts it in: priced at running cost plus what is shared out, each viewer's money shared out by watch time in the open, guarded against fake viewing, with a statement for every viewer and filmmaker, and passes for people who cannot pay and for libraries and schools.",
+   "features": [
+    {
+     "id": "MOV-A7-F1",
+     "name": "Watch everything in the pass",
+     "does": "Pay one monthly price and watch every film its filmmaker put in the pass, and cancel in one step.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MOV-A7-F1-P1",
+       "name": "Pass plans",
+       "what": "A monthly price set by the filmmakers' vote: the running cost per viewer plus the amount shared out, charged through the kit's regular payments (KIT-A3-F12-P1).",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "KIT-A3-F12-P1",
+        "MOV-A6-F1-P1"
+       ],
+       "piece": "K02"
+      },
+      {
+       "id": "MOV-A7-F1-P2",
+       "name": "Join, pause and cancel",
+       "what": "Join in two steps, pause, and cancel in one step with no questions.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MOV-A7-F1-P1",
+        "KIT-A3-F12-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A7-F1-P3",
+       "name": "Films opt in",
+       "what": "Each filmmaker chooses which films are in the pass, in which countries and from when, and can keep rent and buy open beside it.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MOV-A6-F1-P1",
+        "MOV-A11-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A7-F2",
+     "name": "Shared out by watch time",
+     "does": "Know that pass money goes to filmmakers by how long people watched their films, worked out in the open each month.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MOV-A7-F2-P1",
+       "name": "Share-out method decision",
+       "what": "Compare a share per viewer (each viewer's fee goes only to what that viewer watched) with one pool shared by total watch time, on fairness to small films, fake viewing and how easy each is to explain, with worked examples, for an owner and a vote to decide.",
+       "kind": "research",
+       "size": "medium",
+       "depends_on": [],
+       "piece": null
+      },
+      {
+       "id": "MOV-A7-F2-P2",
+       "name": "Watch-time counter",
+       "what": "Counts minutes actually watched per film and profile on the server, capped per day, keeping only what the share-out needs and only until it is paid.",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "MOV-A4-F1-P1",
+        "kit-ops"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A7-F2-P3",
+       "name": "Share-out engine",
+       "what": "The monthly calculation, built so either method can run, with the result paid through the payout runs (A14-F2-P2).",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "MOV-A7-F2-P1",
+        "MOV-A7-F2-P2",
+        "svc-payments"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A7-F2-P4",
+       "name": "Share-out statements",
+       "what": "Each viewer sees where their pass money went this month; each filmmaker sees how their share was worked out.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MOV-A7-F2-P3"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A7-F3",
+     "name": "Guarded against fake viewing",
+     "does": "Know that bots and played-on-repeat films cannot take pass money from honest filmmakers.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MOV-A7-F3-P1",
+       "name": "Fake viewing checks",
+       "what": "Published rules: minimum watch time, daily caps per profile, device and pattern checks on the kit's fraud signals (KIT-A10-F12-P2).",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "MOV-A7-F2-P2",
+        "KIT-A10-F12-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A7-F3-P2",
+       "name": "Holds and claw-backs",
+       "what": "Rules for holding a share under review and taking back money proven to come from fake viewing, under the kit's loss rules (KIT-A3-F16-P1).",
+       "kind": "legal",
+       "size": "small",
+       "depends_on": [
+        "MOV-A7-F3-P1",
+        "KIT-A3-F16-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A7-F4",
+     "name": "Passes for people who cannot pay",
+     "does": "Get a free pass under a published hardship rule, with filmmakers still paid.",
+     "priority": "later",
+     "parts": [
+      {
+       "id": "MOV-A7-F4-P1",
+       "name": "Hardship passes",
+       "what": "Free passes under the kit's hardship rule (KIT-A13-F3-P7), paid for from voluntary support set aside for it and shown on the ledger.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A13-F3-P7",
+        "MOV-A7-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A7-F5",
+     "name": "Passes for libraries and schools",
+     "does": "Let a library or school give its members a pass, with filmmakers paid by watch time.",
+     "priority": "later",
+     "parts": [
+      {
+       "id": "MOV-A7-F5-P1",
+       "name": "Organisation passes",
+       "what": "An organisation buys passes for its members on the kit organisation model (KIT-A1-F7-P1), with watch time shared out the same way.",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A1-F7-P1",
+        "MOV-A7-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A7-F6",
+     "name": "Give a pass",
+     "does": "Give someone a month or a year of the pass.",
+     "priority": "later",
+     "parts": [
+      {
+       "id": "MOV-A7-F6-P1",
+       "name": "Gift passes",
+       "what": "Pass gift codes on the kit's gift cards (KIT-A3-F15-P2).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A3-F15-P2",
+        "MOV-A7-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MOV-A8",
+   "name": "Young viewers and age limits",
+   "summary": "Age limits that follow each country's ratings: age rules per country, profiles with an age limit, age checks for restricted films where the law asks, a decision on adult films, safe defaults for children, and family links.",
+   "features": [
+    {
+     "id": "MOV-A8-F1",
+     "name": "Age rules for each country",
+     "does": "Know the minimum age to hold an account and what each rating means in your country.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A8-F1-P1",
+       "name": "Age rules pack",
+       "what": "For each country: the minimum age for an account (KIT-A1-F1-P5), the age for each rating, and when an age check is required, kept in the country pack.",
+       "kind": "legal",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A19-F6-P1",
+        "KIT-A1-F1-P5"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A8-F1-P2",
+       "name": "Age band on the account",
+       "what": "Only an age band is kept, never the birth date, matching the kit's age checks (KIT-A2-F8-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A2-F8-P1",
+        "MOV-A8-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A8-F2",
+     "name": "Profiles with an age limit",
+     "does": "Set an age limit on a profile so films above it are hidden or locked, with simpler screens for children.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A8-F2-P1",
+       "name": "Profile age limit",
+       "what": "Films rated above the profile's limit in the viewer's country are hidden, or locked behind the account holder's PIN.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MOV-A1-F4-P1",
+        "MOV-A12-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A8-F2-P2",
+       "name": "Children's profile",
+       "what": "Simpler screens with no paying, no reviews, no autoplay and no outside links.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MOV-A8-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A8-F3",
+     "name": "Age checks for restricted films",
+     "does": "Know that films the law restricts to adults ask for an age check that proves only that you are old enough.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A8-F3-P1",
+       "name": "Restricted film gate",
+       "what": "Films restricted by law to adults need an age check through an accredited provider (KIT-A2-F8-P1) that returns only over or under.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "KIT-A2-F8-P1",
+        "MOV-A12-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A8-F3-P2",
+       "name": "Adult films decision",
+       "what": "Whether sexually explicit films are allowed at all, and if so with which checks and kept out of store apps, for a vote with legal advice.",
+       "kind": "legal",
+       "size": "small",
+       "depends_on": [
+        "MOV-A17-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A8-F4",
+     "name": "Children's safety checked by design",
+     "does": "Trust that children's privacy and safety were assessed before launch.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A8-F4-P1",
+       "name": "Child safety review",
+       "what": "A privacy and safety assessment for children (KIT-A18-F10-P1) against codes such as the UK's age-appropriate design code, before launch and after big changes.",
+       "kind": "legal",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A18-F10-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A8-F5",
+     "name": "Parents and carers",
+     "does": "Link family accounts so a parent can set limits and approve purchases for a child with their own account.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MOV-A8-F5-P1",
+       "name": "Family link",
+       "what": "Uses the kit's family accounts (KIT-A1-F16-P1) and rules for parents and carers (KIT-A1-F8-P2).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A1-F16-P1",
+        "KIT-A1-F8-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A8-F5-P2",
+       "name": "Purchase approvals",
+       "what": "Uses the kit's purchase approvals for children (KIT-A1-F16-P2).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A1-F16-P2"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MOV-A9",
+   "name": "Your lists, history and following",
+   "summary": "Keeping track: a watchlist, continue watching, a history you can pause and clear, following filmmakers and being told when they release, notifications you choose, sharing a film, and lists you make public.",
+   "features": [
+    {
+     "id": "MOV-A9-F1",
+     "name": "Keep a watchlist",
+     "does": "Save films and series to watch later, per profile.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A9-F1-P1",
+       "name": "Watchlist",
+       "what": "A watchlist per profile on the kit's favourites (KIT-A5-F12-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A5-F12-P1",
+        "MOV-A1-F4-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A9-F2",
+     "name": "Continue watching and history",
+     "does": "See what you are part way through, and pause, clear or remove items from your history.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A9-F2-P1",
+       "name": "Watch history",
+       "what": "Per profile, kept only for resume points, your own lists and the pass share-out, for the published time.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "kit-ops",
+        "MOV-A1-F4-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A9-F2-P2",
+       "name": "History controls",
+       "what": "Pause history, clear it all, or remove one film.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MOV-A9-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A9-F3",
+     "name": "Follow filmmakers",
+     "does": "Follow a filmmaker and be told when they release a film in your country.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A9-F3-P1",
+       "name": "Follows",
+       "what": "Follows of filmmakers, people and collections.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MOV-A1-F3-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A9-F3-P2",
+       "name": "Release alerts",
+       "what": "A notice when a followed filmmaker's film opens in your country, through the kit's notification router (KIT-A8-F3-P2).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A8-F3-P2",
+        "MOV-A9-F3-P1",
+        "MOV-A11-F3-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A9-F4",
+     "name": "Notifications you choose",
+     "does": "Choose which notices you get and how: release alerts, rental reminders, receipts.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A9-F4-P1",
+       "name": "Notification settings",
+       "what": "Uses the kit's notification settings (KIT-A8-F5-P1); nothing is sent to sell you more.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A8-F5-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A9-F5",
+     "name": "Share a film",
+     "does": "Send a link to a film that opens in the app or the browser, with nothing tracking who clicked.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A9-F5-P1",
+       "name": "Share links",
+       "what": "Short links and QR codes (KIT-A20-F9-P1) that open in the right place (KIT-A20-F4-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A20-F9-P1",
+        "KIT-A20-F4-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A9-F6",
+     "name": "Public lists",
+     "does": "Make a list public so others can see and follow it.",
+     "priority": "later",
+     "parts": [
+      {
+       "id": "MOV-A9-F6-P1",
+       "name": "Public lists",
+       "what": "A watchlist made public becomes a collection (A2-F5-P1).",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MOV-A9-F1-P1",
+        "MOV-A2-F5-P1"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MOV-A10",
+   "name": "Publishing a film",
+   "summary": "Getting a film up: one checklist from master file to release, uploads that resume on bad connections, quality checks in plain words, artwork and trailer, captions and audio description, release dates, series and episodes, fixing a published film, private screeners, bulk delivery from distributors, and publishing from Spare Studio.",
+   "features": [
+    {
+     "id": "MOV-A10-F1",
+     "name": "Upload a film",
+     "does": "Upload the master file once, from any connection, and follow one checklist to publish.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A10-F1-P1",
+       "name": "Film draft",
+       "what": "A private draft that holds the file, the details and every answer until it is published.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MOV-A3-F1-P1",
+        "kit-ops"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A10-F1-P2",
+       "name": "Publishing checklist",
+       "what": "One checklist: file, details, AI-use answer, captions and audio description, ratings, rights, prices and release, with what is missing shown plainly.",
+       "kind": "interface",
+       "size": "medium",
+       "depends_on": [
+        "MOV-A10-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A10-F1-P3",
+       "name": "Resumable master upload",
+       "what": "Uploads of large master files that resume after a drop, on the kit's file service (KIT-A15-F7-P1) using the open tus protocol.",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A15-F7-P1",
+        "MOV-A18-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A10-F1-P4",
+       "name": "Upload from a link",
+       "what": "Fetch the master from a cloud storage link, through the safe outside fetches (A18-F6-P2).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "MOV-A10-F1-P3",
+        "MOV-A18-F6-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A10-F2",
+     "name": "Quality checks before publishing",
+     "does": "Get a plain report on the picture and sound before publishing, with how to fix each problem.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A10-F2-P1",
+       "name": "Technical checks",
+       "what": "Resolution, frame rate, loudness, sound in step with picture, silent or black stretches and damaged frames.",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "MOV-A18-F1-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A10-F2-P2",
+       "name": "Fix-it guide",
+       "what": "Plain advice for each problem found, with links to free tools such as Spare Studio.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MOV-A10-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A10-F3",
+     "name": "Artwork and trailer",
+     "does": "Add a poster, stills and a trailer, with descriptions for people who cannot see them.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A10-F3-P1",
+       "name": "Poster and stills",
+       "what": "Images on the kit's file service, with an image description asked for each (KIT-A19-F2-P3).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A15-F7-P1",
+        "KIT-A19-F2-P3"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A10-F3-P2",
+       "name": "Trailer upload",
+       "what": "A trailer with its own captions, AI-use answer and, where needed, its own rating.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MOV-A10-F1-P3",
+        "MOV-A12-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A10-F4",
+     "name": "Captions and audio description before publishing",
+     "does": "Add captions in the film's main language before publishing, and audio description if you have it.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A10-F4-P1",
+       "name": "Access tracks step",
+       "what": "The checklist asks for captions in the film's main spoken language, offers caption drafts (A13-F2) and audio description, and shows viewers what is missing.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MOV-A13-F1-P1",
+        "MOV-A13-F3-P1",
+        "MOV-A10-F1-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A10-F5",
+     "name": "Set the release",
+     "does": "Pick a release date and time for each country and see it go live on time.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A10-F5-P1",
+       "name": "Release scheduling",
+       "what": "Release dates per country and per way to watch, run on the kit's durable timers (KIT-A15-F14-P1).",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MOV-A11-F3-P1",
+        "KIT-A15-F14-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A10-F6",
+     "name": "Series and episodes",
+     "does": "Publish a series season by season, releasing episodes all at once or week by week.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A10-F6-P1",
+       "name": "Episode publishing",
+       "what": "Each episode has its own draft, checks and release date inside its season.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MOV-A3-F5-P1",
+        "MOV-A10-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A10-F7",
+     "name": "Fix a published film",
+     "does": "Replace the file, captions or artwork of a published film without viewers losing access, with every change logged.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A10-F7-P1",
+       "name": "Replace and version",
+       "what": "A new file is encoded beside the old one and swapped in when ready, keeping resume points close to where they were.",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "MOV-A10-F1-P1",
+        "MOV-A18-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A10-F7-P2",
+       "name": "Change log",
+       "what": "Changes to price, rights, rating, section and file on the kit's public listing history (KIT-A5-F28-P1).",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MOV-A10-F7-P1",
+        "KIT-A5-F28-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A10-F8",
+     "name": "Private screeners",
+     "does": "Send festivals, critics or distributors a private link that expires, carrying a hidden mark if you choose.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MOV-A10-F8-P1",
+       "name": "Screener links",
+       "what": "Private links on the kit's guest access (KIT-A15-F8-P2), with an end date, a view limit and, if chosen, a per-viewer watermark (A16-F4).",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "KIT-A15-F8-P2",
+        "MOV-A16-F1-P4"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A10-F9",
+     "name": "Bulk delivery from distributors",
+     "does": "Let a distributor deliver a whole catalogue at once from files and a spreadsheet.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MOV-A10-F9-P1",
+       "name": "Delivery spec",
+       "what": "A published delivery spec for masters, captions, artwork and details in open formats.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MOV-A10-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A10-F9-P2",
+       "name": "Catalogue import",
+       "what": "Bulk import on the kit's listing import (KIT-A5-F17-P2), each film still needing its AI-use answer, rights and rating.",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A5-F17-P2",
+        "MOV-A10-F9-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A10-F10",
+     "name": "Publish from Spare Studio",
+     "does": "Send a finished film from the Spare Studio editor straight to a draft here.",
+     "priority": "later",
+     "parts": [
+      {
+       "id": "MOV-A10-F10-P1",
+       "name": "Studio hand-off",
+       "what": "Spare Studio exports to a Spare Movies draft through the public API (A23-F5-P1), keeping content credentials (A5-F7-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "MOV-A23-F5-P1",
+        "MOV-A10-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MOV-A11",
+   "name": "Rights, territories and release windows",
+   "summary": "Showing a film only where the filmmaker holds the rights: rights by country and by way of watching, proof kept privately, release dates and windows, the country check, travellers keeping paid access where the law asks, what happens when rights end, disputes over who owns a film, music clearances, and screening licences.",
+   "features": [
+    {
+     "id": "MOV-A11-F1",
+     "name": "Declare your rights",
+     "does": "Say which countries you hold the rights for, for which ways of watching and until when, with proof kept privately.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A11-F1-P1",
+       "name": "Rights record",
+       "what": "For each film: countries, ways of watching (rent, buy, pass, free), start and end dates, holdbacks and deals elsewhere, as operations with a full history.",
+       "kind": "data",
+       "size": "medium",
+       "depends_on": [
+        "MOV-A3-F1-P1",
+        "kit-ops"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A11-F1-P2",
+       "name": "Rights editor",
+       "what": "Pick countries from a list grouped by region, with quick choices such as 'worldwide' or 'worldwide except', and dates for each.",
+       "kind": "interface",
+       "size": "medium",
+       "depends_on": [
+        "MOV-A11-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A11-F1-P3",
+       "name": "Proof of rights",
+       "what": "Contracts, licences and releases kept privately in the kit's document vault (KIT-A15-F13-P1), opened only by moderators when a claim is made.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "KIT-A15-F13-P1",
+        "MOV-A11-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A11-F1-P4",
+       "name": "Rights declaration",
+       "what": "The filmmaker confirms they hold the rights, including music, archive footage and actors' releases, with published consequences for a false declaration.",
+       "kind": "legal",
+       "size": "small",
+       "depends_on": [
+        "MOV-A17-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A11-F2",
+     "name": "Films only where rights allow",
+     "does": "See only films you can watch where you are, and a plain reason when one is not available here.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A11-F2-P1",
+       "name": "Country check",
+       "what": "Works out the viewer's country for each play and sale and checks it against the rights record.",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "MOV-A11-F1-P1",
+        "KIT-A19-F6-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A11-F2-P2",
+       "name": "Where you are, kept private",
+       "what": "The country is worked out from the network address at the moment of play and dropped, never stored; the rules for travel and private networks are published.",
+       "kind": "library",
+       "size": "small",
+       "depends_on": [
+        "MOV-A11-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A11-F2-P3",
+       "name": "Not available here",
+       "what": "The page says plainly when a film is not available in your country and why, with a button to be told if it comes.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MOV-A11-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A11-F3",
+     "name": "Release dates and windows",
+     "does": "Set when each way of watching opens in each country, such as buy first, the pass later, free after a year.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A11-F3-P1",
+       "name": "Windows",
+       "what": "Release dates per country and per way of watching.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MOV-A11-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A11-F3-P2",
+       "name": "Windows open on time",
+       "what": "Each window opens and closes on the kit's durable timers (KIT-A15-F14-P1), with the change logged.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MOV-A11-F3-P1",
+        "KIT-A15-F14-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A11-F4",
+     "name": "Travellers keep paid access",
+     "does": "Keep watching what you paid for when you travel, where the law asks for it and the rights allow.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A11-F4-P1",
+       "name": "Portability rules",
+       "what": "Paid viewers who are only visiting another EU country keep their access, as the EU's portability regulation asks of paid services, with each other country's rules in its pack.",
+       "kind": "legal",
+       "size": "small",
+       "depends_on": [
+        "MOV-A11-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A11-F4-P2",
+       "name": "Home country check",
+       "what": "The viewer's home country from their payment details, checked as the portability rules allow.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MOV-A11-F4-P1",
+        "svc-payments"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A11-F5",
+     "name": "When rights end",
+     "does": "Be told before a film leaves your country, and keep what you bought where the promise says.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A11-F5-P1",
+       "name": "Rights end handling",
+       "what": "Tells viewers ahead, keeps buyers' access where the keep-access promise gives it, and refunds where it cannot.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MOV-A11-F3-P2",
+        "MOV-A6-F2-P3"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A11-F6",
+     "name": "Rights disputes",
+     "does": "When two people claim the same film, have it decided on evidence with the money held until then.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A11-F6-P1",
+       "name": "Rights dispute",
+       "what": "A dispute on the kit's disputes service (KIT-A11-F1-P1) with evidence (KIT-A11-F2-P1), earnings held while it runs, and the court's decision followed where there is one.",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A11-F1-P1",
+        "KIT-A11-F2-P1",
+        "MOV-A11-F1-P3"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A11-F7",
+     "name": "Music clearances",
+     "does": "List the music in your film so writers are paid where the law asks.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A11-F7-P1",
+       "name": "Music cue sheet",
+       "what": "The music used, with writers, publishers and timings, in the form collecting societies ask for.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MOV-A11-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A11-F7-P2",
+       "name": "Collecting society licences",
+       "what": "Whether Spare Movies needs its own licences from music collecting societies to stream films in each country even when the filmmaker cleared the music, and the cost passed on at cost (unverified).",
+       "kind": "legal",
+       "size": "medium",
+       "depends_on": [],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A11-F8",
+     "name": "Screening licences",
+     "does": "Licence a film for a cinema, festival, school or community screening.",
+     "priority": "later",
+     "parts": [
+      {
+       "id": "MOV-A11-F8-P1",
+       "name": "Screening orders",
+       "what": "A screening licence as an order on the kit's marketplace engine, priced by the filmmaker, with the date and place.",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "kit-market",
+        "MOV-A11-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A11-F8-P2",
+       "name": "Screening files",
+       "what": "A download for the licensed screening that stops working after the date.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MOV-A11-F8-P1",
+        "MOV-A18-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MOV-A12",
+   "name": "Age ratings and content advice",
+   "summary": "The right age rating in every country: each country's rules in its pack, rating a film with the approved tool where a country allows it and an official rating where it asks for one, content advice in plain words, ratings shown in our own plain style, wrong ratings reported and checked, and warnings for flashing lights.",
+   "features": [
+    {
+     "id": "MOV-A12-F1",
+     "name": "See the right rating for your country",
+     "does": "See the film's rating in your own country, with the body that set it and the reasons.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A12-F1-P1",
+       "name": "Ratings by country",
+       "what": "Each film's rating per country, with who set it (the official body, an approved tool or the filmmaker's own answers), the date and the reasons.",
+       "kind": "data",
+       "size": "medium",
+       "depends_on": [
+        "MOV-A3-F1-P1",
+        "KIT-A19-F6-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A12-F1-P2",
+       "name": "Rating and advice display",
+       "what": "The country's rating as plain text in our own style, never copying official label artwork, with the content advice beside it.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MOV-A12-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A12-F1-P3",
+       "name": "Ratings rules pack",
+       "what": "For each country: the law, the body, whether on-demand films must be rated, whether rating with an approved tool is allowed, how ratings must be shown and the fees, kept in its country pack.",
+       "kind": "legal",
+       "size": "large",
+       "depends_on": [
+        "KIT-A19-F6-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A12-F2",
+     "name": "Rate your film",
+     "does": "Get your film rated for each country the simplest lawful way, with any fee shown.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A12-F2-P1",
+       "name": "Rating questions",
+       "what": "Plain questions about what is in the film; where a country has an approved rating tool, the answers go to that tool on its terms; we never invent an official rating.",
+       "kind": "interface",
+       "size": "medium",
+       "depends_on": [
+        "MOV-A12-F1-P3",
+        "MOV-A10-F1-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A12-F2-P2",
+       "name": "Official rating request",
+       "what": "Where a country needs an official rating, the filmmaker applies to the body, or Spare Movies does it at cost, with the fee shown before starting.",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "MOV-A12-F1-P3"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A12-F2-P3",
+       "name": "Films without a rating",
+       "what": "What happens where a film has no rating yet: hidden from young profiles, or not shown in a country where the law forbids it.",
+       "kind": "legal",
+       "size": "small",
+       "depends_on": [
+        "MOV-A12-F1-P3"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A12-F3",
+     "name": "Content advice in plain words",
+     "does": "See what is in a film, such as violence, strong language or suicide themes, before you press play.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A12-F3-P1",
+       "name": "Content advice list",
+       "what": "Plain categories with how strong each is, shown on the film page and before play.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MOV-A12-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A12-F3-P2",
+       "name": "Filter by advice",
+       "what": "Hide films with chosen advice from a profile.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MOV-A12-F3-P1",
+        "MOV-A2-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A12-F4",
+     "name": "Wrong ratings reported and checked",
+     "does": "Report a rating that looks wrong and see it checked; an official rating always wins.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A12-F4-P1",
+       "name": "Rating reports",
+       "what": "A report type for a wrong rating or missing advice, reviewed by a moderator.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MOV-A17-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A12-F4-P2",
+       "name": "Rating audits",
+       "what": "Regular sample checks of filmmakers' own ratings, with the results published.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MOV-A12-F4-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A12-F5",
+     "name": "Flashing lights warning",
+     "does": "Be warned before a film with flashing that can trigger seizures.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MOV-A12-F5-P1",
+       "name": "Flash detection",
+       "what": "Checks films for flashing against published thresholds and adds a warning the filmmaker can confirm.",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "engine-media"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MOV-A13",
+   "name": "Captions, audio description and dubbing",
+   "summary": "Every film watchable by people who are Deaf, hard of hearing, blind or have low vision: captions in the main language before publishing, caption drafts from speech that people check, audio description recorded or read aloud from text, audio languages and labelled AI dubbing, subtitles in other languages, sign language versions, and the access law in each country.",
+   "features": [
+    {
+     "id": "MOV-A13-F1",
+     "name": "Captions on every film",
+     "does": "Watch every film with captions in its main language, checked for timing and reading speed.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A13-F1-P1",
+       "name": "Caption tracks",
+       "what": "Upload WebVTT or TTML (IMSC) captions through the kit's captions library (KIT-A27-F8-P5), with timing and styling kept.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A27-F8-P5",
+        "KIT-A19-F4-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A13-F1-P2",
+       "name": "Caption checks",
+       "what": "Reading speed, timing against speech, gaps with no captions and overlaps, flagged before publishing.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MOV-A13-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A13-F1-P3",
+       "name": "Captions for Deaf and hard of hearing viewers",
+       "what": "Speaker names, sounds and music marked, kept apart from plain subtitles so each can be chosen.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MOV-A13-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A13-F2",
+     "name": "Caption drafts from speech",
+     "does": "Get a caption draft made from the soundtrack, then fix it before publishing.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A13-F2-P1",
+       "name": "Speech to text drafts",
+       "what": "Drafts from the kit's speech recognition (KIT-A27-F12-P4), an openly licensed model run at cost; a draft nobody checked is marked as automatic.",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A27-F12-P4",
+        "KIT-A19-F4-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A13-F2-P2",
+       "name": "Caption editor",
+       "what": "Fix text and timing beside the film, with the waveform and shortcut keys.",
+       "kind": "interface",
+       "size": "medium",
+       "depends_on": [
+        "MOV-A13-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A13-F3",
+     "name": "Audio description",
+     "does": "Hear what is happening on screen, from a recorded description track or descriptions read aloud.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A13-F3-P1",
+       "name": "Audio description tracks",
+       "what": "A recorded description track, mixed or separate, carried by the kit's extra tracks (KIT-A27-F8-P5).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A27-F8-P5",
+        "MOV-A18-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A13-F3-P2",
+       "name": "Descriptions read aloud",
+       "what": "A timed text description script read by a synthetic voice (KIT-A27-F12-P5) or the viewer's own screen reader, for filmmakers who cannot pay for a recording; marked as synthetic.",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A27-F12-P5",
+        "MOV-A13-F3-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A13-F3-P3",
+       "name": "Description writer",
+       "what": "An editor that shows the gaps in dialogue where descriptions fit.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MOV-A13-F3-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A13-F3-P4",
+       "name": "Find films with description",
+       "what": "Films with audio description are marked, so blind viewers can filter for them.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MOV-A13-F3-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A13-F4",
+     "name": "Audio languages and dubbing",
+     "does": "Hear a film in another language when a dubbed track exists, and know when the voices were made with AI.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A13-F4-P1",
+       "name": "Language tracks",
+       "what": "Extra audio tracks with their language and whether they are original or dubbed.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MOV-A3-F1-P1",
+        "KIT-A27-F8-P5"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A13-F4-P2",
+       "name": "AI dubbing label",
+       "what": "A dubbed track made with AI voices is labelled, and the actors' consent to it is recorded.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MOV-A5-F1-P1",
+        "MOV-A13-F4-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A13-F5",
+     "name": "Subtitles in other languages",
+     "does": "Watch with subtitles in your language, drafted by machine translation and checked by people.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MOV-A13-F5-P1",
+       "name": "Translated subtitles",
+       "what": "Drafts from the kit's machine translation at cost (KIT-A19-F10-P2), checked by the filmmaker or volunteer translators before they show.",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A19-F10-P2",
+        "MOV-A13-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A13-F5-P2",
+       "name": "Translator credits",
+       "what": "Translators are credited and can be given a share of earnings by the filmmaker (A14-F3-P1).",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MOV-A13-F5-P1",
+        "MOV-A14-F3-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A13-F6",
+     "name": "Access law for every country",
+     "does": "Know the captions, audio description and player access each country's law asks for are met.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A13-F6-P1",
+       "name": "Access duties research",
+       "what": "What each launch country requires of on-demand services for captions, audio description and accessible players, building on the kit's accessibility law research (KIT-A19-F2-P8).",
+       "kind": "legal",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A19-F2-P8"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A13-F7",
+     "name": "Sign language versions",
+     "does": "Watch a version with a sign language interpreter in the picture.",
+     "priority": "later",
+     "parts": [
+      {
+       "id": "MOV-A13-F7-P1",
+       "name": "Sign language version",
+       "what": "A sign language version added as an extra version of the film (A3-F6-P1), marked so it can be found.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MOV-A3-F6-P1"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MOV-A14",
+   "name": "Filmmaker earnings and payouts",
+   "summary": "Money to the people who made the film: earnings by film and by way of watching with the at-cost fee on every line, payouts on a schedule, splits among producers, cast and crew, tax statements and reporting, money held only when there is a reason, paying back investors first, and pre-orders.",
+   "features": [
+    {
+     "id": "MOV-A14-F1",
+     "name": "See your earnings",
+     "does": "See every sale, rental, support payment and pass share, with tax, the fee and what you got.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A14-F1-P1",
+       "name": "Earnings ledger",
+       "what": "Every money movement per film, with tax, the provider charge, the running-cost share and the net amount.",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "svc-payments",
+        "MOV-A6-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A14-F1-P2",
+       "name": "Earnings page",
+       "what": "Earnings by film, country and way of watching, on the kit's earnings page (KIT-A3-F3-P3).",
+       "kind": "interface",
+       "size": "medium",
+       "depends_on": [
+        "MOV-A14-F1-P1",
+        "KIT-A3-F3-P3"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A14-F1-P3",
+       "name": "Accounting export",
+       "what": "Exports for accounting software from the kit (KIT-A4-F4-P2).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A4-F4-P2",
+        "MOV-A14-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A14-F2",
+     "name": "Get paid out",
+     "does": "Get your money on a set schedule to your bank, with any failed payout fixed quickly.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A14-F2-P1",
+       "name": "Payout set-up",
+       "what": "Bank details on the kit's payout set-up (KIT-A3-F3-P1) after the checks (A1-F3-P4).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A3-F3-P1",
+        "MOV-A1-F3-P4"
+       ],
+       "piece": "K02"
+      },
+      {
+       "id": "MOV-A14-F2-P2",
+       "name": "Payout runs",
+       "what": "Weekly or monthly payouts on the kit's payout runs (KIT-A3-F3-P2), with failed payouts handled (KIT-A3-F3-P5).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A3-F3-P2",
+        "KIT-A3-F3-P5"
+       ],
+       "piece": "K02"
+      },
+      {
+       "id": "MOV-A14-F2-P3",
+       "name": "Payout change guard",
+       "what": "Uses the kit's payout change guard (KIT-A3-F3-P4), so a hijacked account cannot redirect earnings.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A3-F3-P4"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A14-F3",
+     "name": "Split earnings with your team",
+     "does": "Share a film's earnings with producers, cast and crew by agreed percentages, each paid directly.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A14-F3-P1",
+       "name": "Split rules",
+       "what": "Percentage splits per film, agreed and signed by every person in them (KIT-A25-F1-P2); a change needs everyone's signature again.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MOV-A14-F1-P1",
+        "KIT-A25-F1-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A14-F3-P2",
+       "name": "Split payouts",
+       "what": "Each person in a split is paid their share directly in the payout run.",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "MOV-A14-F3-P1",
+        "MOV-A14-F2-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A14-F4",
+     "name": "Tax statements and reporting",
+     "does": "Get a yearly statement, and know your income is reported where the law asks.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A14-F4-P1",
+       "name": "Yearly statements",
+       "what": "The kit's yearly statements (KIT-A4-F4-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A4-F4-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A14-F4-P2",
+       "name": "Platform income reporting",
+       "what": "Income reported under the platform reporting rules that apply (KIT-A4-F3).",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A4-F3-P1",
+        "KIT-A4-F3-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A14-F4-P3",
+       "name": "Tax on payouts across borders",
+       "what": "Whether payouts to filmmakers in other countries count as royalties that need tax held back, and the forms each country asks for (unverified).",
+       "kind": "legal",
+       "size": "medium",
+       "depends_on": [],
+       "piece": null
+      },
+      {
+       "id": "MOV-A14-F4-P4",
+       "name": "Sanctions screening",
+       "what": "Payouts never reach sanctioned people, through the kit's screening (KIT-A4-F8-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A4-F8-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A14-F5",
+     "name": "Money held only with a reason",
+     "does": "Know money is held only for a refund window, a rights dispute or a fake viewing check, with the reason shown.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A14-F5-P1",
+       "name": "Hold rules",
+       "what": "Published reasons and time limits for holding earnings, on the kit's hold and release rules (KIT-A3-F2-P1).",
+       "kind": "legal",
+       "size": "small",
+       "depends_on": [
+        "KIT-A3-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A14-F6",
+     "name": "Pay back investors first",
+     "does": "Pay investors and funders back in an agreed order before the splits start.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MOV-A14-F6-P1",
+       "name": "Recoupment order",
+       "what": "An agreed order of who is paid back how much before the percentage splits begin, shown to everyone in it.",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "MOV-A14-F3-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A14-F7",
+     "name": "Pre-orders",
+     "does": "Let viewers buy a film before release to help fund it.",
+     "priority": "later",
+     "parts": [
+      {
+       "id": "MOV-A14-F7-P1",
+       "name": "Pre-orders",
+       "what": "A purchase that opens on the release date, refunded in full if the film never comes out.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "kit-market",
+        "MOV-A6-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MOV-A15",
+   "name": "Filmmaker studio and stats",
+   "summary": "Running a catalogue: one dashboard for films, checks, ratings, rights, protection and earnings, honest numbers on watching that never track a person, a team with roles, promotion without paid ranking, replies to viewers, and online premieres.",
+   "features": [
+    {
+     "id": "MOV-A15-F1",
+     "name": "One dashboard for your films",
+     "does": "See every film's state in one place: drafts, checks, ratings, rights, protection and earnings.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A15-F1-P1",
+       "name": "Studio home",
+       "what": "A list of films with their state and the next thing each needs.",
+       "kind": "interface",
+       "size": "medium",
+       "depends_on": [
+        "MOV-A10-F1-P1",
+        "MOV-A14-F1-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A15-F1-P2",
+       "name": "To-do list",
+       "what": "Missing captions, expiring rights, ratings due and disputes, on the kit's seller to-do page (KIT-A5-F23-P2).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A5-F23-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A15-F2",
+     "name": "See how your films are doing",
+     "does": "See plays, watch time, how far people watch and which countries, without anyone being tracked.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A15-F2-P1",
+       "name": "Watch numbers",
+       "what": "Counted privately (KIT-A22-F8-P1), never per person, with small numbers hidden (KIT-A13-F9-P2).",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "MOV-A9-F2-P1",
+        "KIT-A22-F8-P1",
+        "KIT-A13-F9-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A15-F2-P2",
+       "name": "Numbers page",
+       "what": "Plain charts by week, country and way of watching.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MOV-A15-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A15-F3",
+     "name": "Work as a team",
+     "does": "Give producers, editors and accountants their own roles on your films.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A15-F3-P1",
+       "name": "Team roles",
+       "what": "Owner, editor, finance and viewer roles on the kit's team management (KIT-A1-F7-P2).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A1-F7-P2",
+        "MOV-A1-F3-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A15-F4",
+     "name": "Promote your film",
+     "does": "Share a press page, an embeddable trailer and a QR code for posters, and write to your followers.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MOV-A15-F4-P1",
+       "name": "Press page",
+       "what": "A press page with stills, synopsis, credits and contacts.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MOV-A3-F1-P3"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A15-F4-P2",
+       "name": "Trailer embed",
+       "what": "An embeddable trailer player with no tracking.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MOV-A4-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A15-F4-P3",
+       "name": "Newsletters to followers",
+       "what": "Write to followers who agreed, on the kit's newsletters (KIT-A28-F5-P2).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A28-F5-P2",
+        "MOV-A9-F3-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A15-F5",
+     "name": "Reply to viewers",
+     "does": "Answer questions and reviews from one inbox.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MOV-A15-F5-P1",
+       "name": "Viewer inbox",
+       "what": "Questions and reviews in one place on the kit's enquiry inbox (KIT-A5-F29-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A5-F29-P1",
+        "MOV-A3-F7-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A15-F6",
+     "name": "Online premieres",
+     "does": "Hold an online premiere at a set time with a question time after.",
+     "priority": "later",
+     "parts": [
+      {
+       "id": "MOV-A15-F6-P1",
+       "name": "Premieres",
+       "what": "A set start time for everyone with a ticket, played in step, then a chat with the filmmaker.",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "MOV-A10-F5-P1",
+        "MOV-A4-F11-P1"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MOV-A16",
+   "name": "Stopping copies",
+   "summary": "Making films hard to copy and pass around without paying, honestly: the open decision between locked playback, a hidden watermark per viewer and no lock, encrypted delivery and a key service, fingerprints that spot stolen uploads before they earn anything, tracing a leak back to an account, help with takedowns on other sites, and a plain promise to viewers. Nothing stops someone recording the screen as it plays.",
+   "features": [
+    {
+     "id": "MOV-A16-F1",
+     "name": "Protect playback",
+     "does": "Know that a film is delivered so it cannot simply be downloaded and passed around.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A16-F1-P1",
+       "name": "Protection decision",
+       "what": "Compare locked playback (Widevine, FairPlay and PlayReady are closed systems and each needs an agreement with its company), a hidden per-viewer watermark and no lock, on cost, reach, privacy, patents and what filmmakers and their investors require.",
+       "kind": "research",
+       "size": "medium",
+       "depends_on": [],
+       "piece": null
+      },
+      {
+       "id": "MOV-A16-F1-P2",
+       "name": "Encrypted delivery",
+       "what": "Films encrypted once with the Common Encryption standard (CENC, cbcs), so the same files work with any locked system if one is chosen.",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "MOV-A18-F3-P1",
+        "MOV-A16-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A16-F1-P3",
+       "name": "Key service",
+       "what": "Gives out playback keys per session after checking the access right, the country and the device limit, on the kit's encryption and keys (KIT-A22-F5-P5).",
+       "kind": "service",
+       "size": "large",
+       "depends_on": [
+        "MOV-A16-F1-P2",
+        "KIT-A22-F5-P5"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A16-F1-P4",
+       "name": "Signed, expiring links",
+       "what": "Delivery links tied to the session that expire, on the kit's sharing rules (KIT-A15-F8-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A15-F8-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A16-F2",
+     "name": "Fingerprints that spot stolen uploads",
+     "does": "Know that someone cannot upload your film and collect money for it.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A16-F2-P1",
+       "name": "Fingerprint method",
+       "what": "Compare open video and audio fingerprinting methods on accuracy, speed and licence, starting with Meta's TMK+PDQF and vPDQ (BSD-2-Clause), with a patent search before any code.",
+       "kind": "research",
+       "size": "medium",
+       "depends_on": [],
+       "piece": null
+      },
+      {
+       "id": "MOV-A16-F2-P2",
+       "name": "Fingerprint every film",
+       "what": "Fingerprints made for every film and trailer on upload and stored privately.",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "MOV-A16-F2-P1",
+        "MOV-A18-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A16-F2-P3",
+       "name": "Check every upload",
+       "what": "New uploads are matched against every film; a match pauses publishing and goes to a person, never removed or paid automatically.",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "MOV-A16-F2-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A16-F2-P4",
+       "name": "Match review",
+       "what": "Both films side by side with the matching stretches, for a moderator to decide, logged in public.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MOV-A16-F2-P3",
+        "MOV-A17-F7-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A16-F3",
+     "name": "A plain promise to viewers",
+     "does": "Know what the protection does, what it never collects and which devices it works on.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A16-F3-P1",
+       "name": "Protection promise",
+       "what": "Plain words on what protection is used, that it installs nothing hidden and tracks nothing, and which devices can play.",
+       "kind": "legal",
+       "size": "small",
+       "depends_on": [
+        "MOV-A16-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A16-F4",
+     "name": "Hidden watermark per viewer",
+     "does": "Have each stream carry a hidden mark, so a leaked copy leads back to the account it came from.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MOV-A16-F4-P1",
+       "name": "Watermark method",
+       "what": "Compare watermarking methods, such as two marked copies of each piece with every viewer getting a unique pattern of them, with a patent search before any code; the field is heavily patented (unverified).",
+       "kind": "research",
+       "size": "medium",
+       "depends_on": [],
+       "piece": null
+      },
+      {
+       "id": "MOV-A16-F4-P2",
+       "name": "Watermarked delivery",
+       "what": "Each session gets its own pattern of marked pieces, chosen at delivery from two marked copies of each piece.",
+       "kind": "service",
+       "size": "large",
+       "depends_on": [
+        "MOV-A16-F4-P1",
+        "MOV-A18-F3-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A16-F4-P3",
+       "name": "Leak tracing",
+       "what": "Reads the mark from a leaked copy and finds the account; a person reviews before any action, and the action is logged.",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "MOV-A16-F4-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A16-F5",
+     "name": "Help with copies on other sites",
+     "does": "Check a link to a copy on another site and get a takedown notice ready to send.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MOV-A16-F5-P1",
+       "name": "Copy check and notice",
+       "what": "The filmmaker submits a link; the copy is checked against the fingerprint and a notice is prepared on the kit's notice templates (KIT-A10-F21-P2) for the filmmaker to send.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MOV-A16-F2-P2",
+        "KIT-A10-F21-P2"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MOV-A17",
+   "name": "Moderation, legal removals and transparency",
+   "summary": "Spare Movies removes only what the law requires, in the open: reports from anyone, published rules, illegal material removed fast and blocked only where it is illegal, copyright notices and counter-notices, a public log of every removal and section move with the law behind it, appeals, moderators that filmmakers elect, government requests handled by law, and fake filmmakers stopped.",
+   "features": [
+    {
+     "id": "MOV-A17-F1",
+     "name": "Report a film or account",
+     "does": "Report a film, trailer, review or account in two taps, with or without an account.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A17-F1-P1",
+       "name": "Report types",
+       "what": "Illegal content, copyright, wrong section, wrong rating, privacy and impersonation, on the kit's reports service (KIT-A10-F3).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A10-F3-P1",
+        "KIT-A10-F3-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A17-F1-P2",
+       "name": "Reports without an account",
+       "what": "Rights holders and the public can report without joining (KIT-A10-F3-P3).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A10-F3-P3"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A17-F2",
+     "name": "Read the rules",
+     "does": "Read Spare Movies' rules in plain words, including what it will never remove.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A17-F2-P1",
+       "name": "Spare Movies rules",
+       "what": "The published rules on the kit's rules library (KIT-A10-F5-P1): what the law requires to be removed in each country, and the promise that lawful films stay up.",
+       "kind": "legal",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A10-F5-P1",
+        "KIT-A10-F9-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A17-F3",
+     "name": "Illegal material removed fast",
+     "does": "Know that material the law forbids is removed fast, and blocked only in the countries where it is illegal.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A17-F3-P1",
+       "name": "Legal duties per country",
+       "what": "What each country requires a film host to remove and how fast, including classification law, court orders and platform laws such as the EU Digital Services Act (KIT-A18-F13-P1).",
+       "kind": "legal",
+       "size": "large",
+       "depends_on": [
+        "KIT-A10-F9-P1",
+        "KIT-A18-F13-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A17-F3-P2",
+       "name": "Known illegal content matching",
+       "what": "Every upload checked against approved hash lists through the kit (KIT-A10-F10-P2), with matches reported to the right agency.",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A10-F10-P2"
+       ],
+       "piece": "M07"
+      },
+      {
+       "id": "MOV-A17-F3-P3",
+       "name": "Blocked only where illegal",
+       "what": "A film banned in one country is blocked there only, with the law named in the public log.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MOV-A11-F2-P1",
+        "MOV-A17-F3-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A17-F4",
+     "name": "Copyright notices",
+     "does": "Send or answer a copyright notice, with deadlines tracked and a counter-notice for mistakes.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A17-F4-P1",
+       "name": "Notice and counter-notice",
+       "what": "Copyright notices and counter-notices on the kit's notice handling and deadlines (KIT-A10-F21-P2, KIT-A10-F9-P2), with earnings held while a notice is open.",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A10-F21-P2",
+        "KIT-A10-F9-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A17-F4-P2",
+       "name": "Repeat infringer rule",
+       "what": "A published rule for accounts that upload others' films again and again.",
+       "kind": "legal",
+       "size": "small",
+       "depends_on": [
+        "MOV-A17-F4-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A17-F4-P3",
+       "name": "Registered notice agent",
+       "what": "An agent for copyright notices registered where the law asks, such as with the US Copyright Office, renewed on time, with the contact details published.",
+       "kind": "legal",
+       "size": "small",
+       "depends_on": [
+        "MOV-A17-F4-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A17-F5",
+     "name": "See every removal in public",
+     "does": "Read a public log of every removal, block and section move, with the rule and the law behind it.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A17-F5-P1",
+       "name": "Removal log entries",
+       "what": "Spare Movies' entries on the kit's public removal log (KIT-A10-F7-P1): the film, the countries, the law or rule, who asked, the date and the appeal state, with no personal details.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A10-F7-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A17-F5-P2",
+       "name": "Log screens",
+       "what": "The log with filters by reason, country and month, and counts at the top.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MOV-A17-F5-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A17-F5-P3",
+       "name": "Transparency reports",
+       "what": "Spare Movies' numbers in the kit's transparency reports (KIT-A10-F15-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A10-F15-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A17-F6",
+     "name": "Appeal any decision",
+     "does": "Appeal any removal, block, section move or rating change, and get a reasoned answer.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A17-F6-P1",
+       "name": "Appeals",
+       "what": "Statements of reasons and appeals on the kit (KIT-A10-F8-P1, KIT-A11-F5-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A11-F5-P1",
+        "KIT-A10-F8-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A17-F7",
+     "name": "Moderators filmmakers elect",
+     "does": "Know that reports are decided by trained moderators elected by filmmakers, checked for consistency.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A17-F7-P1",
+       "name": "Review queue",
+       "what": "Reports, fingerprint matches and section hints in the kit's review queue and moderator tools (KIT-A10-F6).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A10-F6-P2",
+        "KIT-A10-F6-P3"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A17-F7-P2",
+       "name": "Elected moderators",
+       "what": "Moderators elected on the kit's elections (KIT-A12-F6-P1), with decisions sampled for consistency (KIT-A10-F20-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A12-F6-P1",
+        "KIT-A10-F20-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A17-F7-P3",
+       "name": "Moderator wellbeing",
+       "what": "The kit's moderator wellbeing support (KIT-A10-F6-P4), since reviewing films can mean hours of distressing material.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A10-F6-P4"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A17-F8",
+     "name": "Government and police requests",
+     "does": "Know that requests from governments and police are handled only by law and counted in public.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A17-F8-P1",
+       "name": "Requests handled by law",
+       "what": "The kit's law enforcement requests (KIT-A10-F9-P3), counted in the transparency report.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A10-F9-P3"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A17-F9",
+     "name": "Fake filmmakers stopped",
+     "does": "Know that accounts pretending to be a filmmaker to sell their films are stopped.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A17-F9-P1",
+       "name": "Impersonation checks",
+       "what": "Scam methods and fraud signals from the kit (KIT-A10-F12), with the payout checks (A1-F3-P4) before any money moves.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A10-F12-P1",
+        "KIT-A10-F12-P2"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MOV-A18",
+   "name": "Video pipeline and delivery at cost",
+   "summary": "The machinery under every film: master files taken in safely and kept, encoding into a ladder of sizes with open codecs where devices allow, packaging for streaming, an openly licensed player core, storage in tiers, delivery bought at cost and metered for the ledger, the fee worked out from real costs, safe processing, deletion that really deletes, peer-assisted delivery, and HDR and surround sound.",
+   "features": [
+    {
+     "id": "MOV-A18-F1",
+     "name": "Take in a master safely",
+     "does": "Know your master file is taken in safely, checked and kept for later.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A18-F1-P1",
+       "name": "Master intake",
+       "what": "Takes in large master files through the kit's file service, unpacked in a sandbox (A18-F6-P1).",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A15-F7-P1",
+        "MOV-A18-F6-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A18-F1-P2",
+       "name": "Technical analysis",
+       "what": "Reads every stream, measures loudness and finds damaged frames, for the quality checks (A10-F2-P1).",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "engine-media"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A18-F1-P3",
+       "name": "Master archive",
+       "what": "Originals kept in cold storage at cost, so films can be encoded again as codecs improve.",
+       "kind": "data",
+       "size": "medium",
+       "depends_on": [
+        "kit-store"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A18-F2",
+     "name": "Every size from one master",
+     "does": "Have every film turned into the sizes phones, computers and TVs need.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A18-F2-P1",
+       "name": "Encoding ladder",
+       "what": "Sizes and bitrates chosen per film, on the kit's decoding and encoding (KIT-A27-F8-P2).",
+       "kind": "service",
+       "size": "large",
+       "depends_on": [
+        "engine-media",
+        "KIT-A27-F8-P2"
+       ],
+       "piece": "M03"
+      },
+      {
+       "id": "MOV-A18-F2-P2",
+       "name": "Codec choice",
+       "what": "AV1 where devices play it, H.264 for reach, and when HEVC is worth its patent licences, from the kit's one codec and patent study (KIT-A27-F8-P1).",
+       "kind": "research",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A27-F8-P1"
+       ],
+       "piece": "M03"
+      },
+      {
+       "id": "MOV-A18-F2-P3",
+       "name": "Encoding queue",
+       "what": "Jobs and workers for encoding, recording machine time per film for the cost ledger.",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "kit-ops",
+        "svc-ledger"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A18-F2-P4",
+       "name": "Sound mixes and loudness",
+       "what": "Stereo from any mix, levelled to a published loudness target.",
+       "kind": "library",
+       "size": "small",
+       "depends_on": [
+        "engine-media"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A18-F3",
+     "name": "Streaming on any connection",
+     "does": "Have films packaged so they stream on any device and connection.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A18-F3-P1",
+       "name": "Packaging",
+       "what": "HLS and DASH from one set of CMAF files, with captions and extra audio tracks.",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "engine-media",
+        "MOV-A18-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A18-F3-P2",
+       "name": "Player core choice",
+       "what": "Pick the player core from openly licensed ones such as Shaka Player and hls.js (both Apache-2.0) and dash.js (BSD-3-Clause), on device reach, captions, audio description and protection support.",
+       "kind": "research",
+       "size": "small",
+       "depends_on": [],
+       "piece": null
+      },
+      {
+       "id": "MOV-A18-F3-P3",
+       "name": "Thumbnails and scrub previews",
+       "what": "Frames for the seek bar and posters picked from the film.",
+       "kind": "library",
+       "size": "small",
+       "depends_on": [
+        "engine-media"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A18-F4",
+     "name": "Delivered at cost",
+     "does": "Know films are stored and delivered as cheaply as possible, with the costs published.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A18-F4-P1",
+       "name": "Storage tiers",
+       "what": "Popular and new films in fast storage, the rest in cheaper storage, on the kit's storage at cost (KIT-A15-F7-P2).",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "kit-store",
+        "KIT-A15-F7-P2"
+       ],
+       "piece": "M06"
+      },
+      {
+       "id": "MOV-A18-F4-P2",
+       "name": "Delivery network choice",
+       "what": "Compare delivery networks bought at cost, co-op caches and member servers on price per gigabyte in each region and reach to TVs and phones.",
+       "kind": "research",
+       "size": "medium",
+       "depends_on": [],
+       "piece": "M06"
+      },
+      {
+       "id": "MOV-A18-F4-P3",
+       "name": "Delivery metering",
+       "what": "Gigabytes delivered per film and country, on the kit's metering (KIT-A13-F2), feeding the fee and the ledger.",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "svc-ledger",
+        "KIT-A13-F2-P2",
+        "KIT-A13-F2-P3"
+       ],
+       "piece": "K06"
+      }
+     ]
+    },
+    {
+     "id": "MOV-A18-F5",
+     "name": "The fee from real costs",
+     "does": "Know the fee on each sale comes from what delivery, storage, encoding and payments really cost.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A18-F5-P1",
+       "name": "Cost per sale and per hour",
+       "what": "Works out last period's running cost per sale and per hour delivered, on the kit's fee setting (KIT-A13-F3-P1).",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MOV-A18-F4-P3",
+        "KIT-A13-F3-P1"
+       ],
+       "piece": "K06"
+      }
+     ]
+    },
+    {
+     "id": "MOV-A18-F6",
+     "name": "Media handled safely",
+     "does": "Know a booby-trapped file or link cannot break into the servers.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A18-F6-P1",
+       "name": "Sandboxed processing",
+       "what": "Encoders and file readers run in a locked-down sandbox with no network access.",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "MOV-A18-F2-P3"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A18-F6-P2",
+       "name": "Safe outside fetches",
+       "what": "Fetching a master from a link refuses internal addresses, follows few redirects and caps size and time.",
+       "kind": "library",
+       "size": "small",
+       "depends_on": [
+        "kit-core"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A18-F7",
+     "name": "Deleted means deleted",
+     "does": "When a film is taken down for good, every copy, size and cached piece is gone within a published time.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A18-F7-P1",
+       "name": "Deletion fan-out",
+       "what": "Removes every size, copy and delivery cache, keeping buyers' access only where the keep-access promise says.",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A18-F2-P1",
+        "MOV-A18-F4-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A18-F7-P2",
+       "name": "Legal hold",
+       "what": "Keeps evidence only where the law requires it, sealed and logged.",
+       "kind": "legal",
+       "size": "small",
+       "depends_on": [
+        "KIT-A10-F9-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A18-F8",
+     "name": "Viewers share pieces of popular films",
+     "does": "Opt in to share pieces of films you are watching with nearby viewers, to cut delivery costs.",
+     "priority": "later",
+     "parts": [
+      {
+       "id": "MOV-A18-F8-P1",
+       "name": "Peer-assisted delivery",
+       "what": "Players share pieces with each other over WebRTC, opt-in and within data limits; we learn from PeerTube's method and write our own code, never copying its AGPL code.",
+       "kind": "library",
+       "size": "large",
+       "depends_on": [
+        "MOV-A18-F3-P1"
+       ],
+       "piece": "M06"
+      }
+     ]
+    },
+    {
+     "id": "MOV-A18-F9",
+     "name": "HDR and surround sound",
+     "does": "Watch in HDR and hear surround sound where your TV and the film allow.",
+     "priority": "later",
+     "parts": [
+      {
+       "id": "MOV-A18-F9-P1",
+       "name": "HDR versions",
+       "what": "HDR in open formats such as HDR10 and HLG; closed HDR formats only after their licences are checked.",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "MOV-A18-F2-P1"
+       ],
+       "piece": "M03"
+      },
+      {
+       "id": "MOV-A18-F9-P2",
+       "name": "Surround sound",
+       "what": "5.1 tracks where the master has them, in codecs whose licences are checked.",
+       "kind": "library",
+       "size": "small",
+       "depends_on": [
+        "MOV-A18-F2-P4"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MOV-A19",
+   "name": "Apps and devices",
+   "summary": "Watching on what you have: a web app in any browser that installs on phones, store apps, settings that follow you, slow connections and old devices, TV apps, and a computer app.",
+   "features": [
+    {
+     "id": "MOV-A19-F1",
+     "name": "Watch in a browser",
+     "does": "Watch in any modern browser on a computer, phone or tablet.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A19-F1-P1",
+       "name": "Web app",
+       "what": "Spare Movies in the kit's app frame (KIT-A20-F1-P2), laid out for phones, computers and big screens.",
+       "kind": "interface",
+       "size": "large",
+       "depends_on": [
+        "KIT-A20-F1-P2",
+        "MOV-A4-F1-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A19-F2",
+     "name": "Install on your phone",
+     "does": "Install Spare Movies on a phone from the browser or an app store.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A19-F2-P1",
+       "name": "Installable app",
+       "what": "The kit's installable apps (KIT-A20-F2-P2).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A20-F2-P2"
+       ],
+       "piece": "K04"
+      },
+      {
+       "id": "MOV-A19-F2-P2",
+       "name": "Store apps",
+       "what": "Store apps that meet each store's rules (KIT-A20-F8-P1), with paying handled as A6-F10 decides.",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A20-F8-P1",
+        "MOV-A19-F2-P1"
+       ],
+       "piece": "K04"
+      }
+     ]
+    },
+    {
+     "id": "MOV-A19-F3",
+     "name": "Settings that follow you",
+     "does": "Have your profile, captions and choices the same on every device.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A19-F3-P1",
+       "name": "Preferences that follow you",
+       "what": "Uses the kit's preferences that follow you (KIT-A20-F5-P2).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A20-F5-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A19-F4",
+     "name": "Slow connections and old devices",
+     "does": "Watch on an old phone or a slow connection.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A19-F4-P1",
+       "name": "Light mode",
+       "what": "The kit's light mode (KIT-A19-F5-P1): small images, low data, the smallest video sizes.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A19-F5-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A19-F5",
+     "name": "Apps for TVs",
+     "does": "Watch on a smart TV or TV box with an app you control by remote.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MOV-A19-F5-P1",
+       "name": "TV app approach",
+       "what": "Compare smart TV platforms and web-based TV apps on reach, store terms, protection needs and the cost of keeping each up to date.",
+       "kind": "research",
+       "size": "medium",
+       "depends_on": [],
+       "piece": "K04"
+      },
+      {
+       "id": "MOV-A19-F5-P2",
+       "name": "TV app",
+       "what": "A remote-friendly app with large text, the same captions and audio description, and TV code sign-in (A1-F6-P1).",
+       "kind": "interface",
+       "size": "large",
+       "depends_on": [
+        "MOV-A19-F5-P1",
+        "MOV-A4-F1-P1",
+        "MOV-A1-F6-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A19-F6",
+     "name": "Computer app",
+     "does": "Install Spare Movies on a computer to watch offline.",
+     "priority": "later",
+     "parts": [
+      {
+       "id": "MOV-A19-F6-P1",
+       "name": "Desktop app",
+       "what": "The kit's desktop shell and installers (KIT-A20-F2-P4, KIT-A20-F2-P5), with offline downloads (A4-F9-P1).",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A20-F2-P4",
+        "KIT-A20-F2-P5",
+        "MOV-A4-F9-P1"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MOV-A20",
+   "name": "Accessible apps and languages",
+   "summary": "Every screen usable by everyone: screen readers, keyboards and remotes, a player whose every control is announced, larger text and higher contrast, reduced motion, the interface and film details in many languages, local formats, an accessibility statement, easy-read help and right-to-left layouts.",
+   "features": [
+    {
+     "id": "MOV-A20-F1",
+     "name": "Works with screen readers, keyboards and remotes",
+     "does": "Use every screen and every player control with a screen reader, a keyboard or a TV remote.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A20-F1-P1",
+       "name": "Accessible screens",
+       "what": "Built from the kit's accessible components (KIT-A19-F2-P1) and tested (KIT-A19-F2-P2).",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A19-F2-P1",
+        "KIT-A19-F2-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A20-F1-P2",
+       "name": "Accessible player",
+       "what": "Every player control reachable and announced, with caption and description switches in a fixed, easy place.",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "MOV-A4-F1-P2",
+        "KIT-A19-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A20-F2",
+     "name": "Comfortable to use",
+     "does": "Make text larger, raise contrast and stop trailers moving on their own.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A20-F2-P1",
+       "name": "Display settings",
+       "what": "The kit's display settings (KIT-A19-F3-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A19-F3-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A20-F2-P2",
+       "name": "Reduced motion",
+       "what": "No moving previews or trailers that start on their own when reduced motion is set.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "KIT-A19-F3-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A20-F3",
+     "name": "Your language",
+     "does": "Use Spare Movies in your language and read film details in it where they are translated.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A20-F3-P1",
+       "name": "Interface translations",
+       "what": "The kit's translation framework and member translation (KIT-A19-F1).",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A19-F1-P1",
+        "KIT-A19-F1-P3"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A20-F3-P2",
+       "name": "Film details in many languages",
+       "what": "Titles and synopses in several languages on the kit's translated fields (KIT-A19-F1-P6).",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "KIT-A19-F1-P6",
+        "MOV-A3-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A20-F4",
+     "name": "Local formats",
+     "does": "See dates, times, lengths and money the way your country writes them.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A20-F4-P1",
+       "name": "Local formats",
+       "what": "The kit's local formats (KIT-A19-F1-P2).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A19-F1-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A20-F5",
+     "name": "Accessibility statement",
+     "does": "Read what works, what does not yet, and report a barrier.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A20-F5-P1",
+       "name": "Statement and barrier reports",
+       "what": "On the kit's accessibility statement and barrier reports (KIT-A19-F2-P4).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A19-F2-P4"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A20-F6",
+     "name": "Easy-read help",
+     "does": "Read the key steps in easy-read words and sign language.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MOV-A20-F6-P1",
+       "name": "Easy read",
+       "what": "The kit's easy read and sign language videos (KIT-A19-F8-P1) for joining, paying and publishing.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A19-F8-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A20-F7",
+     "name": "Right-to-left languages",
+     "does": "Use Spare Movies in Arabic, Hebrew and other right-to-left languages.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MOV-A20-F7-P1",
+       "name": "Right-to-left layout",
+       "what": "The kit's right-to-left layout (KIT-A19-F7-P1), including the player.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A19-F7-P1"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MOV-A21",
+   "name": "Your data and privacy",
+   "summary": "No adverts and no tracking: what you watch is kept only for what you use it for and protected by video privacy law, a choice over AI training that is off by default, guards against scraping, download all your data, consents you can change, privacy duties met in each country, and data kept in the right place.",
+   "features": [
+    {
+     "id": "MOV-A21-F1",
+     "name": "No adverts, no tracking",
+     "does": "Watch with no adverts, no tracking and no data sold, ever.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A21-F1-P1",
+       "name": "No adverts promise",
+       "what": "No adverts and no sale of data, as a protected promise (A22-F1-P3).",
+       "kind": "legal",
+       "size": "small",
+       "depends_on": [
+        "MOV-A22-F1-P3"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A21-F1-P2",
+       "name": "Private usage counts",
+       "what": "How the app is used is counted on the kit's private usage counts (KIT-A22-F8-P1), never per person.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A22-F8-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A21-F2",
+     "name": "What you watch stays yours",
+     "does": "Know what you watch is never shared, and is kept only as long as it is needed.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A21-F2-P1",
+       "name": "Retention schedule",
+       "what": "Watch history and watch-time counts on the kit's retention schedules (KIT-A18-F6-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A18-F6-P1",
+        "MOV-A9-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A21-F2-P2",
+       "name": "Video privacy law",
+       "what": "Laws that protect which films a person watched, such as the US Video Privacy Protection Act, built into the rules for every country (unverified for countries other than the US).",
+       "kind": "legal",
+       "size": "small",
+       "depends_on": [
+        "KIT-A18-F12-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A21-F3",
+     "name": "Download all your data",
+     "does": "Download everything Spare Movies holds about you.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A21-F3-P1",
+       "name": "Data export",
+       "what": "The kit's data export (KIT-A18-F1-P1), including purchases, lists, history and, for filmmakers, every film's records.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A18-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A21-F4",
+     "name": "Consents you can change",
+     "does": "See and change every consent you gave, and what is collected about you.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A21-F4-P1",
+       "name": "Consents page",
+       "what": "The kit's consents page (KIT-A18-F17-P2).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A18-F17-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A21-F4-P2",
+       "name": "Collection notices",
+       "what": "The kit's collection notices (KIT-A18-F5-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A18-F5-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A21-F5",
+     "name": "Your rights under the law",
+     "does": "Use your privacy rights in your country, answered on time.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A21-F5-P1",
+       "name": "Privacy requests",
+       "what": "The kit's privacy page and request clock (KIT-A18-F3).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A18-F3-P1",
+        "KIT-A18-F3-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A21-F5-P2",
+       "name": "Privacy impact assessment",
+       "what": "Spare Movies' assessment on the kit's method (KIT-A18-F10-P1), covering watch history, the country check, age checks and protection.",
+       "kind": "legal",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A18-F10-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A21-F5-P3",
+       "name": "Overseas privacy duties",
+       "what": "The kit's overseas privacy duties (KIT-A18-F12-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A18-F12-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A21-F6",
+     "name": "Films kept out of AI training",
+     "does": "Know no film is used to train AI unless its filmmaker says yes.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A21-F6-P1",
+       "name": "AI training choice",
+       "what": "The kit's AI training choice (KIT-A17-F11-P1), off by default for every film, trailer and caption.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A17-F11-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A21-F6-P2",
+       "name": "Scraping guard",
+       "what": "Bulk copy limits and traffic limits from the kit (KIT-A16-F1-P4, KIT-A22-F5-P4).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A16-F1-P4",
+        "KIT-A22-F5-P4"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A21-F7",
+     "name": "Data kept in the right place",
+     "does": "Have your data kept in your region where the law or your choice asks.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MOV-A21-F7-P1",
+       "name": "Data location",
+       "what": "The kit's data location (KIT-A18-F9-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A18-F9-P1"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MOV-A22",
+   "name": "Running Spare Movies: rules, costs, votes and help",
+   "summary": "How Spare Movies is run: filmmakers vote on its fees and rules and major changes go to a vote of members, protected core promises, the open cost ledger for delivery, storage, encoding, ratings and payments, help and support, safe servers, the legal set-up including local content duties, measured performance and insurance.",
+   "features": [
+    {
+     "id": "MOV-A22-F1",
+     "name": "Filmmakers set the fees and rules",
+     "does": "Propose and vote on Spare Movies' fees and rules as a filmmaker; major changes go to a vote of members.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A22-F1-P1",
+       "name": "Proposals and votes",
+       "what": "Proposals and results through the kit's ballots (KIT-A12-F3-P1), one vote per person, never per profile, company or agent.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "svc-voting",
+        "KIT-A12-F3-P1",
+        "KIT-A12-F5-P2"
+       ],
+       "piece": "K01"
+      },
+      {
+       "id": "MOV-A22-F1-P2",
+       "name": "Who votes on what",
+       "what": "Filmmakers, and the people in their splits, vote on Spare Movies' fees and rules; viewers can propose and are asked; major changes go to a vote of members (KIT-A12-F5).",
+       "kind": "legal",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A12-F5-P1",
+        "KIT-A12-F5-P2"
+       ],
+       "piece": "K01"
+      },
+      {
+       "id": "MOV-A22-F1-P3",
+       "name": "Protected core promises",
+       "what": "No adverts, removing only what the law requires, and filmmakers keeping everything except running costs can change only by a vote of members.",
+       "kind": "legal",
+       "size": "small",
+       "depends_on": [
+        "KIT-A12-F5-P1"
+       ],
+       "piece": "K01"
+      }
+     ]
+    },
+    {
+     "id": "MOV-A22-F2",
+     "name": "See what it costs",
+     "does": "See each month what delivery, storage, encoding, ratings, payments and moderation cost, and how the fee follows.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A22-F2-P1",
+       "name": "Movies cost lines",
+       "what": "Monthly lines for gigabytes delivered and stored, encoding hours, rating fees, payment charges and moderation hours.",
+       "kind": "data",
+       "size": "medium",
+       "depends_on": [
+        "svc-ledger",
+        "MOV-A18-F4-P3"
+       ],
+       "piece": "K06"
+      },
+      {
+       "id": "MOV-A22-F2-P2",
+       "name": "Fee explainer",
+       "what": "The kit's fee explainer (KIT-A13-F3-P2) with a worked example for a rental, a purchase and a pass month.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A13-F3-P2"
+       ],
+       "piece": "K06"
+      }
+     ]
+    },
+    {
+     "id": "MOV-A22-F3",
+     "name": "Get help",
+     "does": "Find answers, ask a person and see if something is down.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A22-F3-P1",
+       "name": "Help centre",
+       "what": "Spare Movies' pages in the kit's help centre (KIT-A21-F1-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A21-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A22-F3-P2",
+       "name": "Support requests",
+       "what": "The kit's support cases (KIT-A21-F2-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A21-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A22-F3-P3",
+       "name": "Status page",
+       "what": "The kit's status page (KIT-A21-F5-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A21-F5-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A22-F4",
+     "name": "Run the servers safely",
+     "does": "Admins run, watch, back up and secure the servers, with every admin action logged.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A22-F4-P1",
+       "name": "Admin console",
+       "what": "Spare Movies' admin actions on the kit's admin console (KIT-A22-F6-P1), each with a stated reason.",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A22-F6-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A22-F4-P2",
+       "name": "Monitoring and alerts",
+       "what": "The kit's monitoring (KIT-A22-F1-P1), with start times and stalls watched.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A22-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A22-F4-P3",
+       "name": "Backups of masters",
+       "what": "The kit's backups and restore drills (KIT-A22-F3-P1) extended to the master archive.",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A22-F3-P1",
+        "MOV-A18-F1-P3"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A22-F4-P4",
+       "name": "Security reviews",
+       "what": "Outside reviews of the key service and payments through the kit (KIT-A22-F5-P3).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A22-F5-P3"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A22-F5",
+     "name": "Legal set-up",
+     "does": "Read plain terms for viewers and filmmakers and know which legal body runs the service.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A22-F5-P1",
+       "name": "Terms for viewers and filmmakers",
+       "what": "Plain terms for viewers and a plain agreement for filmmakers that match the published rules.",
+       "kind": "legal",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A18-F4-P2",
+        "MOV-A17-F2-P1"
+       ],
+       "piece": "K01"
+      },
+      {
+       "id": "MOV-A22-F5-P2",
+       "name": "Licence register",
+       "what": "Spare Movies' entries in the repository's one licence register: every open-source dependency, its licence and where it came from.",
+       "kind": "legal",
+       "size": "small",
+       "depends_on": [],
+       "piece": "A14"
+      },
+      {
+       "id": "MOV-A22-F5-P3",
+       "name": "Regulator notices",
+       "what": "Tell regulators before starting where the law asks, such as Ofcom for an on-demand service based in the UK; which ones apply depends on where the operating body is set up (KIT-A18-F13-P1).",
+       "kind": "legal",
+       "size": "small",
+       "depends_on": [
+        "KIT-A18-F13-P1"
+       ],
+       "piece": "K01"
+      },
+      {
+       "id": "MOV-A22-F5-P4",
+       "name": "Local content and levy duties",
+       "what": "Whether rules such as the EU's share of European works on on-demand services, Canada's streaming contributions, Australia's local content rules or national film levies reach Spare Movies, from what size, and what they would cost.",
+       "kind": "legal",
+       "size": "medium",
+       "depends_on": [],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A22-F6",
+     "name": "Measured performance",
+     "does": "Know how fast films start and how often they stall, measured and published.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A22-F6-P1",
+       "name": "Performance budgets",
+       "what": "Targets for time to first frame, stalls per hour and catalogue load, measured on real connections in each launch country.",
+       "kind": "research",
+       "size": "small",
+       "depends_on": [],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A22-F7",
+     "name": "Insurance",
+     "does": "Know the co-op is insured against claims over films it hosts.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MOV-A22-F7-P1",
+       "name": "Media liability insurance",
+       "what": "Cover for copyright and defamation claims over hosted films, compared on cost, with the premium on the ledger (KIT-A14-F17-P1).",
+       "kind": "research",
+       "size": "small",
+       "depends_on": [
+        "KIT-A14-F17-P1"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MOV-A23",
+   "name": "Headless API, plugins and AI agents",
+   "summary": "Everything by command, so people, scripts and AI agents use the same path: the command set and query API, an MCP server with approval before spending or publishing, a register of where Spare Movies uses AI, plugins, a developer API with a catalogue feed, and webhooks.",
+   "features": [
+    {
+     "id": "MOV-A23-F1",
+     "name": "Everything by command",
+     "does": "Do anything a person can do, from browsing to publishing, through the same commands.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A23-F1-P1",
+       "name": "Spare Movies command set",
+       "what": "Every action (publish, price, rate, rent, buy, report, moderate) as a command on the kit's operation layer.",
+       "kind": "library",
+       "size": "large",
+       "depends_on": [
+        "kit-ops",
+        "MOV-A3-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A23-F1-P2",
+       "name": "Query API",
+       "what": "Read the catalogue, film pages, rights and earnings through one query API that respects every permission.",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "MOV-A2-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A23-F2",
+     "name": "Use your own AI",
+     "does": "Connect your AI agent to search, keep lists or run your catalogue, with approval before it spends or publishes.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A23-F2-P1",
+       "name": "MCP server",
+       "what": "Spare Movies' commands on the kit's MCP server (KIT-A17-F1-P1) with MCP authorisation (KIT-A17-F1-P3).",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "kit-mcp",
+        "KIT-A17-F1-P1",
+        "KIT-A17-F1-P3",
+        "MOV-A23-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A23-F2-P2",
+       "name": "Approval before spending or publishing",
+       "what": "A person approves before an agent rents, buys, publishes, changes prices or rights (KIT-A17-F2-P1), within the agent's limits (KIT-A17-F4-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A17-F2-P1",
+        "KIT-A17-F4-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A23-F2-P3",
+       "name": "Guards against hidden instructions",
+       "what": "Synopses, captions and reviews reach an agent marked as data, never as instructions (KIT-A17-F5-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A17-F5-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A23-F3",
+     "name": "See where Spare Movies uses AI",
+     "does": "See every place Spare Movies itself uses AI, such as caption drafts, read-aloud descriptions and detection hints.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MOV-A23-F3-P1",
+       "name": "AI use register",
+       "what": "Spare Movies' uses of AI in the kit's public register (KIT-A17-F10-P1), with review by a person on request (KIT-A17-F10-P2).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A17-F10-P1",
+        "KIT-A17-F10-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A23-F4",
+     "name": "Plugins",
+     "does": "Add plugins such as other caption formats or festival submission tools.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MOV-A23-F4-P1",
+       "name": "Plugin points",
+       "what": "Plugin hooks for formats, publishing steps and filmmaker tools on the kit's plugin host (KIT-A16-F5-P2).",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "kit-plugin",
+        "KIT-A16-F5-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A23-F5",
+     "name": "Developer API",
+     "does": "Build tools on Spare Movies with a documented public API, and feed the catalogue to other sites.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MOV-A23-F5-P1",
+       "name": "Public API",
+       "what": "Scoped tokens and published rate limits from the kit (KIT-A16-F1-P2, KIT-A16-F1-P3).",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A16-F1-P2",
+        "KIT-A16-F1-P3",
+        "MOV-A23-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MOV-A23-F5-P2",
+       "name": "Catalogue feed",
+       "what": "Films and where to watch them as an open feed, on the kit's listing feed service (KIT-A28-F3-P2).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A28-F3-P2",
+        "MOV-A2-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MOV-A23-F6",
+     "name": "Webhooks",
+     "does": "Be told by webhook when a film is published, sold or reported.",
+     "priority": "later",
+     "parts": [
+      {
+       "id": "MOV-A23-F6-P1",
+       "name": "Webhooks",
+       "what": "Spare Movies events on the kit's signed webhooks (KIT-A16-F2-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A16-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "assess": [
+  "Would the core features alone make a credible switch for someone leaving Netflix, Prime Video, Disney+ or a film rental store, when the first catalogue will be independent films rather than studio titles?",
+  "Is paying per film (rent, buy, support or free) enough for a first release, or must the viewer pass be core, and should a pass be shared out by each viewer's own watch time or by one pool of all watch time (MOV-A7-F2-P1)?",
+  "Can the at-cost fee stay small and easy to understand when delivery cost depends on a film's length, its quality and the viewer's country, and should it be a fixed amount per sale, an amount per hour watched, or both (MOV-A6-F1-P3, MOV-A18-F5-P1)?",
+  "Which way of stopping copies should come first: locked playback with the agreements it needs, a hidden watermark per viewer, or no lock, and what do filmmakers and their investors actually require (MOV-A16-F1-P1)?",
+  "Can fingerprints catch stolen uploads well enough with a person deciding every match, and fast enough that nobody collects money for a film they did not make (MOV-A16-F2)?",
+  "How does a filmmaker prove they hold the rights in each country, and what happens to buyers when rights end or two people claim the same film (MOV-A11)?",
+  "Which countries require official age ratings for on-demand films, which allow rating with an approved tool, and what would rating one film in every launch country cost a small filmmaker (MOV-A12-F1-P3)?",
+  "Do local content rules and levies, such as the EU's share of European works, Canada's streaming contributions or Australia's local content rules, reach a small at-cost service, and from what size (MOV-A22-F5-P4)?",
+  "Is asking for captions before publishing fair to filmmakers with no budget, and are checked caption drafts and descriptions read by a synthetic voice good enough for Deaf and blind viewers (MOV-A13)?",
+  "Who is the seller of record for each sale, the filmmaker or the co-op, and can tax on films sold online be handled in every launch country without a tax team (MOV-A6-F8)?",
+  "Does Spare Movies need its own licences from music collecting societies to stream films whose makers already cleared the music, and what would that cost (MOV-A11-F7-P2)?",
+  "Can filmmakers really keep everything except running costs in phone and TV apps, given the app stores' rules for selling films (MOV-A6-F10)?",
+  "Where is the line between AI-assisted and AI-made in film, for example AI dubbing, de-ageing or generated shots, and is a filmmakers' vote the right way to set it (MOV-A5-F1-P3)?",
+  "Should sexually explicit films be allowed with full age checks and kept out of store apps, or ruled out (MOV-A8-F3-P2)?",
+  "Selling to viewers in other countries rests on kit parts marked later (KIT-A3-F14, KIT-A4-F7); should the kit move them up for an international film service?",
+  "Which parts should move down to the kit because Spare Social and Spare Music need them too: the Human and AI sections, fingerprinting, the pass share-out engine, rights by country, and encrypted delivery with a key service?",
+  "Spare Movies has no work-board pieces yet. Which research and legal parts gate core features and should become pieces first: protection, fingerprinting, the ratings packs, rights proof, seller of record and tax, local content duties, collecting societies and access law?",
+  "Is every open project used in the core under a licence that allows it, and are PeerTube (AGPL-3.0), Jellyfin and Kodi (GPL) kept to learning from how they work, with none of their code copied?",
+  "What numbers would prove the demo works, such as time to first frame, stalls per hour, delivery cost per hour watched in each region, and the share of films with captions and audio description?"
+ ]
+}

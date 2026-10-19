@@ -11,7 +11,7 @@ Every piece is a GitHub issue. See who's working on what: [checked out](https://
 | Spare Studio (working name) | Mapping | 8 | [projects/spare-studio](projects/spare-studio/STATUS.md) |
 | Spare Social (working name) | Mapping | 9 | [projects/spare-social](projects/spare-social/STATUS.md) |
 | Spare Music | Mapping | 0 | [projects/spare-music](projects/spare-music/STATUS.md) |
-| Spare Movies | Idea | 0 | [projects/spare-movies](projects/spare-movies/STATUS.md) |
+| Spare Movies | Mapping | 0 | [projects/spare-movies](projects/spare-movies/STATUS.md) |
 | Spare Research | Mapping | 0 | [projects/spare-research](projects/spare-research/STATUS.md) |
 | Spare Office | Mapping | 7 | [projects/spare-office](projects/spare-office/STATUS.md) |
 | Spare OS | Mapping | 6 | [projects/spare-os](projects/spare-os/STATUS.md) |
