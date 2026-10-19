@@ -157,6 +157,22 @@ label.chk{display:inline-flex;align-items:center;gap:6px;cursor:pointer;white-sp
 .tab:hover{color:var(--ink);background:var(--panel-alt)}
 .tab[aria-current=page]{background:var(--app);color:var(--ink);font-weight:600}
 .tab-sep{width:1px;background:var(--hairline);margin:6px var(--sh);flex:none}
+/* Each Studio app has its own light colour: its tab shows it, and the screen takes it while you're in the app. Home keeps Studio's purple. */
+html[data-part="home"],.tab[data-route="home"]{--app:#C4B2FF;--app-strong:#5B3FB8;--app-tint:#F3EFFF}
+html[data-part="photo"],.tab[data-route="photo"]{--app:#8EC5FF;--app-strong:#1F5FA8;--app-tint:#EAF4FF}
+html[data-part="draw"],.tab[data-route="draw"]{--app:#FDBA8C;--app-strong:#A34A12;--app-tint:#FFF1E7}
+html[data-part="layout"],.tab[data-route="layout"]{--app:#F2B8E0;--app-strong:#94306F;--app-tint:#FCEEF8}
+html[data-part="video"],.tab[data-route="video"]{--app:#A9B6FF;--app-strong:#3A47A8;--app-tint:#EEF0FF}
+html[data-part="raw"],.tab[data-route="raw"]{--app:#7FD8CF;--app-strong:#13756B;--app-tint:#E8F8F6}
+html[data-part="pdf"],.tab[data-route="pdf"]{--app:#F6A5A5;--app-strong:#A12C2C;--app-tint:#FDECEC}
+html[data-part="motion"],.tab[data-route="motion"]{--app:#F2D675;--app-strong:#7A6210;--app-tint:#FCF6DD}
+html[data-part="sound"],.tab[data-route="sound"]{--app:#93D9A6;--app-strong:#1F7A45;--app-tint:#EAF8EE}
+html[data-part="screens"],.tab[data-route="screens"]{--app:#80D4F0;--app-strong:#11708F;--app-tint:#E7F7FD}
+html[data-part="animate"],.tab[data-route="animate"]{--app:#C9DE7A;--app-strong:#5A6E12;--app-tint:#F5F9E3}
+html[data-part="3d"],.tab[data-route="3d"]{--app:#DCC196;--app-strong:#7A5626;--app-tint:#F9F1E4}
+html[data-part="library"],.tab[data-route="library"]{--app:#B8C4D6;--app-strong:#3D4F6B;--app-tint:#EEF1F6}
+html[data-part="account"],.tab[data-route="account"]{--app:#CDD1D6;--app-strong:#4A525C;--app-tint:#F2F3F5}
+.tab[data-route]{box-shadow:inset 0 3px 0 var(--app)}
 .main{min-height:0;overflow:auto;position:relative}
 .screen{display:none}
 .screen.on{display:block}
@@ -1826,6 +1842,7 @@ function route(){
   let r=decodeURIComponent(location.hash.slice(1));if(!ROUTES[r])r='home';current=r;
   $$('.screen').forEach(s=>s.classList.toggle('on',s.id==='s-'+r));
   $$('.tab').forEach(t=>{if(t.dataset.route===r)t.setAttribute('aria-current','page');else t.removeAttribute('aria-current')});
+  document.documentElement.dataset.part=r;
   const [app,file,fmt]=ROUTES[r];
   $('#open-app').textContent=r==='home'?T('Home'):app;$('#open-file').textContent=file;$('#open-fmt').textContent=fmt;$('#open-fmt').hidden=!fmt;$('#open-sep2').hidden=!file;
   $('#st-extra').textContent=EXTRA[r]||'';
