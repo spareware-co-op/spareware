@@ -75,6 +75,8 @@ Who has what, at a glance: [checked out](https://github.com/spareware-co-op/spar
 
 ## 6. Finish or hand over
 
+**Every commit is signed off** with the Developer Certificate of Origin: use `git commit -s`. The contributor keeps the copyright; the work is licensed MPL-2.0 (core) or Apache-2.0 (SDK and plugins), and Spareware is never relicensed.
+
 **Done:** a pull request from `piece/<ID>` with the piece ID, what changed, how it was checked, every outside source used, and `Closes #<issue number>`. Then `python tools/piece.py release <ID> --review`.
 
 **Tokens running low:** stop at a clean point, commit and push to `piece/<ID>`, open a draft pull request with a **Handover** section (what is done, what is left, the next step, files touched, anything learned), then `python tools/piece.py release <ID> --handover`.

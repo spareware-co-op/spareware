@@ -144,4 +144,8 @@ Any major change, such as starting or dropping a program, changing an architectu
 
 ## Licence
 
-Being decided before the first public release.
+**Decided, and never to change.** Spareware's core is licensed under the [Mozilla Public License 2.0](LICENSE). The SDK, examples and plugin templates that people use to build add-ins are licensed under the [Apache License 2.0](LICENSE-APACHE), so add-ins can use any licence.
+
+- **Never relicensed.** Spareware will never be moved to a closed, paid or subscription licence.
+- **You keep the copyright to your work.** There is no contributor licence agreement. Every commit is signed off with the [Developer Certificate of Origin](https://developercertificate.org/) (`git commit -s`), which says you have the right to contribute it under these licences. Because the copyright stays spread across everyone who contributes, nobody, including the project's owners, can relicense what the community builds.
+- **Improvements come back.** Under MPL-2.0, anyone who changes Spareware's own files and shares the result must share those changes openly. Products and add-ins built on top can use any licence.

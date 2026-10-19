@@ -216,7 +216,7 @@ Everything stays in one repo and one workspace, so a change to the kit is checke
 | Decision | Options | Lean |
 | --- | --- | --- |
 | Legal entity | NZ co-operative company; incorporated society; charitable trust | A federation: a steward society holds the code and name; NZ co-operative company runs the platforms; a local co-op per country ([K01 note](projects/kit/notes/K01-legal-entity.md), in review). To be reworked: the owner decided on 2026-10-19 there are no member shares and the only charge is running costs |
-| Licence | MPL-2.0 core with Apache-2.0 SDK; Apache-2.0 for all; MIT | MPL-2.0 core, Apache-2.0 SDK |
+| Licence | Decided 2026-10-19 | MPL-2.0 core, Apache-2.0 SDK and plugins, never relicensed, no contributor agreement, Developer Certificate of Origin sign-off only ([K07 note](projects/kit/notes/K07-licence.md), [README](README.md#licence)) |
 | Payment provider | Stripe Connect; local NZ providers | Research first (piece K02) |
 | Phone apps | Web apps installed from the browser; Tauri mobile; native | Research first (piece K04) |
 | First marketplace | Ride, Food, Work or another | Research first (piece K05) |

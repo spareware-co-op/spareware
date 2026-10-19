@@ -7243,13 +7243,13 @@
         {
           "id": "KIT-A14-F16",
           "name": "Contribute with clear rights",
-          "does": "Sign off my contributions so the co-op can use them, with my employer's consent where I worked on their time.",
+          "does": "Sign off my contributions with the Developer Certificate of Origin, keep the copyright to my work, and know Spareware will never be relicensed, with my employer's consent where I worked on their time.",
           "priority": "core",
           "parts": [
             {
               "id": "KIT-A14-F16-P1",
               "name": "Contributor sign-off",
-              "what": "A developer certificate of origin or a contributor licence agreement, and employer consent for work done on an employer's time.",
+              "what": "Developer Certificate of Origin sign-off on every commit, with no contributor licence agreement, and employer consent for work done on an employer's time.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
