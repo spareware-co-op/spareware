@@ -55,7 +55,7 @@ Who has what, at a glance: [checked out](https://github.com/spareware-co-op/spar
 
 **Mapping and Design stages:** write the note at `projects/<name>/notes/<ID>-<slug>.md` with: the question, the options, the evidence, a recommendation and the open risks. Evidence means reading the actual source of the projects you cite, not only their docs. Link every source.
 
-**Build and Harden stages:** code, tests and a benchmark, following the project's `ARCHITECTURE.md`. Any interface follows [design/DESIGN.md](design/DESIGN.md) and uses [design/tokens.css](design/tokens.css) for every colour, font and spacing. Code goes in the matching crate under `projects/<name>/crates/` (each crate's `lib.rs` says what it is for). Keep the layering rule in the root `ARCHITECTURE.md`: a program never depends on another program; shared needs move into `projects/kit` or `projects/engines`.
+**Build and Harden stages:** code, tests and a benchmark, following the project's `ARCHITECTURE.md`. Any interface follows [design/DESIGN.md](design/DESIGN.md) and uses [design/tokens.css](design/tokens.css) for every colour, font and spacing. Never change the shared look itself unless a member vote agreed it, or a unique situation truly needs it; then say why in the pull request. Code goes in the matching crate under `projects/<name>/crates/` (each crate's `lib.rs` says what it is for). Keep the layering rule in the root `ARCHITECTURE.md`: a program never depends on another program; shared needs move into `projects/kit` or `projects/engines`.
 
 **Always:**
 

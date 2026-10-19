@@ -1,0 +1,5349 @@
+{
+ "program": "spare-music",
+ "name": "Spare Music",
+ "replaces": "Spotify, Apple Music, SoundCloud and Bandcamp",
+ "summary": "One place to listen to music and to buy it straight from the artists. Artists choose how their music is sold and keep everything except the running costs, shown on the open cost ledger. The catalogue has a Human section and an AI section that each listener chooses between, songwriters are paid through their collecting societies country by country, uploads are fingerprinted so nobody can sell someone else's music, and only what the law requires is removed.",
+ "areas": [
+  {
+   "id": "MUS-A1",
+   "name": "Joining, accounts and artist pages",
+   "summary": "Joining with one Spareware login, listening before signing up, a listener profile, artist pages for solo artists, bands and labels, proving an artist is who they say, running a label or a team, getting back in, and leaving or handing on a catalogue.",
+   "features": [
+    {
+     "id": "MUS-A1-F1",
+     "name": "Join with one Spareware login",
+     "does": "Join in under a minute with a passkey and a name, using the same login as every other Spareware app.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A1-F1-P1",
+       "name": "Spareware login hook-up",
+       "what": "Use the kit's account service and passkey sign-in (KIT-A1-F2-P1), with passwords as a fallback.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A1-F1-P1",
+        "KIT-A1-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A1-F1-P2",
+       "name": "Sign-up flow",
+       "what": "Screens for a name, the Human and AI choice (MUS-A5-F2-P2) and agreeing to the published rules, with the kit's minimum age check (KIT-A1-F1-P5).",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MUS-A1-F1-P1",
+        "KIT-A1-F1-P5",
+        "MUS-A14-F2-P1",
+        "MUS-A5-F2-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A1-F1-P3",
+       "name": "Sign-up spam guard",
+       "what": "Uses the kit's sign-up abuse protection (KIT-A1-F1-P4), so fake accounts cannot be made in bulk to farm plays.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A1-F1-P4"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A1-F2",
+     "name": "Listen before signing up",
+     "does": "Play free music and previews with no account, and keep what you saved when you join.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A1-F2-P1",
+       "name": "Listening without an account",
+       "what": "Uses the kit's local profile (KIT-A1-F15-P1) to keep likes, the queue and playlists on the device, moved into the account on sign-up.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A1-F15-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A1-F2-P2",
+       "name": "Previews for everyone",
+       "what": "Each release sets which tracks play in full and how long the preview is for the rest, before anyone signs in.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A9-F1-P1",
+        "MUS-A16-F3-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A1-F3",
+     "name": "Make a listener profile",
+     "does": "Choose a name, a photo and what others can see, such as your public playlists and the artists you support.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A1-F3-P1",
+       "name": "Listener profile record",
+       "what": "Name, photo, a short bio and what is shown (playlists, follows, artists supported), stored as operations on the kit's profile model (KIT-A1-F5-P1).",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "KIT-A1-F5-P1",
+        "kit-ops"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A1-F3-P2",
+       "name": "Listener page",
+       "what": "A page with public playlists and the artists the listener chose to show. Listening history is never shown unless the listener turns it on.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MUS-A1-F3-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A1-F4",
+     "name": "Make an artist page",
+     "does": "Set up a page for yourself, your band or your label, with a photo, a bio, links, members and your releases.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A1-F4-P1",
+       "name": "Artist record",
+       "what": "An artist is a solo act, a band, a duo, an orchestra or a label, with its own name, bio, links, members, genres and an optional home town, separate from any login.",
+       "kind": "data",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A1-F5-P1",
+        "kit-ops"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A1-F4-P2",
+       "name": "Artist page",
+       "what": "One page with releases, popular tracks, shows, a support button and the artist's posts, laid out the same way for every artist, with no paid placement.",
+       "kind": "interface",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A1-F4-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A1-F4-P3",
+       "name": "Band members and roles",
+       "what": "Several logins run one artist page as owner, manager or member, on the kit's roles and team management (KIT-A1-F5-P2, KIT-A1-F7-P2).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "MUS-A1-F4-P1",
+        "KIT-A1-F5-P2",
+        "KIT-A1-F7-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A1-F4-P4",
+       "name": "Artist name rules",
+       "what": "Two artists may share a name, as in real life, so pages are told apart by town, genre and photo; look-alikes of verified artists are checked for impersonation (MUS-A11-F4-P1).",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A1-F4-P1",
+        "MUS-A11-F4-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A1-F5",
+     "name": "Prove you are the artist",
+     "does": "Get a verified badge that shows the page is run by the artist or their team, so nobody can pose as them.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A1-F5-P1",
+       "name": "Artist verification",
+       "what": "Checks that the person running a page is the artist or acts for them: the kit's identity check (KIT-A2-F1-P2), links from the artist's own website and other pages, and for labels the business check (KIT-A2-F7-P1).",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A2-F1-P2",
+        "KIT-A2-F7-P1",
+        "MUS-A1-F4-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A1-F5-P2",
+       "name": "Verified artist badge",
+       "what": "Shown on the page and every release, using the kit's verified badge (KIT-A2-F5-P1), with published rules for how it is earned and lost.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MUS-A1-F5-P1",
+        "KIT-A2-F5-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A1-F5-P3",
+       "name": "Claim an existing page",
+       "what": "An artist claims a page that a past upload created, and the old uploads are reviewed under the rights rules.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A1-F5-P1",
+        "MUS-A7-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A1-F6",
+     "name": "Run a label or a team",
+     "does": "Run several artists from one label account, give staff roles, and see every action in a log.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A1-F6-P1",
+       "name": "Label accounts",
+       "what": "A label is a kit organisation (KIT-A1-F7-P1) that runs several artist pages and releases, with its own payout details.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A1-F7-P1",
+        "MUS-A1-F4-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A1-F6-P2",
+       "name": "Team action log",
+       "what": "Every upload, price change, split change and payout change by anyone on the team is logged, using the kit's organisation audit log (KIT-A1-F7-P7).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A1-F7-P7"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A1-F7",
+     "name": "Get back into your account",
+     "does": "Recover a lost login and sign out of devices you do not recognise.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A1-F7-P1",
+       "name": "Recovery",
+       "what": "Recovery codes, a backup passkey and assisted recovery from the kit (KIT-A1-F4-P1, KIT-A1-F4-P2).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A1-F4-P1",
+        "KIT-A1-F4-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A1-F7-P2",
+       "name": "Sessions and payout guard",
+       "what": "See every signed-in device, and sign in again before payout details or splits change (KIT-A1-F3-P4, KIT-A3-F3-P4).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A1-F3-P2",
+        "KIT-A1-F3-P4",
+        "KIT-A3-F3-P4"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A1-F8",
+     "name": "Leave or hand on your music",
+     "does": "Delete a listener account, take your music down, or name who looks after an artist's catalogue and earnings after death.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A1-F8-P1",
+       "name": "Delete and take down",
+       "what": "Delete a listener account with a full purge after a short grace period; artists can take releases down, while buyers keep the downloads they paid for.",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A18-F2-P1",
+        "MUS-A16-F6-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A1-F8-P2",
+       "name": "Estates and heirs",
+       "what": "When an artist dies their releases stay up, and earnings go to the estate once it proves its right, using the kit's after-death handling (KIT-A18-F11-P1).",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A18-F11-P1",
+        "MUS-A10-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A1-F8-P3",
+       "name": "Settle up before closing",
+       "what": "An artist closing an account is paid what is owed first, through the kit's settle-up step (KIT-A18-F2-P2).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A18-F2-P2"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MUS-A2",
+   "name": "Listening and the player",
+   "summary": "Playing music well on every device: the player, the queue, albums without gaps and at an even volume, sound quality you choose, lyrics and credits while you listen, offline listening, speakers and cars, and listening together.",
+   "features": [
+    {
+     "id": "MUS-A2-F1",
+     "name": "Play music",
+     "does": "Play a track, an album or a playlist, pause, skip and seek, and pick up where you left off on any device.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A2-F1-P1",
+       "name": "Player",
+       "what": "Play, pause, skip and seek, a waveform you can scrub, and the now-playing screen, on the kit's audio engine (KIT-A27-F8-P4).",
+       "kind": "interface",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A27-F8-P4",
+        "MUS-A16-F3-P2",
+        "MUS-A16-F2-P3"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A2-F1-P2",
+       "name": "Pick up where you left off",
+       "what": "The queue and the place in the track follow the listener across devices as operations, so a phone carries on what the laptop was playing.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "kit-sync",
+        "MUS-A2-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A2-F1-P3",
+       "name": "Media keys and lock screen",
+       "what": "Play from headphone buttons, keyboard media keys, the lock screen and notifications, with artwork and track names.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "MUS-A2-F1-P1",
+        "KIT-A20-F2-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A2-F2",
+     "name": "Queue and shuffle",
+     "does": "See what plays next, reorder it, add to it, shuffle and repeat.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A2-F2-P1",
+       "name": "Queue",
+       "what": "An editable queue with play next, add to queue, shuffle that plays everything once before repeating, and repeat one or all.",
+       "kind": "library",
+       "size": "small",
+       "depends_on": [
+        "MUS-A16-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A2-F2-P2",
+       "name": "Queue screen",
+       "what": "The queue as a list you can drag to reorder, with what is playing now and where the queue came from.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MUS-A2-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A2-F3",
+     "name": "Albums played the way the artist meant",
+     "does": "Hear albums with no gaps between tracks that run together, at an even volume, in the artist's order.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A2-F3-P1",
+       "name": "Gapless playback",
+       "what": "No silence between tracks that run together, using the encoder delay and padding stored with each file.",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A27-F8-P4",
+        "MUS-A16-F3-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A2-F3-P2",
+       "name": "Even loudness",
+       "what": "Volume kept even from the loudness measured on upload (MUS-A16-F2-P2), by track for playlists and by album for albums, so quiet songs stay quiet; listeners can turn it off.",
+       "kind": "library",
+       "size": "small",
+       "depends_on": [
+        "MUS-A16-F2-P2",
+        "MUS-A2-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A2-F3-P3",
+       "name": "The artist's order kept",
+       "what": "An artist can mark an album as one piece, such as a live set or a classical work, so it plays in order even when shuffle is on.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MUS-A6-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A2-F4",
+     "name": "Choose sound quality",
+     "does": "Pick normal, high or lossless quality, separately for mobile data, wi-fi and downloads.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A2-F4-P1",
+       "name": "Quality settings",
+       "what": "Quality per connection and for downloads, with the data used per hour shown for each.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MUS-A16-F3-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A2-F4-P2",
+       "name": "Lossless streaming",
+       "what": "Lossless FLAC at the quality the artist uploaded, where the device and connection can take it.",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A16-F3-P2",
+        "MUS-A16-F3-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A2-F5",
+     "name": "Lyrics and credits while you listen",
+     "does": "Read the words as the song plays, and see who wrote, played and produced each track.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A2-F5-P1",
+       "name": "Lyrics",
+       "what": "Lyrics the songwriter supplies, timed line by line in the open LRC format where they choose, shown in step with the music.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MUS-A6-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A2-F5-P2",
+       "name": "Credits panel",
+       "what": "Every credit on the track: writers, performers, producers, engineers and any samples, each linked to its page.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MUS-A6-F4-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A2-F5-P3",
+       "name": "Lyrics rights",
+       "what": "Lyrics are words with their own copyright, so only the songwriter or their publisher may supply them; the rights declaration covers them.",
+       "kind": "legal",
+       "size": "small",
+       "depends_on": [
+        "MUS-A7-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A2-F6",
+     "name": "Listen offline",
+     "does": "Download albums and playlists to play with no signal, kept up to date.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A2-F6-P1",
+       "name": "Offline downloads",
+       "what": "Saves music to the device at the chosen quality, kept in step with the library, with the space used shown and one place to clear it (KIT-A15-F4-P1).",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A16-F3-P2",
+        "KIT-A15-F4-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A2-F6-P2",
+       "name": "Offline rule",
+       "what": "How long offline copies of streamed music last without going online, which follows the copy-protection decision in ARCHITECTURE.md; bought music is the buyer's to keep with no limit.",
+       "kind": "research",
+       "size": "small",
+       "depends_on": [],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A2-F7",
+     "name": "Play on speakers, TVs and in the car",
+     "does": "Send music to speakers and TVs at home, and play it in the car.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A2-F7-P1",
+       "name": "Casting to speakers",
+       "what": "Plays on speakers and TVs through open protocols such as UPnP and DLNA, and through makers' casting kits only where their terms allow.",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A2-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A2-F7-P2",
+       "name": "Car play",
+       "what": "Plays through the phone systems built into cars, meeting each one's rules for screens used while driving (KIT-A20-F11-P1).",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A2-F1-P1",
+        "KIT-A20-F11-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A2-F7-P3",
+       "name": "Sign in on a TV or speaker",
+       "what": "Sign in on a device with no keyboard using the kit's device sign-in (KIT-A1-F12-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A1-F12-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A2-F8",
+     "name": "Sleep timer and listening extras",
+     "does": "Stop after a set time, change the speed for talks and audiobooks, and crossfade between songs in playlists.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A2-F8-P1",
+       "name": "Player extras",
+       "what": "Sleep timer, crossfade for playlists (never inside an album that runs together) and speed control for spoken word.",
+       "kind": "library",
+       "size": "small",
+       "depends_on": [
+        "MUS-A2-F1-P1",
+        "MUS-A2-F3-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A2-F9",
+     "name": "Listen together",
+     "does": "Listen in time with friends in a shared room, with one queue anyone can add to.",
+     "priority": "later",
+     "parts": [
+      {
+       "id": "MUS-A2-F9-P1",
+       "name": "Shared listening rooms",
+       "what": "A room where everyone hears the same moment, with a shared queue and chat, through the kit's live updates and chat (KIT-A15-F5-P1, KIT-A8-F1-P2).",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A2-F1-P1",
+        "KIT-A15-F5-P1",
+        "KIT-A8-F1-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A2-F10",
+     "name": "Music videos and visualisers",
+     "does": "Watch an artist's music video or a visualiser alongside the track.",
+     "priority": "later",
+     "parts": [
+      {
+       "id": "MUS-A2-F10-P1",
+       "name": "Music videos",
+       "what": "A video the artist uploads with a track, played with the kit's video decoding (KIT-A27-F8-P2), and easy to switch off to save data.",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A6-F2-P1",
+        "KIT-A27-F8-P2"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MUS-A3",
+   "name": "Your library and playlists",
+   "summary": "Saving music, one library of everything you bought or saved, playlists you make, share or make with friends, listening history you control, playing your own files, and bringing your library from another service.",
+   "features": [
+    {
+     "id": "MUS-A3-F1",
+     "name": "Save music to your library",
+     "does": "Save tracks, albums and artists, and see everything you bought, saved or downloaded in one place.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A3-F1-P1",
+       "name": "Library",
+       "what": "Saved tracks, albums, artists and playlists, with bought music marked, sorted the way you choose.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MUS-A16-F1-P1",
+        "kit-ops"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A3-F1-P2",
+       "name": "Library screens",
+       "what": "Lists and a grid with filters for bought, saved, downloaded, and Human or AI.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MUS-A3-F1-P1",
+        "MUS-A5-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A3-F2",
+     "name": "Make playlists",
+     "does": "Make a playlist, add a note to any track, reorder it, and share it or keep it private.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A3-F2-P1",
+       "name": "Playlist record",
+       "what": "Title, description, picture, privacy, and tracks with optional notes, as operations so every change has history and undo (KIT-A15-F2-P1).",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "kit-ops",
+        "KIT-A15-F2-P1",
+        "MUS-A16-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A3-F2-P2",
+       "name": "Playlist editor",
+       "what": "Add, remove and drag to reorder, with search inside the playlist.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MUS-A3-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A3-F2-P3",
+       "name": "Who made it",
+       "what": "Every playlist shows who made it: a member, an artist or an agent; agent-made playlists carry the kit's agent label (KIT-A17-F9-P1).",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MUS-A3-F2-P1",
+        "KIT-A17-F9-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A3-F3",
+     "name": "Share a playlist",
+     "does": "Share a link anyone can open, and follow other people's playlists.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A3-F3-P1",
+       "name": "Playlist links",
+       "what": "Short links and QR codes from the kit (KIT-A20-F9-P1) that open the playlist in the app or the browser, with a preview card (KIT-A28-F2-P3).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A20-F9-P1",
+        "KIT-A28-F2-P3",
+        "MUS-A3-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A3-F3-P2",
+       "name": "Follow playlists",
+       "what": "Follow a playlist and see when it changes.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A3-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A3-F4",
+     "name": "Make playlists together",
+     "does": "Let friends add to a playlist and see who added what.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A3-F4-P1",
+       "name": "Shared playlists",
+       "what": "Invite people to add and reorder, each addition showing who added it, on the kit's sharing (KIT-A15-F8-P1).",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A3-F2-P1",
+        "KIT-A15-F8-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A3-F5",
+     "name": "See and clear your history",
+     "does": "See what you played, pause your history, and delete any of it.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A3-F5-P1",
+       "name": "Listening history",
+       "what": "Private by default and kept only as long as payouts and fake-play checks need (MUS-A16-F5-P1), then reduced to counts; pause and delete at any time (KIT-A18-F6-P1).",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A16-F5-P1",
+        "KIT-A18-F6-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A3-F6",
+     "name": "Play your own files",
+     "does": "Add music files you already own and play them beside Spare Music.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A3-F6-P1",
+       "name": "Your own files",
+       "what": "Plays music files on the device in the same library, never uploaded unless you choose, read with the kit's openly licensed decoders (KIT-A27-F8-P2).",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A27-F8-P2",
+        "MUS-A3-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A3-F7",
+     "name": "Bring your library from another service",
+     "does": "Move your playlists and saved music from another service, matched to what is on Spare Music.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A3-F7-P1",
+       "name": "Playlist import",
+       "what": "Reads exported playlist files (CSV, M3U and XSPF) and matches tracks by ISRC and title, never by scraping another company's service; tracks not on Spare Music are listed so you can tell the artist.",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A16-F1-P1",
+        "MUS-A6-F2-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A3-F7-P2",
+       "name": "Other services' exports",
+       "what": "Which services let people export their own playlists and library, and in what files, read from the files the listener downloads under each service's terms.",
+       "kind": "research",
+       "size": "small",
+       "depends_on": [],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A3-F8",
+     "name": "Smart playlists and folders",
+     "does": "Sort playlists into folders, and make playlists that fill themselves by rules you set.",
+     "priority": "later",
+     "parts": [
+      {
+       "id": "MUS-A3-F8-P1",
+       "name": "Smart playlists",
+       "what": "Playlists built from rules such as genre, year, Human only and not played lately, with the rule shown.",
+       "kind": "library",
+       "size": "small",
+       "depends_on": [
+        "MUS-A3-F2-P1",
+        "MUS-A4-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MUS-A4",
+   "name": "Finding music",
+   "summary": "Search, browsing by genre, mood and place, every new release from artists you follow, discovery with published rules, radio from a song, charts counted in the open, playlists by people, and recognising a song playing nearby. No paid placement anywhere.",
+   "features": [
+    {
+     "id": "MUS-A4-F1",
+     "name": "Search everything",
+     "does": "Search artists, releases, tracks, playlists, labels and lyrics, spelled any way, with or without accents and macrons.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A4-F1-P1",
+       "name": "Search service",
+       "what": "Music search on the kit's search service (KIT-A6-F1-P2) with accent-aware matching (KIT-A19-F1-P4) and the listener's section filter.",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A6-F1-P2",
+        "KIT-A19-F1-P4",
+        "MUS-A16-F1-P1",
+        "MUS-A5-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A4-F1-P2",
+       "name": "Search screen",
+       "what": "One box with results grouped by artists, releases, tracks, playlists and lyrics, and recent searches you can clear.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MUS-A4-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A4-F2",
+     "name": "Browse by genre, mood and place",
+     "does": "Browse the genres and moods artists chose, and find music from your town or anywhere.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A4-F2-P1",
+       "name": "Genres and moods",
+       "what": "Genres and moods from a published list the artist picks from, plus free tags, with no hidden scoring.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MUS-A6-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A4-F2-P2",
+       "name": "Local scenes",
+       "what": "Music by place, from the home town an artist chose to show, never from tracking where listeners are.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A1-F4-P1",
+        "MUS-A4-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A4-F3",
+     "name": "New from artists you follow",
+     "does": "See every new release from artists you follow, newest first, with nothing left out.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A4-F3-P1",
+       "name": "Release feed",
+       "what": "Every release and post from followed artists in time order; nothing is hidden or ranked.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A12-F1-P1",
+        "MUS-A6-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A4-F3-P2",
+       "name": "New releases screen",
+       "what": "This week's releases from followed artists at the top of home, with a mark on anything new since you last looked.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MUS-A4-F3-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A4-F4",
+     "name": "Discovery with published rules",
+     "does": "Get suggestions from rules you can read, choose or turn off, with no paid placement.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A4-F4-P1",
+       "name": "Discovery rules",
+       "what": "Suggestion lists built from published rules, such as listeners of this also played, new in your genres and new from your area, with the rule shown on each list (KIT-A6-F1-P3).",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A6-F1-P3",
+        "MUS-A16-F5-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A4-F4-P2",
+       "name": "Why this was suggested",
+       "what": "Every suggestion has a Why button naming the rule that picked it.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MUS-A4-F4-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A4-F4-P3",
+       "name": "No paid placement",
+       "what": "A protected rule (MUS-A21-F1-P3) that nobody can pay to be suggested, charted or placed higher.",
+       "kind": "legal",
+       "size": "small",
+       "depends_on": [
+        "MUS-A21-F1-P3"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A4-F5",
+     "name": "Charts counted in the open",
+     "does": "See what is most played and most bought, by genre and country, counted by a published method that leaves out fake plays.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A4-F5-P1",
+       "name": "Charts",
+       "what": "Weekly charts by plays, by purchases and by number of listeners, per genre and country, from plays that passed the fake-play checks.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A16-F5-P1",
+        "MUS-A11-F5-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A4-F5-P2",
+       "name": "How charts are counted",
+       "what": "The counting rule, and how many plays were left out as fake, published every week.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MUS-A4-F5-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A4-F5-P3",
+       "name": "Chart screens",
+       "what": "Charts by genre and country, with the week's movers and the counting rule one tap away.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MUS-A4-F5-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A4-F6",
+     "name": "Radio from a song",
+     "does": "Start an endless mix from a song, an artist or a genre, built by a published rule.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A4-F6-P1",
+       "name": "Radio",
+       "what": "A queue that keeps filling by a published rule from similar listeners' plays and shared genres, respecting Human, AI or both.",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A4-F4-P1",
+        "MUS-A2-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A4-F7",
+     "name": "Playlists by people",
+     "does": "Browse playlists made by members, artists and music writers, each signed by its maker.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A4-F7-P1",
+       "name": "People's playlists to browse",
+       "what": "Public playlists by genre and mood, made by people, never paid for, each showing who made it.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A3-F2-P1",
+        "MUS-A3-F2-P3"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A4-F8",
+     "name": "Reviews and music writing",
+     "does": "Read reviews and interviews by members and music writers, with the music playing alongside.",
+     "priority": "later",
+     "parts": [
+      {
+       "id": "MUS-A4-F8-P1",
+       "name": "Reviews and articles",
+       "what": "Long posts with players inside, written by members and labelled when paid for.",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A16-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A4-F9",
+     "name": "Recognise a song playing nearby",
+     "does": "Hold up your phone to find a song playing in a cafe or on the radio.",
+     "priority": "later",
+     "parts": [
+      {
+       "id": "MUS-A4-F9-P1",
+       "name": "Song recognition",
+       "what": "Matches a few seconds recorded on the phone against the catalogue's fingerprints (MUS-A11-F1-P2), using only a method the patent check cleared.",
+       "kind": "library",
+       "size": "large",
+       "depends_on": [
+        "MUS-A11-F1-P2",
+        "MUS-A11-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MUS-A5",
+   "name": "Human and AI sections",
+   "summary": "The catalogue has a Human section and an AI section. Artists declare AI use on every track, AI agent accounts are labelled and publish only in the AI section, uploads are checked for content credentials and AI-detection signals as hints only, an AI copy of a real singer's voice needs that singer's consent, listeners choose Human, AI or both, and wrong placements are fixed in the open.",
+   "features": [
+    {
+     "id": "MUS-A5-F1",
+     "name": "Declare AI use on every track",
+     "does": "Say for every track whether AI was used and how: none, AI-assisted or AI-made, with which parts and which tools.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A5-F1-P1",
+       "name": "AI-use field",
+       "what": "None, AI-assisted or AI-made for each track, with the parts that used AI (music, vocals, lyrics, artwork, mixing or mastering) and an optional note on tools.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MUS-A6-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A5-F1-P2",
+       "name": "Declaration step",
+       "what": "The upload asks every time, with the artist's usual answers filled in, and is never skipped.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MUS-A5-F1-P1",
+        "MUS-A6-F1-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A5-F1-P3",
+       "name": "Where the line falls",
+       "what": "Published examples of AI-assisted and AI-made, such as an AI mastering tool or a generated drum pattern against a fully generated song, voted on by artists.",
+       "kind": "legal",
+       "size": "small",
+       "depends_on": [
+        "MUS-A14-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A5-F2",
+     "name": "Listen to Human, AI or both",
+     "does": "Choose the Human section, the AI section or both, everywhere you browse, and change it any time.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A5-F2-P1",
+       "name": "Section filter",
+       "what": "Every list, search, chart, radio and suggestion filters by section on the server.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A5-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A5-F2-P2",
+       "name": "Section choice",
+       "what": "A clear Human, AI or Both switch, chosen at sign-up and changeable any time, the same on every device (KIT-A20-F5-P2).",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MUS-A5-F2-P1",
+        "KIT-A20-F5-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A5-F2-P3",
+       "name": "Mixed playlists",
+       "what": "A playlist with tracks from both sections plays only the section the listener chose, and says how many tracks it skipped.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A5-F2-P1",
+        "MUS-A3-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A5-F3",
+     "name": "Labelled AI agents",
+     "does": "Know when an account is an AI agent, and who is responsible for it.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A5-F3-P1",
+       "name": "Agent accounts",
+       "what": "Accounts run by AI agents carry a label and the person or organisation responsible, and publish only in the AI section, using the kit's agent labels (KIT-A17-F9-P1).",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "KIT-A17-F9-P1",
+        "MUS-A1-F4-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A5-F3-P2",
+       "name": "Section follows the answer, not the route",
+       "what": "A track goes to the section its AI-use answer gives, whether it came through the app, the command API, MCP or a distributor feed; an agent's own uploads always go to AI.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A5-F1-P1",
+        "MUS-A5-F3-P1",
+        "MUS-A22-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A5-F4",
+     "name": "Fix wrong sections in the open",
+     "does": "Flag a track in the wrong section; a moderator moves it with the reason in the public log, and the artist can appeal.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A5-F4-P1",
+       "name": "Wrong-section report",
+       "what": "A report type for tracks in the wrong section.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MUS-A14-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A5-F4-P2",
+       "name": "Section move and appeal",
+       "what": "Moderators move a track with a logged reason; the artist can appeal, and repeated false answers follow the published ladder.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A14-F4-P1",
+        "MUS-A14-F5-P1",
+        "MUS-A14-F6-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A5-F5",
+     "name": "Real voices only with consent",
+     "does": "Know an AI copy of a real singer's voice appears only with that singer's consent.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A5-F5-P1",
+       "name": "Voice consent",
+       "what": "An AI track that imitates a real person's voice needs that person's recorded consent; without it, the track comes down when that person or their estate asks, logged in public.",
+       "kind": "legal",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A5-F1-P1",
+        "MUS-A14-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A5-F5-P2",
+       "name": "Voice and likeness law",
+       "what": "Research on rights in a person's voice and likeness in each country, such as passing off, privacy, personality rights and new laws on digital replicas.",
+       "kind": "research",
+       "size": "medium",
+       "depends_on": [],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A5-F6",
+     "name": "Checked, not assumed",
+     "does": "See content credentials when a track carries them, while moderators get detection signals as hints, never verdicts.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A5-F6-P1",
+       "name": "Content credentials reader",
+       "what": "Reads C2PA content credentials in audio files (the c2pa-rs library lists MP3, WAV, FLAC and M4A) and in artwork, with the kit's content credentials (KIT-A27-F8-P6), and shows them on the track.",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A27-F8-P6",
+        "MUS-A16-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A5-F6-P2",
+       "name": "Detection signals research",
+       "what": "Compares open methods for spotting AI-generated audio on accuracy, bias across genres and languages, and licence, for moderator hints only.",
+       "kind": "research",
+       "size": "medium",
+       "depends_on": [],
+       "piece": null
+      },
+      {
+       "id": "MUS-A5-F6-P3",
+       "name": "Signals as hints",
+       "what": "Detection scores reach moderators beside the artist's answer, never move a track by themselves, and are listed in the AI use register (KIT-A17-F10-P1).",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A5-F6-P2",
+        "KIT-A17-F10-P1",
+        "MUS-A14-F7-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A5-F7",
+     "name": "How the AI was trained",
+     "does": "See whether the maker of an AI track says the tools were trained with permission.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A5-F7-P1",
+       "name": "Training declaration",
+       "what": "AI tracks say whether the tools were trained with the rights holders' permission, as the artist declares it; not known is an allowed answer.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MUS-A5-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A5-F8",
+     "name": "Mark your music as human-made",
+     "does": "Attach signed content credentials to music recorded and mixed with Spareware tools.",
+     "priority": "later",
+     "parts": [
+      {
+       "id": "MUS-A5-F8-P1",
+       "name": "Sign your own recordings",
+       "what": "Adds C2PA content credentials when a track is exported from Spareware tools, signed with the co-op's certificate (KIT-A27-F8-P7).",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A27-F8-P6",
+        "KIT-A27-F8-P7",
+        "MUS-A5-F6-P1"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MUS-A6",
+   "name": "Uploading and releasing music",
+   "summary": "Artists upload lossless masters, add the details a release needs, set artwork, credits and lyrics, schedule a release with pre-orders, share private previews, fix mistakes after release and take releases down, from the app, a script or a distributor's feed.",
+   "features": [
+    {
+     "id": "MUS-A6-F1",
+     "name": "Upload a release",
+     "does": "Upload a single, EP or album in lossless quality, with progress that survives a dropped connection.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A6-F1-P1",
+       "name": "Resumable uploads",
+       "what": "Large uploads that pause and resume, on the kit's file uploads (KIT-A15-F7-P1) with an open resumable upload protocol.",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A15-F7-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A6-F1-P2",
+       "name": "Upload screens",
+       "what": "Drag in files, see each one checked, and fill in the release in one guided flow saved as a draft.",
+       "kind": "interface",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A6-F1-P1",
+        "MUS-A6-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A6-F1-P3",
+       "name": "Accepted formats",
+       "what": "Accepts WAV, AIFF and FLAC at CD quality or better, checks for clipping and long silence, and explains any problem in plain words.",
+       "kind": "library",
+       "size": "small",
+       "depends_on": [
+        "MUS-A16-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A6-F2",
+     "name": "Release details",
+     "does": "Add titles, artists, release date, genre, language, an explicit label and the codes the music trade uses.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A6-F2-P1",
+       "name": "Release and track records",
+       "what": "Release, track and version records with titles, main and featured artists, dates, genre, language, explicit flag and identifiers, as operations.",
+       "kind": "data",
+       "size": "medium",
+       "depends_on": [
+        "kit-core",
+        "kit-ops"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A6-F2-P2",
+       "name": "Industry codes",
+       "what": "Takes the ISRC for each recording and the UPC or EAN for each release where the artist has them, and assigns ISRCs from a co-op registrant code where they do not (to be checked with the ISRC agencies).",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A6-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A6-F2-P3",
+       "name": "Explicit and content labels",
+       "what": "Explicit lyrics and other content labels set by the artist, used by listeners' filters and family settings.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MUS-A6-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A6-F3",
+     "name": "Artwork",
+     "does": "Add cover art and see how it looks small and large.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A6-F3-P1",
+       "name": "Cover art",
+       "what": "Square artwork checked for size, with versions for every screen, hidden metadata stripped (KIT-A15-F7-P3) and a check against known illegal images (KIT-A10-F10-P2).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A15-F7-P3",
+        "KIT-A10-F10-P2",
+        "MUS-A6-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A6-F3-P2",
+       "name": "Artwork description",
+       "what": "A text description of the artwork for screen readers, written or approved by the artist.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MUS-A6-F3-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A6-F4",
+     "name": "Credits",
+     "does": "Credit everyone who wrote, played, sang, produced, engineered or mixed each track.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A6-F4-P1",
+       "name": "Credits",
+       "what": "Roles from a published list that follows the music trade's DDEX role names, each linked to an artist page or given as a plain name.",
+       "kind": "data",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A6-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A6-F4-P2",
+       "name": "Invite collaborators",
+       "what": "Collaborators get a link to confirm their credit and, where money is involved, their share (MUS-A7-F3-P1).",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A6-F4-P1",
+        "MUS-A7-F3-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A6-F5",
+     "name": "Schedule a release",
+     "does": "Pick a release day and time, take pre-orders, and choose when previews go live.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A6-F5-P1",
+       "name": "Release scheduler",
+       "what": "Releases go live at a set time in each listener's time zone or at one moment worldwide, on the kit's durable timers (KIT-A15-F14-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "MUS-A6-F2-P1",
+        "KIT-A15-F14-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A6-F5-P2",
+       "name": "Pre-orders",
+       "what": "Buy before release; the download arrives on release day, with a refund if the release is cancelled.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A6-F5-P1",
+        "MUS-A9-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A6-F6",
+     "name": "Share before release",
+     "does": "Send a private link to press, radio and friends before release.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A6-F6-P1",
+       "name": "Private preview links",
+       "what": "Streaming-only links that expire, on the kit's guest access by private link (KIT-A15-F8-P2), each logged with who it was sent to.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A15-F8-P2",
+        "MUS-A16-F3-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A6-F7",
+     "name": "Fix or take down a release",
+     "does": "Correct a typo, replace a file or take a release down, with buyers told what changed.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A6-F7-P1",
+       "name": "Release versions",
+       "what": "Every change is a new version with history (KIT-A15-F3-P1); replacing audio keeps play counts only when the fingerprint shows it is the same recording.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A6-F2-P1",
+        "MUS-A11-F1-P2",
+        "KIT-A15-F3-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A6-F7-P2",
+       "name": "Take down your own music",
+       "what": "Artists take releases down at any time; buyers keep what they bought and are told.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A6-F2-P1",
+        "MUS-A3-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A6-F8",
+     "name": "Deliver from a distributor or a script",
+     "does": "Deliver releases from a distributor in the music trade's standard format, or by script.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A6-F8-P1",
+       "name": "Distributor feed",
+       "what": "Reads releases sent in DDEX's release format (ERN), which distributors use, under DDEX's free implementation licence once its terms for an open-source project are checked.",
+       "kind": "integration",
+       "size": "large",
+       "depends_on": [
+        "MUS-A6-F2-P1",
+        "MUS-A6-F4-P1",
+        "MUS-A7-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A6-F8-P2",
+       "name": "Bulk upload by command",
+       "what": "Upload many releases through the command API, with the same checks as the app.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A22-F1-P1",
+        "MUS-A6-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A6-F9",
+     "name": "Liner notes and extras",
+     "does": "Add liner notes, photos, a booklet and the story behind each song.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A6-F9-P1",
+       "name": "Liner notes and booklets",
+       "what": "Notes and a PDF booklet with each release, shown accessibly with the kit's PDF reader (KIT-A27-F6-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "MUS-A6-F2-P1",
+        "KIT-A27-F6-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A6-F10",
+     "name": "Classical, spoken word and podcasts",
+     "does": "Release classical works, audiobooks, talks and podcasts with the details each needs.",
+     "priority": "later",
+     "parts": [
+      {
+       "id": "MUS-A6-F10-P1",
+       "name": "Classical details",
+       "what": "Composer, work, movement, conductor and ensemble fields, so classical music can be found the way people look for it.",
+       "kind": "data",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A6-F2-P1",
+        "MUS-A6-F4-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A6-F10-P2",
+       "name": "Spoken word and podcasts",
+       "what": "Chapters, speed control and episode feeds, published as open podcast feeds.",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A6-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MUS-A7",
+   "name": "Rights and splits",
+   "summary": "Every track says who owns the recording and who wrote the song, whether the writers belong to a collecting society, whether it is a cover, uses samples or is out of copyright, and how the money is split, with disagreements between collaborators handled fairly.",
+   "features": [
+    {
+     "id": "MUS-A7-F1",
+     "name": "Declare your rights",
+     "does": "Say on every upload that you own or control the recording and the song, or name who does.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A7-F1-P1",
+       "name": "Rights declaration",
+       "what": "For each track: who owns the recording, who wrote the song and in what shares, whether it is original, a cover, uses samples or is out of copyright, and what licence covers each part.",
+       "kind": "data",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A6-F2-P1",
+        "MUS-A6-F4-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A7-F1-P2",
+       "name": "Rights step",
+       "what": "A plain-words step in the upload that asks each question once, says why it is asked, and remembers the answers for next time.",
+       "kind": "interface",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A7-F1-P1",
+        "MUS-A6-F1-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A7-F1-P3",
+       "name": "Artist agreement",
+       "what": "Short terms where the artist confirms the declaration is true, gives Spare Music only the rights it needs to stream and sell, and keeps everything else (KIT-A18-F4-P1).",
+       "kind": "legal",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A18-F4-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A7-F2",
+     "name": "Songwriters and their societies",
+     "does": "Name each songwriter and whether they belong to a collecting society, so their share reaches them.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A7-F2-P1",
+       "name": "Songwriter records",
+       "what": "Songwriters with their collecting society, their writer number with it (the IPI number) and their publisher, if any.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MUS-A7-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A7-F2-P2",
+       "name": "Song codes",
+       "what": "The ISWC code for each song where one exists, used to match songs in reports to societies.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MUS-A7-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A7-F2-P3",
+       "name": "Writers outside any society",
+       "what": "A songwriter who belongs to no society is paid the songwriting share directly, on the same statement as the recording share.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A7-F2-P1",
+        "MUS-A7-F3-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A7-F3",
+     "name": "Split the money",
+     "does": "Agree who gets what share of each track's earnings, and have each person paid directly.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A7-F3-P1",
+       "name": "Split sheets",
+       "what": "Shares of the recording and songwriting earnings per track, agreed by everyone named and changed only when all agree, kept as operations with history.",
+       "kind": "data",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A7-F1-P1",
+        "kit-ops"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A7-F3-P2",
+       "name": "Split payouts",
+       "what": "Each person on a split sheet is paid their share straight from the payout run (KIT-A3-F3-P2), so nobody in the middle holds other people's money.",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A7-F3-P1",
+        "KIT-A3-F3-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A7-F3-P3",
+       "name": "Unconfirmed shares",
+       "what": "A share whose owner has not joined is held for a published time, then handled as money that cannot be paid out under the kit's rules (KIT-A3-F3-P6).",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A7-F3-P2",
+        "KIT-A3-F3-P6"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A7-F4",
+     "name": "Covers",
+     "does": "Release a cover version with the licence its country needs, and the original songwriters paid.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A7-F4-P1",
+       "name": "Cover licensing",
+       "what": "A cover is allowed where Spare Music holds the country's licence for the song (MUS-A8-F1-P1) or the artist uploads proof of a licence; the songwriting share goes to the original writers.",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A7-F1-P1",
+        "MUS-A8-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A7-F4-P2",
+       "name": "Cover law per country",
+       "what": "How covers are licensed for streaming and downloads in each country, such as the United States' compulsory licence for songs, run for digital services by The MLC, and society licences elsewhere.",
+       "kind": "research",
+       "size": "medium",
+       "depends_on": [],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A7-F5",
+     "name": "Samples",
+     "does": "Use a sample only with both owners' agreement, shown in the credits.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A7-F5-P1",
+       "name": "Sample clearance",
+       "what": "A track with a sample names the sampled recording and song, with proof that the recording owner and the song owner agreed, since no country has a compulsory licence for samples (to be confirmed per country).",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A7-F1-P1",
+        "MUS-A6-F4-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A7-F5-P2",
+       "name": "Sample packs and loops",
+       "what": "Loops and samples from packs are declared with the pack's name and licence, checked against its terms.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MUS-A7-F5-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A7-F6",
+     "name": "Out of copyright and free licences",
+     "does": "Release old works out of copyright, or music under a Creative Commons licence, labelled clearly.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A7-F6-P1",
+       "name": "Public domain and Creative Commons",
+       "what": "A song can be marked out of copyright (with the composer's dates) or under a Creative Commons licence, shown on the track, with the recording's own rights still declared.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MUS-A7-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A7-F6-P2",
+       "name": "Copyright terms per country",
+       "what": "How long songs and recordings stay in copyright in each country, so out-of-copyright claims are checked against the right term.",
+       "kind": "research",
+       "size": "small",
+       "depends_on": [],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A7-F7",
+     "name": "Disagreements over rights",
+     "does": "Raise a disagreement over credits, splits or ownership, with only that track's money held until it is settled.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A7-F7-P1",
+       "name": "Rights disputes",
+       "what": "Disputes between collaborators or claimants on the kit's disputes service and evidence store (KIT-A11-F1-P1, KIT-A11-F2-P1), holding that track's earnings, never the artist's whole account.",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A11-F1-P1",
+        "KIT-A11-F2-P1",
+        "MUS-A7-F3-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A7-F7-P2",
+       "name": "Panel decisions",
+       "what": "Unsettled disputes go to a member panel (KIT-A11-F4-P1), or outside to the courts with the evidence pack (KIT-A11-F7-P2).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "MUS-A7-F7-P1",
+        "KIT-A11-F4-P1",
+        "KIT-A11-F7-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A7-F8",
+     "name": "Publishers and labels' rights",
+     "does": "Let a publisher or label manage the rights it holds for many artists, with statements for each.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A7-F8-P1",
+       "name": "Publisher accounts",
+       "what": "Publishers hold songwriting shares for the writers they represent, with their own statements, as kit organisations (KIT-A1-F7-P1).",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A7-F2-P1",
+        "KIT-A1-F7-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A7-F9",
+     "name": "DJ mixes and remixes",
+     "does": "Release a DJ mix or a remix only with the rights for every track in it.",
+     "priority": "later",
+     "parts": [
+      {
+       "id": "MUS-A7-F9-P1",
+       "name": "Mixes and remixes",
+       "what": "A mix lists every track used with its codes, and is allowed only where licences or each owner's agreement cover all of them; the earnings are split by a published rule.",
+       "kind": "research",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A7-F1-P1",
+        "MUS-A11-F1-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A7-F10",
+     "name": "Licence a track for film, games and adverts",
+     "does": "Let someone license a track for a film, game or advert, at the rights owners' price.",
+     "priority": "later",
+     "parts": [
+      {
+       "id": "MUS-A7-F10-P1",
+       "name": "Sync licence requests",
+       "what": "Requests to use a track in a video, film or game, with terms set by the rights owners and a short agreement signed online (KIT-A25-F1-P2).",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A7-F1-P1",
+        "KIT-A25-F1-P2"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MUS-A8",
+   "name": "Collecting societies and licences per country",
+   "summary": "Each country gets its own rights pack: which bodies license songs and recordings there, which licences Spare Music holds, how plays and sales are reported and paid, which covers are allowed, and what changed. The songwriting share reaches writers through their societies, with every payment shown.",
+   "features": [
+    {
+     "id": "MUS-A8-F1",
+     "name": "Licences held in each country",
+     "does": "Know which licences Spare Music holds in each country, and what they allow.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A8-F1-P1",
+       "name": "Rights packs per country",
+       "what": "For each country: the bodies that license songs and recordings, the licences held, their terms, rates and reporting rules, in the format of the kit's country packs (KIT-A19-F6-P1).",
+       "kind": "data",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A19-F6-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A8-F1-P2",
+       "name": "Licensing research per country",
+       "what": "For each launch country: which licences an at-cost service for independent artists needs, what they cost, and how members' own songs are licensed where societies take an assignment of their rights (APRA AMCOS, PRS, SOCAN and GEMA do; the United States societies license without exclusivity). Needs a lawyer's view.",
+       "kind": "research",
+       "size": "large",
+       "depends_on": [],
+       "piece": null
+      },
+      {
+       "id": "MUS-A8-F1-P3",
+       "name": "Licences page",
+       "what": "A public page of the licences held in each country, their dates and their cost, beside the cost ledger.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MUS-A8-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A8-F2",
+     "name": "Songwriters paid through their societies",
+     "does": "Have the songwriting share reach writers through their societies, with every payment shown.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A8-F2-P1",
+       "name": "Usage reports",
+       "what": "Reports of plays and sales per song to each society, in DDEX's sales report format (DSR) where the society takes it, checked against each society's rules.",
+       "kind": "service",
+       "size": "large",
+       "depends_on": [
+        "MUS-A16-F5-P1",
+        "MUS-A16-F5-P3",
+        "MUS-A7-F2-P1",
+        "MUS-A7-F2-P2",
+        "MUS-A8-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A8-F2-P2",
+       "name": "Society payments",
+       "what": "Pays each society what its licence asks for each period, shown on the artist's statement as the songwriting share sent through that society (KIT-A3-F3-P2).",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A8-F2-P1",
+        "KIT-A3-F3-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A8-F2-P3",
+       "name": "Society reporting research",
+       "what": "Each society's reporting format, periods, invoices and licences for small services, such as APRA AMCOS's Online Mini Licence and PRS for Music's licences for small online services.",
+       "kind": "research",
+       "size": "medium",
+       "depends_on": [],
+       "piece": null
+      },
+      {
+       "id": "MUS-A8-F2-P4",
+       "name": "Matching songs with societies",
+       "what": "Matches songs to each society's records by ISWC, writer numbers and titles, and lists unmatched songs for the writer to fix.",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A7-F2-P2",
+        "MUS-A8-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A8-F3",
+     "name": "Licence costs in the open",
+     "does": "See what each licence costs and who carries it, as lines on the open cost ledger.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A8-F3-P1",
+       "name": "Licence lines on the ledger",
+       "what": "What each society licence costs per period, how it is worked out and which plays it covers, as published lines on the open cost ledger (KIT-A13-F1-P2).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A13-F1-P2",
+        "MUS-A8-F2-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A8-F3-P2",
+       "name": "Who carries a licence cost",
+       "what": "A published rule that a licence's cost is carried by the plays and sales of the songs it covers, not by artists who own all their rights and belong to no society.",
+       "kind": "legal",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A8-F3-P1",
+        "MUS-A8-F1-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A8-F4",
+     "name": "Only where licensed",
+     "does": "Play and sell a song only in countries where it is licensed, and be told why if it is not.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A8-F4-P1",
+       "name": "Where each track can play",
+       "what": "Each track plays and sells only where its rights allow, from the rights declaration and the country's pack; listeners see a plain reason when something is not available.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A7-F1-P1",
+        "MUS-A8-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A8-F5",
+     "name": "Label catalogues on at-cost terms",
+     "does": "Let labels license whole catalogues to Spare Music on its at-cost terms.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A8-F5-P1",
+       "name": "Standard label licence",
+       "what": "One at-cost licence a label can sign for its catalogue, with no advances or minimum payments, published in full.",
+       "kind": "legal",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A7-F1-P3",
+        "MUS-A7-F8-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A8-F6",
+     "name": "Told when the rules change",
+     "does": "Be told when a country's rules for music change, and what it means for your music.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A8-F6-P1",
+       "name": "Law and licence changes",
+       "what": "Rights packs record each change with its date, and the artists and listeners affected are told through co-op announcements (KIT-A8-F8-P1).",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A8-F1-P1",
+        "KIT-A8-F8-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A8-F7",
+     "name": "Radio-style stations",
+     "does": "Listen to stations that play like radio, under the licences radio-style services use.",
+     "priority": "later",
+     "parts": [
+      {
+       "id": "MUS-A8-F7-P1",
+       "name": "Licences for radio-style play",
+       "what": "Which licences cover radio-style play in each country, such as SoundExchange's for non-interactive streams in the United States, if members want stations.",
+       "kind": "research",
+       "size": "medium",
+       "depends_on": [],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MUS-A9",
+   "name": "Paying for music",
+   "summary": "Each artist chooses how their music is sold: free, buy to keep, pay what you like, part of a listening pass if members choose one, or stream to own. Listeners see the price, the running costs and what reaches the artist before they pay, and can support artists directly.",
+   "features": [
+    {
+     "id": "MUS-A9-F1",
+     "name": "Artists choose how they sell",
+     "does": "Set for each release whether it is free, buy to keep, pay what you like, in the listening pass or stream to own.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A9-F1-P1",
+       "name": "Pricing choices",
+       "what": "The ways a release can be sold, with prices in the artist's currency (KIT-A3-F1-P4) and the lowest pay-what-you-like price, set per release and per track.",
+       "kind": "data",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A6-F2-P1",
+        "KIT-A3-F1-P4"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A9-F1-P2",
+       "name": "Pricing step",
+       "what": "A step in the upload that shows, for each choice, what a listener pays, the running costs and what reaches the artist.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MUS-A9-F1-P1",
+        "MUS-A9-F3-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A9-F2",
+     "name": "Buy music to keep",
+     "does": "Buy a track or album and download it in the format you want, yours to keep with no lock.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A9-F2-P1",
+       "name": "Buy to keep",
+       "what": "Checkout on the kit's payments (KIT-A3-F1-P3) with a receipt (KIT-A3-F7-P1), adding the release to the buyer's library for good.",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A3-F1-P3",
+        "KIT-A3-F7-P1",
+        "MUS-A9-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A9-F2-P2",
+       "name": "Download formats",
+       "what": "Downloads in FLAC, Opus, MP3 or other formats the codec study clears (KIT-A27-F8-P1), with tags, artwork and lyrics inside.",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A16-F3-P1",
+        "KIT-A27-F8-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A9-F2-P3",
+       "name": "Pay what you like",
+       "what": "Pay more than the lowest price, or nothing for a free release, with what the artist receives shown as you type.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MUS-A9-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A9-F3",
+     "name": "See where the money goes",
+     "does": "Before paying, see the running costs and what the artist gets.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A9-F3-P1",
+       "name": "At-cost fee on music",
+       "what": "Works out the running cost of each sale and stream from the open cost ledger, with the kit's fee calculator and fee breakdown (KIT-A3-F4-P1, KIT-A3-F4-P2); nothing is added on top.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A3-F4-P1",
+        "KIT-A3-F4-P2",
+        "svc-ledger"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A9-F3-P2",
+       "name": "Money breakdown",
+       "what": "Every price shows the card fee, delivery and storage, any songwriting share sent to a society, any tax, and what the artist gets.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MUS-A9-F3-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A9-F4",
+     "name": "Support an artist directly",
+     "does": "Tip an artist or support them monthly, with all of it reaching them.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A9-F4-P1",
+       "name": "Tips",
+       "what": "Tips on the kit's tips (KIT-A3-F6-P1): the whole tip reaches the artist, and the card cost is carried as a running cost on the ledger.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A3-F6-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A9-F4-P2",
+       "name": "Monthly support",
+       "what": "Monthly support at amounts the artist sets, on the kit's regular payments (KIT-A3-F12-P1), with extras such as early releases and supporter-only tracks.",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A3-F12-P1",
+        "MUS-A1-F4-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A9-F4-P3",
+       "name": "Fair support terms",
+       "what": "Cancel in one step, notice before any price change, and the refunds consumer law gives in each country (KIT-A18-F8-P1).",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A9-F4-P2",
+        "KIT-A18-F8-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A9-F5",
+     "name": "The listening pass",
+     "does": "Pay one monthly amount to stream everything in the pass, if members choose to offer one.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A9-F5-P1",
+       "name": "Pass decision",
+       "what": "A decision note comparing no pass, a pass shared by each listener's own plays and a pooled pass, on what artists earn, fake-play risk, licence cost and running cost, for the members' vote.",
+       "kind": "research",
+       "size": "medium",
+       "depends_on": [],
+       "piece": null
+      },
+      {
+       "id": "MUS-A9-F5-P2",
+       "name": "Listening pass",
+       "what": "A monthly pass on the kit's regular payments (KIT-A3-F12-P1), with an optional monthly cap (KIT-A3-F12-P2); its price is running costs plus the amount members vote goes to artists.",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A3-F12-P1",
+        "KIT-A3-F12-P2",
+        "MUS-A9-F5-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A9-F5-P3",
+       "name": "How the pass is shared out",
+       "what": "Shares each listener's pass among the artists that listener played, or pools every pass by share of all plays, whichever members choose; both are built so the vote can pick.",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A9-F5-P2",
+        "MUS-A16-F5-P1",
+        "MUS-A11-F5-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A9-F5-P4",
+       "name": "Where your pass went",
+       "what": "Each month, see which artists your pass paid and how much.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MUS-A9-F5-P3"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A9-F5-P5",
+       "name": "Pass price rule",
+       "what": "How the pass price is set from running costs and the amount members vote goes to artists, published with every change.",
+       "kind": "legal",
+       "size": "small",
+       "depends_on": [
+        "MUS-A9-F5-P2",
+        "MUS-A21-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A9-F6",
+     "name": "Free listening",
+     "does": "Listen to free releases and previews at no charge, with their running costs covered in the open.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A9-F6-P1",
+       "name": "Free streams",
+       "what": "Free releases and previews play for everyone; their delivery cost is a ledger line covered by a rule members vote on, such as a free allowance (KIT-A13-F3-P7).",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A16-F3-P2",
+        "KIT-A13-F3-P7"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A9-F6-P2",
+       "name": "Who covers free listening",
+       "what": "A published rule, set by vote, for how the delivery cost of free listening is shared, such as a small part of every sale's running cost.",
+       "kind": "legal",
+       "size": "small",
+       "depends_on": [
+        "MUS-A9-F6-P1",
+        "MUS-A21-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A9-F7",
+     "name": "Pay on any device",
+     "does": "Buy and pay in a way each app store allows, so artists keep everything except running costs on phones too.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A9-F7-P1",
+       "name": "App store rules for music",
+       "what": "When Apple and Google require their own payment, and their cut, for music sales, passes and tips, and where linking to the web is allowed, following the kit's app store rules (KIT-A20-F8-P1).",
+       "kind": "legal",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A20-F8-P1"
+       ],
+       "piece": "K04"
+      },
+      {
+       "id": "MUS-A9-F7-P2",
+       "name": "Purchase plan per store",
+       "what": "Buy on the web, link out where allowed, or sign in to music bought elsewhere, so a store's cut is never hidden in an artist's price.",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A9-F7-P1",
+        "MUS-A9-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A9-F8",
+     "name": "Refunds",
+     "does": "Get a refund on a mistaken purchase or a broken file, by published rules.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A9-F8-P1",
+       "name": "Refunds and disputes",
+       "what": "Refunds, card disputes and who carries a loss on the kit's rules (KIT-A3-F5-P1, KIT-A3-F5-P2, KIT-A3-F16-P1), with a published rule for music already downloaded.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A3-F5-P1",
+        "KIT-A3-F5-P2",
+        "KIT-A3-F16-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A9-F9",
+     "name": "Stream to own",
+     "does": "Pay a little for each play until you own the track, if the artist chooses it.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A9-F9-P1",
+       "name": "Stream to own",
+       "what": "Each play costs a little more until the listener has paid the track's price and owns it, billed monthly after use so the co-op never holds a prepaid balance (KIT-A3-F12-P2); the method the Resonate co-op used until it closed in 2024.",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A9-F1-P1",
+        "MUS-A16-F5-P1",
+        "KIT-A3-F12-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A9-F9-P2",
+       "name": "Progress to owning",
+       "what": "Each track shows how close you are to owning it and what you have paid.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MUS-A9-F9-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A9-F10",
+     "name": "Discography bundles",
+     "does": "Buy an artist's whole catalogue, or several releases at once, at a price the artist sets.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A9-F10-P1",
+       "name": "Bundles",
+       "what": "Bundles of releases with their own price set by the artist, with what each release in the bundle earns shown on the statement.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A9-F1-P1",
+        "MUS-A9-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A9-F11",
+     "name": "Download codes",
+     "does": "Hand out codes at shows or with records that unlock a download.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A9-F11-P1",
+       "name": "Download codes",
+       "what": "Single-use codes an artist makes for a release, printable as cards, each redeemed once and logged.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A9-F2-P1",
+        "MUS-A3-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A9-F12",
+     "name": "Gifts",
+     "does": "Give an album or a month of support to someone else.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A9-F12-P1",
+       "name": "Gift a release",
+       "what": "Buy a release or support for someone, who gets a link to claim it.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A9-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A9-F13",
+     "name": "Records, CDs and merch",
+     "does": "Buy records, CDs and merch from the artist, with the download included.",
+     "priority": "later",
+     "parts": [
+      {
+       "id": "MUS-A9-F13-P1",
+       "name": "Physical sales",
+       "what": "Physical items on the kit's marketplace engine (KIT-A5-F1-P1) with stock (KIT-A5-F10-P1), sent by the artist, unlocking the digital album when bought.",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A5-F1-P1",
+        "KIT-A5-F10-P1",
+        "kit-market",
+        "MUS-A9-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A9-F14",
+     "name": "Prices in your own money",
+     "does": "See prices in your own currency, with exchange costs shown.",
+     "priority": "later",
+     "parts": [
+      {
+       "id": "MUS-A9-F14-P1",
+       "name": "Local currency prices",
+       "what": "Prices in the listener's currency on the kit's currencies per country (KIT-A3-F14-P1), with the exchange cost published.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A3-F14-P1",
+        "MUS-A9-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MUS-A10",
+   "name": "Earnings, payouts and tax",
+   "summary": "Artists see what every play and sale earned, with the running costs and any society share shown, get paid on a regular schedule, have tax charged and reported as each country requires, and are protected from fraud.",
+   "features": [
+    {
+     "id": "MUS-A10-F1",
+     "name": "See what you earned",
+     "does": "See earnings per track, release and country, every play and sale accounted for.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A10-F1-P1",
+       "name": "Earnings ledger",
+       "what": "Every sale, pass share and tip, with the running cost and any society share beside it, adding up to the cent (KIT-A3-F9-P1).",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A16-F5-P3",
+        "MUS-A16-F5-P1",
+        "KIT-A3-F9-P1",
+        "MUS-A9-F3-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A10-F1-P2",
+       "name": "Earnings page",
+       "what": "Earnings by day, month, track and country, with running costs and society shares shown, on the kit's earnings page (KIT-A3-F3-P3).",
+       "kind": "interface",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A10-F1-P1",
+        "KIT-A3-F3-P3"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A10-F2",
+     "name": "Get paid out",
+     "does": "Set up payouts once and get paid on a regular schedule.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A10-F2-P1",
+       "name": "Payout set-up",
+       "what": "Payout details on the kit's payouts (KIT-A3-F3-P1), with the identity checks the provider needs (KIT-A2-F1-P2).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A3-F3-P1",
+        "KIT-A2-F1-P2"
+       ],
+       "piece": "K02"
+      },
+      {
+       "id": "MUS-A10-F2-P2",
+       "name": "Payout runs",
+       "what": "Regular payouts through the kit's payout runs (KIT-A3-F3-P2), with failed payouts retried (KIT-A3-F3-P5).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A3-F3-P2",
+        "KIT-A3-F3-P5",
+        "MUS-A10-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A10-F2-P3",
+       "name": "No play minimum",
+       "what": "Every play earns from the first one; small balances are carried forward until they pass the cost of paying them out, a rule shown on the statement.",
+       "kind": "legal",
+       "size": "small",
+       "depends_on": [
+        "MUS-A10-F2-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A10-F3",
+     "name": "Statements",
+     "does": "Download monthly statements that show every line, ready for an accountant.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A10-F3-P1",
+       "name": "Statements",
+       "what": "Monthly and yearly statements in open formats from the kit's statements (KIT-A4-F4-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A4-F4-P1",
+        "MUS-A10-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A10-F4",
+     "name": "Tax on sales in each country",
+     "does": "Know the right tax is charged on every sale and passed on, wherever the buyer is.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A10-F4-P1",
+       "name": "Tax research for music",
+       "what": "For each launch country: who the seller is for downloads, passes and tips (KIT-A3-F1-P5), when a platform must charge GST or VAT on digital services sold through it, and how artists' income is reported. Needs a tax adviser's view.",
+       "kind": "research",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A3-F1-P5"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A10-F4-P2",
+       "name": "Tax on music sales",
+       "what": "Works out and collects GST or VAT where the co-op counts as the seller of digital music, on the kit's tax engine (KIT-A4-F1-P2) and country packs (KIT-A19-F6-P1); the kit's tax rules per country (KIT-A4-F7) are marked later and must move up before sales open in a second country.",
+       "kind": "integration",
+       "size": "large",
+       "depends_on": [
+        "KIT-A4-F1-P2",
+        "KIT-A19-F6-P1",
+        "MUS-A10-F4-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A10-F4-P3",
+       "name": "Income reporting",
+       "what": "Reports artists' income where platform reporting rules require it, with the details collected once (KIT-A4-F3-P1, KIT-A4-F3-P2).",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A4-F3-P1",
+        "KIT-A4-F3-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A10-F5",
+     "name": "Safe from fraud and money laundering",
+     "does": "Know payouts are protected from stolen cards, card testing and money laundering.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A10-F5-P1",
+       "name": "Payment fraud checks",
+       "what": "Card testing, stolen cards used to buy one's own music, and tips used to move money, caught with the kit's fraud screening and published risk rules (KIT-A3-F13-P1, KIT-A3-F13-P2).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A3-F13-P1",
+        "KIT-A3-F13-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A10-F5-P2",
+       "name": "Money laundering and sanctions",
+       "what": "Whether money-laundering rules cover music sales and payouts in each country, under the kit's programme (KIT-A4-F5-P1), with sanctions screening of payouts (KIT-A4-F8-P1).",
+       "kind": "legal",
+       "size": "small",
+       "depends_on": [
+        "KIT-A4-F5-P1",
+        "KIT-A4-F8-P1"
+       ],
+       "piece": "K02"
+      },
+      {
+       "id": "MUS-A10-F5-P3",
+       "name": "First payout holds",
+       "what": "A new artist's first payouts are held for a published time, and negative balances after chargebacks are recovered within the kit's limits (KIT-A3-F16-P2).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A3-F16-P2",
+        "MUS-A10-F2-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A10-F6",
+     "name": "Tax held back for you",
+     "does": "Have tax held back from payouts if you choose.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A10-F6-P1",
+       "name": "Withholding at payout",
+       "what": "Uses the kit's withholding at payout (KIT-A4-F12-P2) for artists who want it.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A4-F12-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A10-F7",
+     "name": "Pay session players from earnings",
+     "does": "Pay a session player or producer a set fee from future earnings.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A10-F7-P1",
+       "name": "Fees from earnings",
+       "what": "A set fee to a collaborator paid from future earnings of a track, shown on both statements until it is paid.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A7-F3-P2"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MUS-A11",
+   "name": "Stopping copies and stolen uploads",
+   "summary": "Uploads are fingerprinted and compared with the catalogue so nobody can upload someone else's music and take its earnings. A match goes to a person, never an automatic strike. Copyright notices are handled on time, impersonators are stopped, fake plays are found and left out, and copy protection follows the members' decision.",
+   "features": [
+    {
+     "id": "MUS-A11-F1",
+     "name": "Stolen uploads caught",
+     "does": "Know that someone uploading your music as theirs is caught before it earns.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A11-F1-P1",
+       "name": "Fingerprint method study",
+       "what": "Compares open audio fingerprinting methods, such as Chromaprint (LGPL-2.1 as a whole) and landmark methods like audfprint (MIT), on accuracy with noise and edits, speed, licence and patents (the first landmark fingerprint patent, US 6,990,453, has expired; later patents need a search), before any code is chosen.",
+       "kind": "research",
+       "size": "medium",
+       "depends_on": [],
+       "piece": null
+      },
+      {
+       "id": "MUS-A11-F1-P2",
+       "name": "Fingerprint index",
+       "what": "Fingerprints every uploaded recording and keeps a searchable index of the whole catalogue.",
+       "kind": "library",
+       "size": "large",
+       "depends_on": [
+        "MUS-A11-F1-P1",
+        "MUS-A16-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A11-F1-P3",
+       "name": "Upload check",
+       "what": "Each new upload is compared with the index; a close match to someone else's recording holds the release for review before it goes live.",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A11-F1-P2",
+        "MUS-A6-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A11-F1-P4",
+       "name": "Matches reviewed by people",
+       "what": "A trained moderator compares a held match with both rights declarations; the uploader can show a licence, and nothing becomes a strike without a person's decision.",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A11-F1-P3",
+        "MUS-A14-F7-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A11-F2",
+     "name": "Protect your catalogue",
+     "does": "Add your recordings to the reference list so copies are caught, including ones uploaded before you joined.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A11-F2-P1",
+       "name": "Reference recordings",
+       "what": "Verified artists and labels add reference fingerprints for their recordings, including music not released on Spare Music, without uploading the audio.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A11-F1-P2",
+        "MUS-A1-F5-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A11-F2-P2",
+       "name": "Check what is already up",
+       "what": "New references are compared with the existing catalogue, and matches go to review.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A11-F2-P1",
+        "MUS-A11-F1-P4"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A11-F3",
+     "name": "Copyright notices",
+     "does": "Send a copyright notice about a track, answer one with a counter-notice, and see the outcome.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A11-F3-P1",
+       "name": "Notice and counter-notice",
+       "what": "Notice and counter-notice forms on the kit's notices and deadlines (KIT-A10-F21-P2, KIT-A10-F9-P2), meeting each country's rules for hosts (KIT-A10-F21-P1), usable without an account (KIT-A10-F3-P3).",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A10-F21-P1",
+        "KIT-A10-F21-P2",
+        "KIT-A10-F9-P2",
+        "KIT-A10-F3-P3"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A11-F3-P2",
+       "name": "Money held during a claim",
+       "what": "While a claim is open, that track's earnings are held, then paid to whoever the outcome favours, never kept by the co-op.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A11-F3-P1",
+        "MUS-A10-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A11-F3-P3",
+       "name": "Repeat infringer policy",
+       "what": "A published policy for accounts with repeated upheld copyright notices, on the enforcement ladder.",
+       "kind": "legal",
+       "size": "small",
+       "depends_on": [
+        "MUS-A14-F2-P1",
+        "MUS-A14-F6-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A11-F3-P4",
+       "name": "Host duties per country",
+       "what": "What each country asks of a music host: notice and takedown, Canada's notice and notice, Australia's safe harbour that does not cover commercial platforms (to be checked), and the EU's duties for content-sharing services to try to get licences and to keep notified works off.",
+       "kind": "research",
+       "size": "large",
+       "depends_on": [],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A11-F4",
+     "name": "Stop impersonators",
+     "does": "Know nobody can release music as you or put a fake release on your page.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A11-F4-P1",
+       "name": "Impersonation checks",
+       "what": "Releases credited to a verified artist need that artist's approval; look-alike names and artwork are flagged for review.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A1-F5-P1",
+        "MUS-A6-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A11-F4-P2",
+       "name": "Releases on the wrong page",
+       "what": "Artists report a release put on their page by someone else, and it comes off the page while it is reviewed.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A11-F4-P1",
+        "MUS-A14-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A11-F5",
+     "name": "Fake plays left out",
+     "does": "Know plays from bots and play farms are found, left out of charts and payouts, and logged.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A11-F5-P1",
+       "name": "Fake play detection",
+       "what": "Published signals such as new accounts playing in loops, repeated short plays and play farms, with the details that would help fraudsters kept back (svc-trust).",
+       "kind": "service",
+       "size": "large",
+       "depends_on": [
+        "MUS-A16-F5-P1",
+        "svc-trust",
+        "MUS-A11-F5-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A11-F5-P2",
+       "name": "Fake play research",
+       "what": "Proven ways to find artificial plays, from published research and the rules other services publish, and what can be shown without helping fraudsters.",
+       "kind": "research",
+       "size": "medium",
+       "depends_on": [],
+       "piece": null
+      },
+      {
+       "id": "MUS-A11-F5-P3",
+       "name": "What happens to fake plays",
+       "what": "Fake plays earn nothing and count for nothing; the money stays with the listener's share or the pool, never the co-op, and repeat offenders follow the ladder.",
+       "kind": "legal",
+       "size": "small",
+       "depends_on": [
+        "MUS-A11-F5-P1",
+        "MUS-A14-F6-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A11-F6",
+     "name": "Copy protection decision",
+     "does": "Know how streamed music is protected, decided by members with the trade-offs shown.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A11-F6-P1",
+       "name": "Copy protection decision note",
+       "what": "Compares closed playback locks (DRM, each needing an agreement with the company that owns it), a hidden watermark in each copy, and no lock, on what each stops, cost, licence and fairness to listeners.",
+       "kind": "research",
+       "size": "medium",
+       "depends_on": [],
+       "piece": null
+      },
+      {
+       "id": "MUS-A11-F6-P2",
+       "name": "Offline copies kept in the app",
+       "what": "Streamed music saved for offline is kept encrypted in the app's own storage, if the decision picks it; bought music stays the buyer's to copy.",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A11-F6-P1",
+        "MUS-A2-F6-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A11-F7",
+     "name": "Watermarks in each copy",
+     "does": "Have each download or private preview carry a hidden mark, so a leaked copy leads back to its account, if members choose it.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A11-F7-P1",
+       "name": "Watermark study",
+       "what": "Compares open audio watermarking methods, such as AudioSeal (MIT), on how well marks survive re-recording and compression, sound quality, licence and patents.",
+       "kind": "research",
+       "size": "medium",
+       "depends_on": [],
+       "piece": null
+      },
+      {
+       "id": "MUS-A11-F7-P2",
+       "name": "Per-copy watermark",
+       "what": "A hidden mark in each copy, if the decision picks it, using an openly licensed method cleared for patents.",
+       "kind": "library",
+       "size": "large",
+       "depends_on": [
+        "MUS-A11-F7-P1",
+        "MUS-A11-F6-P1",
+        "MUS-A16-F3-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A11-F8",
+     "name": "Find copies elsewhere",
+     "does": "Find your music uploaded on other sites, if you choose, so you can send notices yourself.",
+     "priority": "later",
+     "parts": [
+      {
+       "id": "MUS-A11-F8-P1",
+       "name": "Copies on other sites",
+       "what": "Looks for a recording's fingerprint on sites whose terms allow it, and gives the artist the evidence to send their own notice.",
+       "kind": "research",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A11-F1-P2"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MUS-A12",
+   "name": "Artists and fans together",
+   "summary": "Following artists, artist posts and news, shows and tour dates, supporter extras, a mailing list the artist owns, sharing music anywhere with no tracking, an artist's own site, and messages between artists and fans.",
+   "features": [
+    {
+     "id": "MUS-A12-F1",
+     "name": "Follow artists",
+     "does": "Follow an artist and hear about every release, show and post, in time order.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A12-F1-P1",
+       "name": "Follow",
+       "what": "Follow artists and labels; who you follow is private unless you show it.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A1-F4-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A12-F1-P2",
+       "name": "Release alerts",
+       "what": "New releases and shows from followed artists through the kit's notifications, as the listener chooses (KIT-A8-F3-P2, KIT-A8-F5-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A8-F3-P2",
+        "KIT-A8-F5-P1",
+        "MUS-A12-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A12-F2",
+     "name": "Artist posts",
+     "does": "Read news, photos and notes from artists you follow, and reply where they allow it.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A12-F2-P1",
+       "name": "Artist posts",
+       "what": "Short posts with photos and audio clips on the artist page and in followers' release feed, with comments if the artist turns them on (KIT-A8-F12-P1).",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A1-F4-P1",
+        "KIT-A8-F12-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A12-F3",
+     "name": "A mailing list the artist owns",
+     "does": "Email fans and buyers who agreed to hear from you, and take the list with you.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A12-F3-P1",
+       "name": "Fan mailing list",
+       "what": "Buyers and followers who opt in, kept by the artist and exportable any time, sent through the kit's email with consent records (KIT-A8-F4-P1, KIT-A8-F5-P2).",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A8-F4-P1",
+        "KIT-A8-F5-P2",
+        "MUS-A12-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A12-F4",
+     "name": "Share music anywhere",
+     "does": "Share a track, album or playlist as a link that plays in any browser, with no tracking.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A12-F4-P1",
+       "name": "Share links and cards",
+       "what": "Links and preview cards (KIT-A28-F2-P3) that open the web player, without tracking who opened them.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A28-F2-P3",
+        "MUS-A16-F3-P3"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A12-F4-P2",
+       "name": "Embed player",
+       "what": "A small player artists can put on their own site, through the oEmbed standard, with no tracking.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MUS-A16-F3-P3"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A12-F5",
+     "name": "Shows and tour dates",
+     "does": "See an artist's shows near you, with a link to buy tickets.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A12-F5-P1",
+       "name": "Show listings",
+       "what": "Shows with date, place and ticket link, with places from the kit's address search (KIT-A7-F2-P2).",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A1-F4-P1",
+        "KIT-A7-F2-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A12-F6",
+     "name": "Supporter extras",
+     "does": "Get early releases, demos and supporter-only posts from artists you support.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A12-F6-P1",
+       "name": "Supporter-only music and posts",
+       "what": "Releases and posts only an artist's supporters can play or read, delivered with signed links.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A9-F4-P2",
+        "MUS-A12-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A12-F7",
+     "name": "Your own artist site",
+     "does": "Run a simple site on your own web address with your music, shows and shop.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A12-F7-P1",
+       "name": "Artist site",
+       "what": "An artist site on the kit's own-site builder and custom domains (KIT-A28-F4-P1, KIT-A28-F1-P2), with the embed player.",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A28-F4-P1",
+        "KIT-A28-F1-P2",
+        "MUS-A12-F4-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A12-F8",
+     "name": "Messages and listening parties",
+     "does": "Message an artist who allows it, and join an artist's listening party for a new release.",
+     "priority": "later",
+     "parts": [
+      {
+       "id": "MUS-A12-F8-P1",
+       "name": "Artist messages",
+       "what": "Messages on the kit's chat service (KIT-A8-F1-P2), with artists choosing who can write to them.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A8-F1-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A12-F8-P2",
+       "name": "Listening parties",
+       "what": "An artist plays a new release to fans at one time, with chat, in a shared listening room.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A2-F9-P1"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MUS-A13",
+   "name": "Artist studio and stats",
+   "summary": "The artist's own workspace: a dashboard, stats that protect listeners' privacy, every release in one place, counted promotion links, a release planner, and where your music is being played and added.",
+   "features": [
+    {
+     "id": "MUS-A13-F1",
+     "name": "See how your music is doing",
+     "does": "See plays, listeners, buyers, supporters and saves for each track, by day and country.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A13-F1-P1",
+       "name": "Stats",
+       "what": "Counts per track and release by day and country, from plays that passed the fake-play checks, with small numbers hidden so no single listener can be picked out (KIT-A13-F9-P2).",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A16-F5-P1",
+        "MUS-A11-F5-P1",
+        "KIT-A13-F9-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A13-F1-P2",
+       "name": "Stats page",
+       "what": "Charts and tables in the dashboard on the kit's chart engine (KIT-A27-F3-P3), downloadable as CSV.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MUS-A13-F1-P1",
+        "KIT-A27-F3-P3"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A13-F2",
+     "name": "Dashboard",
+     "does": "See earnings, plays, new supporters, payouts and anything that needs you, on one page.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A13-F2-P1",
+       "name": "Artist dashboard",
+       "what": "One page for earnings, plays, held uploads, unconfirmed splits and to-dos, on the kit's seller to-do page (KIT-A5-F23-P2).",
+       "kind": "interface",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A10-F1-P1",
+        "MUS-A13-F1-P1",
+        "KIT-A5-F23-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A13-F3",
+     "name": "Know your supporters",
+     "does": "See who bought your music or supports you, where they chose to share their name, and thank them.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A13-F3-P1",
+       "name": "Supporters list",
+       "what": "Buyers and supporters who agreed to share their name, with what they bought, never their contact details unless they joined the mailing list.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A16-F5-P3",
+        "MUS-A9-F4-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A13-F3-P2",
+       "name": "Thank-you notes",
+       "what": "Send a thank-you note to a buyer or supporter, delivered by the kit's messaging (svc-messaging).",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MUS-A13-F3-P1",
+        "svc-messaging"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A13-F4",
+     "name": "Manage every release",
+     "does": "See every release, draft and scheduled date, and edit any of them.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A13-F4-P1",
+       "name": "Release manager",
+       "what": "Releases and tracks with their state (draft, held, scheduled, live, taken down) and edits for prices and countries in bulk.",
+       "kind": "interface",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A6-F2-P1",
+        "MUS-A9-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A13-F5",
+     "name": "Counted promotion links",
+     "does": "Make a link for a release that shows how many visits and sales it brought, without tracking anyone.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A13-F5-P1",
+       "name": "Counted links",
+       "what": "Links that count the visits and sales they lead to, with the kit's private usage counts (KIT-A22-F8-P1), no cookies and no tracking of people.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A12-F4-P1",
+        "KIT-A22-F8-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A13-F6",
+     "name": "Plan a release",
+     "does": "Plan a release with a checklist and dates.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A13-F6-P1",
+       "name": "Release planner",
+       "what": "Steps from master to release day: artwork, credits, splits, rights, previews and pre-orders, with reminders.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "MUS-A6-F5-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A13-F7",
+     "name": "Who adds your music",
+     "does": "See which public playlists include your tracks.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A13-F7-P1",
+       "name": "Playlist reach",
+       "what": "Public playlists that include a track, with the maker's name.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A3-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A13-F8",
+     "name": "Import from music tools",
+     "does": "Turn a mixed and mastered track from any music tool into a draft release.",
+     "priority": "later",
+     "parts": [
+      {
+       "id": "MUS-A13-F8-P1",
+       "name": "Draft from exported files",
+       "what": "A draft release made from files any audio tool exports, through the command API.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "MUS-A22-F1-P1",
+        "MUS-A6-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MUS-A14",
+   "name": "Moderation, legal duties and transparency",
+   "summary": "Removing only what the law requires, by published rules, in the open: reports from anyone, a rule book linked to each country's law, fast removal of illegal material, a public removal log, statements of reasons and appeals, a published ladder before any ban, elected moderators, spam defences, and police and government requests checked and counted.",
+   "features": [
+    {
+     "id": "MUS-A14-F1",
+     "name": "Report anything",
+     "does": "Report a track, artwork, lyrics, playlist, page or post against a named rule, and hear what happened.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A14-F1-P1",
+       "name": "Report flow",
+       "what": "A short flow on every item on the kit's reports (KIT-A10-F3-P1, KIT-A10-F3-P2): pick the rule, add detail, block too if you want.",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "svc-trust",
+        "KIT-A10-F3-P1",
+        "KIT-A10-F3-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A14-F1-P2",
+       "name": "Reporter updates",
+       "what": "Tells the reporter what was decided, why, and how to appeal.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A14-F1-P1",
+        "svc-messaging"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A14-F2",
+     "name": "Read the rules",
+     "does": "Read the rules in plain words, each linked to the law that requires it.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A14-F2-P1",
+       "name": "Rule book",
+       "what": "Versioned plain-language rules on the kit's rules library (KIT-A10-F5-P1), changed only by vote; the promise to remove only what the law requires is protected (MUS-A21-F1-P3).",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "KIT-A10-F5-P1",
+        "svc-voting",
+        "MUS-A21-F1-P3"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A14-F2-P2",
+       "name": "Rules mapped to each country's law",
+       "what": "For each rule, the law in each country that requires it, kept with the rights packs and country packs.",
+       "kind": "research",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A14-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A14-F3",
+     "name": "Illegal material removed fast",
+     "does": "Know illegal material, such as terrorist recordings, child abuse images in artwork, credible threats and music a court orders down, is removed fast.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A14-F3-P1",
+       "name": "Known material matching",
+       "what": "Artwork and images checked with the kit's known-content matching (KIT-A10-F10-P2), and audio checked against lists from authorised bodies where such lists exist.",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A10-F10-P2",
+        "MUS-A16-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A14-F3-P2",
+       "name": "Legal deadline clock",
+       "what": "A clock for each kind of notice, with on-call cover and alerts before a deadline is missed, on the kit's legal notice handling (KIT-A10-F9-P2) and urgent route (KIT-A21-F3-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A10-F9-P2",
+        "KIT-A21-F3-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A14-F3-P3",
+       "name": "Country-only restriction",
+       "what": "A track that is unlawful in one country is hidden only there, if the demand passes a published test, and the restriction is logged in public.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A8-F4-P1",
+        "MUS-A14-F9-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A14-F3-P4",
+       "name": "Hate lyrics and incitement",
+       "what": "When lyrics cross into illegal hate speech or incitement in each country, so only what the law forbids comes down, and lawful but offensive music stays up with a label if one fits.",
+       "kind": "research",
+       "size": "medium",
+       "depends_on": [],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A14-F4",
+     "name": "See every removal in public",
+     "does": "Browse a public log of every removal, held upload, section move and copyright decision, with the rule and the law behind it.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A14-F4-P1",
+       "name": "Public removal log",
+       "what": "Spare Music's actions in the kit's public removal log (KIT-A10-F7-P1): every takedown, held upload, section move and copyright decision, with its rule and law, never exposing victims.",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A10-F7-P1",
+        "MUS-A14-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A14-F4-P2",
+       "name": "Transparency reports",
+       "what": "Regular counts per rule, matches reviewed, notices received and upheld, and government requests, as open data (KIT-A10-F15-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A10-F15-P1",
+        "MUS-A14-F4-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A14-F5",
+     "name": "Appeal any decision",
+     "does": "Appeal a removal, held upload, section move or strike, first to another moderator, then to a member panel.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A14-F5-P1",
+       "name": "Appeals",
+       "what": "Two-step appeals with deadlines on the kit's appeals and panels (KIT-A11-F5-P1, KIT-A11-F4-P1), with the outcome logged.",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A11-F5-P1",
+        "KIT-A11-F4-P1",
+        "MUS-A14-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A14-F5-P2",
+       "name": "Statement of reasons",
+       "what": "The artist or listener acted on is told the rule, the reason and how to appeal (KIT-A10-F8-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A10-F8-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A14-F6",
+     "name": "Know the steps before a ban",
+     "does": "See a published ladder of warning, suspension and ban, applied the same way to everyone.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A14-F6-P1",
+       "name": "Enforcement ladder",
+       "what": "Published steps for repeated breaches, such as uploading other people's music or false AI-use answers, with when each step expires and how an account is restored.",
+       "kind": "legal",
+       "size": "small",
+       "depends_on": [
+        "MUS-A14-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A14-F6-P2",
+       "name": "Strikes and restoring",
+       "what": "Records each upheld breach as a strike that expires, applies the next step, and restores the account when a ban ends or an appeal wins.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A14-F6-P1",
+        "MUS-A14-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A14-F7",
+     "name": "Elected moderators",
+     "does": "Vote for moderators with fixed terms, and see the tools and limits they work under.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A14-F7-P1",
+       "name": "Moderator elections",
+       "what": "Elections and recall through the kit's elections (KIT-A12-F6-P1), one vote per person.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A12-F6-P1",
+        "svc-voting"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A14-F7-P2",
+       "name": "Moderator workbench",
+       "what": "Queues for reports, held matches and section flags on the kit's moderator tools (KIT-A10-F6-P3), with both recordings side by side for a match.",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A10-F6-P3",
+        "MUS-A14-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A14-F7-P3",
+       "name": "Moderator training and wellbeing",
+       "what": "Training on music rights and the rules (KIT-A25-F2-P1), and care for people who review harmful material (KIT-A10-F6-P4).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A25-F2-P1",
+        "KIT-A10-F6-P4"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A14-F8",
+     "name": "Stop spam and fake artists",
+     "does": "Keep the catalogue free of spam uploads, noise tracks and networks of fake artists.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A14-F8-P1",
+       "name": "Spam uploads",
+       "what": "Limits for new accounts (KIT-A10-F11-P1), and checks for mass uploads of near-identical tracks, silence and noise made only to farm plays.",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A10-F11-P1",
+        "MUS-A11-F1-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A14-F8-P2",
+       "name": "Noise and spam rules",
+       "what": "Published rules on tracks of silence or noise, very short tracks and mass uploads, so each removal names its rule like any other.",
+       "kind": "legal",
+       "size": "small",
+       "depends_on": [
+        "MUS-A14-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A14-F9",
+     "name": "Police and government requests",
+     "does": "Know any request for your data or to remove music is checked against the law and counted in public.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A14-F9-P1",
+       "name": "Request desk",
+       "what": "The kit's published process for police and court requests (KIT-A10-F9-P3), with counts in the transparency report.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A10-F9-P3",
+        "MUS-A14-F4-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A14-F10",
+     "name": "Trusted flaggers and second looks",
+     "does": "Know reports from recognised bodies are seen first, and a sample of decisions is checked again.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A14-F10-P1",
+       "name": "Second review",
+       "what": "A random sample of decisions gets a second review, with agreement rates published, using the kit's decision sampling (KIT-A10-F20-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A10-F20-P1",
+        "MUS-A14-F7-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A14-F10-P2",
+       "name": "Trusted flaggers",
+       "what": "A priority queue for recognised safety and rights bodies, on the kit's trusted flaggers (KIT-A10-F17-P1), which must move up from later for this.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A10-F17-P1",
+        "MUS-A14-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MUS-A15",
+   "name": "Personal controls, young people and wellbeing",
+   "summary": "What each listener decides: hidden artists and tracks, explicit filters and content labels, a private session, notifications, each country's age rules and teen defaults, family settings, and care for your hearing.",
+   "features": [
+    {
+     "id": "MUS-A15-F1",
+     "name": "Hide what you do not want",
+     "does": "Hide an artist or a track, skip explicit lyrics, and filter by content labels.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A15-F1-P1",
+       "name": "Hide and block",
+       "what": "Hide artists and tracks from every list and radio, and block accounts (KIT-A10-F4-P1).",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "KIT-A10-F4-P1",
+        "MUS-A5-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A15-F1-P2",
+       "name": "Explicit filter",
+       "what": "Skips tracks marked explicit, playing a clean version where the artist uploaded one.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A6-F2-P3"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A15-F1-P3",
+       "name": "Content labels your way",
+       "what": "Show, warn or hide by content label, on the kit's labels and filters (KIT-A10-F13-P1, KIT-A10-F13-P2).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A10-F13-P1",
+        "KIT-A10-F13-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A15-F2",
+     "name": "Private listening",
+     "does": "Listen privately so nothing shows on your profile or shapes your suggestions.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A15-F2-P1",
+       "name": "Private session",
+       "what": "A switch that keeps plays off the profile and out of suggestions; they still pay artists.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A16-F5-P1",
+        "MUS-A3-F5-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A15-F3",
+     "name": "Age rules for each country",
+     "does": "Know accounts follow the age rules where you live.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A15-F3-P1",
+       "name": "Age rules",
+       "what": "Minimum ages and teen defaults per country from the country packs (KIT-A19-F6-P1), using the kit's age checks (KIT-A2-F8-P1) without keeping identity documents.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A2-F8-P1",
+        "KIT-A19-F6-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A15-F3-P2",
+       "name": "Teen defaults",
+       "what": "For teens: explicit filter on, no messages from strangers, a private profile and spending limits.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A15-F3-P1",
+        "MUS-A15-F1-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A15-F4",
+     "name": "Choose what reaches you",
+     "does": "Choose which notifications and emails you get.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A15-F4-P1",
+       "name": "Notification settings",
+       "what": "Spare Music's notices on the kit's notification settings and digests (KIT-A8-F5-P1, KIT-A8-F5-P3).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A8-F5-P1",
+        "KIT-A8-F5-P3"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A15-F5",
+     "name": "Family settings",
+     "does": "Link family accounts, set limits and approve children's purchases.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A15-F5-P1",
+       "name": "Family accounts",
+       "what": "The kit's family accounts and purchase approvals (KIT-A1-F16-P1, KIT-A1-F16-P2).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A1-F16-P1",
+        "KIT-A1-F16-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A15-F6",
+     "name": "Care for your hearing",
+     "does": "Get a reminder to rest your ears after long, loud listening.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A15-F6-P1",
+       "name": "Hearing reminder",
+       "what": "An optional reminder after long loud listening on headphones, using the sound levels the device reports, following the World Health Organization's safe listening guidance (to be checked).",
+       "kind": "library",
+       "size": "small",
+       "depends_on": [
+        "MUS-A2-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MUS-A16",
+   "name": "Audio pipeline, storage and delivery",
+   "summary": "Turning an upload into music that plays well anywhere: one catalogue store, checking files, measuring loudness, encoding for streaming and download, storing masters safely, delivering at cost, recording each play once, and deleting for good.",
+   "features": [
+    {
+     "id": "MUS-A16-F1",
+     "name": "One catalogue",
+     "does": "Know every artist, release, track and credit is kept in one consistent catalogue.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A16-F1-P1",
+       "name": "Catalogue service",
+       "what": "Artists, releases, tracks, credits and rights as operations on the kit's operation layer and storage (kit-ops, kit-store), read through the query API.",
+       "kind": "service",
+       "size": "large",
+       "depends_on": [
+        "kit-ops",
+        "kit-store",
+        "MUS-A6-F2-P1",
+        "MUS-A1-F4-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A16-F2",
+     "name": "Uploads checked and prepared",
+     "does": "Know every upload is checked, measured and ready to play within minutes.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A16-F2-P1",
+       "name": "Ingest pipeline",
+       "what": "Decodes the upload (KIT-A27-F8-P2), checks it, finds long silence, and starts loudness measurement, waveforms and fingerprinting, as a job that survives restarts (KIT-A15-F14-P1).",
+       "kind": "service",
+       "size": "large",
+       "depends_on": [
+        "KIT-A27-F8-P2",
+        "MUS-A6-F1-P1",
+        "KIT-A15-F14-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A16-F2-P2",
+       "name": "Loudness measurement",
+       "what": "Loudness and true peak per track and per album by the published ITU-R BS.1770 method and EBU R 128, stored for the player.",
+       "kind": "library",
+       "size": "small",
+       "depends_on": [
+        "MUS-A16-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A16-F2-P3",
+       "name": "Waveforms",
+       "what": "A small waveform for each track for the player, with positions read out for screen readers.",
+       "kind": "library",
+       "size": "small",
+       "depends_on": [
+        "MUS-A16-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A16-F3",
+     "name": "Plays smoothly anywhere",
+     "does": "Hear music start fast and keep playing on slow or patchy connections.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A16-F3-P1",
+       "name": "Encoding",
+       "what": "Encodes each track to Opus (royalty-free, BSD-licensed library) at several bitrates for streaming and keeps FLAC for lossless play and downloads, plus any formats the codec study clears (KIT-A27-F8-P1).",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A27-F8-P1",
+        "KIT-A27-F8-P2",
+        "MUS-A16-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A16-F3-P2",
+       "name": "Streaming delivery",
+       "what": "Plays start from the first chunk and step down in quality when the connection drops, over plain HTTP with signed links that expire.",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A16-F3-P1",
+        "MUS-A16-F4-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A16-F3-P3",
+       "name": "Web player",
+       "what": "Plays in any modern browser with no app, for shared links and embeds.",
+       "kind": "interface",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A16-F3-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A16-F4",
+     "name": "Stored and delivered at cost",
+     "does": "Know storage and delivery cost as little as possible, shown on the ledger.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A16-F4-P1",
+       "name": "Master storage",
+       "what": "Lossless masters kept in two places on the kit's storage at cost (KIT-A15-F7-P2), checked against their checksums on a schedule (KIT-A22-F3-P1).",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A15-F7-P2",
+        "KIT-A22-F3-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A16-F4-P2",
+       "name": "Delivery network",
+       "what": "Delivery through caches near listeners, from the kit's hosting choice (KIT-A22-F4-P2), compared on price per gigabyte.",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A22-F4-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A16-F4-P3",
+       "name": "Music cost lines",
+       "what": "Monthly cost lines for gigabytes stored and delivered, encoding hours, licences and moderation hours, metered per app (KIT-A13-F2-P2).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "svc-ledger",
+        "KIT-A13-F2-P2"
+       ],
+       "piece": "K06"
+      },
+      {
+       "id": "MUS-A16-F4-P4",
+       "name": "Cost of music at scale",
+       "what": "Storage and bandwidth per listener and per artist, compared across co-op hosting, caching partners and peer-assisted delivery.",
+       "kind": "research",
+       "size": "medium",
+       "depends_on": [],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A16-F5",
+     "name": "Each play recorded once",
+     "does": "Know each play and sale is recorded once, the same way, for payouts, charts and stats.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A16-F5-P1",
+       "name": "Play events",
+       "what": "A play counts after a published number of seconds and is recorded once, with only what payouts and fake-play checks need, then reduced to counts after a published time (KIT-A18-F6-P1).",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A16-F3-P2",
+        "kit-ops",
+        "KIT-A18-F6-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A16-F5-P2",
+       "name": "When a play counts",
+       "what": "The published rule for when a play counts, such as after 30 seconds, and how repeats by one listener count, voted on by artists.",
+       "kind": "legal",
+       "size": "small",
+       "depends_on": [
+        "MUS-A16-F5-P1",
+        "MUS-A21-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A16-F5-P3",
+       "name": "Sales records",
+       "what": "Every sale, pass share and tip as one record that earnings, statements and society reports all read.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MUS-A9-F2-P1",
+        "kit-ops"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A16-F6",
+     "name": "Deleted means deleted",
+     "does": "Know music you take down leaves storage and caches on a published timetable.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A16-F6-P1",
+       "name": "Deletion",
+       "what": "Taken-down releases leave caches at once and storage after a short grace period, except copies the law or buyers' downloads need (KIT-A18-F6-P1).",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A16-F4-P1",
+        "MUS-A16-F4-P2",
+        "KIT-A18-F6-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A16-F7",
+     "name": "Details from open music data",
+     "does": "Have releases matched with open music data, so codes and credits stay right.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A16-F7-P1",
+       "name": "Open metadata matching",
+       "what": "Matches releases with MusicBrainz's core data (CC0) to suggest codes and credits the artist confirms, within its published rate limits and commercial terms; its supplementary data (CC BY-NC-SA) is not used.",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A6-F2-P1",
+        "MUS-A6-F2-P2"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MUS-A17",
+   "name": "Open network and moving",
+   "summary": "Spare Music connects outward: anyone can take their bought music and their data with them, artists can take their whole catalogue and fan list, other open servers can follow artists here, existing music players can connect through an open API, and groups can run their own server.",
+   "features": [
+    {
+     "id": "MUS-A17-F1",
+     "name": "Take your music with you",
+     "does": "Download everything you bought, any time, in open formats with no lock.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A17-F1-P1",
+       "name": "Bought music export",
+       "what": "All bought music in FLAC or other cleared formats with full tags and artwork, and playlists as M3U and XSPF, through the kit's data export (KIT-A18-F1-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A18-F1-P1",
+        "MUS-A9-F2-P2",
+        "MUS-A3-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A17-F1-P2",
+       "name": "Artist export",
+       "what": "Artists download their masters, details, credits, splits, statements and fan list in open formats, to move anywhere.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "MUS-A16-F4-P1",
+        "MUS-A7-F3-P1",
+        "MUS-A12-F3-P1",
+        "KIT-A18-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A17-F2",
+     "name": "Learn from open music projects",
+     "does": "Know Spare Music is built on what open projects learned, with every licence checked.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A17-F2-P1",
+       "name": "Study of open music projects",
+       "what": "How Funkwhale, Navidrome, Ampache, MusicBrainz, Mirlo and Resonate are built and where they struggled, reading GPL and AGPL code only to learn, never to copy.",
+       "kind": "research",
+       "size": "large",
+       "depends_on": [],
+       "piece": null
+      },
+      {
+       "id": "MUS-A17-F2-P2",
+       "name": "Licence register",
+       "what": "Spare Music's entries in the one licence register: every open-source library and data set used, its licence and where it came from.",
+       "kind": "legal",
+       "size": "small",
+       "depends_on": [],
+       "piece": "A14"
+      }
+     ]
+    },
+    {
+     "id": "MUS-A17-F3",
+     "name": "Follow across open networks",
+     "does": "Follow Spare Music artists from other open networks, and artists there from here.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A17-F3-P1",
+       "name": "Federation",
+       "what": "Releases and posts published over ActivityPub, the W3C standard Funkwhale uses for music, so other servers can follow artists; designed from the specification, never from Funkwhale's AGPL code (KIT-A1-F9-P1).",
+       "kind": "integration",
+       "size": "large",
+       "depends_on": [
+        "MUS-A6-F2-P1",
+        "MUS-A12-F2-P1",
+        "KIT-A1-F9-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A17-F3-P2",
+       "name": "Rights over the network",
+       "what": "Only release details, previews and links travel to other servers; full audio stays on servers that hold the licences, and AI-use answers travel with each track.",
+       "kind": "legal",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A17-F3-P1",
+        "MUS-A8-F4-P1",
+        "MUS-A5-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A17-F4",
+     "name": "Use other music players",
+     "does": "Use existing music player apps that speak the open OpenSubsonic API.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A17-F4-P1",
+       "name": "Open player API",
+       "what": "An API compatible with the OpenSubsonic specification (Apache-2.0 in its repository; the site's notice to be checked), written from the specification, so existing players can stream bought and saved music.",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A16-F1-P1",
+        "MUS-A16-F3-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A17-F5",
+     "name": "Run your own Spare Music server",
+     "does": "Run a server for a scene, a label or a community, connected to the rest.",
+     "priority": "later",
+     "parts": [
+      {
+       "id": "MUS-A17-F5-P1",
+       "name": "Self-hosting",
+       "what": "Spare Music in the kit's self-host package (KIT-A22-F7-P1), with the licence and tax duties that come with selling music on it (KIT-A22-F7-P4).",
+       "kind": "integration",
+       "size": "large",
+       "depends_on": [
+        "KIT-A22-F7-P1",
+        "KIT-A22-F7-P4",
+        "MUS-A17-F3-P1"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MUS-A18",
+   "name": "Your data and privacy",
+   "summary": "Listening history is private by default, nothing is sold and there are no adverts, members can see, download and delete their data, data stays in the right place, and music is kept out of AI training unless the artist says yes.",
+   "features": [
+    {
+     "id": "MUS-A18-F1",
+     "name": "Download all your data",
+     "does": "Download your account, history, playlists and purchases any time.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A18-F1-P1",
+       "name": "Data export",
+       "what": "Spare Music's data in the kit's data export (KIT-A18-F1-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A18-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A18-F2",
+     "name": "No tracking and no adverts",
+     "does": "Use Spare Music with no adverts and no data sold, now and later.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A18-F2-P1",
+       "name": "No-advert rule",
+       "what": "A protected rule (MUS-A21-F1-P3) against adverts and data sales; an artist's own news to their followers is not an advert.",
+       "kind": "legal",
+       "size": "small",
+       "depends_on": [
+        "MUS-A21-F1-P3"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A18-F2-P2",
+       "name": "Counting without tracking",
+       "what": "Usage counted with the kit's private usage counts (KIT-A22-F8-P1), never per person beyond what payouts need.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A22-F8-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A18-F3",
+     "name": "Your rights under the law",
+     "does": "See, correct and delete your data under your country's privacy law.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A18-F3-P1",
+       "name": "Privacy requests",
+       "what": "The kit's privacy page and request clock (KIT-A18-F3-P1, KIT-A18-F3-P2), with overseas privacy duties met (KIT-A18-F12-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A18-F3-P1",
+        "KIT-A18-F3-P2",
+        "KIT-A18-F12-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A18-F4",
+     "name": "Your music out of AI training",
+     "does": "Know your music is never used to train AI unless you choose to allow it.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A18-F4-P1",
+       "name": "AI training choice",
+       "what": "Artists' music and listeners' history are kept out of AI training by default, with the kit's AI training choice (KIT-A17-F11-P1); the co-op never sells music for training.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A17-F11-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A18-F4-P2",
+       "name": "Limits on bulk copying",
+       "what": "Published limits against bulk downloading of the catalogue, such as for AI training (KIT-A16-F1-P4).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A16-F1-P4",
+        "MUS-A16-F3-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A18-F5",
+     "name": "Data kept in the right place",
+     "does": "Know where your data is stored and who else handles it.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A18-F5-P1",
+       "name": "Processors and location",
+       "what": "The kit's processor list and overseas disclosure checks (KIT-A18-F15-P1, KIT-A18-F15-P2).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A18-F15-P1",
+        "KIT-A18-F15-P2"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MUS-A19",
+   "name": "Apps, devices and offline",
+   "summary": "Spare Music in a browser, on phones and computers, on slow connections, with settings that follow you, a first-run guide, and watches and speakers later.",
+   "features": [
+    {
+     "id": "MUS-A19-F1",
+     "name": "Use it in a browser",
+     "does": "Listen, buy and run an artist page in any modern browser.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A19-F1-P1",
+       "name": "Web app",
+       "what": "The whole app in the browser on the kit's shared components and app frame (KIT-A20-F1-P1, KIT-A20-F1-P2).",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A20-F1-P1",
+        "KIT-A20-F1-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A19-F2",
+     "name": "Phone apps",
+     "does": "Install Spare Music on a phone, with background play and offline music.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A19-F2-P1",
+       "name": "Phone apps",
+       "what": "Phone apps by the kit's chosen approach (KIT-A20-F2-P1, KIT-A20-F2-P2), with background audio, lock screen controls and downloads.",
+       "kind": "integration",
+       "size": "large",
+       "depends_on": [
+        "KIT-A20-F2-P1",
+        "KIT-A20-F2-P2",
+        "MUS-A2-F1-P1"
+       ],
+       "piece": "K04"
+      },
+      {
+       "id": "MUS-A19-F2-P2",
+       "name": "Background play rules",
+       "what": "How each phone platform allows background audio and offline storage for each kind of app, and what that means for the approach.",
+       "kind": "research",
+       "size": "small",
+       "depends_on": [],
+       "piece": "K04"
+      }
+     ]
+    },
+    {
+     "id": "MUS-A19-F3",
+     "name": "Works on slow connections",
+     "does": "Keep listening on a slow or patchy connection.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A19-F3-P1",
+       "name": "Light mode",
+       "what": "Lower quality, smaller artwork and cached lists on slow connections (KIT-A19-F5-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A19-F5-P1",
+        "MUS-A2-F4-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A19-F4",
+     "name": "Settings that follow you",
+     "does": "Have your settings and choices the same on every device.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A19-F4-P1",
+       "name": "Settings",
+       "what": "Settings on the kit's settings framework (KIT-A20-F5-P1, KIT-A20-F5-P2).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A20-F5-P1",
+        "KIT-A20-F5-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A19-F5",
+     "name": "Get started",
+     "does": "Learn the Human and AI choice and how artists are paid on the first day.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A19-F5-P1",
+       "name": "First run",
+       "what": "A short first-run guide (KIT-A20-F6-P1) on the sections, how money reaches artists and how to support them.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A20-F6-P1",
+        "MUS-A5-F2-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A19-F6",
+     "name": "Computer app",
+     "does": "Install Spare Music on a computer, with media keys and big libraries.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A19-F6-P1",
+       "name": "Desktop app",
+       "what": "A desktop app on the kit's desktop shell and installers (KIT-A20-F2-P4, KIT-A20-F2-P5).",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A20-F2-P4",
+        "KIT-A20-F2-P5"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A19-F7",
+     "name": "Watches and smart speakers",
+     "does": "Play on a watch or a smart speaker.",
+     "priority": "later",
+     "parts": [
+      {
+       "id": "MUS-A19-F7-P1",
+       "name": "Watches and speakers",
+       "what": "Watch apps and speaker apps where each maker's terms allow, with offline play on watches.",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "MUS-A2-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MUS-A20",
+   "name": "Accessibility and languages",
+   "summary": "Every screen works with a screen reader and a keyboard, lyrics are there as text, the app speaks your language, text and contrast can change, and dates and money follow your country.",
+   "features": [
+    {
+     "id": "MUS-A20-F1",
+     "name": "Works with screen readers and keyboards",
+     "does": "Use every screen, the player included, with a screen reader or a keyboard.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A20-F1-P1",
+       "name": "Accessible components",
+       "what": "The kit's accessible components and testing (KIT-A19-F2-P1, KIT-A19-F2-P2), with the player's position, queue and waveform read out.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A19-F2-P1",
+        "KIT-A19-F2-P2",
+        "MUS-A2-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A20-F2",
+     "name": "Lyrics as text",
+     "does": "Read the words of songs if you are deaf or hard of hearing.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A20-F2-P1",
+       "name": "Lyrics for access",
+       "what": "Lyrics as accessible text in step with the music, and transcripts for spoken word with the kit's captions (KIT-A19-F4-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "MUS-A2-F5-P1",
+        "KIT-A19-F4-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A20-F3",
+     "name": "Your language",
+     "does": "Use Spare Music in your language, with names in their own scripts.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A20-F3-P1",
+       "name": "Languages",
+       "what": "Interface languages on the kit's translation framework (KIT-A19-F1-P1); artist names and titles kept in their own script with a sort name; right-to-left layout (KIT-A19-F7-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A19-F1-P1",
+        "KIT-A19-F7-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A20-F4",
+     "name": "Comfortable to use",
+     "does": "Make text larger, raise contrast and reduce motion.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A20-F4-P1",
+       "name": "Display settings",
+       "what": "The kit's display settings (KIT-A19-F3-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A19-F3-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A20-F5",
+     "name": "Local formats",
+     "does": "See dates, numbers and money written the way your country writes them.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A20-F5-P1",
+       "name": "Local formats",
+       "what": "The kit's local formats (KIT-A19-F1-P2).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A19-F1-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A20-F6",
+     "name": "Lyrics in your language",
+     "does": "Read a translation of the lyrics, marked as a translation.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A20-F6-P1",
+       "name": "Lyric translations",
+       "what": "Translations from the artist, or machine translations (KIT-A19-F10-P2) marked as such and only where the songwriter allows them.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "MUS-A2-F5-P1",
+        "KIT-A19-F10-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A20-F7",
+     "name": "Sign language versions",
+     "does": "Watch a sign language version of a song where the artist made one.",
+     "priority": "later",
+     "parts": [
+      {
+       "id": "MUS-A20-F7-P1",
+       "name": "Sign language videos",
+       "what": "Artists add a sign language video to a track, shown beside the player.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "MUS-A6-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MUS-A21",
+   "name": "Running it: fees, votes, costs and support",
+   "summary": "Artists vote on Spare Music's fees and rules, major changes go to a vote of members, the running costs are published every month and set the fee, help is easy to find, the servers are run safely, and performance is measured.",
+   "features": [
+    {
+     "id": "MUS-A21-F1",
+     "name": "Artists set the fees and rules",
+     "does": "Propose and vote on Spare Music's fees and rules, as an artist.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A21-F1-P1",
+       "name": "Proposals and votes",
+       "what": "Spare Music proposals and results through the kit's ballots (KIT-A12-F3-P1), applied as operations (KIT-A12-F4-P1), one vote per person.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "svc-voting",
+        "KIT-A12-F3-P1",
+        "KIT-A12-F4-P1"
+       ],
+       "piece": "K01"
+      },
+      {
+       "id": "MUS-A21-F1-P2",
+       "name": "Who votes on what",
+       "what": "Artists vote on Spare Music's fees and rules, listeners have a say on listener matters such as the pass, and major changes go to a vote of members, set in the kit's electorates (KIT-A12-F5-P2).",
+       "kind": "legal",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A12-F5-P2"
+       ],
+       "piece": "K01"
+      },
+      {
+       "id": "MUS-A21-F1-P3",
+       "name": "Protected promises",
+       "what": "Artists keeping everything except running costs, no adverts, no paid placement and removing only what the law requires change only by a vote of members (KIT-A12-F5-P1).",
+       "kind": "legal",
+       "size": "small",
+       "depends_on": [
+        "KIT-A12-F5-P1"
+       ],
+       "piece": "K01"
+      }
+     ]
+    },
+    {
+     "id": "MUS-A21-F2",
+     "name": "See what it costs",
+     "does": "See each month what storage, delivery, licences and moderation cost, and how the fee was set.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A21-F2-P1",
+       "name": "Music on the cost ledger",
+       "what": "Spare Music's monthly costs and fee on the kit's ledger pages and fee explainer (KIT-A13-F1-P3, KIT-A13-F3-P2).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A13-F1-P3",
+        "KIT-A13-F3-P2",
+        "MUS-A16-F4-P3"
+       ],
+       "piece": "K06"
+      },
+      {
+       "id": "MUS-A21-F2-P2",
+       "name": "Setting the fee",
+       "what": "The fee per sale and per stream set from last period's costs on the kit's fee setting and prices by use (KIT-A13-F3-P1, KIT-A13-F3-P6), with any surplus lowering the next period's fee.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A13-F3-P1",
+        "KIT-A13-F3-P6"
+       ],
+       "piece": "K06"
+      }
+     ]
+    },
+    {
+     "id": "MUS-A21-F3",
+     "name": "Get help",
+     "does": "Find answers, ask for help, report a bug and see if something is down.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A21-F3-P1",
+       "name": "Help and support",
+       "what": "The kit's help centre, support cases and status page (KIT-A21-F1-P1, KIT-A21-F2-P1, KIT-A21-F5-P1), with music rights explained in plain words, and the kit's Report a bug button.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A21-F1-P1",
+        "KIT-A21-F2-P1",
+        "KIT-A21-F5-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A21-F4",
+     "name": "Run the servers safely",
+     "does": "Admins run, watch, back up and secure the servers, with every action logged.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A21-F4-P1",
+       "name": "Admin, monitoring and security",
+       "what": "The kit's admin console, monitoring and security reviews (KIT-A22-F6-P1, KIT-A22-F1-P1, KIT-A22-F5-P3).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A22-F6-P1",
+        "KIT-A22-F1-P1",
+        "KIT-A22-F5-P3"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A21-F5",
+     "name": "Legal set-up",
+     "does": "Read plain terms of use and know which legal body runs the service.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A21-F5-P1",
+       "name": "Terms of use",
+       "what": "Plain terms for listeners, and the artist agreement, matching the rules and the co-op's legal entity (KIT-A18-F4-P2).",
+       "kind": "legal",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A18-F4-P2",
+        "MUS-A7-F1-P3"
+       ],
+       "piece": "K01"
+      },
+      {
+       "id": "MUS-A21-F5-P2",
+       "name": "Insurance",
+       "what": "Insurance for copyright and defamation claims over what artists upload, on the kit's co-op insurance (KIT-A14-F17-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A14-F17-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A21-F6",
+     "name": "Measured performance",
+     "does": "Know how fast music starts and pages load, measured and published.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A21-F6-P1",
+       "name": "Performance budgets",
+       "what": "Targets for time to first sound, skip time and page load, measured on real connections in several countries (KIT-A22-F2-P5).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A22-F2-P5"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A21-F7",
+     "name": "Fair storage for big catalogues",
+     "does": "Upload freely, with very large catalogues paying for their storage at cost if artists vote for it.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A21-F7-P1",
+       "name": "Storage allowance",
+       "what": "A free storage allowance with at-cost storage beyond it, if artists vote for it, on the kit's per-account metering (KIT-A13-F2-P3).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A13-F2-P3",
+        "KIT-A15-F7-P2"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MUS-A22",
+   "name": "Headless API, plugins and AI agents",
+   "summary": "Everything a person can do, a script or AI agent can do through the same commands, with agent labels, guards and approvals, actions only people may take, plugins, a developer API, webhooks and a register of where Spare Music uses AI.",
+   "features": [
+    {
+     "id": "MUS-A22-F1",
+     "name": "Everything by command",
+     "does": "Do anything in Spare Music through the same commands the app uses.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A22-F1-P1",
+       "name": "Command set",
+       "what": "Every action (play, buy, upload, declare, split, report, moderate) as a command on the kit's operation layer and command API (KIT-A16-F1-P1).",
+       "kind": "library",
+       "size": "large",
+       "depends_on": [
+        "kit-ops",
+        "KIT-A16-F1-P1",
+        "MUS-A16-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A22-F1-P2",
+       "name": "Query API",
+       "what": "Read the catalogue, library, playlists, stats and statements through one query API that respects every permission.",
+       "kind": "library",
+       "size": "large",
+       "depends_on": [
+        "MUS-A16-F1-P1",
+        "MUS-A22-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A22-F2",
+     "name": "Use your own AI",
+     "does": "Let your own AI assistant build playlists, manage releases or answer fans, within permissions you set.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "MUS-A22-F2-P1",
+       "name": "MCP server",
+       "what": "Spare Music's commands on the kit's MCP server and authorisation (KIT-A17-F1-P1, KIT-A17-F1-P3).",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "kit-mcp",
+        "KIT-A17-F1-P1",
+        "KIT-A17-F1-P3",
+        "MUS-A22-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A22-F2-P2",
+       "name": "Guards and approvals",
+       "what": "Titles, lyrics and posts reach an agent as data, never as instructions (KIT-A17-F5-P1); a person approves purchases, payout and split changes, and releases (KIT-A17-F2-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A17-F5-P1",
+        "KIT-A17-F2-P1",
+        "MUS-A22-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "MUS-A22-F2-P3",
+       "name": "People-only actions",
+       "what": "Votes, appeals, rights declarations and split approvals are made only by a person (KIT-A17-F9-P2).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A17-F9-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A22-F3",
+     "name": "Plugins",
+     "does": "Add visualisers, equalisers, listening loggers and new ways to browse, each showing what it can access.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A22-F3-P1",
+       "name": "Plugin points",
+       "what": "Plugin hooks for the player, library views and artist tools on the kit's plugin host (KIT-A16-F5-P2).",
+       "kind": "library",
+       "size": "large",
+       "depends_on": [
+        "kit-plugin",
+        "KIT-A16-F5-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A22-F4",
+     "name": "Developer API",
+     "does": "Build apps on Spare Music with scoped permissions and good docs.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A22-F4-P1",
+       "name": "Public API",
+       "what": "Sign-in through the kit's provider, scoped tokens, rate limits and versions (KIT-A1-F6-P1, KIT-A16-F1-P2, KIT-A16-F1-P3, KIT-A16-F9-P1).",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "KIT-A1-F6-P1",
+        "KIT-A16-F1-P2",
+        "KIT-A16-F1-P3",
+        "KIT-A16-F9-P1",
+        "MUS-A22-F1-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A22-F5",
+     "name": "See where Spare Music uses AI",
+     "does": "See every place Spare Music uses AI and ask a person to review a decision.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "MUS-A22-F5-P1",
+       "name": "AI use register",
+       "what": "Detection hints, fake-play signals, translations and suggestions in the kit's AI use register (KIT-A17-F10-P1), with review by a person (KIT-A17-F10-P2).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A17-F10-P1",
+        "KIT-A17-F10-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "MUS-A22-F6",
+     "name": "Webhooks",
+     "does": "Get a call to your own server when you make a sale or gain a supporter.",
+     "priority": "later",
+     "parts": [
+      {
+       "id": "MUS-A22-F6-P1",
+       "name": "Webhooks",
+       "what": "Spare Music events on the kit's signed webhooks (KIT-A16-F2-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "KIT-A16-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "assess": [
+  "Would the core features alone make a credible switch for someone leaving Spotify, Apple Music, SoundCloud or Bandcamp, given that the big labels' catalogues will not be there at first?",
+  "Should the first release sell like Bandcamp (buy to keep, pay what you like, free streams) and add the listening pass later, or launch with the pass (MUS-A9-F5)?",
+  "If there is a pass, should each listener's money go only to the artists they played, or be pooled by share of all plays, and how does each choice change the reward for fake plays (MUS-A9-F5-P3, MUS-A11-F5)?",
+  "Does a society member's own upload still need that society's licence in each launch country, what would those licences cost an at-cost service, and is the rule for who carries the cost fair (MUS-A8-F1-P2, MUS-A8-F3-P2)?",
+  "Can Spare Music report plays and sales to each country's societies in their formats without a large staff, and which countries should come first?",
+  "Are covers allowed at launch only where a licence covers them (MUS-A7-F4), and is asking for proof for every sample workable for independent artists?",
+  "Which fingerprinting method is accurate enough, licensed for the core (Chromaprint is LGPL-2.1 as a whole) and clear of patents, and how many held matches can people review each week (MUS-A11-F1)?",
+  "Which copy protection, if any: a closed DRM lock, a watermark in each copy, or none, given that nothing stops someone recording the sound as it plays (MUS-A11-F6, MUS-A11-F7)?",
+  "Does 'remove only what the law requires' hold up for music, where hate lyrics, impersonation and AI copies of real voices sit close to the line (MUS-A14-F3-P4, MUS-A5-F5)?",
+  "Can the Human and AI sections be enforced fairly when AI is used for mastering, drums or backing vocals, and where should AI-assisted end (MUS-A5-F1-P3)?",
+  "Can artists keep everything except running costs on iPhone and Android, given the app stores' payment rules (MUS-A9-F7)?",
+  "How is tax handled when downloads and passes are sold across borders, and which kit parts must move up to core for that, such as tax rules per country (KIT-A4-F7) and currencies per country (KIT-A3-F14)?",
+  "Who votes on what: artists on fees and rules, listeners on the pass, and members on major changes (MUS-A21-F1-P2)?",
+  "What do lossless masters and delivery cost per artist and per listener each month, and who covers free listening (MUS-A16-F4-P4, MUS-A9-F6)?",
+  "Which candidate kit parts should move down from Spare Music so other apps can use them: audio fingerprinting, rights packs, society reporting and split payouts?",
+  "Which parts carry legal risk under 'Built legally, or not at all': fingerprint and watermark patents, the DDEX licence terms, the OpenSubsonic site notice, MusicBrainz's non-commercial supplementary data and AcoustID's non-commercial service?",
+  "Is this map the right size for contributors with spare tokens, and what is the smallest slice worth building and demonstrating first?",
+  "What numbers would prove the demo works, such as time to first sound on a slow phone connection, time from upload to live, and running cost per listener per month?"
+ ]
+}
