@@ -358,7 +358,7 @@ Every extension point has the same four answers: who can add one, where it lives
 6. **Federation of marketplaces.** Self-hosting the apps people work in is clear. Federating marketplaces, where money and licences are involved, needs a legal study (KIT-A22-F7-P2, KIT-A22-F7-P4).
 7. **Formats still to name.** Spare Studio, Social, Music, Movies and Research.
 8. **Workspace glob.** Whether `projects/*/crates/*` works well in a workspace with this layout is untested.
-9. **Review tooling.** CODEOWNERS, branch protection and the planned checks are not yet set up in the repo. Whether the idle-owner rule is wanted is open.
+9. **Review tooling.** A CODEOWNERS file, a pull request template and a sign-off check are in place (2026-10-19). Per-program reviewers are added to CODEOWNERS as maintainers join; making the checks required is an owner decision.
 10. **Splitting tools.** Which tool keeps history when a program moves out is not chosen.
 
 ## Sources
