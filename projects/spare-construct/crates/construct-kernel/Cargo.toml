@@ -1,0 +1,8 @@
+[package]
+name = "construct-kernel"
+version = "0.0.0"
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+kit-core = { path = "../../../kit/crates/kit-core" }

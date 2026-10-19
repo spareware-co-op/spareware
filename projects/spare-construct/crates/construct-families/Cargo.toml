@@ -1,0 +1,11 @@
+[package]
+name = "construct-families"
+version = "0.0.0"
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+construct-model = { path = "../construct-model" }
+construct-kernel = { path = "../construct-kernel" }
+construct-solver = { path = "../construct-solver" }
+construct-regen = { path = "../construct-regen" }

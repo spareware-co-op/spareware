@@ -1,0 +1,8 @@
+[package]
+name = "construct-cli"
+version = "0.0.0"
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+construct-api = { path = "../construct-api" }

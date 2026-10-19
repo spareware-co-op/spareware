@@ -1,8 +1,0 @@
-[package]
-name = "arch-cli"
-version = "0.0.0"
-edition.workspace = true
-publish.workspace = true
-
-[dependencies]
-arch-api = { path = "../arch-api" }

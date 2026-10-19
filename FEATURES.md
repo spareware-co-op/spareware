@@ -11,7 +11,7 @@ Each program has a feature map, read top-down: areas, then what a person can do 
 | Program | Replaces | Areas | Features | Parts | Core parts | Feature map | Demo |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Shared kit and co-op portal, with the shared engines | The parts every platform rebuilds or rents | 28 | 369 | 765 | 656 | [projects/kit/FEATURES.md](projects/kit/FEATURES.md) | [Demo](https://spareware-co-op.github.io/spareware/kit/) |
-| Spare Arch | Revit, and the add-ins people buy for it | 24 | 194 | 639 | 340 | [projects/spare-arch/FEATURES.md](projects/spare-arch/FEATURES.md) | [Demo](https://spareware-co-op.github.io/spareware/spare-arch/) |
+| Spare Construct | Revit, and the add-ins people buy for it | 24 | 194 | 639 | 340 | [projects/spare-construct/FEATURES.md](projects/spare-construct/FEATURES.md) | [Demo](https://spareware-co-op.github.io/spareware/spare-construct/) |
 | Spare Studio (working name) | Adobe's apps | 21 | 202 | 562 | 320 | [projects/spare-studio/FEATURES.md](projects/spare-studio/FEATURES.md) | [Demo](https://spareware-co-op.github.io/spareware/spare-studio/) |
 | Spare Social (working name) | TikTok, YouTube, Instagram and Facebook | 23 | 199 | 525 | 345 | [projects/spare-social/FEATURES.md](projects/spare-social/FEATURES.md) | [Demo](https://spareware-co-op.github.io/spareware/spare-social/) |
 | Spare Office | Microsoft 365 | 21 | 275 | 641 | 416 | [projects/spare-office/FEATURES.md](projects/spare-office/FEATURES.md) | [Demo](https://spareware-co-op.github.io/spareware/spare-office/) |
@@ -31,7 +31,7 @@ Core parts are the parts of core features. The shared kit row includes the share
 
 Each number is how many of that program's parts depend on that kit area, either by part ID or by the crate, service or engine the area builds. A blank means none. The maps were checked on 2026-10-19: every dependency resolves, and no program depends on another program.
 
-| Kit area | Arch | Studio | Social | Office | OS | Ride | Food | Stay | Home | Rent | Work | Market | Programs |
+| Kit area | Construct | Studio | Social | Office | OS | Ride | Food | Stay | Home | Rent | Work | Market | Programs |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | [KIT-A1 Accounts and sign-in](projects/kit/FEATURES.md#kit-a1-accounts-and-sign-in) | 7 | 16 | 25 | 31 | 22 | 16 | 24 | 15 | 15 | 11 | 17 | 17 | 12 |
 | [KIT-A2 Identity, licence and business checks](projects/kit/FEATURES.md#kit-a2-identity-licence-and-business-checks) | 1 | 1 | 9 | 3 | 4 | 20 | 22 | 12 | 16 | 11 | 20 | 11 | 12 |
@@ -77,16 +77,16 @@ A lean for discussion, from what the maps show. The first marketplace is decided
    - **Spare Ride and Spare Food together:** dispatch, live location, drivers and couriers, work-time limits, driving-safe mode and ordering by text or phone.
    - **Spare Work and Spare Market:** the shared service catalogue, category trees, banned and restricted rules, invoices with payment terms, customer lists and own sites.
    - **Spare Rent, Spare Home and Spare Stay, after Spare Work:** the property record, ownership checks, formal notices, viewings and floor plans (KIT-A26). They book Spare Work's pros through the shared catalogue, so Spare Work's catalogue entries come first.
-5. **Design and everyday computing, alongside the marketplaces.** These lean on the kit far less (Arch 19%, Studio 31%, Social 46%, Office 40%, OS 25% of parts), so they can move as soon as the foundations and their engines are ready:
+5. **Design and everyday computing, alongside the marketplaces.** These lean on the kit far less (Construct 19%, Studio 31%, Social 46%, Office 40%, OS 25% of parts), so they can move as soon as the foundations and their engines are ready:
    - **Spare OS can start at once:** it builds on a proven open-source base (piece OS01), and only 25% of its parts touch the kit.
-   - **Spare Studio's first app (piece S08) proves the engines**, then **Spare Arch** builds on the same renderer, 2D drawing, text and PDF, plus chunked storage (KIT-A15-F6) and plugins (KIT-A16-F5).
+   - **Spare Studio's first app (piece S08) proves the engines**, then **Spare Construct** builds on the same renderer, 2D drawing, text and PDF, plus chunked storage (KIT-A15-F6) and plugins (KIT-A16-F5).
    - **Spare Office** follows once text co-editing (piece OF03) and the office formats engine are ready.
    - **Spare Social** follows once engine-media and the safety stack (KIT-A10) are ready, since it hosts members' video and posts at scale and needs reports and moderation from day one.
 
 ## Feature maps and demos
 
 - **Shared kit and co-op portal, with the shared engines:** [feature map](projects/kit/FEATURES.md) · [demo](https://spareware-co-op.github.io/spareware/kit/)
-- **Spare Arch:** [feature map](projects/spare-arch/FEATURES.md) · [demo](https://spareware-co-op.github.io/spareware/spare-arch/)
+- **Spare Construct:** [feature map](projects/spare-construct/FEATURES.md) · [demo](https://spareware-co-op.github.io/spareware/spare-construct/)
 - **Spare Studio (working name):** [feature map](projects/spare-studio/FEATURES.md) · [demo](https://spareware-co-op.github.io/spareware/spare-studio/)
 - **Spare Social (working name):** [feature map](projects/spare-social/FEATURES.md) · [demo](https://spareware-co-op.github.io/spareware/spare-social/)
 - **Spare Office:** [feature map](projects/spare-office/FEATURES.md) · [demo](https://spareware-co-op.github.io/spareware/spare-office/)

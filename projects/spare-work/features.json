@@ -884,7 +884,7 @@
         {
           "id": "WORK-A3-F3",
           "name": "Attach drawings and documents",
-          "does": "A customer can attach plans, Spare Arch drawings, building consent documents and specifications.",
+          "does": "A customer can attach plans, Spare Construct drawings, building consent documents and specifications.",
           "priority": "next",
           "parts": [
             {
@@ -901,8 +901,8 @@
             },
             {
               "id": "WORK-A3-F3-P2",
-              "name": "Spare Arch drawing links",
-              "what": "Links a Spare Arch drawing set through Spare Arch's public command API, never a code dependency or the AI channel.",
+              "name": "Spare Construct drawing links",
+              "what": "Links a Spare Construct drawing set through Spare Construct's public command API, never a code dependency or the AI channel.",
               "kind": "integration",
               "size": "medium",
               "depends_on": [
@@ -2171,13 +2171,13 @@
         {
           "id": "WORK-A7-F7",
           "name": "Price from drawings",
-          "does": "A worker can price straight from quantities in a Spare Arch drawing set attached to the job.",
+          "does": "A worker can price straight from quantities in a Spare Construct drawing set attached to the job.",
           "priority": "later",
           "parts": [
             {
               "id": "WORK-A7-F7-P1",
               "name": "Read quantities",
-              "what": "Reads quantities from attached drawings through Spare Arch's public command API.",
+              "what": "Reads quantities from attached drawings through Spare Construct's public command API.",
               "kind": "integration",
               "size": "large",
               "depends_on": [
@@ -5403,14 +5403,14 @@
         },
         {
           "id": "WORK-A19-F5",
-          "name": "Tender a Spare Arch design",
-          "does": "A designer can send a Spare Arch project out to trades for quotes.",
+          "name": "Tender a Spare Construct design",
+          "does": "A designer can send a Spare Construct project out to trades for quotes.",
           "priority": "later",
           "parts": [
             {
               "id": "WORK-A19-F5-P1",
               "name": "Tender package",
-              "what": "Builds a job with drawings, schedules and quantities from a Spare Arch project through Spare Arch's public command API.",
+              "what": "Builds a job with drawings, schedules and quantities from a Spare Construct project through Spare Construct's public command API.",
               "kind": "integration",
               "size": "large",
               "depends_on": [

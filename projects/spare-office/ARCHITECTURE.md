@@ -29,7 +29,7 @@ Accounts (one login for every app), sync and history (live co-editing and versio
 
 **High level:** one document core shared by Write, Sheets and Slides: styled text, tables, images, comments, track changes and live co-editing.
 
-**Low level:** every edit is an operation (kit-ops), so co-editing, undo and history share one path; text co-editing uses a text CRDT where the server-ordered log isn't enough (see Spare Arch's multi-user section); Sheets needs a formula engine compatible with common spreadsheet functions (piece OF06).
+**Low level:** every edit is an operation (kit-ops), so co-editing, undo and history share one path; text co-editing uses a text CRDT where the server-ordered log isn't enough (see Spare Construct's multi-user section); Sheets needs a formula engine compatible with common spreadsheet functions (piece OF06).
 
 ### File formats
 

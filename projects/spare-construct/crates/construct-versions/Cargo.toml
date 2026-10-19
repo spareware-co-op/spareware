@@ -1,0 +1,10 @@
+[package]
+name = "construct-versions"
+version = "0.0.0"
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+kit-sync = { path = "../../../kit/crates/kit-sync" }
+construct-model = { path = "../construct-model" }
+construct-views = { path = "../construct-views" }

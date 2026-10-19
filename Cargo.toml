@@ -5,7 +5,7 @@ resolver = "3"
 members = [
   "projects/kit/crates/*",
   "projects/engines/crates/*",
-  "projects/spare-arch/crates/*",
+  "projects/spare-construct/crates/*",
   "projects/spare-office/crates/*",
 ]
 
