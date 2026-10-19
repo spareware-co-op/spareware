@@ -85,6 +85,25 @@ The kit is two things: libraries compiled into every app (`crates/`), and servic
 
 **Waits on:** piece K06.
 
+### Bug reports
+
+**High level:** every app has a "Report a bug" button. The report goes straight to an issue in the Spareware repo on GitHub, written so a contributor's AI agent can pick it up with spare tokens and fix it. A person still reviews every fix before it merges, as with all work. The reporter needs no GitHub account and can follow the issue to see when it's fixed.
+
+**Low level:**
+
+- One kit library draws the form in every app: what happened, what you expected, the steps, and an optional screenshot. The app adds its name, version and device itself, and, only if the person agrees, the log and the operations leading up to the problem, with personal data stripped (the same consent and stripping as the opt-in crash reports, KIT-A22-F9-P1).
+- Apps never hold a GitHub key. They send the report to a small kit service, which files the issue through a GitHub App allowed to create issues and nothing else.
+- Each issue is labelled `bug` and with its program, and gets a piece ID, so `tools/piece.py` checks it out like any other piece and two agents never fix the same bug.
+- A report that matches an open bug (the same crash signature or close wording) is added to that issue instead of opening a new one.
+- Reporting is also a command, so AI agents and add-ins report bugs through the same path as people.
+- Security problems never go to a public issue; they are held privately for an owner.
+
+**To be decided:**
+
+- Whether a report becomes a piece straight away, or only after an agent or a person reproduces it.
+- Whether reporting needs a Spareware account (to stop spam) or is open to anyone.
+- Where screenshots and logs live, since they can show private details: on the public issue after stripping, or kept privately and shown only to the agent fixing it.
+
 ## Running it
 
 | Concern | Approach |

@@ -37,6 +37,10 @@ flowchart TB
       MOVIESAPP["`**Spare Movies**
 *replaces Netflix*`"]
     end
+    subgraph Science[Research]
+      RESEARCHAPP["`**Spare Research**
+*free to read and publish research*`"]
+    end
   end
   API["`**One command and query API per app**
 *every change is an operation; AI, plugins and people use the same path*`"]
@@ -56,7 +60,7 @@ flowchart TB
   Products --> API --> Kit --> HOST
 ```
 
-## Four families of product
+## Five families of product
 
 | Family | Products | What they need most |
 | --- | --- | --- |
@@ -64,6 +68,7 @@ flowchart TB
 | Marketplaces | Spare Ride, Food, Stay, Home, Rent, Work, Market | Two-sided matching, payments, trust and safety, phones, real-time location, each industry's rules |
 | Everyday computing | [Spare Office](projects/spare-office/ARCHITECTURE.md), [Spare OS](projects/spare-os/ARCHITECTURE.md) | Open file formats and protocols, live co-editing, a proven Linux base, a painless move from Windows |
 | Social | [Spare Social](projects/spare-social/ARCHITECTURE.md) (working name); [Spare Music](projects/spare-music/ARCHITECTURE.md) and [Spare Movies](projects/spare-movies/ARCHITECTURE.md) (ideas) | Video storage and delivery at cost, feeds people choose, moderation that removes only what the law requires, open social protocols; for music and movies, paying artists fairly and keeping their work from being copied |
+| Research | [Spare Research](projects/spare-research/ARCHITECTURE.md) (idea) | Free reading and publishing, open peer review, permanent links and long-term copies, hosting only papers the authors have the right to share |
 
 Design tools lean on the Rust core pattern mapped in [Spare Construct's ARCHITECTURE.md](projects/spare-construct/ARCHITECTURE.md), and share its renderer, 2D drawing engine and PDF output with Spare Studio. Marketplaces lean on the shared kit. Both use the same command layer, plugins, sync and AI access.
 
@@ -91,6 +96,7 @@ Design tools lean on the Rust core pattern mapped in [Spare Construct's ARCHITEC
 | Open cost ledger | Monthly public record of what each app cost to run and what the fee paid for | All |
 | Sync, history, storage | Operation log, offline work, version history, chunked storage | All; heaviest in Spare Construct |
 | Plugins and MCP server | Sandboxed add-ins and AI access on every app | All |
+| Bug reports | A "Report a bug" button in every app that files a GitHub issue, written so contributors' AI agents can fix it with spare tokens ([kit map](projects/kit/ARCHITECTURE.md#bug-reports)) | All |
 | Marketplace engine | Listings, requests, orders, pricing rules and the at-cost fee, as one shared loop | All marketplaces |
 
 ## The marketplace pattern
