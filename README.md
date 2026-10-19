@@ -52,6 +52,10 @@ flowchart TB
     direction LR
     SOCIAL["`**Spare Social**
 *replaces TikTok, YouTube, Instagram, Facebook*`"]
+    MUSIC["`**Spare Music**
+*replaces Spotify*`"]
+    MOVIES["`**Spare Movies**
+*replaces Netflix*`"]
   end
   subgraph COMPUTE["`**Everyday computing**`"]
     direction LR
@@ -83,6 +87,8 @@ flowchart TB
 | Spare Construct | Revit, and the add-ins people buy for it | Mapping | [Map](projects/spare-construct/ARCHITECTURE.md) · [Work board](projects/spare-construct/STATUS.md) |
 | Spare Studio (working name) | Adobe's apps: Photoshop, Illustrator, InDesign, Premiere, After Effects, Lightroom, Acrobat and more | Mapping | [Map](projects/spare-studio/ARCHITECTURE.md) · [Work board](projects/spare-studio/STATUS.md) |
 | Spare Social (working name) | TikTok, YouTube, Instagram and Facebook, together | Mapping | [Map](projects/spare-social/ARCHITECTURE.md) · [Work board](projects/spare-social/STATUS.md) |
+| Spare Music | Spotify | Idea | [Map](projects/spare-music/ARCHITECTURE.md) · [Work board](projects/spare-music/STATUS.md) |
+| Spare Movies | Netflix | Idea | [Map](projects/spare-movies/ARCHITECTURE.md) · [Work board](projects/spare-movies/STATUS.md) |
 | Spare Office | Microsoft 365: Word, Excel, PowerPoint, Outlook, Teams, OneNote, OneDrive | Mapping | [Map](projects/spare-office/ARCHITECTURE.md) · [Work board](projects/spare-office/STATUS.md) |
 | Spare OS | Paying for Windows | Mapping | [Map](projects/spare-os/ARCHITECTURE.md) · [Work board](projects/spare-os/STATUS.md) |
 | Spare Ride | Uber | Mapping | [Map](projects/spare-ride/ARCHITECTURE.md) · [Work board](projects/spare-ride/STATUS.md) |
