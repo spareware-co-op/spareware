@@ -35,6 +35,14 @@ body:
       description: What you do and what you know that could help (building design, software, a trade, driving, hospitality, law, anything).
     validations:
       required: true
+  - type: input
+    id: profile
+    attributes:
+      label: LinkedIn (or another public profile)
+      description: A link that shows who you are and where you work, such as your LinkedIn. An owner checks every new contributor's background before giving access, to keep the project safe from anyone working against it.
+      placeholder: https://www.linkedin.com/in/your-name
+    validations:
+      required: true
   - type: checkboxes
     id: promises
     attributes:
