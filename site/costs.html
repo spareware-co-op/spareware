@@ -104,6 +104,12 @@ h1 { margin: 0 0 var(--space); font-size: 20px; font-weight: 700; letter-spacing
 
 /* Panels */
 main { padding: calc(var(--space) * 3) 0 calc(var(--space) * 5); }
+.take .who { margin: 0 0 4px; }
+.take .who b { font-size: 1.5em; }
+.take .bar { height: 22px; border-radius: var(--radius); margin: 6px 0 14px; }
+.take .bar.spare { background: var(--app); }
+.take .bar.inc { background: var(--ink-3); opacity: .45; }
+.take .lab { margin: 0; }
 .panel { background: var(--panel); border: 1px solid var(--hairline); border-radius: var(--radius); padding: calc(var(--space) * 2); min-width: 0; }
 .panel-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px var(--space); margin-bottom: calc(var(--space) * 1.5); }
 .panel-head p { color: var(--ink-2); flex: 1 0 100%; }
@@ -256,6 +262,11 @@ details > summary { cursor: pointer; font-weight: 600; margin-top: calc(var(--sp
     </div>
     <input type="range" id="vol" min="2" max="6" step="0.01" value="4" aria-describedby="vol-ticks">
     <div class="ticks" id="vol-ticks" aria-hidden="true"><span><i class="l">100</i><i class="s">100</i></span><span><i class="l">1,000</i><i class="s">1k</i></span><span><i class="l">10,000</i><i class="s">10k</i></span><span><i class="l">100,000</i><i class="s">100k</i></span><span><i class="l">1 million</i><i class="s">1M</i></span></div>
+  </section>
+
+  <section class="panel take" aria-labelledby="take-title" id="take-panel" style="margin-top: calc(var(--space) * 2)">
+    <div class="panel-head"><h2 id="take-title">What the worker takes home</h2><p id="take-sub"></p></div>
+    <div id="take"></div>
   </section>
 
   <div class="grid grid-chart">
@@ -3747,6 +3758,26 @@ details > summary { cursor: pointer; font-weight: 600; margin-top: calc(var(--sp
     } else { pn.hidden = true; }
   }
 
+  /* ---------- What the worker takes home ---------- */
+  var WHO = { ride: "The driver", food: "The restaurant and courier", stay: "The host", home: "The seller", rent: "The landlord", work: "The tradesperson", market: "The seller" };
+  function drawTake(a) {
+    var panel = $("take-panel"), box = $("take");
+    var amt = a.payment.amount_usd;
+    if (!hasPay(a) || !amt || a.kind === "member" || !WHO[a.id]) { panel.hidden = true; return; }
+    panel.hidden = false; panel.setAttribute("data-app", a.id);
+    var fee = total(a, state.vol, "mid"), keep = amt - fee, who = WHO[a.id];
+    $("take-sub").textContent = "On " + exLabel(a).replace(/,$/, "") + ", at " + count(state.vol) + " " + a.volume_label + ". Everything except the small at-cost fee goes to them. Sales tax, where a country charges it, goes to the government.";
+    var h = '<p class="who">' + esc(who) + ' takes home <b>' + money(keep) + '</b> (' + pct(keep, amt) + ')</p>' +
+      '<div class="bar spare" style="width:' + (keep / amt * 100).toFixed(1) + '%"></div>';
+    var inc = a.incumbent;
+    if (inc && inc.cut_pct_low != null && !inc.flat_usd) {
+      var cut = inc.cut_pct_high || inc.cut_pct_low, incKeep = amt * (1 - cut / 100);
+      h += '<p class="lab">With ' + esc(inc.name) + "'s " + cut + '% cut, they would take home <b>' + money(incKeep) + '</b> (' + pct(incKeep, amt) + ')</p>' +
+        '<div class="bar inc" style="width:' + (incKeep / amt * 100).toFixed(1) + '%"></div>';
+    }
+    box.innerHTML = h;
+  }
+
   /* ---------- Comparison ---------- */
   function drawCompare(a) {
     var box = $("cmp-chart"); box.innerHTML = "";
@@ -3859,7 +3890,7 @@ details > summary { cursor: pointer; font-weight: 600; margin-top: calc(var(--sp
     $("vol-num").textContent = count(state.vol);
     $("vol-unit").textContent = a.volume_label;
     $("vol").setAttribute("aria-valuetext", count(state.vol) + " " + a.volume_label);
-    drawFee(a); drawNow(a); drawCompare(a); drawDollars(); buildNotes();
+    drawTake(a); drawFee(a); drawNow(a); drawCompare(a); drawDollars(); buildNotes();
   }
 
   buildControls();
