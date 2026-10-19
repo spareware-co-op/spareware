@@ -2,7 +2,7 @@
   "program": "spare-office",
   "name": "Spare Office",
   "replaces": "Microsoft 365: Word, Excel, PowerPoint, Outlook, Teams, OneNote, OneDrive and Forms",
-  "summary": "Documents, spreadsheets, slides, mail and calendar, chat and meetings, notes, forms and file storage in one suite that is free to use and owned by its members. Files save in open formats, Microsoft's formats are read and written from their published standards, and people, scripts and AI agents all use the same commands.",
+  "summary": "Documents, spreadsheets, slides, mail and calendar, chat and meetings, notes, forms and file storage in one suite that is free to use and free to join. Files save in open formats, Microsoft's formats are read and written from their published standards, and people, scripts and AI agents all use the same commands.",
   "areas": [
     {
       "id": "OFF-A1",
@@ -390,7 +390,7 @@
         {
           "id": "OFF-A1-F11",
           "name": "Show your organisation is real",
-          "does": "Get a verified badge on your organisation once its NZ Business Number is checked.",
+          "does": "Get a verified badge on your organisation once its business number is checked (example: a New Zealand Business Number).",
           "priority": "next",
           "parts": [
             {
@@ -417,7 +417,7 @@
             {
               "id": "OFF-A1-F12-P1",
               "name": "Registrar choice",
-              "what": "Which authorised .nz registrars offer a reseller interface and terms that let the co-op pass on their price at cost.",
+              "what": "Which authorised registrars for each country's domains, starting with .nz, offer a reseller interface and terms that let the co-op pass on their price at cost.",
               "kind": "research",
               "size": "small",
               "depends_on": [],
@@ -832,7 +832,7 @@
             {
               "id": "OFF-A2-F9-P4",
               "name": "Language marking",
-              "what": "Set the language of a paragraph or phrase, or let it be detected, so spelling, grammar, hyphenation and read-aloud switch between English and te reo Māori in one document.",
+              "what": "Set the language of a paragraph or phrase, or let it be detected, so spelling, grammar, hyphenation and read-aloud switch between languages in one document, such as English and te reo Māori.",
               "kind": "library",
               "size": "medium",
               "depends_on": [
@@ -895,7 +895,7 @@
             {
               "id": "OFF-A2-F11-P2",
               "name": "Page set-up",
-              "what": "Paper sizes with A4 as the NZ default, margins, orientation and printer choice.",
+              "what": "Paper sizes with each country's default, such as A4 in New Zealand, margins, orientation and printer choice.",
               "kind": "library",
               "size": "small",
               "depends_on": [
@@ -925,7 +925,7 @@
             {
               "id": "OFF-A2-F12-P2",
               "name": "Starter template set",
-              "what": "Letters, CVs, invoices with GST, budgets, timesheets, minutes and decks, made by us for NZ first.",
+              "what": "Letters, CVs, invoices with sales tax, budgets, timesheets, minutes and decks, made by us for each country, starting with New Zealand.",
               "kind": "data",
               "size": "medium",
               "depends_on": [
@@ -2304,7 +2304,7 @@
             {
               "id": "OFF-A5-F5-P2",
               "name": "Labels and envelopes",
-              "what": "Common label sheet and envelope sizes, NZ first.",
+              "what": "Common label sheet and envelope sizes for each country, starting with New Zealand.",
               "kind": "data",
               "size": "small",
               "depends_on": [
@@ -2783,7 +2783,7 @@
             {
               "id": "OFF-A6-F3-P1",
               "name": "Number format engine",
-              "what": "Format codes for numbers, dates, times, percentages and currency, with NZ formats by default.",
+              "what": "Format codes for numbers, dates, times, percentages and currency, with the person's local formats by default.",
               "kind": "library",
               "size": "medium",
               "depends_on": [
@@ -5278,7 +5278,7 @@
             {
               "id": "OFF-A11-F3-P4",
               "name": "Mail transport security",
-              "what": "MTA-STS in enforce mode, TLS-RPT reports, implicit TLS for mail apps with TLS 1.2 as the minimum, and empty SPF, DMARC and MX records for parked domains, on every hosted domain, so agencies and schools can meet NZ's Secure Government Email framework here.",
+              "what": "MTA-STS in enforce mode, TLS-RPT reports, implicit TLS for mail apps with TLS 1.2 as the minimum, and empty SPF, DMARC and MX records for parked domains, on every hosted domain, so agencies and schools can meet government mail rules here, such as New Zealand's Secure Government Email framework.",
               "kind": "service",
               "size": "medium",
               "depends_on": [
@@ -5861,7 +5861,7 @@
             {
               "id": "OFF-A12-F5-P3",
               "name": "Public holiday calendars",
-              "what": "Shows the public holidays from the kit's country packs, including Matariki's changing date and regional anniversary days, as calendars people can add.",
+              "what": "Shows the public holidays from the kit's country packs, such as New Zealand's Matariki with its changing date and regional anniversary days, as calendars people can add.",
               "kind": "integration",
               "size": "small",
               "depends_on": [
@@ -5933,7 +5933,7 @@
             {
               "id": "OFF-A12-F6-P5",
               "name": "Booking payment duties",
-              "what": "What consumer law, GST and anti-money-laundering rules ask when a business takes deposits through a booking page, and what the co-op's part in the sale makes it responsible for.",
+              "what": "What consumer law, sales tax and anti-money-laundering rules ask when a business takes deposits through a booking page, and what the co-op's part in the sale makes it responsible for.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -6908,8 +6908,8 @@
             },
             {
               "id": "OFF-A14-F7-P3",
-              "name": "Te reo Māori speech and voices research",
-              "what": "Which te reo Māori speech recognition models and voices exist, their licences, and whether their data-sovereignty terms allow this use, worked through under the kit's Māori data principles.",
+              "name": "Indigenous language speech and voices research",
+              "what": "Which speech recognition models and voices exist for indigenous languages, starting with te reo Māori, their licences, and whether their data-sovereignty terms allow this use, worked through under the kit's indigenous data principles.",
               "kind": "research",
               "size": "small",
               "depends_on": [
@@ -7075,7 +7075,7 @@
             {
               "id": "OFF-A14-F11-P2",
               "name": "Phone rules research",
-              "what": "Emergency calling, numbering and telecommunications duties in NZ and overseas.",
+              "what": "Emergency calling, numbering and telecommunications duties in each country, starting with New Zealand.",
               "kind": "legal",
               "size": "medium",
               "depends_on": [
@@ -7163,7 +7163,7 @@
         {
           "id": "OFF-A14-F15",
           "name": "Interpreters in meetings",
-          "does": "Listen to a meeting through an interpreter in your language, such as te reo Māori, a Pacific language or NZ Sign Language.",
+          "does": "Listen to a meeting through an interpreter in your language, such as te reo Māori, a Pacific language or New Zealand Sign Language.",
           "priority": "next",
           "parts": [
             {
@@ -7904,7 +7904,7 @@
     {
       "id": "OFF-A17",
       "name": "Accessibility, languages and countries",
-      "summary": "Usable by everyone: screen readers, keyboard only, captions, reading help and accessible output, in English and te reo Māori first, then any language and script, with each country's formats, holidays and paper sizes.",
+      "summary": "Usable by everyone: screen readers, keyboard only, captions, reading help and accessible output, in many languages, starting with the example country's (for New Zealand: English and te reo Māori), then any language and script, with each country's formats, holidays and paper sizes.",
       "features": [
         {
           "id": "OFF-A17-F1",
@@ -8018,7 +8018,7 @@
             {
               "id": "OFF-A17-F5-P1",
               "name": "Text-to-speech service",
-              "what": "Natural voices in many languages from open models whose licences are checked, with te reo Māori voices used only on terms that respect Māori data sovereignty. It belongs in the kit beside speech recognition so every app shares one copy.",
+              "what": "Natural voices in many languages from open models whose licences are checked, with voices in indigenous languages, such as te reo Māori, used only on terms that respect indigenous data sovereignty. It belongs in the kit beside speech recognition so every app shares one copy.",
               "kind": "integration",
               "size": "medium",
               "depends_on": [
@@ -8116,7 +8116,7 @@
         {
           "id": "OFF-A17-F8",
           "name": "Use it in your language",
-          "does": "Use the apps in English or te reo Māori first, then other languages, with community translations.",
+          "does": "Use the apps in many languages, starting with the example country's (for New Zealand: English and te reo Māori), with community translations.",
           "priority": "core",
           "parts": [
             {
@@ -8132,8 +8132,8 @@
             },
             {
               "id": "OFF-A17-F8-P3",
-              "name": "Te reo Māori interface",
-              "what": "A full te reo Māori interface, made with Māori language experts and following Te Taura Whiri guidance on new words.",
+              "name": "Indigenous language interface",
+              "what": "A full interface in the example country's indigenous language, starting with te reo Māori for New Zealand, made with Māori language experts and following Te Taura Whiri guidance on new words.",
               "kind": "data",
               "size": "medium",
               "depends_on": [
@@ -8203,7 +8203,7 @@
         {
           "id": "OFF-A17-F10",
           "name": "Spelling in many languages",
-          "does": "Check spelling in NZ English, te reo Māori, Pacific languages and many more.",
+          "does": "Check spelling in many languages, starting with the example country's (for New Zealand: New Zealand English, te reo Māori and Pacific languages).",
           "priority": "core",
           "parts": [
             {
@@ -8237,7 +8237,7 @@
             {
               "id": "OFF-A17-F11-P2",
               "name": "Office additions to country packs",
-              "what": "Paper sizes, document templates and invoice and tax formats per country, added to the kit's country packs, NZ first.",
+              "what": "Paper sizes, document templates and invoice and tax formats per country, added to the kit's country packs, starting with New Zealand.",
               "kind": "data",
               "size": "medium",
               "depends_on": [
@@ -8259,7 +8259,7 @@
             {
               "id": "OFF-A17-F12-P1",
               "name": "Conformance reports",
-              "what": "WCAG 2.2 AA conformance reports per app, meeting the NZ Government Web Accessibility Standard and overseas rules such as EN 301 549.",
+              "what": "WCAG 2.2 AA conformance reports per app, meeting each country's rules, such as the New Zealand Government Web Accessibility Standard and EN 301 549.",
               "kind": "legal",
               "size": "medium",
               "depends_on": [
@@ -8272,14 +8272,14 @@
         },
         {
           "id": "OFF-A17-F13",
-          "name": "Te reo sorting and other calendars",
-          "does": "Get lists sorted and words hyphenated the te reo Māori way, and see dates in other calendars, including maramataka.",
+          "name": "Language sorting and other calendars",
+          "does": "Get lists sorted and words hyphenated the way each language needs, such as te reo Māori, and see dates in other calendars, including maramataka.",
           "priority": "later",
           "parts": [
             {
               "id": "OFF-A17-F13-P1",
-              "name": "Te reo sorting and hyphenation",
-              "what": "Sort order and hyphenation rules for te reo Māori, agreed with language experts, used in sheets, lists, indexes and page layout.",
+              "name": "Language sorting and hyphenation",
+              "what": "Sort order and hyphenation rules for each language, starting with te reo Māori, agreed with language experts, used in sheets, lists, indexes and page layout.",
               "kind": "data",
               "size": "small",
               "depends_on": [
@@ -8309,7 +8309,7 @@
     {
       "id": "OFF-A18",
       "name": "Organisation admin, security and compliance",
-      "summary": "What an organisation's admins need: a console for people and settings, organisation sign-in, security rules, an audit log, retention and legal holds, search for legal and information requests, labels for sensitive content, data kept in NZ, backups, independent security checks, taking over an organisation, approving staff access, change notices and AI rules.",
+      "summary": "What an organisation's admins need: a console for people and settings, organisation sign-in, security rules, an audit log, retention and legal holds, search for legal and information requests, labels for sensitive content, data kept in region, backups, independent security checks, taking over an organisation, approving staff access, change notices and AI rules.",
       "features": [
         {
           "id": "OFF-A18-F1",
@@ -8532,7 +8532,7 @@
         {
           "id": "OFF-A18-F7",
           "name": "Find content for legal and information requests",
-          "does": "Search and export content for a court case, an Official Information Act request or a Privacy Act access request.",
+          "does": "Search and export content for a court case, a public information request or a privacy access request (example: New Zealand's Official Information Act and Privacy Act).",
           "priority": "next",
           "parts": [
             {
@@ -8566,13 +8566,13 @@
         {
           "id": "OFF-A18-F8",
           "name": "Label sensitive content",
-          "does": "Mark files and mail with a sensitivity label, including NZ government classifications, and stop sensitive data leaking.",
+          "does": "Mark files and mail with a sensitivity label, including government classifications such as New Zealand's, and stop sensitive data leaking.",
           "priority": "later",
           "parts": [
             {
               "id": "OFF-A18-F8-P1",
               "name": "Sensitivity labels",
-              "what": "Labels with markings and sharing rules, including NZ government classification markings.",
+              "what": "Labels with markings and sharing rules, including government classification markings such as New Zealand's.",
               "kind": "library",
               "size": "medium",
               "depends_on": [
@@ -8584,7 +8584,7 @@
             {
               "id": "OFF-A18-F8-P2",
               "name": "Sensitive data detection",
-              "what": "Finds numbers such as IRD numbers, card numbers and passport numbers before they are shared.",
+              "what": "Finds numbers such as tax numbers (example: New Zealand IRD numbers), card numbers and passport numbers before they are shared.",
               "kind": "library",
               "size": "medium",
               "depends_on": [
@@ -8690,13 +8690,13 @@
         {
           "id": "OFF-A18-F12",
           "name": "Choose where data lives",
-          "does": "Keep your organisation's data in NZ, with other regions to choose from later.",
+          "does": "Keep your organisation's data in its region, starting with New Zealand, with other regions to choose from later.",
           "priority": "core",
           "parts": [
             {
               "id": "OFF-A18-F12-P1",
-              "name": "Data kept in NZ",
-              "what": "Every organisation's Office data and backups stay in NZ on the kit's hosting; choosing another region follows the kit's data location.",
+              "name": "Data kept in region",
+              "what": "Every organisation's Office data and backups stay in its region on the kit's hosting, starting with New Zealand; choosing another region follows the kit's data location.",
               "kind": "integration",
               "size": "small",
               "depends_on": [
@@ -8734,7 +8734,7 @@
             {
               "id": "OFF-A18-F14-P3",
               "name": "Government assurance pack",
-              "what": "What NZ government agencies need for cloud risk assessment, mapped to the NZ Information Security Manual.",
+              "what": "What government agencies in each country need for cloud risk assessment, starting with New Zealand's agencies and the New Zealand Information Security Manual.",
               "kind": "legal",
               "size": "medium",
               "depends_on": [
@@ -8833,13 +8833,13 @@
         {
           "id": "OFF-A18-F18",
           "name": "Set the organisation's AI rules",
-          "does": "Choose which AI providers, if any, staff may use, and whether content may leave NZ for AI.",
+          "does": "Choose which AI providers, if any, staff may use, and whether content may leave the country for AI.",
           "priority": "next",
           "parts": [
             {
               "id": "OFF-A18-F18-P1",
               "name": "Organisation AI rules",
-              "what": "Admins allow or block AI providers and own provider keys for their staff, and choose whether content may go overseas for AI, after the check that information privacy principle 12 needs, as locked organisation policies.",
+              "what": "Admins allow or block AI providers and own provider keys for their staff, and choose whether content may go overseas for AI, after the check privacy law needs (example: New Zealand's information privacy principle 12), as locked organisation policies.",
               "kind": "library",
               "size": "small",
               "depends_on": [
@@ -9360,13 +9360,13 @@
         {
           "id": "OFF-A20-F3",
           "name": "Bills for organisations",
-          "does": "Get monthly GST tax invoices, pay by card or bank transfer, and see costs per team.",
+          "does": "Get monthly tax invoices, pay by card or bank transfer, and see costs per team.",
           "priority": "core",
           "parts": [
             {
               "id": "OFF-A20-F3-P1",
               "name": "Organisation billing",
-              "what": "Monthly bills with the kit's GST tax invoices, paid by card or on account through the kit's regular payments and business accounts, in NZD first. Needs the kit to make regular payments and business accounts core.",
+              "what": "Monthly bills with the kit's tax invoices, paid by card or on account through the kit's regular payments and business accounts, in each country's currency, starting with NZD. Needs the kit to make regular payments and business accounts core.",
               "kind": "service",
               "size": "medium",
               "depends_on": [
@@ -9563,7 +9563,7 @@
     {
       "id": "OFF-A21",
       "name": "Safety, moderation and legal duties",
-      "summary": "Keeping people safe and the co-op within the law: reporting abuse, stopping phishing, malware and spam, handling illegal content and complaints as NZ law requires, privacy duties, requests from authorities, a public removal log with appeals, and building everything legally.",
+      "summary": "Keeping people safe and the co-op within the law: reporting abuse, stopping phishing, malware and spam, handling illegal content and complaints as each country's law requires, privacy duties, requests from authorities, a public removal log with appeals, and building everything legally.",
       "features": [
         {
           "id": "OFF-A21-F1",
@@ -9661,7 +9661,7 @@
             {
               "id": "OFF-A21-F3-P2",
               "name": "Spam law research",
-              "what": "What the Unsolicited Electronic Messages Act 2007 and overseas spam laws require of senders and of the service.",
+              "what": "What each country's spam law requires of senders and of the service (example: New Zealand's Unsolicited Electronic Messages Act 2007).",
               "kind": "legal",
               "size": "small",
               "depends_on": [],
@@ -9702,8 +9702,8 @@
         },
         {
           "id": "OFF-A21-F5",
-          "name": "Harmful digital communications complaints",
-          "does": "Complain about harmful content and have it handled under the Harmful Digital Communications Act process.",
+          "name": "Online harm complaints",
+          "does": "Complain about harmful content and have it handled under each country's online harm process (example: New Zealand's Harmful Digital Communications Act).",
           "priority": "core",
           "parts": [
             {
@@ -9729,7 +9729,7 @@
             {
               "id": "OFF-A21-F6-P1",
               "name": "Copyright notice flow",
-              "what": "Copyright notices and counter-notices about shared files, on the kit's copyright notice handling under the Copyright Act 1994, logged publicly.",
+              "what": "Copyright notices and counter-notices about shared files, on the kit's copyright notice handling under each country's copyright law (example: New Zealand's Copyright Act 1994), logged publicly.",
               "kind": "integration",
               "size": "small",
               "depends_on": [
@@ -9760,7 +9760,7 @@
             {
               "id": "OFF-A21-F7-P2",
               "name": "Telecommunications duties research",
-              "what": "Extends the kit's interception duty check to mail, phone numbers and calls to the phone network: whether the Telecommunications (Interception Capability and Security) Act 2013 makes the co-op a service provider with a duty to help with warrants, whether the Telecommunications Information Privacy Code 2020 applies, and what a 2025 bill extending duties to overseas providers changes (*unverified*). Needed before Mail and Chat go live, as it shapes encryption and logging.",
+              "what": "Extends the kit's interception duty check to mail, phone numbers and calls to the phone network, starting with New Zealand: whether the Telecommunications (Interception Capability and Security) Act 2013 makes the co-op a service provider with a duty to help with warrants, whether the Telecommunications Information Privacy Code 2020 applies, and what a 2025 bill extending duties to overseas providers changes (*unverified*). Needed before Mail and Chat go live, as it shapes encryption and logging.",
               "kind": "legal",
               "size": "medium",
               "depends_on": [
@@ -9813,7 +9813,7 @@
             {
               "id": "OFF-A21-F9-P5",
               "name": "Health information duties",
-              "what": "What the Health Information Privacy Code 2020 asks when GPs, iwi health providers and others keep health information in Mail, Drive and Forms, and what Spare Office must do as the service holding it for them.",
+              "what": "What health privacy rules ask (example: New Zealand's Health Information Privacy Code 2020) when GPs, iwi health providers and others keep health information in Mail, Drive and Forms, and what Spare Office must do as the service holding it for them.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -9981,12 +9981,12 @@
     "Which parts carry real running costs (storage, mail, meeting servers, speech recognition, AI), and what free allowance can members afford to vote for?",
     "AI: does the demo make it clear the assistant is off until turned on, the person and their organisation pick the provider, content never trains a model, and an agent must ask a person before it sends mail, shares outside or deletes?",
     "Accessibility: can canvas-drawn editors really work with every screen reader? Is the accessible mirror part sized and scheduled early enough?",
-    "Te reo Māori: who are our language and data-sovereignty partners for the interface, dictionaries, macron autocorrect, sorting, maramataka, speech models and voices, and are they involved from the start?",
+    "Indigenous languages, starting with te reo Māori: who are our language and data-sovereignty partners for the interface, dictionaries, macron autocorrect, sorting, maramataka, speech models and voices, and are they involved from the start?",
     "Legal: which legal parts need a lawyer before launch (privacy and IPP 3A, health information, telecommunications interception duties, harmful digital communications, illegal content, recording consent, electronic signatures, booking payments, overseas tax, import terms, Exchange protocol clearance)?",
     "Scope edges: do video editing, diagramming, project scheduling, intranet sites, rosters, a video library, dashboards, low-code apps, Access databases and Publisher files belong in Spare Office, in Spare Studio or Spare Work, or later?",
     "Moving in: do Microsoft's and Google's API terms allow our import tools, and what happens to chat history that can't be exported?",
     "Are the part sizes believable? Which large parts should become new work-board pieces next?",
-    "Public sector and schools: do we target NZ government agencies and schools early (Public Records Act, the NZ Information Security Manual, Secure Government Email, classification labels, class notebooks, assignments and LTI) or later?",
+    "Public sector and schools: do we target government agencies and schools early, starting with New Zealand's (Public Records Act, the New Zealand Information Security Manual, Secure Government Email, classification labels, class notebooks, assignments and LTI) or later?",
     "Does the demo use only our own names, look and icons, with Microsoft's product names appearing only to say what each app replaces?",
     "Headless: does the demo show one task done by a person, a script and an agent through the same commands, with every Office app's command schemas in the command API and MCP server from the first release?",
     "Safe files: does the demo open hostile test files (remote templates, DDE fields, macros, booby-trapped zips) without fetching or running anything, and serve every upload from a separate domain?",

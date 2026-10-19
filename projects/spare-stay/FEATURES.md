@@ -2,7 +2,7 @@
 
 *Stage: Mapping. Built from [features.json](features.json); edit that file and this page together. Mapped top-down on 2026-10-18, then checked on 2026-10-19 against an independent review and the kit's own map. The architecture is in [ARCHITECTURE.md](ARCHITECTURE.md) and the work board in [STATUS.md](STATUS.md).*
 
-Spare Stay replaces Airbnb, Booking.com and Bookabach. Short stays where hosts keep everything except the at-cost fee, guests see the full price from the first search, and hosts own the app and vote on its rules. It runs on the kit's shared marketplace loop and named kit parts, and adds only what stays need. This map lists everything a full replacement needs, top-down so nothing is missed: each **area** is a part of the product, each **feature** is something a person can do, and each **part** is a piece that can be built on its own. It covers every journey: first sign-up, listing a place, booking, paying, the stay itself, things going wrong (lock-outs, damage, double bookings, emergencies, a host who leaves), safety, access for everyone, offline use at baches with no signal, languages and countries, taking your data and reviews with you, moderation and the law. Most of the work sits on the shared kit, which now has 26 areas: accounts, identity checks, payments, tax, the marketplace engine, search and matching, maps, messaging and calls, ratings, safety, disputes, voting, the open cost ledger, membership, sync and storage, the open API, AI access, privacy, languages and accessibility, the app shell, support, hosting and admin, work law, health and safety, signatures and training, and property records (see the [kit's feature map](../kit/FEATURES.md)). Where a part rests on the kit, it names the kit part by ID and holds only Stay's own rules; Stay uses 228 of the kit's 572 parts. Where Stay needs a shared part the kit does not have yet, the Stay part says the kit should own it. IDs are never renumbered or reused: 33 parts and one feature were retired in the review, and 4 parts moved (listed below). **Core** means needed for a first usable release, **next** soon after, **later** after that. Nothing here copies another company's design; we follow the same journeys because guests and hosts need them, and build them our own way.
+Spare Stay replaces Airbnb, Booking.com and local sites such as Bookabach. Short stays where hosts keep everything except the at-cost fee, guests see the full price from the first search, and hosts vote on its fees and rules. It runs on the kit's shared marketplace loop and named kit parts, and adds only what stays need. This map lists everything a full replacement needs, top-down so nothing is missed: each **area** is a part of the product, each **feature** is something a person can do, and each **part** is a piece that can be built on its own. It covers every journey: first sign-up, listing a place, booking, paying, the stay itself, things going wrong (lock-outs, damage, double bookings, emergencies, a host who leaves), safety, access for everyone, offline use at baches with no signal, languages and countries, taking your data and reviews with you, moderation and the law. Most of the work sits on the shared kit, which now has 26 areas: accounts, identity checks, payments, tax, the marketplace engine, search and matching, maps, messaging and calls, ratings, safety, disputes, voting, the open cost ledger, membership, sync and storage, the open API, AI access, privacy, languages and accessibility, the app shell, support, hosting and admin, work law, health and safety, signatures and training, and property records (see the [kit's feature map](../kit/FEATURES.md)). Where a part rests on the kit, it names the kit part by ID and holds only Stay's own rules; Stay uses 228 of the kit's 572 parts. Where Stay needs a shared part the kit does not have yet, the Stay part says the kit should own it. IDs are never renumbered or reused: 33 parts and one feature were retired in the review, and 4 parts moved (listed below). **Core** means needed for a first usable release, **next** soon after, **later** after that. Nothing here copies another company's design; we follow the same journeys because guests and hosts need them, and build them our own way.
 
 **22 areas, 168 features (87 core, 57 next, 24 later), 341 parts.** **Depends on** names kit crates and shared engines (in code type), kit parts by ID (KIT-...) or other Stay parts by ID. **Piece** links a part to an existing work-board piece.
 
@@ -21,12 +21,12 @@ Spare Stay replaces Airbnb, Booking.com and Bookabach. Short stays where hosts k
 | [STAY-A11 Host operations and teams](#stay-a11-host-operations-and-teams) | Tools to run one place or a hundred: a daily view, co-hosts with set permissions, cleaning and upkeep, bulk changes and insights. | 9 | 17 |
 | [STAY-A12 Reviews](#stay-a12-reviews) | Two-way reviews from real stays only, published together so neither side can retaliate, with fair published rules for removal. | 8 | 13 |
 | [STAY-A13 Trust, safety and damage](#stay-a13-trust-safety-and-damage) | Verified people, fraud and scam checks, help in an emergency, protection when a stay goes wrong, fair damage claims, blocking, and disputes decided by panels that are fair to both sides. | 11 | 29 |
-| [STAY-A14 Local rules, tax and legal duties](#stay-a14-local-rules-tax-and-legal-duties) | Council rules, GST, income reporting, levies and consumer law built in as rules, NZ first, with each new country added as data. | 9 | 27 |
-| [STAY-A15 Co-op membership, votes and the open fee](#stay-a15-co-op-membership-votes-and-the-open-fee) | Hosts are members who own the app, vote on its fees and rules within competition law, hear guests before votes that affect them, and can see what every dollar of the fee paid for. | 5 | 10 |
+| [STAY-A14 Local rules, tax and legal duties](#stay-a14-local-rules-tax-and-legal-duties) | Council rules, sales tax, income reporting, levies and consumer law built in as rules, with each country added as data in its own pack; New Zealand is the first. | 9 | 27 |
+| [STAY-A15 Membership, votes and the open fee](#stay-a15-membership-votes-and-the-open-fee) | Hosts keep all the profit except running costs, vote on its fees and rules within competition law, hear guests before votes that affect them, and can see what every dollar of the fee paid for. | 5 | 10 |
 | [STAY-A16 Help and support](#stay-a16-help-and-support) | Answers first, then people: a help centre, support requests linked to bookings, and a phone line for urgent problems, all run at cost. | 6 | 7 |
-| [STAY-A17 Accessibility, languages and regions](#stay-a17-accessibility-languages-and-regions) | Usable by everyone, in their own language, currency and formats: NZ first, ready for any country. | 4 | 4 |
+| [STAY-A17 Accessibility, languages and regions](#stay-a17-accessibility-languages-and-regions) | Usable by everyone, in their own language, currency and formats, ready for any country; New Zealand is the first country pack. | 4 | 4 |
 | [STAY-A18 Apps, offline and open access](#stay-a18-apps-offline-and-open-access) | Phone apps and a web app for guests and hosts, working offline where it matters, with the same commands open to AI agents, plugins and scripts. | 7 | 13 |
-| [STAY-A19 Your data and privacy](#stay-a19-your-data-and-privacy) | Members own their data: see it, take it with them in open formats, choose who sees it, and delete it. | 8 | 11 |
+| [STAY-A19 Your data and privacy](#stay-a19-your-data-and-privacy) | Members control their data: see it, take it with them in open formats, choose who sees it, and delete it. | 8 | 11 |
 | [STAY-A20 Moderation and administration](#stay-a20-moderation-and-administration) | Stay's moderators and staff act through the kit's review queue and admin console, with every removal and the rule behind it in the public log. Monitoring and backups are the kit's, for every app. | 6 | 7 |
 | [STAY-A21 Reach, direct bookings and extras](#stay-a21-reach-direct-bookings-and-extras) | Bring guests to hosts without paid ranking: a plan for the empty start, hosts' own booking pages, sharing, web search, open feeds, local tourism partners, and extras around the stay. | 7 | 13 |
 | [STAY-A22 Experiences](#stay-a22-experiences) | Tours and activities hosted by members and booked alongside stays. A separate marketplace with its own safety law, mapped here as its own area so it can become its own program if members choose. | 3 | 5 |
@@ -57,9 +57,9 @@ One Spareware login for guests, hosts, co-hosts, cleaners and property managers,
 | STAY-A1-F2-P2 | **Profile fields and visibility**: What each profile field holds and who can see it before and after a booking. | data | small | KIT-A1-F5-P1 |  |
 | STAY-A1-F2-P3 | **Profile photo checks**: Photos are checked for banned content before they show; any face check runs under the Biometric Processing Privacy Code 2025 through the kit, with a person reviewing a failed match. | service | small | KIT-A10-F10-P2, KIT-A2-F1-P4, `engine-media` |  |
 | STAY-A1-F3-P1 | **Stay's ID checks**: Guests and hosts check their ID once through the kit's identity check; Stay keeps only the result, and any selfie match runs under the Biometric Processing Privacy Code 2025 with a non-biometric option. | integration | small | KIT-A2-F1-P2, KIT-A2-F1-P3, KIT-A2-F1-P4 |  |
-| STAY-A1-F3-P2 | **Overseas guests' IDs**: Stay's needs for the kit's identity provider choice: passports and licences from the countries NZ's visitors come from, and what each check costs. | research | small | KIT-A2-F1-P1 |  |
+| STAY-A1-F3-P2 | **Overseas guests' IDs**: Stay's needs for the kit's identity provider choice: passports and licences from the countries guests come from in each market, and what each check costs. | research | small | KIT-A2-F1-P1 |  |
 | STAY-A1-F3-P3 | **When a check is needed**: Stay's rules on the kit's check rules per app for when an ID check is required: every host, and guests for instant booking or high-risk stays. | legal | small | KIT-A2-F2-P2, STAY-A1-F3-P1 |  |
-| STAY-A1-F4-P1 | **Host business record**: Private person or business, legal name, IRD number, date of birth for individuals, GST registration and NZBN, on the kit's seller details and held privately. | data | small | KIT-A4-F3-P2 |  |
+| STAY-A1-F4-P1 | **Host business record**: Private person or business, legal name, tax number, date of birth for individuals, sales tax registration and business number (example: IRD number, GST registration and NZBN in New Zealand), on the kit's seller details and held privately. | data | small | KIT-A4-F3-P2 |  |
 | STAY-A1-F4-P2 | **Business details screens**: Screens to enter and update tax and business details. | interface | small | STAY-A1-F4-P1, KIT-A20-F1-P1 |  |
 | STAY-A1-F4-P4 | **Private or business host**: Shows guests on the listing and the receipt whether the host is a private person or a business, with the business's trader details, since consumer law rights differ. | data | small | STAY-A1-F4-P1, KIT-A2-F7-P2 |  |
 | STAY-A1-F5-P1 | **Second step for hosts**: Hosts, co-hosts and anyone else who receives payouts or sees guests' addresses must turn on the kit's second sign-in step; devices, sign-in alerts and payout change holds come from the kit. | service | small | KIT-A1-F3-P1, KIT-A1-F3-P2, KIT-A1-F3-P3, KIT-A3-F3-P4 |  |
@@ -73,12 +73,12 @@ Hosts describe a place truthfully and fully: what it is, where it is, what it ha
 
 | Feature | What a person can do | Priority | Parts |
 | --- | --- | --- | --- |
-| STAY-A2-F1 Create a listing | Follow step-by-step setup to list a whole home, a room, a bach, a cabin, a campsite or a small hotel's rooms. | core | Listing data model; Listing setup steps; Place types; Draft, publish and snooze; Getting there and signal |
+| STAY-A2-F1 Create a listing | Follow step-by-step setup to list a whole home, a room, a holiday home, a cabin, a campsite or a small hotel's rooms. | core | Listing data model; Listing setup steps; Place types; Draft, publish and snooze; Getting there and signal |
 | STAY-A2-F2 Photos | Add photos with captions and sort them room by room. | core | Photo screens; Photo checks |
 | STAY-A2-F3 Description, amenities and house rules | Describe the place, tick its amenities, and set house rules such as pets, smoking, parties, quiet hours and check-in times. | core | Amenity list; House rules; Description editor; Writing help |
 | STAY-A2-F4 Location and privacy | Set the exact address for booked guests and show only an approximate area to everyone else. | core | Address and pin; Approximate location; Address check |
 | STAY-A2-F5 Accessibility details | Describe step-free access, door widths, bathroom features and more, with a photo proving each one. | core | Accessibility features list; Feature photos and review; What disabled travellers need listed |
-| STAY-A2-F6 Safety details | Declare smoke alarms, carbon monoxide alarms, first aid, pools, hazards and any cameras or noise monitors. | core | Safety declarations; Cameras and monitors rule; NZ safety facts |
+| STAY-A2-F6 Safety details | Declare smoke alarms, carbon monoxide alarms, first aid, pools, hazards and any cameras or noise monitors. | core | Safety declarations; Cameras and monitors rule; Country safety facts (example: New Zealand) |
 | STAY-A2-F7 Listing quality check | Get a checklist of what is missing or unclear, and pass a review before the listing goes live. | core | Completeness checklist; Listing review |
 | STAY-A2-F8 Many units and room types | List a set of identical rooms or units once, with how many are free each night. | next | Room and unit types; Unit screens |
 | STAY-A2-F9 Translated listings | Show your listing in the guest's language, with your own words kept as the original. | next | Listing translation; Host's own translations |
@@ -105,10 +105,10 @@ Hosts describe a place truthfully and fully: what it is, where it is, what it ha
 | STAY-A2-F4-P3 | **Address check**: Confirms the host controls the address, to stop fake listings. | service | medium | KIT-A7-F2-P3, STAY-A2-F4-P1 |  |
 | STAY-A2-F5-P1 | **Accessibility features list**: Measurable features such as step-free entry, door width in centimetres and grab rails. | data | small | STAY-A2-F1-P1 |  |
 | STAY-A2-F5-P2 | **Feature photos and review**: Each feature needs its own photo and is reviewed before it shows. | service | medium | STAY-A2-F5-P1, KIT-A15-F7-P1, KIT-A10-F6-P2 |  |
-| STAY-A2-F5-P3 | **What disabled travellers need listed**: Research with disabled travellers and NZ disability groups on which details matter, with sources. | research | small |  |  |
+| STAY-A2-F5-P3 | **What disabled travellers need listed**: Research with disabled travellers and disability groups in each launch country on which details matter, with sources. | research | small |  |  |
 | STAY-A2-F6-P1 | **Safety declarations**: Required safety facts for each place type, shown to guests before they book. | data | small | STAY-A2-F1-P1 |  |
 | STAY-A2-F6-P2 | **Cameras and monitors rule**: Outdoor cameras and noise monitors must be disclosed; cameras inside are banned. | legal | small | STAY-A2-F6-P1 |  |
-| STAY-A2-F6-P3 | **NZ safety facts**: NZ facts for each place: the water source (town supply, tank or bore) and whether a shared supply is registered with Taumata Arowai; pool and spa barriers under the Building Act; an evacuation scheme where a building houses more than 5 people (unless 3 or fewer household units); and smoke alarm checks. Each legal point is marked to verify. | data | small | STAY-A2-F6-P1 |  |
+| STAY-A2-F6-P3 | **Country safety facts (example: New Zealand)**: Each country pack's safety facts for each place. For New Zealand: the water source (town supply, tank or bore) and whether a shared supply is registered with Taumata Arowai; pool and spa barriers under the Building Act; an evacuation scheme where a building houses more than 5 people (unless 3 or fewer household units); and smoke alarm checks. Each legal point is marked to verify. | data | small | STAY-A2-F6-P1 |  |
 | STAY-A2-F7-P1 | **Completeness checklist**: Shows what is missing or unclear, using rules anyone can read. | service | small | STAY-A2-F1-P1 |  |
 | STAY-A2-F7-P2 | **Listing review**: Stay's checks on the kit's listing checks: new and changed listings are checked automatically, people review flagged ones, and the automatic checks are on the AI use register. | service | small | KIT-A5-F1-P3, KIT-A10-F6-P2, STAY-A2-F1-P4 |  |
 | STAY-A2-F8-P1 | **Room and unit types**: Stay's unit types on the kit's availability calendars: one listing with many identical units and a count free each night. | data | medium | KIT-A5-F5-P1, STAY-A2-F1-P1 |  |
@@ -148,9 +148,9 @@ One calendar per place that knows every booking and block, stays in sync with ot
 | STAY-A3-F3-P4 | **Sync status**: Shows when each linked calendar last synced and any errors. | interface | small | STAY-A3-F3-P2 |  |
 | STAY-A3-F3-P5 | **Double booking resolution**: When calendar lag causes a double booking, the booking made first stands, by the times both sites record. If that is the other site's, the Spare Stay guest gets a full refund and rebooking help, the host is not penalised when the other site's calendar was late, and both guests are told plainly what happened. | legal | small | STAY-A3-F3-P3, STAY-A13-F2-P2 |  |
 | STAY-A3-F4-P1 | **Channel connection API**: Stay's commands for availability, rates and bookings, published for channel managers to use with scoped tokens. | service | medium | STAY-A18-F4-P1, STAY-A3-F1-P1, STAY-A4-F1-P1, KIT-A16-F1-P2 |  |
-| STAY-A3-F4-P2 | **Channel manager research**: Which channel managers NZ hosts use, what open interfaces they offer and what joining costs. | research | small |  |  |
+| STAY-A3-F4-P2 | **Channel manager research**: Which channel managers hosts use in each launch country, what open interfaces they offer and what joining costs. | research | small |  |  |
 | STAY-A3-F4-P3 | **Partner sandbox**: A test area and checklist for channel managers to connect. | interface | medium | STAY-A3-F4-P1 |  |
-| STAY-A3-F4-P4 | **Property management system links**: Links to the property management systems NZ motels and small hotels use, through their published interfaces or the channel API, starting with the ones the research shows matter most. | integration | medium | STAY-A3-F4-P1, STAY-A3-F4-P2 |  |
+| STAY-A3-F4-P4 | **Property management system links**: Links to the property management systems motels and small hotels use in each launch country, through their published interfaces or the channel API, starting with the ones the research shows matter most. | integration | medium | STAY-A3-F4-P1, STAY-A3-F4-P2 |  |
 | STAY-A3-F5-P1 | **Calendar feed for people**: Guests and hosts subscribe to their trips or bookings in any calendar app. Personal calendar feeds should move down into the kit, since Ride, Food and Work bookings need the same. | service | small | STAY-A3-F3-P1 |  |
 
 ## STAY-A4 Pricing and the full price
@@ -180,15 +180,15 @@ Hosts set prices with clear rules; guests see one full price, with every fee, ta
 | STAY-A4-F3-P2 | **Price option screens**: Set up options and show guests the difference side by side. | interface | small | STAY-A4-F3-P1, STAY-A4-F5-P3 |  |
 | STAY-A4-F4-P1 | **Fee rules**: Cleaning, extra guest, pet, linen and other fees, each per stay, per night or per guest. | data | small | STAY-A4-F1-P1 |  |
 | STAY-A4-F4-P2 | **Optional extras**: Extras guests can add, such as firewood, linen hire or early check-in. | data | small | STAY-A4-F4-P1 |  |
-| STAY-A4-F4-P3 | **Food and alcohol extras**: Rules for extras that are food or drink. Meals and breakfast hampers must meet the Food Act 2014: small places serving few guests may be exempt from registration (to confirm), but the food must still be safe and suitable. Alcohol can't be sold as an extra without a licence. | legal | small | STAY-A4-F4-P2 |  |
-| STAY-A4-F5-P1 | **Price engine**: Stay's full price on the kit's full price first: the total for any dates and guests from nightly rates, fees, the at-cost fee, GST and local levies. Discounts and rate plans plug in once they exist. | library | medium | KIT-A5-F3-P2, STAY-A4-F1-P1, STAY-A4-F4-P1, STAY-A14-F3-P1 |  |
+| STAY-A4-F4-P3 | **Food and alcohol extras**: Rules for extras that are food or drink, set in each country pack. In New Zealand, meals and breakfast hampers must meet the Food Act 2014: small places serving few guests may be exempt from registration (to confirm), but the food must still be safe and suitable. Alcohol can't be sold as an extra without a licence. | legal | small | STAY-A4-F4-P2 |  |
+| STAY-A4-F5-P1 | **Price engine**: Stay's full price on the kit's full price first: the total for any dates and guests from nightly rates, fees, the at-cost fee, sales tax and local levies. Discounts and rate plans plug in once they exist. | library | medium | KIT-A5-F3-P2, STAY-A4-F1-P1, STAY-A4-F4-P1, STAY-A14-F3-P1 |  |
 | STAY-A4-F5-P2 | **Price index for search**: Full prices worked out ahead for common date ranges, so search stays fast. | service | medium | STAY-A4-F5-P1, STAY-A5-F1-P2 |  |
 | STAY-A4-F5-P3 | **Price breakdown**: A line-by-line breakdown anyone can open: nights, fees, the at-cost fee, tax and levies. | interface | small | STAY-A4-F5-P1, KIT-A3-F4-P2 |  |
-| STAY-A4-F5-P4 | **Price display rules**: Stay's cases for the kit's consumer law duties on showing the total price, in NZ, Australia, the EU and other markets. | legal | small | KIT-A18-F8-P1 |  |
+| STAY-A4-F5-P4 | **Price display rules**: Stay's cases for the kit's consumer law duties on showing the total price in each market, such as New Zealand, Australia and the EU. | legal | small | KIT-A18-F8-P1 |  |
 | STAY-A4-F6-P1 | **Price suggestions**: Suggests prices from public and aggregated local data on demand, seasons and events, never from competing hosts' private rates, and shows why. | service | large | STAY-A4-F5-P1, STAY-A4-F6-P2, STAY-A4-F6-P4 |  |
 | STAY-A4-F6-P2 | **Pricing method research**: Proven open methods for price suggestions and which data we may legally use. | research | medium |  |  |
 | STAY-A4-F6-P3 | **Automatic pricing**: Optional rules that apply suggestions within limits the host sets. | service | medium | STAY-A4-F6-P1, STAY-A4-F6-P4 |  |
-| STAY-A4-F6-P4 | **Pricing tools and competition law**: Price suggestions and automatic pricing use only public or aggregated data, never the pooled private rates of hosts who compete with each other, so the shared tool can't become a cartel provision under the Commerce Act; checked with a lawyer. | legal | small | KIT-A12-F4-P3 |  |
+| STAY-A4-F6-P4 | **Pricing tools and competition law**: Price suggestions and automatic pricing use only public or aggregated data, never the pooled private rates of hosts who compete with each other, so the shared tool can't become a cartel provision under competition law (example: New Zealand's Commerce Act); checked with a lawyer. | legal | small | KIT-A12-F4-P3 |  |
 | STAY-A4-F7-P1 | **Currency display**: Shows prices in the guest's currency on the kit's currencies, at a published rate, and says which rate was used. | service | small | KIT-A3-F14-P1 |  |
 | STAY-A4-F7-P2 | **Currency at payment**: The guest is charged the full price shown in their currency if they pay within a set time of searching, and is shown the new total first if the rate has moved. Refunds go back in the guest's currency, and who carries an exchange loss on a refund is published. | integration | small | KIT-A3-F14-P1, STAY-A4-F7-P1 | [K02](../kit/STATUS.md) |
 | STAY-A4-F8-P1 | **Rate plans**: Rate plans with meal options such as breakfast included, prices by the number of guests, and child prices by age band, on the price rules. | data | medium | STAY-A4-F1-P1, STAY-A4-F5-P1 |  |
@@ -207,7 +207,7 @@ Guests find the right place by where, when and who, on a map or a list, ranked b
 | STAY-A5-F5 Honest ranking | See results in an order set by published rules, with no paid placement and the rules one tap away. | core | Stay ranking factors; Sort choices |
 | STAY-A5-F6 Wishlists and sharing | Save places to lists, share a list with your group and pick favourites together. | next | Wishlists; Group picks |
 | STAY-A5-F7 Saved searches and alerts | Save a search and get told when a matching place opens up or the price drops. | next | Saved searches; Alert choices |
-| STAY-A5-F8 Browse by theme | Browse ideas such as beach baches, ski towns, pet-friendly or accessible stays. | later | Themes; Theme pages |
+| STAY-A5-F8 Browse by theme | Browse ideas such as beach houses, ski towns, pet-friendly or accessible stays. | later | Themes; Theme pages |
 | STAY-A5-F9 Recently viewed and compare | Go back to places you looked at and compare a few side by side. | later | Recently viewed; Compare places |
 | STAY-A5-F10 Ask in everyday words | Search in everyday words and compare places side by side with AI help, marked as AI. | later | Everyday-words search; AI comparison |
 
@@ -232,7 +232,7 @@ Guests find the right place by where, when and who, on a map or a list, ranked b
 | STAY-A5-F8-P2 | **Theme pages**: Browse pages for themes and regions. | interface | small | STAY-A5-F8-P1 |  |
 | STAY-A5-F9-P1 | **Recently viewed**: A private list of places you looked at, kept on your device unless you choose to sync it. | service | small | `kit-store` |  |
 | STAY-A5-F9-P2 | **Compare places**: Full price, rooms, rules, reviews and distance side by side. | interface | small | STAY-A5-F9-P1, STAY-A4-F5-P1 |  |
-| STAY-A5-F10-P1 | **Everyday-words search**: Turns a request such as 'a quiet bach near Raglan for four with a dog' into search filters through Stay's MCP commands, marked as AI, with the filters shown so the person can change them. | service | medium | STAY-A18-F4-P2, STAY-A5-F3-P1, KIT-A17-F10-P1 |  |
+| STAY-A5-F10-P1 | **Everyday-words search**: Turns a request such as 'a quiet holiday home near the beach for four with a dog' into search filters through Stay's MCP commands, marked as AI, with the filters shown so the person can change them. | service | medium | STAY-A18-F4-P2, STAY-A5-F3-P1, KIT-A17-F10-P1 |  |
 | STAY-A5-F10-P2 | **AI comparison**: An AI summary comparing chosen places side by side, marked as AI and linked to the listing facts it used. | service | small | STAY-A5-F9-P2, STAY-A18-F4-P2, KIT-A17-F10-P1 |  |
 
 ## STAY-A6 Booking
@@ -246,7 +246,7 @@ Guests book instantly or by request, see exactly what they agree to, and get a c
 | STAY-A6-F3 Booking requests | Send a request with a message; the host accepts or declines within 24 hours. | core | Request and reply; Request screens; Pre-approval and special offers |
 | STAY-A6-F4 Guests, children and pets | Say how many adults, children, infants and pets are coming, and bring a service animal. | core | Guest details; Service animal rule |
 | STAY-A6-F5 Confirmation and trip page | Get a confirmation with the booking number, address, check-in time and receipt, and one page for the whole trip. | core | Confirmation; Trip page |
-| STAY-A6-F6 Booking documents | Download a receipt, a GST tax invoice, and a booking letter for visas or employers. | core | Stay tax invoices; Booking letter |
+| STAY-A6-F6 Booking documents | Download a receipt, a tax invoice, and a booking letter for visas or employers. | core | Stay tax invoices; Booking letter |
 | STAY-A6-F7 Book for someone else | Book a stay for another person, such as a parent or a colleague. | next | Named main guest |
 | STAY-A6-F8 Split the cost | Split the payment between the people in your group. | later | Split payments; Split screens |
 | STAY-A6-F9 Business travel | Book for work, put a company's details on invoices and see a team's trips together. | later | Business accounts; Travel rules |
@@ -270,7 +270,7 @@ Guests book instantly or by request, see exactly what they agree to, and get a c
 | STAY-A6-F4-P2 | **Service animal rule**: Stay's use of the kit's assistance animal rule: assistance dogs are always allowed and never charged a pet fee. | legal | small | KIT-A10-F19-P2, STAY-A6-F4-P1 |  |
 | STAY-A6-F5-P1 | **Confirmation**: Confirmation screen, email and receipt with everything agreed, using the kit's receipts. | service | small | KIT-A8-F4-P1, KIT-A3-F7-P1, STAY-A6-F2-P2 |  |
 | STAY-A6-F5-P2 | **Trip page**: One page per trip with dates, address, host, chat, documents, directions and the safety and help buttons. | interface | medium | STAY-A6-F2-P2, KIT-A5-F4-P2 |  |
-| STAY-A6-F6-P1 | **Stay tax invoices**: Stay's content on the kit's tax invoices: whose name and GST number appear follows the seller of record decision, delivered as accessible PDFs. | service | small | KIT-A4-F2-P1, KIT-A19-F11-P1, STAY-A7-F1-P4, STAY-A6-F2-P2 |  |
+| STAY-A6-F6-P1 | **Stay tax invoices**: Stay's content on the kit's tax invoices: whose name and sales tax number appear follows the seller of record decision, delivered as accessible PDFs. | service | small | KIT-A4-F2-P1, KIT-A19-F11-P1, STAY-A7-F1-P4, STAY-A6-F2-P2 |  |
 | STAY-A6-F6-P2 | **Booking letter**: A plain letter confirming the stay, for visas or employers. | service | small | `engine-pdf`, KIT-A19-F11-P1, STAY-A6-F2-P2 |  |
 | STAY-A6-F7-P1 | **Named main guest**: The booker and the main guest can differ, with the main guest's contact shared with the host. | data | small | STAY-A6-F2-P2 |  |
 | STAY-A6-F8-P1 | **Split payments**: Each traveller pays their share before a deadline, or the booker covers the rest, on the kit's split payments. | integration | medium | KIT-A3-F21-P1, STAY-A6-F2-P2 |  |
@@ -302,9 +302,9 @@ Guests pay through a regulated provider, money is held within the provider's tim
 | ID | Part | Kind | Size | Depends on | Piece |
 | --- | --- | --- | --- | --- | --- |
 | STAY-A7-F1-P1 | **Stay checkout step**: Stay's step on the kit's checkout: the booking summary, full price, cancellation policy and payment schedule, with card numbers handled only by the provider. | interface | small | KIT-A3-F1-P3, STAY-A7-F2-P1, STAY-A4-F5-P3 |  |
-| STAY-A7-F1-P2 | **Payment methods**: Stay's needs for the kit's payment provider choice: which cards, bank payments and wallets visitors to NZ use, and what each costs. | research | small | KIT-A3-F1-P1 | [K02](../kit/STATUS.md) |
+| STAY-A7-F1-P2 | **Payment methods**: Stay's needs for the kit's payment provider choice: which cards, bank payments and wallets guests use in each market, and what each costs. | research | small | KIT-A3-F1-P1 | [K02](../kit/STATUS.md) |
 | STAY-A7-F1-P3 | **Payment records**: Each payment is an operation linked to its booking. | data | small | KIT-A3-F1-P2, `kit-ops`, STAY-A6-F2-P2 |  |
-| STAY-A7-F1-P4 | **Who sells the stay**: Stay's case for the kit's seller of record decision: whether the host or the co-op supplies the stay, whose name and GST number go on the tax invoice, who owes consumer guarantees and who answers card disputes, for bookings through Spare Stay, hosts' own pages and booking boxes. For GST the co-op is the deemed supplier of listed services. | legal | small | KIT-A3-F1-P5, KIT-A4-F1-P1, KIT-A18-F8-P1 | [K02](../kit/STATUS.md) |
+| STAY-A7-F1-P4 | **Who sells the stay**: Stay's case for the kit's seller of record decision: whether the host or the co-op supplies the stay, whose name and sales tax number go on the tax invoice, who owes consumer guarantees and who answers card disputes, for bookings through Spare Stay, hosts' own pages and booking boxes. Under New Zealand GST, in the first country pack, the co-op is the deemed supplier of listed services. | legal | small | KIT-A3-F1-P5, KIT-A4-F1-P1, KIT-A18-F8-P1 | [K02](../kit/STATUS.md) |
 | STAY-A7-F2-P1 | **Payment schedule**: Stay's schedule on the kit's hold time limits and stage payments: a deposit at booking and the balance charged inside the provider's hold window, with reminders. | service | small | KIT-A3-F2-P4, KIT-A3-F2-P3, STAY-A6-F2-P2 |  |
 | STAY-A7-F2-P2 | **Payment plan screens**: Shows what is paid, what is due and when. | interface | small | STAY-A7-F2-P1 |  |
 | STAY-A7-F3-P1 | **Stay release point**: Stay's release point on the kit's hold and release rules: the host's share is released a set time after check-in. | integration | small | KIT-A3-F2-P1, STAY-A7-F1-P3, STAY-A7-F3-P3 | [K02](../kit/STATUS.md) |
@@ -312,7 +312,7 @@ Guests pay through a regulated provider, money is held within the provider's tim
 | STAY-A7-F4-P1 | **Stay deposit rules**: Stay's rules on the kit's deposits and damage holds: the host sets an amount within a voted cap, held as a card hold or a paid deposit, and card holds on long stays are re-authorised before they lapse. | integration | small | KIT-A3-F10-P1, KIT-A3-F2-P4, KIT-A12-F4-P1 |  |
 | STAY-A7-F4-P2 | **Deposit release clock**: Counts the claim window from check-out and releases the deposit when it ends. | service | small | STAY-A7-F4-P1, STAY-A9-F6-P2, STAY-A13-F3-P1, KIT-A15-F14-P1 |  |
 | STAY-A7-F5-P1 | **Stay payout timing**: Stay's payout date for each booking on the kit's payout runs: after check-in, or earlier under the rule for bookings made months ahead. | integration | small | KIT-A3-F3-P1, KIT-A3-F3-P2, STAY-A7-F3-P1 | [K02](../kit/STATUS.md) |
-| STAY-A7-F5-P3 | **Earnings page**: Stay's lines on the kit's earnings page: each payout by place and booking, with nights, fees, GST and flat-rate credits. | interface | small | KIT-A3-F3-P3, STAY-A7-F5-P1 |  |
+| STAY-A7-F5-P3 | **Earnings page**: Stay's lines on the kit's earnings page: each payout by place and booking, with nights, fees, sales tax and any flat-rate credits. | interface | small | KIT-A3-F3-P3, STAY-A7-F5-P1 |  |
 | STAY-A7-F6-P1 | **Stay fee inputs**: Stay's inputs to the kit's fee calculator: the voted split between guest and host, and the provider's charges passed through at cost. | library | small | KIT-A3-F4-P1, KIT-A13-F3-P1, STAY-A15-F4-P1 | [K06](../kit/STATUS.md) |
 | STAY-A7-F6-P2 | **Fee explained**: Each booking's fee links to that month's cost ledger. | interface | small | STAY-A7-F6-P1, KIT-A13-F3-P2 | [K06](../kit/STATUS.md) |
 | STAY-A7-F7-P1 | **Stay's dispute evidence**: Gathers each booking's evidence for the kit's card disputes: what was agreed, the house rules and policy accepted, check-in confirmation and messages. | service | small | KIT-A3-F5-P2, STAY-A6-F2-P2, STAY-A10-F1-P1 |  |
@@ -359,7 +359,7 @@ Everything a guest needs from arrival to check-out on one trip page that works w
 | --- | --- | --- | --- |
 | STAY-A9-F1 Check-in instructions | Get directions, the door code or key box details, Wi-Fi and parking, released early enough to reach your phone before you lose signal. | core | Check-in details; Arrival guide; Directions hand-off; Check-in secrets |
 | STAY-A9-F2 House guide | Read the house manual, appliance help, rubbish and recycling days, and the host's local tips. | next | House manual; Local tips map; Evacuation information |
-| STAY-A9-F3 Offline trip | See your booking, address, codes and host contact with no signal, as at many baches. | core | Offline trip copy |
+| STAY-A9-F3 Offline trip | See your booking, address, codes and host contact with no signal, as at many remote holiday homes. | core | Offline trip copy |
 | STAY-A9-F4 Smart locks | Get a door code that works only for your dates. | next | Smart lock links; Lock maker research |
 | STAY-A9-F5 Report a problem | Tell the host about a problem with photos, and get a refund or a move if it isn't fixed. | core | Problem reports |
 | STAY-A9-F6 Check-out | Get the check-out steps and confirm you have left. | core | Check-out steps; Stay complete |
@@ -382,7 +382,7 @@ Everything a guest needs from arrival to check-out on one trip page that works w
 | STAY-A9-F2-P3 | **Evacuation information**: Where to go and how to get warnings in a tsunami, flood or fire, from official sources, in every house guide. | data | small | STAY-A9-F2-P1, STAY-A8-F5-P2 |  |
 | STAY-A9-F3-P1 | **Offline trip copy**: Trip details, check-in steps, an area map and any house guide kept on the phone for places with no coverage, and wiped after the stay. | service | medium | `kit-sync`, KIT-A15-F4-P4, STAY-A6-F5-P2, STAY-A9-F1-P4 |  |
 | STAY-A9-F4-P1 | **Smart lock links**: Makes a code per stay through lock makers' published interfaces, as plugins, preferring codes that work offline for the stay's dates. Smart lock links should move down into the kit, since Spare Rent and Spare Home need them too. | integration | medium | `kit-plugin`, STAY-A6-F2-P2, STAY-A9-F1-P4 |  |
-| STAY-A9-F4-P2 | **Lock maker research**: Which locks sold in NZ have published interfaces and terms that allow this. | research | small |  |  |
+| STAY-A9-F4-P2 | **Lock maker research**: Which locks sold in each launch country have published interfaces and terms that allow this. | research | small |  |  |
 | STAY-A9-F5-P1 | **Problem reports**: Problems reported with photos and a time, shared with the host and kept as evidence; a problem not fixed in time opens a protection claim. | service | small | KIT-A10-F3-P1, KIT-A11-F2-P1, STAY-A10-F1-P1 |  |
 | STAY-A9-F6-P1 | **Check-out steps**: The host's check-out tasks and a button to confirm departure. | interface | small | STAY-A9-F1-P1 |  |
 | STAY-A9-F6-P2 | **Stay complete**: Stay's use of the kit's completion and auto-confirm: check-out confirmed, or confirmed on its own at check-out time, which opens reviews and starts the deposit clock. | service | small | KIT-A5-F7-P1, STAY-A6-F2-P2 |  |
@@ -433,7 +433,7 @@ Tools to run one place or a hundred: a daily view, co-hosts with set permissions
 | STAY-A11-F4 Upkeep and supplies | Log repairs, track supplies and keep records for each place. | next | Repair log; Supplies list |
 | STAY-A11-F5 Insights | See occupancy, earnings, review scores and how guests find your place. | next | Host insights; Insight screens |
 | STAY-A11-F6 Bulk changes | Change prices, rules or settings across many listings at once, and undo it. | next | Bulk edit |
-| STAY-A11-F7 Host tax summary | Get a yearly summary of income, fees, GST, nights let and private use to give your accountant. | next | Yearly summary; Mixed-use asset rules |
+| STAY-A11-F7 Host tax summary | Get a yearly summary of income, fees, sales tax, nights let and private use to give your accountant. | next | Yearly summary; Mixed-use asset rules |
 | STAY-A11-F8 Pay cleaners and co-hosts lawfully | Know whether cleaners and co-hosts paid through the app are employees or contractors, and that the pay, tax and safety rules follow. | next | Stay worker status; Cleaning hazards and safety duties |
 | STAY-A11-F9 Owners and managers | Hand a listing to a new owner or manager when a place is sold, and give owners statements for places a manager runs. | later | Listing hand-over; Owner statements |
 
@@ -452,12 +452,12 @@ Tools to run one place or a hundred: a daily view, co-hosts with set permissions
 | STAY-A11-F5-P1 | **Host insights**: Occupancy, average nightly price, earnings and review trends for each place. | service | medium | STAY-A6-F2-P2, STAY-A7-F5-P3, STAY-A12-F1-P1 |  |
 | STAY-A11-F5-P2 | **Insight screens**: Charts and tables, with export. | interface | medium | STAY-A11-F5-P1 |  |
 | STAY-A11-F6-P1 | **Bulk edit**: Applies one change to many listings as one operation that can be undone. | service | medium | `kit-ops`, STAY-A2-F1-P1, STAY-A4-F1-P1 |  |
-| STAY-A11-F7-P1 | **Yearly summary**: Stay's summary on the kit's yearly statements: income, fees, GST, flat-rate credits and nights per place, plus private-use, rented and unused days for the mixed-use asset rules. | service | small | KIT-A4-F4-P1, STAY-A7-F5-P3, STAY-A3-F1-P4, STAY-A11-F7-P2 |  |
-| STAY-A11-F7-P2 | **Mixed-use asset rules**: How IRD's mixed-use asset rules apply to baches: they apply when a place has private and rented use and is unused for 62 days or more in the year; owners earning under $4,000 from it can opt out, but not companies. To confirm against IRD's guidance. | research | small |  |  |
+| STAY-A11-F7-P1 | **Yearly summary**: Stay's summary on the kit's yearly statements: income, fees, sales tax, any flat-rate credits and nights per place, plus private-use, rented and unused days for the mixed-use asset rules. | service | small | KIT-A4-F4-P1, STAY-A7-F5-P3, STAY-A3-F1-P4, STAY-A11-F7-P2 |  |
+| STAY-A11-F7-P2 | **Mixed-use asset rules**: How each country taxes a holiday home with private and rented use. In New Zealand, IRD's mixed-use asset rules apply to baches when a place has private and rented use and is unused for 62 days or more in the year; owners earning under $4,000 from it can opt out, but not companies. To confirm against IRD's guidance. | research | small |  |  |
 | STAY-A11-F8-P1 | **Stay worker status**: Stay's facts for the kit's worker status test for cleaners and co-hosts paid through the app, with the result declared in Stay's settings, which switches on the matching pay and tax rules; decided with a lawyer before any payout split pays a worker. | legal | small | KIT-A23-F1-P1, KIT-A23-F1-P2 |  |
 | STAY-A11-F8-P2 | **Cleaning hazards and safety duties**: Stay's facts for the kit's health and safety duties for cleaners, with hazard notes on each place, such as steep access, chemicals or a dog, shown before a job is accepted. | library | small | KIT-A24-F1-P1, KIT-A24-F5-P1, STAY-A11-F3-P1 |  |
 | STAY-A11-F9-P1 | **Listing hand-over**: Moves a listing, its calendar and future bookings to a new owner or manager, with a published rule on whether reviews stay with the place, and each side keeping its own records. | service | small | STAY-A2-F1-P1, STAY-A19-F6-P1 |  |
-| STAY-A11-F9-P2 | **Owner statements**: Monthly statements for owners whose places a manager runs: bookings, payouts, fees, GST and costs. | service | small | STAY-A7-F5-P3, STAY-A11-F2-P1, `engine-pdf` |  |
+| STAY-A11-F9-P2 | **Owner statements**: Monthly statements for owners whose places a manager runs: bookings, payouts, fees, sales tax and costs. | service | small | STAY-A7-F5-P3, STAY-A11-F2-P1, `engine-pdf` |  |
 
 ## STAY-A12 Reviews
 
@@ -498,7 +498,7 @@ Verified people, fraud and scam checks, help in an emergency, protection when a 
 
 | Feature | What a person can do | Priority | Parts |
 | --- | --- | --- | --- |
-| STAY-A13-F1 Help in an emergency | Call 111 or the local emergency number from the app, and reach urgent safety help at any hour during a stay. | core | Emergency button; Urgent safety support; Sexual harm path in Stay |
+| STAY-A13-F1 Help in an emergency | Call the local emergency number from the app (example: 111 in New Zealand), and reach urgent safety help at any hour during a stay. | core | Emergency button; Urgent safety support; Sexual harm path in Stay |
 | STAY-A13-F2 Guest protection | Get a refund or help to rebook if you can't get in, the place isn't as described, it isn't safe or the host cancels. | core | Guest protection rules; Protection claims; Who pays for protection; Hidden camera found |
 | STAY-A13-F3 Damage claims | Claim for damage with photos and receipts; the guest can reply; a fair panel decides if you can't agree. | core | Damage claims; Claim screens; Damage cover and insurance law; Settle before a panel; Published damage rules |
 | STAY-A13-F4 Disputes and member panels | Take a disagreement about money, the listing or the stay to a panel that is fair to hosts and guests alike, or to an outside tribunal. | core | Stay dispute types; Stay panels; Fair panel make-up; Outside routes for stays |
@@ -507,7 +507,7 @@ Verified people, fraud and scam checks, help in an emergency, protection when a 
 | STAY-A13-F7 Fair treatment | Book and host without discrimination, under a commitment every member accepts. | core | Fair treatment commitment; Decline patterns; What hosts may choose |
 | STAY-A13-F8 Host liability cover | Get liability cover for injury to guests, arranged at cost. | later | Liability cover research |
 | STAY-A13-F9 Overstays and threatening guests | Know the steps when a guest won't leave or turns threatening, and get support as a host. | next | Overstay and threat steps |
-| STAY-A13-F10 Spot exploitation | Learn the warning signs of human trafficking and child exploitation, and report them to NZ Police. | next | Exploitation warning signs |
+| STAY-A13-F10 Spot exploitation | Learn the warning signs of human trafficking and child exploitation, and report them to the police. | next | Exploitation warning signs |
 | STAY-A13-F11 Block someone | Block a guest or a host, and report or block from any message. | core | Stay blocking; Report and block from chat |
 
 **Parts**
@@ -523,37 +523,37 @@ Verified people, fraud and scam checks, help in an emergency, protection when a 
 | STAY-A13-F2-P4 | **Hidden camera found**: When a guest finds an undisclosed camera: an urgent report, the listing frozen at once, a full refund and rebooking, and police if needed. | service | small | STAY-A2-F6-P2, STAY-A13-F2-P2, KIT-A10-F3-P1 |  |
 | STAY-A13-F3-P1 | **Damage claims**: Stay's claims on the kit's disputes and evidence store: the claim, photos and receipts, the guest's reply and time limits under the published damage rules, with any deposit held until it is decided. | service | medium | KIT-A11-F1-P1, KIT-A11-F2-P1, STAY-A9-F6-P2, STAY-A13-F3-P5 |  |
 | STAY-A13-F3-P2 | **Claim screens**: Screens for both sides to add photos, receipts and replies. | interface | small | STAY-A13-F3-P1 |  |
-| STAY-A13-F3-P3 | **Damage cover and insurance law**: Stay's case for the kit's insurance options: a co-op pool or an outside insurer for damage beyond the deposit, compared on cost; whether a co-op pool is insurance business needing a Reserve Bank licence under the Insurance (Prudential Supervision) Act 2010; and what financial advice rules apply if the co-op arranges cover for hosts. | research | medium | KIT-A11-F9-P1, KIT-A11-F10-P1 | [ST03](STATUS.md) |
+| STAY-A13-F3-P3 | **Damage cover and insurance law**: Stay's case for the kit's insurance options: a co-op pool or an outside insurer for damage beyond the deposit, compared on cost; whether a co-op pool is insurance business needing a licence from the insurance regulator (example: a Reserve Bank licence under New Zealand's Insurance (Prudential Supervision) Act 2010); and what financial advice rules apply if the co-op arranges cover for hosts. | research | medium | KIT-A11-F9-P1, KIT-A11-F10-P1 | [ST03](STATUS.md) |
 | STAY-A13-F3-P4 | **Settle before a panel**: Stay's use of the kit's settlement offers: either side offers an amount, and an accepted offer moves the held money at once. | library | small | KIT-A11-F3-P1, STAY-A13-F3-P1 |  |
 | STAY-A13-F3-P5 | **Published damage rules**: Wear and tear versus damage, depreciation of items, the evidence needed, time limits and caps, with a short course for panel members who decide damage claims. | legal | small | KIT-A25-F2-P1 |  |
 | STAY-A13-F4-P1 | **Stay dispute types**: Stay's dispute types (refunds, damage and listing accuracy) and deadlines on the kit's disputes service, with money held until a decision. | service | small | KIT-A11-F1-P1, KIT-A11-F6-P1 |  |
 | STAY-A13-F4-P2 | **Stay panels**: Stay's panels on the kit's panel selection, made up by the fair panel rule, with one appeal. | service | small | KIT-A11-F4-P1, KIT-A11-F5-P1, STAY-A13-F4-P3 |  |
-| STAY-A13-F4-P3 | **Fair panel make-up**: While only hosts are members, panels that decide host-against-guest disputes, review removals and protection claims include guest-side members or independent adjudicators, with conflict checks so no host decides a case about a competitor or a friend. | legal | small | KIT-A10-F20-P1, KIT-A11-F4-P1 |  |
-| STAY-A13-F4-P4 | **Outside routes for stays**: Stay's guidance on the kit's outside routes: the Disputes Tribunal for host and guest disputes, the Tenancy Tribunal where a long stay is a tenancy, and an evidence bundle either side can export. | data | small | KIT-A11-F7-P1, KIT-A11-F4-P5, KIT-A11-F2-P1 |  |
+| STAY-A13-F4-P3 | **Fair panel make-up**: Since hosts vote on Stay's rules, panels that decide host-against-guest disputes, review removals and protection claims include guest-side members or independent adjudicators, with conflict checks so no host decides a case about a competitor or a friend. | legal | small | KIT-A10-F20-P1, KIT-A11-F4-P1 |  |
+| STAY-A13-F4-P4 | **Outside routes for stays**: Stay's guidance on the kit's outside routes: a small claims tribunal for host and guest disputes, a tenancy tribunal where a long stay is a tenancy (examples: New Zealand's Disputes Tribunal and Tenancy Tribunal), and an evidence bundle either side can export. | data | small | KIT-A11-F7-P1, KIT-A11-F4-P5, KIT-A11-F2-P1 |  |
 | STAY-A13-F5-P1 | **Stay fraud signals**: Stay's signals for the kit's fraud signals: a place already listed by someone else, a host who doesn't match the address, and bookings made far ahead on new cards. | service | small | KIT-A10-F12-P2, KIT-A3-F13-P1, KIT-A3-F3-P4 |  |
 | STAY-A13-F5-P2 | **Proven scam defences**: What other marketplaces do against rental scams, and what fits a co-op, as Stay's input to the kit's scam methods. | research | small | KIT-A10-F12-P1 |  |
 | STAY-A13-F5-P3 | **Ban evasion checks**: Spots a banned host or guest coming back under a new account or a family member's name, using the kit's one-membership check and restrictions across apps, for a person to review. | service | small | KIT-A10-F14-P1, KIT-A14-F1-P4, KIT-A10-F12-P2 |  |
 | STAY-A13-F6-P1 | **Neighbour reports**: A public form and number for neighbours to report a current problem at a listing. | service | small | KIT-A10-F3-P1, KIT-A8-F4-P2 |  |
 | STAY-A13-F6-P2 | **Party rule**: No unapproved parties, with risk checks on short local bookings over busy dates that use booking facts, never age alone, and are checked for indirect age discrimination. | legal | small | KIT-A10-F5-P1, STAY-A13-F7-P3 |  |
-| STAY-A13-F7-P1 | **Fair treatment commitment**: Stay's use of the kit's non-discrimination commitment under the Human Rights Act, accepted by every member. | legal | small | KIT-A10-F19-P1 |  |
+| STAY-A13-F7-P1 | **Fair treatment commitment**: Stay's use of the kit's non-discrimination commitment under human rights law (example: New Zealand's Human Rights Act), accepted by every member. | legal | small | KIT-A10-F19-P1 |  |
 | STAY-A13-F7-P2 | **Decline patterns**: Stay's use of the kit's decline pattern checks on booking requests, listed on the AI use register, with a person's review. | service | small | KIT-A6-F5-P3, STAY-A6-F3-P1 |  |
-| STAY-A13-F7-P3 | **What hosts may choose**: Whether hosts may set a minimum guest age, and what the Human Rights Act allows a host who shares their own home to choose about guests; checked with a lawyer. | legal | small | KIT-A10-F19-P1 |  |
-| STAY-A13-F8-P1 | **Liability cover research**: Options for host liability insurance in NZ and abroad, with costs, as Stay's input to the kit's insurance options. | research | medium | KIT-A11-F9-P1 |  |
-| STAY-A13-F9-P1 | **Overstay and threat steps**: Plain steps for a guest who overstays or refuses to leave, and for a threatening guest: when to call 111, trespass notices, and support for the host, who often lives next door; checked with a lawyer. | legal | small | KIT-A10-F1-P1, KIT-A21-F3-P1 |  |
-| STAY-A13-F10-P1 | **Exploitation warning signs**: A short course for hosts and cleaners on the warning signs of human trafficking and child exploitation, and a reporting route to NZ Police. | service | small | KIT-A25-F2-P1, KIT-A10-F3-P1 |  |
+| STAY-A13-F7-P3 | **What hosts may choose**: Whether hosts may set a minimum guest age, and what human rights law allows a host who shares their own home to choose about guests (example: New Zealand's Human Rights Act); checked with a lawyer. | legal | small | KIT-A10-F19-P1 |  |
+| STAY-A13-F8-P1 | **Liability cover research**: Options for host liability insurance in each country, with costs, as Stay's input to the kit's insurance options. | research | medium | KIT-A11-F9-P1 |  |
+| STAY-A13-F9-P1 | **Overstay and threat steps**: Plain steps for a guest who overstays or refuses to leave, and for a threatening guest: when to call the emergency number (111 in New Zealand), trespass notices, and support for the host, who often lives next door; checked with a lawyer. | legal | small | KIT-A10-F1-P1, KIT-A21-F3-P1 |  |
+| STAY-A13-F10-P1 | **Exploitation warning signs**: A short course for hosts and cleaners on the warning signs of human trafficking and child exploitation, and a reporting route to the police in each country (example: NZ Police). | service | small | KIT-A25-F2-P1, KIT-A10-F3-P1 |  |
 | STAY-A13-F11-P1 | **Stay blocking**: Stay's use of the kit's blocking: a blocked guest can't find, request or message that host's places, and a blocked host's places don't show to that guest. | service | small | KIT-A10-F4-P1, STAY-A5-F1-P2 |  |
 | STAY-A13-F11-P2 | **Report and block from chat**: Stay's use of the kit's report and block on every message in booking threads. | interface | small | KIT-A8-F6-P1, STAY-A10-F1-P1 |  |
 
 ## STAY-A14 Local rules, tax and legal duties
 
-Council rules, GST, income reporting, levies and consumer law built in as rules, NZ first, with each new country added as data.
+Council rules, sales tax, income reporting, levies and consumer law built in as rules, with each country added as data in its own pack; New Zealand is the first.
 
 | Feature | What a person can do | Priority | Parts |
 | --- | --- | --- | --- |
 | STAY-A14-F1 Council rules | See your council's short-stay rules for a place and record your registration or consent. | core | Council rule research; Council rule data; Registration numbers; Campground registration; Right to host |
 | STAY-A14-F2 Night caps and council records | Track nights let against a council's cap, and share records with the council when the law asks. | core | Night cap tracking; Council records |
-| STAY-A14-F3 GST on stays | Have GST collected correctly on every booking, with flat-rate credits passed to hosts who aren't GST registered. | core | GST on stays rules; Flat-rate credit statements; GST rules research; Large owner opt-outs; Listing intermediaries |
-| STAY-A14-F4 Income reporting | Have your income reported to IRD as the law requires, and see exactly what was sent. | core | Rental reporting details; Your copy |
+| STAY-A14-F3 Sales tax on stays (example: New Zealand GST) | Have sales tax collected correctly on every booking, with any credits the law gives passed to hosts who aren't registered (example: New Zealand's flat-rate credits). | core | Sales tax on stays rules; Flat-rate credit statements; Sales tax rules research; Large owner opt-outs; Listing intermediaries |
+| STAY-A14-F4 Income reporting | Have your income reported to the tax office as the law requires (example: New Zealand's IRD), and see exactly what was sent. | core | Rental reporting details; Your copy |
 | STAY-A14-F5 Levies and tourist taxes | Have local levies and tourist taxes added and paid where the law asks the platform to collect them. | next | Levy rules; Levy payments |
 | STAY-A14-F6 Anti-money-laundering | Keep the co-op within anti-money-laundering law for online marketplaces. | core | Stay's money-laundering risks |
 | STAY-A14-F7 Terms and consumer law | Read plain terms for guests and hosts, with the terms each booking was made under kept. | core | Plain-language terms; Consumer law duties; No parity or exclusivity |
@@ -564,60 +564,60 @@ Council rules, GST, income reporting, levies and consumer law built in as rules,
 
 | ID | Part | Kind | Size | Depends on | Piece |
 | --- | --- | --- | --- | --- | --- |
-| STAY-A14-F1-P1 | **Council rule research**: Each main NZ council's registration, consent, night cap, rates and levy rules, with sources. | research | medium |  | [ST01](STATUS.md) |
+| STAY-A14-F1-P1 | **Council rule research**: Each main council's registration, consent, night cap, rates and levy rules in each country, with sources, starting with New Zealand's. | research | medium |  | [ST01](STATUS.md) |
 | STAY-A14-F1-P2 | **Council rule data**: Each council's rules as data the app can apply. | data | medium | STAY-A14-F1-P1 | [ST01](STATUS.md) |
 | STAY-A14-F1-P3 | **Registration numbers**: Hosts enter registration or consent numbers; a listing that needs one can't go live without it. | service | small | STAY-A14-F1-P2, STAY-A2-F1-P4 | [ST01](STATUS.md) |
-| STAY-A14-F1-P4 | **Campground registration**: A campsite or glamping listing used by 2 or more parties for reward needs the council's certificate of registration under the Camping-Grounds Regulations 1985 before it can go live. | legal | small | STAY-A14-F1-P3, STAY-A2-F1-P3 | [ST01](STATUS.md) |
+| STAY-A14-F1-P4 | **Campground registration**: A campsite or glamping listing needs whatever registration its country pack sets before it can go live. In New Zealand, one used by 2 or more parties for reward needs the council's certificate of registration under the Camping-Grounds Regulations 1985. | legal | small | STAY-A14-F1-P3, STAY-A2-F1-P3 | [ST01](STATUS.md) |
 | STAY-A14-F1-P5 | **Right to host**: Each host declares they own the place, or rent it with the landlord's written consent; body corporate rules on noise, security and common areas are shown as house rules; and the host confirms their home insurer knows about paid guests. | legal | small | STAY-A2-F3-P2 |  |
 | STAY-A14-F2-P1 | **Night cap tracking**: Counts nights let each year and warns, then closes the calendar, at a cap. | service | small | STAY-A3-F1-P1, STAY-A14-F1-P2 | [ST01](STATUS.md) |
 | STAY-A14-F2-P2 | **Council records**: Records a council may see, shared only as its rules require. | service | medium | STAY-A14-F2-P1 | [ST01](STATUS.md) |
-| STAY-A14-F3-P1 | **GST on stays rules**: Stay's cases for the kit's GST engine: short stays as listed services, the platform's 15% GST, 8.5% flat-rate credits for unregistered hosts, opt-outs and listing intermediaries. Local levies are worked out separately. | library | small | KIT-A4-F1-P2, KIT-A4-F1-P1 |  |
-| STAY-A14-F3-P2 | **Flat-rate credit statements**: Stay's statements on the kit's flat-rate credit notices, at least monthly, with lines per listing, sent to the owner or, where a listing intermediary has taken on GST, to that intermediary. | service | small | KIT-A4-F1-P3, STAY-A14-F3-P1, STAY-A14-F3-P6 |  |
-| STAY-A14-F3-P4 | **GST rules research**: How GST applies to everything that is not a night's stay: cancellation fees, no-show charges, forfeited deposits, damage payments, extras such as firewood or linen hire, and trip extras or experiences that may not be listed services; from IRD's guidance. | research | small | KIT-A4-F1-P1 |  |
-| STAY-A14-F3-P5 | **Large owner opt-outs**: Records opt-out notices from non-individual owners with more than $500,000 of taxable supplies, and written opt-out agreements for owners with more than 2,000 nights through one marketplace, or hostels and motels with more than $60,000 that were GST-registered before 1 April 2024. Then switches the GST engine, invoices and flat-rate credits for that owner, on the kit's opt-out agreements. | service | small | KIT-A4-F10-P1, STAY-A14-F3-P1 |  |
-| STAY-A14-F3-P6 | **Listing intermediaries**: Where a property manager lists for owners and agrees to collect and pay GST itself, records the agreement and each owner's GST status, and has the manager run flat-rate credits for unregistered owners, as IRD's listing intermediary rules set out. | service | small | KIT-A4-F1-P1, STAY-A1-F1-P2, STAY-A14-F3-P1 |  |
-| STAY-A14-F4-P1 | **Rental reporting details**: Stay's details for the kit's yearly IRD report: each listing's address and land title or registration number, days rented per listing, the host's tax number and date of birth for individuals, checks done by the deadline, and the excluded-seller test for listings rented more than 2,000 times; confirmed against IRD's guidance. | service | small | KIT-A4-F3-P2, KIT-A4-F3-P3, STAY-A1-F4-P1 |  |
+| STAY-A14-F3-P1 | **Sales tax on stays rules**: Stay's cases for the kit's sales tax engine. In the first country pack (New Zealand): short stays as listed services, the platform's 15% GST, 8.5% flat-rate credits for unregistered hosts, opt-outs and listing intermediaries. Local levies are worked out separately. | library | small | KIT-A4-F1-P2, KIT-A4-F1-P1 |  |
+| STAY-A14-F3-P2 | **Flat-rate credit statements**: Stay's statements on the kit's flat-rate credit notices, at least monthly, with lines per listing, sent to the owner or, where a listing intermediary has taken on sales tax, to that intermediary. | service | small | KIT-A4-F1-P3, STAY-A14-F3-P1, STAY-A14-F3-P6 |  |
+| STAY-A14-F3-P4 | **Sales tax rules research**: How sales tax applies to everything that is not a night's stay: cancellation fees, no-show charges, forfeited deposits, damage payments, extras such as firewood or linen hire, and trip extras or experiences that may not be listed services; for New Zealand, from IRD's guidance. | research | small | KIT-A4-F1-P1 |  |
+| STAY-A14-F3-P5 | **Large owner opt-outs**: In the first country pack (New Zealand): records opt-out notices from non-individual owners with more than $500,000 of taxable supplies, and written opt-out agreements for owners with more than 2,000 nights through one marketplace, or hostels and motels with more than $60,000 that were GST-registered before 1 April 2024. Then switches the sales tax engine, invoices and flat-rate credits for that owner, on the kit's opt-out agreements. | service | small | KIT-A4-F10-P1, STAY-A14-F3-P1 |  |
+| STAY-A14-F3-P6 | **Listing intermediaries**: Where a property manager lists for owners and agrees to collect and pay sales tax itself, records the agreement and each owner's tax status, and has the manager run flat-rate credits for unregistered owners, as the tax office's rules set out (example: IRD's listing intermediary rules in New Zealand). | service | small | KIT-A4-F1-P1, STAY-A1-F1-P2, STAY-A14-F3-P1 |  |
+| STAY-A14-F4-P1 | **Rental reporting details**: Stay's details for the kit's yearly report to the tax office. For New Zealand: each listing's address and land title or registration number, days rented per listing, the host's tax number and date of birth for individuals, checks done by the deadline, and the excluded-seller test for listings rented more than 2,000 times; confirmed against IRD's guidance. | service | small | KIT-A4-F3-P2, KIT-A4-F3-P3, STAY-A1-F4-P1 |  |
 | STAY-A14-F4-P2 | **Your copy**: Hosts see and download what was reported about them. | interface | small | STAY-A14-F4-P1, KIT-A4-F3-P3 |  |
 | STAY-A14-F5-P1 | **Levy rules**: Each place's levies and tourist taxes as data for the kit's tax rules per country, such as Victoria's short stay levy. The levy engine itself should move down into the kit's tax service. | data | small | KIT-A4-F7-P1, KIT-A19-F6-P1 |  |
 | STAY-A14-F5-P2 | **Levy payments**: Collects levies and pays them to the right office. | integration | medium | STAY-A14-F5-P1, KIT-A3-F1-P2 |  |
 | STAY-A14-F6-P1 | **Stay's money-laundering risks**: Stay's risks for the co-op's one anti-money-laundering programme: high-value bookings paid by someone else, refunds asked to a different card, and long stays paid far ahead. | legal | small | KIT-A4-F5-P1 | [K02](../kit/STATUS.md) |
 | STAY-A14-F7-P1 | **Plain-language terms**: Guest terms and host terms written plainly, on the kit's terms and privacy policy. | legal | medium | KIT-A18-F4-P2 |  |
-| STAY-A14-F7-P3 | **Consumer law duties**: Stay's cases for the kit's consumer law duties: what the Fair Trading Act and Consumer Guarantees Act ask of the platform and of hosts. | research | medium | KIT-A18-F8-P1 | [MK02](../spare-market/STATUS.md) |
+| STAY-A14-F7-P3 | **Consumer law duties**: Stay's cases for the kit's consumer law duties: what consumer law asks of the platform and of hosts (example: New Zealand's Fair Trading Act and Consumer Guarantees Act). | research | medium | KIT-A18-F8-P1 | [MK02](../spare-market/STATUS.md) |
 | STAY-A14-F7-P4 | **No parity or exclusivity**: Spare Stay never asks hosts for price parity or exclusivity, so they can list anywhere at any price. | legal | small | STAY-A14-F7-P1 |  |
-| STAY-A14-F8-P1 | **Where a stay becomes a tenancy**: When a long stay falls under the Residential Tenancies Act, with sources. | research | small | KIT-A26-F3-P2 | [RT01](../spare-rent/STATUS.md) |
+| STAY-A14-F8-P1 | **Where a stay becomes a tenancy**: When a long stay becomes a tenancy under each country's rental law (example: New Zealand's Residential Tenancies Act), with sources. | research | small | KIT-A26-F3-P2 | [RT01](../spare-rent/STATUS.md) |
 | STAY-A14-F8-P2 | **Monthly billing**: Monthly payments and rules for long stays that remain holiday stays. | service | medium | STAY-A7-F2-P1, STAY-A14-F8-P1 |  |
 | STAY-A14-F8-P3 | **Host rental agreement**: A host's own rental agreement for long stays or larger groups, signed through the kit's signatures. | service | small | KIT-A25-F1-P2, STAY-A14-F8-P1 |  |
 | STAY-A14-F9-P1 | **Country rule packs**: One pack per country: taxes, registration, reporting, guest register and consumer rules. | data | large | KIT-A19-F6-P1, KIT-A4-F7-P1, STAY-A14-F1-P2 |  |
 | STAY-A14-F9-P2 | **EU short-stay rules**: The registration numbers and data sharing EU rules have asked of platforms since 20 May 2026. | research | medium |  |  |
-| STAY-A14-F9-P3 | **Australian state rules**: State registers, levies and caps in Australia, the nearest next market. | research | medium |  |  |
+| STAY-A14-F9-P3 | **Australian state rules**: State registers, levies and caps in Australia, for its country pack. | research | medium |  |  |
 | STAY-A14-F9-P4 | **EU accessibility and platform duties**: The European Accessibility Act for consumer online services, whose reach into accommodation booking is unsettled, and EU platform duties such as trader traceability and published ranking factors, for the EU rule pack. | research | small | KIT-A18-F13-P1 |  |
 
-## STAY-A15 Co-op membership, votes and the open fee
+## STAY-A15 Membership, votes and the open fee
 
-Hosts are members who own the app, vote on its fees and rules within competition law, hear guests before votes that affect them, and can see what every dollar of the fee paid for.
+Hosts keep all the profit except running costs, vote on its fees and rules within competition law, hear guests before votes that affect them, and can see what every dollar of the fee paid for.
 
 | Feature | What a person can do | Priority | Parts |
 | --- | --- | --- | --- |
-| STAY-A15-F1 Join as a member | Join the co-op as a host and become an owner with one vote. | core | Stay members and electorate; Member screens; Holiday-rental co-ops today |
+| STAY-A15-F1 Join as a member | Join free as a host and get one vote on Stay's fees and rules. | core | Stay members and electorate; Member screens; Holiday-rental co-ops today |
 | STAY-A15-F2 Vote on fees and rules | Read proposals, discuss them and vote on Spare Stay's fee, policies and rules. | core | Stay proposal types; Competition law for host votes |
 | STAY-A15-F3 See what the fee paid for | Open the monthly cost ledger and see what Spare Stay cost to run. | core | Ledger page; Stay cost lines |
 | STAY-A15-F4 Who pays the fee | Members decide whether guests, hosts or both pay the fee, and everyone sees the result. | core | Fee split setting; Guest voice |
-| STAY-A15-F5 Guests as members | Guests can join too and have a say on matters that affect them. | later | Guest membership |
+| STAY-A15-F5 Guests as members | Guests are members too, free, with a say on matters that affect them. | later | Guest membership |
 
 **Parts**
 
 | ID | Part | Kind | Size | Depends on | Piece |
 | --- | --- | --- | --- | --- | --- |
-| STAY-A15-F1-P1 | **Stay members and electorate**: Whether every host must be a member, how property management companies and co-hosts count, and who is in Stay's electorate, on the kit's join flow, member register and electorates. | data | small | KIT-A14-F1-P3, KIT-A14-F2-P1, KIT-A12-F5-P2 | [K01](../kit/STATUS.md) |
+| STAY-A15-F1-P1 | **Stay members and electorate**: Whether every host must be a member, how property management companies and co-hosts count, and who is in Stay's electorate, on the kit's join flow, member list and electorates. | data | small | KIT-A14-F1-P3, KIT-A14-F2-P1, KIT-A12-F5-P2 | [K01](../kit/STATUS.md) |
 | STAY-A15-F1-P2 | **Member screens**: Join, see your membership and leave. | interface | small | STAY-A15-F1-P1, KIT-A14-F3-P1 |  |
 | STAY-A15-F1-P3 | **Holiday-rental co-ops today**: How existing holiday-rental co-ops run and how they are doing, with sources, adding to the kit's platform co-op study. | research | small | KIT-A14-F10-P1 | [ST04](STATUS.md) |
 | STAY-A15-F2-P1 | **Stay proposal types**: Stay's proposal types (the fee split, cancellation policies, badges and house rule limits) on the kit's proposals, ballots and results. | service | small | KIT-A12-F1-P1, KIT-A12-F3-P1, KIT-A12-F4-P1, STAY-A15-F2-P3 |  |
-| STAY-A15-F2-P3 | **Competition law for host votes**: Hosts compete with each other, so votes on cancellation policies, discounts, the fee split or anything touching price are checked on the kit's competition law check, so they never become cartel provisions under the Commerce Act. | legal | small | KIT-A12-F4-P3 |  |
+| STAY-A15-F2-P3 | **Competition law for host votes**: Hosts compete with each other, so votes on cancellation policies, discounts, the fee split or anything touching price are checked on the kit's competition law check, so they never become cartel provisions under competition law (example: New Zealand's Commerce Act). | legal | small | KIT-A12-F4-P3 |  |
 | STAY-A15-F3-P1 | **Ledger page**: Stay's monthly costs, bookings and the fee they set, on the kit's ledger pages. | interface | small | KIT-A13-F1-P3 | [K06](../kit/STATUS.md) |
 | STAY-A15-F3-P2 | **Stay cost lines**: Stay's running costs and bookings in the kit's fee setting, so the fee is last period's cost divided by bookings; paid marketing counts as a cost only if members vote for it. | library | small | KIT-A13-F3-P1, KIT-A13-F2-P2 | [K06](../kit/STATUS.md) |
 | STAY-A15-F4-P1 | **Fee split setting**: A voted setting for guest, host or a split, applied by the price engine. | data | small | STAY-A15-F3-P2, STAY-A4-F5-P1, KIT-A12-F4-P1, STAY-A15-F4-P2 |  |
-| STAY-A15-F4-P2 | **Guest voice**: Until guests can join, guests are consulted before any vote that changes what they pay or how disputes are decided, and their views are published with the result. | service | small | KIT-A12-F11-P2 |  |
-| STAY-A15-F5-P1 | **Guest membership**: Whether and how guests join, and which votes they get. | research | small | KIT-A12-F5-P2 | [K01](../kit/STATUS.md) |
+| STAY-A15-F4-P2 | **Guest voice**: Guests are consulted before any host vote that changes what they pay or how disputes are decided, and their views are published with the result. | service | small | KIT-A12-F11-P2 |  |
+| STAY-A15-F5-P1 | **Guest membership**: Which votes guests get as members, beyond the major changes every member votes on. | research | small | KIT-A12-F5-P2 | [K01](../kit/STATUS.md) |
 
 ## STAY-A16 Help and support
 
@@ -628,7 +628,7 @@ Answers first, then people: a help centre, support requests linked to bookings, 
 | STAY-A16-F1 Help centre | Search plain answers to common questions in your own language. | core | Stay help topics; Article editor |
 | STAY-A16-F2 Contact support | Open a support request about a booking and follow it to an answer. | core | Support requests |
 | STAY-A16-F3 AI helper | Ask an AI helper about your booking or listing, with a person one tap away. | next | AI helper |
-| STAY-A16-F4 Other ways to reach support | Reach a person by phone, email or NZ Relay. | core | Stay support channels |
+| STAY-A16-F4 Other ways to reach support | Reach a person by phone, email or a relay service (example: NZ Relay). | core | Stay support channels |
 | STAY-A16-F5 Host community | Ask other hosts for advice in member forums. | later | Host forums |
 | STAY-A16-F6 Status and complaints | See whether Spare Stay is down, and complain about the co-op itself. | next | Stay status and complaints |
 
@@ -640,29 +640,29 @@ Answers first, then people: a help centre, support requests linked to bookings, 
 | STAY-A16-F1-P2 | **Article editor**: Staff and members write and update articles, with review. | interface | small | KIT-A21-F1-P1, STAY-A16-F1-P1 |  |
 | STAY-A16-F2-P1 | **Support requests**: Stay's cases on the kit's support cases, linked to bookings, with deadlines. | service | small | KIT-A21-F2-P1, STAY-A6-F2-P2 |  |
 | STAY-A16-F3-P1 | **AI helper**: Stay's use of the kit's help assistant: answers from Stay's help centre and your own booking, acting only through Stay's commands, with your consent and a person one tap away. | service | small | KIT-A17-F7-P1, STAY-A16-F1-P1, STAY-A18-F4-P1 |  |
-| STAY-A16-F4-P1 | **Stay support channels**: Stay's use of the kit's other support channels: phone with call-back, email, and NZ Relay for Deaf, hard of hearing and speech-impaired members. | integration | small | KIT-A21-F4-P1, STAY-A16-F2-P1 |  |
+| STAY-A16-F4-P1 | **Stay support channels**: Stay's use of the kit's other support channels: phone with call-back, email, and the national relay service for Deaf, hard of hearing and speech-impaired members (example: NZ Relay). | integration | small | KIT-A21-F4-P1, STAY-A16-F2-P1 |  |
 | STAY-A16-F5-P1 | **Host forums**: Host forums on the kit's member forum, moderated by published rules. | service | small | KIT-A21-F6-P1 |  |
 | STAY-A16-F6-P1 | **Stay status and complaints**: Spare Stay on the kit's status page, and the kit's process for complaints about the co-op itself. | service | small | KIT-A21-F5-P1, KIT-A21-F9-P2 |  |
 
 ## STAY-A17 Accessibility, languages and regions
 
-Usable by everyone, in their own language, currency and formats: NZ first, ready for any country.
+Usable by everyone, in their own language, currency and formats, ready for any country; New Zealand is the first country pack.
 
 | Feature | What a person can do | Priority | Parts |
 | --- | --- | --- | --- |
 | STAY-A17-F1 Accessible app | Use every screen with a screen reader, keyboard, larger text or high contrast. | core | Stay accessible screens |
-| STAY-A17-F2 Languages | Use Spare Stay in English, te reo Māori and other languages. | core | Te reo Māori |
+| STAY-A17-F2 Languages | Use Spare Stay in English and other languages, including each launch country's own (example: te reo Māori in New Zealand). | core | Launch country languages (example: te reo Māori) |
 | STAY-A17-F3 Local formats | See dates, times, prices, addresses and units the way your country writes them. | core | Time zones |
-| STAY-A17-F4 Easy read, sign language and light mode | Read key steps in easy read or NZ Sign Language, and use a light mode on a weak signal. | next | Easy read and light mode in Stay |
+| STAY-A17-F4 Easy read, sign language and light mode | Read key steps in easy read or the country's sign language (example: NZ Sign Language), and use a light mode on a weak signal. | next | Easy read and light mode in Stay |
 
 **Parts**
 
 | ID | Part | Kind | Size | Depends on | Piece |
 | --- | --- | --- | --- | --- | --- |
 | STAY-A17-F1-P1 | **Stay accessible screens**: Stay's hardest screens (maps, calendars and date pickers) built on the kit's accessible components to WCAG 2.2 AA. | interface | medium | KIT-A19-F2-P1 |  |
-| STAY-A17-F2-P2 | **Te reo Māori**: Stay's text in te reo Māori, translated and checked by fluent speakers through the kit's member translation. | data | medium | KIT-A19-F1-P1, KIT-A19-F1-P3 |  |
+| STAY-A17-F2-P2 | **Launch country languages (example: te reo Māori)**: Stay's text in each launch country's own languages, starting with te reo Māori for New Zealand, translated and checked by fluent speakers through the kit's member translation. | data | medium | KIT-A19-F1-P1, KIT-A19-F1-P3 |  |
 | STAY-A17-F3-P2 | **Time zones**: Check-in times in the place's time zone, including the Chatham Islands, with the guest's own time alongside, on the kit's time-zone engine. | library | small | KIT-A5-F5-P3, KIT-A19-F1-P2 |  |
-| STAY-A17-F4-P1 | **Easy read and light mode in Stay**: Stay's key steps (booking, check-in and cancelling) in easy read and NZ Sign Language, and a light mode for weak signal, on the kit's display settings, easy read and light mode. | interface | small | KIT-A19-F8-P1, KIT-A19-F5-P1, KIT-A19-F3-P1 |  |
+| STAY-A17-F4-P1 | **Easy read and light mode in Stay**: Stay's key steps (booking, check-in and cancelling) in easy read and each country's sign language (example: NZ Sign Language), and a light mode for weak signal, on the kit's display settings, easy read and light mode. | interface | small | KIT-A19-F8-P1, KIT-A19-F5-P1, KIT-A19-F3-P1 |  |
 
 ## STAY-A18 Apps, offline and open access
 
@@ -698,7 +698,7 @@ Phone apps and a web app for guests and hosts, working offline where it matters,
 
 ## STAY-A19 Your data and privacy
 
-Members own their data: see it, take it with them in open formats, choose who sees it, and delete it.
+Members control their data: see it, take it with them in open formats, choose who sees it, and delete it.
 
 | Feature | What a person can do | Priority | Parts |
 | --- | --- | --- | --- |
@@ -718,13 +718,13 @@ Members own their data: see it, take it with them in open formats, choose who se
 | STAY-A19-F1-P2 | **Listing export**: A listing and its calendar in an open format another site can read, added to the kit's data export. | data | small | KIT-A18-F1-P1, STAY-A2-F1-P1, STAY-A3-F3-P1 |  |
 | STAY-A19-F2-P1 | **Stay deletion rules**: Stay's steps before the kit's account deletion: open bookings, payouts and disputes are settled first, and future bookings follow the rule for a host who leaves. | service | small | KIT-A18-F2-P1, KIT-A18-F2-P2, STAY-A19-F6-P1 |  |
 | STAY-A19-F3-P1 | **Privacy settings**: Profile visibility, marketing consent and data use choices. | interface | small | KIT-A18-F3-P1, KIT-A18-F17-P2 |  |
-| STAY-A19-F3-P2 | **Stay's privacy duties**: Stay's cases for the kit's privacy duties: what the Privacy Act 2020 and overseas laws such as the GDPR ask of stays, including breach notices. | legal | small | KIT-A18-F7-P1, KIT-A18-F12-P1 |  |
+| STAY-A19-F3-P2 | **Stay's privacy duties**: Stay's cases for the kit's privacy duties: what privacy laws such as New Zealand's Privacy Act 2020 and the GDPR ask of stays, including breach notices. | legal | small | KIT-A18-F7-P1, KIT-A18-F12-P1 |  |
 | STAY-A19-F4-P1 | **Access log**: Every time support or a host's team opens a guest's or host's personal details is logged and shown to that member on the kit's privacy page. | service | small | KIT-A18-F3-P1, `kit-ops` |  |
 | STAY-A19-F5-P1 | **Data residency**: Stay's use of the kit's data location, keeping members' data in their region where the law asks. | service | small | KIT-A18-F9-P1 |  |
-| STAY-A19-F6-P1 | **Future bookings on host exit**: When a host deletes their account, leaves the co-op, unlists, is banned or dies, each confirmed future booking is honoured, handed to a named co-host, or cancelled with a full refund and rebooking help, and the guest is told. | service | medium | KIT-A18-F2-P1, KIT-A14-F8-P1, KIT-A18-F11-P1, STAY-A8-F4-P1, STAY-A8-F4-P2 |  |
+| STAY-A19-F6-P1 | **Future bookings on host exit**: When a host deletes their account, unlists, is banned or dies, each confirmed future booking is honoured, handed to a named co-host, or cancelled with a full refund and rebooking help, and the guest is told. | service | medium | KIT-A18-F2-P1, KIT-A14-F8-P1, KIT-A18-F11-P1, STAY-A8-F4-P1, STAY-A8-F4-P2 |  |
 | STAY-A19-F7-P1 | **Portable Stay reviews**: Hosts and guests export their reviews as signed files others can check, on the kit's portable reputation. | library | small | KIT-A9-F7-P1, STAY-A12-F1-P1 |  |
 | STAY-A19-F8-P1 | **Host duties for guest data**: Rules hosts accept for the guest data they receive: use it only for the stay, keep it safe, and don't keep it after the retention period. | legal | small | KIT-A18-F4-P2 |  |
-| STAY-A19-F8-P2 | **Notices for data from others**: Notices under information privacy principle 3A, from 1 May 2026, when Stay gets details from someone else: a booker naming companions or the main guest, neighbour reports and council records. | legal | small | KIT-A18-F5-P1 |  |
+| STAY-A19-F8-P2 | **Notices for data from others**: Notices when Stay gets details from someone else, where privacy law requires them (example: New Zealand's information privacy principle 3A, from 1 May 2026): a booker naming companions or the main guest, neighbour reports and council records. | legal | small | KIT-A18-F5-P1 |  |
 | STAY-A19-F8-P3 | **Stay retention schedule**: How long each kind of stay data is kept, on the kit's retention schedules: check-in codes, the guest register, ID results, messages and evidence. | service | small | KIT-A18-F6-P1 |  |
 
 ## STAY-A20 Moderation and administration
@@ -791,7 +791,7 @@ Tours and activities hosted by members and booked alongside stays. A separate ma
 | Feature | What a person can do | Priority | Parts |
 | --- | --- | --- | --- |
 | STAY-A22-F1 List and book an experience | List a tour or activity by date, with group sizes, a meeting point and what to bring, and book one. | later | Experience listings; Experience booking |
-| STAY-A22-F2 Run adventure activities lawfully | Show that a guided adventure activity has passed its safety audit and is registered with WorkSafe. | later | Adventure activity rules; Registration check |
+| STAY-A22-F2 Run adventure activities lawfully | Show that a guided adventure activity has passed its safety audit and is registered with the safety regulator (example: New Zealand's WorkSafe). | later | Adventure activity rules; Registration check |
 | STAY-A22-F3 Guide checks | Know a guide is who they say and holds the qualifications the activity needs. | later | Guide checks |
 
 **Parts**
@@ -800,7 +800,7 @@ Tours and activities hosted by members and booked alongside stays. A separate ma
 | --- | --- | --- | --- | --- | --- |
 | STAY-A22-F1-P1 | **Experience listings**: Experience fields on the kit's listing model and availability: dates and times, group sizes, a meeting point, skill and fitness levels, and what to bring. Moved here from STAY-A21-F6-P2. | data | medium | KIT-A5-F1-P1, KIT-A5-F5-P1 |  |
 | STAY-A22-F1-P2 | **Experience booking**: Booking, cancelling and paying for an experience on the kit's order steps and cancellation policies. | service | medium | KIT-A5-F4-P1, KIT-A5-F6-P1, STAY-A22-F1-P1 |  |
-| STAY-A22-F2-P1 | **Adventure activity rules**: Under the Health and Safety at Work (Adventure Activities) Regulations 2016, guided adventure activity operators must pass a safety audit and register with WorkSafe; an adventure listing can't go live without a current registration. | legal | small | KIT-A24-F1-P1 |  |
+| STAY-A22-F2-P1 | **Adventure activity rules**: Each country pack sets the adventure activity rules. In New Zealand, under the Health and Safety at Work (Adventure Activities) Regulations 2016, guided adventure activity operators must pass a safety audit and register with WorkSafe; an adventure listing can't go live without a current registration. | legal | small | KIT-A24-F1-P1 |  |
 | STAY-A22-F2-P2 | **Registration check**: Records each operator's registration and audit expiry, with reminders from the kit's re-check scheduler. | service | small | KIT-A2-F3-P1, STAY-A22-F2-P1 |  |
 | STAY-A22-F3-P1 | **Guide checks**: Identity and qualification checks for guides on the kit's identity check and public register checks. | integration | small | KIT-A2-F1-P2, KIT-A2-F2-P1 |  |
 
@@ -854,26 +854,26 @@ These IDs are kept out of use so links never point at the wrong thing. A retired
 - Does every search result show the full price, with every fee, tax and levy, before a guest opens the listing?
 - Can a host join without leaving the other booking sites, with calendars synced, double bookings caught, and a fair rule when one still happens?
 - Is the core set small enough for a first release, and could a host and a guest complete a whole stay with only core features?
-- Does the map name every legal duty the platform carries in NZ: GST on listed services, flat-rate credits, opt-outs and listing intermediaries, income reporting to IRD, anti-money-laundering, council rules and campground registration?
+- Does the map name every legal duty the platform carries in the first country pack (New Zealand): GST on listed services, flat-rate credits, opt-outs and listing intermediaries, income reporting to IRD, anti-money-laundering, council rules and campground registration, and will each new country pack do the same?
 - Who holds the money at every step, does the rule for bookings made months ahead stay inside the provider's time limits, and does any part make the co-op hold funds itself?
 - Is the seller of record settled for bookings on Spare Stay, on hosts' own pages and through booking boxes?
 - Who pays for guest protection and goodwill when the host is not at fault, and is the cap published?
-- Is damage cover answered, including whether a co-op pool needs a Reserve Bank licence, or is it still the biggest open risk (piece ST03)?
-- While only hosts are members, are panels, review removals and fee votes fair to guests?
-- Do host votes and the pricing tools stay clear of cartel provisions under the Commerce Act?
+- Is damage cover answered, including whether a co-op pool needs an insurance licence (example: from New Zealand's Reserve Bank), or is it still the biggest open risk (piece ST03)?
+- Since hosts vote on Stay's fees and rules, are panels, review removals and fee votes fair to guests?
+- Do host votes and the pricing tools stay clear of cartel provisions under competition law (example: New Zealand's Commerce Act)?
 - Is the worker status of cleaners and co-hosts settled before any payout split pays them?
 - How will guests find Spare Stay when the big sites hold the demand, and is the reach plan more than hope?
 - Are accessibility features proven with photos, and does the app itself meet WCAG 2.2 AA?
 - Does every action go through the command API, so AI agents, plugins and scripts can do what a person can, and are agents kept from grabbing scarce dates or harvesting addresses?
 - Has every Stay part that copied a kit part become a thin use of it, and has the kit taken on the shared parts Stay marks to move down: people on an order, personal calendar feeds, smart lock links, floor plans, own booking sites, open listing feeds, search-friendly pages, saved and scheduled messages, the levy engine and cross-app add-ons?
-- Does the trip page still work at a bach with no signal, and are door codes safe once the stay ends?
+- Does the trip page still work at a remote holiday home with no signal, and are door codes safe once the stay ends?
 - Can a new country be added as a rule pack of data, without new code?
 - Does anything in the demo copy an incumbent's names, icons, wording or screen designs?
 - Which parts are large and core, and who could take them on first?
 
 ## Where this map came from
 
-Checked on 2026-10-18 against the incumbents' published help pages and news, and the rules below, then on 2026-10-19 against an independent review. Not legal advice; anything marked *unverified* in [ARCHITECTURE.md](ARCHITECTURE.md), or marked to verify or confirm in a part, still needs checking.
+Checked on 2026-10-18 against the incumbents' published help pages and news, and the New Zealand rules below (the first country pack; each country gets its own pack), then on 2026-10-19 against an independent review. Not legal advice; anything marked *unverified* in [ARCHITECTURE.md](ARCHITECTURE.md), or marked to verify or confirm in a part, still needs checking.
 
 | Topic | Source |
 | --- | --- |

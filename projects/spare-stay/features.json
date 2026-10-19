@@ -1,8 +1,8 @@
 {
   "program": "spare-stay",
   "name": "Spare Stay",
-  "replaces": "Airbnb, Booking.com and Bookabach",
-  "summary": "Short stays where hosts keep everything except the at-cost fee, guests see the full price from the first search, and hosts own the app and vote on its rules. It runs on the kit's shared marketplace loop and named kit parts, and adds only what stays need.",
+  "replaces": "Airbnb, Booking.com and local sites such as Bookabach",
+  "summary": "Short stays where hosts keep everything except the at-cost fee, guests see the full price from the first search, and hosts vote on its fees and rules. It runs on the kit's shared marketplace loop and named kit parts, and adds only what stays need.",
   "areas": [
     {
       "id": "STAY-A1",
@@ -132,7 +132,7 @@
             {
               "id": "STAY-A1-F3-P2",
               "name": "Overseas guests' IDs",
-              "what": "Stay's needs for the kit's identity provider choice: passports and licences from the countries NZ's visitors come from, and what each check costs.",
+              "what": "Stay's needs for the kit's identity provider choice: passports and licences from the countries guests come from in each market, and what each check costs.",
               "kind": "research",
               "size": "small",
               "depends_on": [
@@ -163,7 +163,7 @@
             {
               "id": "STAY-A1-F4-P1",
               "name": "Host business record",
-              "what": "Private person or business, legal name, IRD number, date of birth for individuals, GST registration and NZBN, on the kit's seller details and held privately.",
+              "what": "Private person or business, legal name, tax number, date of birth for individuals, sales tax registration and business number (example: IRD number, GST registration and NZBN in New Zealand), on the kit's seller details and held privately.",
               "kind": "data",
               "size": "small",
               "depends_on": [
@@ -281,7 +281,7 @@
         {
           "id": "STAY-A2-F1",
           "name": "Create a listing",
-          "does": "Follow step-by-step setup to list a whole home, a room, a bach, a cabin, a campsite or a small hotel's rooms.",
+          "does": "Follow step-by-step setup to list a whole home, a room, a holiday home, a cabin, a campsite or a small hotel's rooms.",
           "priority": "core",
           "parts": [
             {
@@ -509,7 +509,7 @@
             {
               "id": "STAY-A2-F5-P3",
               "name": "What disabled travellers need listed",
-              "what": "Research with disabled travellers and NZ disability groups on which details matter, with sources.",
+              "what": "Research with disabled travellers and disability groups in each launch country on which details matter, with sources.",
               "kind": "research",
               "size": "small",
               "depends_on": [],
@@ -547,8 +547,8 @@
             },
             {
               "id": "STAY-A2-F6-P3",
-              "name": "NZ safety facts",
-              "what": "NZ facts for each place: the water source (town supply, tank or bore) and whether a shared supply is registered with Taumata Arowai; pool and spa barriers under the Building Act; an evacuation scheme where a building houses more than 5 people (unless 3 or fewer household units); and smoke alarm checks. Each legal point is marked to verify.",
+              "name": "Country safety facts (example: New Zealand)",
+              "what": "Each country pack's safety facts for each place. For New Zealand: the water source (town supply, tank or bore) and whether a shared supply is registered with Taumata Arowai; pool and spa barriers under the Building Act; an evacuation scheme where a building houses more than 5 people (unless 3 or fewer household units); and smoke alarm checks. Each legal point is marked to verify.",
               "kind": "data",
               "size": "small",
               "depends_on": [
@@ -900,7 +900,7 @@
             {
               "id": "STAY-A3-F4-P2",
               "name": "Channel manager research",
-              "what": "Which channel managers NZ hosts use, what open interfaces they offer and what joining costs.",
+              "what": "Which channel managers hosts use in each launch country, what open interfaces they offer and what joining costs.",
               "kind": "research",
               "size": "small",
               "depends_on": [],
@@ -920,7 +920,7 @@
             {
               "id": "STAY-A3-F4-P4",
               "name": "Property management system links",
-              "what": "Links to the property management systems NZ motels and small hotels use, through their published interfaces or the channel API, starting with the ones the research shows matter most.",
+              "what": "Links to the property management systems motels and small hotels use in each launch country, through their published interfaces or the channel API, starting with the ones the research shows matter most.",
               "kind": "integration",
               "size": "medium",
               "depends_on": [
@@ -1085,7 +1085,7 @@
             {
               "id": "STAY-A4-F4-P3",
               "name": "Food and alcohol extras",
-              "what": "Rules for extras that are food or drink. Meals and breakfast hampers must meet the Food Act 2014: small places serving few guests may be exempt from registration (to confirm), but the food must still be safe and suitable. Alcohol can't be sold as an extra without a licence.",
+              "what": "Rules for extras that are food or drink, set in each country pack. In New Zealand, meals and breakfast hampers must meet the Food Act 2014: small places serving few guests may be exempt from registration (to confirm), but the food must still be safe and suitable. Alcohol can't be sold as an extra without a licence.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -1104,7 +1104,7 @@
             {
               "id": "STAY-A4-F5-P1",
               "name": "Price engine",
-              "what": "Stay's full price on the kit's full price first: the total for any dates and guests from nightly rates, fees, the at-cost fee, GST and local levies. Discounts and rate plans plug in once they exist.",
+              "what": "Stay's full price on the kit's full price first: the total for any dates and guests from nightly rates, fees, the at-cost fee, sales tax and local levies. Discounts and rate plans plug in once they exist.",
               "kind": "library",
               "size": "medium",
               "depends_on": [
@@ -1142,7 +1142,7 @@
             {
               "id": "STAY-A4-F5-P4",
               "name": "Price display rules",
-              "what": "Stay's cases for the kit's consumer law duties on showing the total price, in NZ, Australia, the EU and other markets.",
+              "what": "Stay's cases for the kit's consumer law duties on showing the total price in each market, such as New Zealand, Australia and the EU.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -1195,7 +1195,7 @@
             {
               "id": "STAY-A4-F6-P4",
               "name": "Pricing tools and competition law",
-              "what": "Price suggestions and automatic pricing use only public or aggregated data, never the pooled private rates of hosts who compete with each other, so the shared tool can't become a cartel provision under the Commerce Act; checked with a lawyer.",
+              "what": "Price suggestions and automatic pricing use only public or aggregated data, never the pooled private rates of hosts who compete with each other, so the shared tool can't become a cartel provision under competition law (example: New Zealand's Commerce Act); checked with a lawyer.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -1488,7 +1488,7 @@
         {
           "id": "STAY-A5-F8",
           "name": "Browse by theme",
-          "does": "Browse ideas such as beach baches, ski towns, pet-friendly or accessible stays.",
+          "does": "Browse ideas such as beach houses, ski towns, pet-friendly or accessible stays.",
           "priority": "later",
           "parts": [
             {
@@ -1555,7 +1555,7 @@
             {
               "id": "STAY-A5-F10-P1",
               "name": "Everyday-words search",
-              "what": "Turns a request such as 'a quiet bach near Raglan for four with a dog' into search filters through Stay's MCP commands, marked as AI, with the filters shown so the person can change them.",
+              "what": "Turns a request such as 'a quiet holiday home near the beach for four with a dog' into search filters through Stay's MCP commands, marked as AI, with the filters shown so the person can change them.",
               "kind": "service",
               "size": "medium",
               "depends_on": [
@@ -1778,13 +1778,13 @@
         {
           "id": "STAY-A6-F6",
           "name": "Booking documents",
-          "does": "Download a receipt, a GST tax invoice, and a booking letter for visas or employers.",
+          "does": "Download a receipt, a tax invoice, and a booking letter for visas or employers.",
           "priority": "core",
           "parts": [
             {
               "id": "STAY-A6-F6-P1",
               "name": "Stay tax invoices",
-              "what": "Stay's content on the kit's tax invoices: whose name and GST number appear follows the seller of record decision, delivered as accessible PDFs.",
+              "what": "Stay's content on the kit's tax invoices: whose name and sales tax number appear follows the seller of record decision, delivered as accessible PDFs.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -1994,7 +1994,7 @@
             {
               "id": "STAY-A7-F1-P2",
               "name": "Payment methods",
-              "what": "Stay's needs for the kit's payment provider choice: which cards, bank payments and wallets visitors to NZ use, and what each costs.",
+              "what": "Stay's needs for the kit's payment provider choice: which cards, bank payments and wallets guests use in each market, and what each costs.",
               "kind": "research",
               "size": "small",
               "depends_on": [
@@ -2018,7 +2018,7 @@
             {
               "id": "STAY-A7-F1-P4",
               "name": "Who sells the stay",
-              "what": "Stay's case for the kit's seller of record decision: whether the host or the co-op supplies the stay, whose name and GST number go on the tax invoice, who owes consumer guarantees and who answers card disputes, for bookings through Spare Stay, hosts' own pages and booking boxes. For GST the co-op is the deemed supplier of listed services.",
+              "what": "Stay's case for the kit's seller of record decision: whether the host or the co-op supplies the stay, whose name and sales tax number go on the tax invoice, who owes consumer guarantees and who answers card disputes, for bookings through Spare Stay, hosts' own pages and booking boxes. Under New Zealand GST, in the first country pack, the co-op is the deemed supplier of listed services.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -2153,7 +2153,7 @@
             {
               "id": "STAY-A7-F5-P3",
               "name": "Earnings page",
-              "what": "Stay's lines on the kit's earnings page: each payout by place and booking, with nights, fees, GST and flat-rate credits.",
+              "what": "Stay's lines on the kit's earnings page: each payout by place and booking, with nights, fees, sales tax and any flat-rate credits.",
               "kind": "interface",
               "size": "small",
               "depends_on": [
@@ -2585,7 +2585,7 @@
         {
           "id": "STAY-A9-F3",
           "name": "Offline trip",
-          "does": "See your booking, address, codes and host contact with no signal, as at many baches.",
+          "does": "See your booking, address, codes and host contact with no signal, as at many remote holiday homes.",
           "priority": "core",
           "parts": [
             {
@@ -2626,7 +2626,7 @@
             {
               "id": "STAY-A9-F4-P2",
               "name": "Lock maker research",
-              "what": "Which locks sold in NZ have published interfaces and terms that allow this.",
+              "what": "Which locks sold in each launch country have published interfaces and terms that allow this.",
               "kind": "research",
               "size": "small",
               "depends_on": [],
@@ -3161,13 +3161,13 @@
         {
           "id": "STAY-A11-F7",
           "name": "Host tax summary",
-          "does": "Get a yearly summary of income, fees, GST, nights let and private use to give your accountant.",
+          "does": "Get a yearly summary of income, fees, sales tax, nights let and private use to give your accountant.",
           "priority": "next",
           "parts": [
             {
               "id": "STAY-A11-F7-P1",
               "name": "Yearly summary",
-              "what": "Stay's summary on the kit's yearly statements: income, fees, GST, flat-rate credits and nights per place, plus private-use, rented and unused days for the mixed-use asset rules.",
+              "what": "Stay's summary on the kit's yearly statements: income, fees, sales tax, any flat-rate credits and nights per place, plus private-use, rented and unused days for the mixed-use asset rules.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -3181,7 +3181,7 @@
             {
               "id": "STAY-A11-F7-P2",
               "name": "Mixed-use asset rules",
-              "what": "How IRD's mixed-use asset rules apply to baches: they apply when a place has private and rented use and is unused for 62 days or more in the year; owners earning under $4,000 from it can opt out, but not companies. To confirm against IRD's guidance.",
+              "what": "How each country taxes a holiday home with private and rented use. In New Zealand, IRD's mixed-use asset rules apply to baches when a place has private and rented use and is unused for 62 days or more in the year; owners earning under $4,000 from it can opt out, but not companies. To confirm against IRD's guidance.",
               "kind": "research",
               "size": "small",
               "depends_on": [],
@@ -3243,7 +3243,7 @@
             {
               "id": "STAY-A11-F9-P2",
               "name": "Owner statements",
-              "what": "Monthly statements for owners whose places a manager runs: bookings, payouts, fees, GST and costs.",
+              "what": "Monthly statements for owners whose places a manager runs: bookings, payouts, fees, sales tax and costs.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -3492,7 +3492,7 @@
         {
           "id": "STAY-A13-F1",
           "name": "Help in an emergency",
-          "does": "Call 111 or the local emergency number from the app, and reach urgent safety help at any hour during a stay.",
+          "does": "Call the local emergency number from the app (example: 111 in New Zealand), and reach urgent safety help at any hour during a stay.",
           "priority": "core",
           "parts": [
             {
@@ -3627,7 +3627,7 @@
             {
               "id": "STAY-A13-F3-P3",
               "name": "Damage cover and insurance law",
-              "what": "Stay's case for the kit's insurance options: a co-op pool or an outside insurer for damage beyond the deposit, compared on cost; whether a co-op pool is insurance business needing a Reserve Bank licence under the Insurance (Prudential Supervision) Act 2010; and what financial advice rules apply if the co-op arranges cover for hosts.",
+              "what": "Stay's case for the kit's insurance options: a co-op pool or an outside insurer for damage beyond the deposit, compared on cost; whether a co-op pool is insurance business needing a licence from the insurance regulator (example: a Reserve Bank licence under New Zealand's Insurance (Prudential Supervision) Act 2010); and what financial advice rules apply if the co-op arranges cover for hosts.",
               "kind": "research",
               "size": "medium",
               "depends_on": [
@@ -3695,7 +3695,7 @@
             {
               "id": "STAY-A13-F4-P3",
               "name": "Fair panel make-up",
-              "what": "While only hosts are members, panels that decide host-against-guest disputes, review removals and protection claims include guest-side members or independent adjudicators, with conflict checks so no host decides a case about a competitor or a friend.",
+              "what": "Since hosts vote on Stay's rules, panels that decide host-against-guest disputes, review removals and protection claims include guest-side members or independent adjudicators, with conflict checks so no host decides a case about a competitor or a friend.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -3707,7 +3707,7 @@
             {
               "id": "STAY-A13-F4-P4",
               "name": "Outside routes for stays",
-              "what": "Stay's guidance on the kit's outside routes: the Disputes Tribunal for host and guest disputes, the Tenancy Tribunal where a long stay is a tenancy, and an evidence bundle either side can export.",
+              "what": "Stay's guidance on the kit's outside routes: a small claims tribunal for host and guest disputes, a tenancy tribunal where a long stay is a tenancy (examples: New Zealand's Disputes Tribunal and Tenancy Tribunal), and an evidence bundle either side can export.",
               "kind": "data",
               "size": "small",
               "depends_on": [
@@ -3805,7 +3805,7 @@
             {
               "id": "STAY-A13-F7-P1",
               "name": "Fair treatment commitment",
-              "what": "Stay's use of the kit's non-discrimination commitment under the Human Rights Act, accepted by every member.",
+              "what": "Stay's use of the kit's non-discrimination commitment under human rights law (example: New Zealand's Human Rights Act), accepted by every member.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -3828,7 +3828,7 @@
             {
               "id": "STAY-A13-F7-P3",
               "name": "What hosts may choose",
-              "what": "Whether hosts may set a minimum guest age, and what the Human Rights Act allows a host who shares their own home to choose about guests; checked with a lawyer.",
+              "what": "Whether hosts may set a minimum guest age, and what human rights law allows a host who shares their own home to choose about guests (example: New Zealand's Human Rights Act); checked with a lawyer.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -3847,7 +3847,7 @@
             {
               "id": "STAY-A13-F8-P1",
               "name": "Liability cover research",
-              "what": "Options for host liability insurance in NZ and abroad, with costs, as Stay's input to the kit's insurance options.",
+              "what": "Options for host liability insurance in each country, with costs, as Stay's input to the kit's insurance options.",
               "kind": "research",
               "size": "medium",
               "depends_on": [
@@ -3866,7 +3866,7 @@
             {
               "id": "STAY-A13-F9-P1",
               "name": "Overstay and threat steps",
-              "what": "Plain steps for a guest who overstays or refuses to leave, and for a threatening guest: when to call 111, trespass notices, and support for the host, who often lives next door; checked with a lawyer.",
+              "what": "Plain steps for a guest who overstays or refuses to leave, and for a threatening guest: when to call the emergency number (111 in New Zealand), trespass notices, and support for the host, who often lives next door; checked with a lawyer.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -3880,13 +3880,13 @@
         {
           "id": "STAY-A13-F10",
           "name": "Spot exploitation",
-          "does": "Learn the warning signs of human trafficking and child exploitation, and report them to NZ Police.",
+          "does": "Learn the warning signs of human trafficking and child exploitation, and report them to the police.",
           "priority": "next",
           "parts": [
             {
               "id": "STAY-A13-F10-P1",
               "name": "Exploitation warning signs",
-              "what": "A short course for hosts and cleaners on the warning signs of human trafficking and child exploitation, and a reporting route to NZ Police.",
+              "what": "A short course for hosts and cleaners on the warning signs of human trafficking and child exploitation, and a reporting route to the police in each country (example: NZ Police).",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -3934,7 +3934,7 @@
     {
       "id": "STAY-A14",
       "name": "Local rules, tax and legal duties",
-      "summary": "Council rules, GST, income reporting, levies and consumer law built in as rules, NZ first, with each new country added as data.",
+      "summary": "Council rules, sales tax, income reporting, levies and consumer law built in as rules, with each country added as data in its own pack; New Zealand is the first.",
       "features": [
         {
           "id": "STAY-A14-F1",
@@ -3945,7 +3945,7 @@
             {
               "id": "STAY-A14-F1-P1",
               "name": "Council rule research",
-              "what": "Each main NZ council's registration, consent, night cap, rates and levy rules, with sources.",
+              "what": "Each main council's registration, consent, night cap, rates and levy rules in each country, with sources, starting with New Zealand's.",
               "kind": "research",
               "size": "medium",
               "depends_on": [],
@@ -3977,7 +3977,7 @@
             {
               "id": "STAY-A14-F1-P4",
               "name": "Campground registration",
-              "what": "A campsite or glamping listing used by 2 or more parties for reward needs the council's certificate of registration under the Camping-Grounds Regulations 1985 before it can go live.",
+              "what": "A campsite or glamping listing needs whatever registration its country pack sets before it can go live. In New Zealand, one used by 2 or more parties for reward needs the council's certificate of registration under the Camping-Grounds Regulations 1985.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -4032,14 +4032,14 @@
         },
         {
           "id": "STAY-A14-F3",
-          "name": "GST on stays",
-          "does": "Have GST collected correctly on every booking, with flat-rate credits passed to hosts who aren't GST registered.",
+          "name": "Sales tax on stays (example: New Zealand GST)",
+          "does": "Have sales tax collected correctly on every booking, with any credits the law gives passed to hosts who aren't registered (example: New Zealand's flat-rate credits).",
           "priority": "core",
           "parts": [
             {
               "id": "STAY-A14-F3-P1",
-              "name": "GST on stays rules",
-              "what": "Stay's cases for the kit's GST engine: short stays as listed services, the platform's 15% GST, 8.5% flat-rate credits for unregistered hosts, opt-outs and listing intermediaries. Local levies are worked out separately.",
+              "name": "Sales tax on stays rules",
+              "what": "Stay's cases for the kit's sales tax engine. In the first country pack (New Zealand): short stays as listed services, the platform's 15% GST, 8.5% flat-rate credits for unregistered hosts, opt-outs and listing intermediaries. Local levies are worked out separately.",
               "kind": "library",
               "size": "small",
               "depends_on": [
@@ -4051,7 +4051,7 @@
             {
               "id": "STAY-A14-F3-P2",
               "name": "Flat-rate credit statements",
-              "what": "Stay's statements on the kit's flat-rate credit notices, at least monthly, with lines per listing, sent to the owner or, where a listing intermediary has taken on GST, to that intermediary.",
+              "what": "Stay's statements on the kit's flat-rate credit notices, at least monthly, with lines per listing, sent to the owner or, where a listing intermediary has taken on sales tax, to that intermediary.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -4063,8 +4063,8 @@
             },
             {
               "id": "STAY-A14-F3-P4",
-              "name": "GST rules research",
-              "what": "How GST applies to everything that is not a night's stay: cancellation fees, no-show charges, forfeited deposits, damage payments, extras such as firewood or linen hire, and trip extras or experiences that may not be listed services; from IRD's guidance.",
+              "name": "Sales tax rules research",
+              "what": "How sales tax applies to everything that is not a night's stay: cancellation fees, no-show charges, forfeited deposits, damage payments, extras such as firewood or linen hire, and trip extras or experiences that may not be listed services; for New Zealand, from IRD's guidance.",
               "kind": "research",
               "size": "small",
               "depends_on": [
@@ -4075,7 +4075,7 @@
             {
               "id": "STAY-A14-F3-P5",
               "name": "Large owner opt-outs",
-              "what": "Records opt-out notices from non-individual owners with more than $500,000 of taxable supplies, and written opt-out agreements for owners with more than 2,000 nights through one marketplace, or hostels and motels with more than $60,000 that were GST-registered before 1 April 2024. Then switches the GST engine, invoices and flat-rate credits for that owner, on the kit's opt-out agreements.",
+              "what": "In the first country pack (New Zealand): records opt-out notices from non-individual owners with more than $500,000 of taxable supplies, and written opt-out agreements for owners with more than 2,000 nights through one marketplace, or hostels and motels with more than $60,000 that were GST-registered before 1 April 2024. Then switches the sales tax engine, invoices and flat-rate credits for that owner, on the kit's opt-out agreements.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -4087,7 +4087,7 @@
             {
               "id": "STAY-A14-F3-P6",
               "name": "Listing intermediaries",
-              "what": "Where a property manager lists for owners and agrees to collect and pay GST itself, records the agreement and each owner's GST status, and has the manager run flat-rate credits for unregistered owners, as IRD's listing intermediary rules set out.",
+              "what": "Where a property manager lists for owners and agrees to collect and pay sales tax itself, records the agreement and each owner's tax status, and has the manager run flat-rate credits for unregistered owners, as the tax office's rules set out (example: IRD's listing intermediary rules in New Zealand).",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -4102,13 +4102,13 @@
         {
           "id": "STAY-A14-F4",
           "name": "Income reporting",
-          "does": "Have your income reported to IRD as the law requires, and see exactly what was sent.",
+          "does": "Have your income reported to the tax office as the law requires (example: New Zealand's IRD), and see exactly what was sent.",
           "priority": "core",
           "parts": [
             {
               "id": "STAY-A14-F4-P1",
               "name": "Rental reporting details",
-              "what": "Stay's details for the kit's yearly IRD report: each listing's address and land title or registration number, days rented per listing, the host's tax number and date of birth for individuals, checks done by the deadline, and the excluded-seller test for listings rented more than 2,000 times; confirmed against IRD's guidance.",
+              "what": "Stay's details for the kit's yearly report to the tax office. For New Zealand: each listing's address and land title or registration number, days rented per listing, the host's tax number and date of birth for individuals, checks done by the deadline, and the excluded-seller test for listings rented more than 2,000 times; confirmed against IRD's guidance.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -4203,7 +4203,7 @@
             {
               "id": "STAY-A14-F7-P3",
               "name": "Consumer law duties",
-              "what": "Stay's cases for the kit's consumer law duties: what the Fair Trading Act and Consumer Guarantees Act ask of the platform and of hosts.",
+              "what": "Stay's cases for the kit's consumer law duties: what consumer law asks of the platform and of hosts (example: New Zealand's Fair Trading Act and Consumer Guarantees Act).",
               "kind": "research",
               "size": "medium",
               "depends_on": [
@@ -4233,7 +4233,7 @@
             {
               "id": "STAY-A14-F8-P1",
               "name": "Where a stay becomes a tenancy",
-              "what": "When a long stay falls under the Residential Tenancies Act, with sources.",
+              "what": "When a long stay becomes a tenancy under each country's rental law (example: New Zealand's Residential Tenancies Act), with sources.",
               "kind": "research",
               "size": "small",
               "depends_on": [
@@ -4298,7 +4298,7 @@
             {
               "id": "STAY-A14-F9-P3",
               "name": "Australian state rules",
-              "what": "State registers, levies and caps in Australia, the nearest next market.",
+              "what": "State registers, levies and caps in Australia, for its country pack.",
               "kind": "research",
               "size": "medium",
               "depends_on": [],
@@ -4321,19 +4321,19 @@
     },
     {
       "id": "STAY-A15",
-      "name": "Co-op membership, votes and the open fee",
-      "summary": "Hosts are members who own the app, vote on its fees and rules within competition law, hear guests before votes that affect them, and can see what every dollar of the fee paid for.",
+      "name": "Membership, votes and the open fee",
+      "summary": "Hosts keep all the profit except running costs, vote on its fees and rules within competition law, hear guests before votes that affect them, and can see what every dollar of the fee paid for.",
       "features": [
         {
           "id": "STAY-A15-F1",
           "name": "Join as a member",
-          "does": "Join the co-op as a host and become an owner with one vote.",
+          "does": "Join free as a host and get one vote on Stay's fees and rules.",
           "priority": "core",
           "parts": [
             {
               "id": "STAY-A15-F1-P1",
               "name": "Stay members and electorate",
-              "what": "Whether every host must be a member, how property management companies and co-hosts count, and who is in Stay's electorate, on the kit's join flow, member register and electorates.",
+              "what": "Whether every host must be a member, how property management companies and co-hosts count, and who is in Stay's electorate, on the kit's join flow, member list and electorates.",
               "kind": "data",
               "size": "small",
               "depends_on": [
@@ -4391,7 +4391,7 @@
             {
               "id": "STAY-A15-F2-P3",
               "name": "Competition law for host votes",
-              "what": "Hosts compete with each other, so votes on cancellation policies, discounts, the fee split or anything touching price are checked on the kit's competition law check, so they never become cartel provisions under the Commerce Act.",
+              "what": "Hosts compete with each other, so votes on cancellation policies, discounts, the fee split or anything touching price are checked on the kit's competition law check, so they never become cartel provisions under competition law (example: New Zealand's Commerce Act).",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -4455,7 +4455,7 @@
             {
               "id": "STAY-A15-F4-P2",
               "name": "Guest voice",
-              "what": "Until guests can join, guests are consulted before any vote that changes what they pay or how disputes are decided, and their views are published with the result.",
+              "what": "Guests are consulted before any host vote that changes what they pay or how disputes are decided, and their views are published with the result.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -4468,13 +4468,13 @@
         {
           "id": "STAY-A15-F5",
           "name": "Guests as members",
-          "does": "Guests can join too and have a say on matters that affect them.",
+          "does": "Guests are members too, free, with a say on matters that affect them.",
           "priority": "later",
           "parts": [
             {
               "id": "STAY-A15-F5-P1",
               "name": "Guest membership",
-              "what": "Whether and how guests join, and which votes they get.",
+              "what": "Which votes guests get as members, beyond the major changes every member votes on.",
               "kind": "research",
               "size": "small",
               "depends_on": [
@@ -4566,13 +4566,13 @@
         {
           "id": "STAY-A16-F4",
           "name": "Other ways to reach support",
-          "does": "Reach a person by phone, email or NZ Relay.",
+          "does": "Reach a person by phone, email or a relay service (example: NZ Relay).",
           "priority": "core",
           "parts": [
             {
               "id": "STAY-A16-F4-P1",
               "name": "Stay support channels",
-              "what": "Stay's use of the kit's other support channels: phone with call-back, email, and NZ Relay for Deaf, hard of hearing and speech-impaired members.",
+              "what": "Stay's use of the kit's other support channels: phone with call-back, email, and the national relay service for Deaf, hard of hearing and speech-impaired members (example: NZ Relay).",
               "kind": "integration",
               "size": "small",
               "depends_on": [
@@ -4627,7 +4627,7 @@
     {
       "id": "STAY-A17",
       "name": "Accessibility, languages and regions",
-      "summary": "Usable by everyone, in their own language, currency and formats: NZ first, ready for any country.",
+      "summary": "Usable by everyone, in their own language, currency and formats, ready for any country; New Zealand is the first country pack.",
       "features": [
         {
           "id": "STAY-A17-F1",
@@ -4651,13 +4651,13 @@
         {
           "id": "STAY-A17-F2",
           "name": "Languages",
-          "does": "Use Spare Stay in English, te reo Māori and other languages.",
+          "does": "Use Spare Stay in English and other languages, including each launch country's own (example: te reo Māori in New Zealand).",
           "priority": "core",
           "parts": [
             {
               "id": "STAY-A17-F2-P2",
-              "name": "Te reo Māori",
-              "what": "Stay's text in te reo Māori, translated and checked by fluent speakers through the kit's member translation.",
+              "name": "Launch country languages (example: te reo Māori)",
+              "what": "Stay's text in each launch country's own languages, starting with te reo Māori for New Zealand, translated and checked by fluent speakers through the kit's member translation.",
               "kind": "data",
               "size": "medium",
               "depends_on": [
@@ -4691,13 +4691,13 @@
         {
           "id": "STAY-A17-F4",
           "name": "Easy read, sign language and light mode",
-          "does": "Read key steps in easy read or NZ Sign Language, and use a light mode on a weak signal.",
+          "does": "Read key steps in easy read or the country's sign language (example: NZ Sign Language), and use a light mode on a weak signal.",
           "priority": "next",
           "parts": [
             {
               "id": "STAY-A17-F4-P1",
               "name": "Easy read and light mode in Stay",
-              "what": "Stay's key steps (booking, check-in and cancelling) in easy read and NZ Sign Language, and a light mode for weak signal, on the kit's display settings, easy read and light mode.",
+              "what": "Stay's key steps (booking, check-in and cancelling) in easy read and each country's sign language (example: NZ Sign Language), and a light mode for weak signal, on the kit's display settings, easy read and light mode.",
               "kind": "interface",
               "size": "small",
               "depends_on": [
@@ -4939,7 +4939,7 @@
     {
       "id": "STAY-A19",
       "name": "Your data and privacy",
-      "summary": "Members own their data: see it, take it with them in open formats, choose who sees it, and delete it.",
+      "summary": "Members control their data: see it, take it with them in open formats, choose who sees it, and delete it.",
       "features": [
         {
           "id": "STAY-A19-F1",
@@ -5004,7 +5004,7 @@
             {
               "id": "STAY-A19-F3-P2",
               "name": "Stay's privacy duties",
-              "what": "Stay's cases for the kit's privacy duties: what the Privacy Act 2020 and overseas laws such as the GDPR ask of stays, including breach notices.",
+              "what": "Stay's cases for the kit's privacy duties: what privacy laws such as New Zealand's Privacy Act 2020 and the GDPR ask of stays, including breach notices.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -5063,7 +5063,7 @@
             {
               "id": "STAY-A19-F6-P1",
               "name": "Future bookings on host exit",
-              "what": "When a host deletes their account, leaves the co-op, unlists, is banned or dies, each confirmed future booking is honoured, handed to a named co-host, or cancelled with a full refund and rebooking help, and the guest is told.",
+              "what": "When a host deletes their account, unlists, is banned or dies, each confirmed future booking is honoured, handed to a named co-host, or cancelled with a full refund and rebooking help, and the guest is told.",
               "kind": "service",
               "size": "medium",
               "depends_on": [
@@ -5117,7 +5117,7 @@
             {
               "id": "STAY-A19-F8-P2",
               "name": "Notices for data from others",
-              "what": "Notices under information privacy principle 3A, from 1 May 2026, when Stay gets details from someone else: a booker naming companions or the main guest, neighbour reports and council records.",
+              "what": "Notices when Stay gets details from someone else, where privacy law requires them (example: New Zealand's information privacy principle 3A, from 1 May 2026): a booker naming companions or the main guest, neighbour reports and council records.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -5529,13 +5529,13 @@
         {
           "id": "STAY-A22-F2",
           "name": "Run adventure activities lawfully",
-          "does": "Show that a guided adventure activity has passed its safety audit and is registered with WorkSafe.",
+          "does": "Show that a guided adventure activity has passed its safety audit and is registered with the safety regulator (example: New Zealand's WorkSafe).",
           "priority": "later",
           "parts": [
             {
               "id": "STAY-A22-F2-P1",
               "name": "Adventure activity rules",
-              "what": "Under the Health and Safety at Work (Adventure Activities) Regulations 2016, guided adventure activity operators must pass a safety audit and register with WorkSafe; an adventure listing can't go live without a current registration.",
+              "what": "Each country pack sets the adventure activity rules. In New Zealand, under the Health and Safety at Work (Adventure Activities) Regulations 2016, guided adventure activity operators must pass a safety audit and register with WorkSafe; an adventure listing can't go live without a current registration.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -5584,19 +5584,19 @@
     "Does every search result show the full price, with every fee, tax and levy, before a guest opens the listing?",
     "Can a host join without leaving the other booking sites, with calendars synced, double bookings caught, and a fair rule when one still happens?",
     "Is the core set small enough for a first release, and could a host and a guest complete a whole stay with only core features?",
-    "Does the map name every legal duty the platform carries in NZ: GST on listed services, flat-rate credits, opt-outs and listing intermediaries, income reporting to IRD, anti-money-laundering, council rules and campground registration?",
+    "Does the map name every legal duty the platform carries in the first country pack (New Zealand): GST on listed services, flat-rate credits, opt-outs and listing intermediaries, income reporting to IRD, anti-money-laundering, council rules and campground registration, and will each new country pack do the same?",
     "Who holds the money at every step, does the rule for bookings made months ahead stay inside the provider's time limits, and does any part make the co-op hold funds itself?",
     "Is the seller of record settled for bookings on Spare Stay, on hosts' own pages and through booking boxes?",
     "Who pays for guest protection and goodwill when the host is not at fault, and is the cap published?",
-    "Is damage cover answered, including whether a co-op pool needs a Reserve Bank licence, or is it still the biggest open risk (piece ST03)?",
-    "While only hosts are members, are panels, review removals and fee votes fair to guests?",
-    "Do host votes and the pricing tools stay clear of cartel provisions under the Commerce Act?",
+    "Is damage cover answered, including whether a co-op pool needs an insurance licence (example: from New Zealand's Reserve Bank), or is it still the biggest open risk (piece ST03)?",
+    "Since hosts vote on Stay's fees and rules, are panels, review removals and fee votes fair to guests?",
+    "Do host votes and the pricing tools stay clear of cartel provisions under competition law (example: New Zealand's Commerce Act)?",
     "Is the worker status of cleaners and co-hosts settled before any payout split pays them?",
     "How will guests find Spare Stay when the big sites hold the demand, and is the reach plan more than hope?",
     "Are accessibility features proven with photos, and does the app itself meet WCAG 2.2 AA?",
     "Does every action go through the command API, so AI agents, plugins and scripts can do what a person can, and are agents kept from grabbing scarce dates or harvesting addresses?",
     "Has every Stay part that copied a kit part become a thin use of it, and has the kit taken on the shared parts Stay marks to move down: people on an order, personal calendar feeds, smart lock links, floor plans, own booking sites, open listing feeds, search-friendly pages, saved and scheduled messages, the levy engine and cross-app add-ons?",
-    "Does the trip page still work at a bach with no signal, and are door codes safe once the stay ends?",
+    "Does the trip page still work at a remote holiday home with no signal, and are door codes safe once the stay ends?",
     "Can a new country be added as a rule pack of data, without new code?",
     "Does anything in the demo copy an incumbent's names, icons, wording or screen designs?",
     "Which parts are large and core, and who could take them on first?"

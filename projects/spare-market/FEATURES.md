@@ -2,7 +2,7 @@
 
 *Stage: Mapping. Mapped top-down on 2026-10-18, then checked on 2026-10-19 against an independent review and the kit's own map. Every choice is open until an owner accepts a decision note.*
 
-This is the full map of what Spare Market needs, worked top-down: the areas a complete replacement for Trade Me, eBay, Etsy, Facebook Marketplace and Shopify must cover, the features a person uses in each, and the parts to build for each feature. It follows every journey: joining, listing, searching, buying, paying, shipping, pickup, returns, disputes, running a shop and its counter, moderation, member votes, many languages and countries, access for everyone, offline use, data export and the law. The Market runs on the shared kit, so where a part rests on the kit it names the kit part it uses by ID and holds only the Market's own rules: the Market uses 214 of the kit's 572 parts, listed in the [kit's feature map](../kit/FEATURES.md). Where the Market needs a shared part the kit does not have yet, the part says the kit should own it, and the questions at the end list them all. New Zealand comes first; every part is built so other countries can be added as rule sets, not rewrites. Vehicles are mapped here; property, rentals, jobs and trade services are mapped in Spare Home, Spare Rent and Spare Work. Everything is our own design: other companies are named only to say what we replace. IDs are never renumbered or reused; the parts this review handed to the kit are listed under [Retired IDs](#retired-ids).
+This is the full map of what Spare Market needs, worked top-down: the areas a complete replacement for eBay, Etsy, Facebook Marketplace, Shopify and local sites such as Trade Me must cover, the features a person uses in each, and the parts to build for each feature. It follows every journey: joining, listing, searching, buying, paying, shipping, pickup, returns, disputes, running a shop and its counter, moderation, member votes, many languages and countries, access for everyone, offline use, data export and the law. The Market runs on the shared kit, so where a part rests on the kit it names the kit part it uses by ID and holds only the Market's own rules: the Market uses 214 of the kit's 572 parts, listed in the [kit's feature map](../kit/FEATURES.md). Where the Market needs a shared part the kit does not have yet, the part says the kit should own it, and the questions at the end list them all. Spare Market is for any country: every part is built so each country is added as a rule set, not a rewrite, and New Zealand is the first country pack. Vehicles are mapped here; property, rentals, jobs and trade services are mapped in Spare Home, Spare Rent and Spare Work. Everything is our own design: other companies are named only to say what we replace. IDs are never renumbered or reused; the parts this review handed to the kit are listed under [Retired IDs](#retired-ids).
 
 **In numbers:** 22 areas, 177 features (74 core, 56 next, 47 later) and 388 parts. The same map is in [features.json](features.json) for tools and the demo.
 
@@ -64,7 +64,7 @@ Joining with one Spareware login, a public trading profile, the checks a seller 
 | MKT-A1-F3-P2 | **When the Market asks for an identity check**: Sends members to the kit's identity check before payouts above a set amount, before selling vehicles or high-value items, and for the verified badge. | library | small | KIT-A2-F1-P2, KIT-A2-F1-P3 |  |
 | MKT-A1-F3-P3 | **Address check**: Confirms an address by a code sent by post or a trusted record, so buyers know a seller is real; hosts, home sellers and landlords need the same check, so it should move down into the kit as an identity check. | integration | small | KIT-A2-F1-P3, KIT-A7-F2-P3 |  |
 | MKT-A1-F3-P4 | **Where badges show**: Shows the kit's verified badges on Market profiles, listings, offers and chat headers. | interface | small | KIT-A2-F5-P1, MKT-A1-F2-P1 |  |
-| MKT-A1-F4-P1 | **In-trade declaration**: Requires in-trade sellers to say so, and shows the kit's trader details on every listing, as the Fair Trading Act requires. | data | small | KIT-A2-F7-P2, KIT-A2-F7-P1, MKT-A1-F1-P2, KIT-A18-F8-P1 |  |
+| MKT-A1-F4-P1 | **In-trade declaration**: Requires in-trade sellers to say so, and shows the kit's trader details on every listing, as consumer law requires (example: New Zealand's Fair Trading Act). | data | small | KIT-A2-F7-P2, KIT-A2-F7-P1, MKT-A1-F1-P2, KIT-A18-F8-P1 |  |
 | MKT-A1-F4-P3 | **In-trade prompts**: Spot members who sell like a business, such as many new identical items, and ask them to declare. | service | medium | MKT-A1-F4-P1, MKT-A4-F1-P2 |  |
 | MKT-A1-F5-P1 | **Payout set-up from the Market**: Starts the kit's payout set-up at a seller's first sale, so they can list before it is done but cannot be paid until it is. | integration | small | KIT-A3-F3-P1 |  |
 | MKT-A1-F5-P2 | **Market seller checks**: Which Market sellers the kit's customer checks cover and when, such as before high payouts or many high-value sales, under the co-op's one anti-money-laundering programme. | legal | small | KIT-A4-F5-P1, KIT-A4-F5-P2, KIT-A4-F5-P5, MKT-A7-F6-P1 |  |
@@ -130,7 +130,7 @@ Putting an item up for sale in a few minutes from a phone, with good photos, an 
 | MKT-A2-F10-P1 | **Personalisation fields**: Seller-set questions the buyer answers at checkout, with length limits. | data | small | MKT-A2-F1-P1 |  |
 | MKT-A2-F10-P2 | **Making time**: Days needed to make an item before dispatch, shown and used in delivery estimates; when making takes longer than a card hold lasts, the buyer pays a deposit then the balance. | data | small | MKT-A2-F1-P1, KIT-A3-F2-P4, KIT-A3-F2-P3 |  |
 | MKT-A2-F10-P3 | **Digital file delivery**: Secure download links after payment, with a download limit and the file kept safe from sharing links. | service | medium | KIT-A15-F7-P1, MKT-A9-F1-P1 |  |
-| MKT-A2-F10-P4 | **Digital goods rules**: GST on digital items, refunds for downloads, and the seller confirming they hold the rights. | legal | small | KIT-A4-F1-P2, KIT-A18-F8-P1 |  |
+| MKT-A2-F10-P4 | **Digital goods rules**: Sales tax on digital items, refunds for downloads, and the seller confirming they hold the rights. | legal | small | KIT-A4-F1-P2, KIT-A18-F8-P1 |  |
 | MKT-A2-F11-P1 | **Wanted ad record**: An ask on the kit's marketplace loop: what is wanted, a price range, area and an end date. | data | small | kit-market, MKT-A1-F1-P2 |  |
 | MKT-A2-F11-P2 | **Wanted ad alerts**: Shows a wanted ad to sellers listing similar items, and tells the asker about matching new listings through the saved search matcher (MKT-A4-F4-P2). | service | small | MKT-A2-F11-P1, MKT-A4-F4-P2 |  |
 | MKT-A2-F11-P3 | **Wanted ads search**: Wanted ads in their own search tab, with replies going to the chat. | interface | small | MKT-A2-F11-P1, MKT-A4-F1-P4, MKT-A10-F2-P1 |  |
@@ -168,7 +168,7 @@ A shared category tree and the item details each kind of item needs, so filters 
 | MKT-A3-F3-P2 | **Flaw notes**: A place to list flaws and link each to a photo. | interface | small | MKT-A2-F1-P3, MKT-A2-F2-P1 |  |
 | MKT-A3-F4-P1 | **Barcode scanner**: Reads barcodes and ISBNs with the phone camera, in the browser. | interface | small | engine-media |  |
 | MKT-A3-F4-P2 | **Product catalogue**: Shared records of known products, built by members and from open product data whose licences allow it. | data | large | MKT-A3-F2-P1 |  |
-| MKT-A3-F4-P3 | **Open product data sources**: Which open product and book databases exist, their licences and what they cover in New Zealand. | research | small |  |  |
+| MKT-A3-F4-P3 | **Open product data sources**: Which open product and book databases exist, their licences and what they cover in each launch country, starting with New Zealand. | research | small |  |  |
 | MKT-A3-F5-P1 | **Fit data**: Records of which part fits which model, from open or properly licensed data and seller input. | data | large | MKT-A3-F4-P2 |  |
 | MKT-A3-F5-P2 | **Fit data licences**: Where vehicle and appliance fit data can be obtained, at what cost and under what terms. | research | medium |  |  |
 | MKT-A3-F5-P3 | **My vehicle filter**: Save a vehicle or model and filter search to parts that fit it. | interface | small | MKT-A3-F5-P1, MKT-A4-F1-P4 |  |
@@ -236,7 +236,7 @@ Getting from wanting an item to having paid for it: buy now, offers and counter 
 | MKT-A5-F5 One cart across sellers | Put items from several sellers in one cart and pay once. | next | Cart; Split payment by seller; Combined shipping |
 | MKT-A5-F6 Ask for something custom | Ask a maker for a custom item, agree the price and time in the chat, and buy it from a listing made just for you. | next | Custom request; Private listing for one buyer |
 | MKT-A5-F7 Buy as a gift | Send an item as a gift with a note, gift wrap if the seller offers it, and a receipt without prices. | next | Gift options; Gift receipt |
-| MKT-A5-F8 Buy for a business | Get a tax invoice with GST details when buying from a GST-registered seller. | next | Market tax invoices |
+| MKT-A5-F8 Buy for a business | Get a tax invoice with sales tax details when buying from a seller registered for it. | next | Market tax invoices |
 | MKT-A5-F9 Give to a cause | Sell for a registered charity and send part or all of the price to it, or add a donation at checkout. | later | Donation split; Donation tax credits |
 | MKT-A5-F10 Pre-order and back in stock | Order something not yet made or in stock, or ask to be told when it is back. | later | Pre-order terms; Back in stock alerts |
 | MKT-A5-F11 A fair chance at limited stock | Have a fair chance at limited releases and scarce items, without resellers' bots buying them first. | next | Limits and fair queues |
@@ -246,7 +246,7 @@ Getting from wanting an item to having paid for it: buy now, offers and counter 
 | ID | Part | Kind | Size | Depends on | Piece |
 | --- | --- | --- | --- | --- | --- |
 | MKT-A5-F1-P1 | **Buy command**: Reserves the item or stock while paying and stops two people buying the last one. | library | medium | kit-market, KIT-A5-F4-P1, MKT-A2-F1-P2 |  |
-| MKT-A5-F1-P2 | **Market price lines**: The Market's price lines (item, shipping, buyer fee and GST) on the kit's full-price-first calculator, shown before the pay button and never added later. | library | small | KIT-A5-F3-P2, MKT-A7-F2-P1, MKT-A8-F1-P1, KIT-A4-F1-P2 |  |
+| MKT-A5-F1-P2 | **Market price lines**: The Market's price lines (item, shipping, buyer fee and sales tax) on the kit's full-price-first calculator, shown before the pay button and never added later. | library | small | KIT-A5-F3-P2, MKT-A7-F2-P1, MKT-A8-F1-P1, KIT-A4-F1-P2 |  |
 | MKT-A5-F1-P3 | **Checkout screens**: Delivery or pickup choice, address, payment and a final check, short enough for a phone. | interface | medium | KIT-A3-F1-P3, MKT-A5-F1-P1, MKT-A5-F1-P5, MKT-A7-F1-P2 |  |
 | MKT-A5-F1-P4 | **Order confirmation**: A confirmation page and message to both sides with what happens next. | service | small | MKT-A9-F1-P1, KIT-A8-F3-P2 |  |
 | MKT-A5-F1-P5 | **Address book**: Saved delivery addresses with a default, and gift addresses kept apart so they are never used by mistake. | data | small | MKT-A1-F1-P2, KIT-A7-F2-P2, KIT-A19-F1-P2 |  |
@@ -264,7 +264,7 @@ Getting from wanting an item to having paid for it: buy now, offers and counter 
 | MKT-A5-F6-P2 | **Private listing for one buyer**: A listing only the named buyer can see and buy, made from the agreed request. | service | small | MKT-A2-F1-P2 |  |
 | MKT-A5-F7-P1 | **Gift options**: Gift note, wrap choice and a separate delivery address on the order. | data | small | MKT-A9-F1-P1 |  |
 | MKT-A5-F7-P2 | **Gift receipt**: A receipt without prices that still allows a return. | library | small | engine-pdf, MKT-A9-F1-P1 |  |
-| MKT-A5-F8-P1 | **Market tax invoices**: Tax invoices from the kit for each sale by a GST-registered seller, and for the buyer fee to GST-registered buyers. | library | small | KIT-A4-F2-P1, MKT-A7-F9-P1 |  |
+| MKT-A5-F8-P1 | **Market tax invoices**: Tax invoices from the kit for each sale by a seller registered for sales tax, and for the buyer fee to registered buyers. | library | small | KIT-A4-F2-P1, MKT-A7-F9-P1 |  |
 | MKT-A5-F9-P2 | **Donation split**: Sends the chosen share of a sale to the charity through the payment provider. | service | medium | KIT-A5-F11-P1, KIT-A3-F3-P2, MKT-A7-F3-P1 |  |
 | MKT-A5-F9-P3 | **Donation tax credits**: A purchase whose proceeds go to a charity is not a gift and earns no donation tax credit; only a separate donation at checkout might, with the charity issuing the receipt. | legal | small | MKT-A5-F9-P2 |  |
 | MKT-A5-F10-P1 | **Pre-order terms**: Expected dispatch date, the right to cancel if it is late, and when payment is taken: within the provider's hold time limits, or as a deposit then the balance for long waits. | data | small | MKT-A2-F7-P1, KIT-A18-F8-P1, KIT-A3-F2-P4, KIT-A3-F2-P3 |  |
@@ -320,7 +320,7 @@ The buyer's money held by a regulated provider until the item arrives, who the s
 | MKT-A7-F6 Anti-money-laundering duties met | Trade knowing the Market meets anti-money-laundering law without making honest trade harder. | core | Market risks for the co-op's programme; Market signals for suspicious activity |
 | MKT-A7-F7 Card disputes | Have card disputes answered on time with evidence from the order, and know who carries a lost one. | core | Market evidence for card disputes; Market loss rule |
 | MKT-A7-F8 Protection pool | Know buyers are refunded even when a seller cannot pay back, from a small pool shown on the cost ledger. | next | Market protection pool |
-| MKT-A7-F9 Know who the seller is | Know who sold you the item, who charges GST on it, and who answers for it if something goes wrong. | core | Market seller of record |
+| MKT-A7-F9 Know who the seller is | Know who sold you the item, who charges sales tax on it, and who answers for it if something goes wrong. | core | Market seller of record |
 | MKT-A7-F10 Pay safely for a car or other big item | Pay for a car, boat or machinery by low-cost bank payment into a held account, or by a deposit then the balance. | next | Held bank payment for big items; Deposit then balance |
 
 **Parts**
@@ -336,13 +336,13 @@ The buyer's money held by a regulated provider until the item arrives, who the s
 | MKT-A7-F3-P1 | **Market payout timing**: Pays a seller through the kit's payout runs once each order's money is released, with held and available amounts shown apart on the kit's earnings page. | library | small | KIT-A3-F3-P2, KIT-A3-F3-P3, MKT-A7-F1-P2 |  |
 | MKT-A7-F4-P1 | **Market refund reasons**: Full and part refunds on the kit's refunds, each linked to the order and a Market reason. | library | small | KIT-A3-F5-P1, MKT-A9-F1-P1 |  |
 | MKT-A7-F4-P2 | **Refund screens**: Refund from the order with the amount, reason and a note to the buyer. | interface | small | MKT-A7-F4-P1 |  |
-| MKT-A7-F5-P1 | **What a Market receipt shows**: The seller of record, GST and the fee on every receipt from the kit, for online and counter sales alike, printed or emailed. | library | small | KIT-A3-F7-P1, MKT-A7-F9-P1 |  |
+| MKT-A7-F5-P1 | **What a Market receipt shows**: The seller of record, sales tax and the fee on every receipt from the kit, for online and counter sales alike, printed or emailed. | library | small | KIT-A3-F7-P1, MKT-A7-F9-P1 |  |
 | MKT-A7-F6-P1 | **Market risks for the co-op's programme**: The Market risks the co-op's one anti-money-laundering programme must cover, such as high-value goods, gift cards, stored balances and fake sales used to move money, and which duties the payment provider carries. | legal | small | KIT-A4-F5-P1 |  |
 | MKT-A7-F6-P3 | **Market signals for suspicious activity**: Market patterns, such as repeat sales between the same accounts or prices far above value, sent to the kit's suspicious activity reports. | library | small | KIT-A4-F5-P3, KIT-A10-F12-P2, MKT-A7-F6-P1 |  |
 | MKT-A7-F7-P1 | **Market evidence for card disputes**: Sends tracking, messages, photos and the pickup record to the kit's card disputes within the card network's deadlines. | library | small | KIT-A3-F5-P2, MKT-A9-F1-P1, KIT-A11-F2-P1 |  |
 | MKT-A7-F7-P2 | **Market loss rule**: Who carries a lost card dispute in the Market: the seller, as a negative balance recovered from future payouts, or the protection reserve when the seller kept every rule, on the kit's loss rules. | legal | small | KIT-A3-F16-P1, KIT-A3-F16-P2, KIT-A13-F3-P5 |  |
 | MKT-A7-F8-P1 | **Market protection pool**: What the Market's protection pool covers and its limits, on the kit's protection pool. | research | small | KIT-A11-F10-P1, KIT-A11-F10-P2 |  |
-| MKT-A7-F9-P1 | **Market seller of record**: The Market's choice on the kit's seller of record: the trader is the seller, except where the Market is the deemed supplier, for low-value imported goods and its own buyer fee. This sets who charges GST, who owes Consumer Guarantees Act duties, whose name is on the receipt and who answers card disputes. | legal | medium | KIT-A3-F1-P5, MKT-A19-F2-P1, KIT-A18-F8-P1 |  |
+| MKT-A7-F9-P1 | **Market seller of record**: The Market's choice on the kit's seller of record: the trader is the seller, except where the Market is the deemed supplier, for low-value imported goods and its own buyer fee. This sets who charges sales tax, who owes consumer guarantee duties (example: under New Zealand's Consumer Guarantees Act), whose name is on the receipt and who answers card disputes. | legal | medium | KIT-A3-F1-P5, MKT-A19-F2-P1, KIT-A18-F8-P1 |  |
 | MKT-A7-F10-P1 | **Held bank payment for big items**: Pays a high-value order by bank payment into a held account, where card costs would be too high, and releases it on the same rules as other orders. | integration | medium | KIT-A3-F11-P1, KIT-A3-F2-P1, KIT-A3-F2-P2, MKT-A7-F1-P2 |  |
 | MKT-A7-F10-P2 | **Deposit then balance**: A deposit held when the deal is agreed and the balance paid at handover, for items such as vehicles and machinery. | library | small | KIT-A3-F2-P3, KIT-A3-F10-P1, MKT-A7-F10-P1 |  |
 
@@ -361,7 +361,7 @@ Getting the item from seller to buyer: shipping prices, courier labels, tracking
 | MKT-A8-F7 Local delivery | Have a local item delivered the same day by a nearby independent courier. | later | Local delivery as a shared delivery job; Large item freight |
 | MKT-A8-F8 Use a fulfilment warehouse | Send stock to a warehouse that packs and ships orders for the seller. | later | Warehouse connectors |
 | MKT-A8-F9 Ship overseas | Sell to buyers in other countries with customs forms filled from the listing. | later | Customs declarations; Duty and tax at checkout; Country shipping limits |
-| MKT-A8-F10 Know what can be posted | See before posting which items couriers refuse or charge more for, such as lithium batteries, aerosols and perfume, and how to send them. | next | Posting dangerous goods in NZ; Dangerous goods flags |
+| MKT-A8-F10 Know what can be posted | See before posting which items couriers refuse or charge more for, such as lithium batteries, aerosols and perfume, and how to send them. | next | Posting dangerous goods; Dangerous goods flags |
 
 **Parts**
 
@@ -393,7 +393,7 @@ Getting the item from seller to buyer: shipping prices, courier labels, tracking
 | MKT-A8-F9-P1 | **Customs declarations**: Customs forms filled from item details, value and tariff codes. | library | medium | MKT-A3-F2-P1, MKT-A8-F4-P2, KIT-A19-F6-P1 |  |
 | MKT-A8-F9-P2 | **Duty and tax at checkout**: Import duty and tax worked out and shown at checkout, so buyers pay no surprise charges on arrival. | service | large | KIT-A4-F1-P2, KIT-A4-F7-P1, MKT-A19-F5-P2, MKT-A19-F5-P3 |  |
 | MKT-A8-F9-P3 | **Country shipping limits**: Items that may not be sent to, or from, each country. | data | medium | MKT-A12-F1-P2, KIT-A19-F6-P1, MKT-A19-F5-P2, MKT-A19-F5-P3 |  |
-| MKT-A8-F10-P1 | **Posting dangerous goods in NZ**: What NZ couriers and the postal service allow for lithium batteries, aerosols, perfume, nail polish and other dangerous goods sent within New Zealand, and what they charge extra. | research | small | MKT-A8-F4-P1 |  |
+| MKT-A8-F10-P1 | **Posting dangerous goods**: What couriers and the postal service in each country allow for lithium batteries, aerosols, perfume, nail polish and other dangerous goods sent within the country, and what they charge extra, starting with New Zealand. | research | small | MKT-A8-F4-P1 |  |
 | MKT-A8-F10-P2 | **Dangerous goods flags**: Flags listings in categories that carry dangerous goods, shows the courier rules on the listing form, and offers only shipping services that accept them. | library | small | MKT-A8-F10-P1, MKT-A3-F2-P1, MKT-A8-F1-P1 |  |
 
 ## MKT-A9 Orders, returns and after-sale
@@ -478,7 +478,7 @@ Trust between strangers: two-way ratings from real trades only, buyer protection
 | MKT-A11-F2-P1 | **Protection rules**: What is covered, up to what amount, by when, and what is not, such as cash trades. | legal | medium | MKT-A7-F1-P2 | [MK01](STATUS.md) |
 | MKT-A11-F2-P2 | **Claim flow**: Opens a claim from a problem report once the seller's response window has passed. | service | medium | MKT-A11-F2-P1, MKT-A7-F1-P2, MKT-A9-F1-P1, MKT-A9-F4-P2, KIT-A11-F1-P1 |  |
 | MKT-A11-F3-P4 | **Decision to money**: Turns a panel decision or a settlement on a Market order into a release, a refund or a split of the held money. | library | small | KIT-A11-F3-P1, KIT-A3-F2-P1, MKT-A7-F1-P2, MKT-A7-F4-P1 |  |
-| MKT-A11-F3-P6 | **Evidence pack and outside routes**: Exports a case's evidence as one pack for the Disputes Tribunal, and links to report scams to Netsafe and Police, alongside the kit's guidance on outside routes. | library | small | KIT-A11-F7-P1, KIT-A11-F2-P1, engine-pdf |  |
+| MKT-A11-F3-P6 | **Evidence pack and outside routes**: Exports a case's evidence as one pack for a small claims tribunal (example: New Zealand's Disputes Tribunal), and links to report scams to the online safety agency and police (example: Netsafe in New Zealand), alongside the kit's guidance on outside routes. | library | small | KIT-A11-F7-P1, KIT-A11-F2-P1, engine-pdf |  |
 | MKT-A11-F4-P1 | **Performance measures**: Dispatch time, reply time, cancellations and problem rates per seller. | service | medium | MKT-A9-F1-P1, MKT-A10-F2-P1 |  |
 | MKT-A11-F4-P2 | **Reliability badges**: Badges earned from the measures, shown on profiles and used in ranking. | interface | small | MKT-A11-F4-P1, MKT-A4-F3-P1 |  |
 | MKT-A11-F4-P3 | **Limits for low standards**: Warnings, then listing limits, for sellers who fall below the published standards. | library | small | MKT-A11-F4-P1, KIT-A9-F4-P1 |  |
@@ -505,17 +505,17 @@ Keeping the Market safe and legal: rules on banned and restricted items, scam de
 
 | ID | Part | Kind | Size | Depends on | Piece |
 | --- | --- | --- | --- | --- | --- |
-| MKT-A12-F1-P1 | **Restricted goods law**: Every NZ law limiting online sales, with sources: firearms and restricted weapons, fireworks, alcohol, vapes, medicines, food (Food Act registration), live animals and pets, livestock (NAIT transfers), plants and seeds (biosecurity), wildlife, taonga tūturu (Protected Objects Act: registered collectors only), event tickets (resale bans for major events), publications that need classification labels, second-hand electrical goods, recalled goods, goods with compulsory safety standards and stolen goods. | legal | large |  |  |
+| MKT-A12-F1-P1 | **Restricted goods law**: Every law limiting online sales in each country, with sources, starting with New Zealand's: firearms and restricted weapons, fireworks, alcohol, vapes, medicines, food (Food Act registration), live animals and pets, livestock (NAIT transfers), plants and seeds (biosecurity), wildlife, taonga tūturu (Protected Objects Act: registered collectors only), event tickets (resale bans for major events), publications that need classification labels, second-hand electrical goods, recalled goods, goods with compulsory safety standards and stolen goods. | legal | large |  |  |
 | MKT-A12-F1-P2 | **Item rules as data**: Banned, restricted and licence-needed items written as rules linked to categories and keywords, versioned and voted on. | data | medium | MKT-A12-F1-P1, MKT-A3-F1-P1, KIT-A10-F5-P1, KIT-A12-F4-P4 |  |
 | MKT-A12-F1-P3 | **Licence and age checks**: Checks a seller's licence, or a buyer's age, for items that need one, through the kit's age checks and public register checks. | library | small | KIT-A2-F8-P1, KIT-A2-F2-P1, KIT-A2-F13-P1, MKT-A12-F1-P2 |  |
 | MKT-A12-F1-P4 | **Rules pages**: Plain pages listing what can and cannot be sold and why. | interface | small | MKT-A12-F1-P2 |  |
 | MKT-A12-F1-P5 | **Age check at handover**: Checks age again when an R18 item changes hands, since a check at purchase alone lets parcels reach under-18s at the door: ID shown at pickup, or a courier that checks ID and takes a signature; until that courier service is linked (MKT-A8-F4-P8), R18 items are pickup only. | library | small | MKT-A12-F1-P3, MKT-A7-F1-P4 |  |
-| MKT-A12-F1-P6 | **Second-hand dealer prompts**: Asks members who trade second-hand goods often enough to be presumed dealers (6 or more trading days, or over $2,000, in 12 months) for their dealer's licence, and shows it on their listings. | library | small | MKT-A21-F6-P3, MKT-A1-F4-P3 |  |
+| MKT-A12-F1-P6 | **Second-hand dealer prompts**: Asks members who trade second-hand goods often enough to be presumed dealers (in New Zealand, 6 or more trading days, or over $2,000, in 12 months) for their dealer's licence, and shows it on their listings. | library | small | MKT-A21-F6-P3, MKT-A1-F4-P3 |  |
 | MKT-A12-F2-P2 | **Market scam rules**: Signals specific to buying and selling, such as prices far below value, reused photos and a rush to move to another app, set as rules on the kit's fraud signals, which hold risky listings for review. | library | small | KIT-A10-F12-P2, MKT-A2-F1-P1 |  |
 | MKT-A12-F2-P4 | **Safe trading guide**: Short plain advice on spotting scams, shown where people need it. | interface | small |  |  |
 | MKT-A12-F3-P1 | **Report links on everything**: A report link on every listing, profile, message, review, shop page, blog post and storefront page, using the kit's report forms. | interface | small | KIT-A10-F3-P2, KIT-A10-F3-P1, KIT-A10-F3-P3, MKT-A17-F1-P1 |  |
 | MKT-A12-F4-P1 | **Every upload checked**: Sends every Market upload, from listing, review and chat photos to shop page images, blog images and theme files, through the kit's file service and its known-content checks. | integration | small | KIT-A15-F7-P1, KIT-A10-F10-P2 |  |
-| MKT-A12-F5-P1 | **Rights notices on listings and shops**: A notice link on every listing and shop page, and takedown and restore of Market listings, on the kit's copyright and trade mark notices, acted on promptly as the Copyright Act's rules for hosts require. | integration | small | KIT-A10-F21-P2, MKT-A2-F1-P4, MKT-A17-F1-P1 |  |
+| MKT-A12-F5-P1 | **Rights notices on listings and shops**: A notice link on every listing and shop page, and takedown and restore of Market listings, on the kit's copyright and trade mark notices, acted on promptly as copyright law's rules for hosts require (example: New Zealand's Copyright Act). | integration | small | KIT-A10-F21-P2, MKT-A2-F1-P4, MKT-A17-F1-P1 |  |
 | MKT-A12-F6-P1 | **Recall list link**: Pulls government product recall lists, starting with New Zealand's; Spare Food needs food recalls too, so the feed should move down into the kit. | integration | medium | MKT-A12-F1-P2 |  |
 | MKT-A12-F6-P2 | **Recall matching**: Matches recalls to listings and past orders by product, brand and model. | service | medium | MKT-A3-F4-P2, MKT-A4-F1-P2, MKT-A9-F1-P1 |  |
 | MKT-A12-F7-P1 | **Share my pickup**: Sends the pickup time, place and listing to a chosen contact through the kit's trusted contact link, and checks in afterwards. | integration | small | KIT-A10-F2-P1, MKT-A8-F2-P1 |  |
@@ -554,7 +554,7 @@ Any business can run its own online shop on Spare Market at cost: its own web ad
 | MKT-A13-F2-P3 | **Visual editor**: Drag blocks, change settings and preview on phone and desktop, with undo and published versions. | interface | large | MKT-A13-F2-P1, kit-ops |  |
 | MKT-A13-F2-P4 | **Theme add-ins**: Themes and blocks from other designers, run as sandboxed add-ins and kept off checkout pages. | library | medium | KIT-A16-F5-P2, KIT-A16-F6-P2, MKT-A13-F2-P1, MKT-A13-F3-P4 |  |
 | MKT-A13-F3-P1 | **Custom domains**: Connect a domain, check its records and issue free security certificates automatically; Spare Stay and Spare Social map their own web addresses too (STAY-A21-F3-P2, SOC-A1-F3-P1), so this should move down into the kit as one domain service. | service | medium | MKT-A13-F5-P1 |  |
-| MKT-A13-F3-P2 | **Domain buying**: Whether the co-op can sell domain names at cost through a registrar, and the rules for .nz names. | research | small |  |  |
+| MKT-A13-F3-P2 | **Domain buying**: Whether the co-op can sell domain names at cost through a registrar, and the rules for country domains such as .nz names. | research | small |  |  |
 | MKT-A13-F3-P3 | **Free shop address**: A free web address for shops without a domain, on a separate domain registered on the Public Suffix List, so no shop can read another shop's or the Market's cookies. | service | small | MKT-A13-F5-P1, MKT-A13-F3-P4 |  |
 | MKT-A13-F3-P4 | **Storefront security**: Serves shop sites apart from the Market's own domain, keeps theme and add-in scripts off checkout pages, and sets content security rules and script checks on every page that leads to payment, as the card industry's rules for payment pages ask. | library | medium | MKT-A13-F5-P1, KIT-A3-F1-P3, KIT-A3-F1-P6, KIT-A22-F5-P3 |  |
 | MKT-A13-F4-P1 | **Pages and blog**: Pages and blog posts with text, images and product blocks. | service | medium | MKT-A13-F1-P2, engine-text, KIT-A15-F7-P1, MKT-A12-F4-P1 |  |
@@ -599,7 +599,7 @@ The tools a shop runs its business with: products and collections, one stock cou
 | MKT-A14-F8 Bundles and made-up products | Sell sets of items together, or products built from chosen parts. | later | Bundles |
 | MKT-A14-F9 Sell on other channels | Keep product feeds for search and comparison sites up to date from one place. | later | Channel feeds |
 | MKT-A14-F10 Sell live on video | Show items on a live video and let viewers buy them while they watch. | later | Live selling approach; Live selling stream |
-| MKT-A14-F11 Layby | Offer layby: the buyer pays in parts and takes the item once it is paid off, with the rights the Fair Trading Act gives. | later | Layby law; Layby payments |
+| MKT-A14-F11 Layby | Offer layby: the buyer pays in parts and takes the item once it is paid off, with the rights consumer law gives (example: New Zealand's Fair Trading Act). | later | Layby law; Layby payments |
 | MKT-A14-F12 Dropshipping and print on demand | Sell products a supplier makes or sends for you, with that shown to buyers. | later | Supplier-fulfilled products; Supplier shown to buyers |
 
 **Parts**
@@ -616,8 +616,8 @@ The tools a shop runs its business with: products and collections, one stock cou
 | MKT-A14-F2-P5 | **Buying stock in**: Purchase orders to suppliers and receiving stock against them. | interface | medium | KIT-A5-F10-P1 |  |
 | MKT-A14-F3-P1 | **Market discount types**: Percent, amount, buy-some-get-some and free shipping discounts, with dates, limits and who can use them, as rules on the kit's promotions and vouchers. | library | small | KIT-A5-F14-P2, MKT-A5-F1-P3 |  |
 | MKT-A14-F3-P2 | **Discount screens**: Create, schedule and end discounts, and see how they did. | interface | small | MKT-A14-F3-P1 |  |
-| MKT-A14-F3-P3 | **Honest pricing checks**: Checks that a was-price was a real recent price, as the Fair Trading Act requires. | legal | small | KIT-A5-F14-P1, KIT-A18-F8-P1, MKT-A14-F3-P1 |  |
-| MKT-A14-F4-P1 | **Customer records**: A shop's customers with their orders and consent, kept to what the Privacy Act allows; restaurants, hosts and trades need the same list, so it should move down into the kit. | data | medium | MKT-A9-F1-P1, MKT-A21-F3-P5, KIT-A18-F5-P1, KIT-A18-F17-P1 |  |
+| MKT-A14-F3-P3 | **Honest pricing checks**: Checks that a was-price was a real recent price, as consumer law requires (example: New Zealand's Fair Trading Act). | legal | small | KIT-A5-F14-P1, KIT-A18-F8-P1, MKT-A14-F3-P1 |  |
+| MKT-A14-F4-P1 | **Customer records**: A shop's customers with their orders and consent, kept to what privacy law allows; restaurants, hosts and trades need the same list, so it should move down into the kit. | data | medium | MKT-A9-F1-P1, MKT-A21-F3-P5, KIT-A18-F5-P1, KIT-A18-F17-P1 |  |
 | MKT-A14-F4-P2 | **Email newsletters**: Simple newsletters with consent and a working unsubscribe, as anti-spam law requires; they should move down into the kit with the customer list. | service | medium | KIT-A8-F4-P1, KIT-A8-F5-P2, MKT-A14-F4-P1 |  |
 | MKT-A14-F4-P3 | **Unfinished checkout reminders**: A reminder about a left cart, only for shoppers who agreed to messages. | service | small | KIT-A8-F3-P2, KIT-A8-F5-P2, MKT-A5-F5-P1, MKT-A14-F4-P1 |  |
 | MKT-A14-F4-P4 | **Customer groups**: Groups such as regulars or wholesale, used by discounts and price lists. | data | small | MKT-A14-F4-P1 |  |
@@ -631,7 +631,7 @@ The tools a shop runs its business with: products and collections, one stock cou
 | MKT-A14-F9-P2 | **Channel feeds**: Keeps product feeds for search and comparison sites up to date. | integration | medium | MKT-A4-F9-P2 |  |
 | MKT-A14-F10-P1 | **Live selling approach**: Whether to build live selling on the shared media engine or on a live video service in the kit, never on another program, and what it costs to run. | research | small |  |  |
 | MKT-A14-F10-P2 | **Live selling stream**: A live video with listings pinned on screen, quick buying and a chat for questions. | service | large | engine-media, MKT-A2-F1-P1, MKT-A5-F1-P1, MKT-A10-F2-P1 |  |
-| MKT-A14-F11-P1 | **Layby law**: The Fair Trading Act's layby rules: what the agreement must say, the buyer's right to cancel, what a seller may keep, and what happens if the shop closes. | legal | small | KIT-A18-F8-P1 |  |
+| MKT-A14-F11-P1 | **Layby law**: Each country's layby rules, starting with New Zealand's Fair Trading Act: what the agreement must say, the buyer's right to cancel, what a seller may keep, and what happens if the shop closes. | legal | small | KIT-A18-F8-P1 |  |
 | MKT-A14-F11-P2 | **Layby payments**: Payments in parts on the kit's stage payments, with the item set aside in stock until it is paid off or the layby is cancelled, online or at the till. | library | small | KIT-A3-F2-P3, KIT-A5-F10-P1, MKT-A14-F11-P1 |  |
 | MKT-A14-F12-P1 | **Supplier-fulfilled products**: Products made or sent by a supplier or print partner, with the order passed to them and the tracking brought back. | library | medium | MKT-A9-F1-P1, MKT-A2-F9-P1, KIT-A16-F5-P2 |  |
 | MKT-A14-F12-P2 | **Supplier shown to buyers**: Shows on the listing that a supplier makes or sends the item, with its delivery time, in line with the making declaration. | interface | small | MKT-A2-F9-P1, MKT-A8-F1-P2 |  |
@@ -653,7 +653,7 @@ A shop counter on the kit's card readers and shared till, on a phone, tablet or 
 
 | ID | Part | Kind | Size | Depends on | Piece |
 | --- | --- | --- | --- | --- | --- |
-| MKT-A15-F1-P1 | **Till research**: Card readers and point-of-sale options from payment providers that fit at-cost pricing, including NZ EFTPOS through the local switch and the in-store card surcharge rules, as the Market's input to the kit's card readers and shared till. | research | medium | KIT-A3-F4-P3, KIT-A3-F19-P2 | [MK07](STATUS.md) |
+| MKT-A15-F1-P1 | **Till research**: Card readers and point-of-sale options from payment providers that fit at-cost pricing, including local debit networks and in-store card surcharge rules (example: EFTPOS in New Zealand), as the Market's input to the kit's card readers and shared till. | research | medium | KIT-A3-F4-P3, KIT-A3-F19-P2 | [MK07](STATUS.md) |
 | MKT-A15-F1-P2 | **Market till screens**: The shop's products, stock, discounts and returns on the kit's shared till, on a phone, tablet or computer. | interface | medium | KIT-A3-F19-P2, KIT-A5-F10-P1, MKT-A14-F3-P1, MKT-A15-F1-P1 |  |
 | MKT-A15-F1-P4 | **Cash and cash counts**: Cash payments, change, opening float and cash drawer counts. | interface | small | MKT-A15-F1-P2 |  |
 | MKT-A15-F1-P6 | **Counter returns and exchanges**: Refund or swap an item at the counter, online or in-store purchases alike. | service | small | MKT-A9-F5-P2, MKT-A15-F1-P2 |  |
@@ -695,7 +695,7 @@ Running a busy selling account: a dashboard of what needs doing, bulk tools, sal
 | MKT-A16-F4-P2 | **Sold price search**: Search sold items and see a price range. | interface | small | MKT-A16-F4-P1 |  |
 | MKT-A16-F4-P3 | **Open price data**: Whether to publish summarised sold prices as open data for members and researchers. | research | small | MKT-A16-F4-P1 |  |
 | MKT-A16-F5-P2 | **Accounting connectors**: Sends Market sales, fees, refunds and payouts to accounting software through the kit's common connectors. | integration | small | KIT-A16-F8-P1, KIT-A4-F4-P2, MKT-A16-F5-P3 |  |
-| MKT-A16-F5-P3 | **Which accounting software first**: The accounting software NZ small sellers use most, and the terms of their APIs. | research | small |  |  |
+| MKT-A16-F5-P3 | **Which accounting software first**: The accounting software small sellers use most in each launch country, and the terms of their APIs. | research | small |  |  |
 | MKT-A16-F6-P1 | **Market add-in points**: The places add-ins can hook in: listings, orders, checkout, shipping, storefront and reports. | library | medium | KIT-A16-F5-P2, MKT-A16-F7-P1 |  |
 | MKT-A16-F7-P1 | **Market command schemas**: Every Market action described once as a command and query on the kit's command schemas, so the app, AI agents, add-ins and scripts share one path and the kit generates the API from it. | library | medium | KIT-A15-F1-P3, KIT-A16-F1-P1 |  |
 | MKT-A16-F7-P2 | **Agent safeguards in Market commands**: Wires the kit's agent safeguards into the Market: approval before an agent buys, offers, bids or refunds; agent labels on offers, questions, answers and messages; ratings and dispute statements made by people only; listing and chat text marked untrusted; and spending limits per agent. | library | medium | KIT-A17-F1-P1, KIT-A17-F2-P1, KIT-A17-F9-P1, KIT-A17-F9-P2, KIT-A17-F5-P1, KIT-A17-F4-P1, MKT-A16-F7-P1 |  |
@@ -730,13 +730,13 @@ Running the Market fairly in the open on the kit's trust, support and admin serv
 
 ## MKT-A18 Members, fees and the cost ledger
 
-What makes the Market a co-op: buyers and sellers join as members and vote on fees and rules from the first release, see each month what it cost to run and how the Market is doing, and help get their own town started.
+How members run the Market: buyers and sellers join free as members and vote on fees and rules from the first release, see each month what it cost to run and how the Market is doing, and help get their own town started.
 
 | Feature | What a person can do | Priority | Parts |
 | --- | --- | --- | --- |
 | MKT-A18-F1 See what it cost | See each month what the Market cost to run and how the fee was set from it. | core | Market cost page |
 | MKT-A18-F2 Get a town started | Help a town get enough sellers and buyers at once for the Market to be useful there. | core | Launch plan; Invites and local launch page |
-| MKT-A18-F3 Join the co-op | Become a member with one share and a vote on the Market's fees and rules, from the first release. | core | Market electorate; Start-up rules |
+| MKT-A18-F3 Join as a member | Become a member, free, with a vote on the Market's fees and rules, from the first release. | core | Market electorate; Start-up rules |
 | MKT-A18-F4 Vote on fees and rules | Propose and vote on changes to fees, ranking, item rules and protection limits. | core | Market proposals |
 | MKT-A18-F5 Community buy-and-sell groups | Run a buy-and-sell group for a school, club or suburb inside the Market. | later | Group marketplaces; Fundraising sales |
 | MKT-A18-F6 See how the Market is doing | See each month, region by region, how the Market is doing: listings, sales, time to sell, disputes, fraud losses and support times. | core | Monthly Market figures |
@@ -757,13 +757,13 @@ What makes the Market a co-op: buyers and sellers join as members and vote on fe
 
 ## MKT-A19 Countries, languages, currencies and tax
 
-New Zealand first, international by design: English and te reo Māori from the start, GST worked out right, and each new country added as a rule set for its language, currency, tax, consumer law and platform duties.
+International by design, with New Zealand as the first country pack: English and each launch country's own languages (example: te reo Māori) from the start, sales tax worked out right, and each new country added as a rule set for its language, currency, tax, consumer law and platform duties.
 
 | Feature | What a person can do | Priority | Parts |
 | --- | --- | --- | --- |
-| MKT-A19-F1 Use it in your language | Use the Market in English or te reo Māori, with more languages added by members. | core | Te reo Māori translation; Next languages |
-| MKT-A19-F2 GST worked out right | Have GST worked out and shown correctly on every sale and fee. | core | Market GST rules; GST threshold warning |
-| MKT-A19-F3 Overseas sellers to NZ buyers | Buy from overseas sellers with GST collected at checkout, as the law asks of marketplaces. | later | Low-value import GST |
+| MKT-A19-F1 Use it in your language | Use the Market in English or each launch country's own languages (example: te reo Māori), with more languages added by members. | core | Launch country language translation (example: te reo Māori); Next languages |
+| MKT-A19-F2 Sales tax worked out right | Have sales tax worked out and shown correctly on every sale and fee. | core | Market sales tax rules; Sales tax threshold warning |
+| MKT-A19-F3 Overseas sellers to local buyers | Buy from overseas sellers with sales tax collected at checkout, as the law asks of marketplaces (example: New Zealand GST on low-value imports). | later | Low-value import sales tax |
 | MKT-A19-F4 Prices in your currency | See prices in your own currency, while sellers are paid in theirs. | later | Prices shown in your currency |
 | MKT-A19-F5 Rules for each country | Sell in another country with its consumer, safety, tax and platform rules built in. | later | EU platform duties; Australia and UK duties; Business seller checks for the EU |
 | MKT-A19-F6 Income reporting | Have the Market report sellers' income to tax authorities wherever the law requires it. | later | Goods reporting watch |
@@ -772,11 +772,11 @@ New Zealand first, international by design: English and te reo Māori from the s
 
 | ID | Part | Kind | Size | Depends on | Piece |
 | --- | --- | --- | --- | --- | --- |
-| MKT-A19-F1-P2 | **Te reo Māori translation**: The Market's interface text in te reo Māori, done with fluent speakers through the kit's member translation, macrons always right. | data | medium | KIT-A19-F1-P1, KIT-A19-F1-P3, KIT-A18-F16-P1 |  |
-| MKT-A19-F1-P5 | **Next languages**: Chooses the next languages from New Zealand's most spoken, starting with Samoan, Mandarin and Hindi, and finds fluent members to translate and review them. | research | small | KIT-A19-F1-P3, MKT-A19-F1-P2 |  |
-| MKT-A19-F2-P1 | **Market GST rules**: When GST applies to goods sales, the buyer fee and shipping, for registered and unregistered sellers, and the marketplace rules for low-value imported goods, as the Market's input to the kit's GST rules. | legal | medium | KIT-A4-F1-P1 |  |
-| MKT-A19-F2-P4 | **GST threshold warning**: Warns a seller whose sales look like a taxable activity as they near the NZ$60,000 GST registration threshold across every Spareware app, and explains what registering changes; Spare Food maps the same warning (FOOD-A10-F13-P1), so it should move down into the kit. | library | small | KIT-A4-F1-P2, KIT-A3-F3-P3, MKT-A19-F2-P1 |  |
-| MKT-A19-F3-P1 | **Low-value import GST**: Collects and returns GST on imported goods of NZ$1,000 or less sold through the Market by overseas sellers. | service | medium | KIT-A4-F1-P2, MKT-A19-F2-P1, MKT-A7-F9-P1 |  |
+| MKT-A19-F1-P2 | **Launch country language translation (example: te reo Māori)**: The Market's interface text in each launch country's own languages, starting with te reo Māori with macrons always right, done with fluent speakers through the kit's member translation. | data | medium | KIT-A19-F1-P1, KIT-A19-F1-P3, KIT-A18-F16-P1 |  |
+| MKT-A19-F1-P5 | **Next languages**: Chooses the next languages from each country's most spoken, such as Samoan, Mandarin and Hindi in New Zealand, and finds fluent members to translate and review them. | research | small | KIT-A19-F1-P3, MKT-A19-F1-P2 |  |
+| MKT-A19-F2-P1 | **Market sales tax rules**: When sales tax applies to goods sales, the buyer fee and shipping, for registered and unregistered sellers, and the marketplace rules for low-value imported goods, as the Market's input to the kit's sales tax rules. | legal | medium | KIT-A4-F1-P1 |  |
+| MKT-A19-F2-P4 | **Sales tax threshold warning**: Warns a seller whose sales look like a taxable activity as they near the sales tax registration threshold across every Spareware app (example: NZ$60,000 for New Zealand GST), and explains what registering changes; Spare Food maps the same warning (FOOD-A10-F13-P1), so it should move down into the kit. | library | small | KIT-A4-F1-P2, KIT-A3-F3-P3, MKT-A19-F2-P1 |  |
+| MKT-A19-F3-P1 | **Low-value import sales tax**: Collects and returns sales tax on low-value imported goods sold through the Market by overseas sellers, as each country requires (example: GST on goods of NZ$1,000 or less in New Zealand). | service | medium | KIT-A4-F1-P2, MKT-A19-F2-P1, MKT-A7-F9-P1 |  |
 | MKT-A19-F4-P2 | **Prices shown in your currency**: Shows a converted price as a guide on listings, and the exact amount charged at checkout, on the kit's currencies per country. | integration | small | KIT-A3-F14-P1 |  |
 | MKT-A19-F5-P2 | **EU platform duties**: Trader checks, compliance by design and product safety duties for marketplaces selling in the EU. | legal | medium | KIT-A18-F13-P1 |  |
 | MKT-A19-F5-P3 | **Australia and UK duties**: Consumer, tax and platform duties for marketplaces in Australia and the UK. | legal | medium | KIT-A18-F13-P1 |  |
@@ -806,7 +806,7 @@ Working for everyone, everywhere: screen readers, keyboards and large text, an i
 
 ## MKT-A21 Data, privacy and legal duties
 
-Members own their data and can take it or delete it, on the kit's data, privacy and legal parts; the Market adds its own rules on top: who sees a buyer's details, checks before an account closes, consumer law in the product, its terms and the records second-hand dealer law asks for.
+Members control their data and can take it or delete it, on the kit's data, privacy and legal parts; the Market adds its own rules on top: who sees a buyer's details, checks before an account closes, consumer law in the product, its terms and the records second-hand dealer law asks for.
 
 | Feature | What a person can do | Priority | Parts |
 | --- | --- | --- | --- |
@@ -828,7 +828,7 @@ Members own their data and can take it or delete it, on the kit's data, privacy 
 | MKT-A21-F5-P1 | **Market terms and rules**: The Market's terms for buyers, sellers and shops in plain words, checked by a lawyer, on the kit's terms and policy versions. | legal | small | KIT-A18-F4-P1, KIT-A18-F4-P2, KIT-A18-F8-P1 |  |
 | MKT-A21-F5-P2 | **Rule change notices**: Tells members about voted fee and rule changes before they apply, with a summary of what changed and when. | service | small | KIT-A8-F8-P1, KIT-A12-F4-P2, MKT-A18-F4-P1 |  |
 | MKT-A21-F6-P1 | **Market records the law needs**: Which Market records tax, anti-money-laundering, consumer and second-hand dealer law ask for, and for how long, kept through the kit's financial record keeping and retention schedules. | legal | small | KIT-A4-F6-P1, KIT-A18-F6-P1, MKT-A21-F6-P3 |  |
-| MKT-A21-F6-P3 | **Second-hand dealer law**: What the Secondhand Dealers and Pawnbrokers Act 2004 asks of the Market: whether it counts as an internet auction provider, which must record every person offering second-hand goods (name, date of birth, phone and email), keep each sale's details for 12 months from when bids close and let Police see them; and when in-trade second-hand sellers need a dealer's licence, presumed after 6 or more trading days, or over $2,000, in 12 months. | legal | medium |  |  |
+| MKT-A21-F6-P3 | **Second-hand dealer law**: What second-hand dealer law asks of the Market in each country, starting with New Zealand's Secondhand Dealers and Pawnbrokers Act 2004: whether it counts as an internet auction provider, which must record every person offering second-hand goods (name, date of birth, phone and email), keep each sale's details for 12 months from when bids close and let Police see them; and when in-trade second-hand sellers need a dealer's licence, presumed after 6 or more trading days, or over $2,000, in 12 months. | legal | medium |  |  |
 
 ## MKT-A22 Vehicles and other big items
 
@@ -836,7 +836,7 @@ Cars, motorbikes, boats, caravans and machinery need their own details, checks a
 
 | Feature | What a person can do | Priority | Parts |
 | --- | --- | --- | --- |
-| MKT-A22-F1 List a vehicle by its plate | Enter a number plate and have the make, model, year and registration details filled in. | next | Plate lookup; Vehicle fields; Warrant of fitness rule |
+| MKT-A22-F1 List a vehicle by its plate | Enter a number plate and have the make, model, year and registration details filled in. | next | Plate lookup; Vehicle fields; Roadworthiness certificate rule (example: New Zealand's warrant of fitness) |
 | MKT-A22-F2 Check for money owing | Check whether money is owed on a vehicle, or it is reported stolen, before buying. | next | Money owing check; Stolen vehicle check; Vehicle check report |
 | MKT-A22-F3 Dealers on the Market | Let registered motor vehicle traders list their stock with the notices the law requires. | later | Vehicle trader law; Trader register check; Dealer notices; Dealer stock feed |
 | MKT-A22-F4 Viewings and test drives | Book a viewing or test drive, with safety tips and a check that the driver is licensed. | later | Viewing booking; Test drive safety |
@@ -848,19 +848,19 @@ Cars, motorbikes, boats, caravans and machinery need their own details, checks a
 | ID | Part | Kind | Size | Depends on | Piece |
 | --- | --- | --- | --- | --- | --- |
 | MKT-A22-F1-P2 | **Plate lookup**: Fills the listing's make, model, year and registration details from the kit's vehicle data after the seller enters the plate. | integration | small | KIT-A2-F6-P2, MKT-A3-F2-P1 |  |
-| MKT-A22-F1-P3 | **Vehicle fields**: Odometer, warrant of fitness or certificate of fitness expiry, registration expiry, road user charges status for diesel and electric vehicles, fuel, transmission and import history. | data | small | MKT-A3-F2-P1 |  |
-| MKT-A22-F1-P4 | **Warrant of fitness rule**: Tells sellers a sold vehicle needs a warrant of fitness issued within one month before delivery, unless the buyer agrees in writing, with that waiver in the sale agreement, and shows the date to buyers. | library | small | MKT-A22-F1-P3, MKT-A12-F1-P2, MKT-A22-F5-P2 |  |
+| MKT-A22-F1-P3 | **Vehicle fields**: Odometer, roadworthiness certificate expiry (example: warrant or certificate of fitness in New Zealand), registration expiry, road user charges status where they apply (example: diesel and electric vehicles in New Zealand), fuel, transmission and import history. | data | small | MKT-A3-F2-P1 |  |
+| MKT-A22-F1-P4 | **Roadworthiness certificate rule (example: New Zealand's warrant of fitness)**: Tells sellers what roadworthiness certificate a sold vehicle needs under the country pack; in New Zealand, a warrant of fitness issued within one month before delivery, unless the buyer agrees in writing, with that waiver in the sale agreement, and shows the date to buyers. | library | small | MKT-A22-F1-P3, MKT-A12-F1-P2, MKT-A22-F5-P2 |  |
 | MKT-A22-F2-P1 | **Money owing check**: Searches the Personal Property Securities Register for finance against the vehicle, at the register's own cost. | integration | medium | MKT-A22-F1-P3 |  |
 | MKT-A22-F2-P2 | **Stolen vehicle check**: Checks the plate or VIN against the public list of stolen vehicles. | integration | small | MKT-A22-F1-P3 |  |
 | MKT-A22-F2-P3 | **Vehicle check report**: One page showing the check results and their date, shared with the buyer. | interface | small | engine-pdf, MKT-A22-F2-P1, MKT-A22-F2-P2 |  |
-| MKT-A22-F3-P1 | **Vehicle trader law**: The Motor Vehicle Sales Act and consumer information rules: who must register as a trader, and the notices buyers must get. | legal | medium | KIT-A18-F8-P1 |  |
+| MKT-A22-F3-P1 | **Vehicle trader law**: Each country's vehicle dealer and consumer information rules, starting with New Zealand's Motor Vehicle Sales Act: who must register as a trader, and the notices buyers must get. | legal | medium | KIT-A18-F8-P1 |  |
 | MKT-A22-F3-P2 | **Trader register check**: Checks a dealer against the public Motor Vehicle Traders Register. | integration | small | MKT-A22-F3-P1, MKT-A1-F4-P1 |  |
 | MKT-A22-F3-P3 | **Dealer notices**: The required information notices filled from the listing and shown and signed before sale. | library | small | engine-pdf, MKT-A22-F3-P1 |  |
 | MKT-A22-F3-P4 | **Dealer stock feed**: Keeps a dealer's stock in step from their own system through a standard file or the command API. | integration | medium | MKT-A14-F1-P2, MKT-A16-F7-P1 |  |
 | MKT-A22-F4-P1 | **Viewing booking**: Pick a time from the seller's free slots, with reminders and the address shared only once booked. | interface | small | MKT-A10-F2-P1, KIT-A5-F5-P1, KIT-A7-F10-P1 |  |
 | MKT-A22-F4-P2 | **Test drive safety**: What sellers should check before a test drive, such as the driver licence and insurance, and how to do it safely. | research | small |  |  |
 | MKT-A22-F5-P1 | **Ownership change guide**: Step-by-step help and reminders for both sides to complete the official online change of ownership. | interface | small | KIT-A8-F3-P2, MKT-A9-F1-P1 |  |
-| MKT-A22-F5-P2 | **Sale agreement**: Our own plain sale agreement for private vehicle sales, with the buyer's written warrant of fitness waiver where it applies, filled from the listing and signed through the kit's signatures. | library | small | KIT-A25-F1-P2, KIT-A18-F8-P1, MKT-A22-F1-P3 |  |
+| MKT-A22-F5-P2 | **Sale agreement**: Our own plain sale agreement for private vehicle sales, with any written waiver the country pack allows (example: New Zealand's warrant of fitness waiver), filled from the listing and signed through the kit's signatures. | library | small | KIT-A25-F1-P2, KIT-A18-F8-P1, MKT-A22-F1-P3 |  |
 | MKT-A22-F6-P1 | **Fields for other vehicles**: Hours, hull and engine details, towing weights and certificates for each kind. | data | small | MKT-A3-F2-P1 |  |
 | MKT-A22-F6-P2 | **Freight and towing quotes**: Ask freight firms and towing services for quotes to move a big item. | integration | medium | KIT-A16-F5-P2, KIT-A7-F3-P2, KIT-A6-F6-P1 |  |
 
@@ -869,25 +869,25 @@ Cars, motorbikes, boats, caravans and machinery need their own details, checks a
 - Walk through selling a used item and buying one from a stranger: is every step there, from the first photo to the rating?
 - Is the core set small enough to build first, yet good enough that a Trade Me or Facebook Marketplace user would switch?
 - Should money always be held, even for local pickup, or should cash on pickup stay as an uncovered choice?
-- Should auctions stay at later, given how many New Zealand buyers expect them?
+- Should auctions stay at later, given how many buyers in launch countries such as New Zealand expect them?
 - Is no paid placement in search the right rule, or should members vote on promotion at cost?
 - Shops: start with Market sellers who want a shop page, or go after small businesses on Shopify with their own web addresses from day one?
 - Is a till for physical shops worth building ourselves, or should the payment provider's own till be linked instead?
 - Who sits on dispute panels, how are they chosen and trained, and are they paid?
 - Which restricted items are never allowed at launch, such as firearms, alcohol and vapes, and which need licence or age checks, given that R18 items stay pickup only until an ID-checked courier service is linked (MKT-A12-F1-P5, MKT-A8-F4-P8)?
 - Do the anti-money-laundering duties change how held payments, payouts or seller checks must work?
-- Which town or community should the launch plan target first, and how does the Market beat Trade Me's network effect there?
+- Which town or community should the launch plan target first, and how does the Market beat the local incumbent's network effect there (example: Trade Me in New Zealand)?
 - Is AI help for writing a listing from photos core or next, and what must the seller always confirm?
-- Should vehicles be in the first release, given how much of Trade Me's traffic they bring, or wait until the money owing and dealer rules are built?
+- Should vehicles be in the first release, given how much of the big marketplaces' traffic they bring (example: Trade Me), or wait until the money owing and dealer rules are built?
 - Which countries come after New Zealand, and which of their rules (EU, UK, Australia) shape the core now so nothing is rebuilt later?
 - Do the demo screens look like our own design, with nothing copied from any incumbent's interface?
 - Who pays the Market's fee, and is it flat or based on value (MKT-A7-F2-P4)? Does it stay fair for a free item, a $2 item and a $30,000 car, now that Trade Me charges sellers 2.19%?
-- Who is the seller of record (MKT-A7-F9-P1): the trader, except where the Market is the deemed supplier for low-value imported goods and its own buyer fee? Does a lawyer agree, since it sets who charges GST, who owes consumer guarantees and who answers card disputes?
-- Does the Market count as an internet auction provider under the Secondhand Dealers and Pawnbrokers Act 2004 from launch, even before auctions, and how does it collect sellers' dates of birth for Police without collecting more than it needs (MKT-A21-F6-P3)?
+- Who is the seller of record (MKT-A7-F9-P1): the trader, except where the Market is the deemed supplier for low-value imported goods and its own buyer fee? Does a lawyer agree, since it sets who charges sales tax, who owes consumer guarantees and who answers card disputes?
+- Does the Market count as an internet auction provider under New Zealand's Secondhand Dealers and Pawnbrokers Act 2004 from launch, even before auctions, and how does it collect sellers' dates of birth for Police without collecting more than it needs (MKT-A21-F6-P3)?
 - Should sales on a shop's own site use held payments or pay out within days (MKT-A13-F6-P4), and may shops take guest orders (MKT-A13-F6-P3)?
 - Hire of items between members, such as tools, cameras and party gear, is mapped here as MKT-A2-F14 (later). Should it stay in the Market or move to Spare Rent?
 - Pieces: the kit now maps MK01, MK04 and MK05 on its own parts (KIT-A3-F2-P1, KIT-A10-F12-P1 and P2, KIT-A6-F1-P1 and P2), and the Market's copies are gone. Should those pieces move to the kit's board, with the Market keeping only MK01's protection limits (MKT-A11-F2-P1)? MK06 and MK07 now also feed kit parts (stock, and card readers and a shared till). MK02 now covers platform, seller and auction law; should restricted goods law (MKT-A12-F1-P1, large, no piece) get a piece of its own?
-- The Market asks the kit to open shared parts it does not have yet: an address check (MKT-A1-F3-P3); shop web pages (MKT-A13-F1-P1), which Spare Food's direct ordering page also needs; custom domains (MKT-A13-F3-P1), which Spare Stay and Spare Social also map; a guest checkout decision (MKT-A13-F6-P3), which Spare Food waits on too; customer lists and newsletters (MKT-A14-F4-P1, MKT-A14-F4-P2); invoices with payment terms (MKT-A14-F7-P2); automations (MKT-A16-F8-P1); recall feeds (MKT-A12-F6-P1); and a GST threshold warning (MKT-A19-F2-P4), which Spare Food also maps. Has the kit opened each one, so the Market part becomes a thin use of it?
+- The Market asks the kit to open shared parts it does not have yet: an address check (MKT-A1-F3-P3); shop web pages (MKT-A13-F1-P1), which Spare Food's direct ordering page also needs; custom domains (MKT-A13-F3-P1), which Spare Stay and Spare Social also map; a guest checkout decision (MKT-A13-F6-P3), which Spare Food waits on too; customer lists and newsletters (MKT-A14-F4-P1, MKT-A14-F4-P2); invoices with payment terms (MKT-A14-F7-P2); automations (MKT-A16-F8-P1); recall feeds (MKT-A12-F6-P1); and a sales tax threshold warning (MKT-A19-F2-P4), which Spare Food also maps. Has the kit opened each one, so the Market part becomes a thin use of it?
 - Left out on purpose: paid placement, promoted listings and ads (rankings follow published rules and are never sold); paid tiers for sellers or shops (every seller pays the same at-cost fee, and shops pay only their hosting cost); loans and cash advances to sellers (lending brings in credit law and is not a running cost); tracking pixels and cross-site tracking (counts are kept in totals only); selling or sharing members' data. Does each reason still hold?
 - Are the part sizes believable for the people and spare tokens the co-op has, and what is the first piece of code to write?
 - Are any parts missing, duplicated, or in the wrong area, and does every part have the dependencies it really needs?

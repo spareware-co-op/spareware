@@ -1,8 +1,8 @@
 {
  "program": "spare-market",
  "name": "Spare Market",
- "replaces": "Trade Me, eBay, Etsy, Facebook Marketplace and Shopify",
- "summary": "A members-owned place to buy and sell anything, from a used couch to a maker's whole online shop and its shop counter. Listing is free, selling costs only the at-cost fee, and the buyer's money is held until the item arrives.",
+ "replaces": "eBay, Etsy, Facebook Marketplace, Shopify and local sites such as Trade Me",
+ "summary": "A place where members buy and sell anything, from a used couch to a maker's whole online shop and its shop counter. Listing is free, selling costs only the at-cost fee, and the buyer's money is held until the item arrives.",
  "areas": [
   {
    "id": "MKT-A1",
@@ -163,7 +163,7 @@
       {
        "id": "MKT-A1-F4-P1",
        "name": "In-trade declaration",
-       "what": "Requires in-trade sellers to say so, and shows the kit's trader details on every listing, as the Fair Trading Act requires.",
+       "what": "Requires in-trade sellers to say so, and shows the kit's trader details on every listing, as consumer law requires (example: New Zealand's Fair Trading Act).",
        "kind": "data",
        "size": "small",
        "depends_on": [
@@ -767,7 +767,7 @@
       {
        "id": "MKT-A2-F10-P4",
        "name": "Digital goods rules",
-       "what": "GST on digital items, refunds for downloads, and the seller confirming they hold the rights.",
+       "what": "Sales tax on digital items, refunds for downloads, and the seller confirming they hold the rights.",
        "kind": "legal",
        "size": "small",
        "depends_on": [
@@ -1071,7 +1071,7 @@
       {
        "id": "MKT-A3-F4-P3",
        "name": "Open product data sources",
-       "what": "Which open product and book databases exist, their licences and what they cover in New Zealand.",
+       "what": "Which open product and book databases exist, their licences and what they cover in each launch country, starting with New Zealand.",
        "kind": "research",
        "size": "small",
        "depends_on": [],
@@ -1577,7 +1577,7 @@
       {
        "id": "MKT-A5-F1-P2",
        "name": "Market price lines",
-       "what": "The Market's price lines (item, shipping, buyer fee and GST) on the kit's full-price-first calculator, shown before the pay button and never added later.",
+       "what": "The Market's price lines (item, shipping, buyer fee and sales tax) on the kit's full-price-first calculator, shown before the pay button and never added later.",
        "kind": "library",
        "size": "small",
        "depends_on": [
@@ -1844,13 +1844,13 @@
     {
      "id": "MKT-A5-F8",
      "name": "Buy for a business",
-     "does": "Get a tax invoice with GST details when buying from a GST-registered seller.",
+     "does": "Get a tax invoice with sales tax details when buying from a seller registered for it.",
      "priority": "next",
      "parts": [
       {
        "id": "MKT-A5-F8-P1",
        "name": "Market tax invoices",
-       "what": "Tax invoices from the kit for each sale by a GST-registered seller, and for the buyer fee to GST-registered buyers.",
+       "what": "Tax invoices from the kit for each sale by a seller registered for sales tax, and for the buyer fee to registered buyers.",
        "kind": "library",
        "size": "small",
        "depends_on": [
@@ -2360,7 +2360,7 @@
       {
        "id": "MKT-A7-F5-P1",
        "name": "What a Market receipt shows",
-       "what": "The seller of record, GST and the fee on every receipt from the kit, for online and counter sales alike, printed or emailed.",
+       "what": "The seller of record, sales tax and the fee on every receipt from the kit, for online and counter sales alike, printed or emailed.",
        "kind": "library",
        "size": "small",
        "depends_on": [
@@ -2460,13 +2460,13 @@
     {
      "id": "MKT-A7-F9",
      "name": "Know who the seller is",
-     "does": "Know who sold you the item, who charges GST on it, and who answers for it if something goes wrong.",
+     "does": "Know who sold you the item, who charges sales tax on it, and who answers for it if something goes wrong.",
      "priority": "core",
      "parts": [
       {
        "id": "MKT-A7-F9-P1",
        "name": "Market seller of record",
-       "what": "The Market's choice on the kit's seller of record: the trader is the seller, except where the Market is the deemed supplier, for low-value imported goods and its own buyer fee. This sets who charges GST, who owes Consumer Guarantees Act duties, whose name is on the receipt and who answers card disputes.",
+       "what": "The Market's choice on the kit's seller of record: the trader is the seller, except where the Market is the deemed supplier, for low-value imported goods and its own buyer fee. This sets who charges sales tax, who owes consumer guarantee duties (example: under New Zealand's Consumer Guarantees Act), whose name is on the receipt and who answers card disputes.",
        "kind": "legal",
        "size": "medium",
        "depends_on": [
@@ -2920,8 +2920,8 @@
      "parts": [
       {
        "id": "MKT-A8-F10-P1",
-       "name": "Posting dangerous goods in NZ",
-       "what": "What NZ couriers and the postal service allow for lithium batteries, aerosols, perfume, nail polish and other dangerous goods sent within New Zealand, and what they charge extra.",
+       "name": "Posting dangerous goods",
+       "what": "What couriers and the postal service in each country allow for lithium batteries, aerosols, perfume, nail polish and other dangerous goods sent within the country, and what they charge extra, starting with New Zealand.",
        "kind": "research",
        "size": "small",
        "depends_on": [
@@ -3453,7 +3453,7 @@
       {
        "id": "MKT-A11-F3-P6",
        "name": "Evidence pack and outside routes",
-       "what": "Exports a case's evidence as one pack for the Disputes Tribunal, and links to report scams to Netsafe and Police, alongside the kit's guidance on outside routes.",
+       "what": "Exports a case's evidence as one pack for a small claims tribunal (example: New Zealand's Disputes Tribunal), and links to report scams to the online safety agency and police (example: Netsafe in New Zealand), alongside the kit's guidance on outside routes.",
        "kind": "library",
        "size": "small",
        "depends_on": [
@@ -3580,7 +3580,7 @@
       {
        "id": "MKT-A12-F1-P1",
        "name": "Restricted goods law",
-       "what": "Every NZ law limiting online sales, with sources: firearms and restricted weapons, fireworks, alcohol, vapes, medicines, food (Food Act registration), live animals and pets, livestock (NAIT transfers), plants and seeds (biosecurity), wildlife, taonga tūturu (Protected Objects Act: registered collectors only), event tickets (resale bans for major events), publications that need classification labels, second-hand electrical goods, recalled goods, goods with compulsory safety standards and stolen goods.",
+       "what": "Every law limiting online sales in each country, with sources, starting with New Zealand's: firearms and restricted weapons, fireworks, alcohol, vapes, medicines, food (Food Act registration), live animals and pets, livestock (NAIT transfers), plants and seeds (biosecurity), wildlife, taonga tūturu (Protected Objects Act: registered collectors only), event tickets (resale bans for major events), publications that need classification labels, second-hand electrical goods, recalled goods, goods with compulsory safety standards and stolen goods.",
        "kind": "legal",
        "size": "large",
        "depends_on": [],
@@ -3640,7 +3640,7 @@
       {
        "id": "MKT-A12-F1-P6",
        "name": "Second-hand dealer prompts",
-       "what": "Asks members who trade second-hand goods often enough to be presumed dealers (6 or more trading days, or over $2,000, in 12 months) for their dealer's licence, and shows it on their listings.",
+       "what": "Asks members who trade second-hand goods often enough to be presumed dealers (in New Zealand, 6 or more trading days, or over $2,000, in 12 months) for their dealer's licence, and shows it on their listings.",
        "kind": "library",
        "size": "small",
        "depends_on": [
@@ -3731,7 +3731,7 @@
       {
        "id": "MKT-A12-F5-P1",
        "name": "Rights notices on listings and shops",
-       "what": "A notice link on every listing and shop page, and takedown and restore of Market listings, on the kit's copyright and trade mark notices, acted on promptly as the Copyright Act's rules for hosts require.",
+       "what": "A notice link on every listing and shop page, and takedown and restore of Market listings, on the kit's copyright and trade mark notices, acted on promptly as copyright law's rules for hosts require (example: New Zealand's Copyright Act).",
        "kind": "integration",
        "size": "small",
        "depends_on": [
@@ -3955,7 +3955,7 @@
       {
        "id": "MKT-A13-F3-P2",
        "name": "Domain buying",
-       "what": "Whether the co-op can sell domain names at cost through a registrar, and the rules for .nz names.",
+       "what": "Whether the co-op can sell domain names at cost through a registrar, and the rules for country domains such as .nz names.",
        "kind": "research",
        "size": "small",
        "depends_on": [],
@@ -4533,7 +4533,7 @@
       {
        "id": "MKT-A14-F3-P3",
        "name": "Honest pricing checks",
-       "what": "Checks that a was-price was a real recent price, as the Fair Trading Act requires.",
+       "what": "Checks that a was-price was a real recent price, as consumer law requires (example: New Zealand's Fair Trading Act).",
        "kind": "legal",
        "size": "small",
        "depends_on": [
@@ -4554,7 +4554,7 @@
       {
        "id": "MKT-A14-F4-P1",
        "name": "Customer records",
-       "what": "A shop's customers with their orders and consent, kept to what the Privacy Act allows; restaurants, hosts and trades need the same list, so it should move down into the kit.",
+       "what": "A shop's customers with their orders and consent, kept to what privacy law allows; restaurants, hosts and trades need the same list, so it should move down into the kit.",
        "kind": "data",
        "size": "medium",
        "depends_on": [
@@ -4775,13 +4775,13 @@
     {
      "id": "MKT-A14-F11",
      "name": "Layby",
-     "does": "Offer layby: the buyer pays in parts and takes the item once it is paid off, with the rights the Fair Trading Act gives.",
+     "does": "Offer layby: the buyer pays in parts and takes the item once it is paid off, with the rights consumer law gives (example: New Zealand's Fair Trading Act).",
      "priority": "later",
      "parts": [
       {
        "id": "MKT-A14-F11-P1",
        "name": "Layby law",
-       "what": "The Fair Trading Act's layby rules: what the agreement must say, the buyer's right to cancel, what a seller may keep, and what happens if the shop closes.",
+       "what": "Each country's layby rules, starting with New Zealand's Fair Trading Act: what the agreement must say, the buyer's right to cancel, what a seller may keep, and what happens if the shop closes.",
        "kind": "legal",
        "size": "small",
        "depends_on": [
@@ -4853,7 +4853,7 @@
       {
        "id": "MKT-A15-F1-P1",
        "name": "Till research",
-       "what": "Card readers and point-of-sale options from payment providers that fit at-cost pricing, including NZ EFTPOS through the local switch and the in-store card surcharge rules, as the Market's input to the kit's card readers and shared till.",
+       "what": "Card readers and point-of-sale options from payment providers that fit at-cost pricing, including local debit networks and in-store card surcharge rules (example: EFTPOS in New Zealand), as the Market's input to the kit's card readers and shared till.",
        "kind": "research",
        "size": "medium",
        "depends_on": [
@@ -5181,7 +5181,7 @@
       {
        "id": "MKT-A16-F5-P3",
        "name": "Which accounting software first",
-       "what": "The accounting software NZ small sellers use most, and the terms of their APIs.",
+       "what": "The accounting software small sellers use most in each launch country, and the terms of their APIs.",
        "kind": "research",
        "size": "small",
        "depends_on": [],
@@ -5453,7 +5453,7 @@
   {
    "id": "MKT-A18",
    "name": "Members, fees and the cost ledger",
-   "summary": "What makes the Market a co-op: buyers and sellers join as members and vote on fees and rules from the first release, see each month what it cost to run and how the Market is doing, and help get their own town started.",
+   "summary": "How members run the Market: buyers and sellers join free as members and vote on fees and rules from the first release, see each month what it cost to run and how the Market is doing, and help get their own town started.",
    "features": [
     {
      "id": "MKT-A18-F1",
@@ -5507,8 +5507,8 @@
     },
     {
      "id": "MKT-A18-F3",
-     "name": "Join the co-op",
-     "does": "Become a member with one share and a vote on the Market's fees and rules, from the first release.",
+     "name": "Join as a member",
+     "does": "Become a member, free, with a vote on the Market's fees and rules, from the first release.",
      "priority": "core",
      "parts": [
       {
@@ -5618,18 +5618,18 @@
   {
    "id": "MKT-A19",
    "name": "Countries, languages, currencies and tax",
-   "summary": "New Zealand first, international by design: English and te reo Māori from the start, GST worked out right, and each new country added as a rule set for its language, currency, tax, consumer law and platform duties.",
+   "summary": "International by design, with New Zealand as the first country pack: English and each launch country's own languages (example: te reo Māori) from the start, sales tax worked out right, and each new country added as a rule set for its language, currency, tax, consumer law and platform duties.",
    "features": [
     {
      "id": "MKT-A19-F1",
      "name": "Use it in your language",
-     "does": "Use the Market in English or te reo Māori, with more languages added by members.",
+     "does": "Use the Market in English or each launch country's own languages (example: te reo Māori), with more languages added by members.",
      "priority": "core",
      "parts": [
       {
        "id": "MKT-A19-F1-P2",
-       "name": "Te reo Māori translation",
-       "what": "The Market's interface text in te reo Māori, done with fluent speakers through the kit's member translation, macrons always right.",
+       "name": "Launch country language translation (example: te reo Māori)",
+       "what": "The Market's interface text in each launch country's own languages, starting with te reo Māori with macrons always right, done with fluent speakers through the kit's member translation.",
        "kind": "data",
        "size": "medium",
        "depends_on": [
@@ -5642,7 +5642,7 @@
       {
        "id": "MKT-A19-F1-P5",
        "name": "Next languages",
-       "what": "Chooses the next languages from New Zealand's most spoken, starting with Samoan, Mandarin and Hindi, and finds fluent members to translate and review them.",
+       "what": "Chooses the next languages from each country's most spoken, such as Samoan, Mandarin and Hindi in New Zealand, and finds fluent members to translate and review them.",
        "kind": "research",
        "size": "small",
        "depends_on": [
@@ -5655,14 +5655,14 @@
     },
     {
      "id": "MKT-A19-F2",
-     "name": "GST worked out right",
-     "does": "Have GST worked out and shown correctly on every sale and fee.",
+     "name": "Sales tax worked out right",
+     "does": "Have sales tax worked out and shown correctly on every sale and fee.",
      "priority": "core",
      "parts": [
       {
        "id": "MKT-A19-F2-P1",
-       "name": "Market GST rules",
-       "what": "When GST applies to goods sales, the buyer fee and shipping, for registered and unregistered sellers, and the marketplace rules for low-value imported goods, as the Market's input to the kit's GST rules.",
+       "name": "Market sales tax rules",
+       "what": "When sales tax applies to goods sales, the buyer fee and shipping, for registered and unregistered sellers, and the marketplace rules for low-value imported goods, as the Market's input to the kit's sales tax rules.",
        "kind": "legal",
        "size": "medium",
        "depends_on": [
@@ -5672,8 +5672,8 @@
       },
       {
        "id": "MKT-A19-F2-P4",
-       "name": "GST threshold warning",
-       "what": "Warns a seller whose sales look like a taxable activity as they near the NZ$60,000 GST registration threshold across every Spareware app, and explains what registering changes; Spare Food maps the same warning (FOOD-A10-F13-P1), so it should move down into the kit.",
+       "name": "Sales tax threshold warning",
+       "what": "Warns a seller whose sales look like a taxable activity as they near the sales tax registration threshold across every Spareware app (example: NZ$60,000 for New Zealand GST), and explains what registering changes; Spare Food maps the same warning (FOOD-A10-F13-P1), so it should move down into the kit.",
        "kind": "library",
        "size": "small",
        "depends_on": [
@@ -5687,14 +5687,14 @@
     },
     {
      "id": "MKT-A19-F3",
-     "name": "Overseas sellers to NZ buyers",
-     "does": "Buy from overseas sellers with GST collected at checkout, as the law asks of marketplaces.",
+     "name": "Overseas sellers to local buyers",
+     "does": "Buy from overseas sellers with sales tax collected at checkout, as the law asks of marketplaces (example: New Zealand GST on low-value imports).",
      "priority": "later",
      "parts": [
       {
        "id": "MKT-A19-F3-P1",
-       "name": "Low-value import GST",
-       "what": "Collects and returns GST on imported goods of NZ$1,000 or less sold through the Market by overseas sellers.",
+       "name": "Low-value import sales tax",
+       "what": "Collects and returns sales tax on low-value imported goods sold through the Market by overseas sellers, as each country requires (example: GST on goods of NZ$1,000 or less in New Zealand).",
        "kind": "service",
        "size": "medium",
        "depends_on": [
@@ -5891,7 +5891,7 @@
   {
    "id": "MKT-A21",
    "name": "Data, privacy and legal duties",
-   "summary": "Members own their data and can take it or delete it, on the kit's data, privacy and legal parts; the Market adds its own rules on top: who sees a buyer's details, checks before an account closes, consumer law in the product, its terms and the records second-hand dealer law asks for.",
+   "summary": "Members control their data and can take it or delete it, on the kit's data, privacy and legal parts; the Market adds its own rules on top: who sees a buyer's details, checks before an account closes, consumer law in the product, its terms and the records second-hand dealer law asks for.",
    "features": [
     {
      "id": "MKT-A21-F1",
@@ -6030,7 +6030,7 @@
       {
        "id": "MKT-A21-F6-P3",
        "name": "Second-hand dealer law",
-       "what": "What the Secondhand Dealers and Pawnbrokers Act 2004 asks of the Market: whether it counts as an internet auction provider, which must record every person offering second-hand goods (name, date of birth, phone and email), keep each sale's details for 12 months from when bids close and let Police see them; and when in-trade second-hand sellers need a dealer's licence, presumed after 6 or more trading days, or over $2,000, in 12 months.",
+       "what": "What second-hand dealer law asks of the Market in each country, starting with New Zealand's Secondhand Dealers and Pawnbrokers Act 2004: whether it counts as an internet auction provider, which must record every person offering second-hand goods (name, date of birth, phone and email), keep each sale's details for 12 months from when bids close and let Police see them; and when in-trade second-hand sellers need a dealer's licence, presumed after 6 or more trading days, or over $2,000, in 12 months.",
        "kind": "legal",
        "size": "medium",
        "depends_on": [],
@@ -6066,7 +6066,7 @@
       {
        "id": "MKT-A22-F1-P3",
        "name": "Vehicle fields",
-       "what": "Odometer, warrant of fitness or certificate of fitness expiry, registration expiry, road user charges status for diesel and electric vehicles, fuel, transmission and import history.",
+       "what": "Odometer, roadworthiness certificate expiry (example: warrant or certificate of fitness in New Zealand), registration expiry, road user charges status where they apply (example: diesel and electric vehicles in New Zealand), fuel, transmission and import history.",
        "kind": "data",
        "size": "small",
        "depends_on": [
@@ -6076,8 +6076,8 @@
       },
       {
        "id": "MKT-A22-F1-P4",
-       "name": "Warrant of fitness rule",
-       "what": "Tells sellers a sold vehicle needs a warrant of fitness issued within one month before delivery, unless the buyer agrees in writing, with that waiver in the sale agreement, and shows the date to buyers.",
+       "name": "Roadworthiness certificate rule (example: New Zealand's warrant of fitness)",
+       "what": "Tells sellers what roadworthiness certificate a sold vehicle needs under the country pack; in New Zealand, a warrant of fitness issued within one month before delivery, unless the buyer agrees in writing, with that waiver in the sale agreement, and shows the date to buyers.",
        "kind": "library",
        "size": "small",
        "depends_on": [
@@ -6141,7 +6141,7 @@
       {
        "id": "MKT-A22-F3-P1",
        "name": "Vehicle trader law",
-       "what": "The Motor Vehicle Sales Act and consumer information rules: who must register as a trader, and the notices buyers must get.",
+       "what": "Each country's vehicle dealer and consumer information rules, starting with New Zealand's Motor Vehicle Sales Act: who must register as a trader, and the notices buyers must get.",
        "kind": "legal",
        "size": "medium",
        "depends_on": [
@@ -6238,7 +6238,7 @@
       {
        "id": "MKT-A22-F5-P2",
        "name": "Sale agreement",
-       "what": "Our own plain sale agreement for private vehicle sales, with the buyer's written warrant of fitness waiver where it applies, filled from the listing and signed through the kit's signatures.",
+       "what": "Our own plain sale agreement for private vehicle sales, with any written waiver the country pack allows (example: New Zealand's warrant of fitness waiver), filled from the listing and signed through the kit's signatures.",
        "kind": "library",
        "size": "small",
        "depends_on": [
@@ -6289,25 +6289,25 @@
   "Walk through selling a used item and buying one from a stranger: is every step there, from the first photo to the rating?",
   "Is the core set small enough to build first, yet good enough that a Trade Me or Facebook Marketplace user would switch?",
   "Should money always be held, even for local pickup, or should cash on pickup stay as an uncovered choice?",
-  "Should auctions stay at later, given how many New Zealand buyers expect them?",
+  "Should auctions stay at later, given how many buyers in launch countries such as New Zealand expect them?",
   "Is no paid placement in search the right rule, or should members vote on promotion at cost?",
   "Shops: start with Market sellers who want a shop page, or go after small businesses on Shopify with their own web addresses from day one?",
   "Is a till for physical shops worth building ourselves, or should the payment provider's own till be linked instead?",
   "Who sits on dispute panels, how are they chosen and trained, and are they paid?",
   "Which restricted items are never allowed at launch, such as firearms, alcohol and vapes, and which need licence or age checks, given that R18 items stay pickup only until an ID-checked courier service is linked (MKT-A12-F1-P5, MKT-A8-F4-P8)?",
   "Do the anti-money-laundering duties change how held payments, payouts or seller checks must work?",
-  "Which town or community should the launch plan target first, and how does the Market beat Trade Me's network effect there?",
+  "Which town or community should the launch plan target first, and how does the Market beat the local incumbent's network effect there (example: Trade Me in New Zealand)?",
   "Is AI help for writing a listing from photos core or next, and what must the seller always confirm?",
-  "Should vehicles be in the first release, given how much of Trade Me's traffic they bring, or wait until the money owing and dealer rules are built?",
+  "Should vehicles be in the first release, given how much of the big marketplaces' traffic they bring (example: Trade Me), or wait until the money owing and dealer rules are built?",
   "Which countries come after New Zealand, and which of their rules (EU, UK, Australia) shape the core now so nothing is rebuilt later?",
   "Do the demo screens look like our own design, with nothing copied from any incumbent's interface?",
   "Who pays the Market's fee, and is it flat or based on value (MKT-A7-F2-P4)? Does it stay fair for a free item, a $2 item and a $30,000 car, now that Trade Me charges sellers 2.19%?",
-  "Who is the seller of record (MKT-A7-F9-P1): the trader, except where the Market is the deemed supplier for low-value imported goods and its own buyer fee? Does a lawyer agree, since it sets who charges GST, who owes consumer guarantees and who answers card disputes?",
-  "Does the Market count as an internet auction provider under the Secondhand Dealers and Pawnbrokers Act 2004 from launch, even before auctions, and how does it collect sellers' dates of birth for Police without collecting more than it needs (MKT-A21-F6-P3)?",
+  "Who is the seller of record (MKT-A7-F9-P1): the trader, except where the Market is the deemed supplier for low-value imported goods and its own buyer fee? Does a lawyer agree, since it sets who charges sales tax, who owes consumer guarantees and who answers card disputes?",
+  "Does the Market count as an internet auction provider under New Zealand's Secondhand Dealers and Pawnbrokers Act 2004 from launch, even before auctions, and how does it collect sellers' dates of birth for Police without collecting more than it needs (MKT-A21-F6-P3)?",
   "Should sales on a shop's own site use held payments or pay out within days (MKT-A13-F6-P4), and may shops take guest orders (MKT-A13-F6-P3)?",
   "Hire of items between members, such as tools, cameras and party gear, is mapped here as MKT-A2-F14 (later). Should it stay in the Market or move to Spare Rent?",
   "Pieces: the kit now maps MK01, MK04 and MK05 on its own parts (KIT-A3-F2-P1, KIT-A10-F12-P1 and P2, KIT-A6-F1-P1 and P2), and the Market's copies are gone. Should those pieces move to the kit's board, with the Market keeping only MK01's protection limits (MKT-A11-F2-P1)? MK06 and MK07 now also feed kit parts (stock, and card readers and a shared till). MK02 now covers platform, seller and auction law; should restricted goods law (MKT-A12-F1-P1, large, no piece) get a piece of its own?",
-  "The Market asks the kit to open shared parts it does not have yet: an address check (MKT-A1-F3-P3); shop web pages (MKT-A13-F1-P1), which Spare Food's direct ordering page also needs; custom domains (MKT-A13-F3-P1), which Spare Stay and Spare Social also map; a guest checkout decision (MKT-A13-F6-P3), which Spare Food waits on too; customer lists and newsletters (MKT-A14-F4-P1, MKT-A14-F4-P2); invoices with payment terms (MKT-A14-F7-P2); automations (MKT-A16-F8-P1); recall feeds (MKT-A12-F6-P1); and a GST threshold warning (MKT-A19-F2-P4), which Spare Food also maps. Has the kit opened each one, so the Market part becomes a thin use of it?",
+  "The Market asks the kit to open shared parts it does not have yet: an address check (MKT-A1-F3-P3); shop web pages (MKT-A13-F1-P1), which Spare Food's direct ordering page also needs; custom domains (MKT-A13-F3-P1), which Spare Stay and Spare Social also map; a guest checkout decision (MKT-A13-F6-P3), which Spare Food waits on too; customer lists and newsletters (MKT-A14-F4-P1, MKT-A14-F4-P2); invoices with payment terms (MKT-A14-F7-P2); automations (MKT-A16-F8-P1); recall feeds (MKT-A12-F6-P1); and a sales tax threshold warning (MKT-A19-F2-P4), which Spare Food also maps. Has the kit opened each one, so the Market part becomes a thin use of it?",
   "Left out on purpose: paid placement, promoted listings and ads (rankings follow published rules and are never sold); paid tiers for sellers or shops (every seller pays the same at-cost fee, and shops pay only their hosting cost); loans and cash advances to sellers (lending brings in credit law and is not a running cost); tracking pixels and cross-site tracking (counts are kept in totals only); selling or sharing members' data. Does each reason still hold?",
   "Are the part sizes believable for the people and spare tokens the co-op has, and what is the first piece of code to write?",
   "Are any parts missing, duplicated, or in the wrong area, and does every part have the dependencies it really needs?"
