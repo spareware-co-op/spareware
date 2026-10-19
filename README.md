@@ -114,8 +114,13 @@ Every line of Spareware is our own work or used under a licence that allows it. 
 5. **Your agent opens a pull request.** An owner reviews it before it merges. Nothing merges on AI review alone.
 6. **Run out mid-piece?** Your agent leaves a handover note so the next person carries on where you stopped.
 
+## Major changes go to a vote
+
+Any major change, such as starting or dropping a program, changing an architecture decision, changing these rules or changing how fees work, is put to a vote of the members before it happens. An owner opens a poll in [Discussions, under Polls](https://github.com/spareware-co-op/spareware/discussions/categories/polls), and the result decides it. Everyday decisions inside a piece of work are settled in its pull request.
+
 ## Ground rules for every piece
 
+- Practical and easy to use: every app is built for the people who will use it every day, and should be simple to pick up and quick to work in.
 - Port proven methods: read how the best open project does it before designing anything.
 - Measured, not assumed: tests and benchmarks with every change; a slower change does not merge.
 - Every change is an operation: one path for the interface, AI, plugins, undo and sync.
