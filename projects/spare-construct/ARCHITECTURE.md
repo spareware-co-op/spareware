@@ -234,6 +234,35 @@ Civil adds the ground and everything built on and under it, in the same model as
 - Which country's road and drainage rules come first?
 - Do rail and bridges join Civil later? IFC 4.3 covers both.
 
+## Point clouds
+
+Laser scans and drone surveys live in the model, not in a separate program. A scan of a whole building or site opens fast and works in plans, sections and 3D like any other element.
+
+**High level**
+
+- **Bring scans in**: E57 and LAS or LAZ from any scanner or survey, and plain-text PTS. ReCap's own .rcp and .rcs are Autodesk's private format with no public specification, so they come in only once Autodesk clears it or legal advice allows (README legal rules). Until then, ReCap Pro exports E57.
+- **Huge scans stay fast**: each scan is converted once into levels of detail and streamed by what is in view, like the model's chunks, so billions of points stay smooth.
+- **Scans in every view**: cut by each plan's and section's view range and by section boxes; coloured by real colour, intensity, height, or distance from the model.
+- **Snap and measure**: snap to points, edges and planes found in the scan.
+- **Scan to model**: fit walls, floors, columns and pipes to the scan, and show where the model departs from it, for as-builts and checking what was built.
+- **Survey and civil**: turn scan points into ground surfaces and breaklines (see Disciplines and civil).
+- **Line scans up**: place scans on survey coordinates, and register several scans together by targets or by shape (later).
+- **Share**: scans travel in sharing packages, and the browser viewer streams them too.
+
+**Low level**
+
+- Readers: the e57 crate (MIT) and las-rs (MIT), with laz-rs (Apache-2.0) for compressed LAZ.
+- Converted scans are stored as a LAZ 1.4 octree in the COPC layout (spec repo MIT), so the file stays open, other tools can read it, and parts can be read without loading the whole file.
+- Viewing follows Potree's method (BSD-2-Clause): an octree with a points-per-frame budget, drawn by the wgpu renderer.
+- Positions are f64 project coordinates, sent to the GPU relative to the camera, as for the model.
+- Scans are reference data, kept out of the operation log. The model stores a link, a placement and display settings, so sync never moves billions of points.
+- Fitting finds planes and cylinders in the points (RANSAC), then proposes walls, floors and pipes for a person to accept.
+
+**Discuss**
+
+- Ask Autodesk about reading .rcs directly, or rely on E57 exports?
+- Register raw scans in the app, or leave that to the scanner's own software?
+
 ## Clash detection
 
 Clash runs live inside the model as people work, not as a separate export-and-check step. Every discipline sits in one model, so the core flags a duct meeting a beam the moment either one moves.
@@ -486,7 +515,8 @@ IFC is the exchange format, not the native one, and Revit models come in through
 | PDF | Out | pdf-writer crate | Vector sheets and views |
 | glTF / GLB | Out | Our own writer | Twinmotion, Enscape, web |
 | 3D Tiles | Out | Our own writer | City-scale web viewers |
-| Point clouds (E57, LAS) | In | Reference underlay | Survey |
+| Point clouds (E57, LAS, LAZ, PTS) | In | e57, las-rs and laz-rs crates | See Point clouds |
+| ReCap .rcp / .rcs | In | Only once Autodesk clears it or legal advice allows | Until then, export E57 from ReCap Pro |
 | LandXML 1.2 | In and out | Our own reader and writer | Civil surfaces, alignments, pipe networks and survey points |
 | CSV / XLSX | In and out | Schedules and parameter tables |  |
 
@@ -691,3 +721,8 @@ Licences, activity and browser support were checked on each project's GitHub rep
 | [ifc-lite](https://github.com/LTplus-AG/ifc-lite) | MPL-2.0 | Rust/WebAssembly IFC core with headless SDK and MCP to study |
 | [Chili3D](https://github.com/xiangechen/chili3d) | AGPL-3.0 | Browser CAD on OCCT; cannot reuse code |
 | [spade](https://github.com/Stoeoef/spade) | MIT or Apache-2.0 | Rust Delaunay triangulation for civil surfaces |
+| [e57](https://github.com/cry-inc/e57) | MIT | Rust E57 point cloud reader and writer |
+| [las-rs](https://github.com/gadomski/las-rs) | MIT | Rust LAS reader and writer |
+| [laz-rs](https://github.com/laz-rs/laz-rs) | Apache-2.0 | Rust LAZ compression |
+| [COPC](https://github.com/copcio/copcio.github.io) | MIT (spec repo) | Cloud-optimised point cloud layout on LAZ 1.4 |
+| [Potree](https://github.com/potree/potree) | BSD-2-Clause | Point cloud viewing method to follow |
