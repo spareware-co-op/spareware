@@ -70,6 +70,8 @@ flowchart TB
 *replaces Microsoft 365*`"]
     OSYS["`**Spare OS**
 *replaces paying for Windows*`"]
+    KEYS["`**Spare Keys**
+*passwords, sign-in codes and passkeys*`"]
   end
   CMD["`**One command layer per app**
 *people, AI agents and add-ins all use the same path*`"]
