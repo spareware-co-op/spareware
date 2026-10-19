@@ -1,0 +1,567 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spareware</title>
+<meta name="description" content="Free software for everyone, built together with the spare weekly AI tokens we don't finish. Browse every program's feature map and open its demo.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'%3E%3Ccircle cx='100' cy='100' r='92' fill='%23C8102E'/%3E%3Cpath d='M140 66 C140 50 124 42 100 42 C72 42 58 54 58 72 C58 92 76 98 100 101 C124 104 142 110 142 130 C142 148 126 158 100 158 C74 158 60 150 58 134' fill='none' stroke='%23ffffff' stroke-width='24' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+/* copied from design/tokens.css */
+/* Spareware design tokens: the one shared look for every Spareware app.
+   Read design/DESIGN.md first. An app sets data-app="<name>" on <html> to get its own colour.
+   Text is always ink on light colours; white text appears only on Spareware red. */
+:root {
+  /* Spareware (the co-op) */
+  --spare-red: #C8102E;
+  --spare-red-hover: #A80D26;
+  --spare-red-tint: #FCE9EC;
+
+  /* Neutrals */
+  --ink: #1A1A1A;
+  --ink-2: #595959;
+  --ink-3: #8A8A8A;
+  --page: #FAF8F5;
+  --panel: #FFFFFF;
+  --panel-alt: #F7F6F3;
+  --sink: #F1EFEA;
+  --hairline: #E5E5E3;
+  --rule: #C9C9C9;
+
+  /* States (always paired: strong for borders and icons, tint for backgrounds) */
+  --danger: #B91C1C;  --danger-tint: #FDE8E8;
+  --success: #15803D; --success-tint: #E3F6E8;
+  --info: #1D4ED8;    --info-tint: #E3ECFD;
+
+  /* Type and shape */
+  --font-ui: system-ui, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  --text: 13px;
+  --radius: 3px;
+  --space: 8px;
+
+  /* The current app's colours (default: Spareware itself) */
+  --app: var(--spare-red-tint);
+  --app-strong: var(--spare-red);
+  --app-tint: var(--spare-red-tint);
+}
+
+/* One light colour per app: --app is the fill for its mark, primary buttons and active items
+   (ink text on it), --app-strong is for thin borders and icons, --app-tint for quiet backgrounds. */
+[data-app="arch"]   { --app: #8EC5FF; --app-strong: #1F5FA8; --app-tint: #EAF4FF; }
+[data-app="studio"] { --app: #C4B2FF; --app-strong: #5B3FB8; --app-tint: #F3EFFF; }
+[data-app="social"] { --app: #FFB27A; --app-strong: #9E4A14; --app-tint: #FFF1E6; }
+[data-app="ride"]   { --app: #7FD8CF; --app-strong: #13756B; --app-tint: #E8F8F6; }
+[data-app="food"]   { --app: #A9DE8A; --app-strong: #3E7C1F; --app-tint: #EFF9E8; }
+[data-app="stay"]   { --app: #80D4F0; --app-strong: #11708F; --app-tint: #E7F7FD; }
+[data-app="home"]   { --app: #E8C99A; --app-strong: #8A5A1C; --app-tint: #FBF4EA; }
+[data-app="rent"]   { --app: #F2B8E0; --app-strong: #94306F; --app-tint: #FCEEF8; }
+[data-app="work"]   { --app: #B8C4D6; --app-strong: #3D4F6B; --app-tint: #EEF1F6; }
+[data-app="market"] { --app: #D8E36A; --app-strong: #66700F; --app-tint: #F7F9DF; }
+[data-app="office"] { --app: #A9B6FF; --app-strong: #3A47A8; --app-tint: #EEF0FF; }
+[data-app="os"]     { --app: #CDD1D6; --app-strong: #4A525C; --app-tint: #F2F3F5; }
+</style>
+<style>
+/* Hub styles. They use only the tokens above. The hub belongs to the co-op, so it is Spareware red;
+   each program card and its feature map take that program's own colour through data-app. */
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+html:has(dialog[open]) { overflow: hidden; }
+body { margin: 0; background: var(--page); color: var(--ink); font-family: var(--font-ui); font-size: var(--text); line-height: 1.5; }
+a { color: var(--app-strong); }
+:focus-visible { outline: 2px solid var(--app-strong); outline-offset: 2px; }
+[hidden] { display: none !important; }
+p { margin: 0; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 calc(var(--space) * 3); }
+.label { display: block; margin: 0; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); }
+.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.id { font-family: var(--font-mono); font-size: 11px; color: var(--ink-2); white-space: nowrap; }
+
+/* Buttons */
+.btn { display: inline-flex; align-items: center; justify-content: center; min-height: 34px; padding: 0 calc(var(--space) * 1.5); border: 1px solid transparent; border-radius: var(--radius); font: inherit; font-weight: 600; line-height: 1.2; text-decoration: none; white-space: nowrap; cursor: pointer; }
+.btn-coop { background: var(--spare-red); color: var(--panel); }
+.btn-coop:hover { background: var(--spare-red-hover); }
+.btn-primary { background: var(--app); color: var(--ink); }
+.btn-primary:hover { border-color: var(--app-strong); }
+.btn-secondary { background: var(--panel); color: var(--ink); border-color: var(--ink); }
+.btn-secondary:hover { background: var(--panel-alt); }
+.btn-quiet { background: var(--panel); color: var(--ink-2); border-color: var(--rule); }
+.btn-quiet:hover { color: var(--ink); border-color: var(--ink-2); }
+.btn:disabled { color: var(--ink-3); border-color: var(--hairline); background: var(--panel); cursor: not-allowed; }
+.coop .btn-primary { background: var(--spare-red); color: var(--panel); }
+.coop .btn-primary:hover { background: var(--spare-red-hover); border-color: transparent; }
+
+/* Intro */
+.intro { background: var(--panel); border-bottom: 1px solid var(--hairline); padding: calc(var(--space) * 5) 0 calc(var(--space) * 4); }
+.brand { display: flex; align-items: center; gap: calc(var(--space) * 1.5); margin: 0 0 calc(var(--space) * 2.5); font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
+.brand svg { width: 48px; height: 48px; flex: none; }
+.lead { max-width: 36em; margin: 0 0 var(--space); font-size: 17px; font-weight: 600; line-height: 1.4; }
+.sub { max-width: 46em; margin: 0 0 calc(var(--space) * 3); font-size: 14px; color: var(--ink-2); }
+.actions { display: flex; flex-wrap: wrap; gap: var(--space); }
+
+/* Programs */
+main { padding: calc(var(--space) * 4) 0 calc(var(--space) * 5); }
+.programs-head { margin: 0 0 calc(var(--space) * 3); }
+.programs-head h2 { margin: 0 0 4px; font-size: 15px; font-weight: 700; }
+.programs-head p { color: var(--ink-2); }
+.group { display: flex; flex-direction: column; min-width: 0; }
+.group + .group { margin-top: calc(var(--space) * 4); }
+.group > .label { margin-bottom: calc(var(--space) * 1.5); }
+.grid { display: grid; flex: 1; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: calc(var(--space) * 2); }
+/* Wide screens: small groups sit side by side on one three-column grid, so no row is left half empty. */
+@media (min-width: 1000px) {
+  #groups { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: calc(var(--space) * 4) calc(var(--space) * 2); }
+  .group + .group { margin-top: 0; }
+  .group[data-n="1"] .grid { grid-template-columns: minmax(0, 1fr); }
+  .group[data-n="2"] { grid-column: span 2; }
+  .group[data-n="2"] .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .group.many { grid-column: 1 / -1; }
+  .group.many .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+.card { display: flex; flex-direction: column; min-width: 0; background: var(--panel); border: 1px solid var(--hairline); border-radius: var(--radius); }
+.card-head { display: flex; align-items: center; gap: var(--space); padding: calc(var(--space) * 1.5) calc(var(--space) * 2); background: var(--app-tint); border-bottom: 1px solid var(--hairline); border-radius: var(--radius) var(--radius) 0 0; }
+.card-head h3 { margin: 0; font-size: 14px; font-weight: 700; }
+.mark { width: 14px; height: 14px; flex: none; border-radius: 1px; background: var(--app); }
+.coop .mark { background: var(--spare-red); }
+.card-body { display: flex; flex: 1; flex-direction: column; gap: calc(var(--space) * 2); padding: calc(var(--space) * 2); }
+.replaces { margin-top: 2px; overflow-wrap: anywhere; }
+.counts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space); margin: 0; padding-top: calc(var(--space) * 1.5); border-top: 1px solid var(--hairline); }
+.counts dt { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); white-space: nowrap; }
+.counts dd { margin: 0; font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 18px; font-weight: 600; }
+.counts[aria-busy="true"] dd { color: var(--ink-3); }
+.note { margin: 0; padding: var(--space) calc(var(--space) * 1.5); background: var(--app-tint); border-left: 3px solid var(--app); color: var(--ink); }
+.coop .note { border-left-color: var(--spare-red); }
+.card-actions { display: flex; flex-wrap: wrap; gap: var(--space); margin-top: auto; }
+
+/* Footer */
+.foot { background: var(--panel); border-top: 1px solid var(--hairline); padding: calc(var(--space) * 3) 0; color: var(--ink-2); }
+.foot .wrap { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space) calc(var(--space) * 4); }
+.foot a { font-weight: 600; }
+.stage { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px var(--space); }
+
+/* Feature map */
+dialog.map { width: min(980px, calc(100vw - 32px)); height: min(880px, calc(100dvh - 32px)); max-width: none; max-height: none; padding: 0; border: 1px solid var(--ink); border-radius: var(--radius); background: var(--panel); color: var(--ink); overflow: hidden; }
+dialog.map::backdrop { background: color-mix(in srgb, var(--ink) 40%, transparent); }
+.map-in { display: flex; flex-direction: column; height: 100%; }
+.map-head { display: flex; align-items: center; gap: var(--space); padding: calc(var(--space) * 1.5) calc(var(--space) * 2); border-bottom: 1px solid var(--hairline); }
+.map-head h2 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space); min-width: 0; margin: 0; font-size: 14px; font-weight: 700; }
+.map-head .crumb { font-weight: 400; color: var(--ink-2); }
+.map-head .btn { margin-left: auto; }
+.map-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space) calc(var(--space) * 1.5); padding: calc(var(--space) * 1.5) calc(var(--space) * 2); background: var(--panel-alt); border-bottom: 1px solid var(--hairline); }
+.search { flex: 1 1 260px; min-width: 0; }
+.search input { width: 100%; min-height: 34px; padding: 0 10px; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--panel); color: var(--ink); font: inherit; }
+.search input:focus-visible { outline: 2px solid var(--app-strong); outline-offset: 0; border-color: var(--app-strong); }
+.seg { display: inline-flex; flex: none; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--panel); overflow: hidden; }
+.seg button { min-height: 32px; padding: 0 calc(var(--space) * 1.5); border: 0; background: var(--panel); color: var(--ink-2); font: inherit; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--rule); }
+.seg button:hover { color: var(--ink); }
+.seg button[aria-pressed="true"] { background: var(--app); color: var(--ink); font-weight: 600; }
+.seg button:focus-visible { outline-offset: -3px; }
+.result { flex: 1 0 100%; color: var(--ink-2); }
+.map-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: calc(var(--space) * 2); }
+.map-intro { display: grid; gap: 4px; margin-bottom: calc(var(--space) * 1.5); padding-bottom: calc(var(--space) * 1.5); border-bottom: 1px solid var(--hairline); color: var(--ink-2); }
+.map-intro b { color: var(--ink); font-weight: 600; }
+.empty { padding: calc(var(--space) * 5) var(--space); text-align: center; color: var(--ink-3); }
+.map-body .note { margin-top: calc(var(--space) * 2); }
+
+details > summary { list-style: none; cursor: pointer; }
+details > summary::-webkit-details-marker { display: none; }
+details > summary::before { content: ""; flex: none; width: 6px; height: 6px; margin: 0 4px 0 2px; border-right: 1.5px solid var(--ink-2); border-bottom: 1.5px solid var(--ink-2); transform: rotate(-45deg); transition: transform .12s; }
+details[open] > summary::before { transform: rotate(45deg); }
+details > summary:hover .name { text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 3px; }
+
+.area { border-bottom: 1px solid var(--hairline); }
+.area > summary { display: flex; align-items: center; gap: var(--space); padding: 10px 0; }
+.area > summary .name { font-size: 14px; font-weight: 600; min-width: 0; }
+.area > summary .tally { margin-left: auto; flex: none; color: var(--ink-2); white-space: nowrap; }
+.area-sum { margin: 0 0 10px 18px; color: var(--ink-2); }
+.features { margin: 0 0 calc(var(--space) * 1.5) 18px; }
+.feature { border-top: 1px solid var(--hairline); }
+.feature > summary { display: flex; align-items: center; gap: var(--space); padding: 7px 0; }
+.feature > summary .name { font-weight: 600; min-width: 0; }
+.feature > summary .tally { margin-left: auto; flex: none; color: var(--ink-2); white-space: nowrap; }
+.feature-in { margin: 0 0 10px 18px; }
+.does { margin-bottom: var(--space); }
+.parts { margin: 0; padding: 0; list-style: none; }
+.part { padding: 6px 0 6px calc(var(--space) * 1.5); border-left: 2px solid var(--hairline); }
+.part + .part { margin-top: 2px; }
+.part-top { display: flex; align-items: center; gap: var(--space); }
+.part-top .pname { font-weight: 600; min-width: 0; }
+.part-top .badge { margin-left: auto; }
+.part-what { color: var(--ink-2); }
+.part-meta { margin-top: 2px; color: var(--ink-2); font-size: 12px; }
+.name, .pname, .does, .part-what, .area-sum { overflow-wrap: anywhere; }
+
+.badge { display: inline-flex; flex: none; align-items: center; height: 18px; padding: 0 8px; border: 1px solid transparent; border-radius: 999px; background: var(--sink); color: var(--ink-2); font-size: 11px; font-weight: 600; white-space: nowrap; }
+.badge-core { background: var(--app-tint); color: var(--app-strong); border-color: var(--app); }
+.badge-later { background: var(--panel); border-color: var(--rule); }
+
+@media (max-width: 640px) {
+  .wrap { padding: 0 calc(var(--space) * 2); }
+  .intro { padding: calc(var(--space) * 3) 0; }
+  .lead { font-size: 16px; }
+  .actions .btn { flex: 1 1 auto; min-height: 40px; }
+  dialog.map { width: 100vw; height: 100dvh; margin: 0; border: 0; border-radius: 0; }
+  .map-tools, .map-head { padding-left: calc(var(--space) * 1.5); padding-right: calc(var(--space) * 1.5); }
+  .map-body { padding: calc(var(--space) * 1.5); }
+  .search input { font-size: 16px; }
+  .seg { width: 100%; }
+  .seg button { flex: 1; }
+  .area-sum, .features, .feature-in { margin-left: 8px; }
+}
+</style>
+</head>
+<body>
+
+<header class="intro">
+  <div class="wrap">
+    <h1 class="brand">
+      <svg viewBox="0 0 200 200" aria-hidden="true" focusable="false">
+        <circle cx="100" cy="100" r="92" style="fill: var(--spare-red)"/>
+        <path d="M140 66 C140 50 124 42 100 42 C72 42 58 54 58 72 C58 92 76 98 100 101 C124 104 142 110 142 130 C142 148 126 158 100 158 C74 158 60 150 58 134" fill="none" style="stroke: var(--panel)" stroke-width="24" stroke-linecap="round"/>
+      </svg>
+      Spareware
+    </h1>
+    <p class="lead">Free software for everyone. Let's build it together with the spare weekly AI tokens we don't finish.</p>
+    <p class="sub">On the apps where people earn a living, the workers keep all the profit except the running costs.</p>
+    <div class="actions">
+      <a class="btn btn-coop" href="https://github.com/spareware-co-op/spareware/issues/new?template=join-request.yml">Give your spare tokens</a>
+      <a class="btn btn-secondary" href="./demos.html">See all the demos</a>
+      <a class="btn btn-secondary" href="https://github.com/spareware-co-op/spareware">See the code</a>
+      <a class="btn btn-secondary" href="./costs.html">What it costs to run</a>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="programs-head">
+    <h2>The programs</h2>
+    <p>Open a demo to try a program, or open its feature map to see everything it needs.</p>
+  </div>
+  <div id="groups"></div>
+  <noscript><p class="note">Turn on JavaScript to browse the programs.</p></noscript>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p>Major changes go to a vote. <a href="https://github.com/spareware-co-op/spareware/discussions/categories/polls">See the polls</a></p>
+    <p class="stage"><span class="label">Stage</span> <span>Mapping: the architecture is planned, no app is built yet</span></p>
+  </div>
+</footer>
+
+<dialog class="map" id="map" aria-labelledby="map-title">
+  <div class="map-in">
+    <div class="map-head">
+      <span class="mark" aria-hidden="true"></span>
+      <h2 id="map-title"><span id="map-name"></span><span class="crumb">Feature map</span></h2>
+      <button class="btn btn-quiet" type="button" id="map-close">Close</button>
+    </div>
+    <div class="map-tools">
+      <label class="search"><span class="sr">Search the feature map</span><input type="search" id="map-q" placeholder="Search areas, features and parts" autocomplete="off"></label>
+      <div class="seg" role="group" aria-label="Show by priority">
+        <button type="button" data-p="all" aria-pressed="true">All</button>
+        <button type="button" data-p="core" aria-pressed="false">Core</button>
+        <button type="button" data-p="next" aria-pressed="false">Next</button>
+        <button type="button" data-p="later" aria-pressed="false">Later</button>
+      </div>
+      <p class="result" id="map-result" aria-live="polite"></p>
+    </div>
+    <div class="map-body" id="map-body">
+      <div class="map-intro" id="map-intro" hidden>
+        <p><b>Replaces:</b> <span id="map-replaces"></span></p>
+        <p>Core is needed for the first usable release, next comes soon after, later waits. Each part shows its size: small, medium or large.</p>
+      </div>
+      <div id="map-tree"></div>
+      <p class="empty" id="map-empty" hidden>Nothing matches. Try another word, or show all priorities.</p>
+    </div>
+  </div>
+</dialog>
+
+<script>
+(function () {
+  'use strict';
+
+  // Every program on the site. "app" is its colour key in tokens.css; the kit has none, so it is Spareware red.
+  var PROGRAMS = {
+    'kit':          { name: 'Shared kit and co-op portal', app: '', replaces: 'The parts every platform rebuilds: sign-in, payments, maps, messages, voting and the open cost ledger' },
+    'spare-arch':   { name: 'Spare Arch',   app: 'arch',   replaces: 'Revit, and the add-ins people buy for it' },
+    'spare-studio': { name: 'Spare Studio', app: 'studio', replaces: "Adobe's apps: Photoshop, Illustrator, InDesign, Premiere, After Effects, Lightroom, Acrobat and more" },
+    'spare-office': { name: 'Spare Office', app: 'office', replaces: 'Microsoft 365: Word, Excel, PowerPoint, Outlook, Teams, OneNote, OneDrive' },
+    'spare-os':     { name: 'Spare OS',     app: 'os',     replaces: 'Paying for Windows' },
+    'spare-social': { name: 'Spare Social', app: 'social', replaces: 'TikTok, YouTube, Instagram and Facebook, together' },
+    'spare-ride':   { name: 'Spare Ride',   app: 'ride',   replaces: 'Uber and taxi booking apps' },
+    'spare-food':   { name: 'Spare Food',   app: 'food',   replaces: 'Uber Eats and DoorDash' },
+    'spare-stay':   { name: 'Spare Stay',   app: 'stay',   replaces: 'Airbnb and Booking.com' },
+    'spare-home':   { name: 'Spare Home',   app: 'home',   replaces: 'Agent commissions and listing fees when selling a home' },
+    'spare-rent':   { name: 'Spare Rent',   app: 'rent',   replaces: 'Property manager and listing fees' },
+    'spare-work':   { name: 'Spare Work',   app: 'work',   replaces: 'Trades and freelance marketplaces' },
+    'spare-market': { name: 'Spare Market', app: 'market', replaces: 'Trade Me, eBay, Etsy and Shopify' }
+  };
+
+  var GROUPS = [
+    { name: 'The shared kit',      slugs: ['kit'] },
+    { name: 'Design tools',        slugs: ['spare-arch', 'spare-studio'] },
+    { name: 'Everyday computing',  slugs: ['spare-office', 'spare-os'] },
+    { name: 'Sharing and talking', slugs: ['spare-social'] },
+    { name: 'Marketplaces',        slugs: ['spare-ride', 'spare-food', 'spare-stay', 'spare-home', 'spare-rent', 'spare-work', 'spare-market'] }
+  ];
+
+  var PRIORITY = { core: 'Core', next: 'Next', later: 'Later' };
+  var SIZE = { small: 'Small', medium: 'Medium', large: 'Large' };
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function plural(n, word) { return n + ' ' + word + (n === 1 ? '' : 's'); }
+
+  // One fetch per program, shared by its card and its feature map.
+  var loads = {};
+  function load(slug) {
+    if (!loads[slug]) {
+      loads[slug] = fetch('./' + slug + '/features.json').then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      });
+    }
+    return loads[slug];
+  }
+
+  function failText() {
+    return location.protocol === 'file:'
+      ? 'Open this page from the website to see the counts and the feature map.'
+      : 'The feature map could not load just now. Try reloading the page.';
+  }
+
+  function count(d) {
+    var areas = d.areas || [], features = 0, core = 0;
+    areas.forEach(function (a) {
+      (a.features || []).forEach(function (f) {
+        features++;
+        if (f.priority === 'core') core += (f.parts || []).length;
+      });
+    });
+    return { areas: areas.length, features: features, core: core };
+  }
+
+  /* Cards */
+  var groupsEl = document.getElementById('groups');
+  GROUPS.forEach(function (g, gi) {
+    var section = document.createElement('section');
+    section.className = 'group' + (g.slugs.length > 2 ? ' many' : '');
+    section.setAttribute('data-n', g.slugs.length);
+    section.setAttribute('aria-labelledby', 'g' + gi);
+    section.innerHTML = '<h2 class="label" id="g' + gi + '">' + esc(g.name) + '</h2><div class="grid"></div>';
+    var grid = section.querySelector('.grid');
+    g.slugs.forEach(function (slug) { grid.appendChild(card(slug)); });
+    groupsEl.appendChild(section);
+  });
+
+  function card(slug) {
+    var p = PROGRAMS[slug];
+    var el = document.createElement('article');
+    el.className = 'card' + (p.app ? '' : ' coop');
+    if (p.app) el.setAttribute('data-app', p.app);
+    el.setAttribute('aria-labelledby', 't-' + slug);
+    el.innerHTML =
+      '<div class="card-head"><span class="mark" aria-hidden="true"></span><h3 id="t-' + slug + '">' + esc(p.name) + '</h3></div>' +
+      '<div class="card-body">' +
+        '<div><span class="label">Replaces</span><p class="replaces">' + esc(p.replaces) + '</p></div>' +
+        '<dl class="counts" aria-busy="true">' +
+          '<div><dt>Areas</dt><dd data-k="areas">...</dd></div>' +
+          '<div><dt>Features</dt><dd data-k="features">...</dd></div>' +
+          '<div><dt>Core parts</dt><dd data-k="core">...</dd></div>' +
+        '</dl>' +
+        '<p class="note" role="status" hidden></p>' +
+        '<div class="card-actions">' +
+          '<a class="btn btn-primary" href="./' + slug + '/" aria-describedby="t-' + slug + '">Open demo</a>' +
+          '<button class="btn btn-secondary" type="button" aria-haspopup="dialog" aria-describedby="t-' + slug + '">Feature map</button>' +
+        '</div>' +
+      '</div>';
+
+    var counts = el.querySelector('.counts');
+    var note = el.querySelector('.note');
+    var mapBtn = el.querySelector('button');
+    mapBtn.addEventListener('click', function () { openMap(slug, mapBtn); });
+
+    load(slug).then(function (d) {
+      var c = count(d);
+      Object.keys(c).forEach(function (k) { counts.querySelector('[data-k="' + k + '"]').textContent = c[k]; });
+      counts.setAttribute('aria-busy', 'false');
+    }).catch(function () {
+      counts.hidden = true;
+      note.textContent = failText();
+      note.hidden = false;
+      mapBtn.disabled = true;
+    });
+    return el;
+  }
+
+  /* Feature map */
+  var dlg = document.getElementById('map');
+  var nameEl = document.getElementById('map-name');
+  var qEl = document.getElementById('map-q');
+  var resultEl = document.getElementById('map-result');
+  var bodyEl = document.getElementById('map-body');
+  var introEl = document.getElementById('map-intro');
+  var replacesEl = document.getElementById('map-replaces');
+  var treeEl = document.getElementById('map-tree');
+  var emptyEl = document.getElementById('map-empty');
+  var segBtns = Array.prototype.slice.call(dlg.querySelectorAll('.seg button'));
+
+  var index = [];        // [{ el, tally, hay, total, features: [{ el, p, hay, partsHay }] }]
+  var prio = 'all';
+  var searching = false;
+  var current = '';
+
+  document.getElementById('map-close').addEventListener('click', function () { dlg.close(); });
+  dlg.addEventListener('click', function (e) { if (e.target === dlg) dlg.close(); });
+
+  segBtns.forEach(function (b) {
+    b.addEventListener('click', function () {
+      prio = b.getAttribute('data-p');
+      segBtns.forEach(function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+      apply();
+    });
+  });
+
+  var timer = 0;
+  qEl.addEventListener('input', function () {
+    clearTimeout(timer);
+    timer = setTimeout(apply, 120);
+  });
+
+  function openMap(slug, opener) {
+    var p = PROGRAMS[slug];
+    current = slug;
+    if (p.app) dlg.setAttribute('data-app', p.app); else dlg.removeAttribute('data-app');
+    dlg.classList.toggle('coop', !p.app);
+    nameEl.textContent = p.name;
+    qEl.value = '';
+    prio = 'all';
+    searching = false;
+    segBtns.forEach(function (x) { x.setAttribute('aria-pressed', String(x.getAttribute('data-p') === 'all')); });
+    index = [];
+    introEl.hidden = true;
+    emptyEl.hidden = true;
+    resultEl.textContent = '';
+    treeEl.innerHTML = '<p class="empty">Loading the feature map</p>';
+    if (!dlg.open) dlg.showModal();
+    bodyEl.scrollTop = 0;
+
+    load(slug).then(function (d) {
+      if (current !== slug) return;
+      render(d, p);
+    }).catch(function () {
+      if (current !== slug) return;
+      treeEl.innerHTML = '<p class="note">' + esc(failText()) + '</p>';
+    });
+  }
+
+  function render(d, p) {
+    replacesEl.textContent = d.replaces || p.replaces;
+    introEl.hidden = false;
+
+    var html = '';
+    (d.areas || []).forEach(function (a) {
+      html += '<details class="area"><summary><span class="name">' + esc(a.name) + '</span> <span class="id">' + esc(a.id) + '</span><span class="tally"></span></summary>';
+      if (a.summary) html += '<p class="area-sum">' + esc(a.summary) + '</p>';
+      html += '<div class="features">';
+      (a.features || []).forEach(function (f) {
+        var parts = f.parts || [];
+        var pr = PRIORITY[f.priority] ? f.priority : '';
+        html += '<details class="feature"><summary><span class="name">' + esc(f.name) + '</span>' +
+          (pr ? '<span class="badge badge-' + pr + '">' + PRIORITY[pr] + '</span>' : '') +
+          '<span class="tally"><span class="num">' + parts.length + '</span> ' + (parts.length === 1 ? 'part' : 'parts') + '</span></summary>' +
+          '<div class="feature-in">' +
+            (f.does ? '<p class="does">' + esc(f.does) + '</p>' : '') +
+            '<ul class="parts">';
+        parts.forEach(function (pt) {
+          html += '<li class="part"><div class="part-top"><span class="pname">' + esc(pt.name) + '</span>' +
+            (SIZE[pt.size] ? '<span class="badge">' + SIZE[pt.size] + '</span>' : '') + '</div>' +
+            (pt.what ? '<p class="part-what">' + esc(pt.what) + '</p>' : '') +
+            '<p class="part-meta"><span class="id">' + esc(pt.id) + '</span>' + (pt.kind ? ' · ' + esc(pt.kind) : '') + '</p></li>';
+        });
+        html += '</ul></div></details>';
+      });
+      html += '</div></details>';
+    });
+    treeEl.innerHTML = html;
+
+    var areaEls = treeEl.querySelectorAll('.area');
+    index = (d.areas || []).map(function (a, ai) {
+      var el = areaEls[ai];
+      var fEls = el.querySelectorAll('.feature');
+      return {
+        el: el,
+        tally: el.querySelector('.tally'),
+        hay: [a.id, a.name, a.summary].join(' ').toLowerCase(),
+        total: (a.features || []).length,
+        features: (a.features || []).map(function (f, fi) {
+          return {
+            el: fEls[fi],
+            p: f.priority,
+            hay: [f.id, f.name, f.does].join(' ').toLowerCase(),
+            partsHay: (f.parts || []).map(function (pt) { return [pt.id, pt.name, pt.what, pt.kind].join(' '); }).join(' ').toLowerCase()
+          };
+        })
+      };
+    });
+    apply();
+  }
+
+  function hasAll(text, terms) {
+    for (var i = 0; i < terms.length; i++) if (text.indexOf(terms[i]) < 0) return false;
+    return true;
+  }
+
+  function apply() {
+    if (!index.length) return;
+    var terms = qEl.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    var hasTerms = terms.length > 0;
+    var shownF = 0, shownA = 0, total = 0;
+
+    index.forEach(function (A) {
+      var n = 0;
+      var areaHit = hasTerms && hasAll(A.hay, terms);
+      A.features.forEach(function (F) {
+        total++;
+        var ok = prio === 'all' || F.p === prio;
+        var openIt = false;
+        if (ok && hasTerms && !areaHit) {
+          var own = A.hay + ' ' + F.hay;
+          ok = hasAll(own + ' ' + F.partsHay, terms);
+          openIt = ok && !hasAll(own, terms);   // matched inside its parts, so show them
+        }
+        F.el.hidden = !ok;
+        if (hasTerms) F.el.open = openIt;
+        if (ok) n++;
+      });
+      A.el.hidden = n === 0;
+      if (hasTerms) A.el.open = n > 0;
+      A.tally.textContent = n === A.total ? plural(n, 'feature') : n + ' of ' + plural(A.total, 'feature');
+      if (n) shownA++;
+      shownF += n;
+    });
+
+    // Leaving a search folds the tree back up so it reads from the top again.
+    if (!hasTerms && searching) {
+      index.forEach(function (A) {
+        A.el.open = false;
+        A.features.forEach(function (F) { F.el.open = false; });
+      });
+    }
+    searching = hasTerms;
+
+    resultEl.textContent = shownF === total
+      ? 'Showing all ' + plural(total, 'feature') + ' in ' + plural(shownA, 'area') + '.'
+      : 'Showing ' + shownF + ' of ' + plural(total, 'feature') + ' in ' + plural(shownA, 'area') + '.';
+    emptyEl.hidden = shownF > 0;
+  }
+})();
+</script>
+</body>
+</html>
