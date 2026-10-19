@@ -1,0 +1,11 @@
+[package]
+name = "office-core"
+version = "0.0.0"
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+kit-core = { path = "../../../kit/crates/kit-core" }
+kit-ops = { path = "../../../kit/crates/kit-ops" }
+kit-store = { path = "../../../kit/crates/kit-store" }
+engine-text = { path = "../../../engines/crates/engine-text" }
