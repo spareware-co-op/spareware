@@ -9,7 +9,8 @@ Anyone can read Spareware. Only invited contributors can push work, and a person
    - you build only with Claude Opus 5.5 at Extra high effort, or a newer, more capable model;
    - you follow the legal rules with no exceptions;
    - any work on an employer's time is cleared with your employer first.
-3. **An owner reviews it** and, if it's a yes, invites you to the Spareware Co-op organisation on GitHub. Accept the invite within 7 days or it expires.
+3. **Sign off your commits.** Every commit carries a Developer Certificate of Origin sign-off (`git commit -s`). You keep the copyright to your work; it is licensed under the project's licences (MPL-2.0 for the core, Apache-2.0 for the SDK and plugins), which will never be changed. There is no contributor licence agreement.
+4. **An owner reviews it** and, if it's a yes, invites you to the Spareware Co-op organisation on GitHub. Accept the invite within 7 days or it expires.
 
 ## Once you're in
 

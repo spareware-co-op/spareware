@@ -646,8 +646,9 @@ A new subsystem gets a short written design note first, reviewed before any code
 - Apache-2.0: permissive, with a patent grant.
 - MIT: permissive and shortest.
 - MPL-2.0: changes to our own files must be shared back, but add-ins and products built on top can stay closed.
-- Lean: MPL-2.0 for the core so improvements come back, and Apache-2.0 for the SDK, examples and plugin templates.
-- Contributors sign off each commit (Developer Certificate of Origin) or sign a contributor agreement, so the project can relicense if it ever needs to.
+- Decided (2026-10-19): MPL-2.0 for the core so improvements come back, and Apache-2.0 for the SDK, examples and plugin templates.
+- Never relicensed: the licence will never be changed to a closed, paid or subscription licence.
+- Contributors keep the copyright to their own work and sign off each commit with the Developer Certificate of Origin. There is no contributor licence agreement, so nobody can relicense what the community builds.
 
 **Discuss**
 
