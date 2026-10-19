@@ -11,6 +11,15 @@ Replaces Netflix. Filmmakers sell their films and shows the way they want, and v
 - Filmmakers keep everything except running costs, shown on the open cost ledger.
 - Films are hard to copy and pass around without paying.
 
+## Human and AI sections
+
+The catalogue has two sections: **Human**, for films and shows people made themselves, and **AI**, for ones made with AI. Each viewer chooses to see one, the other, or both, and can change it at any time.
+
+- **Declared by the filmmaker:** every film and show says whether AI was used. Accounts that are AI agents are labelled and can publish only in the AI section.
+- **Checked, not assumed:** uploads are checked for content credentials (C2PA, an open standard for recording how media was made) and for AI-detection signals. Signals are hints for moderators, never automatic verdicts.
+- **Fixable in the open:** members can flag a film in the wrong section; moderators move it with the reason in the public log, and the filmmaker can appeal.
+- **Fair to filmmakers:** using AI isn't a penalty; it just goes in its own section, so human work isn't buried.
+
 ## Open decisions
 
 | Decision | Options | Lean |
