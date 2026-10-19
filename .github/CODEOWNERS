@@ -1,0 +1,17 @@
+# Who is asked to review each part of Spareware.
+# Today one owner reviews everything. As maintainers join, each program, the kit and the engines
+# get their own reviewers here, so review grows with the number of contributors (see EXTENDING.md, "Review at scale").
+# Keep the most specific lines last: GitHub uses the last matching line.
+
+*                               @Vanman989
+
+# Shared foundations: changes here affect every program, so they always need an owner's review.
+/projects/kit/                  @Vanman989
+/projects/engines/              @Vanman989
+/design/                        @Vanman989
+/.github/                       @Vanman989
+/AGENTS.md                      @Vanman989
+/ARCHITECTURE.md                @Vanman989
+/EXTENDING.md                   @Vanman989
+/LICENSE                        @Vanman989
+/LICENSE-APACHE                 @Vanman989
