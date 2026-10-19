@@ -400,7 +400,8 @@ Sharing between firms is built into the app, not a separate platform. It does th
 **High level**
 
 - **Shared project space**: one project that every firm on the job joins with its own team. Each firm's model stays its own, on its own server or co-op servers.
-- **Packages**: a firm publishes a package (chosen models, views and sheets) when it is ready. Everyone sees it on a shared timeline.
+- **Packages**: a firm publishes a package (chosen models, views and sheets) when it is ready. Everyone sees it on the sharing timeline.
+- **Sharing timeline**: like Design Collaboration's timeline, with a row for each firm's team and every package as a mark along it, showing who has taken it in. It is the main view of the sharing space and is open from the start, not a collapsed strip at the top of the page.
 - **Take it in when you're ready**: each firm chooses when to take in a new package, so a consultant's change never lands in the middle of someone's work. Live sync stays inside each firm's own team.
 - **Linked consultant models**: a package taken in shows as a linked model, with what changed since the last package marked in 3D, in plans and in a list.
 - **Other software**: consultants on Revit, Archicad, Tekla or other tools publish IFC into the same space. It is versioned and compared like everyone else's. Clash issues travel as BCF.
