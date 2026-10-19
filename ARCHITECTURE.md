@@ -32,6 +32,10 @@ flowchart TB
     subgraph Social[Sharing and talking]
       SOCIALAPP["`**Spare Social**
 *video, photos, posts, groups*`"]
+      MUSICAPP["`**Spare Music**
+*replaces Spotify*`"]
+      MOVIESAPP["`**Spare Movies**
+*replaces Netflix*`"]
     end
   end
   API["`**One command and query API per app**
@@ -59,7 +63,7 @@ flowchart TB
 | Design tools | Spare Construct; [Spare Studio](projects/spare-studio/ARCHITECTURE.md) (working name), ideally with [ArtCraft](https://github.com/storytold) under the umbrella | Heavy local computing, a geometry kernel or GPU image pipeline, desktop and browser, huge files, drawings and print |
 | Marketplaces | Spare Ride, Food, Stay, Home, Rent, Work, Market | Two-sided matching, payments, trust and safety, phones, real-time location, each industry's rules |
 | Everyday computing | [Spare Office](projects/spare-office/ARCHITECTURE.md), [Spare OS](projects/spare-os/ARCHITECTURE.md) | Open file formats and protocols, live co-editing, a proven Linux base, a painless move from Windows |
-| Social | [Spare Social](projects/spare-social/ARCHITECTURE.md) (working name) | Video storage and delivery at cost, feeds people choose, moderation that removes only what the law requires, open social protocols |
+| Social | [Spare Social](projects/spare-social/ARCHITECTURE.md) (working name); [Spare Music](projects/spare-music/ARCHITECTURE.md) and [Spare Movies](projects/spare-movies/ARCHITECTURE.md) (ideas) | Video storage and delivery at cost, feeds people choose, moderation that removes only what the law requires, open social protocols; for music and movies, paying artists fairly and keeping their work from being copied |
 
 Design tools lean on the Rust core pattern mapped in [Spare Construct's ARCHITECTURE.md](projects/spare-construct/ARCHITECTURE.md), and share its renderer, 2D drawing engine and PDF output with Spare Studio. Marketplaces lean on the shared kit. Both use the same command layer, plugins, sync and AI access.
 
