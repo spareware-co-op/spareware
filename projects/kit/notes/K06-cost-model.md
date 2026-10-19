@@ -1,6 +1,6 @@
 # K06: Cost model and open cost ledger
 
-*Piece K06, shared kit. Written 2026-10-19. An estimate for planning, not a quote. The numbers are in [cost-model.json](../cost-model.json) and on the [costs page](https://spareware-co-op.github.io/spareware/costs.html).*
+*Piece K06, shared kit. Written 2026-10-19. An estimate for planning, not a quote. The numbers are in [cost-model.json](../cost-model.json) and on the [costs page](https://spareware.app/costs.html).*
 
 ## The answer in plain words
 

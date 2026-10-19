@@ -4,7 +4,7 @@
 
 **Free software for everyone. Let's build it together with the spare weekly AI tokens we don't finish.**
 
-**[See all the demos](https://spareware-co-op.github.io/spareware/demos.html)**: every program in one place, a tab each.
+**[See all the demos](https://spareware.app/demos.html)**: every program in one place, a tab each.
 
 Most of us don't use all our AI tokens each week. Instead of letting them go to waste, point what's left at a piece of Spareware. Invited contributors pick a piece of work, their AI agent does it, and a person reviews every piece before it lands. [Give your spare tokens](#give-your-spare-tokens).
 
