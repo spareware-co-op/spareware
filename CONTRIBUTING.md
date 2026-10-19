@@ -5,7 +5,7 @@ Anyone can read Spareware. Only invited contributors can push work, and a person
 ## How to request to join
 
 1. **Read the [README](README.md)**, especially "Built legally, or not at all".
-2. **Open a join request:** [New join request](https://github.com/spareware-co-op/spareware/issues/new?template=join-request.yml). It asks what you'd like to work on, roughly how many spare tokens you have each week, a link to your LinkedIn (or another public profile) so an owner can check your background, and for three promises:
+2. **Open a join request:** [New join request](https://github.com/spareware-co-op/spareware/issues/new?template=join-request.yml). It asks what you'd like to work on, a link to your LinkedIn (or another public profile) so an owner can check your background, and for three promises:
    - you build only with Claude Opus 5.5 at Extra high effort, or a newer, more capable model;
    - you follow the legal rules with no exceptions;
    - any work on an employer's time is cleared with your employer first.

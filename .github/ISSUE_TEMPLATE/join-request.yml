@@ -18,16 +18,6 @@ body:
         - Wherever I'm needed
     validations:
       required: true
-  - type: dropdown
-    id: tokens
-    attributes:
-      label: Roughly how many spare tokens do you have each week?
-      options:
-        - A little
-        - A fair amount
-        - A lot
-    validations:
-      required: true
   - type: textarea
     id: about
     attributes:
