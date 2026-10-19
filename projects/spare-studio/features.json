@@ -18,7 +18,7 @@
       {
        "id": "STU-A1-F1-P1",
        "name": "Installers on the shared desktop shell",
-       "what": "Studio's app picker on signed installers for Windows, macOS and Linux that add or remove single apps; the installer belongs in the kit's shared desktop shell, used by Spare Arch and Spare Office too.",
+       "what": "Studio's app picker on signed installers for Windows, macOS and Linux that add or remove single apps; the installer belongs in the kit's shared desktop shell, used by Spare Construct and Spare Office too.",
        "kind": "integration",
        "size": "medium",
        "depends_on": [
@@ -211,7 +211,7 @@
       {
        "id": "STU-A1-F5-P1",
        "name": "Per-member usage meter",
-       "what": "Counts storage, AI compute, video processing and server jobs per member against their cap; it belongs in the kit beside the per-app usage metering, since Spare Office, Spare Social and Spare Arch need the same.",
+       "what": "Counts storage, AI compute, video processing and server jobs per member against their cap; it belongs in the kit beside the per-app usage metering, since Spare Office, Spare Social and Spare Construct need the same.",
        "kind": "service",
        "size": "medium",
        "depends_on": [
@@ -729,7 +729,7 @@
       {
        "id": "STU-A2-F5-P1",
        "name": "Project file container",
-       "what": "Whether studio files use a SQLite container or a custom chunk file, shared with Spare Arch's decision.",
+       "what": "Whether studio files use a SQLite container or a custom chunk file, shared with Spare Construct's decision.",
        "kind": "research",
        "size": "small",
        "depends_on": [],
@@ -930,7 +930,7 @@
       {
        "id": "STU-A2-F8-P1",
        "name": "Renderer approach",
-       "what": "Our own renderer on wgpu or a web renderer first, shared with Spare Arch's decision.",
+       "what": "Our own renderer on wgpu or a web renderer first, shared with Spare Construct's decision.",
        "kind": "research",
        "size": "medium",
        "depends_on": [],
@@ -1138,7 +1138,7 @@
       {
        "id": "STU-A3-F1-P2",
        "name": "Text engine",
-       "what": "Font loading, shaping, bidirectional text, line breaking and paragraph layout, built in engine-text and shared with Spare Arch and Spare Office.",
+       "what": "Font loading, shaping, bidirectional text, line breaking and paragraph layout, built in engine-text and shared with Spare Construct and Spare Office.",
        "kind": "library",
        "size": "large",
        "depends_on": [
@@ -1215,7 +1215,7 @@
       {
        "id": "STU-A3-F2-P2",
        "name": "Spelling and hyphenation dictionaries",
-       "what": "Open dictionaries per language, te reo Māori and English (New Zealand) first, each licence checked, kept in engine-text so Spare Office, Spare OS and Spare Arch use the same ones.",
+       "what": "Open dictionaries per language, te reo Māori and English (New Zealand) first, each licence checked, kept in engine-text so Spare Office, Spare OS and Spare Construct use the same ones.",
        "kind": "data",
        "size": "medium",
        "depends_on": [
@@ -1238,7 +1238,7 @@
       {
        "id": "STU-A3-F2-P4",
        "name": "Input methods for canvas text",
-       "what": "IME composition and candidate windows, dead keys and compose keys for text drawn on the GPU canvas, on desktop and in the browser; built in engine-text with Spare Office and Spare Arch.",
+       "what": "IME composition and candidate windows, dead keys and compose keys for text drawn on the GPU canvas, on desktop and in the browser; built in engine-text with Spare Office and Spare Construct.",
        "kind": "library",
        "size": "large",
        "depends_on": [
@@ -1662,7 +1662,7 @@
       {
        "id": "STU-A4-F4-P1",
        "name": "Open font catalogue",
-       "what": "A catalogue of fonts under open licences such as the SIL Open Font License, with previews and pairings, kept in engine-text so Spare Office, Spare OS and Spare Arch share one.",
+       "what": "A catalogue of fonts under open licences such as the SIL Open Font License, with previews and pairings, kept in engine-text so Spare Office, Spare OS and Spare Construct share one.",
        "kind": "data",
        "size": "medium",
        "depends_on": [
@@ -2527,7 +2527,7 @@
   {
    "id": "STU-A6",
    "name": "Spare Draw: vector illustration",
-   "summary": "Logos, illustrations, icons, packaging, patterns and type art as sharp vectors at any size. Replaces Illustrator. Shares its 2D drawing engine with Spare Arch.",
+   "summary": "Logos, illustrations, icons, packaging, patterns and type art as sharp vectors at any size. Replaces Illustrator. Shares its 2D drawing engine with Spare Construct.",
    "features": [
     {
      "id": "STU-A6-F1",
@@ -2593,7 +2593,7 @@
       {
        "id": "STU-A6-F2-P1",
        "name": "Path booleans",
-       "what": "Robust 2D boolean operations on curves, built in engine-draw2d and shared with Spare Arch.",
+       "what": "Robust 2D boolean operations on curves, built in engine-draw2d and shared with Spare Construct.",
        "kind": "library",
        "size": "large",
        "depends_on": [
@@ -5224,7 +5224,7 @@
   {
    "id": "STU-A12",
    "name": "Spare PDF: read, edit, review, fill and sign",
-   "summary": "Read any PDF, mark it up, edit it, organise pages, fill and build forms, sign and send for signature, scan paper, protect, redact and make PDFs accessible. Replaces Acrobat, Acrobat Reader, Acrobat Sign and the scan and fill-and-sign phone apps. Shares its PDF engine with Spare Arch and Spare Office.",
+   "summary": "Read any PDF, mark it up, edit it, organise pages, fill and build forms, sign and send for signature, scan paper, protect, redact and make PDFs accessible. Replaces Acrobat, Acrobat Reader, Acrobat Sign and the scan and fill-and-sign phone apps. Shares its PDF engine with Spare Construct and Spare Office.",
    "features": [
     {
      "id": "STU-A12-F1",
@@ -6303,7 +6303,7 @@
   {
    "id": "STU-A15",
    "name": "Spare 3D: materials, texturing and 3D scenes",
-   "summary": "Paint textures onto 3D models, build materials, stage product shots and render realistic images. Replaces Substance 3D and Dimension. Shares its renderer with Spare Arch; Blender's Cycles renderer (Apache-2.0) is the first to learn from.",
+   "summary": "Paint textures onto 3D models, build materials, stage product shots and render realistic images. Replaces Substance 3D and Dimension. Shares its renderer with Spare Construct; Blender's Cycles renderer (Apache-2.0) is the first to learn from.",
    "features": [
     {
      "id": "STU-A15-F1",
@@ -6325,7 +6325,7 @@
       {
        "id": "STU-A15-F1-P2",
        "name": "3D viewport",
-       "what": "A fast viewport with lighting, materials and camera controls, built in engine-render and shared with Spare Arch.",
+       "what": "A fast viewport with lighting, materials and camera controls, built in engine-render and shared with Spare Construct.",
        "kind": "interface",
        "size": "medium",
        "depends_on": [
@@ -6462,7 +6462,7 @@
       {
        "id": "STU-A15-F4-P2",
        "name": "Path-traced rendering",
-       "what": "Realistic path-traced rendering with an open denoiser, built in engine-render and shared with Spare Arch.",
+       "what": "Realistic path-traced rendering with an open denoiser, built in engine-render and shared with Spare Construct.",
        "kind": "library",
        "size": "large",
        "depends_on": [
@@ -6855,7 +6855,7 @@
       {
        "id": "STU-A16-F8-P1",
        "name": "Consent records",
-       "what": "Each member's AI training choice kept once in the kit's accounts service as a consent register that every app and AI service checks, since Spare Social, Spare Office and Spare Arch hold members' work too.",
+       "what": "Each member's AI training choice kept once in the kit's accounts service as a consent register that every app and AI service checks, since Spare Social, Spare Office and Spare Construct hold members' work too.",
        "kind": "service",
        "size": "small",
        "depends_on": [
@@ -7060,7 +7060,7 @@
       {
        "id": "STU-A17-F3-P1",
        "name": "One comment model",
-       "what": "Comments anchored to points, regions, pages, video frames and text ranges, with replies and mentions, that map to and from PDF annotations; it belongs in the kit beside messaging, since Spare Office and Spare Arch markups need the same.",
+       "what": "Comments anchored to points, regions, pages, video frames and text ranges, with replies and mentions, that map to and from PDF annotations; it belongs in the kit beside messaging, since Spare Office and Spare Construct markups need the same.",
        "kind": "service",
        "size": "medium",
        "depends_on": [
@@ -8158,7 +8158,7 @@
       {
        "id": "STU-A21-F1-P2",
        "name": "ArtCraft's repo layout and agent workflow",
-       "what": "How ArtCraft builds from scratch in Rust with agents, and what to copy, shared with Spare Arch.",
+       "what": "How ArtCraft builds from scratch in Rust with agents, and what to copy, shared with Spare Construct.",
        "kind": "research",
        "size": "small",
        "depends_on": [],
@@ -8222,7 +8222,7 @@
   "Which parts could come from ArtCraft, Graphite, Penpot, OpenToonz or other permissively licensed projects instead of being built (piece S01)?",
   "Is every Adobe file format handled only from a published specification, and which legal parts need a lawyer before work starts (piece S06)?",
   "Is the studio core (document model, GPU pipeline, colour, text) truly shared by every app, or does any app quietly need its own?",
-  "Are the shared engines (render, 2D drawing, text, PDF, media) shared with Spare Arch, Spare Office and Spare Social rather than copied?",
+  "Are the shared engines (render, 2D drawing, text, PDF, media) shared with Spare Construct, Spare Office and Spare Social rather than copied?",
   "Does the at-cost model add up: what stays free, what do storage, AI and video processing cost a member each month, and does paying after use against a monthly cap keep the co-op from ever holding members' money?",
   "Is the AI policy clear enough to build on: off by default, the member's choice of model, labelled, and never trained on members' work without consent (piece S07)?",
   "Are accessibility, te reo Māori and offline work treated as core, not as extras for later?",

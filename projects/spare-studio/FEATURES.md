@@ -15,16 +15,16 @@ Spare Studio replaces Adobe Creative Cloud: Photoshop, Illustrator, InDesign, In
 | STU-A3 | [Type, colour and output](#stu-a3-type-colour-and-output) | 8 | 31 | The shared core for text in every app, colour that stays true from screen to print and video, and output to printers, files and the web, with proof of where a file came from. Replaces the type, colour and export features spread across every Adobe app. |
 | STU-A4 | [Spare Library: assets, fonts, colours and templates](#stu-a4-spare-library-assets-fonts-colours-and-templates) | 8 | 22 | One browser for every file, shared libraries that work in every app, open fonts, open stock and templates, and a door into Spare Market for the assets members sell. Replaces Bridge, Creative Cloud Libraries, Adobe Fonts, Adobe Stock and Adobe Color. Selling, orders, tax and payouts for assets live in Spare Market on the shared marketplace engine. |
 | STU-A5 | [Spare Photo and Spare Paint: photo editing, compositing and painting](#stu-a5-spare-photo-and-spare-paint-photo-editing-compositing-and-painting) | 15 | 48 | Edit and retouch photos, combine images, design graphics and paint by hand, all without harming the original. Replaces Photoshop and Fresco. Spare Paint is Spare Photo's brush engine in a touch-first layout. |
-| STU-A6 | [Spare Draw: vector illustration](#stu-a6-spare-draw-vector-illustration) | 12 | 32 | Logos, illustrations, icons, packaging, patterns and type art as sharp vectors at any size. Replaces Illustrator. Shares its 2D drawing engine with Spare Arch. |
+| STU-A6 | [Spare Draw: vector illustration](#stu-a6-spare-draw-vector-illustration) | 12 | 32 | Logos, illustrations, icons, packaging, patterns and type art as sharp vectors at any size. Replaces Illustrator. Shares its 2D drawing engine with Spare Construct. |
 | STU-A7 | [Spare Layout: page layout, long documents and quick designs](#stu-a7-spare-layout-page-layout-long-documents-and-quick-designs) | 11 | 34 | Magazines, books, reports, catalogues, flyers, social posts and e-books, from a one-minute template edit to a 500-page book. Replaces InDesign, InCopy and the template side of Express. |
 | STU-A8 | [Spare Raw: photo library and raw development](#stu-a8-spare-raw-photo-library-and-raw-development) | 15 | 37 | Bring photos in, organise tens of thousands of them, develop raw files without touching the originals, and share, print or make books from them. Replaces Lightroom and Lightroom Classic. |
 | STU-A9 | [Spare Video: video editing and encoding](#stu-a9-spare-video-video-editing-and-encoding) | 14 | 36 | Edit video from the first rough cut to a finished film, with captions, colour, sound and export to every screen. Replaces Premiere Pro, Media Encoder and the phone video editors. Shares its media engine with Spare Social. |
 | STU-A10 | [Spare Motion: motion graphics and visual effects](#stu-a10-spare-motion-motion-graphics-and-visual-effects) | 11 | 22 | Animated titles and graphics, compositing, keying, tracking and visual effects, plus templates that Spare Video uses. Replaces After Effects. |
 | STU-A11 | [Spare Sound: audio editing, mixing and podcasts](#stu-a11-spare-sound-audio-editing-mixing-and-podcasts) | 9 | 20 | Record, edit, repair and mix audio for podcasts, video, radio and music. Replaces Audition. Shares its audio engine with Spare Video and Spare Motion. |
-| STU-A12 | [Spare PDF: read, edit, review, fill and sign](#stu-a12-spare-pdf-read-edit-review-fill-and-sign) | 18 | 41 | Read any PDF, mark it up, edit it, organise pages, fill and build forms, sign and send for signature, scan paper, protect, redact and make PDFs accessible. Replaces Acrobat, Acrobat Reader, Acrobat Sign and the scan and fill-and-sign phone apps. Shares its PDF engine with Spare Arch and Spare Office. |
+| STU-A12 | [Spare PDF: read, edit, review, fill and sign](#stu-a12-spare-pdf-read-edit-review-fill-and-sign) | 18 | 41 | Read any PDF, mark it up, edit it, organise pages, fill and build forms, sign and send for signature, scan paper, protect, redact and make PDFs accessible. Replaces Acrobat, Acrobat Reader, Acrobat Sign and the scan and fill-and-sign phone apps. Shares its PDF engine with Spare Construct and Spare Office. |
 | STU-A13 | [Spare Screens: interface design, prototypes and websites](#stu-a13-spare-screens-interface-design-prototypes-and-websites) | 8 | 17 | Design app and web screens, build clickable prototypes, keep design systems, hand off to developers and publish simple websites. Replaces XD and Dreamweaver, and the screen-design tools people moved to after XD. Penpot (MPL-2.0) is the first project to learn from or partner with. |
 | STU-A14 | [Spare Animate: 2D and character animation](#stu-a14-spare-animate-2d-and-character-animation) | 5 | 13 | Frame-by-frame and rigged 2D animation for cartoons, explainers, games and the web, and puppets that follow a webcam. Replaces Animate and Character Animator. OpenToonz (BSD-3-Clause) is the first project to learn from or build on. |
-| STU-A15 | [Spare 3D: materials, texturing and 3D scenes](#stu-a15-spare-3d-materials-texturing-and-3d-scenes) | 6 | 15 | Paint textures onto 3D models, build materials, stage product shots and render realistic images. Replaces Substance 3D and Dimension. Shares its renderer with Spare Arch; Blender's Cycles renderer (Apache-2.0) is the first to learn from. |
+| STU-A15 | [Spare 3D: materials, texturing and 3D scenes](#stu-a15-spare-3d-materials-texturing-and-3d-scenes) | 6 | 15 | Paint textures onto 3D models, build materials, stage product shots and render realistic images. Replaces Substance 3D and Dimension. Shares its renderer with Spare Construct; Blender's Cycles renderer (Apache-2.0) is the first to learn from. |
 | STU-A16 | [AI tools: optional, at cost, with consent](#stu-a16-ai-tools-optional-at-cost-with-consent) | 10 | 28 | AI across the suite that a member can switch off. Members choose the model, AI runs on the device or at cost, every AI edit is labelled, and nothing is trained on members' work without their consent. Replaces Firefly and the generative features in every Adobe app. |
 | STU-A17 | [Sharing, review and teamwork](#stu-a17-sharing-review-and-teamwork) | 7 | 20 | Keep files in co-op storage at cost, share links, collect feedback pinned to the exact spot, page, frame or text, approve versions, work together live and show a portfolio. Replaces Creative Cloud storage and cloud documents, Frame.io review, Behance and Adobe Portfolio; hiring from a portfolio happens in Spare Work. |
 | STU-A18 | [Automation, plugins and AI agents](#stu-a18-automation-plugins-and-ai-agents) | 5 | 19 | Every change is an operation, so scripts, plugins and AI agents can do anything a person can, through one command API, safely and in the open. Replaces each Adobe app's own scripting, plugin systems and automation. |
@@ -52,7 +52,7 @@ How a person or an organisation starts, signs in, joins the co-op, pays for the 
 
 | ID | Part | Kind | Size | Depends on | Piece |
 | --- | --- | --- | --- | --- | --- |
-| STU-A1-F1-P1 | **Installers on the shared desktop shell.** Studio's app picker on signed installers for Windows, macOS and Linux that add or remove single apps; the installer belongs in the kit's shared desktop shell, used by Spare Arch and Spare Office too. | integration | medium | KIT-A20-F1-P2, KIT-A22-F2-P3 |  |
+| STU-A1-F1-P1 | **Installers on the shared desktop shell.** Studio's app picker on signed installers for Windows, macOS and Linux that add or remove single apps; the installer belongs in the kit's shared desktop shell, used by Spare Construct and Spare Office too. | integration | medium | KIT-A20-F1-P2, KIT-A22-F2-P3 |  |
 | STU-A1-F1-P2 | **Browser build study.** Whether the heavy apps can run in a browser on WebAssembly and WebGPU: memory limits, speed, file access, and which apps are worth it. | research | medium |  |  |
 | STU-A1-F1-P3 | **Studio update channels.** Studio's update channels with pause, skip and roll back, on the kit's update delivery. | service | medium | KIT-A20-F7-P1, STU-A1-F1-P1 |  |
 | STU-A1-F1-P4 | **Local profile without an account.** Preferences, recent files and libraries kept on the device until the person chooses to sign in. | data | small | kit-store |  |
@@ -66,7 +66,7 @@ How a person or an organisation starts, signs in, joins the co-op, pays for the 
 | STU-A1-F4-P1 | **Join from the studio.** A link from every Studio app into the kit's join flow, which ties the account to a co-op membership and its share. | interface | small | KIT-A14-F1-P3 |  |
 | STU-A1-F4-P2 | **Studio proposals and votes.** Studio's proposal types, such as the free allowance, the AI policy, at-cost prices and the order of apps, on the kit's proposals and ballots, with results applied as operations. | interface | small | KIT-A12-F1-P1, KIT-A12-F3-P1, KIT-A12-F4-P1, STU-A1-F4-P3 |  |
 | STU-A1-F4-P3 | **Spare Studio's electorate.** States who votes on Studio matters; lean: every co-op member who uses Spare Studio votes on the free allowance, the AI policy, at-cost prices and the order of apps, since Studio has no workers in the marketplace sense, and asset sellers vote on the market fee in Spare Market. | data | small | KIT-A12-F5-P2, KIT-A12-F5-P1 |  |
-| STU-A1-F5-P1 | **Per-member usage meter.** Counts storage, AI compute, video processing and server jobs per member against their cap; it belongs in the kit beside the per-app usage metering, since Spare Office, Spare Social and Spare Arch need the same. | service | medium | KIT-A13-F2-P2, svc-ledger, kit-ops |  |
+| STU-A1-F5-P1 | **Per-member usage meter.** Counts storage, AI compute, video processing and server jobs per member against their cap; it belongs in the kit beside the per-app usage metering, since Spare Office, Spare Social and Spare Construct need the same. | service | medium | KIT-A13-F2-P2, svc-ledger, kit-ops |  |
 | STU-A1-F5-P2 | **Monthly cap and pay after use.** Lets a person set a monthly cap and pay for use after each month through the payment provider, in their own currency; the co-op never holds a prepaid balance. | interface | medium | svc-payments, STU-A1-F5-P1, KIT-A3-F12-P1, KIT-A3-F8-P1 | [K02](../kit/STATUS.md) |
 | STU-A1-F5-P3 | **Studio tax invoices.** Monthly tax invoices and receipts for at-cost Studio charges, issued through the kit's tax invoices. | service | small | KIT-A4-F2-P1, STU-A1-F5-P6 |  |
 | STU-A1-F5-P4 | **Studio lines on the open ledger.** Studio's costs for storage, AI compute and video processing, and how each at-cost price was set, on the kit's ledger pages. | interface | small | KIT-A13-F1-P3, KIT-A13-F3-P1 | [K06](../kit/STATUS.md) |
@@ -128,7 +128,7 @@ The shared base every app stands on: one workspace, one document model where eve
 | STU-A2-F3-P5 | **Layers panel.** Shows, orders, groups, locks, hides, colour-labels and searches layers in every app. | interface | medium | STU-A2-F3-P2 |  |
 | STU-A2-F4-P1 | **Undo and redo on the operation log.** Undo built on the kit's operation log, so people, scripts and AI share one history. | library | medium | kit-ops, STU-A2-F3-P2 | [S02](STATUS.md) |
 | STU-A2-F4-P2 | **History panel and snapshots.** A list of every step, named snapshots, and branching from any earlier step. | interface | medium | STU-A2-F4-P1 |  |
-| STU-A2-F5-P1 | **Project file container.** Whether studio files use a SQLite container or a custom chunk file, shared with Spare Arch's decision. | research | small |  | [A06](../spare-arch/STATUS.md) |
+| STU-A2-F5-P1 | **Project file container.** Whether studio files use a SQLite container or a custom chunk file, shared with Spare Construct's decision. | research | small |  | [A06](../spare-construct/STATUS.md) |
 | STU-A2-F5-P2 | **Spare Studio file format.** A documented, layered, open file format with a published schema and test files. | data | large | kit-store, STU-A2-F3-P2, STU-A2-F5-P1 |  |
 | STU-A2-F5-P3 | **Format reader and writer library.** A library that reads and writes the format, published so other tools can use it too. | library | medium | STU-A2-F5-P2 |  |
 | STU-A2-F5-P4 | **Public format specification.** Plain documentation of the format with examples, version rules and a validator. | data | medium | STU-A2-F5-P2 |  |
@@ -144,7 +144,7 @@ The shared base every app stands on: one workspace, one document model where eve
 | STU-A2-F7-P4 | **EPS and PostScript study.** Whether to write a PostScript interpreter from the published specification or read only the preview and PDF inside EPS files, since Ghostscript is AGPL. | research | medium | STU-A2-F7-P1 |  |
 | STU-A2-F7-P5 | **Import report.** Lists anything that could not be brought across exactly and what it became instead. | interface | small | STU-A2-F7-P2 |  |
 | STU-A2-F7-P6 | **PSD fidelity study.** How exactly layers, masks, effects and text layers can round-trip through PSD and PSB from the published specification, tested on real files. | research | medium | STU-A2-F7-P1 |  |
-| STU-A2-F8-P1 | **Renderer approach.** Our own renderer on wgpu or a web renderer first, shared with Spare Arch's decision. | research | medium |  | [A04](../spare-arch/STATUS.md) |
+| STU-A2-F8-P1 | **Renderer approach.** Our own renderer on wgpu or a web renderer first, shared with Spare Construct's decision. | research | medium |  | [A04](../spare-construct/STATUS.md) |
 | STU-A2-F8-P2 | **GPU image pipeline.** Tiles, filters, blending and adjustments as GPU compute on wgpu with a CPU fallback, built on engine-render as one image pipeline that the photo editors in Spare Social, Spare Market and Spare OS can use too. | library | large | engine-render, STU-A2-F8-P1 |  |
 | STU-A2-F8-P3 | **Tile and page cache.** Loads only what is on screen at the zoom in use and pages the rest from disk. | library | medium | kit-store |  |
 | STU-A2-F8-P4 | **Speed benchmarks.** A public set of very large test files with timings checked on every change. | data | medium |  |  |
@@ -178,15 +178,15 @@ The shared core for text in every app, colour that stays true from screen to pri
 | ID | Part | Kind | Size | Depends on | Piece |
 | --- | --- | --- | --- | --- | --- |
 | STU-A3-F1-P1 | **Text engine libraries.** Recommended open libraries for fonts, shaping and layout, with licences, and what Spare Layout needs on top. | research | medium |  | [S05](STATUS.md) |
-| STU-A3-F1-P2 | **Text engine.** Font loading, shaping, bidirectional text, line breaking and paragraph layout, built in engine-text and shared with Spare Arch and Spare Office. | library | large | engine-text, STU-A3-F1-P1 |  |
+| STU-A3-F1-P2 | **Text engine.** Font loading, shaping, bidirectional text, line breaking and paragraph layout, built in engine-text and shared with Spare Construct and Spare Office. | library | large | engine-text, STU-A3-F1-P1 |  |
 | STU-A3-F1-P3 | **Text layers and frames.** Point text, area text, text on a path and threaded frames as one shared text object. | library | medium | STU-A3-F1-P2, STU-A2-F3-P2 |  |
 | STU-A3-F1-P4 | **Character and paragraph panels.** Size, leading, tracking, kerning, OpenType features and variable font axes. | interface | medium | STU-A3-F1-P3 |  |
 | STU-A3-F1-P5 | **Missing font handling.** Finds missing fonts, offers open replacements and keeps the original font names in the file. | library | small | STU-A3-F1-P2 |  |
 | STU-A3-F1-P6 | **Colour and emoji fonts.** Draws COLR v1, SVG-in-OpenType and sbix colour fonts, so emoji and colour type work in every app. | library | medium | engine-text, STU-A3-F1-P2 |  |
 | STU-A3-F2-P1 | **Complex scripts.** Arabic, Hebrew, Indic, Thai and CJK shaping, vertical text, ruby and Japanese spacing rules. | library | large | STU-A3-F1-P2 |  |
-| STU-A3-F2-P2 | **Spelling and hyphenation dictionaries.** Open dictionaries per language, te reo Māori and English (New Zealand) first, each licence checked, kept in engine-text so Spare Office, Spare OS and Spare Arch use the same ones. | data | medium | engine-text |  |
+| STU-A3-F2-P2 | **Spelling and hyphenation dictionaries.** Open dictionaries per language, te reo Māori and English (New Zealand) first, each licence checked, kept in engine-text so Spare Office, Spare OS and Spare Construct use the same ones. | data | medium | engine-text |  |
 | STU-A3-F2-P3 | **Glyphs, macrons and smart quotes.** A glyph panel, easy macron input and smart quotes that follow each language's rules. | interface | small | STU-A3-F1-P4, STU-A3-F2-P4 |  |
-| STU-A3-F2-P4 | **Input methods for canvas text.** IME composition and candidate windows, dead keys and compose keys for text drawn on the GPU canvas, on desktop and in the browser; built in engine-text with Spare Office and Spare Arch. | library | large | engine-text, STU-A3-F1-P2, STU-A19-F5-P1 |  |
+| STU-A3-F2-P4 | **Input methods for canvas text.** IME composition and candidate windows, dead keys and compose keys for text drawn on the GPU canvas, on desktop and in the browser; built in engine-text with Spare Office and Spare Construct. | library | large | engine-text, STU-A3-F1-P2, STU-A19-F5-P1 |  |
 | STU-A3-F3-P1 | **Colour management approach.** How open tools manage colour, their licences, and a recommended approach for print, photo and video. | research | medium |  | [S03](STATUS.md) |
 | STU-A3-F3-P2 | **Colour management engine.** ICC profile transforms for photo and print, and OpenColorIO for video and film, on the GPU. | library | large | STU-A2-F8-P2, STU-A3-F3-P1 |  |
 | STU-A3-F3-P3 | **Screen profiles and HDR display.** Reads each screen's profile and shows HDR content correctly where the screen supports it. | library | medium | STU-A3-F3-P2, engine-render |  |
@@ -236,7 +236,7 @@ One browser for every file, shared libraries that work in every app, open fonts,
 | STU-A4-F2-P2 | **Libraries panel.** Drag items into and out of libraries in every app. | interface | medium | STU-A4-F2-P1 |  |
 | STU-A4-F2-P3 | **Shared and synced libraries.** Libraries synced across devices and shared with a team, updating every place an item is used. | service | medium | kit-sync, STU-A4-F2-P1 |  |
 | STU-A4-F3-P1 | **Brand kits.** Logos, colours, fonts and templates an organisation locks so everyone's work stays on brand. | interface | medium | STU-A4-F2-P1, STU-A1-F7-P1 |  |
-| STU-A4-F4-P1 | **Open font catalogue.** A catalogue of fonts under open licences such as the SIL Open Font License, with previews and pairings, kept in engine-text so Spare Office, Spare OS and Spare Arch share one. | data | medium | engine-text |  |
+| STU-A4-F4-P1 | **Open font catalogue.** A catalogue of fonts under open licences such as the SIL Open Font License, with previews and pairings, kept in engine-text so Spare Office, Spare OS and Spare Construct share one. | data | medium | engine-text |  |
 | STU-A4-F4-P2 | **Font manager.** Turns fonts on and off across apps, groups them and shows their licence terms. | interface | medium | STU-A3-F1-P2 |  |
 | STU-A4-F4-P3 | **Font licence rules.** What each font licence allows for embedding in PDF, packaging for print and use on the web. | legal | small |  |  |
 | STU-A4-F5-P1 | **Template gallery.** Co-op-made templates for posters, social posts, documents, slides, video and more. | data | large | STU-A1-F3-P5 |  |
@@ -328,7 +328,7 @@ Edit and retouch photos, combine images, design graphics and paint by hand, all 
 
 ## STU-A6 Spare Draw: vector illustration
 
-Logos, illustrations, icons, packaging, patterns and type art as sharp vectors at any size. Replaces Illustrator. Shares its 2D drawing engine with Spare Arch.
+Logos, illustrations, icons, packaging, patterns and type art as sharp vectors at any size. Replaces Illustrator. Shares its 2D drawing engine with Spare Construct.
 
 | Feature | What a person can do | Priority | Parts |
 | --- | --- | --- | --- |
@@ -353,7 +353,7 @@ Logos, illustrations, icons, packaging, patterns and type art as sharp vectors a
 | STU-A6-F1-P2 | **Pen, curvature and pencil tools.** Tools for drawing and editing points and handles, with snapping and smoothing. | library | medium | STU-A6-F1-P1, STU-A2-F1-P3 |  |
 | STU-A6-F1-P3 | **Live shapes.** Rectangles, ellipses, polygons, stars and lines that keep editable corners and sides. | library | small | STU-A6-F1-P1 |  |
 | STU-A6-F1-P4 | **GPU vector drawing.** Fast, accurate drawing of complex vector art on the GPU, with exact preview at any zoom. | library | large | engine-render, engine-draw2d |  |
-| STU-A6-F2-P1 | **Path booleans.** Robust 2D boolean operations on curves, built in engine-draw2d and shared with Spare Arch. | library | large | engine-draw2d |  |
+| STU-A6-F2-P1 | **Path booleans.** Robust 2D boolean operations on curves, built in engine-draw2d and shared with Spare Construct. | library | large | engine-draw2d |  |
 | STU-A6-F2-P2 | **Shape builder.** Merges or removes regions by dragging across overlapping shapes. | library | medium | STU-A6-F2-P1 |  |
 | STU-A6-F2-P3 | **Paint regions.** Fills the regions formed by overlapping paths as if they were separate shapes. | library | medium | STU-A6-F2-P1 |  |
 | STU-A6-F2-P4 | **Knife, scissors and eraser.** Tools to cut, split and erase parts of paths. | library | small | STU-A6-F2-P1 |  |
@@ -653,7 +653,7 @@ Record, edit, repair and mix audio for podcasts, video, radio and music. Replace
 
 ## STU-A12 Spare PDF: read, edit, review, fill and sign
 
-Read any PDF, mark it up, edit it, organise pages, fill and build forms, sign and send for signature, scan paper, protect, redact and make PDFs accessible. Replaces Acrobat, Acrobat Reader, Acrobat Sign and the scan and fill-and-sign phone apps. Shares its PDF engine with Spare Arch and Spare Office.
+Read any PDF, mark it up, edit it, organise pages, fill and build forms, sign and send for signature, scan paper, protect, redact and make PDFs accessible. Replaces Acrobat, Acrobat Reader, Acrobat Sign and the scan and fill-and-sign phone apps. Shares its PDF engine with Spare Construct and Spare Office.
 
 | Feature | What a person can do | Priority | Parts |
 | --- | --- | --- | --- |
@@ -791,7 +791,7 @@ Frame-by-frame and rigged 2D animation for cartoons, explainers, games and the w
 
 ## STU-A15 Spare 3D: materials, texturing and 3D scenes
 
-Paint textures onto 3D models, build materials, stage product shots and render realistic images. Replaces Substance 3D and Dimension. Shares its renderer with Spare Arch; Blender's Cycles renderer (Apache-2.0) is the first to learn from.
+Paint textures onto 3D models, build materials, stage product shots and render realistic images. Replaces Substance 3D and Dimension. Shares its renderer with Spare Construct; Blender's Cycles renderer (Apache-2.0) is the first to learn from.
 
 | Feature | What a person can do | Priority | Parts |
 | --- | --- | --- | --- |
@@ -807,7 +807,7 @@ Paint textures onto 3D models, build materials, stage product shots and render r
 | ID | Part | Kind | Size | Depends on | Piece |
 | --- | --- | --- | --- | --- | --- |
 | STU-A15-F1-P1 | **3D import and export.** Reads and writes glTF, OBJ, STL, PLY and OpenUSD from their published specifications and open libraries. | library | large | engine-render |  |
-| STU-A15-F1-P2 | **3D viewport.** A fast viewport with lighting, materials and camera controls, built in engine-render and shared with Spare Arch. | interface | medium | engine-render |  |
+| STU-A15-F1-P2 | **3D viewport.** A fast viewport with lighting, materials and camera controls, built in engine-render and shared with Spare Construct. | interface | medium | engine-render |  |
 | STU-A15-F2-P1 | **UV unwrapping.** Automatic and guided UV unwrapping. | library | large | STU-A15-F1-P1 |  |
 | STU-A15-F2-P2 | **3D texture painting.** Projection painting across texture sets with the shared brush engine. | library | large | STU-A5-F7-P1, STU-A15-F2-P1, engine-render |  |
 | STU-A15-F2-P3 | **Map baking.** Bakes normal, ambient occlusion and curvature maps from detailed models. | library | large | engine-render |  |
@@ -817,7 +817,7 @@ Paint textures onto 3D models, build materials, stage product shots and render r
 | STU-A15-F3-P3 | **Open material library.** A library of materials under open licences, with credit kept. | data | medium | STU-A4-F2-P1 |  |
 | STU-A15-F3-P4 | **Smart materials.** Materials that place wear, dirt and edge highlights from a model's baked curvature and occlusion maps, and update when the model changes. | library | medium | STU-A15-F3-P1, STU-A15-F2-P3 |  |
 | STU-A15-F4-P1 | **Scene staging.** Place models, cameras, lights and backdrops, with ground snapping and simple presets. | interface | medium | STU-A15-F1-P2 |  |
-| STU-A15-F4-P2 | **Path-traced rendering.** Realistic path-traced rendering with an open denoiser, built in engine-render and shared with Spare Arch. | library | large | engine-render |  |
+| STU-A15-F4-P2 | **Path-traced rendering.** Realistic path-traced rendering with an open denoiser, built in engine-render and shared with Spare Construct. | library | large | engine-render |  |
 | STU-A15-F5-P1 | **3D layers in other apps.** Linked 3D content rendered in place in other documents. | library | medium | STU-A2-F3-P4, STU-A15-F4-P2 |  |
 | STU-A15-F5-P2 | **Augmented reality preview.** Shows a model in the room through a phone's camera, using the phone's own AR support. | integration | medium | STU-A15-F1-P1 | [K04](../kit/STATUS.md) |
 | STU-A15-F6-P1 | **Simple modelling and sculpting.** Basic mesh modelling and sculpting tools. | library | large | STU-A15-F1-P1 |  |
@@ -866,7 +866,7 @@ AI across the suite that a member can switch off. Members choose the model, AI r
 | STU-A16-F7-P1 | **AI labelling.** Records AI operations in the file and adds labels and content credentials on export. | library | small | STU-A3-F8-P1 | [M09](../spare-social/STATUS.md) |
 | STU-A16-F7-P2 | **AI labelling law.** What the EU AI Act and other laws require when AI-made content is marked and published. | legal | small |  |  |
 | STU-A16-F7-P3 | **Durable AI marking.** A machine-readable mark on AI output that survives metadata stripping, such as a watermark, if EU AI Act Article 50 covers co-op-hosted models; whether its dates have moved is unverified. | library | medium | STU-A16-F7-P1, STU-A16-F7-P2 |  |
-| STU-A16-F8-P1 | **Consent records.** Each member's AI training choice kept once in the kit's accounts service as a consent register that every app and AI service checks, since Spare Social, Spare Office and Spare Arch hold members' work too. | service | small | svc-accounts, KIT-A1-F6-P2, STU-A16-F1-P1 | [S07](STATUS.md) |
+| STU-A16-F8-P1 | **Consent records.** Each member's AI training choice kept once in the kit's accounts service as a consent register that every app and AI service checks, since Spare Social, Spare Office and Spare Construct hold members' work too. | service | small | svc-accounts, KIT-A1-F6-P2, STU-A16-F1-P1 | [S07](STATUS.md) |
 | STU-A16-F8-P2 | **No keeping or training by providers.** Contracts and settings so co-op-hosted and partner providers neither keep nor train on members' data. | legal | small |  |  |
 | STU-A16-F8-P3 | **Do-not-train marks on exports.** Marks exports 'do not train' with a C2PA training and mining assertion and a text-and-data-mining reservation, so outside AI companies are told. | library | small | STU-A3-F8-P1, STU-A16-F8-P1 |  |
 | STU-A16-F9-P1 | **Generation safety checks.** Blocks illegal and abusive prompts and outputs before anything is shown or saved. | service | medium | svc-trust, STU-A16-F2-P1 | [M07](../spare-social/STATUS.md) |
@@ -898,10 +898,10 @@ Keep files in co-op storage at cost, share links, collect feedback pinned to the
 | STU-A17-F2-P1 | **Studio share links.** View, comment and edit links for Studio files on the kit's sharing, with expiry, passwords and download control. | service | medium | KIT-A15-F8-P1, STU-A17-F1-P1 |  |
 | STU-A17-F2-P2 | **Web viewer.** Views images, PDFs, video, audio and layouts in a browser with no account or install. | interface | large | engine-render, engine-pdf, engine-media |  |
 | STU-A17-F2-P3 | **Hidden data removed from shared files.** Strips location and other hidden metadata by default from files shared by link, web galleries and portfolios, and scans shared files for malware, on the kit's upload checks and metadata stripping. | library | small | KIT-A15-F7-P1, KIT-A15-F7-P3, STU-A17-F2-P1 |  |
-| STU-A17-F3-P1 | **One comment model.** Comments anchored to points, regions, pages, video frames and text ranges, with replies and mentions, that map to and from PDF annotations; it belongs in the kit beside messaging, since Spare Office and Spare Arch markups need the same. | service | medium | svc-messaging, STU-A17-F2-P1, STU-A12-F2-P1 |  |
+| STU-A17-F3-P1 | **One comment model.** Comments anchored to points, regions, pages, video frames and text ranges, with replies and mentions, that map to and from PDF annotations; it belongs in the kit beside messaging, since Spare Office and Spare Construct markups need the same. | service | medium | svc-messaging, STU-A17-F2-P1, STU-A12-F2-P1 |  |
 | STU-A17-F3-P2 | **Review and approval.** Version stacks, reviewers, due dates and an approval status for each version. | service | medium | STU-A17-F3-P1, STU-A2-F9-P1 |  |
 | STU-A17-F3-P3 | **Review alerts.** Comment, mention and approval alerts on the kit's notification router and settings. | integration | small | KIT-A8-F3-P2, KIT-A8-F5-P1 |  |
-| STU-A17-F4-P1 | **Live co-editing.** Co-editing of canvases, pages and timelines on the kit's live updates and presence, with follow mode. | service | large | KIT-A15-F5-P1, KIT-A15-F5-P2, KIT-A15-F4-P2 | [A05](../spare-arch/STATUS.md) |
+| STU-A17-F4-P1 | **Live co-editing.** Co-editing of canvases, pages and timelines on the kit's live updates and presence, with follow mode. | service | large | KIT-A15-F5-P1, KIT-A15-F5-P2, KIT-A15-F4-P2 | [A05](../spare-construct/STATUS.md) |
 | STU-A17-F5-P1 | **Portfolio pages.** A portfolio site built from chosen projects, on co-op hosting or a member's own domain. | interface | medium | STU-A17-F2-P1, STU-A17-F2-P3, STU-A20-F2-P5 |  |
 | STU-A17-F5-P2 | **Post to Spare Social.** Posts work with its content credentials and human or AI label. | integration | small | STU-A3-F8-P1, STU-A16-F7-P1 | [M09](../spare-social/STATUS.md) |
 | STU-A17-F5-P3 | **Hire me link.** A 'hire me' link from a portfolio to the member's Spare Work profile, so hiring happens in Spare Work and Studio builds none of it. | integration | small | STU-A17-F5-P1 |  |
@@ -1043,7 +1043,7 @@ The work that decides what is built first and with whom: the ArtCraft partnershi
 | ID | Part | Kind | Size | Depends on | Piece |
 | --- | --- | --- | --- | --- | --- |
 | STU-A21-F1-P1 | **ArtCraft's architecture compared with ours.** How ArtCraft's apps are built and what of them the studio core could share, from reading their source. | research | medium |  | [S01](STATUS.md) |
-| STU-A21-F1-P2 | **ArtCraft's repo layout and agent workflow.** How ArtCraft builds from scratch in Rust with agents, and what to copy, shared with Spare Arch. | research | small |  | [A10](../spare-arch/STATUS.md) |
+| STU-A21-F1-P2 | **ArtCraft's repo layout and agent workflow.** How ArtCraft builds from scratch in Rust with agents, and what to copy, shared with Spare Construct. | research | small |  | [A10](../spare-construct/STATUS.md) |
 | STU-A21-F1-P3 | **Partner agreement with ArtCraft.** A written agreement if ArtCraft comes under the umbrella, covering credit, licences and names. | legal | medium | STU-A21-F1-P1 |  |
 | STU-A21-F2-P1 | **First app decision.** The decision note an owner decides: Spare Photo, PDF and Draw ranked on demand, effort and what ArtCraft already covers. | research | small | STU-A21-F1-P1 | [S08](STATUS.md) |
 | STU-A21-F3-P1 | **Name clearance.** Trade mark searches for Spare Studio and each app name in New Zealand, Australia, the EU and the US before release, with other names ready where one clashes. | legal | medium |  |  |
@@ -1063,10 +1063,10 @@ The work that decides what is built first and with whom: the ArtCraft partnershi
 | [K02](../kit/STATUS.md) | STU-A1-F5-P2 |
 | [K04](../kit/STATUS.md) | STU-A4-F8-P2, STU-A8-F11-P1, STU-A9-F12-P1, STU-A12-F8-P2, STU-A15-F5-P2, STU-A19-F6-P2, STU-A19-F6-P3 |
 | [K06](../kit/STATUS.md) | STU-A1-F5-P4 |
-| [A04](../spare-arch/STATUS.md) | STU-A2-F8-P1 |
-| [A05](../spare-arch/STATUS.md) | STU-A17-F4-P1 |
-| [A06](../spare-arch/STATUS.md) | STU-A2-F5-P1 |
-| [A10](../spare-arch/STATUS.md) | STU-A21-F1-P2 |
+| [A04](../spare-construct/STATUS.md) | STU-A2-F8-P1 |
+| [A05](../spare-construct/STATUS.md) | STU-A17-F4-P1 |
+| [A06](../spare-construct/STATUS.md) | STU-A2-F5-P1 |
+| [A10](../spare-construct/STATUS.md) | STU-A21-F1-P2 |
 | [M07](../spare-social/STATUS.md) | STU-A16-F9-P1 |
 | [M09](../spare-social/STATUS.md) | STU-A16-F7-P1, STU-A17-F5-P2 |
 | [OF02](../spare-office/STATUS.md) | STU-A12-F7-P4 |
@@ -1080,7 +1080,7 @@ The work that decides what is built first and with whom: the ArtCraft partnershi
 3. Which parts could come from ArtCraft, Graphite, Penpot, OpenToonz or other permissively licensed projects instead of being built (piece S01)?
 4. Is every Adobe file format handled only from a published specification, and which legal parts need a lawyer before work starts (piece S06)?
 5. Is the studio core (document model, GPU pipeline, colour, text) truly shared by every app, or does any app quietly need its own?
-6. Are the shared engines (render, 2D drawing, text, PDF, media) shared with Spare Arch, Spare Office and Spare Social rather than copied?
+6. Are the shared engines (render, 2D drawing, text, PDF, media) shared with Spare Construct, Spare Office and Spare Social rather than copied?
 7. Does the at-cost model add up: what stays free, what do storage, AI and video processing cost a member each month, and does paying after use against a monthly cap keep the co-op from ever holding members' money?
 8. Is the AI policy clear enough to build on: off by default, the member's choice of model, labelled, and never trained on members' work without consent (piece S07)?
 9. Are accessibility, te reo Māori and offline work treated as core, not as extras for later?

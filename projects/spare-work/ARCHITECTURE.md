@@ -4,7 +4,7 @@
 
 Trades and freelance work where the worker keeps everything except the at-cost fee, payment for each stage is held safely until the work is done, and licences are checked against the public registers. Workers own the app and vote on its rules. It runs on the shared marketplace loop; this map covers only what work adds.
 
-Spare Work is also the services layer for the other programs: maintenance for Spare Rent, photographers and lawyers for Spare Home, and building trades for designs from Spare Arch.
+Spare Work is also the services layer for the other programs: maintenance for Spare Rent, photographers and lawyers for Spare Home, and building trades for designs from Spare Construct.
 
 ## Goals
 
@@ -21,7 +21,7 @@ Accounts and ID checks (licence and registration checks), payments (held stage p
 
 ### Jobs and quotes
 
-**High level:** customers describe the job with photos (or attach Spare Arch drawings); matching workers quote; the customer accepts one quote.
+**High level:** customers describe the job with photos (or attach Spare Construct drawings); matching workers quote; the customer accepts one quote.
 
 **Low level:** quotes are versioned operations; a quote becomes stages with amounts and sign-off conditions.
 

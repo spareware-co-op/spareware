@@ -133,7 +133,7 @@ A customer describes what they need once, with photos, drawings, address, timing
 | --- | --- | --- | --- |
 | WORK-A3-F1 Describe a job | A customer can post a job with a title, description, trade, photos, location, timing and rough budget. | core | P1 Job data model; P2 Job posting form; P3 Photos and video on a job; P4 Address privacy; P5 Roles on a job; P6 Disclosed commissions and markups |
 | WORK-A3-F2 Pick the right trade | A customer can pick the right trade or service from a clear list, or have one suggested from their description. | core | P1 Category tree; P2 Suggest a category; P3 Category changes by vote |
-| WORK-A3-F3 Attach drawings and documents | A customer can attach plans, Spare Arch drawings, building consent documents and specifications. | next | P1 Document attachments and viewer; P2 Spare Arch drawing links; P3 Building consent details; P4 Does it need consent? |
+| WORK-A3-F3 Attach drawings and documents | A customer can attach plans, Spare Construct drawings, building consent documents and specifications. | next | P1 Document attachments and viewer; P2 Spare Construct drawing links; P3 Building consent details; P4 Does it need consent? |
 | WORK-A3-F4 Help with scoping | A customer can see a rough price range and a checklist of what to ask before posting. | next | P1 Price ranges from past jobs; P2 Scoping checklists; P3 Licensed work notice |
 | WORK-A3-F5 Choose who sees the job | A customer can send a job to all matching workers, to a shortlist, or straight to one worker they know. | core | P1 Open, invited or direct; P2 Invite by link |
 | WORK-A3-F6 Manage a posted job | A customer can edit, pause, close or repost a job and see who has responded. | core | P1 Job states and history; P2 Customer job page; P3 Close stale jobs |
@@ -156,7 +156,7 @@ A customer describes what they need once, with photos, drawings, address, timing
 | WORK-A3-F2-P2 | **Suggest a category**: Suggests a category from the description for the customer to confirm, using a model run at cost. | library | medium | WORK-A3-F2-P1 (Category tree), KIT-A17-F6-P2 (Co-op AI at cost) |  |
 | WORK-A3-F2-P3 | **Category changes by vote**: New or changed categories are proposed and voted on by members. | service | small | KIT-A12-F4-P1 (Results to settings), WORK-A3-F2-P1 (Category tree) |  |
 | WORK-A3-F3-P1 | **Document attachments and viewer**: Attaches PDFs and images and views them on any device. | interface | medium | engine-pdf, KIT-A15-F7-P1 (File uploads) |  |
-| WORK-A3-F3-P2 | **Spare Arch drawing links**: Links a Spare Arch drawing set through Spare Arch's public command API, never a code dependency or the AI channel. | integration | medium | KIT-A16-F1-P1 (Command API), WORK-A19-F1-P1 (Work command schemas) |  |
+| WORK-A3-F3-P2 | **Spare Construct drawing links**: Links a Spare Construct drawing set through Spare Construct's public command API, never a code dependency or the AI channel. | integration | medium | KIT-A16-F1-P1 (Command API), WORK-A19-F1-P1 (Work command schemas) |  |
 | WORK-A3-F3-P3 | **Building consent details**: Records the consent number, the council and the consent documents on the job. | data | small | WORK-A3-F1-P1 (Job data model) |  |
 | WORK-A3-F3-P4 | **Does it need consent?**: Plain guidance on whether work needs a building consent or is exempt under Schedule 1 of the Building Act, including the small stand-alone dwelling exemption, with a link to the council. | legal | medium | WORK-A3-F2-P1 (Category tree) |  |
 | WORK-A3-F4-P1 | **Price ranges from past jobs**: Price ranges by trade and region from finished jobs, published as open data only for groups large enough that no customer or worker can be identified. | library | medium | WORK-A3-F1-P1 (Job data model), KIT-A5-F4-P1 (Order steps) |  |
@@ -292,7 +292,7 @@ Workers quote for free; customers compare quotes, ask questions and accept one. 
 | WORK-A7-F4 Compare and accept quotes | A customer can compare quotes line by line, ask questions, and accept one. | core | P1 Quote comparison; P2 Accept or decline; P3 Quote to agreement |
 | WORK-A7-F5 Revise a quote | A worker can revise a quote before it is accepted, and the customer sees exactly what changed. | core | P1 Quote versions |
 | WORK-A7-F6 Quote templates | A worker can save quote templates for jobs they do often. | next | P1 Templates |
-| WORK-A7-F7 Price from drawings | A worker can price straight from quantities in a Spare Arch drawing set attached to the job. | later | P1 Read quantities; P2 Quantities to price book |
+| WORK-A7-F7 Price from drawings | A worker can price straight from quantities in a Spare Construct drawing set attached to the job. | later | P1 Read quantities; P2 Quantities to price book |
 | WORK-A7-F8 Charge-up jobs | A trade can work on time and materials, with a rate card, time on site, materials receipts with the markup shown, and an optional cap. | core | P1 Rate card; P2 Time on site; P3 Materials with receipts; P4 Not-to-exceed cap |
 
 ### Parts for WORK-A7
@@ -314,7 +314,7 @@ Workers quote for free; customers compare quotes, ask questions and accept one. 
 | WORK-A7-F4-P3 | **Quote to agreement**: Turns the accepted quote into a written agreement with stages. | library | medium | WORK-A7-F1-P2 (Quote data model), WORK-A8-F1-P1 (Agreement document), WORK-A8-F2-P1 (Stage model) |  |
 | WORK-A7-F5-P1 | **Quote versions**: Keeps every version and shows changes between them. | interface | small | WORK-A7-F1-P2 (Quote data model), kit-sync |  |
 | WORK-A7-F6-P1 | **Templates**: Saves a quote as a template and starts new quotes from it. | library | small | WORK-A7-F1-P2 (Quote data model), WORK-A7-F1-P4 (Price book) |  |
-| WORK-A7-F7-P1 | **Read quantities**: Reads quantities from attached drawings through Spare Arch's public command API. | integration | large | KIT-A16-F1-P1 (Command API), WORK-A19-F1-P1 (Work command schemas) |  |
+| WORK-A7-F7-P1 | **Read quantities**: Reads quantities from attached drawings through Spare Construct's public command API. | integration | large | KIT-A16-F1-P1 (Command API), WORK-A19-F1-P1 (Work command schemas) |  |
 | WORK-A7-F7-P2 | **Quantities to price book**: Matches quantities to price book items to start a quote. | library | medium | WORK-A7-F1-P4 (Price book) |  |
 | WORK-A7-F8-P1 | **Rate card**: Hourly rates, call-out charge and materials markup, shown to the customer before they agree. | data | small | WORK-A7-F1-P4 (Price book) |  |
 | WORK-A7-F8-P2 | **Time on site**: Records time on site with start and stop, or entered after, with notes, as operations the customer can see; hourly remote work uses the same records. | library | medium | kit-ops, WORK-A10-F2-P1 (Site visit booking) |  |
@@ -729,7 +729,7 @@ Spare Work is the services layer for the other programs, and everything a person
 | WORK-A19-F2 AI access | A member can let an AI agent post jobs, write quotes or track stages, with their permission. | core | P1 Spare Work MCP server; P2 Agent permissions; P3 Agent quote limits; P4 Stranger content is data; P5 Agent activity with undo |
 | WORK-A19-F3 Maintenance from Spare Rent | A landlord or tenant can raise a maintenance job in Spare Rent that becomes a Spare Work job. | core | P1 Job intake from other programs; P2 Who approves and pays |
 | WORK-A19-F4 Services for Spare Home | A seller or buyer can book photographers, inspectors, valuers, lawyers and licensed agents from Spare Home, checked and rated once in one shared catalogue. | core | P1 Home's services in the shared catalogue; P2 One check and one reputation |
-| WORK-A19-F5 Tender a Spare Arch design | A designer can send a Spare Arch project out to trades for quotes. | later | P1 Tender package |
+| WORK-A19-F5 Tender a Spare Construct design | A designer can send a Spare Construct project out to trades for quotes. | later | P1 Tender package |
 | WORK-A19-F6 Plugins | A worker or business can add plugins for their trade, such as a roofing calculator. | later | P1 Plugin slots |
 | WORK-A19-F7 Local services for other programs | A host in Spare Stay or a mover in Spare Home can find cleaners, co-hosts and movers in the same shared catalogue, so local services have one home. | next | P1 Local services in the shared catalogue |
 
@@ -749,7 +749,7 @@ Spare Work is the services layer for the other programs, and everything a person
 | WORK-A19-F3-P2 | **Who approves and pays**: Maps a Spare Rent repair onto job roles: the landlord pays, the property manager approves and discloses any commission or markup, the tenant is the site contact, and both confirm completion. | library | medium | WORK-A3-F1-P5 (Roles on a job), WORK-A10-F6-P3 (Sign-off by more than one party), WORK-A3-F1-P6 (Disclosed commissions and markups) |  |
 | WORK-A19-F4-P1 | **Home's services in the shared catalogue**: Spare Work's photographers, lawyers, valuers, inspectors and licensed agents are entries in the shared service catalogue, which Spare Home books through the kit's marketplace engine without calling Spare Work. | integration | small | WORK-A6-F1-P3 (Entries in the shared service catalogue), kit-market |  |
 | WORK-A19-F4-P2 | **One check and one reputation**: Each pro's licence checks and reviews live in the kit's register checks and ratings, so Spare Home shows the same results without checking or rating them again. | integration | small | KIT-A2-F2-P1 (Public register checks), KIT-A9-F1-P1 (Ratings service), WORK-A2-F3-P2 (Registers each trade needs), WORK-A14-F1-P1 (Review model) |  |
-| WORK-A19-F5-P1 | **Tender package**: Builds a job with drawings, schedules and quantities from a Spare Arch project through Spare Arch's public command API. | integration | large | KIT-A16-F1-P1 (Command API), WORK-A19-F1-P1 (Work command schemas) |  |
+| WORK-A19-F5-P1 | **Tender package**: Builds a job with drawings, schedules and quantities from a Spare Construct project through Spare Construct's public command API. | integration | large | KIT-A16-F1-P1 (Command API), WORK-A19-F1-P1 (Work command schemas) |  |
 | WORK-A19-F6-P1 | **Plugin slots**: Places in quotes, jobs and profiles where sandboxed plugins can add tools. | library | medium | kit-plugin |  |
 | WORK-A19-F7-P1 | **Local services in the shared catalogue**: Offers cleaning, turnovers, co-hosting and moving as entries in the shared service catalogue, which Spare Stay and Spare Home book through the kit's marketplace engine, instead of separate service listings in those apps. | integration | small | WORK-A6-F1-P3 (Entries in the shared service catalogue), WORK-A3-F7-P1 (Recurring jobs), kit-market |  |
 

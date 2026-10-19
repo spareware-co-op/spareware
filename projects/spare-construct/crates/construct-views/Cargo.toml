@@ -1,0 +1,12 @@
+[package]
+name = "construct-views"
+version = "0.0.0"
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+construct-model = { path = "../construct-model" }
+construct-elements = { path = "../construct-elements" }
+engine-draw2d = { path = "../../../engines/crates/engine-draw2d" }
+engine-text = { path = "../../../engines/crates/engine-text" }
+engine-pdf = { path = "../../../engines/crates/engine-pdf" }

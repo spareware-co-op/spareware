@@ -46,7 +46,7 @@
 
 /* One light colour per app: --app is the fill for its mark, primary buttons and active items
    (ink text on it), --app-strong is for thin borders and icons, --app-tint for quiet backgrounds. */
-[data-app="arch"]   { --app: #8EC5FF; --app-strong: #1F5FA8; --app-tint: #EAF4FF; }
+[data-app="construct"] { --app: #8EC5FF; --app-strong: #1F5FA8; --app-tint: #EAF4FF; }
 [data-app="studio"] { --app: #C4B2FF; --app-strong: #5B3FB8; --app-tint: #F3EFFF; }
 [data-app="social"] { --app: #FFB27A; --app-strong: #9E4A14; --app-tint: #FFF1E6; }
 [data-app="ride"]   { --app: #7FD8CF; --app-strong: #13756B; --app-tint: #E8F8F6; }
@@ -572,7 +572,7 @@ const rng = (key, min, max, unit = '') => `<input type="range" min="${min}" max=
 const SPARE = [
   ['office', 'Spare Office', 'Of', 'Documents, sheets, slides and mail'],
   ['studio', 'Spare Studio', 'St', 'Photos, design and video'],
-  ['arch', 'Spare Arch', 'Ar', 'Building design'],
+  ['construct', 'Spare Construct', 'Co', 'Building design'],
   ['social', 'Spare Social', 'So', 'Video, photos, posts and groups'],
   ['ride', 'Spare Ride', 'Ri', 'Rides, drivers paid fairly'],
   ['food', 'Spare Food', 'Fd', 'Food delivery at cost'],
@@ -1267,7 +1267,7 @@ const WINP = [
   ['Tide tables', 'good', 'Runs well. Double-click its installer.', 'Yes'],
   ['School timetable program', 'good', 'Runs well. Printing tested.', 'Yes'],
   ['Payroll program', 'vm', 'Needs Windows itself. Runs in a Windows virtual machine with your own Windows licence.', 'Yes'],
-  ['Revit (building design)', 'no', 'Does not run. Spare Arch replaces it (being built).', 'No'],
+  ['Revit (building design)', 'no', 'Does not run. Spare Construct replaces it (being built).', 'No'],
   ['Microsoft 365 desktop apps', 'spare', 'Use Spare Office. Your files open as they are.', 'Yes'],
   ['Adobe photo and design apps', 'spare', 'Older versions run with fixes. Spare Studio replaces them (being built).', 'Partly'],
   ['Label printer tool', 'fix', 'Runs with a fix recipe. The printer also works with no driver.', 'No'],

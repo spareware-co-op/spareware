@@ -43,7 +43,7 @@ flowchart TB
   end
   subgraph DESIGN["`**Design tools**`"]
     direction LR
-    ARCH["`**Spare Arch**
+    CONSTRUCT["`**Spare Construct**
 *replaces Revit*`"]
     STUDIO["`**Spare Studio**
 *replaces Adobe*`"]
@@ -80,7 +80,7 @@ flowchart TB
 | Program | Replaces | Stage | Architecture |
 | --- | --- | --- | --- |
 | Shared kit | The parts every platform rebuilds | Mapping | [Map](ARCHITECTURE.md) · [Work board](projects/kit/STATUS.md) |
-| Spare Arch | Revit, and the add-ins people buy for it | Mapping | [Map](projects/spare-arch/ARCHITECTURE.md) · [Work board](projects/spare-arch/STATUS.md) |
+| Spare Construct | Revit, and the add-ins people buy for it | Mapping | [Map](projects/spare-construct/ARCHITECTURE.md) · [Work board](projects/spare-construct/STATUS.md) |
 | Spare Studio (working name) | Adobe's apps: Photoshop, Illustrator, InDesign, Premiere, After Effects, Lightroom, Acrobat and more | Mapping | [Map](projects/spare-studio/ARCHITECTURE.md) · [Work board](projects/spare-studio/STATUS.md) |
 | Spare Social (working name) | TikTok, YouTube, Instagram and Facebook, together | Mapping | [Map](projects/spare-social/ARCHITECTURE.md) · [Work board](projects/spare-social/STATUS.md) |
 | Spare Office | Microsoft 365: Word, Excel, PowerPoint, Outlook, Teams, OneNote, OneDrive | Mapping | [Map](projects/spare-office/ARCHITECTURE.md) · [Work board](projects/spare-office/STATUS.md) |

@@ -29,7 +29,7 @@ Our products use their own names. Adobe's names appear only to say what each rep
 | Spare Screens | XD (maintenance mode), Figma | Penpot (MPL-2.0), ArtCraft FigCraft (Apache-2.0) |
 | Spare Animate | Animate, Character Animator | OpenToonz (BSD-3-Clause); Synfig to learn from only (GPL) |
 | Spare Paint | Fresco | Shares Spare Photo's brush engine |
-| Spare 3D | Substance 3D, Dimension | Shares Spare Arch's renderer; Blender's Cycles renderer is Apache-2.0 |
+| Spare 3D | Substance 3D, Dimension | Shares Spare Construct's renderer; Blender's Cycles renderer is Apache-2.0 |
 | Spare Library | Bridge | Shared asset browser in the studio core |
 
 "Learn from only" means reading how a GPL project solves a problem and writing our own code in our own words, never copying it, per the legal rules.
@@ -39,13 +39,13 @@ Our products use their own names. Adobe's names appear only to say what each rep
 | Part | What it does | Shared with |
 | --- | --- | --- |
 | Document model | Layers, groups, masks, artboards and pages; every edit is a non-destructive operation, so undo, history, sync and AI use one path | Same operation log as the shared kit |
-| GPU image pipeline | Filters, adjustments, blending, raw development and video effects as GPU compute (wgpu) | Spare Arch's renderer |
+| GPU image pipeline | Filters, adjustments, blending, raw development and video effects as GPU compute (wgpu) | Spare Construct's renderer |
 | Colour management | ICC profiles for print and photo, OpenColorIO (BSD-3) for video and film | All studio apps |
-| Vector engine | Paths, strokes, 2D booleans, text on paths | Spare Arch's 2D drawing engine |
-| Text engine | Font loading, shaping, line breaking, paragraph and page layout | Spare Layout, Spare Draw, Spare Arch annotation |
+| Vector engine | Paths, strokes, 2D booleans, text on paths | Spare Construct's 2D drawing engine |
+| Text engine | Font loading, shaping, line breaking, paragraph and page layout | Spare Layout, Spare Draw, Spare Construct annotation |
 | Media engine | Decoding and encoding video and audio, playback, timelines | Spare Video, Spare Motion, Spare Sound |
 | Asset library | Shared browser for files, fonts, colours, brushes and templates | All studio apps |
-| PDF engine | Reading, editing and writing PDF to ISO 32000-2 | Spare PDF, print output, Spare Arch sheets |
+| PDF engine | Reading, editing and writing PDF to ISO 32000-2 | Spare PDF, print output, Spare Construct sheets |
 | AI tools | Optional; members choose their model; run at cost; never trained on members' work without consent | All |
 
 ## File formats

@@ -1,0 +1,9 @@
+[package]
+name = "construct-interop"
+version = "0.0.0"
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+construct-model = { path = "../construct-model" }
+construct-elements = { path = "../construct-elements" }

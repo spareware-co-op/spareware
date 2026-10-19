@@ -916,7 +916,7 @@
       {
        "id": "RENT-A3-F2-P4",
        "name": "Floor plans",
-       "what": "A simple floor plan from the plan drawer shared with Spare Home (HOME-A3-F3-P1, HOME-A3-F3-P2) and Spare Stay, built once on the 2D drawing engine and proposed for the kit; plans can come from Spare Arch.",
+       "what": "A simple floor plan from the plan drawer shared with Spare Home (HOME-A3-F3-P1, HOME-A3-F3-P2) and Spare Stay, built once on the 2D drawing engine and proposed for the kit; plans can come from Spare Construct.",
        "kind": "library",
        "size": "medium",
        "depends_on": [

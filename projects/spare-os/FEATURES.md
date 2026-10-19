@@ -337,7 +337,7 @@ What is on the PC from the first start: every Spare app with one login, a privat
 
 | Feature | What a person can do | Priority | Parts |
 | --- | --- | --- | --- |
-| OS-A8-F1 Use every Spare app straight away | Open Spare Office, Spare Studio, Spare Arch, Spare Social and the marketplace apps from the start menu, already signed in. | core | OS-A8-F1-P1 to P4 |
+| OS-A8-F1 Use every Spare app straight away | Open Spare Office, Spare Studio, Spare Construct, Spare Social and the marketplace apps from the start menu, already signed in. | core | OS-A8-F1-P1 to P4 |
 | OS-A8-F2 Browse the web | Use a fast, private web browser that keeps up with security fixes. | core | OS-A8-F2-P1 to P3 |
 | OS-A8-F3 Use the small everyday apps | Use a text editor, calculator, clocks and alarms, image viewer, PDF viewer, camera and sound recorder. | core | OS-A8-F3-P1 to P3 |
 | OS-A8-F4 Play music and video | Play common music and video files, and discs where the law allows it. | core | OS-A8-F4-P1 |
@@ -450,7 +450,7 @@ Keeping people's existing programs working: a tested list of what runs, Windows 
 | OS-A10-F5-P1 | **Android container research**: Compares open ways to run Android apps on Linux, their hardware needs and the app store terms that apply. | research | medium | OS-A1-F1-P1 |  |
 | OS-A10-F5-P2 | **Android app support**: Ships the chosen Android container as an optional, sandboxed add-on, with any Android app store offered under the policy for software that is not open source. | integration | large | OS-A10-F5-P1, OS-A12-F4-P1, OS-A21-F1-P4 |  |
 | OS-A10-F6-P1 | **Switching blockers list**: Anonymous, opt-in counts of programs and services that blocked people's moves, such as exam device checks and device-compliance rules, from move-across scans and reports. | data | medium | OS-A4-F5-P1 |  |
-| OS-A10-F6-P2 | **Replacement roadmap**: Public list linking each top blocker to a Spare program or open project that replaces it, starting with Spare Arch for Revit. | data | small | OS-A10-F6-P1 |  |
+| OS-A10-F6-P2 | **Replacement roadmap**: Public list linking each top blocker to a Spare program or open project that replaces it, starting with Spare Construct for Revit. | data | small | OS-A10-F6-P1 |  |
 | OS-A10-F6-P3 | **NCEA digital exam approval**: Works with NZQA so Spare OS PCs pass the device check for NCEA digital exams, since its published device guidance names Chrome OS, Windows and Mac and does not mention Linux (current table unverified). | research | medium | OS-A8-F2-P1 |  |
 
 ## OS-A11 Updates, backup and recovery

@@ -46,7 +46,7 @@
 
 /* One light colour per app: --app is the fill for its mark, primary buttons and active items
    (ink text on it), --app-strong is for thin borders and icons, --app-tint for quiet backgrounds. */
-[data-app="arch"]   { --app: #8EC5FF; --app-strong: #1F5FA8; --app-tint: #EAF4FF; }
+[data-app="construct"] { --app: #8EC5FF; --app-strong: #1F5FA8; --app-tint: #EAF4FF; }
 [data-app="studio"] { --app: #C4B2FF; --app-strong: #5B3FB8; --app-tint: #F3EFFF; }
 [data-app="social"] { --app: #FFB27A; --app-strong: #9E4A14; --app-tint: #FFF1E6; }
 [data-app="ride"]   { --app: #7FD8CF; --app-strong: #13756B; --app-tint: #E8F8F6; }
@@ -1025,7 +1025,7 @@ SCR.listing = id => {
   </div>
   <div class="sect" id="sec-plan"><div class="sect-head"><span class="label">${l.plan === 'S' ? 'Site plan' : 'Floor plan'}</span>${l.plan === 'S' ? '' : `<button class="chip" data-act="sizes" aria-pressed="${S.sizes}">${ic('ruler')}Room sizes</button>`}</div>
     <div class="plan">${planSVG(l.plan)}</div>
-    <p class="small muted mt">${l.plan === 'S' ? 'From the survey plan.' : `Drawn from a Spare Arch model, to scale. Floor area ${l.floor} m². Check sizes yourself before you rely on them.`}</p>
+    <p class="small muted mt">${l.plan === 'S' ? 'From the survey plan.' : `Drawn from a Spare Construct model, to scale. Floor area ${l.floor} m². Check sizes yourself before you rely on them.`}</p>
   </div>
   <div class="sect" id="sec-docs"><div class="sect-head"><span class="label">Documents</span><span class="small muted">The seller sees who opened what</span></div>
     <ul class="list">${docs}</ul>
@@ -1321,8 +1321,8 @@ SELL.listing = () => {
   </div>
   <div class="sect"><span class="label">Floor plan</span>
     <div class="plan">${planSVG('A')}</div>
-    <p class="small muted mt">From your Spare Arch model "Rātā Grove as built", version ${S.planV || 3}. You drew it, so it is yours to use.</p>
-    <div class="btns mt"><button class="btn small" data-act="plan" data-v="arch">${ic('plan')}Update from Spare Arch</button><button class="btn small" data-act="plan" data-v="draw">${ic('draw')}Draw in the app</button><button class="btn small" data-act="plan" data-v="upload">${ic('plus')}Upload a plan</button></div>
+    <p class="small muted mt">From your Spare Construct model "Rātā Grove as built", version ${S.planV || 3}. You drew it, so it is yours to use.</p>
+    <div class="btns mt"><button class="btn small" data-act="plan" data-v="construct">${ic('plan')}Update from Spare Construct</button><button class="btn small" data-act="plan" data-v="draw">${ic('draw')}Draw in the app</button><button class="btn small" data-act="plan" data-v="upload">${ic('plus')}Upload a plan</button></div>
   </div>
   <div class="sect"><span class="label">What stays with the house</span>
     <div class="chips wrap">${S.chattels.map((c, i) => `<button class="chip" data-act="chattel" data-i="${i}" aria-pressed="${c[1]}">${c[1] ? ic('check') : ic('plus')}${esc(c[0])}</button>`).join('')}</div>
@@ -1476,7 +1476,7 @@ SELL.guide = () => {
 /* Costs: full cost, recent sales, the fee and where it goes */
 function costCalc() {
   const p = S.saleprice;
-  const items = [['At-cost listing fee', 120], ['Photographer', 450], ['Floor plan from Spare Arch', 0], ['{council}', 345], ['{insp}', 650], ['Signboard with a QR code', 280], ['Brochures and handouts', 90]];
+  const items = [['At-cost listing fee', 120], ['Photographer', 450], ['Floor plan from Spare Construct', 0], ['{council}', 345], ['{insp}', 650], ['Signboard with a QR code', 280], ['Brochures and handouts', 90]];
   const law = 1650 + 250, own = items.reduce((a, b) => a + b[1], 0), comm = p * P().comm, tax = comm * P().rate;
   const spare = own + law, agent = comm + tax + law;
   return `<table class="tbl">${items.map(i => `<tr><td>${i[0]}</td><td class="num">${money(i[1])}</td></tr>`).join('')}<tr><td>{Law}, fixed price and costs</td><td class="num">${money(law)}</td></tr><tr><th>Selling with Spare Home</th><th class="num">${money(spare)}</th></tr></table>
@@ -1908,7 +1908,7 @@ Object.assign(ACT, {
   },
   peditset: el => { byId('L1').photos[+el.dataset.i].edit = el.dataset.v; closeSheet(); render(); toast('Labelled. Buyers see it on the photo.'); },
   addphoto: () => { const l = byId('L1'); l.photos.push({ k: 'garden', cap: 'Back garden', own: 'Taken by you. Yours to use.' }); l.changes.push(['Mon 19 Oct', '1 photo added']); render(); toast('Photo added at the end. Move it up to change the order.'); },
-  plan: el => { if (el.dataset.v === 'arch') { S.planV = (S.planV || 3) + 1; render(); } toast({ arch: `Floor plan updated from Spare Arch, version ${S.planV}. Room sizes come from the model.`, draw: 'The plan drawing tool opens here: tap corners to draw walls.', upload: 'Pick a plan file, then say who drew it, so we know you may use it.' }[el.dataset.v]); },
+  plan: el => { if (el.dataset.v === 'construct') { S.planV = (S.planV || 3) + 1; render(); } toast({ construct: `Floor plan updated from Spare Construct, version ${S.planV}. Room sizes come from the model.`, draw: 'The plan drawing tool opens here: tap corners to draw walls.', upload: 'Pick a plan file, then say who drew it, so we know you may use it.' }[el.dataset.v]); },
   chattel: el => { const c = S.chattels[+el.dataset.i]; c[1] = !c[1]; render(); },
   vshare: el => {
     const d = S.vault[+el.dataset.i];
@@ -2067,7 +2067,7 @@ Object.assign(ACT, {
   install: () => sheet('Install on this phone', `<p>Add Spare Home to your home screen from your browser's menu. It is under 2 MB, opens like an app and can send notifications.</p><button class="btn primary block mt2" data-act="toastclose" data-msg="Added to your home screen.">${ic('phone')}Add to home screen</button>`),
   notif: el => { const a = S.notify[el.dataset.k], c = +el.dataset.c; a[c] = a[c] ? 0 : 1; render(); },
   fmt: el => { S.fmt = el.dataset.v; render(); },
-  export: () => sheet('Export everything', `<ul class="list small">${[['Listing and its history', 'JSON'], ['Photos, 6 files', 'JPEG, 38 MB'], ['Floor plan', 'SVG and the Spare Arch model'], ['Documents, 10 files', 'PDF'], ['Messages', 'JSON'], ['Offers register and log', 'CSV'], ['Payments and invoices', 'CSV and PDF']].map(([a, b]) => `<li class="item">${ic('doc', 'app')}<span class="grow">${a}</span><span class="muted">${b}</span></li>`).join('')}</ul>
+  export: () => sheet('Export everything', `<ul class="list small">${[['Listing and its history', 'JSON'], ['Photos, 6 files', 'JPEG, 38 MB'], ['Floor plan', 'SVG and the Spare Construct model'], ['Documents, 10 files', 'PDF'], ['Messages', 'JSON'], ['Offers register and log', 'CSV'], ['Payments and invoices', 'CSV and PDF']].map(([a, b]) => `<li class="item">${ic('doc', 'app')}<span class="grow">${a}</span><span class="muted">${b}</span></li>`).join('')}</ul>
       <button class="btn primary block mt2" data-act="toastclose" data-msg="Export ready: spare-home-export-2026-10-19.zip, 61 MB.">${ic('download')}Make the export</button>`),
   privacy: () => sheet('What we keep about you', `<table class="tbl"><tr><th>What</th><th>Why</th><th>How long</th></tr>${[['Identity check result', 'To stop fake listings', 'As long as the law requires'], ['Listing and its history', 'Buyers rely on it', 'Until you delete it'], ['Messages', 'Safety and disputes', '2 years after the sale'], ['Payments and invoices', 'Tax law', '{keep} years']].map(r => `<tr>${r.map(x => `<td>${x}</td>`).join('')}</tr>`).join('')}</table>
       <p class="small muted mt">We never sell your data. Visitors' and neighbours' details stay private.</p>
