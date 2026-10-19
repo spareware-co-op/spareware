@@ -1,0 +1,3870 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>What Spareware costs to run</title>
+<meta name="description" content="Every Spareware app charges only what it costs to run. Estimates of that cost per ride, order, booking or member, and how the at-cost fee falls as each app grows.">
+<style>
+/* copied from design/tokens.css */
+/* Spareware design tokens: the one shared look for every Spareware app.
+   Read design/DESIGN.md first. An app sets data-app="<name>" on <html> to get its own colour.
+   Text is always ink on light colours; white text appears only on Spareware red. */
+:root {
+  /* Spareware (the co-op) */
+  --spare-red: #C8102E;
+  --spare-red-hover: #A80D26;
+  --spare-red-tint: #FCE9EC;
+
+  /* Neutrals */
+  --ink: #1A1A1A;
+  --ink-2: #595959;
+  --ink-3: #8A8A8A;
+  --page: #FAF8F5;
+  --panel: #FFFFFF;
+  --panel-alt: #F7F6F3;
+  --sink: #F1EFEA;
+  --hairline: #E5E5E3;
+  --rule: #C9C9C9;
+
+  /* States (always paired: strong for borders and icons, tint for backgrounds) */
+  --danger: #B91C1C;  --danger-tint: #FDE8E8;
+  --success: #15803D; --success-tint: #E3F6E8;
+  --info: #1D4ED8;    --info-tint: #E3ECFD;
+
+  /* Type and shape */
+  --font-ui: system-ui, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  --text: 13px;
+  --radius: 3px;
+  --space: 8px;
+
+  /* The current app's colours (default: Spareware itself) */
+  --app: var(--spare-red-tint);
+  --app-strong: var(--spare-red);
+  --app-tint: var(--spare-red-tint);
+}
+
+/* One light colour per app: --app is the fill for its mark, primary buttons and active items
+   (ink text on it), --app-strong is for thin borders and icons, --app-tint for quiet backgrounds. */
+[data-app="arch"]   { --app: #8EC5FF; --app-strong: #1F5FA8; --app-tint: #EAF4FF; }
+[data-app="studio"] { --app: #C4B2FF; --app-strong: #5B3FB8; --app-tint: #F3EFFF; }
+[data-app="social"] { --app: #FFB27A; --app-strong: #9E4A14; --app-tint: #FFF1E6; }
+[data-app="ride"]   { --app: #7FD8CF; --app-strong: #13756B; --app-tint: #E8F8F6; }
+[data-app="food"]   { --app: #A9DE8A; --app-strong: #3E7C1F; --app-tint: #EFF9E8; }
+[data-app="stay"]   { --app: #80D4F0; --app-strong: #11708F; --app-tint: #E7F7FD; }
+[data-app="home"]   { --app: #E8C99A; --app-strong: #8A5A1C; --app-tint: #FBF4EA; }
+[data-app="rent"]   { --app: #F2B8E0; --app-strong: #94306F; --app-tint: #FCEEF8; }
+[data-app="work"]   { --app: #B8C4D6; --app-strong: #3D4F6B; --app-tint: #EEF1F6; }
+[data-app="market"] { --app: #D8E36A; --app-strong: #66700F; --app-tint: #F7F9DF; }
+[data-app="office"] { --app: #A9B6FF; --app-strong: #3A47A8; --app-tint: #EEF0FF; }
+[data-app="os"]     { --app: #CDD1D6; --app-strong: #4A525C; --app-tint: #F2F3F5; }
+</style>
+<style>
+/* Page styles. They use only the tokens above. This is a co-op page, so it is Spareware red;
+   the chart takes the picked app's own colour through data-app. */
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--page); color: var(--ink); font-family: var(--font-ui); font-size: var(--text); line-height: 1.5; overflow-x: hidden; }
+a { color: var(--spare-red); }
+:focus-visible { outline: 2px solid var(--spare-red); outline-offset: 2px; }
+[hidden] { display: none !important; }
+p { margin: 0; }
+h2 { margin: 0; font-size: 14px; font-weight: 700; }
+ul { margin: 0; padding-left: 18px; }
+li + li { margin-top: 4px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 calc(var(--space) * 3); }
+.label { display: block; margin: 0; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); }
+.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--ink-2); }
+.small { font-size: 12px; }
+.btn { display: inline-flex; align-items: center; justify-content: center; min-height: 34px; padding: 0 calc(var(--space) * 1.5); border: 1px solid transparent; border-radius: var(--radius); font: inherit; font-weight: 600; line-height: 1.2; text-decoration: none; white-space: nowrap; cursor: pointer; }
+.btn-quiet { background: var(--panel); color: var(--ink-2); border-color: var(--rule); }
+.btn-quiet:hover { color: var(--ink); border-color: var(--ink-2); }
+
+/* Intro */
+.intro { background: var(--panel); border-bottom: 1px solid var(--hairline); padding: calc(var(--space) * 3) 0 calc(var(--space) * 3); }
+.intro-top { display: flex; align-items: center; gap: calc(var(--space) * 2); flex-wrap: wrap; margin-bottom: calc(var(--space) * 2.5); }
+.brand { display: flex; align-items: center; gap: calc(var(--space) * 1.5); font-size: 22px; font-weight: 700; letter-spacing: -.01em; color: var(--ink); text-decoration: none; }
+.brand svg { width: 44px; height: 44px; flex: none; }
+.intro-top .btn { margin-left: auto; }
+h1 { margin: 0 0 var(--space); font-size: 20px; font-weight: 700; letter-spacing: -.01em; }
+.lead { max-width: 44em; margin: 0 0 calc(var(--space) * 2); font-size: 15px; color: var(--ink-2); }
+.cur { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space) calc(var(--space) * 1.5); }
+.cur .note-tax { color: var(--ink-2); font-size: 12px; }
+
+/* Segmented control */
+.seg { display: inline-flex; flex: none; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--panel); overflow: hidden; }
+.seg button { min-height: 32px; padding: 0 calc(var(--space) * 1.25); border: 0; background: var(--panel); color: var(--ink-2); font: inherit; font-family: var(--font-mono); cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--rule); }
+.seg button:hover { color: var(--ink); }
+.seg button[aria-pressed="true"] { background: var(--spare-red); color: var(--panel); font-weight: 600; }
+.seg button:focus-visible { outline-offset: -3px; }
+
+/* Panels */
+main { padding: calc(var(--space) * 3) 0 calc(var(--space) * 5); }
+.panel { background: var(--panel); border: 1px solid var(--hairline); border-radius: var(--radius); padding: calc(var(--space) * 2); min-width: 0; }
+.panel-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px var(--space); margin-bottom: calc(var(--space) * 1.5); }
+.panel-head p { color: var(--ink-2); flex: 1 0 100%; }
+.grid { display: grid; gap: calc(var(--space) * 2); margin-top: calc(var(--space) * 2); }
+@media (min-width: 960px) {
+  .grid-chart { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+  .grid-two { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+
+/* App picker */
+.apps { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr)); gap: var(--space); margin: 0 0 calc(var(--space) * 2); padding: 0; list-style: none; }
+.apps li + li { margin: 0; }
+.app-btn { display: flex; align-items: center; gap: var(--space); width: 100%; min-height: 40px; padding: 4px calc(var(--space) * 1.25); border: 1px solid var(--hairline); border-radius: var(--radius); background: var(--panel); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.app-btn:hover { border-color: var(--rule); }
+.app-btn[aria-pressed="true"] { background: var(--app-tint); border-color: var(--app-strong); box-shadow: inset 3px 0 0 var(--app); }
+.app-btn:focus-visible { outline: 2px solid var(--app-strong); outline-offset: 1px; }
+.mark { width: 12px; height: 12px; flex: none; border-radius: 1px; background: var(--app); }
+.app-btn b { display: block; font-weight: 600; line-height: 1.25; }
+.app-btn span.u { display: block; color: var(--ink-2); font-size: 11px; line-height: 1.25; }
+
+/* Slider */
+.vol-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px var(--space); }
+.vol-value { font-size: 18px; font-weight: 600; }
+.vol-value .num { font-size: 20px; }
+input[type="range"] { width: 100%; margin: calc(var(--space) * 1.25) 0 2px; accent-color: var(--spare-red); height: 28px; }
+.ticks { display: flex; justify-content: space-between; color: var(--ink-3); font-size: 11px; font-family: var(--font-mono); }
+.ticks span { width: 0; display: flex; justify-content: center; white-space: nowrap; }
+.ticks span:first-child { justify-content: flex-start; }
+.ticks span:last-child { justify-content: flex-end; }
+.ticks i { font-style: normal; }
+.ticks .s { display: none; }
+
+/* Readout */
+.headline { font-size: 15px; line-height: 1.45; }
+.headline b { font-weight: 700; }
+.big { display: flex; flex-wrap: wrap; gap: var(--space) calc(var(--space) * 3); margin: calc(var(--space) * 1.5) 0; padding: calc(var(--space) * 1.5) 0; border-top: 1px solid var(--hairline); border-bottom: 1px solid var(--hairline); }
+.big div { min-width: 0; }
+.big .v { display: block; font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 22px; font-weight: 600; line-height: 1.2; }
+.big .r { display: block; color: var(--ink-2); font-size: 12px; }
+table { width: 100%; border-collapse: collapse; }
+caption { text-align: left; color: var(--ink-2); font-size: 12px; padding-bottom: 4px; }
+th, td { padding: 5px 4px; border-bottom: 1px solid var(--hairline); text-align: right; vertical-align: top; }
+th:first-child, td:first-child { text-align: left; padding-left: 0; }
+th:last-child, td:last-child { padding-right: 0; }
+thead th { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); }
+td.num { white-space: nowrap; }
+tr.total td { font-weight: 700; border-bottom: 0; }
+.sw { display: inline-block; width: 10px; height: 10px; margin-right: 6px; border-radius: 1px; background: var(--app); vertical-align: -1px; }
+
+/* Notes */
+.note { margin: calc(var(--space) * 1.5) 0 0; padding: var(--space) calc(var(--space) * 1.5); background: var(--spare-red-tint); border-left: 3px solid var(--spare-red); }
+.note-app { background: var(--app-tint); border-left-color: var(--app); }
+
+/* Charts */
+.chart { width: 100%; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart text { font-family: var(--font-mono); font-size: 11px; fill: var(--ink-2); }
+.chart .grid-line { stroke: var(--hairline); stroke-width: 1; }
+.chart .axis { stroke: var(--rule); stroke-width: 1; }
+.chart .band { fill: var(--app-tint); stroke: var(--app); stroke-width: 1; }
+.chart .mid { fill: none; stroke: var(--app-strong); stroke-width: 2; }
+.chart .pay { stroke: var(--ink-2); stroke-width: 1.5; stroke-dasharray: 6 4; }
+.chart .marker { stroke: var(--ink-3); stroke-width: 1; stroke-dasharray: 2 3; }
+.chart .dot { fill: var(--app-strong); stroke: var(--panel); stroke-width: 2; }
+.chart .dot-label { fill: var(--ink); font-weight: 600; }
+.chart .seg-label { fill: var(--ink); font-weight: 600; }
+.chart .spare { fill: var(--spare-red); }
+.chart .inc { fill: var(--rule); }
+.chart .inc-ext { fill: var(--sink); stroke: var(--rule); stroke-width: 1; }
+.chart .whisker { stroke: var(--ink); stroke-width: 1.5; }
+.chart .bar-label { fill: var(--ink); font-family: var(--font-ui); font-size: 12px; }
+.chart .bar-label tspan.b { font-weight: 700; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px calc(var(--space) * 2); margin-top: var(--space); color: var(--ink-2); font-size: 12px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.key { display: inline-block; flex: none; width: 14px; height: 10px; border-radius: 1px; }
+.key-band { background: var(--app-tint); border: 1px solid var(--app); }
+.key-mid { height: 0; border-top: 2px solid var(--app-strong); }
+.key-pay { height: 0; border-top: 2px dashed var(--ink-2); }
+.seg-fill { fill: var(--app); }
+.dollar + .dollar { margin-top: calc(var(--space) * 2); padding-top: calc(var(--space) * 2); border-top: 1px solid var(--hairline); }
+.dollar-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px var(--space); margin-bottom: 6px; }
+.dollar-head b { font-weight: 600; }
+.parts { display: flex; flex-wrap: wrap; gap: 2px calc(var(--space) * 1.75); margin: 6px 0 0; padding: 0; list-style: none; font-size: 12px; color: var(--ink-2); }
+.parts li + li { margin: 0; }
+.parts li { display: inline-flex; align-items: center; white-space: nowrap; }
+.parts .num { color: var(--ink); margin-left: 4px; }
+.cmp-text { margin-top: var(--space); color: var(--ink-2); }
+.empty { padding: calc(var(--space) * 3) var(--space); text-align: center; color: var(--ink-3); }
+
+/* Notes and sources */
+.notes h3 { margin: calc(var(--space) * 2) 0 6px; font-size: var(--text); font-weight: 700; }
+.notes h3:first-child { margin-top: 0; }
+.notes ul { color: var(--ink-2); }
+.notes li { overflow-wrap: anywhere; }
+details > summary { cursor: pointer; font-weight: 600; margin-top: calc(var(--space) * 2); }
+.links { display: flex; flex-wrap: wrap; gap: var(--space); margin-top: calc(var(--space) * 2); }
+
+/* Footer */
+.foot { background: var(--panel); border-top: 1px solid var(--hairline); padding: calc(var(--space) * 3) 0; color: var(--ink-2); }
+.foot .wrap { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space) calc(var(--space) * 4); }
+.foot a { font-weight: 600; }
+
+@media (max-width: 640px) {
+  .wrap { padding: 0 calc(var(--space) * 2); }
+  .intro { padding: calc(var(--space) * 2) 0; }
+  .brand { font-size: 18px; }
+  .brand svg { width: 36px; height: 36px; }
+  h1 { font-size: 18px; }
+  .lead { font-size: 14px; }
+  .cur .seg { width: 100%; }
+  .cur .seg button { flex: 1; padding: 0 2px; }
+  .panel { padding: calc(var(--space) * 1.5); }
+  .apps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .big .v { font-size: 19px; }
+  .ticks .l { display: none; }
+  .ticks .s { display: inline; }
+  th, td { padding: 5px 2px; }
+}
+</style>
+</head>
+<body>
+<header class="intro">
+  <div class="wrap">
+    <div class="intro-top">
+      <a class="brand" href="./index.html">
+        <svg viewBox="0 0 200 200" role="img" aria-label="Spareware" focusable="false">
+          <circle cx="100" cy="100" r="92" style="fill: var(--spare-red)"/>
+          <path d="M140 66 C140 50 124 42 100 42 C72 42 58 54 58 72 C58 92 76 98 100 101 C124 104 142 110 142 130 C142 148 126 158 100 158 C74 158 60 150 58 134" fill="none" style="stroke: var(--panel)" stroke-width="24" stroke-linecap="round"/>
+        </svg>
+        Spareware
+      </a>
+      <a class="btn btn-quiet" href="./index.html">All programs</a>
+    </div>
+    <h1>What it costs to run</h1>
+    <p class="lead">Every Spareware app charges only what it costs to run. Pick an app to see our estimate of that cost, and how it falls as more people use it.</p>
+    <div class="cur">
+      <div class="seg" role="group" aria-label="Currency" id="cur"></div>
+      <p class="note-tax">Prices exclude sales tax. Each country adds its own: GST, VAT or sales tax.</p>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="panel" aria-labelledby="pick-title">
+    <div class="panel-head"><h2 id="pick-title">Pick an app</h2></div>
+    <ul class="apps" id="apps"></ul>
+    <div class="vol-head">
+      <label class="label" for="vol" id="vol-label">How busy the app is</label>
+      <p class="vol-value"><span class="num" id="vol-num">10,000</span> <span id="vol-unit">rides a month</span></p>
+    </div>
+    <input type="range" id="vol" min="2" max="6" step="0.01" value="4" aria-describedby="vol-ticks">
+    <div class="ticks" id="vol-ticks" aria-hidden="true"><span><i class="l">100</i><i class="s">100</i></span><span><i class="l">1,000</i><i class="s">1k</i></span><span><i class="l">10,000</i><i class="s">10k</i></span><span><i class="l">100,000</i><i class="s">100k</i></span><span><i class="l">1 million</i><i class="s">1M</i></span></div>
+  </section>
+
+  <div class="grid grid-chart">
+    <section class="panel" aria-labelledby="fee-title" id="fee-panel">
+      <div class="panel-head">
+        <h2 id="fee-title">The at-cost fee falls as the app grows</h2>
+        <p id="fee-sub"></p>
+      </div>
+      <div class="chart" id="fee-chart"></div>
+      <div class="legend" id="fee-legend"></div>
+    </section>
+    <section class="panel" aria-labelledby="now-title" id="now-panel">
+      <div class="panel-head"><h2 id="now-title">At this size</h2></div>
+      <p class="headline" id="headline"></p>
+      <div class="big" id="big"></div>
+      <table id="breakdown"></table>
+      <p class="note note-app" id="pilot-note" hidden></p>
+    </section>
+  </div>
+
+  <div class="grid grid-two">
+    <section class="panel" aria-labelledby="cmp-title">
+      <div class="panel-head">
+        <h2 id="cmp-title">Compared with what the big platform takes</h2>
+        <p id="cmp-sub"></p>
+      </div>
+      <div class="chart" id="cmp-chart"></div>
+      <p class="cmp-text small" id="cmp-text"></p>
+    </section>
+    <section class="panel" aria-labelledby="dollar-title">
+      <div class="panel-head">
+        <h2 id="dollar-title">Where each dollar of the fee goes</h2>
+        <p id="dollar-sub"></p>
+      </div>
+      <div id="dollars"></div>
+    </section>
+  </div>
+
+  <section class="panel notes" aria-labelledby="notes-title" style="margin-top: calc(var(--space) * 2)">
+    <div class="panel-head"><h2 id="notes-title">These are estimates</h2></div>
+    <div id="notes"></div>
+  </section>
+  <noscript><p class="note">Turn on JavaScript to see the cost charts. The figures are also in the K06 note on GitHub.</p></noscript>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="./index.html">Back to all Spareware programs</a></p>
+    <p>Piece K06, shared kit. Estimate of 19 Oct 2026, not a quote.</p>
+  </div>
+</footer>
+
+<script type="application/json" id="model">{
+ "title": "Spareware cost model",
+ "piece": "K06",
+ "date": "2026-10-19",
+ "status": "Estimate for planning. Built from price research done on 2026-10-18 and checked independently; every checker correction is applied. Not a quote.",
+ "about": "What each Spareware app would cost to run, per ride, order, booking, job, sale or active member, and how the at-cost fee falls as more people use it.",
+ "currency": {
+  "display": "USD",
+  "excludes_tax": true,
+  "tax_note": "All figures exclude sales tax. Each country adds its own (GST, VAT or sales tax). The research added 15% NZ GST; it is removed here.",
+  "symbols": {
+   "USD": "US$",
+   "NZD": "NZ$",
+   "AUD": "A$",
+   "GBP": "£",
+   "EUR": "€",
+   "CAD": "C$"
+  }
+ },
+ "exchange_rates": {
+  "source": "European Central Bank euro reference rates, read through the Frankfurter API",
+  "source_url": "https://api.frankfurter.dev/v1/2026-10-16?from=USD&to=NZD,AUD,GBP,EUR,CAD",
+  "date": "2026-10-16",
+  "opened": "2026-10-19 (still the latest published)",
+  "per_usd": {
+   "USD": 1.0,
+   "NZD": 1.7656,
+   "AUD": 1.437,
+   "GBP": 0.74989,
+   "EUR": 0.88865,
+   "CAD": 1.4161
+  },
+  "note": "Fixed rates for the currency switch. Prices first priced in EUR, AUD or NZD were converted to USD at these rates. The research used rates of 16 to 18 Oct 2026 (US$1 = NZ$1.7656 to 1.7694), so its NZ$ figures differ from these by under 0.3%."
+ },
+ "method": {
+  "fee_formula": "At-cost fee per unit = fixed monthly cost / monthly volume + variable cost per unit. Fixed = servers and services (the app's own servers plus the shared kit's common items) + the people layer. The card or bank fee is passed through on top, per transaction.",
+  "low": "Cheapest researched setup with light use: small rented servers (OVHcloud Sydney or Auckland, Hetzner Europe), Cloudflare R2 storage, open-source maps, search and chat run on our own servers, Amazon SES email.",
+  "high": "Dearest researched setup with heavy use: big cloud with a New Zealand region (AWS Auckland or Azure New Zealand North) and paid services (Mapbox, Algolia, Stream Chat, Postmark, Twilio, Sumsub, AWS MediaConvert and Rekognition).",
+  "mid": "For each part (servers and services, maps, messages, ID checks and moderation, people), the geometric mean of its low and high values, the usual middle for estimates that span a 10 to 1,000 times range. A part that costs nothing in the low case also costs nothing in the middle case (the middle uses the free or self-hosted option there). Not a priced setup. Card fees use their own middle rule.",
+  "segments": {
+   "servers": "Servers and services: servers, storage, bandwidth, sign-in, monitoring, backups, bookkeeping software, company filing, app store fee",
+   "maps": "Maps: map tiles, routing and address search",
+   "messages": "Messages: text messages, email, chat (push notifications are free)",
+   "checks": "ID checks and moderation",
+   "people": "People: a small team for support, moderation, bookkeeping and ledger sign-off",
+   "payment": "Card or bank fee, passed through at cost"
+  },
+  "pilot_size": {
+   "transactions_a_month": 10000,
+   "members": 5000,
+   "note": "The research sized servers and the team for a first deployment of 1,000 to 5,000 members and up to about 10,000 jobs a month. Above that the team must grow; how fast is not researched, so the people line is too low at large volumes. Server capacity per user is not load tested."
+  },
+  "assumptions": [
+   "Example amounts chosen for illustration, not prices: ride US$15, food order US$25, stay booking US$300, work job US$500, market sale US$40, rent US$300 a week.",
+   "List apps (Stay, Home, Rent, Work, Market): 10 active users a month for each booking, listing, letting, job or sale, so the browsing costs of people who look but do not buy are counted. Our assumption, not researched.",
+   "Spare Rent: the one-off letting cost is spread over a 12-month tenancy. Our assumption.",
+   "Each app is costed as if it runs on its own deployment. Ride and Food can share one, and so can the five list apps, which lowers each app's fixed cost.",
+   "Member apps (Social, Office, Arch, Studio, OS) carry a per-member server share sized for capacity as well as the small fixed set of servers, so the fixed servers are counted twice at small scale. This errs high.",
+   "Free tiers are ignored, as in the research, except where noted. They make a small first deployment cheaper than shown.",
+   "Driver, courier, host and trade ID checks are one-off per worker, not per job, and are left out of the per-job figures (US$0 to US$1.35 each).",
+   "Paid map APIs are not in the planned design (the kit map uses open map data). If the apps used them, a ride would cost US$0.02 to US$0.29 more with Mapbox or US$0.06 to US$0.67 more with Google Maps Platform (research workings)."
+  ],
+  "not_included": [
+   "Legal advice, insurance and licences (for example a passenger service licence)",
+   "Outside accountant and audit",
+   "Outside security review before launch (no public price found)",
+   "Domain names",
+   "Card disputes (NZ$25 each at Stripe) and refunds",
+   "Currency conversion margins on paying offshore suppliers",
+   "Growth of the team beyond a pilot",
+   "Optional AI use in the design tools (bring your own model costs nothing; light use US$0.30, heavy use US$30 a member a month on Claude API prices)"
+  ]
+ },
+ "kit": {
+  "what": "Common items every app deployment needs, on top of its own servers.",
+  "items": [
+   {
+    "item": "Off-site backup copy, 100 GB on Backblaze B2 (US$6.95 per TB)",
+    "segment": "servers",
+    "low_usd": 0.695,
+    "high_usd": 0.695,
+    "source_url": "https://www.backblaze.com/cloud-storage/pricing"
+   },
+   {
+    "item": "Bookkeeping software (example: Xero NZ Ignite NZ$37, Grow NZ$89, ex GST)",
+    "segment": "servers",
+    "low_usd": 20.956,
+    "high_usd": 50.4078,
+    "source_url": "https://www.xero.com/nz/pricing-plans/"
+   },
+   {
+    "item": "Company annual filing (example: NZ Companies Office, NZ$57.20 a year incl GST)",
+    "segment": "servers",
+    "low_usd": 2.3476,
+    "high_usd": 2.3476,
+    "source_url": "https://companies-register.companiesoffice.govt.nz/help-centre/managing-your-online-account/schedule-of-fees/"
+   },
+   {
+    "item": "Monitoring and error tracking (low: self-hosted and free plans; high: Grafana Pro US$19 + Sentry Team US$29)",
+    "segment": "servers",
+    "low_usd": 0.0,
+    "high_usd": 48.0,
+    "source_url": "https://grafana.com/pricing/"
+   },
+   {
+    "item": "DDoS protection and firewall (low: Cloudflare Free; high: Cloudflare Pro US$25)",
+    "segment": "servers",
+    "low_usd": 0.0,
+    "high_usd": 25.0,
+    "source_url": "https://www.cloudflare.com/plans/network-cdn/"
+   },
+   {
+    "item": "Sign-in server (low: self-hosted Keycloak; high: Zitadel Pro US$100)",
+    "segment": "servers",
+    "low_usd": 0.0,
+    "high_usd": 100.0,
+    "source_url": "https://zitadel.com/pricing"
+   },
+   {
+    "item": "Apple Developer Program, US$99 a year (only if a native iPhone app ships)",
+    "segment": "servers",
+    "low_usd": 8.25,
+    "high_usd": 8.25,
+    "source_url": "https://developer.apple.com/programs/"
+   },
+   {
+    "item": "Text message sender number (Twilio international number, US$1.15)",
+    "segment": "messages",
+    "low_usd": 1.15,
+    "high_usd": 1.15,
+    "source_url": "https://www.twilio.com/en-us/sms/pricing/nz"
+   },
+   {
+    "item": "Email plan (high only: Postmark Basic US$15)",
+    "segment": "messages",
+    "low_usd": 0.0,
+    "high_usd": 15.0,
+    "source_url": "https://postmarkapp.com/pricing"
+   }
+  ],
+  "fixed_usd_month": {
+   "servers": {
+    "low": 32.2487,
+    "high": 234.7
+   },
+   "maps": {
+    "low": 0.0,
+    "high": 0.0
+   },
+   "messages": {
+    "low": 1.15,
+    "high": 16.15
+   },
+   "checks": {
+    "low": 0.0,
+    "high": 0.0
+   }
+  },
+  "account_messages_per_member_usd": {
+   "low": 0.0004,
+   "high": 0.228,
+   "workings": "Low: 4 emails on Amazon SES at US$0.0001. High: 10 emails at Postmark's US$0.0018 overage + 2 sign-in texts at Twilio's US$0.105. Added to member apps only."
+  },
+  "original_nzd_incl_gst": {
+   "fixed_low_hetzner_singapore": 320.85,
+   "fixed_nz_hosted_catalyst": 547.64,
+   "fixed_high_azure": 961.2,
+   "fixed_high_checker": "948.85, plus about 14.77 for two public IPv4 addresses",
+   "per_member_variable": [
+    0.002,
+    0.66
+   ],
+   "per_member_high_checker": "about 0.62 to 0.63"
+  }
+ },
+ "people": {
+  "what": "A small team for support, moderation, bookkeeping and signing off the cost ledger. Legal and outside accountant time not included.",
+  "example_country": "New Zealand",
+  "monthly_usd": {
+   "low": 661.94,
+   "mid": 1383.68,
+   "high": 2892.36
+  },
+  "monthly_nzd": {
+   "low": 1168.72,
+   "high": 5106.75
+  },
+  "workings": {
+   "low": "10 hours a week (support 5, moderation 3, bookkeeping and ledger 2) x 52/12 weeks x NZ$23.95 adult minimum wage (from 1 April 2026) = NZ$1,037.83, x 1.1261 on-costs = NZ$1,168.71",
+   "high": "35 hours a week (support 20, moderation 10, accounting 5) x 52/12 x NZ$29.90 Living Wage (2026/27) = NZ$4,534.83, x 1.1261 = NZ$5,106.75",
+   "on_costs": "8% pay-as-you-go holiday pay, then KiwiSaver 3.5%, ACC work levy 0.69% and Working Safer levy 0.08% on pay including holiday pay: 1.08 x 1.0427 = 1.1261 (the checker's correction; the research used 12.19%)",
+   "mid": "Geometric mean of low and high"
+  },
+  "original_nzd": {
+   "low": 1164.35,
+   "high": 5087.63
+  },
+  "sources": [
+   "https://www.employment.govt.nz/news-and-updates/minimum-wage-is-increasing-on-1-april-2026",
+   "https://www.livingwage.org.nz/",
+   "https://www.ird.govt.nz/kiwisaver-changes",
+   "https://www.employment.govt.nz/pay-and-hours/pay-and-wages/leave-and-holiday-pay/pay-as-you-go-annual-holiday-payments",
+   "https://acc.co.nz/levy-results"
+  ],
+  "unverified": [
+   "ACC work levy 0.69% and Working Safer levy 0.08%: the ACC page could not be read; figures from search excerpts",
+   "Team size is a planning assumption for a pilot"
+  ]
+ },
+ "payment": {
+  "what": "Card and bank fees are passed through at cost, per transaction. They usually make up most of the at-cost fee. They differ by country and provider; the example is Stripe in New Zealand.",
+  "example_provider": "Stripe (Connect for marketplaces)",
+  "example_country": "New Zealand",
+  "rules": {
+   "low": "Domestic card 2.65% + NZ$0.30 (standard pricing page); Stripe handles Connect pricing, so no payout fees",
+   "mid": "Domestic card 2.7% + NZ$0.30 (Connect pricing page, marketplaces where Stripe handles pricing)",
+   "high": "International card 3.7% + NZ$0.30 (Connect page), plus 2% currency conversion where the guest pays in another currency (Stay), plus platform-priced Connect fees: 0.25% + NZ$0.25 per payout and NZ$2 per active payee a month"
+  },
+  "fixed_part_usd": 0.169914,
+  "rent": "Rent can go by bank direct debit instead: NZ BECS through Stripe, 1% + NZ$0.40 capped at NZ$4.00 a debit; or by plain bank transfer that the app only records.",
+  "sources": [
+   "https://stripe.com/en-nz/pricing",
+   "https://stripe.com/en-nz/connect/pricing"
+  ],
+  "unverified": [
+   "Which card rate a Connect marketplace pays: the standard page shows 2.65% + NZ$0.30 and the Connect page 2.7% + NZ$0.30 (both open on 2026-10-18). Ask Stripe.",
+   "Whether Stripe's 0.25% funds-routing fee stacks with the per-payout fee when the platform handles pricing; not included",
+   "Whether GST or VAT is charged on Stripe's fees (moot here, since all figures exclude tax)"
+  ]
+ },
+ "apps": [
+  {
+   "id": "ride",
+   "name": "Spare Ride",
+   "family": "move",
+   "kind": "transaction",
+   "unit": "ride",
+   "unit_plural": "rides",
+   "volume_label": "rides a month",
+   "example_amount_usd": 15,
+   "example_label": "a US$15 ride",
+   "payment": {
+    "kind": "card",
+    "amount_usd": 15,
+    "low": 0.567414,
+    "mid": 0.574914,
+    "high": 0.819052,
+    "rule": {
+     "low": "Domestic card 2.65% + NZ$0.30 (Stripe NZ standard pricing page); Stripe handles Connect pricing, so no payout fees",
+     "mid": "Domestic card 2.7% + NZ$0.30 (Stripe NZ Connect pricing page); no payout fees",
+     "high": "International card 3.7% + NZ$0.30 (Connect page), plus platform-priced payouts: 0.25% + NZ$0.25 per payout (one payout per 5 rides) and NZ$2 per active driver a month (40 rides)"
+    }
+   },
+   "incumbent": {
+    "name": "Uber",
+    "cut_pct_low": 28,
+    "cut_pct_high": 28,
+    "text": "Uber's NZ driver guide illustrates a 28% service fee on the fare, plus a separate rider fee (not counted here)",
+    "status": "unverified: the guide is an illustration; the current real rate is unverified",
+    "source_url": "https://www.uber.com/nz/en/blog/understanding-earnings-post-1-april-2024/"
+   },
+   "pilot_volume": 10000,
+   "sources": [
+    "https://ca.api.ovh.com/1.0/order/catalog/public/vps?ovhSubsidiary=AU",
+    "https://aws.amazon.com/ec2/pricing/on-demand/",
+    "https://developers.cloudflare.com/r2/pricing/",
+    "https://www.clicksend.com/nz/pricing/nz/",
+    "https://www.twilio.com/en-us/sms/pricing/nz",
+    "https://aws.amazon.com/ses/pricing/",
+    "https://postmarkapp.com/pricing",
+    "https://github.com/Project-OSRM/osrm-backend/wiki/Disk-and-Memory-Requirements"
+   ],
+   "original_nzd_incl_gst": {
+    "variable_low": 0.0062,
+    "variable_low_checker": 0.0074,
+    "variable_high": 0.1147,
+    "fixed_shared_with_food": {
+     "ovh_sydney": 80.22,
+     "hetzner_singapore": 356.29,
+     "catalyst_nz": 751.32,
+     "aws_auckland": 981.77
+    },
+    "card_fee_on_nzd25_ride": [
+     0.9625,
+     1.3512
+    ],
+    "card_fee_checker_connect_rates": [
+     0.975,
+     1.225,
+     1.4088
+    ]
+   },
+   "fixed_usd": {
+    "servers": {
+     "low": 53.1363,
+     "mid": 169.643,
+     "high": 541.602
+    },
+    "maps": {
+     "low": 10.3688,
+     "mid": 39.8789,
+     "high": 153.376
+    },
+    "messages": {
+     "low": 1.15,
+     "mid": 4.30958,
+     "high": 16.15
+    },
+    "checks": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 0.0
+    }
+   },
+   "variable_usd": {
+    "servers": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 0.000456
+    },
+    "maps": {
+     "low": 7.2e-05,
+     "mid": 0.00019718,
+     "high": 0.00054
+    },
+    "messages": {
+     "low": 0.00357474,
+     "mid": 0.0141613,
+     "high": 0.0561
+    },
+    "checks": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 0.0
+    }
+   },
+   "fixed_tech_total_usd": {
+    "low": 64.6551,
+    "mid": 213.831,
+    "high": 711.128
+   },
+   "variable_total_usd": {
+    "low": 0.00364674,
+    "mid": 0.0143585,
+    "high": 0.057096
+   },
+   "fee_table_usd": [
+    {
+     "volume": 100,
+     "low": {
+      "servers_and_services": 0.6502,
+      "people": 6.619,
+      "running_total": 7.27,
+      "with_payment_fee": 7.837
+     },
+     "mid": {
+      "servers_and_services": 2.153,
+      "people": 13.84,
+      "running_total": 15.99,
+      "with_payment_fee": 16.56
+     },
+     "high": {
+      "servers_and_services": 7.168,
+      "people": 28.92,
+      "running_total": 36.09,
+      "with_payment_fee": 36.91
+     }
+    },
+    {
+     "volume": 1000,
+     "low": {
+      "servers_and_services": 0.0683,
+      "people": 0.6619,
+      "running_total": 0.7302,
+      "with_payment_fee": 1.298
+     },
+     "mid": {
+      "servers_and_services": 0.2282,
+      "people": 1.384,
+      "running_total": 1.612,
+      "with_payment_fee": 2.187
+     },
+     "high": {
+      "servers_and_services": 0.7682,
+      "people": 2.892,
+      "running_total": 3.661,
+      "with_payment_fee": 4.48
+     }
+    },
+    {
+     "volume": 10000,
+     "low": {
+      "servers_and_services": 0.01011,
+      "people": 0.06619,
+      "running_total": 0.07631,
+      "with_payment_fee": 0.6437
+     },
+     "mid": {
+      "servers_and_services": 0.03574,
+      "people": 0.1384,
+      "running_total": 0.1741,
+      "with_payment_fee": 0.749
+     },
+     "high": {
+      "servers_and_services": 0.1282,
+      "people": 0.2892,
+      "running_total": 0.4174,
+      "with_payment_fee": 1.236
+     }
+    },
+    {
+     "volume": 100000,
+     "low": {
+      "servers_and_services": 0.004293,
+      "people": 0.006619,
+      "running_total": 0.01091,
+      "with_payment_fee": 0.5783
+     },
+     "mid": {
+      "servers_and_services": 0.0165,
+      "people": 0.01384,
+      "running_total": 0.03033,
+      "with_payment_fee": 0.6052
+     },
+     "high": {
+      "servers_and_services": 0.06421,
+      "people": 0.02892,
+      "running_total": 0.09313,
+      "with_payment_fee": 0.9122
+     }
+    },
+    {
+     "volume": 1000000,
+     "low": {
+      "servers_and_services": 0.003711,
+      "people": 0.0006619,
+      "running_total": 0.004373,
+      "with_payment_fee": 0.5718
+     },
+     "mid": {
+      "servers_and_services": 0.01457,
+      "people": 0.001384,
+      "running_total": 0.01596,
+      "with_payment_fee": 0.5909
+     },
+     "high": {
+      "servers_and_services": 0.05781,
+      "people": 0.002892,
+      "running_total": 0.0607,
+      "with_payment_fee": 0.8798
+     }
+    }
+   ],
+   "volume_for_fixed_under_10_cents": {
+    "low": 7300,
+    "mid": 16000,
+    "high": 36000
+   },
+   "volume_for_tech_fixed_under_10_cents": {
+    "low": 600,
+    "mid": 2100,
+    "high": 7100
+   }
+  },
+  {
+   "id": "food",
+   "name": "Spare Food",
+   "family": "move",
+   "kind": "transaction",
+   "unit": "order",
+   "unit_plural": "orders",
+   "volume_label": "orders a month",
+   "example_amount_usd": 25,
+   "example_label": "a US$25 order",
+   "payment": {
+    "kind": "card",
+    "amount_usd": 25,
+    "low": 0.832414,
+    "mid": 0.844914,
+    "high": 1.21405,
+    "rule": {
+     "low": "Domestic card 2.65% + NZ$0.30 (Stripe NZ standard pricing page); Stripe handles Connect pricing, so no payout fees",
+     "mid": "Domestic card 2.7% + NZ$0.30 (Stripe NZ Connect pricing page); no payout fees",
+     "high": "International card 3.7% + NZ$0.30 (Connect page), plus platform-priced payouts: 0.25% + NZ$0.25 per payout (one payout per 5 orders) and NZ$2 per active courier a month (40 orders)"
+    }
+   },
+   "incumbent": {
+    "name": "Uber Eats",
+    "cut_pct_low": 30,
+    "cut_pct_high": 30,
+    "text": "Uber Eats takes 30% from the restaurant when Uber delivers (16% with the restaurant's own staff, 8% for pickup); customer fees not counted",
+    "status": "researched 2026-10-18",
+    "source_url": "https://merchants.ubereats.com/nz/en/pricing/"
+   },
+   "pilot_volume": 10000,
+   "sources": [
+    "https://ca.api.ovh.com/1.0/order/catalog/public/vps?ovhSubsidiary=AU",
+    "https://aws.amazon.com/ec2/pricing/on-demand/",
+    "https://developers.cloudflare.com/r2/pricing/",
+    "https://www.clicksend.com/nz/pricing/nz/",
+    "https://www.twilio.com/en-us/sms/pricing/nz",
+    "https://aws.amazon.com/ses/pricing/",
+    "https://postmarkapp.com/pricing",
+    "https://github.com/Project-OSRM/osrm-backend/wiki/Disk-and-Memory-Requirements"
+   ],
+   "original_nzd_incl_gst": {
+    "variable_low": 0.0062,
+    "variable_low_checker": 0.0074,
+    "variable_high": 0.115,
+    "card_fee_on_nzd45_order": [
+     1.4925,
+     2.1562
+    ],
+    "card_fee_checker_connect_rates": [
+     1.515,
+     1.965,
+     2.2598
+    ]
+   },
+   "fixed_usd": {
+    "servers": {
+     "low": 53.1363,
+     "mid": 169.643,
+     "high": 541.602
+    },
+    "maps": {
+     "low": 10.3688,
+     "mid": 39.8789,
+     "high": 153.376
+    },
+    "messages": {
+     "low": 1.15,
+     "mid": 4.30958,
+     "high": 16.15
+    },
+    "checks": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 0.0
+    }
+   },
+   "variable_usd": {
+    "servers": {
+     "low": 7.2e-06,
+     "mid": 6.41804e-05,
+     "high": 0.0005721
+    },
+    "maps": {
+     "low": 7.2e-05,
+     "mid": 0.00019718,
+     "high": 0.00054
+    },
+    "messages": {
+     "low": 0.00357474,
+     "mid": 0.0141613,
+     "high": 0.0561
+    },
+    "checks": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 0.0
+    }
+   },
+   "fixed_tech_total_usd": {
+    "low": 64.6551,
+    "mid": 213.831,
+    "high": 711.128
+   },
+   "variable_total_usd": {
+    "low": 0.00365394,
+    "mid": 0.0144227,
+    "high": 0.0572121
+   },
+   "fee_table_usd": [
+    {
+     "volume": 100,
+     "low": {
+      "servers_and_services": 0.6502,
+      "people": 6.619,
+      "running_total": 7.27,
+      "with_payment_fee": 8.102
+     },
+     "mid": {
+      "servers_and_services": 2.153,
+      "people": 13.84,
+      "running_total": 15.99,
+      "with_payment_fee": 16.83
+     },
+     "high": {
+      "servers_and_services": 7.168,
+      "people": 28.92,
+      "running_total": 36.09,
+      "with_payment_fee": 37.31
+     }
+    },
+    {
+     "volume": 1000,
+     "low": {
+      "servers_and_services": 0.06831,
+      "people": 0.6619,
+      "running_total": 0.7302,
+      "with_payment_fee": 1.563
+     },
+     "mid": {
+      "servers_and_services": 0.2283,
+      "people": 1.384,
+      "running_total": 1.612,
+      "with_payment_fee": 2.457
+     },
+     "high": {
+      "servers_and_services": 0.7683,
+      "people": 2.892,
+      "running_total": 3.661,
+      "with_payment_fee": 4.875
+     }
+    },
+    {
+     "volume": 10000,
+     "low": {
+      "servers_and_services": 0.01012,
+      "people": 0.06619,
+      "running_total": 0.07631,
+      "with_payment_fee": 0.9087
+     },
+     "mid": {
+      "servers_and_services": 0.03581,
+      "people": 0.1384,
+      "running_total": 0.1742,
+      "with_payment_fee": 1.019
+     },
+     "high": {
+      "servers_and_services": 0.1283,
+      "people": 0.2892,
+      "running_total": 0.4176,
+      "with_payment_fee": 1.632
+     }
+    },
+    {
+     "volume": 100000,
+     "low": {
+      "servers_and_services": 0.0043,
+      "people": 0.006619,
+      "running_total": 0.01092,
+      "with_payment_fee": 0.8433
+     },
+     "mid": {
+      "servers_and_services": 0.01656,
+      "people": 0.01384,
+      "running_total": 0.0304,
+      "with_payment_fee": 0.8753
+     },
+     "high": {
+      "servers_and_services": 0.06432,
+      "people": 0.02892,
+      "running_total": 0.09325,
+      "with_payment_fee": 1.307
+     }
+    },
+    {
+     "volume": 1000000,
+     "low": {
+      "servers_and_services": 0.003719,
+      "people": 0.0006619,
+      "running_total": 0.004381,
+      "with_payment_fee": 0.8368
+     },
+     "mid": {
+      "servers_and_services": 0.01464,
+      "people": 0.001384,
+      "running_total": 0.01602,
+      "with_payment_fee": 0.8609
+     },
+     "high": {
+      "servers_and_services": 0.05792,
+      "people": 0.002892,
+      "running_total": 0.06082,
+      "with_payment_fee": 1.275
+     }
+    }
+   ],
+   "volume_for_fixed_under_10_cents": {
+    "low": 7300,
+    "mid": 16000,
+    "high": 36000
+   },
+   "volume_for_tech_fixed_under_10_cents": {
+    "low": 600,
+    "mid": 2100,
+    "high": 7100
+   }
+  },
+  {
+   "id": "stay",
+   "name": "Spare Stay",
+   "family": "list",
+   "kind": "transaction",
+   "unit": "booking",
+   "unit_plural": "bookings",
+   "volume_label": "bookings a month",
+   "example_amount_usd": 300,
+   "example_label": "a US$300 booking",
+   "payment": {
+    "kind": "card",
+    "amount_usd": 300,
+    "low": 8.11991,
+    "mid": 8.26991,
+    "high": 19.2943,
+    "rule": {
+     "low": "Domestic card 2.65% + NZ$0.30 (Stripe NZ standard pricing page); Stripe handles Connect pricing, so no payout fees",
+     "mid": "Domestic card 2.7% + NZ$0.30 (Stripe NZ Connect pricing page); no payout fees",
+     "high": "International card 3.7% + 2% currency conversion + NZ$0.30, plus platform-priced payout 0.25% + NZ$0.25 and NZ$2 for the host's active account that month"
+    }
+   },
+   "incumbent": {
+    "name": "Airbnb",
+    "cut_pct_low": 15.5,
+    "cut_pct_high": 15.5,
+    "text": "Most Airbnb hosts on the single-fee structure pay 15.5%",
+    "status": "researched 2026-10-18",
+    "source_url": "https://www.airbnb.co.nz/help/article/1857"
+   },
+   "pilot_volume": 10000,
+   "sources": [
+    "https://ca.api.ovh.com/1.0/order/catalog/public/vps?ovhSubsidiary=AU",
+    "https://prices.azure.com/api/retail/prices?$filter=armRegionName eq 'newzealandnorth' and serviceName eq 'Virtual Machines'",
+    "https://developers.cloudflare.com/r2/pricing/",
+    "https://developers.cloudflare.com/images/pricing/",
+    "https://www.mapbox.com/pricing",
+    "https://www.algolia.com/pricing",
+    "https://getstream.io/chat/pricing/",
+    "https://www.clicksend.com/nz/pricing/?region=nz&currency=nzd",
+    "https://www.twilio.com/en-us/sms/pricing/nz",
+    "https://aws.amazon.com/ses/pricing/",
+    "https://postmarkapp.com/pricing",
+    "https://didit.me/pricing",
+    "https://sumsub.com/pricing/",
+    "https://developers.cloudflare.com/stream/pricing/"
+   ],
+   "original_nzd_incl_gst": {
+    "fixed_low_ovh": 37.68,
+    "fixed_low_checker_no_commitment": 43.34,
+    "fixed_nz_hosted_catalyst": 298.53,
+    "fixed_high_azure": 600.43,
+    "fixed_high_checker_before_stream_chat": 742.79,
+    "per_active_user": [
+     0.0011,
+     1.31
+    ],
+    "per_active_user_high_checker_free_tiers": 0.64,
+    "per_booking": [
+     0.13,
+     0.91
+    ],
+    "stripe_per_booking": [
+     8.25,
+     54.3
+    ]
+   },
+   "fixed_usd": {
+    "servers": {
+     "low": 53.5863,
+     "mid": 151.389,
+     "high": 427.698
+    },
+    "maps": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 0.0
+    },
+    "messages": {
+     "low": 1.15,
+     "mid": 24.3397,
+     "high": 515.15
+    },
+    "checks": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 149.0
+    }
+   },
+   "variable_usd": {
+    "servers": {
+     "low": 0.001503,
+     "mid": 0.0470311,
+     "high": 1.47168
+    },
+    "maps": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 1.5
+    },
+    "messages": {
+     "low": 0.0744948,
+     "mid": 0.479547,
+     "high": 3.087
+    },
+    "checks": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 0.0
+    }
+   },
+   "fixed_tech_total_usd": {
+    "low": 54.7363,
+    "mid": 175.729,
+    "high": 1091.85
+   },
+   "variable_total_usd": {
+    "low": 0.0759978,
+    "mid": 0.526578,
+    "high": 6.05868
+   },
+   "fee_table_usd": [
+    {
+     "volume": 100,
+     "low": {
+      "servers_and_services": 0.6234,
+      "people": 6.619,
+      "running_total": 7.243,
+      "with_payment_fee": 15.36
+     },
+     "mid": {
+      "servers_and_services": 2.284,
+      "people": 13.84,
+      "running_total": 16.12,
+      "with_payment_fee": 24.39
+     },
+     "high": {
+      "servers_and_services": 16.98,
+      "people": 28.92,
+      "running_total": 45.9,
+      "with_payment_fee": 65.2
+     }
+    },
+    {
+     "volume": 1000,
+     "low": {
+      "servers_and_services": 0.1307,
+      "people": 0.6619,
+      "running_total": 0.7927,
+      "with_payment_fee": 8.913
+     },
+     "mid": {
+      "servers_and_services": 0.7023,
+      "people": 1.384,
+      "running_total": 2.086,
+      "with_payment_fee": 10.36
+     },
+     "high": {
+      "servers_and_services": 7.151,
+      "people": 2.892,
+      "running_total": 10.04,
+      "with_payment_fee": 29.34
+     }
+    },
+    {
+     "volume": 10000,
+     "low": {
+      "servers_and_services": 0.08147,
+      "people": 0.06619,
+      "running_total": 0.1477,
+      "with_payment_fee": 8.268
+     },
+     "mid": {
+      "servers_and_services": 0.5442,
+      "people": 0.1384,
+      "running_total": 0.6825,
+      "with_payment_fee": 8.952
+     },
+     "high": {
+      "servers_and_services": 6.168,
+      "people": 0.2892,
+      "running_total": 6.457,
+      "with_payment_fee": 25.75
+     }
+    },
+    {
+     "volume": 100000,
+     "low": {
+      "servers_and_services": 0.07655,
+      "people": 0.006619,
+      "running_total": 0.08316,
+      "with_payment_fee": 8.203
+     },
+     "mid": {
+      "servers_and_services": 0.5283,
+      "people": 0.01384,
+      "running_total": 0.5422,
+      "with_payment_fee": 8.812
+     },
+     "high": {
+      "servers_and_services": 6.07,
+      "people": 0.02892,
+      "running_total": 6.099,
+      "with_payment_fee": 25.39
+     }
+    },
+    {
+     "volume": 1000000,
+     "low": {
+      "servers_and_services": 0.07605,
+      "people": 0.0006619,
+      "running_total": 0.07671,
+      "with_payment_fee": 8.197
+     },
+     "mid": {
+      "servers_and_services": 0.5268,
+      "people": 0.001384,
+      "running_total": 0.5281,
+      "with_payment_fee": 8.798
+     },
+     "high": {
+      "servers_and_services": 6.06,
+      "people": 0.002892,
+      "running_total": 6.063,
+      "with_payment_fee": 25.36
+     }
+    }
+   ],
+   "volume_for_fixed_under_10_cents": {
+    "low": 7200,
+    "mid": 15600,
+    "high": 39800
+   },
+   "volume_for_tech_fixed_under_10_cents": {
+    "low": 500,
+    "mid": 1800,
+    "high": 10900
+   }
+  },
+  {
+   "id": "home",
+   "name": "Spare Home",
+   "family": "list",
+   "kind": "transaction",
+   "unit": "listing",
+   "unit_plural": "listings",
+   "volume_label": "homes listed a month",
+   "example_amount_usd": null,
+   "example_label": "one home listed through to sale (3 months)",
+   "payment": {
+    "kind": "none",
+    "amount_usd": null,
+    "low": 0,
+    "mid": 0,
+    "high": 0,
+    "rule": {
+     "low": "No money held: deposits go through lawyers (design assumption that needs legal checking)",
+     "mid": "As low",
+     "high": "As low"
+    }
+   },
+   "incumbent": {
+    "name": "Agents",
+    "cut_pct_low": 3,
+    "cut_pct_high": 4,
+    "text": "Agents commonly charge 3 to 4% of the sale price plus GST, with minimums around NZ$11,000",
+    "status": "unverified (calculator sites)",
+    "source_url": "https://www.calculate.co.nz/flat-fee-vs-commission-calculator.php"
+   },
+   "pilot_volume": 10000,
+   "sources": [
+    "https://ca.api.ovh.com/1.0/order/catalog/public/vps?ovhSubsidiary=AU",
+    "https://prices.azure.com/api/retail/prices?$filter=armRegionName eq 'newzealandnorth' and serviceName eq 'Virtual Machines'",
+    "https://developers.cloudflare.com/r2/pricing/",
+    "https://developers.cloudflare.com/images/pricing/",
+    "https://www.mapbox.com/pricing",
+    "https://www.algolia.com/pricing",
+    "https://getstream.io/chat/pricing/",
+    "https://www.clicksend.com/nz/pricing/?region=nz&currency=nzd",
+    "https://www.twilio.com/en-us/sms/pricing/nz",
+    "https://aws.amazon.com/ses/pricing/",
+    "https://postmarkapp.com/pricing",
+    "https://didit.me/pricing",
+    "https://sumsub.com/pricing/",
+    "https://developers.cloudflare.com/stream/pricing/"
+   ],
+   "original_nzd_incl_gst": {
+    "fixed_low_ovh": 37.68,
+    "fixed_low_checker_no_commitment": 43.34,
+    "fixed_nz_hosted_catalyst": 298.53,
+    "fixed_high_azure": 600.43,
+    "fixed_high_checker_before_stream_chat": 742.79,
+    "per_active_user": [
+     0.0011,
+     1.31
+    ],
+    "per_active_user_high_checker_free_tiers": 0.64,
+    "per_listing": [
+     0.93,
+     4.82
+    ]
+   },
+   "fixed_usd": {
+    "servers": {
+     "low": 53.5863,
+     "mid": 151.389,
+     "high": 427.698
+    },
+    "maps": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 0.0
+    },
+    "messages": {
+     "low": 1.15,
+     "mid": 24.3397,
+     "high": 515.15
+    },
+    "checks": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 149.0
+    }
+   },
+   "variable_usd": {
+    "servers": {
+     "low": 0.002718,
+     "mid": 0.0669882,
+     "high": 1.651
+    },
+    "maps": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 1.50225
+    },
+    "messages": {
+     "low": 0.14499,
+     "mid": 0.703558,
+     "high": 3.414
+    },
+    "checks": {
+     "low": 0.33,
+     "mid": 0.667458,
+     "high": 1.35
+    }
+   },
+   "fixed_tech_total_usd": {
+    "low": 54.7363,
+    "mid": 175.729,
+    "high": 1091.85
+   },
+   "variable_total_usd": {
+    "low": 0.477708,
+    "mid": 1.438,
+    "high": 7.91725
+   },
+   "fee_table_usd": [
+    {
+     "volume": 100,
+     "low": {
+      "servers_and_services": 1.025,
+      "people": 6.619,
+      "running_total": 7.644,
+      "with_payment_fee": 7.644
+     },
+     "mid": {
+      "servers_and_services": 3.195,
+      "people": 13.84,
+      "running_total": 17.03,
+      "with_payment_fee": 17.03
+     },
+     "high": {
+      "servers_and_services": 18.84,
+      "people": 28.92,
+      "running_total": 47.76,
+      "with_payment_fee": 47.76
+     }
+    },
+    {
+     "volume": 1000,
+     "low": {
+      "servers_and_services": 0.5324,
+      "people": 0.6619,
+      "running_total": 1.194,
+      "with_payment_fee": 1.194
+     },
+     "mid": {
+      "servers_and_services": 1.614,
+      "people": 1.384,
+      "running_total": 2.997,
+      "with_payment_fee": 2.997
+     },
+     "high": {
+      "servers_and_services": 9.009,
+      "people": 2.892,
+      "running_total": 11.9,
+      "with_payment_fee": 11.9
+     }
+    },
+    {
+     "volume": 10000,
+     "low": {
+      "servers_and_services": 0.4832,
+      "people": 0.06619,
+      "running_total": 0.5494,
+      "with_payment_fee": 0.5494
+     },
+     "mid": {
+      "servers_and_services": 1.456,
+      "people": 0.1384,
+      "running_total": 1.594,
+      "with_payment_fee": 1.594
+     },
+     "high": {
+      "servers_and_services": 8.026,
+      "people": 0.2892,
+      "running_total": 8.316,
+      "with_payment_fee": 8.316
+     }
+    },
+    {
+     "volume": 100000,
+     "low": {
+      "servers_and_services": 0.4783,
+      "people": 0.006619,
+      "running_total": 0.4849,
+      "with_payment_fee": 0.4849
+     },
+     "mid": {
+      "servers_and_services": 1.44,
+      "people": 0.01384,
+      "running_total": 1.454,
+      "with_payment_fee": 1.454
+     },
+     "high": {
+      "servers_and_services": 7.928,
+      "people": 0.02892,
+      "running_total": 7.957,
+      "with_payment_fee": 7.957
+     }
+    },
+    {
+     "volume": 1000000,
+     "low": {
+      "servers_and_services": 0.4778,
+      "people": 0.0006619,
+      "running_total": 0.4784,
+      "with_payment_fee": 0.4784
+     },
+     "mid": {
+      "servers_and_services": 1.438,
+      "people": 0.001384,
+      "running_total": 1.44,
+      "with_payment_fee": 1.44
+     },
+     "high": {
+      "servers_and_services": 7.918,
+      "people": 0.002892,
+      "running_total": 7.921,
+      "with_payment_fee": 7.921
+     }
+    }
+   ],
+   "volume_for_fixed_under_10_cents": {
+    "low": 7200,
+    "mid": 15600,
+    "high": 39800
+   },
+   "volume_for_tech_fixed_under_10_cents": {
+    "low": 500,
+    "mid": 1800,
+    "high": 10900
+   }
+  },
+  {
+   "id": "rent",
+   "name": "Spare Rent",
+   "family": "list",
+   "kind": "transaction",
+   "unit": "tenancy month",
+   "unit_plural": "tenancy months",
+   "volume_label": "tenancies running a month",
+   "example_amount_usd": 1300.0,
+   "example_label": "a month of US$300-a-week rent",
+   "payment": {
+    "kind": "bank_debit",
+    "amount_usd": 1300.0,
+    "low": 0.0,
+    "mid": 9.81725,
+    "high": 14.8136,
+    "rule": {
+     "low": "Tenant pays the landlord by bank transfer; the app only records it",
+     "mid": "Weekly NZ bank direct debit (BECS) through Stripe, 1% + NZ$0.40 capped at NZ$4.00 a debit",
+     "high": "As mid, plus platform-priced weekly payouts 0.25% + NZ$0.25 and NZ$2 for the landlord's active account"
+    }
+   },
+   "incumbent": {
+    "name": "Property managers",
+    "cut_pct_low": 7,
+    "cut_pct_high": 10,
+    "text": "Property managers typically take 7 to 10% of rent plus GST, plus about a week's rent as a letting fee (not counted here)",
+    "status": "researched 2026-10-18",
+    "source_url": "https://www.propertybrokers.co.nz/news/how-much-does-property-management-cost-in-new-zealand"
+   },
+   "pilot_volume": 10000,
+   "sources": [
+    "https://ca.api.ovh.com/1.0/order/catalog/public/vps?ovhSubsidiary=AU",
+    "https://prices.azure.com/api/retail/prices?$filter=armRegionName eq 'newzealandnorth' and serviceName eq 'Virtual Machines'",
+    "https://developers.cloudflare.com/r2/pricing/",
+    "https://developers.cloudflare.com/images/pricing/",
+    "https://www.mapbox.com/pricing",
+    "https://www.algolia.com/pricing",
+    "https://getstream.io/chat/pricing/",
+    "https://www.clicksend.com/nz/pricing/?region=nz&currency=nzd",
+    "https://www.twilio.com/en-us/sms/pricing/nz",
+    "https://aws.amazon.com/ses/pricing/",
+    "https://postmarkapp.com/pricing",
+    "https://didit.me/pricing",
+    "https://sumsub.com/pricing/",
+    "https://developers.cloudflare.com/stream/pricing/",
+    "https://stripe.com/en-nz/pricing"
+   ],
+   "original_nzd_incl_gst": {
+    "fixed_low_ovh": 37.68,
+    "fixed_low_checker_no_commitment": 43.34,
+    "fixed_nz_hosted_catalyst": 298.53,
+    "fixed_high_azure": 600.43,
+    "fixed_high_checker_before_stream_chat": 742.79,
+    "per_active_user": [
+     0.0011,
+     1.31
+    ],
+    "per_active_user_high_checker_free_tiers": 0.64,
+    "per_letting": [
+     0.8,
+     4.36
+    ],
+    "per_tenancy_month": [
+     0.001,
+     0.46
+    ],
+    "rent_collection_per_month": [
+     0,
+     26.92
+    ]
+   },
+   "fixed_usd": {
+    "servers": {
+     "low": 53.5863,
+     "mid": 151.389,
+     "high": 427.698
+    },
+    "maps": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 0.0
+    },
+    "messages": {
+     "low": 1.15,
+     "mid": 24.3397,
+     "high": 515.15
+    },
+    "checks": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 149.0
+    }
+   },
+   "variable_usd": {
+    "servers": {
+     "low": 0.0001365,
+     "mid": 0.0040822,
+     "high": 0.122083
+    },
+    "maps": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 0.125125
+    },
+    "messages": {
+     "low": 0.00669123,
+     "mid": 0.0581816,
+     "high": 0.5059
+    },
+    "checks": {
+     "low": 0.0275,
+     "mid": 0.0556215,
+     "high": 0.1125
+    }
+   },
+   "fixed_tech_total_usd": {
+    "low": 54.7363,
+    "mid": 175.729,
+    "high": 1091.85
+   },
+   "variable_total_usd": {
+    "low": 0.0343277,
+    "mid": 0.117885,
+    "high": 0.865608
+   },
+   "fee_table_usd": [
+    {
+     "volume": 100,
+     "low": {
+      "servers_and_services": 0.5817,
+      "people": 6.619,
+      "running_total": 7.201,
+      "with_payment_fee": 7.201
+     },
+     "mid": {
+      "servers_and_services": 1.875,
+      "people": 13.84,
+      "running_total": 15.71,
+      "with_payment_fee": 25.53
+     },
+     "high": {
+      "servers_and_services": 11.78,
+      "people": 28.92,
+      "running_total": 40.71,
+      "with_payment_fee": 55.52
+     }
+    },
+    {
+     "volume": 1000,
+     "low": {
+      "servers_and_services": 0.08906,
+      "people": 0.6619,
+      "running_total": 0.751,
+      "with_payment_fee": 0.751
+     },
+     "mid": {
+      "servers_and_services": 0.2936,
+      "people": 1.384,
+      "running_total": 1.677,
+      "with_payment_fee": 11.49
+     },
+     "high": {
+      "servers_and_services": 1.957,
+      "people": 2.892,
+      "running_total": 4.85,
+      "with_payment_fee": 19.66
+     }
+    },
+    {
+     "volume": 10000,
+     "low": {
+      "servers_and_services": 0.0398,
+      "people": 0.06619,
+      "running_total": 0.106,
+      "with_payment_fee": 0.106
+     },
+     "mid": {
+      "servers_and_services": 0.1355,
+      "people": 0.1384,
+      "running_total": 0.2738,
+      "with_payment_fee": 10.09
+     },
+     "high": {
+      "servers_and_services": 0.9748,
+      "people": 0.2892,
+      "running_total": 1.264,
+      "with_payment_fee": 16.08
+     }
+    },
+    {
+     "volume": 100000,
+     "low": {
+      "servers_and_services": 0.03488,
+      "people": 0.006619,
+      "running_total": 0.04149,
+      "with_payment_fee": 0.04149
+     },
+     "mid": {
+      "servers_and_services": 0.1196,
+      "people": 0.01384,
+      "running_total": 0.1335,
+      "with_payment_fee": 9.951
+     },
+     "high": {
+      "servers_and_services": 0.8765,
+      "people": 0.02892,
+      "running_total": 0.9055,
+      "with_payment_fee": 15.72
+     }
+    },
+    {
+     "volume": 1000000,
+     "low": {
+      "servers_and_services": 0.03438,
+      "people": 0.0006619,
+      "running_total": 0.03504,
+      "with_payment_fee": 0.03504
+     },
+     "mid": {
+      "servers_and_services": 0.1181,
+      "people": 0.001384,
+      "running_total": 0.1194,
+      "with_payment_fee": 9.937
+     },
+     "high": {
+      "servers_and_services": 0.8667,
+      "people": 0.002892,
+      "running_total": 0.8696,
+      "with_payment_fee": 15.68
+     }
+    }
+   ],
+   "volume_for_fixed_under_10_cents": {
+    "low": 7200,
+    "mid": 15600,
+    "high": 39800
+   },
+   "volume_for_tech_fixed_under_10_cents": {
+    "low": 500,
+    "mid": 1800,
+    "high": 10900
+   }
+  },
+  {
+   "id": "work",
+   "name": "Spare Work",
+   "family": "list",
+   "kind": "transaction",
+   "unit": "job",
+   "unit_plural": "jobs",
+   "volume_label": "jobs a month",
+   "example_amount_usd": 500,
+   "example_label": "a US$500 job",
+   "payment": {
+    "kind": "card",
+    "amount_usd": 500,
+    "low": 13.4199,
+    "mid": 13.6699,
+    "high": 16.1943,
+    "rule": {
+     "low": "Domestic card 2.65% + NZ$0.30 (Stripe NZ standard pricing page); Stripe handles Connect pricing, so no payout fees",
+     "mid": "Domestic card 2.7% + NZ$0.30 (Stripe NZ Connect pricing page); no payout fees",
+     "high": "Domestic card 2.7% + NZ$0.30, plus platform-priced payout 0.25% + NZ$0.25 and NZ$2 for the trade's active account that month"
+    }
+   },
+   "incumbent": {
+    "name": "Fiverr",
+    "cut_pct_low": 20,
+    "cut_pct_high": 20,
+    "text": "Fiverr reportedly takes 20% from sellers plus 5.5% from buyers (buyer side not counted); Builderscrack charges trades NZ$79 to NZ$149 plus GST a month for leads",
+    "status": "secondary sources",
+    "source_url": "https://vaultleap.com/blog/fiverr-fees-explained-2026"
+   },
+   "pilot_volume": 10000,
+   "sources": [
+    "https://ca.api.ovh.com/1.0/order/catalog/public/vps?ovhSubsidiary=AU",
+    "https://prices.azure.com/api/retail/prices?$filter=armRegionName eq 'newzealandnorth' and serviceName eq 'Virtual Machines'",
+    "https://developers.cloudflare.com/r2/pricing/",
+    "https://developers.cloudflare.com/images/pricing/",
+    "https://www.mapbox.com/pricing",
+    "https://www.algolia.com/pricing",
+    "https://getstream.io/chat/pricing/",
+    "https://www.clicksend.com/nz/pricing/?region=nz&currency=nzd",
+    "https://www.twilio.com/en-us/sms/pricing/nz",
+    "https://aws.amazon.com/ses/pricing/",
+    "https://postmarkapp.com/pricing",
+    "https://didit.me/pricing",
+    "https://sumsub.com/pricing/",
+    "https://developers.cloudflare.com/stream/pricing/"
+   ],
+   "original_nzd_incl_gst": {
+    "fixed_low_ovh": 37.68,
+    "fixed_low_checker_no_commitment": 43.34,
+    "fixed_nz_hosted_catalyst": 298.53,
+    "fixed_high_azure": 600.43,
+    "fixed_high_checker_before_stream_chat": 742.79,
+    "per_active_user": [
+     0.0011,
+     1.31
+    ],
+    "per_active_user_high_checker_free_tiers": 0.64,
+    "per_job": [
+     0.13,
+     0.93
+    ],
+    "stripe_per_job": [
+     8.25,
+     60.55
+    ]
+   },
+   "fixed_usd": {
+    "servers": {
+     "low": 53.5863,
+     "mid": 151.389,
+     "high": 427.698
+    },
+    "maps": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 0.0
+    },
+    "messages": {
+     "low": 1.15,
+     "mid": 24.3397,
+     "high": 515.15
+    },
+    "checks": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 149.0
+    }
+   },
+   "variable_usd": {
+    "servers": {
+     "low": 0.001368,
+     "mid": 0.0442294,
+     "high": 1.43
+    },
+    "maps": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 1.50075
+    },
+    "messages": {
+     "low": 0.0742948,
+     "mid": 0.478484,
+     "high": 3.0816
+    },
+    "checks": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 0.0
+    }
+   },
+   "fixed_tech_total_usd": {
+    "low": 54.7363,
+    "mid": 175.729,
+    "high": 1091.85
+   },
+   "variable_total_usd": {
+    "low": 0.0756628,
+    "mid": 0.522713,
+    "high": 6.01235
+   },
+   "fee_table_usd": [
+    {
+     "volume": 100,
+     "low": {
+      "servers_and_services": 0.623,
+      "people": 6.619,
+      "running_total": 7.242,
+      "with_payment_fee": 20.66
+     },
+     "mid": {
+      "servers_and_services": 2.28,
+      "people": 13.84,
+      "running_total": 16.12,
+      "with_payment_fee": 29.79
+     },
+     "high": {
+      "servers_and_services": 16.93,
+      "people": 28.92,
+      "running_total": 45.85,
+      "with_payment_fee": 62.05
+     }
+    },
+    {
+     "volume": 1000,
+     "low": {
+      "servers_and_services": 0.1304,
+      "people": 0.6619,
+      "running_total": 0.7923,
+      "with_payment_fee": 14.21
+     },
+     "mid": {
+      "servers_and_services": 0.6984,
+      "people": 1.384,
+      "running_total": 2.082,
+      "with_payment_fee": 15.75
+     },
+     "high": {
+      "servers_and_services": 7.104,
+      "people": 2.892,
+      "running_total": 9.997,
+      "with_payment_fee": 26.19
+     }
+    },
+    {
+     "volume": 10000,
+     "low": {
+      "servers_and_services": 0.08114,
+      "people": 0.06619,
+      "running_total": 0.1473,
+      "with_payment_fee": 13.57
+     },
+     "mid": {
+      "servers_and_services": 0.5403,
+      "people": 0.1384,
+      "running_total": 0.6787,
+      "with_payment_fee": 14.35
+     },
+     "high": {
+      "servers_and_services": 6.122,
+      "people": 0.2892,
+      "running_total": 6.411,
+      "with_payment_fee": 22.61
+     }
+    },
+    {
+     "volume": 100000,
+     "low": {
+      "servers_and_services": 0.07621,
+      "people": 0.006619,
+      "running_total": 0.08283,
+      "with_payment_fee": 13.5
+     },
+     "mid": {
+      "servers_and_services": 0.5245,
+      "people": 0.01384,
+      "running_total": 0.5383,
+      "with_payment_fee": 14.21
+     },
+     "high": {
+      "servers_and_services": 6.023,
+      "people": 0.02892,
+      "running_total": 6.052,
+      "with_payment_fee": 22.25
+     }
+    },
+    {
+     "volume": 1000000,
+     "low": {
+      "servers_and_services": 0.07572,
+      "people": 0.0006619,
+      "running_total": 0.07638,
+      "with_payment_fee": 13.5
+     },
+     "mid": {
+      "servers_and_services": 0.5229,
+      "people": 0.001384,
+      "running_total": 0.5243,
+      "with_payment_fee": 14.19
+     },
+     "high": {
+      "servers_and_services": 6.013,
+      "people": 0.002892,
+      "running_total": 6.016,
+      "with_payment_fee": 22.21
+     }
+    }
+   ],
+   "volume_for_fixed_under_10_cents": {
+    "low": 7200,
+    "mid": 15600,
+    "high": 39800
+   },
+   "volume_for_tech_fixed_under_10_cents": {
+    "low": 500,
+    "mid": 1800,
+    "high": 10900
+   }
+  },
+  {
+   "id": "market",
+   "name": "Spare Market",
+   "family": "list",
+   "kind": "transaction",
+   "unit": "sale",
+   "unit_plural": "sales",
+   "volume_label": "sales a month",
+   "example_amount_usd": 40,
+   "example_label": "a US$40 sale",
+   "payment": {
+    "kind": "card",
+    "amount_usd": 40,
+    "low": 1.22991,
+    "mid": 1.24991,
+    "high": 2.62427,
+    "rule": {
+     "low": "Domestic card 2.65% + NZ$0.30 (Stripe NZ standard pricing page); Stripe handles Connect pricing, so no payout fees",
+     "mid": "Domestic card 2.7% + NZ$0.30 (Stripe NZ Connect pricing page); no payout fees",
+     "high": "Domestic card 2.7% + NZ$0.30, plus platform-priced payout 0.25% + NZ$0.25 and NZ$2 for the seller's active account that month"
+    }
+   },
+   "incumbent": {
+    "name": "Trade Me",
+    "cut_pct_low": 2.19,
+    "cut_pct_high": 2.19,
+    "text": "Trade Me sellers pay 2.19% through its own payment system; buyers also pay NZ$0.99, NZ$1.99 or NZ$4.99 on purchases over NZ$20 (not counted here)",
+    "status": "researched 2026-10-18",
+    "source_url": "https://consumer.org.nz/shopping/online-shopping/the-fine-print-whats-behind-trade-mes-move-to-scrap-success-fees"
+   },
+   "pilot_volume": 10000,
+   "sources": [
+    "https://ca.api.ovh.com/1.0/order/catalog/public/vps?ovhSubsidiary=AU",
+    "https://prices.azure.com/api/retail/prices?$filter=armRegionName eq 'newzealandnorth' and serviceName eq 'Virtual Machines'",
+    "https://developers.cloudflare.com/r2/pricing/",
+    "https://developers.cloudflare.com/images/pricing/",
+    "https://www.mapbox.com/pricing",
+    "https://www.algolia.com/pricing",
+    "https://getstream.io/chat/pricing/",
+    "https://www.clicksend.com/nz/pricing/?region=nz&currency=nzd",
+    "https://www.twilio.com/en-us/sms/pricing/nz",
+    "https://aws.amazon.com/ses/pricing/",
+    "https://postmarkapp.com/pricing",
+    "https://didit.me/pricing",
+    "https://sumsub.com/pricing/",
+    "https://developers.cloudflare.com/stream/pricing/"
+   ],
+   "original_nzd_incl_gst": {
+    "fixed_low_ovh": 37.68,
+    "fixed_low_checker_no_commitment": 43.34,
+    "fixed_nz_hosted_catalyst": 298.53,
+    "fixed_high_azure": 600.43,
+    "fixed_high_checker_before_stream_chat": 742.79,
+    "per_active_user": [
+     0.0011,
+     1.31
+    ],
+    "per_active_user_high_checker_free_tiers": 0.64,
+    "per_sale": [
+     0.001,
+     0.49
+    ],
+    "stripe_per_sale": [
+     0.83,
+     6.9
+    ]
+   },
+   "fixed_usd": {
+    "servers": {
+     "low": 53.5863,
+     "mid": 151.389,
+     "high": 427.698
+    },
+    "maps": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 0.0
+    },
+    "messages": {
+     "low": 1.15,
+     "mid": 24.3397,
+     "high": 515.15
+    },
+    "checks": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 149.0
+    }
+   },
+   "variable_usd": {
+    "servers": {
+     "low": 0.001422,
+     "mid": 0.0451884,
+     "high": 1.436
+    },
+    "maps": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 1.5
+    },
+    "messages": {
+     "low": 0.0045,
+     "mid": 0.113533,
+     "high": 2.8644
+    },
+    "checks": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 0.0
+    }
+   },
+   "fixed_tech_total_usd": {
+    "low": 54.7363,
+    "mid": 175.729,
+    "high": 1091.85
+   },
+   "variable_total_usd": {
+    "low": 0.005922,
+    "mid": 0.158721,
+    "high": 5.8004
+   },
+   "fee_table_usd": [
+    {
+     "volume": 100,
+     "low": {
+      "servers_and_services": 0.5533,
+      "people": 6.619,
+      "running_total": 7.173,
+      "with_payment_fee": 8.403
+     },
+     "mid": {
+      "servers_and_services": 1.916,
+      "people": 13.84,
+      "running_total": 15.75,
+      "with_payment_fee": 17.0
+     },
+     "high": {
+      "servers_and_services": 16.72,
+      "people": 28.92,
+      "running_total": 45.64,
+      "with_payment_fee": 48.27
+     }
+    },
+    {
+     "volume": 1000,
+     "low": {
+      "servers_and_services": 0.06066,
+      "people": 0.6619,
+      "running_total": 0.7226,
+      "with_payment_fee": 1.953
+     },
+     "mid": {
+      "servers_and_services": 0.3345,
+      "people": 1.384,
+      "running_total": 1.718,
+      "with_payment_fee": 2.968
+     },
+     "high": {
+      "servers_and_services": 6.892,
+      "people": 2.892,
+      "running_total": 9.785,
+      "with_payment_fee": 12.41
+     }
+    },
+    {
+     "volume": 10000,
+     "low": {
+      "servers_and_services": 0.0114,
+      "people": 0.06619,
+      "running_total": 0.07759,
+      "with_payment_fee": 1.307
+     },
+     "mid": {
+      "servers_and_services": 0.1763,
+      "people": 0.1384,
+      "running_total": 0.3147,
+      "with_payment_fee": 1.565
+     },
+     "high": {
+      "servers_and_services": 5.91,
+      "people": 0.2892,
+      "running_total": 6.199,
+      "with_payment_fee": 8.823
+     }
+    },
+    {
+     "volume": 100000,
+     "low": {
+      "servers_and_services": 0.006469,
+      "people": 0.006619,
+      "running_total": 0.01309,
+      "with_payment_fee": 1.243
+     },
+     "mid": {
+      "servers_and_services": 0.1605,
+      "people": 0.01384,
+      "running_total": 0.1743,
+      "with_payment_fee": 1.424
+     },
+     "high": {
+      "servers_and_services": 5.811,
+      "people": 0.02892,
+      "running_total": 5.84,
+      "with_payment_fee": 8.465
+     }
+    },
+    {
+     "volume": 1000000,
+     "low": {
+      "servers_and_services": 0.005977,
+      "people": 0.0006619,
+      "running_total": 0.006639,
+      "with_payment_fee": 1.237
+     },
+     "mid": {
+      "servers_and_services": 0.1589,
+      "people": 0.001384,
+      "running_total": 0.1603,
+      "with_payment_fee": 1.41
+     },
+     "high": {
+      "servers_and_services": 5.801,
+      "people": 0.002892,
+      "running_total": 5.804,
+      "with_payment_fee": 8.429
+     }
+    }
+   ],
+   "volume_for_fixed_under_10_cents": {
+    "low": 7200,
+    "mid": 15600,
+    "high": 39800
+   },
+   "volume_for_tech_fixed_under_10_cents": {
+    "low": 500,
+    "mid": 1800,
+    "high": 10900
+   }
+  },
+  {
+   "id": "social",
+   "name": "Spare Social",
+   "family": "social",
+   "kind": "member",
+   "unit": "active member",
+   "unit_plural": "active members",
+   "volume_label": "active members a month",
+   "example_amount_usd": null,
+   "example_label": "one active member for a month",
+   "payment": {
+    "kind": "none",
+    "low": 0,
+    "mid": 0,
+    "high": 0,
+    "rule": {
+     "low": "Free to use; no payment taken",
+     "mid": "As low",
+     "high": "As low"
+    }
+   },
+   "incumbent": null,
+   "pilot_volume": 5000,
+   "sources": [
+    "https://developers.cloudflare.com/r2/pricing/",
+    "https://www.ovhcloud.com/en-au/public-cloud/prices/",
+    "https://website-price-api.hetzner.com/api/v1/products/ROBOT_1720%2BROBOT_1266",
+    "https://aws.amazon.com/cloudfront/pricing/pay-as-you-go/",
+    "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSElementalMediaConvert/current/ap-southeast-2/index.json",
+    "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRekognition/current/ap-southeast-2/index.json",
+    "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/current/ap-southeast-6/index.json",
+    "https://www.backblaze.com/cloud-storage/pricing",
+    "https://www.microsoft.com/en-us/photodna"
+   ],
+   "original_nzd_incl_gst": {
+    "per_active_member": [
+     0.027,
+     9.04
+    ],
+    "per_active_member_high_checker": 9.02,
+    "per_hour_watched": [
+     0.0007,
+     0.3125
+    ],
+    "fixed_option_a": 662.37
+   },
+   "fixed_usd": {
+    "servers": {
+     "low": 349.747,
+     "mid": 447.933,
+     "high": 573.682
+    },
+    "maps": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 0.0
+    },
+    "messages": {
+     "low": 1.15,
+     "mid": 4.30958,
+     "high": 16.15
+    },
+    "checks": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 0.0
+    }
+   },
+   "variable_usd": {
+    "servers": {
+     "low": 0.0122381,
+     "mid": 0.214084,
+     "high": 3.74502
+    },
+    "maps": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 0.0
+    },
+    "messages": {
+     "low": 0.0004,
+     "mid": 0.00954987,
+     "high": 0.228
+    },
+    "checks": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 0.698
+    }
+   },
+   "fixed_tech_total_usd": {
+    "low": 350.897,
+    "mid": 452.243,
+    "high": 589.832
+   },
+   "variable_total_usd": {
+    "low": 0.0126381,
+    "mid": 0.223634,
+    "high": 4.67102
+   },
+   "fee_table_usd": [
+    {
+     "volume": 100,
+     "low": {
+      "servers_and_services": 3.522,
+      "people": 6.619,
+      "running_total": 10.14,
+      "with_payment_fee": 10.14
+     },
+     "mid": {
+      "servers_and_services": 4.746,
+      "people": 13.84,
+      "running_total": 18.58,
+      "with_payment_fee": 18.58
+     },
+     "high": {
+      "servers_and_services": 10.57,
+      "people": 28.92,
+      "running_total": 39.49,
+      "with_payment_fee": 39.49
+     }
+    },
+    {
+     "volume": 1000,
+     "low": {
+      "servers_and_services": 0.3635,
+      "people": 0.6619,
+      "running_total": 1.025,
+      "with_payment_fee": 1.025
+     },
+     "mid": {
+      "servers_and_services": 0.6759,
+      "people": 1.384,
+      "running_total": 2.06,
+      "with_payment_fee": 2.06
+     },
+     "high": {
+      "servers_and_services": 5.261,
+      "people": 2.892,
+      "running_total": 8.153,
+      "with_payment_fee": 8.153
+     }
+    },
+    {
+     "volume": 10000,
+     "low": {
+      "servers_and_services": 0.04773,
+      "people": 0.06619,
+      "running_total": 0.1139,
+      "with_payment_fee": 0.1139
+     },
+     "mid": {
+      "servers_and_services": 0.2689,
+      "people": 0.1384,
+      "running_total": 0.4072,
+      "with_payment_fee": 0.4072
+     },
+     "high": {
+      "servers_and_services": 4.73,
+      "people": 0.2892,
+      "running_total": 5.019,
+      "with_payment_fee": 5.019
+     }
+    },
+    {
+     "volume": 100000,
+     "low": {
+      "servers_and_services": 0.01615,
+      "people": 0.006619,
+      "running_total": 0.02277,
+      "with_payment_fee": 0.02277
+     },
+     "mid": {
+      "servers_and_services": 0.2282,
+      "people": 0.01384,
+      "running_total": 0.242,
+      "with_payment_fee": 0.242
+     },
+     "high": {
+      "servers_and_services": 4.677,
+      "people": 0.02892,
+      "running_total": 4.706,
+      "with_payment_fee": 4.706
+     }
+    },
+    {
+     "volume": 1000000,
+     "low": {
+      "servers_and_services": 0.01299,
+      "people": 0.0006619,
+      "running_total": 0.01365,
+      "with_payment_fee": 0.01365
+     },
+     "mid": {
+      "servers_and_services": 0.2241,
+      "people": 0.001384,
+      "running_total": 0.2255,
+      "with_payment_fee": 0.2255
+     },
+     "high": {
+      "servers_and_services": 4.672,
+      "people": 0.002892,
+      "running_total": 4.675,
+      "with_payment_fee": 4.675
+     }
+    }
+   ],
+   "volume_for_fixed_under_10_cents": {
+    "low": 10100,
+    "mid": 18400,
+    "high": 34800
+   },
+   "volume_for_tech_fixed_under_10_cents": {
+    "low": 3500,
+    "mid": 4500,
+    "high": 5900
+   }
+  },
+  {
+   "id": "office",
+   "name": "Spare Office",
+   "family": "office",
+   "kind": "member",
+   "unit": "active user",
+   "unit_plural": "active users",
+   "volume_label": "active users a month",
+   "example_amount_usd": null,
+   "example_label": "one active user for a month",
+   "payment": {
+    "kind": "none",
+    "low": 0,
+    "mid": 0,
+    "high": 0,
+    "rule": {
+     "low": "Not costed: how members pay is not decided",
+     "mid": "As low",
+     "high": "As low"
+    }
+   },
+   "incumbent": {
+    "name": "Microsoft 365 Business Basic",
+    "flat_usd": 6.40009,
+    "text": "Microsoft 365 Business Basic costs NZ$11.30 per user a month, paid yearly, excluding GST",
+    "status": "researched 2026-10-18 (New Zealand price page)",
+    "source_url": "https://www.microsoft.com/en-nz/microsoft-365/business/microsoft-365-plans-and-pricing"
+   },
+   "pilot_volume": 5000,
+   "sources": [
+    "https://www.hetzner.com/cloud/regular-performance/",
+    "https://developers.cloudflare.com/r2/pricing/",
+    "https://aws.amazon.com/ses/pricing/",
+    "https://docs.opendesk.eu/operations/scaling/",
+    "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/20261015173540/ap-southeast-6/index.json",
+    "https://b0.p.awsstatic.com/pricing/2.0/meteredUnitMaps/ec2/USD/current/ec2-ondemand-without-sec-sel/Asia%20Pacific%20(New%20Zealand)/Linux/index.json"
+   ],
+   "original_nzd_incl_gst": {
+    "option_a_hetzner_singapore": [
+     0.92,
+     3.78
+    ],
+    "option_b_catalyst_nz": [
+     1.83,
+     11.92
+    ],
+    "option_c_aws_auckland": [
+     3.12,
+     15.77
+    ],
+    "fixed": {
+     "hetzner_singapore": 466,
+     "catalyst_nz": 979.03,
+     "aws_auckland": 1013.38
+    }
+   },
+   "fixed_usd": {
+    "servers": {
+     "low": 261.754,
+     "mid": 438.264,
+     "high": 733.801
+    },
+    "maps": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 0.0
+    },
+    "messages": {
+     "low": 1.15,
+     "mid": 4.30958,
+     "high": 16.15
+    },
+    "checks": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 0.0
+    }
+   },
+   "variable_usd": {
+    "servers": {
+     "low": 0.452102,
+     "mid": 1.87377,
+     "high": 7.76596
+    },
+    "maps": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 0.0
+    },
+    "messages": {
+     "low": 0.0004,
+     "mid": 0.00954987,
+     "high": 0.228
+    },
+    "checks": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 0.0
+    }
+   },
+   "fixed_tech_total_usd": {
+    "low": 262.904,
+    "mid": 442.574,
+    "high": 749.951
+   },
+   "variable_total_usd": {
+    "low": 0.452502,
+    "mid": 1.88332,
+    "high": 7.99396
+   },
+   "fee_table_usd": [
+    {
+     "volume": 100,
+     "low": {
+      "servers_and_services": 3.082,
+      "people": 6.619,
+      "running_total": 9.701,
+      "with_payment_fee": 9.701
+     },
+     "mid": {
+      "servers_and_services": 6.309,
+      "people": 13.84,
+      "running_total": 20.15,
+      "with_payment_fee": 20.15
+     },
+     "high": {
+      "servers_and_services": 15.49,
+      "people": 28.92,
+      "running_total": 44.42,
+      "with_payment_fee": 44.42
+     }
+    },
+    {
+     "volume": 1000,
+     "low": {
+      "servers_and_services": 0.7154,
+      "people": 0.6619,
+      "running_total": 1.377,
+      "with_payment_fee": 1.377
+     },
+     "mid": {
+      "servers_and_services": 2.326,
+      "people": 1.384,
+      "running_total": 3.71,
+      "with_payment_fee": 3.71
+     },
+     "high": {
+      "servers_and_services": 8.744,
+      "people": 2.892,
+      "running_total": 11.64,
+      "with_payment_fee": 11.64
+     }
+    },
+    {
+     "volume": 10000,
+     "low": {
+      "servers_and_services": 0.4788,
+      "people": 0.06619,
+      "running_total": 0.545,
+      "with_payment_fee": 0.545
+     },
+     "mid": {
+      "servers_and_services": 1.928,
+      "people": 0.1384,
+      "running_total": 2.066,
+      "with_payment_fee": 2.066
+     },
+     "high": {
+      "servers_and_services": 8.069,
+      "people": 0.2892,
+      "running_total": 8.358,
+      "with_payment_fee": 8.358
+     }
+    },
+    {
+     "volume": 100000,
+     "low": {
+      "servers_and_services": 0.4551,
+      "people": 0.006619,
+      "running_total": 0.4618,
+      "with_payment_fee": 0.4618
+     },
+     "mid": {
+      "servers_and_services": 1.888,
+      "people": 0.01384,
+      "running_total": 1.902,
+      "with_payment_fee": 1.902
+     },
+     "high": {
+      "servers_and_services": 8.001,
+      "people": 0.02892,
+      "running_total": 8.03,
+      "with_payment_fee": 8.03
+     }
+    },
+    {
+     "volume": 1000000,
+     "low": {
+      "servers_and_services": 0.4528,
+      "people": 0.0006619,
+      "running_total": 0.4534,
+      "with_payment_fee": 0.4534
+     },
+     "mid": {
+      "servers_and_services": 1.884,
+      "people": 0.001384,
+      "running_total": 1.885,
+      "with_payment_fee": 1.885
+     },
+     "high": {
+      "servers_and_services": 7.995,
+      "people": 0.002892,
+      "running_total": 7.998,
+      "with_payment_fee": 7.998
+     }
+    }
+   ],
+   "volume_for_fixed_under_10_cents": {
+    "low": 9200,
+    "mid": 18300,
+    "high": 36400
+   },
+   "volume_for_tech_fixed_under_10_cents": {
+    "low": 2600,
+    "mid": 4400,
+    "high": 7500
+   }
+  },
+  {
+   "id": "arch",
+   "name": "Spare Arch",
+   "family": "design",
+   "kind": "member",
+   "unit": "active user",
+   "unit_plural": "active users",
+   "volume_label": "active users a month",
+   "example_amount_usd": null,
+   "example_label": "one active user for a month",
+   "payment": {
+    "kind": "none",
+    "low": 0,
+    "mid": 0,
+    "high": 0,
+    "rule": {
+     "low": "Not in the fee: collecting a small charge by card costs about US$0.05 to US$0.35 a member a month (Stripe NZ, annual or monthly billing)",
+     "mid": "As low",
+     "high": "As low"
+    }
+   },
+   "incumbent": null,
+   "pilot_volume": 5000,
+   "sources": [
+    "https://www.hetzner.com/storage/object-storage/",
+    "https://www.hetzner.com/cloud/regular-performance/",
+    "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/current/ap-southeast-6/index.json",
+    "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSDataTransfer/current/ap-southeast-6/index.json",
+    "https://aws.amazon.com/ec2/pricing/on-demand/"
+   ],
+   "original_nzd_incl_gst": {
+    "option_d_hetzner_europe": [
+     0.2,
+     1.79
+    ],
+    "option_a_r2_singapore": [
+     0.54,
+     7.6
+    ],
+    "option_b_catalyst_nz": [
+     1.04,
+     16.94
+    ],
+    "option_c_aws_auckland": [
+     1.95,
+     35.16
+    ],
+    "fixed": {
+     "option_d": 179.45,
+     "option_a": 226.35,
+     "option_b": 455.01,
+     "option_c": 588.8
+    }
+   },
+   "fixed_usd": {
+    "servers": {
+     "low": 120.551,
+     "mid": 251.351,
+     "high": 524.072
+    },
+    "maps": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 0.0
+    },
+    "messages": {
+     "low": 1.15,
+     "mid": 4.30958,
+     "high": 16.15
+    },
+    "checks": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 0.0
+    }
+   },
+   "variable_usd": {
+    "servers": {
+     "low": 0.100068,
+     "mid": 1.3149,
+     "high": 17.2779
+    },
+    "maps": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 0.0
+    },
+    "messages": {
+     "low": 0.0004,
+     "mid": 0.00954987,
+     "high": 0.228
+    },
+    "checks": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 0.0
+    }
+   },
+   "fixed_tech_total_usd": {
+    "low": 121.701,
+    "mid": 255.661,
+    "high": 540.222
+   },
+   "variable_total_usd": {
+    "low": 0.100468,
+    "mid": 1.32445,
+    "high": 17.5059
+   },
+   "fee_table_usd": [
+    {
+     "volume": 100,
+     "low": {
+      "servers_and_services": 1.317,
+      "people": 6.619,
+      "running_total": 7.937,
+      "with_payment_fee": 7.937
+     },
+     "mid": {
+      "servers_and_services": 3.881,
+      "people": 13.84,
+      "running_total": 17.72,
+      "with_payment_fee": 17.72
+     },
+     "high": {
+      "servers_and_services": 22.91,
+      "people": 28.92,
+      "running_total": 51.83,
+      "with_payment_fee": 51.83
+     }
+    },
+    {
+     "volume": 1000,
+     "low": {
+      "servers_and_services": 0.2222,
+      "people": 0.6619,
+      "running_total": 0.8841,
+      "with_payment_fee": 0.8841
+     },
+     "mid": {
+      "servers_and_services": 1.58,
+      "people": 1.384,
+      "running_total": 2.964,
+      "with_payment_fee": 2.964
+     },
+     "high": {
+      "servers_and_services": 18.05,
+      "people": 2.892,
+      "running_total": 20.94,
+      "with_payment_fee": 20.94
+     }
+    },
+    {
+     "volume": 10000,
+     "low": {
+      "servers_and_services": 0.1126,
+      "people": 0.06619,
+      "running_total": 0.1788,
+      "with_payment_fee": 0.1788
+     },
+     "mid": {
+      "servers_and_services": 1.35,
+      "people": 0.1384,
+      "running_total": 1.488,
+      "with_payment_fee": 1.488
+     },
+     "high": {
+      "servers_and_services": 17.56,
+      "people": 0.2892,
+      "running_total": 17.85,
+      "with_payment_fee": 17.85
+     }
+    },
+    {
+     "volume": 100000,
+     "low": {
+      "servers_and_services": 0.1017,
+      "people": 0.006619,
+      "running_total": 0.1083,
+      "with_payment_fee": 0.1083
+     },
+     "mid": {
+      "servers_and_services": 1.327,
+      "people": 0.01384,
+      "running_total": 1.341,
+      "with_payment_fee": 1.341
+     },
+     "high": {
+      "servers_and_services": 17.51,
+      "people": 0.02892,
+      "running_total": 17.54,
+      "with_payment_fee": 17.54
+     }
+    },
+    {
+     "volume": 1000000,
+     "low": {
+      "servers_and_services": 0.1006,
+      "people": 0.0006619,
+      "running_total": 0.1013,
+      "with_payment_fee": 0.1013
+     },
+     "mid": {
+      "servers_and_services": 1.325,
+      "people": 0.001384,
+      "running_total": 1.326,
+      "with_payment_fee": 1.326
+     },
+     "high": {
+      "servers_and_services": 17.51,
+      "people": 0.002892,
+      "running_total": 17.51,
+      "with_payment_fee": 17.51
+     }
+    }
+   ],
+   "volume_for_fixed_under_10_cents": {
+    "low": 7800,
+    "mid": 16400,
+    "high": 34300
+   },
+   "volume_for_tech_fixed_under_10_cents": {
+    "low": 1200,
+    "mid": 2600,
+    "high": 5400
+   }
+  },
+  {
+   "id": "studio",
+   "name": "Spare Studio",
+   "family": "design",
+   "kind": "member",
+   "unit": "active user",
+   "unit_plural": "active users",
+   "volume_label": "active users a month",
+   "example_amount_usd": null,
+   "example_label": "one active user for a month",
+   "payment": {
+    "kind": "none",
+    "low": 0,
+    "mid": 0,
+    "high": 0,
+    "rule": {
+     "low": "Not in the fee: collecting a small charge by card costs about US$0.05 to US$0.35 a member a month (Stripe NZ, annual or monthly billing)",
+     "mid": "As low",
+     "high": "As low"
+    }
+   },
+   "incumbent": null,
+   "pilot_volume": 5000,
+   "sources": [
+    "https://www.hetzner.com/storage/object-storage/",
+    "https://www.hetzner.com/cloud/regular-performance/",
+    "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/current/ap-southeast-6/index.json",
+    "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSDataTransfer/current/ap-southeast-6/index.json",
+    "https://aws.amazon.com/ec2/pricing/on-demand/"
+   ],
+   "original_nzd_incl_gst": {
+    "option_d_hetzner_europe": [
+     0.25,
+     4.68
+    ],
+    "option_a_r2_singapore": [
+     0.67,
+     11.49
+    ],
+    "option_b_catalyst_nz": [
+     1.78,
+     39.95
+    ],
+    "option_c_aws_auckland": [
+     3.48,
+     77.05
+    ],
+    "fixed": {
+     "option_d": 179.45,
+     "option_a": 226.35,
+     "option_b": 455.01,
+     "option_c": 588.8
+    }
+   },
+   "fixed_usd": {
+    "servers": {
+     "low": 120.551,
+     "mid": 251.351,
+     "high": 524.072
+    },
+    "maps": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 0.0
+    },
+    "messages": {
+     "low": 1.15,
+     "mid": 4.30958,
+     "high": 16.15
+    },
+    "checks": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 0.0
+    }
+   },
+   "variable_usd": {
+    "servers": {
+     "low": 0.124591,
+     "mid": 2.17201,
+     "high": 37.8649
+    },
+    "maps": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 0.0
+    },
+    "messages": {
+     "low": 0.0004,
+     "mid": 0.00954987,
+     "high": 0.228
+    },
+    "checks": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 0.0
+    }
+   },
+   "fixed_tech_total_usd": {
+    "low": 121.701,
+    "mid": 255.661,
+    "high": 540.222
+   },
+   "variable_total_usd": {
+    "low": 0.124991,
+    "mid": 2.18156,
+    "high": 38.0929
+   },
+   "fee_table_usd": [
+    {
+     "volume": 100,
+     "low": {
+      "servers_and_services": 1.342,
+      "people": 6.619,
+      "running_total": 7.961,
+      "with_payment_fee": 7.961
+     },
+     "mid": {
+      "servers_and_services": 4.738,
+      "people": 13.84,
+      "running_total": 18.57,
+      "with_payment_fee": 18.57
+     },
+     "high": {
+      "servers_and_services": 43.5,
+      "people": 28.92,
+      "running_total": 72.42,
+      "with_payment_fee": 72.42
+     }
+    },
+    {
+     "volume": 1000,
+     "low": {
+      "servers_and_services": 0.2467,
+      "people": 0.6619,
+      "running_total": 0.9086,
+      "with_payment_fee": 0.9086
+     },
+     "mid": {
+      "servers_and_services": 2.437,
+      "people": 1.384,
+      "running_total": 3.821,
+      "with_payment_fee": 3.821
+     },
+     "high": {
+      "servers_and_services": 38.63,
+      "people": 2.892,
+      "running_total": 41.53,
+      "with_payment_fee": 41.53
+     }
+    },
+    {
+     "volume": 10000,
+     "low": {
+      "servers_and_services": 0.1372,
+      "people": 0.06619,
+      "running_total": 0.2034,
+      "with_payment_fee": 0.2034
+     },
+     "mid": {
+      "servers_and_services": 2.207,
+      "people": 0.1384,
+      "running_total": 2.345,
+      "with_payment_fee": 2.345
+     },
+     "high": {
+      "servers_and_services": 38.15,
+      "people": 0.2892,
+      "running_total": 38.44,
+      "with_payment_fee": 38.44
+     }
+    },
+    {
+     "volume": 100000,
+     "low": {
+      "servers_and_services": 0.1262,
+      "people": 0.006619,
+      "running_total": 0.1328,
+      "with_payment_fee": 0.1328
+     },
+     "mid": {
+      "servers_and_services": 2.184,
+      "people": 0.01384,
+      "running_total": 2.198,
+      "with_payment_fee": 2.198
+     },
+     "high": {
+      "servers_and_services": 38.1,
+      "people": 0.02892,
+      "running_total": 38.13,
+      "with_payment_fee": 38.13
+     }
+    },
+    {
+     "volume": 1000000,
+     "low": {
+      "servers_and_services": 0.1251,
+      "people": 0.0006619,
+      "running_total": 0.1258,
+      "with_payment_fee": 0.1258
+     },
+     "mid": {
+      "servers_and_services": 2.182,
+      "people": 0.001384,
+      "running_total": 2.183,
+      "with_payment_fee": 2.183
+     },
+     "high": {
+      "servers_and_services": 38.09,
+      "people": 0.002892,
+      "running_total": 38.1,
+      "with_payment_fee": 38.1
+     }
+    }
+   ],
+   "volume_for_fixed_under_10_cents": {
+    "low": 7800,
+    "mid": 16400,
+    "high": 34300
+   },
+   "volume_for_tech_fixed_under_10_cents": {
+    "low": 1200,
+    "mid": 2600,
+    "high": 5400
+   }
+  },
+  {
+   "id": "os",
+   "name": "Spare OS",
+   "family": "os",
+   "kind": "member",
+   "unit": "computer",
+   "unit_plural": "computers",
+   "volume_label": "installed computers",
+   "example_amount_usd": null,
+   "example_label": "one installed computer for a month",
+   "payment": {
+    "kind": "none",
+    "low": 0,
+    "mid": 0,
+    "high": 0,
+    "rule": {
+     "low": "Free to use; no payment taken",
+     "mid": "As low",
+     "high": "As low"
+    }
+   },
+   "incumbent": null,
+   "pilot_volume": 5000,
+   "sources": [
+    "https://developers.cloudflare.com/r2/pricing/",
+    "https://www.ovhcloud.com/en-au/public-cloud/prices/",
+    "https://aws.amazon.com/cloudfront/pricing/pay-as-you-go/",
+    "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/20261015191316/ap-southeast-6/index.json",
+    "https://glitchtip.com/pricing"
+   ],
+   "original_nzd_incl_gst": {
+    "per_computer_r2": [
+     0.0002,
+     0.0015
+    ],
+    "per_computer_aws": [
+     0.572,
+     1.588
+    ],
+    "fixed": {
+     "ovh_auckland_sydney": 162.76,
+     "hetzner_ax42_r2": 231.98,
+     "catalyst_nz": 216.31,
+     "aws_auckland": 282.25
+    }
+   },
+   "fixed_usd": {
+    "servers": {
+     "low": 106.492,
+     "mid": 197.279,
+     "high": 365.464
+    },
+    "maps": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 0.0
+    },
+    "messages": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 0.0
+    },
+    "checks": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 0.0
+    }
+   },
+   "variable_usd": {
+    "servers": {
+     "low": 0.000108,
+     "mid": 0.00942955,
+     "high": 0.8233
+    },
+    "maps": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 0.0
+    },
+    "messages": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 0.0
+    },
+    "checks": {
+     "low": 0.0,
+     "mid": 0.0,
+     "high": 0.0
+    }
+   },
+   "fixed_tech_total_usd": {
+    "low": 106.492,
+    "mid": 197.279,
+    "high": 365.464
+   },
+   "variable_total_usd": {
+    "low": 0.000108,
+    "mid": 0.00942955,
+    "high": 0.8233
+   },
+   "fee_table_usd": [
+    {
+     "volume": 100,
+     "low": {
+      "servers_and_services": 1.065,
+      "people": 6.619,
+      "running_total": 7.684,
+      "with_payment_fee": 7.684
+     },
+     "mid": {
+      "servers_and_services": 1.982,
+      "people": 13.84,
+      "running_total": 15.82,
+      "with_payment_fee": 15.82
+     },
+     "high": {
+      "servers_and_services": 4.478,
+      "people": 28.92,
+      "running_total": 33.4,
+      "with_payment_fee": 33.4
+     }
+    },
+    {
+     "volume": 1000,
+     "low": {
+      "servers_and_services": 0.1066,
+      "people": 0.6619,
+      "running_total": 0.7685,
+      "with_payment_fee": 0.7685
+     },
+     "mid": {
+      "servers_and_services": 0.2067,
+      "people": 1.384,
+      "running_total": 1.59,
+      "with_payment_fee": 1.59
+     },
+     "high": {
+      "servers_and_services": 1.189,
+      "people": 2.892,
+      "running_total": 4.081,
+      "with_payment_fee": 4.081
+     }
+    },
+    {
+     "volume": 10000,
+     "low": {
+      "servers_and_services": 0.01076,
+      "people": 0.06619,
+      "running_total": 0.07695,
+      "with_payment_fee": 0.07695
+     },
+     "mid": {
+      "servers_and_services": 0.02916,
+      "people": 0.1384,
+      "running_total": 0.1675,
+      "with_payment_fee": 0.1675
+     },
+     "high": {
+      "servers_and_services": 0.8598,
+      "people": 0.2892,
+      "running_total": 1.149,
+      "with_payment_fee": 1.149
+     }
+    },
+    {
+     "volume": 100000,
+     "low": {
+      "servers_and_services": 0.001173,
+      "people": 0.006619,
+      "running_total": 0.007792,
+      "with_payment_fee": 0.007792
+     },
+     "mid": {
+      "servers_and_services": 0.0114,
+      "people": 0.01384,
+      "running_total": 0.02524,
+      "with_payment_fee": 0.02524
+     },
+     "high": {
+      "servers_and_services": 0.827,
+      "people": 0.02892,
+      "running_total": 0.8559,
+      "with_payment_fee": 0.8559
+     }
+    },
+    {
+     "volume": 1000000,
+     "low": {
+      "servers_and_services": 0.0002145,
+      "people": 0.0006619,
+      "running_total": 0.0008764,
+      "with_payment_fee": 0.0008764
+     },
+     "mid": {
+      "servers_and_services": 0.009627,
+      "people": 0.001384,
+      "running_total": 0.01101,
+      "with_payment_fee": 0.01101
+     },
+     "high": {
+      "servers_and_services": 0.8237,
+      "people": 0.002892,
+      "running_total": 0.8266,
+      "with_payment_fee": 0.8266
+     }
+    }
+   ],
+   "volume_for_fixed_under_10_cents": {
+    "low": 7700,
+    "mid": 15800,
+    "high": 32600
+   },
+   "volume_for_tech_fixed_under_10_cents": {
+    "low": 1100,
+    "mid": 2000,
+    "high": 3700
+   }
+  }
+ ],
+ "unverified": [
+  "Which Stripe card rate a Connect marketplace pays (2.65% or 2.7% domestic) and whether the 0.25% funds-routing fee stacks.",
+  "Hetzner showed 'This product is currently unavailable' on every cloud plan on 18 Oct 2026, so the Hetzner setups (Office low, Arch and Studio low) may not be orderable today.",
+  "OVHcloud: which OVH company bills a buyer outside Australia (its other catalogues list the same VPS at US$10 a month), and the price of the IPv4 address that Auckland Local Zone servers must pay for (shown only in the control panel).",
+  "Server capacity per user (marketplace servers, Social app servers, Office co-editing, mail and video, the design tools' sync servers) is not load tested.",
+  "Spare Social low case: serving video from Cloudflare R2 under Cloudflare's CDN terms, and free PhotoDNA scanning (needs an application).",
+  "Self-hosted video transcoding speed on the Hetzner AX42 needs a test encode.",
+  "Didit ID checks: the 500 free checks a month end on 1 Nov 2026 (US$10 of credit a month after that); the US$0.33 per check used here stays.",
+  "Many price pages show '$' without naming the currency (Cloudflare, Twilio, Postmark, Mapbox, Algolia, Sentry and others); USD is assumed.",
+  "Apple Developer fee waiver for non-profits, and whether native iPhone apps ship at all (piece K04).",
+  "ACC work levy and Working Safer levy rates in the people on-costs.",
+  "Spare OS: monthly update size is measured on one example image (Aurora, 15 Sep to 13 Oct 2026); downloads per install and machine life are assumptions.",
+  "Incumbent figures: Uber's 28% is an illustration in its driver guide; agents' 3 to 4% comes from calculator sites; Fiverr's 20% from secondary sources.",
+  "Our own assumptions, not research: the example amounts, 10 active users per list-app transaction, a 12-month tenancy, and the pilot team size."
+ ],
+ "checker_corrections_applied": [
+  "Stripe Connect page rates (2.7% domestic, 3.7% international) used for the middle and high cases; 2.65% only for the low case.",
+  "ClickSend low SMS rate NZ$0.1227 (NZ$20 top-up tier) instead of NZ$0.1014, which needs a NZ$13,000 top-up.",
+  "OVHcloud VPS-2 2027 at A$14.00 with no commitment plus the mandatory A$0.90 backup, instead of A$11.90 (12 months upfront) and A$1.00.",
+  "Hetzner prices with the EUR 0.50 primary IPv4 included where the page includes it.",
+  "Postmark: per-email overage plus the US$15 plan in the high case, with no second per-email charge inside the plan in the move family.",
+  "Stream Chat priced as its flat US$499 a month (1,001 to 10,000 monthly users), not US$0.09 per user; Meilisearch Cloud dropped from the list high baseline; Sumsub's US$149 minimum used instead of Veriff's.",
+  "Azure egress at the default routing rate US$0.12 per GB.",
+  "Clerk's US$0.02 per user dropped from the kit per-member high case.",
+  "Azure Postgres backup storage is free up to the provisioned size (kit high baseline).",
+  "Mapbox geocoding instead of Google in the list high case.",
+  "Spare Social high case servers on AWS (2 x m7g.xlarge), not OVH; transcoding box treated as a fixed cost, not a per-minute cost.",
+  "OVH object storage priced per GiB, not per GB.",
+  "Spare OS high download 7.2 GB a month (a 30.44-day month, not 28 days); Sentry usage inside the 50,000 included errors costs nothing; the OVH mirror is not counted twice.",
+  "People on-costs compound on holiday pay (1.1261, not 1.1219).",
+  "Didit free tier ends 1 Nov 2026, so the low ID check is US$0.33, not US$0."
+ ],
+ "sources": [
+  {
+   "name": "Exchange rates: ECB reference rates via Frankfurter",
+   "url": "https://api.frankfurter.dev/v1/2026-10-16?from=USD&to=NZD,AUD,GBP,EUR,CAD"
+  },
+  {
+   "name": "Stripe NZ pricing",
+   "url": "https://stripe.com/en-nz/pricing"
+  },
+  {
+   "name": "Stripe NZ Connect pricing",
+   "url": "https://stripe.com/en-nz/connect/pricing"
+  },
+  {
+   "name": "OVHcloud VPS catalogue (Australia)",
+   "url": "https://ca.api.ovh.com/1.0/order/catalog/public/vps?ovhSubsidiary=AU"
+  },
+  {
+   "name": "OVHcloud Public Cloud prices",
+   "url": "https://www.ovhcloud.com/en-au/public-cloud/prices/"
+  },
+  {
+   "name": "Hetzner Cloud",
+   "url": "https://www.hetzner.com/cloud/regular-performance/"
+  },
+  {
+   "name": "Hetzner Object Storage",
+   "url": "https://www.hetzner.com/storage/object-storage/"
+  },
+  {
+   "name": "AWS EC2 on-demand prices",
+   "url": "https://aws.amazon.com/ec2/pricing/on-demand/"
+  },
+  {
+   "name": "AWS data transfer, Auckland",
+   "url": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSDataTransfer/current/ap-southeast-6/index.json"
+  },
+  {
+   "name": "AWS S3, Auckland",
+   "url": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/current/ap-southeast-6/index.json"
+  },
+  {
+   "name": "AWS CloudFront pay as you go",
+   "url": "https://aws.amazon.com/cloudfront/pricing/pay-as-you-go/"
+  },
+  {
+   "name": "Azure retail prices API",
+   "url": "https://prices.azure.com/api/retail/prices?$filter=armRegionName eq 'newzealandnorth' and serviceName eq 'Virtual Machines'"
+  },
+  {
+   "name": "Cloudflare R2",
+   "url": "https://developers.cloudflare.com/r2/pricing/"
+  },
+  {
+   "name": "Cloudflare Images",
+   "url": "https://developers.cloudflare.com/images/pricing/"
+  },
+  {
+   "name": "Cloudflare Stream",
+   "url": "https://developers.cloudflare.com/stream/pricing/"
+  },
+  {
+   "name": "Cloudflare plans",
+   "url": "https://www.cloudflare.com/plans/network-cdn/"
+  },
+  {
+   "name": "Backblaze B2",
+   "url": "https://www.backblaze.com/cloud-storage/pricing"
+  },
+  {
+   "name": "Mapbox",
+   "url": "https://www.mapbox.com/pricing"
+  },
+  {
+   "name": "Google Maps Platform",
+   "url": "https://developers.google.com/maps/billing-and-pricing/pricing"
+  },
+  {
+   "name": "Algolia",
+   "url": "https://www.algolia.com/pricing"
+  },
+  {
+   "name": "Stream Chat",
+   "url": "https://getstream.io/chat/pricing/"
+  },
+  {
+   "name": "ClickSend NZ",
+   "url": "https://www.clicksend.com/nz/pricing/nz/"
+  },
+  {
+   "name": "Twilio SMS to NZ",
+   "url": "https://www.twilio.com/en-us/sms/pricing/nz"
+  },
+  {
+   "name": "Amazon SES",
+   "url": "https://aws.amazon.com/ses/pricing/"
+  },
+  {
+   "name": "Postmark",
+   "url": "https://postmarkapp.com/pricing"
+  },
+  {
+   "name": "Didit",
+   "url": "https://didit.me/pricing"
+  },
+  {
+   "name": "Didit pricing change, 1 Nov 2026",
+   "url": "https://didit.me/blog/new-pricing-november-2026/"
+  },
+  {
+   "name": "Sumsub",
+   "url": "https://sumsub.com/pricing/"
+  },
+  {
+   "name": "AWS Elemental MediaConvert, Sydney",
+   "url": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSElementalMediaConvert/current/ap-southeast-2/index.json"
+  },
+  {
+   "name": "AWS Rekognition, Sydney",
+   "url": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRekognition/current/ap-southeast-2/index.json"
+  },
+  {
+   "name": "openDesk scaling guide",
+   "url": "https://docs.opendesk.eu/operations/scaling/"
+  },
+  {
+   "name": "Grafana Cloud",
+   "url": "https://grafana.com/pricing/"
+  },
+  {
+   "name": "Sentry",
+   "url": "https://sentry.io/pricing/"
+  },
+  {
+   "name": "Zitadel",
+   "url": "https://zitadel.com/pricing"
+  },
+  {
+   "name": "Apple Developer Program",
+   "url": "https://developer.apple.com/programs/"
+  },
+  {
+   "name": "Xero NZ",
+   "url": "https://www.xero.com/nz/pricing-plans/"
+  },
+  {
+   "name": "NZ Companies Office fees",
+   "url": "https://companies-register.companiesoffice.govt.nz/help-centre/managing-your-online-account/schedule-of-fees/"
+  },
+  {
+   "name": "NZ minimum wage",
+   "url": "https://www.employment.govt.nz/news-and-updates/minimum-wage-is-increasing-on-1-april-2026"
+  },
+  {
+   "name": "NZ Living Wage",
+   "url": "https://www.livingwage.org.nz/"
+  },
+  {
+   "name": "IRD KiwiSaver changes",
+   "url": "https://www.ird.govt.nz/kiwisaver-changes"
+  },
+  {
+   "name": "Uber NZ driver earnings guide",
+   "url": "https://www.uber.com/nz/en/blog/understanding-earnings-post-1-april-2024/"
+  },
+  {
+   "name": "Uber Eats NZ merchant pricing",
+   "url": "https://merchants.ubereats.com/nz/en/pricing/"
+  },
+  {
+   "name": "Airbnb host fees",
+   "url": "https://www.airbnb.co.nz/help/article/1857"
+  },
+  {
+   "name": "Agent commission calculator",
+   "url": "https://www.calculate.co.nz/flat-fee-vs-commission-calculator.php"
+  },
+  {
+   "name": "Property management costs",
+   "url": "https://www.propertybrokers.co.nz/news/how-much-does-property-management-cost-in-new-zealand"
+  },
+  {
+   "name": "Fiverr fees (secondary)",
+   "url": "https://vaultleap.com/blog/fiverr-fees-explained-2026"
+  },
+  {
+   "name": "Trade Me fees (Consumer NZ)",
+   "url": "https://consumer.org.nz/shopping/online-shopping/the-fine-print-whats-behind-trade-mes-move-to-scrap-success-fees"
+  },
+  {
+   "name": "Microsoft 365 business plans (NZ)",
+   "url": "https://www.microsoft.com/en-nz/microsoft-365/business/microsoft-365-plans-and-pricing"
+  }
+ ]
+}</script>
+<script>
+(function () {
+  "use strict";
+  var M = JSON.parse(document.getElementById("model").textContent);
+  var RATES = M.exchange_rates.per_usd;
+  var SYM = M.currency.symbols;
+  var CURS = ["USD", "NZD", "AUD", "GBP", "EUR", "CAD"];
+  var CASES = ["low", "mid", "high"];
+  var CASE_LABEL = { low: "Low", mid: "Middle", high: "High" };
+  var SEGS = [
+    { key: "servers", label: "Servers and services", app: "office" },
+    { key: "maps", label: "Maps", app: "ride" },
+    { key: "messages", label: "Messages", app: "social" },
+    { key: "checks", label: "ID checks and moderation", app: "studio" },
+    { key: "people", label: "People", app: "food" },
+    { key: "payment", label: "Card fee", app: "os" }
+  ];
+  var APPS = {};
+  M.apps.forEach(function (a) { APPS[a.id] = a; });
+  var GH = "https://github.com/spareware-co-op/spareware/blob/main/projects/kit/";
+  var state = { app: "ride", vol: 10000, cur: "USD" };
+  var SVGNS = "http://www.w3.org/2000/svg";
+
+  function $(id) { return document.getElementById(id); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function svgEl(name, attrs, parent) {
+    var e = document.createElementNS(SVGNS, name);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+
+  /* ---------- Numbers ---------- */
+  function conv(usd) { return usd * RATES[state.cur]; }
+  function plain(v) {
+    var a = Math.abs(v);
+    if (a === 0) return "0";
+    if (a >= 100) return Math.round(v).toLocaleString("en-US");
+    if (a >= 0.1) return v.toFixed(2);
+    if (a >= 0.01) return v.toFixed(3);
+    if (a >= 0.0001) return Number(v.toPrecision(2)).toFixed(Math.max(0, 1 - Math.floor(Math.log10(a))));
+    return "under 0.0001";
+  }
+  function money(usd) {
+    var t = plain(conv(usd));
+    return t.indexOf("under") === 0 ? "under " + SYM[state.cur] + "0.0001" : SYM[state.cur] + t;
+  }
+  function pct(part, whole) {
+    var p = part / whole * 100;
+    return (p >= 10 ? Math.round(p) : p >= 1 ? p.toFixed(1) : p.toFixed(2)) + "%";
+  }
+  function count(n) { return n >= 1e6 ? (n / 1e6) + " million" : n.toLocaleString("en-US"); }
+  function niceVol(x) {
+    var v = Math.pow(10, x);
+    var p = Math.pow(10, Math.floor(Math.log10(v)) - 1);
+    return Math.round(v / p) * p;
+  }
+
+  /* ---------- Model ---------- */
+  function parts(a, V, c) {
+    var o = {};
+    ["servers", "maps", "messages", "checks"].forEach(function (s) {
+      o[s] = a.fixed_usd[s][c] / V + a.variable_usd[s][c];
+    });
+    o.people = M.people.monthly_usd[c] / V;
+    o.payment = a.payment[c] || 0;
+    return o;
+  }
+  function running(a, V, c) { var p = parts(a, V, c); return p.servers + p.maps + p.messages + p.checks + p.people; }
+  function total(a, V, c) { return running(a, V, c) + (a.payment[c] || 0); }
+  function moneyEx(usd) {
+    var v = conv(usd);
+    return Math.abs(v - Math.round(v)) < 0.005 ? SYM[state.cur] + Math.round(v).toLocaleString("en-US") : money(usd);
+  }
+  function exLabel(a) {
+    var amt = a.payment.amount_usd;
+    if (a.id === "rent") return "one tenancy, with rent of " + moneyEx(amt) + " a month,";
+    if (a.id === "home") return "one home listed through to sale";
+    if (a.kind === "member") return "one " + a.unit;
+    return "one " + moneyEx(amt) + " " + a.unit;
+  }
+  function payName(a) { return a.payment.kind === "bank_debit" ? "Bank fee" : "Card fee"; }
+  function hasPay(a) { return a.payment.kind === "card" || a.payment.kind === "bank_debit"; }
+
+  /* ---------- Controls ---------- */
+  function buildControls() {
+    var cur = $("cur");
+    CURS.forEach(function (c) {
+      var b = document.createElement("button");
+      b.type = "button"; b.textContent = c; b.dataset.cur = c;
+      b.setAttribute("aria-pressed", c === state.cur ? "true" : "false");
+      b.addEventListener("click", function () { state.cur = c; render(); });
+      cur.appendChild(b);
+    });
+    var ul = $("apps");
+    M.apps.forEach(function (a) {
+      var li = document.createElement("li");
+      var b = document.createElement("button");
+      b.type = "button"; b.className = "app-btn"; b.dataset.app = a.id;
+      b.setAttribute("aria-pressed", a.id === state.app ? "true" : "false");
+      b.innerHTML = '<span class="mark" aria-hidden="true"></span><span><b>' + esc(a.name) + '</b><span class="u">per ' + esc(a.unit) + (a.kind === "member" ? ", a month" : "") + "</span></span>";
+      b.addEventListener("click", function () { state.app = a.id; render(); });
+      li.appendChild(b); ul.appendChild(li);
+    });
+    $("vol").addEventListener("input", function (e) { state.vol = niceVol(parseFloat(e.target.value)); render(); });
+    window.addEventListener("resize", debounce(render, 120));
+  }
+  function debounce(fn, ms) { var t; return function () { clearTimeout(t); t = setTimeout(fn, ms); }; }
+
+  /* ---------- Fee chart ---------- */
+  function drawFee(a) {
+    var box = $("fee-chart");
+    box.innerHTML = "";
+    var W = Math.max(280, box.clientWidth), H = W < 560 ? 250 : 300;
+    var m = { l: 52, r: 14, t: 14, b: 34 };
+    var svg = svgEl("svg", { viewBox: "0 0 " + W + " " + H, width: W, height: H, role: "img",
+      "aria-label": "Running cost per " + a.unit + " falling from " + money(running(a, 100, "mid")) + " at 100 to " + money(running(a, 1e6, "mid")) + " at 1 million a month, middle case" }, box);
+    var N = 96, pts = [], lo = Infinity, hi = 0;
+    for (var i = 0; i <= N; i++) {
+      var x = 2 + 4 * i / N, V = Math.pow(10, x);
+      var p = { x: x, low: conv(running(a, V, "low")), mid: conv(running(a, V, "mid")), high: conv(running(a, V, "high")) };
+      pts.push(p); lo = Math.min(lo, p.low); hi = Math.max(hi, p.high);
+    }
+    var pay = hasPay(a) ? conv(a.payment.mid) : 0;
+    if (pay > 0) { lo = Math.min(lo, pay); hi = Math.max(hi, pay); }
+    var y0 = Math.floor(Math.log10(lo)), y1 = Math.ceil(Math.log10(hi));
+    if (y1 - y0 < 2) y1 = y0 + 2;
+    function X(x) { return m.l + (x - 2) / 4 * (W - m.l - m.r); }
+    function Y(v) { return m.t + (y1 - Math.log10(v)) / (y1 - y0) * (H - m.t - m.b); }
+    var step = (y1 - y0) > 6 ? 2 : 1;
+    for (var d = y0; d <= y1; d += step) {
+      var v = Math.pow(10, d), yy = Y(v);
+      svgEl("line", { x1: m.l, x2: W - m.r, y1: yy, y2: yy, "class": "grid-line" }, svg);
+      var t = svgEl("text", { x: m.l - 6, y: yy + 4, "text-anchor": "end" }, svg);
+      t.textContent = v >= 1 ? v.toLocaleString("en-US") : String(Number(v.toPrecision(1)));
+    }
+    [2, 3, 4, 5, 6].forEach(function (x) {
+      svgEl("line", { x1: X(x), x2: X(x), y1: m.t, y2: H - m.b, "class": "grid-line" }, svg);
+      var t = svgEl("text", { x: X(x), y: H - m.b + 16, "text-anchor": x === 2 ? "start" : x === 6 ? "end" : "middle" }, svg);
+      t.textContent = W < 480 ? ["100", "1k", "10k", "100k", "1M"][x - 2] : x === 6 ? "1 million" : Math.pow(10, x).toLocaleString("en-US");
+    });
+    svgEl("line", { x1: m.l, x2: W - m.r, y1: H - m.b, y2: H - m.b, "class": "axis" }, svg);
+    var xt = svgEl("text", { x: (m.l + W - m.r) / 2, y: H - 4, "text-anchor": "middle" }, svg);
+    xt.textContent = a.volume_label + (W < 480 ? " (k = thousand, M = million)" : " (each step is 10 times more)");
+    var band = pts.map(function (p, i) { return (i ? "L" : "M") + X(p.x).toFixed(1) + " " + Y(p.low).toFixed(1); }).join(" ") + " " +
+      pts.slice().reverse().map(function (p) { return "L" + X(p.x).toFixed(1) + " " + Y(p.high).toFixed(1); }).join(" ") + " Z";
+    svgEl("path", { d: band, "class": "band" }, svg);
+    svgEl("path", { d: pts.map(function (p, i) { return (i ? "L" : "M") + X(p.x).toFixed(1) + " " + Y(p.mid).toFixed(1); }).join(" "), "class": "mid" }, svg);
+    if (pay > 0) {
+      svgEl("line", { x1: m.l, x2: W - m.r, y1: Y(pay), y2: Y(pay), "class": "pay" }, svg);
+      var pt = svgEl("text", { x: W - m.r, y: Y(pay) - 6, "text-anchor": "end" }, svg);
+      pt.textContent = payName(a) + " " + plain(pay);
+    }
+    var lx = Math.log10(state.vol), mv = conv(running(a, state.vol, "mid"));
+    svgEl("line", { x1: X(lx), x2: X(lx), y1: m.t, y2: H - m.b, "class": "marker" }, svg);
+    svgEl("circle", { cx: X(lx), cy: Y(mv), r: 5, "class": "dot" }, svg);
+    var right = X(lx) > W * 0.6;
+    var dl = svgEl("text", { x: X(lx) + (right ? -9 : 9), y: Y(mv) - 8, "text-anchor": right ? "end" : "start", "class": "dot-label" }, svg);
+    dl.textContent = plain(mv);
+    $("fee-sub").textContent = "Running cost per " + a.unit + (a.kind === "member" ? " a month" : "") + ", " + SYM[state.cur] + ", excluding tax. Both scales go up in steps of 10.";
+    $("fee-legend").innerHTML = '<span><i class="key key-band" aria-hidden="true"></i>Low to high estimate</span><span><i class="key key-mid" aria-hidden="true"></i>Middle estimate</span>' +
+      (pay > 0 ? '<span><i class="key key-pay" aria-hidden="true"></i>' + payName(a) + " on " + esc(exLabel(a).replace(/,$/, "")) + ", middle (example: " + esc(M.payment.example_country) + ")</span>" : "");
+  }
+
+  /* ---------- Readout and breakdown ---------- */
+  function drawNow(a) {
+    var V = state.vol, run = {}, tot = {};
+    CASES.forEach(function (c) { run[c] = running(a, V, c); tot[c] = total(a, V, c); });
+    var vtxt = count(V) + " " + a.volume_label;
+    var h;
+    if (a.kind === "member") {
+      h = "At <b>" + esc(vtxt) + "</b>, " + esc(exLabel(a)) + " costs about <b>" + money(run.mid) + "</b> a month to run.";
+    } else if (a.payment.kind === "none") {
+      h = "At <b>" + esc(vtxt) + "</b>, " + esc(exLabel(a)) + " costs about <b>" + money(run.mid) + "</b> to run. No money is held, so there is no card fee.";
+    } else if (a.payment.kind === "bank_debit") {
+      h = "At <b>" + esc(vtxt) + "</b>, " + esc(exLabel(a)) + " costs about <b>" + money(run.mid) + "</b> to run, plus <b>" + money(a.payment.mid) + "</b> in bank fees if the rent goes by direct debit.";
+    } else {
+      h = "At <b>" + esc(vtxt) + "</b>, " + esc(exLabel(a)) + " costs about <b>" + money(run.mid) + "</b> to run, plus a <b>" + money(a.payment.mid) + "</b> card fee.";
+    }
+    $("headline").innerHTML = h;
+    var amt = a.payment.amount_usd;
+    var big = '<div><span class="label">Running cost</span><span class="v">' + money(run.mid) + '</span><span class="r">' + money(run.low) + " to " + money(run.high) + "</span></div>";
+    if (hasPay(a)) {
+      big += '<div><span class="label">At-cost fee</span><span class="v">' + money(tot.mid) + '</span><span class="r">' + (amt ? pct(tot.mid, amt) + " of " + moneyEx(amt) : "") + "</span></div>";
+    }
+    $("big").innerHTML = big;
+    var rows = "", P = {};
+    CASES.forEach(function (c) { P[c] = parts(a, V, c); });
+    SEGS.forEach(function (s) {
+      if (s.key === "payment" && !hasPay(a)) return;
+      if (CASES.every(function (c) { return P[c][s.key] === 0; })) return;
+      var label = s.key === "payment" ? payName(a) : s.label;
+      rows += '<tr><td><span class="sw" data-app="' + s.app + '" aria-hidden="true"></span>' + label + "</td>" +
+        CASES.map(function (c) { return '<td class="num">' + plain(conv(P[c][s.key])) + "</td>"; }).join("") + "</tr>";
+    });
+    rows += '<tr class="total"><td>' + (hasPay(a) ? "At-cost fee" : "Total") + "</td>" + CASES.map(function (c) { return '<td class="num">' + plain(conv(tot[c])) + "</td>"; }).join("") + "</tr>";
+    $("breakdown").innerHTML = "<caption>" + SYM[state.cur] + " per " + esc(a.unit) + (a.kind === "member" ? " a month" : "") + ", excluding tax</caption><thead><tr><th>Part</th>" +
+      CASES.map(function (c) { return "<th>" + CASE_LABEL[c] + "</th>"; }).join("") + "</tr></thead><tbody>" + rows + "</tbody>";
+    var pn = $("pilot-note");
+    if (V > a.pilot_volume) {
+      pn.hidden = false;
+      pn.textContent = "Above " + a.pilot_volume.toLocaleString("en-US") + " " + a.volume_label + " the team must grow. That growth is not costed yet, so the people line here is too low.";
+    } else if (V < 1000) {
+      pn.hidden = false;
+      pn.textContent = "At this size the fixed costs, mostly a small team, are most of the fee. A new app would share servers and people with other apps until it grows.";
+    } else { pn.hidden = true; }
+  }
+
+  /* ---------- Comparison ---------- */
+  function drawCompare(a) {
+    var box = $("cmp-chart"); box.innerHTML = "";
+    var inc = a.incumbent, V = state.vol;
+    var tot = { low: total(a, V, "low"), mid: total(a, V, "mid"), high: total(a, V, "high") };
+    var rows = [];
+    $("cmp-sub").textContent = "Middle estimate at " + count(V) + " " + a.volume_label + ", with the low to high range.";
+    if (!inc) {
+      box.innerHTML = '<p class="empty">No researched comparison yet for ' + esc(a.name) + ".</p>";
+      $("cmp-text").textContent = "";
+      return;
+    }
+    var amt = a.payment.amount_usd;
+    if (inc.flat_usd) {
+      rows.push({ label: a.name + " at cost", v: tot.mid, lo: tot.low, hi: tot.high, cls: "spare" });
+      rows.push({ label: inc.name, v: inc.flat_usd, cls: "inc" });
+    } else if (amt) {
+      rows.push({ label: a.name + " at cost", v: tot.mid, lo: tot.low, hi: tot.high, cls: "spare" });
+      var l = inc.cut_pct_low / 100 * amt, hgh = inc.cut_pct_high / 100 * amt;
+      rows.push({ label: inc.name + ", " + (inc.cut_pct_low === inc.cut_pct_high ? inc.cut_pct_low + "%" : inc.cut_pct_low + " to " + inc.cut_pct_high + "%"), v: l, ext: hgh > l ? hgh : 0, cls: "inc" });
+    }
+    if (rows.length) {
+      var W = Math.max(280, box.clientWidth), rowH = 50, H = rows.length * rowH + 6;
+      var max = 0;
+      rows.forEach(function (r) { max = Math.max(max, r.hi || 0, r.ext || 0, r.v); });
+      max *= 1.04;
+      var svg = svgEl("svg", { viewBox: "0 0 " + W + " " + H, width: W, height: H, role: "img",
+        "aria-label": rows.map(function (r) { return r.label + " " + (r.ext ? money(r.v) + " to " + money(r.ext) : money(r.v)); }).join("; ") }, box);
+      rows.forEach(function (r, i) {
+        var y = i * rowH;
+        var t = svgEl("text", { x: 0, y: y + 14, "class": "bar-label" }, svg);
+        var s1 = svgEl("tspan", {}, t); s1.textContent = r.label + ": ";
+        var s2 = svgEl("tspan", { "class": "b" }, t);
+        s2.textContent = r.ext ? money(r.v) + " to " + money(r.ext) : money(r.v);
+        var bw = function (v) { return Math.max(2, v / max * (W - 2)); };
+        if (r.ext) svgEl("rect", { x: 0, y: y + 22, width: bw(r.ext), height: 18, "class": "inc-ext" }, svg);
+        svgEl("rect", { x: 0, y: y + 22, width: bw(r.v), height: 18, "class": r.cls }, svg);
+        if (r.hi) {
+          var x1 = bw(r.lo), x2 = bw(r.hi), cy = y + 31;
+          svgEl("line", { x1: x1, x2: x2, y1: cy, y2: cy, "class": "whisker" }, svg);
+          svgEl("line", { x1: x1, x2: x1, y1: cy - 6, y2: cy + 6, "class": "whisker" }, svg);
+          svgEl("line", { x1: x2, x2: x2, y1: cy - 6, y2: cy + 6, "class": "whisker" }, svg);
+        }
+      });
+    } else {
+      box.innerHTML = '<p class="empty">' + esc(inc.name) + " charge " + inc.cut_pct_low + " to " + inc.cut_pct_high + "% of the sale price. " + esc(a.name) + " costs about " + money(tot.mid) + " per listing, whatever the price.</p>";
+    }
+    var on = amt ? " Worked out on " + exLabel(a).replace(/,$/, "") + "." : "";
+    $("cmp-text").innerHTML = esc(inc.text) + "." + esc(on) + " Status: " + esc(inc.status) + '. <a href="' + esc(inc.source_url) + '">Source</a>.';
+  }
+
+  /* ---------- Where each dollar goes ---------- */
+  function drawDollars() {
+    var V = state.vol, box = $("dollars"); box.innerHTML = "";
+    $("dollar-sub").textContent = "Middle estimate at " + count(V) + " a month. " + M.payment.example_provider.split(" (")[0] + " card fees in " + M.payment.example_country + " as the example; they differ by country.";
+    ["ride", "food", "stay"].forEach(function (id) {
+      var a = APPS[id], p = parts(a, V, "mid"), tot = total(a, V, "mid");
+      var div = document.createElement("div"); div.className = "dollar";
+      div.innerHTML = '<div class="dollar-head"><span><b>' + esc(a.name) + "</b>, " + esc(exLabel(a)) + '</span><span class="num">' + money(tot) + " fee, " + pct(tot, a.payment.amount_usd) + "</span></div>";
+      var chart = document.createElement("div"); chart.className = "chart"; div.appendChild(chart);
+      box.appendChild(div);
+      var W = Math.max(260, chart.clientWidth), H = 26;
+      var svg = svgEl("svg", { viewBox: "0 0 " + W + " " + H, width: W, height: H, role: "img",
+        "aria-label": SEGS.filter(function (s) { return p[s.key] > 0; }).map(function (s) { return s.label + " " + pct(p[s.key], tot); }).join(", ") }, chart);
+      var x = 0, list = "";
+      SEGS.forEach(function (s) {
+        var v = p[s.key]; if (!(v > 0)) return;
+        var w = v / tot * W;
+        var g = svgEl("g", { "data-app": s.app }, svg);
+        svgEl("rect", { x: x.toFixed(2), y: 0, width: Math.max(0.5, w - 1).toFixed(2), height: H, "class": "seg-fill" }, g);
+        if (w >= 38) {
+          var t = svgEl("text", { x: (x + w / 2).toFixed(1), y: 17, "text-anchor": "middle", "class": "seg-label" }, svg);
+          t.textContent = pct(v, tot);
+        }
+        x += w;
+        list += '<li><span class="sw" data-app="' + s.app + '" aria-hidden="true"></span>' + s.label + '<span class="num">' + money(v) + " (" + pct(v, tot) + ")</span></li>";
+      });
+      var ul = document.createElement("ul"); ul.className = "parts"; ul.innerHTML = list; div.appendChild(ul);
+    });
+  }
+
+  /* ---------- Notes ---------- */
+  function buildNotes() {
+    var r = M.exchange_rates, h = "";
+    h += "<p>Built from price research of 18 Oct 2026 that was checked independently, with every correction applied. All figures are estimates for planning, not quotes, and exclude sales tax.</p>";
+    h += "<h3>How to read the range</h3><ul>";
+    h += "<li><b>Low:</b> " + esc(M.method.low) + "</li>";
+    h += "<li><b>High:</b> " + esc(M.method.high) + "</li>";
+    h += "<li><b>Middle:</b> " + esc(M.method.mid) + "</li>";
+    h += "<li><b>People:</b> " + esc(M.people.what) + " Example: " + esc(M.people.example_country) + " wages, " + money(M.people.monthly_usd.low) + " to " + money(M.people.monthly_usd.high) + " a month. " + esc(M.method.pilot_size.note) + "</li>";
+    h += "<li><b>Card fees:</b> " + esc(M.payment.what) + "</li></ul>";
+    h += "<h3>Our assumptions</h3><ul>" + M.method.assumptions.map(function (s) { return "<li>" + esc(s) + "</li>"; }).join("") + "</ul>";
+    h += "<h3>Not included</h3><ul>" + M.method.not_included.map(function (s) { return "<li>" + esc(s) + "</li>"; }).join("") + "</ul>";
+    h += "<h3>Not yet verified</h3><ul>" + M.unverified.map(function (s) { return "<li>" + esc(s) + "</li>"; }).join("") + "</ul>";
+    h += "<h3>Exchange rates</h3><p class=\"muted\">Fixed rates from " + esc(r.source) + ", dated 16 Oct 2026: " +
+      CURS.slice(1).map(function (c) { return "US$1 = " + SYM[c] + r.per_usd[c]; }).join(", ") + '. <a href="' + esc(r.source_url) + '">Source</a>.</p>';
+    h += "<details><summary>Sources (" + M.sources.length + ")</summary><ul style=\"margin-top:8px\">" +
+      M.sources.map(function (s) { return '<li><a href="' + esc(s.url) + '">' + esc(s.name) + "</a></li>"; }).join("") + "</ul></details>";
+    h += '<div class="links"><a class="btn btn-quiet" href="' + GH + 'notes/K06-cost-model.md">Read the full workings</a><a class="btn btn-quiet" href="' + GH + 'cost-model.json">Get the model data</a></div>';
+    $("notes").innerHTML = h;
+  }
+
+  /* ---------- Render ---------- */
+  function render() {
+    var a = APPS[state.app];
+    Array.prototype.forEach.call(document.querySelectorAll("#cur button"), function (b) { b.setAttribute("aria-pressed", b.dataset.cur === state.cur ? "true" : "false"); });
+    Array.prototype.forEach.call(document.querySelectorAll(".app-btn"), function (b) { b.setAttribute("aria-pressed", b.dataset.app === state.app ? "true" : "false"); });
+    $("fee-panel").setAttribute("data-app", a.id);
+    $("now-panel").setAttribute("data-app", a.id);
+    $("vol-num").textContent = count(state.vol);
+    $("vol-unit").textContent = a.volume_label;
+    $("vol").setAttribute("aria-valuetext", count(state.vol) + " " + a.volume_label);
+    drawFee(a); drawNow(a); drawCompare(a); drawDollars(); buildNotes();
+  }
+
+  buildControls();
+  render();
+})();
+</script>
+</body>
+</html>

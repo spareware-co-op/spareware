@@ -1,0 +1,61 @@
+name: Site
+
+# Publishes the browse hub, every program's demo and feature map to GitHub Pages.
+# Layout: /index.html (hub), /<program>/index.html (demo), /<program>/features.json, /<program>/FEATURES.md
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - "projects/**/demo/**"
+      - "projects/**/features.json"
+      - "projects/**/FEATURES.md"
+      - "design/**"
+      - ".github/workflows/site.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assemble the site
+        run: |
+          mkdir -p _site
+          cp -r site/. _site/
+          cp design/tokens.css _site/tokens.css
+          for dir in projects/*/; do
+            slug=$(basename "$dir")
+            case "$slug" in _template) continue ;; esac
+            mkdir -p "_site/$slug"
+            if [ -d "$dir/demo" ]; then cp -r "$dir/demo/." "_site/$slug/"; fi
+            for f in features.json FEATURES.md; do
+              if [ -f "$dir/$f" ]; then cp "$dir/$f" "_site/$slug/$f"; fi
+            done
+          done
+          touch _site/.nojekyll
+          find _site -maxdepth 2 | sort
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
