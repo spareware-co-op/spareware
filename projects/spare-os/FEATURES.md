@@ -61,7 +61,7 @@ The proven Linux base, the build line that turns it into signed Spare OS images,
 | OS-A1-F2-P4 | **Hardware test lab**: A pool of real PCs, laptops, printers and docks, many donated by members, that every release is tested on. | service | large | OS-A1-F1-P2, OS-A1-F2-P7 |  |
 | OS-A1-F2-P5 | **Hardware compatibility list**: A public, searchable list of PC models and devices with how well each works, built from the lab and members' reports. | data | medium | OS-A1-F2-P4 |  |
 | OS-A1-F2-P6 | **Old start-up modes decision**: Decides whether to support PCs that start in legacy BIOS mode or have Windows on an MBR disk, as many 2011 to 2013 PCs do and dual boot then needs, and how that fits signed start-up and image updates. | research | medium | OS-A1-F2-P1, OS-A11-F1-P1, OS-A12-F2-P1 |  |
-| OS-A1-F2-P7 | **Wipe standard for donated PCs**: A written standard for wiping every donated PC before it enters the test lab or the refurbishment programme, with a record of each wipe, because donors' personal data on those disks stays the co-op's responsibility under the Privacy Act. | legal | small | OS-A11-F6-P4, KIT-A18-F14-P1 |  |
+| OS-A1-F2-P7 | **Wipe standard for donated PCs**: A written standard for wiping every donated PC before it enters the test lab or the refurbishment programme, with a record of each wipe, because donors' personal data on those disks stays the co-op's responsibility under privacy law (example: New Zealand's Privacy Act). | legal | small | OS-A11-F6-P4, KIT-A18-F14-P1 |  |
 | OS-A1-F3-P1 | **Driver detection and offers**: Spots devices that need an extra driver or firmware file and offers the right one from the store. | library | medium | OS-A1-F1-P2 |  |
 | OS-A1-F3-P2 | **Graphics drivers**: Ships or offers graphics drivers, including NVIDIA's, signed so they load with Secure Boot on, following the policy for software that is not open source. | integration | large | OS-A12-F2-P2, OS-A21-F1-P4 |  |
 | OS-A1-F3-P3 | **Firmware files package**: Packages the firmware files Wi-Fi cards, Bluetooth and graphics chips need, keeping each maker's redistribution terms and following the policy for software that is not open source. | data | small | OS-A1-F1-P3, OS-A21-F1-P4 |  |
@@ -101,7 +101,7 @@ Every way a person gets Spare OS onto a PC: downloading it, making a USB stick o
 | OS-A2-F2-P1 | **USB maker for Windows**: Our own small, open program that downloads the image, checks it and writes it to a USB stick. | interface | medium | OS-A2-F1-P3, OS-A2-F2-P4 |  |
 | OS-A2-F2-P2 | **USB maker for Mac and Linux**: The same USB maker built for macOS and Linux. | interface | small | OS-A2-F2-P1, OS-A2-F2-P4 |  |
 | OS-A2-F2-P3 | **Boot menu help**: A list by PC maker of the key that opens the boot menu, plus how to turn off Windows fast start-up first. | data | small |  |  |
-| OS-A2-F2-P4 | **Signed Windows and Mac builds**: Signs the USB maker and Windows-side helper with a co-op Authenticode certificate (Microsoft's Artifact Signing issues them to NZ organisations) and Mac builds with Apple Developer ID notarisation, through the kit's signed releases and held by the legal entity with costs on the ledger, so SmartScreen and Smart App Control let them run; the certificates belong in the kit for every Spare desktop app. | integration | medium | OS-A1-F1-P5, svc-ledger, KIT-A22-F2-P3, KIT-A14-F1-P1 |  |
+| OS-A2-F2-P4 | **Signed Windows and Mac builds**: Signs the USB maker and Windows-side helper with a co-op Authenticode certificate (Microsoft's Artifact Signing issues them to organisations in the countries it lists, such as New Zealand) and Mac builds with Apple Developer ID notarisation, through the kit's signed releases and held by the legal entity with costs on the ledger, so SmartScreen and Smart App Control let them run; the certificates belong in the kit for every Spare desktop app. | integration | medium | OS-A1-F1-P5, svc-ledger, KIT-A22-F2-P3, KIT-A14-F1-P1 |  |
 | OS-A2-F2-P5 | **Accessible, translated Windows tools**: Makes the USB maker and the Windows-side helper work fully with Windows screen readers, the keyboard alone and high contrast, and translates them, since they are the first Spare programs a blind person runs. | interface | small | OS-A2-F2-P1, OS-A4-F4-P2, KIT-A19-F1-P1, KIT-A19-F2-P1 |  |
 | OS-A2-F3-P1 | **Live session**: A full Spare OS session that runs from the USB stick and leaves the PC's disk untouched. | library | medium | OS-A1-F1-P2 |  |
 | OS-A2-F3-P2 | **Hardware check report**: Shows which devices work and which need attention, and with consent adds the result to the compatibility list. | interface | medium | OS-A1-F2-P5 |  |
@@ -152,7 +152,7 @@ The first few minutes after install or on a new PC: language, keyboard, Wi-Fi, a
 | OS-A3-F3-P1 | **Spareware login at setup**: Signs in with a passkey or password through the accounts service, and links it to the local account. | integration | medium | svc-accounts |  |
 | OS-A3-F3-P2 | **Settings sync choice**: Lets the person choose which settings sync between their PCs, all off until they turn them on, with Wi-Fi passwords and other secrets left out until end-to-end encrypted sync (OS-A12-F11) is ready. | library | medium | kit-sync, OS-A6-F1-P1 |  |
 | OS-A3-F4-P1 | **Privacy choices screen**: One screen listing each choice, what is sent, to whom and why, with nothing pre-ticked. | interface | small | OS-A12-F5-P1 |  |
-| OS-A3-F4-P2 | **Spare OS privacy notice**: Adds what Spare OS itself collects, in plain words, to the kit's collection notices, checked against privacy law in NZ and the main overseas markets. | legal | small | KIT-A18-F5-P1, OS-A21-F6-P1 |  |
+| OS-A3-F4-P2 | **Spare OS privacy notice**: Adds what Spare OS itself collects, in plain words, to the kit's collection notices, checked against privacy law in each country, starting with New Zealand. | legal | small | KIT-A18-F5-P1, OS-A21-F6-P1 |  |
 | OS-A3-F5-P1 | **Welcome tour**: A short, skippable tour of the start menu, files, settings, store and help. | interface | medium | OS-A5-F1-P2 |  |
 | OS-A3-F5-P2 | **Where did it go guide**: A searchable list that maps common Windows tasks and places to where they are in Spare OS. | data | medium | OS-A20-F1-P1 |  |
 | OS-A3-F6-P1 | **Layout presets**: Our own designed layouts built on the desktop's settings, with no copied visuals from other systems. | data | medium | OS-A5-F1-P2 |  |
@@ -401,8 +401,8 @@ Installing, updating and removing software from one trusted store or other sourc
 | OS-A9-F3-P3 | **Report and takedown**: Lets anyone report a harmful app; decisions and removals go in the public log with the rule behind them. | service | medium | svc-trust, OS-A21-F5-P1 |  |
 | OS-A9-F3-P4 | **Submission checks**: Automated malware and policy checks on every new app version before it is listed, sharing its scanners with the kit's plugin review once that is ready. | service | medium | OS-A9-F1-P3 |  |
 | OS-A9-F4-P1 | **App payments**: Takes payments and tips through the regulated payment provider, with the at-cost fee on the ledger. | integration | medium | svc-payments, svc-ledger, OS-A9-F9-P1, OS-A9-F9-P3 | [K02](../kit/STATUS.md) |
-| OS-A9-F4-P2 | **Tax on digital sales**: Works out and collects GST, VAT and sales tax on app sales where the store must, on the kit's GST engine, starting with NZ. | legal | medium | svc-payments, KIT-A4-F1-P2 |  |
-| OS-A9-F4-P3 | **Refunds and consumer guarantees for apps**: Refunds for app purchases on the kit's refunds service, following NZ consumer guarantees for digital content and the EU's digital content rules. | legal | medium | KIT-A3-F5-P1, KIT-A18-F8-P1, OS-A21-F10-P2 |  |
+| OS-A9-F4-P2 | **Tax on digital sales**: Works out and collects sales tax, VAT and GST on app sales where the store must, on the kit's sales tax engine, starting with New Zealand. | legal | medium | svc-payments, KIT-A4-F1-P2 |  |
+| OS-A9-F4-P3 | **Refunds and consumer guarantees for apps**: Refunds for app purchases on the kit's refunds service, following each country's consumer law for digital content, such as New Zealand's consumer guarantees and the EU's digital content rules. | legal | medium | KIT-A3-F5-P1, KIT-A18-F8-P1, OS-A21-F10-P2 |  |
 | OS-A9-F4-P4 | **Receipts and tax invoices for apps**: Gives every app purchase a receipt, and a tax invoice where the law needs one, through the kit. | integration | small | KIT-A3-F7-P1, KIT-A4-F2-P1, OS-A9-F4-P1 |  |
 | OS-A9-F4-P5 | **App subscriptions**: Lets makers sell subscriptions that the person can see and cancel in one place, on the kit's regular payments. | integration | small | KIT-A3-F12-P1, OS-A9-F4-P1 |  |
 | OS-A9-F5-P1 | **Plugin and MCP tool listings**: Lists sandboxed plugins and MCP tools in the store with their declared permissions, after the kit's plugin review and signing. | integration | medium | kit-plugin, kit-mcp, OS-A9-F1-P3, KIT-A16-F6-P2 |  |
@@ -410,7 +410,7 @@ Installing, updating and removing software from one trusted store or other sourc
 | OS-A9-F7-P1 | **Install approvals**: Holds a child's install request until a parent approves, using the age range and family settings. | library | medium | OS-A13-F4-P1, OS-A21-F4-P2 |  |
 | OS-A9-F7-P2 | **Purchase approvals and spending limits**: Holds a child's purchase until a parent approves and sets spending limits per child, meeting app store laws that need parent consent for purchases as well as downloads, such as Texas's, which courts let take effect in 2026. | library | medium | OS-A9-F7-P1, OS-A9-F4-P1, OS-A21-F4-P1 |  |
 | OS-A9-F7-P3 | **Age ratings for apps and games**: Gives every app and game an age rating from an open, questionnaire-based rating scheme, shown in the store and used by family settings. | data | medium | OS-A9-F1-P3 |  |
-| OS-A9-F7-P4 | **Game classification law**: Checks NZ classification law for games sold through the store, and overseas equivalents, and how ratings and labels must be shown. | legal | small |  |  |
+| OS-A9-F7-P4 | **Game classification law**: Checks each country's classification law for games sold through the store, starting with New Zealand's, and how ratings and labels must be shown. | legal | small |  |  |
 | OS-A9-F8-P1 | **Offline app bundles and local cache**: Copies apps and updates once to a local server or drive and installs from there. | service | medium | OS-A19-F4-P1 |  |
 | OS-A9-F9-P1 | **Maker account and agreement**: A maker account and a plain-words maker agreement covering listing rules, fees at cost, payouts and takedowns. | legal | small | svc-accounts, KIT-A18-F4-P1, OS-A9-F3-P1, OS-A21-F10-P1 |  |
 | OS-A9-F9-P2 | **Maker portal**: Where makers upload and sign versions, follow review status, see installs and sales figures, and answer reviews. | interface | medium | KIT-A16-F7-P1, OS-A9-F1-P3, OS-A9-F3-P4 |  |
@@ -451,7 +451,7 @@ Keeping people's existing programs working: a tested list of what runs, Windows 
 | OS-A10-F5-P2 | **Android app support**: Ships the chosen Android container as an optional, sandboxed add-on, with any Android app store offered under the policy for software that is not open source. | integration | large | OS-A10-F5-P1, OS-A12-F4-P1, OS-A21-F1-P4 |  |
 | OS-A10-F6-P1 | **Switching blockers list**: Anonymous, opt-in counts of programs and services that blocked people's moves, such as exam device checks and device-compliance rules, from move-across scans and reports. | data | medium | OS-A4-F5-P1 |  |
 | OS-A10-F6-P2 | **Replacement roadmap**: Public list linking each top blocker to a Spare program or open project that replaces it, starting with Spare Construct for Revit. | data | small | OS-A10-F6-P1 |  |
-| OS-A10-F6-P3 | **NCEA digital exam approval**: Works with NZQA so Spare OS PCs pass the device check for NCEA digital exams, since its published device guidance names Chrome OS, Windows and Mac and does not mention Linux (current table unverified). | research | medium | OS-A8-F2-P1 |  |
+| OS-A10-F6-P3 | **NCEA digital exam approval**: Works with each country's exam bodies so Spare OS PCs pass their device checks, starting with NZQA for New Zealand's NCEA digital exams, since its published device guidance names Chrome OS, Windows and Mac and does not mention Linux (current table unverified). | research | medium | OS-A8-F2-P1 |  |
 
 ## OS-A11 Updates, backup and recovery
 
@@ -642,7 +642,7 @@ Usable by everyone from the first screen, including the disk unlock screen: a sc
 | OS-A15-F4 Type and click another way | Use sticky keys, slow keys, mouse keys, an on-screen keyboard, switch access or dwell clicking. | core | OS-A15-F4-P1 to P2 |
 | OS-A15-F5 Control the PC by voice | Open apps, click, scroll and type by voice, offline. | next | OS-A15-F5-P1 to P2 |
 | OS-A15-F6 Read captions for any sound | See live captions for any sound playing on the PC, made on the device. | next | OS-A15-F6-P1 |
-| OS-A15-F7 Hear text read aloud | Have any text read aloud in a natural voice, including NZ English and te reo Māori. | core | OS-A15-F7-P1 to P2 |
+| OS-A15-F7 Hear text read aloud | Have any text read aloud in a natural voice, including the example country's (for New Zealand: New Zealand English and te reo Māori). | core | OS-A15-F7-P1 to P2 |
 | OS-A15-F8 Rely on Spare OS meeting accessibility law | Rely on Spare OS meeting accessibility law and standards wherever it is offered, such as the European Accessibility Act, which covers consumer operating systems. | core | OS-A15-F8-P1 to P2 |
 | OS-A15-F9 Use eye or head tracking | Move the pointer and click with eye or head tracking hardware. | later | OS-A15-F9-P1 |
 | OS-A15-F10 Use the PC with hearing loss | Hear sound in one ear or with uneven hearing, and see a flash when the PC plays an alert sound. | core | OS-A15-F10-P1 |
@@ -666,38 +666,38 @@ Usable by everyone from the first screen, including the disk unlock screen: a sc
 | OS-A15-F5-P2 | **Dictation into any text box**: Types what the person says into any app, with spoken punctuation and corrections. | interface | medium | OS-A18-F4-P1, OS-A16-F2-P1 |  |
 | OS-A15-F6-P1 | **Live captions**: Captions for any audio, including calls and videos, in a movable window, made on the device. | interface | medium | OS-A18-F4-P1 |  |
 | OS-A15-F7-P1 | **Text-to-speech voices**: Open, natural voices for the main languages, used by the screen reader and read-aloud. | library | medium |  |  |
-| OS-A15-F7-P2 | **Te reo Māori voice**: Works with Māori language and data experts on a te reo Māori voice on terms that respect Māori data sovereignty. | research | medium | OS-A15-F7-P1, OS-A16-F1-P2 |  |
+| OS-A15-F7-P2 | **Indigenous language voices**: Works with language and data experts on voices for indigenous languages, starting with a te reo Māori voice made with Māori experts on terms that respect Māori data sovereignty. | research | medium | OS-A15-F7-P1, OS-A16-F1-P2 |  |
 | OS-A15-F8-P1 | **Accessibility conformance report**: A published report against the European standard for accessible technology and WCAG, updated each release. | legal | medium | OS-A15-F1-P3, OS-A15-F8-P2 |  |
-| OS-A15-F8-P2 | **Accessibility law research**: Which accessibility laws apply to a free operating system in NZ, the EU and other markets, and what each requires; the research belongs in the kit for every Spare app. | legal | medium |  |  |
+| OS-A15-F8-P2 | **Accessibility law research**: Which accessibility laws apply to a free operating system in each country, such as New Zealand and the EU, and what each requires; the research belongs in the kit for every Spare app. | legal | medium |  |  |
 | OS-A15-F9-P1 | **Eye and head tracking research**: Finds which trackers have open drivers and how they fit with dwell clicking. | research | small | OS-A15-F4-P2 |  |
 | OS-A15-F10-P1 | **Mono audio, balance and visual alerts**: Mono audio, left and right balance, and a screen flash for alert sounds, each set from accessibility settings. | library | small | OS-A14-F8-P2, OS-A6-F1-P1 |  |
 | OS-A15-F11-P1 | **Hearing aid pairing**: Pairs Bluetooth LE Audio hearing aids and streams sound to them, tested on the lab's hearing aids. | integration | medium | OS-A14-F5-P1, OS-A1-F2-P4 |  |
 
 ## OS-A16 Languages and regions
 
-New Zealand first, international by design: every screen translatable, te reo Māori and Pacific languages first-class with their own keyboards, dictionaries and te reo speech, every keyboard and script, local formats, spelling, country packs and on-device translation.
+International by design, with New Zealand as the first example country: every screen translatable, the example country's languages first-class (for New Zealand: te reo Māori and Pacific languages, with their own keyboards, dictionaries and te reo speech), every keyboard and script, local formats, spelling, country packs and on-device translation.
 
 | Feature | What a person can do | Priority | Parts |
 | --- | --- | --- | --- |
-| OS-A16-F1 Use Spare OS in my language | Use every screen of Spare OS in their own language, with te reo Māori and NZ English ready from the start. | core | OS-A16-F1-P1 to P4 |
+| OS-A16-F1 Use Spare OS in my language | Use every screen of Spare OS in their own language, with the example country's languages ready from the start (for New Zealand: New Zealand English and te reo Māori). | core | OS-A16-F1-P1 to P4 |
 | OS-A16-F2 Type in any language | Type in any language with the right keyboard layout or input method, including macrons for te reo Māori. | core | OS-A16-F2-P1 to P3 |
 | OS-A16-F3 See every script and emoji | Read every writing system and emoji correctly, including right-to-left languages. | core | OS-A16-F3-P1 to P2 |
 | OS-A16-F4 Use local formats | See dates, times, numbers, money, paper size and units the local way. | core | OS-A16-F4-P1 |
-| OS-A16-F5 Check spelling in my language | Get spell checking in their language in every app, including te reo Māori and NZ English. | core | OS-A16-F5-P1 to P2 |
+| OS-A16-F5 Check spelling in my language | Get spell checking in their language in every app, including te reo Māori and New Zealand English. | core | OS-A16-F5-P1 to P2 |
 | OS-A16-F6 Get a set-up that fits my country | Get the right public holidays, emergency information, legal notices and download mirrors for their country. | next | OS-A16-F6-P1 to P2 |
 | OS-A16-F7 Translate text on the device | Translate text and web pages without sending them anywhere. | later | OS-A16-F7-P1 |
-| OS-A16-F8 Speak to the PC in te reo Māori | Dictate, see captions and control the PC by voice in te reo Māori, not only in English. | next | OS-A16-F8-P1 |
+| OS-A16-F8 Speak to the PC in my language | Dictate, see captions and control the PC by voice in smaller and indigenous languages, such as te reo Māori, not only in English. | next | OS-A16-F8-P1 |
 
 ### OS-A16 parts
 
 | ID | Part | Kind | Size | Depends on | Piece |
 | --- | --- | --- | --- | --- | --- |
 | OS-A16-F1-P1 | **Translation workflow**: Spare OS's texts on the kit's member translation workflow, with review before release, linked to the translation platforms of the open projects Spare OS ships. | service | medium | KIT-A19-F1-P3 |  |
-| OS-A16-F1-P2 | **Te reo Māori translation**: A full te reo Māori translation done with Māori language experts, with agreed terms for new technical words. | data | large | OS-A16-F1-P1 |  |
+| OS-A16-F1-P2 | **Fluent speaker translation**: A full translation into the example country's languages, starting with te reo Māori, done with Māori language experts, with agreed terms for new technical words. | data | large | OS-A16-F1-P1 |  |
 | OS-A16-F1-P3 | **Pacific languages**: Translations for Samoan, Tongan, Cook Islands Māori and other Pacific languages, led by native speakers. | data | medium | OS-A16-F1-P1 |  |
 | OS-A16-F1-P4 | **Text built for translation**: Every interface text kept in translatable form through the kit's translation framework, with room for longer words and plural rules. | library | small | OS-A16-F1-P1, KIT-A19-F1-P1 |  |
 | OS-A16-F2-P1 | **Keyboard layouts and input methods**: Ships open input methods for Chinese, Japanese, Korean, Indic and other scripts, switched from the tray. | integration | medium |  |  |
-| OS-A16-F2-P2 | **Māori macrons by default**: Sets NZ keyboards to type macron vowels with a simple key combination out of the box. | data | small | OS-A16-F2-P1 |  |
+| OS-A16-F2-P2 | **Māori macrons by default**: Sets keyboards for languages that use macrons, such as te reo Māori, to type macron vowels with a simple key combination out of the box. | data | small | OS-A16-F2-P1 |  |
 | OS-A16-F2-P3 | **Pacific keyboards**: Ready-to-use Samoan, Tongan and Cook Islands Māori keyboard layouts that type the ʻokina or fakauʻa and macrons. | data | small | OS-A16-F2-P1 |  |
 | OS-A16-F3-P1 | **Fonts for all scripts and emoji**: Open font families that cover every major writing system and current emoji. | data | medium |  |  |
 | OS-A16-F3-P2 | **Right-to-left checks**: Checks that every Spare OS screen lays out correctly in right-to-left languages. | service | small | OS-A16-F1-P1 |  |
@@ -707,7 +707,7 @@ New Zealand first, international by design: every screen translatable, te reo M�
 | OS-A16-F6-P1 | **Country packs**: Spare OS's own settings, such as default mirrors and local help contacts, added to the kit's country packs, starting with New Zealand. | data | medium | OS-A16-F4-P1, KIT-A19-F6-P1, KIT-A19-F9-P1 |  |
 | OS-A16-F6-P2 | **Local mirrors per country**: Download and update mirrors in each country where members run them. | service | small | OS-A2-F1-P2 |  |
 | OS-A16-F7-P1 | **Offline translation**: Runs open translation models on the device for chosen language pairs. | library | medium | OS-A18-F4-P2 |  |
-| OS-A16-F8-P1 | **Te reo Māori speech recognition**: Builds te reo Māori speech recognition for dictation, live captions and voice control with Māori language and data experts, respecting the community licence terms that existing te reo speech data comes with. | research | large | KIT-A18-F16-P1, OS-A18-F4-P1, OS-A15-F7-P2 |  |
+| OS-A16-F8-P1 | **Indigenous language speech recognition**: Builds speech recognition for indigenous languages for dictation, live captions and voice control, starting with te reo Māori, made with Māori language and data experts, respecting the community licence terms that existing te reo speech data comes with. | research | large | KIT-A18-F16-P1, OS-A18-F4-P1, OS-A15-F7-P2 |  |
 
 ## OS-A17 Games and media
 
@@ -791,7 +791,7 @@ For offices, schools and co-ops: central sign-in, setting up many PCs at once wi
 | OS-A19-F8 Keep local admin passwords safe | Have a different local admin password on each PC, changed automatically and stored in the directory. | next | OS-A19-F8-P1 |
 | OS-A19-F9 Fit into an existing Microsoft network | Join existing Windows domains and cloud directories, use their file shares and printers, and pass their device rules. | next | OS-A19-F9-P1 to P2 |
 | OS-A19-F10 Get help from a local IT partner | Hire a local IT firm trained and listed by the co-op to run Spare OS PCs. | later | OS-A19-F10-P1 |
-| OS-A19-F11 Fit into Google Workspace | Sign in with a Google Workspace for Education or business account and manage PCs from it, as many NZ schools do with Chromebooks. | next | OS-A19-F11-P1 |
+| OS-A19-F11 Fit into Google Workspace | Sign in with a Google Workspace for Education or business account and manage PCs from it, as many schools do with Chromebooks. | next | OS-A19-F11-P1 |
 | OS-A19-F12 Run the office server | Run file shares, printing, network addresses, backups and update caching for an office or school on one server, without a Windows Server licence. | next | OS-A19-F12-P1 to P2 |
 | OS-A19-F13 Keep a fleet secure | Collect logs centrally, get alerts about suspicious activity, check each PC's health, and show the fleet meets a recognised security baseline. | next | OS-A19-F13-P1 to P3 |
 | OS-A19-F14 Pick approved apps myself | As staff, choose and install apps the organisation has approved, without asking IT each time. | later | OS-A19-F14-P1 |
@@ -818,7 +818,7 @@ For offices, schools and co-ops: central sign-in, setting up many PCs at once wi
 | OS-A19-F7-P1 | **Kiosk and shared PC modes**: Locks a PC to one app or resets it to a clean state at each sign-out. | library | medium | OS-A19-F3-P1 |  |
 | OS-A19-F7-P2 | **Classroom tools**: Lets a teacher share their screen, send files and pause screens, with students told when it is on. | interface | medium | OS-A19-F6-P1 |  |
 | OS-A19-F7-P3 | **Exam mode**: Locks the PC to an exam app or site for the length of an exam. | library | small | OS-A19-F7-P1 |  |
-| OS-A19-F7-P4 | **Exam platforms that check the system**: Tracks exam and assessment platforms that check which operating system a device runs, as NZQA's does, and works with each so exam mode meets them. | research | small | OS-A19-F7-P3, OS-A10-F6-P3 |  |
+| OS-A19-F7-P4 | **Exam platforms that check the system**: Tracks exam and assessment platforms that check which operating system a device runs, as New Zealand's NZQA does, and works with each so exam mode meets them. | research | small | OS-A19-F7-P3, OS-A10-F6-P3 |  |
 | OS-A19-F8-P1 | **Local admin password rotation**: Sets and rotates each PC's local admin password and saves it in the directory. | library | small | OS-A19-F3-P1, OS-A19-F1-P2 |  |
 | OS-A19-F9-P1 | **Windows domain and cloud directory join**: Joins existing Windows domains and Microsoft cloud directories with open tools built from published protocols. | integration | medium | OS-A19-F1-P3 |  |
 | OS-A19-F9-P2 | **Microsoft 365 device compliance**: Checks whether Microsoft 365 rules that only admit compliant devices will accept Spare OS PCs, and what an organisation can do if they don't. | research | medium | OS-A19-F9-P1 |  |
@@ -828,7 +828,7 @@ For offices, schools and co-ops: central sign-in, setting up many PCs at once wi
 | OS-A19-F12-P2 | **Network services and backup target**: DNS and DHCP, a network backup target and the update cache in the same package, set up from one screen. | integration | medium | OS-A19-F12-P1, OS-A19-F4-P1, OS-A11-F4-P1 |  |
 | OS-A19-F13-P1 | **Central logs and alerts**: Collects logs from every PC on the organisation's server and alerts IT staff to suspicious activity, using open detection rules. | service | large | OS-A19-F5-P1, OS-A6-F10-P2 |  |
 | OS-A19-F13-P2 | **Device health checks**: Lets the console check, through each PC's security chip, that it started securely and has not been tampered with. | library | medium | OS-A12-F2-P1, OS-A12-F1-P2, OS-A19-F3-P2 |  |
-| OS-A19-F13-P3 | **Hardening baselines**: Published security baselines for Spare OS, checked against the NZ Information Security Manual and common benchmarks, that the rules engine can apply and report on. | data | medium | OS-A19-F3-P1 |  |
+| OS-A19-F13-P3 | **Hardening baselines**: Published security baselines for Spare OS, checked against government security manuals, such as the New Zealand Information Security Manual, and common benchmarks, that the rules engine can apply and report on. | data | medium | OS-A19-F3-P1 |  |
 | OS-A19-F14-P1 | **Organisation app catalogue**: A private catalogue of the apps an organisation approves, shown in the store to its staff. | interface | medium | OS-A9-F1-P1, OS-A19-F3-P1 |  |
 
 ## OS-A20 Help, support and community
@@ -861,7 +861,7 @@ People need help switching: built-in guides that also work offline, a member sup
 | OS-A20-F2-P1 | **Member support network**: Matches people who need help with trained member helpers, by language and place. | service | large | svc-messaging, svc-accounts, svc-matching |  |
 | OS-A20-F2-P2 | **Helper training and badges**: The helper course and badge on the kit's training and certificates, with ratings from the people helpers help. | data | medium | svc-trust, KIT-A25-F2-P1 |  |
 | OS-A20-F2-P3 | **Business support at cost**: Paid support plans for organisations priced at cost and shown on the ledger. | service | medium | svc-payments, svc-ledger |  |
-| OS-A20-F2-P4 | **Phone and NZ Relay support**: Help by phone, and through NZ Relay for Deaf, hard of hearing and speech-impaired people, for when the PC itself is what's broken. | integration | small | KIT-A21-F4-P1 |  |
+| OS-A20-F2-P4 | **Phone and relay support**: Help by phone, and through a relay service (example: New Zealand Relay) for Deaf, hard of hearing and speech-impaired people, for when the PC itself is what's broken. | integration | small | KIT-A21-F4-P1 |  |
 | OS-A20-F3-P1 | **Community forum**: Spare OS's part of the kit's member forum, signed in with the Spareware login. | integration | medium | svc-accounts, KIT-A21-F6-P1 |  |
 | OS-A20-F4-P1 | **Diagnostics collector**: Gathers logs and system details for a problem, removes personal details and shows the result to the person. | library | medium | OS-A18-F1-P1 |  |
 | OS-A20-F4-P2 | **Problem report form**: A short form that sends the report to the public tracker or a helper, with the person's consent. | interface | small | OS-A20-F4-P1 |  |
@@ -874,7 +874,7 @@ People need help switching: built-in guides that also work offline, a member sup
 | OS-A20-F8-P2 | **Verified helpers only**: Lets only helpers whose identity the kit has checked start a session, and shows their verified name and badge throughout. | service | medium | KIT-A2-F1-P2, KIT-A2-F1-P3, OS-A20-F2-P2 |  |
 | OS-A20-F8-P3 | **Scam warning and report**: Warns before every session that the co-op never calls out of the blue and gives a one-click report, since built-in remote help is the main tool of tech-support scams, as in the 2024 ransomware attacks through Windows' Quick Assist. | interface | small | KIT-A10-F3-P1, OS-A20-F8-P1 |  |
 | OS-A20-F9-P1 | **Safety checks for visiting helpers**: Requires a consented safety check through the kit before a helper visits homes or helps vulnerable people, and in-person help starts only once this is in place. | integration | small | KIT-A2-F9-P1, KIT-A2-F9-P2, OS-A20-F2-P1 |  |
-| OS-A20-F10-P1 | **Funding model**: Compares ways to pay Spare OS's running costs, such as member dues, donations, business support plans, partner PC fees and a share of co-op costs, as a decision note for members. | research | medium | OS-A20-F6-P1, KIT-A13-F3-P1, KIT-A14-F1-P1 |  |
+| OS-A20-F10-P1 | **Funding model**: Compares ways to pay Spare OS's running costs, such as donations, business support plans, partner PC fees and a part of the co-op's shared costs, with no member dues, as a decision note for members. | research | medium | OS-A20-F6-P1, KIT-A13-F3-P1, KIT-A14-F1-P1 |  |
 | OS-A20-F10-P2 | **Funding vote and ledger lines**: Puts the chosen funding model to a member vote and shows each funding source on the ledger beside the costs it pays. | integration | small | svc-voting, svc-ledger, KIT-A12-F5-P2, OS-A20-F10-P1 |  |
 | OS-A20-F11-P1 | **Complaints and disputes about help**: Takes complaints and disputes about helpers, paid support, IT partners and store purchases through the kit's disputes, with a path to put right a broken PC or lost data. | service | medium | KIT-A11-F1-P1, KIT-A21-F2-P1, OS-A20-F2-P1 |  |
 | OS-A20-F11-P2 | **Rules for paid helpers and IT partners**: Applies the kit's worker-status, health and safety and insurance rules to paid helpers and IT partners who take control of PCs or go into homes. | legal | medium | KIT-A23-F1-P1, KIT-A24-F1-P1, KIT-A14-F17-P1 |  |
@@ -891,7 +891,7 @@ What Spare OS must do by law and by licence wherever it is offered: licence noti
 | OS-A21-F3 Rely on Spare OS meeting product security law | Rely on Spare OS meeting product security law, such as the EU Cyber Resilience Act, whose reporting duties began in September 2026. | core | OS-A21-F3-P1 to P2 |
 | OS-A21-F4 Meet age-assurance laws | Have the PC give apps only an age range where the law requires it, with nothing more shared. | core | OS-A21-F4-P1 to P2 |
 | OS-A21-F5 Handle app takedowns fairly | Know that harmful or unlawful apps are removed under published rules, with notice, appeal and a public log. | core | OS-A21-F5-P1 |
-| OS-A21-F6 Have my data protected by law | Know Spare OS follows privacy law in NZ and overseas, including telling people about data breaches. | core | OS-A21-F6-P1 to P2 |
+| OS-A21-F6 Have my data protected by law | Know Spare OS follows privacy law in each country, including telling people about data breaches. | core | OS-A21-F6-P1 to P2 |
 | OS-A21-F7 Know the names and look are our own | Trust that Spare OS uses its own name, logo, icons and design, and names other companies only to say what it replaces. | core | OS-A21-F7-P1 to P2 |
 | OS-A21-F8 Download Spare OS from any country | Download Spare OS legally from anywhere encryption export rules allow, knowing where local law limits encryption. | core | OS-A21-F8-P1 |
 | OS-A21-F9 Buy PCs and support with consumer rights | Have the usual consumer rights when buying a Spare OS PC or paid support. | next | OS-A21-F9-P1 to P2 |
@@ -906,24 +906,24 @@ What Spare OS must do by law and by licence wherever it is offered: licence noti
 | OS-A21-F1-P1 | **Licence inventory and software bill of materials**: A machine-readable list of every shipped part, its version, licence and origin, made by the build line in the same form as the kit's software bills of materials. | data | medium | OS-A1-F1-P2, KIT-A22-F2-P3 |  |
 | OS-A21-F1-P2 | **Source archive for every release**: Keeps the exact source of every shipped part for each release for as long as the licences require. | service | medium | OS-A1-F1-P2 |  |
 | OS-A21-F1-P3 | **Licences screen**: Shows every part's licence and credit from the About page. | interface | small | OS-A21-F1-P1 |  |
-| OS-A21-F1-P4 | **Licence policy for shipped software**: Writes down, for an owner's decision, where our code ends and separate programs begin: our own libraries stay permissive, and for software that is not open source, such as NVIDIA's driver, device firmware files, the browser's streaming content protection module, game store apps and any Android store, which ship in the image, which are opt-in downloads the person chooses, and on what redistribution terms. | legal | medium | KIT-A16-F4-P1 |  |
+| OS-A21-F1-P4 | **Licence policy for shipped software**: Writes down, for an owner's decision, where our code ends and separate programs begin: our own code stays under MPL-2.0, with the SDK and plugins under Apache-2.0, and for software that is not open source, such as NVIDIA's driver, device firmware files, the browser's streaming content protection module, game store apps and any Android store, which ship in the image, which are opt-in downloads the person chooses, and on what redistribution terms. | legal | medium | KIT-A16-F4-P1 |  |
 | OS-A21-F1-P5 | **Labels for software that is not open source**: Marks every driver, module or app that is not open source wherever it is offered, with its maker and terms, before the person chooses it. | interface | small | OS-A21-F1-P4, OS-A9-F1-P1 |  |
 | OS-A21-F3-P1 | **Product security law research**: Whether the co-op is a manufacturer or an open-source steward of Spare OS under the EU Cyber Resilience Act, its distributor or importer duties for other makers' commercial apps sold into the EU through the store from 11 December 2027, and the duties for support periods, reporting and bills of materials; the research belongs in the kit for every Spare app. | legal | medium | KIT-A14-F1-P1 |  |
 | OS-A21-F3-P2 | **Reporting exploited flaws to authorities**: Reports actively exploited flaws and severe incidents to the right authority within the legal deadlines. | service | small | OS-A12-F8-P1, OS-A21-F3-P1 |  |
 | OS-A21-F4-P1 | **Age-assurance law research**: Tracks laws that put age duties on operating systems or app stores, such as California's from 1 January 2027 and Texas's app store law that courts let take effect in 2026, including parent consent for purchases, and designs the lightest way to comply. | legal | medium |  |  |
 | OS-A21-F4-P2 | **Age range service for apps**: A local service that tells permitted apps only the user's age range, never the birth date, and logs each request. | library | medium | OS-A21-F4-P1, OS-A13-F1-P1 |  |
 | OS-A21-F5-P1 | **Store rules and takedown process**: Published store rules, legal takedown handling and appeals, with every decision in the trust service's public log. | legal | medium | svc-trust |  |
-| OS-A21-F6-P1 | **Privacy law research**: Spare OS's duties under the NZ Privacy Act 2020, the EU's data protection law and others, worked through with the kit's privacy officer. | legal | medium | KIT-A18-F14-P1 |  |
+| OS-A21-F6-P1 | **Privacy law research**: Spare OS's duties under each country's privacy law, such as New Zealand's Privacy Act 2020 and the EU's data protection law, worked through with the kit's privacy officer. | legal | medium | KIT-A18-F14-P1 |  |
 | OS-A21-F6-P2 | **Spare OS in the breach plan**: Adds Spare OS's own services, such as backups, sync, device finding and the store, to the kit's breach response. | legal | small | OS-A21-F6-P1, KIT-A18-F7-P1 |  |
 | OS-A21-F7-P1 | **Name and look review**: Checks every release's names, icons and screens are our own work and not copies of another system. | legal | small | OS-A5-F1-P3 |  |
 | OS-A21-F7-P2 | **Name and logo registration**: Registers the Spare OS name and logo in the main markets; the registration work belongs in the kit for every Spare name. | legal | small | KIT-A14-F1-P1 |  |
-| OS-A21-F8-P1 | **Encryption export check**: Checks NZ and other export rules for publicly available encryption software, and laws in some countries that restrict importing or using encryption, which is on by default, and records the basis for shipping it; the research belongs in the kit for every Spare app. | legal | small |  |  |
-| OS-A21-F9-P1 | **Consumer law research**: Spare OS's duties under NZ consumer and fair trading law, and overseas equivalents, for pre-installed PCs and paid support, building on the kit's consumer law research. | legal | medium | KIT-A18-F8-P1 |  |
+| OS-A21-F8-P1 | **Encryption export check**: Checks each country's export rules for publicly available encryption software, starting with New Zealand's, and laws in some countries that restrict importing or using encryption, which is on by default, and records the basis for shipping it; the research belongs in the kit for every Spare app. | legal | small |  |  |
+| OS-A21-F9-P1 | **Consumer law research**: Spare OS's duties under each country's consumer and fair trading law, starting with New Zealand's, for pre-installed PCs and paid support, building on the kit's consumer law research. | legal | medium | KIT-A18-F8-P1 |  |
 | OS-A21-F9-P2 | **Ecodesign rules for partner tablets**: Checks the EU ecodesign rules that require years of operating system updates for tablets, in case partners sell tablets with Spare OS. | legal | small | OS-A21-F9-P1 |  |
 | OS-A21-F10-P1 | **Spare OS terms of use**: Plain-words terms for Spare OS and its services, including the warranty disclaimer that free software licences carry, shown in the installer and on the website. | legal | small | KIT-A18-F4-P1, KIT-A18-F4-P2 |  |
 | OS-A21-F10-P2 | **Store terms for customers**: Plain-words terms for buying and installing apps from the store, including refunds and what the co-op checks. | legal | small | OS-A21-F10-P1, KIT-A18-F8-P1 |  |
 | OS-A21-F11-P1 | **EU Digital Services Act duties**: Notice and action, statements of reasons, complaints and, where it applies, checks on the makers selling apps, as the EU Digital Services Act requires of hosts and marketplaces. | legal | medium | KIT-A10-F9-P1, KIT-A10-F8-P1, OS-A21-F5-P1 |  |
-| OS-A21-F11-P2 | **Harmful digital communications duties**: Handles complaints about reviews and forum posts under the NZ Harmful Digital Communications Act, so the co-op keeps its protection as a host. | legal | small | KIT-A10-F9-P2 |  |
+| OS-A21-F11-P2 | **Online harm duties**: Handles complaints about reviews and forum posts under each country's online harm law (example: New Zealand's Harmful Digital Communications Act), so the co-op keeps its protection as a host. | legal | small | KIT-A10-F9-P2 |  |
 | OS-A21-F11-P3 | **Copyright notices for member content**: Takes copyright notices for member-given wallpapers and forum posts through the kit's notice handling. | service | small | KIT-A10-F21-P2, OS-A5-F9-P2 |  |
 | OS-A21-F12-P1 | **Continuity plan**: A plan, held by the steward society, for handing the update service, signing keys and mirrors to another steward. | legal | small | KIT-A14-F15-P1, OS-A1-F1-P5, OS-A11-F1-P2 |  |
 
@@ -934,11 +934,11 @@ What Spare OS must do by law and by licence wherever it is offered: licence noti
 - Is every icon, layout, sound and screen our own design, with nothing copied from Windows or any other system?
 - Can someone try Spare OS from a USB stick and go back to Windows untouched, and is BitLocker checked before any partition is changed?
 - Does the move from Windows bring files, browser data, email and Wi-Fi across without breaking any encryption or terms, and what happens to cloud-only files?
-- Of the 50 Windows programs NZ offices and schools use most, how many run, and is the compatibility list honest about the ones that don't?
+- Of the 50 Windows programs offices and schools use most, measured first in New Zealand, how many run, and is the compatibility list honest about the ones that don't?
 - Can an update ever leave a PC unable to start, and how is rollback tested on real hardware each release?
 - Who holds the signing keys and the Secure Boot signing agreement, and what is the plan if the firmware certificates change again?
 - Is every data-sharing choice off by default, and could a sceptical member check exactly what is sent?
-- Does every screen work with a screen reader and keyboard alone, and in te reo Māori?
+- Does every screen work with a screen reader and keyboard alone, and in the example country's languages (for New Zealand: te reo Māori)?
 - Is the co-op a manufacturer or an open-source steward under EU product security law, and which duties (accessibility, age ranges, privacy, export) need a lawyer before the first release?
 - Is every system action a command, so scripts and AI use the same path as people, and can an AI only act with the person's approval?
 - What will Spare OS cost to run each month (build servers, mirrors, test lab, signing, support), and is it on the open cost ledger?
@@ -951,7 +951,7 @@ What Spare OS must do by law and by licence wherever it is offered: licence noti
 - Could a scammer use remote help on a first-time switcher, and what stops them: verified helpers, scope and time limits, the scam warning and the log?
 - Can a blind person unlock an encrypted Spare OS PC and finish install with no sighted help?
 - Who pays Spare OS's running costs when there are no jobs to charge a fee on, and have members voted on it?
-- Can NZ students sit NCEA digital exams on a Spare OS laptop, and can school PCs get online behind N4L's network?
+- Can students sit digital exams on a Spare OS laptop, starting with New Zealand's NCEA, and can school PCs get online behind school networks such as New Zealand's N4L?
 
 ## Sources checked on 2026-10-18 and 2026-10-19
 

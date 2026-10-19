@@ -2,7 +2,7 @@
   "program": "spare-ride",
   "name": "Spare Ride",
   "replaces": "Uber (rides), plus the taxi booking apps and phone booking lines people use today",
-  "summary": "A ride-hailing app owned by its members, with drivers voting on its fares and rules: riders see an upfront fare and where every dollar goes, and drivers keep everything except the at-cost fee they vote on. It runs on the shared marketplace loop in the kit and adds only what rides need: dispatch by road time, fares, live trips, safety, accessibility and the passenger transport rules.",
+  "summary": "A ride-hailing app that is free to join, with drivers voting on its fares and rules: riders see an upfront fare and where every dollar goes, and drivers keep everything except the at-cost fee for running costs, which they vote on. It runs on the shared marketplace loop in the kit and adds only what rides need: dispatch by road time, fares, live trips, safety, accessibility and the passenger transport rules.",
   "areas": [
     {
       "id": "RIDE-A1",
@@ -274,7 +274,7 @@
         },
         {
           "id": "RIDE-A1-F9",
-          "name": "Visiting New Zealand",
+          "name": "Visiting from another country",
           "does": "A visitor signs up with an overseas phone number or email, pays with a card from home, sees the higher overseas card fee before booking and uses the app in their own language.",
           "priority": "next",
           "parts": [
@@ -307,7 +307,7 @@
             {
               "id": "RIDE-A1-F9-P3",
               "name": "Visitor's language",
-              "what": "Opens the app in the phone's language where a translation exists, with the languages most visitors to NZ speak translated first.",
+              "what": "Opens the app in the phone's language where a translation exists, with the languages most visitors to each country speak translated first.",
               "kind": "interface",
               "size": "small",
               "depends_on": [
@@ -369,7 +369,7 @@
             {
               "id": "RIDE-A2-F1-P4",
               "name": "Driver requirements list",
-              "what": "Every licence, check and document a driver needs in NZ, with the source for each.",
+              "what": "Every licence, check and document a driver needs in each country, starting with New Zealand, with the source for each.",
               "kind": "research",
               "size": "medium",
               "depends_on": [],
@@ -379,8 +379,8 @@
         },
         {
           "id": "RIDE-A2-F2",
-          "name": "Licence and P endorsement check",
-          "does": "An applicant proves they hold a full driver licence and a P (passenger) endorsement, checked against the official record.",
+          "name": "Licence and passenger endorsement check",
+          "does": "An applicant proves they hold a full driver licence and any passenger endorsement their country asks for (example: New Zealand's P endorsement), checked against the official record.",
           "priority": "core",
           "parts": [
             {
@@ -398,7 +398,7 @@
             {
               "id": "RIDE-A2-F2-P2",
               "name": "Endorsement rules",
-              "what": "Encodes what a valid P endorsement is and when it lapses, so the app never lets an unendorsed driver online.",
+              "what": "Encodes what a valid passenger endorsement is in each country pack (example: New Zealand's P endorsement) and when it lapses, so the app never lets an unendorsed driver online.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -409,7 +409,7 @@
             {
               "id": "RIDE-A2-F2-P3",
               "name": "Drivers with their own operator licence",
-              "what": "Lets drivers who hold their own small passenger service licence record it, which changes what records they keep.",
+              "what": "Lets drivers who hold their own operator licence (example: New Zealand's small passenger service licence) record it, which changes what records they keep.",
               "kind": "data",
               "size": "small",
               "depends_on": [
@@ -495,7 +495,7 @@
             {
               "id": "RIDE-A2-F4-P5",
               "name": "Licence label per vehicle",
-              "what": "Issues each approved vehicle a small passenger service licence label under the co-op's licence, records which label is in which vehicle, checks a photo that it is in the front windscreen above the registration label, and takes it back when the vehicle leaves.",
+              "what": "Where the country asks for one, issues each approved vehicle a licence label under the co-op's licence (example: New Zealand's small passenger service licence label), records which label is in which vehicle, checks a photo that it is in the front windscreen above the registration label, and takes it back when the vehicle leaves.",
               "kind": "data",
               "size": "small",
               "depends_on": [
@@ -516,7 +516,7 @@
             {
               "id": "RIDE-A2-F5-P1",
               "name": "Insurance options",
-              "what": "What cover passengers, drivers and the co-op need and who in NZ offers it.",
+              "what": "What cover passengers, drivers and the co-op need and who offers it in each country, starting with New Zealand.",
               "kind": "research",
               "size": "medium",
               "depends_on": [],
@@ -538,7 +538,7 @@
         {
           "id": "RIDE-A2-F6",
           "name": "Payout and tax details",
-          "does": "An applicant adds a bank account for payouts, their IRD number and whether they are GST-registered.",
+          "does": "An applicant adds a bank account for payouts, their tax number (example: New Zealand's IRD number) and whether they are registered for sales tax.",
           "priority": "core",
           "parts": [
             {
@@ -555,7 +555,7 @@
             {
               "id": "RIDE-A2-F6-P2",
               "name": "Tax details",
-              "what": "IRD number and GST status, stored so the GST engine and income reports are correct.",
+              "what": "Tax number and sales tax status, stored so the sales tax engine and income reports are correct.",
               "kind": "data",
               "size": "small",
               "depends_on": [
@@ -583,7 +583,7 @@
         {
           "id": "RIDE-A2-F7",
           "name": "Join the co-op",
-          "does": "An applicant becomes a member of the co-op and agrees to the driver agreement written in plain words.",
+          "does": "An applicant becomes a member of the co-op for free and agrees to the driver agreement written in plain words.",
           "priority": "core",
           "parts": [
             {
@@ -626,7 +626,7 @@
             {
               "id": "RIDE-A2-F7-P4",
               "name": "Non-discrimination commitment",
-              "what": "Each driver accepts the kit's non-discrimination commitment at sign-up, written for rides: never refusing, cancelling on or rating down a rider on any ground the Human Rights Act 1993 protects.",
+              "what": "Each driver accepts the kit's non-discrimination commitment at sign-up, written for rides: never refusing, cancelling on or rating down a rider on any ground human rights law protects (example: New Zealand's Human Rights Act 1993).",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -658,7 +658,7 @@
             {
               "id": "RIDE-A2-F8-P1",
               "name": "Orientation content",
-              "what": "Short lessons and a quiz on safety, accessibility, assistance animals, work time limits, caring for intoxicated or vulnerable riders, spotting human trafficking and the app, in English and te reo Māori first, then in the languages many drivers speak, such as Hindi, Punjabi, Mandarin, Samoan and Tongan.",
+              "what": "Short lessons and a quiz on safety, accessibility, assistance animals, work time limits, caring for intoxicated or vulnerable riders, spotting human trafficking and the app, in the example country's languages first (for New Zealand: English and te reo Māori), then in the languages many drivers speak, such as Hindi, Punjabi, Mandarin, Samoan and Tongan.",
               "kind": "data",
               "size": "medium",
               "depends_on": [
@@ -800,8 +800,8 @@
             },
             {
               "id": "RIDE-A2-F12-P2",
-              "name": "Share repaid",
-              "what": "Redeems the driver's member share when they leave, unless they choose to stay a member.",
+              "name": "Member role on leaving",
+              "what": "Ends the driver's member role in Spare Ride when they leave, unless they choose to stay a member.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -825,7 +825,7 @@
             {
               "id": "RIDE-A2-F12-P4",
               "name": "Unclaimed payouts",
-              "what": "Payouts that cannot be delivered after a driver leaves, and dormant ride credit, are recorded and, if the co-op rather than the payment provider holds them, paid to Inland Revenue under the Unclaimed Money Act 1971, which is unverified.",
+              "what": "Payouts that cannot be delivered after a driver leaves, and dormant ride credit, are recorded and, if the co-op rather than the payment provider holds them, paid to the tax office under unclaimed money law (example: New Zealand's Inland Revenue and Unclaimed Money Act 1971), which is unverified.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -838,13 +838,13 @@
         },
         {
           "id": "RIDE-A2-F13",
-          "name": "Help getting a P endorsement",
-          "does": "A person who wants to drive but has no P endorsement follows a step-by-step guide and tracks each step.",
+          "name": "Help getting a passenger endorsement",
+          "does": "A person who wants to drive but has no passenger endorsement follows a step-by-step guide and tracks each step.",
           "priority": "next",
           "parts": [
             {
               "id": "RIDE-A2-F13-P1",
-              "name": "P endorsement guide",
+              "name": "Passenger endorsement guide",
               "what": "Steps for the medical, the fit and proper check and the application, with links to the official forms and a progress tracker.",
               "kind": "interface",
               "size": "small",
@@ -859,7 +859,7 @@
         {
           "id": "RIDE-A2-F14",
           "name": "Right to work checked",
-          "does": "An applicant on a visa shows they may drive in NZ, and is checked again before their visa lapses.",
+          "does": "An applicant on a visa shows they may drive in the country they apply in, and is checked again before their visa lapses.",
           "priority": "core",
           "parts": [
             {
@@ -1068,7 +1068,7 @@
         {
           "id": "RIDE-A3-F4",
           "name": "Upfront fare and where it goes",
-          "does": "A rider sees the full fare before booking and how it splits between driver, running cost, payment fee and GST.",
+          "does": "A rider sees the full fare before booking and how it splits between driver, running cost, payment fee and sales tax.",
           "priority": "core",
           "parts": [
             {
@@ -1429,7 +1429,7 @@
             {
               "id": "RIDE-A4-F2-P1",
               "name": "Pooling methods",
-              "what": "How proven open projects and papers match shared rides, and whether riders in NZ cities would use them.",
+              "what": "How proven open projects and papers match shared rides, and whether riders in the first cities would use them.",
               "kind": "research",
               "size": "medium",
               "depends_on": [],
@@ -1582,7 +1582,7 @@
             {
               "id": "RIDE-A4-F6-P1",
               "name": "Public transport timetables",
-              "what": "Imports the open timetable feeds (GTFS) that NZ transport agencies publish, under their licence terms.",
+              "what": "Imports the open timetable feeds (GTFS) that transport agencies publish in each country, starting with New Zealand's, under their licence terms.",
               "kind": "integration",
               "size": "medium",
               "depends_on": [],
@@ -2153,7 +2153,7 @@
             {
               "id": "RIDE-A6-F6-P1",
               "name": "Passenger work time rules",
-              "what": "Ride's NZ work time rules for passenger drivers on the kit's work-time limits, counting all paid work and not only Spare Ride time: continuous work, daily and cumulative limits and rest breaks.",
+              "what": "Ride's work time rules for passenger drivers in each country pack (example: New Zealand's) on the kit's work-time limits, counting all paid work and not only Spare Ride time: continuous work, daily and cumulative limits and rest breaks.",
               "kind": "library",
               "size": "medium",
               "depends_on": [
@@ -2166,7 +2166,7 @@
             {
               "id": "RIDE-A6-F6-P2",
               "name": "Electronic logbook",
-              "what": "Records work time as an electronic logbook built to NZTA's approval rules, so drivers need no paper logbook.",
+              "what": "Records work time as an electronic logbook built to the transport regulator's approval rules (example: New Zealand's NZTA), so drivers need no paper logbook.",
               "kind": "service",
               "size": "large",
               "depends_on": [
@@ -2225,7 +2225,7 @@
             {
               "id": "RIDE-A6-F6-P7",
               "name": "Logbook approval",
-              "what": "Gets NZTA's approval for the electronic logbook before drivers rely on it, with what the approval asks for.",
+              "what": "Gets the transport regulator's approval (example: New Zealand's NZTA) for the electronic logbook before drivers rely on it, with what the approval asks for.",
               "kind": "legal",
               "size": "medium",
               "depends_on": [
@@ -2838,13 +2838,13 @@
         {
           "id": "RIDE-A8-F3",
           "name": "Breakdown on every fare",
-          "does": "Every fare shows the driver's share, the at-cost fee, the payment fee and GST.",
+          "does": "Every fare shows the driver's share, the at-cost fee, the payment fee and sales tax.",
           "priority": "core",
           "parts": [
             {
               "id": "RIDE-A8-F3-P1",
               "name": "Breakdown calculator",
-              "what": "Splits a fare into driver share, fee, payment fee and GST, to the cent.",
+              "what": "Splits a fare into driver share, fee, payment fee and sales tax, to the cent.",
               "kind": "library",
               "size": "small",
               "depends_on": [
@@ -2871,7 +2871,7 @@
             {
               "id": "RIDE-A8-F3-P3",
               "name": "Who pays the fee",
-              "what": "Whether the rider or the driver pays the at-cost fee, and what that means for GST on the fee and tax invoices for GST-registered drivers.",
+              "what": "Whether the rider or the driver pays the at-cost fee, and what that means for sales tax on the fee and tax invoices for drivers registered for sales tax.",
               "kind": "research",
               "size": "small",
               "depends_on": [
@@ -2894,7 +2894,7 @@
             {
               "id": "RIDE-A8-F3-P5",
               "name": "Payment fee and surcharge rules",
-              "what": "Checks that the payment fee line on every fare is not a card surcharge that NZ's planned ban forbids for in-app payments, on the kit's card fee pass-through check.",
+              "what": "Checks that the payment fee line on every fare is not a card surcharge that a country's ban forbids for in-app payments (example: New Zealand's planned ban), on the kit's card fee pass-through check.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -2945,7 +2945,7 @@
             {
               "id": "RIDE-A8-F5-P1",
               "name": "Toll and airport fee data",
-              "what": "Toll roads and airport charges with their prices, kept up to date from NZTA and each airport and matched to the route.",
+              "what": "Toll roads and airport charges with their prices, kept up to date from the road agency (example: New Zealand's NZTA) and each airport and matched to the route.",
               "kind": "data",
               "size": "small",
               "depends_on": [],
@@ -3201,7 +3201,7 @@
             {
               "id": "RIDE-A9-F5-P1",
               "name": "Bank payments research",
-              "what": "Whether NZ open banking payments suit rides and which providers support them.",
+              "what": "Whether open banking payments suit rides in each country, starting with New Zealand, and which providers support them.",
               "kind": "research",
               "size": "small",
               "depends_on": [
@@ -3220,7 +3220,7 @@
             {
               "id": "RIDE-A9-F6-P1",
               "name": "Cash rules",
-              "what": "Whether cash fits the registered passenger rule, GST collection and driver safety.",
+              "what": "Whether cash fits the registered passenger rule, sales tax collection and driver safety.",
               "kind": "research",
               "size": "small",
               "depends_on": [],
@@ -3250,7 +3250,7 @@
             {
               "id": "RIDE-A9-F7-P3",
               "name": "Voucher terms",
-              "what": "Vouchers stay valid for at least three years, as the Fair Trading Act has required since 16 March 2026, and ride credit is paid back or kept when an account closes.",
+              "what": "Vouchers stay valid for as long as each country's law asks, such as at least three years under New Zealand's Fair Trading Act since 16 March 2026, and ride credit is paid back or kept when an account closes.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -3284,7 +3284,7 @@
         {
           "id": "RIDE-A9-F9",
           "name": "Receipts and tax invoices",
-          "does": "A rider gets a receipt for every trip that is also a valid GST tax invoice.",
+          "does": "A rider gets a receipt for every trip that is also a valid tax invoice where sales tax applies.",
           "priority": "core",
           "parts": [
             {
@@ -3427,18 +3427,18 @@
     {
       "id": "RIDE-A10",
       "name": "Tax and earnings records",
-      "summary": "The tax and pay records the platform must keep and give drivers: GST on rides as a listed service, flat-rate credits, income reports to IRD, earnings statements, mileage logs, and payroll if drivers are employees.",
+      "summary": "The tax and pay records the platform must keep and give drivers in each country: sales tax on rides (example: New Zealand GST on rides as a listed service, with flat-rate credits), income reports to the tax office (example: New Zealand's IRD), earnings statements, mileage logs, and payroll if drivers are employees.",
       "features": [
         {
           "id": "RIDE-A10-F1",
-          "name": "GST collected on every ride",
-          "does": "The platform charges and pays 15% GST on every ride, as the law requires for ride-sharing.",
+          "name": "Sales tax on rides (example: New Zealand GST)",
+          "does": "The platform charges and pays sales tax on every ride where the law requires it, such as 15% GST on ride-sharing in New Zealand.",
           "priority": "core",
           "parts": [
             {
               "id": "RIDE-A10-F1-P3",
-              "name": "Ride figures for GST returns",
-              "what": "Feeds Ride's GST on fares, fees and extras into the kit's operator GST returns.",
+              "name": "Ride figures for sales tax returns",
+              "what": "Feeds Ride's sales tax on fares, fees and extras into the kit's operator sales tax returns.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -3450,7 +3450,7 @@
             {
               "id": "RIDE-A10-F1-P4",
               "name": "Ride fee invoices",
-              "what": "Ride's fee lines on the kit's GST on the fee, so GST-registered drivers get a tax invoice for any fee they pay once it is settled who pays it.",
+              "what": "Ride's fee lines on the kit's sales tax on the fee, so drivers registered for sales tax get a tax invoice for any fee they pay once it is settled who pays it.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -3463,7 +3463,7 @@
             {
               "id": "RIDE-A10-F1-P5",
               "name": "Tax on extras",
-              "what": "How tips, cancellation and no-show fees, waiting charges, tolls, airport fees and cleaning charges are treated for GST on listed services and in income reports to IRD, which is unverified.",
+              "what": "How tips, cancellation and no-show fees, waiting charges, tolls, airport fees and cleaning charges are treated for sales tax and in income reports to the tax office, starting with New Zealand's GST listed services rules and IRD, which is unverified.",
               "kind": "research",
               "size": "small",
               "depends_on": [
@@ -3478,7 +3478,7 @@
         {
           "id": "RIDE-A10-F2",
           "name": "Flat-rate credit statements",
-          "does": "A driver who is not GST-registered gets a monthly statement of their flat-rate credits.",
+          "does": "A driver who is not registered for sales tax gets a monthly statement of any flat-rate credits their country gives (example: New Zealand's GST flat-rate credits).",
           "priority": "core",
           "parts": [
             {
@@ -3497,13 +3497,13 @@
         },
         {
           "id": "RIDE-A10-F3",
-          "name": "Income reports to IRD",
-          "does": "The platform reports each driver's income to IRD as the law requires and shows the driver what was sent.",
+          "name": "Income reports to the tax office (example: New Zealand's IRD)",
+          "does": "The platform reports each driver's income to the tax office as the law requires and shows the driver what was sent.",
           "priority": "core",
           "parts": [
             {
               "id": "RIDE-A10-F3-P2",
-              "name": "What we told IRD",
+              "name": "What we told the tax office",
               "what": "Shows each driver the figures reported about them.",
               "kind": "interface",
               "size": "small",
@@ -3583,7 +3583,7 @@
         {
           "id": "RIDE-A10-F6",
           "name": "Pay records if drivers are employees",
-          "does": "If drivers are employed by the co-op, they get payslips, PAYE, KiwiSaver, leave, holiday pay and at least the minimum wage for time worked.",
+          "does": "If drivers are employed by the co-op, they get payslips, tax and retirement savings deductions (example: New Zealand's PAYE and KiwiSaver), leave, holiday pay and at least the minimum wage for time worked.",
           "priority": "next",
           "parts": [
             {
@@ -3653,14 +3653,14 @@
         },
         {
           "id": "RIDE-A10-F7",
-          "name": "ACC and levies explained",
-          "does": "A self-employed driver sees what ACC levies and other costs to expect and where to sort them.",
+          "name": "Accident cover and levies explained",
+          "does": "A self-employed driver sees what accident cover levies (example: New Zealand's ACC) and other costs to expect and where to sort them.",
           "priority": "later",
           "parts": [
             {
               "id": "RIDE-A10-F7-P1",
-              "name": "Ride's ACC page",
-              "what": "Shows self-employed drivers the kit's KiwiSaver, ACC and tax guidance in the driver help hub, with examples from ride work.",
+              "name": "Ride's accident cover page",
+              "what": "Shows self-employed drivers the kit's savings, accident cover and tax guidance in the driver help hub, with examples from ride work.",
               "kind": "data",
               "size": "small",
               "depends_on": [
@@ -3701,13 +3701,13 @@
         {
           "id": "RIDE-A11-F2",
           "name": "Address and place search",
-          "does": "A person finds any NZ address or place by name, in English or te reo Māori.",
+          "does": "A person finds any address or place by name, in each place's languages (for New Zealand: English or te reo Māori).",
           "priority": "core",
           "parts": [
             {
               "id": "RIDE-A11-F2-P3",
               "name": "Place names in two languages",
-              "what": "Matches places by their English and te reo Māori names.",
+              "what": "Matches places by their names in each language, such as English and te reo Māori names in New Zealand.",
               "kind": "data",
               "size": "small",
               "depends_on": [
@@ -3980,7 +3980,7 @@
             {
               "id": "RIDE-A12-F2-P2",
               "name": "Ride call needs",
-              "what": "What Ride needs from the kit's telephony provider, such as masked calls on each trip, the phone booking line and NZ Relay calls, with expected call volumes.",
+              "what": "What Ride needs from the kit's telephony provider, such as masked calls on each trip, the phone booking line and relay service calls (example: New Zealand Relay), with expected call volumes.",
               "kind": "research",
               "size": "small",
               "depends_on": [
@@ -4173,7 +4173,7 @@
             {
               "id": "RIDE-A13-F1-P3",
               "name": "Help by text",
-              "what": "For people who cannot make a voice call, opens 111 TXT for those registered with Police, with the location and car filled in, and a text chat with the safety team.",
+              "what": "For people who cannot make a voice call, opens the country's emergency text service (example: 111 TXT in New Zealand, for those registered with Police), with the location and car filled in, and a text chat with the safety team.",
               "kind": "interface",
               "size": "small",
               "depends_on": [
@@ -4338,7 +4338,7 @@
             {
               "id": "RIDE-A13-F7-P1",
               "name": "Recording rules",
-              "what": "What NZ privacy law requires for recording in a vehicle, including notice and consent.",
+              "what": "What each country's privacy law requires for recording in a vehicle, starting with New Zealand's, including notice and consent.",
               "kind": "legal",
               "size": "small",
               "depends_on": [],
@@ -4388,7 +4388,7 @@
             {
               "id": "RIDE-A13-F9-P1",
               "name": "Women preferences and the law",
-              "what": "Whether NZ human rights law allows this and on what terms.",
+              "what": "Whether each country's human rights law allows this, starting with New Zealand's, and on what terms.",
               "kind": "legal",
               "size": "small",
               "depends_on": [],
@@ -4536,7 +4536,7 @@
             {
               "id": "RIDE-A13-F14-P1",
               "name": "Safety guides",
-              "what": "Short safety guides in help, in English and te reo Māori first.",
+              "what": "Short safety guides in help, in the example country's languages first (for New Zealand: English and te reo Māori).",
               "kind": "data",
               "size": "small",
               "depends_on": [
@@ -4567,7 +4567,7 @@
             {
               "id": "RIDE-A13-F15-P2",
               "name": "Impaired driver report",
-              "what": "A one-tap report during or just after a trip that the driver may be impaired, which points the rider to 111 if they are in danger and pauses offers to that driver until a person reviews it, under the safety pause rules.",
+              "what": "A one-tap report during or just after a trip that the driver may be impaired, which points the rider to the emergency number if they are in danger and pauses offers to that driver until a person reviews it, under the safety pause rules.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -4590,7 +4590,7 @@
             {
               "id": "RIDE-A13-F16-P1",
               "name": "Dashcam rules",
-              "what": "Rules for drivers' own dashcams: notice to riders, what the Privacy Act asks and how long footage may be kept.",
+              "what": "Rules for drivers' own dashcams: notice to riders, what privacy law asks (example: New Zealand's Privacy Act) and how long footage may be kept.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -4633,7 +4633,7 @@
     {
       "id": "RIDE-A14",
       "name": "Accessibility",
-      "summary": "Rides for everyone: wheelchair accessible vehicles, assistance animals always carried, help to the car, apps that work with screen readers, deaf and hard of hearing drivers, booking by phone or by voice, Total Mobility and a simpler mode.",
+      "summary": "Rides for everyone: wheelchair accessible vehicles, assistance animals always carried, help to the car, apps that work with screen readers, deaf and hard of hearing drivers, booking by phone or by voice, disability fare subsidies (example: New Zealand's Total Mobility) and a simpler mode.",
       "features": [
         {
           "id": "RIDE-A14-F1",
@@ -4850,8 +4850,8 @@
             },
             {
               "id": "RIDE-A14-F6-P3",
-              "name": "Text and Relay booking",
-              "what": "People who cannot use a voice line book by text, or call through NZ Relay, and staff are trained to take Relay calls.",
+              "name": "Text and relay booking",
+              "what": "People who cannot use a voice line book by text, or call through a relay service (example: New Zealand Relay), and staff are trained to take relay calls.",
               "kind": "integration",
               "size": "small",
               "depends_on": [
@@ -4864,14 +4864,14 @@
         },
         {
           "id": "RIDE-A14-F7",
-          "name": "Total Mobility",
-          "does": "A rider with a Total Mobility card gets their subsidised fare on Spare Ride.",
+          "name": "Disability fare subsidies",
+          "does": "A rider with a disability fare subsidy card, such as New Zealand's Total Mobility card, gets their subsidised fare on Spare Ride.",
           "priority": "next",
           "parts": [
             {
               "id": "RIDE-A14-F7-P1",
-              "name": "Total Mobility rules",
-              "what": "How councils approve operators, the subsidy, the card and reporting, region by region.",
+              "name": "Fare subsidy rules",
+              "what": "How each scheme approves operators, the subsidy, the card and reporting, region by region, starting with the councils that run New Zealand's Total Mobility.",
               "kind": "research",
               "size": "medium",
               "depends_on": [],
@@ -4879,8 +4879,8 @@
             },
             {
               "id": "RIDE-A14-F7-P2",
-              "name": "Total Mobility card link",
-              "what": "Reads the rider's card, applies the subsidy and reports trips to the council.",
+              "name": "Fare subsidy card link",
+              "what": "Reads the rider's card, applies the subsidy and reports trips to the scheme.",
               "kind": "integration",
               "size": "large",
               "depends_on": [
@@ -4892,8 +4892,8 @@
             },
             {
               "id": "RIDE-A14-F7-P3",
-              "name": "Total Mobility driver checks",
-              "what": "Tracks each driver's qualifications for each council's Total Mobility scheme, such as first aid and the NZQA unit standards Auckland Transport asks for, as checks with expiry dates.",
+              "name": "Fare subsidy driver checks",
+              "what": "Tracks each driver's qualifications for each scheme, such as first aid and the NZQA unit standards Auckland Transport asks for under New Zealand's Total Mobility, as checks with expiry dates.",
               "kind": "data",
               "size": "small",
               "depends_on": [
@@ -5044,14 +5044,14 @@
         },
         {
           "id": "RIDE-A14-F14",
-          "name": "Easy read and NZ Sign Language",
-          "does": "A person reads orientation, safety and key help pages in easy read or watches them in NZ Sign Language.",
+          "name": "Easy read and sign language",
+          "does": "A person reads orientation, safety and key help pages in easy read or watches them in sign language (for New Zealand: New Zealand Sign Language).",
           "priority": "later",
           "parts": [
             {
               "id": "RIDE-A14-F14-P1",
               "name": "Easy read and sign language versions",
-              "what": "Easy read and NZ Sign Language versions of driver orientation, safety guides and key help pages.",
+              "what": "Easy read and sign language versions, starting with New Zealand Sign Language, of driver orientation, safety guides and key help pages.",
               "kind": "data",
               "size": "small",
               "depends_on": [
@@ -5410,7 +5410,7 @@
             {
               "id": "RIDE-A15-F8-P3",
               "name": "Support after harm",
-              "what": "How a driver hurt or threatened by a rider is supported: Police, ACC, the co-op's insurance and any claim against the rider.",
+              "what": "How a driver hurt or threatened by a rider is supported: Police, accident cover such as New Zealand's ACC, the co-op's insurance and any claim against the rider.",
               "kind": "research",
               "size": "small",
               "depends_on": [
@@ -5429,7 +5429,7 @@
             {
               "id": "RIDE-A15-F9-P1",
               "name": "Outside routes for rides",
-              "what": "Guidance on taking a ride dispute to the Disputes Tribunal or raising a concern with NZTA, on the kit's outside routes.",
+              "what": "Guidance on taking a ride dispute to each country's small claims body or transport regulator (example: New Zealand's Disputes Tribunal and NZTA), on the kit's outside routes.",
               "kind": "data",
               "size": "small",
               "depends_on": [
@@ -5456,7 +5456,7 @@
             {
               "id": "RIDE-A16-F1-P1",
               "name": "Ride help articles",
-              "what": "Short articles for riders and drivers, in English and te reo Māori first and then in languages such as Samoan and Tongan, kept as open text files in the kit's help centre.",
+              "what": "Short articles for riders and drivers, in the example country's languages first (for New Zealand: English and te reo Māori) and then in languages such as Samoan and Tongan, kept as open text files in the kit's help centre.",
               "kind": "data",
               "size": "medium",
               "depends_on": [
@@ -5762,7 +5762,7 @@
             {
               "id": "RIDE-A17-F2-P1",
               "name": "Teen riding rules",
-              "what": "Whether and how under-18s may ride alone in NZ, and what drivers must know.",
+              "what": "Whether and how under-18s may ride alone in each country, starting with New Zealand, and what drivers must know.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -6007,18 +6007,18 @@
     {
       "id": "RIDE-A18",
       "name": "Co-op membership, voting and open costs",
-      "summary": "What makes Spare Ride a co-op: drivers join as members, vote on fares and rules, see the monthly cost ledger and where each trip's fee went, propose changes and elect panels.",
+      "summary": "What makes Spare Ride a co-op: drivers join as members for free, vote on fares and rules, see the monthly cost ledger and where each trip's fee went, propose changes and elect panels.",
       "features": [
         {
           "id": "RIDE-A18-F1",
           "name": "Join as a member",
-          "does": "A driver joins the co-op with one share and one vote, and a rider can join too if members agree.",
+          "does": "A driver joins for free and gets one vote on Spare Ride's fares and rules; riders who take part are members too and vote on major changes.",
           "priority": "core",
           "parts": [
             {
               "id": "RIDE-A18-F1-P1",
               "name": "Ride member classes",
-              "what": "Driver members and, if members agree, rider members, as Spare Ride's classes on the kit's member register, kept within the kit's co-operative test so members who stop riding or driving do not tip the balance.",
+              "what": "Driver members and rider members as Spare Ride's classes on the kit's member register, with drivers voting on fares and rules, and the kit's active member check so members who stop riding or driving do not tip the balance.",
               "kind": "data",
               "size": "small",
               "depends_on": [
@@ -6276,7 +6276,7 @@
             {
               "id": "RIDE-A19-F1-P1",
               "name": "First city decision",
-              "what": "Ranks NZ cities on riders, drivers, competition and rules.",
+              "what": "Ranks cities on riders, drivers, competition and rules, starting with New Zealand's.",
               "kind": "research",
               "size": "small",
               "depends_on": [],
@@ -6542,7 +6542,7 @@
         {
           "id": "RIDE-A19-F11",
           "name": "Disaster mode",
-          "does": "In a Civil Defence emergency, operations staff switch an area into disaster mode: busy-time pricing off, areas paused or limited, free trips where members agreed, and official alerts shown.",
+          "does": "In a declared emergency, such as a Civil Defence emergency in New Zealand, operations staff switch an area into disaster mode: busy-time pricing off, areas paused or limited, free trips where members agreed, and official alerts shown.",
           "priority": "next",
           "parts": [
             {
@@ -6608,7 +6608,7 @@
         {
           "id": "RIDE-A19-F13",
           "name": "Give a trip to a chosen driver",
-          "does": "Staff offer a phone booking, Total Mobility trip or wheelchair trip to a named driver, who can still decline.",
+          "does": "Staff offer a phone booking, subsidised fare trip or wheelchair trip to a named driver, who can still decline.",
           "priority": "next",
           "parts": [
             {
@@ -6681,18 +6681,18 @@
     {
       "id": "RIDE-A20",
       "name": "Legal duties and compliance",
-      "summary": "What the law asks of a ride platform in NZ and how the app meets it: the operator licence, registered passengers instead of cameras, trip records, driver identification, agreed fares, drivers' status, health and safety, insurance, plain terms, consumer law and anti-money-laundering checks.",
+      "summary": "What the law asks of a ride platform in each country and how the app meets it, starting with New Zealand, the first country pack: the operator licence, registered passengers instead of cameras, trip records, driver identification, agreed fares, drivers' status, health and safety, insurance, plain terms, consumer law and anti-money-laundering checks.",
       "features": [
         {
           "id": "RIDE-A20-F1",
           "name": "Hold the operator licence",
-          "does": "The co-op holds the small passenger service licence that any ride app needs, with fit and proper people in control.",
+          "does": "The co-op holds the operator licence each country asks of a ride app (example: New Zealand's small passenger service licence), with fit and proper people in control.",
           "priority": "core",
           "parts": [
             {
               "id": "RIDE-A20-F1-P1",
               "name": "Operator licence application",
-              "what": "What NZTA needs for the licence, who must pass the fit and proper check, and the NZ-resident representative.",
+              "what": "What the transport regulator needs for the licence, starting with New Zealand's NZTA: who must pass the fit and proper check, and the New Zealand-resident representative.",
               "kind": "legal",
               "size": "medium",
               "depends_on": [],
@@ -6744,7 +6744,7 @@
             {
               "id": "RIDE-A20-F2-P3",
               "name": "Registered passengers on every booking path",
-              "what": "A ruling for each way a trip can be booked (for a guest, by phone, by a hotel or clinic, Total Mobility, taxi rank and street hail) on whether every passenger is a registered passenger, and what the vehicle needs if not.",
+              "what": "A ruling for each way a trip can be booked (for a guest, by phone, by a hotel or clinic, a fare subsidy scheme, taxi rank and street hail) on whether every passenger is a registered passenger, and what the vehicle needs if not.",
               "kind": "legal",
               "size": "medium",
               "depends_on": [
@@ -6767,7 +6767,7 @@
             {
               "id": "RIDE-A20-F2-P5",
               "name": "No trips off the app",
-              "what": "A published rule that drivers and riders never use Spare Ride to set up trips outside it, since such a trip breaks the registered passenger rule and skips the GST the platform must collect.",
+              "what": "A published rule that drivers and riders never use Spare Ride to set up trips outside it, since such a trip breaks the registered passenger rule and skips the sales tax the platform must collect.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -6881,7 +6881,7 @@
             {
               "id": "RIDE-A20-F6-P2",
               "name": "Trip incidents in the register",
-              "what": "Crashes, assaults and serious injuries during trips go into the kit's incident register, each checked for whether it must be notified to WorkSafe, which for road crashes is unverified.",
+              "what": "Crashes, assaults and serious injuries during trips go into the kit's incident register, each checked for whether it must be notified to the safety regulator (example: New Zealand's WorkSafe), which for road crashes is unverified.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -6951,7 +6951,7 @@
         {
           "id": "RIDE-A20-F9",
           "name": "Anti-money-laundering check",
-          "does": "The co-op meets the anti-money-laundering duties online marketplaces have had since 1 June 2025, covering the risks rides bring.",
+          "does": "The co-op meets the anti-money-laundering duties online marketplaces have in each country (example: New Zealand's, since 1 June 2025), covering the risks rides bring.",
           "priority": "core",
           "parts": [
             {
@@ -7006,13 +7006,13 @@
         {
           "id": "RIDE-A20-F12",
           "name": "Fare vote cleared under competition law",
-          "does": "Drivers vote on fares only in a way competition law allows, with any clearance from the Commerce Commission in place before the first vote.",
+          "does": "Drivers vote on fares only in a way competition law allows, with any clearance from the competition regulator (example: New Zealand's Commerce Commission) in place before the first vote.",
           "priority": "core",
           "parts": [
             {
               "id": "RIDE-A20-F12-P1",
               "name": "Ride fare vote and competition law",
-              "what": "Applies the kit's competition law check to drivers voting on a shared fare formula, which may be cartel conduct under the Commerce Act 1986 if they are contractors, and picks the route that makes it lawful.",
+              "what": "Applies the kit's competition law check to drivers voting on a shared fare formula, which may be cartel conduct under competition law if they are contractors (example: New Zealand's Commerce Act 1986), and picks the route that makes it lawful.",
               "kind": "legal",
               "size": "medium",
               "depends_on": [
@@ -7023,8 +7023,8 @@
             },
             {
               "id": "RIDE-A20-F12-P2",
-              "name": "Commerce Commission clearance",
-              "what": "If needed, an authorisation under section 58, or a notice under any new collective bargaining regime for small businesses, before the first fare vote.",
+              "name": "Competition regulator clearance",
+              "what": "If needed, an authorisation (example: under section 58 of New Zealand's Commerce Act), or a notice under any new collective bargaining regime for small businesses, before the first fare vote.",
               "kind": "legal",
               "size": "medium",
               "depends_on": [
@@ -7225,7 +7225,7 @@
         {
           "id": "RIDE-A21-F7",
           "name": "Breach response",
-          "does": "If personal data leaks, the co-op tells the people affected and the Privacy Commissioner as the law requires.",
+          "does": "If personal data leaks, the co-op tells the people affected and the privacy regulator (example: New Zealand's Privacy Commissioner) as the law requires.",
           "priority": "core",
           "parts": [
             {
@@ -7272,8 +7272,8 @@
             },
             {
               "id": "RIDE-A21-F8-P3",
-              "name": "Māori data check",
-              "what": "Checks each release of travel data against Māori data sovereignty principles, with Māori advice, as well as against the anonymising methods.",
+              "name": "Indigenous data check",
+              "what": "Checks each release of travel data against indigenous data sovereignty principles, such as Māori data sovereignty in New Zealand, with advice from those communities, as well as against the anonymising methods.",
               "kind": "research",
               "size": "small",
               "depends_on": [
@@ -7330,7 +7330,7 @@
         {
           "id": "RIDE-A21-F10",
           "name": "Told when someone else gives us your details",
-          "does": "A guest rider, trusted contact, staff member or patient whose details came from someone else is told who has them and why, as the Privacy Act has required since 1 May 2026.",
+          "does": "A guest rider, trusted contact, staff member or patient whose details came from someone else is told who has them and why, as privacy law requires (example: New Zealand's Privacy Act since 1 May 2026).",
           "priority": "core",
           "parts": [
             {
@@ -7414,18 +7414,18 @@
     {
       "id": "RIDE-A22",
       "name": "Languages, countries and poor signal",
-      "summary": "New Zealand first, international by design: many languages with te reo Māori first-class, local formats, country rule packs, payments and tax per country, local emergency numbers, local co-ops, data kept in region, and apps that cope with weak signal.",
+      "summary": "International by design, with New Zealand as the first example country: many languages, starting with the example country's (for New Zealand: English and te reo Māori), local formats, country rule packs, payments and tax per country, local emergency numbers, local co-ops, data kept in region, and apps that cope with weak signal.",
       "features": [
         {
           "id": "RIDE-A22-F1",
           "name": "Many languages",
-          "does": "A person uses the app in their language, starting with English and te reo Māori, with others added by volunteers.",
+          "does": "A person uses the app in their language, starting with the example country's (for New Zealand: English and te reo Māori), with others added by volunteers.",
           "priority": "core",
           "parts": [
             {
               "id": "RIDE-A22-F1-P3",
-              "name": "Te reo Māori review",
-              "what": "Paid review of Ride's te reo Māori text by fluent speakers before each release, through the kit's member translation.",
+              "name": "Fluent speaker review",
+              "what": "Paid review of Ride's text in each language by fluent speakers before each release, starting with te reo Māori in New Zealand, through the kit's member translation.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -7539,7 +7539,7 @@
             {
               "id": "RIDE-A22-F5-P1",
               "name": "Emergency numbers check",
-              "what": "Takes emergency numbers from the kit's country packs, starting with NZ's, and checks them before each city launch.",
+              "what": "Takes emergency numbers from the kit's country packs, starting with New Zealand's, and checks them before each city launch.",
               "kind": "data",
               "size": "small",
               "depends_on": [
@@ -7924,20 +7924,20 @@
   "assess": [
     "Is there anything you do in Uber or a taxi app today, as a rider or a driver, that has no feature in this map?",
     "Could the first city launch with only the core features, or is something marked next that riders would miss on day one?",
-    "Is the fare card clear in five seconds: the fare, the driver's share, the at-cost fee, the payment fee and GST?",
+    "Is the fare card clear in five seconds: the fare, the driver's share, the at-cost fee, the payment fee and sales tax?",
     "Would a driver trust the offer card: does it show everything needed to decide, and is declining clearly free?",
     "Can the dispatch rules be published in one page and still work fairly at airports, events and quiet times?",
     "Is the drivers' status decision (RD01) far enough along to build pay, work time and the driver agreement, or should those parts wait?",
     "Can the co-op get access to the official licence and vehicle registers, or does sign-up start with people reviewing documents?",
     "Should Spare Ride build its own approved electronic logbook, or have drivers use an existing approved one at first?",
     "Are the core safety tools at least as good as the incumbent's on day one: emergency button, trip sharing, PIN, check-ins and a response team?",
-    "Does the first city have enough wheelchair accessible vehicles, and should phone booking and Total Mobility be in the first release?",
+    "Does the first city have enough wheelchair accessible vehicles, and should phone booking and disability fare subsidies be in the first release?",
     "Once support staff, the safety team, insurance, telephony and maps are on the ledger, what does the at-cost fee per trip come to?",
     "Which kit services (payments, matching, maps, trust) must exist before Spare Ride can start, and who is building them?",
-    "Are the part sizes believable, and which large parts (routing, address search, navigation, background location, payments, GST engine, the apps) carry the most risk?",
+    "Are the part sizes believable, and which large parts (routing, address search, navigation, background location, payments, sales tax engine, the apps) carry the most risk?",
     "Does every screen in the demo come from what people need to do, with nothing copied from an incumbent's interface?",
     "Does anything here need a lawyer before it is built: cameras and registered passengers, recording audio, women preferences, teen accounts, cash, stored credit?",
-    "Can drivers lawfully vote on a shared fare under the Commerce Act, and does the co-op need a Commerce Commission authorisation before the first vote (RIDE-A20-F12)?",
+    "Can drivers lawfully vote on a shared fare under competition law (example: New Zealand's Commerce Act), and does the co-op need the regulator's authorisation (example: the Commerce Commission) before the first vote (RIDE-A20-F12)?",
     "Do the face checks at sign-up and during shifts pass the Biometric Processing Privacy Code's proportionality test, and what other way is there for people who will not use their face (RIDE-A21-F9)?",
     "Who sells each ride, the co-op or the driver, and do the receipt, the tax invoices and the rider terms all match that choice?",
     "If drivers are contractors, does every driver-facing rule pass the 2026 gateway test check, and if RD01 decides they are employees, are pay records, leave and rosters (RIDE-A10-F6) moved to core before launch?",

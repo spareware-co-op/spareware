@@ -2,7 +2,7 @@
   "program": "kit",
   "name": "Shared kit and co-op portal",
   "replaces": "The services every platform rebuilds or rents: sign-in and identity services (such as Auth0 and Okta), map and routing services (such as Google Maps Platform and Mapbox), chat, call and notification services (such as Twilio, SendGrid, Firebase and Zoom), e-signature services (such as DocuSign), trust and safety tools, voting tools (such as Loomio and Decidim), open budget tools (such as Open Collective) and back-office systems, plus the member register and portal a co-op would otherwise run by hand.",
-  "summary": "One set of libraries and services every Spareware app is built on: accounts, payments and payouts, tax, matching, maps, messaging, trust and safety, worker law, property records, member voting, the open cost ledger, sync and history, plugins and AI access, and it maps the shared engines the programs use. It also runs the co-op's own member portal, where people join, vote, check the costs and share in any surplus.",
+  "summary": "One set of libraries and services every Spareware app is built on: accounts, payments and payouts, tax, matching, maps, messaging, trust and safety, worker law, property records, member voting, the open cost ledger, sync and history, plugins and AI access, and it maps the shared engines the programs use. It also runs the member portal, where people join for free, vote and check the costs.",
   "areas": [
     {
       "id": "KIT-A1",
@@ -680,7 +680,7 @@
             {
               "id": "KIT-A2-F1-P1",
               "name": "Identity provider choice",
-              "what": "Compares providers accredited under NZ's Digital Identity Services Trust Framework on cost, method and what data they keep.",
+              "what": "Compares accredited identity providers in each country on cost, method and what data they keep, starting with those accredited under New Zealand's Digital Identity Services Trust Framework.",
               "kind": "research",
               "size": "small",
               "depends_on": [],
@@ -737,7 +737,7 @@
             {
               "id": "KIT-A2-F1-P6",
               "name": "Identity checks for people overseas",
-              "what": "Lets people who live outside NZ, such as overseas sellers and visiting guests, prove who they are in the first release, through a provider that covers their country or their NZ lawyer's anti-money-laundering identity check, recorded as the same result as a local check. Spare Home and Spare Stay both need it.",
+              "what": "Lets people who live outside the country an app runs in, such as overseas sellers and visiting guests, prove who they are in the first release, through a provider that covers their country or a local lawyer's anti-money-laundering identity check, recorded as the same result as a local check. Spare Home and Spare Stay both need it.",
               "kind": "integration",
               "size": "medium",
               "depends_on": [
@@ -891,7 +891,7 @@
             {
               "id": "KIT-A2-F7-P1",
               "name": "Business number lookup",
-              "what": "Confirms a business through the NZ Business Number register and stores the result.",
+              "what": "Confirms a business through each country's business register (example: the New Zealand Business Number register) and stores the result.",
               "kind": "integration",
               "size": "small",
               "depends_on": [
@@ -913,8 +913,8 @@
             },
             {
               "id": "KIT-A2-F7-P3",
-              "name": "Charities Register check",
-              "what": "Confirms a registered charity through the NZ Charities Register, on its published terms, and stores the result beside the business number check.",
+              "name": "Charities register check",
+              "what": "Confirms a registered charity through each country's charities register (example: New Zealand's Charities Register), on its published terms, and stores the result beside the business number check.",
               "kind": "integration",
               "size": "small",
               "depends_on": [
@@ -951,7 +951,7 @@
           "parts": [
             {
               "id": "KIT-A2-F9-P1",
-              "name": "Background checks in NZ",
+              "name": "Background checks in each country",
               "what": "Which checks each app's law requires, who may run them and how to do it lawfully.",
               "kind": "research",
               "size": "medium",
@@ -1116,7 +1116,7 @@
             {
               "id": "KIT-A3-F1-P1",
               "name": "Payment provider choice",
-              "what": "Compares providers that pay out to workers in NZ, and lists what Spareware must never handle itself.",
+              "what": "Compares providers that pay out to workers in each country, starting with New Zealand, and lists what Spareware must never handle itself.",
               "kind": "research",
               "size": "medium",
               "depends_on": [],
@@ -1152,7 +1152,7 @@
             {
               "id": "KIT-A3-F1-P4",
               "name": "Money type",
-              "what": "Exact amounts in each currency's ISO 4217 minor units, with currency, rounding rules and GST fields: the one money type every app and kit-core use.",
+              "what": "Exact amounts in each currency's ISO 4217 minor units, with currency, rounding rules and sales tax fields: the one money type every app and kit-core use.",
               "kind": "library",
               "size": "small",
               "depends_on": [
@@ -1164,7 +1164,7 @@
             {
               "id": "KIT-A3-F1-P5",
               "name": "Seller of record per app",
-              "what": "Decides for each app whether the worker or the co-op is the seller, which sets who charges GST, who owes consumer guarantees, whose name is on the receipt and who answers card disputes.",
+              "what": "Decides for each app whether the worker or the co-op is the seller, which sets who charges sales tax, who owes consumer guarantees, whose name is on the receipt and who answers card disputes.",
               "kind": "legal",
               "size": "medium",
               "depends_on": [
@@ -1289,7 +1289,7 @@
             {
               "id": "KIT-A3-F3-P3",
               "name": "Earnings page",
-              "what": "Shows each job, the fee, GST and every payout, and exports them.",
+              "what": "Shows each job, the fee, sales tax and every payout, and exports them.",
               "kind": "interface",
               "size": "medium",
               "depends_on": [
@@ -1330,7 +1330,7 @@
             {
               "id": "KIT-A3-F3-P6",
               "name": "Money that cannot be paid out",
-              "what": "What happens to money that can never be paid out, and how the Unclaimed Money Act 1971 applies to it (*unverified* period for platform balances).",
+              "what": "What happens to money that can never be paid out, and how unclaimed money law applies to it (example: New Zealand's Unclaimed Money Act 1971; *unverified* period for platform balances).",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -1341,7 +1341,7 @@
             {
               "id": "KIT-A3-F3-P7",
               "name": "Bank account name check",
-              "what": "Checks the account name matches when payout details change, through NZ banks' Confirmation of Payee, run since late 2024 (*unverified* whether a business can call it), or the provider's own check.",
+              "what": "Checks the account name matches when payout details change, through the banks' own name check where a country has one (example: New Zealand banks' Confirmation of Payee, run since late 2024; *unverified* whether a business can call it), or the provider's own check.",
               "kind": "integration",
               "size": "small",
               "depends_on": [
@@ -1385,7 +1385,7 @@
             {
               "id": "KIT-A3-F4-P3",
               "name": "Card fee pass-through check",
-              "what": "Checks that passing card costs through at cost is not a card surcharge where the law bans one, such as in-store payments if NZ's planned ban applies (*unverified*).",
+              "what": "Checks that passing card costs through at cost is not a card surcharge where the law bans one, such as in-store payments if New Zealand's planned ban applies (*unverified*).",
               "kind": "legal",
               "size": "small",
               "depends_on": [],
@@ -1447,7 +1447,7 @@
         {
           "id": "KIT-A3-F7",
           "name": "Keep a receipt",
-          "does": "Get a clear receipt showing the fee and GST for every payment.",
+          "does": "Get a clear receipt showing the fee and sales tax for every payment.",
           "priority": "core",
           "parts": [
             {
@@ -1691,7 +1691,7 @@
         {
           "id": "KIT-A3-F17",
           "name": "Pay on account as a business",
-          "does": "Let a business pay on account and get one GST invoice a month.",
+          "does": "Let a business pay on account and get one tax invoice a month.",
           "priority": "core",
           "parts": [
             {
@@ -1776,7 +1776,7 @@
             {
               "id": "KIT-A3-F19-P1",
               "name": "Tap to pay on a phone",
-              "what": "Takes a card on the worker's own phone through the provider's tap to pay, which Stripe lists as available in NZ (*unverified* for Connect platforms), with the in-store surcharge check applied.",
+              "what": "Takes a card on the worker's own phone through the provider's tap to pay, which Stripe lists country by country (example: New Zealand; *unverified* for Connect platforms), with the in-store surcharge check applied.",
               "kind": "integration",
               "size": "medium",
               "depends_on": [
@@ -1871,7 +1871,7 @@
             {
               "id": "KIT-A3-F23-P1",
               "name": "Fundraising rules",
-              "what": "NZ rules for charitable fundraising, receipts and donation tax credits, and the rules overseas, for fundraisers in Spare Social and fundraising sales in Spare Market.",
+              "what": "Each country's rules for charitable fundraising, receipts and donation tax relief, starting with New Zealand's donation tax credits, for fundraisers in Spare Social and fundraising sales in Spare Market.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -1886,18 +1886,18 @@
     {
       "id": "KIT-A4",
       "name": "Tax, invoices and money law",
-      "summary": "The tax and money law every marketplace must meet, built once: GST on listed services, the co-op's own GST returns, tax invoices, reporting sellers' income to IRD, anti-money-laundering duties and record keeping. Built in svc-payments; svc-tax is a proposed name (KIT-A16-F10-P1).",
+      "summary": "The tax and money law every marketplace must meet, built once and filled in by each country pack: sales tax on platform sales (example: New Zealand GST on listed services), the co-op's own sales tax returns, tax invoices, reporting sellers' income to the tax office (example: New Zealand's IRD), anti-money-laundering duties and record keeping. New Zealand is the first country pack; each country gets its own. Built in svc-payments; svc-tax is a proposed name (KIT-A16-F10-P1).",
       "features": [
         {
           "id": "KIT-A4-F1",
-          "name": "Have GST charged correctly",
-          "does": "Have GST worked out and collected the way the law says for each kind of job.",
+          "name": "Have sales tax charged correctly",
+          "does": "Have sales tax worked out and collected the way each country's law says for each kind of job.",
           "priority": "core",
           "parts": [
             {
               "id": "KIT-A4-F1-P1",
-              "name": "GST rules per app",
-              "what": "Maps which apps fall under GST on listed services and how each kind of job is taxed.",
+              "name": "Sales tax rules per app",
+              "what": "Maps which apps fall under each country's sales tax rules for platforms (example: New Zealand GST on listed services) and how each kind of job is taxed.",
               "kind": "research",
               "size": "medium",
               "depends_on": [],
@@ -1905,8 +1905,8 @@
             },
             {
               "id": "KIT-A4-F1-P2",
-              "name": "GST engine",
-              "what": "Works out GST on every order, including the platform's own duty to collect it on listed services.",
+              "name": "Sales tax engine",
+              "what": "Works out sales tax on every order from the country pack's rules, including the platform's own duty to collect it where the law sets one (example: New Zealand GST on listed services).",
               "kind": "library",
               "size": "large",
               "depends_on": [
@@ -1979,7 +1979,7 @@
         {
           "id": "KIT-A4-F3",
           "name": "Know my income is reported correctly",
-          "does": "Have the platform report sellers' income to IRD each year, and see what was sent.",
+          "does": "Have the platform report sellers' income to the tax office each year (example: New Zealand's IRD), and see what was sent.",
           "priority": "core",
           "parts": [
             {
@@ -2005,7 +2005,7 @@
             },
             {
               "id": "KIT-A4-F3-P3",
-              "name": "Yearly IRD report",
+              "name": "Yearly tax office report",
               "what": "Builds and files the yearly report and gives each seller a copy.",
               "kind": "service",
               "size": "medium",
@@ -2020,7 +2020,7 @@
         {
           "id": "KIT-A4-F4",
           "name": "Get a year-end statement",
-          "does": "Download a year's earnings, fees and GST to give to an accountant.",
+          "does": "Download a year's earnings, fees and sales tax to give to an accountant.",
           "priority": "core",
           "parts": [
             {
@@ -2116,7 +2116,7 @@
             {
               "id": "KIT-A4-F5-P5",
               "name": "Due diligence threshold",
-              "what": "Counts each person's transactions with the co-op over a rolling 12 months and starts customer due diligence once they pass NZ$10,000, as DIA's online marketplace exemption allows (*unverified* exact test), while suspicious activity reporting still covers everyone.",
+              "what": "Counts each person's transactions with the co-op over a rolling 12 months and starts customer due diligence once they pass the country pack's threshold (example: NZ$10,000 under the online marketplace exemption from New Zealand's DIA; *unverified* exact test), while suspicious activity reporting still covers everyone.",
               "kind": "service",
               "size": "medium",
               "depends_on": [
@@ -2181,7 +2181,7 @@
             {
               "id": "KIT-A4-F7-P1",
               "name": "Tax rules per country",
-              "what": "Country packs for VAT and GST rules and platform reporting abroad.",
+              "what": "Country packs for each country's VAT, GST or other sales tax rules and platform reporting.",
               "kind": "library",
               "size": "large",
               "depends_on": [
@@ -2193,7 +2193,7 @@
             {
               "id": "KIT-A4-F7-P2",
               "name": "Tax on services sold across borders",
-              "what": "Which GST, VAT and digital services taxes apply when a member overseas pays for at-cost storage or AI, or a worker overseas sells remote services, and when the co-op must register. Spare Studio and Spare Work both need the answer.",
+              "what": "Which sales taxes, VAT and digital services taxes apply when a member in another country pays for at-cost storage or AI, or a worker in another country sells remote services, and when the co-op must register there. Spare Studio and Spare Work both need the answer.",
               "kind": "research",
               "size": "medium",
               "depends_on": [
@@ -2237,14 +2237,14 @@
         },
         {
           "id": "KIT-A4-F9",
-          "name": "Know the co-op pays its own GST",
-          "does": "Trust that the co-op files its own GST returns as marketplace operator and charges GST on its fee.",
+          "name": "Know the co-op pays its own sales tax",
+          "does": "Trust that the co-op files its own sales tax returns as marketplace operator and charges sales tax on its fee.",
           "priority": "core",
           "parts": [
             {
               "id": "KIT-A4-F9-P1",
-              "name": "Co-op GST registration",
-              "what": "When the co-op must register for GST, its return periods, and how listed services rules make it the supplier of record for GST.",
+              "name": "Co-op sales tax registration",
+              "what": "When the co-op must register for sales tax in each country, its return periods, and how platform rules make it the supplier of record (example: New Zealand's GST listed services rules).",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -2254,8 +2254,8 @@
             },
             {
               "id": "KIT-A4-F9-P2",
-              "name": "Operator GST returns",
-              "what": "Builds and files the co-op's GST returns as marketplace operator from the GST engine's records, ready for an accountant to check.",
+              "name": "Operator sales tax returns",
+              "what": "Builds and files the co-op's sales tax returns as marketplace operator from the sales tax engine's records, ready for an accountant to check.",
               "kind": "service",
               "size": "medium",
               "depends_on": [
@@ -2267,8 +2267,8 @@
             },
             {
               "id": "KIT-A4-F9-P3",
-              "name": "GST on the fee",
-              "what": "Charges GST on the at-cost fee where it applies and issues tax invoices for the fee to GST-registered sellers.",
+              "name": "Sales tax on the fee",
+              "what": "Charges sales tax on the at-cost fee where it applies and issues tax invoices for the fee to sellers registered for sales tax.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -2283,14 +2283,14 @@
         },
         {
           "id": "KIT-A4-F10",
-          "name": "Opt out of platform GST as a large supplier",
-          "does": "As a large accommodation owner or large registered supplier, agree with the platform to account for GST myself where the law allows.",
+          "name": "Opt out of platform sales tax as a large supplier",
+          "does": "As a large accommodation owner or large registered supplier, agree with the platform to account for sales tax myself where the law allows.",
           "priority": "core",
           "parts": [
             {
               "id": "KIT-A4-F10-P1",
-              "name": "GST opt-out agreements",
-              "what": "Records opt-out agreements under the listed services rules, checks the size tests, and switches the GST engine to the seller accounting for GST.",
+              "name": "Sales tax opt-out agreements",
+              "what": "Records opt-out agreements where the law allows them (example: New Zealand's listed services rules), checks the size tests, and switches the sales tax engine to the seller accounting for the tax.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -2303,14 +2303,14 @@
         },
         {
           "id": "KIT-A4-F11",
-          "name": "Get GST figures for each return",
-          "does": "As a GST-registered worker, get the platform's figures for each two-monthly or six-monthly return.",
+          "name": "Get sales tax figures for each return",
+          "does": "As a worker registered for sales tax, get the platform's figures for each return period (example: two-monthly or six-monthly in New Zealand).",
           "priority": "next",
           "parts": [
             {
               "id": "KIT-A4-F11-P1",
-              "name": "GST period statements",
-              "what": "Statements for GST-registered workers that match their return periods, showing sales, the GST the platform collected and fees (*unverified* exact duty under the listed services rules).",
+              "name": "Sales tax period statements",
+              "what": "Statements for workers registered for sales tax that match their return periods, showing sales, the tax the platform collected and fees (*unverified* exact duty under New Zealand's listed services rules).",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -2324,13 +2324,13 @@
         {
           "id": "KIT-A4-F12",
           "name": "Have tax held back from my payouts",
-          "does": "Choose a rate of tax to be held back from each payout and paid to IRD for me.",
+          "does": "Choose a rate of tax to be held back from each payout and paid to the tax office for me.",
           "priority": "next",
           "parts": [
             {
               "id": "KIT-A4-F12-P1",
               "name": "Voluntary withholding rules",
-              "what": "Confirms with IRD how voluntary withholding works when a platform pays a contractor, and what each statement must show. Spare Food and Spare Work both map it.",
+              "what": "Confirms with the tax office how voluntary withholding works when a platform pays a contractor (example: New Zealand's IRD), and what each statement must show. Spare Food and Spare Work both map it.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -2341,7 +2341,7 @@
             {
               "id": "KIT-A4-F12-P2",
               "name": "Withholding at payout",
-              "what": "Holds back the rate a worker chooses from each payout, passes it to IRD and shows it on statements and the yearly summary.",
+              "what": "Holds back the rate a worker chooses from each payout, passes it to the tax office and shows it on statements and the yearly summary.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -2355,14 +2355,14 @@
         },
         {
           "id": "KIT-A4-F13",
-          "name": "Be warned before I must register for GST",
-          "does": "Be told before my sales across every Spareware app reach the GST registration threshold.",
+          "name": "Be warned before I must register for sales tax",
+          "does": "Be told before my sales across every Spareware app reach the sales tax registration threshold.",
           "priority": "core",
           "parts": [
             {
               "id": "KIT-A4-F13-P1",
-              "name": "GST threshold warning",
-              "what": "Warns a worker or seller whose sales across every Spareware app near the NZ$60,000 GST registration threshold, and explains what registering changes. How platform sales count towards the threshold is for the GST study to confirm (*unverified*). Spare Food and Spare Market map the same warning.",
+              "name": "Sales tax threshold warning",
+              "what": "Warns a worker or seller whose sales across every Spareware app near the country's sales tax registration threshold (example: NZ$60,000 for New Zealand GST), and explains what registering changes. How platform sales count towards the threshold is for the sales tax study to confirm (*unverified*). Spare Food and Spare Market map the same warning.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -3196,7 +3196,7 @@
             {
               "id": "KIT-A5-F26-P1",
               "name": "Restricted goods and services law",
-              "what": "Every NZ law that limits what may be sold or offered online, such as alcohol, vapes, medicines, firearms and work reserved to licensed people, with sources. Spare Market, Spare Work and Spare Food all need it.",
+              "what": "Every law in each country pack that limits what may be sold or offered online, starting with New Zealand's, such as alcohol, vapes, medicines, firearms and work reserved to licensed people, with sources. Spare Market, Spare Work and Spare Food all need it.",
               "kind": "legal",
               "size": "medium",
               "depends_on": [
@@ -3369,7 +3369,7 @@
             {
               "id": "KIT-A5-F32-P2",
               "name": "Phone ordering line",
-              "what": "A phone number with a simple menu and a person who takes the order into the same order path, including calls through NZ Relay. Spare Ride and Spare Food both need it.",
+              "what": "A phone number with a simple menu and a person who takes the order into the same order path, including calls through a relay service (example: New Zealand Relay). Spare Ride and Spare Food both need it.",
               "kind": "service",
               "size": "medium",
               "depends_on": [
@@ -3633,7 +3633,7 @@
             {
               "id": "KIT-A6-F5-P3",
               "name": "Decline pattern checks",
-              "what": "Spots workers or hosts declining people in patterns that point to discrimination on grounds the Human Rights Act 1993 protects, for a person to review.",
+              "what": "Spots workers or hosts declining people in patterns that point to discrimination on grounds human rights law protects (example: New Zealand's Human Rights Act 1993), for a person to review.",
               "kind": "service",
               "size": "medium",
               "depends_on": [
@@ -3836,7 +3836,7 @@
             {
               "id": "KIT-A7-F2-P1",
               "name": "Geocoder choice",
-              "what": "Compares open geocoders on NZ address quality and licence, keeping any GPL engine as a separate service.",
+              "what": "Compares open geocoders on address quality in each country, starting with New Zealand, and on licence, keeping any GPL engine as a separate service.",
               "kind": "research",
               "size": "small",
               "depends_on": [],
@@ -3856,8 +3856,8 @@
             },
             {
               "id": "KIT-A7-F2-P3",
-              "name": "NZ address data",
-              "what": "Loads official NZ address data under its open licence and keeps it current.",
+              "name": "Official address data",
+              "what": "Loads each country's official address data under its open licence, starting with New Zealand's, and keeps it current.",
               "kind": "data",
               "size": "medium",
               "depends_on": [
@@ -3887,7 +3887,7 @@
             {
               "id": "KIT-A7-F3-P1",
               "name": "Routing engine choice",
-              "what": "Compares open routing engines on NZ travel-time accuracy, speed, licence and running cost.",
+              "what": "Compares open routing engines on travel-time accuracy in each country, starting with New Zealand, and on speed, licence and running cost.",
               "kind": "research",
               "size": "medium",
               "depends_on": [],
@@ -4165,7 +4165,7 @@
             {
               "id": "KIT-A7-F12-P1",
               "name": "Aerial photos and boundary lines",
-              "what": "Adds open aerial imagery and property boundary lines from LINZ to the kit's maps under their licences. Spare Home and Spare Construct both need them.",
+              "what": "Adds open aerial imagery and property boundary lines from each country's land agency (example: LINZ in New Zealand) to the kit's maps under their licences. Spare Home and Spare Construct both need them.",
               "kind": "integration",
               "size": "medium",
               "depends_on": [
@@ -4259,7 +4259,7 @@
             {
               "id": "KIT-A8-F1-P5",
               "name": "Interception duty check",
-              "what": "Whether the co-op's chat and call services make it a service provider with a duty to assist under the Telecommunications (Interception Capability and Security) Act 2013 (*unverified* whether app chat counts).",
+              "what": "Whether the co-op's chat and call services make it a service provider with a duty to assist under interception law (example: New Zealand's Telecommunications (Interception Capability and Security) Act 2013; *unverified* whether app chat counts).",
               "kind": "legal",
               "size": "small",
               "depends_on": [],
@@ -4977,7 +4977,7 @@
             {
               "id": "KIT-A10-F1-P1",
               "name": "Emergency button",
-              "what": "Calls the emergency number from the country pack (111 in NZ) and shows the address, vehicle and job details to read out, and still works with no data connection.",
+              "what": "Calls the emergency number from the country pack (111 in New Zealand) and shows the address, vehicle and job details to read out, and still works with no data connection.",
               "kind": "interface",
               "size": "small",
               "depends_on": [
@@ -5000,8 +5000,8 @@
             },
             {
               "id": "KIT-A10-F1-P3",
-              "name": "Helplines and 111 TXT",
-              "what": "Shows each country's helplines, such as 1737 in NZ, and guides Deaf and speech-impaired members to register for 111 TXT before they need it.",
+              "name": "Helplines and emergency text",
+              "what": "Shows each country's helplines, such as 1737 in New Zealand, and guides Deaf and speech-impaired members to register for emergency text, such as 111 TXT in New Zealand, before they need it.",
               "kind": "data",
               "size": "small",
               "depends_on": [
@@ -5215,7 +5215,7 @@
             {
               "id": "KIT-A10-F9-P1",
               "name": "Legal duties for hosts",
-              "what": "What NZ and other countries require hosts to remove, how fast and by whom.",
+              "what": "What each country requires hosts to remove, starting with New Zealand, how fast and by whom.",
               "kind": "research",
               "size": "medium",
               "depends_on": [],
@@ -5500,7 +5500,7 @@
             {
               "id": "KIT-A10-F19-P1",
               "name": "Non-discrimination commitment",
-              "what": "A commitment every member accepts at sign-up under the Human Rights Act 1993, covering how workers treat customers and how customers treat workers.",
+              "what": "A commitment every member accepts at sign-up under each country's human rights law (example: New Zealand's Human Rights Act 1993), covering how workers treat customers and how customers treat workers.",
               "kind": "legal",
               "size": "small",
               "depends_on": [],
@@ -5509,7 +5509,7 @@
             {
               "id": "KIT-A10-F19-P2",
               "name": "Assistance animal rule",
-              "what": "One rule for every app that assistance dogs are always accepted and never charged as pets, checked by a lawyer under the Dog Control Act 1996 and the Human Rights Act 1993 (*unverified* per app).",
+              "what": "One rule for every app that assistance dogs are always accepted and never charged as pets, checked by a lawyer in each country (example: New Zealand's Dog Control Act 1996 and Human Rights Act 1993; *unverified* per app).",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -5548,7 +5548,7 @@
             {
               "id": "KIT-A10-F21-P1",
               "name": "Copyright and counterfeit rules",
-              "what": "What copyright and trade mark law ask of a host that receives notices, including the Copyright Act's rules for online hosts and counterfeit goods.",
+              "what": "What copyright and trade mark law ask of a host that receives notices, including each country's rules for online hosts and counterfeit goods (example: New Zealand's Copyright Act).",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -5779,7 +5779,7 @@
             {
               "id": "KIT-A11-F4-P4",
               "name": "Tax on member role pay",
-              "what": "How pay to panel members, moderators and ledger checkers is taxed and treated, such as honoraria under the schedular payment rules (*unverified*).",
+              "what": "How pay to panel members, moderators and ledger checkers is taxed and treated, such as honoraria under New Zealand's schedular payment rules (*unverified*).",
               "kind": "legal",
               "size": "small",
               "depends_on": [],
@@ -5788,7 +5788,7 @@
             {
               "id": "KIT-A11-F4-P5",
               "name": "Legal standing of panel decisions",
-              "what": "What a panel decision binds and how it sits beside the Disputes Tribunal and Consumer Guarantees Act rights, given that a consumer is bound to arbitration only by a separate written agreement made after the dispute arises (Arbitration Act 1996 s 11).",
+              "what": "What a panel decision binds and how it sits beside each country's small claims and consumer rights. In New Zealand, the first country pack, that means the Disputes Tribunal and Consumer Guarantees Act rights, and a consumer is bound to arbitration only by a separate written agreement made after the dispute arises (Arbitration Act 1996 s 11).",
               "kind": "legal",
               "size": "medium",
               "depends_on": [
@@ -5922,7 +5922,7 @@
             {
               "id": "KIT-A11-F9-P3",
               "name": "Income cover options",
-              "what": "Options for income cover beyond ACC, such as an optional group policy at cost, what each covers and what it costs. Spare Food and Spare Ride both map it.",
+              "what": "Options for income cover beyond public accident cover (example: New Zealand's ACC), such as an optional group policy at cost, what each covers and what it costs. Spare Food and Spare Ride both map it.",
               "kind": "research",
               "size": "small",
               "depends_on": [
@@ -5942,7 +5942,7 @@
             {
               "id": "KIT-A11-F10-P1",
               "name": "Protection pool rules",
-              "what": "What the pool covers, how it is funded and how claims are decided, and whether a member-funded pool counts as insurance business under the Insurance (Prudential Supervision) Act 2010 (*unverified*).",
+              "what": "What the pool covers, how it is funded and how claims are decided, and whether a member-funded pool counts as insurance business under insurance law (example: New Zealand's Insurance (Prudential Supervision) Act 2010; *unverified*).",
               "kind": "legal",
               "size": "medium",
               "depends_on": [
@@ -5972,7 +5972,7 @@
     {
       "id": "KIT-A12",
       "name": "Member voting and meetings",
-      "summary": "Members propose, discuss and vote on fees and rules for each app and for the whole co-op, elect directors, panels and moderators, follow decisions through, and hold meetings online, with a way to vote without a device. One member, one vote. Built as svc-voting.",
+      "summary": "Workers propose, discuss and vote on their own app's fees and rules, and members vote on major changes for the whole co-op. Members elect directors, panels and moderators, follow decisions through, and hold meetings online, with a way to vote without a device. One member, one vote. Built as svc-voting.",
       "features": [
         {
           "id": "KIT-A12-F1",
@@ -6114,7 +6114,7 @@
             {
               "id": "KIT-A12-F4-P3",
               "name": "Competition law check",
-              "what": "Whether worker-members who are contractors may vote together on fares, prices or fees without making a cartel provision under the Commerce Act, and whether a collective bargaining route proposed in late 2025 now applies (*unverified*).",
+              "what": "Whether worker-members who are contractors may vote together on fares, prices or fees without making a cartel provision under competition law, starting with New Zealand's Commerce Act, and whether a collective bargaining route proposed there in late 2025 now applies (*unverified*).",
               "kind": "legal",
               "size": "medium",
               "depends_on": [],
@@ -6123,7 +6123,7 @@
             {
               "id": "KIT-A12-F4-P4",
               "name": "Legal duty locks",
-              "what": "Marks settings that carry a legal duty, such as a required check, GST collection or a notice period, so a passed vote cannot switch them off, and sends any proposal that touches them for legal review before the vote opens.",
+              "what": "Marks settings that carry a legal duty, such as a required check, sales tax collection or a notice period, so a passed vote cannot switch them off, and sends any proposal that touches them for legal review before the vote opens.",
               "kind": "library",
               "size": "small",
               "depends_on": [
@@ -6194,7 +6194,7 @@
             {
               "id": "KIT-A12-F6-P3",
               "name": "Candidate checks and consent",
-              "what": "Checks that each board candidate is not disqualified under the Companies Act 1993 and holds their written consent before the election opens.",
+              "what": "Checks that each board candidate is not disqualified under company law (example: New Zealand's Companies Act 1993) and holds their written consent before the election opens.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -6704,7 +6704,7 @@
             {
               "id": "KIT-A13-F11-P1",
               "name": "Bookkeeping system choice",
-              "what": "Compares existing accounting systems on NZ GST, bank feeds, payroll links, licence and cost, so the co-op uses one rather than building its own.",
+              "what": "Compares existing accounting systems on sales tax (example: New Zealand GST), bank feeds, payroll links, licence and cost, so the co-op uses one rather than building its own.",
               "kind": "research",
               "size": "small",
               "depends_on": [],
@@ -6787,12 +6787,12 @@
     {
       "id": "KIT-A14",
       "name": "Co-op membership and member portal",
-      "summary": "The co-op's own home: joining once per person, the share register and the co-operative test, member roles, rebates of any surplus, reports, the constitution, discipline, board work, insurance, contributors' rights, the steward society and the federation of local co-ops. Proposed as svc-members (KIT-A16-F10-P1); the member register feeds svc-voting.",
+      "summary": "The co-op's own home: joining for free once per person, the member register, member roles, refunds of any fees above running costs, reports, the constitution, discipline, board work, insurance, contributors' rights, the steward society and the federation of local co-ops. Proposed as svc-members (KIT-A16-F10-P1); the member register feeds svc-voting.",
       "features": [
         {
           "id": "KIT-A14-F1",
           "name": "Join the co-op",
-          "does": "Become a member by buying one $1 share and agreeing to the constitution.",
+          "does": "Become a member for free by taking part with a Spareware account and agreeing to the constitution, with no shares and no joining fee.",
           "priority": "core",
           "parts": [
             {
@@ -6806,8 +6806,8 @@
             },
             {
               "id": "KIT-A14-F1-P2",
-              "name": "Member share offer",
-              "what": "Confirms $1 member shares can be offered without a full disclosure document.",
+              "name": "Free membership terms",
+              "what": "Confirms free membership, with no shares and no fee, is not a securities offer and needs no disclosure document.",
               "kind": "legal",
               "size": "small",
               "depends_on": [],
@@ -6816,7 +6816,7 @@
             {
               "id": "KIT-A14-F1-P3",
               "name": "Join flow",
-              "what": "Explains membership, takes the $1 share payment and records acceptance of the constitution.",
+              "what": "Explains membership, which is free, and records acceptance of the constitution.",
               "kind": "interface",
               "size": "medium",
               "depends_on": [
@@ -6832,7 +6832,7 @@
             {
               "id": "KIT-A14-F1-P4",
               "name": "One person, one membership",
-              "what": "An identity check and a duplicate check before a share is issued, so no one holds two memberships or two votes.",
+              "what": "An identity check and a duplicate check before membership starts, so no one holds two memberships or two votes.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -6845,7 +6845,7 @@
             {
               "id": "KIT-A14-F1-P5",
               "name": "Business members",
-              "what": "Restaurants, shops and trade firms join as business members under the constitution's member classes, with a check that the business is real before a share is issued.",
+              "what": "Restaurants, shops and trade firms join as business members under the constitution's member classes, with a check that the business is real before it joins.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -6860,14 +6860,14 @@
         },
         {
           "id": "KIT-A14-F2",
-          "name": "Be on the share register",
-          "does": "Know my membership and share are recorded correctly.",
+          "name": "Be on the member register",
+          "does": "Know my membership is recorded correctly.",
           "priority": "core",
           "parts": [
             {
               "id": "KIT-A14-F2-P1",
               "name": "Member register",
-              "what": "The legal share register and member classes for each app, every change an operation.",
+              "what": "The member register and member classes for each app, every change an operation.",
               "kind": "service",
               "size": "large",
               "depends_on": [
@@ -6890,8 +6890,8 @@
             },
             {
               "id": "KIT-A14-F2-P3",
-              "name": "Co-operative test",
-              "what": "Tracks that transacting shareholders hold at least 60% of voting rights, as the Co-operative Companies Act 1996 requires, and flags members who stop trading.",
+              "name": "Active member check",
+              "what": "Tracks which members take part in each app, so votes stay with people who use it, and flags members who stop taking part.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -6904,7 +6904,7 @@
             {
               "id": "KIT-A14-F2-P4",
               "name": "Register inspection",
-              "what": "Handles requests to inspect the share register under company law (*unverified* scope for co-operative companies) without showing members' home addresses beyond what the law requires.",
+              "what": "Handles requests to inspect the member register where the law for the co-op's legal form allows it (*unverified* scope) without showing members' home addresses beyond what the law requires.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -6956,7 +6956,7 @@
             {
               "id": "KIT-A14-F4-P2",
               "name": "Yearly filings",
-              "what": "Annual returns and statements to the Companies Office and regulators, using the audited yearly accounts.",
+              "what": "Annual returns and statements to the company registry (example: New Zealand's Companies Office) and regulators, using the audited yearly accounts.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -6969,14 +6969,14 @@
         },
         {
           "id": "KIT-A14-F5",
-          "name": "Share in any surplus",
-          "does": "See my share of any surplus, returned as a rebate or as lower fees.",
+          "name": "Get back fees above running costs",
+          "does": "See any fees I paid above running costs returned to me as a refund or as lower fees.",
           "priority": "next",
           "parts": [
             {
               "id": "KIT-A14-F5-P1",
-              "name": "Trade records",
-              "what": "Records each member's trade with the co-op, as the basis for any rebate.",
+              "name": "Fee records",
+              "what": "Records the fees each member paid, as the basis for any refund of fees above running costs.",
               "kind": "service",
               "size": "medium",
               "depends_on": [
@@ -6988,8 +6988,8 @@
             },
             {
               "id": "KIT-A14-F5-P2",
-              "name": "Rebates",
-              "what": "Works out and pays rebates once members have voted on them.",
+              "name": "Fee refunds",
+              "what": "Works out and pays refunds of fees above running costs once members have voted on them.",
               "kind": "service",
               "size": "medium",
               "depends_on": [
@@ -7001,8 +7001,8 @@
             },
             {
               "id": "KIT-A14-F5-P3",
-              "name": "Rebate tax",
-              "what": "How rebates are taxed and reported for each member.",
+              "name": "Fee refund tax",
+              "what": "How fee refunds are taxed and reported for each member.",
               "kind": "legal",
               "size": "small",
               "depends_on": [],
@@ -7054,13 +7054,13 @@
         {
           "id": "KIT-A14-F8",
           "name": "Leave the co-op",
-          "does": "Leave and have my share paid back under the constitution.",
+          "does": "Leave whenever I choose, with my votes and roles closed under the constitution.",
           "priority": "core",
           "parts": [
             {
               "id": "KIT-A14-F8-P1",
-              "name": "Leaving and share redemption",
-              "what": "Ends a membership and redeems the share, keeping the records the law requires.",
+              "name": "Leaving",
+              "what": "Ends a membership and closes its votes and roles, keeping the records the law requires.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -7216,7 +7216,7 @@
             {
               "id": "KIT-A14-F15-P1",
               "name": "Steward society rules",
-              "what": "The constitution, committee, disputes procedure and yearly duties the Incorporated Societies Act 2022 requires of the steward.",
+              "what": "The constitution, committee, disputes procedure and yearly duties the law requires of the steward (example: New Zealand's Incorporated Societies Act 2022).",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -7297,7 +7297,7 @@
             {
               "id": "KIT-A14-F18-P1",
               "name": "Trade marks",
-              "what": "Registers Spareware and the product names as trade marks, in NZ first, held by the steward and licensed to local co-ops.",
+              "what": "Registers Spareware and the product names as trade marks in each country, starting with the first example country, New Zealand, held by the steward and licensed to local co-ops.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -8109,13 +8109,13 @@
         {
           "id": "KIT-A16-F4",
           "name": "Know the licence",
-          "does": "Know which licence covers the code and the SDK.",
+          "does": "Know the core is under MPL-2.0 and the SDK and plugins under Apache-2.0, and that neither will ever be relicensed.",
           "priority": "core",
           "parts": [
             {
               "id": "KIT-A16-F4-P1",
               "name": "Licence decision",
-              "what": "The core and SDK licences, chosen for contributors and add-in authors.",
+              "what": "The decided licences: MPL-2.0 for the core and Apache-2.0 for the SDK and plugins, never relicensed, with no contributor licence agreement and Developer Certificate of Origin sign-off only.",
               "kind": "legal",
               "size": "small",
               "depends_on": [],
@@ -8226,7 +8226,7 @@
             {
               "id": "KIT-A16-F7-P2",
               "name": "Paid add-ins",
-              "what": "Pays plugin authors through the payments service, charging GST under the remote services and marketplace operator rules and issuing tax invoices.",
+              "what": "Pays plugin authors through the payments service, charging sales tax under each country's remote services and marketplace operator rules and issuing tax invoices.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -8693,7 +8693,7 @@
     {
       "id": "KIT-A18",
       "name": "Privacy, data rights and legal duties",
-      "summary": "Members see, take and delete their data, consent is recorded, data is kept only as long as needed, a named privacy officer answers, overseas handling is checked, Māori data is cared for, and the co-op meets privacy, consumer and platform law in NZ first and each new country after. Built in svc-accounts; svc-privacy is a proposed name (KIT-A16-F10-P1).",
+      "summary": "Members see, take and delete their data, consent is recorded, data is kept only as long as needed, a named privacy officer answers, overseas handling is checked, indigenous data, such as Māori data, is cared for, and the co-op meets privacy, consumer and platform law in each country through its country pack, starting with New Zealand. Built in svc-accounts; svc-privacy is a proposed name (KIT-A16-F10-P1).",
       "features": [
         {
           "id": "KIT-A18-F1",
@@ -8774,7 +8774,7 @@
             {
               "id": "KIT-A18-F3-P2",
               "name": "Privacy request clock",
-              "what": "Tracks every request to see or correct personal information against the Privacy Act's 20 working day limit, with reminders and any extension recorded.",
+              "what": "Tracks every request to see or correct personal information against each country's time limit (example: 20 working days under New Zealand's Privacy Act 2020), with reminders and any extension recorded.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -8824,7 +8824,7 @@
             {
               "id": "KIT-A18-F5-P1",
               "name": "Collection notices",
-              "what": "Notices for direct and indirect collection under the NZ Privacy Act, including principle 3A from 1 May 2026.",
+              "what": "Notices for direct and indirect collection under each country's privacy law (example: New Zealand's Privacy Act, including principle 3A from 1 May 2026).",
               "kind": "legal",
               "size": "small",
               "depends_on": [],
@@ -8861,7 +8861,7 @@
             {
               "id": "KIT-A18-F7-P1",
               "name": "Breach response",
-              "what": "Breach assessment and notification to the Privacy Commissioner and the people affected.",
+              "what": "Breach assessment and notification to the privacy regulator (example: New Zealand's Privacy Commissioner) and the people affected.",
               "kind": "legal",
               "size": "small",
               "depends_on": [],
@@ -8989,7 +8989,7 @@
             {
               "id": "KIT-A18-F14-P1",
               "name": "Privacy officer",
-              "what": "Appoints a named privacy officer for the co-op and every app, as the Privacy Act 2020 requires, reachable from every privacy page.",
+              "what": "Appoints a named privacy officer for the co-op and every app, as privacy law requires (example: New Zealand's Privacy Act 2020), reachable from every privacy page.",
               "kind": "legal",
               "size": "small",
               "depends_on": [],
@@ -9027,14 +9027,14 @@
         },
         {
           "id": "KIT-A18-F16",
-          "name": "Have Māori data cared for",
-          "does": "Know te reo Māori data, voice recordings and iwi-related data are cared for under Māori data sovereignty principles.",
+          "name": "Have indigenous data cared for",
+          "does": "Know indigenous language data, voice recordings and community data are cared for under indigenous data sovereignty principles, such as Māori data sovereignty in New Zealand.",
           "priority": "core",
           "parts": [
             {
               "id": "KIT-A18-F16-P1",
-              "name": "Māori data principles",
-              "what": "How Māori data sovereignty principles, such as Te Mana Raraunga's, apply to te reo data, voice and iwi-related data, worked through with Māori members.",
+              "name": "Indigenous data principles",
+              "what": "How indigenous data sovereignty principles apply to language data, voice and community data in each country, starting with Māori data sovereignty principles in New Zealand, such as Te Mana Raraunga's, for te reo Māori and iwi-related data, worked through with Māori members.",
               "kind": "research",
               "size": "small",
               "depends_on": [],
@@ -9111,12 +9111,12 @@
     {
       "id": "KIT-A19",
       "name": "Languages, accessibility and countries",
-      "summary": "Every app works in te reo Māori and English from the start, meets accessibility standards, gets NZ's holidays, time zones and emergency numbers right, and takes on new languages and countries without rewriting. Proposed as kit-i18n and svc-translate (KIT-A16-F10-P1).",
+      "summary": "Every app works in many languages from the start, beginning with the example country's (for New Zealand: English and te reo Māori), meets accessibility standards, gets each country's holidays, time zones and emergency numbers right through its country pack, and takes on new languages and countries without rewriting. Proposed as kit-i18n and svc-translate (KIT-A16-F10-P1).",
       "features": [
         {
           "id": "KIT-A19-F1",
           "name": "Use an app in my language",
-          "does": "Switch any app between te reo Māori, English and other languages.",
+          "does": "Switch any app between many languages, starting with the example country's (for New Zealand: English and te reo Māori).",
           "priority": "core",
           "parts": [
             {
@@ -9165,7 +9165,7 @@
             {
               "id": "KIT-A19-F1-P5",
               "name": "Community languages",
-              "what": "Chooses and funds the next languages members speak most, starting in NZ with languages such as Samoan, Tongan, Chinese and Hindi, translated with fluent speakers once for every app. Spare OS, Spare Home, Spare Rent, Spare Work and Spare Market all plan them.",
+              "what": "Chooses and funds the next languages members speak most, starting in the first example country, New Zealand, with languages such as Samoan, Tongan, Chinese and Hindi, translated with fluent speakers once for every app. Spare OS, Spare Home, Spare Rent, Spare Work and Spare Market all plan them.",
               "kind": "research",
               "size": "medium",
               "depends_on": [
@@ -9276,7 +9276,7 @@
             {
               "id": "KIT-A19-F2-P8",
               "name": "Accessibility law research",
-              "what": "Which accessibility laws apply to each app in NZ, the EU and other markets, such as the European Accessibility Act, and what each requires. Spare OS, Spare Studio and Spare Stay all ask.",
+              "what": "Which accessibility laws apply to each app in each country, such as New Zealand's rules and the EU's European Accessibility Act, and what each requires. Spare OS, Spare Studio and Spare Stay all ask.",
               "kind": "research",
               "size": "small",
               "depends_on": [
@@ -9352,7 +9352,7 @@
             {
               "id": "KIT-A19-F6-P1",
               "name": "Country packs",
-              "what": "Packs for each new country in the NZ pack's format: currency, tax, ID providers, emergency numbers, helplines, holidays and legal rules.",
+              "what": "Packs for each new country in the format the first pack, New Zealand, sets: currency, tax, ID providers, emergency numbers, helplines, holidays and legal rules.",
               "kind": "data",
               "size": "large",
               "depends_on": [
@@ -9386,13 +9386,13 @@
         {
           "id": "KIT-A19-F8",
           "name": "Read an easy version",
-          "does": "Read key screens and rules in easy-read and NZ Sign Language versions.",
+          "does": "Read key screens and rules in easy-read and sign language versions (for New Zealand: New Zealand Sign Language).",
           "priority": "core",
           "parts": [
             {
               "id": "KIT-A19-F8-P1",
-              "name": "Easy read and NZ Sign Language",
-              "what": "Easy-read text and NZ Sign Language videos for the key steps in each app.",
+              "name": "Easy read and sign language",
+              "what": "Easy-read text and videos in each country's sign language, starting with New Zealand Sign Language, for the key steps in each app.",
               "kind": "data",
               "size": "medium",
               "depends_on": [
@@ -9404,14 +9404,14 @@
         },
         {
           "id": "KIT-A19-F9",
-          "name": "Have NZ's dates and numbers right from day one",
-          "does": "Have deadlines, notice periods and emergency numbers follow NZ's real calendar, holidays and time zones.",
+          "name": "Have each country's dates and numbers right from day one",
+          "does": "Have deadlines, notice periods and emergency numbers follow each country's real calendar, holidays and time zones, starting with New Zealand's.",
           "priority": "core",
           "parts": [
             {
               "id": "KIT-A19-F9-P1",
-              "name": "NZ country pack",
-              "what": "The first country pack: the emergency number and 111 TXT, helplines, GST rate, currency, public holidays including Matariki and regional anniversary days, and both time zones including the Chatham Islands.",
+              "name": "First country pack (example: New Zealand)",
+              "what": "The first country pack, New Zealand, which sets the format every other pack follows: the emergency number and 111 TXT, helplines, GST rate, currency, public holidays including Matariki and regional anniversary days, and both time zones including the Chatham Islands.",
               "kind": "data",
               "size": "medium",
               "depends_on": [
@@ -9435,13 +9435,13 @@
         {
           "id": "KIT-A19-F10",
           "name": "Read translations made at cost",
-          "does": "Read messages, listings and help pages machine-translated by one co-op service, with te reo Māori checked by fluent speakers.",
+          "does": "Read messages, listings and help pages machine-translated by one co-op service, with each language, such as te reo Māori, checked by fluent speakers.",
           "priority": "core",
           "parts": [
             {
               "id": "KIT-A19-F10-P1",
               "name": "Translation model choice",
-              "what": "Compares open translation models whose licences allow this use, on quality for te reo Māori and other languages and on running cost.",
+              "what": "Compares open translation models whose licences allow this use, on quality for each language, such as te reo Māori, and on running cost.",
               "kind": "research",
               "size": "medium",
               "depends_on": [
@@ -9463,8 +9463,8 @@
             },
             {
               "id": "KIT-A19-F10-P3",
-              "name": "Te reo quality checks",
-              "what": "Fluent members review samples of te reo Māori translations, and weak language pairs are switched off until they pass.",
+              "name": "Translation quality checks",
+              "what": "Fluent members review samples of translations in each language, such as te reo Māori, and weak language pairs are switched off until they pass.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -9839,7 +9839,7 @@
             {
               "id": "KIT-A20-F11-P1",
               "name": "Phone rules on the road",
-              "what": "What NZ road rules allow for phones in cradles in cars and on bikes, e-bikes and scooters, with sources, checked against each worker screen. Spare Ride and Spare Food both need it.",
+              "what": "What each country's road rules allow for phones in cradles in cars and on bikes, e-bikes and scooters, starting with New Zealand's, with sources, checked against each worker screen. Spare Ride and Spare Food both need it.",
               "kind": "legal",
               "size": "small",
               "depends_on": [],
@@ -9959,7 +9959,7 @@
             {
               "id": "KIT-A21-F4-P1",
               "name": "Other support channels",
-              "what": "Email and phone channels, and NZ Relay for Deaf, hard of hearing and speech-impaired members.",
+              "what": "Email and phone channels, and each country's relay service for Deaf, hard of hearing and speech-impaired members (example: New Zealand Relay).",
               "kind": "integration",
               "size": "small",
               "depends_on": [
@@ -10057,7 +10057,7 @@
             {
               "id": "KIT-A21-F9-P1",
               "name": "Dispute resolution scheme",
-              "what": "Whether the co-op must register on the Financial Service Providers Register and, if so, join an approved dispute resolution scheme.",
+              "what": "Whether the co-op must register as a financial service provider in each country and, if so, join an approved dispute resolution scheme (example: New Zealand's Financial Service Providers Register).",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -10082,13 +10082,13 @@
         {
           "id": "KIT-A21-F10",
           "name": "Get an interpreter",
-          "does": "Have an interpreter, including NZ Sign Language, for a dispute, a panel hearing or a support call.",
+          "does": "Have an interpreter, including sign language such as New Zealand Sign Language, for a dispute, a panel hearing or a support call.",
           "priority": "next",
           "parts": [
             {
               "id": "KIT-A21-F10-P1",
               "name": "Interpreters",
-              "what": "Books qualified interpreters, including NZ Sign Language, for disputes, panel hearings and support, paid at cost and shown in the ledger.",
+              "what": "Books qualified interpreters, including sign language such as New Zealand Sign Language, for disputes, panel hearings and support, paid at cost and shown in the ledger.",
               "kind": "integration",
               "size": "small",
               "depends_on": [
@@ -10188,7 +10188,7 @@
             {
               "id": "KIT-A22-F2-P4",
               "name": "Developer accounts and signing certificates",
-              "what": "Apple, Google and Windows developer accounts and code signing certificates held by the legal entity, including Google's developer verification for sideloaded Android apps from 2026 to 2027 (*unverified* dates for NZ), with costs on the ledger.",
+              "what": "Apple, Google and Windows developer accounts and code signing certificates held by the legal entity, including Google's developer verification for sideloaded Android apps from 2026 to 2027 (*unverified* dates for each country), with costs on the ledger.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -10254,13 +10254,13 @@
         {
           "id": "KIT-A22-F4",
           "name": "Have servers run at cost",
-          "does": "Have servers run in NZ first, at cost, with their costs fed to the ledger.",
+          "does": "Have servers run at cost in the regions people use, starting with the first example country, New Zealand, with their costs fed to the ledger.",
           "priority": "core",
           "parts": [
             {
               "id": "KIT-A22-F4-P1",
               "name": "Hosting",
-              "what": "Infrastructure as code for the co-op's servers, NZ first.",
+              "what": "Infrastructure as code for the co-op's servers in each region, starting with New Zealand.",
               "kind": "service",
               "size": "large",
               "depends_on": [
@@ -10272,7 +10272,7 @@
             {
               "id": "KIT-A22-F4-P2",
               "name": "Hosting provider choice",
-              "what": "Compares hosting providers on NZ regions, data sovereignty, overseas laws that can reach the data and cost, as the basis for the launch cost estimate and for where data lives.",
+              "what": "Compares hosting providers on regions in each country, starting with New Zealand, and on data sovereignty, overseas laws that can reach the data and cost, as the basis for the launch cost estimate and for where data lives.",
               "kind": "research",
               "size": "medium",
               "depends_on": [],
@@ -10406,7 +10406,7 @@
             {
               "id": "KIT-A22-F7-P4",
               "name": "Duties when members self-host",
-              "what": "Who carries GST, anti-money-laundering, privacy and safety duties when a member group runs its own servers, set out in the agreement each group signs.",
+              "what": "Who carries sales tax, anti-money-laundering, privacy and safety duties when a member group runs its own servers, set out in the agreement each group signs.",
               "kind": "legal",
               "size": "medium",
               "depends_on": [
@@ -10482,7 +10482,7 @@
     {
       "id": "KIT-A23",
       "name": "Work law and worker status",
-      "summary": "One worker-status framework for every app: employee or contractor under the law's tests, agreements that meet them, personal grievances, minimum pay, holidays and leave, payroll, KiwiSaver and ACC guidance, switched on by each app's settings. Proposed as svc-work (KIT-A16-F10-P1).",
+      "summary": "One worker-status framework for every app: employee or contractor under the law's tests, agreements that meet them, personal grievances, minimum pay, holidays and leave, payroll, and retirement savings and accident cover guidance (example: New Zealand's KiwiSaver and ACC), switched on by each app's settings. Each country pack has its own rules, starting with New Zealand's. Proposed as svc-work (KIT-A16-F10-P1).",
       "features": [
         {
           "id": "KIT-A23-F1",
@@ -10493,7 +10493,7 @@
             {
               "id": "KIT-A23-F1-P1",
               "name": "Worker status test",
-              "what": "Applies NZ employment law's tests, including the new gateway test for contractors (in force date *unverified*), to each app's way of working, checked by a lawyer.",
+              "what": "Applies each country's employment law tests, starting with New Zealand's, including its new gateway test for contractors (in force date *unverified*), to each app's way of working, checked by a lawyer.",
               "kind": "legal",
               "size": "medium",
               "depends_on": [],
@@ -10526,7 +10526,7 @@
             {
               "id": "KIT-A23-F1-P4",
               "name": "Employment agreements",
-              "what": "Written employment agreements for apps whose workers are employees, as the Employment Relations Act 2000 requires, versioned, with each worker's signed copy kept.",
+              "what": "Written employment agreements for apps whose workers are employees, as employment law requires (example: New Zealand's Employment Relations Act 2000), versioned, with each worker's signed copy kept.",
               "kind": "legal",
               "size": "medium",
               "depends_on": [
@@ -10550,7 +10550,7 @@
             {
               "id": "KIT-A23-F1-P6",
               "name": "Union access",
-              "what": "How unions reach and meet workers who work only through an app, under the Employment Relations Act's access rules (*unverified* how they apply to an app).",
+              "what": "How unions reach and meet workers who work only through an app, under each country's union access rules (example: New Zealand's Employment Relations Act; *unverified* how they apply to an app).",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -10593,7 +10593,7 @@
             {
               "id": "KIT-A23-F2-P3",
               "name": "Payroll provider link",
-              "what": "The one payroll provider link, for co-op staff and employee workers alike, which handles PAYE, KiwiSaver and payday filing.",
+              "what": "The one payroll provider link, for co-op staff and employee workers alike, which handles pay tax, retirement savings and payroll filing (example: New Zealand's PAYE, KiwiSaver and payday filing).",
               "kind": "integration",
               "size": "medium",
               "depends_on": [
@@ -10604,8 +10604,8 @@
             },
             {
               "id": "KIT-A23-F2-P4",
-              "name": "KiwiSaver, ACC and tax guidance",
-              "what": "Plain guidance for each status on KiwiSaver, ACC levies and income tax, linked from the earnings page.",
+              "name": "Savings, accident cover and tax guidance",
+              "what": "Plain guidance for each status on retirement savings, accident cover levies and income tax in each country (example: New Zealand's KiwiSaver and ACC), linked from the earnings page.",
               "kind": "data",
               "size": "small",
               "depends_on": [
@@ -10615,8 +10615,8 @@
             },
             {
               "id": "KIT-A23-F2-P5",
-              "name": "Move to the Employment Leave Act",
-              "what": "The move from the Holidays Act 2003 to the Employment Leave Act 2026's hours-based leave, which applies from the first pay period on or after 6 August 2028, with agreements updated in time.",
+              "name": "Leave law changes",
+              "what": "Keeps leave rules current as each country's law changes, such as New Zealand's move from the Holidays Act 2003 to the Employment Leave Act 2026's hours-based leave, which applies from the first pay period on or after 6 August 2028, with agreements updated in time.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -10674,7 +10674,7 @@
             {
               "id": "KIT-A24-F1-P1",
               "name": "Health and safety duties",
-              "what": "The co-op's duties as a person conducting a business or undertaking under the Health and Safety at Work Act 2015, for workers whatever their status (platform position *unverified*).",
+              "what": "The co-op's duties under each country's workplace safety law, for workers whatever their status, starting with its duties as a person conducting a business or undertaking under New Zealand's Health and Safety at Work Act 2015 (platform position *unverified*).",
               "kind": "legal",
               "size": "medium",
               "depends_on": [
@@ -10705,7 +10705,7 @@
             {
               "id": "KIT-A24-F2-P2",
               "name": "Notifiable event reports",
-              "what": "Flags events that must be notified to WorkSafe and tracks the notice and the duty to keep the scene as it was.",
+              "what": "Flags events that must be notified to the safety regulator (example: New Zealand's WorkSafe) and tracks the notice and the duty to keep the scene as it was.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -10804,7 +10804,7 @@
             {
               "id": "KIT-A25-F1-P1",
               "name": "Electronic signature rules",
-              "what": "What NZ law asks of an electronic signature, and which documents need more than a click.",
+              "what": "What each country's law asks of an electronic signature, starting with New Zealand's, and which documents need more than a click.",
               "kind": "research",
               "size": "small",
               "depends_on": [],
@@ -10968,7 +10968,7 @@
             {
               "id": "KIT-A26-F1-P2",
               "name": "Property data sources",
-              "what": "Which official land, title, rates and zoning data the record may load, such as LINZ title and parcel data and council rating information, under what licence and at what cost, done once for every app.",
+              "what": "Which official land, title, rates and zoning data the record may load, such as title and parcel data from each country's land agency (example: LINZ in New Zealand) and council rating information, under what licence and at what cost, done once for every app.",
               "kind": "research",
               "size": "medium",
               "depends_on": [],
@@ -11054,7 +11054,7 @@
             {
               "id": "KIT-A26-F3-P1",
               "name": "Tenancy rules pack",
-              "what": "The tenancy rules Spare Rent and Spare Home both need, such as written notice to tenants, consent before entry, rights about photos and viewings, and notice periods after a sale, as one versioned pack in the NZ country pack.",
+              "what": "The tenancy rules Spare Rent and Spare Home both need, such as written notice to tenants, consent before entry, rights about photos and viewings, and notice periods after a sale, as one versioned pack in each country pack, starting with New Zealand's.",
               "kind": "data",
               "size": "medium",
               "depends_on": [
@@ -11067,7 +11067,7 @@
             {
               "id": "KIT-A26-F3-P2",
               "name": "Tenancy law check",
-              "what": "A lawyer checks the pack against the Residential Tenancies Act 1986, and again whenever the law changes.",
+              "what": "A lawyer checks the pack against each country's tenancy law (example: New Zealand's Residential Tenancies Act 1986), and again whenever the law changes.",
               "kind": "legal",
               "size": "small",
               "depends_on": [],
@@ -11316,7 +11316,7 @@
             {
               "id": "KIT-A26-F10-P1",
               "name": "Owner statements",
-              "what": "Monthly statements for owners whose places a manager runs: income, payouts, costs, the manager's at-cost fee and GST. Spare Stay and Spare Rent both need them.",
+              "what": "Monthly statements for owners whose places a manager runs: income, payouts, costs, the manager's at-cost fee and sales tax. Spare Stay and Spare Rent both need them.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -11511,7 +11511,7 @@
             {
               "id": "KIT-A27-F5-P2",
               "name": "Spelling and hyphenation dictionaries",
-              "what": "Open dictionaries for each language, te reo Māori and English (New Zealand) first, and Pacific languages built with native speakers, each licence checked, used by every app's spell checker.",
+              "what": "Open dictionaries for each language, starting with the example country's (for New Zealand: English and te reo Māori, then Pacific languages built with native speakers), each licence checked, used by every app's spell checker.",
               "kind": "data",
               "size": "medium",
               "depends_on": [
@@ -11864,7 +11864,7 @@
             {
               "id": "KIT-A27-F12-P2",
               "name": "Open model choices",
-              "what": "Which open models for text recognition, speech recognition and voices may be used under their licences, how accurate each is, and how te reo Māori models follow Māori data principles, decided once for every program.",
+              "what": "Which open models for text recognition, speech recognition and voices may be used under their licences, how accurate each is, and how models for indigenous languages, such as te reo Māori, follow indigenous data principles, decided once for every program.",
               "kind": "research",
               "size": "medium",
               "depends_on": [
@@ -11888,7 +11888,7 @@
             {
               "id": "KIT-A27-F12-P4",
               "name": "Speech recognition",
-              "what": "Speech to text for captions, transcripts, dictation and voice control, on the device or on co-op servers at cost, te reo Māori and English first. Spare Social, Spare Office, Spare Studio and Spare OS need it, and the kit's captions use it.",
+              "what": "Speech to text for captions, transcripts, dictation and voice control, on the device or on co-op servers at cost, in many languages, starting with the example country's (for New Zealand: English and te reo Māori). Spare Social, Spare Office, Spare Studio and Spare OS need it, and the kit's captions use it.",
               "kind": "library",
               "size": "medium",
               "depends_on": [
@@ -11900,7 +11900,7 @@
             {
               "id": "KIT-A27-F12-P5",
               "name": "Text-to-speech voices",
-              "what": "Natural voices in many languages from open models, for read aloud, screen readers and offers read to drivers, with te reo Māori voices used only on terms that respect Māori data sovereignty. Spare Office, Spare OS, Spare Studio and Spare Ride need them.",
+              "what": "Natural voices in many languages from open models, for read aloud, screen readers and offers read to drivers, with voices in indigenous languages, such as te reo Māori, used only on terms that respect indigenous data sovereignty. Spare Office, Spare OS, Spare Studio and Spare Ride need them.",
               "kind": "library",
               "size": "medium",
               "depends_on": [
@@ -12112,7 +12112,7 @@
             {
               "id": "KIT-A28-F6-P1",
               "name": "Domains bought at cost",
-              "what": "Whether the co-op can sell domain names at the registrar's price, and the rules for .nz names. Spare Office and Spare Market both ask.",
+              "what": "Whether the co-op can sell domain names at the registrar's price, and the rules for country domains such as .nz. Spare Office and Spare Market both ask.",
               "kind": "research",
               "size": "small",
               "depends_on": [
@@ -12130,12 +12130,12 @@
     "Is the core set the smallest that gets the first marketplace and the member portal live, or is something marked core that can wait?",
     "Does any part here belong in only one program, or does any program hold something every app needs (the layering rule)?",
     "Is every place money moves run through a regulated payment provider, so the co-op never holds money itself?",
-    "Which legal parts need a lawyer before Design starts, and in what order: legal entity, holding money, anti-money-laundering, GST, privacy, terms?",
+    "Which legal parts need a lawyer before Design starts, and in what order: legal entity, holding money, anti-money-laundering, sales tax, privacy, terms?",
     "Can a member trace any fee on a receipt back to real bills in the open cost ledger?",
     "Does a passed vote actually change an app's settings, and are quorum and electorates taken from the constitution?",
     "Are the safety tools enough for the first app's real risks (emergencies, reports, disputes) while removing only what the rules or the law require?",
     "Is every outside service and open-source project named here usable under its licence and terms, with no GPL or AGPL code in the core?",
-    "Are te reo Māori, accessibility and data export built in from the first release rather than added later?",
+    "Are many languages, starting with the example country's (for New Zealand: English and te reo Māori), accessibility and data export built in from the first release rather than added later?",
     "Which parts have no work-board piece yet, and which should become the next pieces?",
     "Does the demo show each area's main screens in the design guide's look, with Spareware red only on co-op pages?",
     "What will the kit cost to run each month at launch, and does the ledger design show that cost clearly?",
@@ -12148,7 +12148,7 @@
     "Kit core now includes every kit feature a program's core feature depends on; should some programs lower their own features instead, so the first release stays small?",
     "Should the programs that still map their own copies of kit parts switch to the kit's: translation frameworks (CON-A22-F4-P1, MKT-A19-F1-P1, OFF-A17-F8-P1, SOC-A21-F5-P1, STAY-A17-F2-P1, STU-A19-F3-P1), status pages (SOC-A22-F4-P3, MKT-A17-F7-P1), Office's chat server (OFF-A13-F1-P2), at-cost pricing (OFF-A20, STU-A1-F5, SOC-A22-F3) and the other copies the review listed?",
     "Should the kit pieces now tracked on other programs' boards (A05, A08, A14, MK01, MK04, MK05, OF05, M04 and RD03) move to the kit's own board?",
-    "Can a member panel's decision move held money without binding consumers in a way the Arbitration Act forbids, and what do the order terms need to say?",
+    "Can a member panel's decision move held money without binding consumers in a way arbitration law forbids (example: New Zealand's Arbitration Act), and what do the order terms need to say?",
     "Is a member-funded protection pool an insurance business that needs a licence, and if so, is outside insurance the better route?",
     "Does the map now hold everything Spare Home, Rent and Stay share (property record, document vault, visitor register, tenancy rules), so none of them depends on another?",
     "The shared engines (KIT-A27) are mapped here though they are built in projects/engines; should the engines get a map of their own, and should engine-formats and engine-models be adopted as engine names?",

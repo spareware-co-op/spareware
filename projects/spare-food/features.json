@@ -1,8 +1,8 @@
 {
   "program": "spare-food",
   "name": "Spare Food",
-  "replaces": "Uber Eats, DoorDash and Delivereasy",
-  "summary": "Food delivery where restaurants pay only the at-cost fee, couriers keep their whole delivery fee and tips, and customers pay menu prices. Restaurants and couriers own it and vote on its rules.",
+  "replaces": "Uber Eats, DoorDash and local apps such as Delivereasy",
+  "summary": "Food delivery where restaurants pay only the at-cost fee, couriers keep their whole delivery fee and tips, and customers pay menu prices. Restaurants and couriers keep all the profit except running costs, and vote on its fees and rules.",
   "areas": [
     {
       "id": "FOOD-A1",
@@ -128,7 +128,7 @@
             {
               "id": "FOOD-A1-F2-P3",
               "name": "Food safety registration check",
-              "what": "Records the restaurant's Food Act registration and its expiry, with reminders from the kit's re-check scheduler before it lapses.",
+              "what": "Records the restaurant's food safety registration and its expiry (example: under New Zealand's Food Act), with reminders from the kit's re-check scheduler before it lapses.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -325,14 +325,14 @@
         },
         {
           "id": "FOOD-A1-F5",
-          "name": "Co-op membership on joining",
-          "does": "A restaurant or courier can become a voting member of the co-op as part of signing up.",
+          "name": "Free membership on joining",
+          "does": "A restaurant or courier can become a voting member as part of signing up, free.",
           "priority": "next",
           "parts": [
             {
               "id": "FOOD-A1-F5-P1",
               "name": "Membership offer at sign-up",
-              "what": "Offers co-op membership during restaurant and courier sign-up, using the kit's join flow.",
+              "what": "Offers free membership during restaurant and courier sign-up, using the kit's join flow.",
               "kind": "interface",
               "size": "small",
               "depends_on": [
@@ -342,8 +342,8 @@
             },
             {
               "id": "FOOD-A1-F5-P2",
-              "name": "Food member classes",
-              "what": "Which member class restaurants and couriers join in the co-op-wide share register; the register itself is the kit's.",
+              "name": "Food member groups",
+              "what": "Which voting group restaurants and couriers join in the co-op-wide member list; the list itself is the kit's.",
               "kind": "data",
               "size": "small",
               "depends_on": [
@@ -459,7 +459,7 @@
             {
               "id": "FOOD-A1-F9-P2",
               "name": "Home and mobile food business rules",
-              "what": "How home-based and mobile food businesses register under the Food Act, and what their page must show.",
+              "what": "How home-based and mobile food businesses register under each country's food safety law (example: New Zealand's Food Act), and what their page must show.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -562,7 +562,7 @@
             {
               "id": "FOOD-A2-F2-P3",
               "name": "Macron-aware Food search",
-              "what": "Food's search uses the kit's macron-aware matching for te reo Māori and English names as restaurants write them, and indexes translated dish names once menus carry them.",
+              "what": "Food's search uses the kit's accent-aware matching for names in each country's languages as restaurants write them (example: te reo Māori names with macrons in New Zealand), and indexes translated dish names once menus carry them.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -1119,7 +1119,7 @@
         {
           "id": "FOOD-A3-F11",
           "name": "Packaging charges and rules",
-          "does": "A restaurant charges for bags or containers on their own line, and menus follow NZ's single-use plastic rules.",
+          "does": "A restaurant charges for bags or containers on their own line, and menus follow local single-use plastic rules (example: New Zealand's phase-outs).",
           "priority": "later",
           "parts": [
             {
@@ -1136,7 +1136,7 @@
             {
               "id": "FOOD-A3-F11-P2",
               "name": "Single-use plastic rules",
-              "what": "Which takeaway packaging NZ's single-use plastic phase-outs cover, turned into menu checks.",
+              "what": "Which takeaway packaging each country's single-use plastic rules cover, turned into menu checks, starting with New Zealand's phase-outs.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -1335,7 +1335,7 @@
         {
           "id": "FOOD-A4-F5",
           "name": "Clear price breakdown",
-          "does": "See the full total, with every fee, before checkout begins, with menu prices including GST and nothing added later.",
+          "does": "See the full total, with every fee, before checkout begins, with menu prices including sales tax and nothing added later.",
           "priority": "core",
           "parts": [
             {
@@ -1356,7 +1356,7 @@
             {
               "id": "FOOD-A4-F5-P2",
               "name": "Where-the-money-goes display",
-              "what": "Food's version of the kit's fee breakdown: what goes to the restaurant, the courier, the running cost and tax, with GST shown as included.",
+              "what": "Food's version of the kit's fee breakdown: what goes to the restaurant, the courier, the running cost and tax, with sales tax shown as included.",
               "kind": "interface",
               "size": "small",
               "depends_on": [
@@ -1368,7 +1368,7 @@
             {
               "id": "FOOD-A4-F5-P3",
               "name": "Price display check",
-              "what": "Checks the price display against Commerce Commission guidance on drip pricing: menu prices include GST, the full total appears before checkout, and GST reads as included, not added.",
+              "what": "Checks the price display against the consumer regulator's guidance on drip pricing (example: New Zealand's Commerce Commission): menu prices include sales tax, the full total appears before checkout, and sales tax reads as included, not added.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -1552,7 +1552,7 @@
             {
               "id": "FOOD-A4-F11-P1",
               "name": "Reusable container scheme research",
-              "what": "How existing NZ reusable container schemes work and whether they can link in.",
+              "what": "How existing reusable container schemes in each country work and whether they can link in, starting with New Zealand's.",
               "kind": "research",
               "size": "small",
               "depends_on": [],
@@ -1652,7 +1652,7 @@
             {
               "id": "FOOD-A4-F14-P2",
               "name": "Phone ordering line",
-              "what": "Food's phone ordering: a person takes the order into the same order path through the kit's phone support channels, including NZ Relay. The phone line itself should move down into the kit, since Spare Ride maps the same.",
+              "what": "Food's phone ordering: a person takes the order into the same order path through the kit's phone support channels, including the national relay service (example: NZ Relay in New Zealand). The phone line itself should move down into the kit, since Spare Ride maps the same.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -2451,7 +2451,7 @@
             {
               "id": "FOOD-A6-F6-P3",
               "name": "Tax statements",
-              "what": "Food's figures (delivery fees, tips and GST) on the kit's yearly statements.",
+              "what": "Food's figures (delivery fees, tips and sales tax) on the kit's yearly statements.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -2643,7 +2643,7 @@
             {
               "id": "FOOD-A6-F12-P3",
               "name": "Phone rules on the road",
-              "what": "What NZ road rules allow for phones in cradles on bikes, e-bikes, scooters and in cars. This research should be shared through the kit, since Spare Ride needs the car case.",
+              "what": "What each country's road rules allow for phones in cradles on bikes, e-bikes, scooters and in cars, starting with New Zealand's. This research should be shared through the kit, since Spare Ride needs the car case.",
               "kind": "legal",
               "size": "small",
               "depends_on": [],
@@ -2699,7 +2699,7 @@
             {
               "id": "FOOD-A6-F13-P4",
               "name": "Rest and meal breaks",
-              "what": "Rest and meal breaks for employee couriers as the Employment Relations Act 2000 requires, with offers paused during each break.",
+              "what": "Rest and meal breaks for employee couriers as employment law requires (example: New Zealand's Employment Relations Act 2000), with offers paused during each break.",
               "kind": "library",
               "size": "small",
               "depends_on": [
@@ -2722,8 +2722,8 @@
             },
             {
               "id": "FOOD-A6-F13-P6",
-              "name": "Payroll, PAYE and KiwiSaver",
-              "what": "Employee couriers paid through the kit's payroll provider link, which handles PAYE, KiwiSaver and payday filing, with the kit's guidance for each status on the earnings page.",
+              "name": "Payroll, income tax and retirement savings (example: New Zealand's PAYE and KiwiSaver)",
+              "what": "Employee couriers paid through the kit's payroll provider link, which handles income tax, retirement savings and payday filing (example: PAYE and KiwiSaver in New Zealand), with the kit's guidance for each status on the earnings page.",
               "kind": "integration",
               "size": "small",
               "depends_on": [
@@ -2736,7 +2736,7 @@
             {
               "id": "FOOD-A6-F13-P7",
               "name": "Union access and bargaining",
-              "what": "What the co-op owes as an employer under the Employment Relations Act 2000 if couriers are employees: union access, good-faith bargaining, and how a collective agreement sits with member votes on pay. The kit should hold this rule for every app.",
+              "what": "What the co-op owes as an employer if couriers are employees: union access, good-faith bargaining, and how a collective agreement sits with member votes on pay (example: New Zealand's Employment Relations Act 2000). The kit should hold this rule for every app.",
               "kind": "legal",
               "size": "medium",
               "depends_on": [
@@ -3191,7 +3191,7 @@
             {
               "id": "FOOD-A9-F2-P1",
               "name": "Food fee rate",
-              "what": "Food's fee per order from the kit's fee calculator and fee setting, with pickup and delivery rates apart, the first period's fee from the start-up rule, and GST on the fee where it applies.",
+              "what": "Food's fee per order from the kit's fee calculator and fee setting, with pickup and delivery rates apart, the first period's fee from the start-up rule, and sales tax on the fee where it applies.",
               "kind": "library",
               "size": "small",
               "depends_on": [
@@ -3403,13 +3403,13 @@
         {
           "id": "FOOD-A9-F8",
           "name": "Member benefits instead of subscriptions",
-          "does": "A customer could get lower fees through co-op membership instead of a paid subscription, if members vote for it.",
+          "does": "A customer could get lower fees as a free member instead of through a paid subscription, if members vote for it.",
           "priority": "later",
           "parts": [
             {
               "id": "FOOD-A9-F8-P1",
-              "name": "Customer membership question",
-              "what": "Whether customers can be members and what they would get, put to a vote.",
+              "name": "Customer member benefits question",
+              "what": "What customers who take part as members would get, put to a vote.",
               "kind": "research",
               "size": "small",
               "depends_on": [
@@ -3424,7 +3424,7 @@
     {
       "id": "FOOD-A10",
       "name": "Payments, payouts and tax",
-      "summary": "The money: held by a regulated payment provider, split between the restaurant, the courier, the at-cost fee, GST and the provider's charge, paid out daily, and taxed as NZ law requires.",
+      "summary": "The money: held by a regulated payment provider, split between the restaurant, the courier, the at-cost fee, sales tax and the provider's charge, paid out daily, and taxed as each country's law requires.",
       "features": [
         {
           "id": "FOOD-A10-F1",
@@ -3459,13 +3459,13 @@
         {
           "id": "FOOD-A10-F2",
           "name": "Order money split",
-          "does": "Each order's money splits automatically between the restaurant, the courier, the at-cost fee, the GST the platform collects and the payment provider's charge.",
+          "does": "Each order's money splits automatically between the restaurant, the courier, the at-cost fee, the sales tax the platform collects and the payment provider's charge.",
           "priority": "core",
           "parts": [
             {
               "id": "FOOD-A10-F2-P1",
               "name": "Split rules",
-              "what": "Food's split on the kit's multi-party orders: the restaurant gets the menu total less its own deals, the courier the delivery fee and tips, and the fee, the GST for IRD and the provider's charge each get their own line.",
+              "what": "Food's split on the kit's multi-party orders: the restaurant gets the menu total less its own deals, the courier the delivery fee and tips, and the fee, the sales tax for the tax office and the provider's charge each get their own line.",
               "kind": "library",
               "size": "medium",
               "depends_on": [
@@ -3478,7 +3478,7 @@
             {
               "id": "FOOD-A10-F2-P2",
               "name": "Split record",
-              "what": "Every split stored as operations linked to the order, so payouts, GST and the kit's reconciliation agree.",
+              "what": "Every split stored as operations linked to the order, so payouts, sales tax and the kit's reconciliation agree.",
               "kind": "data",
               "size": "small",
               "depends_on": [
@@ -3524,14 +3524,14 @@
         },
         {
           "id": "FOOD-A10-F4",
-          "name": "GST on the listed service",
-          "does": "The platform collects GST on food delivery as a listed service, and gives sellers what the law says they need.",
+          "name": "Sales tax on the listed service (example: New Zealand GST)",
+          "does": "The platform collects sales tax on food delivery where the law makes the platform collect it (example: New Zealand GST on listed services), and gives sellers what the law says they need.",
           "priority": "core",
           "parts": [
             {
               "id": "FOOD-A10-F4-P1",
               "name": "What counts as the listed service",
-              "what": "Which parts of a food order the marketplace rules cover, and how restaurants' own GST fits, using the seller of record decision.",
+              "what": "Which parts of a food order the marketplace rules cover, and how restaurants' own sales tax fits, using the seller of record decision.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -3542,8 +3542,8 @@
             },
             {
               "id": "FOOD-A10-F4-P2",
-              "name": "Food GST rules",
-              "what": "Food's GST rules for each order line on the kit's GST engine, including flat-rate credit notices to unregistered restaurants and couriers.",
+              "name": "Food sales tax rules",
+              "what": "Food's sales tax rules for each order line on the kit's sales tax engine, including flat-rate credit notices to unregistered restaurants and couriers.",
               "kind": "library",
               "size": "small",
               "depends_on": [
@@ -3555,8 +3555,8 @@
             },
             {
               "id": "FOOD-A10-F4-P4",
-              "name": "Food lines for GST returns",
-              "what": "Food's order lines in the kit's operator GST returns.",
+              "name": "Food lines for sales tax returns",
+              "what": "Food's order lines in the kit's operator sales tax returns.",
               "kind": "data",
               "size": "small",
               "depends_on": [
@@ -3583,14 +3583,14 @@
         },
         {
           "id": "FOOD-A10-F5",
-          "name": "Income reporting to IRD",
+          "name": "Income reporting to the tax office (example: New Zealand's IRD)",
           "does": "The platform reports sellers' income as the digital platform rules require.",
           "priority": "core",
           "parts": [
             {
               "id": "FOOD-A10-F5-P1",
               "name": "Food income reporting",
-              "what": "Food's seller details for couriers, and for restaurants if the rules cover them, on the kit's yearly IRD report.",
+              "what": "Food's seller details for couriers, and for restaurants if the rules cover them, on the kit's yearly report to the tax office.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -3623,7 +3623,7 @@
             {
               "id": "FOOD-A10-F6-P2",
               "name": "Money back by default",
-              "what": "Every refund goes back the way the customer paid unless they choose credit, and credit is never the only choice, as the Consumer Guarantees Act requires.",
+              "what": "Every refund goes back the way the customer paid unless they choose credit, and credit is never the only choice, as consumer law requires (example: New Zealand's Consumer Guarantees Act).",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -3773,8 +3773,8 @@
           "parts": [
             {
               "id": "FOOD-A10-F11-P1",
-              "name": "Voluntary withholding with IRD",
-              "what": "Confirms with IRD how voluntary withholding works when a platform pays a courier. The rule should move down into the kit, since Spare Work maps the same.",
+              "name": "Voluntary withholding with the tax office (example: New Zealand's IRD)",
+              "what": "Confirms with the tax office how voluntary withholding works when a platform pays a courier, starting with New Zealand's IRD. The rule should move down into the kit, since Spare Work maps the same.",
               "kind": "research",
               "size": "small",
               "depends_on": [
@@ -3829,14 +3829,14 @@
         },
         {
           "id": "FOOD-A10-F13",
-          "name": "Warning before the GST threshold",
-          "does": "A courier or a small restaurant is told when its sales near the GST registration threshold, and what registering would change.",
+          "name": "Warning before the sales tax threshold",
+          "does": "A courier or a small restaurant is told when its sales near the sales tax registration threshold, and what registering would change.",
           "priority": "next",
           "parts": [
             {
               "id": "FOOD-A10-F13-P1",
-              "name": "GST threshold warning",
-              "what": "Warns a courier or an unregistered restaurant as its sales in every Spareware app near the $60,000 GST registration threshold, and explains what registering changes for flat-rate credits and invoices. How platform sales count towards the threshold is for the GST study to confirm (*unverified*), and the warning should move down into the kit, since Spare Ride and Spare Work need it.",
+              "name": "Sales tax threshold warning",
+              "what": "Warns a courier or an unregistered restaurant as its sales in every Spareware app near the country's sales tax registration threshold (example: $60,000 for New Zealand GST), and explains what registering changes for flat-rate credits and invoices. How platform sales count towards the threshold is for the sales tax study to confirm (*unverified*), and the warning should move down into the kit, since Spare Ride and Spare Work need it.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -4044,7 +4044,7 @@
         {
           "id": "FOOD-A11-F5",
           "name": "Consumer law",
-          "does": "Customers get what the Consumer Guarantees Act and Fair Trading Act promise.",
+          "does": "Customers get what consumer law promises (example: New Zealand's Consumer Guarantees Act and Fair Trading Act).",
           "priority": "core",
           "parts": [
             {
@@ -4061,7 +4061,7 @@
             {
               "id": "FOOD-A11-F5-P2",
               "name": "Seller of record for each order",
-              "what": "Food's case for the kit's seller of record decision: the restaurant sells the meal, and the courier or the co-op sells the delivery, which sets who charges GST, who owes consumer guarantees, whose name is on each receipt and who answers card disputes.",
+              "what": "Food's case for the kit's seller of record decision: the restaurant sells the meal, and the courier or the co-op sells the delivery, which sets who charges sales tax, who owes consumer guarantees, whose name is on each receipt and who answers card disputes.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -4101,7 +4101,7 @@
             {
               "id": "FOOD-A11-F7-P1",
               "name": "Sickness and reaction report",
-              "what": "A separate, urgent report for illness or an allergic reaction, which first tells the person to call 111 or Healthline if they need care.",
+              "what": "A separate, urgent report for illness or an allergic reaction, which first tells the person to call the emergency number or a health line if they need care (example: 111 or Healthline in New Zealand).",
               "kind": "interface",
               "size": "small",
               "depends_on": [
@@ -4150,8 +4150,8 @@
             },
             {
               "id": "FOOD-A11-F7-P5",
-              "name": "Telling MPI and councils",
-              "what": "When the law asks the restaurant or the platform to tell MPI or the council, and how the platform helps.",
+              "name": "Telling the food regulator and councils",
+              "what": "When the law asks the restaurant or the platform to tell the food safety regulator (example: New Zealand's MPI) or the council, and how the platform helps.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -4164,13 +4164,13 @@
         {
           "id": "FOOD-A11-F8",
           "name": "Take it further",
-          "does": "A customer, restaurant or courier learns how to take a dispute to the Disputes Tribunal or another outside route.",
+          "does": "A customer, restaurant or courier learns how to take a dispute to a small claims tribunal (example: New Zealand's Disputes Tribunal) or another outside route.",
           "priority": "next",
           "parts": [
             {
               "id": "FOOD-A11-F8-P1",
               "name": "Outside routes for Food",
-              "what": "Food's links to the Disputes Tribunal and other outside routes, on the kit's guidance.",
+              "what": "Food's links to small claims tribunals and other outside routes, on the kit's guidance.",
               "kind": "data",
               "size": "small",
               "depends_on": [
@@ -4406,8 +4406,8 @@
             },
             {
               "id": "FOOD-A12-F4-P7",
-              "name": "WorkSafe notices",
-              "what": "Flags Food incidents that must be notified to WorkSafe, such as a death or a serious injury in a crash, and tracks the notice and keeping the scene as it was, on the kit's notifiable event reports.",
+              "name": "Workplace safety notices",
+              "what": "Flags Food incidents that must be notified to the workplace safety regulator (example: New Zealand's WorkSafe), such as a death or a serious injury in a crash, and tracks the notice and keeping the scene as it was, on the kit's notifiable event reports.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -4564,8 +4564,8 @@
             },
             {
               "id": "FOOD-A12-F9-P3",
-              "name": "Income cover beyond ACC",
-              "what": "Options for income cover beyond ACC, such as a co-op group policy.",
+              "name": "Income cover beyond public accident cover",
+              "what": "Options for income cover beyond public accident cover (example: New Zealand's ACC), such as a co-op group policy.",
               "kind": "research",
               "size": "small",
               "depends_on": [
@@ -4841,13 +4841,13 @@
         {
           "id": "FOOD-A13-F7",
           "name": "Monthly tax summary",
-          "does": "A restaurant gets the GST and income figures it needs each month.",
+          "does": "A restaurant gets the sales tax and income figures it needs each month.",
           "priority": "core",
           "parts": [
             {
               "id": "FOOD-A13-F7-P1",
               "name": "Tax summary",
-              "what": "Sales, GST handled by the platform, and fees for each month.",
+              "what": "Sales, sales tax handled by the platform, and fees for each month.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -4951,7 +4951,7 @@
             {
               "id": "FOOD-A14-F1-P5",
               "name": "Product recalls",
-              "what": "Items on MPI's food recall list are pulled from grocery listings, and buyers are told.",
+              "what": "Items on the food regulator's recall list (example: New Zealand's MPI) are pulled from grocery listings, and buyers are told.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -4982,7 +4982,7 @@
             {
               "id": "FOOD-A14-F2-P1",
               "name": "Alcohol law study",
-              "what": "Remote sales under the Sale and Supply of Alcohol Act 2012 and its regulations: what the seller and the platform must each do, and on which days and hours delivery is barred.",
+              "what": "Remote sales under each country's alcohol law, starting with New Zealand's Sale and Supply of Alcohol Act 2012 and its regulations: what the seller and the platform must each do, and on which days and hours delivery is barred.",
               "kind": "legal",
               "size": "medium",
               "depends_on": [],
@@ -5039,7 +5039,7 @@
             {
               "id": "FOOD-A14-F2-P6",
               "name": "Alcohol delivery hours",
-              "what": "No alcohol delivered from 11pm to 6am (section 59), none on Good Friday, Easter Sunday or Christmas Day or before 1pm on Anzac Day (section 48, which section 49 applies to remote-sale deliveries), and any narrower hours in the seller's licence conditions or a local alcohol policy that the law study finds apply.",
+              "what": "Each country pack sets its own hours. In the first pack (New Zealand): no alcohol delivered from 11pm to 6am (section 59), none on Good Friday, Easter Sunday or Christmas Day or before 1pm on Anzac Day (section 48, which section 49 applies to remote-sale deliveries), and any narrower hours in the seller's licence conditions or a local alcohol policy that the law study finds apply.",
               "kind": "library",
               "size": "small",
               "depends_on": [
@@ -5102,7 +5102,7 @@
             {
               "id": "FOOD-A14-F4-P2",
               "name": "Monthly invoicing",
-              "what": "Food's order lines on the kit's one monthly invoice with GST, paid by bank transfer.",
+              "what": "Food's order lines on the kit's one monthly invoice with sales tax, paid by bank transfer.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -5175,8 +5175,8 @@
     },
     {
       "id": "FOOD-A15",
-      "name": "Co-op ownership, voting and the open cost ledger",
-      "summary": "Restaurants and couriers own the app: they vote on fees and rules, see exactly what it costs to run, and decide where it opens next.",
+      "name": "Member voting and the open cost ledger",
+      "summary": "Restaurants and couriers keep all the profit except running costs: they vote on fees and rules, see exactly what it costs to run, and decide where it opens next.",
       "features": [
         {
           "id": "FOOD-A15-F1",
@@ -5254,7 +5254,7 @@
             {
               "id": "FOOD-A15-F2-P3",
               "name": "Competition law gate for pay votes",
-              "what": "Couriers vote on the delivery fee formula, the busy-time bonus and the waiting rate only in a form the kit's competition law check clears, such as pay set by the co-op as employer, a Commerce Commission authorisation, or a collective bargaining law if one applies.",
+              "what": "Couriers vote on the delivery fee formula, the busy-time bonus and the waiting rate only in a form the kit's competition law check clears, such as pay set by the co-op as employer, a competition authority's authorisation (example: New Zealand's Commerce Commission), or a collective bargaining law if one applies.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -5402,13 +5402,13 @@
         {
           "id": "FOOD-A15-F7",
           "name": "Member meetings and reports",
-          "does": "A member can read the annual report and take part in general meetings online.",
+          "does": "A member can read the annual report and take part in member meetings online.",
           "priority": "next",
           "parts": [
             {
               "id": "FOOD-A15-F7-P1",
-              "name": "Online general meetings",
-              "what": "Food's papers and votes in the kit's general meetings.",
+              "name": "Online member meetings",
+              "what": "Food's papers and votes in the kit's member meetings.",
               "kind": "service",
               "size": "small",
               "depends_on": [
@@ -5439,7 +5439,7 @@
             {
               "id": "FOOD-A15-F8-P2",
               "name": "Start-up funding",
-              "what": "How the first months are paid for (member capital, loans or grants), shown on the ledger.",
+              "what": "How the first months are paid for (donations, loans or grants), shown on the ledger.",
               "kind": "research",
               "size": "medium",
               "depends_on": [
@@ -5726,7 +5726,7 @@
     {
       "id": "FOOD-A17",
       "name": "Accessibility, languages and countries",
-      "summary": "Usable by everyone, in te reo Māori, English and other languages, and ready for a local co-op in another country to run with its own laws.",
+      "summary": "Usable by everyone, in English and other languages, and ready for any country with its own rules pack; New Zealand is the first, with te reo Māori.",
       "features": [
         {
           "id": "FOOD-A17-F1",
@@ -5809,7 +5809,7 @@
         {
           "id": "FOOD-A17-F2",
           "name": "Many languages",
-          "does": "A person uses the apps in their own language, starting with te reo Māori and English.",
+          "does": "A person uses the apps in their own language, starting with English and the languages of each launch country (example: te reo Māori in New Zealand).",
           "priority": "core",
           "parts": [
             {
@@ -5825,8 +5825,8 @@
             },
             {
               "id": "FOOD-A17-F2-P2",
-              "name": "Te reo Māori version",
-              "what": "A full te reo Māori version, checked by fluent speakers.",
+              "name": "Launch country languages (example: te reo Māori)",
+              "what": "A full version in each launch country's own languages, checked by fluent speakers, starting with te reo Māori for New Zealand.",
               "kind": "data",
               "size": "medium",
               "depends_on": [
@@ -5851,7 +5851,7 @@
         {
           "id": "FOOD-A17-F3",
           "name": "Other countries",
-          "does": "A local co-op in another country runs Spare Food with its own currency, tax, addresses and laws.",
+          "does": "Spare Food runs in any country with that country's currency, tax, addresses and laws, set in its own country pack.",
           "priority": "later",
           "parts": [
             {
@@ -5880,7 +5880,7 @@
             {
               "id": "FOOD-A17-F3-P3",
               "name": "Platform work law by country",
-              "what": "Courier rules elsewhere, such as the EU Platform Work Directive and Australia's minimum standards for gig workers.",
+              "what": "Courier rules in each country, such as the EU Platform Work Directive and Australia's minimum standards for gig workers.",
               "kind": "legal",
               "size": "medium",
               "depends_on": [],
@@ -5889,7 +5889,7 @@
             {
               "id": "FOOD-A17-F3-P4",
               "name": "Allergen lists per country",
-              "what": "Allergen lists for each country, such as the EU's 14, the US's 9 and the ANZ list, plus energy units, so NZ allergen data fits other countries.",
+              "what": "Allergen lists for each country, such as the EU's 14, the US's 9 and the ANZ list, plus energy units, so allergen data entered in one country fits the others.",
               "kind": "data",
               "size": "small",
               "depends_on": [
@@ -5996,14 +5996,14 @@
         },
         {
           "id": "FOOD-A17-F8",
-          "name": "Easy read and NZ Sign Language",
-          "does": "A person reads the key steps in easy-read text, or watches them in NZ Sign Language.",
+          "name": "Easy read and sign language",
+          "does": "A person reads the key steps in easy-read text, or watches them in the country's sign language (example: New Zealand Sign Language).",
           "priority": "later",
           "parts": [
             {
               "id": "FOOD-A17-F8-P1",
-              "name": "Food easy read and NZ Sign Language",
-              "what": "Easy-read text and NZ Sign Language videos for ordering, signing up to deliver and reporting a problem, on the kit's easy read and NZ Sign Language.",
+              "name": "Food easy read and sign language",
+              "what": "Easy-read text and videos in each country's sign language (example: NZ Sign Language) for ordering, signing up to deliver and reporting a problem, on the kit's easy read and sign language.",
               "kind": "data",
               "size": "small",
               "depends_on": [
@@ -6018,7 +6018,7 @@
     {
       "id": "FOOD-A18",
       "name": "Privacy, data and legal duties",
-      "summary": "Members own their data and can take it with them, and the app meets every law that applies to a food platform.",
+      "summary": "Members control their data and can take it with them, and the app meets every law that applies to a food platform.",
       "features": [
         {
           "id": "FOOD-A18-F1",
@@ -6082,7 +6082,7 @@
             {
               "id": "FOOD-A18-F2-P2",
               "name": "Food safety duties page",
-              "what": "A plain page, linked from the terms and the help centre, showing who answers for what under the Food Act.",
+              "what": "A plain page, linked from the terms and the help centre, showing who answers for what under food safety law (example: New Zealand's Food Act).",
               "kind": "interface",
               "size": "small",
               "depends_on": [
@@ -6096,7 +6096,7 @@
         {
           "id": "FOOD-A18-F3",
           "name": "Courier status and pay law",
-          "does": "Courier terms meet employment law, including the 2026 gateway test for contractors, or couriers are employed.",
+          "does": "Courier terms meet employment law, including each country's test for who is a contractor (example: New Zealand's 2026 gateway test), or couriers are employed.",
           "priority": "core",
           "parts": [
             {
@@ -6114,7 +6114,7 @@
             {
               "id": "FOOD-A18-F3-P2",
               "name": "Accident cover and insurance",
-              "what": "ACC levies, accident cover and insurance options for couriers.",
+              "what": "Public accident cover and its levies (example: New Zealand's ACC), and insurance options for couriers.",
               "kind": "research",
               "size": "small",
               "depends_on": [],
@@ -6124,8 +6124,8 @@
         },
         {
           "id": "FOOD-A18-F4",
-          "name": "Privacy Act duties",
-          "does": "The app meets the Privacy Act 2020: clear notices, access and correction requests, and breach reporting.",
+          "name": "Privacy law duties",
+          "does": "The app meets privacy law (example: New Zealand's Privacy Act 2020): clear notices, access and correction requests, and breach reporting.",
           "priority": "core",
           "parts": [
             {
@@ -6156,7 +6156,7 @@
             {
               "id": "FOOD-A18-F4-P4",
               "name": "Indirect collection notices",
-              "what": "Principle 3A notices for every indirect collection in Food: licence, criminal record and identity results from providers, customer details supplied by restaurants, and proof photos that show other people.",
+              "what": "Notices for every indirect collection in Food (example: New Zealand's privacy principle 3A): licence, criminal record and identity results from providers, customer details supplied by restaurants, and proof photos that show other people.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -6634,13 +6634,13 @@
         {
           "id": "FOOD-A19-F8",
           "name": "Severe weather and emergencies",
-          "does": "Operators see weather and Civil Defence warnings, and can switch a city into an emergency mode.",
+          "does": "Operators see weather and emergency management warnings (example: New Zealand's Civil Defence), and can switch a city into an emergency mode.",
           "priority": "next",
           "parts": [
             {
               "id": "FOOD-A19-F8-P1",
-              "name": "Weather and Civil Defence warnings",
-              "what": "Weather warnings and Civil Defence alerts shown to operators, with suggested zone pauses, from a shared feed the kit should own, since Spare Ride, Spare Stay and Spare Work need it too. MetService's data terms are *unverified*.",
+              "name": "Weather and emergency warnings",
+              "what": "Weather warnings and emergency management alerts shown to operators, with suggested zone pauses, from a shared feed the kit should own, since Spare Ride, Spare Stay and Spare Work need it too. Each country has its own sources; for New Zealand, Civil Defence and MetService, whose data terms are *unverified*.",
               "kind": "integration",
               "size": "small",
               "depends_on": [
@@ -6999,25 +6999,25 @@
   ],
   "assess": [
     "Could a customer, a restaurant and a courier each finish a whole order, from sign-up to payout, using only the core features?",
-    "Does every feature a regular Uber Eats, DoorDash or Delivereasy user relies on each week have a home in this map, and does each reason in the left-out list (the last question) still hold?",
+    "Does every feature a regular Uber Eats, DoorDash or local delivery app user relies on each week have a home in this map, and does each reason in the left-out list (the last question) still hold?",
     "Is the courier status decision (FD02) settled before courier terms, pay, ratings and removal are built, since it changes all of them, and does every courier pay vote pass the competition law check (KIT-A12-F4-P3) first?",
-    "Does the price breakdown make it obvious what the restaurant, the courier, the running cost and GST each get, so a customer trusts it more than the big apps?",
+    "Does the price breakdown make it obvious what the restaurant, the courier, the running cost and sales tax each get, so a customer trusts it more than the big apps?",
     "Is the at-cost fee believable in the first months, when the running cost is shared over few orders?",
     "Does ready-timed dispatch (FD03) have a proven, published method to port, or is it being invented?",
     "Will restaurants accept a separate tablet at launch, or must point-of-sale and printer links (FD05) come first?",
     "Which parts are shared with Spare Ride (courier accounts, location, routing, safety) and are they moved down into the kit rather than copied?",
-    "Is each legal duty (Food Act, GST on listed services, income reporting, anti-money-laundering, Privacy Act, alcohol) owned by a piece and checked by a lawyer before launch?",
+    "Is each legal duty in the first country pack (for New Zealand: Food Act, GST on listed services, income reporting, anti-money-laundering, Privacy Act, alcohol) covered by a piece and checked by a lawyer before launch?",
     "Are groceries, alcohol and catering rightly marked later, given the extra law and the picker app they need?",
-    "Can every screen in the demo be used with a keyboard and a screen reader, and in te reo Māori?",
+    "Can every screen in the demo be used with a keyboard and a screen reader, and in each launch country's languages (example: te reo Māori)?",
     "Does anything in the demo look like an incumbent's interface, name, colours or icons?",
     "What does the demo show when the courier's or the restaurant's signal drops mid-order?",
     "How does the co-op sign up enough restaurants and couriers in one city at the same time, and what count is enough to open?",
     "Which large parts should be split further before the Design stage, and is any size clearly wrong?",
     "Are the decisions on what the at-cost fee may cover (FOOD-A9-F2-P3) and who pays it (FOOD-A9-F2-P4) made before the price calculator, the money split and the ledger page are built?",
     "Does the demo show what happens when an order goes wrong: a declined or unanswered order, a silent restaurant tablet, an allergy request the kitchen declines, and a report of sickness or an allergic reaction?",
-    "Food's core features rest on kit parts the kit marks as next or later: organisation model (KIT-A1-F7-P1, next); team management (KIT-A1-F7-P2, next); vehicle checks (KIT-A2-F6-P2, next); business number lookup (KIT-A2-F7-P1, next); trader details (KIT-A2-F7-P2, next); background checks in NZ (KIT-A2-F9-P1, next); background check link (KIT-A2-F9-P2, next); face check fairness testing (KIT-A2-F12-P1, next); repeat face checks (KIT-A2-F12-P2, next); sanctions screening (KIT-A4-F8-P1, later); scheduled and repeat bookings (KIT-A5-F9-P1, next); multi-party orders (KIT-A5-F11-P1, next); favourites (KIT-A5-F12-P1, next); order changes (KIT-A5-F15-P1, next); fairness checks (KIT-A6-F5-P2, next); turn-by-turn guidance (KIT-A7-F6-P1, next); message translation (KIT-A8-F7-P1, next); fraud signals (KIT-A10-F12-P2, next); insurance claims link (KIT-A11-F9-P2, later); privacy impact assessments (KIT-A18-F10-P1, next); update delivery (KIT-A20-F7-P1, next). Will the kit bring each one forward, or should the Food part that needs it wait?",
+    "Food's core features rest on kit parts the kit marks as next or later: organisation model (KIT-A1-F7-P1, next); team management (KIT-A1-F7-P2, next); vehicle checks (KIT-A2-F6-P2, next); business number lookup (KIT-A2-F7-P1, next); trader details (KIT-A2-F7-P2, next); background checks (KIT-A2-F9-P1, next); background check link (KIT-A2-F9-P2, next); face check fairness testing (KIT-A2-F12-P1, next); repeat face checks (KIT-A2-F12-P2, next); sanctions screening (KIT-A4-F8-P1, later); scheduled and repeat bookings (KIT-A5-F9-P1, next); multi-party orders (KIT-A5-F11-P1, next); favourites (KIT-A5-F12-P1, next); order changes (KIT-A5-F15-P1, next); fairness checks (KIT-A6-F5-P2, next); turn-by-turn guidance (KIT-A7-F6-P1, next); message translation (KIT-A8-F7-P1, next); fraud signals (KIT-A10-F12-P2, next); insurance claims link (KIT-A11-F9-P2, later); privacy impact assessments (KIT-A18-F10-P1, next); update delivery (KIT-A20-F7-P1, next). Will the kit bring each one forward, or should the Food part that needs it wait?",
     "Which Food parts still have no work-board piece, such as the first city and launch plan, start-up funding, insurance and restricted goods, and should new pieces be opened for them?",
-    "Food asks the kit to open shared parts it does not have yet: a shared worker record of hours across apps (FOOD-A6-F1-P4); a shared device mode for kitchen and shop tablets (FOOD-A16-F2-P2); an A-to-B delivery job type (FOOD-A14-F5-P1, FOOD-A14-F6-P1); a guest order decision (FOOD-A1-F1-P6); union access and bargaining duties (FOOD-A6-F13-P7); a GST threshold warning (FOOD-A10-F13-P1); rules for health, faith and disability details (FOOD-A18-F10-P1); access needs on the profile (FOOD-A4-F13-P1); a shop page and a till (FOOD-A13-F4-P1, FOOD-A13-F5-P1); a mileage and expense log (FOOD-A6-F6-P4); text and phone ordering (FOOD-A4-F14-P1, FOOD-A4-F14-P2); a driving-safe mode and the phone road rules (FOOD-A6-F12-P1, FOOD-A6-F12-P3); tax withholding from payouts (FOOD-A10-F11-P1, FOOD-A10-F11-P2); a city simulator (FOOD-A19-F5-P1); emergency powers rules (FOOD-A15-F9-P1); a weather and Civil Defence feed (FOOD-A19-F8-P1); launch counting, pledges and waitlists (FOOD-A15-F6-P1, FOOD-A15-F6-P4, FOOD-A15-F6-P6). Has the kit opened each one, so the Food part becomes a thin use of it?",
+    "Food asks the kit to open shared parts it does not have yet: a shared worker record of hours across apps (FOOD-A6-F1-P4); a shared device mode for kitchen and shop tablets (FOOD-A16-F2-P2); an A-to-B delivery job type (FOOD-A14-F5-P1, FOOD-A14-F6-P1); a guest order decision (FOOD-A1-F1-P6); union access and bargaining duties (FOOD-A6-F13-P7); a sales tax threshold warning (FOOD-A10-F13-P1); rules for health, faith and disability details (FOOD-A18-F10-P1); access needs on the profile (FOOD-A4-F13-P1); a shop page and a till (FOOD-A13-F4-P1, FOOD-A13-F5-P1); a mileage and expense log (FOOD-A6-F6-P4); text and phone ordering (FOOD-A4-F14-P1, FOOD-A4-F14-P2); a driving-safe mode and the phone road rules (FOOD-A6-F12-P1, FOOD-A6-F12-P3); tax withholding from payouts (FOOD-A10-F11-P1, FOOD-A10-F11-P2); a city simulator (FOOD-A19-F5-P1); emergency powers rules (FOOD-A15-F9-P1); a weather and emergency warnings feed (FOOD-A19-F8-P1); launch counting, pledges and waitlists (FOOD-A15-F6-P1, FOOD-A15-F6-P4, FOOD-A15-F6-P6). Has the kit opened each one, so the Food part becomes a thin use of it?",
     "Left out on purpose: paid placement and ads (rankings follow published rules and are never sold); paid subscriptions (member benefits in FOOD-A9-F8 lower fees instead, if members vote for them); a paid priority delivery tier (dispatch treats every order by the same published rules); co-op-run dark stores (the co-op runs no kitchens or shops of its own and serves independent sellers); drones and robots (not proven at scale, and tightly limited by aviation and road rules); table reservations (a booking product, not delivery, which can come later as its own feature or app); package returns (returns belong with a shared delivery job type in the kit and with Spare Market's shipping); restaurant cash advances and loans (lending brings in credit law and is not an at-cost running cost). Does each reason still hold?"
   ]
 }

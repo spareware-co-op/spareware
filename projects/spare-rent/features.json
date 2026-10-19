@@ -1,8 +1,8 @@
 {
  "program": "spare-rent",
  "name": "Spare Rent",
- "replaces": "Property managers' fees (commonly 7-10% of rent plus GST and a letting fee of about a week's rent), paid rental listings such as Trade Me Property, and paid landlord and property-management software",
- "summary": "Long-term renting where landlords self-manage legally with good tools, renters apply once and control their own information, and any management work is done by co-op members at cost. It never holds bonds or rent, renters never pay a fee, and it builds tenancy law in as rules and legal clocks so no duty or deadline is missed; tenancy disputes go to the Tenancy Tribunal, never to member panels.",
+ "replaces": "Property managers' fees (in New Zealand, commonly 7-10% of rent plus GST and a letting fee of about a week's rent), paid rental listings such as Trade Me Property, and paid landlord and property-management software",
+ "summary": "Long-term renting where landlords self-manage legally with good tools, renters apply once and control their own information, and any management work is done by co-op members at cost. It never holds bonds or rent, renters never pay a fee, and it builds tenancy law in as rules and legal clocks so no duty or deadline is missed; tenancy disputes go to the tenancy tribunal or court, never to member panels.",
  "areas": [
   {
    "id": "RENT-A1",
@@ -65,8 +65,8 @@
       },
       {
        "id": "RENT-A1-F1-P5",
-       "name": "Tenancy Services registration check",
-       "what": "During landlord set-up, checks the landlord is registered with Tenancy Services and has the RealMe login the bond system needs; registers them through the Tenancy Bond API, which allows it, or guides them through Bond Hub.",
+       "name": "Bond body registration check (example: New Zealand's Tenancy Services)",
+       "what": "During landlord set-up, checks the landlord is registered with the official bond body where the country has one. In New Zealand: checks the landlord is registered with Tenancy Services and has the RealMe login the bond system needs; registers them through the Tenancy Bond API, which allows it, or guides them through Bond Hub.",
        "kind": "interface",
        "size": "small",
        "depends_on": [
@@ -262,7 +262,7 @@
       {
        "id": "RENT-A1-F5-P4",
        "name": "Agent while the landlord is overseas",
-       "what": "Prompts a landlord leaving New Zealand for more than 21 days in a row to appoint a local agent, gives the tenant the agent's name, contact details and address for service, and starts the bond record update; not doing this is an unlawful act.",
+       "what": "Prompts a landlord leaving the country for longer than the law allows (in New Zealand, more than 21 days in a row) to appoint a local agent, gives the tenant the agent's name, contact details and address for service, and starts the bond record update; not doing this is an unlawful act.",
        "kind": "service",
        "size": "small",
        "depends_on": [
@@ -333,7 +333,7 @@
     {
      "id": "RENT-A1-F7",
      "name": "Switch from a property manager",
-     "does": "Leave a property manager and take over, with tenants and Tenancy Services told about the change.",
+     "does": "Leave a property manager and take over, with tenants and the bond body told about the change.",
      "priority": "next",
      "parts": [
       {
@@ -481,7 +481,7 @@
       {
        "id": "RENT-A2-F1-P4",
        "name": "Parcel and title data",
-       "what": "Parcel and title datasets, licences and update rates, done once with Spare Home's open property data research (HOME-A2-F1-P3); addresses come from the kit's NZ address data.",
+       "what": "Parcel and title datasets, licences and update rates, done once with Spare Home's open property data research (HOME-A2-F1-P3); addresses come from the kit's address data for each country.",
        "kind": "research",
        "size": "small",
        "depends_on": [
@@ -813,7 +813,7 @@
   {
    "id": "RENT-A3",
    "name": "Listings and advertising",
-   "summary": "Landlords advertise a home truthfully and fully, with the rent stated, every cost shown, the Healthy Homes status visible and the advertising rules checked before it goes live, then reach renters on Spare Rent and elsewhere.",
+   "summary": "Landlords advertise a home truthfully and fully, with the rent stated, every cost shown, the rental standards status visible (example: New Zealand's Healthy Homes standards) and the advertising rules checked before it goes live, then reach renters on Spare Rent and elsewhere.",
    "features": [
     {
      "id": "RENT-A3-F1",
@@ -862,7 +862,7 @@
       {
        "id": "RENT-A3-F1-P4",
        "name": "Advertising rules research",
-       "what": "Research the rules for rental adverts: rent shown, the bidding ban, the Human Rights Act and the Fair Trading Act.",
+       "what": "Research the rules for rental adverts in each country: in New Zealand, rent shown, the bidding ban, the Human Rights Act and the Fair Trading Act.",
        "kind": "research",
        "size": "small",
        "depends_on": [],
@@ -946,8 +946,8 @@
       },
       {
        "id": "RENT-A3-F3-P2",
-       "name": "Healthy Homes summary",
-       "what": "The home's Healthy Homes status shown on the listing.",
+       "name": "Rental standards summary",
+       "what": "The home's rental standards status shown on the listing.",
        "kind": "interface",
        "size": "small",
        "depends_on": [
@@ -1446,7 +1446,7 @@
       {
        "id": "RENT-A4-F6-P2",
        "name": "Compare view",
-       "what": "Rent, costs, size, travel time and Healthy Homes status side by side.",
+       "what": "Rent, costs, size, travel time and rental standards status side by side.",
        "kind": "interface",
        "size": "small",
        "depends_on": [
@@ -1736,7 +1736,7 @@
       {
        "id": "RENT-A5-F5-P5",
        "name": "Limits built into the profile",
-       "what": "Blocks detailed bank statements, allows only one proof of ability to pay besides a credit report, asks for ID copies only when a credit or criminal record check needs them, and never asks about Human Rights Act grounds, family violence history or social media.",
+       "what": "Blocks detailed bank statements, allows only one proof of ability to pay besides a credit report, asks for ID copies only when a credit or criminal record check needs them, and never asks about grounds protected by human rights law (example: New Zealand's Human Rights Act), family violence history or social media.",
        "kind": "library",
        "size": "medium",
        "depends_on": [
@@ -1888,7 +1888,7 @@
       {
        "id": "RENT-A5-F9-P2",
        "name": "Credit and record check rules",
-       "what": "Research the credit reporting code, criminal record checks and Tenancy Tribunal decision searches.",
+       "what": "Research the credit reporting rules, criminal record checks and tribunal decision searches in each country, starting with New Zealand's credit reporting code and Tenancy Tribunal decisions.",
        "kind": "research",
        "size": "small",
        "depends_on": [],
@@ -1897,7 +1897,7 @@
       {
        "id": "RENT-A5-F9-P3",
        "name": "Collected-from-others notice",
-       "what": "Tells the renter when information about them is collected from someone else, as IPP 3A requires.",
+       "what": "Tells the renter when information about them is collected from someone else, as privacy law requires (example: New Zealand's IPP 3A).",
        "kind": "service",
        "size": "small",
        "depends_on": [
@@ -1950,7 +1950,7 @@
       {
        "id": "RENT-A5-F10-P4",
        "name": "Discrimination grounds in housing",
-       "what": "Research the Human Rights Act grounds that apply to choosing tenants.",
+       "what": "Research the human rights law grounds that apply to choosing tenants in each country (example: New Zealand's Human Rights Act).",
        "kind": "research",
        "size": "small",
        "depends_on": [],
@@ -2086,7 +2086,7 @@
       {
        "id": "RENT-A5-F13-P4",
        "name": "Rules for occupied homes",
-       "what": "The rules for viewings and photos with tenants in place, kept once in the NZ rule pack and shared with Spare Home's tenancy rules (HOME-A7-F5-P1).",
+       "what": "The rules for viewings and photos with tenants in place, kept once in each country's rule pack and shared with Spare Home's tenancy rules (HOME-A7-F5-P1).",
        "kind": "data",
        "size": "small",
        "depends_on": [
@@ -2135,7 +2135,7 @@
       {
        "id": "RENT-A6-F1-P3",
        "name": "Required statements",
-       "what": "Adds the insurance, insulation and Healthy Homes statements the law requires.",
+       "what": "Adds the statements the law requires, such as New Zealand's insurance, insulation and Healthy Homes statements.",
        "kind": "service",
        "size": "small",
        "depends_on": [
@@ -2435,18 +2435,18 @@
   {
    "id": "RENT-A7",
    "name": "Bonds",
-   "summary": "Spare Rent never holds a bond. Since 29 June 2026 bond transactions are online only: Spare Rent does what the Tenancy Bond API supports with each landlord's own RealMe consent, hands the rest to Bond Hub, tells tenants that Tenancy Services will contact them directly about refunds, and keeps the legal clocks so none is late.",
+   "summary": "Spare Rent never holds a bond. Each country pack says where bonds are lodged and how. In the first pack (New Zealand), bond transactions have been online only since 29 June 2026: Spare Rent does what the Tenancy Bond API supports with each landlord's own RealMe consent, hands the rest to Bond Hub, tells tenants that Tenancy Services will contact them directly about refunds, and keeps the legal clocks so none is late.",
    "features": [
     {
      "id": "RENT-A7-F1",
      "name": "Lodge a bond",
-     "does": "Lodge the bond with Tenancy Services from inside the app, within the legal time.",
+     "does": "Lodge the bond with the official body that holds it (example: New Zealand's Tenancy Services) from inside the app, within the legal time.",
      "priority": "core",
      "parts": [
       {
        "id": "RENT-A7-F1-P1",
        "name": "Bond API access, terms and coverage",
-       "what": "Research registering with MBIE, its API Access Agreement, the sandbox, each landlord's RealMe consent, and which bond operations the API supports today.",
+       "what": "Research access to each country's official bond system. For New Zealand: registering with MBIE, its API Access Agreement, the sandbox, each landlord's RealMe consent, and which bond operations the API supports today.",
        "kind": "research",
        "size": "small",
        "depends_on": [],
@@ -2454,8 +2454,8 @@
       },
       {
        "id": "RENT-A7-F1-P2",
-       "name": "Tenancy Bond API connection",
-       "what": "Calls the Tenancy Bond API with the co-op's subscription key and each landlord's own consent token, for the operations the API supports.",
+       "name": "Official bond system connection (example: New Zealand's Tenancy Bond API)",
+       "what": "Calls the official bond system's API, such as New Zealand's Tenancy Bond API, with the co-op's subscription key and each landlord's own consent token, for the operations the API supports.",
        "kind": "integration",
        "size": "large",
        "depends_on": [
@@ -2493,8 +2493,8 @@
       },
       {
        "id": "RENT-A7-F1-P5",
-       "name": "Bond Hub hand-off",
-       "what": "Sends the landlord to Bond Hub with the details ready to copy for any operation the API doesn't support, or when it is down; there are no paper bond forms since 29 June 2026.",
+       "name": "Official bond website hand-off (example: New Zealand's Bond Hub)",
+       "what": "Sends the landlord to the official bond website (example: Bond Hub in New Zealand) with the details ready to copy for any operation the API doesn't support, or when it is down; in New Zealand there are no paper bond forms since 29 June 2026.",
        "kind": "interface",
        "size": "small",
        "depends_on": [
@@ -2505,7 +2505,7 @@
       {
        "id": "RENT-A7-F1-P6",
        "name": "Landlord consent to the bond system",
-       "what": "Each landlord logs in with the RealMe account they use with Tenancy Services so Spare Rent can reach their bonds; the consent token is kept per landlord, encrypted, renewed and can be withdrawn.",
+       "what": "Each landlord logs in with the government login they use with the bond body (example: RealMe with New Zealand's Tenancy Services) so Spare Rent can reach their bonds; the consent token is kept per landlord, encrypted, renewed and can be withdrawn.",
        "kind": "service",
        "size": "medium",
        "depends_on": [
@@ -2517,8 +2517,8 @@
       },
       {
        "id": "RENT-A7-F1-P7",
-       "name": "MBIE API Access Agreement",
-       "what": "The co-op signs MBIE's API Access Agreement before its subscription is approved, and keeps its subscription keys secret.",
+       "name": "Bond system access agreement (example: MBIE's API Access Agreement)",
+       "what": "The co-op signs each bond system's access agreement before its subscription is approved, such as MBIE's API Access Agreement in New Zealand, and keeps its subscription keys secret.",
        "kind": "legal",
        "size": "small",
        "depends_on": [
@@ -2530,7 +2530,7 @@
       {
        "id": "RENT-A7-F1-P8",
        "name": "Supported operations table",
-       "what": "Which bond operations, such as lodging, top-ups, refunds, change of tenant and change of landlord, go through the API and which through Bond Hub, kept current and shown before each step.",
+       "what": "Which bond operations, such as lodging, top-ups, refunds, change of tenant and change of landlord, go through the API and which through the official website (example: Bond Hub), kept current and shown before each step.",
        "kind": "data",
        "size": "small",
        "depends_on": [
@@ -2540,8 +2540,8 @@
       },
       {
        "id": "RENT-A7-F1-P9",
-       "name": "What tenants will hear from Tenancy Services",
-       "what": "Tells tenants to expect official emails from bonds@tenancy.govt.nz and texts from 2910 about their bond and refund, to keep their contact details current with Tenancy Services, and how to tell those messages from scams.",
+       "name": "What tenants will hear from the bond body",
+       "what": "Tells tenants what official messages to expect about their bond and refund, such as, in New Zealand, emails from bonds@tenancy.govt.nz and texts from 2910, to keep their contact details current with the bond body, and how to tell those messages from scams.",
        "kind": "service",
        "size": "small",
        "depends_on": [
@@ -2554,8 +2554,8 @@
     },
     {
      "id": "RENT-A7-F2",
-     "name": "Bonds paid by Work and Income",
-     "does": "Handle bonds paid partly or fully by Work and Income.",
+     "name": "Bonds paid by a government agency (example: New Zealand's Work and Income)",
+     "does": "Handle bonds paid partly or fully by a government agency.",
      "priority": "core",
      "parts": [
       {
@@ -2572,7 +2572,7 @@
       {
        "id": "RENT-A7-F2-P2",
        "name": "Government-paid bonds",
-       "what": "Research how bonds paid by Work and Income are lodged, transferred and refunded.",
+       "what": "Research how bonds paid by a government agency are lodged, transferred and refunded, starting with New Zealand's Work and Income.",
        "kind": "research",
        "size": "small",
        "depends_on": [],
@@ -2583,13 +2583,13 @@
     {
      "id": "RENT-A7-F3",
      "name": "Pet bonds",
-     "does": "Lodge a pet bond of up to two weeks' rent when a pet is agreed, and get it back when the pet leaves.",
+     "does": "Lodge a pet bond where the law allows one (in New Zealand, up to two weeks' rent) when a pet is agreed, and get it back when the pet leaves.",
      "priority": "core",
      "parts": [
       {
        "id": "RENT-A7-F3-P1",
        "name": "Pet bond lodgement",
-       "what": "The one part that lodges or tops up a pet bond, through the API or the Bond Hub hand-off.",
+       "what": "The one part that lodges or tops up a pet bond, through the API or the official website hand-off.",
        "kind": "integration",
        "size": "small",
        "depends_on": [
@@ -2642,7 +2642,7 @@
       {
        "id": "RENT-A7-F5-P1",
        "name": "Change of tenant or landlord",
-       "what": "The one part for changes of tenant or landlord on a bond: through the API where it supports them, otherwise through Bond Hub.",
+       "what": "The one part for changes of tenant or landlord on a bond: through the API where it supports them, otherwise through the official website.",
        "kind": "integration",
        "size": "medium",
        "depends_on": [
@@ -2667,13 +2667,13 @@
     {
      "id": "RENT-A7-F6",
      "name": "Refund a bond",
-     "does": "Propose how the bond is split at the end; Tenancy Services then asks each tenant directly to agree or dispute it.",
+     "does": "Propose how the bond is split at the end; the bond body then asks each tenant directly to agree or dispute it, as New Zealand's Tenancy Services does.",
      "priority": "core",
      "parts": [
       {
        "id": "RENT-A7-F6-P1",
        "name": "Refund split proposal",
-       "what": "The landlord proposes deductions with evidence, checked against the liability rules; the tenant sees the proposal here but agrees or disputes it directly with Tenancy Services.",
+       "what": "The landlord proposes deductions with evidence, checked against the liability rules; the tenant sees the proposal here but agrees or disputes it directly with the bond body.",
        "kind": "interface",
        "size": "medium",
        "depends_on": [
@@ -2686,7 +2686,7 @@
       {
        "id": "RENT-A7-F6-P2",
        "name": "Refund request",
-       "what": "Submits the landlord's refund request through the API or Bond Hub; Tenancy Services then contacts each tenant by email or text to agree or dispute it.",
+       "what": "Submits the landlord's refund request through the API or the official website; the bond body then contacts each tenant by email or text to agree or dispute it.",
        "kind": "integration",
        "size": "small",
        "depends_on": [
@@ -2699,7 +2699,7 @@
       {
        "id": "RENT-A7-F6-P3",
        "name": "When the split isn't agreed",
-       "what": "Explains the next steps and builds the evidence pack for the Tribunal.",
+       "what": "Explains the next steps and builds the evidence pack for the tribunal.",
        "kind": "service",
        "size": "small",
        "depends_on": [
@@ -2710,7 +2710,7 @@
       {
        "id": "RENT-A7-F6-P4",
        "name": "Deduction check",
-       "what": "Checks proposed deductions against the damage-liability rules: for careless damage when the landlord is insured, the lower of the insurance excess or four weeks' rent (to confirm), the pet damage rules since December 2025, and fair wear and tear.",
+       "what": "Checks proposed deductions against the country pack's damage-liability rules; in New Zealand: for careless damage when the landlord is insured, the lower of the insurance excess or four weeks' rent (to confirm), the pet damage rules since December 2025, and fair wear and tear.",
        "kind": "service",
        "size": "medium",
        "depends_on": [
@@ -2835,7 +2835,7 @@
       {
        "id": "RENT-A8-F2-P2",
        "name": "Payment matching",
-       "what": "Matches incoming payments to tenancies by reference, amount and payer, including rent paid straight from Work and Income and rent split between several payers.",
+       "what": "Matches incoming payments to tenancies by reference, amount and payer, including rent paid straight from a government agency (example: New Zealand's Work and Income) and rent split between several payers.",
        "kind": "service",
        "size": "medium",
        "depends_on": [
@@ -2848,7 +2848,7 @@
       {
        "id": "RENT-A8-F2-P3",
        "name": "Read-only bank feeds",
-       "what": "Research read-only bank feed providers, terms and cost, and accreditation under the Customer and Product Data Act where it applies, done once for the kit rather than per app.",
+       "what": "Research read-only bank feed providers, terms and cost, and accreditation under open banking law where it applies (example: New Zealand's Customer and Product Data Act), done once for the kit rather than per app.",
        "kind": "research",
        "size": "small",
        "depends_on": [],
@@ -2868,7 +2868,7 @@
       {
        "id": "RENT-A8-F2-P5",
        "name": "Several payers",
-       "what": "Records who pays which share of the rent, such as each flatmate or Work and Income, so matching and arrears count the whole rent.",
+       "what": "Records who pays which share of the rent, such as each flatmate or a government agency, so matching and arrears count the whole rent.",
        "kind": "data",
        "size": "small",
        "depends_on": [
@@ -3011,7 +3011,7 @@
       {
        "id": "RENT-A8-F5-P4",
        "name": "Late-rent strikes",
-       "what": "Counts each time rent is 5 or more working days late within 90 days and how long rent is in arrears, so the landlord knows when the Tribunal grounds are met (3 occasions in 90 days, or 21 days in arrears), with the required notice for each occasion.",
+       "what": "Counts late rent and how long rent is in arrears against the country pack's grounds, so the landlord knows when the tribunal grounds are met, with the required notice for each occasion; in New Zealand, rent 5 or more working days late on 3 occasions in 90 days, or 21 days in arrears.",
        "kind": "service",
        "size": "small",
        "depends_on": [
@@ -3043,7 +3043,7 @@
       {
        "id": "RENT-A8-F6-P2",
        "name": "Signed plan",
-       "what": "Both sides sign the plan, each approving it in person, so it can be shown later or turned into a FastTrack Resolution order (RENT-A13-F3-P3).",
+       "what": "Both sides sign the plan, each approving it in person, so it can be shown later or turned into a sealed settlement order (RENT-A13-F3-P3).",
        "kind": "interface",
        "size": "small",
        "depends_on": [
@@ -3136,7 +3136,7 @@
       {
        "id": "RENT-A8-F9-P1",
        "name": "Rent adjustment record",
-       "what": "A dated adjustment with its reason, agreed by both sides or ordered by the Tribunal.",
+       "what": "A dated adjustment with its reason, agreed by both sides or ordered by the tribunal.",
        "kind": "data",
        "size": "small",
        "depends_on": [
@@ -3215,7 +3215,7 @@
       {
        "id": "RENT-A9-F1-P3",
        "name": "Tenancy working days",
-       "what": "Tenancy law's own working-day rule, which also skips 25 December to 15 January (to confirm under RT01), layered on the kit's NZ holiday data.",
+       "what": "Tenancy law's own working-day rule for each country, layered on the kit's holiday data; in New Zealand it also skips 25 December to 15 January (to confirm under RT01).",
        "kind": "data",
        "size": "small",
        "depends_on": [
@@ -3295,7 +3295,7 @@
       {
        "id": "RENT-A9-F2-P4",
        "name": "Anti-social behaviour strikes",
-       "what": "Notices of anti-social behaviour with their required content, a count of notices within 90 days, and a clock for the 28 days the landlord has to apply to the Tribunal after the third.",
+       "what": "Notices of anti-social behaviour with their required content, a count of notices, and a clock for the time the landlord has to apply to the tribunal; in New Zealand, 28 days after the third notice within 90 days.",
        "kind": "service",
        "size": "small",
        "depends_on": [
@@ -3319,7 +3319,7 @@
       {
        "id": "RENT-A9-F2-P6",
        "name": "Retaliation warning",
-       "what": "Warns a landlord about to give notice soon after the tenant complained or asked for something, such as a repair or a Healthy Homes question, that the Tribunal can declare a retaliatory notice of no effect and award exemplary damages.",
+       "what": "Warns a landlord about to give notice soon after the tenant complained or asked for something, such as a repair or a rental standards question, that the tribunal can declare a retaliatory notice of no effect and award exemplary damages, as New Zealand's can.",
        "kind": "service",
        "size": "small",
        "depends_on": [
@@ -3362,7 +3362,7 @@
       {
        "id": "RENT-A9-F3-P3",
        "name": "Challenge a retaliatory notice",
-       "what": "When a termination notice arrives, shows the tenant they can apply to the Tribunal within 12 months if they think it is retaliatory, to have it set aside and seek exemplary damages, and that applying within 28 working days also lets them ask for the notice to be cancelled, with both clocks running.",
+       "what": "When a termination notice arrives, shows the tenant how to challenge it if they think it is retaliatory; in New Zealand, they can apply to the Tenancy Tribunal within 12 months to have it set aside and seek exemplary damages, and that applying within 28 working days also lets them ask for the notice to be cancelled, with both clocks running.",
        "kind": "interface",
        "size": "small",
        "depends_on": [
@@ -3541,7 +3541,7 @@
       {
        "id": "RENT-A9-F8-P4",
        "name": "Home destroyed or uninhabitable",
-       "what": "Rent abates; the landlord may end the tenancy with 7 days' notice and the tenant with 2; if only part of the home is damaged, the Tribunal decides.",
+       "what": "The country pack's rules apply. In New Zealand, rent abates; the landlord may end the tenancy with 7 days' notice and the tenant with 2; if only part of the home is damaged, the Tenancy Tribunal decides.",
        "kind": "service",
        "size": "medium",
        "depends_on": [
@@ -4200,13 +4200,13 @@
   },
   {
    "id": "RENT-A12",
-   "name": "Healthy Homes and compliance",
-   "summary": "A checklist and evidence store for every Healthy Homes standard, a heating calculator, the compliance and insulation statements each agreement needs, and a clear view of gaps for landlords and tenants.",
+   "name": "Rental standards and compliance",
+   "summary": "A checklist and evidence store for every rental standard the country sets (example: New Zealand's Healthy Homes standards), a heating calculator, the compliance and insulation statements each agreement needs, and a clear view of gaps for landlords and tenants.",
    "features": [
     {
      "id": "RENT-A12-F1",
-     "name": "Healthy Homes checklist",
-     "does": "Work through each Healthy Homes standard and see what is done and what isn't.",
+     "name": "Rental standards checklist (example: New Zealand's Healthy Homes standards)",
+     "does": "Work through each rental standard and see what is done and what isn't.",
      "priority": "core",
      "parts": [
       {
@@ -4221,7 +4221,7 @@
       {
        "id": "RENT-A12-F1-P2",
        "name": "Standards model",
-       "what": "Heating, insulation, ventilation, moisture and drainage, and draught stopping, as checkable items, with each version of the standards and the date it applies from.",
+       "what": "Each country's rental standards as checkable items, such as New Zealand's heating, insulation, ventilation, moisture and drainage, and draught stopping, with each version of the standards and the date it applies from.",
        "kind": "data",
        "size": "medium",
        "depends_on": [
@@ -4252,7 +4252,7 @@
       {
        "id": "RENT-A12-F2-P1",
        "name": "Heating requirement calculation",
-       "what": "Applies the right heating formula by dwelling type, build date and tenancy date, including the different formula for post-2008 homes and some apartments and the 2026 changes, tested against worked examples.",
+       "what": "Applies the right heating formula from the country pack by dwelling type, build date and tenancy date; in New Zealand, including the different formula for post-2008 homes and some apartments and the 2026 changes, tested against worked examples.",
        "kind": "library",
        "size": "medium",
        "depends_on": [
@@ -4277,7 +4277,7 @@
       {
        "id": "RENT-A12-F2-P3",
        "name": "Formulas and test cases",
-       "what": "Research each version of the heating, ventilation and moisture rules, including the 2022, September 2025 and 2026 changes, and collect worked examples to test against.",
+       "what": "Research each version of the heating, ventilation and moisture rules in each country, including New Zealand's 2022, September 2025 and 2026 changes, and collect worked examples to test against.",
        "kind": "research",
        "size": "small",
        "depends_on": [],
@@ -4309,7 +4309,7 @@
     {
      "id": "RENT-A12-F4",
      "name": "Compliance statements",
-     "does": "Produce the Healthy Homes compliance statement and insulation statement for each new or renewed agreement.",
+     "does": "Produce the compliance statements each new or renewed agreement needs (example: New Zealand's Healthy Homes compliance statement and insulation statement).",
      "priority": "core",
      "parts": [
       {
@@ -4413,8 +4413,8 @@
   },
   {
    "id": "RENT-A13",
-   "name": "Ending tenancies, disputes and the Tribunal",
-   "summary": "Tenancies end with the right notice and one move-out flow; disagreements are settled with structured offers where possible, made enforceable through FastTrack Resolution, or go to the Tenancy Tribunal with an evidence pack built from records already kept. Only the Tribunal decides tenancy disputes; member panels handle only complaints about the platform and paid manager and helper jobs.",
+   "name": "Ending tenancies, disputes and the tribunal",
+   "summary": "Tenancies end with the right notice and one move-out flow; disagreements are settled with structured offers where possible, made enforceable through the official fast route where there is one (example: New Zealand's FastTrack Resolution), or go to the tenancy tribunal or court with an evidence pack built from records already kept. Only the tribunal or court decides tenancy disputes; member panels handle only complaints about the platform and paid manager and helper jobs.",
    "features": [
     {
      "id": "RENT-A13-F1",
@@ -4471,7 +4471,7 @@
     {
      "id": "RENT-A13-F3",
      "name": "Settle it between you",
-     "does": "Settle a disagreement with structured offers before going to the Tribunal.",
+     "does": "Settle a disagreement with structured offers before going to the tribunal.",
      "priority": "core",
      "parts": [
       {
@@ -4499,8 +4499,8 @@
       },
       {
        "id": "RENT-A13-F3-P3",
-       "name": "FastTrack Resolution",
-       "what": "Turns an agreed settlement of money owed into an application for a Mediator's Order sealed by the Tribunal, stating the amount, the repayment plan, when payments start and what happens on a missed payment; the tenant is told before filing, a mediator then checks the terms with them, and the filing fee is $28.",
+       "name": "Sealed settlement order (example: New Zealand's FastTrack Resolution)",
+       "what": "Turns an agreed settlement of money owed into an order the tribunal seals, where the country has such a route. In New Zealand: an application for a Mediator's Order sealed by the Tenancy Tribunal, stating the amount, the repayment plan, when payments start and what happens on a missed payment; the tenant is told before filing, a mediator then checks the terms with them, and the filing fee is $28.",
        "kind": "service",
        "size": "medium",
        "depends_on": [
@@ -4514,8 +4514,8 @@
     },
     {
      "id": "RENT-A13-F4",
-     "name": "Tenancy Tribunal pack",
-     "does": "Build an evidence pack for the Tenancy Tribunal from the records already kept.",
+     "name": "Tenancy tribunal pack",
+     "does": "Build an evidence pack for the tenancy tribunal or court (example: New Zealand's Tenancy Tribunal) from the records already kept.",
      "priority": "core",
      "parts": [
       {
@@ -4536,7 +4536,7 @@
       {
        "id": "RENT-A13-F4-P2",
        "name": "Tribunal and mediation steps",
-       "what": "Research the application steps, formats and fees for mediation and the Tribunal.",
+       "what": "Research the application steps, formats and fees for mediation and the tribunal in each country.",
        "kind": "research",
        "size": "small",
        "depends_on": [],
@@ -4558,7 +4558,7 @@
     {
      "id": "RENT-A13-F5",
      "name": "Track orders",
-     "does": "Record Tribunal orders and their dates, see rehearing and appeal deadlines, and get help when an order isn't paid.",
+     "does": "Record tribunal orders and their dates, see rehearing and appeal deadlines, and get help when an order isn't paid.",
      "priority": "next",
      "parts": [
       {
@@ -4662,7 +4662,7 @@
       {
        "id": "RENT-A13-F8-P2",
        "name": "Which disputes go where",
-       "what": "Tenancy disputes go only to the Tenancy Tribunal and never to a member panel; panels handle only complaints about the platform and paid manager and helper jobs.",
+       "what": "Tenancy disputes go only to the tenancy tribunal or court and never to a member panel; panels handle only complaints about the platform and paid manager and helper jobs.",
        "kind": "data",
        "size": "small",
        "depends_on": [
@@ -4930,13 +4930,13 @@
     {
      "id": "RENT-A14-F10",
      "name": "Platform income reporting",
-     "does": "Know whether Spare Rent must report landlords' and managers' income to IRD, and see what was sent.",
+     "does": "Know whether Spare Rent must report landlords' and managers' income to the tax office (example: New Zealand's IRD), and see what was sent.",
      "priority": "core",
      "parts": [
       {
        "id": "RENT-A14-F10-P1",
        "name": "Is Spare Rent a reporting platform?",
-       "what": "Whether IRD's digital platform information rules cover Spare Rent: renting out property, residential included, and personal services count; advertising alone does not, but agreements, rent tracking and paid manager services may.",
+       "what": "Whether each country's digital platform reporting rules cover Spare Rent, starting with IRD's in New Zealand: renting out property, residential included, and personal services count; advertising alone does not, but agreements, rent tracking and paid manager services may.",
        "kind": "research",
        "size": "small",
        "depends_on": [
@@ -4959,7 +4959,7 @@
       {
        "id": "RENT-A14-F10-P3",
        "name": "Yearly report and seller copies",
-       "what": "Files the yearly report through the kit by 7 February and gives each landlord and manager a copy of what was sent.",
+       "what": "Files the yearly report through the kit by each country's deadline (7 February in New Zealand) and gives each landlord and manager a copy of what was sent.",
        "kind": "service",
        "size": "small",
        "depends_on": [
@@ -5013,7 +5013,7 @@
     {
      "id": "RENT-A15-F2",
      "name": "Book single services",
-     "does": "Book only what you need, such as letting, hosting viewings, an inspection or a Tribunal pack.",
+     "does": "Book only what you need, such as letting, hosting viewings, an inspection or a tribunal pack.",
      "priority": "next",
      "parts": [
       {
@@ -5271,7 +5271,7 @@
       {
        "id": "RENT-A15-F9-P5",
        "name": "Tax invoices and income reporting",
-       "what": "GST tax invoices for their fees, and their income reported as personal services where the platform rules apply.",
+       "what": "Tax invoices for their fees, and their income reported as personal services where the platform rules apply.",
        "kind": "service",
        "size": "small",
        "depends_on": [
@@ -5441,7 +5441,7 @@
       {
        "id": "RENT-A16-F6-P2",
        "name": "Tenancy wording in translation",
-       "what": "Checks the kit's translation at cost on tenancy wording, with te reo Māori checked by fluent speakers.",
+       "what": "Checks the kit's translation at cost on tenancy wording, with each launch country's own languages checked by fluent speakers (example: te reo Māori).",
        "kind": "research",
        "size": "small",
        "depends_on": [
@@ -5601,7 +5601,7 @@
       {
        "id": "RENT-A17-F2-P2",
        "name": "Scam guide",
-       "what": "Plain advice on the common rental scams, how to check official Tenancy Services messages, and what to do.",
+       "what": "Plain advice on the common rental scams, how to check official messages from the bond body (example: New Zealand's Tenancy Services), and what to do.",
        "kind": "data",
        "size": "small",
        "depends_on": [
@@ -5650,7 +5650,7 @@
       {
        "id": "RENT-A17-F4-P1",
        "name": "Discrimination reports",
-       "what": "A report type that explains the grounds and points to the Human Rights Commission.",
+       "what": "A report type that explains the grounds and points to the human rights body (example: New Zealand's Human Rights Commission).",
        "kind": "service",
        "size": "small",
        "depends_on": [
@@ -6184,7 +6184,7 @@
   {
    "id": "RENT-A20",
    "name": "Access for everyone",
-   "summary": "Spare Rent works for everyone: with a screen reader or keyboard, in plain words, easy read and NZ Sign Language, in te reo Māori and other languages, offline, on any phone and on slow connections, by paper and phone for people who are offline, and with a trusted helper for anyone who needs one.",
+   "summary": "Spare Rent works for everyone: with a screen reader or keyboard, in plain words, easy read and the country's sign language, in each launch country's own languages and others (example: NZ Sign Language and te reo Māori in New Zealand), offline, on any phone and on slow connections, by paper and phone for people who are offline, and with a trusted helper for anyone who needs one.",
    "features": [
     {
      "id": "RENT-A20-F1",
@@ -6232,8 +6232,8 @@
       },
       {
        "id": "RENT-A20-F2-P2",
-       "name": "Easy read and NZ Sign Language",
-       "what": "Easy-read and NZ Sign Language versions of tenants' and landlords' main rights, on the kit's easy-read support.",
+       "name": "Easy read and sign language",
+       "what": "Easy-read and sign language versions (example: NZ Sign Language) of tenants' and landlords' main rights, on the kit's easy-read support.",
        "kind": "data",
        "size": "medium",
        "depends_on": [
@@ -6247,7 +6247,7 @@
     {
      "id": "RENT-A20-F3",
      "name": "Many languages",
-     "does": "Use the app in English or te reo Māori first, then other languages.",
+     "does": "Use the app in English or each launch country's own languages first (example: te reo Māori), then other languages.",
      "priority": "core",
      "parts": [
       {
@@ -6263,8 +6263,8 @@
       },
       {
        "id": "RENT-A20-F3-P2",
-       "name": "Te reo Māori",
-       "what": "A full te reo Māori interface, made with fluent speakers.",
+       "name": "Launch country languages (example: te reo Māori)",
+       "what": "A full interface in each launch country's own languages, made with fluent speakers, starting with te reo Māori for New Zealand.",
        "kind": "data",
        "size": "medium",
        "depends_on": [
@@ -6446,7 +6446,7 @@
   {
    "id": "RENT-A21",
    "name": "Countries and rule packs",
-   "summary": "Tenancy law lives in rule packs, not in code, layered on the kit's country packs: New Zealand first, then other countries, states, provinces and cities, each with its own notices, clocks, caps, statements, bond scheme and duties, lawyer-checked and tested in the open.",
+   "summary": "Tenancy law lives in rule packs, not in code, layered on the kit's country packs for any country, state, province or city, with New Zealand the first pack, each with its own notices, clocks, caps, statements, bond scheme and duties, lawyer-checked and tested in the open.",
    "features": [
     {
      "id": "RENT-A21-F1",
@@ -6470,7 +6470,7 @@
       {
        "id": "RENT-A21-F1-P2",
        "name": "Tenancy law as product rules",
-       "what": "Research every duty, notice and timeframe in New Zealand tenancy law, with sources.",
+       "what": "Research every duty, notice and timeframe in each country's tenancy law, with sources, starting with New Zealand's for the first pack.",
        "kind": "research",
        "size": "large",
        "depends_on": [],
@@ -6534,7 +6534,7 @@
     },
     {
      "id": "RENT-A21-F3",
-     "name": "Bond and deposit schemes abroad",
+     "name": "Bond and deposit schemes in each country",
      "does": "Lodge bonds and deposits with the right scheme in each country.",
      "priority": "later",
      "parts": [
@@ -6619,7 +6619,7 @@
     {
      "id": "RENT-A21-F6",
      "name": "Community-made rule packs",
-     "does": "Let members in other countries write and maintain rule packs, reviewed by owners.",
+     "does": "Let members in any country write and maintain rule packs, reviewed by owners.",
      "priority": "later",
      "parts": [
       {
@@ -6681,7 +6681,7 @@
     {
      "id": "RENT-A22-F1",
      "name": "Join as a member",
-     "does": "Join the co-op as a landlord, renter or manager and get one vote.",
+     "does": "Join free as a landlord, renter or manager and get one vote.",
      "priority": "core",
      "parts": [
       {
@@ -6732,7 +6732,7 @@
       {
        "id": "RENT-A22-F2-P3",
        "name": "Fee charging and tax invoices",
-       "what": "Charges the landlord the fee with GST and a tax invoice through the kit's tax service.",
+       "what": "Charges the landlord the fee with sales tax and a tax invoice through the kit's tax service.",
        "kind": "integration",
        "size": "small",
        "depends_on": [
@@ -6797,7 +6797,7 @@
       {
        "id": "RENT-A22-F4-P2",
        "name": "Who votes on Spare Rent",
-       "what": "Who votes on Spare Rent's fees and rules: landlords, renters, co-op managers or all three, balanced so neither landlords nor renters outvote the other on rules that affect both, and whether renters who pay no fee count as transacting shareholders under the co-operative test.",
+       "what": "Who votes on Spare Rent's fees and rules: landlords, renters, co-op managers or all three, balanced so neither landlords nor renters outvote the other on rules that affect both, .",
        "kind": "research",
        "size": "small",
        "depends_on": [
@@ -6927,7 +6927,7 @@
       {
        "id": "RENT-A22-F7-P3",
        "name": "The platform's privacy duties",
-       "what": "Research Spare Rent's own Privacy Act duties beyond the kit's collection notices, such as the Privacy Commissioner's rental guidance.",
+       "what": "Research Spare Rent's own privacy law duties in each country beyond the kit's collection notices, such as New Zealand's Privacy Commissioner's rental guidance.",
        "kind": "research",
        "size": "small",
        "depends_on": [
@@ -7021,28 +7021,28 @@
  ],
  "assess": [
   "Can a landlord go from adding a property to a signed agreement and a lodged bond without a property manager, and does each step say what the law needs?",
-  "Is every legal clock right for a tenancy signed on a given date: bond lodged within 23 working days, entry notice, rent rise once in 12 months with 60 days' notice, and the 90, 42 and 21 day ending notices?",
+  "In the New Zealand pack, is every legal clock right for a tenancy signed on a given date: bond lodged within 23 working days, entry notice, rent rise once in 12 months with 60 days' notice, and the 90, 42 and 21 day ending notices?",
   "Does the platform ever hold a bond or rent? It must never hold a bond, and rent should only pass through a regulated payment provider if both sides choose.",
-  "Has the co-op signed MBIE's API Access Agreement, does each landlord give RealMe consent, and which bond operations go through the API and which through Bond Hub? What happens to lodgement if that access is late?",
+  "For the New Zealand pack, has the co-op signed MBIE's API Access Agreement, does each landlord give RealMe consent, and which bond operations go through the API and which through Bond Hub? What happens to lodgement if that access is late?",
   "Can a renter apply once and see exactly what each landlord sees, when, and for how long it is kept?",
-  "Does the application flow ask only what the Privacy Commissioner's guidance allows at each stage, and does it tell renters when information comes from others (IPP 3A)?",
-  "Are the Healthy Homes compliance statement, insulation statement and insurance statement produced correctly for a new agreement?",
+  "Does the application flow ask only what the privacy regulator's guidance allows at each stage (example: New Zealand's Privacy Commissioner), and does it tell renters when information comes from others (IPP 3A in New Zealand)?",
+  "Are the required statements, such as New Zealand's Healthy Homes compliance statement, insulation statement and insurance statement, produced correctly for a new agreement?",
   "What would the at-cost fee be per tenancy per month, compared with 7-10% of rent plus a letting fee?",
   "How will renters find listings if the big listing sites won't take a feed, and is the reach research (HM02) enough?",
   "Are reviews of landlords and tenants fair and legal, and who decides when one is challenged?",
   "Does an inspection work start to finish with no signal, and do the photos keep their dates?",
-  "Is it usable in te reo Māori and with a screen reader from the first release?",
+  "Is it usable in each launch country's own languages (example: te reo Māori) and with a screen reader from the first release?",
   "Which questions need a lawyer before launch: whether the co-op or its managers count as agents under tenancy law, client money, privacy duties and reviews?",
   "Which core parts make the smallest first release a landlord and renter could actually use?",
   "How hard is it to add another country's rule pack, and who keeps the New Zealand pack current when the law changes?",
   "Does anything in the demo look or read like an incumbent's product? It must be our own design and our own words.",
   "Is a renter ever charged anything connected to getting, keeping or renewing a tenancy, including a credit check? They must not be.",
   "Does any software or agent score, rank or decline applicants? A person must decide, against criteria set beforehand.",
-  "Do tenants know that Tenancy Services will email or text them directly about bond refunds, and can they tell those messages from scams?",
-  "Is Spare Rent a reporting platform under IRD's digital platform rules, and if so is the report filed by 7 February?",
+  "Do tenants know that the bond body (example: New Zealand's Tenancy Services) will email or text them directly about bond refunds, and can they tell those messages from scams?",
+  "Is Spare Rent a reporting platform under each country's digital platform rules, and if so is each report filed on time (for New Zealand, IRD's rules and 7 February)?",
   "Can a tenant, co-tenant or guarantor who never joins still sign, get notices, see reports and report repairs?",
   "When a rule or clock turns out wrong, who finds the affected tenancies, who tells both sides, and what cover pays for losses?",
   "Has the kit taken on the parts Spare Rent shares with other programs: the property record, document vault, tenancy rules, formal notices and service, bank feeds and text recognition?",
-  "Are there work-board pieces for the Tenancy Bond API research and for the parts of RT01 that need their own piece or a lawyer?"
+  "Are there work-board pieces for the bond system API research (example: New Zealand's Tenancy Bond API) and for the parts of RT01 that need their own piece or a lawyer?"
  ]
 }
