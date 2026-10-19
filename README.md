@@ -14,6 +14,8 @@ Big platforms take a large cut from the people who do the work, and design and o
 
 ## How it all fits together
 
+To build on Spareware, add a program, a plugin, a country pack or a language, read [EXTENDING.md](EXTENDING.md): how it stays open and expandable for decades.
+
 Every program sits on one shared kit, so each new app gets accounts, payments, AI access and the open cost ledger from day one, and a fix to the kit improves every app at once. The full map is [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ```mermaid
