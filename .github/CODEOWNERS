@@ -3,15 +3,15 @@
 # get their own reviewers here, so review grows with the number of contributors (see EXTENDING.md, "Review at scale").
 # Keep the most specific lines last: GitHub uses the last matching line.
 
-*                               @Vanman989
+*                               @spareware-co-op/owners
 
 # Shared foundations: changes here affect every program, so they always need an owner's review.
-/projects/kit/                  @Vanman989
-/projects/engines/              @Vanman989
-/design/                        @Vanman989
-/.github/                       @Vanman989
-/AGENTS.md                      @Vanman989
-/ARCHITECTURE.md                @Vanman989
-/EXTENDING.md                   @Vanman989
-/LICENSE                        @Vanman989
-/LICENSE-APACHE                 @Vanman989
+/projects/kit/                  @spareware-co-op/owners
+/projects/engines/              @spareware-co-op/owners
+/design/                        @spareware-co-op/owners
+/.github/                       @spareware-co-op/owners
+/AGENTS.md                      @spareware-co-op/owners
+/ARCHITECTURE.md                @spareware-co-op/owners
+/EXTENDING.md                   @spareware-co-op/owners
+/LICENSE                        @spareware-co-op/owners
+/LICENSE-APACHE                 @spareware-co-op/owners
