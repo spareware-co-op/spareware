@@ -10,22 +10,22 @@ Each program has a feature map, read top-down: areas, then what a person can do 
 
 | Program | Replaces | Areas | Features | Parts | Core parts | Feature map | Demo |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Shared kit and co-op portal, with the shared engines | The parts every platform rebuilds or rents | 28 | 369 | 765 | 656 | [projects/kit/FEATURES.md](projects/kit/FEATURES.md) | [Demo](https://spareware-co-op.github.io/spareware/kit/) |
-| Spare Construct | Revit, and the add-ins people buy for it | 24 | 194 | 639 | 340 | [projects/spare-construct/FEATURES.md](projects/spare-construct/FEATURES.md) | [Demo](https://spareware-co-op.github.io/spareware/spare-construct/) |
-| Spare Studio (working name) | Adobe's apps | 21 | 202 | 562 | 320 | [projects/spare-studio/FEATURES.md](projects/spare-studio/FEATURES.md) | [Demo](https://spareware-co-op.github.io/spareware/spare-studio/) |
-| Spare Social (working name) | TikTok, YouTube, Instagram and Facebook | 23 | 199 | 525 | 345 | [projects/spare-social/FEATURES.md](projects/spare-social/FEATURES.md) | [Demo](https://spareware-co-op.github.io/spareware/spare-social/) |
-| Spare Office | Microsoft 365 | 21 | 275 | 641 | 416 | [projects/spare-office/FEATURES.md](projects/spare-office/FEATURES.md) | [Demo](https://spareware-co-op.github.io/spareware/spare-office/) |
-| Spare OS | Paying for Windows | 21 | 193 | 450 | 297 | [projects/spare-os/FEATURES.md](projects/spare-os/FEATURES.md) | [Demo](https://spareware-co-op.github.io/spareware/spare-os/) |
-| Spare Ride | Uber | 23 | 250 | 482 | 309 | [projects/spare-ride/FEATURES.md](projects/spare-ride/FEATURES.md) | [Demo](https://spareware-co-op.github.io/spareware/spare-ride/) |
-| Spare Food | Uber Eats, DoorDash | 20 | 193 | 448 | 328 | [projects/spare-food/FEATURES.md](projects/spare-food/FEATURES.md) | [Demo](https://spareware-co-op.github.io/spareware/spare-food/) |
-| Spare Stay | Airbnb, Booking.com | 22 | 168 | 341 | 208 | [projects/spare-stay/FEATURES.md](projects/spare-stay/FEATURES.md) | [Demo](https://spareware-co-op.github.io/spareware/spare-stay/) |
-| Spare Home | Agent commissions and listing fees when selling a home | 19 | 164 | 372 | 271 | [projects/spare-home/FEATURES.md](projects/spare-home/FEATURES.md) | [Demo](https://spareware-co-op.github.io/spareware/spare-home/) |
-| Spare Rent | Property manager and listing fees | 22 | 191 | 456 | 330 | [projects/spare-rent/FEATURES.md](projects/spare-rent/FEATURES.md) | [Demo](https://spareware-co-op.github.io/spareware/spare-rent/) |
-| Spare Work | Trades and freelance marketplaces | 22 | 153 | 397 | 280 | [projects/spare-work/FEATURES.md](projects/spare-work/FEATURES.md) | [Demo](https://spareware-co-op.github.io/spareware/spare-work/) |
-| Spare Market | Trade Me, eBay, Etsy, Shopify | 22 | 177 | 388 | 157 | [projects/spare-market/FEATURES.md](projects/spare-market/FEATURES.md) | [Demo](https://spareware-co-op.github.io/spareware/spare-market/) |
+| Shared kit and co-op portal, with the shared engines | The parts every platform rebuilds or rents | 28 | 369 | 765 | 656 | [projects/kit/FEATURES.md](projects/kit/FEATURES.md) | [Demo](https://spareware.app/kit/) |
+| Spare Construct | Revit, and the add-ins people buy for it | 24 | 194 | 639 | 340 | [projects/spare-construct/FEATURES.md](projects/spare-construct/FEATURES.md) | [Demo](https://spareware.app/spare-construct/) |
+| Spare Studio (working name) | Adobe's apps | 21 | 202 | 562 | 320 | [projects/spare-studio/FEATURES.md](projects/spare-studio/FEATURES.md) | [Demo](https://spareware.app/spare-studio/) |
+| Spare Social (working name) | TikTok, YouTube, Instagram and Facebook | 23 | 199 | 525 | 345 | [projects/spare-social/FEATURES.md](projects/spare-social/FEATURES.md) | [Demo](https://spareware.app/spare-social/) |
+| Spare Office | Microsoft 365 | 21 | 275 | 641 | 416 | [projects/spare-office/FEATURES.md](projects/spare-office/FEATURES.md) | [Demo](https://spareware.app/spare-office/) |
+| Spare OS | Paying for Windows | 21 | 193 | 450 | 297 | [projects/spare-os/FEATURES.md](projects/spare-os/FEATURES.md) | [Demo](https://spareware.app/spare-os/) |
+| Spare Ride | Uber | 23 | 250 | 482 | 309 | [projects/spare-ride/FEATURES.md](projects/spare-ride/FEATURES.md) | [Demo](https://spareware.app/spare-ride/) |
+| Spare Food | Uber Eats, DoorDash | 20 | 193 | 448 | 328 | [projects/spare-food/FEATURES.md](projects/spare-food/FEATURES.md) | [Demo](https://spareware.app/spare-food/) |
+| Spare Stay | Airbnb, Booking.com | 22 | 168 | 341 | 208 | [projects/spare-stay/FEATURES.md](projects/spare-stay/FEATURES.md) | [Demo](https://spareware.app/spare-stay/) |
+| Spare Home | Agent commissions and listing fees when selling a home | 19 | 164 | 372 | 271 | [projects/spare-home/FEATURES.md](projects/spare-home/FEATURES.md) | [Demo](https://spareware.app/spare-home/) |
+| Spare Rent | Property manager and listing fees | 22 | 191 | 456 | 330 | [projects/spare-rent/FEATURES.md](projects/spare-rent/FEATURES.md) | [Demo](https://spareware.app/spare-rent/) |
+| Spare Work | Trades and freelance marketplaces | 22 | 153 | 397 | 280 | [projects/spare-work/FEATURES.md](projects/spare-work/FEATURES.md) | [Demo](https://spareware.app/spare-work/) |
+| Spare Market | Trade Me, eBay, Etsy, Shopify | 22 | 177 | 388 | 157 | [projects/spare-market/FEATURES.md](projects/spare-market/FEATURES.md) | [Demo](https://spareware.app/spare-market/) |
 | **All maps** |  | **288** | **2728** | **6466** | **4257** |  |  |
 
-Core parts are the parts of core features. The shared kit row includes the shared engines (KIT-A27), which are built in `projects/engines` and mapped in the kit's map so every program has one place to depend on. The demos are published on the [Spareware site](https://spareware-co-op.github.io/spareware/).
+Core parts are the parts of core features. The shared kit row includes the shared engines (KIT-A27), which are built in `projects/engines` and mapped in the kit's map so every program has one place to depend on. The demos are published on the [Spareware site](https://spareware.app/).
 
 ## What each program takes from the shared kit
 
@@ -85,16 +85,16 @@ A lean for discussion, from what the maps show. The first marketplace is decided
 
 ## Feature maps and demos
 
-- **Shared kit and co-op portal, with the shared engines:** [feature map](projects/kit/FEATURES.md) · [demo](https://spareware-co-op.github.io/spareware/kit/)
-- **Spare Construct:** [feature map](projects/spare-construct/FEATURES.md) · [demo](https://spareware-co-op.github.io/spareware/spare-construct/)
-- **Spare Studio (working name):** [feature map](projects/spare-studio/FEATURES.md) · [demo](https://spareware-co-op.github.io/spareware/spare-studio/)
-- **Spare Social (working name):** [feature map](projects/spare-social/FEATURES.md) · [demo](https://spareware-co-op.github.io/spareware/spare-social/)
-- **Spare Office:** [feature map](projects/spare-office/FEATURES.md) · [demo](https://spareware-co-op.github.io/spareware/spare-office/)
-- **Spare OS:** [feature map](projects/spare-os/FEATURES.md) · [demo](https://spareware-co-op.github.io/spareware/spare-os/)
-- **Spare Ride:** [feature map](projects/spare-ride/FEATURES.md) · [demo](https://spareware-co-op.github.io/spareware/spare-ride/)
-- **Spare Food:** [feature map](projects/spare-food/FEATURES.md) · [demo](https://spareware-co-op.github.io/spareware/spare-food/)
-- **Spare Stay:** [feature map](projects/spare-stay/FEATURES.md) · [demo](https://spareware-co-op.github.io/spareware/spare-stay/)
-- **Spare Home:** [feature map](projects/spare-home/FEATURES.md) · [demo](https://spareware-co-op.github.io/spareware/spare-home/)
-- **Spare Rent:** [feature map](projects/spare-rent/FEATURES.md) · [demo](https://spareware-co-op.github.io/spareware/spare-rent/)
-- **Spare Work:** [feature map](projects/spare-work/FEATURES.md) · [demo](https://spareware-co-op.github.io/spareware/spare-work/)
-- **Spare Market:** [feature map](projects/spare-market/FEATURES.md) · [demo](https://spareware-co-op.github.io/spareware/spare-market/)
+- **Shared kit and co-op portal, with the shared engines:** [feature map](projects/kit/FEATURES.md) · [demo](https://spareware.app/kit/)
+- **Spare Construct:** [feature map](projects/spare-construct/FEATURES.md) · [demo](https://spareware.app/spare-construct/)
+- **Spare Studio (working name):** [feature map](projects/spare-studio/FEATURES.md) · [demo](https://spareware.app/spare-studio/)
+- **Spare Social (working name):** [feature map](projects/spare-social/FEATURES.md) · [demo](https://spareware.app/spare-social/)
+- **Spare Office:** [feature map](projects/spare-office/FEATURES.md) · [demo](https://spareware.app/spare-office/)
+- **Spare OS:** [feature map](projects/spare-os/FEATURES.md) · [demo](https://spareware.app/spare-os/)
+- **Spare Ride:** [feature map](projects/spare-ride/FEATURES.md) · [demo](https://spareware.app/spare-ride/)
+- **Spare Food:** [feature map](projects/spare-food/FEATURES.md) · [demo](https://spareware.app/spare-food/)
+- **Spare Stay:** [feature map](projects/spare-stay/FEATURES.md) · [demo](https://spareware.app/spare-stay/)
+- **Spare Home:** [feature map](projects/spare-home/FEATURES.md) · [demo](https://spareware.app/spare-home/)
+- **Spare Rent:** [feature map](projects/spare-rent/FEATURES.md) · [demo](https://spareware.app/spare-rent/)
+- **Spare Work:** [feature map](projects/spare-work/FEATURES.md) · [demo](https://spareware.app/spare-work/)
+- **Spare Market:** [feature map](projects/spare-market/FEATURES.md) · [demo](https://spareware.app/spare-market/)
