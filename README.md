@@ -140,6 +140,7 @@ Any major change, such as starting or dropping a program, changing an architectu
 
 ## Ground rules for every piece
 
+- **Start with "Can we?"** Every idea, request and problem starts from "Can we do this, and how?", never "it doesn't" or "we can't". If something isn't possible yet, say what it would take to make it possible. The legal rules above always still apply.
 - Practical and easy to use: every app is built for the people who will use it every day, and should be simple to pick up and quick to work in.
 - Port proven methods: read how the best open project does it before designing anything.
 - Measured, not assumed: tests and benchmarks with every change; a slower change does not merge.

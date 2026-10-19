@@ -81,6 +81,7 @@ Design tools lean on the Rust core pattern mapped in [Spare Construct's ARCHITEC
 5. **Open formats and open data.** Members can take their data and their history with them.
 6. **Built legally, or not at all.** See the README. No exceptions.
 7. **Port proven methods; measure everything.** The same ground rules as Spare Construct.
+8. **Start with "Can we?"** Every idea and problem starts from how it could be done, never "it doesn't". If something isn't possible yet, say what it would take.
 
 ## The shared kit
 

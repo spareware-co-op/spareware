@@ -59,6 +59,7 @@ Who has what, at a glance: [checked out](https://github.com/spareware-co-op/spar
 
 **Always:**
 
+- Start with "Can we?": when something looks unsupported or hard, answer with how it could be done and what it would take, never just "it doesn't" or "we can't". Only the legal rules in step 5 are a hard no.
 - Read how the best open project does it before designing; name the method you are following.
 - Research before stating anything you are unsure of, and mark anything unverified.
 - Stay inside the piece. If something else looks broken, note it on the pull request; do not fix it.
