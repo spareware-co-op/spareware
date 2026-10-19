@@ -424,32 +424,78 @@ Every saved state is a version, and versioning is automated: versions are made a
 
 ## Sharing with consultants
 
-Sharing between firms is built into the app, not a separate platform. It does the job of Autodesk Docs and Design Collaboration, without bridging projects, matching regions or copying folders.
+Sharing between firms is built into the app, not a separate platform. It does the job of Autodesk Docs and Design Collaboration, without bridging projects, matching regions or copying folders. The files side (folders, status, review and transmittals) is in Project data management, next. Feature map: area CON-A25.
 
 **High level**
 
-- **Shared project space**: one project that every firm on the job joins with its own team. Each firm's model stays its own, on its own server or co-op servers.
-- **Packages**: a firm publishes a package (chosen models, views and sheets) when it is ready. Everyone sees it on the sharing timeline.
-- **Sharing timeline**: like Design Collaboration's timeline, with a row for each firm's team and every package as a mark along it, showing who has taken it in. It is the main view of the sharing space and is open from the start, not a collapsed strip at the top of the page.
-- **Take it in when you're ready**: each firm chooses when to take in a new package, so a consultant's change never lands in the middle of someone's work. Live sync stays inside each firm's own team.
+- **Shared project space**: one project that every firm on the job joins. Each firm keeps its own models, on its own server or co-op servers.
+- **Team spaces**: each firm, or each discipline in a large firm, works in its own team space inside the project. Work in progress stays in the team. Inside a team, people take turns through check-out in the first release, and edit live once multi-user sync arrives (see Multi-user and history).
+- **Packages**: a team publishes a package when it is ready: chosen models, views, sheets and files, as one numbered version with a note. A package is the only way work leaves a team.
+- **Sharing timeline**: the main view of the sharing space, open from the start, not a collapsed strip at the top of the page. It does the job of Design Collaboration's timeline in our own design: a row for each team, every package as a mark along it, and for each mark which teams have taken it in and what changed.
+- **Take it in when you're ready**: each team chooses when to take in another team's package, so a consultant's change never lands in the middle of someone's work. Until then its linked copy stays on the package it last took in. A team can stay on an earlier package, or go back to one, with the reason recorded.
+- **Compare any two packages**: in 3D, in plans, on sheets and in a list, with the same compare as versions (see Versions and revisions).
 - **Linked consultant models**: a package taken in shows as a linked model, with what changed since the last package marked in 3D, in plans and in a list.
-- **Other software**: consultants on Revit, Archicad, Tekla or other tools publish IFC into the same space. It is versioned and compared like everyone else's. Clash issues travel as BCF.
-- **Issues and markups**: raised on the model or a sheet, assigned to a firm or a person, and tracked to closed across every firm.
-- **Documents**: drawing register, transmittals, received documents and approvals all live in the shared space, tied to the built-in document control.
+- **Other software**: consultants on Revit, Archicad, Tekla or other tools publish IFC and PDFs into their own team space. They are versioned and compared like everyone else's. Clash issues travel as BCF.
+- **Issues and markups**: raised on the model, a sheet or a file, assigned to a firm or a person, and tracked to closed across every firm.
 - **Permissions**: set per firm, team and package. Each firm decides what leaves it; design options and work in progress never leave unless it says so.
+- **Record**: every publish, take-in and go-back is recorded: who, when, which package and which version.
 
 **Low level**
 
-- A package is a signed pointer into the publishing firm's operation log plus the chunks it covers, so taking one in downloads only the chunks that changed.
+- A package is a signed pointer into the publishing team's operation log plus the chunks and files it covers.
+- Chunks and files are content-addressed: each one's ID is a hash of its contents. This is Speckle's method: its SDKs (Apache-2.0) set an object's ID to a SHA-256 hash of the serialised object, and a sender first asks the server which IDs it already holds, then sends only the rest. So a new package shares every unchanged chunk with the last one, and taking it in downloads only what changed.
 - Elements keep their permanent IDs across packages, so renaming a model or a sheet never breaks its version history.
+- What goes into a package is filtered by discipline ownership, by view and by permissions, the same rules used everywhere else.
+- Permissions are relationships: this person is in that team, that team may view this package, this folder sits inside that one. One check walks them. This is the method of Google's Zanzibar paper, which OpenFGA and SpiceDB (both Apache-2.0) implement. The kit owns the permission checks (KIT-A15-F1-P4), so which engine it uses is the kit's decision.
+- The timeline is drawn from the sharing record, which is part of the operation log, so it can never disagree with what happened.
+- Publishing a package moves what it holds to the shared state (see Project data management).
 - Each firm's server joins the shared space directly, so firms can host anywhere. The space itself can sit with the lead firm, the client or co-op servers.
-- What goes into a package is filtered by discipline ownership and by view, using the same rules as permissions.
-- Every publish and take-in is recorded: who, when, which version.
 
 **Discuss**
 
 - Who hosts the shared space by default: the lead consultant, the client, or co-op servers?
 - Can Revit users publish straight into the space through the Revit add-in exporter, or through IFC only at first?
+- Team spaces are in the first release, but live sync inside a team waits for multi-user sync (next). Is check-out inside a team enough for the first release?
+
+## Project data management
+
+Every project file lives in one versioned store with the models. It does the job of a common data environment such as Autodesk Docs, Aconex or Newforma, built in. Folders, versions, status, permissions, review, issue sets and transmittals all run on the same operation log as the model, so a drawing, the model it came from and the transmittal it went out in always point at each other. Feature map: area CON-A26.
+
+**High level**
+
+- **One store for files and models**: project folders hold any file type: models, drawings, PDFs, specifications, photos, reports and letters. A model is a file in the store too, versioned by its operation log. Every other file is versioned whole.
+- **Versions of every file**: uploading over a file makes its next version, with who, when and a note. Any two versions compare: models element by element, drawings and PDFs as an overlay of changed areas, images side by side, text word by word. Restoring an old version saves it as a new one, so nothing is lost.
+- **Naming checked on upload**: each project sets its naming standard as rules, made of fields such as project, firm, type, discipline and number. A name that fails shows the wrong field and a suggested name. The project chooses whether a failing name blocks the upload or only warns.
+- **Attributes**: every file has typed attributes (originator, discipline, type, revision, description), filled in from its name where the rules allow.
+- **Four states**: every file and model version is in one state. Work in progress is seen only by its team. Shared is seen by other teams for coordination. Published is approved for use, such as for construction. Archived is kept read-only. These are the states ISO 19650 describes for a common data environment (names checked against public guides, not the standard's own text: *unverified*). We follow the idea, not the standard's text, and claim no compliance.
+- **How status moves**: work starts in progress. Publishing a package moves what it holds to shared. An approved review, or issuing it in a set, moves a file to published. Closing the project moves everything to archived. A state never moves back: a new version starts again in progress.
+- **Status and revision codes** are data per country, client or office, so a project uses the codes its contract asks for.
+- **Permissions**: view, add, edit, approve and manage on each folder and file, for a firm, team, role or person, passed down to sub-folders unless changed. They are the same relationships as package permissions, so a file is never visible in one place and hidden in another.
+- **Review and approval**: send files or a package for review, naming who reviews, in what order and by when. Reviewers comment, mark up and decide: approved, approved with comments, or rejected. Gates such as "published needs an approved review" are checked on every change of state.
+- **Issue sets and transmittals**: gather sheets, models and any files into an issue set with a reason and recipients. Issuing fixes the versions, marks them published, writes the transmittal and adds every document to the register. What other firms send is logged as a received transmittal and filed.
+- **Markups and issues**: markups sit on the file version they were made on and carry to the next version where they still apply. Issues raised on a file, a markup or a package join the one issue list once the issue model arrives (next).
+- **Search**: names, attributes and the text inside files, scans included. Results show only what the person may open.
+- **Desktop and offline**: chosen folders sync to the computer. Work offline; each save comes back as a new version and the naming check runs as it syncs.
+- **Retention and close**: records are kept as long as the law and the contract ask, with legal holds. Closing the project archives everything read-only and writes an archive copy in open formats.
+- **Audit**: every action on every file, opens and downloads included, is recorded and can be exported.
+
+**Low level**
+
+- Files sit in the kit's file service, content-addressed like package chunks. Large files are split into content-defined chunks, so a new version of a large export stores and sends only the changed chunks. Method to follow: restic (BSD-2-Clause), which cuts chunks with Rabin fingerprints and names each by its SHA-256 hash. Chunk sizes are settled in the Design stage.
+- Desktop sync uses the kit's desktop sync client. Syncthing (MPL-2.0) is the method to study: it splits files into hashed blocks and asks a peer only for the blocks it lacks, and keeps old versions as files change.
+- A file's record (name, folder, attributes, state, versions, permissions, review steps) is operations on the project's log. History, undo and audit come from the log, and the record replays the same on every machine.
+- States are a small state machine. Every change of state is a command checked against the gates and permissions, and recorded with who and why.
+- Review steps are data, not code: steps with reviewers, order, due dates and allowed decisions. Due dates and reminders run on the kit's durable timers.
+- Issue records store each file's version and hash, so any issued document can be proven and produced again exactly.
+- Search: the kit's search service indexes names, attributes and text taken from PDFs, office files, IFC properties and, through text recognition, scans. Results pass the same permission check as opening the file.
+- Retention uses the kit's retention schedules with legal holds. The archive copy is PDF/A, IFC and the open project file.
+
+**Discuss**
+
+- Folders by content (drawings, reports) with the state on every file, or a folder for each state? Lean: by content, with the state shown and filterable.
+- Which naming standard and status codes ship in each country pack, and which can be encoded without a licence (see the standards clearance part, CON-A24-F1-P6)? The UK National Annex to ISO 19650-2 sets out its own status codes and a field-based naming convention; we do not copy its tables.
+- Exchange with other platforms through buildingSMART's OpenCDE Documents API (version 1.0), so a firm on another platform can send and fetch files without exports? Its repository has no licence file (*unverified*), so its terms need checking first.
+- Should review and approval steps move to the kit, since Spare Studio's review and approval needs the same?
 
 ## Rendering and front end
 
@@ -701,7 +747,7 @@ Twenty-one choices to settle, each with my lean; change the status as they are a
 
 ## Sources
 
-Licences, activity and browser support were checked on each project's GitHub repo on 2026-10-18.
+Licences, activity and browser support were checked on each project's GitHub repo on 2026-10-18. The last six rows, for sharing and project data management, were checked on 2026-10-19.
 
 | Project | Licence | What it is to us |
 | --- | --- | --- |
@@ -727,3 +773,9 @@ Licences, activity and browser support were checked on each project's GitHub rep
 | [laz-rs](https://github.com/laz-rs/laz-rs) | Apache-2.0 | Rust LAZ compression |
 | [COPC](https://github.com/copcio/copcio.github.io) | MIT (spec repo) | Cloud-optimised point cloud layout on LAZ 1.4 |
 | [Potree](https://github.com/potree/potree) | BSD-2-Clause | Point cloud viewing method to follow |
+| [Speckle SDK (specklepy)](https://github.com/specklesystems/specklepy) | Apache-2.0 | Content-addressed objects; send and receive only what is missing ([serialiser](https://github.com/specklesystems/specklepy/blob/main/src/specklepy/serialization/base_object_serializer.py)) |
+| [restic chunker](https://github.com/restic/chunker) | BSD-2-Clause | Content-defined chunking with Rabin fingerprints for file versions |
+| [Syncthing](https://github.com/syncthing/syncthing) | MPL-2.0 | Block-based folder sync and file versioning to study for desktop sync |
+| [OpenFGA](https://github.com/openfga/openfga) | Apache-2.0 | Relationship-based permissions in the Zanzibar style |
+| [SpiceDB](https://github.com/authzed/spicedb) | Apache-2.0 | Relationship-based permissions in the Zanzibar style |
+| [OpenCDE Documents API](https://github.com/buildingSMART/documents-API) | No licence file (*unverified*) | Open API for moving documents between platforms; terms to check |

@@ -2,9 +2,9 @@
 
 *Stage: Mapping. A readable copy of [features.json](features.json), which is the source; keep the two in step. Every priority and size is a proposal for an owner to accept.*
 
-Spare Construct replaces Revit and the add-ins people buy for it. One open building model for every discipline, built from scratch in Rust, that runs on the desktop, in the browser and headless for AI and scripts. Everything people buy add-ins for today is built in as first-party add-ins on the same public API, free to use, with hosting run at cost. This page maps the whole job top-down: 24 areas, 194 things a person can do, and 639 buildable parts. **Core** means needed for the first usable release (roadmap Gate D: a full council set for a house), **next** follows soon after, and **later** waits. Parts name what they lean on: kit parts by their ID (see the [kit map](../kit/FEATURES.md)), shared engines, or other Spare Construct parts. Where a part is already on the [work board](STATUS.md), its piece is linked.
+Spare Construct replaces Revit and the add-ins people buy for it. One open building model for every discipline, built from scratch in Rust, that runs on the desktop, in the browser and headless for AI and scripts. Everything people buy add-ins for today is built in as first-party add-ins on the same public API, free to use, with hosting run at cost. This page maps the whole job top-down: 26 areas, 214 things a person can do, and 687 buildable parts. **Core** means needed for the first usable release (roadmap Gate D: a full council set for a house), **next** follows soon after, and **later** waits. Parts name what they lean on: kit parts by their ID (see the [kit map](../kit/FEATURES.md)), shared engines, or other Spare Construct parts. Where a part is already on the [work board](STATUS.md), its piece is linked.
 
-**Replaces:** Revit, and the add-ins people buy or bolt on to it: Navisworks, Revizto and BIMcollab for clash; Solibri and UpCodes for model checking; Enscape, Twinmotion, Lumion and D5 Render for rendering; Dynamo for visual scripting; pyRevit, DiRoots, Ideate and Naviate toolkits; Ideate BIMLink and DiRoots SheetLink for Excel; AGACAD, StrucSoft MWF and hsbcad for framing; CostX and Assemble for quantities; Autodesk Docs, Newforma and Aconex for document control.
+**Replaces:** Revit, and the add-ins people buy or bolt on to it: Navisworks, Revizto and BIMcollab for clash; Solibri and UpCodes for model checking; Enscape, Twinmotion, Lumion and D5 Render for rendering; Dynamo for visual scripting; pyRevit, DiRoots, Ideate and Naviate toolkits; Ideate BIMLink and DiRoots SheetLink for Excel; AGACAD, StrucSoft MWF and hsbcad for framing; CostX and Assemble for quantities; Autodesk Docs, Newforma and Aconex for document control; Autodesk Design Collaboration for sharing between firms.
 
 ## What Spare Construct asks of the kit
 
@@ -31,8 +31,8 @@ Where the kit part could wait, the Spare Construct part moved instead: office si
 | CON-A8 | [Views and graphics](#con-a8-views-and-graphics) | 8 | 33 | 6 |
 | CON-A9 | [Annotation and detailing](#con-a9-annotation-and-detailing) | 7 | 18 | 6 |
 | CON-A10 | [Schedules, quantities and cost](#con-a10-schedules-quantities-and-cost) | 8 | 22 | 3 |
-| CON-A11 | [Sheets, printing and issuing](#con-a11-sheets-printing-and-issuing) | 11 | 34 | 5 |
-| CON-A12 | [Teamwork, history and versions](#con-a12-teamwork-history-and-versions) | 10 | 31 | 4 |
+| CON-A11 | [Sheets, printing and issuing](#con-a11-sheets-printing-and-issuing) | 11 | 33 | 5 |
+| CON-A12 | [Teamwork, history and versions](#con-a12-teamwork-history-and-versions) | 10 | 29 | 4 |
 | CON-A13 | [Coordination and clash](#con-a13-coordination-and-clash) | 6 | 13 | 0 |
 | CON-A14 | [Model checking, QA and building code](#con-a14-model-checking-qa-and-building-code) | 6 | 18 | 2 |
 | CON-A15 | [Analysis: energy, daylight and carbon](#con-a15-analysis-energy-daylight-and-carbon) | 7 | 17 | 2 |
@@ -45,6 +45,8 @@ Where the kit part could wait, the Spare Construct part moved instead: office si
 | CON-A22 | [Interface, accessibility and languages](#con-a22-interface-accessibility-and-languages) | 8 | 30 | 3 |
 | CON-A23 | [Hosting, offices, security and running costs](#con-a23-hosting-offices-security-and-running-costs) | 7 | 26 | 0 |
 | CON-A24 | [Legal, licence, community and support](#con-a24-legal-licence-community-and-support) | 7 | 28 | 4 |
+| CON-A25 | [Sharing between firms](#con-a25-sharing-between-firms) | 7 | 22 | 7 |
+| CON-A26 | [Project files and document control](#con-a26-project-files-and-document-control) | 13 | 29 | 12 |
 
 ## CON-A1 Getting started, accounts and settings
 
@@ -495,7 +497,7 @@ Dimensions, tags, text, keynotes, symbols and detail drawing tools that stay bou
 | CON-A9-F5-P2 | **Matchlines and view references**. Matchlines and view references between dependent views. | library | small | CON-A8-F1-P1 |  |
 | CON-A9-F6-P1 | **Rule numbering**. Numbers by level, room, path or grid, with prefixes and gaps. | library | medium | CON-A2-F2-P1 |  |
 | CON-A9-F6-P2 | **Renumber tools**. Renumber by clicking along a path, swap numbers and fix duplicates. | interface | small | CON-A9-F6-P1 |  |
-| CON-A9-F6-P3 | **Naming rules engine**. One rule format for the names and numbers of sheets, views, files and documents, set per office and client, used by A11-F2-P2, A12-F7-P2 and A20-F2-P2. | library | small | CON-A9-F6-P1 |  |
+| CON-A9-F6-P3 | **Naming rules engine**. One rule format for the names and numbers of sheets, views, files and documents, set per office and client, used by A11-F2-P2, A26-F3-P1 and A20-F2-P2. | library | small | CON-A9-F6-P1 |  |
 | CON-A9-F7-P1 | **3D annotation**. Dimensions, tags and text on a work plane in 3D views. | library | medium | CON-A9-F1-P1, CON-A9-F2-P1, CON-A8-F4-P1 |  |
 
 ## CON-A10 Schedules, quantities and cost
@@ -551,7 +553,7 @@ Title blocks, sheets, print sets, PDF output, revisions, issue records, transmit
 | CON-A11-F3 Record revisions | Track revisions on sheets, with clouds, tags and revision schedules. | core | P1 Revisions; P2 Automatic revision clouds |
 | CON-A11-F4 Issue drawing sets | Issue a set and get the issue record, transmittal and drawing register written for them. | core | P1 Issue records; P2 Transmittals and registers; P3 Send an issue; P4 Issue fingerprints; P5 Records for the longstop |
 | CON-A11-F5 Lodge with councils | Package a consent set in MBIE's standard order, with forms filled from project data and supporting documents gathered, ready to lodge. | core | P1 Consent pack; P2 Council portals; P3 Forms from project data; P4 House consent checklist; P5 Supporting documents |
-| CON-A11-F6 Mark up and review drawings | Mark up sheets and views, assign markups to people and track them to done. | next | P1 Markups; P2 Review flow |
+| CON-A11-F6 Assign and track markups | Assign markups to people and track them to done, as issues. | next | P2 Review flow |
 | CON-A11-F7 Share drawings online | Share sheets and the model with anyone through a link that opens in a browser. | next | P1 Web viewer; P2 Share links; P3 Listing floor plans; P4 Link controls; P5 Redaction |
 | CON-A11-F8 Answer council requests and lodge amendments | Track a council's requests for further information to their answers, and lodge amendments to a consented set. | next | P1 Council requests; P2 Amendments |
 | CON-A11-F9 Review a lodged set as a council officer | As a council officer, open a lodged set in a browser, mark it up and send requests for further information. | later | P1 Officer review |
@@ -583,8 +585,7 @@ Title blocks, sheets, print sets, PDF output, revisions, issue records, transmit
 | CON-A11-F5-P3 | **Forms from project data**. Statutory forms filled from project information and design records. | data | small | CON-A2-F2-P5, CON-A24-F4-P2 |  |
 | CON-A11-F5-P4 | **House consent checklist**. MBIE's standard order of documents as a checklist. Each item is tied to the core part that makes it, or marked as supplied from outside at Gate D: truss and frame designs from the plant, geotechnical reports, engineers' producer statements and the specification. | data | small | CON-A11-F4-P1 |  |
 | CON-A11-F5-P5 | **Supporting documents**. Producer statements PS1 to PS4, reports, and BRANZ appraisals and CodeMark certificates linked from the types used, gathered in the order of the checklist. | library | small | CON-A11-F5-P4, CON-A2-F2-P1 |  |
-| CON-A11-F6-P1 | **Markups**. Clouds, text, arrows and stamps on sheets and PDFs, using the shared PDF markup in engine-pdf, which Spare Studio needs too, stored as operations. | library | medium | CON-A8-F2-P4, engine-pdf |  |
-| CON-A11-F6-P2 | **Review flow**. Assign, answer and close markups as issues in the one issue model (A12-F8-P3), with a record of who did what. | interface | small | CON-A11-F6-P1, CON-A12-F8-P3, KIT-A8-F3-P2 |  |
+| CON-A11-F6-P2 | **Review flow**. Assign, answer and close markups as issues in the one issue model (A12-F8-P3), with a record of who did what. | interface | small | CON-A26-F8-P1, CON-A12-F8-P3, KIT-A8-F3-P2 |  |
 | CON-A11-F7-P1 | **Web viewer**. A read-only browser viewer for sheets and 3D. | interface | medium | CON-A2-F10-P1, CON-A8-F4-P1 |  |
 | CON-A11-F7-P2 | **Share links**. Spare Construct's share rules (which sheets, views and versions) on the kit's sharing (KIT-A15-F8-P1). Link bandwidth is metered so its cost reaches the ledger (KIT-A13-F2-P2). | service | small | CON-A11-F7-P1, KIT-A15-F8-P1, KIT-A13-F2-P2 |  |
 | CON-A11-F7-P3 | **Listing floor plans**. Clean marketing floor plans made from the model and exported in an open format that Spare Home imports, never through a shared crate. | library | small | CON-A8-F1-P1, CON-A11-F2-P1 |  |
@@ -592,7 +593,7 @@ Title blocks, sheets, print sets, PDF output, revisions, issue records, transmit
 | CON-A11-F7-P5 | **Redaction**. Withhold chosen categories or areas of the model before sharing or exporting, for prisons, banks and other secure projects. | library | medium | CON-A11-F7-P2, CON-A8-F3-P3 |  |
 | CON-A11-F8-P1 | **Council requests**. Requests for further information logged against sheets and elements with due dates, and answered with revised sheets, in the one issue model. | library | medium | CON-A12-F8-P3, CON-A11-F5-P1 |  |
 | CON-A11-F8-P2 | **Amendments**. An amendment lodged as the changes against the consented set, clouded and listed automatically. | library | small | CON-A11-F3-P2, CON-A11-F5-P1 |  |
-| CON-A11-F9-P1 | **Officer review**. A council officer opens the lodged set in the web viewer, marks it up and sends requests that arrive in the designer's register. | interface | medium | CON-A11-F7-P1, CON-A11-F6-P1, CON-A11-F8-P1 |  |
+| CON-A11-F9-P1 | **Officer review**. A council officer opens the lodged set in the web viewer, marks it up and sends requests that arrive in the designer's register. | interface | medium | CON-A11-F7-P1, CON-A26-F8-P1, CON-A11-F8-P1 |  |
 | CON-A11-F10-P1 | **Conditions and inspections**. Consent conditions and inspections tracked against the set, with dates and results. | library | small | CON-A11-F5-P1, CON-A12-F8-P3 |  |
 | CON-A11-F10-P2 | **Completion papers**. As-built drawings, the builder's record of work, producer statements PS3 and PS4 and the other papers for the code compliance certificate, gathered in one place. | library | small | CON-A11-F10-P1, CON-A11-F5-P5 |  |
 | CON-A11-F11-P1 | **Electronic signatures**. Signatures on drawings, certificates of design work and producer statements through the kit's signatures (KIT-A25-F1-P2), stored with the issue fingerprint. | integration | small | CON-A11-F4-P4, CON-A24-F4-P4, KIT-A25-F1-P2 |  |
@@ -609,7 +610,7 @@ Many people editing one model at once, offline work, full history, versions and 
 | CON-A12-F4 Save and compare versions | Save named versions at milestones and compare any two in colour. | core | P1 Versions; P2 Version compare; P3 Compare view |
 | CON-A12-F5 Link consultant models | Link consultants' models, keep each version they send and see what changed. | core | P1 Linked models; P2 Received versions; P3 Copy and monitor |
 | CON-A12-F6 Control who can do what | Set who can view, edit or approve by project, discipline and category. | next | P1 Permissions; P2 Approvals; P3 Project transfer; P4 Role end; P5 Project control rules |
-| CON-A12-F7 Keep project documents in one place | Store drawings, reports, photos and letters for a project, with registers and status codes. | next | P1 Project documents; P2 Naming rules; P3 Questions and submittals |
+| CON-A12-F7 Ask questions and track submittals | Send requests for information and submittals to the right firm, with due dates, and track the answers. | next | P3 Questions and submittals |
 | CON-A12-F8 Get told what matters | Get notified about mentions, assigned issues, new consultant versions and drawing issues. | next | P1 Notifications; P2 Comments on elements; P3 One issue model |
 | CON-A12-F9 Take turns on a shared project | Check out a shared project to edit it while others open it read-only, until live sync arrives. | core | P1 Project check-out; P2 Check in and hand over |
 | CON-A12-F10 Place one design many times | Place one linked design at several named positions on a site, such as repeated houses or terraces. | later | P1 Named positions |
@@ -640,9 +641,7 @@ Many people editing one model at once, offline work, full history, versions and 
 | CON-A12-F6-P3 | **Project transfer**. Hand a hosted project, with its history, to the client or to another office. | library | small | CON-A12-F6-P1, CON-A23-F1-P1 |  |
 | CON-A12-F6-P4 | **Role end**. Remove a consultant's access when their role ends, keeping their work and history. | library | small | CON-A12-F6-P1 |  |
 | CON-A12-F6-P5 | **Project control rules**. Who controls a shared project and its model at handover, or when an office closes, set out in the hosting terms. | legal | small | CON-A24-F4-P3 |  |
-| CON-A12-F7-P1 | **Project documents**. Spare Construct's document rules (folders, status codes and registers) on the kit's files and sharing (KIT-A15-F7-P1, KIT-A15-F8-P1). A candidate kit document store, since Spare Office needs the same. | service | large | KIT-A15-F7-P1, KIT-A15-F8-P1, KIT-A15-F3-P1 |  |
-| CON-A12-F7-P2 | **Naming rules**. Document naming rules per office and per client, as rule sets for the one naming rules engine (A9-F6-P3). | data | small | CON-A12-F7-P1, CON-A9-F6-P3 |  |
-| CON-A12-F7-P3 | **Questions and submittals**. Requests for information and submittals with due dates and answers, as issues in the one issue model (A12-F8-P3). | library | medium | CON-A12-F7-P1, CON-A12-F8-P3, KIT-A8-F3-P2 |  |
+| CON-A12-F7-P3 | **Questions and submittals**. Requests for information and submittals with due dates and answers, as issues in the one issue model (A12-F8-P3). | library | medium | CON-A26-F1-P1, CON-A12-F8-P3, KIT-A8-F3-P2 |  |
 | CON-A12-F8-P1 | **Notifications**. In-app, email and push notifications through the kit's notification router (KIT-A8-F3-P2), each one chosen by the person. | integration | small | KIT-A8-F3-P2, KIT-A8-F5-P1 |  |
 | CON-A12-F8-P2 | **Comments on elements**. Comment threads pinned to elements and viewpoints, as issues in the one issue model (A12-F8-P3). | library | small | CON-A12-F1-P4, CON-A12-F8-P3 |  |
 | CON-A12-F8-P3 | **One issue model**. One BCF-compatible model for issues and comments, with viewpoint, element links, status, owner and history. Clash issues, markups, element comments, RFIs and council requests all use it, and it is exported as BCF. | library | medium | CON-A2-F5-P1, CON-A8-F7-P2 |  |
@@ -1167,6 +1166,101 @@ The licence, proof that it is built legally, privacy, fair moderation of shared 
 | CON-A24-F7-P1 | **Agent workflow**. What Spare Construct can copy from ArtCraft's Rust repo layout and agent workflow. | research | small |  | [A10](STATUS.md) |
 | CON-A24-F7-P2 | **Agent-ready issues**. Spare Construct pieces name the benchmark, truth test or determinism check that proves them done, on top of the repo-wide piece format. | data | small |  |  |
 
+## CON-A25 Sharing between firms
+
+Each firm works in its own team space and shares packages of models, views, sheets and files with the other firms when it is ready. A sharing timeline shows every package and who has taken it in, and each team takes in other teams' packages when it chooses.
+
+| Feature | What a person can do | Priority | Parts |
+| --- | --- | --- | --- |
+| CON-A25-F1 Work in my firm's team space | Work with my own firm in a team space inside the project, where our work in progress stays ours until we publish it. | core | P1 Project space; P2 Team spaces; P3 Team boundary; P4 Join a project; P5 Shared space hosting decision; P6 Sharing running costs |
+| CON-A25-F2 Publish a package | Choose models, views, sheets and files and publish them to the other firms as one numbered package when they are ready. | core | P1 Packages; P2 Package contents; P3 Publish flow; P4 Saved package sets; P5 Packages from other software |
+| CON-A25-F3 Follow the sharing timeline | See every team's packages on one timeline, who has taken each one in, and what changed. | core | P1 Sharing timeline; P2 Change summary; P3 New package alerts |
+| CON-A25-F4 Take in a package when I'm ready | Take in another team's package when my team is ready, so nobody's work changes under them. | core | P1 Take in; P2 Before you take in; P3 Stay on or go back |
+| CON-A25-F5 Compare any two packages | Compare any two packages and see what changed in 3D, in plans, on sheets and in a list. | core | P1 Package compare; P2 Compare from the timeline |
+| CON-A25-F6 Control what each firm and team sees | Set who can see, publish and take in, per firm, team and package. | core | P1 Sharing permissions; P2 Firm sharing policies |
+| CON-A25-F7 See every publish and take-in | See a full record of every publish and take-in: who, when, which package and which version. | core | P1 Sharing record |
+
+**Parts in Sharing between firms**
+
+| ID | Part | Kind | Size | Depends on | Piece |
+| --- | --- | --- | --- | --- | --- |
+| CON-A25-F1-P1 | **Project space**. The shared space every firm on a job joins. It holds the teams, packages, project files and the sharing record, on the kit's operation log, file service and hosting at cost (KIT-A15-F1-P2, KIT-A15-F7-P1, KIT-A22-F4-P1). A firm's own server joins it once self-hosting arrives (A23-F2). | service | large | CON-A2-F5-P1, CON-A25-F1-P5, KIT-A15-F1-P2, KIT-A15-F7-P1, KIT-A22-F4-P1 |  |
+| CON-A25-F1-P2 | **Team spaces**. A team space for each firm or discipline, such as Architecture, Structure, Services and Client, with its own members, models, views, sheets and folders. Work in progress in it is seen only by the team. Members and roles come from the kit's organisations (KIT-A1-F7-P1, KIT-A1-F7-P2). | library | medium | CON-A25-F1-P1, KIT-A1-F7-P1, KIT-A1-F7-P2 |  |
+| CON-A25-F1-P3 | **Team boundary**. A team's operation log and check-outs stay inside the team. In the first release people in a team take turns through project check-out (A12-F9-P1); once live sync arrives (A12-F1-P1), edits inside a team sync live. Nothing reaches another team until it is published. | library | small | CON-A25-F1-P2, CON-A12-F9-P1 |  |
+| CON-A25-F1-P4 | **Join a project**. Invite a firm to a project, or ask to join one, with the lead firm accepting. Each firm brings its own people and keeps its own models. A client or other guest can join read-only through the kit's guest access (KIT-A15-F8-P2). | interface | small | CON-A25-F1-P2, KIT-A8-F4-P1, KIT-A15-F8-P2 |  |
+| CON-A25-F1-P5 | **Shared space hosting decision**. A decision note on who hosts a project's shared space by default (the lead firm, the client or co-op servers) and how a firm's own server joins it. It settles the sharing side of the hosting decision (A23-F1-P6). | research | small |  |  |
+| CON-A25-F1-P6 | **Sharing running costs**. Storage and transfer for team spaces, packages and project files metered per project and firm through the kit's per-account metering (KIT-A13-F2-P3), charged at cost (KIT-A15-F7-P2) and shown on the open cost ledger. | service | small | CON-A25-F1-P1, KIT-A13-F2-P3, KIT-A15-F7-P2 |  |
+| CON-A25-F2-P1 | **Packages**. A package is a named, numbered version of a team's chosen models, views, sheets and files: a signed pointer into the team's operation log plus the chunks and files it covers. Chunks and files are content-addressed, the way Speckle stores objects, so packages share what did not change and publishing or taking in moves only what did. | library | large | CON-A25-F1-P2, CON-A12-F4-P1, CON-A2-F4-P2, KIT-A15-F7-P1 |  |
+| CON-A25-F2-P2 | **Package contents**. Pick what goes in: whole models or chosen levels, views, sheets and folders. Contents are filtered by discipline ownership, view filters (A8-F3-P3) and permissions (A25-F6-P1), so design options and work in progress never leave unless the team chooses. | library | medium | CON-A25-F2-P1, CON-A25-F6-P1, CON-A8-F3-P3 |  |
+| CON-A25-F2-P3 | **Publish flow**. Publish from one dialog that shows what is chosen, what changed since the team's last package (A25-F3-P2) and a note. A team can require an approval before a package leaves (A26-F6-P3). | interface | medium | CON-A25-F2-P2, CON-A25-F3-P2, CON-A26-F6-P3 |  |
+| CON-A25-F2-P4 | **Saved package sets**. Saved choices, such as weekly coordination for Structure or a monthly set for the client, so a regular publish is one click, or runs on a schedule through the kit's durable timers (KIT-A15-F14-P1). | library | small | CON-A25-F2-P2, KIT-A15-F14-P1 |  |
+| CON-A25-F2-P5 | **Packages from other software**. Firms on other software publish IFC files and PDFs as packages into their own team space. They are kept and compared like every other package (A12-F5-P2). | integration | medium | CON-A25-F2-P1, CON-A18-F1-P1, CON-A12-F5-P2 |  |
+| CON-A25-F3-P1 | **Sharing timeline**. The main view of the shared space, open from the start: a row for each team, each package as a mark along it, and for each mark which teams have taken it in. Choose a mark to see its contents, note and changes, and filter by team and date. | interface | medium | CON-A25-F2-P1, CON-A25-F4-P1, CON-A22-F1-P2 |  |
+| CON-A25-F3-P2 | **Change summary**. A plain summary of what changed since a team's last package: elements added, removed and changed by category, sheets changed and files added. Built from version compare (A12-F4-P2). | library | medium | CON-A25-F2-P1, CON-A12-F4-P2 |  |
+| CON-A25-F3-P3 | **New package alerts**. Members are told when another team publishes, through the kit's notification router and settings (KIT-A8-F3-P2, KIT-A8-F5-P1). | integration | small | CON-A25-F2-P1, KIT-A8-F3-P2, KIT-A8-F5-P1 |  |
+| CON-A25-F4-P1 | **Take in**. Each team chooses when to take in another team's package. Until then, its linked copy stays on the last package it took in. Taking in downloads only the changed chunks and updates the linked model (A12-F5-P1). | library | medium | CON-A25-F2-P1, CON-A12-F5-P1 |  |
+| CON-A25-F4-P2 | **Before you take in**. Before taking in, see the change summary (A25-F3-P2) and which of the team's own views, sheets and clash tests the change touches. | interface | small | CON-A25-F4-P1, CON-A25-F3-P2 |  |
+| CON-A25-F4-P3 | **Stay on or go back**. Stay on an earlier package as long as needed, or go back to one, with the reason recorded. | library | small | CON-A25-F4-P1 |  |
+| CON-A25-F5-P1 | **Package compare**. Differences between any two packages: model elements through version compare (A12-F4-P2), drawings through sheet comparison (A11-F3-P2) and other files through file compare (A26-F2-P2). Two packages from different teams compare by what each holds. | library | medium | CON-A25-F2-P1, CON-A12-F4-P2, CON-A11-F3-P2, CON-A26-F2-P2 |  |
+| CON-A25-F5-P2 | **Compare from the timeline**. Pick two marks on the timeline to open them in the compare view (A12-F4-P3), with the change list grouped by category and sheet. | interface | small | CON-A25-F5-P1, CON-A25-F3-P1, CON-A12-F4-P3 |  |
+| CON-A25-F6-P1 | **Sharing permissions**. Who may publish for a team, who may take in, and which teams may see each package. Rights are relationships (this firm is a member of that team; that team may view this package), checked by the kit (KIT-A15-F1-P4, KIT-A15-F8-P1), so a team's rights pass down to its packages and folders. Element permissions inside a live model stay with A12-F6-P1. | service | medium | CON-A25-F1-P2, KIT-A15-F1-P4, KIT-A15-F8-P1, KIT-A1-F7-P1 |  |
+| CON-A25-F6-P2 | **Firm sharing policies**. A firm's admin can lock what may leave the firm, such as no design options and no work in progress, through the kit's organisation policies (KIT-A1-F7-P5). | library | small | CON-A25-F6-P1, KIT-A1-F7-P5 |  |
+| CON-A25-F7-P1 | **Sharing record**. Every publish, take-in, go-back and permission change is an operation on the kit's tamper-evident log (KIT-A15-F1-P2), searchable and exportable in the kit's organisation audit log (KIT-A1-F7-P7). The timeline is drawn from this record. | library | small | CON-A25-F2-P1, CON-A25-F4-P1, KIT-A15-F1-P2, KIT-A1-F7-P7 |  |
+
+## CON-A26 Project files and document control
+
+Every project file in one versioned store with the models: folders, versions and compare, naming checks, status from work in progress to archived, permissions, review and approval, issue sets with transmittals and a register, markups, search, desktop sync, retention and an audit log.
+
+| Feature | What a person can do | Priority | Parts |
+| --- | --- | --- | --- |
+| CON-A26-F1 Keep every project file in folders | Keep models, drawings, PDFs, specifications, photos, reports and letters in project folders, in one store with the model. | core | P1 Project file store; P2 Folder templates; P3 File previews |
+| CON-A26-F2 Keep every version of every file | Keep every version of every file, see who made it, compare any two and go back to one. | core | P1 File versions; P2 File compare; P3 Restore a version |
+| CON-A26-F3 Name files to the standard | Have every file name checked against the project's naming standard when it is uploaded, with a fix suggested. | core | P1 Naming rules; P2 Upload check |
+| CON-A26-F4 Track status and attributes | Give every file attributes such as discipline, type and revision, and a status that moves from work in progress to shared, published and archived. | core | P1 File attributes; P2 Information states; P3 Status codes |
+| CON-A26-F5 Control who sees each folder and file | Set who can see, add, edit and approve in each folder and file, per firm, team and role. | core | P1 Folder and file permissions; P2 Who has access |
+| CON-A26-F6 Review and approve | Send files and packages for review, get comments and decisions from the right people by a due date, and approve them before they are published. | core | P1 Review steps; P2 Review panel; P3 Approval gates |
+| CON-A26-F7 Issue sets with transmittals | Gather files and sheets into an issue set, send it with a transmittal, and keep a register of everything issued and received. | core | P1 Issue sets; P2 Transmittals for any file; P3 Received transmittals; P4 Document register |
+| CON-A26-F8 Mark up files | Mark up drawings, PDFs and images, with each markup kept on the file version it was made on. | core | P1 Markups |
+| CON-A26-F9 Track issues on files | Raise an issue on a file, a markup or a package, assign it to a firm or a person, and track it to closed. | next | P1 Issues on files |
+| CON-A26-F10 Find any file | Search file names, attributes and the text inside files, and see only what I'm allowed to see. | core | P1 File search; P2 Search panel |
+| CON-A26-F11 Work on files from my desktop and offline | Keep chosen project folders on my computer, work on them offline, and have changes come back as new versions. | core | P1 Desktop folder sync; P2 Offline files |
+| CON-A26-F12 Keep records and archive at project close | Keep project records as long as the law and the contract ask, and archive the whole project read-only when it closes. | core | P1 Retention rules; P2 Project close |
+| CON-A26-F13 See who did what to every file | See a full record of who opened, added, changed, moved, shared, approved and deleted every file. | core | P1 File audit log |
+
+**Parts in Project files and document control**
+
+| ID | Part | Kind | Size | Depends on | Piece |
+| --- | --- | --- | --- | --- | --- |
+| CON-A26-F1-P1 | **Project file store**. Project folders for any file type (models, drawings, PDFs, specifications, photos, reports and letters) on the kit's file service, sharing and version history (KIT-A15-F7-P1, KIT-A15-F8-P1, KIT-A15-F3-P1), in the same project space as the models (A25-F1-P1). A candidate kit document store, since Spare Office needs the same. | service | large | KIT-A15-F7-P1, KIT-A15-F8-P1, KIT-A15-F3-P1, CON-A25-F1-P1 |  |
+| CON-A26-F1-P2 | **Folder templates**. Folder structures per office, client and project type, set up with a new project and kept as data. | data | small | CON-A26-F1-P1 |  |
+| CON-A26-F1-P3 | **File previews**. Thumbnails and quick previews of every file without opening its program, through the kit's preview service (KIT-A15-F16-P1). | integration | small | CON-A26-F1-P1, KIT-A15-F16-P1 |  |
+| CON-A26-F2-P1 | **File versions**. Uploading a file over an existing one makes its next version, with who, when and a note. Versions are split into content-defined chunks, as restic does, so a new version stores and sends only what changed. Models are versioned by their operation log. | library | medium | CON-A26-F1-P1, KIT-A15-F3-P1 |  |
+| CON-A26-F2-P2 | **File compare**. Compare two versions of a file: models element by element (A12-F4-P2), drawings and PDFs as an overlay of changed areas, images side by side, and text documents word by word. | library | medium | CON-A26-F2-P1, CON-A12-F4-P2, KIT-A27-F6-P1 |  |
+| CON-A26-F2-P3 | **Restore a version**. Make an earlier version current again. The restore is saved as a new version, so nothing is lost. | library | small | CON-A26-F2-P1 |  |
+| CON-A26-F3-P1 | **Naming rules**. Document naming rules per office and per client, as rule sets for the one naming rules engine (A9-F6-P3). | data | small | CON-A26-F1-P1, CON-A9-F6-P3 |  |
+| CON-A26-F3-P2 | **Upload check**. Each upload is checked against the naming rules. A name that fails shows which field is wrong and a suggested name, and the project chooses whether a failing name blocks the upload or only warns. | library | small | CON-A26-F3-P1, CON-A26-F4-P1 |  |
+| CON-A26-F4-P1 | **File attributes**. Typed attributes on every file and folder, such as originator, discipline, type, level, revision and description, filled in from the file name where the naming rules allow, and set per office and client. | data | small | CON-A26-F1-P1, CON-A26-F3-P1 |  |
+| CON-A26-F4-P2 | **Information states**. Every file and model version has one state: work in progress (seen by its team), shared (seen by other teams for coordination), published (approved for use) or archived (kept read-only). These follow the states ISO 19650 describes for a common data environment, without claiming compliance. Publishing a package shares what it holds. | library | medium | CON-A26-F4-P1 |  |
+| CON-A26-F4-P3 | **Status codes**. Status and revision codes kept as data per country, client or office, so a project uses the codes its contract asks for. No national code table is copied without clearance (A24-F1-P6). | data | small | CON-A26-F4-P2, CON-A24-F1-P6 |  |
+| CON-A26-F5-P1 | **Folder and file permissions**. View, add, edit, approve and manage rights on folders and files, given to a firm, team, role or person and passed down to sub-folders unless changed, using the same relationship checks as sharing (A25-F6-P1). | service | medium | CON-A25-F6-P1, CON-A26-F1-P1 |  |
+| CON-A26-F5-P2 | **Who has access**. One panel that shows who can open a folder or file and why, and changes it. | interface | small | CON-A26-F5-P1 |  |
+| CON-A26-F6-P1 | **Review steps**. Review steps kept as data: who reviews, in what order, by when, and which decisions they can give (approved, approved with comments, rejected). Each decision is an operation with its reason, and due dates and reminders run on the kit's durable timers and notifications (KIT-A15-F14-P1, KIT-A8-F3-P2). A candidate kit part, since Spare Studio's review and approval needs the same. | library | medium | CON-A26-F4-P2, KIT-A15-F1-P2, KIT-A15-F14-P1, KIT-A8-F3-P2 |  |
+| CON-A26-F6-P2 | **Review panel**. A panel beside the file or package with its markups (A26-F8-P1), the decision buttons and the history of every step. | interface | medium | CON-A26-F6-P1, CON-A26-F8-P1 |  |
+| CON-A26-F6-P3 | **Approval gates**. Rules such as a file needing an approved review before it is published, or a package needing the lead's approval before it leaves, checked on every change of state. | library | small | CON-A26-F6-P1, CON-A26-F4-P2 |  |
+| CON-A26-F7-P1 | **Issue sets**. Pick sheets, models and any project files into an issue set with a reason and recipients. Issuing fixes the versions it holds, marks them published, and keeps the issue records and fingerprints that drawing issues use (A11-F4-P1, A11-F4-P4). | library | medium | CON-A26-F2-P1, CON-A26-F4-P2, CON-A11-F4-P1, CON-A11-F4-P4 |  |
+| CON-A26-F7-P2 | **Transmittals for any file**. The transmittal and the document register cover every file in a set, not only sheets, extending the drawing transmittals and register (A11-F4-P2), and are sent by the issue sender (A11-F4-P3). | library | small | CON-A26-F7-P1, CON-A11-F4-P2, CON-A11-F4-P3 |  |
+| CON-A26-F7-P3 | **Received transmittals**. Log what other firms and the client send, file what came into the right folders, and record the acknowledgement. | library | small | CON-A26-F7-P2, CON-A26-F1-P1 |  |
+| CON-A26-F7-P4 | **Document register**. One register of every document with its versions, state and every issue it went out in, filtered and exported to a spreadsheet (A10-F3-P1). | interface | small | CON-A26-F7-P2, CON-A10-F3-P1 |  |
+| CON-A26-F8-P1 | **Markups**. Clouds, text, arrows and stamps on sheets, PDFs and images, using the kit's PDF markup (KIT-A27-F6-P4) and anchored comments (KIT-A8-F12-P2), which Spare Studio needs too. Markups are operations kept on the file version they were made on, and carried to the next version where they still apply. | library | medium | CON-A8-F2-P4, engine-pdf, KIT-A27-F6-P4, KIT-A8-F12-P2, CON-A26-F2-P1 |  |
+| CON-A26-F9-P1 | **Issues on files**. Issues linked to a file version, a markup or a package, in the one issue model (A12-F8-P3), so model, sheet and file issues sit in one list. | library | small | CON-A12-F8-P3, CON-A26-F8-P1, CON-A25-F2-P1 |  |
+| CON-A26-F10-P1 | **File search**. Names, attributes and contents (text in PDFs and documents, scanned drawings read by the kit's text recognition, and model properties) indexed in the kit's search service, with results filtered by permission (KIT-A6-F1-P2, KIT-A6-F1-P4, KIT-A27-F12-P3). | integration | medium | CON-A26-F1-P1, CON-A26-F4-P1, KIT-A6-F1-P2, KIT-A6-F1-P4, KIT-A27-F12-P3 |  |
+| CON-A26-F10-P2 | **Search panel**. A search box with filters by folder, state, discipline, type and date, on the kit's search screens (KIT-A6-F1-P5). | interface | small | CON-A26-F10-P1, KIT-A6-F1-P5 |  |
+| CON-A26-F11-P1 | **Desktop folder sync**. Chosen project folders kept on the computer through the kit's desktop sync client (KIT-A15-F15-P1). Each saved change becomes a new version, and the naming check runs as it syncs. | integration | medium | CON-A26-F2-P1, CON-A26-F3-P2, KIT-A15-F15-P1 |  |
+| CON-A26-F11-P2 | **Offline files**. Files kept for offline use are encrypted on the device (KIT-A15-F4-P4). If two people change one file offline, both versions are kept and a person chooses (KIT-A15-F4-P3). | library | small | CON-A26-F11-P1, KIT-A15-F4-P3, KIT-A15-F4-P4 |  |
+| CON-A26-F12-P1 | **Retention rules**. Retention per folder and kind of record, with legal holds, through the kit's retention schedules (KIT-A18-F6-P1). Issue records keep the longstop period of the country pack (A11-F4-P5). | library | small | CON-A26-F1-P1, KIT-A18-F6-P1, CON-A11-F4-P5 |  |
+| CON-A26-F12-P2 | **Project close**. Closing a project moves everything to archived and read-only, and writes an archive copy in open formats (PDF/A, IFC and the project file) through the full export (A18-F7-P1, A11-F2-P5). | library | medium | CON-A26-F12-P1, CON-A26-F4-P2, CON-A18-F7-P1, CON-A11-F2-P5 |  |
+| CON-A26-F13-P1 | **File audit log**. Every file action is an operation, and opens and downloads are logged too, searchable and exportable in the kit's organisation audit log (KIT-A1-F7-P7). | library | small | CON-A26-F1-P1, KIT-A1-F7-P7 |  |
+
 ## Moved and merged parts
 
 IDs are never reused. A part that changed priority moved to a feature of that priority under a new ID; a duplicate was merged into the part that stays.
@@ -1184,6 +1278,9 @@ IDs are never reused. A part that changed priority moved to a feature of that pr
 | CON-A21-F1-P5 | CON-A21-F6-P2 | Goes with the 3D framing generator, which stays next. |
 | CON-A19-F3-P3 | merged into CON-A1-F7-P3 | Same feature as the AI helper (CON-A1-F7-P3), and both repeated the kit help assistant (KIT-A17-F7). |
 | CON-A18-F7-P2 | merged into CON-A2-F4-P6 | Repeated the reader library already in the published file format (CON-A2-F4-P6). |
+| CON-A12-F7-P1 | merged into CON-A26-F1-P1 | Project files are core for the first release; the document store is now the project file store. |
+| CON-A12-F7-P2 | CON-A26-F3-P1 | Naming checks on upload are core for the first release. |
+| CON-A11-F6-P1 | CON-A26-F8-P1 | Markups on any file are core for the first release; tracking them as issues stays next. |
 
 ## Questions for assessing this map and the demo
 
