@@ -12,6 +12,8 @@ Every Spareware app is free for everyone to use, anywhere in the world. On the a
 
 Big platforms take a large cut from the people who do the work, and design and office software charges every year just to be allowed to work. Spareware builds free replacements in the open.
 
+**We start with "Can we?"** Every idea is met with how it could work, not why it won't. If it isn't possible yet, we work out what it would take.
+
 ## How it all fits together
 
 To build on Spareware, add a program, a plugin, a country pack or a language, read [EXTENDING.md](EXTENDING.md): how it stays open and expandable for decades.
