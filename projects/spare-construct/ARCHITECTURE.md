@@ -40,7 +40,7 @@ Best means three things: faster than Revit on the largest single model, fully us
 
 **Goals**
 
-- One model holds every discipline of a building (architecture, structure, MEP), not a stack of linked files.
+- One model holds every discipline (architecture, structure, MEP and civil), not a stack of linked files.
 - Opening, moving around and editing a large model stays fast. A city of buildings works by the same design.
 - Everything a person can do in the app, an AI or a script can do headless, through the same commands.
 - Anyone can build their own add-in on the main version without forking it.
@@ -190,6 +190,49 @@ Walls, floors, roofs and openings come first, because everything else hangs off 
 
 - After walls, floors, openings and rooms: structure or MEP first?
 - Which NZ rules (D1 stairs, H1 energy) are built into element rules, and which are left to add-ins?
+
+## Disciplines and civil
+
+One program and one model for every discipline, civil included. Picking a discipline changes the program around the person, not the file: the tools, templates and drawings switch, and the model stays the same.
+
+**Discipline modes**
+
+- A discipline picker at the top of the app: Architecture, Structure, MEP, Civil and Coordination.
+- Picking one swaps the tool tabs, the project browser, the default view templates and drawing types, and the display units and labels (chainages and reduced levels in Civil).
+- The other disciplines stay visible as greyed context and can't be edited by accident. Ownership and permissions already filter on discipline (see Building elements).
+- A mode is a settings file (tools, templates, units, browser layout), so a firm or a country can add its own, such as landscape.
+- Modes only change what people see. Every command stays available headless, so an AI can call a civil command from any mode.
+
+**Civil: high level**
+
+Civil adds the ground and everything built on and under it, in the same model as the buildings. A building's floor level can follow the design surface, and its drainage joins the street network in the same model.
+
+| Element | What v1 does | Hard part |
+| --- | --- | --- |
+| Survey | Points with codes, breaklines and control, from survey files and LandXML | Point codes that draw the linework automatically |
+| Surfaces | Existing and design ground as triangulated surfaces from points, breaklines and LiDAR; contours | Millions of LiDAR points; fast re-triangulation after an edit |
+| Alignments and profiles | Road and pipe centrelines (lines, arcs, spiral transitions), vertical profiles, superelevation | Exact chainage along spirals |
+| Corridors | Cross-section templates swept along an alignment: lanes, kerbs, footpaths, batters to the ground | Rebuilding a long road in pieces when one input changes |
+| Grading and earthworks | Pads, feature lines, slopes to a surface, cut and fill volumes, mass haul | Clean daylight lines where slopes meet the ground |
+| Pipe networks | Gravity (stormwater, wastewater) and pressure (water supply) pipes, manholes and sumps, with hydraulic checks | Rule-based sizing and inverts; clashes with other services |
+| Lots | Subdivision lots from boundaries, with areas, over a cadastral underlay | Shared boundaries kept in step |
+| Civil drawings | Plan and long-section sheets, cross-section sheets, setout tables | Sheets laid out along an alignment |
+
+**Low level**
+
+- Civil element types sit in their own crates beside the building ones (survey, surface, alignment, corridor, grading, pipes, lots), on the same data model, regeneration, kernel and drawing engine.
+- Surfaces: constrained Delaunay triangulation, following the spade crate (MIT or Apache-2.0). Surfaces are chunked by spatial cell like the building model, so a whole catchment pages from disk.
+- Alignments are exact geometry (lines, arcs, spirals) with chainage. Corridors, sections and labels reference a chainage and offset, so moving an alignment carries everything on it, the way a wall carries its doors.
+- Corridors regenerate by chainage range, so an edit rebuilds only the stretch it touches, on every core.
+- Positions use the project's map projection and heights one vertical datum, shown in others as needed (NZTM2000 and NZVD2016 in New Zealand). Each country's settings name its own.
+- Design rules come as country rule packs, like the building code checks: road geometry, and each council's engineering standards for roads and drainage.
+- Interop: LandXML 1.2 in and out; IFC 4.3 alignments, roads and earthworks; the EPA's public-domain SWMM input files for stormwater models; DXF and point clouds as for buildings. Civil programs' own files are mostly DWG, so they follow the DWG decision.
+
+**Discuss**
+
+- Civil after structure and MEP, or surfaces and drainage early, since every building needs a site?
+- Which country's road and drainage rules come first?
+- Do rail and bridges join Civil later? IFC 4.3 covers both.
 
 ## Clash detection
 
@@ -415,6 +458,7 @@ IFC is the exchange format, not the native one, and Revit models come in through
 | glTF / GLB | Out | Our own writer | Twinmotion, Enscape, web |
 | 3D Tiles | Out | Our own writer | City-scale web viewers |
 | Point clouds (E57, LAS) | In | Reference underlay | Survey |
+| LandXML 1.2 | In and out | Our own reader and writer | Civil surfaces, alignments, pipe networks and survey points |
 | CSV / XLSX | In and out | Schedules and parameter tables |  |
 
 **Discuss**
@@ -477,6 +521,7 @@ Everything Revit users buy or bolt on today is built in, as first-party add-ins 
 | Document control and CDE | Autodesk Docs, Newforma, Aconex, Procore | Built-in document control: issues, transmittals, registers, markups |
 | Specification | Masterspec links, keynote add-ins | Keynotes and specification linked to elements |
 | Site and planning | Civil 3D links, site and planning add-ins | LINZ terrain and aerials, zoning, height in relation to boundary |
+| Civil design | Civil 3D, 12d Model, OpenRoads | The Civil discipline: survey, surfaces, roads, earthworks and drainage (see Disciplines and civil) |
 | Data and dashboards | Power BI connectors, model health tools | Live project data out to dashboards; model health built in |
 | AI agents | Revit MCP servers, Copilot agents | MCP server and AI on every command (see Headless API) |
 
@@ -615,3 +660,4 @@ Licences, activity and browser support were checked on each project's GitHub rep
 | [Pascal editor](https://github.com/pascalorg/editor) | MIT | Browser BIM editor to study; cuts openings, has MCP |
 | [ifc-lite](https://github.com/LTplus-AG/ifc-lite) | MPL-2.0 | Rust/WebAssembly IFC core with headless SDK and MCP to study |
 | [Chili3D](https://github.com/xiangechen/chili3d) | AGPL-3.0 | Browser CAD on OCCT; cannot reuse code |
+| [spade](https://github.com/Stoeoef/spade) | MIT or Apache-2.0 | Rust Delaunay triangulation for civil surfaces |
