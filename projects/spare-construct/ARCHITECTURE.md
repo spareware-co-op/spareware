@@ -393,6 +393,34 @@ Every saved state is a version, and versioning is automated: versions are made a
 - Auto clouds placed directly, or suggested for a person to accept?
 - Automatic versions on every issue only, or nightly as well?
 
+## Sharing with consultants
+
+Sharing between firms is built into the app, not a separate platform. It does the job of Autodesk Docs and Design Collaboration, without bridging projects, matching regions or copying folders.
+
+**High level**
+
+- **Shared project space**: one project that every firm on the job joins with its own team. Each firm's model stays its own, on its own server or co-op servers.
+- **Packages**: a firm publishes a package (chosen models, views and sheets) when it is ready. Everyone sees it on a shared timeline.
+- **Take it in when you're ready**: each firm chooses when to take in a new package, so a consultant's change never lands in the middle of someone's work. Live sync stays inside each firm's own team.
+- **Linked consultant models**: a package taken in shows as a linked model, with what changed since the last package marked in 3D, in plans and in a list.
+- **Other software**: consultants on Revit, Archicad, Tekla or other tools publish IFC into the same space. It is versioned and compared like everyone else's. Clash issues travel as BCF.
+- **Issues and markups**: raised on the model or a sheet, assigned to a firm or a person, and tracked to closed across every firm.
+- **Documents**: drawing register, transmittals, received documents and approvals all live in the shared space, tied to the built-in document control.
+- **Permissions**: set per firm, team and package. Each firm decides what leaves it; design options and work in progress never leave unless it says so.
+
+**Low level**
+
+- A package is a signed pointer into the publishing firm's operation log plus the chunks it covers, so taking one in downloads only the chunks that changed.
+- Elements keep their permanent IDs across packages, so renaming a model or a sheet never breaks its version history.
+- Each firm's server joins the shared space directly, so firms can host anywhere. The space itself can sit with the lead firm, the client or co-op servers.
+- What goes into a package is filtered by discipline ownership and by view, using the same rules as permissions.
+- Every publish and take-in is recorded: who, when, which version.
+
+**Discuss**
+
+- Who hosts the shared space by default: the lead consultant, the client, or co-op servers?
+- Can Revit users publish straight into the space through the Revit add-in exporter, or through IFC only at first?
+
 ## Rendering and front end
 
 The interface is HTML; the 3D and 2D views come from a GPU renderer fed straight from the core. The renderer uses the same techniques large HTML games use to keep millions of objects at full frame rate.
@@ -519,6 +547,7 @@ Everything Revit users buy or bolt on today is built in, as first-party add-ins 
 | Quantities and cost | CostX, Assemble, Navisworks quantities | Live quantities by element, linked cost rates |
 | 4D sequencing | Synchro, Navisworks TimeLiner | Construction phases on a timeline, played in 3D |
 | Document control and CDE | Autodesk Docs, Newforma, Aconex, Procore | Built-in document control: issues, transmittals, registers, markups |
+| Sharing with consultants | Autodesk Design Collaboration, BIM 360 | Built-in shared project space with packages between firms (see Sharing with consultants) |
 | Specification | Masterspec links, keynote add-ins | Keynotes and specification linked to elements |
 | Site and planning | Civil 3D links, site and planning add-ins | LINZ terrain and aerials, zoning, height in relation to boundary |
 | Civil design | Civil 3D, 12d Model, OpenRoads | The Civil discipline: survey, surfaces, roads, earthworks and drainage (see Disciplines and civil) |
