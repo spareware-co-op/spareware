@@ -63,6 +63,7 @@
 [data-app="music"]  { --app: #EB8EEB; --app-strong: #B82EB8; --app-tint: #FBE9FB; }
 [data-app="movies"] { --app: #EB8E8E; --app-strong: #B82E2E; --app-tint: #FBE9E9; }
 [data-app="research"] { --app: #C2DBB3; --app-strong: #458321; --app-tint: #F0FBE9; }
+[data-app="keys"]   { --app: #70EB70; --app-strong: #228722; --app-tint: #E9FBE9; }
 </style>
 <style>
 /* Hub styles. They use only the tokens above. The hub belongs to the co-op, so it is Spareware red;
@@ -293,6 +294,7 @@ details > summary:hover .name { text-decoration: underline; text-decoration-colo
     'spare-studio': { name: 'Spare Studio', app: 'studio', replaces: "Adobe's apps: Photoshop, Illustrator, InDesign, Premiere, After Effects, Lightroom, Acrobat and more" },
     'spare-office': { name: 'Spare Office', app: 'office', replaces: 'Microsoft 365: Word, Excel, PowerPoint, Outlook, Teams, OneNote, OneDrive' },
     'spare-os':     { name: 'Spare OS',     app: 'os',     replaces: 'Paying for Windows' },
+    'spare-keys':   { name: 'Spare Keys',   app: 'keys',   replaces: 'Paid password managers and authenticator apps', idea: true },
     'spare-social': { name: 'Spare Social', app: 'social', replaces: 'TikTok, YouTube, Instagram and Facebook, together' },
     'spare-music':  { name: 'Spare Music',  app: 'music',  replaces: 'Spotify, Apple Music, SoundCloud and Bandcamp' },
     'spare-movies': { name: 'Spare Movies', app: 'movies', replaces: 'Netflix, Prime Video, Disney+ and film rental' },
@@ -309,7 +311,7 @@ details > summary:hover .name { text-decoration: underline; text-decoration-colo
   var GROUPS = [
     { name: 'The shared kit',      slugs: ['kit'] },
     { name: 'Design tools',        slugs: ['spare-construct', 'spare-studio'] },
-    { name: 'Everyday computing',  slugs: ['spare-office', 'spare-os'] },
+    { name: 'Everyday computing',  slugs: ['spare-office', 'spare-os', 'spare-keys'] },
     { name: 'Sharing and talking', slugs: ['spare-social', 'spare-music', 'spare-movies'] },
     { name: 'Research',            slugs: ['spare-research'] },
     { name: 'Marketplaces',        slugs: ['spare-ride', 'spare-food', 'spare-stay', 'spare-home', 'spare-rent', 'spare-work', 'spare-market'] }
@@ -373,6 +375,16 @@ details > summary:hover .name { text-decoration: underline; text-decoration-colo
     el.className = 'card' + (p.app ? '' : ' coop');
     if (p.app) el.setAttribute('data-app', p.app);
     el.setAttribute('aria-labelledby', 't-' + slug);
+    if (p.idea) {
+      el.innerHTML =
+        '<div class="card-head"><span class="mark" aria-hidden="true"></span><h3 id="t-' + slug + '">' + esc(p.name) + '</h3></div>' +
+        '<div class="card-body">' +
+          '<div><span class="label">Replaces</span><p class="replaces">' + esc(p.replaces) + '</p></div>' +
+          '<p class="note">Idea stage: the feature map and demo come next.</p>' +
+          '<div class="card-actions"><a class="btn btn-secondary" target="_blank" rel="noopener" href="https://github.com/spareware-co-op/spareware/blob/main/projects/' + slug + '/ARCHITECTURE.md">Read the plan</a></div>' +
+        '</div>';
+      return el;
+    }
     el.innerHTML =
       '<div class="card-head"><span class="mark" aria-hidden="true"></span><h3 id="t-' + slug + '">' + esc(p.name) + '</h3></div>' +
       '<div class="card-body">' +
