@@ -96,7 +96,7 @@ flowchart TB
 | Spare Studio (working name) | Adobe's apps: Photoshop, Illustrator, InDesign, Premiere, After Effects, Lightroom, Acrobat and more | Mapping | [Map](projects/spare-studio/ARCHITECTURE.md) · [Work board](projects/spare-studio/STATUS.md) |
 | Spare Social (working name) | TikTok, YouTube, Instagram and Facebook, together | Mapping | [Map](projects/spare-social/ARCHITECTURE.md) · [Work board](projects/spare-social/STATUS.md) |
 | Spare Music | Spotify | Mapping | [Map](projects/spare-music/ARCHITECTURE.md) · [Work board](projects/spare-music/STATUS.md) |
-| Spare Movies | Netflix | Idea | [Map](projects/spare-movies/ARCHITECTURE.md) · [Work board](projects/spare-movies/STATUS.md) |
+| Spare Movies | Netflix | Mapping | [Map](projects/spare-movies/ARCHITECTURE.md) · [Work board](projects/spare-movies/STATUS.md) |
 | Spare Research | Journal paywalls and the fees scientists pay to publish | Mapping | [Map](projects/spare-research/ARCHITECTURE.md) · [Work board](projects/spare-research/STATUS.md) |
 | Spare Office | Microsoft 365: Word, Excel, PowerPoint, Outlook, Teams, OneNote, OneDrive | Mapping | [Map](projects/spare-office/ARCHITECTURE.md) · [Work board](projects/spare-office/STATUS.md) |
 | Spare OS | Paying for Windows | Mapping | [Map](projects/spare-os/ARCHITECTURE.md) · [Work board](projects/spare-os/STATUS.md) |
