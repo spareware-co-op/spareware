@@ -179,6 +179,19 @@ table.tbl { width: 100%; border-collapse: collapse; }
 .rail a { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 5px 2px; color: var(--ink-2); text-decoration: none; font-size: 11px; border-left: 3px solid transparent; flex: none; }
 .rail a:hover { background: var(--panel-alt); color: var(--ink); }
 .rail a.on { background: var(--app-tint); border-left-color: var(--app); color: var(--ink); font-weight: 600; }
+/* Each Office app has its own light colour: the page takes the colour of the app you're in, and each app's icon keeps its own. */
+html[data-part="home"], .rail a[data-k="home"] { --app: #A9B6FF; --app-strong: #3A47A8; --app-tint: #EEF0FF; }
+html[data-part="write"], .rail a[data-k="write"] { --app: #93C5FD; --app-strong: #1D5FB0; --app-tint: #EAF3FE; }
+html[data-part="sheets"], .rail a[data-k="sheets"] { --app: #93D9A6; --app-strong: #1F7A45; --app-tint: #EAF8EE; }
+html[data-part="slides"], .rail a[data-k="slides"] { --app: #FDBA8C; --app-strong: #A34A12; --app-tint: #FFF1E7; }
+html[data-part="mail"], .rail a[data-k="mail"] { --app: #7FD3E6; --app-strong: #0F6E85; --app-tint: #E6F7FB; }
+html[data-part="calendar"], .rail a[data-k="calendar"] { --app: #F6A5A5; --app-strong: #A12C2C; --app-tint: #FDECEC; }
+html[data-part="chat"], .rail a[data-k="chat"] { --app: #C4B2FF; --app-strong: #5B3FB8; --app-tint: #F3EFFF; }
+html[data-part="notes"], .rail a[data-k="notes"] { --app: #F2D675; --app-strong: #7A6210; --app-tint: #FCF6DD; }
+html[data-part="drive"], .rail a[data-k="drive"] { --app: #B8C4D6; --app-strong: #3D4F6B; --app-tint: #EEF1F6; }
+html[data-part="forms"], .rail a[data-k="forms"] { --app: #C9DE7A; --app-strong: #5A6E12; --app-tint: #F5F9E3; }
+html[data-part="admin"], .rail a[data-k="admin"] { --app: #CDD1D6; --app-strong: #4A525C; --app-tint: #F2F3F5; }
+html[data-part="coop"], .rail a[data-k="coop"] { --app: #CDD1D6; --app-strong: #4A525C; --app-tint: #F2F3F5; }
 .rail .sp { flex: 1; min-height: 8px; }
 .rail hr { border: 0; border-top: 1px solid var(--hairline); margin: 4px 10px; }
 .main { flex: 1; min-width: 0; position: relative; overflow: hidden; }
@@ -2132,6 +2145,7 @@ function route() {
   $$('.screen').forEach(x => x.classList.toggle('on', x.id === 's-' + s));
   const key = s === 'settings' ? (SUB === 'costs' ? 'coop' : 'admin') : (s === 'meet' ? 'chat' : s);
   $$('.rail a').forEach(a => a.classList.toggle('on', a.dataset.k === key));
+  document.documentElement.dataset.part = key;
   $('#where-app').textContent = SCREENS[s][0];
   $('#where-doc').textContent = SCREENS[s][1];
   document.title = SCREENS[s][0] + ' · Spare Office demo';
