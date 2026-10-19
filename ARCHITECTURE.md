@@ -184,6 +184,12 @@ spareware/
 │  │  │                       arch-interop, arch-api, arch-cli
 │  │  ├─ app/                 interface and desktop shell
 │  │  └─ notes/
+│  ├─ spare-office/
+│  │  └─ crates/              office-core, office-formats, office-collab, office-write,
+│  │                          office-sheets, office-slides, office-notes, office-forms,
+│  │                          office-drive, office-mail, office-calendar, office-chat,
+│  │                          office-meet, office-automation, office-app, office-admin,
+│  │                          office-migrate
 │  ├─ spare-studio/           crates and app added at its Design stage
 │  ├─ spare-ride/ … spare-market/
 │  └─ _template/
