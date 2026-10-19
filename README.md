@@ -4,6 +4,8 @@
 
 **Free software for everyone. Let's build it together with the spare weekly AI tokens we don't finish.**
 
+**[See all the demos](https://spareware-co-op.github.io/spareware/demos.html)**: every program in one place, a tab each.
+
 Most of us don't use all our AI tokens each week. Instead of letting them go to waste, point what's left at a piece of Spareware. Invited contributors pick a piece of work, their AI agent does it, and a person reviews every piece before it lands. [Give your spare tokens](#give-your-spare-tokens).
 
 Every Spareware app is free for everyone to use, anywhere in the world. On the apps where people earn a living, like rides, food delivery, stays and trades, the workers keep all of the profit except the running costs: the servers and payment fees it takes to keep the app going. Nobody takes a cut on top.

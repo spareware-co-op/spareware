@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>All the demos | Spareware</title>
+<meta name="description" content="Every Spareware demo in one place. Tab between the programs.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'%3E%3Ccircle cx='100' cy='100' r='92' fill='%23C8102E'/%3E%3Cpath d='M140 66 C140 50 124 42 100 42 C72 42 58 54 58 72 C58 92 76 98 100 101 C124 104 142 110 142 130 C142 148 126 158 100 158 C74 158 60 150 58 134' fill='none' stroke='%23ffffff' stroke-width='24' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+/* copied from design/tokens.css */
+:root {
+  --spare-red: #C8102E;
+  --spare-red-hover: #A80D26;
+  --spare-red-tint: #FCE9EC;
+  --ink: #1A1A1A;
+  --ink-2: #595959;
+  --ink-3: #8A8A8A;
+  --page: #FAF8F5;
+  --panel: #FFFFFF;
+  --panel-alt: #F7F6F3;
+  --hairline: #E5E5E3;
+  --rule: #C9C9C9;
+  --font-ui: system-ui, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  --text: 13px;
+  --radius: 3px;
+  --space: 8px;
+  --app: var(--spare-red-tint);
+  --app-strong: var(--spare-red);
+  --app-tint: var(--spare-red-tint);
+}
+[data-app="arch"]   { --app: #8EC5FF; --app-strong: #1F5FA8; --app-tint: #EAF4FF; }
+[data-app="studio"] { --app: #C4B2FF; --app-strong: #5B3FB8; --app-tint: #F3EFFF; }
+[data-app="social"] { --app: #FFB27A; --app-strong: #9E4A14; --app-tint: #FFF1E6; }
+[data-app="ride"]   { --app: #7FD8CF; --app-strong: #13756B; --app-tint: #E8F8F6; }
+[data-app="food"]   { --app: #A9DE8A; --app-strong: #3E7C1F; --app-tint: #EFF9E8; }
+[data-app="stay"]   { --app: #80D4F0; --app-strong: #11708F; --app-tint: #E7F7FD; }
+[data-app="home"]   { --app: #E8C99A; --app-strong: #8A5A1C; --app-tint: #FBF4EA; }
+[data-app="rent"]   { --app: #F2B8E0; --app-strong: #94306F; --app-tint: #FCEEF8; }
+[data-app="work"]   { --app: #B8C4D6; --app-strong: #3D4F6B; --app-tint: #EEF1F6; }
+[data-app="market"] { --app: #D8E36A; --app-strong: #66700F; --app-tint: #F7F9DF; }
+[data-app="office"] { --app: #A9B6FF; --app-strong: #3A47A8; --app-tint: #EEF0FF; }
+[data-app="os"]     { --app: #CDD1D6; --app-strong: #4A525C; --app-tint: #F2F3F5; }
+</style>
+<style>
+/* One bar of tabs, one per program in its own colour; the program's existing demo shows underneath. */
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { display: flex; flex-direction: column; margin: 0; background: var(--page); color: var(--ink); font-family: var(--font-ui); font-size: var(--text); line-height: 1.4; }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+.top { display: flex; align-items: flex-end; gap: calc(var(--space) * 2); padding: var(--space) calc(var(--space) * 2) 0; background: var(--panel); border-bottom: 1px solid var(--rule); }
+.brand { display: flex; align-items: center; gap: var(--space); flex: none; padding-bottom: 9px; color: var(--ink); font-size: 14px; font-weight: 700; text-decoration: none; }
+.brand svg { width: 22px; height: 22px; }
+.brand:hover span { text-decoration: underline; text-underline-offset: 3px; }
+
+.tabs { display: flex; gap: 3px; min-width: 0; overflow-x: auto; scrollbar-width: thin; }
+.tab { flex: none; min-height: 34px; margin-bottom: -1px; padding: 0 calc(var(--space) * 1.5); border: 1px solid var(--hairline); border-top: 4px solid var(--app); border-bottom-color: var(--rule); border-radius: var(--radius) var(--radius) 0 0; background: var(--app-tint); color: var(--ink); font: inherit; white-space: nowrap; cursor: pointer; }
+.tab:hover { border-top-color: var(--app-strong); }
+.tab[aria-selected="true"] { background: var(--app); border-color: var(--app-strong); border-top-color: var(--app-strong); border-bottom-color: var(--app); font-weight: 700; }
+.tab.coop[aria-selected="true"] { background: var(--spare-red); border-color: var(--spare-red); color: var(--panel); }
+.tab:focus-visible { outline-offset: -4px; }
+
+.frames { position: relative; flex: 1; min-height: 0; background: var(--panel); }
+.frames iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.frames iframe[hidden] { display: none; }
+
+@media (max-width: 640px) {
+  .top { flex-direction: column; align-items: stretch; gap: 4px; padding: 6px var(--space) 0; }
+  .brand { padding-bottom: 0; }
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <a class="brand" href="./" title="Back to the programs">
+    <svg viewBox="0 0 200 200" aria-hidden="true" focusable="false">
+      <circle cx="100" cy="100" r="92" style="fill: var(--spare-red)"/>
+      <path d="M140 66 C140 50 124 42 100 42 C72 42 58 54 58 72 C58 92 76 98 100 101 C124 104 142 110 142 130 C142 148 126 158 100 158 C74 158 60 150 58 134" fill="none" style="stroke: var(--panel)" stroke-width="24" stroke-linecap="round"/>
+    </svg>
+    <span>Spareware</span>
+  </a>
+  <div class="tabs" id="tabs" role="tablist" aria-label="Demos"></div>
+</header>
+
+<main class="frames" id="frames"></main>
+
+<script>
+(function () {
+  'use strict';
+
+  // Same programs and order as the front page. Each tab opens that program's existing demo at ./<slug>/.
+  var PROGRAMS = [
+    { slug: 'kit',          name: 'Shared kit',   app: '' },
+    { slug: 'spare-arch',   name: 'Spare Arch',   app: 'arch' },
+    { slug: 'spare-studio', name: 'Spare Studio', app: 'studio' },
+    { slug: 'spare-office', name: 'Spare Office', app: 'office' },
+    { slug: 'spare-os',     name: 'Spare OS',     app: 'os' },
+    { slug: 'spare-social', name: 'Spare Social', app: 'social' },
+    { slug: 'spare-ride',   name: 'Spare Ride',   app: 'ride' },
+    { slug: 'spare-food',   name: 'Spare Food',   app: 'food' },
+    { slug: 'spare-stay',   name: 'Spare Stay',   app: 'stay' },
+    { slug: 'spare-home',   name: 'Spare Home',   app: 'home' },
+    { slug: 'spare-rent',   name: 'Spare Rent',   app: 'rent' },
+    { slug: 'spare-work',   name: 'Spare Work',   app: 'work' },
+    { slug: 'spare-market', name: 'Spare Market', app: 'market' }
+  ];
+
+  var tabsEl = document.getElementById('tabs');
+  var framesEl = document.getElementById('frames');
+  var frames = {};   // a demo loads the first time its tab opens, then keeps its place when you tab back
+
+  var tabs = PROGRAMS.map(function (p) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'tab' + (p.app ? '' : ' coop');
+    if (p.app) b.setAttribute('data-app', p.app);
+    b.setAttribute('role', 'tab');
+    b.id = 'tab-' + p.slug;
+    b.setAttribute('aria-controls', 'demo-' + p.slug);
+    b.textContent = p.name;
+    b.addEventListener('click', function () { show(p.slug, true); });
+    tabsEl.appendChild(b);
+    return b;
+  });
+
+  tabsEl.addEventListener('keydown', function (e) {
+    var i = tabs.indexOf(document.activeElement);
+    if (i < 0) return;
+    var j = e.key === 'ArrowRight' ? i + 1 : e.key === 'ArrowLeft' ? i - 1 : e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : -1;
+    if (j < 0 && e.key !== 'ArrowLeft') return;
+    e.preventDefault();
+    j = (j + tabs.length) % tabs.length;
+    tabs[j].focus();
+    show(PROGRAMS[j].slug, true);
+  });
+
+  function show(slug, fromTab) {
+    var p = null;
+    PROGRAMS.forEach(function (x) { if (x.slug === slug) p = x; });
+    if (!p) p = PROGRAMS[0];
+
+    if (!frames[p.slug]) {
+      var f = document.createElement('iframe');
+      f.id = 'demo-' + p.slug;
+      f.setAttribute('role', 'tabpanel');
+      f.setAttribute('aria-labelledby', 'tab-' + p.slug);
+      f.title = p.name + ' demo';
+      f.src = './' + p.slug + '/';
+      framesEl.appendChild(f);
+      frames[p.slug] = f;
+    }
+    Object.keys(frames).forEach(function (k) { frames[k].hidden = k !== p.slug; });
+    tabs.forEach(function (t, i) {
+      var on = PROGRAMS[i].slug === p.slug;
+      t.setAttribute('aria-selected', String(on));
+      t.tabIndex = on ? 0 : -1;
+      if (on) t.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    });
+    document.title = p.name + ' demo | Spareware';
+    if (fromTab && location.hash !== '#' + p.slug) history.replaceState(null, '', '#' + p.slug);
+  }
+
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1), false); });
+  show(location.hash.slice(1), false);
+})();
+</script>
+</body>
+</html>

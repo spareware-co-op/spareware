@@ -1,0 +1,2184 @@
+<!doctype html>
+<html lang="en" data-app="ride">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spare Ride demo</title>
+<style>
+/* copied from design/tokens.css */
+/* Spareware design tokens: the one shared look for every Spareware app.
+   Read design/DESIGN.md first. An app sets data-app="<name>" on <html> to get its own colour.
+   Text is always ink on light colours; white text appears only on Spareware red. */
+:root {
+  /* Spareware (the co-op) */
+  --spare-red: #C8102E;
+  --spare-red-hover: #A80D26;
+  --spare-red-tint: #FCE9EC;
+
+  /* Neutrals */
+  --ink: #1A1A1A;
+  --ink-2: #595959;
+  --ink-3: #8A8A8A;
+  --page: #FAF8F5;
+  --panel: #FFFFFF;
+  --panel-alt: #F7F6F3;
+  --sink: #F1EFEA;
+  --hairline: #E5E5E3;
+  --rule: #C9C9C9;
+
+  /* States (always paired: strong for borders and icons, tint for backgrounds) */
+  --danger: #B91C1C;  --danger-tint: #FDE8E8;
+  --success: #15803D; --success-tint: #E3F6E8;
+  --info: #1D4ED8;    --info-tint: #E3ECFD;
+
+  /* Type and shape */
+  --font-ui: system-ui, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  --text: 13px;
+  --radius: 3px;
+  --space: 8px;
+
+  /* The current app's colours (default: Spareware itself) */
+  --app: var(--spare-red-tint);
+  --app-strong: var(--spare-red);
+  --app-tint: var(--spare-red-tint);
+}
+
+/* One light colour per app: --app is the fill for its mark, primary buttons and active items
+   (ink text on it), --app-strong is for thin borders and icons, --app-tint for quiet backgrounds. */
+[data-app="arch"]   { --app: #8EC5FF; --app-strong: #1F5FA8; --app-tint: #EAF4FF; }
+[data-app="studio"] { --app: #C4B2FF; --app-strong: #5B3FB8; --app-tint: #F3EFFF; }
+[data-app="social"] { --app: #FFB27A; --app-strong: #9E4A14; --app-tint: #FFF1E6; }
+[data-app="ride"]   { --app: #7FD8CF; --app-strong: #13756B; --app-tint: #E8F8F6; }
+[data-app="food"]   { --app: #A9DE8A; --app-strong: #3E7C1F; --app-tint: #EFF9E8; }
+[data-app="stay"]   { --app: #80D4F0; --app-strong: #11708F; --app-tint: #E7F7FD; }
+[data-app="home"]   { --app: #E8C99A; --app-strong: #8A5A1C; --app-tint: #FBF4EA; }
+[data-app="rent"]   { --app: #F2B8E0; --app-strong: #94306F; --app-tint: #FCEEF8; }
+[data-app="work"]   { --app: #B8C4D6; --app-strong: #3D4F6B; --app-tint: #EEF1F6; }
+[data-app="market"] { --app: #D8E36A; --app-strong: #66700F; --app-tint: #F7F9DF; }
+[data-app="office"] { --app: #A9B6FF; --app-strong: #3A47A8; --app-tint: #EEF0FF; }
+[data-app="os"]     { --app: #CDD1D6; --app-strong: #4A525C; --app-tint: #F2F3F5; }
+</style>
+<style>
+/* Spare Ride demo styles. Only the tokens above are used for colour, type, corners and spacing. */
+:root { --s1: var(--space); --s2: calc(var(--space) * 2); --s3: calc(var(--space) * 3); --s4: calc(var(--space) * 4); --half: calc(var(--space) / 2); }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--page); color: var(--ink); font-family: var(--font-ui); font-size: var(--text); line-height: 1.45; -webkit-text-size-adjust: 100%; }
+button, input, select, textarea { font: inherit; color: inherit; }
+a { color: var(--ink); text-decoration-color: var(--app-strong); text-underline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--app-strong); outline-offset: 2px; }
+[hidden] { display: none !important; }
+.mono, .money { font-family: var(--font-mono); }
+.hint .mono, .sub .mono, .muted .mono { white-space: nowrap; }
+.muted { color: var(--ink-2); }
+.label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-3); font-weight: 600; margin: 0 0 var(--s1); }
+.mark { display: inline-block; width: 14px; height: 14px; background: var(--app); border: 1px solid var(--app-strong); border-radius: var(--radius); flex: none; }
+.mark.coop { background: var(--spare-red); border-color: var(--spare-red); }
+.ic { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; vertical-align: middle; }
+.ic.sm { width: 15px; height: 15px; }
+.ic.lg { width: 26px; height: 26px; }
+.ic.app { color: var(--app-strong); }
+.ic.dan { color: var(--danger); }
+.ic.ok { color: var(--success); }
+.ic.inf { color: var(--info); }
+
+/* Demo chrome around the phone */
+.demohead { height: 48px; display: flex; align-items: center; gap: var(--s1); padding: 0 var(--s2); background: var(--panel); border-bottom: 1px solid var(--hairline); }
+.demohead b { font-weight: 700; }
+.demohead .sep { color: var(--ink-3); }
+.demohead .grow { flex: 1; }
+.demohead .screens-btn { display: none; }
+.stage { display: flex; justify-content: center; gap: var(--s3); padding: var(--s2); height: calc(100vh - 48px); }
+.nav, .about { background: var(--panel); border: 1px solid var(--hairline); border-radius: var(--radius); overflow-y: auto; }
+.nav { width: 240px; flex: none; padding: var(--s2) 0; }
+.nav .label { padding: 0 var(--s2); margin-top: var(--s2); }
+.nav .label:first-child { margin-top: 0; }
+.nav a { display: flex; gap: var(--s1); align-items: baseline; padding: 7px var(--s2); text-decoration: none; color: var(--ink); border-left: 3px solid transparent; }
+.nav a .num { font-family: var(--font-mono); color: var(--ink-3); font-size: 11px; width: 18px; flex: none; }
+.nav a:hover { background: var(--panel-alt); }
+.nav a[aria-current="page"] { background: var(--app-tint); border-left-color: var(--app); font-weight: 600; }
+.nav .navfoot { margin: var(--s2) var(--s2) 0; padding-top: var(--s2); border-top: 1px solid var(--hairline); font-size: 12px; color: var(--ink-2); }
+.nav .navfoot a { display: inline; padding: 0; border: 0; text-decoration: underline; text-decoration-color: var(--app-strong); font-weight: 600; }
+.nav .navfoot a:hover { background: none; }
+.about { width: 300px; flex: none; padding: var(--s2); }
+.about h3 { font-size: var(--text); margin: 0 0 var(--half); }
+.about p { margin: 0 0 var(--s2); color: var(--ink-2); }
+.about ul { margin: 0 0 var(--s2); padding: 0; list-style: none; }
+.about li { padding: 6px 0; border-bottom: 1px solid var(--hairline); }
+.about li .mono { font-size: 11px; color: var(--app-strong); display: block; }
+.about .try li { padding-left: var(--s2); position: relative; }
+.about .try li::before { content: ""; position: absolute; left: 0; top: 12px; width: 6px; height: 6px; background: var(--app); border: 1px solid var(--app-strong); }
+.device { flex: none; width: 392px; display: flex; flex-direction: column; align-items: center; }
+.phone { width: 392px; height: 100%; max-height: 812px; background: var(--panel); border: 1px solid var(--ink); border-radius: var(--radius); position: relative; overflow: hidden; overflow: clip; display: flex; flex-direction: column; }
+.statusbar { height: 24px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 var(--s2); font-size: 11px; font-weight: 600; font-family: var(--font-mono); color: var(--ink); border-bottom: 1px solid var(--hairline); background: var(--panel); }
+.statusbar .ic { width: 14px; height: 14px; }
+
+/* App header inside the phone */
+.apphead { height: 46px; flex: none; display: flex; align-items: center; gap: var(--s1); padding: 0 var(--s2); border-bottom: 1px solid var(--hairline); background: var(--panel); }
+.apphead b { font-weight: 700; white-space: nowrap; }
+.apphead .crumb { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
+.apphead .crumb::before { content: "/"; color: var(--ink-3); margin-right: var(--s1); }
+.avatar { width: 30px; height: 30px; flex: none; display: inline-grid; place-items: center; background: var(--app-tint); color: var(--app-strong); border: 1px solid var(--app-strong); border-radius: var(--radius); font-weight: 700; font-size: 11px; cursor: pointer; padding: 0; }
+.avatar.lg { width: 44px; height: 44px; font-size: 14px; }
+.view { flex: 1; overflow-y: auto; overflow-x: hidden; position: relative; background: var(--panel); }
+.scr { min-height: 100%; display: flex; flex-direction: column; }
+.scr > .fill { flex: 1; }
+
+/* Tab bar */
+.tabbar { flex: none; display: flex; border-top: 1px solid var(--hairline); background: var(--panel); }
+.tabbar a { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 7px 0 8px; font-size: 11px; color: var(--ink-2); text-decoration: none; }
+.tabbar a[aria-current="page"] { background: var(--app); color: var(--ink); font-weight: 700; }
+
+/* Building blocks */
+.pad { padding: var(--s2); }
+.sect { padding: var(--s2); border-bottom: 1px solid var(--hairline); }
+.sect:last-child { border-bottom: 0; }
+.sect.alt { background: var(--panel-alt); }
+.stack > * + * { margin-top: var(--s1); }
+h2 { font-size: 15px; font-weight: 700; margin: 0 0 var(--half); line-height: 1.3; }
+h3 { font-size: var(--text); font-weight: 700; margin: 0 0 var(--half); }
+p { margin: 0 0 var(--s1); }
+.hint { font-size: 12px; color: var(--ink-2); margin: var(--half) 0 0; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--s1); min-height: 40px; padding: 0 var(--s2); border-radius: var(--radius); border: 1px solid transparent; cursor: pointer; font-weight: 600; text-decoration: none; white-space: nowrap; }
+.btn.primary { background: var(--app); color: var(--ink); border-color: var(--app); }
+.btn.primary:hover { border-color: var(--app-strong); }
+.btn.primary[disabled] { background: var(--sink); border-color: var(--sink); color: var(--ink-2); cursor: default; }
+.btn.secondary { background: var(--panel); color: var(--ink); border-color: var(--ink); }
+.btn.quiet { background: var(--panel); color: var(--ink-2); border-color: var(--rule); font-weight: 500; }
+.btn.secondary:hover, .btn.quiet:hover { background: var(--panel-alt); }
+.btn.coop { background: var(--spare-red); color: var(--panel); border-color: var(--spare-red); }
+.btn.coop:hover { background: var(--spare-red-hover); }
+.btn.sos { background: var(--danger-tint); color: var(--ink); border: 2px solid var(--danger); }
+.btn.sos .ic { color: var(--danger); }
+.btn.block { width: 100%; }
+.btn.small { min-height: 30px; padding: 0 10px; font-size: 12px; }
+.btn.big { min-height: 52px; font-size: 15px; }
+.btns { display: flex; gap: var(--s1); flex-wrap: wrap; }
+.btns > .btn { flex: 1; }
+.linkbtn { background: none; border: 0; padding: 0; color: var(--ink); text-decoration: underline; text-decoration-color: var(--app-strong); text-underline-offset: 2px; cursor: pointer; font-weight: 600; }
+.badge { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px; background: var(--app-tint); color: var(--app-strong); font-size: 11px; font-weight: 600; white-space: nowrap; }
+.badge.n { background: var(--sink); color: var(--ink-2); }
+/* State badges: a strong line plus a tint, with ink text, so every one passes AA. */
+.badge.ok, .badge.dan, .badge.inf { color: var(--ink); padding: 0 7px; border: 1px solid; }
+.badge.ok { background: var(--success-tint); border-color: var(--success); }
+.badge.dan { background: var(--danger-tint); border-color: var(--danger); }
+.badge.inf { background: var(--info-tint); border-color: var(--info); }
+.badge.coop { background: var(--spare-red-tint); color: var(--spare-red); }
+.note { background: var(--app-tint); border-left: 3px solid var(--app); padding: 10px 12px; border-radius: var(--radius); }
+.note.inf { background: var(--info-tint); border-left-color: var(--info); }
+.note.ok { background: var(--success-tint); border-left-color: var(--success); }
+.note.dan { background: var(--danger-tint); border-left-color: var(--danger); }
+.note.coop { background: var(--spare-red-tint); border-left-color: var(--spare-red); }
+.note b { font-weight: 700; }
+.row { display: flex; align-items: center; gap: 12px; padding: 11px var(--s2); border-bottom: 1px solid var(--hairline); background: var(--panel); width: 100%; text-align: left; border-left: 0; border-right: 0; border-top: 0; cursor: pointer; }
+.row:hover { background: var(--panel-alt); }
+.row .grow { flex: 1; min-width: 0; }
+.row .sub { display: block; font-size: 12px; color: var(--ink-2); }
+.row .end { text-align: right; flex: none; }
+.row.sel { background: var(--app-tint); box-shadow: inset 3px 0 0 var(--app); }
+.row.static { cursor: default; }
+.row.static:hover { background: var(--panel); }
+.list { border-top: 1px solid var(--hairline); }
+.kv { display: grid; grid-template-columns: 1fr auto; gap: 6px var(--s2); }
+.kv dt { color: var(--ink-2); }
+.kv dd { margin: 0; text-align: right; font-family: var(--font-mono); }
+.kv .tot { font-weight: 700; color: var(--ink); border-top: 1px solid var(--ink); padding-top: 6px; }
+.in { width: 100%; min-height: 40px; padding: 0 10px; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--panel); }
+textarea.in { padding: 8px 10px; min-height: 64px; resize: vertical; }
+.inrow { display: flex; gap: var(--s1); }
+.inrow .in { flex: 1; }
+.search { position: relative; }
+.search .ic { position: absolute; left: 10px; top: 11px; color: var(--ink-2); }
+.search .in { padding-left: 36px; min-height: 42px; border-color: var(--ink); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 12px; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--panel); cursor: pointer; color: var(--ink); }
+.chip[aria-pressed="true"] { background: var(--app); border-color: var(--app); font-weight: 600; }
+.seg { display: flex; border: 1px solid var(--rule); border-radius: var(--radius); overflow: hidden; }
+.seg button { flex: 1; min-height: 34px; border: 0; border-right: 1px solid var(--rule); background: var(--panel); cursor: pointer; color: var(--ink-2); padding: 0 6px; }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--app); color: var(--ink); font-weight: 700; }
+.tog { width: 40px; height: 22px; flex: none; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--sink); position: relative; cursor: pointer; padding: 0; }
+.tog::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; background: var(--panel); border: 1px solid var(--ink-3); border-radius: 2px; transition: left .15s; }
+.tog[aria-checked="true"] { background: var(--app); border-color: var(--app-strong); }
+.tog[aria-checked="true"]::after { left: 20px; border-color: var(--app-strong); }
+.togrow { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--hairline); }
+.togrow:last-child { border-bottom: 0; }
+.togrow .grow { flex: 1; }
+.togrow .sub { display: block; font-size: 12px; color: var(--ink-2); }
+.big-num { font-family: var(--font-mono); font-size: 26px; font-weight: 700; line-height: 1.1; letter-spacing: -.01em; }
+.mid-num { font-family: var(--font-mono); font-size: 18px; font-weight: 700; }
+.actionbar { position: sticky; bottom: 0; background: var(--panel); border-top: 1px solid var(--hairline); padding: 10px var(--s2); z-index: 5; }
+.bar { height: 8px; background: var(--sink); border-radius: var(--radius); overflow: hidden; }
+.bar > span { display: block; height: 100%; background: var(--app); border-right: 1px solid var(--app-strong); }
+.bar.coop > span { background: var(--spare-red); border-right: 0; }
+details.more { border-top: 1px solid var(--hairline); }
+details.more summary { cursor: pointer; padding: 10px 0; font-weight: 600; list-style: none; display: flex; align-items: center; gap: 6px; }
+details.more summary::-webkit-details-marker { display: none; }
+details.more summary .ic { transition: transform .15s; }
+details.more[open] summary .ic { transform: rotate(90deg); }
+.plate { font-family: var(--font-mono); font-weight: 700; letter-spacing: .12em; border: 1px solid var(--ink); border-radius: var(--radius); padding: 2px 8px; background: var(--panel); }
+.pin { display: flex; gap: 6px; }
+.pin span { width: 34px; height: 40px; display: grid; place-items: center; border: 1px solid var(--ink); border-radius: var(--radius); font-family: var(--font-mono); font-size: 20px; font-weight: 700; background: var(--panel); }
+.steps { list-style: none; margin: 0; padding: 0; }
+.steps li { display: flex; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--hairline); }
+.steps li:last-child { border-bottom: 0; }
+.steps .dot { width: 20px; height: 20px; flex: none; border: 1px solid var(--rule); border-radius: var(--radius); display: grid; place-items: center; background: var(--panel); }
+.steps li.done .dot { background: var(--app); border-color: var(--app-strong); }
+.steps li.now .dot { border: 2px solid var(--app-strong); }
+.steps li.wait { color: var(--ink-2); }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--hairline); border-top: 1px solid var(--hairline); border-bottom: 1px solid var(--hairline); }
+.grid2 > div { background: var(--panel); padding: 10px var(--s2); }
+.stars { display: flex; gap: 4px; }
+.stars button { background: none; border: 1px solid var(--rule); border-radius: var(--radius); width: 44px; height: 44px; display: grid; place-items: center; cursor: pointer; color: var(--ink-3); }
+.stars button.on { color: var(--app-strong); border-color: var(--app-strong); background: var(--app-tint); }
+.stars button.on .ic { fill: var(--app); }
+.split { display: flex; height: 14px; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--rule); }
+.split span { display: block; height: 100%; }
+.sw { display: inline-block; width: 10px; height: 10px; border: 1px solid var(--rule); border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.c-driver { background: var(--app); }
+.c-fee { background: var(--ink-2); }
+.c-pay { background: var(--ink-3); }
+.c-gst { background: var(--hairline); }
+.c-extra { background: var(--sink); }
+.ring { position: relative; width: 56px; height: 56px; flex: none; }
+.ring svg { width: 56px; height: 56px; transform: rotate(-90deg); }
+.ring .track { fill: none; stroke: var(--sink); stroke-width: 5; }
+.ring .prog { fill: none; stroke: var(--app-strong); stroke-width: 5; transition: stroke-dashoffset 1s linear; }
+.ring b { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--font-mono); font-size: 16px; }
+.drivecard { display: flex; gap: 12px; align-items: center; }
+.coopstrip { display: flex; align-items: center; gap: var(--s1); padding: 8px var(--s2); background: var(--spare-red-tint); border-bottom: 1px solid var(--hairline); font-weight: 600; }
+.bubble { max-width: 80%; padding: 8px 10px; border-radius: var(--radius); border: 1px solid var(--hairline); background: var(--panel-alt); margin: 0 0 6px; }
+.bubble.me { margin-left: auto; background: var(--app-tint); border-color: var(--app); }
+.chat { min-height: 120px; }
+.mlog { font-family: var(--font-mono); font-size: 11px; color: var(--ink-2); line-height: 1.6; background: var(--panel-alt); border: 1px solid var(--hairline); border-radius: var(--radius); padding: var(--s1); overflow-x: auto; white-space: pre; }
+.mlog.wrap { white-space: pre-wrap; overflow-wrap: anywhere; }
+.instr { display: flex; gap: 12px; align-items: center; padding: 12px var(--s2); background: var(--app-tint); border-bottom: 1px solid var(--app); }
+.instr .big { font-size: 17px; font-weight: 700; line-height: 1.25; }
+.tbl { width: 100%; border-collapse: collapse; }
+.tbl th { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); text-align: left; font-weight: 600; padding: 6px 4px; border-bottom: 1px solid var(--rule); }
+.tbl td { padding: 7px 4px; border-bottom: 1px solid var(--hairline); vertical-align: top; }
+.tbl td.r, .tbl th.r { text-align: right; font-family: var(--font-mono); }
+.tbl td.t { text-align: right; }
+.label .badge { text-transform: none; letter-spacing: 0; }
+.voice .bubble b { font-weight: 700; }
+.ctry { padding: 0 var(--s2) var(--s2); margin-bottom: var(--s2); border-bottom: 1px solid var(--hairline); }
+.ctry .label { padding: 0; margin: 0 0 6px; display: block; }
+.ctry select.in { min-height: 34px; padding: 0 6px; border-color: var(--ink); cursor: pointer; }
+.ctry .hint { margin-top: 6px; font-size: 12px; }
+
+/* Map */
+.map { position: relative; height: 270px; flex: none; border-bottom: 1px solid var(--hairline); background: var(--page); overflow: hidden; }
+.map.short { height: 170px; }
+.map.mid { height: 230px; }
+.map.tall { height: 320px; }
+.map > svg { position: absolute; left: 0; top: 0; width: 100%; height: calc(100% - 17px); display: block; }
+.map .credit { position: absolute; left: 0; right: 0; bottom: 0; height: 17px; line-height: 16px; text-align: right; font-size: 10px; color: var(--ink-2); background: var(--panel); border-top: 1px solid var(--hairline); padding: 0 var(--s1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.map .float { position: absolute; left: var(--s1); top: var(--s1); right: var(--s1); background: var(--panel); border: 1px solid var(--ink); border-radius: var(--radius); padding: 8px 10px; font-weight: 600; display: flex; align-items: center; gap: var(--s1); }
+.m-land { fill: var(--page); }
+.m-water { fill: var(--hairline); }
+.m-wave { fill: none; stroke: var(--panel); stroke-width: 1.2; stroke-linecap: round; }
+.m-block { fill: var(--sink); }
+.m-park { fill: var(--panel-alt); stroke: var(--rule); stroke-width: .8; stroke-dasharray: 2 2; }
+.m-case { fill: none; stroke: var(--rule); stroke-linecap: round; stroke-linejoin: round; }
+.m-road { fill: none; stroke: var(--panel); stroke-linecap: round; stroke-linejoin: round; }
+.m-mway { fill: none; stroke: var(--ink-3); stroke-linecap: round; stroke-linejoin: round; }
+.m-label { font-family: var(--font-ui); font-size: 8.5px; letter-spacing: .1em; fill: var(--ink-2); font-weight: 600; paint-order: stroke; stroke: var(--page); stroke-width: 3px; stroke-linejoin: round; }
+.m-label.water { font-style: italic; letter-spacing: .06em; }
+.m-route-halo { fill: none; stroke: var(--app); stroke-width: 9; stroke-linecap: round; stroke-linejoin: round; }
+.m-route { fill: none; stroke: var(--app-strong); stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }
+.m-route.dash { stroke-dasharray: 2 6; }
+.m-done { fill: none; stroke: var(--ink-3); stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }
+.m-pick { fill: var(--panel); stroke: var(--ink); stroke-width: 3; }
+.m-dest { fill: var(--panel); stroke: var(--ink); stroke-width: 3; }
+.m-me-halo { fill: var(--app); opacity: .45; }
+.m-me { fill: var(--app-strong); stroke: var(--panel); stroke-width: 2; }
+.m-car { fill: var(--app); stroke: var(--ink); stroke-width: 1.5; }
+.m-car-dir { fill: var(--ink); }
+.m-other { fill: var(--panel); stroke: var(--app-strong); stroke-width: 1.5; }
+.m-req { fill: var(--panel); stroke: var(--ink); stroke-width: 1.5; }
+.m-zone { fill: var(--app-tint); fill-opacity: .55; stroke: var(--app-strong); stroke-width: 1; stroke-dasharray: 4 3; }
+.m-zone-label { font-family: var(--font-ui); font-size: 8.5px; fill: var(--app-strong); font-weight: 700; letter-spacing: .08em; paint-order: stroke; stroke: var(--app-tint); stroke-width: 3px; stroke-linejoin: round; }
+.m-pulse { fill: none; stroke: var(--app-strong); stroke-width: 1.5; }
+@keyframes pulse { from { r: 8; opacity: .9; } to { r: 46; opacity: 0; } }
+.m-pulse { animation: pulse 2s ease-out infinite; }
+.m-pulse.p2 { animation-delay: 1s; }
+
+.wk-bar { fill: var(--app); stroke: var(--app-strong); stroke-width: 1; }
+.wk-bar.today { fill: var(--app-tint); stroke-width: 2; }
+.wk-val { font-family: var(--font-mono); font-size: 10px; fill: var(--ink-2); }
+.wk-lbl { font-family: var(--font-ui); font-size: 11px; fill: var(--ink-2); font-weight: 600; }
+.wk-axis { stroke: var(--rule); stroke-width: 1; }
+
+/* Sheet, scrim and toast inside the phone */
+.scrim { position: absolute; inset: 0; background: color-mix(in srgb, var(--ink) 30%, transparent); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 20; }
+.scrim.open { opacity: 1; pointer-events: auto; }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; max-height: 88%; display: flex; flex-direction: column; background: var(--panel); border-top: 1px solid var(--ink); border-radius: var(--radius) var(--radius) 0 0; transform: translateY(105%); visibility: hidden; transition: transform .22s ease, visibility 0s linear .22s; z-index: 21; }
+.sheet.open { transform: none; visibility: visible; transition: transform .22s ease; }
+.sheet-head { display: flex; align-items: center; gap: var(--s1); padding: 10px var(--s2); border-bottom: 1px solid var(--hairline); }
+.sheet-head b { flex: 1; font-size: 14px; }
+.sheet-body { overflow-y: auto; padding: var(--s2); }
+.sheet-body > * + * { margin-top: 12px; }
+.iconbtn { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--panel); cursor: pointer; color: var(--ink); padding: 0; flex: none; }
+.toast { position: absolute; left: var(--s2); right: var(--s2); bottom: 70px; background: var(--panel); color: var(--ink); border: 1px solid var(--ink); border-left: 4px solid var(--app); border-radius: var(--radius); padding: 10px 12px; z-index: 40; opacity: 0; transform: translateY(8px); transition: opacity .2s, transform .2s; pointer-events: none; font-weight: 500; }
+.toast.show { opacity: 1; transform: none; }
+.phone.contrast { --ink-2: var(--ink); --ink-3: var(--ink); --hairline: var(--rule); }
+.phone.contrast .c-pay { background: repeating-linear-gradient(45deg, var(--ink) 0 2px, var(--panel) 2px 4px); }
+.tabbar[hidden] { display: none !important; }
+.phone.large .view { zoom: 1.18; }
+
+/* Assess panel */
+.assess-btn { position: fixed; right: var(--s2); bottom: var(--s2); z-index: 60; display: inline-flex; align-items: center; gap: var(--s1); min-height: 36px; padding: 0 14px; background: var(--panel); color: var(--ink); border: 1px solid var(--ink); border-radius: var(--radius); font-weight: 700; cursor: pointer; }
+.assess-btn:hover { background: var(--app-tint); }
+.assess-scrim { position: fixed; inset: 0; background: color-mix(in srgb, var(--ink) 25%, transparent); z-index: 70; }
+.assess { position: fixed; top: 0; right: 0; bottom: 0; width: min(480px, 100%); background: var(--panel); border-left: 1px solid var(--ink); z-index: 71; display: flex; flex-direction: column; }
+.assess-head { display: flex; align-items: center; gap: var(--s1); padding: 10px var(--s2); border-bottom: 1px solid var(--hairline); }
+.assess-head b { flex: 1; font-size: 14px; }
+.assess-body { overflow-y: auto; padding: var(--s2); }
+.assess-body ol { margin: 0 0 var(--s2); padding-left: 22px; }
+.assess-body ol li { padding: 4px 0; }
+.assess-body .scrcov { border-top: 1px solid var(--hairline); padding: 10px 0; }
+.assess-body .scrcov a { font-weight: 700; }
+.assess-body .scrcov ul { margin: 6px 0 0; padding: 0; list-style: none; }
+.assess-body .scrcov li { font-size: 12px; padding: 2px 0; color: var(--ink-2); }
+.assess-body .scrcov li .mono { color: var(--app-strong); margin-right: 6px; font-size: 11px; }
+.cov { display: grid; grid-template-columns: 1fr auto; gap: 4px var(--s2); font-size: 12px; margin-bottom: var(--s2); }
+.cov .mono { text-align: right; }
+
+/* Narrower screens */
+.about { margin-bottom: 44px; }
+@media (max-width: 1080px) {
+  .about { display: none; }
+  .demohead { padding-right: 180px; }
+  .assess-btn { top: 6px; bottom: auto; }
+}
+@media (max-width: 720px) {
+  .demohead { height: 44px; padding: 0 var(--s1); padding-right: 150px; }
+  .demohead .wide-only { display: none; }
+  .demohead .screens-btn { display: inline-flex; }
+  .stage { display: block; padding: 0; height: calc(100vh - 44px); height: calc(100dvh - 44px); }
+  .nav { position: fixed; top: 44px; left: 0; right: 0; bottom: 0; width: auto; z-index: 50; border: 0; border-radius: 0; display: none; }
+  .nav.open { display: block; }
+  .device { width: 100%; height: 100%; }
+  .phone { width: 100%; max-height: none; border: 0; border-radius: 0; }
+  .statusbar { display: none; }
+  .assess-btn { top: 4px; bottom: auto; right: var(--s1); }
+}
+</style>
+</head>
+<body>
+<header class="demohead">
+  <button class="btn quiet small screens-btn" data-act="drawer" aria-controls="nav"><i data-i="menu"></i>Screens</button>
+  <span class="mark wide-only"></span><b class="wide-only">Spare Ride</b><span class="sep wide-only">/</span>
+  <span class="muted">Demo<span class="wide-only"> with sample data</span></span>
+  <span class="grow"></span>
+  <span class="badge n wide-only">Stage: Mapping</span>
+</header>
+
+<div class="stage">
+  <nav class="nav" id="nav" aria-label="Demo screens"></nav>
+
+  <div class="device">
+    <div class="phone" id="phone">
+      <div class="statusbar"><span>8:41</span><span><i data-i="signal"></i> <i data-i="battery"></i></span></div>
+      <div class="apphead">
+        <span class="mark" id="appmark"></span><b>Spare Ride</b><span class="crumb" id="crumb">Book a ride</span>
+        <span class="badge n" id="who">Rider</span>
+      </div>
+      <main class="view" id="view">
+
+<!-- ============ RIDER: WELCOME ============ -->
+<section class="scr" id="scr-r-welcome" data-screen="r-welcome">
+  <div class="sect">
+    <h2>Rides where the driver keeps the fare</h2>
+    <p class="muted">Drivers keep everything except running costs, and vote on the fares. You see where your money goes before you book.</p>
+  </div>
+  <div class="sect stack">
+    <button class="btn primary block big" data-go="r-home" data-toast="Signed in with a passkey. You can book now.">Sign up with a passkey</button>
+    <button class="btn secondary block" data-act="reveal" data-target="#codebox">Use a phone code</button>
+    <div id="codebox" hidden class="stack">
+      <div class="inrow"><input class="in mono" aria-label="Mobile number" value="021 555 0142"><button class="btn secondary" data-act="sendcode">Send code</button></div>
+      <p class="hint" id="codehint">We text a 6-digit code. Overseas numbers work too.</p>
+    </div>
+    <button class="btn quiet block" data-act="reveal" data-target="#emailbox">Use email</button>
+    <div id="emailbox" hidden class="stack">
+      <div class="inrow"><input class="in" aria-label="Email" value="aroha@example.com"><button class="btn secondary" data-toast="Link sent. Open it on this phone to finish.">Send link</button></div>
+    </div>
+  </div>
+  <div class="sect">
+    <div class="label">Already riding with us</div>
+    <button class="row static" style="padding:0;border:0" data-go="r-home" data-toast="Signed in. Your places, settings and trips came with you.">
+      <i data-i="user" class="app"></i><span class="grow">Sign in on this phone or in a browser<span class="sub">Your places, settings and history are waiting</span></span><i data-i="chev"></i>
+    </button>
+  </div>
+  <div class="sect">
+    <div class="label">Language</div>
+    <div class="seg" data-key="lang" id="langSeg"><button aria-pressed="true">English</button><button>Te reo Māori</button></div>
+    <p class="hint" id="langnote">More languages are added by volunteers.</p>
+  </div>
+  <div class="sect stack">
+    <button class="btn quiet block" data-go="d-apply"><i data-i="car"></i>I want to drive</button>
+    <button class="btn quiet block" data-toast="Spare Ride installs on Android and iPhone, or runs in any browser."><i data-i="download"></i>Get the app</button>
+  </div>
+  <div class="sect"><p class="hint" style="margin:0">No smartphone? Book by phone on <span class="mono">0800 000 000</span> (sample number) and get updates by text.</p></div>
+  <div class="sect fill"><p class="hint">By signing up you agree to the <button class="linkbtn" data-sheet="terms">plain terms</button>. They take two minutes to read.</p></div>
+</section>
+
+<!-- ============ RIDER: WHERE TO ============ -->
+<section class="scr" id="scr-r-home" data-screen="r-home">
+  <div class="map" data-map="home"></div>
+  <div class="sect stack">
+    <div class="search"><i data-i="search"></i><input class="in" id="whereto" placeholder="Search a place or address" aria-label="Destination" autocomplete="off"></div>
+    <button class="btn quiet block" data-sheet="voice"><i data-i="mic"></i>Book by voice</button>
+    <div class="list" id="suggest"></div>
+  </div>
+  <div class="sect">
+    <div class="label">Pickup</div>
+    <div class="drivecard">
+      <i data-i="pin" class="app"></i>
+      <div class="grow" style="flex:1"><b id="pickupText">Outside 41 Sandringham Road, Kingsland</b><span class="hint" style="display:block" id="pickupSnap">Moved 12 m to a safe, legal stopping spot.</span></div>
+      <button class="btn quiet small" data-act="movepin">Move</button>
+    </div>
+  </div>
+  <div class="sect">
+    <div class="label">Saved places</div>
+    <div class="chips">
+      <button class="chip" data-act="dest" data-dest="home"><i data-i="home" class="sm"></i>Home</button>
+      <button class="chip" data-act="dest" data-dest="work"><i data-i="brief" class="sm"></i>Work</button>
+      <button class="chip" data-act="dest" data-dest="beach"><i data-i="heart" class="sm"></i>Pt Chevalier Beach</button>
+      <button class="chip" data-sheet="places">+ Add</button>
+    </div>
+  </div>
+  <div class="sect fill">
+    <p class="hint">Spare Ride runs across Auckland. At the airport, pickups are from a marked zone. Cars are about <b>4 min</b> away now.</p>
+  </div>
+</section>
+
+<!-- ============ RIDER: RIDE OPTIONS ============ -->
+<section class="scr" id="scr-r-options" data-screen="r-options">
+  <div class="map mid" data-map="route"></div>
+  <div class="sect">
+    <div class="drivecard"><i data-i="flag" class="app"></i><div style="flex:1"><b data-bind="destName">Britomart</b><span class="sub hint" style="display:block"><span data-bind="routeLine">5.8 km · about 17 min</span></span></div><button class="btn quiet small" data-go="r-home">Change</button></div>
+  </div>
+  <div class="label" style="padding:12px 16px 0">Ride options</div>
+  <div class="list" id="optlist"></div>
+  <div class="sect fill stack">
+    <div class="note" id="needsNote"><b>Your needs go with every request:</b> <span data-bind="needsText">assistance animal</span>. Only drivers and cars that can meet them get the offer. <button class="linkbtn" data-go="r-account">Edit</button></div>
+  </div>
+  <div class="actionbar"><button class="btn primary block big" data-go="r-fare" id="optContinue">Continue</button></div>
+</section>
+
+<!-- ============ RIDER: UPFRONT FARE ============ -->
+<section class="scr" id="scr-r-fare" data-screen="r-fare">
+  <div class="sect">
+    <div class="label">Upfront fare <span class="badge" style="margin-left:6px">Agreed before the trip</span></div>
+    <div style="display:flex;align-items:baseline;gap:10px"><span class="big-num" data-bind="total">NZ$22.48</span><span class="muted" data-bind="optName">Standard</span></div>
+    <p class="hint"><span data-bind="destShort">To Britomart</span> · <span data-bind="routeLine">5.8 km · about 17 min</span>. This price is fixed when you book.</p>
+  </div>
+  <div class="sect">
+    <div class="label">Where your money goes</div>
+    <div class="split" id="splitbar" aria-hidden="true"></div>
+    <dl class="kv" style="margin-top:12px">
+      <dt><span class="sw c-driver"></span>Your driver keeps</dt><dd><b data-bind="driver">$17.44</b></dd>
+      <dt><span class="sw c-fee"></span>At-cost fee, runs Spare Ride <button class="linkbtn" data-sheet="fee" style="font-weight:500">what it pays for</button></dt><dd data-bind="fee">$1.20</dd>
+      <dt><span class="sw c-pay"></span>Card fee, passed on at cost</dt><dd data-bind="pay">$0.91</dd>
+      <dt data-show="extra"><span class="sw c-extra"></span>Airport fee, passed on at cost</dt><dd data-show="extra" data-bind="extra">$0.00</dd>
+      <dt><span class="sw c-gst"></span>GST 15%, collected as the law requires</dt><dd data-bind="gst">$2.93</dd>
+      <dt class="tot">You pay</dt><dd class="tot" data-bind="total">NZ$22.48</dd>
+    </dl>
+    <p class="hint">Your driver keeps <b data-bind="driverPct">78%</b> of the fare. There is no extra booking fee.</p>
+    <p class="hint">Example: New Zealand tax and fees. Each country gets its own rules pack.</p>
+    <details class="more">
+      <summary><i data-i="chev" class="sm"></i>How this fare was worked out</summary>
+      <div class="mlog" data-bind="formulaLog"></div>
+      <p class="hint">Fare formula v3, voted by drivers on 2 October 2026. The version is stored with your trip, so this fare can be explained later.</p>
+    </details>
+  </div>
+  <div class="sect">
+    <div class="label">Extras</div>
+    <p class="hint" style="margin:0" data-bind="extrasLine">No tolls on this route. Waiting: 3 min free after the car arrives, then $0.50 a minute.</p>
+  </div>
+  <div class="sect stack">
+    <div class="label">Note for the driver</div>
+    <div class="inrow"><input class="in" id="pnote" placeholder="Gate code, which door, what you're wearing"><button class="btn secondary" data-act="savenote">Add</button></div>
+    <div class="chips" id="needChips"></div>
+  </div>
+  <div class="sect">
+    <div class="label">Pay with</div>
+    <div class="drivecard"><i data-i="wallet" class="app"></i><div style="flex:1"><b data-bind="payWith">Card ending 4242</b><span class="hint" style="display:block">Held when a driver accepts. Taken when the trip ends.</span></div><button class="btn quiet small" data-sheet="pay">Change</button></div>
+  </div>
+  <div class="sect fill"><p class="hint">Free to cancel for 2 min after a driver accepts. After that NZ$4.00, all of it to the driver.</p></div>
+  <div class="actionbar"><button class="btn primary block big" data-go="r-finding"><span>Book now · <span data-bind="total">NZ$22.48</span></span></button></div>
+</section>
+
+<!-- ============ RIDER: FINDING A DRIVER ============ -->
+<section class="scr" id="scr-r-finding" data-screen="r-finding">
+  <div class="map" data-map="finding"><div class="float"><i data-i="search" class="app"></i><span id="findHead">Finding your driver</span></div></div>
+  <div class="sect">
+    <ol class="steps" id="findSteps">
+      <li class="done"><span class="dot"><i data-i="check" class="sm"></i></span><span>Request sent: <span data-bind="optName">Standard</span>, <span data-bind="total">NZ$22.48</span></span></li>
+      <li class="now" id="fs2"><span class="dot"></span><span><span id="fs2t">Offered to the nearest driver by road time: <b>Sione, 4 min away</b></span><span class="hint" style="display:block" id="fsTimer">Waiting 15 s, then it passes to the next driver.</span></span></li>
+      <li class="wait" id="fs3"><span class="dot"></span><span id="fs3t">Driver accepts and your fare is held</span></li>
+    </ol>
+  </div>
+  <div class="sect stack">
+    <div class="note inf" id="driverCancelNote" hidden><b>Sione had to cancel: a flat tyre.</b> You are first in line for the next driver, at the same fare.</div>
+    <p class="hint">Offers go first to the driver who can reach you soonest by road, not in a straight line. <button class="linkbtn" data-sheet="dispatch">Read the dispatch rules</button></p>
+    <p class="hint">We send a notice when your driver is close, even with the app closed. No data? We text you instead.</p>
+  </div>
+  <div class="sect fill"><button class="btn quiet block small" data-act="drivercancel">Demo: the driver cancels</button></div>
+  <div class="actionbar btns"><button class="btn secondary" data-act="cancelreq">Cancel request</button><button class="btn primary" id="seeDriver" data-go="r-arriving" disabled>See your driver</button></div>
+</section>
+
+<!-- ============ RIDER: DRIVER ON THE WAY ============ -->
+<section class="scr" id="scr-r-arriving" data-screen="r-arriving">
+  <div class="map" data-map="arriving"><div class="float"><i data-i="clock" class="app"></i><span id="arrHead">Sione arrives in 4 min</span></div></div>
+  <div class="sect">
+    <div class="drivecard">
+      <span class="avatar lg">SF</span>
+      <div style="flex:1;min-width:0"><b>Sione F.</b> <span class="muted">· ★ 4.92 · 1,284 trips</span><span class="hint" style="display:block">Silver electric hatchback · driver ID <span class="mono">SR-20417</span></span></div>
+      <span class="plate">RDE482</span>
+    </div>
+  </div>
+  <div class="sect">
+    <div class="label">Your PIN</div>
+    <div class="drivecard"><div class="pin" aria-label="PIN 4 8 2 7"><span>4</span><span>8</span><span>2</span><span>7</span></div><p class="hint" style="margin:0;flex:1">Tell Sione this PIN before you get in. Check the plate and photo too.</p></div>
+  </div>
+  <div class="sect">
+    <div class="btns">
+      <button class="btn secondary" data-sheet="chat"><i data-i="msg"></i>Message</button>
+      <button class="btn secondary" data-act="call"><i data-i="phone"></i>Call</button>
+    </div>
+    <div class="btns" style="margin-top:8px">
+      <button class="btn secondary" data-sheet="share"><i data-i="share"></i>Share trip</button>
+      <button class="btn sos" data-sheet="sos"><i data-i="alert"></i>Emergency</button>
+    </div>
+  </div>
+  <div class="sect fill stack">
+    <div class="note" id="arrNote">We tell you when Sione is outside. Then you have 3 min free, then $0.50 a minute.</div>
+    <button class="btn quiet block" data-sheet="cancel">Cancel ride</button>
+  </div>
+  <div class="actionbar btns"><button class="btn secondary" data-act="arrive">Demo: car arrives</button><button class="btn primary" data-go="r-trip">I'm in: start trip</button></div>
+</section>
+
+<!-- ============ RIDER: ON THE TRIP ============ -->
+<section class="scr" id="scr-r-trip" data-screen="r-trip">
+  <div class="map tall" data-map="trip"><div class="float"><i data-i="flag" class="app"></i><span><span data-bind="destShort">To Britomart</span> · arrive <span id="eta">8:58 am</span></span></div></div>
+  <div class="note inf" id="weakNote" hidden style="border-radius:0"><b>Weak signal.</b> Your trip carries on and catches up when the signal is back.</div>
+  <div class="sect" id="checkin" hidden><div class="note"><b>The car has stopped for 4 min. Are you OK?</b><div class="btns" style="margin-top:8px"><button class="btn secondary small" data-act="checkok">I'm OK</button><button class="btn sos small" data-sheet="sos">Get help</button></div></div></div>
+  <div class="sect">
+    <div class="btns">
+      <button class="btn secondary big" data-sheet="share"><i data-i="share"></i>Share trip</button>
+      <button class="btn sos big" data-sheet="sos"><i data-i="alert"></i>Emergency</button>
+    </div>
+  </div>
+  <div class="sect">
+    <div class="drivecard"><span class="avatar">SF</span><div style="flex:1"><b>Sione F.</b><span class="hint" style="display:block">Silver electric hatchback · <span class="mono">RDE482</span></span></div><button class="iconbtn" data-sheet="chat" aria-label="Message Sione"><i data-i="msg"></i></button></div>
+  </div>
+  <div class="list">
+    <button class="row" data-sheet="dest"><i data-i="flag"></i><span class="grow">Change destination<span class="sub">The fare changes by a published rule</span></span><i data-i="chev"></i></button>
+    <button class="row" data-sheet="report"><i data-i="shield"></i><span class="grow">Report a safety issue<span class="sub">A trained person responds</span></span><i data-i="chev"></i></button>
+  </div>
+  <div class="sect fill">
+    <div class="label">Demo controls</div>
+    <div class="btns"><button class="btn quiet small" data-act="longstop">Simulate a long stop</button><button class="btn quiet small" data-act="weak">Simulate weak signal</button></div>
+  </div>
+  <div class="actionbar"><button class="btn primary block" data-go="r-rate">Demo: arrive at the destination</button></div>
+</section>
+
+<!-- ============ RIDER: RATE AND TIP ============ -->
+<section class="scr" id="scr-r-rate" data-screen="r-rate">
+  <div class="sect"><div class="note ok"><b>You've arrived.</b> <span data-bind="total">NZ$22.48</span> was taken from your <span data-bind="payWithLc">card ending 4242</span>. Nothing more unless you add a tip.</div></div>
+  <div class="sect">
+    <div class="label">Rate Sione</div>
+    <div class="stars" id="stars"></div>
+    <p class="hint" id="rateHint">5 stars. Thank you.</p>
+    <div class="chips" style="margin-top:8px">
+      <button class="chip" data-act="chip" aria-pressed="false">Smooth driving</button>
+      <button class="chip" data-act="chip" aria-pressed="true">Great with my dog</button>
+      <button class="chip" data-act="chip" aria-pressed="false">Helped with bags</button>
+      <button class="chip" data-act="chip" aria-pressed="false">Clean car</button>
+    </div>
+  </div>
+  <div class="sect">
+    <div class="label">Add a tip</div>
+    <div class="seg" data-key="tip"><button>$0</button><button>$2</button><button aria-pressed="true">$3</button><button>$5</button><button>$10</button></div>
+    <p class="hint" id="tipHint">All of the tip goes to Sione.</p>
+  </div>
+  <div class="list">
+    <button class="row" data-sheet="receipt"><i data-i="doc"></i><span class="grow">Receipt and GST tax invoice<span class="sub">Also emailed to you</span></span><i data-i="chev"></i></button>
+    <button class="row" data-sheet="problem"><i data-i="help"></i><span class="grow">Report a problem or a lost item</span><i data-i="chev"></i></button>
+    <button class="row" data-sheet="fee"><i data-i="ledger"></i><span class="grow">Where my fee went</span><i data-i="chev"></i></button>
+  </div>
+  <div class="sect fill"><p class="hint">Sione rates you too. Ratings follow published rules and never decide who gets offers.</p><p class="hint">Every rider is registered, so cars need no in-car camera.</p></div>
+  <div class="actionbar"><button class="btn primary block" data-act="ratedone">Done</button></div>
+</section>
+
+<!-- ============ RIDER: PAST TRIPS ============ -->
+<section class="scr" id="scr-r-trips" data-screen="r-trips">
+  <div class="sect"><h2>Past trips</h2><p class="hint" style="margin:0">Tap a trip for its map, how the fare was worked out, and help.</p></div>
+  <div class="list" id="tripList"></div>
+  <div class="sect fill"><p class="hint">After a trip, the driver no longer sees your exact addresses. You can clear your location history in Account.</p></div>
+</section>
+
+<!-- ============ RIDER: ACCOUNT ============ -->
+<section class="scr" id="scr-r-account" data-screen="r-account">
+  <div class="sect">
+    <div class="drivecard"><span class="avatar lg">AM</span><div style="flex:1"><b id="riderName">Aroha</b> <span class="muted">· the name drivers see</span><span class="hint" style="display:block">★ 4.95 · <span class="mono">021 555 0142</span> · photo optional</span></div><button class="btn quiet small" data-act="reveal" data-target="#nameEdit">Edit</button></div>
+    <div id="nameEdit" hidden class="inrow" style="margin-top:8px"><input class="in" id="nameIn" value="Aroha" aria-label="Name drivers see"><button class="btn secondary" data-act="savename">Save</button></div>
+  </div>
+  <div class="sect">
+    <div class="label">Ride preferences</div>
+    <div class="togrow"><i data-i="quiet" class="app"></i><span class="grow">Quiet ride<span class="sub">Your driver sees this before pickup</span></span><button class="tog" role="switch" aria-checked="false" aria-label="Quiet ride" data-act="tog" data-key="pref"></button></div>
+    <div class="togrow"><i data-i="bag" class="app"></i><span class="grow">Help with bags</span><button class="tog" role="switch" aria-checked="true" aria-label="Help with bags" data-act="tog" data-key="pref"></button></div>
+    <div class="label" style="margin-top:10px">Temperature</div>
+    <div class="seg" data-key="temp"><button>Cooler</button><button aria-pressed="true">As it is</button><button>Warmer</button></div>
+  </div>
+  <div class="sect">
+    <div class="label">Access needs, sent with every booking</div>
+    <div class="togrow"><i data-i="paw" class="app"></i><span class="grow">Assistance animal<span class="sub">Always carried. No driver may refuse.</span></span><button class="tog" role="switch" aria-checked="true" aria-label="Assistance animal" data-act="tog" data-key="need" data-need="animal"></button></div>
+    <div class="togrow"><i data-i="chair" class="app"></i><span class="grow">Wheelchair user<span class="sub">Shows wheelchair accessible cars first</span></span><button class="tog" role="switch" aria-checked="false" aria-label="Wheelchair user" data-act="tog" data-key="need" data-need="chair"></button></div>
+    <div class="togrow"><i data-i="clock" class="app"></i><span class="grow">More time to get in<span class="sub">10 min free wait, never a waiting charge</span></span><button class="tog" role="switch" aria-checked="false" aria-label="More time to get in" data-act="tog" data-key="need" data-need="time"></button></div>
+  </div>
+  <div class="sect">
+    <div class="label">Reading and seeing</div>
+    <div class="togrow"><i data-i="eye" class="app"></i><span class="grow">Large text</span><button class="tog" role="switch" aria-checked="false" aria-label="Large text" data-act="tog" data-key="large"></button></div>
+    <div class="togrow"><i data-i="access" class="app"></i><span class="grow">High contrast<span class="sub">Every screen also works with a screen reader</span></span><button class="tog" role="switch" aria-checked="false" aria-label="High contrast" data-act="tog" data-key="contrast"></button></div>
+    <div class="label" style="margin-top:10px">Language</div>
+    <div class="seg" data-key="lang2" id="langSeg2"><button aria-pressed="true">English</button><button>Te reo Māori</button><button>More</button></div>
+  </div>
+  <div class="list">
+    <button class="row" data-sheet="places"><i data-i="heart"></i><span class="grow">Saved places<span class="sub">Home, Work, Pt Chevalier Beach</span></span><i data-i="chev"></i></button>
+    <button class="row" data-sheet="pay"><i data-i="wallet"></i><span class="grow">Ways to pay<span class="sub" data-bind="payWith">Card ending 4242</span></span><i data-i="chev"></i></button>
+    <button class="row" data-sheet="notify"><i data-i="bell"></i><span class="grow">What reaches me<span class="sub">Push, text and email. No marketing.</span></span><i data-i="chev"></i></button>
+    <button class="row" data-go="c-help"><i data-i="help"></i><span class="grow">Help centre</span><i data-i="chev"></i></button>
+  </div>
+  <div class="sect">
+    <div class="label">Signed in on</div>
+    <div class="togrow"><i data-i="phone"></i><span class="grow">This phone<span class="sub">Now</span></span></div>
+    <div class="togrow" id="devLaptop"><i data-i="globe"></i><span class="grow">Browser on a laptop<span class="sub">Last used Friday</span></span><button class="btn quiet small" data-act="signout">Sign out</button></div>
+  </div>
+  <div class="sect">
+    <div class="label">Your data</div>
+    <div class="list" style="border-top:0">
+      <button class="row" style="padding-left:0;padding-right:0" data-toast="Preparing your download: trips, routes, fares, ratings and messages as open JSON and CSV files."><i data-i="download"></i><span class="grow">Download my data</span></button>
+      <button class="row" style="padding-left:0;padding-right:0" data-act="clearloc"><i data-i="pin"></i><span class="grow">Clear location history<span class="sub" id="locCount">46 places saved from past trips</span></span></button>
+      <button class="row" style="padding-left:0;padding-right:0" data-toast="Request sent. You get an answer within the time the law sets."><i data-i="eye"></i><span class="grow">See or correct my information</span></button>
+      <button class="row" style="padding-left:0;padding-right:0;border-bottom:0" data-sheet="delete"><i data-i="trash"></i><span class="grow">Delete my account and data</span></button>
+    </div>
+  </div>
+  <div class="sect fill stack">
+    <div class="btns"><button class="btn quiet" data-toast="Account paused. Sign in any time to start again.">Pause account</button><button class="btn quiet" data-sheet="delete">Close account</button></div>
+    <div class="note coop"><b>Riders may join the co-op too</b>, if driver members agree. That vote has not happened yet. <button class="linkbtn" data-toast="We'll tell you when riders can join.">Tell me when</button></div>
+  </div>
+</section>
+
+<!-- ============ DRIVER: APPLY TO DRIVE ============ -->
+<section class="scr" id="scr-d-apply" data-screen="d-apply">
+  <div class="sect">
+    <h2>Apply to drive</h2>
+    <p class="hint" style="margin:0">Shown for Hemi, a new applicant part way through. Every step is listed up front. Tap a step to see what it needs.</p>
+    <div class="bar" style="margin-top:10px"><span id="applyBar" style="width:60%"></span></div>
+    <p class="hint" id="applyCount">6 of 10 steps done</p>
+  </div>
+  <div class="list" id="applyList"></div>
+  <div class="sect fill stack">
+    <div class="note inf"><b>Employee or contractor?</b> The co-op is still deciding, with a lawyer (piece RD01). Pay, work time and the driver agreement follow that decision.</div>
+    <button class="btn quiet block" data-toast="Application withdrawn. What you uploaded is deleted, and you can apply again any time.">Withdraw my application</button>
+  </div>
+</section>
+
+<!-- ============ DRIVER: GO ONLINE ============ -->
+<section class="scr" id="scr-d-online" data-screen="d-online">
+  <div class="map mid" data-map="driver"></div>
+  <div class="sect">
+    <b id="onStatus">You're offline</b>
+    <span class="hint" style="display:block" id="onSub">Go online when you're ready. No minimum hours, no targets.</span>
+    <button class="btn primary block big" style="margin-top:10px" id="goBtn" data-act="goonline"><i data-i="power"></i><span>Go online</span></button>
+    <div class="note" id="offerPing" hidden style="margin-top:10px"><b>New offer: you earn NZ$17.44</b><br>Pickup 4 min away in Kingsland.<div style="margin-top:8px"><button class="btn primary small" data-go="d-offer">See the offer</button></div></div>
+  </div>
+  <div class="grid2">
+    <div><div class="label">Today</div><div class="mid-num" data-bind="today">NZ$158.65</div><span class="hint">7 trips · <button class="linkbtn" data-go="d-earnings">payouts</button></span></div>
+    <div><div class="label">Work time</div><div class="mid-num">5:10 <span class="muted" style="font-size:12px">of 13:00</span></div><span class="hint">30 min break due in 20 min · <button class="linkbtn" data-sheet="worktime">logbook</button></span></div>
+  </div>
+  <div class="sect"><div class="note inf"><b>Notice from operations:</b> Queen Street is closed between Customs Street and Victoria Street until 11 am. Pick up on Albert Street.</div></div>
+  <div class="sect">
+    <div class="label">Areas I drive</div>
+    <div class="chips"><button class="chip" data-act="chip" aria-pressed="true">Central</button><button class="chip" data-act="chip" aria-pressed="true">West</button><button class="chip" data-act="chip" aria-pressed="false">North Shore</button><button class="chip" data-act="chip" aria-pressed="false">South</button><button class="chip" data-act="chip" aria-pressed="false">East</button></div>
+    <div class="label" style="margin-top:12px">Ride options I take</div>
+    <div class="chips"><button class="chip" data-act="chip" aria-pressed="true">Standard</button><button class="chip" data-act="chip" aria-pressed="true">Electric</button><button class="chip" data-act="chip" aria-pressed="true">Pets</button><button class="chip" data-act="chip" aria-pressed="false">Shared rides</button><button class="chip" data-act="chip" aria-pressed="false">Long trips</button></div>
+    <div class="togrow" style="margin-top:6px"><span class="grow">Longest pickup I'll take</span><button class="iconbtn" data-act="step" data-d="-1" aria-label="Less"><i data-i="minus"></i></button><b class="mono" id="maxPick" style="width:52px;text-align:center">12 min</b><button class="iconbtn" data-act="step" data-d="1" aria-label="More"><i data-i="plus"></i></button></div>
+  </div>
+  <div class="sect">
+    <div class="label">While driving</div>
+    <div class="togrow"><i data-i="car" class="app"></i><span class="grow">Driving mode<span class="sub">Glance-size text, offers read aloud, typing locked while moving</span></span><button class="tog" role="switch" aria-checked="true" aria-label="Driving mode" data-act="tog" data-key="drivemode"></button></div>
+    <div class="togrow"><i data-i="bell" class="app"></i><span class="grow">Flashing offer alerts<span class="sub">For deaf and hard of hearing drivers. Riders are asked to message, not call.</span></span><button class="tog" role="switch" aria-checked="false" aria-label="Flashing offer alerts" data-act="tog" data-key="flash"></button></div>
+  </div>
+  <div class="list">
+    <button class="row" data-sheet="driverid"><i data-i="id"></i><span class="grow">Driver ID<span class="sub">Show it when a rider, officer or venue asks</span></span><i data-i="chev"></i></button>
+    <button class="row" data-sheet="selfie"><i data-i="camera"></i><span class="grow">Quick selfie check<span class="sub">Due today</span></span><span class="badge">Due</span></button>
+    <button class="row" data-sheet="docs"><i data-i="doc"></i><span class="grow">My documents<span class="sub">Certificate of Fitness ends 9 Nov 2026</span></span><span class="badge inf">21 days</span></button>
+    <button class="row" data-sheet="leave"><i data-i="close"></i><span class="grow">Stop driving<span class="sub">Last payout, balance settled, your records to keep</span></span><i data-i="chev"></i></button>
+  </div>
+  <div class="sect fill"><p class="hint">While you're online, your location is sent every few seconds, also with the app in the background. No one can use the app to track you live or find where you live.</p></div>
+</section>
+
+<!-- ============ DRIVER: OFFER ============ -->
+<section class="scr" id="scr-d-offer" data-screen="d-offer">
+  <div class="sect">
+    <div class="drivecard">
+      <div class="ring"><svg viewBox="0 0 56 56" aria-hidden="true"><circle class="track" cx="28" cy="28" r="24"/><circle class="prog" id="ringProg" cx="28" cy="28" r="24" stroke-dasharray="150.8" stroke-dashoffset="0"/></svg><b id="ringNum">15</b></div>
+      <div style="flex:1;min-width:0"><div class="label" style="margin:0">You earn</div><div class="big-num" data-bind="offerEarn">NZ$17.44</div><span class="hint" data-bind="offerRate">About $0.83 a minute for 21 min</span></div>
+      <button class="iconbtn" data-act="readaloud" aria-label="Read the offer aloud"><i data-i="sound"></i></button>
+    </div>
+  </div>
+  <div class="note" id="passedOn" hidden style="border-radius:0"><b>The offer passed to the next driver.</b> No penalty. <button class="linkbtn" data-go="d-online">Back to online</button></div>
+  <div class="map mid" data-map="offer"></div>
+  <div class="list">
+    <div class="row static"><i data-i="pin" class="app"></i><span class="grow"><b>Pickup · 4 min · 1.6 km</b><span class="sub">Sandringham Road, Kingsland</span></span></div>
+    <div class="row static"><i data-i="flag" class="app"></i><span class="grow"><b>Trip · 17 min · 5.8 km</b><span class="sub">Britomart, Auckland Central</span></span></div>
+    <div class="row static"><i data-i="paw" class="app"></i><span class="grow"><b>Aroha · ★ 4.95</b><span class="sub">Assistance animal. Always carried, no extra charge.</span></span></div>
+  </div>
+  <div class="sect">
+    <div class="label">Rider pays <span data-bind="offerTotal">NZ$22.48</span></div>
+    <dl class="kv">
+      <dt><span class="sw c-driver"></span>You keep</dt><dd><b data-bind="offerDriver">$17.44</b></dd>
+      <dt><span class="sw c-fee"></span>At-cost fee</dt><dd>$1.20</dd>
+      <dt><span class="sw c-pay"></span>Card fee</dt><dd data-bind="offerPay">$0.91</dd>
+      <dt><span class="sw c-gst"></span>GST, paid by the platform</dt><dd data-bind="offerGst">$2.93</dd>
+    </dl>
+  </div>
+  <div class="sect fill"><p class="hint" style="display:flex;gap:8px;align-items:flex-start;margin:0"><i data-i="check" class="ok"></i><span><b>Declining is free.</b> It never lowers your standing or your next offers.</span></p></div>
+  <div class="actionbar btns"><button class="btn secondary big" data-act="decline">Decline</button><button class="btn primary big" data-act="accept">Accept</button></div>
+</section>
+
+<!-- ============ DRIVER: NAVIGATION ============ -->
+<section class="scr" id="scr-d-nav" data-screen="d-nav">
+  <div class="instr"><i data-i="left" class="lg app"></i><div style="flex:1"><div class="big" id="navBig">In 300 m, turn left onto Sandringham Road</div><span class="hint" id="navSub">Then 1.2 km to the pickup</span></div></div>
+  <div class="note inf" id="navWeak" hidden style="border-radius:0"><b>No signal.</b> The trip is saved on your phone and catches up when the signal is back.</div>
+  <div class="map" data-map="nav"></div>
+  <div class="sect" id="navStage"></div>
+  <div class="sect fill">
+    <div class="btns">
+      <button class="btn quiet small" data-sheet="dchat"><i data-i="msg" class="sm"></i>Message</button>
+      <button class="btn quiet small" data-act="navweak"><i data-i="wifi" class="sm"></i>Demo: no signal</button>
+      <button class="btn sos small" data-sheet="sos"><i data-i="alert" class="sm"></i>Emergency</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ DRIVER: PAYOUTS ============ -->
+<section class="scr" id="scr-d-earnings" data-screen="d-earnings">
+  <div class="sect">
+    <div class="label">Today, Monday 19 October</div>
+    <div class="big-num" data-bind="today">NZ$158.65</div>
+    <p class="hint" style="margin:0"><span data-bind="todayTrips">7 trips</span> · <span data-bind="todayTips">$12.00 in tips</span>, all yours · 5 h 10 min online</p>
+  </div>
+  <div class="sect">
+    <div class="label">Last 7 days · <span data-bind="week">NZ$0</span></div>
+    <svg id="weekChart" viewBox="0 0 340 120" style="width:100%;height:auto;display:block" role="img" aria-label="Earnings for the last 7 days"></svg>
+  </div>
+  <div class="sect"><div class="note"><b>Next payout: tonight at 6 pm</b><br><span data-bind="today">NZ$158.65</span> to the bank account ending 1234. Payouts are daily. No fee is added beyond the payment provider's own charge, if it has one.</div></div>
+  <div class="label" style="padding:12px 16px 0">Today's trips</div>
+  <div class="list" id="earnTrips"></div>
+  <div class="sect"><p class="hint" style="margin:0">The at-cost fee today was <span data-bind="todayFee">$8.40</span>. <button class="linkbtn" data-sheet="fee">See what it paid for</button></p></div>
+  <div class="sect stack">
+    <div class="label">Owed and held</div>
+    <div class="note inf" id="owedNote"><b>You owe NZ$3.10.</b> A rider was refunded after a fare review on 14 Oct, after you were paid. It comes off later payouts at $1.00 a day.<div class="btns" style="margin-top:8px"><button class="btn secondary small" data-act="repay">Repay now</button><button class="btn quiet small" data-sheet="support">Ask about it</button></div></div>
+    <div class="note"><b>NZ$40.00 held: cleaning charge on 16 Oct.</b> The rider disagrees, so the money stays held until a panel of members decides, by Thursday 22 October.</div>
+  </div>
+  <div class="sect">
+    <div class="label">Tax and statements · Example: New Zealand</div>
+    <p class="hint" style="margin:0 0 6px">GST on every ride is charged and paid by the platform.</p>
+    <div class="list" style="border-top:0">
+      <button class="row" style="padding-left:0;padding-right:0" data-toast="Downloaded: flat-rate credit statement, September 2026."><i data-i="doc"></i><span class="grow">Flat-rate credits, September<span class="sub">You are not GST-registered</span></span><span class="end money">$307.05</span></button>
+      <button class="row" style="padding-left:0;padding-right:0" data-act="irdshow"><i data-i="doc"></i><span class="grow">Income reported to IRD, 2025<span class="sub">See exactly what was sent</span></span><span class="end money">$41,382.50</span></button>
+    </div>
+    <div id="irdOut"></div>
+    <div class="label" style="margin-top:10px">Earnings statements</div>
+    <div class="chips"><button class="chip" data-toast="Downloaded: earnings statement for last week (PDF and CSV).">Week</button><button class="chip" data-toast="Downloaded: earnings statement for September (PDF and CSV).">Month</button><button class="chip" data-toast="Downloaded: earnings statement for the last tax year (PDF and CSV).">Year</button></div>
+  </div>
+  <div class="sect fill"><button class="btn quiet block" data-sheet="support"><i data-i="help"></i>Driver support</button></div>
+</section>
+
+<!-- ============ DRIVER: FARE VOTE ============ -->
+<section class="scr" id="scr-d-vote" data-screen="d-vote">
+  <div class="coopstrip"><span class="mark coop"></span>Spareware Co-op · drivers' vote</div>
+  <div class="sect">
+    <h2>Fare formula from 1 November</h2>
+    <p class="hint" style="margin:0">Closes Friday 23 October at 5 pm. One member, one vote.</p>
+    <div class="bar coop" style="margin-top:10px"><span id="turnBar" style="width:41%"></span></div>
+    <p class="hint" id="turnText">531 of 1,284 driver members have voted (41%). Quorum is 30%.</p>
+  </div>
+  <div class="sect">
+    <div class="label">Now: formula v3</div>
+    <table class="tbl"><tr><td>Base fare</td><td class="r">$2.50</td><td>Per km</td><td class="r">$1.55</td></tr><tr><td>Per minute</td><td class="r">$0.35</td><td>Minimum</td><td class="r">$9.00</td></tr></table>
+  </div>
+  <div class="label" style="padding:12px 16px 0">Choose one</div>
+  <div class="list" id="propList"></div>
+  <div class="sect stack">
+    <div class="note coop" id="voteDone" hidden></div>
+    <button class="btn coop block big" id="castBtn" data-act="cast">Cast my vote</button>
+    <p class="hint">Each choice was replayed on the last 28 days of real requests, so you can compare waits and earnings. Results are published when the vote closes and change the app on 1 November.</p>
+  </div>
+  <div class="sect">
+    <div class="label">Who decides</div>
+    <ul class="hint" style="padding-left:18px;margin:0">
+      <li>Driver members vote on Spare Ride's fares, fees and rules.</li>
+      <li>Major changes, such as to the shared kit or the software licence, go to a vote of all members.</li>
+      <li>An urgent safety change can be made at once, then members confirm it within 30 days.</li>
+      <li>Before the first real fare vote, the co-op confirms competition law allows it.</li>
+    </ul>
+  </div>
+  <div class="sect fill">
+    <div class="label">Open cost ledger · September 2026</div>
+    <table class="tbl">
+      <tr><td>Support and safety team</td><td class="r">$28,400</td></tr>
+      <tr><td>Insurance</td><td class="r">$11,300</td></tr>
+      <tr><td>Servers and maps</td><td class="r">$9,200</td></tr>
+      <tr><td>Office and audit</td><td class="r">$5,200</td></tr>
+      <tr><td>Licences and compliance</td><td class="r">$4,100</td></tr>
+      <tr><td>Phone calls and texts</td><td class="r">$3,600</td></tr>
+      <tr><td><b>Running cost</b></td><td class="r"><b>$61,800</b></td></tr>
+      <tr><td>Trips</td><td class="r">51,500</td></tr>
+      <tr><td><b>At-cost fee per trip</b></td><td class="r"><b>$1.20</b></td></tr>
+    </table>
+    <p class="hint">Card fees are passed on with each fare, not hidden in the fee. Uptime 99.94%. Sample figures.</p>
+    <button class="btn secondary block" data-toast="The full ledger opens as open data: every bill, signed off by members chosen for the job.">See every bill</button>
+  </div>
+</section>
+
+<!-- ============ CO-OP: OPERATIONS ============ -->
+<section class="scr" id="scr-c-ops" data-screen="c-ops">
+  <div class="sect"><h2>Operations · Auckland</h2><p class="hint" style="margin:0" id="opsSub">Live. Every staff action is logged.</p></div>
+  <div class="grid2" id="opsStats"></div>
+  <div class="map" data-map="ops"></div>
+  <div class="note dan" id="outageNote" hidden style="border-radius:0"><b>Outage mode is on.</b> Trips under way finish normally. Fares settle when payments are back. Riders and drivers see a plain notice.</div>
+  <div class="list">
+    <button class="row" data-act="opsdoc"><i data-i="doc"></i><span class="grow">Documents to review<span class="sub">Photos the automatic checks could not read</span></span><span class="badge" id="docCount">3</span></button>
+    <button class="row" data-sheet="incident"><i data-i="shield" class="dan"></i><span class="grow">Open safety incidents<span class="sub">A trained person on each one</span></span><span class="badge dan">1</span></button>
+    <button class="row" data-sheet="fraud"><i data-i="eye"></i><span class="grow">Possible fraud<span class="sub">Fake locations, shared accounts, stolen cards</span></span><span class="badge n" id="fraudCount">2</span></button>
+  </div>
+  <div class="sect stack">
+    <div class="label">Tell drivers in an area</div>
+    <div class="seg" data-key="zone"><button aria-pressed="true">City zone</button><button>Airport route</button><button>All Auckland</button></div>
+    <textarea class="in" id="opsMsg" aria-label="Notice to drivers">Queen Street is closed between Customs Street and Victoria Street until 11 am. Pick up on Albert Street.</textarea>
+    <button class="btn primary block" data-act="opssend">Send to drivers online there</button>
+  </div>
+  <div class="sect">
+    <div class="label">Service</div>
+    <div class="togrow"><i data-i="alert" class="dan"></i><span class="grow">Outage mode<span class="sub">Payments or dispatch down: trips finish, fares settle later</span></span><button class="tog" role="switch" aria-checked="false" aria-label="Outage mode" data-act="tog" data-key="outage"></button></div>
+    <div class="togrow"><i data-i="group" class="app"></i><span class="grow">Simulated city<span class="sub">2,000 simulated riders and 300 drivers, for tests, training and demos</span></span><button class="tog" role="switch" aria-checked="false" aria-label="Simulated city" data-act="tog" data-key="sim"></button></div>
+  </div>
+  <div class="sect">
+    <div class="label">Launch a city · Wellington</div>
+    <div class="bar"><span style="width:34%"></span></div>
+    <p class="hint">41 of 120 drivers ready. Areas and ride options set. Drivers there vote on their fares first.</p>
+    <button class="btn secondary block" data-act="launch">Switch on Wellington</button>
+  </div>
+  <div class="sect fill">
+    <div class="label">Admin log, open to elected members</div>
+    <div class="mlog" id="adminLog"></div>
+    <p class="hint">Police and regulator requests this quarter: 3, each with legal authority. The count is published every quarter. September uptime: 99.94%.</p>
+  </div>
+</section>
+
+<!-- ============ CO-OP: HELP AND FAIRNESS ============ -->
+<section class="scr" id="scr-c-help" data-screen="c-help">
+  <div class="sect stack">
+    <h2>Help, reports and fairness</h2>
+    <div class="search"><i data-i="search"></i><input class="in" id="helpQ" placeholder="Search help" aria-label="Search help" autocomplete="off"></div>
+    <div class="list" id="helpList"></div>
+  </div>
+  <div class="list">
+    <button class="row" data-go="r-trips"><i data-i="list"></i><span class="grow">Help with a trip<span class="sub">Pick the trip, say what went wrong</span></span><i data-i="chev"></i></button>
+    <button class="row" data-sheet="report"><i data-i="shield"></i><span class="grow">Report a safety incident<span class="sub">A trained person responds, day and night</span></span><i data-i="chev"></i></button>
+    <button class="row" data-sheet="support"><i data-i="car"></i><span class="grow">Driver support<span class="sub">People who know the work</span></span><i data-i="chev"></i></button>
+  </div>
+  <div class="sect">
+    <div class="label">My report R-4471 · rude at pickup</div>
+    <ol class="steps">
+      <li class="done"><span class="dot"><i data-i="check" class="sm"></i></span><span>Received, Friday 3:10 pm</span></li>
+      <li class="done"><span class="dot"><i data-i="check" class="sm"></i></span><span>With a person, Friday 3:25 pm</span></li>
+      <li class="now"><span class="dot"></span><span><b>Answered:</b> the driver was spoken to and a note is on their record. <button class="linkbtn" data-toast="Thanks. Report R-4471 is closed.">Close report</button></span></li>
+    </ol>
+  </div>
+  <div class="sect stack">
+    <div class="label">Disputes decided by members</div>
+    <p style="margin:0">When a rider and a driver disagree about money, it stays held. Three members chosen at random decide.</p>
+    <div class="note"><b>Case D-118: cleaning charge NZ$40.00</b><br>Photos from the driver, a statement from the rider. The panel decides by Thursday 22 October.<div style="margin-top:8px"><button class="btn secondary small" data-act="panel">Add my statement</button></div></div>
+  </div>
+  <div class="sect stack">
+    <div class="label">Removed only under a published rule</div>
+    <div class="note inf"><b>Account paused under rule S4:</b> two selfie checks missed. Appeal to a member panel, or do the check now.<div class="btns" style="margin-top:8px"><button class="btn secondary small" data-act="appeal">Appeal</button><button class="btn quiet small" data-sheet="selfie">Do the check</button></div></div>
+  </div>
+  <div class="sect">
+    <div class="label">Kept clean by people</div>
+    <p class="hint" id="modText">2 profile photos and 1 message are waiting for a person. Nothing is removed by a machine alone.</p>
+    <button class="btn quiet block" data-act="modq">Check the next one</button>
+  </div>
+  <div class="sect">
+    <div class="label">Support staff view</div>
+    <p class="hint">The trip, the people and the history in one place. Fixes use the same commands as the app:</p>
+    <div class="mlog">fare.correct trip=5HD8 amount=-3.10 reason="detour"</div>
+  </div>
+  <div class="sect fill">
+    <div class="label">Complaints register</div>
+    <p class="hint">214 complaints this year. Each is recorded and kept for the time the law requires, ready for inspection.</p>
+    <button class="btn quiet block" data-toast="Register exported for the inspector: 214 records.">Export for an inspector</button>
+  </div>
+</section>
+
+<!-- ============ CO-OP: RULES, PRIVACY, OPEN ACCESS ============ -->
+<section class="scr" id="scr-c-legal" data-screen="c-legal">
+  <div class="sect"><h2>Rules, privacy and open access</h2><p class="hint" style="margin:0">What the law asks of Spare Ride, and where each duty stands. Each country gets its own rules pack. Not legal advice.</p></div>
+  <div class="sect" data-noloc>
+    <div class="label" id="overseeLabel">Who oversees Spare Ride · Example: New Zealand</div>
+    <table class="tbl" id="overseeTbl">
+      <tr><td>Operator licence</td><td class="t">Small passenger service licence</td></tr>
+      <tr><td>Passenger transport</td><td class="t">NZ Transport Agency Waka Kotahi</td></tr>
+      <tr><td>Tax on fares</td><td class="t">GST 15%</td></tr>
+      <tr><td>Income reports</td><td class="t">Inland Revenue</td></tr>
+      <tr><td>Privacy</td><td class="t">Privacy Commissioner</td></tr>
+      <tr><td>Competition</td><td class="t">Commerce Commission</td></tr>
+      <tr><td>Emergency number</td><td class="t mono">111</td></tr>
+    </table>
+    <p class="hint">Change the example country at the top of the screens list.</p>
+  </div>
+  <div data-noloc>
+    <div class="label" style="padding:12px 16px 0">Legal duties · Example: New Zealand</div>
+    <div class="list" id="dutyList"></div>
+    <p class="hint" style="padding:0 16px">This list is New Zealand's. Each country's rules pack has its own list.</p>
+  </div>
+  <div class="sect">
+    <div class="label">How long we keep data</div>
+    <table class="tbl">
+      <tr><td>Receipts and tax records</td><td class="r">as tax law asks</td></tr>
+      <tr><td>Trip routes</td><td class="r">90 days</td></tr>
+      <tr><td>Messages</td><td class="r">90 days</td></tr>
+      <tr><td>Selfie photos (result kept)</td><td class="r">24 hours</td></tr>
+      <tr><td>Safety reports</td><td class="r">as the law asks</td></tr>
+    </table>
+    <p class="hint">Deleted automatically when the time is up. Tax records are kept as long as each country's tax law asks. The other periods are proposals.</p>
+  </div>
+  <div class="list">
+    <button class="row" data-toast="Drivers' live positions are never published or given to riders before a match. Home areas are blurred in every export."><i data-i="lock"></i><span class="grow">Driver locations kept private<span class="sub">No live tracking through the app, the API or open data</span></span><i data-i="chev"></i></button>
+    <button class="row" data-toast="Trusted contacts and guest riders get a text saying who shared their details and why."><i data-i="user"></i><span class="grow">Told when someone gives us your details</span><i data-i="chev"></i></button>
+    <button class="row" data-sheet="selfie"><i data-i="camera"></i><span class="grow">Face checks<span class="sub">Why we ask, what happens to the photo, the other way</span></span><i data-i="chev"></i></button>
+    <button class="row" data-toast="If personal data leaks, we tell the people affected and the Privacy Commissioner, as the law requires."><i data-i="alert"></i><span class="grow">If data leaks</span><i data-i="chev"></i></button>
+    <button class="row" data-toast="Ask to see or correct your information. You get an answer within the time the law sets."><i data-i="eye"></i><span class="grow">Privacy requests</span><i data-i="chev"></i></button>
+    <button class="row" data-toast="The privacy check covers everything Spare Ride collects, and is published before launch."><i data-i="doc"></i><span class="grow">How we checked privacy for the whole app</span><i data-i="chev"></i></button>
+  </div>
+  <div class="sect fill stack">
+    <div class="label">Open access</div>
+    <p class="hint" style="margin:0">Anything a person can do in Spare Ride, a script or an AI agent can do with the same commands.</p>
+    <div class="mlog wrap" id="cmdOut">ride.quote from="41 Sandringham Rd" to="Britomart" option=standard</div>
+    <button class="btn secondary block" data-act="runcmd"><i data-i="code"></i>Run it</button>
+    <p class="hint">The emergency button calls the right number in each country: 111 in New Zealand. Money, dates and distances follow local formats.</p>
+  </div>
+</section>
+
+<!-- MORE SCREENS -->
+
+      </main>
+      <nav class="tabbar" id="tabbar" aria-label="App sections"></nav>
+      <div class="toast" id="toast" role="status" aria-live="polite"></div>
+      <div class="scrim" id="scrim" data-act="closesheet"></div>
+      <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+        <div class="sheet-head"><b id="sheetTitle">Sheet</b><button class="iconbtn" data-act="closesheet" aria-label="Close"><i data-i="close"></i></button></div>
+        <div class="sheet-body" id="sheetBody"></div>
+      </div>
+    </div>
+  </div>
+
+  <aside class="about" id="about" aria-label="About this screen"></aside>
+</div>
+
+<button class="assess-btn" data-act="assess"><span class="mark"></span>Assess this demo</button>
+<div class="assess-scrim" id="assessScrim" data-act="assessclose" hidden></div>
+<section class="assess" id="assess" hidden aria-label="Assess this demo">
+  <div class="assess-head"><b>Assess this demo</b><button class="iconbtn" data-act="assessclose" aria-label="Close"><i data-i="close"></i></button></div>
+  <div class="assess-body" id="assessBody"></div>
+</section>
+
+<!-- ============ SHEETS ============ -->
+<template id="sh-fee" data-title="What the at-cost fee pays for">
+  <p>The fee is last month's running cost divided by last month's trips. No margin is added. Any surplus lowers next month's fee.</p>
+  <table class="tbl">
+    <tr><th>September 2026</th><th class="r">Per trip</th></tr>
+    <tr><td>Support and safety team</td><td class="r">$0.55</td></tr>
+    <tr><td>Insurance</td><td class="r">$0.22</td></tr>
+    <tr><td>Servers and maps</td><td class="r">$0.18</td></tr>
+    <tr><td>Office and audit</td><td class="r">$0.10</td></tr>
+    <tr><td>Licences and compliance</td><td class="r">$0.08</td></tr>
+    <tr><td>Phone calls and texts</td><td class="r">$0.07</td></tr>
+    <tr><td><b>At-cost fee</b></td><td class="r"><b>$1.20</b></td></tr>
+  </table>
+  <p class="hint">NZ$61,800 cost ÷ 51,500 trips = NZ$1.20. Sample figures.</p>
+  <button class="btn secondary block" data-go="d-vote">Open the cost ledger</button>
+</template>
+
+<template id="sh-pay" data-title="Ways to pay">
+  <div class="list">
+    <button class="row sel" data-act="paywith" data-pay="Card ending 4242"><i data-i="wallet"></i><span class="grow">Card ending 4242<span class="sub">Default</span></span></button>
+    <button class="row" data-act="paywith" data-pay="Phone wallet"><i data-i="phone"></i><span class="grow">Phone wallet<span class="sub">Pay with the wallet on your phone</span></span></button>
+    <button class="row" data-act="paywith" data-pay="Card ending 9012 (overseas)"><i data-i="globe"></i><span class="grow">Card ending 9012<span class="sub">Overseas card: higher card fee, shown before you book</span></span></button>
+  </div>
+  <button class="btn secondary block" data-toast="The payment provider's own secure form opens here. Spare Ride never sees your card number.">Add a card</button>
+  <p class="hint">Cards are entered on the regulated payment provider's form. Pay by bank and cash come later, if members vote for them.</p>
+</template>
+
+<template id="sh-places" data-title="Saved places">
+  <div class="list">
+    <div class="row static"><i data-i="home"></i><span class="grow">Home<span class="sub">41 Sandringham Road, Kingsland</span></span></div>
+    <div class="row static"><i data-i="brief"></i><span class="grow">Work<span class="sub">Wynyard Quarter, Auckland Central</span></span></div>
+    <div class="row static"><i data-i="heart"></i><span class="grow">Pt Chevalier Beach<span class="sub">Point Chevalier</span></span></div>
+  </div>
+  <div class="inrow"><input class="in" placeholder="Name, for example Gym" id="newPlace"><button class="btn secondary" data-act="addplace">Save</button></div>
+</template>
+
+<template id="sh-terms" data-title="Plain terms">
+  <ol style="padding-left:18px;margin:0">
+    <li>You see the full fare before you book. That is the price.</li>
+    <li>Your driver keeps everything except the at-cost fee, the card fee and GST.</li>
+    <li>Cancel free for 2 min after a driver accepts.</li>
+    <li>Be kind. Drivers and riders can report anyone who is not.</li>
+    <li>Your data is yours. Download or delete it any time.</li>
+  </ol>
+  <p class="hint">Full terms and the privacy policy are short and in plain words. Draft for discussion.</p>
+</template>
+
+<template id="sh-dispatch" data-title="Dispatch rules v2">
+  <ol style="padding-left:18px;margin:0">
+    <li>Each request goes to the free driver who can reach the pickup soonest by road.</li>
+    <li>Only drivers and cars that meet the rider's needs get the offer.</li>
+    <li>Each offer waits 15 s, then passes to the next driver.</li>
+    <li>Declining never lowers a driver's standing or future offers.</li>
+    <li>If a driver cancels, the rider goes to the front of the line at the same fare.</li>
+    <li>No hidden ranking. Ratings do not decide who gets offers.</li>
+  </ol>
+  <p class="hint">Every trip records the rules version that matched it. Changes are replayed on past days, then drivers vote.</p>
+</template>
+
+<template id="sh-chat" data-title="Message Sione">
+  <div class="chat"><p class="bubble">Hi, I'm about 4 min away in a silver hatchback.</p></div>
+  <div class="chips"><button class="chip" data-act="say">I'm at the gate</button><button class="chip" data-act="say">Running 2 min late</button><button class="chip" data-act="say">I have my guide dog</button></div>
+  <div class="inrow"><input class="in" id="chatIn" placeholder="Write a message" aria-label="Message"><button class="btn secondary" data-act="say" data-free="1">Send</button></div>
+  <p class="hint">Messages work from booking until shortly after the trip. Phone numbers are never shown.</p>
+</template>
+
+<template id="sh-share" data-title="Share my trip">
+  <p>People you trust see a live, read-only map of this trip, the car and the plate. The link stops when the trip ends.</p>
+  <div class="inrow"><input class="in mono" readonly value="ride.spare.example/t/7KQ2" aria-label="Trip link"><button class="btn secondary" data-toast="Link copied.">Copy</button></div>
+  <div class="label">Send to</div>
+  <div class="chips"><button class="chip" data-act="chip" aria-pressed="true">Mum</button><button class="chip" data-act="chip" aria-pressed="false">Rawiri</button><button class="chip" data-toast="Pick someone from your contacts.">+ Someone else</button></div>
+  <div class="togrow"><span class="grow">Share every trip with Mum automatically<span class="sub">She is told who gave us her number, and why.</span></span><button class="tog" role="switch" aria-checked="false" aria-label="Share every trip automatically" data-act="tog" data-key="autoshare"></button></div>
+  <button class="btn primary block" data-act="sharesend">Share now</button>
+</template>
+
+<template id="sh-sos" data-title="Emergency">
+  <button class="btn sos block big" data-act="call111"><i data-i="phone"></i>Call 111</button>
+  <div class="note dan"><b>Read this out:</b><br>New North Road, Kingsland, heading towards the city.<br>Silver electric hatchback, plate <span class="mono">RDE482</span>.<br>Driver Sione F., Spare Ride trip <span class="mono">7KQ2</span>.</div>
+  <p class="hint">The safety team sees your call and the live trip at once.</p>
+  <div class="list">
+    <button class="row" data-act="impaired"><i data-i="alert" class="dan"></i><span class="grow">The driver seems impaired<span class="sub">One tap. The safety team calls you now.</span></span></button>
+    <button class="row" data-act="crash"><i data-i="car" class="dan"></i><span class="grow">We have been in a crash<span class="sub">Help for you, insurance help for the driver</span></span></button>
+    <button class="row" data-sheet="report"><i data-i="shield"></i><span class="grow">Report something else<span class="sub">During or after the trip</span></span></button>
+  </div>
+</template>
+
+<template id="sh-report" data-title="Report a safety incident">
+  <div class="chips"><button class="chip" data-act="chip" aria-pressed="false">Unsafe driving</button><button class="chip" data-act="chip" aria-pressed="false">Made me feel unsafe</button><button class="chip" data-act="chip" aria-pressed="false">Harassment or sexual harm</button><button class="chip" data-act="chip" aria-pressed="false">Something else</button></div>
+  <textarea class="in" placeholder="What happened? Share only what you want to." aria-label="What happened"></textarea>
+  <button class="btn primary block" data-act="reportsend">Send to the safety team</button>
+  <p class="hint">A trained person answers, day and night. You see each step of your report.</p>
+</template>
+
+<template id="sh-cancel" data-title="Cancel this ride?">
+  <p>It is free to cancel until <b>8:43 am</b>, 2 min after Sione accepted.</p>
+  <p class="hint">After that the fee is NZ$4.00, and all of it goes to the driver for the time lost.</p>
+  <div class="btns"><button class="btn secondary" data-act="closesheet">Keep my ride</button><button class="btn primary" data-act="cancelride">Cancel free</button></div>
+</template>
+
+<template id="sh-dest" data-title="Change destination">
+  <p class="hint">The new fare uses the same voted formula for the extra distance and time.</p>
+  <div class="list" id="destList"></div>
+  <div class="mlog" id="destLog">Pick a place to see the new fare.</div>
+  <button class="btn primary block" id="destConfirm" data-act="destconfirm" disabled>Change destination</button>
+</template>
+
+<template id="sh-receipt" data-title="Receipt and tax invoice">
+  <div class="mono" style="font-size:12px;line-height:1.6">Tax invoice · trip 7KQ2<br>Mon 19 Oct 2026, 8:41 to 8:58 am<br>Supplier: Spareware Co-op (sample)<br>GST number: 000-000-000 (sample)<br>Driver: Sione F., driver ID SR-20417<br>Vehicle registration: RDE482<br>Kingsland to Britomart, 5.8 km, 17 min<br>Fare formula v3 · dispatch rules v2</div>
+  <dl class="kv">
+    <dt>To the driver</dt><dd data-bind="driver">$17.44</dd>
+    <dt>At-cost fee</dt><dd data-bind="fee">$1.20</dd>
+    <dt>Card fee</dt><dd data-bind="pay">$0.91</dd>
+    <dt data-show="extra">Airport fee</dt><dd data-show="extra" data-bind="extra">$0.00</dd>
+    <dt>GST 15% included</dt><dd data-bind="gst">$2.93</dd>
+    <dt>Tip, all to the driver</dt><dd data-bind="tip">$3.00</dd>
+    <dt class="tot">Total paid</dt><dd class="tot" data-bind="totalTip">NZ$25.48</dd>
+  </dl>
+  <button class="btn secondary block" data-toast="Receipt emailed to aroha@example.com.">Email it to me</button>
+</template>
+
+<template id="sh-problem" data-title="What went wrong?">
+  <div class="list">
+    <button class="row" data-act="lost"><i data-i="bag"></i><span class="grow">I left something in the car<span class="sub">Contact the driver and arrange a return</span></span></button>
+    <button class="row" data-act="farereview"><i data-i="scale"></i><span class="grow">I think I was overcharged<span class="sub">An automatic check runs first</span></span></button>
+    <button class="row" data-sheet="report"><i data-i="shield"></i><span class="grow">A safety issue</span></button>
+    <button class="row" data-go="c-help"><i data-i="help"></i><span class="grow">Something else<span class="sub">Help centre</span></span></button>
+  </div>
+  <div id="probOut"></div>
+</template>
+
+<template id="sh-notify" data-title="What reaches me">
+  <div class="togrow"><span class="grow">Trip updates by push<span class="sub">Even with the app closed</span></span><button class="tog" role="switch" aria-checked="true" aria-label="Trip updates by push" data-act="tog"></button></div>
+  <div class="togrow"><span class="grow">Trip updates by text<span class="sub">For when you have no data</span></span><button class="tog" role="switch" aria-checked="true" aria-label="Trip updates by text" data-act="tog"></button></div>
+  <div class="togrow"><span class="grow">Receipts by email</span><button class="tog" role="switch" aria-checked="true" aria-label="Receipts by email" data-act="tog"></button></div>
+  <div class="togrow"><span class="grow">News from the co-op<span class="sub">Votes and the monthly ledger</span></span><button class="tog" role="switch" aria-checked="false" aria-label="News from the co-op" data-act="tog"></button></div>
+  <p class="hint">Spare Ride never sends marketing you did not ask for.</p>
+</template>
+
+<template id="sh-delete" data-title="Delete my account and data">
+  <p>We delete your profile, places, messages and location history.</p>
+  <div class="note inf"><b>Kept because the law requires it:</b> receipts and tax records for as long as tax law asks, then deleted automatically. Safety reports for as long as the law requires.</div>
+  <div class="btns"><button class="btn secondary" data-act="closesheet">Keep my account</button><button class="btn primary" data-act="deleteacct">Delete</button></div>
+</template>
+
+<template id="sh-leave" data-title="Stop driving">
+  <ol class="steps">
+    <li><span class="dot">1</span><span>Last payout tonight: <b data-bind="today">NZ$158.65</b></span></li>
+    <li><span class="dot">2</span><span>Settle any balance either way. You owe <b>NZ$3.10</b> from a fare correction.</span></li>
+    <li><span class="dot">3</span><span>Take your record: trips, ratings, earnings and documents as open files.</span></li>
+  </ol>
+  <div class="btns"><button class="btn secondary" data-act="closesheet">Not now</button><button class="btn primary" data-act="leave">Stop driving</button></div>
+</template>
+
+<template id="sh-driverid" data-title="Driver ID">
+  <div style="border:1px solid var(--ink);border-radius:var(--radius);padding:12px">
+    <div class="drivecard"><span class="avatar lg">SF</span><div><b>Sione F.</b><span class="hint" style="display:block">Spare Ride driver ID <span class="mono">SR-20417</span></span></div></div>
+    <dl class="kv" style="margin-top:10px"><dt>P endorsement</dt><dd>to 03/2029</dd><dt>Vehicle</dt><dd>RDE482</dd><dt>Operator</dt><dd>Spareware Co-op</dd><dt>Selfie check</dt><dd>today 8:02 am</dd></dl>
+  </div>
+  <p class="hint">Show this when a rider, an officer or a venue asks. Whether a printed card is also needed is being checked.</p>
+</template>
+
+<template id="sh-docs" data-title="My documents">
+  <div class="list">
+    <div class="row static"><i data-i="id"></i><span class="grow">Driver licence and P endorsement<span class="sub">Valid to March 2029. Re-checked against the official record.</span></span><span class="badge ok">OK</span></div>
+    <div class="row static"><i data-i="car"></i><span class="grow">Certificate of Fitness, RDE482<span class="sub">Ends 9 November 2026. Reminders by push, email and text.</span></span><span class="badge inf">21 days</span></div>
+    <div class="row static"><i data-i="shield"></i><span class="grow">Insurance for passengers<span class="sub">Group cover the co-op arranges at cost</span></span><span class="badge ok">OK</span></div>
+    <div class="row static"><i data-i="user"></i><span class="grow">Identity and selfie check<span class="sub">Last check today 8:02 am</span></span><span class="badge ok">OK</span></div>
+  </div>
+  <button class="btn secondary block" data-act="cofupload">Add the new Certificate of Fitness</button>
+  <p class="hint">If a document lapses you are paused, not removed, until it is fixed.</p>
+</template>
+
+<template id="sh-worktime" data-title="Work time and breaks">
+  <dl class="kv">
+    <dt>Work time today</dt><dd>5 h 10 min</dd>
+    <dt>Next 30 min break due</dt><dd>in 20 min</dd>
+    <dt>Limit for the day</dt><dd>13 h</dd>
+  </dl>
+  <div class="note">When a break is due, new offers stop until it is over. The trip you are on finishes first.</div>
+  <div class="label">Logbook, kept for you</div>
+  <div class="mlog">03:31  start work
+03:48  trip   Ponsonby to Auckland Airport
+       5 more trips
+08:05  trip   Parnell to Kingsland
+08:41  now</div>
+  <div class="btns"><button class="btn secondary" data-act="otherwork">Add other paid work</button><button class="btn secondary" data-act="logshow">Show an officer</button></div>
+  <p class="hint">Other paid work counts too, such as another ride app or a day job. The logbook rules follow the drivers' status decision (piece RD01).</p>
+  <p class="hint" data-noloc>Example: New Zealand work time rules. Each country gets its own rules pack.</p>
+</template>
+
+<template id="sh-selfie" data-title="Quick selfie check">
+  <div style="height:140px;border:1px dashed var(--rule);display:grid;place-items:center;border-radius:var(--radius);background:var(--panel-alt);color:var(--ink-2)"><i data-i="camera" class="lg"></i></div>
+  <p>Now and then we ask for a quick selfie, so riders know the account holder is the one driving.</p>
+  <p class="hint">We compare it with your sign-up photo, keep only the result and delete the photo within 24 hours. Rather not use your face? Choose a short video call with a reviewer instead.</p>
+  <div class="btns"><button class="btn secondary" data-act="selfiealt">Video call instead</button><button class="btn primary" data-act="selfiedone">Take selfie</button></div>
+</template>
+
+<template id="sh-dchat" data-title="Message Aroha">
+  <div class="chat" data-reply="Thanks! Blue door, I'm coming out."><p class="bubble">Hi, I'm by the blue door with my guide dog.</p></div>
+  <div class="chips"><button class="chip" data-act="say">I'm outside</button><button class="chip" data-act="say">2 min away</button><button class="chip" data-act="say">Can't stop here, I'm on the corner</button></div>
+  <p class="hint">In driving mode you send quick replies only. They are read aloud to you.</p>
+</template>
+
+<template id="sh-support" data-title="Driver support">
+  <div class="chat" data-reply="Thanks. I'm looking at it now and will reply here."><p class="bubble">Hi Sione, this is Tama from driver support. People who know the work answer here, usually within 10 min.</p></div>
+  <div class="chips"><button class="chip" data-act="say">A question about a payout</button><button class="chip" data-act="say">A document is expiring</button><button class="chip" data-act="say">The app is not working</button></div>
+  <div class="inrow"><input class="in" id="chatIn" placeholder="Write a message" aria-label="Message"><button class="btn secondary" data-act="say" data-free="1">Send</button></div>
+</template>
+
+<template id="sh-incident" data-title="Incident IN-2291">
+  <p><b>Trip 6PQ1, 7:58 am:</b> a rider reports unsafe driving on the motorway. The trip ended safely.</p>
+  <div class="list">
+    <button class="row" data-act="inc" data-msg="Calling the rider now."><i data-i="phone"></i><span class="grow">Call the rider</span></button>
+    <button class="row" data-act="inc" data-msg="Calling the driver now."><i data-i="phone"></i><span class="grow">Call the driver</span></button>
+    <button class="row" data-act="inc" data-msg="Driver paused under rule S2 while we look. They are told which rule, and how to appeal."><i data-i="lock"></i><span class="grow">Pause the driver while we look<span class="sub">Under a published rule, with a way to appeal</span></span></button>
+    <button class="row" data-act="inc" data-msg="Police liaison opened. Only what the law allows is shared."><i data-i="shield"></i><span class="grow">Work with the police<span class="sub">Only with proper legal authority</span></span></button>
+  </div>
+</template>
+
+<template id="sh-fraud" data-title="Possible fraud">
+  <div class="list">
+    <div class="row static"><i data-i="pin" class="dan"></i><span class="grow">Location jumps 40 km in 1 min<span class="sub">Driver SR-21877, 3 times this week</span></span><button class="btn quiet small" data-act="fraudok">Pause and review</button></div>
+    <div class="row static"><i data-i="wallet" class="dan"></i><span class="grow">One card on 6 new accounts<span class="sub">Riders created today</span></span><button class="btn quiet small" data-act="fraudok">Block the card</button></div>
+  </div>
+  <p class="hint">A person decides every case. Each action goes in the admin log.</p>
+</template>
+
+<template id="sh-voice" data-title="Book by voice">
+  <p class="hint" style="margin:0"><span class="badge n">Next</span> For blind and low-vision riders. Talk to Spare Ride, or to your phone's own voice assistant. Nothing needs to be seen.</p>
+  <div class="label">Sample exchange</div>
+  <div class="voice">
+    <p class="bubble me"><b>You:</b> Book a ride to Britomart.</p>
+    <p class="bubble"><b>Spare Ride:</b> A Standard car to Britomart, about 17 minutes, <span data-bind="total">NZ$22.48</span>. Your assistance animal is on the booking. Book it?</p>
+    <p class="bubble me"><b>You:</b> Yes.</p>
+    <p class="bubble"><b>Spare Ride:</b> Booked. Sione is 4 minutes away in a silver electric hatchback, plate R D E 4 8 2. Your PIN is 4 8 2 7.</p>
+    <p class="bubble me"><b>You:</b> Where is my driver?</p>
+    <p class="bubble"><b>Spare Ride:</b> Sione is 2 minutes away on Sandringham Road. I will tell you when the car is outside.</p>
+    <p class="bubble me"><b>You:</b> Cancel my ride.</p>
+    <p class="bubble"><b>Spare Ride:</b> It is free to cancel for 1 more minute. Cancel now? Say yes or no.</p>
+  </div>
+  <div class="btns"><button class="btn secondary" data-act="voiceassist">Use my phone's assistant</button><button class="btn primary" data-act="voicetalk"><i data-i="mic"></i>Start talking</button></div>
+  <p class="hint">Every answer is spoken aloud and shown as text, and works with the phone's screen reader.</p>
+</template>
+
+<!-- MORE SHEETS -->
+<script>
+"use strict";
+const DATA = {"areas":[["A1","Rider accounts and getting started",6],["A2","Driver sign-up and checks",12],["A3","Booking a ride",7],["A4","More ways to ride",0],["A5","The live trip",7],["A6","The driver's working day",8],["A7","Dispatch and matching",7],["A8","Fares and pricing",7],["A9","Payments, tips and payouts",8],["A10","Tax and earnings records",4],["A11","Maps, routing and navigation",6],["A12","Messages, calls and notifications",6],["A13","Safety",8],["A14","Accessibility",7],["A15","Ratings, reports, disputes and moderation",5],["A16","Help, support and lost items",7],["A17","Businesses, families, taxis and fleets",0],["A18","Co-op membership, voting and open costs",5],["A19","Operations and admin",11],["A20","Legal duties and compliance",11],["A21","Privacy and data export",10],["A22","Languages, countries and poor signal",4],["A23","Apps, platform and open access",4]],"core":{"A1-F1":"Sign up in a minute","A1-F2":"Sign in on any device","A1-F3":"Profile","A1-F4":"Saved places","A1-F5":"Ride preferences","A1-F7":"Change or close an account","A2-F1":"Apply to drive","A2-F2":"Licence and P endorsement check","A2-F3":"Identity check","A2-F4":"Vehicle check","A2-F5":"Insurance","A2-F6":"Payout and tax details","A2-F7":"Join the co-op","A2-F8":"Orientation","A2-F9":"Reviewer approval","A2-F10":"Expiry reminders and re-checks","A2-F12":"Stop driving and leave the co-op","A2-F14":"Right to work checked","A3-F1":"Where to","A3-F2":"Pickup point","A3-F3":"Choose a ride option","A3-F4":"Upfront fare and where it goes","A3-F5":"Book now","A3-F6":"Note for the driver","A3-F10":"Cancel a booking","A5-F1":"Driver on the way","A5-F2":"Arrival and waiting","A5-F3":"Start and end the trip","A5-F5":"Keeps going through lost signal","A5-F6":"No-show","A5-F7":"After the trip","A5-F8":"Past trips and ride again","A6-F1":"Go online and offline","A6-F2":"See the whole offer","A6-F3":"Accept or decline with no penalty","A6-F4":"Choose where and what to drive","A6-F6":"Breaks and work time limits","A6-F8":"Today's earnings","A6-F11":"Driver ID on screen","A6-F12":"Driving mode","A7-F1":"Nearest driver by road time","A7-F2":"Arrival estimates before booking","A7-F3":"Offers that pass on","A7-F4":"Published dispatch rules","A7-F5":"Match the right car to each need","A7-F10":"Replay past days before a change","A7-F11":"When a driver cancels","A8-F1":"Fare formula set by drivers","A8-F2":"Upfront quote","A8-F3":"Breakdown on every fare","A8-F5":"Extras","A8-F6":"Fare changes during a trip","A8-F7":"Cancellation and no-show fees","A8-F8":"Explain any past fare","A9-F1":"Add a way to pay","A9-F2":"Pay and hold","A9-F3":"Tips","A9-F8":"Refunds and corrections","A9-F9":"Receipts and tax invoices","A9-F10":"Daily payouts","A9-F12":"Failed payments and chargebacks","A9-F13":"Money owed after a payout","A10-F1":"GST collected on every ride","A10-F2":"Flat-rate credit statements","A10-F3":"Income reports to IRD","A10-F4":"Earnings statements","A11-F1":"A map on every screen","A11-F2":"Address and place search","A11-F3":"Routes and travel times","A11-F4":"Turn-by-turn directions","A11-F5":"Pickup and drop-off points","A11-F6":"Service areas and zones","A12-F1":"Chat during a trip","A12-F2":"Calls that hide numbers","A12-F3":"Push notifications","A12-F4":"Text message updates","A12-F5":"Email","A12-F6":"Choose what reaches me","A13-F1":"Emergency button","A13-F2":"Share my trip","A13-F3":"Check it is the right car","A13-F4":"Check it is the right driver","A13-F5":"Check-ins when something looks wrong","A13-F11":"Report a safety incident","A13-F12":"After a crash","A13-F15":"No driving impaired","A14-F1":"Wheelchair accessible rides","A14-F2":"Assistance animals always carried","A14-F4":"Works with screen readers and large text","A14-F5":"Deaf and hard of hearing drivers","A14-F6":"Book by phone call","A14-F9":"Accessibility needs on every request","A14-F12":"More time to get in","A15-F1":"Two-way ratings","A15-F3":"Report a problem","A15-F4":"Disputes decided by members","A15-F5":"Deactivation only with reasons and appeal","A15-F7":"Profiles and messages kept clean","A16-F1":"Help centre","A16-F2":"Help with a trip","A16-F3":"Lost items","A16-F4":"Fare review","A16-F5":"Driver support","A16-F6":"Complaints register","A16-F7":"Support staff tools","A18-F1":"Join as a member","A18-F2":"Vote on fares and rules","A18-F3":"Open cost ledger","A18-F4":"Where my fee went","A18-F10":"Clear rules on who decides","A19-F1":"Launch a city","A19-F2":"Watch the service live","A19-F3":"Review documents","A19-F4":"Catch fraud","A19-F5":"Handle incidents","A19-F6":"Official requests for data","A19-F7":"Every admin action logged","A19-F8":"Uptime and monitoring","A19-F9":"Test with simulated riders and drivers","A19-F12":"Tell drivers in an area","A19-F14":"Trips stay safe in an outage","A20-F1":"Hold the operator licence","A20-F2":"Registered passengers instead of cameras","A20-F3":"Driver identification rules met","A20-F4":"Fare agreed before the trip","A20-F5":"Drivers' status decided","A20-F6":"Health and safety duties","A20-F7":"Insurance in place","A20-F8":"Plain terms and policies","A20-F9":"Anti-money-laundering check","A20-F10":"Duties to disabled riders","A20-F12":"Fare vote cleared under competition law","A21-F1":"Download my data","A21-F2":"Delete my data","A21-F3":"Keep data only as long as needed","A21-F4":"Location privacy","A21-F5":"Privacy requests","A21-F7":"Breach response","A21-F9":"Face checks within the biometrics code","A21-F10":"Told when someone else gives us your details","A21-F11":"Driver locations kept private","A21-F12":"Privacy checked for the whole app","A22-F1":"Many languages","A22-F2":"Local formats","A22-F5":"Local emergency numbers","A22-F8":"Works on weak signal","A23-F1":"Rider and driver apps on phones","A23-F3":"Location in the background","A23-F4":"One command API","A23-F8":"The Spareware look"},"assess":["Is there anything you do in Uber or a taxi app today, as a rider or a driver, that has no feature in this map?","Could the first city launch with only the core features, or is something marked next that riders would miss on day one?","Is the fare card clear in five seconds: the fare, the driver's share, the at-cost fee, the payment fee and GST?","Would a driver trust the offer card: does it show everything needed to decide, and is declining clearly free?","Can the dispatch rules be published in one page and still work fairly at airports, events and quiet times?","Is the drivers' status decision (RD01) far enough along to build pay, work time and the driver agreement, or should those parts wait?","Can the co-op get access to the official licence and vehicle registers, or does sign-up start with people reviewing documents?","Should Spare Ride build its own approved electronic logbook, or have drivers use an existing approved one at first?","Are the core safety tools at least as good as the incumbent's on day one: emergency button, trip sharing, PIN, check-ins and a response team?","Does the first city have enough wheelchair accessible vehicles, and should phone booking and Total Mobility be in the first release?","Once support staff, the safety team, insurance, telephony and maps are on the ledger, what does the at-cost fee per trip come to?","Which kit services (payments, matching, maps, trust) must exist before Spare Ride can start, and who is building them?","Are the part sizes believable, and which large parts (routing, address search, navigation, background location, payments, GST engine, the apps) carry the most risk?","Does every screen in the demo come from what people need to do, with nothing copied from an incumbent's interface?","Does anything here need a lawyer before it is built: cameras and registered passengers, recording audio, women preferences, teen accounts, cash, stored credit?","Can drivers lawfully vote on a shared fare under the Commerce Act, and does the co-op need a Commerce Commission authorisation before the first vote (RIDE-A20-F12)?","Do the face checks at sign-up and during shifts pass the Biometric Processing Privacy Code's proportionality test, and what other way is there for people who will not use their face (RIDE-A21-F9)?","Who sells each ride, the co-op or the driver, and do the receipt, the tax invoices and the rider terms all match that choice?","If drivers are contractors, does every driver-facing rule pass the 2026 gateway test check, and if RD01 decides they are employees, are pay records, leave and rosters (RIDE-A10-F6) moved to core before launch?","Has the kit raised the parts Spare Ride's core depends on, such as adding a vehicle, turn-by-turn directions, light mode and trip check-ins, or does launch wait for them?","Do the safety tools cover the worst harms from day one: the separate sexual harm path, impaired driver reports, and limits on safety pauses?","Do disabled riders get the longer free wait with no waiting charges, and do receipts show the driver's identification and the vehicle's registration?"]};
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+
+/* ---------- Icons, drawn for this demo ---------- */
+const ICONS = {
+  car: '<path d="M4 15v-3l2.2-5h11.6L20 12v3z"/><path d="M6 15v2.5M18 15v2.5M7.5 12h.5M16 12h.5"/>',
+  taxi: '<path d="M4 15v-3l2.2-5h11.6L20 12v3z"/><path d="M6 15v2.5M18 15v2.5M10 7V4.5h4V7"/>',
+  pin: '<path d="M12 21s-6-6.2-6-11a6 6 0 0 1 12 0c0 4.8-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/>',
+  flag: '<path d="M6 21V4M6 4h11l-2 4 2 4H6"/>',
+  share: '<circle cx="6" cy="12" r="2.2"/><circle cx="17" cy="6" r="2.2"/><circle cx="17" cy="18" r="2.2"/><path d="M8 11l7-4M8 13l7 4"/>',
+  alert: '<path d="M12 3.5l9 16H3z"/><path d="M12 10v4.5M12 17h.01"/>',
+  shield: '<path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/><path d="M9 12l2 2 4-4"/>',
+  phone: '<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a1 1 0 0 1-1 1A16 16 0 0 1 4 5a1 1 0 0 1 1-1z"/>',
+  msg: '<path d="M4 5h16v11H9l-5 4z"/>',
+  star: '<path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"/>',
+  clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  wallet: '<rect x="3.5" y="6" width="17" height="13" rx="1"/><path d="M3.5 10h17M15 14.5h2"/>',
+  home: '<path d="M4 11l8-7 8 7M6 9.5V20h12V9.5"/>',
+  brief: '<rect x="3.5" y="7.5" width="17" height="12" rx="1"/><path d="M9 7.5V5h6v2.5M3.5 12.5h17"/>',
+  heart: '<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',
+  user: '<circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c1-4 4-6 7-6s6 2 7 6"/>',
+  group: '<circle cx="9" cy="8.5" r="3"/><circle cx="16.5" cy="9.5" r="2.5"/><path d="M3.5 19c.8-3.3 3-5 5.5-5s4.7 1.7 5.5 5M14.5 14.2c2.6-.4 4.9 1.2 5.6 4.8"/>',
+  list: '<path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/>',
+  chart: '<path d="M5 19V11M11 19V5M17 19v-6M3 19.5h18"/>',
+  ballot: '<rect x="4" y="10" width="16" height="10" rx="1"/><path d="M8 10V4h8v6M10 7l1.5 1.5L14 6"/>',
+  menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+  close: '<path d="M6 6l12 12M18 6L6 18"/>',
+  chev: '<path d="M9 6l6 6-6 6"/>',
+  check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  search: '<circle cx="11" cy="11" r="6"/><path d="M16 16l4 4"/>',
+  chair: '<circle cx="11" cy="4.5" r="1.6"/><path d="M11 7.5v6h5.5l2.5 5"/><path d="M11 10.5h4.5"/><path d="M8.2 11.2a5 5 0 1 0 7.2 6.3"/>',
+  paw: '<circle cx="6.5" cy="10" r="1.6"/><circle cx="10" cy="6.3" r="1.6"/><circle cx="14" cy="6.3" r="1.6"/><circle cx="17.5" cy="10" r="1.6"/><path d="M12 12c-3 0-5 3.5-5 5.5 0 1.5 1.5 2 2.5 2s1.5-.5 2.5-.5 1.5.5 2.5.5 2.5-.5 2.5-2c0-2-2-5.5-5-5.5z"/>',
+  bolt: '<path d="M13 3L5 14h6l-1 7 8-11h-6z"/>',
+  diamond: '<path d="M7 4h10l4 5-9 11L3 9z"/><path d="M3 9h18"/>',
+  lock: '<rect x="5" y="11" width="14" height="9" rx="1"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  signal: '<path d="M4 20v-3M9 20v-7M14 20V9M19 20V5"/>',
+  battery: '<rect x="3" y="8" width="16" height="9" rx="1"/><path d="M21 11v3M5.5 10.5h8v4h-8z"/>',
+  doc: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/>',
+  download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
+  id: '<rect x="3" y="5" width="18" height="14" rx="1"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14.5 10h4M14.5 13.5h3"/>',
+  left: '<path d="M17 20v-7a3 3 0 0 0-3-3H6M10 6l-4 4 4 4"/>',
+  power: '<path d="M12 3v9"/><path d="M6.5 7a7.5 7.5 0 1 0 11 0"/>',
+  camera: '<rect x="3.5" y="7" width="17" height="12" rx="1"/><circle cx="12" cy="13" r="3.2"/><path d="M8.5 7l1.5-2.5h4L15.5 7"/>',
+  bell: '<path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5h4"/>',
+  globe: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.5 2.5 3.5 5.5 3.5 8.5s-1 6-3.5 8.5c-2.5-2.5-3.5-5.5-3.5-8.5s1-6 3.5-8.5z"/>',
+  access: '<circle cx="12" cy="5" r="1.8"/><path d="M5 8.5l7 1.5 7-1.5M12 10v5l-3 5M12 15l3 5"/>',
+  help: '<circle cx="12" cy="12" r="8.5"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 16.5h.01"/>',
+  scale: '<path d="M12 4v16M7 20h10M5 8h14M5 8l-2.5 6a2.8 2.8 0 0 0 5 0zM19 8l-2.5 6a2.8 2.8 0 0 0 5 0z"/>',
+  ledger: '<path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h10M9 8h5"/>',
+  map: '<path d="M3.5 6.5l5.5-2 6 2 5.5-2v13l-5.5 2-6-2-5.5 2z"/><path d="M9 4.5v13M15 6.5v13"/>',
+  sound: '<path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>',
+  code: '<path d="M8.5 7L3.5 12l5 5M15.5 7l5 5-5 5"/>',
+  again: '<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5v4h-4"/>',
+  bag: '<path d="M5 8h14l-1 12H6z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/>',
+  quiet: '<path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M16 10l4 4M20 10l-4 4"/>',
+  thermo: '<path d="M10 14V5a2 2 0 0 1 4 0v9a4 4 0 1 1-4 0z"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/>',
+  eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/>',
+  trash: '<path d="M4.5 7h15M9 7V4.5h6V7M6.5 7l1 13h9l1-13"/>',
+  wifi: '<path d="M3 9.5a13 13 0 0 1 18 0M6 12.8a8.5 8.5 0 0 1 12 0M9 16a4 4 0 0 1 6 0M12 19.5h.01"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  minus: '<path d="M5 12h14"/>',
+  box: '<path d="M4 8l8-4 8 4v8l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v8"/>',
+  mic: '<rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5M9 20.5h6"/>'
+};
+const ic = (n, c = "") => '<svg class="ic ' + c + '" viewBox="0 0 24 24" aria-hidden="true">' + (ICONS[n] || "") + '</svg>';
+function hydrate(root) { $$("i[data-i]", root).forEach(el => { el.outerHTML = ic(el.dataset.i, el.className); }); }
+
+/* ---------- Example country ----------
+   Spare Ride is international. Each country gets its own rules pack: money, tax, licences, regulators and
+   the emergency number. The page text is written for New Zealand; inside the phone it is rewritten for the
+   chosen country. Names below are samples for the demo, not legal advice. */
+const COUNTRIES = {
+  nz: { name: "New Zealand", inName: "New Zealand", where: "", long: "NZ$", sym: "$", tax: "GST", taxLower: "GST", rate: 0.15,
+        taxWho: "", taxAuth: "Inland Revenue", taxAuthShort: "IRD", taxId: "IRD number", regulator: "NZ Transport Agency Waka Kotahi",
+        opLicence: "Small passenger service licence", drvLicence: "P endorsement", vcheck: "Certificate of Fitness", sos: "111",
+        privacyName: "Privacy Commissioner", privacyThe: "the Privacy Commissioner", competition: "Commerce Commission",
+        phoneLine: "0800 000 000", mobile: "021 555 0142", langs: ["English", "Te reo Māori"] },
+  au: { name: "Australia", inName: "Australia", where: "Victoria", long: "A$", sym: "$", tax: "GST", taxLower: "GST", rate: 0.10,
+        taxWho: "Drivers register for GST, and it is shown on every ride, as Australia's rules ask.",
+        taxAuth: "Australian Taxation Office", taxAuthShort: "ATO", taxId: "ABN", regulator: "Safe Transport Victoria",
+        opLicence: "Booking service provider registration", drvLicence: "driver accreditation", vcheck: "vehicle safety inspection", sos: "000",
+        privacyName: "Australian Information Commissioner", privacyThe: "the Australian Information Commissioner", competition: "Australian Competition and Consumer Commission",
+        phoneLine: "1800 000 000", mobile: "0491 570 156", langs: ["English", "简体中文"] },
+  uk: { name: "United Kingdom", inName: "the United Kingdom", where: "London", long: "£", sym: "£", tax: "VAT", taxLower: "VAT", rate: 0.20,
+        taxWho: "", taxAuth: "HM Revenue and Customs", taxAuthShort: "HMRC", taxId: "UTR", regulator: "Transport for London",
+        opLicence: "Private hire operator licence", drvLicence: "private hire driver licence", vcheck: "MOT certificate", sos: "999",
+        privacyName: "Information Commissioner's Office", privacyThe: "the Information Commissioner's Office", competition: "Competition and Markets Authority",
+        phoneLine: "0800 000 0000", mobile: "07700 900142", langs: ["English", "Cymraeg"] },
+  us: { name: "United States", inName: "the United States", where: "New York City", long: "US$", sym: "$", tax: "Sales tax", taxLower: "sales tax", rate: 0.08875,
+        taxWho: "", taxAuth: "Internal Revenue Service", taxAuthShort: "IRS", taxId: "TIN", regulator: "NYC Taxi and Limousine Commission",
+        opLicence: "High-volume for-hire service licence", drvLicence: "TLC driver licence", vcheck: "TLC vehicle inspection", sos: "911",
+        privacyName: "New York Attorney General", privacyThe: "the New York Attorney General", competition: "Federal Trade Commission",
+        phoneLine: "1-800-000-0000", mobile: "212-555-0142", langs: ["English", "Español"] },
+  ca: { name: "Canada", inName: "Canada", where: "Toronto", long: "C$", sym: "$", tax: "HST", taxLower: "HST", rate: 0.13,
+        taxWho: "Drivers register for HST and charge it on every ride. Spare Ride can file it for them if they ask.",
+        taxAuth: "Canada Revenue Agency", taxAuthShort: "CRA", taxId: "business number", regulator: "City of Toronto",
+        opLicence: "Private transportation company licence", drvLicence: "PTC driver licence", vcheck: "vehicle safety inspection", sos: "911",
+        privacyName: "Privacy Commissioner of Canada", privacyThe: "the Privacy Commissioner of Canada", competition: "Competition Bureau",
+        phoneLine: "1-800-000-0000", mobile: "416-555-0142", langs: ["English", "Français"] },
+  eu: { name: "European Union", inName: "the European Union", where: "VAT at France's rate", long: "€", sym: "€", tax: "VAT", taxLower: "VAT", rate: 0.10,
+        taxWho: "", taxAuth: "National tax office", taxAuthShort: "the tax office", taxId: "tax ID", regulator: "National transport authority",
+        opLicence: "Passenger transport licence, per member state", drvLicence: "professional driver licence", vcheck: "roadworthiness test", sos: "112",
+        privacyName: "National data protection authority", privacyThe: "the national data protection authority", competition: "European Commission",
+        phoneLine: "00800 0000 0000", mobile: "+00 600 000 142", langs: ["English", "Français"] }
+};
+const CODE = (() => { try { const c = new URLSearchParams(location.search).get("c"); return COUNTRIES[c] ? c : "nz"; } catch (e) { return "nz"; } })();
+const C = COUNTRIES[CODE];
+const PCT = +(C.rate * 100).toFixed(3) + "%";
+if (!C.taxWho) C.taxWho = "How " + C.taxLower + " applies to rides follows the rules pack for " + C.inName + ".";
+const LMAP = CODE === "nz" ? [] : [
+  [/GST on every ride is charged and paid by the platform\./g, C.taxWho],
+  [/GST, paid by the platform/g, C.tax + ", by local rules"],
+  [/Flat-rate credits, September/g, C.tax + " statement, September"],
+  [/You are not GST-registered/g, "What was charged on your rides"],
+  [/Not GST-registered, so you get monthly flat-rate credit statements\./g, C.tax + " details added. Each statement shows the " + C.taxLower + " on your rides."],
+  [/GST status/g, C.taxLower + " status"],
+  [/Every rider is registered, so cars need no in-car camera\./g, "Every rider is registered. Whether cars also need a camera follows the rules pack for " + C.inName + "."],
+  [/the Privacy Commissioner/g, C.privacyThe],
+  [/Example: New Zealand/g, "Example: " + C.name],
+  [/\bin New Zealand\b/g, "in " + C.inName],
+  [/New Zealand/g, C.name],
+  [/GST 15%/g, C.tax + " " + PCT],
+  [/\bIRD number\b/g, C.taxId],
+  [/\bIRD\b/g, C.taxAuthShort],
+  [/\bGST\b/g, C.tax],
+  [/Certificate of Fitness/g, C.vcheck],
+  [/P endorsement/g, C.drvLicence],
+  [/\b111\b/g, C.sos],
+  [/0800 000 000/g, C.phoneLine],
+  [/021 555 0142/g, C.mobile],
+  [/NZ\$/g, C.long],
+  [/\$(?=\d)/g, C.sym]
+];
+/* Rewrites one piece of New Zealand text for the chosen country. A name that lands at the start of a sentence gets a capital. */
+function locText(s) {
+  LMAP.forEach(([re, v]) => { s = s.replace(re, (m, off, all) => (off === 0 || /[.:!?]\s$/.test(all.slice(Math.max(0, off - 2), off))) ? v.charAt(0).toUpperCase() + v.slice(1) : v); });
+  return s;
+}
+const LOCDONE = new WeakSet();
+function localize(root) {
+  if (!LMAP.length || !root) return;
+  const one = n => {
+    if (LOCDONE.has(n)) return; LOCDONE.add(n);
+    if (n.nodeType === 3) { const t = locText(n.data); if (t !== n.data) n.data = t; return; }
+    ["value", "placeholder"].forEach(a => { if (n.hasAttribute(a)) { const v = n.getAttribute(a), t = locText(v); if (t !== v) n.setAttribute(a, t); } });
+  };
+  if (root.nodeType === 3) { if (root.parentElement && !root.parentElement.closest("[data-noloc]")) one(root); return; }
+  if (root.nodeType === 1 && root.closest("[data-noloc]")) return;
+  if (root.nodeType !== 1 && root.nodeType !== 11) return;
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, { acceptNode: n => n.nodeType === 1 && n.hasAttribute("data-noloc") ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
+  if (root.nodeType === 1 && root.matches("input,textarea")) one(root);
+  let n; while ((n = w.nextNode())) { if (n.nodeType === 3 || n.matches("input,textarea")) one(n); }
+}
+
+/* ---------- Sample data ---------- */
+const FORMULA = { v: "v3", base: 2.50, km: 1.55, min: 0.35, minimum: 9.00 };
+const FEE = 1.20, CARD_PCT = 0.027, CARD_FIXED = 0.30;
+const PICK = [108, 232];
+const DESTS = {
+  britomart: { name: "Britomart, Queen Street", area: "Auckland Central", km: 5.8, min: 17, path: [[108,232],[150,205],[200,176],[252,170],[262,120],[268,62]] },
+  airport: { name: "Auckland Airport, Domestic Terminal", area: "Māngere", km: 19.6, min: 26, extra: 2.50, path: [[108,232],[150,205],[200,176],[300,172],[296,240],[318,298]] },
+  museum: { name: "Auckland Museum", area: "Parnell", km: 6.1, min: 16, path: [[108,232],[150,205],[200,176],[300,172],[330,140],[345,128]] },
+  otahuhu: { name: "Ōtāhuhu Station", area: "Ōtāhuhu", km: 14.2, min: 22, path: [[108,232],[150,205],[200,176],[300,172],[298,240],[382,282]] },
+  maungawhau: { name: "Maungawhau / Mount Eden summit", area: "Mount Eden", km: 3.4, min: 10, path: [[108,232],[150,205],[200,176],[214,210],[222,244]] },
+  work: { name: "Work: Wynyard Quarter", area: "Auckland Central", km: 5.3, min: 16, path: [[108,232],[150,205],[200,176],[232,172],[238,110],[226,44]] },
+  beach: { name: "Pt Chevalier Beach", area: "Point Chevalier", km: 4.6, min: 11, path: [[108,232],[62,190],[34,152],[22,128]] },
+  home: { name: "Home", area: "Kingsland", km: 0.4, min: 2, path: [[108,232],[118,226]] }
+};
+const OPTS = [
+  { id: "standard", name: "Standard", icon: "car", sub: "Up to 4 people", mult: 1, wait: 4 },
+  { id: "electric", name: "Electric", icon: "bolt", sub: "Up to 4 people, battery cars", mult: 1, wait: 6 },
+  { id: "larger", name: "Larger", icon: "group", sub: "Up to 6 people and bags", mult: 1.3, wait: 9 },
+  { id: "pet", name: "Pet-friendly", icon: "paw", sub: "Your pet rides with you", mult: 1, wait: 8 },
+  { id: "access", name: "Wheelchair accessible", icon: "chair", sub: "Checked ramp or hoist. Same fare as Standard", mult: 1, wait: 14 },
+  { id: "premium", name: "Premium", icon: "diamond", sub: "Newer, larger cars", mult: 1.45, wait: 11 },
+  { id: "taxi", name: "Taxi", icon: "taxi", sub: "Licensed taxis on Spare Ride", mult: 1.1, wait: 6 }
+];
+const S = {
+  dest: "britomart", opt: "standard", payWith: "Card ending 4242",
+  needs: { animal: true, chair: false, time: false },
+  tip: 3, rating: 5, online: false, navStage: 0, pinOk: false
+};
+
+const r2 = x => Math.round(x * 100) / 100;
+const money = (x, nz) => (nz ? "NZ$" : "$") + x.toFixed(2);
+function fare(km, min, mult = 1, extra = 0, f = FORMULA) {
+  const raw = (f.base + km * f.km + min * f.min) * mult;
+  const driver = Math.max(f.minimum, r2(raw));
+  const k = 1 + C.rate;
+  const total = r2(k * (driver + FEE + extra + CARD_FIXED) / (1 - k * CARD_PCT));
+  const pay = r2(CARD_PCT * total + CARD_FIXED);
+  const gst = r2(total * C.rate / k);
+  const drv = r2(total - FEE - pay - gst - extra);
+  return { driver: drv, fee: FEE, pay, gst, extra, total, raw };
+}
+function cur() { const d = DESTS[S.dest]; const o = OPTS.find(x => x.id === S.opt); return { d, o, f: fare(d.km, d.min, o.mult, d.extra || 0) }; }
+
+/* ---------- Map, drawn by hand in SVG ---------- */
+function rnd(seed) { let s = seed; return () => { s = (s * 9301 + 49297) % 233280; return s / 233280; }; }
+const BLOCKS = (() => {
+  const r = rnd(7); let out = "";
+  for (let y = 66; y < 420; y += 15) for (let x = -149; x < 560; x += 17) {
+    if (r() < 0.22) continue;
+    const w = 9 + Math.floor(r() * 5), h = 7 + Math.floor(r() * 4);
+    out += '<rect class="m-block" x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" rx="1"/>';
+  }
+  return out;
+})();
+const ROADS = [
+  { d: "M40 300L108 232L150 205L200 176", w: 6 },
+  { d: "M118 168L200 176L300 172", w: 6 },
+  { d: "M252 170L262 120L268 62", w: 6 },
+  { d: "M0 202L62 190L125 168", w: 6 },
+  { d: "M132 66L125 168", w: 5 },
+  { d: "M200 176L214 210L206 300", w: 5 },
+  { d: "M108 232L100 300", w: 5 },
+  { d: "M252 170L222 244L232 300", w: 5 },
+  { d: "M300 172L345 128L390 118", w: 5 },
+  { d: "M180 54L330 60L390 52", w: 5 },
+  { d: "M22 128L62 190", w: 4 },
+  { d: "M232 172L238 110L226 44", w: 4 },
+  { d: "M0 128L22 128L60 100L132 92", w: 4 },
+  { d: "M150 205L170 300", w: 4 },
+  { d: "M298 240L390 286", w: 4 }
+];
+/* Roads that meet the edge carry on past it, so a map framed wider than the sheet still looks whole. */
+function extendRoad(d) {
+  const p = d.slice(1).split("L").map(q => q.trim().split(/\s+/).map(Number));
+  const out = (a, b) => { const dx = a[0] - b[0], dy = a[1] - b[1], L = Math.hypot(dx, dy) || 1; return [a[0] + dx / L * 180, a[1] + dy / L * 180]; };
+  const edge = q => q[0] <= 0 || q[0] >= 390 || q[1] >= 300;
+  if (edge(p[0])) p.unshift(out(p[0], p[1]));
+  const n = p.length - 1; if (edge(p[n])) p.push(out(p[n], p[n - 1]));
+  return "M" + p.map(q => q[0].toFixed(0) + " " + q[1].toFixed(0)).join("L");
+}
+const MWAY = extendRoad("M336 30L306 120L300 172L296 240L302 300");
+ROADS.forEach(r => { r.d = extendRoad(r.d); });
+const LABELS = [[14, 246, "KINGSLAND"], [70, 82, "PONSONBY"], [272, 96, "CITY CENTRE"], [318, 152, "PARNELL"], [236, 284, "MOUNT EDEN"], [10, 182, "GREY LYNN"], [150, 228, "NEWTON"]];
+const labelBox = (x, y, t) => [x - 4, y - 10, x + t.length * 6.6 + 4, y + 4];
+const LABEL_BOXES = LABELS.map(l => labelBox(l[0], l[1], l[2])).concat([labelBox(252, 80, "CITY ZONE"), labelBox(300, 266, "AIRPORT ROUTE")]);
+const onLabel = (x, y, r) => LABEL_BOXES.some(b => x + r > b[0] && x - r < b[2] && y + r > b[1] && y - r < b[3]);
+function baseMap() {
+  let s = '<rect class="m-land" x="-200" y="-200" width="790" height="700"/>';
+  s += '<path class="m-water" d="M-200 -200H590V48L390 48C360 54 340 62 310 60C280 58 262 50 236 44C206 38 180 52 150 54C110 56 70 44 0 50L-200 50Z"/>';
+  s += '<path class="m-wave" d="M30 18h22M80 30h18M140 16h26M210 26h20M270 14h24M330 30h18M60 40h14M180 38h16M300 42h14M-90 24h20M-40 38h16M420 22h24M470 36h18"/>';
+  s += '<path class="m-water" d="M-200 106L0 112C12 116 18 124 20 132C10 132 4 130 0 128L-200 134Z"/>';
+  s += BLOCKS;
+  s += '<ellipse class="m-park" cx="335" cy="112" rx="30" ry="20"/><ellipse class="m-park" cx="222" cy="252" rx="22" ry="15"/><rect class="m-park" x="142" y="98" width="34" height="30" rx="2"/><rect class="m-park" x="196" y="74" width="28" height="20" rx="2"/>';
+  ROADS.forEach(r => { s += '<path class="m-case" stroke-width="' + (r.w + 2) + '" d="' + r.d + '"/>'; });
+  s += '<path class="m-mway" stroke-width="12" d="' + MWAY + '"/><path class="m-road" stroke-width="9" d="' + MWAY + '"/>';
+  ROADS.forEach(r => { s += '<path class="m-road" stroke-width="' + r.w + '" d="' + r.d + '"/>'; });
+  s += '<text class="m-label water" x="16" y="30">WAITEMATĀ HARBOUR</text>';
+  LABELS.forEach(l => { s += '<text class="m-label" x="' + l[0] + '" y="' + l[1] + '">' + l[2] + '</text>'; });
+  return s;
+}
+/* Each map is framed on what matters for its screen, clear of the floating label and the credit strip. */
+const box = (list, m) => [Math.min(...list.map(q => q[0])) - m, Math.min(...list.map(q => q[1])) - m, Math.max(...list.map(q => q[0])) + m, Math.max(...list.map(q => q[1])) + m];
+function focusOf(kind, d) {
+  if (kind === "route" || kind === "fare") return box(d.path.concat([PICK]), 18);
+  if (kind === "finding") return [20, 150, 250, 300];
+  if (kind === "arriving") return box(APPROACH.concat([[200, 176]]), 22);
+  if (kind === "trip") return box(d.path.concat([PICK]), 18);
+  if (kind === "nav" || kind === "offer") return box(APPROACH.concat(DESTS.britomart.path), 14);
+  if (kind === "driver") return box([[62, 270], [236, 64], [330, 160]], 14);
+  return [0, 46, 390, 300];
+}
+function fitView(b, W, H, top, bot) {
+  const s = Math.min(W / (b[2] - b[0]), (H - top - bot) / (b[3] - b[1]), 1.8);
+  const vw = W / s, vh = H / s;
+  const clamp = (v, lo, hi) => hi < lo ? (lo + hi) / 2 : Math.max(lo, Math.min(hi, v));
+  const vx = clamp((b[0] + b[2]) / 2 - vw / 2, Math.min(0, b[0]), Math.max(390, b[2]) - vw);
+  const vy = clamp((b[1] + b[3]) / 2 - (top + (H - top - bot) / 2) / s, Math.min(0, b[1] - top / s), Math.max(300, b[3] + bot / s) - vh);
+  return [vx, vy, vw, vh].map(v => v.toFixed(1)).join(" ");
+}
+function mapSize(m) {
+  const W = m.clientWidth || ($("#view") && $("#view").clientWidth) || 390;
+  const H = m.clientHeight || (m.classList.contains("short") ? 170 : m.classList.contains("mid") ? 230 : m.classList.contains("tall") ? 320 : 270);
+  return { W, H: H - 17 };
+}
+const pts = p => p.map(q => q.join(" ")).join(" ");
+function pathLen(p) { let L = 0; for (let i = 1; i < p.length; i++) L += Math.hypot(p[i][0] - p[i-1][0], p[i][1] - p[i-1][1]); return L; }
+function pointAt(p, t) {
+  const L = pathLen(p) * Math.max(0, Math.min(1, t)); let acc = 0;
+  for (let i = 1; i < p.length; i++) {
+    const seg = Math.hypot(p[i][0] - p[i-1][0], p[i][1] - p[i-1][1]);
+    if (acc + seg >= L) { const k = seg ? (L - acc) / seg : 0; return { x: p[i-1][0] + (p[i][0] - p[i-1][0]) * k, y: p[i-1][1] + (p[i][1] - p[i-1][1]) * k, a: Math.atan2(p[i][1] - p[i-1][1], p[i][0] - p[i-1][0]), i }; }
+    acc += seg;
+  }
+  const n = p.length - 1; return { x: p[n][0], y: p[n][1], a: 0, i: n };
+}
+function carSVG(id) { return '<g id="' + id + '"><circle r="10" class="m-car"/><path class="m-car-dir" d="M-4 -3.5L5 0L-4 3.5Z"/></g>'; }
+const APPROACH = [[44,284],[70,262],[96,244],[108,232]];
+function mapSVG(kind, destKey, vb) {
+  const d = DESTS[destKey || S.dest];
+  let s = '<svg viewBox="' + (vb || "0 0 390 300") + '" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Map">' + baseMap();
+  const end = d.path[d.path.length - 1];
+  if (kind === "home") {
+    [[60,280],[170,196],[226,150],[90,170],[140,250]].forEach(c => s += '<circle class="m-other" cx="' + c[0] + '" cy="' + c[1] + '" r="5"/>');
+    s += '<circle class="m-me-halo" cx="108" cy="232" r="16"/><circle class="m-me" cx="108" cy="232" r="6"/>';
+  } else if (kind === "route" || kind === "fare") {
+    s += '<polyline class="m-route-halo" points="' + pts(d.path) + '"/><polyline class="m-route" points="' + pts(d.path) + '"/>';
+    s += '<circle class="m-pick" cx="108" cy="232" r="6"/><rect class="m-dest" x="' + (end[0]-6) + '" y="' + (end[1]-6) + '" width="12" height="12"/>';
+  } else if (kind === "finding") {
+    s += '<circle class="m-pulse" cx="108" cy="232" r="8"/><circle class="m-pulse p2" cx="108" cy="232" r="8"/>';
+    [[60,280],[170,196],[140,250],[42,298]].forEach(c => s += '<circle class="m-other" cx="' + c[0] + '" cy="' + c[1] + '" r="5"/>');
+    s += '<circle class="m-pick" cx="108" cy="232" r="6"/>';
+  } else if (kind === "arriving") {
+    s += '<polyline class="m-route dash" points="' + pts(APPROACH) + '"/>';
+    s += '<polyline class="m-route-halo" points="' + pts(d.path) + '" opacity=".35"/>';
+    s += '<circle class="m-pick" cx="108" cy="232" r="6"/>' + carSVG("carA");
+  } else if (kind === "trip") {
+    s += '<polyline class="m-route-halo" points="' + pts(d.path) + '"/><polyline class="m-route" points="' + pts(d.path) + '"/><polyline class="m-done" id="doneLine" points=""/>';
+    s += '<rect class="m-dest" x="' + (end[0]-6) + '" y="' + (end[1]-6) + '" width="12" height="12"/>' + carSVG("carT");
+  } else if (kind === "nav") {
+    s += '<polyline class="m-route-halo" points="' + pts(APPROACH) + '"/><polyline class="m-route" points="' + pts(APPROACH) + '"/>';
+    s += '<polyline class="m-route dash" points="' + pts(DESTS.britomart.path) + '"/><circle class="m-pick" cx="108" cy="232" r="6"/><rect class="m-dest" x="262" y="56" width="12" height="12"/>' + carSVG("carN");
+  } else if (kind === "offer") {
+    s += '<polyline class="m-route dash" points="' + pts(APPROACH) + '"/><polyline class="m-route-halo" points="' + pts(DESTS.britomart.path) + '"/><polyline class="m-route" points="' + pts(DESTS.britomart.path) + '"/>';
+    s += '<circle class="m-pick" cx="108" cy="232" r="6"/><rect class="m-dest" x="262" y="56" width="12" height="12"/>' + carSVG("carO");
+  } else if (kind === "driver") {
+    s += '<path class="m-zone" d="M236 64L330 64L322 150L246 160Z"/><text class="m-zone-label" x="252" y="80">CITY ZONE</text>';
+    s += '<circle class="m-me-halo" cx="62" cy="270" r="16"/>' + carSVG("carD");
+  } else if (kind === "ops") {
+    s += '<path class="m-zone" d="M236 64L330 64L322 150L246 160Z"/><text class="m-zone-label" x="252" y="80">CITY ZONE</text>';
+    s += '<path class="m-zone" d="M276 250L390 250L390 300L276 300Z"/><text class="m-zone-label" x="300" y="266">AIRPORT ROUTE</text>';
+    const r = rnd(42);
+    for (let i = 0, n = 0; n < 34 && i < 400; i++) { const x = Math.round(20 + r() * 350), y = Math.round(70 + r() * 220); if (onLabel(x, y, 6)) continue; n++; s += '<circle class="m-other" cx="' + x + '" cy="' + y + '" r="4"/>'; }
+    for (let i = 0, n = 0; n < 12 && i < 400; i++) { const x = Math.round(20 + r() * 350), y = Math.round(70 + r() * 220); if (onLabel(x, y, 6)) continue; n++; s += '<rect class="m-req" x="' + (x-3.5) + '" y="' + (y-3.5) + '" width="7" height="7"/>'; }
+  }
+  if (kind === "ops" || kind === "driver") {
+    LABELS.forEach(l => { s += '<text class="m-label" x="' + l[0] + '" y="' + l[1] + '">' + l[2] + '</text>'; });
+  }
+  return s + '</svg>';
+}
+const CARPOS = {};
+function drawMaps(root) {
+  $$("[data-map]", root).forEach(m => {
+    const credit = '<span class="credit">Demo map, drawn by hand. The app credits OpenStreetMap contributors.</span>';
+    const fl = m.querySelector(".float"); const keep = fl ? fl.outerHTML : "";
+    const { W, H } = mapSize(m);
+    const vb = fitView(focusOf(m.dataset.map, DESTS[m.dataset.dest || S.dest]), W, H, fl ? 50 : 8, 8);
+    m.innerHTML = mapSVG(m.dataset.map, m.dataset.dest, vb) + keep + credit;
+    $$("g[id^=car]", m).forEach(g => { if (CARPOS[g.id]) g.setAttribute("transform", CARPOS[g.id]); });
+  });
+}
+function placeCar(id, p, t) { const g = document.getElementById(id); if (!g) return; const q = pointAt(p, t); CARPOS[id] = "translate(" + q.x.toFixed(1) + " " + q.y.toFixed(1) + ") rotate(" + (q.a * 180 / Math.PI).toFixed(0) + ")"; g.setAttribute("transform", CARPOS[id]); return q; }
+let resizeT = null;
+window.addEventListener("resize", () => { clearTimeout(resizeT); resizeT = setTimeout(() => { const el = current && document.getElementById("scr-" + current); if (el) drawMaps(el); }, 200); });
+
+/* ---------- Screens ---------- */
+const GROUPS = { rider: "Rider app", driver: "Driver app", coop: "Co-op and support" };
+const SCREENS = [
+  { id: "r-welcome", g: "rider", who: "New rider", notabs: true, t: "Welcome and sign up", about: "A rider joins in a minute with the one Spareware login.", f: ["A1-F1","A1-F2","A22-F1","A23-F1","A20-F8","A14-F6"], tr: ["Use a phone code, then Send code", "Switch the language", "I want to drive opens the driver sign-up"] },
+  { id: "r-home", g: "rider", t: "Book a ride", about: "Pick a destination and a safe pickup point on an open map, or book by voice.", nx: ["A14-F16"], f: ["A3-F1","A3-F2","A1-F4","A11-F1","A11-F2","A11-F5","A11-F6","A7-F2","A23-F8"], tr: ["Type a place, for example air or ōt", "Book by voice: a short sample exchange", "Tap a saved place", "Move the pickup pin"] },
+  { id: "r-options", g: "rider", t: "Ride options", about: "Compare ride options, each with its own fare and wait.", f: ["A3-F3","A7-F2","A7-F5","A14-F1","A14-F9"], tr: ["Pick a ride option: the button price changes"] },
+  { id: "r-fare", g: "rider", t: "Upfront fare", about: "The fixed fare before booking, and where your money goes.", f: ["A3-F4","A3-F5","A3-F6","A3-F10","A8-F1","A8-F2","A8-F3","A8-F5","A9-F1","A9-F2","A10-F1","A18-F4","A20-F4","A11-F3","A22-F2"], tr: ["Open How this fare was worked out", "Tap what it pays for", "Add a note for the driver", "Change how you pay"] },
+  { id: "r-finding", g: "rider", t: "Finding a driver", about: "The request goes to the nearest driver by road time. Offers pass on if no one answers.", f: ["A7-F1","A7-F3","A7-F4","A7-F11","A9-F2","A12-F3","A12-F4"], tr: ["Wait 3 s for the driver to accept", "Read the dispatch rules", "Demo: the driver cancels"] },
+  { id: "r-arriving", g: "rider", t: "Driver on the way", about: "Watch the car arrive live, check it is the right car, and reach the driver without sharing numbers.", f: ["A5-F1","A5-F2","A13-F3","A12-F1","A12-F2","A3-F10","A8-F7","A11-F1"], tr: ["Message: tap a quick reply", "Call through a hidden number", "Cancel ride shows the fee rule", "Demo: car arrives starts the free wait"] },
+  { id: "r-trip", g: "rider", t: "On the trip", about: "Live trip with share and emergency always in reach.", f: ["A5-F3","A5-F5","A13-F1","A13-F2","A13-F5","A13-F11","A13-F12","A13-F15","A8-F6","A21-F10","A22-F5","A22-F8"], tr: ["Emergency: Call 111 and the details to read out", "Share trip with people you trust", "Change destination: see the fare rule", "Simulate a long stop or weak signal"] },
+  { id: "r-rate", g: "rider", t: "Rate and tip", about: "Rate both ways, tip the driver in full, get a tax invoice, report a problem.", f: ["A5-F7","A9-F3","A9-F9","A15-F1","A15-F3","A16-F3","A16-F4","A12-F5","A20-F2","A20-F3"], tr: ["Tap the stars", "Change the tip: the total changes", "Open the receipt", "Report a lost item"] },
+  { id: "r-trips", g: "rider", t: "Past trips", about: "Every past trip with its map, its fare explained, help, and ride again.", f: ["A5-F8","A8-F8","A16-F2","A9-F8","A9-F12","A21-F4"], tr: ["Open a trip", "Ride again", "Ask for a fare review"] },
+  { id: "r-account", g: "rider", t: "Account and privacy", about: "Profile, preferences, access needs, notices and your data.", f: ["A1-F3","A1-F5","A1-F7","A14-F2","A14-F4","A14-F9","A14-F12","A12-F6","A21-F1","A21-F2","A21-F5","A22-F1","A18-F1"], tr: ["Turn on Large text or High contrast", "Turn on More time to get in, then look at the fare", "Clear location history"] },
+  { id: "d-apply", g: "driver", who: "Applicant", notabs: true, t: "Apply to drive", about: "Every check a new driver needs, listed up front, with progress.", f: ["A2-F1","A2-F2","A2-F3","A2-F4","A2-F5","A2-F6","A2-F7","A2-F8","A2-F9","A2-F10","A2-F14","A21-F9","A20-F5","A20-F7"], tr: ["Tap a step, then Mark done", "Mark every step done to finish"] },
+  { id: "d-online", g: "driver", t: "Go online", about: "One tap to go online, with work time, areas and driving mode.", f: ["A6-F1","A6-F4","A6-F6","A6-F8","A6-F11","A6-F12","A13-F4","A14-F5","A23-F3","A21-F11","A19-F12","A20-F3","A2-F10","A2-F12"], tr: ["Go online: an offer arrives after 2 s", "Change the longest pickup", "Open the logbook beside Work time", "Open Driver ID, the selfie check or My documents"] },
+  { id: "d-offer", g: "driver", t: "New offer", about: "Earnings first, then everything needed to decide. Declining is free.", f: ["A6-F2","A6-F3","A7-F3","A7-F5","A8-F3","A14-F2","A14-F9"], tr: ["Wait 15 s and the offer passes on", "Read aloud", "Accept or Decline"] },
+  { id: "d-nav", g: "driver", t: "Navigation", about: "Turn-by-turn to the pickup, PIN check, the trip, then earnings.", f: ["A11-F3","A11-F4","A5-F2","A5-F3","A5-F5","A5-F6","A5-F7","A8-F7","A13-F1","A13-F3","A12-F1","A22-F8"], tr: ["I've arrived starts the free wait", "Enter PIN 4827 and Start trip", "Skip the wait to see the no-show fee", "Demo: no signal"] },
+  { id: "d-earnings", g: "driver", t: "Daily payouts", about: "Today's earnings per trip, the daily payout, money owed and held, and tax records.", f: ["A6-F8","A9-F3","A9-F10","A9-F13","A10-F2","A10-F3","A10-F4","A18-F4","A15-F4","A16-F5"], tr: ["Open a trip for its breakdown", "Repay now", "See what was sent to the tax office"] },
+  { id: "d-vote", g: "driver", t: "Fare formula vote", about: "Drivers vote on the fare formula, with worked examples and replays, beside the open cost ledger.", f: ["A8-F1","A18-F2","A18-F3","A18-F10","A7-F10","A20-F12","A19-F8"], tr: ["Pick a choice, then Cast my vote", "Compare the worked examples"] },
+  { id: "c-ops", g: "coop", t: "Operations", about: "The co-op's live view of a city: requests, drivers, reviews, incidents, notices and the admin log.", f: ["A19-F1","A19-F2","A19-F3","A19-F4","A19-F5","A19-F6","A19-F7","A19-F9","A19-F12","A19-F14","A2-F9","A11-F6"], tr: ["Review a document", "Send a notice to drivers", "Turn on Outage mode or Simulated city"] },
+  { id: "c-help", g: "coop", who: "Members and staff", t: "Help and fairness", about: "Help centre, reports, member panels for disputes and appeals, and support tools.", f: ["A16-F1","A16-F2","A16-F5","A16-F6","A16-F7","A15-F3","A15-F4","A15-F5","A15-F7","A13-F11","A14-F6"], tr: ["Search help, for example phone", "Appeal a pause", "Check the next profile photo"] },
+  { id: "c-legal", g: "coop", who: "Everyone", t: "Rules and privacy", about: "Each legal duty and where it stands, how long data is kept, and the open command API.", f: ["A20-F1","A20-F2","A20-F4","A20-F6","A20-F8","A20-F9","A20-F10","A21-F3","A21-F7","A21-F10","A21-F11","A21-F12","A23-F4","A22-F2","A22-F5"], tr: ["Run the ride.quote command", "Tap a privacy row", "Change the example country at the top of the screens list"] }
+];
+const SCREEN = Object.fromEntries(SCREENS.map(s => [s.id, s]));
+const TABS = {
+  rider: [["r-home", "Ride", "car"], ["r-trips", "Trips", "list"], ["r-account", "Account", "user"]],
+  driver: [["d-online", "Drive", "power"], ["d-earnings", "Payouts", "chart"], ["d-vote", "Vote", "ballot"]],
+  coop: [["c-ops", "Live", "map"], ["c-help", "Help", "help"], ["c-legal", "Rules", "scale"]]
+};
+const TABOF = { "r-welcome": "r-home", "r-options": "r-home", "r-fare": "r-home", "r-finding": "r-home", "r-arriving": "r-home", "r-trip": "r-home", "r-rate": "r-home", "d-offer": "d-online", "d-nav": "d-online" };
+
+let current = null; const timers = [];
+function later(fn, ms) { const t = setTimeout(fn, ms); timers.push(t); return t; }
+function every(fn, ms) { const t = setInterval(fn, ms); timers.push(t); return t; }
+function clearTimers() { while (timers.length) { const t = timers.pop(); clearTimeout(t); clearInterval(t); } }
+
+const FEATURE_MAP = "https://github.com/spareware-co-op/spareware/blob/main/projects/spare-ride/FEATURES.md";
+const NEXT = { "A14-F16": "Book by voice" };
+function renderNav() {
+  let h = '<div class="ctry"><label class="label" for="country">Example country</label><select class="in" id="country">' +
+    Object.keys(COUNTRIES).map(k => '<option value="' + k + '"' + (k === CODE ? " selected" : "") + '>' + COUNTRIES[k].name + '</option>').join("") +
+    '</select><p class="hint">Money, tax, licences and regulators change with the country' + (C.where ? " (sample rules: " + C.where + ")" : "") + '. Streets stay in the sample city, Auckland. Sample rules, not legal advice.</p></div>';
+  Object.keys(GROUPS).forEach(g => {
+    const list = SCREENS.filter(s => s.g === g); if (!list.length) return;
+    h += '<div class="label">' + GROUPS[g] + '</div>';
+    list.forEach(s => { h += '<a href="#' + s.id + '" data-nav="' + s.id + '"><span class="num">' + (SCREENS.indexOf(s) + 1) + '</span><span>' + s.t + '</span></a>'; });
+  });
+  h += '<div class="navfoot">Sample data only. Every button works.<br><a href="' + FEATURE_MAP + '" target="_blank" rel="noopener">Feature map: FEATURES.md</a></div>';
+  $("#nav").innerHTML = h;
+}
+function renderAbout(s) {
+  const core = DATA ? DATA.core : {};
+  let h = '<div class="label">On this screen</div><h3>' + s.t + '</h3><p>' + s.about + '</p>';
+  h += '<div class="label">Core features shown (' + s.f.length + ')</div><ul>';
+  s.f.forEach(id => { h += '<li><span class="mono">RIDE-' + id + '</span>' + (core[id] || "") + '</li>'; });
+  h += '</ul>';
+  if (s.nx && s.nx.length) { h += '<div class="label">Next feature previewed (' + s.nx.length + ')</div><ul>' + s.nx.map(id => '<li><span class="mono">RIDE-' + id + '</span>' + NEXT[id] + '</li>').join("") + '</ul>'; }
+  if (s.tr && s.tr.length) { h += '<div class="label">Try</div><ul class="try">' + s.tr.map(x => '<li>' + x + '</li>').join("") + '</ul>'; }
+  $("#about").innerHTML = h;
+}
+function renderTabs(s) {
+  const tabs = s.notabs ? [] : TABS[s.g]; const active = TABOF[s.id] || s.id;
+  $("#tabbar").hidden = !tabs.length;
+  $("#tabbar").innerHTML = tabs.map(t => '<a href="#' + t[0] + '"' + (t[0] === active ? ' aria-current="page"' : "") + '>' + ic(t[2]) + '<span>' + t[1] + '</span></a>').join("");
+}
+const ENTER = {};
+function show(id) {
+  if (!SCREEN[id] || !document.getElementById("scr-" + id)) id = "r-home";
+  clearTimers(); closeSheet();
+  current = id; const s = SCREEN[id];
+  $$(".scr").forEach(el => { el.hidden = el.dataset.screen !== id; });
+  $("#crumb").textContent = s.t;
+  $("#who").textContent = s.who || (s.g === "rider" ? "Rider" : s.g === "driver" ? "Driver" : "Co-op staff");
+  $$("#nav a[data-nav]").forEach(a => a.toggleAttribute("aria-current", a.dataset.nav === id));
+  $$("#nav a[data-nav]").forEach(a => { if (a.dataset.nav === id) a.setAttribute("aria-current", "page"); });
+  $("#nav").classList.remove("open");
+  renderTabs(s); renderAbout(s);
+  const el = document.getElementById("scr-" + id); drawMaps(el); refresh();
+  $("#view").scrollTop = 0; $("#phone").scrollTop = 0;
+  if (ENTER[id]) ENTER[id](el);
+}
+
+/* ---------- Bindings ---------- */
+function needsList() { const n = []; if (S.needs.animal) n.push("assistance animal"); if (S.needs.chair) n.push("wheelchair"); if (S.needs.time) n.push("more time to get in"); return n; }
+function refresh() {
+  const { d, o, f } = cur();
+  const B = {
+    total: money(f.total, true), driver: money(f.driver), fee: money(f.fee), pay: money(f.pay), gst: money(f.gst), extra: money(f.extra),
+    driverPct: Math.round(f.driver / f.total * 100) + "%", optName: o.name, destName: d.name, destShort: "To " + d.name.replace("Work: ", ""),
+    routeLine: d.km.toFixed(1) + " km · about " + d.min + " min", payWith: S.payWith, payWithLc: S.payWith.charAt(0).toLowerCase() + S.payWith.slice(1),
+    tip: money(S.tip), totalTip: money(r2(f.total + S.tip), true),
+    needsText: needsList().length ? needsList().join(", ") : "none set",
+    extrasLine: (d.extra ? "Airport fee $" + d.extra.toFixed(2) + ", set by the airport and passed on at cost. " : "No tolls or airport fees on this route. ") + (S.needs.time ? "You have 10 min free to get in and never pay waiting charges." : "Waiting: 3 min free after the car arrives, then $0.50 a minute."),
+    formulaLog: [["base", FORMULA.base], [d.km.toFixed(1) + " km × $" + FORMULA.km.toFixed(2), d.km * FORMULA.km], [d.min + " min × $" + FORMULA.min.toFixed(2), d.min * FORMULA.min]].concat(o.mult !== 1 ? [[o.name + " × " + o.mult, null]] : [], [["to the driver (min $9.00)", f.driver], ["+ at-cost fee", f.fee]], f.extra ? [["+ airport fee", f.extra]] : [], [["+ card fee", f.pay], ["+ " + C.tax + " " + PCT, f.gst], ["= you pay", f.total]]).map(x => x[1] === null ? x[0] : x[0].padEnd(26) + "$" + x[1].toFixed(2)).join("\n")
+  };
+  if (typeof driverBinds === "function") Object.assign(B, driverBinds());
+  $$("[data-bind]").forEach(el => { const k = el.dataset.bind; if (k in B) el.textContent = B[k]; });
+  $$("[data-show=extra]").forEach(el => el.hidden = !f.extra);
+  const sb = $("#splitbar");
+  if (sb) sb.innerHTML = [["c-driver", f.driver], ["c-fee", f.fee], ["c-pay", f.pay], ["c-extra", f.extra], ["c-gst", f.gst]].filter(x => x[1] > 0).map(x => '<span class="' + x[0] + '" style="width:' + (x[1] / f.total * 100).toFixed(2) + '%"></span>').join("");
+  const nc = $("#needChips");
+  if (nc) nc.innerHTML = needsList().map(n => '<span class="badge">' + ic("access", "sm") + n + '</span>').join("") || '<span class="hint">No access needs set.</span>';
+}
+
+/* ---------- Toast and sheets ---------- */
+let toastT = null;
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("show"), 2800); }
+function openSheet(name, title, html) {
+  const tpl = document.getElementById("sh-" + name);
+  $("#sheetTitle").textContent = title || (tpl ? tpl.dataset.title : "");
+  const body = $("#sheetBody"); body.innerHTML = "";
+  if (html) body.innerHTML = html; else if (tpl) body.appendChild(tpl.content.cloneNode(true));
+  hydrate(body); refresh();
+  const wasOpen = $("#sheet").classList.contains("open");
+  if (!wasOpen) sheetOpener = document.activeElement;
+  $("#sheet").classList.add("open"); $("#scrim").classList.add("open");
+  if (SHEETOPEN[name]) SHEETOPEN[name](body);
+  $("#sheet .sheet-head .iconbtn").focus({ preventScroll: true });
+}
+let sheetOpener = null;
+function closeSheet() {
+  const was = $("#sheet").classList.contains("open");
+  $("#sheet").classList.remove("open"); $("#scrim").classList.remove("open");
+  if (was && sheetOpener && document.contains(sheetOpener)) sheetOpener.focus({ preventScroll: true });
+  sheetOpener = null;
+}
+const SHEETOPEN = {};
+
+/* ---------- Actions ---------- */
+const ACT = {
+  drawer() { $("#nav").classList.toggle("open"); },
+  closesheet() { closeSheet(); },
+  reveal(t) { const el = $(t.dataset.target); el.hidden = !el.hidden; },
+  sendcode() { $("#codehint").textContent = "Code sent to 021 555 0142. It is 482 913 in this demo."; toast("Code sent by text."); },
+  tog(t) { const on = t.getAttribute("aria-checked") !== "true"; t.setAttribute("aria-checked", on); if (TOG[t.dataset.key]) TOG[t.dataset.key](on, t); },
+  chip(t) { t.setAttribute("aria-pressed", t.getAttribute("aria-pressed") !== "true"); },
+  dest(t) { S.dest = t.dataset.dest; if (S.dest === "home") { toast("You are already at Home. Pick another place."); return; } location.hash = "r-options"; },
+  movepin() { $("#pickupText").textContent = "Outside 45 Sandringham Road, Kingsland"; $("#pickupSnap").textContent = "Pin moved. Snapped to the nearest safe stopping spot, 8 m away."; toast("Pickup moved."); },
+  savenote() { const v = $("#pnote").value.trim() || "Blue door, side gate"; toast("Note added for the driver: " + v); },
+  paywith(t) { S.payWith = t.dataset.pay; closeSheet(); refresh(); toast("Paying with " + S.payWith + "."); },
+  addplace() { const v = ($("#newPlace").value || "Gym").trim(); closeSheet(); toast("Saved " + v + ". It now shows as a one-tap place."); },
+  opt(t) { S.opt = t.dataset.opt; renderOptions(); refresh(); },
+  assess(t) { $("#assess").hidden = false; $("#assessScrim").hidden = false; $("#assess .iconbtn").focus(); },
+  assessclose() { const was = !$("#assess").hidden; $("#assess").hidden = true; $("#assessScrim").hidden = true; if (was) $(".assess-btn").focus({ preventScroll: true }); }
+};
+const TOG = {};
+document.addEventListener("keydown", e => {
+  if (e.key !== "Escape") return;
+  if (!$("#assess").hidden) ACT.assessclose();
+  else if ($("#sheet").classList.contains("open")) closeSheet();
+  else if ($("#nav").classList.contains("open")) $("#nav").classList.remove("open");
+});
+document.addEventListener("click", e => {
+  const tab = e.target.closest("#tabbar a");
+  if (tab && tab.getAttribute("href") === location.hash) { e.preventDefault(); $("#view").scrollTo({ top: 0, behavior: "smooth" }); return; }
+  const seg = e.target.closest(".seg button");
+  if (seg) { const g = seg.parentElement; $$("button", g).forEach(b => b.setAttribute("aria-pressed", b === seg)); if (SEG[g.dataset.key]) SEG[g.dataset.key](seg.textContent.trim(), seg); return; }
+  const t = e.target.closest("[data-go],[data-act],[data-sheet],[data-toast]");
+  if (!t) return;
+  if (t.tagName === "A" && t.getAttribute("href") && !t.dataset.go) return;
+  if (t.dataset.act && ACT[t.dataset.act]) ACT[t.dataset.act](t, e);
+  if (t.dataset.sheet) openSheet(t.dataset.sheet);
+  if (t.dataset.go) { if (location.hash === "#" + t.dataset.go) show(t.dataset.go); else location.hash = t.dataset.go; }
+  if (t.dataset.toast) later(() => toast(t.dataset.toast), 30);
+});
+const SEG = {
+  lang(v) { $("#langnote").textContent = v === "English" ? "More languages are added by volunteers." : v + " text comes from volunteer translators. This demo stays in English."; toast("Language: " + v); }
+};
+
+/* ---------- Rider screens ---------- */
+const PLACES = [
+  ["britomart", "Britomart, Queen Street", "Auckland Central"],
+  ["airport", "Auckland Airport, Domestic Terminal", "Māngere"],
+  ["museum", "Auckland Museum", "Parnell"],
+  ["otahuhu", "Ōtāhuhu Station", "Ōtāhuhu"],
+  ["maungawhau", "Maungawhau / Mount Eden summit", "Mount Eden"]
+];
+const fold = s => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+function renderSuggest(q) {
+  const list = PLACES.filter(p => !q || fold(p[1] + " " + p[2]).includes(fold(q)));
+  const label = q ? "" : '<div class="label" style="margin:10px 0 0">Recent</div>';
+  $("#suggest").innerHTML = label + (list.length ? list.slice(0, q ? 5 : 3).map(p => '<button class="row" style="padding-left:0;padding-right:0" data-act="dest" data-dest="' + p[0] + '">' + ic("pin", "app") + '<span class="grow">' + p[1] + '<span class="sub">' + p[2] + '</span></span>' + ic("chev") + '</button>').join("") : '<p class="hint" style="text-align:center;padding:12px 0">No match. Try a street, a suburb or a place name.</p>');
+}
+ENTER["r-home"] = () => { renderSuggest(""); };
+document.addEventListener("input", e => { if (e.target.id === "whereto") renderSuggest(e.target.value.trim()); });
+function renderOptions() {
+  const d = DESTS[S.dest];
+  $("#optlist").innerHTML = OPTS.map(o => { const f = fare(d.km, d.min, o.mult, d.extra || 0); return '<button class="row' + (o.id === S.opt ? " sel" : "") + '" data-act="opt" data-opt="' + o.id + '" aria-pressed="' + (o.id === S.opt) + '">' + ic(o.icon, "app") + '<span class="grow"><b>' + o.name + '</b><span class="sub">' + o.sub + '</span></span><span class="end"><b class="money">' + money(f.total, true) + '</b><span class="sub">' + o.wait + ' min away</span></span></button>'; }).join("");
+  const o = OPTS.find(x => x.id === S.opt); const f = fare(d.km, d.min, o.mult, d.extra || 0);
+  $("#optContinue").textContent = "Continue with " + o.name + " · " + money(f.total, true);
+}
+ENTER["r-options"] = () => { renderOptions(); };
+
+/* ---------- Rider: finding, arriving, trip, rate, trips, account ---------- */
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const fmtTime = m => { const h = Math.floor(m / 60), mm = String(m % 60).padStart(2, "0"); return ((h + 11) % 12 + 1) + ":" + mm + (h < 12 ? " am" : " pm"); };
+ENTER["r-finding"] = () => {
+  let left = 15;
+  $("#fs2").className = "now"; $("#fs3").className = "wait"; $("#fs2 .dot").innerHTML = ""; $("#fs3 .dot").innerHTML = "";
+  $("#fs2t").innerHTML = "Offered to the nearest driver by road time: <b>Mere, 3 min away</b>";
+  $("#fs3t").textContent = "Driver accepts and your fare is held";
+  $("#findHead").textContent = "Finding your driver";
+  $("#seeDriver").disabled = true; $("#driverCancelNote").hidden = true;
+  const tick = () => { $("#fsTimer").textContent = "Waiting " + left + " s, then it passes to the next driver."; };
+  tick(); every(() => { if (left > 1) { left--; tick(); } }, 1000);
+  later(() => { left = 15; $("#fs2t").innerHTML = "Mere did not answer, so it passed on. Offered to the next nearest: <b>Sione, 4 min away</b>"; tick(); }, 1200);
+  later(() => accepted("Sione"), 2500);
+};
+function accepted(name) {
+  clearTimers();
+  const { f } = cur();
+  $("#fs2").className = "done"; $("#fs2 .dot").innerHTML = ic("check", "sm");
+  $("#fsTimer").textContent = name + " accepted.";
+  $("#fs3").className = "done"; $("#fs3 .dot").innerHTML = ic("check", "sm");
+  $("#fs3t").innerHTML = "<b>" + money(f.total, true) + " held</b> on your " + esc(S.payWith.toLowerCase()) + ". Taken only when the trip ends.";
+  $("#findHead").textContent = name + " is on the way";
+  $("#seeDriver").disabled = false;
+}
+ENTER["r-arriving"] = () => {
+  S.arrived = false;
+  $("#arrHead").textContent = "Sione arrives in 4 min";
+  $("#arrNote").textContent = S.needs.time ? "We tell you when Sione is outside. Then you have 10 min free, with no waiting charge." : "We tell you when Sione is outside. Then you have 3 min free, then $0.50 a minute.";
+  const t0 = performance.now(), dur = 24000;
+  placeCar("carA", APPROACH, 0);
+  every(() => { const t = Math.min(0.96, (performance.now() - t0) / dur); placeCar("carA", APPROACH, t); if (!S.arrived) $("#arrHead").textContent = "Sione arrives in " + Math.max(1, Math.ceil(4 * (1 - t))) + " min"; }, 100);
+};
+ENTER["r-trip"] = () => {
+  const d = DESTS[S.dest]; $("#weakNote").hidden = true; $("#checkin").hidden = true;
+  $("#eta").textContent = fmtTime(8 * 60 + 41 + d.min);
+  const t0 = performance.now(), dur = 60000, start = 0.2;
+  const step = () => { const t = Math.min(0.95, start + (performance.now() - t0) / dur); const q = placeCar("carT", d.path, t); const dl = document.getElementById("doneLine"); if (q && dl) dl.setAttribute("points", pts(d.path.slice(0, q.i).concat([[q.x, q.y]]))); };
+  step(); every(step, 120);
+};
+function renderStars() {
+  $("#stars").innerHTML = [1, 2, 3, 4, 5].map(n => '<button data-act="star" data-n="' + n + '" class="' + (n <= S.rating ? "on" : "") + '" aria-label="' + n + ' stars">' + ic("star") + '</button>').join("");
+}
+function tipText() { const { f } = cur(); $("#tipHint").textContent = S.tip ? "All " + money(S.tip) + " goes to Sione. Total " + money(r2(f.total + S.tip), true) + "." : "No tip. That is fine. Total " + money(f.total, true) + "."; }
+ENTER["r-rate"] = () => { renderStars(); tipText(); };
+const TRIPS = [
+  { when: "Today, 8:41 am", to: "britomart", drv: "Sione F." },
+  { when: "Fri 16 Oct, 6:12 pm", to: "museum", drv: "Mere K.", badge: ["ok", "Refunded $3.10 after a fare review"] },
+  { when: "Wed 14 Oct, 5:55 am", to: "airport", drv: "Tama R.", badge: ["inf", "Card declined, paid with your second card"] },
+  { when: "Sat 10 Oct, 11:20 pm", to: "maungawhau", drv: "Priya S." }
+];
+function renderTrips() {
+  $("#tripList").innerHTML = TRIPS.map((t, i) => {
+    const d = DESTS[t.to], f = fare(d.km, d.min, 1, d.extra || 0);
+    const log = "formula v3: $2.50 + " + d.km.toFixed(1) + " km × $1.55 + " + d.min + " min × $0.35\ndriver $" + f.driver.toFixed(2) + " + fee $1.20 + card $" + f.pay.toFixed(2) + (f.extra ? " + airport $" + f.extra.toFixed(2) : "") + " + GST $" + f.gst.toFixed(2) + "\n= $" + f.total.toFixed(2) + "   dispatch rules v2";
+    return '<button class="row" data-act="tripopen" data-i="' + i + '" aria-expanded="' + (i === 0) + '">' + ic("flag", "app") + '<span class="grow"><b>Kingsland to ' + d.name.split(",")[0] + '</b><span class="sub">' + t.when + ' · ' + t.drv + '</span>' + (t.badge ? '<span class="badge ' + t.badge[0] + '" style="margin-top:4px">' + t.badge[1] + '</span>' : "") + '</span><span class="end money">' + money(f.total, true) + '</span></button>' +
+      '<div class="tripdetail" id="td' + i + '"' + (i === 0 ? "" : " hidden") + '><div class="map mid" data-map="route" data-dest="' + t.to + '"></div><div class="pad stack"><div class="label">How the fare was worked out</div><div class="mlog">' + log + '</div><div class="btns"><button class="btn primary small" data-act="again" data-dest="' + t.to + '">' + ic("again", "sm") + 'Ride again</button><button class="btn secondary small" data-sheet="receipt">Receipt</button><button class="btn quiet small" data-sheet="problem">Help</button></div></div></div>';
+  }).join("");
+  drawMaps($("#tripList"));
+}
+ENTER["r-trips"] = () => renderTrips();
+Object.assign(ACT, {
+  drivercancel() { const n = $("#driverCancelNote"); n.hidden = false; n.innerHTML = "<b>If a driver cancels, you see why in plain words:</b> “Sione had to cancel: a flat tyre. You are first in line for the next driver, at the same " + money(cur().f.total, true) + ".”"; },
+  cancelreq() { toast("Request cancelled. No charge."); location.hash = "r-home"; },
+  call() { toast("Calling Sione through a hidden number. Neither of you sees the other's number."); },
+  arrive() {
+    clearTimers(); S.arrived = true; placeCar("carA", APPROACH, 1);
+    let s = S.needs.time ? 600 : 180;
+    const tick = () => { if (s >= 0) { $("#arrHead").textContent = "Sione is here · free wait " + Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); s--; } else $("#arrHead").textContent = "Sione is here · waiting $0.50 a minute"; };
+    tick(); every(tick, 1000);
+    $("#arrNote").textContent = "Sione is outside. " + (S.needs.time ? "You have 10 min free and never pay waiting charges." : "Your 3 min free wait has started.");
+    toast("Sione has arrived: silver hatchback, RDE482.");
+  },
+  say(t) {
+    const body = $("#sheetBody"), box = $(".chat", body); if (!box) return;
+    const inp = $("#chatIn", body);
+    let msg = t.dataset.free ? (inp && inp.value.trim()) : t.textContent.trim();
+    if (!msg) msg = "On my way out now.";
+    box.insertAdjacentHTML("beforeend", '<p class="bubble me">' + esc(msg) + '</p>');
+    if (inp) inp.value = "";
+    setTimeout(() => box.insertAdjacentHTML("beforeend", '<p class="bubble">' + (box.dataset.reply || "Great, see you soon.") + '</p>'), 900);
+  },
+  sharesend() { const names = $$("#sheetBody .chip[aria-pressed=true]").map(c => c.textContent.trim()); closeSheet(); toast(names.length ? "Live trip shared with " + names.join(" and ") + "." : "Pick someone to share with first."); },
+  call111() { toast("Demo: this would call 111 now. In another country it calls that country's number."); },
+  impaired() { closeSheet(); toast("Reported. The safety team is calling you now."); },
+  crash() { closeSheet(); toast("Crash reported. A person from the safety team is calling you now."); },
+  reportsend() { closeSheet(); toast("Sent. Report R-4472 is with a trained person. You will see each step."); },
+  cancelride() { closeSheet(); toast("Ride cancelled. No charge."); location.hash = "r-home"; },
+  longstop() { $("#checkin").hidden = false; toast("Check-in sent to you and to Sione."); },
+  checkok() { $("#checkin").hidden = true; toast("Thanks. We will keep an eye on the trip."); },
+  weak() { const n = $("#weakNote"); n.hidden = !n.hidden; toast(n.hidden ? "Signal back. The trip caught up." : "Signal lost. The trip carries on."); },
+  pickdest(t) {
+    const { d, o, f } = cur(); const a = ALT[+t.dataset.k]; S.newDest = +t.dataset.k;
+    const nf = fare(d.km + a[1], d.min + a[2], o.mult, d.extra || 0);
+    $$("#destList .row").forEach(r => r.classList.toggle("sel", r === t));
+    $("#destLog").textContent = "Rule: the voted formula on the new route.\n" + (a[1] >= 0 ? "+" : "") + a[1].toFixed(1) + " km × $1.55, " + (a[2] >= 0 ? "+" : "") + a[2] + " min × $0.35\nold fare $" + f.total.toFixed(2) + "  new fare $" + nf.total.toFixed(2);
+    $("#destConfirm").disabled = false;
+  },
+  destconfirm() { const a = ALT[S.newDest]; const { d, o } = cur(); const nf = fare(d.km + a[1], d.min + a[2], o.mult, d.extra || 0); closeSheet(); toast("Going to " + a[0] + " now. New fare " + money(nf.total, true) + ". The rule is on your receipt."); },
+  star(t) { S.rating = +t.dataset.n; renderStars(); $("#rateHint").textContent = S.rating >= 4 ? S.rating + " stars. Thank you." : S.rating + (S.rating === 1 ? " star" : " stars") + ". Sorry. Tell us what went wrong and a person follows up."; },
+  ratedone() { toast("Thanks. Your rating and tip went to Sione."); location.hash = "r-trips"; },
+  lost() { $("#probOut").innerHTML = '<div class="note"><b>Message sent to Sione:</b> “I think I left a black umbrella.” Sione can drop it off for a NZ$10.00 return fee, all of it to Sione.</div>'; },
+  farereview() { $("#probOut").innerHTML = '<div class="note inf"><b>Automatic check:</b> the route and time matched your quote, so no overcharge was found.<div style="margin-top:8px"><button class="btn secondary small" data-toast="Sent to a person. You get an answer within 2 working days.">Ask a person to review</button></div></div>'; },
+  tripopen(t) { const d = $("#td" + t.dataset.i); d.hidden = !d.hidden; t.setAttribute("aria-expanded", !d.hidden); },
+  again(t) { S.dest = t.dataset.dest; S.opt = "standard"; toast("Same trip, with today's upfront fare."); location.hash = "r-options"; },
+  savename() { const v = ($("#nameIn").value || "Aroha").trim(); $("#riderName").textContent = v; $("#nameEdit").hidden = true; toast("Drivers now see you as " + v + "."); },
+  signout() { $("#devLaptop").remove(); toast("Signed out of the laptop browser."); },
+  clearloc() { $("#locCount").textContent = "No places saved"; toast("Location history cleared."); },
+  deleteacct() { closeSheet(); toast("Demo: your account would be deleted now. We email you a copy of your data first."); },
+  voicetalk() { toast("Listening. Say where you want to go, for example: a ride to Britomart."); },
+  voiceassist() { toast("Say to your phone: ask Spare Ride for a ride to Britomart. The fare is read back before anything is booked."); }
+});
+const ALT = [["Auckland Museum, Parnell", 1.6, 4], ["Wynyard Quarter", 0.9, 3], ["Ponsonby Road shops", -1.2, -2]];
+SHEETOPEN.dest = body => {
+  const { d, o, f } = cur();
+  $("#destList", body).innerHTML = ALT.map((a, k) => { const nf = fare(d.km + a[1], d.min + a[2], o.mult, d.extra || 0); const diff = r2(nf.total - f.total); return '<button class="row" data-act="pickdest" data-k="' + k + '">' + ic("flag") + '<span class="grow">' + a[0] + '<span class="sub">' + (a[1] >= 0 ? "+" : "") + a[1].toFixed(1) + ' km, ' + (a[2] >= 0 ? "+" : "") + a[2] + ' min</span></span><span class="end money">' + (diff >= 0 ? "+" : "−") + money(Math.abs(diff)) + '</span></button>'; }).join("");
+};
+SHEETOPEN.chat = body => { const c = $(".chat", body); if (c) c.dataset.reply = "Great, see you soon."; };
+Object.assign(TOG, {
+  autoshare(on) { toast(on ? "Every trip will be shared with Mum. We text her to say who shared her number, and why." : "Automatic sharing is off."); },
+  need(on, t) { S.needs[t.dataset.need] = on; refresh(); toast(on ? "Saved. It goes with every booking." : "Removed from your needs."); },
+  large(on) { $("#phone").classList.toggle("large", on); },
+  contrast(on) { $("#phone").classList.toggle("contrast", on); },
+  pref(on) { toast("Saved. Your driver sees this before pickup."); }
+});
+Object.assign(SEG, {
+  tip(v) { S.tip = parseFloat(v.replace(/[^0-9.]/g, "")) || 0; tipText(); refresh(); },
+  temp(v) { toast("Temperature preference: " + v.toLowerCase() + "."); },
+  lang2(v) { toast(v === "More" ? "Volunteers are adding more languages. Ask for yours in Help." : "Language: " + v + "."); }
+});
+
+/* ---------- Driver app ---------- */
+const OFFER = fare(5.8, 17, 1, 0);
+const DTRIPS = [
+  ["3:48 am", "Ponsonby", "Auckland Airport", 20.4, 24, 0],
+  ["4:40 am", "Māngere", "Ōtāhuhu", 7.4, 13, 2],
+  ["5:15 am", "Ōtāhuhu", "Newmarket", 12.1, 19, 0],
+  ["6:02 am", "Newmarket", "Ponsonby", 4.2, 14, 3],
+  ["6:40 am", "Grey Lynn", "Wynyard Quarter", 4.0, 12, 0],
+  ["7:25 am", "Mount Eden", "Britomart", 4.6, 15, 4],
+  ["8:05 am", "Parnell", "Kingsland", 5.1, 16, 3]
+].map(t => ({ when: t[0], from: t[1], to: t[2], km: t[3], min: t[4], tip: t[5], f: fare(t[3], t[4]) }));
+const TODAY = r2(DTRIPS.reduce((a, t) => a + t.f.driver + t.tip, 0));
+const WEEK = [["Tu", 182.40], ["We", 0], ["Th", 211.75], ["Fr", 196.10], ["Sa", 240.30], ["Su", 0], ["Mo", TODAY]];
+function driverBinds() {
+  return {
+    today: money(TODAY, true), todayTrips: DTRIPS.length + " trips", todayTips: money(DTRIPS.reduce((a, t) => a + t.tip, 0)) + " in tips",
+    todayFee: money(DTRIPS.length * FEE) + " (" + DTRIPS.length + " trips × $1.20)", week: money(r2(WEEK.reduce((a, w) => a + w[1], 0)), true),
+    offerEarn: money(OFFER.driver, true), offerRate: "About " + money(OFFER.driver / 21) + " a minute for 21 min", offerTotal: money(OFFER.total, true),
+    offerDriver: money(OFFER.driver), offerPay: money(OFFER.pay), offerGst: money(OFFER.gst)
+  };
+}
+const APPLY = [
+  { k: "lic", t: "Driver licence and P endorsement", s: "Checked against the official record", done: true, d: "Full licence held for 2 years or more. P endorsement, to carry passengers, valid to March 2029. Checked against the official record." },
+  { k: "id", t: "Identity", s: "Photo ID and a live selfie", done: true, d: "Checked by a regulated verification provider. We keep the result, not your documents. Rather not use your face? Show your ID to a reviewer on a video call instead." },
+  { k: "rtw", t: "Right to work", s: "Citizen: nothing more needed", done: true, d: "On a visa? Show it here. We check again before it lapses." },
+  { k: "veh", t: "Vehicle", s: "KHT219 · 2019 · 5 seats", done: true, d: "Registration current. Certificate of Fitness valid to 2 March 2027. Age and seats meet the rules." },
+  { k: "ins", t: "Insurance for passengers", s: "Your own policy, or cover the co-op arranges", done: false, d: "Upload a policy that covers carrying passengers for hire, or join the group cover the co-op arranges at cost." },
+  { k: "pay", t: "Payouts and tax", s: "Bank account, IRD number, GST status", done: true, d: "Bank account ending 5521. IRD number added. Not GST-registered, so you get monthly flat-rate credit statements." },
+  { k: "coop", t: "Become a member", s: "One driver, one vote", done: false, d: "Read the driver agreement in plain words (6 min) and become a member. Driver members vote on fares, fees and rules. Major changes go to a vote of all members." },
+  { k: "orient", t: "Orientation", s: "Safety, access, assistance animals, work time, the app", done: false, d: "Five short lessons, about 40 min in all. Assistance animals are always carried. Work time limits keep everyone safe." },
+  { k: "review", t: "Reviewer approval", s: "A person checks what the automatic checks cannot", done: false, d: "A co-op reviewer looks at anything unclear. If they refuse, they tell you why and how to fix it." },
+  { k: "remind", t: "Expiry reminders", s: "We remind you before any document expires", done: true, d: "If a check lapses you are paused, not removed, until it is fixed." }
+];
+function renderApply() {
+  const n = APPLY.filter(a => a.done).length;
+  $("#applyBar").style.width = (n / APPLY.length * 100) + "%";
+  $("#applyCount").textContent = n + " of " + APPLY.length + " steps done" + (n === APPLY.length ? ". You can start driving." : "");
+  $("#applyList").innerHTML = APPLY.map(a => '<button class="row" data-act="applystep" data-k="' + a.k + '">' + ic(a.done ? "check" : "doc", a.done ? "ok" : "app") + '<span class="grow"><b>' + a.t + '</b><span class="sub">' + a.s + '</span></span><span class="badge ' + (a.done ? "ok" : "n") + '">' + (a.done ? "Done" : "To do") + '</span></button>').join("");
+}
+ENTER["d-apply"] = () => renderApply();
+S.maxPick = 12;
+ENTER["d-online"] = () => { updateOnline(); placeCar("carD", [[62, 270], [62, 270]], 0); };
+function updateOnline() {
+  $("#onStatus").textContent = S.online ? "You're online" : "You're offline";
+  $("#onSub").textContent = S.online ? "Looking for trips near Kingsland. Declining is always free." : "Go online when you're ready. No minimum hours, no targets.";
+  const b = $("#goBtn"); b.className = "btn block big " + (S.online ? "secondary" : "primary"); $("span", b).textContent = S.online ? "Go offline" : "Go online";
+  $("#offerPing").hidden = true;
+  if (S.online) later(() => { $("#offerPing").hidden = false; toast("New offer: you earn " + money(OFFER.driver, true) + "."); }, 2000);
+}
+ENTER["d-offer"] = () => {
+  let left = 15; $("#passedOn").hidden = true; $$("#scr-d-offer .actionbar .btn").forEach(b => b.disabled = false);
+  const ring = $("#ringProg"), num = $("#ringNum");
+  ring.style.transition = "none"; ring.setAttribute("stroke-dashoffset", 0); num.textContent = left;
+  placeCar("carO", APPROACH, 0);
+  later(() => { ring.style.transition = ""; }, 50);
+  every(() => {
+    left--; num.textContent = Math.max(0, left); ring.setAttribute("stroke-dashoffset", (150.8 * (15 - left) / 15).toFixed(1));
+    if (left <= 0) { clearTimers(); $("#passedOn").hidden = false; $$("#scr-d-offer .actionbar .btn").forEach(b => b.disabled = true); }
+  }, 1000);
+};
+const NAVI = [
+  ["left", "In 300 m, turn left onto Sandringham Road", "Then 1.2 km to the pickup"],
+  ["pin", "You have arrived", "Pickup: Sandringham Road, Kingsland"],
+  ["chev", "Continue 1.8 km on New North Road", "Then right onto Karangahape Road"],
+  ["flag", "Trip ended", "Britomart, Auckland Central"]
+];
+function renderNav2() {
+  const st = S.navStage, n = NAVI[st];
+  $("#scr-d-nav .instr").firstElementChild.outerHTML = ic(n[0], "lg app");
+  $("#navBig").textContent = n[1]; $("#navSub").textContent = n[2];
+  let h = "";
+  if (st === 0) h = '<b>Picking up Aroha</b> <span class="muted">· 4 min · 1.6 km</span><p class="hint">Assistance animal. Note: “Blue door, side gate.”</p><div class="btns"><button class="btn secondary" data-act="extnav">Other navigation app</button><button class="btn primary" data-act="navarrive">I\'ve arrived</button></div>';
+  if (st === 1) h = '<div class="drivecard"><b style="flex:1">Waiting for Aroha</b><span class="badge" id="waitBadge">Free wait 3:00</span></div><p class="hint">After the free wait, $0.50 a minute goes to you.</p><div class="label" style="margin-top:8px">Ask for Aroha\'s PIN</div><div class="inrow"><input class="in mono" id="pinIn" inputmode="numeric" maxlength="4" placeholder="4 digits" aria-label="Rider PIN"><button class="btn primary" data-act="starttrip">Start trip</button></div><p class="hint">Demo PIN: 4827.</p><div id="noshowBox" hidden style="margin-top:8px"><button class="btn secondary block" data-act="noshow">Mark as no-show · NZ$5.00 to you</button></div><button class="btn quiet small" style="margin-top:8px" id="skipBtn" data-act="skipwait">Demo: skip to the end of the wait</button>';
+  if (st === 2) h = '<b>Dropping off at Britomart</b> <span class="muted">· 17 min · 5.8 km</span><p class="hint">Fare fixed at ' + money(OFFER.total, true) + '. You keep ' + money(OFFER.driver) + '.</p><button class="btn primary block big" data-act="endtrip">End trip</button>';
+  if (st === 3) h = '<div class="note ok"><b>Trip ended.</b> You earned ' + money(OFFER.driver) + ' and a $3.00 tip, all yours.</div><div class="label" style="margin-top:10px">Rate Aroha</div><div class="seg" data-key="drate"><button>1</button><button>2</button><button>3</button><button>4</button><button aria-pressed="true">5</button></div><div class="btns" style="margin-top:10px"><button class="btn secondary" data-go="d-online">Back online</button><button class="btn primary" data-go="d-earnings">See payouts</button></div>';
+  $("#navStage").innerHTML = h;
+}
+function navAnim(path, from, to, dur) { const t0 = performance.now(); every(() => { const k = Math.min(1, (performance.now() - t0) / dur); placeCar("carN", path, from + (to - from) * k); }, 100); }
+ENTER["d-nav"] = () => { S.navStage = 0; $("#navWeak").hidden = true; renderNav2(); navAnim(APPROACH, 0, 0.85, 15000); };
+function renderWeek() {
+  const max = 260, bw = 30, gap = 18;
+  $("#weekChart").innerHTML = WEEK.map((w, i) => {
+    const x = 10 + i * (bw + gap), h = Math.round(w[1] / max * 80), y = 92 - h;
+    return (w[1] ? '<rect class="wk-bar' + (i === 6 ? " today" : "") + '" x="' + x + '" y="' + y + '" width="' + bw + '" height="' + h + '"/><text class="wk-val" x="' + (x + bw / 2) + '" y="' + (y - 4) + '" text-anchor="middle">' + Math.round(w[1]) + '</text>' : '<text class="wk-val" x="' + (x + bw / 2) + '" y="88" text-anchor="middle">off</text>') + '<text class="wk-lbl" x="' + (x + bw / 2) + '" y="110" text-anchor="middle">' + w[0] + '</text>';
+  }).join("") + '<line x1="0" y1="92.5" x2="340" y2="92.5" class="wk-axis"/>';
+}
+function renderEarnTrips() {
+  $("#earnTrips").innerHTML = DTRIPS.map((t, i) => '<button class="row" data-act="etrip" data-i="' + i + '"><span class="mono" style="width:56px;flex:none;font-size:12px;color:var(--ink-2)">' + t.when + '</span><span class="grow">' + t.from + ' to ' + t.to + '<span class="sub" id="eb' + i + '" hidden>Fare ' + money(t.f.total) + ' = you ' + money(t.f.driver) + ' + fee $1.20 + card ' + money(t.f.pay) + ' + GST ' + money(t.f.gst) + '</span></span><span class="end"><b class="money">' + money(t.f.driver) + '</b>' + (t.tip ? '<span class="sub">+ ' + money(t.tip) + ' tip</span>' : "") + '</span></button>').join("");
+}
+ENTER["d-earnings"] = () => { renderWeek(); renderEarnTrips(); };
+const PROPS = [
+  { k: "a", t: "Keep formula v3", sub: "No change.", f: FORMULA, mult: 1, replay: "Replay: waits the same, earnings an hour the same." },
+  { k: "b", t: "Formula v4: $1.65 a km", sub: "Base $2.50, $1.65 a km, $0.35 a minute, minimum $9.00.", f: Object.assign({}, FORMULA, { km: 1.65 }), mult: 1, replay: "Replay: waits +0.2 min, earnings an hour +4.8%." },
+  { k: "c", t: "v4 plus busy-time pricing", sub: "Up to 1.2 times on Friday and Saturday, 10 pm to 3 am. Always shown before booking.", f: Object.assign({}, FORMULA, { km: 1.65 }), mult: 1.2, replay: "Replay: busy-time waits −1.1 min, earnings an hour +7.9%." }
+];
+S.votes = 531; S.members = 1284;
+function renderProps() {
+  $("#propList").innerHTML = PROPS.map(p => { const f = fare(5.8, 17, p.mult, 0, p.f); return '<button class="row' + (S.myVote === p.k ? " sel" : "") + '" data-act="prop" data-k="' + p.k + '" aria-pressed="' + (S.myVote === p.k) + '" style="align-items:flex-start">' + ic(S.myVote === p.k ? "check" : "ballot", "app") + '<span class="grow"><b>' + p.t + '</b><span class="sub">' + p.sub + '</span><span class="sub">Example, 5.8 km and 17 min' + (p.mult !== 1 ? " at a busy time" : "") + ': you keep <b class="mono">' + money(f.driver) + '</b>, the rider pays <b class="mono">' + money(f.total, true) + '</b>.</span><span class="sub">' + p.replay + '</span></span></button>'; }).join("");
+}
+function renderTurnout() { const pc = Math.round(S.votes / S.members * 100); $("#turnBar").style.width = pc + "%"; $("#turnText").textContent = S.votes + " of " + S.members.toLocaleString("en") + " driver members have voted (" + pc + "%). Quorum is 30%."; }
+ENTER["d-vote"] = () => { renderProps(); renderTurnout(); };
+Object.assign(ACT, {
+  applystep(t) {
+    const a = APPLY.find(x => x.k === t.dataset.k);
+    openSheet("apply", a.t, '<p>' + a.d + '</p>' + (a.done ? '<p><span class="badge ok">' + ic("check", "sm") + 'Done</span></p>' : '<button class="btn primary block" data-act="applydone" data-k="' + a.k + '">Mark done (demo)</button>'));
+  },
+  applydone(t) { APPLY.find(x => x.k === t.dataset.k).done = true; closeSheet(); renderApply(); toast("Step done."); },
+  leave() { closeSheet(); toast("Demo: you would stop driving now. Your last payout is on its way."); },
+  goonline() { S.online = !S.online; clearTimers(); updateOnline(); toast(S.online ? "You're online." : "You're offline. See you next time."); },
+  step(t) { S.maxPick = Math.max(4, Math.min(30, S.maxPick + 2 * +t.dataset.d)); $("#maxPick").textContent = S.maxPick + " min"; },
+  cofupload() { closeSheet(); toast("Photo of the new Certificate of Fitness sent. A reviewer checks it if the automatic check cannot read it."); },
+  otherwork() { toast("Other paid work added. It counts towards your work time and breaks."); },
+  logshow() { toast("Logbook shown full screen for the officer, and ready to export."); },
+  selfiedone() { closeSheet(); toast("Selfie matched. Thanks. The photo is deleted within 24 hours."); },
+  selfiealt() { closeSheet(); toast("Video call with a reviewer booked for 9:30 am."); },
+  readaloud() { toast("Reading aloud: you earn " + money(OFFER.driver) + ". Pickup 4 minutes away. Trip 17 minutes to Britomart."); },
+  accept() { toast("Accepted. The fare is held on the rider's card."); location.hash = "d-nav"; },
+  decline() { toast("Declined. No penalty. The offer went to the next driver."); location.hash = "d-online"; },
+  extnav() { toast("Opening this trip in your other navigation app."); },
+  navarrive() {
+    clearTimers(); S.navStage = 1; renderNav2(); placeCar("carN", APPROACH, 1);
+    S.waitLeft = 180;
+    const tick = () => { const b = $("#waitBadge"); if (!b) return; if (S.waitLeft > 0) { b.textContent = "Free wait " + Math.floor(S.waitLeft / 60) + ":" + String(S.waitLeft % 60).padStart(2, "0"); S.waitLeft--; } else { b.textContent = "Wait over"; $("#noshowBox").hidden = false; $("#skipBtn").hidden = true; } };
+    tick(); every(tick, 1000); toast("Aroha has been told you're here.");
+  },
+  skipwait() { S.waitLeft = 0; },
+  starttrip() { const v = ($("#pinIn").value || "").trim(); if (v !== "4827") { toast("That PIN does not match. Check the rider and the car."); return; } clearTimers(); S.navStage = 2; renderNav2(); navAnim(DESTS.britomart.path, 0, 0.6, 20000); toast("PIN matches. Trip started."); },
+  noshow() { clearTimers(); toast("No-show recorded. NZ$5.00 paid to you, by the published rule."); location.hash = "d-online"; },
+  endtrip() { clearTimers(); S.navStage = 3; renderNav2(); placeCar("carN", DESTS.britomart.path, 1); toast("Trip ended. Aroha's receipt is on its way."); },
+  navweak() { const n = $("#navWeak"); n.hidden = !n.hidden; toast(n.hidden ? "Signal back. The trip caught up." : "Signal lost. The trip carries on."); },
+  etrip(t) { const s = $("#eb" + t.dataset.i); s.hidden = !s.hidden; },
+  repay() { $("#owedNote").className = "note ok"; $("#owedNote").innerHTML = "<b>Repaid. You owe nothing.</b> NZ$3.10 came out of tonight's payout."; toast("Repaid NZ$3.10."); },
+  irdshow() { const L = (a, b) => (a + ":").padEnd(17) + b; $("#irdOut").innerHTML = '<div class="mlog">' + esc(["Report for the 2025 calendar year", L("Seller", "Sione F."), L(C.taxId.charAt(0).toUpperCase() + C.taxId.slice(1), "***-***-417"), L("Rides income", "$41,382.50"), L(C.tax, CODE === "nz" ? "collected by the platform" : "on your statement"), L("Trips", "3,912")].join("\n")) + '</div>'; },
+  prop(t) { S.myVote = t.dataset.k; renderProps(); },
+  cast() {
+    if (!S.myVote) { toast("Pick one choice first."); return; }
+    const p = PROPS.find(x => x.k === S.myVote);
+    if (!S.voted) { S.voted = true; S.votes++; renderTurnout(); }
+    const n = $("#voteDone"); n.hidden = false; n.innerHTML = "<b>Your vote is recorded:</b> " + p.t + ". You can change it until Friday at 5 pm.";
+    $("#castBtn").textContent = "Change my vote"; toast("Vote recorded. One member, one vote.");
+  }
+});
+Object.assign(TOG, {
+  drivemode(on) { toast(on ? "Driving mode on: offers read aloud, typing locked while moving." : "Driving mode off."); },
+  flash(on) { toast(on ? "Offers will flash the screen. Riders are asked to message you, not call." : "Flashing alerts off."); }
+});
+Object.assign(SEG, { drate(v) { toast("Thanks. You rated Aroha " + v + "."); } });
+
+/* ---------- Co-op and support ---------- */
+const OPS = { req: 38, wait: 4.2, online: 212, trips: 141 };
+let docs = 3, fraud = 2, modLeft = 3;
+const logLine = (t, act, subj, who) => t + "  " + act.padEnd(16) + subj.padEnd(16) + who;
+const LOG = [
+  logLine("08:36", "doc.approve", "driver=SR-20988", "staff:mt"),
+  logLine("08:31", "incident.assign", "case=IN-2291", "staff:hp"),
+  logLine("08:12", "account.pause", "rule=S4", "staff:hp"),
+  logLine("07:58", "notice.send", "zone=airport", "staff:kw")
+];
+function addLog(act, subj) { const t = "08:" + String(41 + (LOG.length % 9)).padStart(2, "0"); LOG.unshift(logLine(t, act, subj, "you")); const el = $("#adminLog"); if (el) el.textContent = LOG.slice(0, 6).join("\n"); }
+function renderOps() {
+  $("#opsStats").innerHTML = [["Requests waiting", OPS.req], ["Median wait", OPS.wait.toFixed(1) + " min"], ["Drivers online", OPS.online], ["Trips under way", OPS.trips]].map(x => '<div><div class="label" style="margin:0">' + x[0] + '</div><div class="mid-num">' + x[1] + '</div></div>').join("");
+}
+ENTER["c-ops"] = () => {
+  renderOps(); $("#adminLog").textContent = LOG.slice(0, 6).join("\n"); $("#docCount").textContent = docs; $("#fraudCount").textContent = fraud;
+  every(() => { OPS.req = Math.max(5, OPS.req + Math.round(Math.random() * 4 - 2)); OPS.trips = Math.max(20, OPS.trips + Math.round(Math.random() * 4 - 2)); renderOps(); }, 2000);
+};
+const HELP = [
+  ["How the upfront fare works", "You see the full fare before you book. It comes from the fare formula drivers voted on, for the expected route and time. That price is fixed."],
+  ["What the at-cost fee pays for", "The fee is last month's running cost divided by last month's trips. The open cost ledger shows every part of it."],
+  ["Cancelling and fees", "Cancel free for 2 min after a driver accepts. After that NZ$4.00, all of it to the driver."],
+  ["Assistance animals are always welcome", "No driver may refuse an assistance animal. If one does, report it and we act at once."],
+  ["Book by phone", "No smartphone? Call 0800 000 000 (sample number). A person books your ride and you get updates by text."],
+  ["Wheelchair accessible rides", "Choose Wheelchair accessible. Every vehicle has a checked ramp or hoist, and the fare is the same as Standard."],
+  ["Left something in a car", "Open the trip and tap Lost item. You can message the driver and arrange a return for a set fee."],
+  ["Languages", "Spare Ride starts in each country's main languages. Volunteers add more."]
+];
+function renderHelp(q) {
+  const list = HELP.map((h, i) => [h, i]).filter(x => !q || fold(x[0][0] + " " + x[0][1]).includes(fold(q)));
+  $("#helpList").innerHTML = list.length ? list.slice(0, q ? 8 : 4).map(x => '<button class="row" style="padding-left:0;padding-right:0" data-act="article" data-i="' + x[1] + '">' + ic("doc", "app") + '<span class="grow">' + x[0][0] + '</span>' + ic("chev") + '</button>').join("") : '<p class="hint" style="text-align:center;padding:12px 0">No article matches. Ask a person in Help with a trip.</p>';
+}
+ENTER["c-help"] = () => renderHelp("");
+document.addEventListener("input", e => { if (e.target.id === "helpQ") renderHelp(e.target.value.trim()); });
+const DUTIES = [
+  ["Small passenger service licence, held by the co-op", "n", "Before launch"],
+  ["Registered passengers instead of in-car cameras", "", "In the design"],
+  ["Driver ID on screen meets the identification rule", "inf", "Checking"],
+  ["Fare agreed before the trip starts", "ok", "Upfront fare"],
+  ["Drivers' status: employees or contractors", "dan", "Open: RD01"],
+  ["Health and safety duties to drivers and riders", "", "In the design"],
+  ["Insurance for passengers, drivers and the co-op", "inf", "Research: RD02"],
+  ["Plain terms and privacy policy", "inf", "Drafting"],
+  ["Anti-money-laundering duties", "inf", "With the kit"],
+  ["Duties to disabled riders and assistance animals", "", "In the design"],
+  ["Fare vote allowed under competition law", "dan", "Open: before any vote"]
+];
+function renderOversee() {
+  $("#overseeLabel").textContent = "Who oversees Spare Ride · Example: " + C.name + (C.where ? " (" + C.where + ")" : "");
+  $("#overseeTbl").innerHTML = [["Operator licence", C.opLicence], ["Passenger transport", C.regulator], ["Tax on fares", C.tax + " " + PCT], ["Income reports", C.taxAuth], ["Privacy", C.privacyName], ["Competition", C.competition], ["Emergency number", C.sos]].map(r => '<tr><td>' + r[0] + '</td><td class="t">' + esc(r[1]) + '</td></tr>').join("");
+}
+ENTER["c-legal"] = () => { renderOversee(); $("#dutyList").innerHTML = DUTIES.map(d => '<div class="row static"><span class="grow">' + d[0] + '</span><span class="badge ' + d[1] + '">' + d[2] + '</span></div>').join(""); $("#cmdOut").textContent = 'ride.quote from="41 Sandringham Rd" to="Britomart" option=standard'; };
+Object.assign(ACT, {
+  opsdoc() {
+    if (!docs) { toast("Nothing waiting. Good work."); return; }
+    openSheet("doc", "Document review", '<div style="height:120px;border:1px solid var(--rule);background:var(--panel-alt);display:grid;place-items:center;color:var(--ink-3);border-radius:var(--radius)">' + ic("id", "lg") + '</div><p><b>Applicant SR-21990:</b> licence photo. Glare covers the expiry date, so the automatic check could not read it.</p><div class="btns"><button class="btn secondary" data-act="docrefuse">Refuse with a reason</button><button class="btn primary" data-act="docok">Approve</button></div><div id="refuseBox" hidden class="stack"><select class="in" id="refuseWhy" aria-label="Reason"><option>Photo unreadable: please take it again</option><option>Licence has expired</option><option>Name does not match your ID</option></select><button class="btn secondary block" data-act="docrefuse2">Send the refusal</button></div>');
+  },
+  docok() { docs--; $("#docCount").textContent = docs; addLog("doc.approve", "driver=SR-21990"); closeSheet(); toast("Approved. The applicant is told at once."); },
+  docrefuse() { $("#refuseBox").hidden = false; },
+  docrefuse2() { docs--; $("#docCount").textContent = docs; addLog("doc.refuse", "driver=SR-21990"); closeSheet(); toast("Refused. The applicant is told why and how to fix it."); },
+  inc(t) { addLog("incident.action", "case=IN-2291"); toast(t.dataset.msg); },
+  fraudok(t) { t.disabled = true; t.textContent = "Done"; fraud = Math.max(0, fraud - 1); $("#fraudCount").textContent = fraud; addLog("fraud.action", "case=FR-" + (310 + fraud)); },
+  opssend() { const z = S.zone || "City zone"; const n = z === "City zone" ? 46 : z === "Airport route" ? 18 : 212; addLog("notice.send", "zone=" + z.split(" ")[0].toLowerCase()); toast("Sent to " + n + " drivers online in " + (z === "All Auckland" ? "Auckland" : "the " + z) + "."); },
+  launch() { toast("Not yet: Wellington needs 120 drivers ready. 79 to go."); },
+  article(t) { const h = HELP[+t.dataset.i]; openSheet("art", h[0], '<p>' + h[1] + '</p><p class="hint">Was this helpful?</p><div class="btns"><button class="btn secondary" data-act="closesheet" data-toast="Thanks for telling us.">Yes</button><button class="btn quiet" data-go="r-trips" data-toast="Pick the trip and tell us what went wrong.">No, I need a person</button></div>'); },
+  panel() { toast("Your statement was added to case D-118. The panel sees both sides."); },
+  appeal() { toast("Appeal sent. A member panel decides within 5 working days, and you see the rule and the evidence."); },
+  modq() { modLeft = Math.max(0, modLeft - 1); $("#modText").textContent = modLeft ? modLeft + " left for a person to check. Nothing is removed by a machine alone." : "All checked by a person. Nothing is waiting."; toast("Checked by a person: profile photo approved."); },
+  runcmd() { const f = OFFER; $("#cmdOut").textContent = 'ride.quote from="41 Sandringham Rd" to="Britomart" option=standard\n→ quote Q-77K2  total ' + f.total.toFixed(2) + '  driver ' + f.driver.toFixed(2) + '  fee 1.20  card ' + f.pay.toFixed(2) + '  tax ' + f.gst.toFixed(2) + '\n  formula v3  dispatch v2  eta 4 min'; toast("Same answer the app shows. Same command path."); }
+});
+Object.assign(TOG, {
+  outage(on) { $("#outageNote").hidden = !on; addLog("service.outage", on ? "state=on" : "state=off"); },
+  sim(on) { Object.assign(OPS, on ? { req: 296, wait: 3.9, online: 512, trips: 401 } : { req: 38, wait: 4.2, online: 212, trips: 141 }); renderOps(); $("#opsSub").textContent = on ? "Simulated city running. Real riders and drivers are not affected." : "Live. Every staff action is logged."; }
+});
+Object.assign(SEG, { zone(v) { S.zone = v; } });
+
+/* ---------- Assess panel ---------- */
+function renderAssess() {
+  if (!DATA) return;
+  const shown = new Set(); SCREENS.forEach(s => s.f.forEach(f => shown.add(f)));
+  const coreIds = Object.keys(DATA.core);
+  const shownCore = coreIds.filter(id => shown.has(id));
+  const areasWithCore = DATA.areas.filter(a => a[2] > 0);
+  const areasShown = areasWithCore.filter(a => coreIds.some(id => id.startsWith(a[0] + "-") && shown.has(id)));
+  let h = '<p><a href="' + FEATURE_MAP + '" target="_blank" rel="noopener"><b>Feature map: FEATURES.md</b></a></p>';
+  h += '<div class="label">Coverage of the core features</div><div class="cov">';
+  h += '<span>Core feature areas shown</span><span class="mono">' + areasShown.length + ' of ' + areasWithCore.length + '</span>';
+  h += '<span>Core features shown</span><span class="mono">' + shownCore.length + ' of ' + coreIds.length + '</span>';
+  h += '<span>Areas with no core features (next or later only)</span><span class="mono">' + DATA.areas.filter(a => a[2] === 0).map(a => a[0]).join(", ") + '</span></div>';
+  h += '<div class="label">Questions to assess (from features.json)</div><ol>' + DATA.assess.map(q => '<li>' + q + '</li>').join("") + '</ol>';
+  h += '<div class="label">Core features on each screen</div>';
+  SCREENS.forEach((s, i) => {
+    h += '<div class="scrcov"><a href="#' + s.id + '" data-act="assessclose">' + (i + 1) + '. ' + s.t + '</a> <span class="badge n">' + GROUPS[s.g] + '</span><ul>' + s.f.map(id => '<li><span class="mono">RIDE-' + id + '</span>' + (DATA.core[id] || "?") + '</li>').join("") + (s.nx || []).map(id => '<li><span class="mono">RIDE-' + id + '</span>' + NEXT[id] + ' (next)</li>').join("") + '</ul></div>';
+  });
+  const missing = coreIds.filter(id => !shown.has(id));
+  if (missing.length) h += '<div class="label" style="margin-top:12px">Core features not on any screen yet</div><ul style="padding-left:18px;font-size:12px;color:var(--ink-2)">' + missing.map(id => '<li><span class="mono">RIDE-' + id + '</span> ' + DATA.core[id] + '</li>').join("") + '</ul>';
+  $("#assessBody").innerHTML = h;
+}
+
+/* ---------- Start ---------- */
+hydrate(document);
+[["#langSeg", C.langs], ["#langSeg2", C.langs.concat(["More"])]].forEach(([id, names]) => { $$(id + " button").forEach((b, i) => { b.textContent = names[i]; }); });
+localize($("#phone"));
+if (LMAP.length) new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(localize))).observe($("#phone"), { childList: true, subtree: true });
+document.addEventListener("change", e => { if (e.target.id !== "country") return; const u = new URL(location.href); u.searchParams.set("c", e.target.value); location.href = u.href; });
+renderNav();
+renderAssess();
+window.addEventListener("hashchange", () => show(location.hash.slice(1)));
+show(location.hash.slice(1) || "r-home");
+</script>
+</body>
+</html>
