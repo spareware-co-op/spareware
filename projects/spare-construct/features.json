@@ -1,7 +1,7 @@
 {
  "program": "spare-construct",
  "name": "Spare Construct",
- "replaces": "Revit, and the add-ins people buy or bolt on to it: Navisworks, Revizto and BIMcollab for clash; Solibri and UpCodes for model checking; Enscape, Twinmotion, Lumion and D5 Render for rendering; Dynamo for visual scripting; pyRevit, DiRoots, Ideate and Naviate toolkits; Ideate BIMLink and DiRoots SheetLink for Excel; AGACAD, StrucSoft MWF and hsbcad for framing; CostX and Assemble for quantities; Autodesk Docs, Newforma and Aconex for document control",
+ "replaces": "Revit, and the add-ins people buy or bolt on to it: Navisworks, Revizto and BIMcollab for clash; Solibri and UpCodes for model checking; Enscape, Twinmotion, Lumion and D5 Render for rendering; Dynamo for visual scripting; pyRevit, DiRoots, Ideate and Naviate toolkits; Ideate BIMLink and DiRoots SheetLink for Excel; AGACAD, StrucSoft MWF and hsbcad for framing; CostX and Assemble for quantities; Autodesk Docs, Newforma and Aconex for document control; Autodesk Design Collaboration for sharing between firms",
  "summary": "One open building model for every discipline, built from scratch in Rust, that runs on the desktop, in the browser and headless for AI and scripts. Everything people buy add-ins for today is built in as first-party add-ins on the same public API, free to use, with hosting run at cost.",
  "areas": [
   {
@@ -3729,7 +3729,7 @@
       {
        "id": "CON-A9-F6-P3",
        "name": "Naming rules engine",
-       "what": "One rule format for the names and numbers of sheets, views, files and documents, set per office and client, used by A11-F2-P2, A12-F7-P2 and A20-F2-P2.",
+       "what": "One rule format for the names and numbers of sheets, views, files and documents, set per office and client, used by A11-F2-P2, A26-F3-P1 and A20-F2-P2.",
        "kind": "library",
        "size": "small",
        "depends_on": [
@@ -4381,22 +4381,10 @@
     },
     {
      "id": "CON-A11-F6",
-     "name": "Mark up and review drawings",
-     "does": "Mark up sheets and views, assign markups to people and track them to done.",
+     "name": "Assign and track markups",
+     "does": "Assign markups to people and track them to done, as issues.",
      "priority": "next",
      "parts": [
-      {
-       "id": "CON-A11-F6-P1",
-       "name": "Markups",
-       "what": "Clouds, text, arrows and stamps on sheets and PDFs, using the shared PDF markup in engine-pdf, which Spare Studio needs too, stored as operations.",
-       "kind": "library",
-       "size": "medium",
-       "depends_on": [
-        "CON-A8-F2-P4",
-        "engine-pdf"
-       ],
-       "piece": null
-      },
       {
        "id": "CON-A11-F6-P2",
        "name": "Review flow",
@@ -4404,7 +4392,7 @@
        "kind": "interface",
        "size": "small",
        "depends_on": [
-        "CON-A11-F6-P1",
+        "CON-A26-F8-P1",
         "CON-A12-F8-P3",
         "KIT-A8-F3-P2"
        ],
@@ -4526,7 +4514,7 @@
        "size": "medium",
        "depends_on": [
         "CON-A11-F7-P1",
-        "CON-A11-F6-P1",
+        "CON-A26-F8-P1",
         "CON-A11-F8-P1"
        ],
        "piece": null
@@ -4900,35 +4888,10 @@
     },
     {
      "id": "CON-A12-F7",
-     "name": "Keep project documents in one place",
-     "does": "Store drawings, reports, photos and letters for a project, with registers and status codes.",
+     "name": "Ask questions and track submittals",
+     "does": "Send requests for information and submittals to the right firm, with due dates, and track the answers.",
      "priority": "next",
      "parts": [
-      {
-       "id": "CON-A12-F7-P1",
-       "name": "Project documents",
-       "what": "Spare Construct's document rules (folders, status codes and registers) on the kit's files and sharing (KIT-A15-F7-P1, KIT-A15-F8-P1). A candidate kit document store, since Spare Office needs the same.",
-       "kind": "service",
-       "size": "large",
-       "depends_on": [
-        "KIT-A15-F7-P1",
-        "KIT-A15-F8-P1",
-        "KIT-A15-F3-P1"
-       ],
-       "piece": null
-      },
-      {
-       "id": "CON-A12-F7-P2",
-       "name": "Naming rules",
-       "what": "Document naming rules per office and per client, as rule sets for the one naming rules engine (A9-F6-P3).",
-       "kind": "data",
-       "size": "small",
-       "depends_on": [
-        "CON-A12-F7-P1",
-        "CON-A9-F6-P3"
-       ],
-       "piece": null
-      },
       {
        "id": "CON-A12-F7-P3",
        "name": "Questions and submittals",
@@ -4936,7 +4899,7 @@
        "kind": "library",
        "size": "medium",
        "depends_on": [
-        "CON-A12-F7-P1",
+        "CON-A26-F1-P1",
         "CON-A12-F8-P3",
         "KIT-A8-F3-P2"
        ],
@@ -9113,6 +9076,824 @@
        "kind": "data",
        "size": "small",
        "depends_on": [],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "CON-A25",
+   "name": "Sharing between firms",
+   "summary": "Each firm works in its own team space and shares packages of models, views, sheets and files with the other firms when it is ready. A sharing timeline shows every package and who has taken it in, and each team takes in other teams' packages when it chooses.",
+   "features": [
+    {
+     "id": "CON-A25-F1",
+     "name": "Work in my firm's team space",
+     "does": "Work with my own firm in a team space inside the project, where our work in progress stays ours until we publish it.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "CON-A25-F1-P1",
+       "name": "Project space",
+       "what": "The shared space every firm on a job joins. It holds the teams, packages, project files and the sharing record, on the kit's operation log, file service and hosting at cost (KIT-A15-F1-P2, KIT-A15-F7-P1, KIT-A22-F4-P1). A firm's own server joins it once self-hosting arrives (A23-F2).",
+       "kind": "service",
+       "size": "large",
+       "depends_on": [
+        "CON-A2-F5-P1",
+        "CON-A25-F1-P5",
+        "KIT-A15-F1-P2",
+        "KIT-A15-F7-P1",
+        "KIT-A22-F4-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A25-F1-P2",
+       "name": "Team spaces",
+       "what": "A team space for each firm or discipline, such as Architecture, Structure, Services and Client, with its own members, models, views, sheets and folders. Work in progress in it is seen only by the team. Members and roles come from the kit's organisations (KIT-A1-F7-P1, KIT-A1-F7-P2).",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "CON-A25-F1-P1",
+        "KIT-A1-F7-P1",
+        "KIT-A1-F7-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A25-F1-P3",
+       "name": "Team boundary",
+       "what": "A team's operation log and check-outs stay inside the team. In the first release people in a team take turns through project check-out (A12-F9-P1); once live sync arrives (A12-F1-P1), edits inside a team sync live. Nothing reaches another team until it is published.",
+       "kind": "library",
+       "size": "small",
+       "depends_on": [
+        "CON-A25-F1-P2",
+        "CON-A12-F9-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A25-F1-P4",
+       "name": "Join a project",
+       "what": "Invite a firm to a project, or ask to join one, with the lead firm accepting. Each firm brings its own people and keeps its own models. A client or other guest can join read-only through the kit's guest access (KIT-A15-F8-P2).",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "CON-A25-F1-P2",
+        "KIT-A8-F4-P1",
+        "KIT-A15-F8-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A25-F1-P5",
+       "name": "Shared space hosting decision",
+       "what": "A decision note on who hosts a project's shared space by default (the lead firm, the client or co-op servers) and how a firm's own server joins it. It settles the sharing side of the hosting decision (A23-F1-P6).",
+       "kind": "research",
+       "size": "small",
+       "depends_on": [],
+       "piece": null
+      },
+      {
+       "id": "CON-A25-F1-P6",
+       "name": "Sharing running costs",
+       "what": "Storage and transfer for team spaces, packages and project files metered per project and firm through the kit's per-account metering (KIT-A13-F2-P3), charged at cost (KIT-A15-F7-P2) and shown on the open cost ledger.",
+       "kind": "service",
+       "size": "small",
+       "depends_on": [
+        "CON-A25-F1-P1",
+        "KIT-A13-F2-P3",
+        "KIT-A15-F7-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "CON-A25-F2",
+     "name": "Publish a package",
+     "does": "Choose models, views, sheets and files and publish them to the other firms as one numbered package when they are ready.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "CON-A25-F2-P1",
+       "name": "Packages",
+       "what": "A package is a named, numbered version of a team's chosen models, views, sheets and files: a signed pointer into the team's operation log plus the chunks and files it covers. Chunks and files are content-addressed, the way Speckle stores objects, so packages share what did not change and publishing or taking in moves only what did.",
+       "kind": "library",
+       "size": "large",
+       "depends_on": [
+        "CON-A25-F1-P2",
+        "CON-A12-F4-P1",
+        "CON-A2-F4-P2",
+        "KIT-A15-F7-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A25-F2-P2",
+       "name": "Package contents",
+       "what": "Pick what goes in: whole models or chosen levels, views, sheets and folders. Contents are filtered by discipline ownership, view filters (A8-F3-P3) and permissions (A25-F6-P1), so design options and work in progress never leave unless the team chooses.",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "CON-A25-F2-P1",
+        "CON-A25-F6-P1",
+        "CON-A8-F3-P3"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A25-F2-P3",
+       "name": "Publish flow",
+       "what": "Publish from one dialog that shows what is chosen, what changed since the team's last package (A25-F3-P2) and a note. A team can require an approval before a package leaves (A26-F6-P3).",
+       "kind": "interface",
+       "size": "medium",
+       "depends_on": [
+        "CON-A25-F2-P2",
+        "CON-A25-F3-P2",
+        "CON-A26-F6-P3"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A25-F2-P4",
+       "name": "Saved package sets",
+       "what": "Saved choices, such as weekly coordination for Structure or a monthly set for the client, so a regular publish is one click, or runs on a schedule through the kit's durable timers (KIT-A15-F14-P1).",
+       "kind": "library",
+       "size": "small",
+       "depends_on": [
+        "CON-A25-F2-P2",
+        "KIT-A15-F14-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A25-F2-P5",
+       "name": "Packages from other software",
+       "what": "Firms on other software publish IFC files and PDFs as packages into their own team space. They are kept and compared like every other package (A12-F5-P2).",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "CON-A25-F2-P1",
+        "CON-A18-F1-P1",
+        "CON-A12-F5-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "CON-A25-F3",
+     "name": "Follow the sharing timeline",
+     "does": "See every team's packages on one timeline, who has taken each one in, and what changed.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "CON-A25-F3-P1",
+       "name": "Sharing timeline",
+       "what": "The main view of the shared space, open from the start: a row for each team, each package as a mark along it, and for each mark which teams have taken it in. Choose a mark to see its contents, note and changes, and filter by team and date.",
+       "kind": "interface",
+       "size": "medium",
+       "depends_on": [
+        "CON-A25-F2-P1",
+        "CON-A25-F4-P1",
+        "CON-A22-F1-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A25-F3-P2",
+       "name": "Change summary",
+       "what": "A plain summary of what changed since a team's last package: elements added, removed and changed by category, sheets changed and files added. Built from version compare (A12-F4-P2).",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "CON-A25-F2-P1",
+        "CON-A12-F4-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A25-F3-P3",
+       "name": "New package alerts",
+       "what": "Members are told when another team publishes, through the kit's notification router and settings (KIT-A8-F3-P2, KIT-A8-F5-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "CON-A25-F2-P1",
+        "KIT-A8-F3-P2",
+        "KIT-A8-F5-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "CON-A25-F4",
+     "name": "Take in a package when I'm ready",
+     "does": "Take in another team's package when my team is ready, so nobody's work changes under them.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "CON-A25-F4-P1",
+       "name": "Take in",
+       "what": "Each team chooses when to take in another team's package. Until then, its linked copy stays on the last package it took in. Taking in downloads only the changed chunks and updates the linked model (A12-F5-P1).",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "CON-A25-F2-P1",
+        "CON-A12-F5-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A25-F4-P2",
+       "name": "Before you take in",
+       "what": "Before taking in, see the change summary (A25-F3-P2) and which of the team's own views, sheets and clash tests the change touches.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "CON-A25-F4-P1",
+        "CON-A25-F3-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A25-F4-P3",
+       "name": "Stay on or go back",
+       "what": "Stay on an earlier package as long as needed, or go back to one, with the reason recorded.",
+       "kind": "library",
+       "size": "small",
+       "depends_on": [
+        "CON-A25-F4-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "CON-A25-F5",
+     "name": "Compare any two packages",
+     "does": "Compare any two packages and see what changed in 3D, in plans, on sheets and in a list.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "CON-A25-F5-P1",
+       "name": "Package compare",
+       "what": "Differences between any two packages: model elements through version compare (A12-F4-P2), drawings through sheet comparison (A11-F3-P2) and other files through file compare (A26-F2-P2). Two packages from different teams compare by what each holds.",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "CON-A25-F2-P1",
+        "CON-A12-F4-P2",
+        "CON-A11-F3-P2",
+        "CON-A26-F2-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A25-F5-P2",
+       "name": "Compare from the timeline",
+       "what": "Pick two marks on the timeline to open them in the compare view (A12-F4-P3), with the change list grouped by category and sheet.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "CON-A25-F5-P1",
+        "CON-A25-F3-P1",
+        "CON-A12-F4-P3"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "CON-A25-F6",
+     "name": "Control what each firm and team sees",
+     "does": "Set who can see, publish and take in, per firm, team and package.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "CON-A25-F6-P1",
+       "name": "Sharing permissions",
+       "what": "Who may publish for a team, who may take in, and which teams may see each package. Rights are relationships (this firm is a member of that team; that team may view this package), checked by the kit (KIT-A15-F1-P4, KIT-A15-F8-P1), so a team's rights pass down to its packages and folders. Element permissions inside a live model stay with A12-F6-P1.",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "CON-A25-F1-P2",
+        "KIT-A15-F1-P4",
+        "KIT-A15-F8-P1",
+        "KIT-A1-F7-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A25-F6-P2",
+       "name": "Firm sharing policies",
+       "what": "A firm's admin can lock what may leave the firm, such as no design options and no work in progress, through the kit's organisation policies (KIT-A1-F7-P5).",
+       "kind": "library",
+       "size": "small",
+       "depends_on": [
+        "CON-A25-F6-P1",
+        "KIT-A1-F7-P5"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "CON-A25-F7",
+     "name": "See every publish and take-in",
+     "does": "See a full record of every publish and take-in: who, when, which package and which version.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "CON-A25-F7-P1",
+       "name": "Sharing record",
+       "what": "Every publish, take-in, go-back and permission change is an operation on the kit's tamper-evident log (KIT-A15-F1-P2), searchable and exportable in the kit's organisation audit log (KIT-A1-F7-P7). The timeline is drawn from this record.",
+       "kind": "library",
+       "size": "small",
+       "depends_on": [
+        "CON-A25-F2-P1",
+        "CON-A25-F4-P1",
+        "KIT-A15-F1-P2",
+        "KIT-A1-F7-P7"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "CON-A26",
+   "name": "Project files and document control",
+   "summary": "Every project file in one versioned store with the models: folders, versions and compare, naming checks, status from work in progress to archived, permissions, review and approval, issue sets with transmittals and a register, markups, search, desktop sync, retention and an audit log.",
+   "features": [
+    {
+     "id": "CON-A26-F1",
+     "name": "Keep every project file in folders",
+     "does": "Keep models, drawings, PDFs, specifications, photos, reports and letters in project folders, in one store with the model.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "CON-A26-F1-P1",
+       "name": "Project file store",
+       "what": "Project folders for any file type (models, drawings, PDFs, specifications, photos, reports and letters) on the kit's file service, sharing and version history (KIT-A15-F7-P1, KIT-A15-F8-P1, KIT-A15-F3-P1), in the same project space as the models (A25-F1-P1). A candidate kit document store, since Spare Office needs the same.",
+       "kind": "service",
+       "size": "large",
+       "depends_on": [
+        "KIT-A15-F7-P1",
+        "KIT-A15-F8-P1",
+        "KIT-A15-F3-P1",
+        "CON-A25-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A26-F1-P2",
+       "name": "Folder templates",
+       "what": "Folder structures per office, client and project type, set up with a new project and kept as data.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "CON-A26-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A26-F1-P3",
+       "name": "File previews",
+       "what": "Thumbnails and quick previews of every file without opening its program, through the kit's preview service (KIT-A15-F16-P1).",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "CON-A26-F1-P1",
+        "KIT-A15-F16-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "CON-A26-F2",
+     "name": "Keep every version of every file",
+     "does": "Keep every version of every file, see who made it, compare any two and go back to one.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "CON-A26-F2-P1",
+       "name": "File versions",
+       "what": "Uploading a file over an existing one makes its next version, with who, when and a note. Versions are split into content-defined chunks, as restic does, so a new version stores and sends only what changed. Models are versioned by their operation log.",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "CON-A26-F1-P1",
+        "KIT-A15-F3-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A26-F2-P2",
+       "name": "File compare",
+       "what": "Compare two versions of a file: models element by element (A12-F4-P2), drawings and PDFs as an overlay of changed areas, images side by side, and text documents word by word.",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "CON-A26-F2-P1",
+        "CON-A12-F4-P2",
+        "KIT-A27-F6-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A26-F2-P3",
+       "name": "Restore a version",
+       "what": "Make an earlier version current again. The restore is saved as a new version, so nothing is lost.",
+       "kind": "library",
+       "size": "small",
+       "depends_on": [
+        "CON-A26-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "CON-A26-F3",
+     "name": "Name files to the standard",
+     "does": "Have every file name checked against the project's naming standard when it is uploaded, with a fix suggested.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "CON-A26-F3-P1",
+       "name": "Naming rules",
+       "what": "Document naming rules per office and per client, as rule sets for the one naming rules engine (A9-F6-P3).",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "CON-A26-F1-P1",
+        "CON-A9-F6-P3"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A26-F3-P2",
+       "name": "Upload check",
+       "what": "Each upload is checked against the naming rules. A name that fails shows which field is wrong and a suggested name, and the project chooses whether a failing name blocks the upload or only warns.",
+       "kind": "library",
+       "size": "small",
+       "depends_on": [
+        "CON-A26-F3-P1",
+        "CON-A26-F4-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "CON-A26-F4",
+     "name": "Track status and attributes",
+     "does": "Give every file attributes such as discipline, type and revision, and a status that moves from work in progress to shared, published and archived.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "CON-A26-F4-P1",
+       "name": "File attributes",
+       "what": "Typed attributes on every file and folder, such as originator, discipline, type, level, revision and description, filled in from the file name where the naming rules allow, and set per office and client.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "CON-A26-F1-P1",
+        "CON-A26-F3-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A26-F4-P2",
+       "name": "Information states",
+       "what": "Every file and model version has one state: work in progress (seen by its team), shared (seen by other teams for coordination), published (approved for use) or archived (kept read-only). These follow the states ISO 19650 describes for a common data environment, without claiming compliance. Publishing a package shares what it holds.",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "CON-A26-F4-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A26-F4-P3",
+       "name": "Status codes",
+       "what": "Status and revision codes kept as data per country, client or office, so a project uses the codes its contract asks for. No national code table is copied without clearance (A24-F1-P6).",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "CON-A26-F4-P2",
+        "CON-A24-F1-P6"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "CON-A26-F5",
+     "name": "Control who sees each folder and file",
+     "does": "Set who can see, add, edit and approve in each folder and file, per firm, team and role.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "CON-A26-F5-P1",
+       "name": "Folder and file permissions",
+       "what": "View, add, edit, approve and manage rights on folders and files, given to a firm, team, role or person and passed down to sub-folders unless changed, using the same relationship checks as sharing (A25-F6-P1).",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "CON-A25-F6-P1",
+        "CON-A26-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A26-F5-P2",
+       "name": "Who has access",
+       "what": "One panel that shows who can open a folder or file and why, and changes it.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "CON-A26-F5-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "CON-A26-F6",
+     "name": "Review and approve",
+     "does": "Send files and packages for review, get comments and decisions from the right people by a due date, and approve them before they are published.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "CON-A26-F6-P1",
+       "name": "Review steps",
+       "what": "Review steps kept as data: who reviews, in what order, by when, and which decisions they can give (approved, approved with comments, rejected). Each decision is an operation with its reason, and due dates and reminders run on the kit's durable timers and notifications (KIT-A15-F14-P1, KIT-A8-F3-P2). A candidate kit part, since Spare Studio's review and approval needs the same.",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "CON-A26-F4-P2",
+        "KIT-A15-F1-P2",
+        "KIT-A15-F14-P1",
+        "KIT-A8-F3-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A26-F6-P2",
+       "name": "Review panel",
+       "what": "A panel beside the file or package with its markups (A26-F8-P1), the decision buttons and the history of every step.",
+       "kind": "interface",
+       "size": "medium",
+       "depends_on": [
+        "CON-A26-F6-P1",
+        "CON-A26-F8-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A26-F6-P3",
+       "name": "Approval gates",
+       "what": "Rules such as a file needing an approved review before it is published, or a package needing the lead's approval before it leaves, checked on every change of state.",
+       "kind": "library",
+       "size": "small",
+       "depends_on": [
+        "CON-A26-F6-P1",
+        "CON-A26-F4-P2"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "CON-A26-F7",
+     "name": "Issue sets with transmittals",
+     "does": "Gather files and sheets into an issue set, send it with a transmittal, and keep a register of everything issued and received.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "CON-A26-F7-P1",
+       "name": "Issue sets",
+       "what": "Pick sheets, models and any project files into an issue set with a reason and recipients. Issuing fixes the versions it holds, marks them published, and keeps the issue records and fingerprints that drawing issues use (A11-F4-P1, A11-F4-P4).",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "CON-A26-F2-P1",
+        "CON-A26-F4-P2",
+        "CON-A11-F4-P1",
+        "CON-A11-F4-P4"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A26-F7-P2",
+       "name": "Transmittals for any file",
+       "what": "The transmittal and the document register cover every file in a set, not only sheets, extending the drawing transmittals and register (A11-F4-P2), and are sent by the issue sender (A11-F4-P3).",
+       "kind": "library",
+       "size": "small",
+       "depends_on": [
+        "CON-A26-F7-P1",
+        "CON-A11-F4-P2",
+        "CON-A11-F4-P3"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A26-F7-P3",
+       "name": "Received transmittals",
+       "what": "Log what other firms and the client send, file what came into the right folders, and record the acknowledgement.",
+       "kind": "library",
+       "size": "small",
+       "depends_on": [
+        "CON-A26-F7-P2",
+        "CON-A26-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A26-F7-P4",
+       "name": "Document register",
+       "what": "One register of every document with its versions, state and every issue it went out in, filtered and exported to a spreadsheet (A10-F3-P1).",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "CON-A26-F7-P2",
+        "CON-A10-F3-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "CON-A26-F8",
+     "name": "Mark up files",
+     "does": "Mark up drawings, PDFs and images, with each markup kept on the file version it was made on.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "CON-A26-F8-P1",
+       "name": "Markups",
+       "what": "Clouds, text, arrows and stamps on sheets, PDFs and images, using the kit's PDF markup (KIT-A27-F6-P4) and anchored comments (KIT-A8-F12-P2), which Spare Studio needs too. Markups are operations kept on the file version they were made on, and carried to the next version where they still apply.",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "CON-A8-F2-P4",
+        "engine-pdf",
+        "KIT-A27-F6-P4",
+        "KIT-A8-F12-P2",
+        "CON-A26-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "CON-A26-F9",
+     "name": "Track issues on files",
+     "does": "Raise an issue on a file, a markup or a package, assign it to a firm or a person, and track it to closed.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "CON-A26-F9-P1",
+       "name": "Issues on files",
+       "what": "Issues linked to a file version, a markup or a package, in the one issue model (A12-F8-P3), so model, sheet and file issues sit in one list.",
+       "kind": "library",
+       "size": "small",
+       "depends_on": [
+        "CON-A12-F8-P3",
+        "CON-A26-F8-P1",
+        "CON-A25-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "CON-A26-F10",
+     "name": "Find any file",
+     "does": "Search file names, attributes and the text inside files, and see only what I'm allowed to see.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "CON-A26-F10-P1",
+       "name": "File search",
+       "what": "Names, attributes and contents (text in PDFs and documents, scanned drawings read by the kit's text recognition, and model properties) indexed in the kit's search service, with results filtered by permission (KIT-A6-F1-P2, KIT-A6-F1-P4, KIT-A27-F12-P3).",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "CON-A26-F1-P1",
+        "CON-A26-F4-P1",
+        "KIT-A6-F1-P2",
+        "KIT-A6-F1-P4",
+        "KIT-A27-F12-P3"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A26-F10-P2",
+       "name": "Search panel",
+       "what": "A search box with filters by folder, state, discipline, type and date, on the kit's search screens (KIT-A6-F1-P5).",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "CON-A26-F10-P1",
+        "KIT-A6-F1-P5"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "CON-A26-F11",
+     "name": "Work on files from my desktop and offline",
+     "does": "Keep chosen project folders on my computer, work on them offline, and have changes come back as new versions.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "CON-A26-F11-P1",
+       "name": "Desktop folder sync",
+       "what": "Chosen project folders kept on the computer through the kit's desktop sync client (KIT-A15-F15-P1). Each saved change becomes a new version, and the naming check runs as it syncs.",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "CON-A26-F2-P1",
+        "CON-A26-F3-P2",
+        "KIT-A15-F15-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A26-F11-P2",
+       "name": "Offline files",
+       "what": "Files kept for offline use are encrypted on the device (KIT-A15-F4-P4). If two people change one file offline, both versions are kept and a person chooses (KIT-A15-F4-P3).",
+       "kind": "library",
+       "size": "small",
+       "depends_on": [
+        "CON-A26-F11-P1",
+        "KIT-A15-F4-P3",
+        "KIT-A15-F4-P4"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "CON-A26-F12",
+     "name": "Keep records and archive at project close",
+     "does": "Keep project records as long as the law and the contract ask, and archive the whole project read-only when it closes.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "CON-A26-F12-P1",
+       "name": "Retention rules",
+       "what": "Retention per folder and kind of record, with legal holds, through the kit's retention schedules (KIT-A18-F6-P1). Issue records keep the longstop period of the country pack (A11-F4-P5).",
+       "kind": "library",
+       "size": "small",
+       "depends_on": [
+        "CON-A26-F1-P1",
+        "KIT-A18-F6-P1",
+        "CON-A11-F4-P5"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A26-F12-P2",
+       "name": "Project close",
+       "what": "Closing a project moves everything to archived and read-only, and writes an archive copy in open formats (PDF/A, IFC and the project file) through the full export (A18-F7-P1, A11-F2-P5).",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "CON-A26-F12-P1",
+        "CON-A26-F4-P2",
+        "CON-A18-F7-P1",
+        "CON-A11-F2-P5"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "CON-A26-F13",
+     "name": "See who did what to every file",
+     "does": "See a full record of who opened, added, changed, moved, shared, approved and deleted every file.",
+     "priority": "core",
+     "parts": [
+      {
+       "id": "CON-A26-F13-P1",
+       "name": "File audit log",
+       "what": "Every file action is an operation, and opens and downloads are logged too, searchable and exportable in the kit's organisation audit log (KIT-A1-F7-P7).",
+       "kind": "library",
+       "size": "small",
+       "depends_on": [
+        "CON-A26-F1-P1",
+        "KIT-A1-F7-P7"
+       ],
        "piece": null
       }
      ]
