@@ -157,9 +157,9 @@ def cmd_release(pid, mode):
 
 
 def norm(pid):
-    m = re.fullmatch(r"([A-Za-z]{1,2})(\d\d)([A-Za-z]?)", pid.strip())
+    m = re.fullmatch(r"([A-Za-z]{1,4})(\d\d)([A-Za-z]?)", pid.strip())
     if not m:
-        sys.exit(f"{pid} doesn't look like a piece ID (for example A01, RD03 or A01b).")
+        sys.exit(f"{pid} doesn't look like a piece ID (for example A01, RD03, MUS01 or A01b).")
     return m.group(1).upper() + m.group(2) + m.group(3).lower()
 
 
