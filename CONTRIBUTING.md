@@ -28,3 +28,12 @@ Anyone can read Spareware. Only invited contributors can push work, and a person
 ## Talking with others
 
 Use [Discussions](https://github.com/spareware-co-op/spareware/discussions) for ideas, questions and introductions. Use issues for join requests and work pieces.
+
+## How trust grows
+
+1. **New contributor:** a member of the organisation. You can make branches and pull requests on any piece; everything you do is reviewed before it reaches `main`.
+2. **Trusted reviewer:** after a few merged pieces, your approvals count for your program.
+3. **Maintainer:** high trust, added to the owners team, so you can review the shared parts (the kit, the licence, the checks).
+4. **Owner:** runs the organisation.
+
+People move up as their merged work builds trust. Major changes still go to a vote of members.
