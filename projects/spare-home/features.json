@@ -1,7 +1,7 @@
 {
   "program": "spare-home",
   "name": "Spare Home",
-  "replaces": "Real estate agents' percentage commissions and the listing fees of the big property sites, such as Trade Me Property, realestate.co.nz and OneRoof",
+  "replaces": "Real estate agents' percentage commissions and the listing fees of the big property sites, such as, in New Zealand, Trade Me Property, realestate.co.nz and OneRoof",
   "summary": "Spare Home lets an owner sell their home themselves, with every service an agent's commission pays for available separately at a published price. It gives sellers and buyers the tools and never acts as anyone's agent.",
   "areas": [
     {
@@ -68,7 +68,7 @@
             {
               "id": "HOME-A1-F1-P5",
               "name": "Home's minimum age",
-              "what": "Declares Home's minimum age in the kit: 18 to list, offer or bid, the age at which a person in NZ can make a contract that binds them, while browsing needs no account.",
+              "what": "Declares Home's minimum age in the kit, set per country: in New Zealand, 18 to list, offer or bid, the age at which a person there can make a contract that binds them, while browsing needs no account.",
               "kind": "data",
               "size": "small",
               "depends_on": [
@@ -122,7 +122,7 @@
             {
               "id": "HOME-A1-F2-P4",
               "name": "Identity for people overseas",
-              "what": "Lets sellers and buyers who live outside NZ prove who they are in the first release, through their NZ lawyer's anti-money-laundering identity check or a provider that covers their country, instead of waiting for KIT-A2-F10, which is marked later. Every app with members overseas needs this, so it belongs in the kit.",
+              "what": "Lets sellers and buyers who live outside the country of the sale prove who they are in the first release, through their local lawyer's anti-money-laundering identity check or a provider that covers their country, instead of waiting for KIT-A2-F10, which is marked later. Every app with members overseas needs this, so it belongs in the kit.",
               "kind": "integration",
               "size": "medium",
               "depends_on": [
@@ -142,7 +142,7 @@
             {
               "id": "HOME-A1-F3-P1",
               "name": "Title and owner data terms",
-              "what": "Finds which LINZ title and owner datasets Spare Home may use, under which licence and at what cost, where the owner's postal address of record may lawfully come from, and the same for other countries' land registers. Done once with Spare Rent's title research (RENT-A1-F3-P3), and in one research piece with HOME-A2-F1-P3, HOME-A4-F1-P1 and HOME-A5-F3-P1.",
+              "what": "Finds which land register title and owner datasets Spare Home may use (example: LINZ in New Zealand), under which licence and at what cost, where the owner's postal address of record may lawfully come from, and the same for other countries' land registers. Done once with Spare Rent's title research (RENT-A1-F3-P3), and in one research piece with HOME-A2-F1-P3, HOME-A4-F1-P1 and HOME-A5-F3-P1.",
               "kind": "research",
               "size": "small",
               "depends_on": [],
@@ -511,7 +511,7 @@
             {
               "id": "HOME-A2-F1-P3",
               "name": "Open property data sources",
-              "what": "Lists the NZ open datasets for parcels, addresses, land area, building outlines, zoning, aerial imagery and rating values, with licences, costs and update rates. Done once with Spare Rent's parcel research for the shared property record, and in one research piece with HOME-A1-F3-P1, HOME-A4-F1-P1 and HOME-A5-F3-P1.",
+              "what": "Lists each country's open datasets, starting with New Zealand's, for parcels, addresses, land area, building outlines, zoning, aerial imagery and rating values, with licences, costs and update rates. Done once with Spare Rent's parcel research for the shared property record, and in one research piece with HOME-A1-F3-P1, HOME-A4-F1-P1 and HOME-A5-F3-P1.",
               "kind": "research",
               "size": "medium",
               "depends_on": [],
@@ -520,7 +520,7 @@
             {
               "id": "HOME-A2-F1-P4",
               "name": "Open data import",
-              "what": "Fills the record from LINZ and council data, showing the source and date beside every fact.",
+              "what": "Fills the record from land register and council data (example: LINZ in New Zealand), showing the source and date beside every fact.",
               "kind": "integration",
               "size": "medium",
               "depends_on": [
@@ -611,8 +611,8 @@
             },
             {
               "id": "HOME-A2-F3-P3",
-              "name": "GST status of the sale",
-              "what": "Records whether GST applies to the price, such as a new build sold by a registered developer, land sold between registered parties at zero rate, or a mixed-use block, and labels the price, for example 'plus GST if any'.",
+              "name": "Sales tax status of the sale",
+              "what": "Records whether sales tax applies to the price, such as, under New Zealand GST, a new build sold by a registered developer, land sold between registered parties at zero rate, or a mixed-use block, and labels the price, for example 'plus GST if any'.",
               "kind": "data",
               "size": "small",
               "depends_on": [
@@ -624,7 +624,7 @@
             {
               "id": "HOME-A2-F3-P4",
               "name": "Tax on home sales",
-              "what": "Sets out, with sources and a tax adviser's check, when GST applies to a home's price, including compulsory zero-rating between registered parties, residential land withholding tax for offshore sellers, the land transfer tax statement, and the income tax rules a seller should ask their accountant about, such as the bright-line test. One research piece for every tax question in Spare Home.",
+              "what": "Sets out, with sources and a tax adviser's check, when sales tax applies to a home's price in each country pack. For New Zealand that includes compulsory GST zero-rating between registered parties, residential land withholding tax for offshore sellers, the land transfer tax statement, and the income tax rules a seller should ask their accountant about, such as the bright-line test. One research piece for every tax question in Spare Home.",
               "kind": "research",
               "size": "small",
               "depends_on": [],
@@ -718,7 +718,7 @@
             {
               "id": "HOME-A2-F4-P5",
               "name": "Title notices check",
-              "what": "Flags caveats, notices of claim under the Property (Relationships) Act and other notices registered on the title, and tells the seller to see their lawyer before going live, since these can stop a sale late.",
+              "what": "Flags caveats, notices of claim by a partner (example: under New Zealand's Property (Relationships) Act) and other notices registered on the title, and tells the seller to see their lawyer before going live, since these can stop a sale late.",
               "kind": "library",
               "size": "small",
               "depends_on": [
@@ -771,7 +771,7 @@
             {
               "id": "HOME-A2-F6-P4",
               "name": "Tenure gate",
-              "what": "Blocks a listing whose tenure is not supported yet, such as Māori freehold land, company-share flats, licence to occupy and stratum in freehold, with a clear message on why and where to get help, and says that retirement-village units are out of scope.",
+              "what": "Blocks a listing whose tenure is not supported yet, such as, in New Zealand, Māori freehold land, company-share flats, licence to occupy and stratum in freehold, with a clear message on why and where to get help, and says that retirement-village units are out of scope.",
               "kind": "library",
               "size": "small",
               "depends_on": [
@@ -857,7 +857,7 @@
             {
               "id": "HOME-A2-F9-P2",
               "name": "Agency clause rules",
-              "what": "Confirms from the Real Estate Authority's standard clauses that an agent may claim commission on a private sale to a buyer they introduced within 6 months of the agency ending, or 12 months for rural.",
+              "what": "Confirms from each country's standard agency clauses whether an agent may claim commission on a private sale to a buyer they introduced; in New Zealand, the Real Estate Authority's standard clauses allow it within 6 months of the agency ending, or 12 months for rural.",
               "kind": "research",
               "size": "small",
               "depends_on": [],
@@ -900,14 +900,14 @@
         },
         {
           "id": "HOME-A2-F11",
-          "name": "List Māori freehold land and unusual tenures",
-          "does": "List Māori freehold land, company-share flats, licence to occupy and stratum in freehold, with the extra steps and disclosures each needs.",
+          "name": "List special and unusual tenures (example: Māori freehold land in New Zealand)",
+          "does": "List the special tenures each country pack supports, such as Māori freehold land, company-share flats, licence to occupy and stratum in freehold in New Zealand, with the extra steps and disclosures each needs.",
           "priority": "next",
           "parts": [
             {
               "id": "HOME-A2-F11-P1",
-              "name": "Selling Māori freehold land",
-              "what": "Sets out the extra legal steps for Māori land, such as offering to preferred groups first and Māori Land Court steps.",
+              "name": "Selling Māori freehold land (New Zealand pack)",
+              "what": "Sets out, in the New Zealand pack, the extra legal steps for Māori land, such as offering to preferred groups first and Māori Land Court steps.",
               "kind": "research",
               "size": "medium",
               "depends_on": [],
@@ -1692,7 +1692,7 @@
             {
               "id": "HOME-A5-F3-P4",
               "name": "Aerial photos and boundary lines",
-              "what": "Adds LINZ's open aerial imagery and property boundary lines to the kit's maps, so buyers can see a section's boundaries on an aerial photo. Spare Rent, Spare Stay and Spare Work need it too, so it belongs in the kit beside KIT-A7-F1.",
+              "what": "Adds open aerial imagery and property boundary lines from each country's land agency (example: LINZ in New Zealand) to the kit's maps, so buyers can see a section's boundaries on an aerial photo. Spare Rent, Spare Stay and Spare Work need it too, so it belongs in the kit beside KIT-A7-F1.",
               "kind": "integration",
               "size": "medium",
               "depends_on": [
@@ -1912,13 +1912,13 @@
         {
           "id": "HOME-A5-F11",
           "name": "See facts for investors",
-          "does": "See the current rent, when the tenancy ends and the Healthy Homes status of a tenanted home.",
+          "does": "See the current rent, when the tenancy ends and the rental standards status of a tenanted home (example: New Zealand's Healthy Homes standards).",
           "priority": "later",
           "parts": [
             {
               "id": "HOME-A5-F11-P1",
               "name": "Tenanted home facts",
-              "what": "Shows the current rent, the tenancy end date and Healthy Homes compliance status, shared within the tenancy and privacy rules.",
+              "what": "Shows the current rent, the tenancy end date and rental standards compliance status, shared within the tenancy and privacy rules.",
               "kind": "data",
               "size": "small",
               "depends_on": [
@@ -2860,7 +2860,7 @@
             {
               "id": "HOME-A9-F2-P1",
               "name": "Title ordering",
-              "what": "Orders the official record of title from LINZ and files it in the vault.",
+              "what": "Orders the official record of title from the land register (example: LINZ in New Zealand) and files it in the vault.",
               "kind": "integration",
               "size": "medium",
               "depends_on": [
@@ -3182,7 +3182,7 @@
             {
               "id": "HOME-A10-F2-P6",
               "name": "Standard agreement form licence",
-              "what": "Finds the copyright and licence terms of the standard NZ sale and purchase agreement form, so Spare Home never copies its text or layout into guides, templates or offer screens.",
+              "what": "Finds the copyright and licence terms of each country's standard sale and purchase agreement form (example: New Zealand's), so Spare Home never copies its text or layout into guides, templates or offer screens.",
               "kind": "research",
               "size": "small",
               "depends_on": [],
@@ -3255,7 +3255,7 @@
             {
               "id": "HOME-A10-F5-P1",
               "name": "Deadline and tender mode",
-              "what": "Keeps offers sealed until the set time, then opens them together for the seller, showing every deadline in NZ time from the kit's NZ country pack, including the Chatham Islands, and in the buyer's own time zone.",
+              "what": "Keeps offers sealed until the set time, then opens them together for the seller, showing every deadline in the property's own time zone from the kit's country pack (example: New Zealand time, including the Chatham Islands), and in the buyer's own time zone.",
               "kind": "library",
               "size": "medium",
               "depends_on": [
@@ -3383,7 +3383,7 @@
             {
               "id": "HOME-A10-F8-P2",
               "name": "Electronic signing of land contracts",
-              "what": "Answers one question for the kit's electronic signature rules research (KIT-A25-F1-P1): when electronic signatures are valid for land sale agreements in NZ and other countries, so the app records the lawyers' signed agreements correctly.",
+              "what": "Answers one question for the kit's electronic signature rules research (KIT-A25-F1-P1): when electronic signatures are valid for land sale agreements in each country, so the app records the lawyers' signed agreements correctly.",
               "kind": "research",
               "size": "small",
               "depends_on": [],
@@ -3455,7 +3455,7 @@
             {
               "id": "HOME-A11-F1-P2",
               "name": "Agreement day rules",
-              "what": "Adds only what the standard sale agreement defines on top of the kit's NZ public holidays, regional anniversary days and working days, such as the Christmas period it leaves out of working days, kept in the NZ rules pack.",
+              "what": "Adds only what each country's standard sale agreement defines on top of the kit's public holidays and working days, kept in that country's rules pack; for New Zealand, the regional anniversary days and the Christmas period the agreement leaves out of working days.",
               "kind": "data",
               "size": "small",
               "depends_on": [
@@ -3546,7 +3546,7 @@
             {
               "id": "HOME-A11-F2-P4",
               "name": "Trust account details checked another way",
-              "what": "Confirms a lawyer's trust account details through a channel that does not come from the account itself, such as a call-back to the firm's number as published on the Law Society register, and shows them as unchecked until then.",
+              "what": "Confirms a lawyer's trust account details through a channel that does not come from the account itself, such as a call-back to the firm's number as published on the lawyers' register (example: the New Zealand Law Society register), and shows them as unchecked until then.",
               "kind": "library",
               "size": "medium",
               "depends_on": [
@@ -3633,7 +3633,7 @@
             {
               "id": "HOME-A11-F5-P2",
               "name": "Change of address checklist",
-              "what": "Reminds both sides to move power, internet and other accounts and to update the electoral roll, which the law requires after a move, IRD and their driver licence address, with no paid referrals.",
+              "what": "Reminds both sides to move power, internet and other accounts and to update the electoral roll where the law requires it after a move, the tax office and their driver licence address, with no paid referrals.",
               "kind": "data",
               "size": "small",
               "depends_on": [
@@ -3664,7 +3664,7 @@
             {
               "id": "HOME-A11-F6-P1",
               "name": "Tenancy hand-over",
-              "what": "Guides the bond transfer through Tenancy Services, tells the tenant who the new owner is and when they take over, and helps the new owner give the tenant their name, contact details and address for service, as one flow shared with Spare Rent (RENT-A2-F8-P1) on the shared property record.",
+              "what": "Guides the bond transfer through the official body that holds it (example: New Zealand's Tenancy Services), tells the tenant who the new owner is and when they take over, and helps the new owner give the tenant their name, contact details and address for service, as one flow shared with Spare Rent (RENT-A2-F8-P1) on the shared property record.",
               "kind": "library",
               "size": "small",
               "depends_on": [
@@ -3678,7 +3678,7 @@
             {
               "id": "HOME-A11-F6-P2",
               "name": "Tenancy records to the buyer",
-              "what": "Passes the tenancy agreement, which the law requires, and with the seller's agreement the Healthy Homes records, insulation statement and condition report, to the buyer through the shared document vault, sharing only what the new landlord needs about the tenants.",
+              "what": "Passes the tenancy agreement, which the law requires, and with the seller's agreement the rental standards records (example: New Zealand's Healthy Homes records), insulation statement and condition report, to the buyer through the shared document vault, sharing only what the new landlord needs about the tenants.",
               "kind": "library",
               "size": "small",
               "depends_on": [
@@ -3753,7 +3753,7 @@
             {
               "id": "HOME-A11-F9-P2",
               "name": "Tax notes for the sale record",
-              "what": "Adds plain notes from the one tax research piece (HOME-A2-F3-P4) on what to ask an accountant, such as the bright-line test, to the sale record, without tax advice.",
+              "what": "Adds plain notes from the one tax research piece (HOME-A2-F3-P4) on what to ask an accountant, such as New Zealand's bright-line test, to the sale record, without tax advice.",
               "kind": "data",
               "size": "small",
               "depends_on": [
@@ -3793,7 +3793,7 @@
             {
               "id": "HOME-A11-F11-P1",
               "name": "Routes for sale disputes",
-              "what": "Points disputes about the sale to the parties' lawyers, the Disputes Tribunal and the courts, the Real Estate Authority for licensed agents, the Law Society for lawyers and the valuers' registration board, and says the member panel decides only service disputes. Shown in the kit's help centre, and added to the kit's outside routes (KIT-A11-F7-P1) when that is built.",
+              "what": "Points disputes about the sale to the parties' lawyers, the courts and each profession's regulator (in New Zealand: the Disputes Tribunal, the Real Estate Authority for licensed agents, the Law Society for lawyers and the valuers' registration board), and says the member panel decides only service disputes. Shown in the kit's help centre, and added to the kit's outside routes (KIT-A11-F7-P1) when that is built.",
               "kind": "data",
               "size": "small",
               "depends_on": [
@@ -4065,7 +4065,7 @@
             {
               "id": "HOME-A12-F7-P1",
               "name": "Advisers and brokers",
-              "what": "Adds mortgage advisers and insurance brokers to the catalogue, checked on the Financial Service Providers Register and for the licence financial advice law requires.",
+              "what": "Adds mortgage advisers and insurance brokers to the catalogue, checked on the financial services register (example: New Zealand's Financial Service Providers Register) and for the licence financial advice law requires.",
               "kind": "integration",
               "size": "small",
               "depends_on": [
@@ -4245,7 +4245,7 @@
             {
               "id": "HOME-A13-F3-P3",
               "name": "First-home steps",
-              "what": "Explains KiwiSaver first-home withdrawals, first-home schemes, and that banks use valuers from their own panel.",
+              "what": "Explains first-home savings withdrawals and first-home schemes in each country (example: KiwiSaver in New Zealand), and that banks use valuers from their own panel.",
               "kind": "data",
               "size": "small",
               "depends_on": [
@@ -4399,7 +4399,7 @@
             {
               "id": "HOME-A14-F2-P2",
               "name": "Seller of record for booked services",
-              "what": "Sets, on the kit's seller of record per app, who sells each service booked through Home, the professional or the co-op, which decides who charges GST, whose name is on the receipt and who answers a card dispute.",
+              "what": "Sets, on the kit's seller of record per app, who sells each service booked through Home, the professional or the co-op, which decides who charges sales tax, whose name is on the receipt and who answers a card dispute.",
               "kind": "library",
               "size": "small",
               "depends_on": [
@@ -4411,8 +4411,8 @@
             },
             {
               "id": "HOME-A14-F2-P3",
-              "name": "Services in the yearly IRD report",
-              "what": "Includes services booked through Home, such as photography, inspections and conveyancing, in the kit's yearly report of sellers' income to IRD under the digital platform reporting rules, as the kit's reporting rules settle which services and sellers are covered.",
+              "name": "Services in the yearly report to the tax office",
+              "what": "Includes services booked through Home, such as photography, inspections and conveyancing, in the kit's yearly report of sellers' income to the tax office (example: New Zealand's IRD) under the digital platform reporting rules, as the kit's reporting rules settle which services and sellers are covered.",
               "kind": "integration",
               "size": "small",
               "depends_on": [
@@ -4480,7 +4480,7 @@
         {
           "id": "HOME-A14-F4",
           "name": "Get proper invoices and receipts",
-          "does": "Get a GST invoice or receipt for every payment.",
+          "does": "Get a tax invoice or receipt for every payment.",
           "priority": "core",
           "parts": [
             {
@@ -4889,7 +4889,7 @@
             {
               "id": "HOME-A16-F4-P1",
               "name": "Privacy impact assessment",
-              "what": "A privacy impact assessment for Spare Home under NZ privacy law, done before launch, including the notice duty for details collected from someone else (IPP 3A, since 1 May 2026), redone for each new country, and added to the kit's register of assessments (KIT-A18-F10-P1) once that exists.",
+              "what": "A privacy impact assessment for Spare Home under each country's privacy law, done before launch, starting with New Zealand's, including its notice duty for details collected from someone else (IPP 3A, since 1 May 2026), redone for each new country, and added to the kit's register of assessments (KIT-A18-F10-P1) once that exists.",
               "kind": "legal",
               "size": "medium",
               "depends_on": [],
@@ -4922,7 +4922,7 @@
             {
               "id": "HOME-A16-F4-P4",
               "name": "Notices for details from others",
-              "what": "Tells people whose details Spare Home got from someone else, such as tenants named by a seller, owners and co-owners on the title, partners on a shared shortlist and lawyers named by a party, as IPP 3A requires.",
+              "what": "Tells people whose details Spare Home got from someone else, such as tenants named by a seller, owners and co-owners on the title, partners on a shared shortlist and lawyers named by a party, as privacy law requires (example: New Zealand's IPP 3A).",
               "kind": "library",
               "size": "small",
               "depends_on": [
@@ -4974,7 +4974,7 @@
             {
               "id": "HOME-A16-F6-P1",
               "name": "Rules-pack format for home sales",
-              "what": "Home's layer on the kit's NZ country pack, in a format able to hold required listing facts such as the UK's material information Parts A, B and C, disclosures, energy certificates, methods of sale, price display and underquoting rules, cooling-off periods, redress scheme membership, notary-led conveyancing, deeds registries as well as title registers, working-day rules, time zones for deadlines and auctions, and the agency line. It moves onto the kit's country packs (KIT-A19-F6-P1) when they are built.",
+              "what": "Home's layer on the kit's country packs, starting with New Zealand, in a format able to hold required listing facts such as the UK's material information Parts A, B and C, disclosures, energy certificates, methods of sale, price display and underquoting rules, cooling-off periods, redress scheme membership, notary-led conveyancing, deeds registries as well as title registers, working-day rules, time zones for deadlines and auctions, and the agency line. It moves onto the kit's country packs (KIT-A19-F6-P1) when they are built.",
               "kind": "library",
               "size": "large",
               "depends_on": [
@@ -5077,7 +5077,7 @@
             {
               "id": "HOME-A16-F9-P1",
               "name": "Trader status for sellers",
-              "what": "Asks whether a seller sells homes in trade and shows buyers the trader details the kit keeps, if the Commerce Commission's guidance on traders on platforms covers land listings (unverified).",
+              "what": "Asks whether a seller sells homes in trade and shows buyers the trader details the kit keeps, if the consumer regulator's guidance on traders on platforms covers land listings (example: New Zealand's Commerce Commission; unverified).",
               "kind": "library",
               "size": "small",
               "depends_on": [
@@ -5153,7 +5153,7 @@
         {
           "id": "HOME-A17-F2",
           "name": "Use it in your language",
-          "does": "Use Spare Home in English and te reo Māori, and find places typed with or without macrons.",
+          "does": "Use Spare Home in English and each launch country's own languages (example: te reo Māori in New Zealand), and find places typed with or without accents and macrons.",
           "priority": "core",
           "parts": [
             {
@@ -5169,8 +5169,8 @@
             },
             {
               "id": "HOME-A17-F2-P2",
-              "name": "Te reo Māori",
-              "what": "A full te reo Māori version, written with fluent speakers.",
+              "name": "Launch country languages (example: te reo Māori)",
+              "what": "A full version in each launch country's own languages, written with fluent speakers, starting with te reo Māori for New Zealand.",
               "kind": "data",
               "size": "medium",
               "depends_on": [
@@ -5317,7 +5317,7 @@
         {
           "id": "HOME-A17-F9",
           "name": "Read guides the easy way",
-          "does": "Read easy-read versions of the selling and buying guides, and watch the video guides in NZ Sign Language.",
+          "does": "Read easy-read versions of the selling and buying guides, and watch the video guides in the country's sign language (example: NZ Sign Language).",
           "priority": "later",
           "parts": [
             {
@@ -5335,8 +5335,8 @@
             },
             {
               "id": "HOME-A17-F9-P2",
-              "name": "NZ Sign Language video guides",
-              "what": "NZ Sign Language versions of the video guides.",
+              "name": "Sign language video guides",
+              "what": "Versions of the video guides in each country's sign language, starting with NZ Sign Language.",
               "kind": "data",
               "size": "medium",
               "depends_on": [
@@ -5416,7 +5416,7 @@
     {
       "id": "HOME-A18",
       "name": "Your data, AI and plugins",
-      "summary": "Members own their data and can take it with them, even in the middle of a sale. Everything a person can do, an AI agent or script can do through the same commands, inside the same agency guardrails, and a person confirms every high-risk command.",
+      "summary": "Members control their data and can take it with them, even in the middle of a sale. Everything a person can do, an AI agent or script can do through the same commands, inside the same agency guardrails, and a person confirms every high-risk command.",
       "features": [
         {
           "id": "HOME-A18-F1",
@@ -5802,7 +5802,7 @@
             {
               "id": "HOME-A19-F3-P4",
               "name": "Membership for one-time sellers and buyers",
-              "what": "Decides whether sellers and buyers must join the co-op to list or offer, and how many one-time sellers affect the co-operative test that transacting members hold at least 60% of voting rights.",
+              "what": "Decides what say one-time sellers and buyers get as free members, next to the past sellers and professionals who vote on Home's fees and rules.",
               "kind": "research",
               "size": "small",
               "depends_on": [
@@ -5994,7 +5994,7 @@
     "Are tenants told in writing, asked before anyone enters to take photos, value or inspect, and able to refuse photos of their belongings and open homes or auctions at the home?",
     "For units, are the body corporate statements given to buyers before they sign, and the later ones on time?",
     "Which parts depend on data we may not be allowed to use, such as sale prices and owner names, and what happens if we cannot get it?",
-    "Does it work with a screen reader, in te reo Māori, on a cheap phone, and offline at an open home with no signal?",
+    "Does it work with a screen reader, in each launch country's languages (example: te reo Māori), on a cheap phone, and offline at an open home with no signal?",
     "Is every New Zealand rule kept in a rules pack, so another country can be added without rewriting the app?",
     "Can a member export everything and delete their account, and is what the law makes us keep explained?",
     "Can an AI agent do everything a person can through the same commands, and is it held to the same limits?",

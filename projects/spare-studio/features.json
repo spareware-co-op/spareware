@@ -2,7 +2,7 @@
  "program": "spare-studio",
  "name": "Spare Studio",
  "replaces": "Adobe Creative Cloud: Photoshop, Illustrator, InDesign, InCopy, Premiere Pro, Media Encoder, After Effects, Lightroom, Lightroom Classic, Acrobat, Acrobat Sign, Audition, XD, Animate, Character Animator, Fresco, Bridge, Dreamweaver, Express, Firefly, Substance 3D, Dimension, Adobe Fonts, Adobe Stock, Frame.io and Behance",
- "summary": "One creative suite for photos, vectors, layout, video, motion, raw photos, PDF, audio, screens, animation and 3D, built on one shared studio core and the Spareware kit. Free to use, open formats, AI optional and at cost, and owned by its members.",
+ "summary": "One creative suite for photos, vectors, layout, video, motion, raw photos, PDF, audio, screens, animation and 3D, built on one shared studio core and the Spareware kit. Free to use and free to join, open formats, AI optional and at cost.",
  "areas": [
   {
    "id": "STU-A1",
@@ -160,13 +160,13 @@
     {
      "id": "STU-A1-F4",
      "name": "Join the co-op and have a say",
-     "does": "Become a member, read Spare Studio's proposals and vote on the matters Studio's members decide.",
+     "does": "Become a member for free, read Spare Studio's proposals and vote on the matters Studio's members decide.",
      "priority": "next",
      "parts": [
       {
        "id": "STU-A1-F4-P1",
        "name": "Join from the studio",
-       "what": "A link from every Studio app into the kit's join flow, which ties the account to a co-op membership and its share.",
+       "what": "A link from every Studio app into the kit's join flow, which ties the account to a free co-op membership.",
        "kind": "interface",
        "size": "small",
        "depends_on": [
@@ -615,7 +615,7 @@
       {
        "id": "STU-A2-F2-P1",
        "name": "Document presets",
-       "what": "Sizes for paper (ISO and US), screens, social formats and video, with A4 and metric units first in New Zealand.",
+       "what": "Sizes for paper (ISO and US), screens, social formats and video, with each country's default first, such as A4 and metric units in New Zealand.",
        "kind": "data",
        "size": "small",
        "depends_on": [],
@@ -1215,7 +1215,7 @@
       {
        "id": "STU-A3-F2-P2",
        "name": "Spelling and hyphenation dictionaries",
-       "what": "Open dictionaries per language, te reo Māori and English (New Zealand) first, each licence checked, kept in engine-text so Spare Office, Spare OS and Spare Construct use the same ones.",
+       "what": "Open dictionaries per language, starting with the example country's (for New Zealand: English and te reo Māori), each licence checked, kept in engine-text so Spare Office, Spare OS and Spare Construct use the same ones.",
        "kind": "data",
        "size": "medium",
        "depends_on": [
@@ -5458,7 +5458,7 @@
       {
        "id": "STU-A12-F6-P1",
        "name": "Signature law overseas",
-       "what": "What Australia, the EU and the US add to the kit's New Zealand signature rules, for members who sign with people overseas.",
+       "what": "What Australia, the EU and the US add to the kit's signature rules, which start with New Zealand's, for members who sign with people in other countries.",
        "kind": "legal",
        "size": "small",
        "depends_on": [
@@ -6611,8 +6611,8 @@
       },
       {
        "id": "STU-A16-F1-P8",
-       "name": "Te reo Māori model rules",
-       "what": "Rules for te reo Māori speech and translation models: Māori data sovereignty, model terms such as Te Hiku Media's Kaitiakitanga licence, and review by fluent speakers.",
+       "name": "Indigenous language model rules",
+       "what": "Rules for speech and translation models in indigenous languages, starting with te reo Māori in New Zealand: indigenous data sovereignty, model terms such as Te Hiku Media's Kaitiakitanga licence, and review by fluent speakers.",
        "kind": "legal",
        "size": "medium",
        "depends_on": [
@@ -6945,7 +6945,7 @@
       {
        "id": "STU-A17-F1-P1",
        "name": "Studio files in co-op storage",
-       "what": "Studio files and their history in the kit's file service and storage at cost, kept in New Zealand first and in other regions where the law asks.",
+       "what": "Studio files and their history in the kit's file service and storage at cost, kept in the regions the co-op runs, starting with New Zealand, and in other regions where the law asks.",
        "kind": "service",
        "size": "medium",
        "depends_on": [
@@ -7515,7 +7515,7 @@
   {
    "id": "STU-A19",
    "name": "Accessibility, languages, devices and offline",
-   "summary": "Every app works for everyone, in their own language, on the computer or tablet they already have, with or without the internet. New Zealand first, international by design.",
+   "summary": "Every app works for everyone, in their own language, on the computer or tablet they already have, with or without the internet. International by design, with New Zealand as the first example country.",
    "features": [
     {
      "id": "STU-A19-F1",
@@ -7653,7 +7653,7 @@
     {
      "id": "STU-A19-F3",
      "name": "Use the apps in their language",
-     "does": "Use the apps in te reo Māori, English and many other languages, including right-to-left languages.",
+     "does": "Use the apps in many languages, starting with the example country's (for New Zealand: English and te reo Māori), including right-to-left languages.",
      "priority": "core",
      "parts": [
       {
@@ -7681,7 +7681,7 @@
       {
        "id": "STU-A19-F3-P3",
        "name": "Studio in member translation",
-       "what": "Studio's strings in the kit's member translation workflow, te reo Māori first.",
+       "what": "Studio's strings in the kit's member translation workflow, starting with the example country's languages (for New Zealand: te reo Māori).",
        "kind": "service",
        "size": "small",
        "depends_on": [
@@ -7704,7 +7704,7 @@
       {
        "id": "STU-A19-F3-P5",
        "name": "Help in every language",
-       "what": "Translates manuals, the learning centre, templates and tutorial video captions, te reo Māori first, with New Zealand Sign Language for key steps.",
+       "what": "Translates manuals, the learning centre, templates and tutorial video captions, starting with the example country's languages (for New Zealand: te reo Māori), with sign language for key steps, such as New Zealand Sign Language.",
        "kind": "data",
        "size": "large",
        "depends_on": [
@@ -7881,7 +7881,7 @@
       {
        "id": "STU-A20-F1-P1",
        "name": "Studio privacy duties",
-       "what": "What the Privacy Act 2020 and the GDPR add for Studio's own data, such as face groups, client work in cloud files and AI processing, on top of the kit's privacy duties.",
+       "what": "What each country's privacy law, such as New Zealand's Privacy Act 2020 and the EU's GDPR, adds for Studio's own data, such as face groups, client work in cloud files and AI processing, on top of the kit's privacy duties.",
        "kind": "legal",
        "size": "medium",
        "depends_on": [
@@ -8225,7 +8225,7 @@
   "Are the shared engines (render, 2D drawing, text, PDF, media) shared with Spare Construct, Spare Office and Spare Social rather than copied?",
   "Does the at-cost model add up: what stays free, what do storage, AI and video processing cost a member each month, and does paying after use against a monthly cap keep the co-op from ever holding members' money?",
   "Is the AI policy clear enough to build on: off by default, the member's choice of model, labelled, and never trained on members' work without consent (piece S07)?",
-  "Are accessibility, te reo Māori and offline work treated as core, not as extras for later?",
+  "Are accessibility, offline work and many languages, starting with the example country's (for New Zealand: English and te reo Māori), treated as core, not as extras for later?",
   "Does anything in the demo or the map copy Adobe's interface designs, icons or names beyond saying what we replace?",
   "Is the split with Spare Market right: Studio browses, installs and sends assets to sell, while listings, orders, tax, payouts and seller rules live in Spare Market?",
   "Which large parts are the riskiest, and does each have a research or decision piece before building starts?",

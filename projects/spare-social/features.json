@@ -2,7 +2,7 @@
  "program": "spare-social",
  "name": "Spare Social",
  "replaces": "TikTok, YouTube, Instagram and Facebook",
- "summary": "One members-owned app for short videos, long videos and channels, photos and stories, posts, groups, events, messages and live streams. It runs at cost with no adverts, feeds people choose with published rules, removal of only what the law requires, and open protocols so members can take their followers anywhere.",
+ "summary": "One app, free to join, for short videos, long videos and channels, photos and stories, posts, groups, events, messages and live streams. It runs at cost with no adverts, feeds people choose with published rules, removal of only what the law requires, and open protocols so members can take their followers anywhere.",
  "areas": [
   {
    "id": "SOC-A1",
@@ -149,7 +149,7 @@
       {
        "id": "SOC-A1-F3-P3",
        "name": "Organisation check",
-       "what": "Uses the kit's business number and Charities Register checks (KIT-A2-F7-P1, KIT-A2-F7-P3).",
+       "what": "Uses the kit's business number and charities register checks (KIT-A2-F7-P1, KIT-A2-F7-P3).",
        "kind": "integration",
        "size": "small",
        "depends_on": [
@@ -592,7 +592,7 @@
       {
        "id": "SOC-A2-F7-P2",
        "name": "Emergency source research",
-       "what": "How to learn of declared emergencies from official NZ and overseas sources whose terms allow it.",
+       "what": "How to learn of declared emergencies from official sources in each country, starting with New Zealand's, whose terms allow it.",
        "kind": "research",
        "size": "small",
        "depends_on": [],
@@ -1579,7 +1579,7 @@
       {
        "id": "SOC-A5-F4-P3",
        "name": "Music licensing",
-       "what": "What licences are needed in NZ and overseas for members to use commercial music, and what they cost at cost.",
+       "what": "What licences are needed in each country, starting with New Zealand, for members to use commercial music, and what they cost at cost.",
        "kind": "legal",
        "size": "large",
        "depends_on": [],
@@ -2529,7 +2529,7 @@
       {
        "id": "SOC-A8-F2-P6",
        "name": "Admins' legal guide",
-       "what": "Plain guidance for group and page admins on when they can be liable for others' comments they know about, as in NZ's Murray v Wishart and Australia's Voller case.",
+       "what": "Plain guidance for group and page admins on when they can be liable for others' comments they know about, as in New Zealand's Murray v Wishart and Australia's Voller case.",
        "kind": "legal",
        "size": "small",
        "depends_on": [],
@@ -2742,7 +2742,7 @@
       {
        "id": "SOC-A8-F6-P2",
        "name": "Fundraising law",
-       "what": "NZ rules for charitable fundraising, receipts and tax credits, and overseas rules.",
+       "what": "Each country's rules for charitable fundraising, receipts and tax relief, starting with New Zealand's donation tax credits.",
        "kind": "legal",
        "size": "medium",
        "depends_on": [],
@@ -2751,7 +2751,7 @@
       {
        "id": "SOC-A8-F6-P3",
        "name": "Charity check",
-       "what": "Confirms a charity on the NZ Charities Register before its fundraiser opens, using the kit's Charities Register check (KIT-A2-F7-P3).",
+       "what": "Confirms a charity on its country's charities register (example: New Zealand's Charities Register) before its fundraiser opens, using the kit's charities register check (KIT-A2-F7-P3).",
        "kind": "integration",
        "size": "small",
        "depends_on": [
@@ -3094,7 +3094,7 @@
       {
        "id": "SOC-A9-F7-P3",
        "name": "Lawful access and encryption",
-       "what": "What NZ and overseas law asks of an encrypted messaging service, and what it cannot ask.",
+       "what": "What each country's law asks of an encrypted messaging service, starting with New Zealand's, and what it cannot ask.",
        "kind": "legal",
        "size": "medium",
        "depends_on": [],
@@ -3527,8 +3527,8 @@
     },
     {
      "id": "SOC-A10-F6",
-     "name": "Local and NZ feeds",
-     "does": "See posts and events from your town, region or all of NZ if you share a rough location.",
+     "name": "Local and country feeds",
+     "does": "See posts and events from your town, region or whole country if you share a rough location.",
      "priority": "next",
      "parts": [
       {
@@ -4028,7 +4028,7 @@
     {
      "id": "SOC-A12-F6",
      "name": "Help when you are harassed",
-     "does": "Clear abusive comments in bulk, keep evidence, and get help from Netsafe or the police.",
+     "does": "Clear abusive comments in bulk, keep evidence, and get help from an online safety agency, such as Netsafe in New Zealand, or the police.",
      "priority": "core",
      "parts": [
       {
@@ -4045,7 +4045,7 @@
       {
        "id": "SOC-A12-F6-P2",
        "name": "Evidence export",
-       "what": "Save a dated record of abusive posts and messages to give to Netsafe or the police.",
+       "what": "Save a dated record of abusive posts and messages to give to an online safety agency, such as Netsafe in New Zealand, or the police.",
        "kind": "service",
        "size": "small",
        "depends_on": [
@@ -4140,7 +4140,7 @@
       {
        "id": "SOC-A13-F2-P2",
        "name": "Rules mapped to the law",
-       "what": "For each rule, the NZ law (or overseas law for overseas members) that requires it.",
+       "what": "For each rule, the law in each member's country that requires it, starting with New Zealand's.",
        "kind": "research",
        "size": "medium",
        "depends_on": [
@@ -4151,7 +4151,7 @@
       {
        "id": "SOC-A13-F2-P3",
        "name": "Election period rules",
-       "what": "NZ election advertising rules and what they mean for posts during an election period.",
+       "what": "Each country's election advertising rules, starting with New Zealand's, and what they mean for posts during an election period.",
        "kind": "research",
        "size": "small",
        "depends_on": [],
@@ -4199,8 +4199,8 @@
       },
       {
        "id": "SOC-A13-F3-P2",
-       "name": "NZ legal duties",
-       "what": "What NZ requires and how fast: objectionable material and DIA take-down notices, the Harmful Digital Communications Act 2015 (intimate images, and its safe harbour of passing a complaint to the author within 48 hours), court orders, fraud and scams, illegal sales such as arms and drugs, incitement under the Human Rights Act 1993, privacy, defamation and copyright.",
+       "name": "Legal duties in each country",
+       "what": "What each country requires and how fast, starting with New Zealand: objectionable material and DIA take-down notices, the Harmful Digital Communications Act 2015 (intimate images, and its safe harbour of passing a complaint to the author within 48 hours), court orders, fraud and scams, illegal sales such as arms and drugs, incitement under the Human Rights Act 1993, privacy, defamation and copyright.",
        "kind": "research",
        "size": "large",
        "depends_on": [],
@@ -4209,7 +4209,7 @@
       {
        "id": "SOC-A13-F3-P3",
        "name": "Overseas legal duties",
-       "what": "Duties for overseas members, such as the EU Digital Services Act, the UK Online Safety Act and Australia's Online Safety Act.",
+       "what": "Duties in other countries, such as the EU Digital Services Act, the UK Online Safety Act and Australia's Online Safety Act.",
        "kind": "research",
        "size": "large",
        "depends_on": [],
@@ -4240,8 +4240,8 @@
       },
       {
        "id": "SOC-A13-F3-P6",
-       "name": "NZ court orders",
-       "what": "Name suppression breaches, take-down orders under the 2019 contempt of court law and Harmful Digital Communications Act orders handled fast and limited to NZ where the order is, each logged without repeating the suppressed detail.",
+       "name": "Court orders",
+       "what": "Court orders handled fast and limited to the country where the order applies, each logged without repeating the suppressed detail, such as New Zealand's name suppression breaches, take-down orders under its 2019 contempt of court law and Harmful Digital Communications Act orders.",
        "kind": "service",
        "size": "small",
        "depends_on": [
@@ -4264,7 +4264,7 @@
       {
        "id": "SOC-A13-F3-P8",
        "name": "Legal deadline clock and on-call cover",
-       "what": "A clock for each kind of notice (Harmful Digital Communications Act 48 hours, eSafety 24 hours, US TAKE IT DOWN Act 48 hours, DIA take-down notices and live terror content as soon as reasonably practicable), an on-call rota across time zones, and alerts before any deadline is missed.",
+       "what": "A clock for each kind of notice (New Zealand's Harmful Digital Communications Act 48 hours, Australia's eSafety 24 hours, US TAKE IT DOWN Act 48 hours, New Zealand's DIA take-down notices and live terror content as soon as reasonably practicable), an on-call rota across time zones, and alerts before any deadline is missed.",
        "kind": "service",
        "size": "medium",
        "depends_on": [
@@ -4321,7 +4321,7 @@
       {
        "id": "SOC-A13-F4-P1",
        "name": "Notice and counter-notice",
-       "what": "Notice and counter-notice forms for posts and videos, tracked on the kit's legal notice deadlines (KIT-A10-F9-P2) and sharing forms with the kit's listing notices (KIT-A10-F21-P2), fitting the NZ Copyright Act 1994 and the US notice process.",
+       "what": "Notice and counter-notice forms for posts and videos, tracked on the kit's legal notice deadlines (KIT-A10-F9-P2) and sharing forms with the kit's listing notices (KIT-A10-F21-P2), fitting each country's notice rules, such as New Zealand's Copyright Act 1994 and the US notice process.",
        "kind": "integration",
        "size": "medium",
        "depends_on": [
@@ -4485,7 +4485,7 @@
       {
        "id": "SOC-A13-F7-P5",
        "name": "Handling objectionable material lawfully",
-       "what": "A legal basis for moderators handling objectionable material, which is an offence to possess in NZ: hash matches go straight to DIA, and a person sees such material only when they must, blurred first, with every view logged.",
+       "what": "A legal basis for moderators handling objectionable material, which is an offence to possess in many countries: hash matches go straight to the country's authority (example: New Zealand's DIA), and a person sees such material only when they must, blurred first, with every view logged.",
        "kind": "legal",
        "size": "medium",
        "depends_on": [
@@ -4497,7 +4497,7 @@
       {
        "id": "SOC-A13-F7-P6",
        "name": "Moderators' status and safety duties",
-       "what": "Whether paid moderators are employees or contractors, how their pay is taxed, and the co-op's health and safety duties to every moderator, volunteers included, under the Health and Safety at Work Act 2015.",
+       "what": "Whether paid moderators are employees or contractors, how their pay is taxed, and the co-op's health and safety duties to every moderator, volunteers included, under each country's workplace safety law (example: New Zealand's Health and Safety at Work Act 2015).",
        "kind": "legal",
        "size": "medium",
        "depends_on": [
@@ -4601,7 +4601,7 @@
       {
        "id": "SOC-A13-F10-P2",
        "name": "Removal within 48 hours",
-       "what": "Removes the image and known copies within 48 hours, as the US TAKE IT DOWN Act requires since 19 May 2026, and faster where NZ's Harmful Digital Communications Act or Australia's eSafety Commissioner asks.",
+       "what": "Removes the image and known copies within 48 hours, as the US TAKE IT DOWN Act requires since 19 May 2026, and faster where New Zealand's Harmful Digital Communications Act or Australia's eSafety Commissioner asks.",
        "kind": "service",
        "size": "medium",
        "depends_on": [
@@ -4664,7 +4664,7 @@
       {
        "id": "SOC-A13-F12-P1",
        "name": "Privacy complaints about people shown",
-       "what": "A complaint path for bystanders, children and anyone else shown in someone else's photo or video, tested against the Privacy Act 2020 and the Harmful Digital Communications Act principles, with blurring offered before removal where that is enough.",
+       "what": "A complaint path for bystanders, children and anyone else shown in someone else's photo or video, tested against each country's privacy and online harm law (example: New Zealand's Privacy Act 2020 and Harmful Digital Communications Act principles), with blurring offered before removal where that is enough.",
        "kind": "service",
        "size": "small",
        "depends_on": [
@@ -4678,13 +4678,13 @@
     {
      "id": "SOC-A13-F13",
      "name": "Safety bodies heard fast, decisions checked",
-     "does": "Know reports from recognised safety bodies such as Netsafe, DIA and eSafety are reviewed first, and that a sample of decisions gets a second look.",
+     "does": "Know reports from recognised safety bodies such as Netsafe and DIA in New Zealand and eSafety in Australia are reviewed first, and that a sample of decisions gets a second look.",
      "priority": "next",
      "parts": [
       {
        "id": "SOC-A13-F13-P1",
        "name": "Trusted flaggers",
-       "what": "A priority queue for recognised safety bodies, such as Netsafe (NZ's approved agency under the Harmful Digital Communications Act), DIA and eSafety, on the kit's trusted flaggers (KIT-A10-F17-P1), which must move up to next for this.",
+       "what": "A priority queue for recognised safety bodies, such as Netsafe (New Zealand's approved agency under the Harmful Digital Communications Act), New Zealand's DIA and Australia's eSafety, on the kit's trusted flaggers (KIT-A10-F17-P1), which must move up to next for this.",
        "kind": "integration",
        "size": "small",
        "depends_on": [
@@ -4777,7 +4777,7 @@
       {
        "id": "SOC-A14-F1-P3",
        "name": "Minimum-age law research",
-       "what": "Australia's under-16 law, NZ's minimum age bill introduced in August 2026 (passage unverified), and UK and EU child rules.",
+       "what": "Australia's under-16 law, New Zealand's minimum age bill introduced in August 2026 (passage unverified), and UK and EU child rules.",
        "kind": "research",
        "size": "medium",
        "depends_on": [],
@@ -4797,7 +4797,7 @@
       {
        "id": "SOC-A14-F1-P5",
        "name": "Biometric code for faces",
-       "what": "Facial age estimation, face blurring and any face or person detection meet NZ's Biometric Processing Privacy Code (issued 2025, amended 2026; start dates to be checked), building on the kit's compliance work (KIT-A2-F1-P4).",
+       "what": "Facial age estimation, face blurring and any face or person detection meet each country's biometric rules, such as New Zealand's Biometric Processing Privacy Code (issued 2025, amended 2026; start dates to be checked), building on the kit's compliance work (KIT-A2-F1-P4).",
        "kind": "legal",
        "size": "small",
        "depends_on": [
@@ -4912,13 +4912,13 @@
     {
      "id": "SOC-A14-F5",
      "name": "Help in a crisis",
-     "does": "When someone searches for or posts about self-harm, they see local help such as 1737 in NZ, and anyone can flag a person at risk.",
+     "does": "When someone searches for or posts about self-harm, they see local help such as 1737 in New Zealand, and anyone can flag a person at risk.",
      "priority": "core",
      "parts": [
       {
        "id": "SOC-A14-F5-P1",
        "name": "Help resources per country",
-       "what": "Uses the kit's helplines for each country (KIT-A10-F1-P3), such as 1737 in NZ, kept current.",
+       "what": "Uses the kit's helplines for each country (KIT-A10-F1-P3), such as 1737 in New Zealand, kept current.",
        "kind": "integration",
        "size": "small",
        "depends_on": [
@@ -4949,7 +4949,7 @@
       {
        "id": "SOC-A14-F6-P1",
        "name": "Children's space research",
-       "what": "What the law allows for under-13s in NZ and overseas, and whether the co-op should offer it at all.",
+       "what": "What the law allows for under-13s in each country, starting with New Zealand, and whether the co-op should offer it at all.",
        "kind": "research",
        "size": "medium",
        "depends_on": [],
@@ -5029,7 +5029,7 @@
       {
        "id": "SOC-A14-F9-P1",
        "name": "Children's risk assessment",
-       "what": "A child safety risk assessment for each feature, as the UK Online Safety Act requires and NZ's Online Safety (Minimum Age and Child Safety Risk Assessment) Bill proposes (introduced 24 August 2026; passage unverified), refreshed when features change.",
+       "what": "A child safety risk assessment for each feature, as the UK Online Safety Act requires and New Zealand's Online Safety (Minimum Age and Child Safety Risk Assessment) Bill proposes (introduced 24 August 2026; passage unverified), refreshed when features change.",
        "kind": "legal",
        "size": "medium",
        "depends_on": [
@@ -5249,13 +5249,13 @@
     {
      "id": "SOC-A15-F5",
      "name": "Tax done right",
-     "does": "Get the tax summaries you need, with GST handled where the platform must collect it.",
+     "does": "Get the tax summaries you need, with sales tax handled where the platform must collect it (example: New Zealand GST).",
      "priority": "next",
      "parts": [
       {
        "id": "SOC-A15-F5-P1",
        "name": "Tax research for creator payments",
-       "what": "Which of the kit's tax rules apply to creator payments: GST on digital services, who is the seller of record (KIT-A3-F1-P5), income reporting to IRD and overseas tax; needs a tax adviser's view.",
+       "what": "Which of the kit's tax rules apply to creator payments: sales tax on digital services (example: New Zealand GST), who is the seller of record (KIT-A3-F1-P5), income reporting to the tax office (example: New Zealand's IRD) and tax in other countries; needs a tax adviser's view.",
        "kind": "research",
        "size": "medium",
        "depends_on": [
@@ -5267,7 +5267,7 @@
       {
        "id": "SOC-A15-F5-P2",
        "name": "Tax summaries",
-       "what": "Yearly and on-demand summaries for creators from the kit's statements and IRD reporting (KIT-A4-F4-P1, KIT-A4-F3-P3).",
+       "what": "Yearly and on-demand summaries for creators from the kit's statements and tax office reporting (KIT-A4-F4-P1, KIT-A4-F3-P3).",
        "kind": "integration",
        "size": "small",
        "depends_on": [
@@ -5278,8 +5278,8 @@
       },
       {
        "id": "SOC-A15-F5-P3",
-       "name": "GST as the deemed supplier",
-       "what": "Where NZ GST law treats the co-op as the supplier of remote services sold through Spare Social, such as memberships and paid videos from offshore creators to NZ consumers (GST Act section 60C), works out, collects, invoices and returns the GST; until overseas tax is handled (SOC-A15-F13), paid content is sold only to NZ buyers. Needs a tax adviser's view.",
+       "name": "Sales tax as the deemed supplier (example: New Zealand GST)",
+       "what": "Where a country's sales tax law treats the co-op as the supplier of remote services sold through Spare Social, works out, collects, invoices and returns the tax. In New Zealand, the first country pack, that covers memberships and paid videos from offshore creators to New Zealand consumers (GST Act section 60C). Until tax in other countries is handled (SOC-A15-F13), paid content is sold only to buyers in countries whose pack handles it, starting with New Zealand. Needs a tax adviser's view.",
        "kind": "service",
        "size": "medium",
        "depends_on": [
@@ -5311,7 +5311,7 @@
       {
        "id": "SOC-A15-F6-P2",
        "name": "Advertising rules research",
-       "what": "NZ Advertising Standards rules for influencers and overseas equivalents.",
+       "what": "Advertising standards rules for influencers in each country, starting with New Zealand's.",
        "kind": "research",
        "size": "small",
        "depends_on": [],
@@ -5320,7 +5320,7 @@
       {
        "id": "SOC-A15-F6-P3",
        "name": "Promotion the law bans",
-       "what": "Sponsored posts for things NZ law bans promoting, such as vaping and tobacco products, offshore gambling and some medicines, are not allowed even with a label, and election posts carry the promoter statement the Electoral Act asks for.",
+       "what": "Sponsored posts for things a country's law bans promoting are not allowed even with a label, such as vaping and tobacco products, offshore gambling and some medicines in New Zealand, and election posts carry the promoter statement the law asks for (example: New Zealand's Electoral Act).",
        "kind": "legal",
        "size": "small",
        "depends_on": [
@@ -5455,7 +5455,7 @@
       {
        "id": "SOC-A15-F11-P3",
        "name": "Anti-money-laundering and sanctions",
-       "what": "Whether DIA's anti-money-laundering rules for online marketplaces cover creator tips and memberships (unverified), under the kit's programme (KIT-A4-F5-P1), and sanctions screening of payouts through the provider (KIT-A4-F8-P1).",
+       "what": "Whether anti-money-laundering rules for online marketplaces cover creator tips and memberships (example: New Zealand's DIA rules; unverified), under the kit's programme (KIT-A4-F5-P1), and sanctions screening of payouts through the provider (KIT-A4-F8-P1).",
        "kind": "legal",
        "size": "small",
        "depends_on": [
@@ -5882,7 +5882,7 @@
       {
        "id": "SOC-A17-F4-P2",
        "name": "Delivery network choice",
-       "what": "Compare co-op caches, delivery networks bought at cost and member servers on cost and reach in NZ and overseas.",
+       "what": "Compare co-op caches, delivery networks bought at cost and member servers on cost and reach in each country.",
        "kind": "research",
        "size": "medium",
        "depends_on": [],
@@ -5933,7 +5933,7 @@
       {
        "id": "SOC-A17-F5-P1",
        "name": "Speech to text",
-       "what": "Speech recognition through the kit's captions (KIT-A19-F4-P1): an openly licensed model run at cost, te reo Māori and English first.",
+       "what": "Speech recognition through the kit's captions (KIT-A19-F4-P1): an openly licensed model run at cost, in many languages, starting with the example country's (for New Zealand: English and te reo Māori).",
        "kind": "integration",
        "size": "medium",
        "depends_on": [
@@ -6444,7 +6444,7 @@
       {
        "id": "SOC-A19-F4-P1",
        "name": "Privacy request desk",
-       "what": "Access, correction and deletion requests through the kit's privacy page and request clock (KIT-A18-F3-P1, KIT-A18-F3-P2), tracked against the Privacy Act 2020 deadlines and overseas rules.",
+       "what": "Access, correction and deletion requests through the kit's privacy page and request clock (KIT-A18-F3-P1, KIT-A18-F3-P2), tracked against each country's deadlines (example: New Zealand's Privacy Act 2020).",
        "kind": "integration",
        "size": "small",
        "depends_on": [
@@ -6480,7 +6480,7 @@
       {
        "id": "SOC-A19-F4-P4",
        "name": "Notices for data from others",
-       "what": "Notices under privacy principle 3A, in force since 1 May 2026, for data about people collected from others, such as uploaded contacts, tags and mentions of non-members, using the kit's collection notices (KIT-A18-F5-P1).",
+       "what": "Notices under each country's privacy law (example: New Zealand's principle 3A, in force since 1 May 2026), for data about people collected from others, such as uploaded contacts, tags and mentions of non-members, using the kit's collection notices (KIT-A18-F5-P1).",
        "kind": "legal",
        "size": "small",
        "depends_on": [
@@ -6522,7 +6522,7 @@
     {
      "id": "SOC-A19-F6",
      "name": "Data kept in the right place",
-     "does": "Know your data is stored in NZ first, or in your region where your law asks.",
+     "does": "Know where your data is stored: in the regions the co-op runs, starting with New Zealand, or in your own region where your law asks.",
      "priority": "core",
      "parts": [
       {
@@ -6906,7 +6906,7 @@
   {
    "id": "SOC-A21",
    "name": "Accessibility and languages",
-   "summary": "Usable by everyone: screen readers and keyboards, alt text and descriptions, captions styled your way, comfort settings, flashing warnings, the interface in English and te reo Māori first then many languages, NZ Sign Language, translation of posts, and local formats.",
+   "summary": "Usable by everyone: screen readers and keyboards, alt text and descriptions, captions styled your way, comfort settings, flashing warnings, the interface in many languages, starting with the example country's (for New Zealand: English and te reo Māori), sign language such as New Zealand Sign Language, translation of posts, and local formats.",
    "features": [
     {
      "id": "SOC-A21-F1",
@@ -7025,7 +7025,7 @@
     {
      "id": "SOC-A21-F5",
      "name": "Your language",
-     "does": "Use the interface in English, te reo Māori and many other languages, including right-to-left scripts.",
+     "does": "Use the interface in many languages, starting with the example country's (for New Zealand: English and te reo Māori), including right-to-left scripts.",
      "priority": "core",
      "parts": [
       {
@@ -7041,8 +7041,8 @@
       },
       {
        "id": "SOC-A21-F5-P2",
-       "name": "Te reo Māori translation",
-       "what": "Te reo Māori translation by fluent speakers, paid fairly, with a glossary agreed with them, through the kit's member translation (KIT-A19-F1-P3).",
+       "name": "Fluent speaker translation",
+       "what": "Translation of the example country's languages by fluent speakers, paid fairly, with a glossary agreed with them, starting with te reo Māori for New Zealand, through the kit's member translation (KIT-A19-F1-P3).",
        "kind": "data",
        "size": "medium",
        "depends_on": [
@@ -7138,14 +7138,14 @@
     },
     {
      "id": "SOC-A21-F9",
-     "name": "NZ Sign Language",
-     "does": "Watch videos and lives with an NZ Sign Language interpreter in a small window, and mark posts as NZ Sign Language.",
+     "name": "Sign language",
+     "does": "Watch videos and lives with a sign language interpreter in a small window, and mark posts as sign language, such as New Zealand Sign Language.",
      "priority": "later",
      "parts": [
       {
        "id": "SOC-A21-F9-P1",
        "name": "Interpreter window",
-       "what": "A second video track for an NZ Sign Language interpreter, shown picture-in-picture in videos and live streams.",
+       "what": "A second video track for a sign language interpreter, such as for New Zealand Sign Language, shown picture-in-picture in videos and live streams.",
        "kind": "library",
        "size": "medium",
        "depends_on": [
@@ -7156,8 +7156,8 @@
       },
       {
        "id": "SOC-A21-F9-P2",
-       "name": "NZ Sign Language as a post language",
-       "what": "NZ Sign Language as a language posts can carry, for filters and search, alongside the kit's NZ Sign Language versions of key screens (KIT-A19-F8-P1).",
+       "name": "Sign language as a post language",
+       "what": "Each sign language, such as New Zealand Sign Language, as a language posts can carry, for filters and search, alongside the kit's sign language versions of key screens (KIT-A19-F8-P1).",
        "kind": "data",
        "size": "small",
        "depends_on": [
@@ -7173,7 +7173,7 @@
   {
    "id": "SOC-A22",
    "name": "Running the co-op: rules, costs, admin and support",
-   "summary": "How members run Spare Social: who belongs and votes, protected core promises, the open cost ledger for storage and bandwidth, covering video costs fairly, help and support, running the servers safely, the legal set-up, insurance and overseas duties, and measuring performance.",
+   "summary": "How members run Spare Social: who belongs and votes, protected core promises, the open cost ledger for storage and bandwidth, covering video costs fairly, help and support, running the servers safely, the legal set-up, insurance and duties in other countries, and measuring performance.",
    "features": [
     {
      "id": "SOC-A22-F1",
@@ -7198,7 +7198,7 @@
       {
        "id": "SOC-A22-F1-P2",
        "name": "Who belongs and who votes",
-       "what": "Defines who is a member of Spare Social, who counts as its workers (creators, moderators, translators), what viewers vote on, and how members of overseas local co-ops and users on other servers take part, using the kit's electorates (KIT-A12-F5-P2).",
+       "what": "Defines who is a member of Spare Social, who counts as its workers (creators, moderators, translators), what viewers vote on, and how members of local co-ops in other countries and users on other servers take part, using the kit's electorates (KIT-A12-F5-P2).",
        "kind": "legal",
        "size": "medium",
        "depends_on": [
@@ -7321,7 +7321,7 @@
       {
        "id": "SOC-A22-F4-P4",
        "name": "Urgent help and other ways to reach us",
-       "what": "Urgent cases routed to a person on call (KIT-A21-F3-P1), and email, phone and NZ Relay for members who find apps hard to use (KIT-A21-F4-P1).",
+       "what": "Urgent cases routed to a person on call (KIT-A21-F3-P1), and email, phone and relay services (example: New Zealand Relay) for members who find apps hard to use (KIT-A21-F4-P1).",
        "kind": "integration",
        "size": "small",
        "depends_on": [
@@ -7422,7 +7422,7 @@
       {
        "id": "SOC-A22-F7-P1",
        "name": "Performance budgets",
-       "what": "Targets for feed load time, video start time and upload speed, measured on real NZ connections.",
+       "what": "Targets for feed load time, video start time and upload speed, measured on real connections, starting with New Zealand's.",
        "kind": "research",
        "size": "small",
        "depends_on": [],
@@ -7433,7 +7433,7 @@
     {
      "id": "SOC-A22-F8",
      "name": "Costs and duties of a public platform",
-     "does": "See the co-op insured against claims over what members post, its overseas duties costed, researchers given fair access, public posts archived for NZ, and complaints about the co-op itself heard.",
+     "does": "See the co-op insured against claims over what members post, its duties in other countries costed, researchers given fair access, public posts archived by national libraries, and complaints about the co-op itself heard.",
      "priority": "next",
      "parts": [
       {
@@ -7473,7 +7473,7 @@
       {
        "id": "SOC-A22-F8-P4",
        "name": "Archiving by the National Library",
-       "what": "Public posts can be archived by the National Library of New Zealand's collecting of NZ web content, with private and deleted posts never included.",
+       "what": "Public posts can be archived by national libraries that collect web content, such as the National Library of New Zealand, with private and deleted posts never included.",
        "kind": "integration",
        "size": "small",
        "depends_on": [
@@ -7757,19 +7757,19 @@
   "Is a time-order feed plus a discovery feed with published rules enough to keep people who are used to TikTok's For You feed?",
   "Can the co-op afford video storage and bandwidth at cost (piece M06), and would members accept a free allowance with at-cost storage for heavy uploaders?",
   "Which open protocol comes first (piece M01), which Spare Social promises can it not carry (SOC-A18-F1-P6), and is moving your followers really part of the first release?",
-  "Is the line between personal filters and legal removal clear, and does 'remove only what the law requires' hold up against NZ duties, overseas laws and other governments' demands (pieces M02, SOC-A13-F3-P7)?",
+  "Is the line between personal filters and legal removal clear, and does 'remove only what the law requires' hold up against each country's duties, starting with New Zealand's, and other governments' demands (pieces M02, SOC-A13-F3-P7)?",
   "Can elected volunteer moderators meet 24 and 48-hour legal deadlines around the clock, or does the co-op need paid, vetted staff on call (SOC-A13-F3-P8, SOC-A13-F7)?",
   "Should lawful adult sexual content be allowed with full age and consent checks, kept out of the app-store apps, or ruled out (SOC-A13-F2-P4)?",
-  "How does Spare Social meet minimum-age laws, such as Australia's under-16 law and NZ's August 2026 bill, without keeping identity documents?",
-  "Is short video workable without commercial music, and what would licensing music in NZ cost at cost?",
+  "How does Spare Social meet minimum-age laws, such as Australia's under-16 law and New Zealand's August 2026 bill, without keeping identity documents?",
+  "Is short video workable without commercial music, and what would licensing music cost at cost in each country, starting with New Zealand?",
   "Is end-to-end encrypted messaging right for the first release, and is reporting from the reporter's own device enough for safety?",
-  "Who belongs to Spare Social and who votes on its rules: creators, moderators, viewers, overseas members, users on other servers (SOC-A22-F1-P2)?",
+  "Who belongs to Spare Social and who votes on its rules: creators, moderators, viewers, members in other countries, users on other servers (SOC-A22-F1-P2)?",
   "Can creators really keep everything except payment fees on iPhone and Android, given the app stores' payment rules (SOC-A15-F10)?",
   "Can the Human and AI sections be enforced fairly, and should a bot account that uses no AI, such as a quake alert account, still post only in the AI section as ARCHITECTURE.md says (piece M09)?",
   "Which candidate kit parts should move down next: live chat, rich text, private contact discovery, hidden words, labelling services and the one end-to-end encryption library shared with Spare Office?",
   "Which parts carry legal risk under 'Built legally, or not at all': archive importers, codecs, casting kits, GIF providers, open model licences, note-ranking code, video hash libraries?",
-  "Is the te reo Māori and NZ-first commitment funded, with fluent speakers paid to translate?",
+  "Is the commitment to many languages, starting with the example country's (for New Zealand: English and te reo Māori), funded, with fluent speakers paid to translate?",
   "Is this map the right size for contributors with spare tokens, and what is the smallest slice worth building and demonstrating first?",
-  "What numbers would prove the demo works, such as video start time on rural NZ mobile, feed load time and cost per member per month?"
+  "What numbers would prove the demo works, such as video start time on rural mobile networks, such as in rural New Zealand, feed load time and cost per member per month?"
  ]
 }

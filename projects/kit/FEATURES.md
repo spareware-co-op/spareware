@@ -2,7 +2,7 @@
 
 *Stage: Mapping. Everything here is open for discussion until an owner accepts a decision note. The machine-readable copy is [features.json](features.json); the architecture is [ARCHITECTURE.md](ARCHITECTURE.md) and the work board is [STATUS.md](STATUS.md).*
 
-The shared kit is built once and used by every Spareware app, so a new app is a thin layer of its own rules on top. This map lists everything the kit and the co-op's member portal need, top-down: areas, then what a person can do in each, then the buildable parts. It was drawn from every journey a member takes across the apps (first sign-up, daily use, being paid, a dispute, a vote, leaving) and from what the incumbent services offer, with the law in New Zealand first and other countries planned for. It also holds every part that two or more programs share, such as the property record Spare Home, Rent and Stay use, so no program depends on another, and it maps the shared engines (KIT-A27), which are built in projects/engines, so every program has one place to depend on. Money is always held by a regulated payment provider, never by the co-op. Nothing here is decided: each part becomes a design note before any code.
+The shared kit is built once and used by every Spareware app, so a new app is a thin layer of its own rules on top. This map lists everything the kit and the co-op's member portal need, top-down: areas, then what a person can do in each, then the buildable parts. It was drawn from every journey a member takes across the apps (first sign-up, daily use, being paid, a dispute, a vote, leaving) and from what the incumbent services offer. Spareware is international: the law is mapped for New Zealand first, as the first example country pack, and each country gets its own pack. It also holds every part that two or more programs share, such as the property record Spare Home, Rent and Stay use, so no program depends on another, and it maps the shared engines (KIT-A27), which are built in projects/engines, so every program has one place to depend on. Money is always held by a regulated payment provider, never by the co-op. Joining is free and there are no member shares; the only charge anywhere is running costs. Nothing here is decided: each part becomes a design note before any code.
 
 **Replaces:** The services every platform rebuilds or rents: sign-in and identity services (such as Auth0 and Okta), map and routing services (such as Google Maps Platform and Mapbox), chat, call and notification services (such as Twilio, SendGrid, Firebase and Zoom), e-signature services (such as DocuSign), trust and safety tools, voting tools (such as Loomio and Decidim), open budget tools (such as Open Collective) and back-office systems, plus the member register and portal a co-op would otherwise run by hand.
 
@@ -15,7 +15,7 @@ The shared kit is built once and used by every Spareware app, so a new app is a 
 | KIT-A1 | [Accounts and sign-in](#kit-a1-accounts-and-sign-in) | One Spareware login for every app: signing up, signing in safely, getting back into a lost account, devices, roles, teams, and the sign-in service other apps and AI agents can use. Built as svc-accounts. | 17 | 12 |
 | KIT-A2 | [Identity, licence and business checks](#kit-a2-identity-licence-and-business-checks) | Proves people are who they say and hold the licences their work needs, through accredited providers and public registers. The co-op keeps the result; the provider keeps the documents under contract, and the co-op can get them back when the law asks. Built in svc-accounts; svc-identity is a proposed name (KIT-A16-F10-P1). | 14 | 13 |
 | KIT-A3 | [Payments and payouts](#kit-a3-payments-and-payouts) | Customers pay, a regulated provider holds the money within its time limits, workers are paid everything except the at-cost fee, and every dollar is shown, including who carries a loss, payments taken in person and payments made outside the app. The co-op never holds money or card numbers itself. Built as svc-payments. | 23 | 17 |
-| KIT-A4 | [Tax, invoices and money law](#kit-a4-tax-invoices-and-money-law) | The tax and money law every marketplace must meet, built once: GST on listed services, the co-op's own GST returns, tax invoices, reporting sellers' income to IRD, anti-money-laundering duties and record keeping. Built in svc-payments; svc-tax is a proposed name (KIT-A16-F10-P1). | 13 | 10 |
+| KIT-A4 | [Tax, invoices and money law](#kit-a4-tax-invoices-and-money-law) | The tax and money law every marketplace must meet, built once and filled in by each country pack: sales tax on platform sales (example: New Zealand GST on listed services), the co-op's own sales tax returns, tax invoices, reporting sellers' income to the tax office (example: New Zealand's IRD), anti-money-laundering duties and record keeping. New Zealand is the first country pack; each country gets its own. Built in svc-payments; svc-tax is a proposed name (KIT-A16-F10-P1). | 13 | 10 |
 | KIT-A5 | [Marketplace engine](#kit-a5-marketplace-engine) | The one loop every marketplace runs (list or ask, match, agree, pay and hold, do the job, confirm, pay out, rate, resolve), plus changes, extra charges and promotions, built once in kit-market, with each app adding only its own rules. | 32 | 23 |
 | KIT-A6 | [Search, matching and dispatch](#kit-a6-search-matching-and-dispatch) | Pairs a request with the right worker or listing (search with filters, nearest driver, ready-timed courier, open dates, best quote) using rules anyone can read, fair to workers and customers alike. Built in svc-matching; svc-search is a proposed name (KIT-A16-F10-P1). | 10 | 7 |
 | KIT-A7 | [Maps, places and live location](#kit-a7-maps-places-and-live-location) | Maps, address search, routing, live location and service areas on open data, so no app depends on a paid map provider, with exact places kept private until a booking needs them. Built as svc-maps. | 13 | 9 |
@@ -23,18 +23,18 @@ The shared kit is built once and used by every Spareware app, so a new app is a 
 | KIT-A9 | [Ratings and reputation](#kit-a9-ratings-and-reputation) | Two-way ratings and reviews after real jobs, made by people and never agents, fair rules on what counts, and a reputation members can see, challenge and take with them. Built as svc-trust. | 9 | 9 |
 | KIT-A10 | [Safety, reports and moderation](#kit-a10-safety-reports-and-moderation) | Keeps people safe during a job and online: emergency help that works anywhere, official alerts and a disaster mode, helplines, a safe path for sexual harm reports, reports, blocking, published rules, fair treatment whoever you are, member moderators, legal notices, known-illegal-content checks and a public log of every removal. Built as svc-trust. | 23 | 21 |
 | KIT-A11 | [Disputes and appeals](#kit-a11-disputes-and-appeals) | When a job goes wrong the money stays held, both sides are heard, a panel of trained members decides, and either side can appeal. Built as svc-trust. | 10 | 9 |
-| KIT-A12 | [Member voting and meetings](#kit-a12-member-voting-and-meetings) | Members propose, discuss and vote on fees and rules for each app and for the whole co-op, elect directors, panels and moderators, follow decisions through, and hold meetings online, with a way to vote without a device. One member, one vote. Built as svc-voting. | 11 | 7 |
+| KIT-A12 | [Member voting and meetings](#kit-a12-member-voting-and-meetings) | Workers propose, discuss and vote on their own app's fees and rules, and members vote on major changes for the whole co-op. Members elect directors, panels and moderators, follow decisions through, and hold meetings online, with a way to vote without a device. One member, one vote. Built as svc-voting. | 11 | 7 |
 | KIT-A13 | [Open cost ledger](#kit-a13-open-cost-ledger) | Every month each app publishes what it cost to run, what the fee paid for and how the next fee is set, checked and signed off by members. It also keeps the co-op's own books and runs one pipeline for every public report. Built as svc-ledger. | 12 | 8 |
-| KIT-A14 | [Co-op membership and member portal](#kit-a14-co-op-membership-and-member-portal) | The co-op's own home: joining once per person, the share register and the co-operative test, member roles, rebates of any surplus, reports, the constitution, discipline, board work, insurance, contributors' rights, the steward society and the federation of local co-ops. Proposed as svc-members (KIT-A16-F10-P1); the member register feeds svc-voting. | 19 | 11 |
+| KIT-A14 | [Co-op membership and member portal](#kit-a14-co-op-membership-and-member-portal) | The co-op's own home: joining for free once per person, the member register, member roles, refunds of any fees above running costs, reports, the constitution, discipline, board work, insurance, contributors' rights, the steward society and the federation of local co-ops. Proposed as svc-members (KIT-A16-F10-P1); the member register feeds svc-voting. | 19 | 11 |
 | KIT-A15 | [Sync, history and storage](#kit-a15-sync-history-and-storage) | The base every app is built on (kit-core, kit-ops, kit-sync, kit-store): permanent IDs, every change as an operation with versioned schemas, personal data that can still be erased, undo, history, offline work, live co-editing, timers that survive restarts, files, previews, shared libraries, a document vault and sharing. Files are served by a file service proposed as svc-files (KIT-A16-F10-P1). | 18 | 15 |
 | KIT-A16 | [Plugins, open API and integrations](#kit-a16-plugins-open-api-and-integrations) | Everything a person can do, a script or add-in can do: one command API per app, sandboxed plugins (kit-plugin), webhooks, SDKs, a plugin directory and links to outside tools, with limits that stop bulk copying, and named kit parts every program builds on. | 13 | 8 |
 | KIT-A17 | [AI access](#kit-a17-ai-access) | Lets members use AI agents with every app through the same commands as people (kit-mcp), with permissions they choose, approval for money, guards against hidden instructions, agent actions labelled to the other side, people-only votes and reviews, and a record of everything an agent did. | 13 | 9 |
-| KIT-A18 | [Privacy, data rights and legal duties](#kit-a18-privacy-data-rights-and-legal-duties) | Members see, take and delete their data, consent is recorded, data is kept only as long as needed, a named privacy officer answers, overseas handling is checked, Māori data is cared for, and the co-op meets privacy, consumer and platform law in NZ first and each new country after. Built in svc-accounts; svc-privacy is a proposed name (KIT-A16-F10-P1). | 18 | 17 |
-| KIT-A19 | [Languages, accessibility and countries](#kit-a19-languages-accessibility-and-countries) | Every app works in te reo Māori and English from the start, meets accessibility standards, gets NZ's holidays, time zones and emergency numbers right, and takes on new languages and countries without rewriting. Proposed as kit-i18n and svc-translate (KIT-A16-F10-P1). | 12 | 11 |
+| KIT-A18 | [Privacy, data rights and legal duties](#kit-a18-privacy-data-rights-and-legal-duties) | Members see, take and delete their data, consent is recorded, data is kept only as long as needed, a named privacy officer answers, overseas handling is checked, indigenous data, such as Māori data, is cared for, and the co-op meets privacy, consumer and platform law in each country through its country pack, starting with New Zealand. Built in svc-accounts; svc-privacy is a proposed name (KIT-A16-F10-P1). | 18 | 17 |
+| KIT-A19 | [Languages, accessibility and countries](#kit-a19-languages-accessibility-and-countries) | Every app works in many languages from the start, beginning with the example country's (for New Zealand: English and te reo Māori), meets accessibility standards, gets each country's holidays, time zones and emergency numbers right through its country pack, and takes on new languages and countries without rewriting. Proposed as kit-i18n and svc-translate (KIT-A16-F10-P1). | 12 | 11 |
 | KIT-A20 | [App shell and phone apps](#kit-a20-app-shell-and-phone-apps) | The shared frame every app runs in: components from the design guide, installable phone and desktop apps, push, deep links, settings and moving between Spareware apps. Proposed as kit-ui (KIT-A16-F10-P1). | 11 | 11 |
 | KIT-A21 | [Help and member support](#kit-a21-help-and-member-support) | Help pages in every language, support tied to the job, urgent help at any hour, members helping members, and a way to complain about the co-op itself, with response times published. Proposed as svc-support (KIT-A16-F10-P1). | 10 | 7 |
 | KIT-A22 | [Running it: hosting, security and admin](#kit-a22-running-it-hosting-security-and-admin) | Servers run at cost by the co-op or by member groups, with monitoring, backups, encryption, signed releases, security reviews and an admin console where every action is logged. Proposed as svc-admin (KIT-A16-F10-P1). | 10 | 8 |
-| KIT-A23 | [Work law and worker status](#kit-a23-work-law-and-worker-status) | One worker-status framework for every app: employee or contractor under the law's tests, agreements that meet them, personal grievances, minimum pay, holidays and leave, payroll, KiwiSaver and ACC guidance, switched on by each app's settings. Proposed as svc-work (KIT-A16-F10-P1). | 3 | 2 |
+| KIT-A23 | [Work law and worker status](#kit-a23-work-law-and-worker-status) | One worker-status framework for every app: employee or contractor under the law's tests, agreements that meet them, personal grievances, minimum pay, holidays and leave, payroll, and retirement savings and accident cover guidance (example: New Zealand's KiwiSaver and ACC), switched on by each app's settings. Each country pack has its own rules, starting with New Zealand's. Proposed as svc-work (KIT-A16-F10-P1). | 3 | 2 |
 | KIT-A24 | [Health and safety at work](#kit-a24-health-and-safety-at-work) | The co-op's health and safety duties, built once: an incident register, notifiable event reports, work-time limits, help after violence or a crash, and hazard notes. Proposed as svc-work (KIT-A16-F10-P1). | 5 | 5 |
 | KIT-A25 | [Signatures, forms, notices and training](#kit-a25-signatures-forms-notices-and-training) | Tools many apps need that no single app should own: electronic signatures with an audit trail, one form model, formal notices served the way the law asks, and one module for courses, quizzes and certificates. Proposed as svc-sign and svc-training (KIT-A16-F10-P1). | 4 | 4 |
 | KIT-A26 | [Property records, ownership and tenancy rules](#kit-a26-property-records-ownership-and-tenancy-rules) | One shared record for each property with its chattels and repairs, proof of who owns or acts for it, decisions between co-owners, hand-over to a new owner, viewings, simple floor plans, owner statements and one pack of tenancy law, used by Spare Home, Spare Rent and Spare Stay so none of them depends on another. Built in kit-market as shared data; the document vault is KIT-A15-F13. | 10 | 9 |
@@ -138,12 +138,12 @@ Proves people are who they say and hold the licences their work needs, through a
 
 | ID | Part | Kind | Size | Depends on | Piece |
 | --- | --- | --- | --- | --- | --- |
-| KIT-A2-F1-P1 | **Identity provider choice**: Compares providers accredited under NZ's Digital Identity Services Trust Framework on cost, method and what data they keep. | research | small |  |  |
+| KIT-A2-F1-P1 | **Identity provider choice**: Compares accredited identity providers in each country on cost, method and what data they keep, starting with those accredited under New Zealand's Digital Identity Services Trust Framework. | research | small |  |  |
 | KIT-A2-F1-P2 | **Identity check link**: Sends a person to an accredited identity provider and receives only the result. | integration | medium | KIT-A1-F1-P1, KIT-A2-F1-P1, KIT-A2-F1-P4 |  |
 | KIT-A2-F1-P3 | **Check results store**: Records what was checked, by whom, when and until when; the documents stay with the provider, and the co-op can retrieve them when the law asks. | data | small | kit-core, kit-ops, KIT-A2-F1-P1 |  |
 | KIT-A2-F1-P4 | **Biometric code compliance**: Meets the Biometric Processing Privacy Code 2025 for selfie and face-match checks: a proportionality assessment, clear notices, a non-biometric option and limits on keeping face data. | legal | medium |  |  |
 | KIT-A2-F1-P5 | **Verification records on demand**: A contract under which the identity provider keeps verification records for the anti-money-laundering period, a way to retrieve them on request, and a legal hold that account deletion skips. | integration | medium | KIT-A2-F1-P2, KIT-A4-F5-P1, KIT-A18-F6-P1 |  |
-| KIT-A2-F1-P6 | **Identity checks for people overseas**: Lets people who live outside NZ, such as overseas sellers and visiting guests, prove who they are in the first release, through a provider that covers their country or their NZ lawyer's anti-money-laundering identity check, recorded as the same result as a local check. Spare Home and Spare Stay both need it. | integration | medium | KIT-A2-F1-P1, KIT-A2-F1-P3 |  |
+| KIT-A2-F1-P6 | **Identity checks for people overseas**: Lets people who live outside the country an app runs in, such as overseas sellers and visiting guests, prove who they are in the first release, through a provider that covers their country or a local lawyer's anti-money-laundering identity check, recorded as the same result as a local check. Spare Home and Spare Stay both need it. | integration | medium | KIT-A2-F1-P1, KIT-A2-F1-P3 |  |
 | KIT-A2-F2-P1 | **Public register checks**: Looks up licences in public registers, such as trade boards and the business number register, on their published terms. | integration | medium | KIT-A2-F1-P3 | [WK02](../spare-work/STATUS.md) |
 | KIT-A2-F2-P2 | **Check rules per app**: Each app declares which checks a role needs and how often they repeat. | data | medium | KIT-A1-F5-P2, KIT-A2-F1-P3 |  |
 | KIT-A2-F2-P3 | **My checks page**: Shows each check, its status and expiry, and what to do next. | interface | small | KIT-A20-F1-P1, KIT-A2-F1-P3 |  |
@@ -152,11 +152,11 @@ Proves people are who they say and hold the licences their work needs, through a
 | KIT-A2-F5-P1 | **Verified badge**: Shows which checks passed and their dates, without the details behind them. | interface | small | KIT-A2-F1-P3, KIT-A20-F1-P1 |  |
 | KIT-A2-F6-P1 | **Vehicle data access**: Which official vehicle data an app may look up, on what terms and at what cost. | research | small |  |  |
 | KIT-A2-F6-P2 | **Vehicle checks**: Checks registration and safety certificate status from sources that allow it. | integration | medium | KIT-A2-F1-P3, KIT-A2-F6-P1 |  |
-| KIT-A2-F7-P1 | **Business number lookup**: Confirms a business through the NZ Business Number register and stores the result. | integration | small | KIT-A2-F1-P3, KIT-A1-F7-P1 |  |
+| KIT-A2-F7-P1 | **Business number lookup**: Confirms a business through each country's business register (example: the New Zealand Business Number register) and stores the result. | integration | small | KIT-A2-F1-P3, KIT-A1-F7-P1 |  |
 | KIT-A2-F7-P2 | **Trader details**: Keeps the trader details marketplace law asks for and shows buyers what they are owed. | data | small | KIT-A1-F7-P1 |  |
-| KIT-A2-F7-P3 | **Charities Register check**: Confirms a registered charity through the NZ Charities Register, on its published terms, and stores the result beside the business number check. | integration | small | KIT-A2-F7-P1 |  |
+| KIT-A2-F7-P3 | **Charities register check**: Confirms a registered charity through each country's charities register (example: New Zealand's Charities Register), on its published terms, and stores the result beside the business number check. | integration | small | KIT-A2-F7-P1 |  |
 | KIT-A2-F8-P1 | **Age checks**: Age assurance through an accredited provider, returning only whether a person is over the age set. | integration | medium | KIT-A2-F1-P2 | [M07](../spare-social/STATUS.md) |
-| KIT-A2-F9-P1 | **Background checks in NZ**: Which checks each app's law requires, who may run them and how to do it lawfully. | research | medium |  |  |
+| KIT-A2-F9-P1 | **Background checks in each country**: Which checks each app's law requires, who may run them and how to do it lawfully. | research | medium |  |  |
 | KIT-A2-F9-P2 | **Background check link**: Requests a consented check from an approved provider and records only the outcome. | integration | medium | KIT-A2-F1-P3, KIT-A2-F9-P1, KIT-A18-F17-P1 |  |
 | KIT-A2-F10-P1 | **Check providers per country**: Identity, licence and register sources for each country added, in its country pack. | data | medium | KIT-A2-F2-P2, KIT-A19-F6-P1 |  |
 | KIT-A2-F11-P1 | **Right-to-work rules**: Which visas allow employment, which allow contracting, and what each app must check for its workers' status. | research | small |  |  |
@@ -178,7 +178,7 @@ Customers pay, a regulated provider holds the money within its time limits, work
 | **KIT-A3-F4** See the at-cost fee | See exactly what the fee is, what it pays for and how it was worked out. | core | P1, P2, P3 |
 | **KIT-A3-F5** Get a refund | Get a full or part refund when a job is cancelled or a dispute says so. | core | P1, P2 |
 | **KIT-A3-F6** Tip the worker | Add a tip that goes to the worker in full. | core | P1 |
-| **KIT-A3-F7** Keep a receipt | Get a clear receipt showing the fee and GST for every payment. | core | P1 |
+| **KIT-A3-F7** Keep a receipt | Get a clear receipt showing the fee and sales tax for every payment. | core | P1 |
 | **KIT-A3-F8** Save a card for next time | Save a card with the provider so paying next time is one tap. | core | P1 |
 | **KIT-A3-F9** Trust that every dollar adds up | Know that what the provider moved matches what every order says. | core | P1 |
 | **KIT-A3-F10** Pay a deposit or damage hold | Pay a refundable deposit or damage hold for a stay or a hire. | next | P1 |
@@ -188,7 +188,7 @@ Customers pay, a regulated provider holds the money within its time limits, work
 | **KIT-A3-F14** Pay and be paid in my own currency | Pay and be paid in the money of each country Spareware runs in. | later | P1 |
 | **KIT-A3-F15** Give a gift card | Give someone a gift card for any Spareware app. | later | P1, P2 |
 | **KIT-A3-F16** Know who carries a loss | Know what happens when a refund or a lost card dispute lands after the worker was already paid. | core | P1, P2 |
-| **KIT-A3-F17** Pay on account as a business | Let a business pay on account and get one GST invoice a month. | core | P1, P2 |
+| **KIT-A3-F17** Pay on account as a business | Let a business pay on account and get one tax invoice a month. | core | P1, P2 |
 | **KIT-A3-F18** Record a payment made outside the app | Record a job paid in cash or by bank transfer, so the order, ratings and records still work. | core | P1, P2, P3 |
 | **KIT-A3-F19** Take a card in person | Take a card payment at the end of a job on my own phone, a card reader or a shop till. | core | P1, P2 |
 | **KIT-A3-F20** Keep taking payments if a provider drops us | Keep paying and being paid if the payment provider closes the co-op's account. | next | P1 |
@@ -200,11 +200,11 @@ Customers pay, a regulated provider holds the money within its time limits, work
 
 | ID | Part | Kind | Size | Depends on | Piece |
 | --- | --- | --- | --- | --- | --- |
-| KIT-A3-F1-P1 | **Payment provider choice**: Compares providers that pay out to workers in NZ, and lists what Spareware must never handle itself. | research | medium |  | [K02](STATUS.md) |
+| KIT-A3-F1-P1 | **Payment provider choice**: Compares providers that pay out to workers in each country, starting with New Zealand, and lists what Spareware must never handle itself. | research | medium |  | [K02](STATUS.md) |
 | KIT-A3-F1-P2 | **Payment provider link**: One adapter to the chosen regulated provider for charges, holds, splits, refunds and payouts. | integration | large | kit-core, kit-ops, KIT-A3-F1-P1, KIT-A3-F1-P5, KIT-A15-F1-P9 | [K02](STATUS.md) |
 | KIT-A3-F1-P3 | **Checkout**: A shared checkout using the provider's own secure card fields, so card numbers never reach our servers. | interface | medium | KIT-A3-F1-P2, KIT-A20-F1-P1 |  |
-| KIT-A3-F1-P4 | **Money type**: Exact amounts in each currency's ISO 4217 minor units, with currency, rounding rules and GST fields: the one money type every app and kit-core use. | library | small | kit-core, KIT-A15-F1-P1 |  |
-| KIT-A3-F1-P5 | **Seller of record per app**: Decides for each app whether the worker or the co-op is the seller, which sets who charges GST, who owes consumer guarantees, whose name is on the receipt and who answers card disputes. | legal | medium | KIT-A3-F1-P1 | [K02](STATUS.md) |
+| KIT-A3-F1-P4 | **Money type**: Exact amounts in each currency's ISO 4217 minor units, with currency, rounding rules and sales tax fields: the one money type every app and kit-core use. | library | small | kit-core, KIT-A15-F1-P1 |  |
+| KIT-A3-F1-P5 | **Seller of record per app**: Decides for each app whether the worker or the co-op is the seller, which sets who charges sales tax, who owes consumer guarantees, whose name is on the receipt and who answers card disputes. | legal | medium | KIT-A3-F1-P1 | [K02](STATUS.md) |
 | KIT-A3-F1-P6 | **Yearly card security check**: A yearly PCI DSS self-assessment, SAQ A while card fields stay with the provider, as the card schemes ask of every merchant and platform. | legal | small | KIT-A3-F1-P3 |  |
 | KIT-A3-F1-P7 | **Checkout without an account**: Whether people may order with no account, weighing card fraud, anti-money-laundering duties and data rights, decided once. Spare Food and Spare Market both wait on it. | research | small | KIT-A3-F13-P1, KIT-A4-F5-P1, KIT-A18-F5-P1 |  |
 | KIT-A3-F2-P1 | **Hold and release rules**: Holds a payment against an order and releases, refunds or splits it when the order says so. | service | medium | KIT-A3-F1-P2, kit-market, KIT-A3-F2-P2, KIT-A3-F2-P4 | [MK01](../spare-market/STATUS.md) |
@@ -213,14 +213,14 @@ Customers pay, a regulated provider holds the money within its time limits, work
 | KIT-A3-F2-P4 | **Hold time limits**: Each provider's limits on holding money, with rules for when to charge bookings made far ahead, deposit then balance, and re-authorising card holds that expire. | library | medium | KIT-A3-F1-P1, KIT-A3-F2-P2, KIT-A15-F14-P1 |  |
 | KIT-A3-F3-P1 | **Payout set-up**: Sends workers to the provider's own identity and bank account set-up, passing on the kit's identity check result where the provider accepts it, so a worker proves who they are once. | integration | medium | KIT-A3-F1-P2, KIT-A1-F1-P1, KIT-A2-F1-P3 |  |
 | KIT-A3-F3-P2 | **Payout runs**: Pays out daily in batches, with faster payouts at the provider's cost where offered. | service | medium | KIT-A3-F1-P2, KIT-A15-F14-P1 |  |
-| KIT-A3-F3-P3 | **Earnings page**: Shows each job, the fee, GST and every payout, and exports them. | interface | medium | KIT-A20-F1-P1, KIT-A3-F3-P2, KIT-A3-F4-P1 |  |
+| KIT-A3-F3-P3 | **Earnings page**: Shows each job, the fee, sales tax and every payout, and exports them. | interface | medium | KIT-A20-F1-P1, KIT-A3-F3-P2, KIT-A3-F4-P1 |  |
 | KIT-A3-F3-P4 | **Payout change guard**: When a bank account, email or phone changes, asks for a fresh sign-in, holds payouts for a short time and alerts both the old and new contacts. | service | small | KIT-A3-F3-P1, KIT-A1-F3-P2, KIT-A1-F11-P1, KIT-A8-F3-P2, KIT-A1-F3-P4 |  |
 | KIT-A3-F3-P5 | **Failed payouts**: Handles payouts a bank returns, such as for a closed account or wrong details, keeping the money with the provider, telling the worker and paying again once the details are fixed. | service | small | KIT-A3-F3-P2, KIT-A3-F9-P1, KIT-A8-F3-P2 |  |
-| KIT-A3-F3-P6 | **Money that cannot be paid out**: What happens to money that can never be paid out, and how the Unclaimed Money Act 1971 applies to it (*unverified* period for platform balances). | legal | small | KIT-A3-F2-P2 |  |
-| KIT-A3-F3-P7 | **Bank account name check**: Checks the account name matches when payout details change, through NZ banks' Confirmation of Payee, run since late 2024 (*unverified* whether a business can call it), or the provider's own check. | integration | small | KIT-A3-F3-P4 |  |
+| KIT-A3-F3-P6 | **Money that cannot be paid out**: What happens to money that can never be paid out, and how unclaimed money law applies to it (example: New Zealand's Unclaimed Money Act 1971; *unverified* period for platform balances). | legal | small | KIT-A3-F2-P2 |  |
+| KIT-A3-F3-P7 | **Bank account name check**: Checks the account name matches when payout details change, through the banks' own name check where a country has one (example: New Zealand banks' Confirmation of Payee, run since late 2024; *unverified* whether a business can call it), or the provider's own check. | integration | small | KIT-A3-F3-P4 |  |
 | KIT-A3-F4-P1 | **Fee calculator**: Works out each job's fee from the period's published rate and passes provider charges through at cost. | library | medium | KIT-A3-F1-P4, KIT-A13-F3-P1, KIT-A3-F4-P3 |  |
 | KIT-A3-F4-P2 | **Fee breakdown**: Shows this job's fee and where every dollar goes on the price, the receipt and the earnings page, linking to how the period's fee was set. | interface | small | KIT-A3-F4-P1, KIT-A20-F1-P1 |  |
-| KIT-A3-F4-P3 | **Card fee pass-through check**: Checks that passing card costs through at cost is not a card surcharge where the law bans one, such as in-store payments if NZ's planned ban applies (*unverified*). | legal | small |  |  |
+| KIT-A3-F4-P3 | **Card fee pass-through check**: Checks that passing card costs through at cost is not a card surcharge where the law bans one, such as in-store payments if New Zealand's planned ban applies (*unverified*). | legal | small |  |  |
 | KIT-A3-F5-P1 | **Refunds**: Full and part refunds through the provider, following the order's cancellation policy. | service | medium | KIT-A3-F2-P1 |  |
 | KIT-A3-F5-P2 | **Card disputes**: Answers card disputes raised with banks, sending the order's evidence to the provider. | service | medium | KIT-A3-F1-P2, KIT-A11-F2-P1 |  |
 | KIT-A3-F6-P1 | **Tips**: Adds a tip during or after the job and pays all of it to the worker; the card cost on a tip is carried as a running cost in the at-cost fee, never taken from the tip. | service | small | KIT-A3-F3-P2, KIT-A3-F4-P1 |  |
@@ -243,46 +243,46 @@ Customers pay, a regulated provider holds the money within its time limits, work
 | KIT-A3-F18-P1 | **Outside payment records**: Records a cash or bank transfer payment that both sides confirm, so the order, ratings, stock and records work as if it was paid in the app. | service | small | kit-market, KIT-A5-F4-P1 |  |
 | KIT-A3-F18-P2 | **Fee on outside payments**: Invoices the worker for the at-cost fee on a job paid outside the provider, under the fee rule each app's members chose. | service | small | KIT-A3-F18-P1, KIT-A3-F4-P1, KIT-A4-F2-P1 |  |
 | KIT-A3-F18-P3 | **Cash checks**: Flags cash payments for the anti-money-laundering programme, such as large or repeated cash amounts, and counts them toward the due diligence threshold. | service | small | KIT-A3-F18-P1, KIT-A4-F5-P3, KIT-A4-F5-P5 |  |
-| KIT-A3-F19-P1 | **Tap to pay on a phone**: Takes a card on the worker's own phone through the provider's tap to pay, which Stripe lists as available in NZ (*unverified* for Connect platforms), with the in-store surcharge check applied. | integration | medium | KIT-A3-F1-P2, KIT-A3-F4-P3, KIT-A20-F2-P2 |  |
+| KIT-A3-F19-P1 | **Tap to pay on a phone**: Takes a card on the worker's own phone through the provider's tap to pay, which Stripe lists country by country (example: New Zealand; *unverified* for Connect platforms), with the in-store surcharge check applied. | integration | medium | KIT-A3-F1-P2, KIT-A3-F4-P3, KIT-A20-F2-P2 |  |
 | KIT-A3-F19-P2 | **Card readers and a shared till**: The provider's card readers and a shared till for shops and restaurants, with quick staff switching on the shared device. | integration | medium | KIT-A3-F19-P1, KIT-A1-F7-P6 | [MK07](../spare-market/STATUS.md) |
 | KIT-A3-F20-P1 | **Second provider and exit plan**: A second regulated provider ready behind the same adapter, and a tested plan to move to it, including moving saved card tokens through the providers' own migration process. | research | medium | KIT-A3-F1-P1, KIT-A3-F1-P2 |  |
 | KIT-A3-F21-P1 | **Split payments**: Splits one payment between several payers, each paying their share through the provider, with a deadline, reminders and a published rule for shares not paid in time. | service | medium | KIT-A3-F1-P2, KIT-A3-F2-P1, KIT-A15-F14-P1 |  |
 | KIT-A3-F22-P1 | **Failed payment handling**: Retries a failed charge on a published schedule, tells the person, asks for another method and holds new bookings until any balance is paid, never adding a charge for the failure. Spare Ride, Spare Food, Spare Stay and Spare Rent need the same rules. | service | small | KIT-A3-F1-P2, KIT-A8-F3-P2, KIT-A15-F14-P1 |  |
-| KIT-A3-F23-P1 | **Fundraising rules**: NZ rules for charitable fundraising, receipts and donation tax credits, and the rules overseas, for fundraisers in Spare Social and fundraising sales in Spare Market. | legal | small | KIT-A2-F7-P3 |  |
+| KIT-A3-F23-P1 | **Fundraising rules**: Each country's rules for charitable fundraising, receipts and donation tax relief, starting with New Zealand's donation tax credits, for fundraisers in Spare Social and fundraising sales in Spare Market. | legal | small | KIT-A2-F7-P3 |  |
 
 ## KIT-A4 Tax, invoices and money law
 
-The tax and money law every marketplace must meet, built once: GST on listed services, the co-op's own GST returns, tax invoices, reporting sellers' income to IRD, anti-money-laundering duties and record keeping. Built in svc-payments; svc-tax is a proposed name (KIT-A16-F10-P1).
+The tax and money law every marketplace must meet, built once and filled in by each country pack: sales tax on platform sales (example: New Zealand GST on listed services), the co-op's own sales tax returns, tax invoices, reporting sellers' income to the tax office (example: New Zealand's IRD), anti-money-laundering duties and record keeping. New Zealand is the first country pack; each country gets its own. Built in svc-payments; svc-tax is a proposed name (KIT-A16-F10-P1).
 
 | Feature | What a person can do | Priority | Parts |
 | --- | --- | --- | --- |
-| **KIT-A4-F1** Have GST charged correctly | Have GST worked out and collected the way the law says for each kind of job. | core | P1, P2, P3 |
+| **KIT-A4-F1** Have sales tax charged correctly | Have sales tax worked out and collected the way each country's law says for each kind of job. | core | P1, P2, P3 |
 | **KIT-A4-F2** Get a proper tax invoice | Get a valid tax invoice, or have the platform issue one for the seller where the law allows. | core | P1, P2, P3 |
-| **KIT-A4-F3** Know my income is reported correctly | Have the platform report sellers' income to IRD each year, and see what was sent. | core | P1, P2, P3 |
-| **KIT-A4-F4** Get a year-end statement | Download a year's earnings, fees and GST to give to an accountant. | core | P1, P2, P3 |
+| **KIT-A4-F3** Know my income is reported correctly | Have the platform report sellers' income to the tax office each year (example: New Zealand's IRD), and see what was sent. | core | P1, P2, P3 |
+| **KIT-A4-F4** Get a year-end statement | Download a year's earnings, fees and sales tax to give to an accountant. | core | P1, P2, P3 |
 | **KIT-A4-F5** Know the co-op meets anti-money-laundering law | Trust that the co-op follows anti-money-laundering law for online marketplaces. | core | P1, P2, P3, P4, P5, P6, P7 |
 | **KIT-A4-F6** Know records are kept as long as the law says | Trust that every financial record is kept for the required time and can be produced. | core | P1 |
 | **KIT-A4-F7** Have tax handled in other countries | Have each country's sales tax and platform reporting handled when an app goes overseas. | later | P1, P2, P3 |
 | **KIT-A4-F8** Know payouts never reach sanctioned people | Trust that payouts are screened against sanctions lists. | core | P1 |
-| **KIT-A4-F9** Know the co-op pays its own GST | Trust that the co-op files its own GST returns as marketplace operator and charges GST on its fee. | core | P1, P2, P3 |
-| **KIT-A4-F10** Opt out of platform GST as a large supplier | As a large accommodation owner or large registered supplier, agree with the platform to account for GST myself where the law allows. | core | P1 |
-| **KIT-A4-F11** Get GST figures for each return | As a GST-registered worker, get the platform's figures for each two-monthly or six-monthly return. | next | P1 |
-| **KIT-A4-F12** Have tax held back from my payouts | Choose a rate of tax to be held back from each payout and paid to IRD for me. | next | P1, P2 |
-| **KIT-A4-F13** Be warned before I must register for GST | Be told before my sales across every Spareware app reach the GST registration threshold. | core | P1 |
+| **KIT-A4-F9** Know the co-op pays its own sales tax | Trust that the co-op files its own sales tax returns as marketplace operator and charges sales tax on its fee. | core | P1, P2, P3 |
+| **KIT-A4-F10** Opt out of platform sales tax as a large supplier | As a large accommodation owner or large registered supplier, agree with the platform to account for sales tax myself where the law allows. | core | P1 |
+| **KIT-A4-F11** Get sales tax figures for each return | As a worker registered for sales tax, get the platform's figures for each return period (example: two-monthly or six-monthly in New Zealand). | next | P1 |
+| **KIT-A4-F12** Have tax held back from my payouts | Choose a rate of tax to be held back from each payout and paid to the tax office for me. | next | P1, P2 |
+| **KIT-A4-F13** Be warned before I must register for sales tax | Be told before my sales across every Spareware app reach the sales tax registration threshold. | core | P1 |
 
 **Parts**
 
 | ID | Part | Kind | Size | Depends on | Piece |
 | --- | --- | --- | --- | --- | --- |
-| KIT-A4-F1-P1 | **GST rules per app**: Maps which apps fall under GST on listed services and how each kind of job is taxed. | research | medium |  |  |
-| KIT-A4-F1-P2 | **GST engine**: Works out GST on every order, including the platform's own duty to collect it on listed services. | library | large | KIT-A3-F1-P4, KIT-A4-F1-P1 |  |
+| KIT-A4-F1-P1 | **Sales tax rules per app**: Maps which apps fall under each country's sales tax rules for platforms (example: New Zealand GST on listed services) and how each kind of job is taxed. | research | medium |  |  |
+| KIT-A4-F1-P2 | **Sales tax engine**: Works out sales tax on every order from the country pack's rules, including the platform's own duty to collect it where the law sets one (example: New Zealand GST on listed services). | library | large | KIT-A3-F1-P4, KIT-A4-F1-P1 |  |
 | KIT-A4-F1-P3 | **Flat-rate credit notices**: Tells unregistered sellers their flat-rate credits at least monthly, as the law asks. | service | small | KIT-A4-F1-P2, KIT-A8-F3-P2 |  |
 | KIT-A4-F2-P1 | **Tax invoices**: Issues tax invoices and buyer-created tax invoices with every field the law asks for. | service | medium | KIT-A4-F1-P2, engine-pdf | [WK05](../spare-work/STATUS.md) |
 | KIT-A4-F2-P2 | **Supply correction information**: Issues supply correction information, which replaced credit and debit notes from 1 April 2023, whenever a refund, an order change or an extra charge alters an amount already invoiced, with invoices numbered in order for each seller. | service | medium | KIT-A4-F2-P1, KIT-A3-F5-P1, KIT-A5-F15-P1, KIT-A5-F15-P2 | [WK05](../spare-work/STATUS.md) |
 | KIT-A4-F2-P3 | **Invoice numbers and payment terms**: Numbers each seller's invoices in order, with changes issued as supply correction information, and adds due dates, reminders and part payments for invoices paid later. Spare Work numbers invoices this way, and Spare Market's wholesale invoices need the terms. | library | small | KIT-A4-F2-P1, KIT-A4-F2-P2, KIT-A8-F3-P2 |  |
 | KIT-A4-F3-P1 | **Platform reporting rules**: What the digital platform reporting rules ask for, which sellers are covered and when. | research | small |  |  |
 | KIT-A4-F3-P2 | **Seller details**: Collects and checks the details reporting needs, including tax numbers. | service | medium | KIT-A2-F1-P3, KIT-A4-F3-P1 |  |
-| KIT-A4-F3-P3 | **Yearly IRD report**: Builds and files the yearly report and gives each seller a copy. | service | medium | KIT-A4-F3-P2, KIT-A3-F3-P2 |  |
+| KIT-A4-F3-P3 | **Yearly tax office report**: Builds and files the yearly report and gives each seller a copy. | service | medium | KIT-A4-F3-P2, KIT-A3-F3-P2 |  |
 | KIT-A4-F4-P1 | **Yearly statements**: A yearly statement for each worker, printable and in open formats. | service | small | KIT-A3-F3-P2, engine-pdf |  |
 | KIT-A4-F4-P2 | **Accounting exports**: Exports in open formats that common accounting software can import. | integration | small | KIT-A3-F3-P2 |  |
 | KIT-A4-F4-P3 | **Work mileage and expense log**: Work kilometres from finished jobs and time online, measured without keeping the route, and expenses with a receipt photo, gathered into a year-end tax pack. | library | medium | KIT-A4-F4-P1, KIT-A7-F3-P4, KIT-A15-F7-P1 |  |
@@ -290,22 +290,22 @@ The tax and money law every marketplace must meet, built once: GST on listed ser
 | KIT-A4-F5-P2 | **Customer checks**: Runs the checks the programme requires through the identity and payment providers, reusing the kit's identity check result and the provider's own checks wherever the law allows, so a person proves who they are once. | service | medium | KIT-A4-F5-P1, KIT-A2-F1-P2, KIT-A2-F1-P5, KIT-A2-F1-P3 |  |
 | KIT-A4-F5-P3 | **Suspicious activity reports**: Flags, reviews and files reports to the authorities, with access kept to named people. | service | medium | KIT-A4-F5-P1, KIT-A3-F1-P2 |  |
 | KIT-A4-F5-P4 | **Yearly compliance report**: Gathers the figures for the yearly report and the independent audit. | service | small | KIT-A4-F5-P1 |  |
-| KIT-A4-F5-P5 | **Due diligence threshold**: Counts each person's transactions with the co-op over a rolling 12 months and starts customer due diligence once they pass NZ$10,000, as DIA's online marketplace exemption allows (*unverified* exact test), while suspicious activity reporting still covers everyone. | service | medium | KIT-A4-F5-P1, KIT-A4-F5-P2, KIT-A3-F9-P1 |  |
+| KIT-A4-F5-P5 | **Due diligence threshold**: Counts each person's transactions with the co-op over a rolling 12 months and starts customer due diligence once they pass the country pack's threshold (example: NZ$10,000 under the online marketplace exemption from New Zealand's DIA; *unverified* exact test), while suspicious activity reporting still covers everyone. | service | medium | KIT-A4-F5-P1, KIT-A4-F5-P2, KIT-A3-F9-P1 |  |
 | KIT-A4-F5-P6 | **Customer risk ratings**: Gives each person who passes the threshold a risk rating under the programme, keeps it on record and reviews it when their activity changes. | service | small | KIT-A4-F5-P1, KIT-A4-F5-P5 |  |
 | KIT-A4-F5-P7 | **Politically exposed people and enhanced checks**: Checks whether a person over the threshold is politically exposed, and runs enhanced due diligence where the risk rating or the law calls for it (*unverified* detail for marketplaces). | integration | small | KIT-A4-F5-P6, KIT-A2-F1-P2 |  |
 | KIT-A4-F6-P1 | **Financial record keeping**: Keeps orders, invoices and payouts for the required period in a tamper-evident log. | service | small | kit-ops, KIT-A18-F6-P1 |  |
-| KIT-A4-F7-P1 | **Tax rules per country**: Country packs for VAT and GST rules and platform reporting abroad. | library | large | KIT-A4-F1-P2, KIT-A19-F6-P1 |  |
-| KIT-A4-F7-P2 | **Tax on services sold across borders**: Which GST, VAT and digital services taxes apply when a member overseas pays for at-cost storage or AI, or a worker overseas sells remote services, and when the co-op must register. Spare Studio and Spare Work both need the answer. | research | medium | KIT-A4-F7-P1, KIT-A4-F9-P1 |  |
+| KIT-A4-F7-P1 | **Tax rules per country**: Country packs for each country's VAT, GST or other sales tax rules and platform reporting. | library | large | KIT-A4-F1-P2, KIT-A19-F6-P1 |  |
+| KIT-A4-F7-P2 | **Tax on services sold across borders**: Which sales taxes, VAT and digital services taxes apply when a member in another country pays for at-cost storage or AI, or a worker in another country sells remote services, and when the co-op must register there. Spare Studio and Spare Work both need the answer. | research | medium | KIT-A4-F7-P1, KIT-A4-F9-P1 |  |
 | KIT-A4-F7-P3 | **Levies and tourist taxes**: Each place's levies, tourist taxes and per-trip charges as data in its country pack, such as a state's short-stay levy or a trip levy. Spare Stay and Spare Ride map the same need. | data | small | KIT-A4-F7-P1, KIT-A19-F6-P1 |  |
 | KIT-A4-F8-P1 | **Sanctions screening**: Uses the payment provider's screening and records the result. | integration | small | KIT-A3-F1-P2 |  |
-| KIT-A4-F9-P1 | **Co-op GST registration**: When the co-op must register for GST, its return periods, and how listed services rules make it the supplier of record for GST. | legal | small | KIT-A4-F1-P1 |  |
-| KIT-A4-F9-P2 | **Operator GST returns**: Builds and files the co-op's GST returns as marketplace operator from the GST engine's records, ready for an accountant to check. | service | medium | KIT-A4-F9-P1, KIT-A4-F1-P2, KIT-A4-F6-P1 |  |
-| KIT-A4-F9-P3 | **GST on the fee**: Charges GST on the at-cost fee where it applies and issues tax invoices for the fee to GST-registered sellers. | service | small | KIT-A4-F9-P1, KIT-A4-F1-P2, KIT-A4-F2-P1, KIT-A3-F4-P1 |  |
-| KIT-A4-F10-P1 | **GST opt-out agreements**: Records opt-out agreements under the listed services rules, checks the size tests, and switches the GST engine to the seller accounting for GST. | service | small | KIT-A4-F1-P1, KIT-A4-F1-P2 |  |
-| KIT-A4-F11-P1 | **GST period statements**: Statements for GST-registered workers that match their return periods, showing sales, the GST the platform collected and fees (*unverified* exact duty under the listed services rules). | service | small | KIT-A4-F1-P2, KIT-A4-F4-P1 |  |
-| KIT-A4-F12-P1 | **Voluntary withholding rules**: Confirms with IRD how voluntary withholding works when a platform pays a contractor, and what each statement must show. Spare Food and Spare Work both map it. | legal | small | KIT-A4-F3-P1 |  |
-| KIT-A4-F12-P2 | **Withholding at payout**: Holds back the rate a worker chooses from each payout, passes it to IRD and shows it on statements and the yearly summary. | service | small | KIT-A4-F12-P1, KIT-A3-F3-P2, KIT-A4-F4-P1 |  |
-| KIT-A4-F13-P1 | **GST threshold warning**: Warns a worker or seller whose sales across every Spareware app near the NZ$60,000 GST registration threshold, and explains what registering changes. How platform sales count towards the threshold is for the GST study to confirm (*unverified*). Spare Food and Spare Market map the same warning. | service | small | KIT-A4-F1-P2, KIT-A4-F1-P3, KIT-A3-F3-P3 |  |
+| KIT-A4-F9-P1 | **Co-op sales tax registration**: When the co-op must register for sales tax in each country, its return periods, and how platform rules make it the supplier of record (example: New Zealand's GST listed services rules). | legal | small | KIT-A4-F1-P1 |  |
+| KIT-A4-F9-P2 | **Operator sales tax returns**: Builds and files the co-op's sales tax returns as marketplace operator from the sales tax engine's records, ready for an accountant to check. | service | medium | KIT-A4-F9-P1, KIT-A4-F1-P2, KIT-A4-F6-P1 |  |
+| KIT-A4-F9-P3 | **Sales tax on the fee**: Charges sales tax on the at-cost fee where it applies and issues tax invoices for the fee to sellers registered for sales tax. | service | small | KIT-A4-F9-P1, KIT-A4-F1-P2, KIT-A4-F2-P1, KIT-A3-F4-P1 |  |
+| KIT-A4-F10-P1 | **Sales tax opt-out agreements**: Records opt-out agreements where the law allows them (example: New Zealand's listed services rules), checks the size tests, and switches the sales tax engine to the seller accounting for the tax. | service | small | KIT-A4-F1-P1, KIT-A4-F1-P2 |  |
+| KIT-A4-F11-P1 | **Sales tax period statements**: Statements for workers registered for sales tax that match their return periods, showing sales, the tax the platform collected and fees (*unverified* exact duty under New Zealand's listed services rules). | service | small | KIT-A4-F1-P2, KIT-A4-F4-P1 |  |
+| KIT-A4-F12-P1 | **Voluntary withholding rules**: Confirms with the tax office how voluntary withholding works when a platform pays a contractor (example: New Zealand's IRD), and what each statement must show. Spare Food and Spare Work both map it. | legal | small | KIT-A4-F3-P1 |  |
+| KIT-A4-F12-P2 | **Withholding at payout**: Holds back the rate a worker chooses from each payout, passes it to the tax office and shows it on statements and the yearly summary. | service | small | KIT-A4-F12-P1, KIT-A3-F3-P2, KIT-A4-F4-P1 |  |
+| KIT-A4-F13-P1 | **Sales tax threshold warning**: Warns a worker or seller whose sales across every Spareware app near the country's sales tax registration threshold (example: NZ$60,000 for New Zealand GST), and explains what registering changes. How platform sales count towards the threshold is for the sales tax study to confirm (*unverified*). Spare Food and Spare Market map the same warning. | service | small | KIT-A4-F1-P2, KIT-A4-F1-P3, KIT-A3-F3-P3 |  |
 
 ## KIT-A5 Marketplace engine
 
@@ -400,7 +400,7 @@ The one loop every marketplace runs (list or ask, match, agree, pay and hold, do
 | KIT-A5-F25-P2 | **Live auction engine**: Bids as operations ordered by the server, one server clock, a public bid history, automatic bids and extensions near the end, so every bidder sees the same truth. Spare Home and Spare Market share it. | service | large | KIT-A5-F3-P1, KIT-A15-F5-P1, KIT-A5-F25-P1 |  |
 | KIT-A5-F25-P3 | **Bidder registration**: Registers and checks bidders before an auction, with the checks the law or the seller asks for. | service | small | KIT-A5-F25-P2, KIT-A2-F1-P3 |  |
 | KIT-A5-F25-P4 | **Fake bid checks**: Flags bids from accounts linked to the seller or to each other, by device, payment or address signals, as rules on the shared fraud signals service. | service | small | KIT-A5-F25-P2, KIT-A10-F12-P2 |  |
-| KIT-A5-F26-P1 | **Restricted goods and services law**: Every NZ law that limits what may be sold or offered online, such as alcohol, vapes, medicines, firearms and work reserved to licensed people, with sources. Spare Market, Spare Work and Spare Food all need it. | legal | medium | KIT-A18-F8-P1 |  |
+| KIT-A5-F26-P1 | **Restricted goods and services law**: Every law in each country pack that limits what may be sold or offered online, starting with New Zealand's, such as alcohol, vapes, medicines, firearms and work reserved to licensed people, with sources. Spare Market, Spare Work and Spare Food all need it. | legal | medium | KIT-A18-F8-P1 |  |
 | KIT-A5-F26-P2 | **Banned and restricted rules**: Banned, restricted and licence-needed items and services as versioned rules linked to categories and keywords, changed by member vote within the law and checked when a listing is made. | library | medium | KIT-A5-F26-P1, KIT-A5-F1-P5, KIT-A5-F1-P3, KIT-A10-F5-P1 |  |
 | KIT-A5-F26-P3 | **Rules pages**: Plain pages listing what can and cannot be sold or offered, and why. | interface | small | KIT-A5-F26-P2, KIT-A20-F1-P1 |  |
 | KIT-A5-F27-P1 | **Bulk edit**: Changes price, stock, dates or settings for many listings in one checked operation that can be undone together. Spare Stay and Spare Market both need it. | library | small | KIT-A5-F1-P1, KIT-A15-F2-P1 |  |
@@ -410,7 +410,7 @@ The one loop every marketplace runs (list or ask, match, agree, pay and hold, do
 | KIT-A5-F30-P2 | **Which ledger carries a cross-app booking**: Records each cross-app booking against the app it was booked from, so its fee and cost show once, in one app's ledger. | library | small | KIT-A13-F2-P2, KIT-A5-F30-P1 |  |
 | KIT-A5-F31-P1 | **Recently viewed**: A private list of listings a person looked at, kept on the device unless they choose to sync it. Spare Stay and Spare Market both offer it. | library | small | KIT-A5-F1-P1, KIT-A15-F4-P4 |  |
 | KIT-A5-F32-P1 | **Text ordering and booking**: Books or orders by text from a favourite or a past order, with updates by text, a PIN or an approval in the app for a saved card, and the text cost guard. Spare Ride books this way, and Spare Food maps the same channel. | service | medium | KIT-A8-F4-P2, KIT-A8-F4-P4, KIT-A5-F12-P1 |  |
-| KIT-A5-F32-P2 | **Phone ordering line**: A phone number with a simple menu and a person who takes the order into the same order path, including calls through NZ Relay. Spare Ride and Spare Food both need it. | service | medium | KIT-A21-F4-P1, KIT-A5-F4-P1 |  |
+| KIT-A5-F32-P2 | **Phone ordering line**: A phone number with a simple menu and a person who takes the order into the same order path, including calls through a relay service (example: New Zealand Relay). Spare Ride and Spare Food both need it. | service | medium | KIT-A21-F4-P1, KIT-A5-F4-P1 |  |
 
 ## KIT-A6 Search, matching and dispatch
 
@@ -450,7 +450,7 @@ Pairs a request with the right worker or listing (search with filters, nearest d
 | KIT-A6-F4-P5 | **Fair queues**: Per-person caps and a fair queue for scarce viewings, applications and limited releases, so nobody, person or script, takes every slot. Spare Rent and Spare Market need it. | library | small | KIT-A6-F4-P3, KIT-A22-F5-P4 |  |
 | KIT-A6-F5-P1 | **Match explanations**: A plain reason with each match and each ranking. | library | small | KIT-A6-F3-P2, KIT-A6-F1-P2 |  |
 | KIT-A6-F5-P2 | **Fairness checks**: Regular checks that offers, rankings and declines are fair to workers and to customers, with results published through the public reporting pipeline. | service | medium | KIT-A6-F3-P2, KIT-A13-F9-P1 |  |
-| KIT-A6-F5-P3 | **Decline pattern checks**: Spots workers or hosts declining people in patterns that point to discrimination on grounds the Human Rights Act 1993 protects, for a person to review. | service | medium | KIT-A6-F5-P2, KIT-A10-F19-P1, KIT-A10-F6-P2, KIT-A6-F5-P4 |  |
+| KIT-A6-F5-P3 | **Decline pattern checks**: Spots workers or hosts declining people in patterns that point to discrimination on grounds human rights law protects (example: New Zealand's Human Rights Act 1993), for a person to review. | service | medium | KIT-A6-F5-P2, KIT-A10-F19-P1, KIT-A10-F6-P2, KIT-A6-F5-P4 |  |
 | KIT-A6-F5-P4 | **Measuring discrimination without collecting ethnicity**: Measures gaps in how groups of people are treated without storing members' ethnicity, porting a published privacy-preserving method such as Airbnb's Project Lighthouse, with a privacy impact assessment first. | research | medium | KIT-A6-F5-P2, KIT-A18-F10-P1 |  |
 | KIT-A6-F6-P1 | **Quote requests**: Sends a request to a shortlist and gathers quotes side by side. | library | medium | KIT-A6-F3-P2 |  |
 | KIT-A6-F7-P1 | **Batching**: Groups compatible jobs by route and time. | library | large | KIT-A6-F3-P2, KIT-A7-F3-P2 |  |
@@ -487,11 +487,11 @@ Maps, address search, routing, live location and service areas on open data, so 
 | KIT-A7-F1-P2 | **Map display**: Map display with MapLibre, styled to the design guide. | library | medium | KIT-A7-F1-P1, KIT-A20-F1-P1 |  |
 | KIT-A7-F1-P3 | **Map data licence**: Meets OpenStreetMap's licence: attribution shown and share-alike handled for any changed data. | legal | small |  |  |
 | KIT-A7-F1-P4 | **Maps in words**: A list view, written directions and areas described in words beside every map, so screen reader users get the same information. | library | small | KIT-A7-F1-P2, KIT-A19-F2-P1 |  |
-| KIT-A7-F2-P1 | **Geocoder choice**: Compares open geocoders on NZ address quality and licence, keeping any GPL engine as a separate service. | research | small |  |  |
+| KIT-A7-F2-P1 | **Geocoder choice**: Compares open geocoders on address quality in each country, starting with New Zealand, and on licence, keeping any GPL engine as a separate service. | research | small |  |  |
 | KIT-A7-F2-P2 | **Address search**: Address and place search with suggestions as you type. | service | large | KIT-A7-F2-P1, KIT-A19-F1-P4 |  |
-| KIT-A7-F2-P3 | **NZ address data**: Loads official NZ address data under its open licence and keeps it current. | data | medium | KIT-A7-F2-P2 |  |
+| KIT-A7-F2-P3 | **Official address data**: Loads each country's official address data under its open licence, starting with New Zealand's, and keeps it current. | data | medium | KIT-A7-F2-P2 |  |
 | KIT-A7-F2-P4 | **Address from a pin**: Turns a pin or GPS position into the nearest address. | service | small | KIT-A7-F2-P2 |  |
-| KIT-A7-F3-P1 | **Routing engine choice**: Compares open routing engines on NZ travel-time accuracy, speed, licence and running cost. | research | medium |  | [RD03](../spare-ride/STATUS.md) |
+| KIT-A7-F3-P1 | **Routing engine choice**: Compares open routing engines on travel-time accuracy in each country, starting with New Zealand, and on speed, licence and running cost. | research | medium |  | [RD03](../spare-ride/STATUS.md) |
 | KIT-A7-F3-P2 | **Routing service**: Routes, travel times and distance tables for every app. | service | large | KIT-A7-F1-P1, KIT-A7-F3-P1 | [RD03](../spare-ride/STATUS.md) |
 | KIT-A7-F3-P3 | **Arrival time estimates**: Arrival times that learn from finished trips without keeping anyone's trace. | library | medium | KIT-A7-F3-P2 |  |
 | KIT-A7-F3-P4 | **Map matching**: Snaps GPS traces to roads to measure distance accurately for metered fares, pay by distance and the mileage log, using the open routing engine's map matching. | library | medium | KIT-A7-F3-P2 | [RD03](../spare-ride/STATUS.md) |
@@ -509,7 +509,7 @@ Maps, address search, routing, live location and service areas on open data, so 
 | KIT-A7-F11-P1 | **Area data sources**: Which open sources exist for natural hazards, such as flood, liquefaction and coastal hazards, and for zoning, school zones and transport, under what licence and at what cost. Spare Construct, Spare Home and Spare Rent need the same answer. | research | medium | KIT-A26-F1-P2 |  |
 | KIT-A7-F11-P2 | **Area layers and lookups**: Hazard, zone and school zone layers on the map, and a lookup for any address, from sources whose licence allows it, each shown with its source and date. | service | medium | KIT-A7-F11-P1, KIT-A7-F1-P2, KIT-A7-F2-P2 |  |
 | KIT-A7-F11-P3 | **Council rules as data**: Each council's rules that apps apply, such as short-stay registration and night caps, sign rules and planning rules, kept as dated data with sources. Spare Stay, Spare Home and Spare Construct need them. | data | medium | KIT-A19-F9-P1, KIT-A7-F11-P1 |  |
-| KIT-A7-F12-P1 | **Aerial photos and boundary lines**: Adds open aerial imagery and property boundary lines from LINZ to the kit's maps under their licences. Spare Home and Spare Construct both need them. | integration | medium | KIT-A7-F1-P1, KIT-A7-F1-P3, KIT-A26-F1-P2 |  |
+| KIT-A7-F12-P1 | **Aerial photos and boundary lines**: Adds open aerial imagery and property boundary lines from each country's land agency (example: LINZ in New Zealand) to the kit's maps under their licences. Spare Home and Spare Construct both need them. | integration | medium | KIT-A7-F1-P1, KIT-A7-F1-P3, KIT-A26-F1-P2 |  |
 | KIT-A7-F13-P1 | **Public transport timetables**: Imports the open timetable feeds (GTFS) that transport agencies publish, under their terms, so travel times can include buses and trains. Spare Ride and Spare Rent both need them. | integration | medium | KIT-A7-F3-P2 |  |
 
 ## KIT-A8 Messaging and notifications
@@ -545,7 +545,7 @@ Chat between the two sides of a job, calls that hide phone numbers, video calls,
 | KIT-A8-F1-P2 | **Chat service**: The one chat server for every app, Spare Office's chat included: job chats and group chats, stored as operations and synced to every device. | service | large | kit-sync, KIT-A1-F1-P1, KIT-A8-F1-P1 | [OF05](../spare-office/STATUS.md) |
 | KIT-A8-F1-P3 | **Chat screens**: Shared chat screens with photos, read receipts and quick replies. | interface | medium | KIT-A8-F1-P2, KIT-A20-F1-P1, KIT-A15-F7-P1 |  |
 | KIT-A8-F1-P4 | **Link previews without tracking**: Our server fetches a link's title and picture once and shows them to readers, so the linked site never sees who read it, and never inside end-to-end encrypted chats. | service | small | KIT-A8-F1-P2, KIT-A15-F7-P1 |  |
-| KIT-A8-F1-P5 | **Interception duty check**: Whether the co-op's chat and call services make it a service provider with a duty to assist under the Telecommunications (Interception Capability and Security) Act 2013 (*unverified* whether app chat counts). | legal | small |  |  |
+| KIT-A8-F1-P5 | **Interception duty check**: Whether the co-op's chat and call services make it a service provider with a duty to assist under interception law (example: New Zealand's Telecommunications (Interception Capability and Security) Act 2013; *unverified* whether app chat counts). | legal | small |  |  |
 | KIT-A8-F1-P6 | **Bridges to other chat networks**: Whether links to other chat networks are allowed by their terms, and how to join only those without weakening encryption. Spare Office and Spare Social share this question. | research | small | KIT-A8-F1-P1, KIT-A8-F10-P1 |  |
 | KIT-A8-F2-P1 | **Masked calls**: Temporary numbers from a phone provider, paid at cost, that stop working after the job. | integration | medium | KIT-A5-F4-P1 |  |
 | KIT-A8-F3-P1 | **Push delivery**: Sends push through Apple's and Google's push services and web push, as phones require. | integration | medium | KIT-A20-F2-P2 | [K04](STATUS.md) |
@@ -643,9 +643,9 @@ Keeps people safe during a job and online: emergency help that works anywhere, o
 
 | ID | Part | Kind | Size | Depends on | Piece |
 | --- | --- | --- | --- | --- | --- |
-| KIT-A10-F1-P1 | **Emergency button**: Calls the emergency number from the country pack (111 in NZ) and shows the address, vehicle and job details to read out, and still works with no data connection. | interface | small | KIT-A7-F4-P1, KIT-A19-F9-P1 |  |
+| KIT-A10-F1-P1 | **Emergency button**: Calls the emergency number from the country pack (111 in New Zealand) and shows the address, vehicle and job details to read out, and still works with no data connection. | interface | small | KIT-A7-F4-P1, KIT-A19-F9-P1 |  |
 | KIT-A10-F1-P2 | **Urgent safety lane**: The safety lane of the one urgent route, so urgent safety reports reach a trained person on the shared on-call roster at any hour. | service | medium | KIT-A21-F3-P1, KIT-A21-F2-P2 |  |
-| KIT-A10-F1-P3 | **Helplines and 111 TXT**: Shows each country's helplines, such as 1737 in NZ, and guides Deaf and speech-impaired members to register for 111 TXT before they need it. | data | small | KIT-A19-F9-P1 |  |
+| KIT-A10-F1-P3 | **Helplines and emergency text**: Shows each country's helplines, such as 1737 in New Zealand, and guides Deaf and speech-impaired members to register for emergency text, such as 111 TXT in New Zealand, before they need it. | data | small | KIT-A19-F9-P1 |  |
 | KIT-A10-F2-P1 | **Trusted contact link**: A time-limited link showing live progress, which ends with the job. | service | small | KIT-A7-F4-P1 |  |
 | KIT-A10-F3-P1 | **Reports service**: Reports with categories, attachments and status, all as operations. | service | medium | kit-ops |  |
 | KIT-A10-F3-P2 | **Report forms**: Short report forms in every app, reachable from anything that can be reported. | interface | small | KIT-A10-F3-P1, KIT-A20-F1-P1 |  |
@@ -658,7 +658,7 @@ Keeps people safe during a job and online: emergency help that works anywhere, o
 | KIT-A10-F6-P4 | **Moderator wellbeing**: Exposure limits, breaks and support for people reviewing hard content. | service | small | KIT-A10-F6-P2 |  |
 | KIT-A10-F7-P1 | **Public removal log**: Publishes each decision with its rule and no personal details, through the public reporting pipeline. | service | medium | KIT-A10-F6-P2, KIT-A13-F9-P1 | [M04](../spare-social/STATUS.md) |
 | KIT-A10-F8-P1 | **Statements of reasons**: Sends the person affected the reason and an appeal link with every decision. | service | small | KIT-A10-F6-P2, KIT-A8-F3-P2 |  |
-| KIT-A10-F9-P1 | **Legal duties for hosts**: What NZ and other countries require hosts to remove, how fast and by whom. | research | medium |  | [M02](../spare-social/STATUS.md) |
+| KIT-A10-F9-P1 | **Legal duties for hosts**: What each country requires hosts to remove, starting with New Zealand, how fast and by whom. | research | medium |  | [M02](../spare-social/STATUS.md) |
 | KIT-A10-F9-P2 | **Legal notice handling**: Tracks legal complaints and counter-notices against their deadlines. | service | medium | KIT-A10-F6-P2, KIT-A10-F9-P1, KIT-A10-F9-P3 |  |
 | KIT-A10-F9-P3 | **Law enforcement requests**: A published process for police and court requests, checked by a lawyer. | legal | medium |  |  |
 | KIT-A10-F10-P1 | **Safety tooling**: Known-illegal-content matching, age checks and reporting, with licences and legal duties. | research | medium |  | [M07](../spare-social/STATUS.md) |
@@ -676,10 +676,10 @@ Keeps people safe during a job and online: emergency help that works anywhere, o
 | KIT-A10-F17-P1 | **Trusted flaggers**: A priority queue for recognised safety organisations. | service | small | KIT-A10-F6-P2 |  |
 | KIT-A10-F18-P1 | **Sexual harm response design**: How specialist services and other platforms handle sexual harm reports: trauma-informed steps, responder training and referral partners in each country. | research | medium |  |  |
 | KIT-A10-F18-P2 | **Sexual harm path**: A separate, trauma-informed report path handled only by trained responders, with referral to support and the reporter choosing whether police are told. | service | medium | KIT-A10-F18-P1, KIT-A10-F3-P1, KIT-A10-F1-P2, KIT-A10-F1-P3 |  |
-| KIT-A10-F19-P1 | **Non-discrimination commitment**: A commitment every member accepts at sign-up under the Human Rights Act 1993, covering how workers treat customers and how customers treat workers. | legal | small |  |  |
-| KIT-A10-F19-P2 | **Assistance animal rule**: One rule for every app that assistance dogs are always accepted and never charged as pets, checked by a lawyer under the Dog Control Act 1996 and the Human Rights Act 1993 (*unverified* per app). | legal | small | KIT-A10-F19-P1 |  |
+| KIT-A10-F19-P1 | **Non-discrimination commitment**: A commitment every member accepts at sign-up under each country's human rights law (example: New Zealand's Human Rights Act 1993), covering how workers treat customers and how customers treat workers. | legal | small |  |  |
+| KIT-A10-F19-P2 | **Assistance animal rule**: One rule for every app that assistance dogs are always accepted and never charged as pets, checked by a lawyer in each country (example: New Zealand's Dog Control Act 1996 and Human Rights Act 1993; *unverified* per app). | legal | small | KIT-A10-F19-P1 |  |
 | KIT-A10-F20-P1 | **Decision sampling and conflict checks**: Sends a random sample of decisions for a second review, publishes how often they agree, and checks moderators for conflicts of interest. | service | medium | KIT-A10-F6-P2, KIT-A11-F4-P1 |  |
-| KIT-A10-F21-P1 | **Copyright and counterfeit rules**: What copyright and trade mark law ask of a host that receives notices, including the Copyright Act's rules for online hosts and counterfeit goods. | legal | small | KIT-A10-F9-P1 |  |
+| KIT-A10-F21-P1 | **Copyright and counterfeit rules**: What copyright and trade mark law ask of a host that receives notices, including each country's rules for online hosts and counterfeit goods (example: New Zealand's Copyright Act). | legal | small | KIT-A10-F9-P1 |  |
 | KIT-A10-F21-P2 | **Copyright and trade mark notices**: Notices and counter-notices for copied photos, trade mark misuse and counterfeit listings, tracked on the legal notice deadlines. | service | small | KIT-A10-F21-P1, KIT-A10-F9-P2, KIT-A5-F1-P3 |  |
 | KIT-A10-F22-P1 | **Official alerts**: Brings in Civil Defence emergency alerts and MetService warnings for each service area on each source's published terms (MetService's data terms *unverified*), and shows them to people there. | integration | medium | KIT-A7-F5-P1, KIT-A8-F3-P2 |  |
 | KIT-A10-F22-P2 | **Disaster mode**: A switch for an affected zone that waives cancellation fees, pauses ratings and dispatch there and tells workers in the zone, with each use logged and reported. | service | medium | KIT-A10-F22-P1, KIT-A5-F6-P1, KIT-A9-F1-P1, KIT-A6-F3-P2, KIT-A22-F2-P2 |  |
@@ -715,8 +715,8 @@ When a job goes wrong the money stays held, both sides are heard, a panel of tra
 | KIT-A11-F4-P1 | **Panel selection**: Draws eligible members at random, checks for conflicts of interest and keeps panels balanced. | service | medium | KIT-A11-F1-P1, KIT-A14-F2-P1, KIT-A11-F4-P5 |  |
 | KIT-A11-F4-P2 | **Panel workspace**: Lets panel members read the evidence, discuss and record a decision. | interface | medium | KIT-A11-F4-P1, KIT-A11-F2-P1, KIT-A20-F1-P1, KIT-A8-F12-P1 |  |
 | KIT-A11-F4-P3 | **Panel pay**: Pay for panel time, paid out at cost, with training and certificates from the shared training module. | service | small | KIT-A11-F4-P1, KIT-A3-F3-P2, KIT-A25-F2-P1, KIT-A11-F4-P4 |  |
-| KIT-A11-F4-P4 | **Tax on member role pay**: How pay to panel members, moderators and ledger checkers is taxed and treated, such as honoraria under the schedular payment rules (*unverified*). | legal | small |  |  |
-| KIT-A11-F4-P5 | **Legal standing of panel decisions**: What a panel decision binds and how it sits beside the Disputes Tribunal and Consumer Guarantees Act rights, given that a consumer is bound to arbitration only by a separate written agreement made after the dispute arises (Arbitration Act 1996 s 11). | legal | medium | KIT-A18-F8-P1 |  |
+| KIT-A11-F4-P4 | **Tax on member role pay**: How pay to panel members, moderators and ledger checkers is taxed and treated, such as honoraria under New Zealand's schedular payment rules (*unverified*). | legal | small |  |  |
+| KIT-A11-F4-P5 | **Legal standing of panel decisions**: What a panel decision binds and how it sits beside each country's small claims and consumer rights. In New Zealand, the first country pack, that means the Disputes Tribunal and Consumer Guarantees Act rights, and a consumer is bound to arbitration only by a separate written agreement made after the dispute arises (Arbitration Act 1996 s 11). | legal | medium | KIT-A18-F8-P1 |  |
 | KIT-A11-F5-P1 | **Appeals**: A second review by different members within set times, run through the one review queue. | service | small | KIT-A11-F4-P1, KIT-A10-F6-P2 |  |
 | KIT-A11-F6-P1 | **Dispute clocks**: Deadlines for each step, with reminders and a set outcome if time runs out. | service | small | KIT-A11-F1-P1, KIT-A8-F3-P2, KIT-A19-F9-P2, KIT-A15-F14-P1 |  |
 | KIT-A11-F7-P1 | **Outside routes**: Plain guidance on tribunals and regulators for each app and country. | data | small | KIT-A19-F6-P1 |  |
@@ -724,13 +724,13 @@ When a job goes wrong the money stays held, both sides are heard, a panel of tra
 | KIT-A11-F8-P1 | **Dispute statistics**: Published, anonymous counts and outcomes for each app, through the public reporting pipeline. | service | small | KIT-A11-F1-P1, KIT-A13-F9-P1 |  |
 | KIT-A11-F9-P1 | **Insurance options**: Shared cover options across apps, such as a co-op pool or outside insurers, with costs. | research | medium |  | [ST03](../spare-stay/STATUS.md) |
 | KIT-A11-F9-P2 | **Insurance claims link**: Passes dispute evidence to an insurer for apps that carry cover. | integration | medium | KIT-A11-F2-P1, KIT-A11-F9-P1 |  |
-| KIT-A11-F9-P3 | **Income cover options**: Options for income cover beyond ACC, such as an optional group policy at cost, what each covers and what it costs. Spare Food and Spare Ride both map it. | research | small | KIT-A11-F9-P1, KIT-A23-F2-P4 |  |
-| KIT-A11-F10-P1 | **Protection pool rules**: What the pool covers, how it is funded and how claims are decided, and whether a member-funded pool counts as insurance business under the Insurance (Prudential Supervision) Act 2010 (*unverified*). | legal | medium | KIT-A11-F9-P1, KIT-A3-F16-P1 |  |
+| KIT-A11-F9-P3 | **Income cover options**: Options for income cover beyond public accident cover (example: New Zealand's ACC), such as an optional group policy at cost, what each covers and what it costs. Spare Food and Spare Ride both map it. | research | small | KIT-A11-F9-P1, KIT-A23-F2-P4 |  |
+| KIT-A11-F10-P1 | **Protection pool rules**: What the pool covers, how it is funded and how claims are decided, and whether a member-funded pool counts as insurance business under insurance law (example: New Zealand's Insurance (Prudential Supervision) Act 2010; *unverified*). | legal | medium | KIT-A11-F9-P1, KIT-A3-F16-P1 |  |
 | KIT-A11-F10-P2 | **Protection pool**: One pool service, its money held by the payment provider, with published rules, claims decided through disputes and its own ledger lines for money in and claims paid. | service | medium | KIT-A11-F10-P1, KIT-A11-F1-P1, KIT-A13-F1-P2, KIT-A3-F1-P2 |  |
 
 ## KIT-A12 Member voting and meetings
 
-Members propose, discuss and vote on fees and rules for each app and for the whole co-op, elect directors, panels and moderators, follow decisions through, and hold meetings online, with a way to vote without a device. One member, one vote. Built as svc-voting.
+Workers propose, discuss and vote on their own app's fees and rules, and members vote on major changes for the whole co-op. Members elect directors, panels and moderators, follow decisions through, and hold meetings online, with a way to vote without a device. One member, one vote. Built as svc-voting.
 
 | Feature | What a person can do | Priority | Parts |
 | --- | --- | --- | --- |
@@ -759,13 +759,13 @@ Members propose, discuss and vote on fees and rules for each app and for the who
 | KIT-A12-F3-P4 | **Vote without a device**: Postal or phone voting for members without a device, counted with the app votes and checked against the register. | service | medium | KIT-A12-F3-P1 |  |
 | KIT-A12-F4-P1 | **Results to settings**: Turns a passed vote into the operation that changes the app's fees or rules. | service | medium | KIT-A12-F3-P1, kit-ops, KIT-A12-F4-P3, KIT-A12-F4-P4 |  |
 | KIT-A12-F4-P2 | **Results page**: Turnout, quorum, the result and exactly what changed. | interface | small | KIT-A12-F3-P1, KIT-A20-F1-P1 |  |
-| KIT-A12-F4-P3 | **Competition law check**: Whether worker-members who are contractors may vote together on fares, prices or fees without making a cartel provision under the Commerce Act, and whether a collective bargaining route proposed in late 2025 now applies (*unverified*). | legal | medium |  |  |
-| KIT-A12-F4-P4 | **Legal duty locks**: Marks settings that carry a legal duty, such as a required check, GST collection or a notice period, so a passed vote cannot switch them off, and sends any proposal that touches them for legal review before the vote opens. | library | small | KIT-A12-F1-P1 |  |
+| KIT-A12-F4-P3 | **Competition law check**: Whether worker-members who are contractors may vote together on fares, prices or fees without making a cartel provision under competition law, starting with New Zealand's Commerce Act, and whether a collective bargaining route proposed there in late 2025 now applies (*unverified*). | legal | medium |  |  |
+| KIT-A12-F4-P4 | **Legal duty locks**: Marks settings that carry a legal duty, such as a required check, sales tax collection or a notice period, so a passed vote cannot switch them off, and sends any proposal that touches them for legal review before the vote opens. | library | small | KIT-A12-F1-P1 |  |
 | KIT-A12-F5-P1 | **Voting rules in the constitution**: Quorum, notice periods and electorates written into the constitution and rules. | legal | medium |  | [K01](STATUS.md) |
 | KIT-A12-F5-P2 | **Electorates**: Who votes on what: each app's workers, each app's customer-members, every member, or the board, with what customer-members vote on stated for each app. | data | small | KIT-A14-F2-P1, KIT-A12-F5-P1 |  |
 | KIT-A12-F6-P1 | **Elections**: Nominations, candidate statements and ranked voting. | service | medium | KIT-A12-F3-P1 |  |
 | KIT-A12-F6-P2 | **Independent count**: An independent returning officer or scrutineer for board elections, and a published audit of each count. | service | small | KIT-A12-F6-P1, KIT-A12-F3-P3 |  |
-| KIT-A12-F6-P3 | **Candidate checks and consent**: Checks that each board candidate is not disqualified under the Companies Act 1993 and holds their written consent before the election opens. | service | small | KIT-A12-F6-P1, KIT-A14-F1-P1 |  |
+| KIT-A12-F6-P3 | **Candidate checks and consent**: Checks that each board candidate is not disqualified under company law (example: New Zealand's Companies Act 1993) and holds their written consent before the election opens. | service | small | KIT-A12-F6-P1, KIT-A14-F1-P1 |  |
 | KIT-A12-F6-P4 | **Election challenges**: A route to challenge an election result within a set time, decided by the independent returning officer or as the constitution sets. | service | small | KIT-A12-F6-P2, KIT-A12-F5-P1 |  |
 | KIT-A12-F7-P1 | **Meetings**: Notices, agendas, motions, attendance and minutes. | service | medium | KIT-A12-F3-P1, KIT-A8-F3-P2, KIT-A19-F9-P2 |  |
 | KIT-A12-F7-P2 | **Meeting video**: Live video for meetings on the kit's own call service. | integration | medium | KIT-A8-F11-P2, KIT-A12-F7-P1 |  |
@@ -821,7 +821,7 @@ Every month each app publishes what it cost to run, what the fee paid for and ho
 | KIT-A13-F9-P1 | **Public reporting pipeline**: One pipeline that builds every public report from the operation log, strips personal details and publishes them with the ledger as open data. | service | medium | KIT-A13-F5-P1, KIT-A15-F1-P2, KIT-A13-F9-P2 |  |
 | KIT-A13-F9-P2 | **Small-number suppression**: Hides or groups any count in a public report small enough to identify a person, such as one app, place and month, under one published minimum. | library | small |  |  |
 | KIT-A13-F10-P1 | **Expense claims**: Claims with receipts, approval by someone other than the claimant, and repayment, each shown in the ledger. | service | medium | KIT-A13-F11-P2, KIT-A15-F7-P1 |  |
-| KIT-A13-F11-P1 | **Bookkeeping system choice**: Compares existing accounting systems on NZ GST, bank feeds, payroll links, licence and cost, so the co-op uses one rather than building its own. | research | small |  |  |
+| KIT-A13-F11-P1 | **Bookkeeping system choice**: Compares existing accounting systems on sales tax (example: New Zealand GST), bank feeds, payroll links, licence and cost, so the co-op uses one rather than building its own. | research | small |  |  |
 | KIT-A13-F11-P2 | **Books link**: Feeds ledger costs, fee income and payouts owed into the co-op's accounts and reconciles them with the bank. | integration | medium | KIT-A13-F11-P1, KIT-A13-F1-P2, KIT-A3-F9-P1 |  |
 | KIT-A13-F11-P3 | **Supplier bills and staff pay**: Approves and pays supplier bills, and pays staff through the one payroll provider link, each payment an operation with two people signing off. | integration | medium | KIT-A13-F11-P2, KIT-A22-F5-P1, KIT-A23-F2-P3 |  |
 | KIT-A13-F11-P4 | **Yearly accounts and audit**: The financial statements and audit the law and the constitution require, with the auditor chosen by members. | legal | small | KIT-A13-F11-P2 |  |
@@ -830,18 +830,18 @@ Every month each app publishes what it cost to run, what the fee paid for and ho
 
 ## KIT-A14 Co-op membership and member portal
 
-The co-op's own home: joining once per person, the share register and the co-operative test, member roles, rebates of any surplus, reports, the constitution, discipline, board work, insurance, contributors' rights, the steward society and the federation of local co-ops. Proposed as svc-members (KIT-A16-F10-P1); the member register feeds svc-voting.
+The co-op's own home: joining for free once per person, the member register, member roles, refunds of any fees above running costs, reports, the constitution, discipline, board work, insurance, contributors' rights, the steward society and the federation of local co-ops. Proposed as svc-members (KIT-A16-F10-P1); the member register feeds svc-voting.
 
 | Feature | What a person can do | Priority | Parts |
 | --- | --- | --- | --- |
-| **KIT-A14-F1** Join the co-op | Become a member by buying one $1 share and agreeing to the constitution. | core | P1, P2, P3, P4, P5 |
-| **KIT-A14-F2** Be on the share register | Know my membership and share are recorded correctly. | core | P1, P2, P3, P4 |
+| **KIT-A14-F1** Join the co-op | Become a member for free by taking part with a Spareware account and agreeing to the constitution, with no shares and no joining fee. | core | P1, P2, P3, P4, P5 |
+| **KIT-A14-F2** Be on the member register | Know my membership is recorded correctly. | core | P1, P2, P3, P4 |
 | **KIT-A14-F3** See my membership at a glance | See my open votes, roles, earnings and co-op news in one place. | core | P1 |
 | **KIT-A14-F4** Read the constitution and reports | Read the constitution, rules, minutes and annual reports, with past versions. | core | P1, P2 |
-| **KIT-A14-F5** Share in any surplus | See my share of any surplus, returned as a rebate or as lower fees. | next | P1, P2, P3 |
+| **KIT-A14-F5** Get back fees above running costs | See any fees I paid above running costs returned to me as a refund or as lower fees. | next | P1, P2, P3 |
 | **KIT-A14-F6** Take on a member role | Volunteer as a panel member, moderator or ledger checker, and get trained. | core | P1 |
 | **KIT-A14-F7** Invite people | Invite friends or workers to join with a personal link. | core | P1 |
-| **KIT-A14-F8** Leave the co-op | Leave and have my share paid back under the constitution. | core | P1 |
+| **KIT-A14-F8** Leave the co-op | Leave whenever I choose, with my votes and roles closed under the constitution. | core | P1 |
 | **KIT-A14-F9** Find other members | Find members who chose to be listed, by app or place. | next | P1 |
 | **KIT-A14-F10** Read what other co-ops learned | Read the study of other platform co-ops and see which of its lessons shaped the kit's rules. | core | P1 |
 | **KIT-A14-F11** Run the board in the open | As a director, keep board papers, minutes and interests in one place members can check. | next | P1 |
@@ -859,23 +859,23 @@ The co-op's own home: joining once per person, the share register and the co-ope
 | ID | Part | Kind | Size | Depends on | Piece |
 | --- | --- | --- | --- | --- | --- |
 | KIT-A14-F1-P1 | **Legal entity**: The legal form of the operating co-op and of the steward that holds the code and name. | legal | medium |  | [K01](STATUS.md) |
-| KIT-A14-F1-P2 | **Member share offer**: Confirms $1 member shares can be offered without a full disclosure document. | legal | small |  | [K01](STATUS.md) |
-| KIT-A14-F1-P3 | **Join flow**: Explains membership, takes the $1 share payment and records acceptance of the constitution. | interface | medium | KIT-A1-F1-P1, KIT-A3-F1-P3, KIT-A20-F1-P1, KIT-A14-F1-P1, KIT-A14-F1-P2, KIT-A14-F1-P4 |  |
-| KIT-A14-F1-P4 | **One person, one membership**: An identity check and a duplicate check before a share is issued, so no one holds two memberships or two votes. | service | small | KIT-A2-F1-P2, KIT-A2-F1-P3, KIT-A14-F2-P1 |  |
-| KIT-A14-F1-P5 | **Business members**: Restaurants, shops and trade firms join as business members under the constitution's member classes, with a check that the business is real before a share is issued. | service | small | KIT-A14-F1-P1, KIT-A14-F2-P1, KIT-A2-F7-P1, KIT-A1-F7-P1 |  |
-| KIT-A14-F2-P1 | **Member register**: The legal share register and member classes for each app, every change an operation. | service | large | kit-ops, KIT-A1-F1-P1 | [K01](STATUS.md) |
+| KIT-A14-F1-P2 | **Free membership terms**: Confirms free membership, with no shares and no fee, is not a securities offer and needs no disclosure document. | legal | small |  | [K01](STATUS.md) |
+| KIT-A14-F1-P3 | **Join flow**: Explains membership, which is free, and records acceptance of the constitution. | interface | medium | KIT-A1-F1-P1, KIT-A3-F1-P3, KIT-A20-F1-P1, KIT-A14-F1-P1, KIT-A14-F1-P2, KIT-A14-F1-P4 |  |
+| KIT-A14-F1-P4 | **One person, one membership**: An identity check and a duplicate check before membership starts, so no one holds two memberships or two votes. | service | small | KIT-A2-F1-P2, KIT-A2-F1-P3, KIT-A14-F2-P1 |  |
+| KIT-A14-F1-P5 | **Business members**: Restaurants, shops and trade firms join as business members under the constitution's member classes, with a check that the business is real before it joins. | service | small | KIT-A14-F1-P1, KIT-A14-F2-P1, KIT-A2-F7-P1, KIT-A1-F7-P1 |  |
+| KIT-A14-F2-P1 | **Member register**: The member register and member classes for each app, every change an operation. | service | large | kit-ops, KIT-A1-F1-P1 | [K01](STATUS.md) |
 | KIT-A14-F2-P2 | **Membership certificate**: A member number and a downloadable certificate. | service | small | KIT-A14-F2-P1, engine-pdf |  |
-| KIT-A14-F2-P3 | **Co-operative test**: Tracks that transacting shareholders hold at least 60% of voting rights, as the Co-operative Companies Act 1996 requires, and flags members who stop trading. | service | small | KIT-A14-F2-P1, KIT-A5-F4-P1, KIT-A3-F3-P2 |  |
-| KIT-A14-F2-P4 | **Register inspection**: Handles requests to inspect the share register under company law (*unverified* scope for co-operative companies) without showing members' home addresses beyond what the law requires. | legal | small | KIT-A14-F2-P1 |  |
+| KIT-A14-F2-P3 | **Active member check**: Tracks which members take part in each app, so votes stay with people who use it, and flags members who stop taking part. | service | small | KIT-A14-F2-P1, KIT-A5-F4-P1, KIT-A3-F3-P2 |  |
+| KIT-A14-F2-P4 | **Register inspection**: Handles requests to inspect the member register where the law for the co-op's legal form allows it (*unverified* scope) without showing members' home addresses beyond what the law requires. | legal | small | KIT-A14-F2-P1 |  |
 | KIT-A14-F3-P1 | **Member portal home**: One page with open votes, my roles, my apps, ledger news and meetings, in Spareware red. | interface | large | KIT-A14-F2-P1, KIT-A12-F3-P1, KIT-A13-F1-P2, KIT-A20-F1-P1 |  |
 | KIT-A14-F4-P1 | **Co-op documents library**: The versioned constitution, rules, minutes and reports. | service | small | engine-pdf |  |
-| KIT-A14-F4-P2 | **Yearly filings**: Annual returns and statements to the Companies Office and regulators, using the audited yearly accounts. | legal | small | KIT-A14-F2-P1, KIT-A13-F11-P4 |  |
-| KIT-A14-F5-P1 | **Trade records**: Records each member's trade with the co-op, as the basis for any rebate. | service | medium | KIT-A14-F2-P1, KIT-A3-F3-P2, KIT-A14-F5-P3 |  |
-| KIT-A14-F5-P2 | **Rebates**: Works out and pays rebates once members have voted on them. | service | medium | KIT-A14-F5-P1, KIT-A3-F3-P2, KIT-A12-F3-P1 |  |
-| KIT-A14-F5-P3 | **Rebate tax**: How rebates are taxed and reported for each member. | legal | small |  | [K01](STATUS.md) |
+| KIT-A14-F4-P2 | **Yearly filings**: Annual returns and statements to the company registry (example: New Zealand's Companies Office) and regulators, using the audited yearly accounts. | legal | small | KIT-A14-F2-P1, KIT-A13-F11-P4 |  |
+| KIT-A14-F5-P1 | **Fee records**: Records the fees each member paid, as the basis for any refund of fees above running costs. | service | medium | KIT-A14-F2-P1, KIT-A3-F3-P2, KIT-A14-F5-P3 |  |
+| KIT-A14-F5-P2 | **Fee refunds**: Works out and pays refunds of fees above running costs once members have voted on them. | service | medium | KIT-A14-F5-P1, KIT-A3-F3-P2, KIT-A12-F3-P1 |  |
+| KIT-A14-F5-P3 | **Fee refund tax**: How fee refunds are taxed and reported for each member. | legal | small |  | [K01](STATUS.md) |
 | KIT-A14-F6-P1 | **Member roles**: Role sign-up, terms and conflict of interest declarations, with training and certificates from the shared training module. | service | medium | KIT-A14-F2-P1, KIT-A1-F5-P2, KIT-A25-F2-P1, KIT-A11-F4-P4 |  |
 | KIT-A14-F7-P1 | **Invites**: Personal invite links that count joins without tracking anyone elsewhere. | service | small | KIT-A14-F2-P1 |  |
-| KIT-A14-F8-P1 | **Leaving and share redemption**: Ends a membership and redeems the share, keeping the records the law requires. | service | small | KIT-A14-F2-P1, KIT-A3-F5-P1 |  |
+| KIT-A14-F8-P1 | **Leaving**: Ends a membership and closes its votes and roles, keeping the records the law requires. | service | small | KIT-A14-F2-P1, KIT-A3-F5-P1 |  |
 | KIT-A14-F9-P1 | **Member directory**: An opt-in directory showing only what each member chooses. | interface | small | KIT-A14-F2-P1, KIT-A1-F5-P1 |  |
 | KIT-A14-F10-P1 | **Platform co-op study**: What worked and failed for ride, courier and holiday rental co-ops, with current status. | research | medium |  | [K03](STATUS.md) |
 | KIT-A14-F11-P1 | **Board area**: Board papers, minutes, an interests register and resolutions, with board meetings run on the shared meetings part. | service | medium | KIT-A14-F2-P1, KIT-A12-F7-P1 |  |
@@ -884,12 +884,12 @@ The co-op's own home: joining once per person, the share register and the co-ope
 | KIT-A14-F13-P1 | **Contributor records**: Links reviewed contributions to members who choose to show them. | integration | small | KIT-A14-F2-P1 |  |
 | KIT-A14-F14-P1 | **Member discipline rules**: The constitution's grounds, notice, hearing and appeal for suspending or expelling a member. | legal | small | KIT-A14-F1-P1 | [K01](STATUS.md) |
 | KIT-A14-F14-P2 | **Suspension and expulsion**: Notice, hearing, decision and appeal recorded against the register, kept apart from app bans and restrictions. | service | medium | KIT-A14-F14-P1, KIT-A14-F2-P1 |  |
-| KIT-A14-F15-P1 | **Steward society rules**: The constitution, committee, disputes procedure and yearly duties the Incorporated Societies Act 2022 requires of the steward. | legal | small | KIT-A14-F1-P1 | [K01](STATUS.md) |
+| KIT-A14-F15-P1 | **Steward society rules**: The constitution, committee, disputes procedure and yearly duties the law requires of the steward (example: New Zealand's Incorporated Societies Act 2022). | legal | small | KIT-A14-F1-P1 | [K01](STATUS.md) |
 | KIT-A14-F15-P2 | **Steward register and meetings**: The society's own member register, committee records, annual meeting and financial statements, reusing the co-op's register, meetings and books. | service | medium | KIT-A14-F15-P1, KIT-A14-F2-P1, KIT-A12-F7-P1, KIT-A13-F11-P2 |  |
 | KIT-A14-F16-P1 | **Contributor sign-off**: Developer Certificate of Origin sign-off on every commit, with no contributor licence agreement, and employer consent for work done on an employer's time. | legal | small | KIT-A16-F4-P1 | [A14](../spare-construct/STATUS.md) |
 | KIT-A14-F16-P2 | **Sign-off check**: A repository check that every contribution carries the sign-off before it is merged. | service | small | KIT-A14-F16-P1, KIT-A22-F2-P1 |  |
 | KIT-A14-F17-P1 | **Co-op insurance**: Directors and officers, cyber and public liability cover for the co-op across all apps, compared on cost and what each covers. | research | medium |  |  |
-| KIT-A14-F18-P1 | **Trade marks**: Registers Spareware and the product names as trade marks, in NZ first, held by the steward and licensed to local co-ops. | legal | small | KIT-A14-F1-P1 |  |
+| KIT-A14-F18-P1 | **Trade marks**: Registers Spareware and the product names as trade marks in each country, starting with the first example country, New Zealand, held by the steward and licensed to local co-ops. | legal | small | KIT-A14-F1-P1 |  |
 | KIT-A14-F18-P2 | **Domains held by the steward**: The steward holds every Spareware domain under two-person control, so no single person can lose or take one. | legal | small | KIT-A14-F1-P1, KIT-A22-F5-P1 |  |
 | KIT-A14-F19-P1 | **Wind-down plan**: Notice periods, a data export window, payouts and held money settled, and code and data passed to the steward or members when an app or the co-op closes. | legal | medium | KIT-A14-F1-P1, KIT-A18-F1-P1, KIT-A3-F2-P2 |  |
 
@@ -971,7 +971,7 @@ Everything a person can do, a script or add-in can do: one command API per app, 
 | **KIT-A16-F1** Use every app from a script | Do anything I can do in an app through its API. | core | P1, P2, P3, P4, P5 |
 | **KIT-A16-F2** Be told when something changes | Have my own systems called when an order, payment or message changes. | core | P1 |
 | **KIT-A16-F3** Build with a ready-made library | Use ready-made libraries for common languages. | core | P1, P2, P3, P4, P5 |
-| **KIT-A16-F4** Know the licence | Know which licence covers the code and the SDK. | core | P1 |
+| **KIT-A16-F4** Know the licence | Know the core is under MPL-2.0 and the SDK and plugins under Apache-2.0, and that neither will ever be relicensed. | core | P1 |
 | **KIT-A16-F5** Install an add-in | Add a plugin to an app and see what it will be allowed to do first. | core | P1, P2, P3, P4 |
 | **KIT-A16-F6** Find add-ins | Browse, rate and install plugins from one directory. | next | P1, P2 |
 | **KIT-A16-F7** Publish an add-in | Publish a plugin, and charge a fair price for it if I choose. | next | P1, P2 |
@@ -997,7 +997,7 @@ Everything a person can do, a script or add-in can do: one command API per app, 
 | KIT-A16-F3-P3 | **Test mode**: A sandbox with test accounts and test payments. | service | medium | KIT-A16-F1-P1, KIT-A3-F1-P2 |  |
 | KIT-A16-F3-P4 | **Marketplace simulator**: Runs simulated customers and workers on real map data through the same commands as people, so matching, dispatch, fee setting and fraud rules are measured before launch, with each app adding its own behaviours. | service | large | KIT-A16-F3-P3, KIT-A7-F3-P2, KIT-A6-F3-P2, KIT-A15-F1-P3 |  |
 | KIT-A16-F3-P5 | **Command-line tool**: One command-line tool generated from each app's command schemas, for scripts, batch conversion and checks from a terminal. Spare Construct, Spare Studio and Spare OS need it. | library | medium | KIT-A15-F1-P3, KIT-A16-F1-P2 |  |
-| KIT-A16-F4-P1 | **Licence decision**: The core and SDK licences, chosen for contributors and add-in authors. | legal | small |  | [A14](../spare-construct/STATUS.md) |
+| KIT-A16-F4-P1 | **Licence decision**: The decided licences: MPL-2.0 for the core and Apache-2.0 for the SDK and plugins, never relicensed, with no contributor licence agreement and Developer Certificate of Origin sign-off only. | legal | small |  | [A14](../spare-construct/STATUS.md) |
 | KIT-A16-F5-P1 | **Plugin method**: WebAssembly components on wasmtime: what authors in each language can use today. | research | medium |  | [A08](../spare-construct/STATUS.md) |
 | KIT-A16-F5-P2 | **Plugin host**: Runs plugins as sandboxed WebAssembly components with declared permissions. | library | large | KIT-A15-F1-P2, KIT-A16-F5-P1 | [A08](../spare-construct/STATUS.md) |
 | KIT-A16-F5-P3 | **Permission prompt**: Shows a plugin's permissions in plain words before it is installed. | interface | small | KIT-A16-F5-P2, KIT-A20-F1-P1 |  |
@@ -1005,7 +1005,7 @@ Everything a person can do, a script or add-in can do: one command API per app, 
 | KIT-A16-F6-P1 | **Plugin directory**: Listings, versions, reviews and install counts. | service | medium | KIT-A16-F5-P2 |  |
 | KIT-A16-F6-P2 | **Plugin review and signing**: Checks and signs plugins before they are listed, with a way to pull a bad one. | service | medium | KIT-A16-F6-P1 |  |
 | KIT-A16-F7-P1 | **Publisher tools**: Upload, versions and usage figures for plugin authors. | interface | medium | KIT-A16-F6-P1 |  |
-| KIT-A16-F7-P2 | **Paid add-ins**: Pays plugin authors through the payments service, charging GST under the remote services and marketplace operator rules and issuing tax invoices. | service | small | KIT-A16-F6-P1, KIT-A3-F1-P2, KIT-A4-F1-P2, KIT-A4-F2-P1 |  |
+| KIT-A16-F7-P2 | **Paid add-ins**: Pays plugin authors through the payments service, charging sales tax under each country's remote services and marketplace operator rules and issuing tax invoices. | service | small | KIT-A16-F6-P1, KIT-A3-F1-P2, KIT-A4-F1-P2, KIT-A4-F2-P1 |  |
 | KIT-A16-F8-P1 | **Common connectors**: Connectors to widely used tools through their published APIs, on terms that allow it. | integration | medium | KIT-A16-F1-P1 |  |
 | KIT-A16-F9-P1 | **Versions and deprecation**: Versioned APIs with published notice periods before anything is removed. | library | small | KIT-A16-F1-P1 |  |
 | KIT-A16-F10-P1 | **Kit service and crate catalogue**: Published names for the kit's eight services and seven crates, the five shared engines mapped in KIT-A27, the new names this map proposes (such as svc-identity, svc-tax, svc-search, svc-support, svc-members, svc-files, svc-translate, kit-ui, kit-i18n, engine-formats and engine-models) until ARCHITECTURE.md adopts them, the part IDs each covers, and the layering rule that kit services may use engines while kit-core never may. | data | small |  |  |
@@ -1059,7 +1059,7 @@ Lets members use AI agents with every app through the same commands as people (k
 
 ## KIT-A18 Privacy, data rights and legal duties
 
-Members see, take and delete their data, consent is recorded, data is kept only as long as needed, a named privacy officer answers, overseas handling is checked, Māori data is cared for, and the co-op meets privacy, consumer and platform law in NZ first and each new country after. Built in svc-accounts; svc-privacy is a proposed name (KIT-A16-F10-P1).
+Members see, take and delete their data, consent is recorded, data is kept only as long as needed, a named privacy officer answers, overseas handling is checked, indigenous data, such as Māori data, is cared for, and the co-op meets privacy, consumer and platform law in each country through its country pack, starting with New Zealand. Built in svc-accounts; svc-privacy is a proposed name (KIT-A16-F10-P1).
 
 | Feature | What a person can do | Priority | Parts |
 | --- | --- | --- | --- |
@@ -1078,7 +1078,7 @@ Members see, take and delete their data, consent is recorded, data is kept only 
 | **KIT-A18-F13** Have overseas platform law met | Have overseas platform duties, such as notice and appeal rules, met. | core | P1 |
 | **KIT-A18-F14** Reach the privacy officer | Contact the named privacy officer for the co-op or any app about my data. | core | P1 |
 | **KIT-A18-F15** Know who else handles my data | See which outside services handle my data, what they do with it and which countries it goes to. | core | P1, P2 |
-| **KIT-A18-F16** Have Māori data cared for | Know te reo Māori data, voice recordings and iwi-related data are cared for under Māori data sovereignty principles. | core | P1 |
+| **KIT-A18-F16** Have indigenous data cared for | Know indigenous language data, voice recordings and community data are cared for under indigenous data sovereignty principles, such as Māori data sovereignty in New Zealand. | core | P1 |
 | **KIT-A18-F17** See and change every consent I gave | See every consent I gave, such as for marketing, location or AI use, and withdraw any of them in one step. | core | P1, P2 |
 | **KIT-A18-F18** Have sensitive details handled with care | Have my health, religious and disability details asked for only when needed and kept with extra care. | core | P1, P2 |
 
@@ -1090,22 +1090,22 @@ Members see, take and delete their data, consent is recorded, data is kept only 
 | KIT-A18-F2-P1 | **Account deletion**: Deletes or anonymises data across services, keeping legally required records apart. | service | medium | KIT-A1-F1-P1, KIT-A18-F6-P1, KIT-A15-F1-P6, KIT-A18-F2-P2 |  |
 | KIT-A18-F2-P2 | **Settle up before closing**: Before an account closes, ends or cancels open orders, settles money owed either way, closes open disputes and checks legal holds, in that order. | service | small | KIT-A5-F4-P1, KIT-A3-F16-P2, KIT-A11-F1-P1, KIT-A18-F6-P1 |  |
 | KIT-A18-F3-P1 | **Privacy page**: Shows the data held, who accessed it, and correction requests. | interface | medium | KIT-A20-F1-P1, KIT-A15-F1-P2, KIT-A15-F1-P6 |  |
-| KIT-A18-F3-P2 | **Privacy request clock**: Tracks every request to see or correct personal information against the Privacy Act's 20 working day limit, with reminders and any extension recorded. | service | small | KIT-A18-F3-P1, KIT-A19-F9-P2, KIT-A15-F14-P1 |  |
+| KIT-A18-F3-P2 | **Privacy request clock**: Tracks every request to see or correct personal information against each country's time limit (example: 20 working days under New Zealand's Privacy Act 2020), with reminders and any extension recorded. | service | small | KIT-A18-F3-P1, KIT-A19-F9-P2, KIT-A15-F14-P1 |  |
 | KIT-A18-F4-P1 | **Terms and policy versions**: Versioned terms and policies, with a record of each person's acceptance. | service | small | kit-ops, KIT-A18-F4-P2 |  |
 | KIT-A18-F4-P2 | **Terms and privacy policy**: Plain terms and a privacy policy for each app, checked by a lawyer. | legal | medium |  |  |
-| KIT-A18-F5-P1 | **Collection notices**: Notices for direct and indirect collection under the NZ Privacy Act, including principle 3A from 1 May 2026. | legal | small |  |  |
+| KIT-A18-F5-P1 | **Collection notices**: Notices for direct and indirect collection under each country's privacy law (example: New Zealand's Privacy Act, including principle 3A from 1 May 2026). | legal | small |  |  |
 | KIT-A18-F6-P1 | **Retention schedules**: Retention rules for each kind of data, legal holds and automatic deletion. | service | medium | KIT-A15-F1-P2, KIT-A15-F14-P1 |  |
-| KIT-A18-F7-P1 | **Breach response**: Breach assessment and notification to the Privacy Commissioner and the people affected. | legal | small |  |  |
+| KIT-A18-F7-P1 | **Breach response**: Breach assessment and notification to the privacy regulator (example: New Zealand's Privacy Commissioner) and the people affected. | legal | small |  |  |
 | KIT-A18-F8-P1 | **Consumer law for platforms**: Fair trading, consumer guarantees and unfair contract terms duties for each app. | research | medium |  | [MK02](../spare-market/STATUS.md) |
 | KIT-A18-F9-P1 | **Data location**: Places each member's data by region and records where it is kept. | service | medium | KIT-A22-F4-P1 |  |
 | KIT-A18-F10-P1 | **Privacy impact assessments**: A short template and a public register of assessments. | legal | small |  |  |
 | KIT-A18-F11-P1 | **After-death account handling**: A named contact and a process to close, keep or hand over an account. | service | small | KIT-A1-F1-P1, KIT-A21-F2-P2 |  |
 | KIT-A18-F12-P1 | **Overseas privacy duties**: Duties under laws such as the EU's GDPR for each country added. | legal | medium | KIT-A19-F6-P1 |  |
 | KIT-A18-F13-P1 | **Overseas platform duties**: Duties under laws such as the EU Digital Services Act and the UK Online Safety Act. | legal | medium | KIT-A19-F6-P1 |  |
-| KIT-A18-F14-P1 | **Privacy officer**: Appoints a named privacy officer for the co-op and every app, as the Privacy Act 2020 requires, reachable from every privacy page. | legal | small |  |  |
+| KIT-A18-F14-P1 | **Privacy officer**: Appoints a named privacy officer for the co-op and every app, as privacy law requires (example: New Zealand's Privacy Act 2020), reachable from every privacy page. | legal | small |  |  |
 | KIT-A18-F15-P1 | **Overseas disclosure checks**: Checks under information privacy principle 12 before personal data goes to an overseas provider, such as the payment provider, push, email and text services. | legal | small |  |  |
 | KIT-A18-F15-P2 | **Processor list**: A published list of every outside processor, what it handles and where, updated whenever one changes. | service | small | KIT-A18-F15-P1 |  |
-| KIT-A18-F16-P1 | **Māori data principles**: How Māori data sovereignty principles, such as Te Mana Raraunga's, apply to te reo data, voice and iwi-related data, worked through with Māori members. | research | small |  |  |
+| KIT-A18-F16-P1 | **Indigenous data principles**: How indigenous data sovereignty principles apply to language data, voice and community data in each country, starting with Māori data sovereignty principles in New Zealand, such as Te Mana Raraunga's, for te reo Māori and iwi-related data, worked through with Māori members. | research | small |  |  |
 | KIT-A18-F17-P1 | **Consent records**: One service that records each consent, such as marketing, biometrics, background checks, location, AI use and crash reports, with its version and time, and that every app checks before use. | service | medium | kit-ops, KIT-A1-F1-P1, KIT-A18-F4-P1 |  |
 | KIT-A18-F17-P2 | **Consents page**: Shows every consent a person gave, in every app, and withdraws any of them in one step. | interface | small | KIT-A18-F17-P1, KIT-A20-F1-P1 |  |
 | KIT-A18-F18-P1 | **Sensitive details rules**: Rules for health, religious and disability details: consent before saving, the least detail each party needs, no use in suggestions unless switched on, one-step deletion, and special category treatment where the GDPR applies. Spare Food, Spare Ride and Spare Office need them. | legal | small | KIT-A18-F17-P1, KIT-A18-F6-P1 |  |
@@ -1113,20 +1113,20 @@ Members see, take and delete their data, consent is recorded, data is kept only 
 
 ## KIT-A19 Languages, accessibility and countries
 
-Every app works in te reo Māori and English from the start, meets accessibility standards, gets NZ's holidays, time zones and emergency numbers right, and takes on new languages and countries without rewriting. Proposed as kit-i18n and svc-translate (KIT-A16-F10-P1).
+Every app works in many languages from the start, beginning with the example country's (for New Zealand: English and te reo Māori), meets accessibility standards, gets each country's holidays, time zones and emergency numbers right through its country pack, and takes on new languages and countries without rewriting. Proposed as kit-i18n and svc-translate (KIT-A16-F10-P1).
 
 | Feature | What a person can do | Priority | Parts |
 | --- | --- | --- | --- |
-| **KIT-A19-F1** Use an app in my language | Switch any app between te reo Māori, English and other languages. | core | P1, P2, P3, P4, P5, P6 |
+| **KIT-A19-F1** Use an app in my language | Switch any app between many languages, starting with the example country's (for New Zealand: English and te reo Māori). | core | P1, P2, P3, P4, P5, P6 |
 | **KIT-A19-F2** Use every screen with a screen reader or keyboard | Use every screen with a screen reader, a keyboard or a switch. | core | P1, P2, P3, P4, P5, P6, P7, P8 |
 | **KIT-A19-F3** Make text and colours easy to read | Make text larger, raise contrast and reduce motion. | core | P1 |
 | **KIT-A19-F4** Get captions and transcripts | Get captions and transcripts on videos and voice messages. | core | P1 |
 | **KIT-A19-F5** Use an app on an old phone or a slow connection | Use apps on older phones and weak connections. | core | P1 |
 | **KIT-A19-F6** Use an app in a new country | Use an app in another country with its money, taxes, laws and ID checks. | core | P1 |
 | **KIT-A19-F7** Read right to left | Use the apps in right-to-left languages. | core | P1 |
-| **KIT-A19-F8** Read an easy version | Read key screens and rules in easy-read and NZ Sign Language versions. | core | P1 |
-| **KIT-A19-F9** Have NZ's dates and numbers right from day one | Have deadlines, notice periods and emergency numbers follow NZ's real calendar, holidays and time zones. | core | P1, P2 |
-| **KIT-A19-F10** Read translations made at cost | Read messages, listings and help pages machine-translated by one co-op service, with te reo Māori checked by fluent speakers. | core | P1, P2, P3 |
+| **KIT-A19-F8** Read an easy version | Read key screens and rules in easy-read and sign language versions (for New Zealand: New Zealand Sign Language). | core | P1 |
+| **KIT-A19-F9** Have each country's dates and numbers right from day one | Have deadlines, notice periods and emergency numbers follow each country's real calendar, holidays and time zones, starting with New Zealand's. | core | P1, P2 |
+| **KIT-A19-F10** Read translations made at cost | Read messages, listings and help pages machine-translated by one co-op service, with each language, such as te reo Māori, checked by fluent speakers. | core | P1, P2, P3 |
 | **KIT-A19-F11** Read receipts and statements with a screen reader | Read every receipt, statement, invoice and certificate with a screen reader. | core | P1 |
 | **KIT-A19-F12** Use a simpler layout | Switch to a pared-back layout with large text and only the main tasks. | later | P1 |
 
@@ -1138,7 +1138,7 @@ Every app works in te reo Māori and English from the start, meets accessibility
 | KIT-A19-F1-P2 | **Local formats**: Dates, numbers, money and addresses for each locale, using ICU4X. | library | medium | KIT-A15-F1-P1 |  |
 | KIT-A19-F1-P3 | **Member translation**: A workflow for member translators, with reviewers for each language. | service | medium | KIT-A19-F1-P1, KIT-A18-F16-P1 |  |
 | KIT-A19-F1-P4 | **Macron-aware matching**: Matching that ignores macrons when people type, so Maori finds Māori in search and addresses. | library | small | KIT-A19-F1-P2 |  |
-| KIT-A19-F1-P5 | **Community languages**: Chooses and funds the next languages members speak most, starting in NZ with languages such as Samoan, Tongan, Chinese and Hindi, translated with fluent speakers once for every app. Spare OS, Spare Home, Spare Rent, Spare Work and Spare Market all plan them. | research | medium | KIT-A19-F1-P3 |  |
+| KIT-A19-F1-P5 | **Community languages**: Chooses and funds the next languages members speak most, starting in the first example country, New Zealand, with languages such as Samoan, Tongan, Chinese and Hindi, translated with fluent speakers once for every app. Spare OS, Spare Home, Spare Rent, Spare Work and Spare Market all plan them. | research | medium | KIT-A19-F1-P3 |  |
 | KIT-A19-F1-P6 | **Translated listing fields**: Lets authors write or correct their own translations of names and descriptions, shown in each reader's language and found by search. Spare Social, Spare Food and Spare Stay need it. | library | small | KIT-A19-F1-P1, KIT-A6-F1-P2 |  |
 | KIT-A19-F2-P1 | **Accessible components**: Shared components built and tested to WCAG 2.2 AA. | library | medium | KIT-A20-F1-P1, KIT-A19-F2-P2 |  |
 | KIT-A19-F2-P2 | **Accessibility testing**: Automatic checks plus testing with disabled members before each release. | research | small |  |  |
@@ -1147,18 +1147,18 @@ Every app works in te reo Māori and English from the start, meets accessibility
 | KIT-A19-F2-P5 | **Accessibility conformance reports**: A published conformance report for each app against WCAG 2.2 and EN 301 549, updated each release. Spare Studio, Spare Office and Spare OS need them. | legal | small | KIT-A19-F2-P2 |  |
 | KIT-A19-F2-P6 | **Accessibility checker for content**: Checks documents and designs against WCAG 2.2 and PDF/UA, such as contrast, missing alt text and reading order, with a fix for each issue. Spare Office and Spare Studio need the same checker. | library | medium | KIT-A19-F2-P3, KIT-A27-F6-P2 |  |
 | KIT-A19-F2-P7 | **Canvas mirror for screen readers**: A hidden structure that tells screen readers what is drawn on a canvas, such as pages, sheets, slides, layers and selections. Spare Office and Spare Studio share one. | library | medium | KIT-A19-F2-P1, KIT-A20-F1-P1 |  |
-| KIT-A19-F2-P8 | **Accessibility law research**: Which accessibility laws apply to each app in NZ, the EU and other markets, such as the European Accessibility Act, and what each requires. Spare OS, Spare Studio and Spare Stay all ask. | research | small | KIT-A19-F2-P4 |  |
+| KIT-A19-F2-P8 | **Accessibility law research**: Which accessibility laws apply to each app in each country, such as New Zealand's rules and the EU's European Accessibility Act, and what each requires. Spare OS, Spare Studio and Spare Stay all ask. | research | small | KIT-A19-F2-P4 |  |
 | KIT-A19-F3-P1 | **Display settings**: Text size, contrast and motion settings that follow the device. | library | small | KIT-A20-F1-P1 |  |
 | KIT-A19-F4-P1 | **Captions**: Captions and transcripts for media, shared with Spare Social. | library | medium | engine-media |  |
 | KIT-A19-F5-P1 | **Light mode for slow connections**: Smaller pages, fewer images and screens that work offline first. | library | medium | KIT-A20-F2-P2 |  |
-| KIT-A19-F6-P1 | **Country packs**: Packs for each new country in the NZ pack's format: currency, tax, ID providers, emergency numbers, helplines, holidays and legal rules. | data | large | KIT-A15-F1-P1, KIT-A19-F9-P1 |  |
+| KIT-A19-F6-P1 | **Country packs**: Packs for each new country in the format the first pack, New Zealand, sets: currency, tax, ID providers, emergency numbers, helplines, holidays and legal rules. | data | large | KIT-A15-F1-P1, KIT-A19-F9-P1 |  |
 | KIT-A19-F7-P1 | **Right-to-left layout**: Mirrored layouts and right-to-left text handling. | library | medium | KIT-A20-F1-P1, engine-text |  |
-| KIT-A19-F8-P1 | **Easy read and NZ Sign Language**: Easy-read text and NZ Sign Language videos for the key steps in each app. | data | medium | KIT-A19-F1-P1 |  |
-| KIT-A19-F9-P1 | **NZ country pack**: The first country pack: the emergency number and 111 TXT, helplines, GST rate, currency, public holidays including Matariki and regional anniversary days, and both time zones including the Chatham Islands. | data | medium | KIT-A15-F1-P1 |  |
+| KIT-A19-F8-P1 | **Easy read and sign language**: Easy-read text and videos in each country's sign language, starting with New Zealand Sign Language, for the key steps in each app. | data | medium | KIT-A19-F1-P1 |  |
+| KIT-A19-F9-P1 | **First country pack (example: New Zealand)**: The first country pack, New Zealand, which sets the format every other pack follows: the emergency number and 111 TXT, helplines, GST rate, currency, public holidays including Matariki and regional anniversary days, and both time zones including the Chatham Islands. | data | medium | KIT-A15-F1-P1 |  |
 | KIT-A19-F9-P2 | **Working days and notice periods**: Counts working days, public holidays and notice periods for legal clocks, dispute deadlines, meeting notices and tax due dates. | library | small | KIT-A19-F9-P1 |  |
-| KIT-A19-F10-P1 | **Translation model choice**: Compares open translation models whose licences allow this use, on quality for te reo Māori and other languages and on running cost. | research | medium | KIT-A17-F6-P1 |  |
+| KIT-A19-F10-P1 | **Translation model choice**: Compares open translation models whose licences allow this use, on quality for each language, such as te reo Māori, and on running cost. | research | medium | KIT-A17-F6-P1 |  |
 | KIT-A19-F10-P2 | **Machine translation at cost**: One translation service for every app, run at cost, that labels machine translations and keeps the original one tap away. | service | large | KIT-A19-F10-P1, KIT-A22-F4-P1 |  |
-| KIT-A19-F10-P3 | **Te reo quality checks**: Fluent members review samples of te reo Māori translations, and weak language pairs are switched off until they pass. | service | small | KIT-A19-F10-P2, KIT-A19-F1-P3, KIT-A18-F16-P1 |  |
+| KIT-A19-F10-P3 | **Translation quality checks**: Fluent members review samples of translations in each language, such as te reo Māori, and weak language pairs are switched off until they pass. | service | small | KIT-A19-F10-P2, KIT-A19-F1-P3, KIT-A18-F16-P1 |  |
 | KIT-A19-F11-P1 | **Accessible PDFs**: Tagged, accessible PDFs for receipts, statements, invoices and certificates. | library | medium | engine-pdf, KIT-A19-F2-P1 |  |
 | KIT-A19-F12-P1 | **Simple mode**: A pared-back layout with the main tasks first and large text, for people new to an app. Spare Ride and Spare Market both plan it. | interface | small | KIT-A20-F1-P1, KIT-A19-F3-P1 |  |
 
@@ -1204,7 +1204,7 @@ The shared frame every app runs in: components from the design guide, installabl
 | KIT-A20-F8-P1 | **App store rules**: Meets each store's rules on payments, privacy labels and reviews. | legal | small | KIT-A20-F2-P2 | [K04](STATUS.md) |
 | KIT-A20-F9-P1 | **Short links and QR codes**: Short links and QR codes that open the right screen through deep links and count scans in totals only, without tracking anyone. | service | small | KIT-A20-F4-P1 |  |
 | KIT-A20-F10-P1 | **Command search and shortcuts**: Type to find and run any command, with shortcut sets that start from the ones people already know and can be changed, exported and shared. Spare Construct, Spare Studio, Spare Office and Spare OS need the same. | interface | small | KIT-A15-F1-P3, KIT-A20-F1-P1 |  |
-| KIT-A20-F11-P1 | **Phone rules on the road**: What NZ road rules allow for phones in cradles in cars and on bikes, e-bikes and scooters, with sources, checked against each worker screen. Spare Ride and Spare Food both need it. | legal | small |  |  |
+| KIT-A20-F11-P1 | **Phone rules on the road**: What each country's road rules allow for phones in cradles in cars and on bikes, e-bikes and scooters, starting with New Zealand's, with sources, checked against each worker screen. Spare Ride and Spare Food both need it. | legal | small |  |  |
 | KIT-A20-F11-P2 | **Driving-safe mode**: Worker screens that block typing while moving, use large targets, and read offers and messages aloud. Spare Food and Spare Ride both need it. | interface | medium | KIT-A20-F11-P1, KIT-A19-F2-P1, KIT-A27-F12-P5 |  |
 
 ## KIT-A21 Help and member support
@@ -1222,7 +1222,7 @@ Help pages in every language, support tied to the job, urgent help at any hour, 
 | **KIT-A21-F7** Suggest an improvement | Suggest a change, and turn it into a proposal if others support it. | next | P1 |
 | **KIT-A21-F8** See how fast support answers | See published support response times. | next | P1 |
 | **KIT-A21-F9** Complain about the co-op itself | Make a complaint about the co-op, not just about a job, and know where to take it if I am not satisfied. | core | P1, P2 |
-| **KIT-A21-F10** Get an interpreter | Have an interpreter, including NZ Sign Language, for a dispute, a panel hearing or a support call. | next | P1 |
+| **KIT-A21-F10** Get an interpreter | Have an interpreter, including sign language such as New Zealand Sign Language, for a dispute, a panel hearing or a support call. | next | P1 |
 
 **Parts**
 
@@ -1233,14 +1233,14 @@ Help pages in every language, support tied to the job, urgent help at any hour, 
 | KIT-A21-F2-P1 | **Support cases**: Cases linked to orders and accounts, with status and replies. | service | medium | KIT-A5-F4-P1, KIT-A8-F1-P2 |  |
 | KIT-A21-F2-P2 | **Support console**: A case queue for support staff with history, reply templates and every action logged. | interface | large | KIT-A21-F2-P1, KIT-A15-F1-P4 |  |
 | KIT-A21-F3-P1 | **Urgent route**: The one urgent route and on-call roster for safety and money problems, with a safety lane staffed by trained responders. | service | medium | KIT-A21-F2-P1 |  |
-| KIT-A21-F4-P1 | **Other support channels**: Email and phone channels, and NZ Relay for Deaf, hard of hearing and speech-impaired members. | integration | small | KIT-A21-F2-P1 |  |
+| KIT-A21-F4-P1 | **Other support channels**: Email and phone channels, and each country's relay service for Deaf, hard of hearing and speech-impaired members (example: New Zealand Relay). | integration | small | KIT-A21-F2-P1 |  |
 | KIT-A21-F5-P1 | **Status page**: Live status for each app with incident updates, hosted apart from the main servers. | service | small | KIT-A22-F1-P1 |  |
 | KIT-A21-F6-P1 | **Member forum**: A forum for each app, looked after by member moderators. | service | medium | KIT-A10-F6-P2, KIT-A8-F12-P1 |  |
 | KIT-A21-F7-P1 | **Suggestions**: Suggestions that can move to a member proposal. | service | small | KIT-A12-F1-P1, KIT-A8-F12-P1 |  |
 | KIT-A21-F8-P1 | **Support figures**: Published response times and satisfaction for each app, through the public reporting pipeline. | service | small | KIT-A21-F2-P1, KIT-A13-F9-P1 |  |
-| KIT-A21-F9-P1 | **Dispute resolution scheme**: Whether the co-op must register on the Financial Service Providers Register and, if so, join an approved dispute resolution scheme. | legal | small | KIT-A3-F2-P2 |  |
+| KIT-A21-F9-P1 | **Dispute resolution scheme**: Whether the co-op must register as a financial service provider in each country and, if so, join an approved dispute resolution scheme (example: New Zealand's Financial Service Providers Register). | legal | small | KIT-A3-F2-P2 |  |
 | KIT-A21-F9-P2 | **Complaints about the co-op**: A published complaints process about the co-op itself, with response times and the outside route that applies. | service | small | KIT-A21-F9-P1, KIT-A21-F2-P1 |  |
-| KIT-A21-F10-P1 | **Interpreters**: Books qualified interpreters, including NZ Sign Language, for disputes, panel hearings and support, paid at cost and shown in the ledger. | integration | small | KIT-A21-F2-P1, KIT-A11-F4-P2 |  |
+| KIT-A21-F10-P1 | **Interpreters**: Books qualified interpreters, including sign language such as New Zealand Sign Language, for disputes, panel hearings and support, paid at cost and shown in the ledger. | integration | small | KIT-A21-F2-P1, KIT-A11-F4-P2 |  |
 
 ## KIT-A22 Running it: hosting, security and admin
 
@@ -1251,7 +1251,7 @@ Servers run at cost by the co-op or by member groups, with monitoring, backups, 
 | **KIT-A22-F1** Keep the apps running | Have apps stay up, with problems spotted and fixed quickly. | core | P1, P2, P3 |
 | **KIT-A22-F2** Get changes without breakage | Have changes reach members without breaking things. | core | P1, P2, P3, P4, P5, P6 |
 | **KIT-A22-F3** Know my data is backed up | Know data survives a failure and restores are tested. | core | P1, P2 |
-| **KIT-A22-F4** Have servers run at cost | Have servers run in NZ first, at cost, with their costs fed to the ledger. | core | P1, P2 |
+| **KIT-A22-F4** Have servers run at cost | Have servers run at cost in the regions people use, starting with the first example country, New Zealand, with their costs fed to the ledger. | core | P1, P2 |
 | **KIT-A22-F5** Know the apps are secure | Know the apps are protected and checked by outside reviewers. | core | P1, P2, P3, P4, P5 |
 | **KIT-A22-F6** Have admin work done in the open | Have staff act only through an admin console where every action is logged. | core | P1 |
 | **KIT-A22-F7** Run our own server | Let a member group run its own servers and connect them. | next | P1, P2, P3, P4 |
@@ -1269,13 +1269,13 @@ Servers run at cost by the co-op or by member groups, with monitoring, backups, 
 | KIT-A22-F2-P1 | **Release pipeline**: Builds, tests, staged rollouts and rollback for every service. | service | medium |  |  |
 | KIT-A22-F2-P2 | **Feature switches**: Turns features on for each app, region or group, with every change logged. | library | small | KIT-A15-F1-P2 |  |
 | KIT-A22-F2-P3 | **Signed releases**: Signed releases, a software bill of materials, reproducible builds and app-signing keys kept offline under two-person control. | service | medium | KIT-A22-F2-P1, KIT-A22-F5-P1 |  |
-| KIT-A22-F2-P4 | **Developer accounts and signing certificates**: Apple, Google and Windows developer accounts and code signing certificates held by the legal entity, including Google's developer verification for sideloaded Android apps from 2026 to 2027 (*unverified* dates for NZ), with costs on the ledger. | legal | small | KIT-A22-F2-P3, KIT-A14-F1-P1 |  |
+| KIT-A22-F2-P4 | **Developer accounts and signing certificates**: Apple, Google and Windows developer accounts and code signing certificates held by the legal entity, including Google's developer verification for sideloaded Android apps from 2026 to 2027 (*unverified* dates for each country), with costs on the ledger. | legal | small | KIT-A22-F2-P3, KIT-A14-F1-P1 |  |
 | KIT-A22-F2-P5 | **Performance budgets**: Published limits on start time, load time, memory and data use for each app, measured on old devices and real connections on every change, so a slower change does not merge. Spare Social and Spare Office both set them. | library | small | KIT-A22-F2-P1 |  |
 | KIT-A22-F2-P6 | **Name and interface review**: Checks before each release that names, icons and interface designs are our own, and that other companies' names appear only to say what we replace. Spare Construct and Spare Office both map it. | legal | small | KIT-A14-F18-P1 |  |
 | KIT-A22-F3-P1 | **Backups and restore drills**: Continuous off-site copies of the operation log and scheduled restore tests. | service | medium | KIT-A15-F4-P2 |  |
 | KIT-A22-F3-P2 | **Disaster recovery**: A second region and a tested plan to move to it. | service | medium | KIT-A22-F4-P1 |  |
-| KIT-A22-F4-P1 | **Hosting**: Infrastructure as code for the co-op's servers, NZ first. | service | large | KIT-A22-F2-P1, KIT-A22-F4-P2 |  |
-| KIT-A22-F4-P2 | **Hosting provider choice**: Compares hosting providers on NZ regions, data sovereignty, overseas laws that can reach the data and cost, as the basis for the launch cost estimate and for where data lives. | research | medium |  |  |
+| KIT-A22-F4-P1 | **Hosting**: Infrastructure as code for the co-op's servers in each region, starting with New Zealand. | service | large | KIT-A22-F2-P1, KIT-A22-F4-P2 |  |
+| KIT-A22-F4-P2 | **Hosting provider choice**: Compares hosting providers on regions in each country, starting with New Zealand, and on data sovereignty, overseas laws that can reach the data and cost, as the basis for the launch cost estimate and for where data lives. | research | medium |  |  |
 | KIT-A22-F5-P1 | **Secrets and access**: Least-access roles, secret storage and two-person approval for risky actions. | service | medium | KIT-A15-F1-P4 |  |
 | KIT-A22-F5-P2 | **Dependency checks**: Licence and vulnerability checks on every dependency. | service | small | KIT-A22-F2-P1 |  |
 | KIT-A22-F5-P3 | **Security reviews**: Outside reviews before each app goes live, and a page for reporting weaknesses. | service | medium |  |  |
@@ -1285,14 +1285,14 @@ Servers run at cost by the co-op or by member groups, with monitoring, backups, 
 | KIT-A22-F7-P1 | **Self-host package**: Container images, guides and upgrade paths for member-run servers. | service | large | KIT-A22-F4-P1, KIT-A22-F7-P2 |  |
 | KIT-A22-F7-P2 | **Connecting member servers**: How member-run servers join, share data and stay trusted. | research | medium |  |  |
 | KIT-A22-F7-P3 | **Move an account between servers**: Moves a member's account and history between the co-op's servers and a member-run server, either way. | service | medium | KIT-A22-F7-P1, KIT-A22-F7-P2, KIT-A18-F1-P1 |  |
-| KIT-A22-F7-P4 | **Duties when members self-host**: Who carries GST, anti-money-laundering, privacy and safety duties when a member group runs its own servers, set out in the agreement each group signs. | legal | medium | KIT-A22-F7-P2, KIT-A4-F9-P1, KIT-A4-F5-P1 |  |
+| KIT-A22-F7-P4 | **Duties when members self-host**: Who carries sales tax, anti-money-laundering, privacy and safety duties when a member group runs its own servers, set out in the agreement each group signs. | legal | medium | KIT-A22-F7-P2, KIT-A4-F9-P1, KIT-A4-F5-P1 |  |
 | KIT-A22-F8-P1 | **Private usage counts**: Usage counts in totals only, with no tracking cookies or personal profiles. | service | medium | KIT-A22-F1-P1 |  |
 | KIT-A22-F9-P1 | **Crash reports**: Opt-in crash reports with personal data stripped out. | service | small | KIT-A22-F1-P1, KIT-A18-F17-P1 |  |
 | KIT-A22-F10-P1 | **Many-machine installs**: Installs, updates and sets up apps on many machines at once through an organisation's own device tools and set-up files. Spare Construct and Spare OS both need it. | integration | medium | KIT-A20-F2-P5, KIT-A1-F7-P3 | [OS06](../spare-os/STATUS.md) |
 
 ## KIT-A23 Work law and worker status
 
-One worker-status framework for every app: employee or contractor under the law's tests, agreements that meet them, personal grievances, minimum pay, holidays and leave, payroll, KiwiSaver and ACC guidance, switched on by each app's settings. Proposed as svc-work (KIT-A16-F10-P1).
+One worker-status framework for every app: employee or contractor under the law's tests, agreements that meet them, personal grievances, minimum pay, holidays and leave, payroll, and retirement savings and accident cover guidance (example: New Zealand's KiwiSaver and ACC), switched on by each app's settings. Each country pack has its own rules, starting with New Zealand's. Proposed as svc-work (KIT-A16-F10-P1).
 
 | Feature | What a person can do | Priority | Parts |
 | --- | --- | --- | --- |
@@ -1304,17 +1304,17 @@ One worker-status framework for every app: employee or contractor under the law'
 
 | ID | Part | Kind | Size | Depends on | Piece |
 | --- | --- | --- | --- | --- | --- |
-| KIT-A23-F1-P1 | **Worker status test**: Applies NZ employment law's tests, including the new gateway test for contractors (in force date *unverified*), to each app's way of working, checked by a lawyer. | legal | medium |  |  |
+| KIT-A23-F1-P1 | **Worker status test**: Applies each country's employment law tests, starting with New Zealand's, including its new gateway test for contractors (in force date *unverified*), to each app's way of working, checked by a lawyer. | legal | medium |  |  |
 | KIT-A23-F1-P2 | **Worker status per app**: Each app's settings declare its workers' status, which switches on the matching pay, tax, agreement and membership rules. | data | small | KIT-A23-F1-P1, KIT-A1-F5-P2 |  |
 | KIT-A23-F1-P3 | **Contractor agreements**: Plain contractor agreements that meet the gateway test, versioned, with each worker's acceptance recorded. | legal | medium | KIT-A23-F1-P1, KIT-A18-F4-P1 |  |
-| KIT-A23-F1-P4 | **Employment agreements**: Written employment agreements for apps whose workers are employees, as the Employment Relations Act 2000 requires, versioned, with each worker's signed copy kept. | legal | medium | KIT-A23-F1-P1, KIT-A18-F4-P1 |  |
+| KIT-A23-F1-P4 | **Employment agreements**: Written employment agreements for apps whose workers are employees, as employment law requires (example: New Zealand's Employment Relations Act 2000), versioned, with each worker's signed copy kept. | legal | medium | KIT-A23-F1-P1, KIT-A18-F4-P1 |  |
 | KIT-A23-F1-P5 | **Personal grievances**: A way for employee workers to raise a personal grievance within the 90-day limit, with mediation and every step recorded. | service | small | KIT-A23-F1-P4, KIT-A21-F2-P1 |  |
-| KIT-A23-F1-P6 | **Union access**: How unions reach and meet workers who work only through an app, under the Employment Relations Act's access rules (*unverified* how they apply to an app). | legal | small | KIT-A23-F1-P1 |  |
+| KIT-A23-F1-P6 | **Union access**: How unions reach and meet workers who work only through an app, under each country's union access rules (example: New Zealand's Employment Relations Act; *unverified* how they apply to an app). | legal | small | KIT-A23-F1-P1 |  |
 | KIT-A23-F2-P1 | **Minimum pay top-up**: Checks earnings per hour of engaged time against the minimum wage where it applies, and tops them up in the next payout. | library | medium | KIT-A23-F1-P2, KIT-A3-F3-P2 |  |
 | KIT-A23-F2-P2 | **Holidays and leave**: Works out annual holidays, public holiday pay, and sick, bereavement and family violence leave for apps whose workers are employees. | library | medium | KIT-A23-F1-P2, KIT-A19-F9-P2 |  |
-| KIT-A23-F2-P3 | **Payroll provider link**: The one payroll provider link, for co-op staff and employee workers alike, which handles PAYE, KiwiSaver and payday filing. | integration | medium | KIT-A23-F1-P2, KIT-A3-F3-P2 |  |
-| KIT-A23-F2-P4 | **KiwiSaver, ACC and tax guidance**: Plain guidance for each status on KiwiSaver, ACC levies and income tax, linked from the earnings page. | data | small | KIT-A23-F1-P1 |  |
-| KIT-A23-F2-P5 | **Move to the Employment Leave Act**: The move from the Holidays Act 2003 to the Employment Leave Act 2026's hours-based leave, which applies from the first pay period on or after 6 August 2028, with agreements updated in time. | legal | small | KIT-A23-F2-P2 |  |
+| KIT-A23-F2-P3 | **Payroll provider link**: The one payroll provider link, for co-op staff and employee workers alike, which handles pay tax, retirement savings and payroll filing (example: New Zealand's PAYE, KiwiSaver and payday filing). | integration | medium | KIT-A23-F1-P2, KIT-A3-F3-P2 |  |
+| KIT-A23-F2-P4 | **Savings, accident cover and tax guidance**: Plain guidance for each status on retirement savings, accident cover levies and income tax in each country (example: New Zealand's KiwiSaver and ACC), linked from the earnings page. | data | small | KIT-A23-F1-P1 |  |
+| KIT-A23-F2-P5 | **Leave law changes**: Keeps leave rules current as each country's law changes, such as New Zealand's move from the Holidays Act 2003 to the Employment Leave Act 2026's hours-based leave, which applies from the first pay period on or after 6 August 2028, with agreements updated in time. | legal | small | KIT-A23-F2-P2 |  |
 | KIT-A23-F2-P6 | **Wage and time records**: The wage, time, holiday and leave records employment law requires for employee workers, kept from their shift and online records. Spare Food and Spare Ride both need them. | service | small | KIT-A23-F2-P2, KIT-A24-F3-P2 |  |
 | KIT-A23-F3-P1 | **Platform work law per country**: Laws on platform work overseas, such as the EU Platform Work Directive and Australia's minimum standards, and what each changes in matching, ranking and pausing. Spare Ride, Spare Food and Spare Work need them. | legal | medium | KIT-A23-F1-P1, KIT-A18-F13-P1 |  |
 
@@ -1334,9 +1334,9 @@ The co-op's health and safety duties, built once: an incident register, notifiab
 
 | ID | Part | Kind | Size | Depends on | Piece |
 | --- | --- | --- | --- | --- | --- |
-| KIT-A24-F1-P1 | **Health and safety duties**: The co-op's duties as a person conducting a business or undertaking under the Health and Safety at Work Act 2015, for workers whatever their status (platform position *unverified*). | legal | medium | KIT-A23-F1-P1 |  |
+| KIT-A24-F1-P1 | **Health and safety duties**: The co-op's duties under each country's workplace safety law, for workers whatever their status, starting with its duties as a person conducting a business or undertaking under New Zealand's Health and Safety at Work Act 2015 (platform position *unverified*). | legal | medium | KIT-A23-F1-P1 |  |
 | KIT-A24-F2-P1 | **Incident register**: Records injuries, near misses, violence and crashes during work as operations, with follow-up actions. | service | medium | KIT-A24-F1-P1, KIT-A10-F3-P1 |  |
-| KIT-A24-F2-P2 | **Notifiable event reports**: Flags events that must be notified to WorkSafe and tracks the notice and the duty to keep the scene as it was. | service | small | KIT-A24-F2-P1 |  |
+| KIT-A24-F2-P2 | **Notifiable event reports**: Flags events that must be notified to the safety regulator (example: New Zealand's WorkSafe) and tracks the notice and the duty to keep the scene as it was. | service | small | KIT-A24-F2-P1 |  |
 | KIT-A24-F3-P1 | **Work-time limits**: Hooks for each app's fatigue and work-time limits, such as online hours and breaks, that pause offers when a limit is reached. | library | small | KIT-A24-F1-P1, KIT-A6-F2-P1, KIT-A24-F3-P2 |  |
 | KIT-A24-F3-P2 | **Shared work-time record**: One record of each person's online and engaged time across every Spare app, so work-time limits count all their work and nobody types it twice. | data | small | KIT-A6-F2-P1, KIT-A18-F6-P1 |  |
 | KIT-A24-F4-P1 | **Violence and crash handling**: Steps after an assault or crash during a job: safety first, support, the incident record, insurance and any notice to the regulator. | service | medium | KIT-A24-F2-P1, KIT-A10-F1-P2 |  |
@@ -1357,7 +1357,7 @@ Tools many apps need that no single app should own: electronic signatures with a
 
 | ID | Part | Kind | Size | Depends on | Piece |
 | --- | --- | --- | --- | --- | --- |
-| KIT-A25-F1-P1 | **Electronic signature rules**: What NZ law asks of an electronic signature, and which documents need more than a click. | research | small |  |  |
+| KIT-A25-F1-P1 | **Electronic signature rules**: What each country's law asks of an electronic signature, starting with New Zealand's, and which documents need more than a click. | research | small |  |  |
 | KIT-A25-F1-P2 | **Signatures with audit trail**: Signing flows for any app, with a tamper-evident audit trail and a signed PDF copy for every party. | service | medium | KIT-A25-F1-P1, KIT-A15-F1-P2, KIT-A1-F1-P1, engine-pdf |  |
 | KIT-A25-F2-P1 | **Training and certificates**: Courses, quizzes, completion records and renewals for any role in any app, such as worker orientation, moderators and panel members. | service | medium | KIT-A1-F5-P2, KIT-A15-F1-P2 |  |
 | KIT-A25-F2-P2 | **Course screens**: Shared screens to take a course and show a certificate. | interface | small | KIT-A25-F2-P1, KIT-A20-F1-P1 |  |
@@ -1389,14 +1389,14 @@ One shared record for each property with its chattels and repairs, proof of who 
 | ID | Part | Kind | Size | Depends on | Piece |
 | --- | --- | --- | --- | --- | --- |
 | KIT-A26-F1-P1 | **Property record**: Land, title, buildings, rooms, accessibility facts, rates, zoning, past jobs and past sales for one place, every change an operation, with each app adding its own fields. | data | large | kit-core, kit-ops, kit-store, KIT-A7-F2-P2, KIT-A5-F1-P1 |  |
-| KIT-A26-F1-P2 | **Property data sources**: Which official land, title, rates and zoning data the record may load, such as LINZ title and parcel data and council rating information, under what licence and at what cost, done once for every app. | research | medium |  |  |
+| KIT-A26-F1-P2 | **Property data sources**: Which official land, title, rates and zoning data the record may load, such as title and parcel data from each country's land agency (example: LINZ in New Zealand) and council rating information, under what licence and at what cost, done once for every app. | research | medium |  |  |
 | KIT-A26-F1-P3 | **Who sees what, and what passes on**: Rules for who may see each part of the record, such as an owner, tenant, guest or worker, and what passes to a new owner on sale, so private details and past jobs never reach the wrong person. | library | medium | KIT-A26-F1-P1, KIT-A15-F1-P4, KIT-A18-F6-P1 |  |
 | KIT-A26-F1-P4 | **Chattels and appliances**: One register of the rooms, chattels and appliances in a place, with make, model, manuals, warranties and service dates. Spare Home, Spare Rent and Spare Work's completion packs use it. | data | small | KIT-A26-F1-P1, KIT-A15-F13-P1 |  |
 | KIT-A26-F1-P5 | **Repairs and maintenance history**: Problems, repairs, costs and records of work for each place, linked to reports and jobs, and passed to the next owner where the rules allow. Spare Rent, Spare Stay and Spare Work need it. | data | small | KIT-A26-F1-P1, KIT-A26-F1-P3 |  |
 | KIT-A26-F1-P6 | **Body corporate details**: The body corporate's contact, levies and rules stored against a unit. Spare Home and Spare Rent both need them. | data | small | KIT-A26-F1-P1 |  |
 | KIT-A26-F2-P1 | **Visitor register**: Records who came to an open home or viewing and when, from a check-in code or the host's phone, kept only as long as the retention schedule allows. | service | small | kit-ops, KIT-A26-F1-P1, KIT-A18-F6-P1 |  |
-| KIT-A26-F3-P1 | **Tenancy rules pack**: The tenancy rules Spare Rent and Spare Home both need, such as written notice to tenants, consent before entry, rights about photos and viewings, and notice periods after a sale, as one versioned pack in the NZ country pack. | data | medium | KIT-A19-F9-P1, KIT-A19-F9-P2, KIT-A26-F3-P2 | [RT01](../spare-rent/STATUS.md) |
-| KIT-A26-F3-P2 | **Tenancy law check**: A lawyer checks the pack against the Residential Tenancies Act 1986, and again whenever the law changes. | legal | small |  |  |
+| KIT-A26-F3-P1 | **Tenancy rules pack**: The tenancy rules Spare Rent and Spare Home both need, such as written notice to tenants, consent before entry, rights about photos and viewings, and notice periods after a sale, as one versioned pack in each country pack, starting with New Zealand's. | data | medium | KIT-A19-F9-P1, KIT-A19-F9-P2, KIT-A26-F3-P2 | [RT01](../spare-rent/STATUS.md) |
+| KIT-A26-F3-P2 | **Tenancy law check**: A lawyer checks the pack against each country's tenancy law (example: New Zealand's Residential Tenancies Act 1986), and again whenever the law changes. | legal | small |  |  |
 | KIT-A26-F4-P1 | **Owner name match**: Matches a verified name against the owners on the record of title and flags any mismatch, though a name match alone never proves ownership. Spare Home and Spare Rent share one check. | service | small | KIT-A26-F1-P2, KIT-A2-F1-P3 |  |
 | KIT-A26-F4-P2 | **Proof of control**: Confirms the person controls the place through the rates assessment number, their lawyer or a code posted to the property, and never by a posted code alone for a home someone else lives in. | service | small | KIT-A26-F4-P1, KIT-A2-F14-P1, KIT-A2-F1-P3 |  |
 | KIT-A26-F4-P3 | **Notice to the owner of record**: Posts a letter with a code to the owner's address of record whenever a listing starts, telling them how to stop it, where that address may lawfully be used (*unverified*). | service | small | KIT-A8-F17-P1, KIT-A26-F1-P2 |  |
@@ -1412,7 +1412,7 @@ One shared record for each property with its chattels and repairs, proof of who 
 | KIT-A26-F9-P1 | **Simple plan drawer**: Lets a person trace rooms with set sizes, doors and windows with no design skills needed, on the shared 2D drawing engine. Spare Home, Spare Rent and Spare Stay share one drawer. | interface | medium | engine-draw2d, KIT-A26-F1-P1, kit-ops |  |
 | KIT-A26-F9-P2 | **Plan import**: Imports a plan exported in an open format, such as one from Spare Construct, or a PDF or image with its copyright owner and licence recorded. | library | small | KIT-A26-F9-P1, engine-pdf | [HM04](../spare-home/STATUS.md) |
 | KIT-A26-F9-P3 | **Plan output and room areas**: Draws a plan as an image, a PDF and a plain text room list for screen readers, and works out room and floor areas, stating how they were measured. | library | small | KIT-A26-F9-P1, engine-pdf, engine-text |  |
-| KIT-A26-F10-P1 | **Owner statements**: Monthly statements for owners whose places a manager runs: income, payouts, costs, the manager's at-cost fee and GST. Spare Stay and Spare Rent both need them. | service | small | KIT-A4-F4-P1, KIT-A1-F8-P1, KIT-A27-F6-P3 |  |
+| KIT-A26-F10-P1 | **Owner statements**: Monthly statements for owners whose places a manager runs: income, payouts, costs, the manager's at-cost fee and sales tax. Spare Stay and Spare Rent both need them. | service | small | KIT-A4-F4-P1, KIT-A1-F8-P1, KIT-A27-F6-P3 |  |
 
 ## KIT-A27 Shared engines
 
@@ -1449,7 +1449,7 @@ The heavy engines several programs share: GPU rendering, 2D drawing, text, PDF, 
 | KIT-A27-F3-P3 | **Chart engine**: Bar, line, pie, area, scatter and other charts drawn from data, each with a text description and a data table for screen readers. Spare Office, Spare Studio, the ledger pages and seller insights share it. | library | medium | KIT-A27-F3-P1, KIT-A27-F5-P1 |  |
 | KIT-A27-F4-P1 | **Whiteboard canvas**: An endless canvas with ink, shapes, sticky notes and images, edited together, shared by Spare Office's whiteboard and Spare Studio's mood boards. | library | medium | KIT-A27-F3-P1, KIT-A15-F5-P1 |  |
 | KIT-A27-F5-P1 | **Text shaping and layout**: Font loading, shaping, bidirectional and complex scripts, vertical text, colour and emoji fonts, line breaking and paragraph layout, shared by Spare Studio, Spare Office, Spare Construct and Spare Social. | library | large | kit-core | [S05](../spare-studio/STATUS.md) |
-| KIT-A27-F5-P2 | **Spelling and hyphenation dictionaries**: Open dictionaries for each language, te reo Māori and English (New Zealand) first, and Pacific languages built with native speakers, each licence checked, used by every app's spell checker. | data | medium | KIT-A27-F5-P1, KIT-A18-F16-P1 |  |
+| KIT-A27-F5-P2 | **Spelling and hyphenation dictionaries**: Open dictionaries for each language, starting with the example country's (for New Zealand: English and te reo Māori, then Pacific languages built with native speakers), each licence checked, used by every app's spell checker. | data | medium | KIT-A27-F5-P1, KIT-A18-F16-P1 |  |
 | KIT-A27-F5-P3 | **Input methods for drawn text**: IME composition, dead keys, compose keys and easy macron typing for text drawn on a canvas, on desktop and in the browser. Spare Studio, Spare Office and Spare Construct need it. | library | medium | KIT-A27-F5-P1 |  |
 | KIT-A27-F5-P4 | **Open font catalogue**: One catalogue of fonts under open licences, such as the SIL Open Font License, covering every major script, with what each licence allows for embedding, print and the web. Spare Studio, Spare Office, Spare OS and Spare Construct share it. | data | medium | KIT-A27-F5-P1 |  |
 | KIT-A27-F5-P5 | **Long-document layout**: Fields, footnotes, tables of contents, indexes, cross-references, headers and footers, and accessible EPUB export, shared by Spare Studio's layout tools and Spare Office's documents. | library | large | KIT-A27-F5-P1 |  |
@@ -1475,10 +1475,10 @@ The heavy engines several programs share: GPU rendering, 2D drawing, text, PDF, 
 | KIT-A27-F10-P3 | **File encryption**: Reads and writes password encryption for office files and PDFs from their published specifications. Spare Office and Spare Studio both need it. | library | small | KIT-A27-F10-P1, KIT-A27-F6-P1 |  |
 | KIT-A27-F11-P1 | **Data merge**: Makes a page, record or message for each row of a sheet, CSV file or contact group, with previews, for Spare Studio's data merge and Spare Office's mail merge. | library | medium | KIT-A27-F10-P1 |  |
 | KIT-A27-F12-P1 | **On-device model runtime**: Runs open models on the processor, graphics chip or AI chip, for text recognition, speech, voices and image tasks. Spare Studio, Spare OS, Spare Social and Spare Office need it. Proposed as engine-models (KIT-A16-F10-P1). | library | large | kit-core, KIT-A17-F6-P1 |  |
-| KIT-A27-F12-P2 | **Open model choices**: Which open models for text recognition, speech recognition and voices may be used under their licences, how accurate each is, and how te reo Māori models follow Māori data principles, decided once for every program. | research | medium | KIT-A18-F16-P1, KIT-A17-F6-P1 |  |
+| KIT-A27-F12-P2 | **Open model choices**: Which open models for text recognition, speech recognition and voices may be used under their licences, how accurate each is, and how models for indigenous languages, such as te reo Māori, follow indigenous data principles, decided once for every program. | research | medium | KIT-A18-F16-P1, KIT-A17-F6-P1 |  |
 | KIT-A27-F12-P3 | **Text recognition**: Recognises printed and handwritten text in photos, scans and receipts on the device, for search, copying, scanning and receipt reading. Spare Office, Spare Studio, Spare OS and Spare Rent need it. | library | medium | KIT-A27-F12-P1, KIT-A27-F12-P2 |  |
-| KIT-A27-F12-P4 | **Speech recognition**: Speech to text for captions, transcripts, dictation and voice control, on the device or on co-op servers at cost, te reo Māori and English first. Spare Social, Spare Office, Spare Studio and Spare OS need it, and the kit's captions use it. | library | medium | KIT-A27-F12-P1, KIT-A27-F12-P2 |  |
-| KIT-A27-F12-P5 | **Text-to-speech voices**: Natural voices in many languages from open models, for read aloud, screen readers and offers read to drivers, with te reo Māori voices used only on terms that respect Māori data sovereignty. Spare Office, Spare OS, Spare Studio and Spare Ride need them. | library | medium | KIT-A27-F12-P1, KIT-A27-F12-P2, KIT-A18-F16-P1 |  |
+| KIT-A27-F12-P4 | **Speech recognition**: Speech to text for captions, transcripts, dictation and voice control, on the device or on co-op servers at cost, in many languages, starting with the example country's (for New Zealand: English and te reo Māori). Spare Social, Spare Office, Spare Studio and Spare OS need it, and the kit's captions use it. | library | medium | KIT-A27-F12-P1, KIT-A27-F12-P2 |  |
+| KIT-A27-F12-P5 | **Text-to-speech voices**: Natural voices in many languages from open models, for read aloud, screen readers and offers read to drivers, with voices in indigenous languages, such as te reo Māori, used only on terms that respect indigenous data sovereignty. Spare Office, Spare OS, Spare Studio and Spare Ride need them. | library | medium | KIT-A27-F12-P1, KIT-A27-F12-P2, KIT-A18-F16-P1 |  |
 
 ## KIT-A28 Own sites, public pages and feeds
 
@@ -1509,7 +1509,7 @@ Helps members reach people outside the apps: their own web address, fast public 
 | KIT-A28-F4-P2 | **Booking box and embeds**: A small booking or ordering box and a QR code that members can put on a site they already have. Spare Ride, Spare Stay and Spare Food need it. | library | small | KIT-A28-F4-P1, KIT-A20-F9-P1 |  |
 | KIT-A28-F5-P1 | **Customer records**: A seller's own list of customers with their orders and consent, kept to what privacy law allows and never shared with other sellers. Spare Market and Spare Work need it. | service | small | KIT-A18-F17-P1, KIT-A5-F8-P1 |  |
 | KIT-A28-F5-P2 | **Newsletters**: Simple newsletters and follower messages sent only to people who opted in, with a named sender and one-step unsubscribe, as anti-spam law requires. Spare Market and Spare Food need them. | service | small | KIT-A28-F5-P1, KIT-A8-F4-P1, KIT-A8-F5-P2 |  |
-| KIT-A28-F6-P1 | **Domains bought at cost**: Whether the co-op can sell domain names at the registrar's price, and the rules for .nz names. Spare Office and Spare Market both ask. | research | small | KIT-A14-F18-P2 |  |
+| KIT-A28-F6-P1 | **Domains bought at cost**: Whether the co-op can sell domain names at the registrar's price, and the rules for country domains such as .nz. Spare Office and Spare Market both ask. | research | small | KIT-A14-F18-P2 |  |
 
 ## Assessing this map and its demo
 
@@ -1517,12 +1517,12 @@ Helps members reach people outside the apps: their own web address, fast public 
 - Is the core set the smallest that gets the first marketplace and the member portal live, or is something marked core that can wait?
 - Does any part here belong in only one program, or does any program hold something every app needs (the layering rule)?
 - Is every place money moves run through a regulated payment provider, so the co-op never holds money itself?
-- Which legal parts need a lawyer before Design starts, and in what order: legal entity, holding money, anti-money-laundering, GST, privacy, terms?
+- Which legal parts need a lawyer before Design starts, and in what order: legal entity, holding money, anti-money-laundering, sales tax, privacy, terms?
 - Can a member trace any fee on a receipt back to real bills in the open cost ledger?
 - Does a passed vote actually change an app's settings, and are quorum and electorates taken from the constitution?
 - Are the safety tools enough for the first app's real risks (emergencies, reports, disputes) while removing only what the rules or the law require?
 - Is every outside service and open-source project named here usable under its licence and terms, with no GPL or AGPL code in the core?
-- Are te reo Māori, accessibility and data export built in from the first release rather than added later?
+- Are many languages, starting with the example country's (for New Zealand: English and te reo Māori), accessibility and data export built in from the first release rather than added later?
 - Which parts have no work-board piece yet, and which should become the next pieces?
 - Does the demo show each area's main screens in the design guide's look, with Spareware red only on co-op pages?
 - What will the kit cost to run each month at launch, and does the ledger design show that cost clearly?
@@ -1535,7 +1535,7 @@ Helps members reach people outside the apps: their own web address, fast public 
 - Kit core now includes every kit feature a program's core feature depends on; should some programs lower their own features instead, so the first release stays small?
 - Should the programs that still map their own copies of kit parts switch to the kit's: translation frameworks (CON-A22-F4-P1, MKT-A19-F1-P1, OFF-A17-F8-P1, SOC-A21-F5-P1, STAY-A17-F2-P1, STU-A19-F3-P1), status pages (SOC-A22-F4-P3, MKT-A17-F7-P1), Office's chat server (OFF-A13-F1-P2), at-cost pricing (OFF-A20, STU-A1-F5, SOC-A22-F3) and the other copies the review listed?
 - Should the kit pieces now tracked on other programs' boards (A05, A08, A14, MK01, MK04, MK05, OF05, M04 and RD03) move to the kit's own board?
-- Can a member panel's decision move held money without binding consumers in a way the Arbitration Act forbids, and what do the order terms need to say?
+- Can a member panel's decision move held money without binding consumers in a way arbitration law forbids (example: New Zealand's Arbitration Act), and what do the order terms need to say?
 - Is a member-funded protection pool an insurance business that needs a licence, and if so, is outside insurance the better route?
 - Does the map now hold everything Spare Home, Rent and Stay share (property record, document vault, visitor register, tenancy rules), so none of them depends on another?
 - The shared engines (KIT-A27) are mapped here though they are built in projects/engines; should the engines get a map of their own, and should engine-formats and engine-models be adopted as engine names?

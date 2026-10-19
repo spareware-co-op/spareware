@@ -162,7 +162,7 @@
             {
               "id": "OS-A1-F2-P7",
               "name": "Wipe standard for donated PCs",
-              "what": "A written standard for wiping every donated PC before it enters the test lab or the refurbishment programme, with a record of each wipe, because donors' personal data on those disks stays the co-op's responsibility under the Privacy Act.",
+              "what": "A written standard for wiping every donated PC before it enters the test lab or the refurbishment programme, with a record of each wipe, because donors' personal data on those disks stays the co-op's responsibility under privacy law (example: New Zealand's Privacy Act).",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -446,7 +446,7 @@
             {
               "id": "OS-A2-F2-P4",
               "name": "Signed Windows and Mac builds",
-              "what": "Signs the USB maker and Windows-side helper with a co-op Authenticode certificate (Microsoft's Artifact Signing issues them to NZ organisations) and Mac builds with Apple Developer ID notarisation, through the kit's signed releases and held by the legal entity with costs on the ledger, so SmartScreen and Smart App Control let them run; the certificates belong in the kit for every Spare desktop app.",
+              "what": "Signs the USB maker and Windows-side helper with a co-op Authenticode certificate (Microsoft's Artifact Signing issues them to organisations in the countries it lists, such as New Zealand) and Mac builds with Apple Developer ID notarisation, through the kit's signed releases and held by the legal entity with costs on the ledger, so SmartScreen and Smart App Control let them run; the certificates belong in the kit for every Spare desktop app.",
               "kind": "integration",
               "size": "medium",
               "depends_on": [
@@ -919,7 +919,7 @@
             {
               "id": "OS-A3-F4-P2",
               "name": "Spare OS privacy notice",
-              "what": "Adds what Spare OS itself collects, in plain words, to the kit's collection notices, checked against privacy law in NZ and the main overseas markets.",
+              "what": "Adds what Spare OS itself collects, in plain words, to the kit's collection notices, checked against privacy law in each country, starting with New Zealand.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -2738,7 +2738,7 @@
             {
               "id": "OS-A9-F4-P2",
               "name": "Tax on digital sales",
-              "what": "Works out and collects GST, VAT and sales tax on app sales where the store must, on the kit's GST engine, starting with NZ.",
+              "what": "Works out and collects sales tax, VAT and GST on app sales where the store must, on the kit's sales tax engine, starting with New Zealand.",
               "kind": "legal",
               "size": "medium",
               "depends_on": [
@@ -2750,7 +2750,7 @@
             {
               "id": "OS-A9-F4-P3",
               "name": "Refunds and consumer guarantees for apps",
-              "what": "Refunds for app purchases on the kit's refunds service, following NZ consumer guarantees for digital content and the EU's digital content rules.",
+              "what": "Refunds for app purchases on the kit's refunds service, following each country's consumer law for digital content, such as New Zealand's consumer guarantees and the EU's digital content rules.",
               "kind": "legal",
               "size": "medium",
               "depends_on": [
@@ -2873,7 +2873,7 @@
             {
               "id": "OS-A9-F7-P4",
               "name": "Game classification law",
-              "what": "Checks NZ classification law for games sold through the store, and overseas equivalents, and how ratings and labels must be shown.",
+              "what": "Checks each country's classification law for games sold through the store, starting with New Zealand's, and how ratings and labels must be shown.",
               "kind": "legal",
               "size": "small",
               "depends_on": [],
@@ -3214,7 +3214,7 @@
             {
               "id": "OS-A10-F6-P3",
               "name": "NCEA digital exam approval",
-              "what": "Works with NZQA so Spare OS PCs pass the device check for NCEA digital exams, since its published device guidance names Chrome OS, Windows and Mac and does not mention Linux (current table unverified).",
+              "what": "Works with each country's exam bodies so Spare OS PCs pass their device checks, starting with NZQA for New Zealand's NCEA digital exams, since its published device guidance names Chrome OS, Windows and Mac and does not mention Linux (current table unverified).",
               "kind": "research",
               "size": "medium",
               "depends_on": [
@@ -4795,7 +4795,7 @@
         {
           "id": "OS-A15-F7",
           "name": "Hear text read aloud",
-          "does": "Have any text read aloud in a natural voice, including NZ English and te reo Māori.",
+          "does": "Have any text read aloud in a natural voice, including the example country's (for New Zealand: New Zealand English and te reo Māori).",
           "priority": "core",
           "parts": [
             {
@@ -4809,8 +4809,8 @@
             },
             {
               "id": "OS-A15-F7-P2",
-              "name": "Te reo Māori voice",
-              "what": "Works with Māori language and data experts on a te reo Māori voice on terms that respect Māori data sovereignty.",
+              "name": "Indigenous language voices",
+              "what": "Works with language and data experts on voices for indigenous languages, starting with a te reo Māori voice made with Māori experts on terms that respect Māori data sovereignty.",
               "kind": "research",
               "size": "medium",
               "depends_on": [
@@ -4842,7 +4842,7 @@
             {
               "id": "OS-A15-F8-P2",
               "name": "Accessibility law research",
-              "what": "Which accessibility laws apply to a free operating system in NZ, the EU and other markets, and what each requires; the research belongs in the kit for every Spare app.",
+              "what": "Which accessibility laws apply to a free operating system in each country, such as New Zealand and the EU, and what each requires; the research belongs in the kit for every Spare app.",
               "kind": "legal",
               "size": "medium",
               "depends_on": [],
@@ -4914,12 +4914,12 @@
     {
       "id": "OS-A16",
       "name": "Languages and regions",
-      "summary": "New Zealand first, international by design: every screen translatable, te reo Māori and Pacific languages first-class with their own keyboards, dictionaries and te reo speech, every keyboard and script, local formats, spelling, country packs and on-device translation.",
+      "summary": "International by design, with New Zealand as the first example country: every screen translatable, the example country's languages first-class (for New Zealand: te reo Māori and Pacific languages, with their own keyboards, dictionaries and te reo speech), every keyboard and script, local formats, spelling, country packs and on-device translation.",
       "features": [
         {
           "id": "OS-A16-F1",
           "name": "Use Spare OS in my language",
-          "does": "Use every screen of Spare OS in their own language, with te reo Māori and NZ English ready from the start.",
+          "does": "Use every screen of Spare OS in their own language, with the example country's languages ready from the start (for New Zealand: New Zealand English and te reo Māori).",
           "priority": "core",
           "parts": [
             {
@@ -4935,8 +4935,8 @@
             },
             {
               "id": "OS-A16-F1-P2",
-              "name": "Te reo Māori translation",
-              "what": "A full te reo Māori translation done with Māori language experts, with agreed terms for new technical words.",
+              "name": "Fluent speaker translation",
+              "what": "A full translation into the example country's languages, starting with te reo Māori, done with Māori language experts, with agreed terms for new technical words.",
               "kind": "data",
               "size": "large",
               "depends_on": [
@@ -4987,7 +4987,7 @@
             {
               "id": "OS-A16-F2-P2",
               "name": "Māori macrons by default",
-              "what": "Sets NZ keyboards to type macron vowels with a simple key combination out of the box.",
+              "what": "Sets keyboards for languages that use macrons, such as te reo Māori, to type macron vowels with a simple key combination out of the box.",
               "kind": "data",
               "size": "small",
               "depends_on": [
@@ -5056,7 +5056,7 @@
         {
           "id": "OS-A16-F5",
           "name": "Check spelling in my language",
-          "does": "Get spell checking in their language in every app, including te reo Māori and NZ English.",
+          "does": "Get spell checking in their language in every app, including te reo Māori and New Zealand English.",
           "priority": "core",
           "parts": [
             {
@@ -5135,14 +5135,14 @@
         },
         {
           "id": "OS-A16-F8",
-          "name": "Speak to the PC in te reo Māori",
-          "does": "Dictate, see captions and control the PC by voice in te reo Māori, not only in English.",
+          "name": "Speak to the PC in my language",
+          "does": "Dictate, see captions and control the PC by voice in smaller and indigenous languages, such as te reo Māori, not only in English.",
           "priority": "next",
           "parts": [
             {
               "id": "OS-A16-F8-P1",
-              "name": "Te reo Māori speech recognition",
-              "what": "Builds te reo Māori speech recognition for dictation, live captions and voice control with Māori language and data experts, respecting the community licence terms that existing te reo speech data comes with.",
+              "name": "Indigenous language speech recognition",
+              "what": "Builds speech recognition for indigenous languages for dictation, live captions and voice control, starting with te reo Māori, made with Māori language and data experts, respecting the community licence terms that existing te reo speech data comes with.",
               "kind": "research",
               "size": "large",
               "depends_on": [
@@ -5881,7 +5881,7 @@
             {
               "id": "OS-A19-F7-P4",
               "name": "Exam platforms that check the system",
-              "what": "Tracks exam and assessment platforms that check which operating system a device runs, as NZQA's does, and works with each so exam mode meets them.",
+              "what": "Tracks exam and assessment platforms that check which operating system a device runs, as New Zealand's NZQA does, and works with each so exam mode meets them.",
               "kind": "research",
               "size": "small",
               "depends_on": [
@@ -5964,7 +5964,7 @@
         {
           "id": "OS-A19-F11",
           "name": "Fit into Google Workspace",
-          "does": "Sign in with a Google Workspace for Education or business account and manage PCs from it, as many NZ schools do with Chromebooks.",
+          "does": "Sign in with a Google Workspace for Education or business account and manage PCs from it, as many schools do with Chromebooks.",
           "priority": "next",
           "parts": [
             {
@@ -6049,7 +6049,7 @@
             {
               "id": "OS-A19-F13-P3",
               "name": "Hardening baselines",
-              "what": "Published security baselines for Spare OS, checked against the NZ Information Security Manual and common benchmarks, that the rules engine can apply and report on.",
+              "what": "Published security baselines for Spare OS, checked against government security manuals, such as the New Zealand Information Security Manual, and common benchmarks, that the rules engine can apply and report on.",
               "kind": "data",
               "size": "medium",
               "depends_on": [
@@ -6185,8 +6185,8 @@
             },
             {
               "id": "OS-A20-F2-P4",
-              "name": "Phone and NZ Relay support",
-              "what": "Help by phone, and through NZ Relay for Deaf, hard of hearing and speech-impaired people, for when the PC itself is what's broken.",
+              "name": "Phone and relay support",
+              "what": "Help by phone, and through a relay service (example: New Zealand Relay) for Deaf, hard of hearing and speech-impaired people, for when the PC itself is what's broken.",
               "kind": "integration",
               "size": "small",
               "depends_on": [
@@ -6404,7 +6404,7 @@
             {
               "id": "OS-A20-F10-P1",
               "name": "Funding model",
-              "what": "Compares ways to pay Spare OS's running costs, such as member dues, donations, business support plans, partner PC fees and a share of co-op costs, as a decision note for members.",
+              "what": "Compares ways to pay Spare OS's running costs, such as donations, business support plans, partner PC fees and a part of the co-op's shared costs, with no member dues, as a decision note for members.",
               "kind": "research",
               "size": "medium",
               "depends_on": [
@@ -6546,7 +6546,7 @@
             {
               "id": "OS-A21-F1-P4",
               "name": "Licence policy for shipped software",
-              "what": "Writes down, for an owner's decision, where our code ends and separate programs begin: our own libraries stay permissive, and for software that is not open source, such as NVIDIA's driver, device firmware files, the browser's streaming content protection module, game store apps and any Android store, which ship in the image, which are opt-in downloads the person chooses, and on what redistribution terms.",
+              "what": "Writes down, for an owner's decision, where our code ends and separate programs begin: our own code stays under MPL-2.0, with the SDK and plugins under Apache-2.0, and for software that is not open source, such as NVIDIA's driver, device firmware files, the browser's streaming content protection module, game store apps and any Android store, which ship in the image, which are opt-in downloads the person chooses, and on what redistribution terms.",
               "kind": "legal",
               "size": "medium",
               "depends_on": [
@@ -6650,13 +6650,13 @@
         {
           "id": "OS-A21-F6",
           "name": "Have my data protected by law",
-          "does": "Know Spare OS follows privacy law in NZ and overseas, including telling people about data breaches.",
+          "does": "Know Spare OS follows privacy law in each country, including telling people about data breaches.",
           "priority": "core",
           "parts": [
             {
               "id": "OS-A21-F6-P1",
               "name": "Privacy law research",
-              "what": "Spare OS's duties under the NZ Privacy Act 2020, the EU's data protection law and others, worked through with the kit's privacy officer.",
+              "what": "Spare OS's duties under each country's privacy law, such as New Zealand's Privacy Act 2020 and the EU's data protection law, worked through with the kit's privacy officer.",
               "kind": "legal",
               "size": "medium",
               "depends_on": [
@@ -6717,7 +6717,7 @@
             {
               "id": "OS-A21-F8-P1",
               "name": "Encryption export check",
-              "what": "Checks NZ and other export rules for publicly available encryption software, and laws in some countries that restrict importing or using encryption, which is on by default, and records the basis for shipping it; the research belongs in the kit for every Spare app.",
+              "what": "Checks each country's export rules for publicly available encryption software, starting with New Zealand's, and laws in some countries that restrict importing or using encryption, which is on by default, and records the basis for shipping it; the research belongs in the kit for every Spare app.",
               "kind": "legal",
               "size": "small",
               "depends_on": [],
@@ -6734,7 +6734,7 @@
             {
               "id": "OS-A21-F9-P1",
               "name": "Consumer law research",
-              "what": "Spare OS's duties under NZ consumer and fair trading law, and overseas equivalents, for pre-installed PCs and paid support, building on the kit's consumer law research.",
+              "what": "Spare OS's duties under each country's consumer and fair trading law, starting with New Zealand's, for pre-installed PCs and paid support, building on the kit's consumer law research.",
               "kind": "legal",
               "size": "medium",
               "depends_on": [
@@ -6808,8 +6808,8 @@
             },
             {
               "id": "OS-A21-F11-P2",
-              "name": "Harmful digital communications duties",
-              "what": "Handles complaints about reviews and forum posts under the NZ Harmful Digital Communications Act, so the co-op keeps its protection as a host.",
+              "name": "Online harm duties",
+              "what": "Handles complaints about reviews and forum posts under each country's online harm law (example: New Zealand's Harmful Digital Communications Act), so the co-op keeps its protection as a host.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -6861,11 +6861,11 @@
     "Is every icon, layout, sound and screen our own design, with nothing copied from Windows or any other system?",
     "Can someone try Spare OS from a USB stick and go back to Windows untouched, and is BitLocker checked before any partition is changed?",
     "Does the move from Windows bring files, browser data, email and Wi-Fi across without breaking any encryption or terms, and what happens to cloud-only files?",
-    "Of the 50 Windows programs NZ offices and schools use most, how many run, and is the compatibility list honest about the ones that don't?",
+    "Of the 50 Windows programs offices and schools use most, measured first in New Zealand, how many run, and is the compatibility list honest about the ones that don't?",
     "Can an update ever leave a PC unable to start, and how is rollback tested on real hardware each release?",
     "Who holds the signing keys and the Secure Boot signing agreement, and what is the plan if the firmware certificates change again?",
     "Is every data-sharing choice off by default, and could a sceptical member check exactly what is sent?",
-    "Does every screen work with a screen reader and keyboard alone, and in te reo Māori?",
+    "Does every screen work with a screen reader and keyboard alone, and in the example country's languages (for New Zealand: te reo Māori)?",
     "Is the co-op a manufacturer or an open-source steward under EU product security law, and which duties (accessibility, age ranges, privacy, export) need a lawyer before the first release?",
     "Is every system action a command, so scripts and AI use the same path as people, and can an AI only act with the person's approval?",
     "What will Spare OS cost to run each month (build servers, mirrors, test lab, signing, support), and is it on the open cost ledger?",
@@ -6878,6 +6878,6 @@
     "Could a scammer use remote help on a first-time switcher, and what stops them: verified helpers, scope and time limits, the scam warning and the log?",
     "Can a blind person unlock an encrypted Spare OS PC and finish install with no sighted help?",
     "Who pays Spare OS's running costs when there are no jobs to charge a fee on, and have members voted on it?",
-    "Can NZ students sit NCEA digital exams on a Spare OS laptop, and can school PCs get online behind N4L's network?"
+    "Can students sit digital exams on a Spare OS laptop, starting with New Zealand's NCEA, and can school PCs get online behind school networks such as New Zealand's N4L?"
   ]
 }

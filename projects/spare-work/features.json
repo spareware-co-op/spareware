@@ -2,7 +2,7 @@
   "program": "spare-work",
   "name": "Spare Work",
   "replaces": "Builderscrack, hipages, Upwork and Fiverr",
-  "summary": "A trades and freelance marketplace owned by the people who do the work. Customers post a job once and get free quotes, each stage's payment is held until it is signed off, licences are checked against public registers, and workers keep everything except the at-cost fee.",
+  "summary": "A trades and freelance marketplace run for the people who do the work, who vote on its fees and rules. Customers post a job once and get free quotes, each stage's payment is held until it is signed off, licences are checked against public registers, and workers keep everything except the at-cost fee.",
   "areas": [
     {
       "id": "WORK-A1",
@@ -130,7 +130,7 @@
             {
               "id": "WORK-A1-F2-P6",
               "name": "Business check",
-              "what": "Confirms a worker's business through the kit's NZ Business Number lookup and keeps its trader details, so customers see the legal entity behind each quote.",
+              "what": "Confirms a worker's business through the kit's business number lookup (example: the NZ Business Number) and keeps its trader details, so customers see the legal entity behind each quote.",
               "kind": "integration",
               "size": "small",
               "depends_on": [
@@ -142,7 +142,7 @@
             {
               "id": "WORK-A1-F2-P7",
               "name": "Worker age rules",
-              "what": "A minimum age for each category: a teenager can offer simple jobs such as lawn mowing with a parent or carer linked, while licensed work, childcare and work with held money are for adults only; young workers also get the hazardous-work limits, such as no ride-on mowers or other heavy machinery under 15 (confirm the rule in the health and safety regulations).",
+              "what": "A minimum age for each category: a teenager can offer simple jobs such as lawn mowing with a parent or carer linked, while licensed work, childcare and work with held money are for adults only; young workers also get the hazardous-work limits, such as, in New Zealand, no ride-on mowers or other heavy machinery under 15 (confirm the rule in the health and safety regulations).",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -297,7 +297,7 @@
             {
               "id": "WORK-A1-F6-P2",
               "name": "Close with open-job checks",
-              "what": "Closing waits until held money, open stages and disputes are settled, offers a data export first, and ends the person's Spare Work membership and redeems their share through the kit, unless they are still a member through another app.",
+              "what": "Closing waits until held money, open stages and disputes are settled, offers a data export first, and ends the person's Spare Work membership, unless they are still a member through another app.",
               "kind": "library",
               "size": "small",
               "depends_on": [
@@ -460,7 +460,7 @@
             {
               "id": "WORK-A2-F3-P2",
               "name": "Registers each trade needs",
-              "what": "Declares to the kit's register checks which registers each trade needs, starting with licensed building practitioners, electrical workers, and plumbers, gasfitters and drainlayers.",
+              "what": "Declares to the kit's register checks which registers each trade needs in each country, starting with New Zealand's registers for licensed building practitioners, electrical workers, and plumbers, gasfitters and drainlayers.",
               "kind": "data",
               "size": "small",
               "depends_on": [
@@ -499,7 +499,7 @@
             {
               "id": "WORK-A2-F3-P5",
               "name": "Licence rules per trade",
-              "what": "Which work needs which licence, registration or licence class, as an open rules table per country, covering NZ restricted building work, the other trades and the professions in WORK-A2-F3-P7, with exemptions such as the owner-builder exemption for restricted building work and the homeowner exemption for some electrical work.",
+              "what": "Which work needs which licence, registration or licence class, as an open rules table per country, covering, in the New Zealand pack, restricted building work, the other trades and the professions in WORK-A2-F3-P7, with exemptions such as the owner-builder exemption for restricted building work and the homeowner exemption for some electrical work.",
               "kind": "data",
               "size": "medium",
               "depends_on": [
@@ -724,7 +724,7 @@
         {
           "id": "WORK-A2-F8",
           "name": "Show a verified ownership tag",
-          "does": "A Māori- or Pasifika-owned business can choose to show a verified tag, for business customers with progressive procurement targets.",
+          "does": "A business owned by a group that buyers' procurement targets favour (example: Māori- or Pasifika-owned businesses in New Zealand) can choose to show a verified tag, for business customers with progressive procurement targets.",
           "priority": "later",
           "parts": [
             {
@@ -827,7 +827,7 @@
             {
               "id": "WORK-A3-F1-P6",
               "name": "Disclosed commissions and markups",
-              "what": "When the person who approves a job is not the one who pays, such as a property manager, body corporate manager or insurer's agent, they must disclose any commission, referral fee or markup they get from the job, and the payer sees it on the quote and invoice, as the Secret Commissions Act 1910 expects.",
+              "what": "When the person who approves a job is not the one who pays, such as a property manager, body corporate manager or insurer's agent, they must disclose any commission, referral fee or markup they get from the job, and the payer sees it on the quote and invoice, as the law on secret commissions expects (example: New Zealand's Secret Commissions Act 1910).",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -925,7 +925,7 @@
             {
               "id": "WORK-A3-F3-P4",
               "name": "Does it need consent?",
-              "what": "Plain guidance on whether work needs a building consent or is exempt under Schedule 1 of the Building Act, including the small stand-alone dwelling exemption, with a link to the council.",
+              "what": "Plain guidance on whether work needs a building consent or is exempt under the country's building law (example: Schedule 1 of New Zealand's Building Act, including the small stand-alone dwelling exemption), with a link to the council.",
               "kind": "legal",
               "size": "medium",
               "depends_on": [
@@ -1087,7 +1087,7 @@
             {
               "id": "WORK-A3-F7-P3",
               "name": "Danger first",
-              "what": "For a gas smell, live wires or flooding, shows 111 and the gas or lines company's emergency number before any matching starts.",
+              "what": "For a gas smell, live wires or flooding, shows the emergency number (111 in New Zealand) and the gas or lines company's emergency number before any matching starts.",
               "kind": "library",
               "size": "small",
               "depends_on": [
@@ -1108,7 +1108,7 @@
             {
               "id": "WORK-A3-F8-P1",
               "name": "Reserved and prohibited services law",
-              "what": "Every NZ law that reserves work to licensed people or bans a service, with sources: lawyers' reserved areas, immigration advice, real estate agency, financial advice, security work, asbestos removal, health practitioners' restricted activities and protected titles, veterinary work, auctioneers (registration under the Auctioneers Act 2013), debt collection and repossession, food businesses under the Food Act 2014 such as private chefs and caterers, passenger services (a small passenger service licence), goods moved for hire in heavier vehicles (a goods service licence), and contract cheating (an offence under the Education and Training Act 2020, reported as s393; confirm the section).",
+              "what": "Every law in each country that reserves work to licensed people or bans a service, with sources, starting with New Zealand's: lawyers' reserved areas, immigration advice, real estate agency, financial advice, security work, asbestos removal, health practitioners' restricted activities and protected titles, veterinary work, auctioneers (registration under the Auctioneers Act 2013), debt collection and repossession, food businesses under the Food Act 2014 such as private chefs and caterers, passenger services (a small passenger service licence), goods moved for hire in heavier vehicles (a goods service licence), and contract cheating (an offence under the Education and Training Act 2020, reported as s393; confirm the section).",
               "kind": "legal",
               "size": "medium",
               "depends_on": [],
@@ -1153,8 +1153,8 @@
             },
             {
               "id": "WORK-A3-F8-P5",
-              "name": "Remote services stay in NZ at first",
-              "what": "Until the GST rule for remote services from overseas workers is live (WORK-A11-F6-P3), remote services such as a logo or a report are bought and sold only between people resident in NZ, so no overseas worker sells to an NZ consumer through the co-op.",
+              "name": "Remote services stay within one country at first",
+              "what": "Until the sales tax rule for remote services from overseas workers is live (WORK-A11-F6-P3), remote services such as a logo or a report are bought and sold only between people resident in the same country, so no overseas worker sells to a consumer in another country through the co-op.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -1621,7 +1621,7 @@
         {
           "id": "WORK-A5-F2",
           "name": "Trades directory",
-          "does": "A customer can browse a directory of trades by region, such as plumbers in Nelson.",
+          "does": "A customer can browse a directory of trades by region, such as plumbers in a given town.",
           "priority": "next",
           "parts": [
             {
@@ -1949,7 +1949,7 @@
         {
           "id": "WORK-A7-F1",
           "name": "Write a quote",
-          "does": "A worker can write a quote with line items, labour, materials, GST, exclusions, start date and expiry.",
+          "does": "A worker can write a quote with line items, labour, materials, sales tax, exclusions, start date and expiry.",
           "priority": "core",
           "parts": [
             {
@@ -1999,7 +1999,7 @@
             {
               "id": "WORK-A7-F1-P5",
               "name": "Tax and totals",
-              "what": "Works out GST and totals from the worker's tax status and the country's rules, using the kit's full price first, so consumers always see GST-inclusive totals.",
+              "what": "Works out sales tax and totals from the worker's tax status and the country's rules, using the kit's full price first, so consumers always see tax-inclusive totals.",
               "kind": "library",
               "size": "small",
               "depends_on": [
@@ -2281,8 +2281,8 @@
             },
             {
               "id": "WORK-A8-F1-P2",
-              "name": "Building Act pack",
-              "what": "For NZ residential building work: the disclosure statement and checklist before signing when the price is $30,000 or more including GST, or whenever the client asks, and a written contract at $30,000 or more.",
+              "name": "Building law pack (example: New Zealand's Building Act)",
+              "what": "Each country's rules for building contracts; for New Zealand residential building work: the disclosure statement and checklist before signing when the price is $30,000 or more including GST, or whenever the client asks, and a written contract at $30,000 or more.",
               "kind": "legal",
               "size": "medium",
               "depends_on": [
@@ -2330,7 +2330,7 @@
             {
               "id": "WORK-A8-F1-P6",
               "name": "Residential building duties on every job",
-              "what": "For all NZ residential building work, whatever the price: the implied warranties, the 12-month defect repair period and the information due on completion, shown in the agreement.",
+              "what": "For all residential building work in the New Zealand pack, whatever the price: the implied warranties, the 12-month defect repair period and the information due on completion, shown in the agreement.",
               "kind": "legal",
               "size": "medium",
               "depends_on": [
@@ -2365,7 +2365,7 @@
             {
               "id": "WORK-A8-F1-P9",
               "name": "Uninvited direct sales",
-              "what": "When the worker starts the deal uninvited, such as a custom offer, a yearly service reminder with a price, a quote nobody asked for or a door-knock after a storm, the agreement carries the Fair Trading Act cancellation notice and the 5 working day cooling-off period; which flows count is confirmed with a lawyer.",
+              "what": "When the worker starts the deal uninvited, such as a custom offer, a yearly service reminder with a price, a quote nobody asked for or a door-knock after a storm, the agreement carries the cancellation notice and cooling-off period consumer law requires (example: the Fair Trading Act notice and 5 working days in New Zealand); which flows count is confirmed with a lawyer.",
               "kind": "legal",
               "size": "medium",
               "depends_on": [
@@ -2476,7 +2476,7 @@
             {
               "id": "WORK-A8-F4-P1",
               "name": "Construction payment rules",
-              "what": "Whether the app's stage invoices count as payment claims under the Construction Contracts Act, including for residential occupiers, and the timings and content that follow; settled before stage payments ship.",
+              "what": "Whether the app's stage invoices count as payment claims under construction contracts law (example: New Zealand's Construction Contracts Act), including for residential occupiers, and the timings and content that follow; settled before stage payments ship.",
               "kind": "research",
               "size": "medium",
               "depends_on": [],
@@ -2510,7 +2510,7 @@
             {
               "id": "WORK-A8-F4-P4",
               "name": "Suspending work after a missed payment",
-              "what": "Shows a worker their right under the Construction Contracts Act to suspend work after a missed scheduled payment, with the notice it needs, and tells the customer before work stops.",
+              "what": "Shows a worker their right under construction contracts law (example: New Zealand's Construction Contracts Act) to suspend work after a missed scheduled payment, with the notice it needs, and tells the customer before work stops.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -2552,7 +2552,7 @@
             {
               "id": "WORK-A8-F6-P1",
               "name": "Retention rules",
-              "what": "When retentions are allowed and how they must be held, including the Construction Contracts Act's trust rules for retention money, starting with NZ commercial contracts.",
+              "what": "When retentions are allowed and how they must be held in each country, starting with New Zealand commercial contracts and the Construction Contracts Act's trust rules for retention money.",
               "kind": "research",
               "size": "small",
               "depends_on": [],
@@ -2842,7 +2842,7 @@
             {
               "id": "WORK-A9-F4-P4",
               "name": "Fee basis when money stays outside",
-              "what": "Decides how matching, licence re-checks, messages, panels and support are paid for on jobs paid outside the app: a small fee on accepted agreements, member dues, or a fee only on paid jobs with the gap shown; settled before the first fee is set.",
+              "what": "Decides how matching, licence re-checks, messages, panels and support are paid for on jobs paid outside the app: a small fee on accepted agreements, or a fee only on paid jobs with the gap shown; settled before the first fee is set.",
               "kind": "research",
               "size": "medium",
               "depends_on": [
@@ -3034,7 +3034,7 @@
             {
               "id": "WORK-A9-F10-P1",
               "name": "Credit law check",
-              "what": "What the Credit Contracts and Consumer Finance Act and the buy now, pay later rules ask of a platform that offers a lender's finance, settled before any is offered.",
+              "what": "What consumer credit law and the buy now, pay later rules ask of a platform that offers a lender's finance (example: New Zealand's Credit Contracts and Consumer Finance Act), settled before any is offered.",
               "kind": "research",
               "size": "small",
               "depends_on": [],
@@ -3260,7 +3260,7 @@
             {
               "id": "WORK-A10-F5-P3",
               "name": "Record of work",
-              "what": "The named licensed building practitioner gives the owner and the council a record of work when restricted building work is done, or when they stop work, as Building Act s88 requires; whether this now covers small stand-alone dwellings built without consent is unverified.",
+              "what": "In the New Zealand pack, the named licensed building practitioner gives the owner and the council a record of work when restricted building work is done, or when they stop work, as Building Act s88 requires; whether this now covers small stand-alone dwellings built without consent is unverified.",
               "kind": "legal",
               "size": "medium",
               "depends_on": [
@@ -3591,8 +3591,8 @@
             },
             {
               "id": "WORK-A11-F6-P3",
-              "name": "GST on remote services from overseas",
-              "what": "When an overseas worker sells remote services to an NZ consumer, the marketplace is treated as the supplier and must register, charge and return GST, with similar rules in the EU, UK and Australia; live before any overseas worker sells to NZ consumers. Confirm the current Act wording.",
+              "name": "Sales tax on remote services from overseas (example: New Zealand GST)",
+              "what": "When an overseas worker sells remote services to a consumer, the marketplace is often treated as the supplier and must register, charge and return sales tax, as in New Zealand (GST), the EU, the UK and Australia; live before any overseas worker sells to consumers in another country. Confirm the current law in each country.",
               "kind": "legal",
               "size": "medium",
               "depends_on": [
@@ -3788,8 +3788,8 @@
             },
             {
               "id": "WORK-A12-F6-P2",
-              "name": "Text or NZ Relay instead of a call",
-              "what": "A member who is Deaf, hard of hearing or speech-impaired can choose job chat or an NZ Relay call instead of a masked voice call, and the other side sees how best to reach them; whether masked numbers work through NZ Relay is unverified.",
+              "name": "Text or relay service instead of a call",
+              "what": "A member who is Deaf, hard of hearing or speech-impaired can choose job chat or a relay service call (example: NZ Relay) instead of a masked voice call, and the other side sees how best to reach them; whether masked numbers work through relay services is unverified.",
               "kind": "integration",
               "size": "small",
               "depends_on": [
@@ -3806,18 +3806,18 @@
     {
       "id": "WORK-A13",
       "name": "Invoices, tax and records",
-      "summary": "GST-correct invoices and receipts made from each job, records both sides can keep, and the platform's own reports to Inland Revenue.",
+      "summary": "Tax-correct invoices and receipts made from each job, records both sides can keep, and the platform's own reports to the tax office (example: New Zealand's Inland Revenue).",
       "features": [
         {
           "id": "WORK-A13-F1",
           "name": "Send an invoice",
-          "does": "A worker can send a GST-correct invoice made from the agreement and stage, in one tap.",
+          "does": "A worker can send a tax-correct invoice made from the agreement and stage, in one tap.",
           "priority": "core",
           "parts": [
             {
               "id": "WORK-A13-F1-P1",
-              "name": "GST invoices and records for trade and freelance work",
-              "what": "What NZ invoices and records for trade and freelance jobs must show, with sources, as Spare Work's input to the kit's tax invoices.",
+              "name": "Tax invoices and records for trade and freelance work",
+              "what": "What invoices and records for trade and freelance jobs must show in each country, with sources, starting with New Zealand's, as Spare Work's input to the kit's tax invoices.",
               "kind": "research",
               "size": "small",
               "depends_on": [],
@@ -3851,7 +3851,7 @@
             {
               "id": "WORK-A13-F1-P4",
               "name": "Tax invoice for the fee",
-              "what": "Shows the kit's tax invoice for the co-op's fee on each Spare Work payout statement, so GST-registered workers can claim the GST back.",
+              "what": "Shows the kit's tax invoice for the co-op's fee on each Spare Work payout statement, so workers registered for sales tax can claim it back.",
               "kind": "library",
               "size": "small",
               "depends_on": [
@@ -3896,7 +3896,7 @@
             {
               "id": "WORK-A13-F2-P3",
               "name": "Records that pass with the property",
-              "what": "Links each job to its address on a shared property record, so completion packs, records of work, certificates and warranties pass to the next owner when the property is sold, as the Building Act's implied warranties do; the shared record that Spare Home and Spare Rent map belongs in the kit.",
+              "what": "Links each job to its address on a shared property record, so completion packs, records of work, certificates and warranties pass to the next owner when the property is sold, as building law's implied warranties do (example: New Zealand's Building Act); the shared record that Spare Home and Spare Rent map belongs in the kit.",
               "kind": "library",
               "size": "medium",
               "depends_on": [
@@ -3912,13 +3912,13 @@
         {
           "id": "WORK-A13-F3",
           "name": "Set tax status",
-          "does": "A worker can set their GST status, and quotes and invoices follow it.",
+          "does": "A worker can set their sales tax status, and quotes and invoices follow it.",
           "priority": "core",
           "parts": [
             {
               "id": "WORK-A13-F3-P1",
               "name": "Tax rules engine",
-              "what": "Spare Work's tax cases on the kit's GST engine: trades and freelance work are not listed services, so each worker charges GST by their own status.",
+              "what": "Spare Work's tax cases on the kit's sales tax engine: in New Zealand, trades and freelance work are not listed services, so each worker charges GST by their own status.",
               "kind": "library",
               "size": "small",
               "depends_on": [
@@ -3930,8 +3930,8 @@
             },
             {
               "id": "WORK-A13-F3-P2",
-              "name": "GST number check",
-              "what": "Checks the format of a GST number and records the worker's status.",
+              "name": "Sales tax number check",
+              "what": "Checks the format of a sales tax number (example: a New Zealand GST number) and records the worker's status.",
               "kind": "integration",
               "size": "small",
               "depends_on": [
@@ -3944,13 +3944,13 @@
         {
           "id": "WORK-A13-F4",
           "name": "Platform income reporting",
-          "does": "The co-op reports workers' income to Inland Revenue as the digital platform rules for personal services require, and sends each worker a copy.",
+          "does": "The co-op reports workers' income to the tax office (example: New Zealand's Inland Revenue) as the digital platform rules for personal services require, and sends each worker a copy.",
           "priority": "core",
           "parts": [
             {
               "id": "WORK-A13-F4-P1",
               "name": "Personal services in the kit's report",
-              "what": "Feeds Spare Work's personal services income into the kit's yearly IRD report and each worker's copy.",
+              "what": "Feeds Spare Work's personal services income into the kit's yearly report to the tax office and each worker's copy.",
               "kind": "integration",
               "size": "small",
               "depends_on": [
@@ -4060,7 +4060,7 @@
             {
               "id": "WORK-A13-F7-P3",
               "name": "Next steps for unpaid work",
-              "what": "A plain guide to a payment claim under the Construction Contracts Act or a Disputes Tribunal claim, with the job record exported.",
+              "what": "A plain guide to a payment claim under construction contracts law or a small claims tribunal claim (examples: New Zealand's Construction Contracts Act and Disputes Tribunal), with the job record exported.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -4141,7 +4141,7 @@
             {
               "id": "WORK-A14-F2-P2",
               "name": "Customer's reply, challenge and access",
-              "what": "A customer can reply to, challenge and see every review about them, and ask for a correction under the Privacy Act.",
+              "what": "A customer can reply to, challenge and see every review about them, and ask for a correction under privacy law.",
               "kind": "library",
               "size": "small",
               "depends_on": [
@@ -4413,7 +4413,7 @@
         {
           "id": "WORK-A15-F4",
           "name": "Outside options",
-          "does": "A member can see their legal options, such as the Disputes Tribunal or adjudication, and export the file for them.",
+          "does": "A member can see their legal options, such as a small claims tribunal (example: New Zealand's Disputes Tribunal) or adjudication, and export the file for them.",
           "priority": "next",
           "parts": [
             {
@@ -4431,7 +4431,7 @@
             {
               "id": "WORK-A15-F4-P2",
               "name": "Guide to outside options",
-              "what": "Spare Work's outside routes on the kit's guidance: the Disputes Tribunal, adjudication under the Construction Contracts Act, and complaints to licensing boards.",
+              "what": "Spare Work's outside routes on the kit's guidance: a small claims tribunal, adjudication under construction contracts law and complaints to licensing boards (examples: New Zealand's Disputes Tribunal and Construction Contracts Act).",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -4461,7 +4461,7 @@
             {
               "id": "WORK-A15-F5-P2",
               "name": "Defect repair period",
-              "what": "Tracks the 12-month defect repair period for all NZ residential building work, whatever the price, and reminds both sides.",
+              "what": "Tracks the defect repair period each country sets, such as 12 months for all New Zealand residential building work whatever the price, and reminds both sides.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -4727,7 +4727,7 @@
             {
               "id": "WORK-A16-F5-P3",
               "name": "Asbestos check before refurbishment",
-              "what": "For buildings from before 2000, asks whether asbestos has been checked before refurbishment or demolition is agreed, and requires a WorkSafe licence for removal work.",
+              "what": "For buildings from before 2000, asks whether asbestos has been checked before refurbishment or demolition is agreed, and requires the safety regulator's licence for removal work (example: a WorkSafe licence in New Zealand).",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -4739,7 +4739,7 @@
             {
               "id": "WORK-A16-F5-P4",
               "name": "Injuries and notifiable events",
-              "what": "Records injuries and near misses on a job in the kit's incident register, and flags events that must be notified to WorkSafe, such as a serious injury.",
+              "what": "Records injuries and near misses on a job in the kit's incident register, and flags events that must be notified to the workplace safety regulator (example: New Zealand's WorkSafe), such as a serious injury.",
               "kind": "library",
               "size": "small",
               "depends_on": [
@@ -5007,7 +5007,7 @@
             {
               "id": "WORK-A17-F7-P2",
               "name": "Tax threshold alerts",
-              "what": "Warns a worker whose earnings near the $60,000 GST registration threshold, and links the kit's guidance on ACC levies and provisional tax.",
+              "what": "Warns a worker whose earnings near the sales tax registration threshold (example: $60,000 for New Zealand GST), and links the kit's guidance on levies and provisional tax (example: New Zealand's ACC levies).",
               "kind": "library",
               "size": "small",
               "depends_on": [
@@ -5075,13 +5075,13 @@
     },
     {
       "id": "WORK-A18",
-      "name": "Co-op membership, fees and voting",
-      "summary": "Workers are members who own the app. They see the costs, vote on the fee and the rules, and take part in panels.",
+      "name": "Membership, fees and voting",
+      "summary": "Workers keep all the profit except running costs. They see the costs, vote on the fee and the rules, and take part in panels.",
       "features": [
         {
           "id": "WORK-A18-F1",
           "name": "Become a member",
-          "does": "A worker can become a member of the co-op, with one share and one vote.",
+          "does": "A worker can become a member, free, with one vote.",
           "priority": "core",
           "parts": [
             {
@@ -5198,7 +5198,7 @@
             {
               "id": "WORK-A18-F5-P2",
               "name": "Customer membership",
-              "what": "Whether customers can be members and what they would vote on.",
+              "what": "What customers, who are free members too, vote on beyond the major changes every member votes on.",
               "kind": "research",
               "size": "small",
               "depends_on": [],
@@ -5466,7 +5466,7 @@
     {
       "id": "WORK-A20",
       "name": "Access for everyone: phones, offline, languages and countries",
-      "summary": "Usable by everyone, on any phone, on site with poor signal, in many languages, and ready for other countries' licences, tax and law.",
+      "summary": "Usable by everyone, on any phone, on site with poor signal, in many languages, and ready for any country's licences, tax and law.",
       "features": [
         {
           "id": "WORK-A20-F1",
@@ -5618,7 +5618,7 @@
         {
           "id": "WORK-A20-F4",
           "name": "Many languages",
-          "does": "A member can use Spare Work in their own language, starting with English and te reo Māori.",
+          "does": "A member can use Spare Work in their own language, starting with English and each launch country's own languages (example: te reo Māori).",
           "priority": "core",
           "parts": [
             {
@@ -5635,8 +5635,8 @@
             },
             {
               "id": "WORK-A20-F4-P2",
-              "name": "Te reo Māori trade words",
-              "what": "A te reo Māori glossary of trade words, reviewed through the kit's member translation and te reo quality checks.",
+              "name": "Trade words in launch country languages (example: te reo Māori)",
+              "what": "A glossary of trade words in each launch country's own languages, starting with te reo Māori, reviewed through the kit's member translation and language quality checks.",
               "kind": "data",
               "size": "small",
               "depends_on": [
@@ -5660,7 +5660,7 @@
             {
               "id": "WORK-A20-F4-P4",
               "name": "Languages by need",
-              "what": "Which languages Spare Work's workers and customers need after English and te reo Māori, such as Samoan, Tongan, Hindi, Mandarin and Tagalog, planned by need.",
+              "what": "Which languages Spare Work's workers and customers need in each country, such as, in New Zealand, Samoan, Tongan, Hindi, Mandarin and Tagalog after English and te reo Māori, planned by need.",
               "kind": "research",
               "size": "small",
               "depends_on": [
@@ -5673,8 +5673,8 @@
         },
         {
           "id": "WORK-A20-F5",
-          "name": "Launch in other countries",
-          "does": "A local co-op can run Spare Work in another country with its own licences, tax and law.",
+          "name": "Launch in any country",
+          "does": "Spare Work can run in any country with that country's licences, tax and law, set in its own country pack.",
           "priority": "later",
           "parts": [
             {
@@ -5693,7 +5693,7 @@
             {
               "id": "WORK-A20-F5-P2",
               "name": "Country launch checklist",
-              "what": "What a local co-op must research and set up before launching.",
+              "what": "What must be researched and set up before Spare Work launches in a new country.",
               "kind": "research",
               "size": "medium",
               "depends_on": [
@@ -5740,7 +5740,7 @@
     {
       "id": "WORK-A21",
       "name": "Privacy, data and legal duties",
-      "summary": "Members own their data and can take it with them. The platform meets every legal duty that applies to a work marketplace.",
+      "summary": "Members control their data and can take it with them. The platform meets every legal duty that applies to a work marketplace.",
       "features": [
         {
           "id": "WORK-A21-F1",
@@ -5828,7 +5828,7 @@
             {
               "id": "WORK-A21-F3-P2",
               "name": "Spare Work collection notices",
-              "what": "Notices for what Spare Work collects about people from others, such as register records and reviews of customers, on the kit's collection notices, including principle 3A from 1 May 2026.",
+              "what": "Notices for what Spare Work collects about people from others, such as register records and reviews of customers, on the kit's collection notices, including New Zealand's principle 3A from 1 May 2026.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -5926,7 +5926,7 @@
             {
               "id": "WORK-A21-F5-P1",
               "name": "Consumer law duties",
-              "what": "Spare Work's duties on the kit's consumer law research: guarantees for services and the Building Act's implied warranties, for the platform and for workers.",
+              "what": "Spare Work's duties on the kit's consumer law research: guarantees for services and building law's implied warranties (example: New Zealand's Building Act), for the platform and for workers.",
               "kind": "legal",
               "size": "small",
               "depends_on": [
@@ -5996,7 +5996,7 @@
             {
               "id": "WORK-A22-F1-P3",
               "name": "Support cases and channels",
-              "what": "Spare Work's case types, such as a stuck stage payment or a licence check, on the kit's support cases, with urgent routing for safety on site, phone and NZ Relay channels, and the co-op's complaints process.",
+              "what": "Spare Work's case types, such as a stuck stage payment or a licence check, on the kit's support cases, with urgent routing for safety on site, phone and relay service channels (example: NZ Relay), and the co-op's complaints process.",
               "kind": "library",
               "size": "small",
               "depends_on": [
@@ -6144,17 +6144,17 @@
     "Are the licence checks real? Which public registers allow automated lookups under their terms (piece WK02), does each licence match the verified person, and is the licence holder the one signed in before each licensed stage?",
     "Can the payment provider hold stage money long enough? Stripe holds manual payouts for at most 90 days outside the US and offers no escrow. Does funding each stage just in time keep every stage, dispute and appeal inside that limit (piece WK01, WORK-A9-F1-P5), and who bears a chargeback after a stage is released?",
     "Does the contractor design keep workers independent under the 2026 gateway test, and does piece WK03 feed the kit's worker status test (KIT-A23-F1-P1) instead of repeating it?",
-    "Is the Building Act pack correct and current: the disclosure statement and checklist at $30,000 or on request, and the warranties, defect repair period and record of work on every residential job?",
+    "Is the building law pack for New Zealand correct and current: the disclosure statement and checklist at $30,000 or on request, and the warranties, defect repair period and record of work on every residential job?",
     "Does the quote, stage and sign-off model work for a small repair, a charge-up job, a renovation and a remote design job alike (piece WK04)?",
-    "Do Spare Work's stage invoices count as payment claims under the Construction Contracts Act?",
-    "Remote work in the first release is limited to people resident in NZ (WORK-A3-F8-P5), while ARCHITECTURE.md leans 'Remote work: Later'. Is that the right line until the GST rule for remote services from overseas workers is live?",
+    "Do Spare Work's stage invoices count as payment claims under construction contracts law (example: New Zealand's Construction Contracts Act)?",
+    "Remote work in the first release is limited to people resident in the same country (WORK-A3-F8-P5), while ARCHITECTURE.md leans 'Remote work: Later'. Is that the right line until the sales tax rule for remote services from overseas workers is live?",
     "Is the member dispute panel fair and fast enough, with mediation and inspections first, and who pays for panel members' time?",
     "Are the customer protection floors (WORK-A22-F3-P2) set at the right levels, and who sets them while only workers vote?",
     "Can an agent ever move money, end an agreement, serve a legal notice or share an address without the person (WORK-A19-F2-P2), and can hidden text in a job, quote, review or PDF ever reach an agent as an instruction (WORK-A19-F2-P4)?",
     "Is the at-cost fee shown clearly everywhere money moves, with a tax invoice for it?",
-    "What may worker members vote on without breaking the Commerce Act? Does the kit's competition law check (KIT-A12-F4-P3) answer Spare Work's questions on deposit caps and call-out charges (WORK-A18-F3-P3)?",
+    "What may worker members vote on without breaking competition law (example: New Zealand's Commerce Act)? Does the kit's competition law check (KIT-A12-F4-P3) answer Spare Work's questions on deposit caps and call-out charges (WORK-A18-F3-P3)?",
     "Does anything on the map copy an incumbent's interface, wording or patented process rather than solve the job our own way?",
-    "What must the shared kit deliver first? Spare Work's core relies on kit parts the kit marks next: business checks, verified badges, quote requests, saved searches, match explanations and fairness checks, favourites, scam warnings and scam signals, fake review checks, portable reputation, member roles, rules for parents and carers, signatures, bank payments, order changes and extra charges, scheduled and repeat bookings, accessible PDFs, captions, repeat face checks, hazard notes, decision sampling, restrictions across apps, copyright notices, the AI use register and human review of AI decisions, co-op AI at cost, privacy impact assessments, after-death handling, te reo quality checks, consultations, complaints about the co-op and API versions. Insurance options are kit later under Spare Work's protection pool (next). Will the kit move these up?",
+    "What must the shared kit deliver first? Spare Work's core relies on kit parts the kit marks next: business checks, verified badges, quote requests, saved searches, match explanations and fairness checks, favourites, scam warnings and scam signals, fake review checks, portable reputation, member roles, rules for parents and carers, signatures, bank payments, order changes and extra charges, scheduled and repeat bookings, accessible PDFs, captions, repeat face checks, hazard notes, decision sampling, restrictions across apps, copyright notices, the AI use register and human review of AI decisions, co-op AI at cost, privacy impact assessments, after-death handling, language quality checks, consultations, complaints about the co-op and API versions. Insurance options are kit later under Spare Work's protection pool (next). Will the kit move these up?",
     "Will the kit add one shared service catalogue on its marketplace engine, with Spare Work as the main place pros join, are checked and are rated, so Spare Home and Spare Stay book the same people with one account and one reputation (WORK-A6-F1-P3)?",
     "Will the kit take the parts other apps also need, which Spare Work maps for now: a regional emergency mode, a manual document check, invoice numbering with credit notes, Peppol e-invoicing, card-present payments and the shared property record that Spare Home and Spare Rent also map?",
     "Will the kit open its own pieces for public register checks (KIT-A2-F2-P1) and tax invoices (KIT-A4-F2-P1), so WK02 and WK05 become Spare Work's input and the kit never waits on a program?",
