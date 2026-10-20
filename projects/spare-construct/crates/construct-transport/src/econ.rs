@@ -119,7 +119,7 @@ pub fn uspwf(i: f64, n: f64) -> f64 {
     if !(i > 0.0) {
         return n;
     }
-    (1.0 - (1.0 + i).powf(-n)) / (1.0 + i).ln()
+    (1.0 - crate::jsmath::pow(1.0 + i, -n)) / (1.0 + i).ln()
 }
 
 /// `Engine.agpwf(i, n)`: present worth of a benefit growing by 1 a year for n years, continuously discounted at rate i.
@@ -131,7 +131,7 @@ pub fn agpwf(i: f64, n: f64) -> f64 {
         return n * n / 2.0;
     }
     let l = (1.0 + i).ln();
-    let v = (1.0 + i).powf(-n);
+    let v = crate::jsmath::pow(1.0 + i, -n);
     1.0 / (l * l) - n * v / l - v / (l * l)
 }
 
@@ -207,7 +207,7 @@ pub fn pwf(rates: &Value, n: f64) -> Pwf {
         let u = uspwf(i, len);
         u1 += d * u;
         a1 += d * (t0 * u + agpwf(i, len));
-        d *= (1.0 + i).powf(-len);
+        d *= crate::jsmath::pow(1.0 + i, -len);
         t0 = end;
     }
     Pwf {
@@ -847,7 +847,7 @@ pub fn econ(
         let flat = |rr: f64| {
             let r = rr / 100.0;
             if r > 0.0 {
-                (1.0 - (1.0 + r).powf(-years)) / r
+                (1.0 - crate::jsmath::pow(1.0 + r, -years)) / r
             } else {
                 years
             }

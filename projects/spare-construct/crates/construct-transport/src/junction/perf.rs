@@ -3,6 +3,7 @@
 use super::movement::{MajorState, d_hcm};
 use super::moves::movement_caps;
 use crate::graph::{Arc, Ctrl, Graph};
+use crate::jsmath;
 use crate::jsnum::{math_max, math_min, or_default};
 use crate::project::Settings;
 use crate::standards::{CapMethod, junction_set};
@@ -47,7 +48,7 @@ pub fn arc_time(a: &Arc, x: f64, p: &PerfSet) -> f64 {
     if a.conn || a.internal {
         return a.ff;
     }
-    let mut t = a.ff * (1.0 + p.bpr_alpha * (x / a.cap_mid).powf(p.bpr_beta));
+    let mut t = a.ff * (1.0 + p.bpr_alpha * jsmath::pow(x / a.cap_mid, p.bpr_beta));
     if a.ctrl == Ctrl::Free {
         return match &a.mj {
             Some(mj) => t + major_delay(mj, x, p),
@@ -109,7 +110,7 @@ pub fn arc_cap(a: &Arc, xt: &[f64]) -> Option<f64> {
             }
             vc = math_max(vc, 1.0);
             let (tc, tf) = if a.stop { (6.5, 3.5) } else { (6.0, 3.2) };
-            let cp = vc * (-vc * tc / 3600.0).exp() / (1.0 - (-vc * tf / 3600.0).exp());
+            let cp = vc * jsmath::exp(-vc * tc / 3600.0) / (1.0 - jsmath::exp(-vc * tf / 3600.0));
             Some(math_max(
                 80.0,
                 math_min(a.cap_mid, cp * (1.0 + 0.6 * (a.gl as f64 - 1.0))),
@@ -128,9 +129,9 @@ pub fn arc_cap(a: &Arc, xt: &[f64]) -> Option<f64> {
                 }
             }
             let per = if a.gl > 1 {
-                1420.0 * (-0.00091 * vc).exp()
+                1420.0 * jsmath::exp(-0.00091 * vc)
             } else {
-                1380.0 * (-0.00102 * vc).exp()
+                1380.0 * jsmath::exp(-0.00102 * vc)
             };
             Some(math_min(a.cap_mid, math_max(50.0, per * a.gl as f64)))
         }

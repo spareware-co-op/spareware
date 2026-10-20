@@ -14,6 +14,7 @@
 //! number semantics where the prototype relies on them (see [`jsnum`]).
 //! Map: projects/spare-construct/ARCHITECTURE.md, "Traffic and public transport".
 
+pub mod jsmath;
 pub mod jsnum;
 pub mod project;
 pub mod standards;

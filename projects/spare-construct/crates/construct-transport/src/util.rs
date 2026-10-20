@@ -4,11 +4,13 @@
 //! local flat projection, point to segment), angle differences and turns, the binary heap
 //! behind the shortest-path searches, rounding, number formats, HTML escaping and CSV.
 //! Every function mirrors util.js operation for operation, so the results are the same to
-//! the bit wherever the platform's sin, cos, asin and atan2 agree with V8's (the truth
-//! tests in tests/util_cases.rs check this against Node).
+//! the bit (sin, cos and asin are V8's own, see [`crate::jsmath`]; atan2 is the platform's, so
+//! a bearing may differ in the last bit; the truth tests in tests/util_cases.rs check this
+//! against Node).
 //! Not ported: `uid` (random ids; callers pass ids in), `download`, `debounce`, `$`, `$$`
 //! and `sleep` (browser only), `parseCSV` and `deepMerge` (not used by the calculation core).
 
+use crate::jsmath;
 use crate::jsnum::{
     intl_format, is_js_space, math_hypot, math_max, math_min, math_round, number_to_js_string,
     or_default, string_to_number, to_fixed, truthy_number, value_to_js_string,
@@ -29,10 +31,10 @@ pub fn dist(a: &LatLng, b: &LatLng) -> f64 {
     let d_lat = (b[0] - a[0]) * D2R;
     let d_lng = (b[1] - a[1]) * D2R;
     // V8 evaluates x ** 2 as x * x
-    let s1 = (d_lat / 2.0).sin();
-    let s2 = (d_lng / 2.0).sin();
-    let s = s1 * s1 + (a[0] * D2R).cos() * (b[0] * D2R).cos() * (s2 * s2);
-    2.0 * EARTH_R * math_min(1.0, s.sqrt()).asin()
+    let s1 = jsmath::sin(d_lat / 2.0);
+    let s2 = jsmath::sin(d_lng / 2.0);
+    let s = s1 * s1 + jsmath::cos(a[0] * D2R) * jsmath::cos(b[0] * D2R) * (s2 * s2);
+    2.0 * EARTH_R * jsmath::asin(math_min(1.0, s.sqrt()))
 }
 
 /// `U.cumLen(pts)`: cumulative length (m) at each point, starting at 0 (`[0]` for no points).
@@ -56,8 +58,8 @@ pub fn bearing(a: &LatLng, b: &LatLng) -> f64 {
     let p1 = a[0] * D2R;
     let p2 = b[0] * D2R;
     let dl = (b[1] - a[1]) * D2R;
-    let y = dl.sin() * p2.cos();
-    let x = p1.cos() * p2.sin() - p1.sin() * p2.cos() * dl.cos();
+    let y = jsmath::sin(dl) * jsmath::cos(p2);
+    let x = jsmath::cos(p1) * jsmath::sin(p2) - jsmath::sin(p1) * jsmath::cos(p2) * jsmath::cos(dl);
     // JavaScript's % is the C fmod, as Rust's % on f64 is
     (y.atan2(x) / D2R + 360.0) % 360.0
 }
@@ -85,7 +87,7 @@ pub struct Flat {
 /// `U.flat(lat0)`.
 pub fn flat(lat0: f64) -> Flat {
     Flat {
-        kx: 111320.0 * (lat0 * D2R).cos(),
+        kx: 111320.0 * jsmath::cos(lat0 * D2R),
         ky: 110574.0,
     }
 }

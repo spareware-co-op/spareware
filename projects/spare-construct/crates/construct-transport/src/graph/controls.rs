@@ -142,8 +142,8 @@ pub fn site_legs(g: &Graph, inc: &[usize], exits: &[usize]) -> Vec<Leg> {
         .map(|(k, (_, gr))| {
             let (mut sx, mut sy) = (0.0f64, 0.0f64);
             for &x in &gr {
-                sx += (it[x].b * std::f64::consts::PI / 180.0).sin();
-                sy += (it[x].b * std::f64::consts::PI / 180.0).cos();
+                sx += crate::jsmath::sin(it[x].b * std::f64::consts::PI / 180.0);
+                sy += crate::jsmath::cos(it[x].b * std::f64::consts::PI / 180.0);
             }
             // cnt in object key order: array-index names first (ascending), then insertion order
             let mut cnt: Vec<(String, f64)> = Vec::new();

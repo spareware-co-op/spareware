@@ -19,9 +19,11 @@
 //! away from zero). Every function is checked bit for bit, or character for character,
 //! against Node 24 in tests/util_cases.rs (tools/transport-truth/gen-util-cases.mjs).
 //!
-//! Not covered: `Math.sin`, `cos`, `asin`, `atan2`, `exp`, `log` and `pow`. Rust's f64
+//! Not covered here: `Math.sin`, `cos`, `asin`, `atan2`, `exp`, `log` and `pow`. Rust's f64
 //! methods call the platform's C library, which differs from V8's own implementations in the
 //! last bit for roughly 1 to 15% of arguments (measured on Windows against Node 24).
+//! [`crate::jsmath`] has V8's `exp`, `sin`, `cos` and `asin` bit for bit; `atan2` and `log`
+//! are still the platform's, and `pow` is the platform's with V8's special cases.
 
 use serde::de::{Deserialize, Deserializer};
 use serde::ser::{Serialize, Serializer};

@@ -532,7 +532,7 @@ pub fn junction_result(
             let c = a.c.unwrap_or(f64::NAN);
             let s_l = p.sat_flow / pf;
             let q1 = v_l * c / 3600.0 * (1.0 - g_c) / (1.0 - math_min(1.0, x) * g_c);
-            let k_b = STANDARDS.queue.k_b * (s_l * g_c * c / 3600.0).powf(0.7);
+            let k_b = STANDARDS.queue.k_b * crate::jsmath::pow(s_l * g_c * c / 3600.0, 0.7);
             let c_t = math_max(1e-9, c_l * j.t);
             let q2 = 0.25 * c_l * j.t * ((x - 1.0) + ((x - 1.0) * (x - 1.0) + 8.0 * k_b * x / c_t).sqrt());
             qv = (q1 + q2) * j.f95;

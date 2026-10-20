@@ -8,6 +8,7 @@
 
 use super::lanes::{ApproachCap, Lane, LaneRow, Lmv, alloc_lanes, approach_cap, lane_rows_value};
 use crate::graph::js_sort_by;
+use crate::jsmath;
 use crate::jsnum::{math_max, math_max_of, math_min, or_default, plain_number, value_to_number, value_truthy};
 use crate::standards::{Gap, STANDARDS};
 use crate::util::ang_diff;
@@ -16,7 +17,7 @@ use serde_json::{Map, Value, json};
 /// `cpot(vc, tc, tf)`: potential capacity (pcu/h) against conflicting flow vc; 3600 / tf when vc is 0.01 or less.
 pub fn cpot(vc: f64, tc: f64, tf: f64) -> f64 {
     if vc > 0.01 {
-        vc * (-vc * tc / 3600.0).exp() / (1.0 - (-vc * tf / 3600.0).exp())
+        vc * jsmath::exp(-vc * tc / 3600.0) / (1.0 - jsmath::exp(-vc * tf / 3600.0))
     } else {
         3600.0 / tf
     }
@@ -38,7 +39,7 @@ pub fn p_prime(p: f64) -> f64 {
 /// `twoStage(cI, cII, cm, vL, k)`: two-stage gap acceptance (HCM 6 / Brilon): stage capacities, one-stage capacity, major right turners vL using the median, storage k.
 pub fn two_stage(c_i: f64, c_ii: f64, cm: f64, v_l: f64, k: f64) -> f64 {
     let a = if k > 0.0 {
-        1.0 - 0.32 * (-1.3 * k.sqrt()).exp()
+        1.0 - 0.32 * jsmath::exp(-1.3 * k.sqrt())
     } else {
         1.0
     };
@@ -52,7 +53,7 @@ pub fn two_stage(c_i: f64, c_ii: f64, cm: f64, v_l: f64, k: f64) -> f64 {
     }
     math_max(
         0.0,
-        a / (y.powf(k + 1.0) - 1.0) * (y * (y.powf(k) - 1.0) * (c_ii - v_l) + (y - 1.0) * cm),
+        a / (jsmath::pow(y, k + 1.0) - 1.0) * (y * (jsmath::pow(y, k) - 1.0) * (c_ii - v_l) + (y - 1.0) * cm),
     )
 }
 
@@ -728,7 +729,7 @@ pub fn rbt_caps(ent: &mut [MoveEntry], o: &CapOpts) {
                     rl.left2
                 };
                 j += 1;
-                l.c = q.a * (-q.b * vc).exp();
+                l.c = q.a * jsmath::exp(-q.b * vc);
                 l
             })
             .collect();

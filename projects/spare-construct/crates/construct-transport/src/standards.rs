@@ -1024,12 +1024,12 @@ pub fn year_of(sc: Option<&Scenario>, s: &Settings) -> f64 {
 
 /// `growth(S, sc)`: background growth factor from the base year to the scenario year (linear unless growthMode is "compound").
 ///
-/// Compound growth uses `powf`, which may differ from V8's Math.pow in the last bit.
+/// Compound growth uses [`crate::jsmath::pow`].
 pub fn growth(s: &Settings, sc: Option<&Scenario>) -> f64 {
     let dy = year_of(sc, s) - s.base_year.num();
     let g = s.growth.or(0.0) / 100.0;
     if s.growth_mode.is("compound") {
-        (1.0 + g).powf(dy)
+        crate::jsmath::pow(1.0 + g, dy)
     } else {
         math_max(0.0, 1.0 + g * dy)
     }
