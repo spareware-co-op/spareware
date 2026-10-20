@@ -16,6 +16,11 @@
   --r: 3px;
   color-scheme: light;
 }
+/* Inside the Spare Construct frame the header, brand and discipline button come from Spare Construct,
+   so this bar becomes its tool strip. */
+[data-embed="1"] body { grid-template-rows: 41px minmax(0, 1fr) auto; }
+[data-embed="1"] #top { background: var(--panel-2); border-bottom-color: var(--line-2); }
+[data-embed="1"] .brand { display: none; }
 /* The dark set below is used only when exporting a map picture on a dark background. */
 :root[data-theme="dark"] {
   --bg: #0e1312; --panel: #161c1b; --panel-2: #1d2523; --ink: #e5ebe8; --muted: #9caba6; --faint: #84928e;
