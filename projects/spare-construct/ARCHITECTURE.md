@@ -197,7 +197,7 @@ One program and one model for every discipline, civil included. Picking a discip
 
 **Discipline modes**
 
-- A discipline picker at the top of the app: Architecture, Structure, MEP, Civil and Coordination.
+- A discipline picker at the top of the app: Architecture, Structure, MEP, Civil, Transport and Coordination.
 - Picking one swaps the tool tabs, the project browser, the default view templates and drawing types, and the display units and labels (chainages and reduced levels in Civil).
 - The other disciplines stay visible as greyed context and can't be edited by accident. Ownership and permissions already filter on discipline (see Building elements).
 - A mode is a settings file (tools, templates, units, browser layout), so a firm or a country can add its own, such as landscape.
@@ -233,6 +233,39 @@ Civil adds the ground and everything built on and under it, in the same model as
 - Civil after structure and MEP, or surfaces and drainage early, since every building needs a site?
 - Which country's road and drainage rules come first?
 - Do rail and bridges join Civil later? IFC 4.3 covers both.
+
+## Traffic and public transport
+
+Transport is a discipline in Spare Construct, not a separate program. Model the roads, public transport, walking and cycling around a site or across a city, and test what a development or a new road does to them, in the same model as the buildings and the civil works.
+
+**High level**
+
+- **Network from real data**: roads from OpenStreetMap, public transport routes and timetables from GTFS feeds, and traffic counts and crash records from each country pack's open sources. Or draw roads, junctions, lanes and stops by hand.
+- **Land use and trips**: zones for developments and existing land use, and gateways where roads leave the study area. Trips come from land use (trip rates from the country pack), are spread between places and split by mode.
+- **Strategic model**: trips are assigned to the network to give volumes, volume over capacity (level of service A to F), speeds, junction delay and travel times across the whole area.
+- **Microsimulation**: individual cars, buses, bikes and people on the same network, watched live in plan and in 3D, for the junctions and corridors that need detail.
+- **Public transport**: routes, stops and timetables from GTFS; walking catchments to stops, bus priority, dwell times and reliability.
+- **Walking and cycling**: catchments, cycling stress and footpath capacity. People moving inside buildings uses the same engine (evacuation and lifts later).
+- **Safety**: crash history around each junction, and crash risk by road type.
+- **Scenarios**: a base case and options side by side, with development traffic share, emissions and an indicative benefit-cost ratio.
+- **Calibration**: the model is matched to traffic counts and screenlines, with a report on how well it fits.
+- **Reports**: assessed junctions, catchments, a list of every assumption changed from the defaults, and a compliance checklist from the country pack.
+- **One model**: civil roads and corridors are the transport network, and each building's access joins it, so a change to a driveway or a corridor shows straight away in the traffic results.
+
+**Low level**
+
+- Runs on the shared simulation engine (`engine-sim`), on top of the shared geometry core: a fixed time step and the same result for the same inputs, natively and in the browser.
+- The network is a directed graph of links, lanes, junctions and stops, stored in the model like any other elements and chunked by spatial cell, so a whole city pages from disk.
+- Strategic assignment uses the published user-equilibrium method (Frank-Wolfe). Microsimulation follows published models: the Intelligent Driver Model for car-following (Treiber, Hennecke and Helbing, 2000) and MOBIL for lane changes (Kesting, Treiber and Helbing, 2007). Signals run their phases; roundabouts and priority junctions use gap acceptance.
+- Methods to study and reuse: A/B Street (Rust) and CityFlow, both Apache-2.0. SUMO (EPL-2.0) and MATSim (GPL) are used only as outside tools through their documented files, never linked in. JuPedSim (LGPL) is studied for walking models only.
+- Data: OpenStreetMap is under the ODbL and is credited wherever it shows. The GTFS specification is Apache-2.0; each agency's feed carries its own licence, recorded with the data.
+- Exchange: OpenStreetMap and GTFS in; SUMO network and route files in and out, so consultants who use SUMO can take part.
+- A working prototype, Corridor, already does most of the high-level list in the browser. It is a sketch to learn from: the product is built correctly on the shared engines from the core up, not by patching the prototype.
+
+**Discuss**
+
+- Strategic model, microsimulation, or both in the first release?
+- Which country's trip rates and level-of-service rules come first? The prototype uses New Zealand's.
 
 ## Point clouds
 
@@ -628,6 +661,7 @@ Everything Revit users buy or bolt on today is built in, as first-party add-ins 
 | Specification | Masterspec links, keynote add-ins | Keynotes and specification linked to elements |
 | Site and planning | Civil 3D links, site and planning add-ins | LINZ terrain and aerials, zoning, height in relation to boundary |
 | Civil design | Civil 3D, 12d Model, OpenRoads | The Civil discipline: survey, surfaces, roads, earthworks and drainage (see Disciplines and civil) |
+| Traffic and transport | PTV Visum and Vissim, Aimsun, SIDRA Intersection | The Transport discipline: strategic model, microsimulation, public transport and scenarios (see Traffic and public transport) |
 | Data and dashboards | Power BI connectors, model health tools | Live project data out to dashboards; model health built in |
 | AI agents | Revit MCP servers, Copilot agents | MCP server and AI on every command (see Headless API) |
 
@@ -773,6 +807,11 @@ Licences, activity and browser support were checked on each project's GitHub rep
 | [laz-rs](https://github.com/laz-rs/laz-rs) | Apache-2.0 | Rust LAZ compression |
 | [COPC](https://github.com/copcio/copcio.github.io) | MIT (spec repo) | Cloud-optimised point cloud layout on LAZ 1.4 |
 | [Potree](https://github.com/potree/potree) | BSD-2-Clause | Point cloud viewing method to follow |
+| [A/B Street](https://github.com/a-b-street/abstreet) | Apache-2.0 | Rust traffic simulation to study and reuse |
+| [CityFlow](https://github.com/cityflow-project/CityFlow) | Apache-2.0 | Microscopic traffic simulation to study |
+| [Eclipse SUMO](https://github.com/eclipse-sumo/sumo) | EPL-2.0 | Outside tool only, through its documented files |
+| [MATSim](https://github.com/matsim-org/matsim-libs) | GPL-2.0 or later | Avoid (GPL); outside tool only |
+| [JuPedSim](https://github.com/PedestrianDynamics/jupedsim) | LGPL-3.0 or later | Walking models to study |
 | [Speckle SDK (specklepy)](https://github.com/specklesystems/specklepy) | Apache-2.0 | Content-addressed objects; send and receive only what is missing ([serialiser](https://github.com/specklesystems/specklepy/blob/main/src/specklepy/serialization/base_object_serializer.py)) |
 | [restic chunker](https://github.com/restic/chunker) | BSD-2-Clause | Content-defined chunking with Rabin fingerprints for file versions |
 | [Syncthing](https://github.com/syncthing/syncthing) | MPL-2.0 | Block-based folder sync and file versioning to study for desktop sync |
