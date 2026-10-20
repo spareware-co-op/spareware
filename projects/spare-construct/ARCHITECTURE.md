@@ -73,7 +73,7 @@ One Rust core, compiled two ways: a native program for desktop, server and headl
 
 **Low level**
 
-- A workspace of Rust crates, each built and tested alone: `model`, `kernel`, `regen`, `solver`, `draw` (2D drawings), `store`, `sync`, `api`, `render`, `cli`, `mcp`.
+- A workspace of Rust crates, each built and tested alone: `model`, `kernel` (the shared `engine-geometry`), `regen`, `solver`, `draw` (2D drawings), `store`, `sync`, `api`, `render`, `cli`, `mcp`.
 - Threads: native uses a work-stealing pool (the rayon crate) for regeneration and tessellation. Browser threads need SharedArrayBuffer, which needs the page served with cross-origin isolation headers (COOP and COEP).
 - Memory: a browser tab has a hard ceiling. In one test a 1.33 GB model grew to 8.4 GB in memory, so a large model is never loaded whole into a tab.
 - Protocol: binary and versioned, with geometry sent as ready-to-upload GPU buffers so the client does no parsing.
@@ -112,7 +112,7 @@ The model is a database of elements stored column by column, the way game engine
 
 ## Geometry kernel
 
-We write our own kernel in Rust, built for what buildings are made of, with exact arithmetic so booleans never fail. Revit runs Autodesk ShapeManager, a general-purpose CAD kernel. A kernel built only for BIM can be smaller and faster, because most building geometry is flat-faced.
+We write our own kernel in Rust, built for what buildings are made of, with exact arithmetic so booleans never fail. It lives in the shared engines as `engine-geometry`, so every program that works in 3D uses the same core: Spare Studio's 3D app, the simulation engine and any future 3D program. Revit runs Autodesk ShapeManager, a general-purpose CAD kernel. A kernel built only for BIM can be smaller and faster, because most building geometry is flat-faced.
 
 **High level**
 

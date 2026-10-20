@@ -177,7 +177,7 @@ Across all of them: for ride-sharing, food delivery and short stays the platform
 | `STATUS.md` | Every project's stage and open work |
 | `Cargo.toml` | One Rust workspace for every program |
 | `projects/kit/` | The shared kit: `crates/` compiled into every app, `services/` that run once for all apps |
-| `projects/engines/` | Shared engines for the design tools: renderer, 2D drawing, text, PDF, video and audio |
+| `projects/engines/` | Shared engines any program can use: geometry core, renderer, simulation, 2D drawing, text, PDF, video and audio |
 | `projects/spare-<name>/` | One folder per program: `README.md`, `ARCHITECTURE.md`, `STATUS.md`, `notes/`, `crates/`, `app/` |
 | `projects/_template/` | The starting folder copied for each new program |
 
@@ -188,9 +188,10 @@ spareware/
 │  ├─ kit/
 │  │  ├─ crates/              kit-core, kit-ops, kit-store, kit-sync, kit-plugin, kit-mcp, kit-market
 │  │  └─ services/            accounts, payments, matching, maps, messaging, trust, voting, ledger
-│  ├─ engines/crates/         engine-render, engine-draw2d, engine-text, engine-pdf, engine-media
+│  ├─ engines/crates/         engine-geometry, engine-render, engine-sim, engine-draw2d, engine-text,
+│  │                          engine-pdf, engine-media
 │  ├─ spare-construct/
-│  │  ├─ crates/              construct-model, construct-kernel, construct-solver, construct-regen, construct-elements,
+│  │  ├─ crates/              construct-model, construct-solver, construct-regen, construct-elements,
 │  │  │                       construct-families, construct-views, construct-clash, construct-versions,
 │  │  │                       construct-interop, construct-api, construct-cli
 │  │  ├─ app/                 interface and desktop shell

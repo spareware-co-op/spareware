@@ -6,6 +6,6 @@ publish.workspace = true
 
 [dependencies]
 construct-model = { path = "../construct-model" }
-construct-kernel = { path = "../construct-kernel" }
+engine-geometry = { path = "../../../engines/crates/engine-geometry" }
 construct-solver = { path = "../construct-solver" }
 construct-regen = { path = "../construct-regen" }
