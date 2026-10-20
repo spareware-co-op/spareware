@@ -148,6 +148,7 @@ Any major change, such as starting or dropping a program, changing an architectu
 - Practical and easy to use: every app is built for the people who will use it every day, and should be simple to pick up and quick to work in.
 - Port proven methods: read how the best open project does it before designing anything.
 - Measured, not assumed: tests and benchmarks with every change; a slower change does not merge.
+- Correct from the core up: fix the cause where it starts, not a patch on top. A patch only when there is truly no other way, and it is replaced by the proper fix, so every program can be the best of its kind.
 - Every change is an operation: one path for the interface, AI, plugins, undo and sync.
 - Open formats: our own files are documented and readable without our apps.
 - One look: every app follows the [design guide](design/DESIGN.md), Spareware red for the co-op and its own light colour per app. The shared look only changes by member vote, or when a unique situation truly needs it.
