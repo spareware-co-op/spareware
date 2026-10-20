@@ -260,7 +260,7 @@ Transport is a discipline in Spare Construct, not a separate program. Model the 
 - Methods to study and reuse: A/B Street (Rust) and CityFlow, both Apache-2.0. SUMO (EPL-2.0) and MATSim (GPL) are used only as outside tools through their documented files, never linked in. JuPedSim (LGPL) is studied for walking models only.
 - Data: OpenStreetMap is under the ODbL and is credited wherever it shows. The GTFS specification is Apache-2.0; each agency's feed carries its own licence, recorded with the data.
 - Exchange: OpenStreetMap and GTFS in; SUMO network and route files in and out, so consultants who use SUMO can take part.
-- A working prototype, Corridor, already does most of the high-level list in the browser. It is a sketch to learn from: the product is built correctly on the shared engines from the core up, not by patching the prototype.
+- A working prototype, the [Transport demo](https://spareware.app/spare-construct/transport/), already does most of the high-level list in the browser (JavaScript on a Leaflet map). It is a sketch to learn from: the product is built correctly on the shared engines from the core up, not by patching the prototype.
 
 **Discuss**
 

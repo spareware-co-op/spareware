@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Transport · Spare Construct demo</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'%3E%3Ccircle cx='100' cy='100' r='92' fill='%23C8102E'/%3E%3Cpath d='M140 66 C140 50 124 42 100 42 C72 42 58 54 58 72 C58 92 76 98 100 101 C124 104 142 110 142 130 C142 148 126 158 100 158 C74 158 60 150 58 134' fill='none' stroke='%23ffffff' stroke-width='24' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<!-- Top bar: data-prio="3" (then "2") items move into the Menu while the bar is too narrow; data-hide sets the order (lower goes first). -->
+<header id="top">
+  <div class="tb-zone tb-left">
+    <a class="brand" href="../" title="Back to the Spare Construct demo"><span class="mark" aria-hidden="true"></span><span>Spare Construct</span><span class="disc">Transport</span></a>
+    <div class="proj-wrap" data-prio="3" data-hide="90" data-menu="rename">
+      <input id="projName" class="proj" aria-label="Project name" spellcheck="false">
+      <button id="saveState" type="button" class="save-state" title="Where this project is saved"></button>
+    </div>
+    <span class="tb-reg" data-zone="left"></span>
+  </div>
+  <div class="tsep" data-prio="3" data-hide="5"></div>
+  <div class="tb-zone tb-centre">
+    <div class="grp">
+      <select id="scSel" aria-label="Scenario"></select>
+      <button id="scNew" class="btn" title="Copy this scenario into a new scenario you can change" data-prio="3" data-hide="40" data-menu-label="Duplicate scenario">Duplicate scenario</button>
+      <button id="scMenuBtn" class="btn icon" title="Scenario actions" aria-label="Scenario actions" aria-haspopup="menu" data-prio="3" data-hide="45" data-menu="scenario">⋯</button>
+    </div>
+    <div class="seg" id="period" role="group" aria-label="Peak period" data-prio="2" data-hide="20" data-menu="period">
+      <button data-p="AM">AM<span class="pk"> peak</span></button><button data-p="PM">PM<span class="pk"> peak</span></button>
+    </div>
+    <label class="yr" title="Forecast year for this scenario — background traffic grows from the base year" data-prio="2" data-hide="10" data-menu="year">Year <input id="year" type="number" min="1900" max="2200" step="1"></label>
+    <div class="split">
+      <button id="runBtn" class="btn primary" title="Run this scenario for the AM and PM peaks (Ctrl+Enter)"><span class="lbl">Run<span class="lbl-x"> model</span></span><span class="run-stale"></span></button>
+      <button id="runMore" class="btn primary icon" title="More ways to run the model" aria-label="More ways to run the model" aria-haspopup="menu">▾</button>
+    </div>
+    <button id="simBtn" class="btn ib" title="Watch vehicles move through the network (Space)" aria-label="Simulate" data-prio="3" data-hide="60"><span class="ico" aria-hidden="true">▶</span><span class="lbl">Simulate</span></button>
+    <span class="tb-reg" data-zone="centre"></span>
+  </div>
+  <div class="spacer"></div>
+  <div class="tb-zone tb-right">
+    <span class="tb-reg" data-zone="right"></span>
+    <button id="undoBtn" class="btn icon" title="Undo (Ctrl+Z)" aria-label="Undo" data-prio="3" data-hide="30" data-menu-label="Undo">↶</button>
+    <button id="redoBtn" class="btn icon" title="Redo (Ctrl+Y)" aria-label="Redo" data-prio="3" data-hide="20" data-menu-label="Redo">↷</button>
+    <button id="osmBtn" class="btn ib" title="Download existing roads from OpenStreetMap" aria-label="Import roads" data-prio="3" data-hide="50" data-menu-label="Import roads from OpenStreetMap…"><svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/></svg><span class="lbl">Import roads</span></button>
+    <button id="menuBtn" class="btn" title="Menu: files, export, settings, help and about the data" aria-haspopup="menu" aria-expanded="false"><span aria-hidden="true">☰</span><span class="lbl">Menu</span></button>
+  </div>
+</header>
+
+<div id="main">
+  <nav id="tools" aria-label="Tools"></nav>
+  <div id="mapwrap">
+    <div id="map"></div>
+    <div id="topstack" class="float">
+      <div id="banners"></div>
+      <div id="staleBar" hidden></div>
+      <div id="hint"></div>
+    </div>
+    <div id="template" class="float card" hidden></div>
+    <div id="pathCard" class="float card" hidden></div>
+    <div id="simHud" class="float card" hidden></div>
+    <div id="legend" class="float card" role="region" aria-label="Map key and layers"></div>
+    <div id="busy" class="float" hidden role="status"><div class="spin"></div><span id="busyText">Working…</span><span id="busyTime" class="busy-time" aria-hidden="true"></span><button id="busyCancel" class="btn small" type="button" hidden>Cancel</button></div>
+  </div>
+  <aside id="inspector" aria-label="Inspector"><div id="insGrip" class="sheet-grip" aria-hidden="true"></div><div id="insBody"></div></aside>
+</div>
+
+<section id="drawer" aria-label="Results">
+  <div id="drawerGrip" class="grip" role="separator" aria-orientation="horizontal" aria-label="Resize the results panel (arrow keys)" tabindex="0"></div>
+  <div class="tabbar"><div class="tabs" role="tablist" aria-label="Results"></div><button id="drawerToggle" class="tab tab-toggle" type="button"></button></div>
+  <div id="drawerBody" role="tabpanel" tabindex="0"></div>
+</section>
+
+<div id="menu" class="menu" hidden></div>
+<div id="modalBack" hidden><div id="modal" role="dialog" aria-modal="true"></div></div>
+<div id="toasts" role="status" aria-live="polite"></div>
+<div id="alerts" role="alert"></div>
+<input id="fileIn" type="file" accept=".json,.geojson,.csv" hidden>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="js/util.js"></script>
+<script src="js/model.js"></script>
+<script src="js/registry.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/data.js"></script>
+<script src="js/landuse.js"></script>
+<script src="js/turns.js"></script>
+<script src="js/calibrate.js"></script>
+<script src="js/search.js"></script>
+<script src="js/studyarea.js"></script>
+<script src="js/sim.js"></script>
+<script src="js/kit.js"></script>
+<script src="js/render.js"></script>
+<script src="js/ui-inspector.js"></script>
+<script src="js/ui-drawer.js"></script>
+<script src="js/ui-dialogs.js"></script>
+<script src="js/ui.js"></script>
+<!-- Feature files: each registers its parts with Registry (docs/EXTENDING.md). Keep them after ui.js and before sample.js. -->
+<script src="js/features/junctions.js"></script>
+<script src="js/features/calibration.js"></script>
+<script src="js/features/feeds.js"></script>
+<script src="js/features/landuse-plus.js"></script>
+<script src="js/features/report.js"></script>
+<script src="js/features/compliance.js"></script>
+<script src="js/features/compliance-extra.js"></script>
+<script src="js/features/onboarding.js"></script>
+<script src="js/sample.js"></script>
+<script>UI.init();</script>
+</body>
+</html>

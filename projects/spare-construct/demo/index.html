@@ -138,6 +138,7 @@ html[data-disc="structure"],[data-dsw="structure"]{--app:#F4A6A0;--app-strong:#9
 html[data-disc="mep"],[data-dsw="mep"]{--app:#93D9A6;--app-strong:#1F7A45;--app-tint:#EAF8EE}
 html[data-disc="civil"],[data-dsw="civil"]{--app:#DCC196;--app-strong:#7A5626;--app-tint:#F9F1E4}
 html[data-disc="coord"],[data-dsw="coord"]{--app:#C9B8F5;--app-strong:#5A3FB0;--app-tint:#F3EFFE}
+html[data-disc="transport"],[data-dsw="transport"]{--app:#F2D675;--app-strong:#7A6210;--app-tint:#FCF6DD}
 .disc-wrap{position:relative;flex:none}
 .disc-btn{background:var(--app);border-color:var(--app-strong);color:var(--ink);font-weight:600}
 .disc-btn:hover{border-color:var(--ink)}
@@ -800,12 +801,12 @@ ACT.view=b=>{S.view=b.dataset.a;S.zoom=1;S.zc=null;go('plan:'+b.dataset.a)};
 ACT.browser=()=>{S.bopen=!S.bopen;$('#work').classList.toggle('bopen',S.bopen)};
 
 /* ---------- disciplines ---------- */
-const DISCS=[['architecture','Architecture','Walls, doors, windows, rooms and sheets'],['structure','Structure','Framing, bracing and foundations'],['mep','MEP','Ducts, pipes, drainage and electrical'],['civil','Civil','Survey, ground, roads and pipe networks'],['coord','Coordination','Linked models, clash and issues']];
+const DISCS=[['architecture','Architecture','Walls, doors, windows, rooms and sheets'],['structure','Structure','Framing, bracing and foundations'],['mep','MEP','Ducts, pipes, drainage and electrical'],['civil','Civil','Survey, ground, roads and pipe networks'],['transport','Transport','Roads, public transport, walking and traffic simulation on a live map'],['coord','Coordination','Linked models, clash and issues']];
 let DISC='architecture';
 function renderDisc(){const d=DISCS.find(x=>x[0]===DISC);document.documentElement.dataset.disc=DISC;$('#disc-name').textContent=d[1];$('#b-disc').setAttribute('aria-label','Discipline: '+d[1]);$('#disc-menu').innerHTML=DISCS.map(([k,l,w])=>`<button type="button" role="menuitemradio" aria-checked="${k===DISC}" data-act="disc" data-a="${k}" data-dsw="${k}"><span class="dsw" aria-hidden="true"></span><span>${l}<small>${w}</small></span></button>`).join('')}
 function discMenu(open){const m=$('#disc-menu');m.hidden=!open;$('#b-disc').setAttribute('aria-expanded',String(open));if(open){const c=m.querySelector('[aria-checked="true"]');if(c)c.focus()}}
 ACT.discmenu=()=>discMenu($('#disc-menu').hidden);
-ACT.disc=b=>{DISC=b.dataset.a;renderDisc();discMenu(false);S.tool='select';S.pend=null;S.sel=null;S.zoom=1;S.zc=null;const hv=homeView();S.view=hv;go('plan:'+hv);$('#b-disc').focus()};
+ACT.disc=b=>{if(b.dataset.a==='transport'){location.href='transport/';return}DISC=b.dataset.a;renderDisc();discMenu(false);S.tool='select';S.pend=null;S.sel=null;S.zoom=1;S.zc=null;const hv=homeView();S.view=hv;go('plan:'+hv);$('#b-disc').focus()};
 document.addEventListener('click',e=>{if(!$('#disc-menu').hidden&&!e.target.closest('.disc-wrap'))discMenu(false)});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#disc-menu').hidden){discMenu(false);$('#b-disc').focus()}});
 renderDisc();
