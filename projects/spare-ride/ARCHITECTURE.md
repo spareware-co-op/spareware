@@ -11,7 +11,7 @@ Rides where drivers keep everything except the at-cost fee, riders see exactly w
 - No penalties for declining a trip, no hidden ranking of drivers.
 - Safety and accessibility at least as good as the incumbents.
 
-## What it uses from the shared kit
+## What it uses from Spare Kit
 
 Accounts and ID checks (driver licence and vehicle checks), payments, matching and dispatch, maps and live location, messaging, ratings, disputes and safety, member voting, the open cost ledger, and the marketplace engine.
 

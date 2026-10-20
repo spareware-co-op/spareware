@@ -1,4 +1,4 @@
-//! Shared kit: AI access.
+//! Spare Kit: AI access.
 //!
 //! An MCP server built on each app's command API, so AI agents can use every app.
 //! Map: Spare Construct ARCHITECTURE.md, "Headless API, AI and add-ins".

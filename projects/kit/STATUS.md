@@ -1,4 +1,4 @@
-# Shared kit status
+# Spare Kit status
 
 **Stage: Mapping.** Map: [ARCHITECTURE.md](ARCHITECTURE.md), one level deeper than the overview in the root [ARCHITECTURE.md](../../ARCHITECTURE.md). No code yet.
 

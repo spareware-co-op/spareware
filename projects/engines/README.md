@@ -1,6 +1,6 @@
-# Shared engines
+# Spare Kit engines
 
-Heavy engines any program can use. Each is a Rust crate in `crates/`, depends only on the shared kit (or another engine), and never on a program. A program builds in only the engines it uses, so each app stays as small as its job.
+The heavy engines of Spare Kit, which any program can use. Each is a Rust crate in `crates/`, depends only on the kit crates (or another engine), and never on a program. A program builds in only the engines it uses, so each app stays as small as its job.
 
 | Engine | What it does | Used by |
 | --- | --- | --- |

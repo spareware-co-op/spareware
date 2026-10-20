@@ -315,7 +315,7 @@ details > summary { cursor: pointer; font-weight: 600; margin-top: calc(var(--sp
 <footer class="foot">
   <div class="wrap">
     <p><a href="./index.html">Back to all Spareware programs</a></p>
-    <p>Piece K06, shared kit. Estimate of 19 Oct 2026, not a quote.</p>
+    <p>Piece K06, Spare Kit. Estimate of 19 Oct 2026, not a quote.</p>
   </div>
 </footer>
 
@@ -354,7 +354,7 @@ details > summary { cursor: pointer; font-weight: 600; margin-top: calc(var(--sp
   "note": "Fixed rates for the currency switch. Prices first priced in EUR, AUD or NZD were converted to USD at these rates. The research used rates of 16 to 18 Oct 2026 (US$1 = NZ$1.7656 to 1.7694), so its NZ$ figures differ from these by under 0.3%."
  },
  "method": {
-  "fee_formula": "At-cost fee per unit = fixed monthly cost / monthly volume + variable cost per unit. Fixed = servers and services (the app's own servers plus the shared kit's common items) + the people layer. The card or bank fee is passed through on top, per transaction.",
+  "fee_formula": "At-cost fee per unit = fixed monthly cost / monthly volume + variable cost per unit. Fixed = servers and services (the app's own servers plus Spare Kit's common items) + the people layer. The card or bank fee is passed through on top, per transaction.",
   "low": "Cheapest researched setup with light use: small rented servers (OVHcloud Sydney or Auckland, Hetzner Europe), Cloudflare R2 storage, open-source maps, search and chat run on our own servers, Amazon SES email.",
   "high": "Dearest researched setup with heavy use: big cloud with a New Zealand region (AWS Auckland or Azure New Zealand North) and paid services (Mapbox, Algolia, Stream Chat, Postmark, Twilio, Sumsub, AWS MediaConvert and Rekognition).",
   "mid": "For each part (servers and services, maps, messages, ID checks and moderation, people), the geometric mean of its low and high values, the usual middle for estimates that span a 10 to 1,000 times range. A part that costs nothing in the low case also costs nothing in the middle case (the middle uses the free or self-hosted option there). Not a priced setup. Card fees use their own middle rule.",
