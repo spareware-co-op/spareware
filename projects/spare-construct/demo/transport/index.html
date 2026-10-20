@@ -3,7 +3,7 @@
 <head>
 <script>
 /* Transport is a discipline inside Spare Construct: opened on its own, it goes to the Spare Construct frame. */
-if (window.parent === window) location.replace('../#plan:transport'); else document.documentElement.dataset.embed = '1';
+if (window.parent === window) location.replace('../#plan:transport');
 </script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -14,59 +14,67 @@ if (window.parent === window) location.replace('../#plan:transport'); else docum
 </head>
 <body>
 <!-- Top bar: data-prio="3" (then "2") items move into the Menu while the bar is too narrow; data-hide sets the order (lower goes first). -->
-<header id="top">
-  <div class="tb-zone tb-left">
-    <a class="brand" href="../" title="Back to the Spare Construct demo"><span class="mark" aria-hidden="true"></span><span>Spare Construct</span><span class="disc">Transport</span></a>
-    <div class="proj-wrap" data-prio="3" data-hide="90" data-menu="rename">
-      <input id="projName" class="proj" aria-label="Project name" spellcheck="false">
-      <button id="saveState" type="button" class="save-state" title="Where this project is saved"></button>
-    </div>
-    <span class="tb-reg" data-zone="left"></span>
-  </div>
-  <div class="tsep" data-prio="3" data-hide="5"></div>
-  <div class="tb-zone tb-centre">
-    <div class="grp">
-      <select id="scSel" aria-label="Scenario"></select>
-      <button id="scNew" class="btn" title="Copy this scenario into a new scenario you can change" data-prio="3" data-hide="40" data-menu-label="Duplicate scenario">Duplicate scenario</button>
-      <button id="scMenuBtn" class="btn icon" title="Scenario actions" aria-label="Scenario actions" aria-haspopup="menu" data-prio="3" data-hide="45" data-menu="scenario">⋯</button>
-    </div>
-    <div class="seg" id="period" role="group" aria-label="Peak period" data-prio="2" data-hide="20" data-menu="period">
-      <button data-p="AM">AM<span class="pk"> peak</span></button><button data-p="PM">PM<span class="pk"> peak</span></button>
-    </div>
-    <label class="yr" title="Forecast year for this scenario — background traffic grows from the base year" data-prio="2" data-hide="10" data-menu="year">Year <input id="year" type="number" min="1900" max="2200" step="1"></label>
+<header id="top" aria-label="Transport tools">
+  <div class="tb-zone tb-left"><span class="tb-reg" data-zone="left"></span></div>
+  <div class="grp"><span class="glbl">Model</span>
     <div class="split">
       <button id="runBtn" class="btn primary" title="Run this scenario for the AM and PM peaks (Ctrl+Enter)"><span class="lbl">Run<span class="lbl-x"> model</span></span><span class="run-stale"></span></button>
       <button id="runMore" class="btn primary icon" title="More ways to run the model" aria-label="More ways to run the model" aria-haspopup="menu">▾</button>
     </div>
-    <button id="simBtn" class="btn ib" title="Watch vehicles move through the network (Space)" aria-label="Simulate" data-prio="3" data-hide="60"><span class="ico" aria-hidden="true">▶</span><span class="lbl">Simulate</span></button>
-    <span class="tb-reg" data-zone="centre"></span>
+    <button id="simBtn" class="btn ib" title="Watch vehicles move through the network (Space)" aria-label="Simulate"><span class="ico" aria-hidden="true">▶</span><span class="lbl">Simulate</span></button>
   </div>
+  <div class="grp"><span class="glbl">Tools</span><nav id="tools" aria-label="Tools"></nav></div>
+  <div class="grp"><span class="glbl">Data</span>
+    <button id="osmBtn" class="btn ib" title="Download existing roads from OpenStreetMap" aria-label="Import roads" data-menu-label="Import roads from OpenStreetMap…"><svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/></svg><span class="lbl">Import roads</span></button>
+  </div>
+  <div class="tb-zone tb-centre"><span class="tb-reg" data-zone="centre"></span></div>
   <div class="spacer"></div>
   <div class="tb-zone tb-right">
     <span class="tb-reg" data-zone="right"></span>
-    <button id="undoBtn" class="btn icon" title="Undo (Ctrl+Z)" aria-label="Undo" data-prio="3" data-hide="30" data-menu-label="Undo">↶</button>
-    <button id="redoBtn" class="btn icon" title="Redo (Ctrl+Y)" aria-label="Redo" data-prio="3" data-hide="20" data-menu-label="Redo">↷</button>
-    <button id="osmBtn" class="btn ib" title="Download existing roads from OpenStreetMap" aria-label="Import roads" data-prio="3" data-hide="50" data-menu-label="Import roads from OpenStreetMap…"><svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/></svg><span class="lbl">Import roads</span></button>
+    <button id="undoBtn" class="btn icon" title="Undo (Ctrl+Z)" aria-label="Undo" data-menu-label="Undo">↶</button>
+    <button id="redoBtn" class="btn icon" title="Redo (Ctrl+Y)" aria-label="Redo" data-menu-label="Redo">↷</button>
     <button id="menuBtn" class="btn" title="Menu: files, export, settings, help and about the data" aria-haspopup="menu" aria-expanded="false"><span aria-hidden="true">☰</span><span class="lbl">Menu</span></button>
   </div>
 </header>
 
 <div id="main">
-  <nav id="tools" aria-label="Tools"></nav>
-  <div id="mapwrap">
-    <div id="map"></div>
-    <div id="topstack" class="float">
-      <div id="banners"></div>
-      <div id="staleBar" hidden></div>
-      <div id="hint"></div>
+  <aside id="browser" class="browser" aria-label="Project and map key">
+    <div class="b-proj">
+      <span class="slbl">Project</span>
+      <div class="proj-wrap">
+        <input id="projName" class="proj" aria-label="Project name" spellcheck="false">
+        <button id="saveState" type="button" class="save-state" title="Where this project is saved"></button>
+      </div>
     </div>
-    <div id="template" class="float card" hidden></div>
-    <div id="pathCard" class="float card" hidden></div>
-    <div id="simHud" class="float card" hidden></div>
-    <div id="legend" class="float card" role="region" aria-label="Map key and layers"></div>
-    <div id="busy" class="float" hidden role="status"><div class="spin"></div><span id="busyText">Working…</span><span id="busyTime" class="busy-time" aria-hidden="true"></span><button id="busyCancel" class="btn small" type="button" hidden>Cancel</button></div>
+    <div id="legend" role="region" aria-label="Map key and layers"></div>
+  </aside>
+  <div class="center">
+    <div class="vhead">
+      <h2>Transport network</h2><span class="badge n">Live map</span>
+      <div id="hint"></div>
+      <div class="vh-ctl">
+        <select id="scSel" aria-label="Scenario"></select>
+        <button id="scNew" class="btn small" title="Copy this scenario into a new scenario you can change" data-prio="3" data-hide="40" data-menu-label="Duplicate scenario">Duplicate scenario</button>
+        <button id="scMenuBtn" class="btn icon" title="Scenario actions" aria-label="Scenario actions" aria-haspopup="menu" data-prio="3" data-hide="45" data-menu="scenario">⋯</button>
+        <div class="seg" id="period" role="group" aria-label="Peak period" data-prio="2" data-hide="20" data-menu="period">
+      <button data-p="AM">AM<span class="pk"> peak</span></button><button data-p="PM">PM<span class="pk"> peak</span></button>
+    </div>
+        <label class="yr" title="Forecast year for this scenario — background traffic grows from the base year" data-prio="2" data-hide="10" data-menu="year">Year <input id="year" type="number" min="1900" max="2200" step="1"></label>
+      </div>
+    </div>
+    <div id="mapwrap">
+      <div id="map"></div>
+      <div id="topstack" class="float">
+        <div id="banners"></div>
+        <div id="staleBar" hidden></div>
+      </div>
+      <div id="template" class="float card" hidden></div>
+      <div id="pathCard" class="float card" hidden></div>
+      <div id="simHud" class="float card" hidden></div>
+      <div id="busy" class="float" hidden role="status"><div class="spin"></div><span id="busyText">Working…</span><span id="busyTime" class="busy-time" aria-hidden="true"></span><button id="busyCancel" class="btn small" type="button" hidden>Cancel</button></div>
+    </div>
   </div>
-  <aside id="inspector" aria-label="Inspector"><div id="insGrip" class="sheet-grip" aria-hidden="true"></div><div id="insBody"></div></aside>
+  <aside id="inspector" aria-label="Properties"><div id="insGrip" class="sheet-grip" aria-hidden="true"></div><div class="ins-top"><span class="slbl">Properties</span></div><div id="insBody"></div></aside>
 </div>
 
 <section id="drawer" aria-label="Results">
