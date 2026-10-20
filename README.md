@@ -14,6 +14,8 @@ Big platforms take a large cut from the people who do the work, and design and o
 
 **Always start with "Can we".** Every idea is met with how it could work, not why it won't. If it isn't possible yet, we work out what it would take.
 
+**High trust, fail forward.** This is a high-trust place, leaning on a wide, mapped-out [architecture](ARCHITECTURE.md), so pieces fit together even when people work apart. Try things, test them quickly, and if something doesn't work, learn from it and go again: we fail forward and up. No need to stress about getting it perfect the first time; every piece is reviewed before it lands.
+
 ## How it all fits together
 
 To build on Spareware, add a program, a plugin, a country pack or a language, read [EXTENDING.md](EXTENDING.md): how it stays open and expandable for decades.

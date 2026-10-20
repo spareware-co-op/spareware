@@ -7,4 +7,4 @@ publish.workspace = true
 [dependencies]
 kit-store = { path = "../../../kit/crates/kit-store" }
 construct-model = { path = "../construct-model" }
-construct-kernel = { path = "../construct-kernel" }
+engine-geometry = { path = "../../../engines/crates/engine-geometry" }

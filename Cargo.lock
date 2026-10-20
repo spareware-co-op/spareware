@@ -22,8 +22,8 @@ dependencies = [
 name = "construct-clash"
 version = "0.0.0"
 dependencies = [
- "construct-kernel",
  "construct-model",
+ "engine-geometry",
  "kit-store",
 ]
 
@@ -38,10 +38,10 @@ dependencies = [
 name = "construct-elements"
 version = "0.0.0"
 dependencies = [
- "construct-kernel",
  "construct-model",
  "construct-regen",
  "construct-solver",
+ "engine-geometry",
  "kit-core",
 ]
 
@@ -49,10 +49,10 @@ dependencies = [
 name = "construct-families"
 version = "0.0.0"
 dependencies = [
- "construct-kernel",
  "construct-model",
  "construct-regen",
  "construct-solver",
+ "engine-geometry",
 ]
 
 [[package]]
@@ -61,13 +61,6 @@ version = "0.0.0"
 dependencies = [
  "construct-elements",
  "construct-model",
-]
-
-[[package]]
-name = "construct-kernel"
-version = "0.0.0"
-dependencies = [
- "kit-core",
 ]
 
 [[package]]
@@ -122,6 +115,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "engine-geometry"
+version = "0.0.0"
+dependencies = [
+ "kit-core",
+]
+
+[[package]]
 name = "engine-media"
 version = "0.0.0"
 dependencies = [
@@ -141,6 +141,14 @@ dependencies = [
 name = "engine-render"
 version = "0.0.0"
 dependencies = [
+ "kit-core",
+]
+
+[[package]]
+name = "engine-sim"
+version = "0.0.0"
+dependencies = [
+ "engine-geometry",
  "kit-core",
 ]
 
