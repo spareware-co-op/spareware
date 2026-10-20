@@ -4,7 +4,7 @@
 
 - Architecture map written: [ARCHITECTURE.md](ARCHITECTURE.md), 23 sections at high and low level.
 - 21 decisions open (table near the end of the map). No code yet.
-- **Traffic and public transport is further along.** A working browser prototype, the [Transport demo](https://spareware.app/spare-construct/transport/) (open it from the discipline button in the Spare Construct demo), already runs a strategic traffic model and a microsimulation on a live map. It was made to help a traffic engineer, who hasn't used it yet, so nobody from the field has checked it. The product is built from the core up on the shared engines, using the prototype to learn from.
+- **Traffic and public transport is further along.** A working browser prototype, the [Transport demo](https://spareware.app/spare-construct/#plan:transport) (open it from the discipline button in the Spare Construct demo), already runs a strategic traffic model and a microsimulation on a live map. It was made to help a traffic engineer, who hasn't used it yet, so nobody from the field has checked it. The product is built from the core up on the shared engines, using the prototype to learn from.
 - Design stage starts when an owner accepts decision notes for the first six decisions: kernel start, storage layout, entity store, incremental engine, renderer, multi-user.
 
 ## Work board

@@ -197,7 +197,15 @@ One program and one model for every discipline, civil included. Picking a discip
 
 **Discipline modes**
 
-- A discipline picker at the top of the app: Architecture, Structure, MEP, Civil, Transport and Coordination.
+- A discipline picker at the top of the app, numbered in the order a project runs, so the work carries straight through from the first survey to the contractor on site:
+  - **01 Survey**: the ground, boundaries and what is already there (see Survey).
+  - **02 Civil**: earthworks, roads, drainage and services in the ground.
+  - **03 Transport**: traffic, public transport, walking and cycling, tested on the network Civil lays out (see Traffic and public transport).
+  - **04 Architecture**: the buildings.
+  - **05 Structure**: framing, bracing and foundations.
+  - **06 MEP**: building services.
+  - **07 Coordination**: every discipline together, with clash, issues and sharing between firms.
+  - **08 Construction**: what the contractor needs on site (see Construction).
 - Picking one swaps the tool tabs, the project browser, the default view templates and drawing types, and the display units and labels (chainages and reduced levels in Civil).
 - The other disciplines stay visible as greyed context and can't be edited by accident. Ownership and permissions already filter on discipline (see Building elements).
 - A mode is a settings file (tools, templates, units, browser layout), so a firm or a country can add its own, such as landscape.
@@ -209,7 +217,7 @@ Civil adds the ground and everything built on and under it, in the same model as
 
 | Element | What v1 does | Hard part |
 | --- | --- | --- |
-| Survey | Points with codes, breaklines and control, from survey files and LandXML | Point codes that draw the linework automatically |
+| Survey data | Points, linework, control and the existing surface from the Survey discipline (see Survey) | Surfaces staying in step when the survey is updated |
 | Surfaces | Existing and design ground as triangulated surfaces from points, breaklines and LiDAR; contours | Millions of LiDAR points; fast re-triangulation after an edit |
 | Alignments and profiles | Road and pipe centrelines (lines, arcs, spiral transitions), vertical profiles, superelevation | Exact chainage along spirals |
 | Corridors | Cross-section templates swept along an alignment: lanes, kerbs, footpaths, batters to the ground | Rebuilding a long road in pieces when one input changes |
@@ -233,6 +241,34 @@ Civil adds the ground and everything built on and under it, in the same model as
 - Civil after structure and MEP, or surfaces and drainage early, since every building needs a site?
 - Which country's road and drainage rules come first?
 - Do rail and bridges join Civil later? IFC 4.3 covers both.
+
+## Survey
+
+The first discipline: the ground, the boundaries and what is already there, brought in from the field at survey accuracy, so everything after it is built on the right base.
+
+**High level**
+
+- **Field data in**: total station and GNSS observations from field controllers, keeping the raw measurements, not only the final points.
+- **Field codes to linework**: point codes draw kerbs, fences, building outlines and breaklines automatically, from each firm's code library.
+- **Control**: control marks and their coordinates. Traverses are adjusted by the Bowditch (compass) rule and whole networks by least squares, with a report on the residuals and how well it fits.
+- **Coordinates and heights**: the country pack's projections and datums (NZTM2000 and NZVD2016 in New Zealand), with local site grids tied to them.
+- **What is already there**: surveyed buildings, trees, services and levels become real elements in the existing phase, alongside scans (see Point clouds).
+- **Existing ground**: the surveyed surface goes straight to Civil.
+- **Set-out**: points and lines from any discipline's design go out to field controllers, with set-out reports and checks.
+- **As-builts**: as-built surveys compared with the design, element by element, for Construction and handover.
+- **Cadastral**: boundaries, parcels, title plans and survey datasets in each country's required format. In New Zealand that is LINZ's LandXML exchange format under the Cadastral Survey Rules 2021, lodged through Landonline.
+
+**Low level**
+
+- Observations are stored as data (setups, targets, angles, distances, GNSS vectors), so an adjustment re-runs when a measurement is corrected. Adjusted coordinates are results, regenerated like any other.
+- Formats: LandXML 1.2 survey elements (instrument setups, raw observations, GNSS vectors, control) in and out; Trimble JobXML from its published schema; RINEX for raw GNSS data, the open IGS format; Leica GSI and Carlson RW5 only from their makers' published documents; CSV points. NMEA 0183 and RTCM 3 are paid standards, decided before any use.
+- Coordinate transformations follow PROJ (MIT).
+- Adjustment uses the published least-squares method, with Geoscience Australia's DynAdjust (Apache-2.0) as a reference to study. GNU Gama and other GPL tools are not used.
+
+**Discuss**
+
+- Which field controller formats come first?
+- Which countries' cadastral formats come after New Zealand's?
 
 ## Traffic and public transport
 
@@ -260,12 +296,38 @@ Transport is a discipline in Spare Construct, not a separate program. Model the 
 - Methods to study and reuse: A/B Street (Rust) and CityFlow, both Apache-2.0. SUMO (EPL-2.0) and MATSim (GPL) are used only as outside tools through their documented files, never linked in. JuPedSim (LGPL) is studied for walking models only.
 - Data: OpenStreetMap is under the ODbL and is credited wherever it shows. The GTFS specification is Apache-2.0; each agency's feed carries its own licence, recorded with the data.
 - Exchange: OpenStreetMap and GTFS in; SUMO network and route files in and out, so consultants who use SUMO can take part.
-- A working prototype, the [Transport demo](https://spareware.app/spare-construct/transport/), already does most of the high-level list in the browser (JavaScript on a Leaflet map). It is a sketch to learn from: the product is built correctly on the shared engines from the core up, not by patching the prototype.
+- A working prototype, the [Transport demo](https://spareware.app/spare-construct/#plan:transport), already does most of the high-level list in the browser (JavaScript on a Leaflet map). It is a sketch to learn from: the product is built correctly on the shared engines from the core up, not by patching the prototype.
 
 **Discuss**
 
 - Strategic model, microsimulation, or both in the first release?
 - Which country's trip rates and level-of-service rules come first? The prototype uses New Zealand's.
+
+## Construction
+
+The last discipline: everything the contractor needs to build the project, from the same model the designers drew.
+
+**High level**
+
+- **Stages and build sequence**: elements grouped into stages and tasks, linked to a construction programme, and played in 3D over time. Temporary works and the site set-up are drawn for each stage.
+- **Set-out**: points and lines from the model go to site instruments through the Survey discipline.
+- **Site logistics**: a site plan for each stage with hoardings, cranes and their reach, laydown areas and access. Truck routes and traffic management are tested with the Transport discipline.
+- **Quantities by stage**: take-off from the model for each stage, for ordering and payment claims.
+- **Prefabrication**: panels, frames and parts split within lifting and transport limits, with output for the factory.
+- **On site**: issues, inspections, defects and photos pinned to elements, on phones and tablets, working offline.
+- **Progress and as-builts**: progress marked against elements, and as-built surveys and scans compared with the design (see Survey and Point clouds), with changes fed back into the model.
+- **Handover**: the as-built model with product and maintenance information for the owner.
+
+**Low level**
+
+- Stages are fields and relationships on elements, like phases, so every view, schedule and quantity can filter by stage.
+- Programme tasks link to sets of elements by rules (level, zone, category), so new elements join the right task without hand linking.
+- Phones and tablets keep a light copy of the chunks for their area and send their operations when they are back online.
+- Programmes come in and go out through IFC's work schedule entities and CSV; other scheduling formats only from published specifications.
+
+**Discuss**
+
+- Which comes first for contractors: the build sequence in 3D, or site issues and defects?
 
 ## Point clouds
 
@@ -656,10 +718,12 @@ Everything Revit users buy or bolt on today is built in, as first-party add-ins 
 | Point clouds and scan to BIM | ReCap, EdgeWise, Undet | Point cloud underlays and fitting walls, pipes and floors to scans |
 | Quantities and cost | CostX, Assemble, Navisworks quantities | Live quantities by element, linked cost rates |
 | 4D sequencing | Synchro, Navisworks TimeLiner | Construction phases on a timeline, played in 3D |
+| Site and field | Procore, Autodesk Build, Fieldwire | The Construction discipline: site issues, inspections, progress and as-builts (see Construction) |
 | Document control and CDE | Autodesk Docs, Newforma, Aconex, Procore | Built-in document control: issues, transmittals, registers, markups |
 | Sharing with consultants | Autodesk Design Collaboration, BIM 360 | Built-in shared project space with packages between firms (see Sharing with consultants) |
 | Specification | Masterspec links, keynote add-ins | Keynotes and specification linked to elements |
 | Site and planning | Civil 3D links, site and planning add-ins | LINZ terrain and aerials, zoning, height in relation to boundary |
+| Survey office | Trimble Business Center, Leica Infinity, Civil 3D survey, Carlson Survey, 12d Model | The Survey discipline: field data, adjustment, linework, set-out, as-builts and cadastral (see Survey) |
 | Civil design | Civil 3D, 12d Model, OpenRoads | The Civil discipline: survey, surfaces, roads, earthworks and drainage (see Disciplines and civil) |
 | Traffic and transport | PTV Visum and Vissim, Aimsun, SIDRA Intersection | The Transport discipline: strategic model, microsimulation, public transport and scenarios (see Traffic and public transport) |
 | Data and dashboards | Power BI connectors, model health tools | Live project data out to dashboards; model health built in |
@@ -807,6 +871,9 @@ Licences, activity and browser support were checked on each project's GitHub rep
 | [laz-rs](https://github.com/laz-rs/laz-rs) | Apache-2.0 | Rust LAZ compression |
 | [COPC](https://github.com/copcio/copcio.github.io) | MIT (spec repo) | Cloud-optimised point cloud layout on LAZ 1.4 |
 | [Potree](https://github.com/potree/potree) | BSD-2-Clause | Point cloud viewing method to follow |
+| [PROJ](https://github.com/OSGeo/PROJ) | MIT | Coordinate transformations to follow |
+| [DynAdjust](https://github.com/GeoscienceAustralia/DynAdjust) | Apache-2.0 | Least-squares survey network adjustment to study |
+| [GNU Gama](https://www.gnu.org/software/gama/) | GPL-3.0 | Avoid (GPL) |
 | [A/B Street](https://github.com/a-b-street/abstreet) | Apache-2.0 | Rust traffic simulation to study and reuse |
 | [CityFlow](https://github.com/cityflow-project/CityFlow) | Apache-2.0 | Microscopic traffic simulation to study |
 | [Eclipse SUMO](https://github.com/eclipse-sumo/sumo) | EPL-2.0 | Outside tool only, through its documented files |

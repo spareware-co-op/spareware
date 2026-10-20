@@ -139,6 +139,11 @@ html[data-disc="mep"],[data-dsw="mep"]{--app:#93D9A6;--app-strong:#1F7A45;--app-
 html[data-disc="civil"],[data-dsw="civil"]{--app:#DCC196;--app-strong:#7A5626;--app-tint:#F9F1E4}
 html[data-disc="coord"],[data-dsw="coord"]{--app:#C9B8F5;--app-strong:#5A3FB0;--app-tint:#F3EFFE}
 html[data-disc="transport"],[data-dsw="transport"]{--app:#F2D675;--app-strong:#7A6210;--app-tint:#FCF6DD}
+[data-dsw="survey"]{--app:#7FD8CF;--app-strong:#13756B;--app-tint:#E8F8F6}
+[data-dsw="construction"]{--app:#FDBA8C;--app-strong:#A34A12;--app-tint:#FFF1E7}
+.disc-menu .dno{flex:none;width:20px;font-family:var(--font-mono);font-size:12px;color:var(--ink-2);margin-top:1px}
+.disc-menu button[aria-disabled="true"]{cursor:default;color:var(--ink-2)}
+.disc-menu button[aria-disabled="true"]:hover{background:none}
 .disc-wrap{position:relative;flex:none}
 .disc-btn{background:var(--app);border-color:var(--app-strong);color:var(--ink);font-weight:600}
 .disc-btn:hover{border-color:var(--ink)}
@@ -175,6 +180,9 @@ html[data-disc="transport"],[data-dsw="transport"]{--app:#F2D675;--app-strong:#7
 main{display:flex;min-width:0;min-height:0;overflow:hidden}
 .screen{display:none;flex:1;min-width:0;min-height:0}
 .screen.on{display:grid}
+#sc-transport.on{display:flex}
+.tframe{flex:1;width:100%;min-height:0;border:0}
+.tools[hidden]{display:none}
 .split{grid-template-columns:minmax(0,1fr) 296px}
 .center{display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden}
 .side{min-height:0;overflow:auto;background:var(--panel);border-left:1px solid var(--hairline);padding-bottom:56px}
@@ -582,7 +590,8 @@ button.badge:hover{background:var(--hairline);color:var(--ink)}
   <aside class="browser" id="browser" aria-label="Project browser"></aside>
   <main id="main" tabindex="-1">
    <section class="screen" id="sc-start"></section>
-   <section class="screen split" id="sc-plan"></section>
+   <section class="screen" id="sc-transport" aria-label="Transport network"></section>
+<section class="screen split" id="sc-plan"></section>
    <section class="screen split" id="sc-3d"></section>
    <section class="screen split" id="sc-sheet"></section>
    <section class="screen split" id="sc-schedule"></section>
@@ -779,7 +788,7 @@ ACT.redo=()=>{const u=REDO.pop();if(!u){toast('Nothing to redo.');return}UNDO.pu
 /* ---------- screens and routing ---------- */
 const SCREENS=[['start','Start','start'],['plan','Plan','plan'],['3d','3D','cube'],['sheet','Sheets','sheet'],['schedule','Schedules','table'],['clash','Clash','clash'],['compare','Team and versions','compare'],['sharing','Sharing','timeline'],['files','Project files','folder'],['family','Components','family'],['checks','Checks','shield'],['commands','Commands and AI','term']];
 const NOBROWSER=['start','family','checks','commands','sharing','files'];
-const VIEWS={framing:{name:'Framing plan',kind:'Floor plan',sc:'1:100'},services:{name:'Services plan',kind:'Floor plan',sc:'1:100'},coord:{name:'Coordination plan',kind:'Floor plan',sc:'1:100'},ground:{name:'Ground floor plan',kind:'Floor plan',sc:'1:100'},found:{name:'Foundation plan',kind:'Floor plan',sc:'1:100'},bracing:{name:'Bracing plan',kind:'Floor plan',sc:'1:100'},drain:{name:'Drainage plan',kind:'Floor plan',sc:'1:100'},site:{name:'Site plan',kind:'Site plan',sc:'1:200'},elev:{name:'North elevation',kind:'Elevation',sc:'1:100'},secA:{name:'Section A',kind:'Section',sc:'1:100'}};
+const VIEWS={transport:{name:'Transport network',kind:'Live map',sc:'Live map'},framing:{name:'Framing plan',kind:'Floor plan',sc:'1:100'},services:{name:'Services plan',kind:'Floor plan',sc:'1:100'},coord:{name:'Coordination plan',kind:'Floor plan',sc:'1:100'},ground:{name:'Ground floor plan',kind:'Floor plan',sc:'1:100'},found:{name:'Foundation plan',kind:'Floor plan',sc:'1:100'},bracing:{name:'Bracing plan',kind:'Floor plan',sc:'1:100'},drain:{name:'Drainage plan',kind:'Floor plan',sc:'1:100'},site:{name:'Site plan',kind:'Site plan',sc:'1:200'},elev:{name:'North elevation',kind:'Elevation',sc:'1:100'},secA:{name:'Section A',kind:'Section',sc:'1:100'}};
 function go(h){if(location.hash==='#'+h)route();else location.hash=h}
 function route(){
  const h=decodeURIComponent(location.hash.slice(1)||'plan');let[scr,arg]=h.split(':');
@@ -787,8 +796,11 @@ function route(){
  if(arg){if(scr==='plan'&&VIEWS[arg])S.view=arg;if(scr==='sheet')S.sheet=arg;if(scr==='schedule')S.sched=arg}
  if(S.screen!==scr){S.tool='select';S.pend=null}
  S.screen=scr;
- $$('.screen').forEach(s=>s.classList.toggle('on',s.id==='sc-'+scr));
- $('#work').classList.toggle('nob',NOBROWSER.includes(scr));
+ if(scr==='plan'&&S.view==='transport'&&DISC!=='transport'){DISC='transport';renderDisc()}
+ else if(scr==='plan'&&S.view!=='transport'&&DISC==='transport'){DISC='architecture';renderDisc()}
+ const sid=scr==='plan'&&S.view==='transport'?'transport':scr;
+ $$('.screen').forEach(s=>s.classList.toggle('on',s.id==='sc-'+sid));
+ $('#work').classList.toggle('nob',NOBROWSER.includes(scr)||sid==='transport');
  refresh();
  const m=$('#main');if(m)m.scrollTop=0;
 }
@@ -801,12 +813,13 @@ ACT.view=b=>{S.view=b.dataset.a;S.zoom=1;S.zc=null;go('plan:'+b.dataset.a)};
 ACT.browser=()=>{S.bopen=!S.bopen;$('#work').classList.toggle('bopen',S.bopen)};
 
 /* ---------- disciplines ---------- */
-const DISCS=[['architecture','Architecture','Walls, doors, windows, rooms and sheets'],['structure','Structure','Framing, bracing and foundations'],['mep','MEP','Ducts, pipes, drainage and electrical'],['civil','Civil','Survey, ground, roads and pipe networks'],['transport','Transport','Roads, public transport, walking and traffic simulation on a live map'],['coord','Coordination','Linked models, clash and issues']];
+/* In the order a project runs: survey first, the contractor on site last. Survey and Construction are mapped but not in this demo yet. */
+const DISCS=[['survey','Survey','Ground, boundaries and what is already there','01',0],['civil','Civil','Ground, roads and pipe networks','02',1],['transport','Transport','Roads, public transport, walking and traffic simulation on a live map','03',1],['architecture','Architecture','Walls, doors, windows, rooms and sheets','04',1],['structure','Structure','Framing, bracing and foundations','05',1],['mep','MEP','Ducts, pipes, drainage and electrical','06',1],['coord','Coordination','Linked models, clash and issues','07',1],['construction','Construction','Stages, set-out, site and as-builts','08',0]];
 let DISC='architecture';
-function renderDisc(){const d=DISCS.find(x=>x[0]===DISC);document.documentElement.dataset.disc=DISC;$('#disc-name').textContent=d[1];$('#b-disc').setAttribute('aria-label','Discipline: '+d[1]);$('#disc-menu').innerHTML=DISCS.map(([k,l,w])=>`<button type="button" role="menuitemradio" aria-checked="${k===DISC}" data-act="disc" data-a="${k}" data-dsw="${k}"><span class="dsw" aria-hidden="true"></span><span>${l}<small>${w}</small></span></button>`).join('')}
+function renderDisc(){const d=DISCS.find(x=>x[0]===DISC);document.documentElement.dataset.disc=DISC;$('#disc-name').textContent=d[1];$('#b-disc').setAttribute('aria-label','Discipline: '+d[1]);$('#disc-menu').innerHTML=DISCS.map(([k,l,w,no,ok])=>`<button type="button" role="menuitemradio" aria-checked="${k===DISC}"${ok?` data-act="disc"`:' aria-disabled="true"'} data-a="${k}" data-dsw="${k}"><span class="dsw" aria-hidden="true"></span><span class="dno">${no}</span><span>${l}<small>${ok?w:w+'. Not in this demo yet.'}</small></span></button>`).join('')}
 function discMenu(open){const m=$('#disc-menu');m.hidden=!open;$('#b-disc').setAttribute('aria-expanded',String(open));if(open){const c=m.querySelector('[aria-checked="true"]');if(c)c.focus()}}
 ACT.discmenu=()=>discMenu($('#disc-menu').hidden);
-ACT.disc=b=>{if(b.dataset.a==='transport'){location.href='transport/';return}DISC=b.dataset.a;renderDisc();discMenu(false);S.tool='select';S.pend=null;S.sel=null;S.zoom=1;S.zc=null;const hv=homeView();S.view=hv;go('plan:'+hv);$('#b-disc').focus()};
+ACT.disc=b=>{DISC=b.dataset.a;renderDisc();discMenu(false);S.tool='select';S.pend=null;S.sel=null;S.zoom=1;S.zc=null;const hv=homeView();S.view=hv;go('plan:'+hv);$('#b-disc').focus()};
 document.addEventListener('click',e=>{if(!$('#disc-menu').hidden&&!e.target.closest('.disc-wrap'))discMenu(false)});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#disc-menu').hidden){discMenu(false);$('#b-disc').focus()}});
 renderDisc();
@@ -838,14 +851,14 @@ ACT.linkgo=b=>{const a=b.dataset.a;if(a==='str'){S.iso.xray=true;go('3d');toast(
 /* ---------- tool strip ---------- */
 const TB=(act,label,icon,a='',pressed)=>`<button class="tool" data-act="${act}"${a?` data-a="${a}"`:''}${pressed!=null?` aria-pressed="${!!pressed}"`:''}>${ic(icon,'sm')}${label}</button>`;
 const TOOLS={};
-function renderTools(){const f=TOOLS[S.screen];$('#tools').innerHTML=f?f():'';}
+function renderTools(){const f=TOOLS[S.screen];const h=f?f():'';$('#tools').innerHTML=h;$('#tools').hidden=!h;}
 const archTools=()=>{const t=S.tool;const plan=FLOORV.includes(S.view);
  return `<div class="grp"><span class="glbl">Create</span>${TB('tool','Wall','wall','wall',t==='wall')}${TB('tool','Door','door','door',t==='door')}${TB('tool','Window','window','window',t==='window')}${TB('tool','Room','room','room',t==='room')}${TB('tool','Dimension','dim','dim',t==='dim')}</div>
  <div class="grp"><span class="glbl">Annotate</span>${TB('tagall','Tag all','tag','',S.cats.tags)}${TB('renumber','Number doors','num')}${TB('keynotes','Keynotes','key','',S.cats.keys)}</div>
  <div class="grp"><span class="glbl">Modify</span>${['move','copy','rotate','mirror','array','align','offset','trim','split','scale'].map(m=>TB('modify',m[0].toUpperCase()+m.slice(1),m,m)).join('')}</div>`+(plan?'':'');};
 
 /* ---------- discipline tools: each discipline has its own home view, tools and elements, in the same model ---------- */
-const HOMEV={architecture:'ground',structure:'framing',mep:'services',civil:'site',coord:'coord'};
+const HOMEV={architecture:'ground',structure:'framing',mep:'services',civil:'site',transport:'transport',coord:'coord'};
 const homeView=()=>HOMEV[DISC];
 const DNAME=Object.fromEntries(DISCS.map(d=>[d[0],d[1]]));
 const SNAPV=['ground','framing','services','coord'];
@@ -923,6 +936,7 @@ const DT={
 };
 const DTH={post:()=>'<b>Post:</b> click to place a 90×90 post. Snaps to wall ends and crossings.',beam:()=>S.pend?'<b>Beam:</b> pick the other end. The size follows the span.':'<b>Beam:</b> pick one end.',lintel:()=>'<b>Lintel:</b> click a door or a window. The size follows the opening width.',pipe:()=>S.pend?'<b>Pipe:</b> pick the end.':'<b>Pipe:</b> pick the start of a waste pipe.',duct:()=>S.pend?'<b>Duct:</b> pick the end.':'<b>Duct:</b> pick the start of a duct.',light:()=>'<b>Light:</b> click inside a room.',power:()=>'<b>Power point:</b> click on a wall.',spot:()=>'<b>Spot level:</b> click on the site. The level comes from the ground surface.',pad:()=>S.pend?'<b>Pad:</b> pick the opposite corner.':'<b>Pad:</b> pick one corner of a building platform.',sw:()=>S.pend?'<b>Stormwater:</b> pick the next manhole.':'<b>Stormwater:</b> pick the first manhole.',al:()=>S.pend?'<b>Alignment:</b> pick the end. Chainage marks every 5 m.':'<b>Alignment:</b> pick the start of a centreline.',issue:()=>'<b>Issue:</b> click where the problem is.'};
 function discTools(){const t=S.tool;const T=(a,l,i)=>TB('tool',l,i,a,t===a);const V=(a,l,i)=>TB('view',l,i,a,S.screen==='plan'&&S.view===a);
+ if(DISC==='transport')return'';
  if(DISC==='structure')return`<div class="grp"><span class="glbl">Create</span>${T('post','Post','box')}${T('beam','Beam','align')}${T('lintel','Lintel','window')}</div><div class="grp"><span class="glbl">Views</span>${V('framing','Framing plan','plan')}${V('found','Foundation plan','plan')}${V('bracing','Bracing plan','plan')}</div><div class="grp"><span class="glbl">Check</span>${TB('go','Bracing check','shield','checks')}</div>`;
  if(DISC==='mep')return`<div class="grp"><span class="glbl">Create</span>${T('pipe','Pipe','offset')}${T('duct','Duct','layers')}${T('light','Light','sun')}${T('power','Power point','plus')}</div><div class="grp"><span class="glbl">Views</span>${V('services','Services plan','plan')}${V('drain','Drainage plan','plan')}</div><div class="grp"><span class="glbl">Check</span>${TB('go','Clash','clash','clash')}</div>`;
  if(DISC==='civil')return`<div class="grp"><span class="glbl">Create</span>${T('spot','Spot level','pin')}${T('pad','Pad','room')}${T('sw','Stormwater','offset')}${T('al','Alignment','align')}</div><div class="grp"><span class="glbl">Views</span>${V('site','Site plan','pin')}${TB('go','3D','cube','3d')}</div>`;
@@ -1137,6 +1151,7 @@ function planBody(view,o={}){
 function viewBox(view){const b=VB[view]||VB.ground;const z=S.zoom||1;const cx=S.zc?S.zc[0]:b[0]+b[2]/2,cy=S.zc?S.zc[1]:b[1]+b[3]/2;const w=b[2]/z,h=b[3]/z;return[cx-w/2,cy-h/2,w,h].map(n0).join(' ')}
 
 R.plan=()=>{
+ if(S.view==='transport'){const t=$('#sc-transport');if(!t.firstChild)t.innerHTML='<iframe class="tframe" src="transport/" title="Transport network: traffic and public transport model"></iframe>';return}
  const sc=$('#sc-plan');const v=VIEWS[S.view];
  if(!sc.dataset.built){sc.innerHTML=`<div class="center"><div class="vhead"><button class="btn sm bt-browser" data-act="browser">${ic('folder','sm')}Browser</button><h2 id="pv-name"></h2><span class="badge n" id="pv-kind"></span><span class="hint" id="hint"></span><label class="sr" for="pv-scale">Scale</label><select class="inp" id="pv-scale" data-chg="scale"><option>1:50</option><option>1:100</option><option>1:200</option></select><label class="sr" for="pv-detail">Detail</label><select class="inp" id="pv-detail" data-chg="detail"><option value="coarse">Coarse</option><option value="medium">Medium</option><option value="fine">Fine</option></select><button class="ib" data-act="zoom" data-a="in" aria-label="Zoom in">${ic('plus')}</button><button class="ib" data-act="zoom" data-a="out" aria-label="Zoom out">${ic('minus')}</button><button class="ib" data-act="zoom" data-a="fit" aria-label="Zoom to fit">${ic('fit')}</button></div><div class="canvas" id="pv-canvas"></div></div><aside class="side" id="pv-side" aria-label="Properties"></aside>`;sc.dataset.built=1;bindPlanCanvas()}
  $('#pv-name').textContent=v.name;$('#pv-kind').textContent=v.kind+' · '+(FLOORV.includes(S.view)?S.scale:v.sc);
