@@ -19,6 +19,8 @@
 //! Sections: 9, 11.8, 13.18, 19.2 and 19.5; open question OQ-11.2, in the kernel architecture
 //! (`projects/engines/geometry/architecture/`).
 //!
+//! Family: Combine.
+//!
 //! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //! Direct dependencies still to add when geom-run merges (G04): geom-run.

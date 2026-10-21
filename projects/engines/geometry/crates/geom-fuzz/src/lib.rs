@@ -19,7 +19,7 @@
 //!   wraps the harness in `bolero::check!`, and `cargo test -p geom-fuzz` runs it. bolero first
 //!   replays every file in the target's `corpus` and `crashes` folders (below), so a found crash
 //!   stays a test forever (28.16), then runs a fixed number of random inputs. bolero 0.13 draws one
-//!   seed per random input from the operating system's random source (`bolero/src/test/mod.rs`,
+//!   seed per random input from the operating system's random source (`lib/bolero/src/test/mod.rs`,
 //!   `rng_tests`), prints the seed of a failing input as `BOLERO_RANDOM_SEED=<seed>`, and replays
 //!   exactly that input when the variable is set. It prints no seed for an input that passes, and
 //!   offers no way to choose them, so this leg is the "short fuzz" of 28.17: two runs of the same
@@ -49,7 +49,7 @@
 //!   The test name is the `#[test]` function's; `-T` bounds the run (any `humantime` duration);
 //!   `--runs`, `--jobs` and `--max-input-length` are the other limits; `--sanitizer` defaults to
 //!   `address`. Options are those of cargo-bolero 0.13 (`bin/cargo-bolero/src/project.rs` and
-//!   `test.rs` at commit 7642943, read 2026-10-21). libFuzzer's corpus and crashes are kept in
+//!   `test.rs`, read 2026-10-21 and credited below). libFuzzer's corpus and crashes are kept in
 //!   `tests/__fuzz__/predicates/corpus` and `tests/__fuzz__/predicates/crashes`, which the test
 //!   mode above replays on every `cargo test`. The same command with `--engine afl`,
 //!   `--engine honggfuzz` or `--engine kani` runs the other engines bolero supports.
@@ -63,17 +63,23 @@
 //!
 //! - **Development only.** No kernel crate depends on it (`geom-test`'s dependency rule checks
 //!   that), so it may use `std` (chapter 27).
-//! - **The kernel's lints.** `#![forbid(unsafe_code)]`, and no `unwrap`, `expect`, `panic!` or
-//!   indexing outside tests, so a harness reports a law it found broken as a [`Finding`] and only
-//!   the kernel code under test can panic.
+//! - **The kernel's lints: no unsafe code, and no panics of its own.** `#![forbid(unsafe_code)]`,
+//!   and no `unwrap`, `expect`, `panic!` or indexing outside tests, so a harness reports a law it
+//!   found broken as a [`Finding`] and only the kernel code under test can panic.
 //! - **No randomness of its own.** Seeds come from `geom-test` and are printed; bolero's come from
 //!   bolero, as above.
 //!
-//! Sections: chapter 27's `geom-fuzz` row, and 28.5 of the kernel architecture
-//! (`projects/engines/geometry/architecture/`), in part: its tooling (one plain harness function,
-//! bolero's `check!` and the cargo-bolero command) and one target, on the swap law of 28.6; the
-//! seeded leg 28.2 asks for; the replay of every stored crash, 28.16; and the short fuzz and fixed
-//! seeds of 28.17.
+//! Sections: chapter 27's `geom-fuzz` row and its rules for the development crates, and 28.5 of
+//! the kernel architecture (`projects/engines/geometry/architecture/`), in part: its tooling (one
+//! plain harness function, bolero's `check!` and the cargo-bolero command) and one target, on the
+//! swap law of 28.6; the seeded leg 28.2 asks for; the replay of every stored crash, 28.16; and the
+//! short fuzz and fixed seeds of 28.17.
+//!
+//! Method: none; this root defines only the [`Finding`] type, its `Display` and `Error`
+//! implementations and the [`Harness`] alias, whose shape 28.5 gives. Each harness module names
+//! the method it follows.
+//!
+//! Cost: none at run time for the alias; displaying a [`Finding`] writes its two strings.
 //!
 //! Dependencies, every one permissive (29.1):
 //!
@@ -100,6 +106,18 @@
 //! - Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT: `wasip2` and `wit-bindgen` (WASI targets
 //!   only).
 //! - MIT OR Apache-2.0 OR LGPL-2.1-or-later: `r-efi` (UEFI targets only).
+//!
+//! Consulted: bolero 0.13.7 `lib/bolero/src/test/mod.rs`, MIT,
+//!   <https://github.com/camshaft/bolero/blob/7642943b6c1f8a9b5e824dd1cd29b7c8e56068b8/lib/bolero/src/test/mod.rs>,
+//!   for how its test mode draws a seed per input, prints a failing input's seed and replays it,
+//!   as described above. No code copied.
+//! Consulted: cargo-bolero 0.13.5 `bin/cargo-bolero/src/project.rs`, MIT,
+//!   <https://github.com/camshaft/bolero/blob/7642943b6c1f8a9b5e824dd1cd29b7c8e56068b8/bin/cargo-bolero/src/project.rs>,
+//!   for the options of `cargo bolero test` above: the sanitizer and its default, and the
+//!   toolchain. No code copied.
+//! Consulted: cargo-bolero 0.13.5 `bin/cargo-bolero/src/test.rs`, MIT,
+//!   <https://github.com/camshaft/bolero/blob/7642943b6c1f8a9b5e824dd1cd29b7c8e56068b8/bin/cargo-bolero/src/test.rs>,
+//!   for its run limits above: `-T`, `--runs`, `--jobs` and `--max-input-length`. No code copied.
 #![forbid(unsafe_code)]
 
 use core::fmt;

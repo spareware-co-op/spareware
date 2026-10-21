@@ -18,6 +18,8 @@
 //! Sections: 15, and 22 for its errors, in the kernel architecture
 //! (`projects/engines/geometry/architecture/`).
 //!
+//! Family: Sketch.
+//!
 //! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //! Direct dependencies still to add when geom-run merges (G04): geom-run.

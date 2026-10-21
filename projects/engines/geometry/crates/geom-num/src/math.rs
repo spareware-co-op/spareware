@@ -3,7 +3,7 @@
 //! The standard library's `sin`, `cos`, `exp`, `powi` and friends have platform-dependent precision
 //! (the Rust documentation calls it non-deterministic), so the same model would give different
 //! bits on Windows, macOS and in the browser. Every maths function the kernel uses comes from here
-//! instead, from the pure-Rust `libm` crate (MIT OR Apache-2.0): the same code, the same bits, on
+//! instead, from the pure-Rust `libm` crate (MIT): the same code, the same bits, on
 //! every target (chapter 21). Where `libm` uses a processor instruction instead of its own code
 //! (the square root, and the fused multiply-add on processors that have one), the instruction is
 //! one IEEE 754 defines exactly, correctly rounded, so it gives the same bits as the portable code.
@@ -28,6 +28,23 @@
 //! `sinpi` and `cospi` take angles in half-turns. They reduce the angle exactly before `libm` sees
 //! it, so they are exact (0 or ±1) at every multiple of a quarter turn and keep their relative
 //! accuracy next to those multiples, where rotations by a near quarter turn need it.
+//!
+//! Method: `libm` 0.2.16 (MIT, a pure-Rust implementation of the C maths library,
+//! <https://docs.rs/libm/0.2.16>), behind the argument and domain checks above; `sinpi`
+//! and `cospi` follow IEEE 754-2019's `sinPi` and `cosPi` (section 9.2,
+//! <https://doi.org/10.1109/IEEESTD.2019.8766229>) with the reduction each function's
+//! documentation derives.
+//!
+//! Cost: constant per call and no allocation: the argument checks and a few `libm` calls, each a
+//! bounded computation.
+//!
+//! Consulted: FreeBSD `msun` `s_sinpi.c`, BSD-2-Clause,
+//!   <https://github.com/freebsd/freebsd-src/blob/c6d7a2478c9eeb38ed1284e4ee1ff64c75ca8b09/lib/msun/src/s_sinpi.c>,
+//!   for its reduction of the angle to a remainder in half-turns and a sign before its kernel,
+//!   which [`sinpi`] follows. Method only; no code copied.
+//! Consulted: FreeBSD `msun` `s_cospi.c`, BSD-2-Clause,
+//!   <https://github.com/freebsd/freebsd-src/blob/c6d7a2478c9eeb38ed1284e4ee1ff64c75ca8b09/lib/msun/src/s_cospi.c>,
+//!   for the same reduction in [`cospi`]. Method only; no code copied.
 
 use crate::error::NumError;
 use crate::real::{Real, zero_to_plus};

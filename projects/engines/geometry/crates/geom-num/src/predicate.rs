@@ -79,6 +79,14 @@
 //! Notation in the bit budgets: M = `COORD_MAX` = 2^40 − 1 and δ = 2M = 2^41 − 2 < 2^41, the
 //! largest magnitude of a difference of two coordinates. Every bound is on absolute values, and a
 //! sum's bound also bounds each of its partial sums, so the order of evaluation never matters.
+//!
+//! Cost: constant time and no allocation: each predicate evaluates one fixed determinant, in
+//! `i128` for orientation, and with its products summed in [`I256`] for in-circle and in-sphere.
+//!
+//! Consulted: J. R. Shewchuk, `predicates.c`, public domain,
+//!   <https://www.cs.cmu.edu/afs/cs/project/quake/public/code/predicates.c>, for the determinant
+//!   forms and the sign conventions of `orient2d` and `incircle` that the Method and Conventions
+//!   above follow; chapter 29.3 asks for this credit line.
 
 use crate::error::NumError;
 use crate::grid::{COORD_BITS, P2, P3};
