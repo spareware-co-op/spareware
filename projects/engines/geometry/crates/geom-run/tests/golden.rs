@@ -1,5 +1,5 @@
-//! The golden hash of `geom-run`: a fixed corpus of helper calls, hashed, must give one 64-bit
-//! value on every target, build mode, thread count and chunk size.
+//! The golden hash of `geom-run`: a fixed corpus of helper calls, hashed with SHA-256, must give
+//! one digest on every target, build mode, thread count and chunk size.
 //!
 //! Chapter 21 checks the kernel "with 1, 2, 3 and 8 threads" on every target, chapter 23.4 also
 //! forces chunk sizes of 1, 7 and 4,096, and piece G33 is done when the replay vectors "give
@@ -13,9 +13,18 @@
 //!
 //! Every value is written in a canonical little-endian encoding, with a tag before every variant;
 //! a `usize` is written as 8 bytes, so 32-bit and 64-bit targets write the same bytes. The bytes
-//! are hashed with FNV-1a 64, checked against its published test vectors, as geom-num's golden
-//! test does. The corpus comes from SplitMix64 with a fixed seed, so the inputs are the same on
-//! every target by construction and only the helper's answers can differ.
+//! are hashed with SHA-256 (FIPS 180-4), the hash chapters 21 and 28.13 specify for goldens, as
+//! geom-num's golden test does: `common/sha256.rs` is a copy of geom-num's implementation, with its
+//! checks against the standard's test vectors and constants, until the golden store (piece G19)
+//! holds the one shared copy. The corpus comes from `SplitMix64` with a fixed seed, so the inputs
+//! are the same on every target by construction and only the helper's answers can differ.
+//!
+//! **The hash function changed once, and nothing else with it.** G04 first hashed these bytes with
+//! 64-bit FNV-1a, to the golden `0x798d_bcf0_804b_82e3` (`FORMER_FNV_GOLDEN`); chapters 21 and
+//! 28.13 ask for SHA-256, so the golden is now the SHA-256 of the same bytes. A test records the
+//! corpus's bytes once and hashes that one record both ways, so it shows that both goldens are
+//! reproduced from the same bytes: the switch changed the hash function, not the corpus, its
+//! encoding or any answer.
 //!
 //! **The same constant must hold on every target**: Linux, Windows and macOS on x86-64 and arm64,
 //! and wasm32-wasip1 (a 32-bit target) under wasmtime, in debug and release, with overflow checks
@@ -26,6 +35,15 @@
 //! corpus still reaches every outcome it is built to reach, so a corpus that silently stopped
 //! testing the hard cases fails.
 
+// The crate denies native arithmetic and lossy casts in kernel code (Cargo.toml); tests may use
+// them to build their cases and oracles.
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    reason = "test cases and oracles; the rules are for kernel code"
+)]
 // Helpers outside `#[test]` functions are not covered by clippy.toml's allow-*-in-tests settings;
 // clippy.toml says tests may use these, and a broken corpus must stop the test loudly.
 #![allow(
@@ -36,6 +54,9 @@
 )]
 
 mod common;
+// Included here alone, not through `common`, so its tests of SHA-256 run once.
+#[path = "common/sha256.rs"]
+mod sha256;
 
 use std::collections::BTreeSet;
 
@@ -47,9 +68,16 @@ use geom_run::{
     BatchBudget, Budget, BudgetKind, Exceeded, Exec, Interrupted, ItemError, ItemResult, Phase,
     RunError, Stop, Stopped, Usage, WorkMeter,
 };
+use sha256::{Sha256, hex};
 
-/// The golden hash of the corpus. See the module documentation before changing it.
-const GOLDEN: u64 = 0x798d_bcf0_804b_82e3;
+/// The golden digest of the corpus: SHA-256, in hexadecimal. See the module documentation before
+/// changing it.
+const GOLDEN: &str = "b5e1993aceab1c8f0a6cdfd0c786974375634b5470c635da384122a4bc015172";
+
+/// The golden G04 first recorded: the 64-bit FNV-1a hash of the same corpus bytes. Not a golden
+/// any more; kept to show that the move to SHA-256 changed only the hash function (see
+/// `the_sha256_golden_hashes_the_bytes_the_fnv_golden_hashed`).
+const FORMER_FNV_GOLDEN: u64 = 0x798d_bcf0_804b_82e3;
 
 /// The corpus's seed.
 const SEED: u64 = 0x0004_6704_601D;
@@ -63,7 +91,8 @@ const INNER: Phase = Phase::new("inner phase");
 const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
 const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
 
-/// An FNV-1a 64 hash.
+/// An FNV-1a 64 hash: the hash of G04's first golden, used now only to show that the SHA-256
+/// golden hashes the same bytes (`FORMER_FNV_GOLDEN`).
 struct Fnv(u64);
 
 impl Fnv {
@@ -79,9 +108,12 @@ impl Fnv {
     }
 }
 
-/// Writes answers in the canonical encoding, and notes which outcomes the corpus reached.
+/// Writes answers in the canonical encoding into SHA-256, and notes which outcomes the corpus
+/// reached.
 struct Recorder {
-    hash: Fnv,
+    hash: Sha256,
+    /// Every byte written, in order, if this recorder keeps them ([`Recorder::keeping`]).
+    kept: Option<Vec<u8>>,
     calls: u64,
     seen: BTreeSet<&'static str>,
 }
@@ -89,10 +121,32 @@ struct Recorder {
 impl Recorder {
     fn new() -> Recorder {
         Recorder {
-            hash: Fnv::new(),
+            hash: Sha256::new(),
+            kept: None,
             calls: 0,
             seen: BTreeSet::new(),
         }
+    }
+
+    /// A recorder that also keeps every byte it hashes, so that the same bytes can be hashed again.
+    fn keeping() -> Recorder {
+        Recorder {
+            kept: Some(Vec::new()),
+            ..Recorder::new()
+        }
+    }
+
+    /// The canonical bytes of one value: into the hash, and into the record if one is kept.
+    fn write(&mut self, bytes: &[u8]) {
+        self.hash.write(bytes);
+        if let Some(kept) = &mut self.kept {
+            kept.extend_from_slice(bytes);
+        }
+    }
+
+    /// The SHA-256 of everything written so far, in hexadecimal.
+    fn digest(&self) -> String {
+        hex(self.hash.clone().finish())
     }
 
     /// Start one helper call's record: its operation tag.
@@ -106,11 +160,11 @@ impl Recorder {
     }
 
     fn u8(&mut self, v: u8) {
-        self.hash.write(&[v]);
+        self.write(&[v]);
     }
 
     fn u64(&mut self, v: u64) {
-        self.hash.write(&v.to_le_bytes());
+        self.write(&v.to_le_bytes());
     }
 
     /// A `usize` as 8 bytes, the same on 32-bit and 64-bit targets.
@@ -119,12 +173,12 @@ impl Recorder {
     }
 
     fn u128(&mut self, v: u128) {
-        self.hash.write(&v.to_le_bytes());
+        self.write(&v.to_le_bytes());
     }
 
     fn text(&mut self, s: &str) {
         self.usize(s.len());
-        self.hash.write(s.as_bytes());
+        self.write(s.as_bytes());
     }
 
     fn indices(&mut self, v: &[usize]) {
@@ -182,6 +236,10 @@ impl Recorder {
         }
     }
 
+    #[allow(
+        clippy::trivially_copy_pass_by_ref,
+        reason = "passed to `answer`, which hands the function's error over by reference"
+    )]
     fn stopped(&mut self, s: &Stopped) {
         self.stop(s.reason());
     }
@@ -522,10 +580,9 @@ fn nested(exec: Exec<'_>, size: usize, rng: &mut SplitMix, r: &mut Recorder) {
     }
 }
 
-/// The whole corpus on `exec` with chunk size `size`.
-fn corpus(exec: Exec<'_>, size: usize) -> Recorder {
+/// The whole corpus on `exec` with chunk size `size`, written into `r`.
+fn corpus(exec: Exec<'_>, size: usize, mut r: Recorder) -> Recorder {
     let mut rng = SplitMix(SEED);
-    let mut r = Recorder::new();
     phases(exec, size, &mut rng, &mut r);
     searches(exec, size, &mut rng, &mut r);
     batches(exec, size, &mut rng, &mut r);
@@ -575,7 +632,7 @@ fn golden_hash_is_the_same_on_every_target_thread_count_and_chunk_size() {
         ("threads 3", Exec::with_pool(&THREADS_3)),
         ("threads 8", Exec::with_pool(&THREADS_8)),
     ];
-    let reference = corpus(Exec::serial(), 1);
+    let reference = corpus(Exec::serial(), 1, Recorder::new());
     let missing: Vec<_> = REQUIRED
         .iter()
         .filter(|outcome| !reference.seen.contains(*outcome))
@@ -585,22 +642,60 @@ fn golden_hash_is_the_same_on_every_target_thread_count_and_chunk_size() {
         "geom-run determinism corpus: {} helper calls",
         reference.calls
     );
+    let hash = reference.digest();
     for size in [1, 7, 4096] {
         for (name, exec) in executors {
-            let hash = corpus(exec, size).hash.0;
-            println!("  {name:<10} chunk size {size:>4}: {hash:#018x}");
+            let got = corpus(exec, size, Recorder::new()).digest();
+            println!("  {name:<10} chunk size {size:>4}: {got}");
             assert_eq!(
-                hash, reference.hash.0,
+                got, hash,
                 "{name} with chunk size {size} differs from serial with chunk size 1"
             );
         }
     }
-    let hash = reference.hash.0;
-    println!("geom-run golden hash: {hash:#018x}");
+    println!("geom-run golden hash: {hash}");
     assert_eq!(
         hash, GOLDEN,
-        "geom-run's golden hash is {hash:#018x} here but {GOLDEN:#018x} is expected. Either this \
-         target gives other answers (a bug) or the helper's answers or the corpus changed (a \
-         deliberate change must update GOLDEN and say so)"
+        "geom-run's golden digest is {hash} here but {GOLDEN} is expected. Either this target \
+         gives other answers (a bug) or the helper's answers or the corpus changed (a deliberate \
+         change must update GOLDEN and say so)"
+    );
+}
+
+/// The move from FNV-1a 64 to SHA-256 changed the hash function and nothing else. The corpus's
+/// bytes, recorded once, still hash with FNV-1a 64 to G04's first golden, and the same recorded
+/// bytes hash with SHA-256 to `GOLDEN`, as the recorder's own streaming SHA-256 does.
+#[test]
+fn the_sha256_golden_hashes_the_bytes_the_fnv_golden_hashed() {
+    let recorded = corpus(Exec::serial(), 1, Recorder::keeping());
+    let bytes = recorded
+        .kept
+        .as_deref()
+        .expect("a keeping recorder keeps its bytes");
+    println!(
+        "geom-run determinism corpus: {} canonical bytes",
+        bytes.len()
+    );
+
+    let mut fnv = Fnv::new();
+    fnv.write(bytes);
+    println!("FNV-1a 64 of the recorded bytes: {:#018x}", fnv.0);
+    assert_eq!(
+        fnv.0, FORMER_FNV_GOLDEN,
+        "the corpus's bytes are not the ones G04's first golden hashed"
+    );
+
+    let mut sha = Sha256::new();
+    sha.write(bytes);
+    let digest = hex(sha.finish());
+    println!("SHA-256 of the recorded bytes:   {digest}");
+    assert_eq!(
+        digest, GOLDEN,
+        "the same bytes must give the SHA-256 golden"
+    );
+    assert_eq!(
+        recorded.digest(),
+        digest,
+        "the streaming digest differs from the digest of the recorded bytes"
     );
 }

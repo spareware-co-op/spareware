@@ -4,8 +4,8 @@
 //! serial models of chapter 23.10's phase rule and batch rule.
 //!
 //! The pools are test code: the kernel itself starts no threads. Each test file uses only some of
-//! these helpers. The counters are behind locks, not atomics: the crate's clippy.toml forbids
-//! atomic counters (chapter 23.4), and its tests keep the same rule.
+//! these helpers. The counters are behind locks, not atomics: chapter 23.4 forbids atomic counters
+//! in kernel crates, and this crate's tests keep the same rule (`kernel_rules.rs` checks both).
 #![allow(
     dead_code,
     reason = "every test file includes this module and uses only some of its helpers"
@@ -197,7 +197,7 @@ pub fn same_everywhere<T: PartialEq + Debug>(f: impl Fn(Exec<'static>) -> T) -> 
     reference
 }
 
-/// SplitMix64 (Steele, Lea and Flood, "Fast splittable pseudorandom number generators", OOPSLA
+/// `SplitMix64` (Steele, Lea and Flood, "Fast splittable pseudorandom number generators", OOPSLA
 /// 2014): a fixed-seed generator, so every test case is the same on every run and machine.
 pub struct SplitMix(pub u64);
 

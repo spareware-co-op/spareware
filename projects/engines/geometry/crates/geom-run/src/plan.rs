@@ -77,9 +77,10 @@ impl ChunkPlan {
         if start >= len {
             return None;
         }
-        // `start < len`, so neither line below can overflow, and `end <= len`.
-        let rest = len - start;
-        let end = start + if rest < size { rest } else { size };
+        // `end = min(start + size, len)`, exactly: when `start + size` passes `usize::MAX`, the
+        // true sum is above `len` too, so the saturated sum gives `len` as the true one would.
+        let past = start.saturating_add(size);
+        let end = if past < len { past } else { len };
         Some(Chunk { index, start, end })
     }
 
@@ -125,7 +126,9 @@ impl Chunk {
     /// The number of items in the chunk; at least 1 for every chunk a plan makes.
     #[must_use]
     pub const fn len(self) -> usize {
-        self.end - self.start
+        // Exact: only `ChunkPlan::chunk` makes a chunk, always with `start < end`, so this never
+        // saturates.
+        self.end.saturating_sub(self.start)
     }
 
     /// Whether the chunk holds no items. Never true for a chunk a plan makes.
@@ -155,8 +158,8 @@ impl Iterator for Chunks {
 
     fn next(&mut self) -> Option<Chunk> {
         let chunk = self.plan.chunk(self.len, self.next)?;
-        // A chunk exists, so `next < count <= usize::MAX` and this cannot overflow.
-        self.next = chunk.index + 1;
+        // A chunk exists, so `index < count <= usize::MAX`: this never saturates.
+        self.next = chunk.index.saturating_add(1);
         Some(chunk)
     }
 

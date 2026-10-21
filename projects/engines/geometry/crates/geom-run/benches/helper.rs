@@ -15,6 +15,17 @@
 //! Timings depend on the machine; only the answers are deterministic. A helper call that does not
 //! give the expected answer ends the run with an error, never a panic.
 
+// The crate denies native arithmetic and lossy casts in kernel code (Cargo.toml); a benchmark may
+// use them to build its inputs and report its timings.
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    reason = "benchmark inputs and timings; the rules are for kernel code"
+)]
+
 use std::error::Error;
 use std::hint::black_box;
 use std::num::NonZeroUsize;
@@ -84,6 +95,10 @@ fn spin(rounds: u64, seed: u64) -> u64 {
     x
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "the benchmark's script: each measurement in turn, in the order the report prints them"
+)]
 fn main() -> Result<(), Failure> {
     let threads = thread::available_parallelism().map_or(4, NonZeroUsize::get);
     let pool = Threads(threads);
@@ -242,7 +257,7 @@ fn cancel_latency(exec: Exec<'_>) -> Result<Duration, Failure> {
         });
         let mut meter = WorkMeter::new(Budget::UNLIMITED).with_cancel(&token);
         let got: Result<Vec<()>, RunError> =
-            exec.map(&mut meter, PHASE, PLAN, &[()], |_, _, meter| {
+            exec.map(&mut meter, PHASE, PLAN, &[()], |_, (), meter| {
                 started.store(true, Ordering::SeqCst);
                 loop {
                     meter.charge(1)?;

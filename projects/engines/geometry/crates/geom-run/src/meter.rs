@@ -175,7 +175,7 @@ impl<'c> WorkMeter<'c> {
     pub fn poll(&mut self) -> Result<(), Stopped> {
         self.check()?;
         self.until_poll = POLL_EVERY;
-        if self.cancel.is_some_and(|cancel| cancel.requested()) {
+        if self.cancel.is_some_and(Cancel::requested) {
             return Err(self.latch(Stop::Cancelled));
         }
         Ok(())

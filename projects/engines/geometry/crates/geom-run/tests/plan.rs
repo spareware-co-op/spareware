@@ -5,6 +5,15 @@
 //! nothing but the length and the size; `chunk`, `chunks` and `count` agree; and no length, size or
 //! index, up to `usize::MAX`, makes the arithmetic overflow.
 
+// The crate denies native arithmetic and lossy casts in kernel code (Cargo.toml); tests may use
+// them to build their cases and oracles.
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    reason = "test cases and oracles; the rules are for kernel code"
+)]
 // Helpers outside `#[test]` functions are not covered by clippy.toml's allow-*-in-tests settings;
 // clippy.toml says tests may use these, and a broken oracle must stop the test loudly.
 #![allow(

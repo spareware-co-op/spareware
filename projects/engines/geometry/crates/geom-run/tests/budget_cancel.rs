@@ -16,6 +16,15 @@
 //!   `Cancelled`, never partial results, and a long item that charges stops soon after it.
 //! - Errors print what happened, with remedies, and expose the function's error as their source.
 
+// The crate denies native arithmetic and lossy casts in kernel code (Cargo.toml); tests may use
+// them to build their cases and oracles.
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    reason = "test cases and oracles; the rules are for kernel code"
+)]
 // Helpers outside `#[test]` functions are not covered by clippy.toml's allow-*-in-tests settings;
 // clippy.toml says tests may use these, and a broken oracle must stop the test loudly.
 #![allow(
@@ -477,7 +486,7 @@ fn a_long_item_that_charges_stops_soon_after_a_cancellation() {
         });
         let mut meter = WorkMeter::new(Budget::UNLIMITED).with_cancel(&token);
         let got: Result<Vec<()>, RunError> =
-            Exec::serial().map(&mut meter, PHASE, plan(1), &items, |_, _, meter| {
+            Exec::serial().map(&mut meter, PHASE, plan(1), &items, |_, (), meter| {
                 started.store(true, Ordering::SeqCst);
                 // Endless work, charged one unit at a time: only the meter can stop it.
                 loop {

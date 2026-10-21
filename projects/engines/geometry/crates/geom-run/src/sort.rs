@@ -2,10 +2,10 @@
 //!
 //! The answer is the order of the items by `(key, index)`. Indices are distinct, so for a key whose
 //! `Ord` is a total order this order is unique: it is the stable sorted order, and no way of
-//! splitting the work can change it (architecture chapter 23.4, "sort_stable (by a total key: one
-//! answer whatever the chunks)"). The helper returns the order as item indices and leaves the items
-//! untouched, so an arena builder can both reorder its records and remap the indices that point
-//! at them.
+//! splitting the work can change it (architecture chapter 23.4, "`sort_stable` (by a total key:
+//! one answer whatever the chunks)"). The helper returns the order as item indices and leaves the
+//! items untouched, so an arena builder can both reorder its records and remap the indices that
+//! point at them.
 //!
 //! Each chunk is sorted on its own, in parallel; then adjacent sorted runs are merged in rounds,
 //! the merges of a round in parallel, until one run is left. A batch call with a total uses the
@@ -238,6 +238,10 @@ mod tests {
     use super::*;
     use alloc::vec;
 
+    #[allow(
+        clippy::trivially_copy_pass_by_ref,
+        reason = "`merge` and `merge_sort` take their comparison as Fn(&X, &X) -> bool"
+    )]
     fn less(a: &u32, b: &u32) -> bool {
         a < b
     }

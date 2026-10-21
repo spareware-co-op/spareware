@@ -86,7 +86,7 @@ impl<'c> Env<'c> {
 
     /// Whether the caller has asked to stop.
     pub(crate) fn cancelled(&self) -> bool {
-        self.cancel.is_some_and(|cancel| cancel.requested())
+        self.cancel.is_some_and(Cancel::requested)
     }
 
     /// Whether to read the cancellation before the item at `offset` in its chunk: before the
@@ -252,8 +252,9 @@ pub(crate) fn chunk_starts<T>(plan: ChunkPlan, items: &[T]) -> impl Iterator<Ite
         .chunks(plan.size().get())
         .scan(0, |next: &mut usize, chunk| {
             let start = *next;
-            // The starts are prefix sums of chunk lengths, so they never pass `items.len()`.
-            *next += chunk.len();
+            // The starts are prefix sums of chunk lengths, so they never pass `items.len()`: this
+            // never saturates.
+            *next = start.saturating_add(chunk.len());
             Some((start, chunk))
         })
 }
@@ -274,8 +275,9 @@ where
         if env.cancelled_at(offset) {
             return out.ended(End::Cancelled);
         }
-        // `start + offset` is an item's index, below `items.len()` of the whole phase.
-        let index = start + offset;
+        // `start + offset` is an item's index, below `items.len()` of the whole phase: this never
+        // saturates.
+        let index = start.saturating_add(offset);
         let mut meter = env.meter();
         let result = f(index, item, &mut meter);
         out.used = out.used.plus(meter.used());

@@ -9,6 +9,15 @@
 //! library's stable sort. The seed is fixed, so every run tries the same cases; proptest shrinks
 //! any failure to a minimal case.
 
+// The crate denies native arithmetic and lossy casts in kernel code (Cargo.toml); tests may use
+// them to build their cases and oracles.
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    reason = "test cases and oracles; the rules are for kernel code"
+)]
 // Helpers outside `#[test]` functions are not covered by clippy.toml's allow-*-in-tests settings;
 // clippy.toml says tests may use these, and a broken oracle must stop the test loudly.
 #![allow(
@@ -141,6 +150,8 @@ proptest! {
         counts in prop::collection::vec(0_usize..6, 0..300),
         size in 1_usize..80,
     ) {
+        type Out = (usize, usize);
+        type Meter<'m> = WorkMeter<'m>;
         let mut values = Vec::new();
         let mut offsets = Vec::new();
         for (i, &count) in counts.iter().enumerate() {
@@ -148,8 +159,6 @@ proptest! {
             values.extend((0..count).map(|k| (i, k)));
         }
         let count = |_: usize, n: &usize, _: &mut WorkMeter<'_>| Ok::<_, Stopped>(*n);
-        type Out = (usize, usize);
-        type Meter<'m> = WorkMeter<'m>;
         let fill = |i: usize, _: &usize, out: &mut [Out], place: Place<'_>, _: &mut Meter<'_>| {
             assert_eq!(place.offsets.get(i), Some(&place.first));
             for (k, slot) in out.iter_mut().enumerate() {

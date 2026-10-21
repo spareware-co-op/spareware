@@ -204,8 +204,8 @@ where
         if env.cancelled_at(offset) {
             return out.ended(End::Cancelled);
         }
-        // An item's index, below the phase's length.
-        let index = chunk.start + offset;
+        // An item's index, below the phase's length: this never saturates.
+        let index = chunk.start.saturating_add(offset);
         buffer.clear();
         if buffer.try_reserve_exact(count).is_err() {
             return out.ended(End::OutOfMemory);

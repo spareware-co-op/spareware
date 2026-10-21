@@ -147,17 +147,16 @@ impl<U, E> Walk<U, E> {
             return ControlFlow::Break(());
         }
         for item in chunk.items {
-            let result = match self.crossing {
-                Some(crossing) => Err(ItemError::BatchTotal(crossing)),
-                None => {
-                    self.running = self.running.plus(item.used);
-                    match self.passed() {
-                        Some(crossing) => {
-                            self.crossing = Some(crossing);
-                            Err(ItemError::BatchTotal(crossing))
-                        }
-                        None => item.result,
+            let result = if let Some(crossing) = self.crossing {
+                Err(ItemError::BatchTotal(crossing))
+            } else {
+                self.running = self.running.plus(item.used);
+                match self.passed() {
+                    Some(crossing) => {
+                        self.crossing = Some(crossing);
+                        Err(ItemError::BatchTotal(crossing))
                     }
+                    None => item.result,
                 }
             };
             self.results.push(result);
@@ -286,11 +285,11 @@ where
         // no key is read.
         let run = |chunk: &mut (usize, &'t [T])| {
             let (start, slice) = *chunk;
-            // `start + offset` is an item's index, below `items.len()`.
+            // `start + offset` is an item's index, below `items.len()`: this never saturates.
             let indexed = slice
                 .iter()
                 .enumerate()
-                .map(|(offset, item)| (start + offset, item));
+                .map(|(offset, item)| (start.saturating_add(offset), item));
             run_chunk(&env, phase, indexed, f)
         };
         let payloads = chunk_starts(batch.plan, items);

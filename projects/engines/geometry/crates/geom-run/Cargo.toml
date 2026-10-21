@@ -21,13 +21,27 @@ proptest = { version = "1.12.0", default-features = false, features = ["std", "b
 name = "helper"
 harness = false
 
+# The kernel's one lint posture: exactly geom-num's `[lints]` tables, which G09's scaffold check
+# requires of every kernel crate (architecture chapter 27, "Checked arithmetic, and one lint
+# posture"). A change is made in geom-num first; this copy follows it.
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"
 
 [lints.clippy]
+# The crate is written to clippy's pedantic idioms; CI denies every warning.
+pedantic = { level = "warn", priority = -1 }
 unwrap_used = "deny"
 expect_used = "deny"
 panic = "deny"
 indexing_slicing = "deny"
+# Every fixed-width arithmetic step in kernel code is a checked method, and no cast loses a value
+# silently. Tests may use native arithmetic and casts: each test file and test module allows these
+# four, and kernel code allows a cast only where its bound is written beside it.
+arithmetic_side_effects = "deny"
+cast_possible_truncation = "deny"
+cast_possible_wrap = "deny"
+cast_sign_loss = "deny"
+# geom-num compares doubles exactly, never against a tolerance. geom-run has no floating-point
+# code; the setting is here because the posture is one table for every kernel crate.
 float_cmp = "allow"

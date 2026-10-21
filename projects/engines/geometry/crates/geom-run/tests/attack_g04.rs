@@ -30,9 +30,18 @@
 //! - `map_chunks` and `fold_chunks` are gone (23.4: "Chunk boundaries never matter", no
 //!   reduce), so the chunk-function checks became checks of the per-item helpers, and the fold
 //!   test became a test that combining is the caller's, on the calling thread.
-//! - Counters are behind locks, not atomics: the crate's clippy.toml forbids atomic counters
-//!   (23.4), and its tests keep the same rule.
+//! - Counters are behind locks, not atomics: chapter 23.4 forbids atomic counters in kernel
+//!   crates, and this crate's tests keep the same rule (`kernel_rules.rs` checks both).
 
+// The crate denies native arithmetic and lossy casts in kernel code (Cargo.toml); tests may use
+// them to build their cases and oracles.
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    reason = "test cases and oracles; the rules are for kernel code"
+)]
 // Helpers outside `#[test]` functions are not covered by clippy.toml's allow-*-in-tests settings;
 // clippy.toml says tests may use these, and a broken oracle must stop the test loudly.
 #![allow(
@@ -230,7 +239,7 @@ fn run_items(
     exec.try_map(&mut meter, PHASE, plan(size), items, item_fn)
 }
 
-/// SplitMix64 (Steele, Lea and Flood, OOPSLA 2014), fixed seed: the same cases on every run.
+/// `SplitMix64` (Steele, Lea and Flood, OOPSLA 2014), fixed seed: the same cases on every run.
 struct SplitMix(u64);
 
 impl SplitMix {
@@ -257,12 +266,20 @@ fn spin(rounds: u64) -> u64 {
 }
 
 /// Item 10 costs 11 units, every other item 1: with R = 10, item 10 is over R on its own.
+#[allow(
+    clippy::trivially_copy_pass_by_ref,
+    reason = "the helper hands every function its item by reference"
+)]
 fn eleventh_over(i: usize, _: &(), meter: &mut WorkMeter<'_>) -> Result<usize, Stopped> {
     meter.charge(if i == 10 { 11 } else { 1 })?;
     Ok(i)
 }
 
 /// Fails at item 3; returns non-zero-sized values, so reserving room for a whole chunk would fail.
+#[allow(
+    clippy::trivially_copy_pass_by_ref,
+    reason = "the helper hands every function its item by reference"
+)]
 fn fail_at_three(i: usize, _: &(), _: &mut WorkMeter<'_>) -> Result<usize, usize> {
     if i == 3 { Err(i) } else { Ok(i) }
 }
@@ -935,9 +952,7 @@ fn a_helper_thread_panic_reaches_the_caller_with_its_own_payload() {
     let got = no_panic(|| {
         let mut meter = WorkMeter::new(Budget::UNLIMITED);
         Exec::serial().map(&mut meter, PHASE, plan(1), &items, |i, x, _| {
-            if i == 7 {
-                panic!("boom at item {i}");
-            }
+            assert!(i != 7, "boom at item {i}");
             Ok(*x)
         })
     });

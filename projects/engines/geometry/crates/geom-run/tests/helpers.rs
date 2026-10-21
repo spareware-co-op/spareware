@@ -19,6 +19,15 @@
 //! - `sort_stable` gives the stable sorted order (equal to the standard library's stable sort),
 //!   and an `Ord` that breaks its contract cannot make it panic.
 
+// The crate denies native arithmetic and lossy casts in kernel code (Cargo.toml); tests may use
+// them to build their cases and oracles.
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    reason = "test cases and oracles; the rules are for kernel code"
+)]
 // Helpers outside `#[test]` functions are not covered by clippy.toml's allow-*-in-tests settings;
 // clippy.toml says tests may use these, and a broken oracle must stop the test loudly.
 #![allow(
@@ -418,6 +427,8 @@ fn scan_exclusive_gives_exact_offsets() {
 
 #[test]
 fn count_then_fill_puts_outputs_at_their_offsets() {
+    type Output = (u32, usize, usize);
+    type Meter<'m> = WorkMeter<'m>;
     // Item i makes i % 4 outputs; each output names the item, its position, and where the next
     // item's outputs start (an index into the result made by another item).
     let items: Vec<u32> = (0..2000).collect();
@@ -425,8 +436,6 @@ fn count_then_fill_puts_outputs_at_their_offsets() {
         meter.charge(1)?;
         Ok::<_, Stopped>((x % 4) as usize)
     };
-    type Output = (u32, usize, usize);
-    type Meter<'m> = WorkMeter<'m>;
     let fill = |i: usize, x: &u32, out: &mut [Output], place: Place<'_>, meter: &mut Meter<'_>| {
         meter.charge(out.len() as u64)?;
         assert_eq!(out.len(), (x % 4) as usize);
@@ -580,7 +589,7 @@ fn helpers_nest_inside_items_on_the_same_pool() {
     let items: Vec<u64> = (0..64).collect();
     let nested = |exec: Exec<'static>| {
         exec.try_map(&mut unlimited(), PHASE, plan(3), &items, |i, x, meter| {
-            let list: Vec<u64> = (0..(x % 9 + 1)).map(|k| (k * 37 + x) % 11).collect();
+            let list: Vec<u64> = (0..=(x % 9)).map(|k| (k * 37 + x) % 11).collect();
             let order = exec.sort_stable(meter, PHASE, plan(2), &list, |v| *v)?;
             let counts: Vec<usize> = list.iter().map(|&v| v as usize).collect();
             let (offsets, total) = exec.scan_exclusive(meter, PHASE, plan(2), &counts)?;

@@ -170,6 +170,10 @@ impl Usage {
 }
 
 /// `limit − used`, or 0 when `used` is over `limit`.
+#[allow(
+    clippy::cast_possible_truncation,
+    reason = "rest <= limit <= u64::MAX, so the cast to u64 is exact"
+)]
 const fn left(limit: u64, used: u128) -> u64 {
     let rest = (limit as u128).saturating_sub(used);
     // `rest <= limit <= u64::MAX`, so the cast is exact.
