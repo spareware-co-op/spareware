@@ -826,7 +826,36 @@ fn unimodular<const D: usize>(rng: &mut Rng, negative: bool) -> [[i64; D]; D] {
             m[i][c] += k * m[j][c];
         }
     }
+    // The random steps alone can end small (seed 6214692301197557477 ended at
+    // [[0, 1], [-1, -789502539]]). One last step by the largest multiple the grid allows always
+    // reaches an entry above M/2: if that multiple k is 0, some axis c has
+    // |m[i][c]| + |m[j][c]| > M; otherwise k ± 1 would leave the grid on some axis c, so the new
+    // |m[i][c]| ≥ M − |m[j][c]|. Either way one of the two entries exceeds M/2 > 2^30.
+    let i = rng.below(D as u64) as usize;
+    let j = (i + 1 + rng.below(D as u64 - 1) as usize) % D;
+    let (lo, hi) = k_range(m[i], m[j]);
+    let k = if hi >= -lo { hi } else { lo };
+    for c in 0..D {
+        m[i][c] += k * m[j][c];
+    }
     m
+}
+
+/// The generator reaches entries above 2^30 for the seed that once stayed small on CI, and for
+/// every seed in a fixed sweep, in 2D and 3D, with both determinant signs.
+#[test]
+fn unimodular_generator_always_reaches_the_grid() {
+    let largest = |rows: &[i64]| rows.iter().map(|v| v.abs()).max().unwrap();
+    let m = unimodular::<2>(&mut Rng(6_214_692_301_197_557_477), false);
+    assert!(largest(m.as_flattened()) > 1 << 30, "{m:?}");
+    for seed in 0..20_000u64 {
+        for negative in [false, true] {
+            let m2 = unimodular::<2>(&mut Rng(seed), negative);
+            assert!(largest(m2.as_flattened()) > 1 << 30, "seed {seed}: {m2:?}");
+            let m3 = unimodular::<3>(&mut Rng(seed), negative);
+            assert!(largest(m3.as_flattened()) > 1 << 30, "seed {seed}: {m3:?}");
+        }
+    }
 }
 
 /// A base point a such that a + r stays on the grid for every row r (each axis's rows span at most
