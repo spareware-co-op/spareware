@@ -206,6 +206,30 @@ fn violation(kernel: &str, chain: Vec<Step>) -> Violation {
     }
 }
 
+/// Asserts a seed was caught: `violations` holds `want`, and every other violation is the same one
+/// seen from a kernel crate that reaches `want`'s crate, its chain ending in a step to that crate
+/// and then `want`'s chain. Since G09's scaffold put every kernel crate on `geom-num`, a seed on
+/// `geom-num` is reached from each of them, which the check rightly reports one by one (merged
+/// onto this branch before the merge gate, G12, which fixed these assertions).
+fn assert_caught(what: &str, violations: &[Violation], want: &Violation) {
+    assert!(
+        violations.contains(want),
+        "case: {what}: {want} not among {violations:#?}"
+    );
+    let tail = want.chain.len();
+    for v in violations.iter().filter(|v| *v != want) {
+        let n = v.chain.len();
+        let through = n > tail
+            && v.chain[n - tail..] == want.chain[..]
+            && v.chain[n - tail - 1].to == want.kernel_crate;
+        assert!(
+            through,
+            "case: {what}: {v} does not reach the seed through {}",
+            want.kernel_crate
+        );
+    }
+}
+
 #[cfg_attr(
     target_family = "wasm",
     ignore = "runs cargo as a child process, which WebAssembly cannot"
@@ -363,7 +387,7 @@ fn seeded_violations_are_caught() {
         let mut m = base.clone();
         mutate(&mut m);
         let report = check(&m).unwrap();
-        assert_eq!(report.violations, vec![want.clone()], "case: {what}");
+        assert_caught(what, &report.violations, &want);
         println!("caught ({what}): {want}");
     }
 
@@ -425,7 +449,17 @@ fn development_edges_are_allowed() {
 
     // The fixture's chain is live: the same edge as a normal one is caught.
     resolve_edge(&mut m, &num, &middle, &[Value::Null]);
-    assert_eq!(check(&m).unwrap().violations.len(), 1);
+    assert_caught(
+        "the dev edge made normal",
+        &check(&m).unwrap().violations,
+        &violation(
+            "geom-num",
+            vec![
+                step("fixture-middle", Kind::Normal),
+                step("geom-test", Kind::Normal),
+            ],
+        ),
+    );
 
     // Development crates may depend on each other and on kernel crates.
     let mut m = base.clone();

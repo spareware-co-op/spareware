@@ -425,7 +425,9 @@ const FEATURE_GATES: &[FeatureGate<'static>] = &[FeatureGate {
     feature: "threads",
 }];
 
-/// Header fields missing from crates this piece may not edit.
+/// Header fields missing from crates this piece may not edit. (The development crates' Layer,
+/// Invariants and Sections lines, which the merge gate (G12) recorded here as missing, came with
+/// G11's conformance fix in the base G12 merged; the check fails on a gap once it is stale.)
 const HEADER_GAPS: &[HeaderGap<'static>] = &[HeaderGap {
     krate: "num",
     field: Field::Layer,

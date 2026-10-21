@@ -73,6 +73,14 @@ mod manifest;
 #[allow(dead_code)]
 #[path = "scaffold/source.rs"]
 mod source;
+// The merge gate (G12) reads crates' sources for global state and lint attributes through
+// `repo`, with the denied lints `posture` names.
+#[allow(dead_code)]
+#[path = "scaffold/globals.rs"]
+mod globals;
+#[allow(dead_code)]
+#[path = "scaffold/posture.rs"]
+mod posture;
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -615,7 +623,10 @@ mod repository {
             .filter(|r| observed.packages.contains_key(r.name))
             .map(|r| r.name)
             .collect();
-        assert_eq!(present.len(), 45, "{present:?}");
+        // G09's 45 crates (its 44, and the geom-pool scaffold its conformance fix added), and
+        // G11's three development crates (geom-test, geom-fuzz, geom-gen), merged onto this
+        // branch before G12.
+        assert_eq!(present.len(), 48, "{present:?}");
     }
 
     // -------------------------------------------------------------- chapter 27, row by row
@@ -1082,6 +1093,12 @@ mod repository {
         // clippy 1.99.0, run on a probe crate, reads `.clippy.toml` before `clippy.toml` in one
         // folder (warning that it ignores the other), and the nearest folder above a crate that
         // holds neither. `repo::clippy_config` must name the same file.
+        // The process id only names a scratch folder; the clock and process rules (chapter 21)
+        // are for kernel code.
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "test code names a scratch folder"
+        )]
         let base = std::env::temp_dir().join(format!("g09-clippy-lookup-{}", std::process::id()));
         if base.exists() {
             // Left by an earlier run that stopped half way.
