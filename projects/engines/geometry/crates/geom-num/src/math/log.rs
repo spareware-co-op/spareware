@@ -1,11 +1,78 @@
 //! Correctly rounded natural logarithm `ln(x)`: a port of CORE-MATH.
 //!
-//! Source: CORE-MATH `src/binary64/log/log.c` and `src/binary64/log/dint.h` at commit
-//! `0ce0cbc15935e24c656280e5a46c34e89f301b7a`
-//! (<https://gitlab.inria.fr/core-math/core-math/-/tree/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/log>),
-//! by Paul Zimmermann and Tom Hubrecht (log.c; INRIA and CERN) and Tom Hubrecht (dint.h, from his
-//! correctly rounded `pow`; CERN), MIT licence. Both copyright notices are reproduced at the end of
-//! this documentation, as the licence requires.
+//! Method: Ziv's strategy, as in CORE-MATH; the method and the proof of its bound are below.
+//! Source: PORT from CORE-MATH `src/binary64/log/log.c` and `src/binary64/log/dint.h` at commit
+//!   `0ce0cbc15935e24c656280e5a46c34e89f301b7a`, by Paul Zimmermann and Tom Hubrecht (log.c) and
+//!   Tom Hubrecht (dint.h, from his correctly rounded `pow`), MIT,
+//!   <https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/log/log.c>
+//!   Copyright (c) 2022 INRIA and CERN.
+//!   Authors: Paul Zimmermann and Tom Hubrecht.
+//!   <https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/log/dint.h>
+//!   Copyright (c) 2022 CERN.
+//!   Author: Tom Hubrecht
+//!   Changed for Spare Kit: translated to safe `no_std` Rust, with the 128-bit arithmetic in
+//!   `u128` and `u64` steps under the crate's rule (`lib.rs`) and total shifts; round-to-nearest
+//!   only, without the exception flags or `errno`; the canonical NaN for a NaN or a negative input;
+//!   the fast path's seven `fma`s replaced by plain operations, with its bound re-derived; a Taylor
+//!   series in the accurate path just below 1; the accurate path's tables trimmed to the entries
+//!   its index reaches; a written proof of the error bound. Every change is listed under "Changes
+//!   from the C source" below; none changes a correctly rounded result.
+//! SPDX-License-Identifier: MPL-2.0 AND MIT
+//!
+//! The original notices of `log.c` and `dint.h`, reproduced as the MIT licence requires, each as
+//! published (`dint.h`'s reads `exp_dRESS` where `log.c`'s reads `EXPRESS`):
+//!
+//! ```text
+//! log.c:
+//! Copyright (c) 2022 INRIA and CERN.
+//! Authors: Paul Zimmermann and Tom Hubrecht.
+//!
+//! This file is part of the CORE-MATH project
+//! (https://core-math.gitlabpages.inria.fr/).
+//!
+//! Permission is hereby granted, free of charge, to any person obtaining a copy
+//! of this software and associated documentation files (the "Software"), to deal
+//! in the Software without restriction, including without limitation the rights
+//! to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+//! copies of the Software, and to permit persons to whom the Software is
+//! furnished to do so, subject to the following conditions:
+//!
+//! The above copyright notice and this permission notice shall be included in all
+//! copies or substantial portions of the Software.
+//!
+//! THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+//! IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+//! FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+//! AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+//! LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+//! OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+//! SOFTWARE.
+//!
+//! dint.h:
+//! Copyright (c) 2022 CERN.
+//! Author: Tom Hubrecht
+//!
+//! This file is part of the CORE-MATH project
+//! (https://core-math.gitlabpages.inria.fr/).
+//!
+//! Permission is hereby granted, free of charge, to any person obtaining a copy
+//! of this software and associated documentation files (the "Software"), to deal
+//! in the Software without restriction, including without limitation the rights
+//! to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+//! copies of the Software, and to permit persons to whom the Software is
+//! furnished to do so, subject to the following conditions:
+//!
+//! The above copyright notice and this permission notice shall be included in all
+//! copies or substantial portions of the Software.
+//!
+//! THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, exp_dRESS OR
+//! IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+//! FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+//! AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+//! LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+//! OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+//! SOFTWARE.
+//! ```
 //!
 //! **Error bound: correctly rounded**, resting on the completeness of the published worst-case
 //! lists, which their own statement hedges (step A of the proof). For every binary64 input checked
@@ -15,8 +82,7 @@
 //! rounded; an unlisted input with more, which no proof here excludes, would still have an error
 //! below `½ + 2^−56.6` ulp. Domain: every `x ≥ 0`, subnormals included. `ln(1) = +0`,
 //! `ln(±0) = −∞`, `ln(+∞) = +∞`, and a negative input or NaN gives the canonical NaN
-//! (`0x7ff8_0000_0000_0000`). The proof is at the end of this documentation, before the copyright
-//! notice.
+//! (`0x7ff8_0000_0000_0000`). The proof is at the end of this documentation.
 //!
 //! Method (Ziv's strategy, as CORE-MATH). Fast path: `x = 2^e·y` with `y` in `[1/√2, √2)`; a
 //! 10-bit `r ≈ 1/y` from a table makes `z = r·y − 1` exact with `|z| < 0.00213`; then
@@ -114,40 +180,6 @@
 //! `P2_COEFFS` at `z ∈ [−2^−8, 0)`: the polynomial was fitted for `z ≥ 0`, and its error at
 //! `z = −2^−8` is 2^−108.78, a relative error of 2^−100.8, which Lemma 2 does not cover with the
 //! published threshold `t = 47`.
-//!
-//! Original copyright notices:
-//!
-//! ```text
-//! log.c:
-//! Copyright (c) 2022 INRIA and CERN.
-//! Authors: Paul Zimmermann and Tom Hubrecht.
-//!
-//! dint.h:
-//! Copyright (c) 2022 CERN.
-//! Author: Tom Hubrecht
-//!
-//! (both files:)
-//! This file is part of the CORE-MATH project
-//! (https://core-math.gitlabpages.inria.fr/).
-//!
-//! Permission is hereby granted, free of charge, to any person obtaining a copy
-//! of this software and associated documentation files (the "Software"), to deal
-//! in the Software without restriction, including without limitation the rights
-//! to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-//! copies of the Software, and to permit persons to whom the Software is
-//! furnished to do so, subject to the following conditions:
-//!
-//! The above copyright notice and this permission notice shall be included in all
-//! copies or substantial portions of the Software.
-//!
-//! THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-//! IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-//! FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-//! AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-//! LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-//! OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-//! SOFTWARE.
-//! ```
 
 use core::cmp::Ordering;
 

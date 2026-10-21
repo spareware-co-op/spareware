@@ -1,19 +1,61 @@
 //! Correctly rounded `atan2(y, x)`: a port of CORE-MATH.
 //!
-//! Source: CORE-MATH `src/binary64/atan2/atan2.c` and `src/binary64/atan2/tint.h` at commit
-//! `0ce0cbc15935e24c656280e5a46c34e89f301b7a`
-//! (<https://gitlab.inria.fr/core-math/core-math/-/tree/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/atan2>),
-//! by Paul Zimmermann and Alexei Sibidanov, with the rational approximation designed by
-//! Silviu-Ioan Filip, MIT licence. The copyright notices are reproduced at the end of this
-//! documentation, as the licence requires.
+//! Method: Ziv's strategy, as in CORE-MATH; the method and the proof of its bound are below.
+//! Source: PORT from CORE-MATH `src/binary64/atan2/atan2.c` and `src/binary64/atan2/tint.h` at
+//!   commit `0ce0cbc15935e24c656280e5a46c34e89f301b7a`, by Paul Zimmermann and Alexei Sibidanov,
+//!   with the help of Silviu-Ioan Filip, who designed the code that generates its rational
+//!   approximation of `atan`, MIT,
+//!   <https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/atan2/atan2.c>
+//!   Copyright (c) 2024-2025 Paul Zimmermann and Alexei Sibidanov
+//!   <https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/atan2/tint.h>
+//!   Copyright (c) 2023-2024 Paul Zimmermann and Alexei Sibidanov
+//!   Changed for Spare Kit: translated to safe `no_std` Rust, with the 192-bit arithmetic in
+//!   `u128` and `u64` steps under the crate's rule (`lib.rs`) and total shifts; round-to-nearest
+//!   only, without the exception flags, `fenv` or `errno`; the canonical NaN for a NaN; the double
+//!   nearest the 192-bit value where the C stops the program; tiny quotients decided exactly by
+//!   integer arithmetic; written proofs of the fast-path and accurate-path bounds. Every change is
+//!   listed under "Changes from the C source" below; none changes a correctly rounded result.
+//! SPDX-License-Identifier: MPL-2.0 AND MIT
+//!
+//! The original notices of `atan2.c` and `tint.h`, reproduced as the MIT licence requires. The two
+//! differ only in their copyright lines:
+//!
+//! ```text
+//! atan2.c:
+//! Copyright (c) 2024-2025 Paul Zimmermann and Alexei Sibidanov
+//!
+//! tint.h:
+//! Copyright (c) 2023-2024 Paul Zimmermann and Alexei Sibidanov
+//!
+//! (both files:)
+//! This file is part of the CORE-MATH project
+//! (https://core-math.gitlabpages.inria.fr/).
+//!
+//! Permission is hereby granted, free of charge, to any person obtaining a copy
+//! of this software and associated documentation files (the "Software"), to deal
+//! in the Software without restriction, including without limitation the rights
+//! to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+//! copies of the Software, and to permit persons to whom the Software is
+//! furnished to do so, subject to the following conditions:
+//!
+//! The above copyright notice and this permission notice shall be included in all
+//! copies or substantial portions of the Software.
+//!
+//! THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+//! IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+//! FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+//! AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+//! LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+//! OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+//! SOFTWARE.
+//! ```
 //!
 //! **Error bound: correctly rounded**, with one qualification below. The result is the binary64
 //! number nearest the exact angle of the point `(x, y)` from the positive x-axis, in `[−π, π]`
 //! (ties to even), so the error is at most half an ulp. Domain: every pair of doubles, with C99
 //! Annex F's special values (`atan2(±0, +0) = ±0`, `atan2(±0, −0) = ±π`, `atan2(±∞, ±∞) =
 //! ±π/4` or `±3π/4`, and so on); a NaN in either argument gives the canonical NaN
-//! (`0x7ff8_0000_0000_0000`). The proof is at the end of this documentation, before the copyright
-//! notice.
+//! (`0x7ff8_0000_0000_0000`). The proof is at the end of this documentation.
 //!
 //! The qualification: atan2 has two arguments, so its hard-to-round cases cannot be found by
 //! exhaustive search as those of the one-argument functions can. The accurate path's value has
@@ -133,38 +175,6 @@
 //! only round wrongly if the exact value is within that error of a midpoint, which no input has
 //! ever been found to do, and then the error is below `½ + 2^−128` ulp. All 111 772 inputs of
 //! CORE-MATH's atan2.wc (in all four sign combinations) are correctly rounded. ∎
-//!
-//! Original copyright notices:
-//!
-//! ```text
-//! atan2.c:
-//! Copyright (c) 2024-2025 Paul Zimmermann and Alexei Sibidanov
-//!
-//! tint.h:
-//! Copyright (c) 2023-2024 Paul Zimmermann and Alexei Sibidanov
-//!
-//! (both files:)
-//! This file is part of the CORE-MATH project
-//! (https://core-math.gitlabpages.inria.fr/).
-//!
-//! Permission is hereby granted, free of charge, to any person obtaining a copy
-//! of this software and associated documentation files (the "Software"), to deal
-//! in the Software without restriction, including without limitation the rights
-//! to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-//! copies of the Software, and to permit persons to whom the Software is
-//! furnished to do so, subject to the following conditions:
-//!
-//! The above copyright notice and this permission notice shall be included in all
-//! copies or substantial portions of the Software.
-//!
-//! THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-//! IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-//! FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-//! AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-//! LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-//! OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-//! SOFTWARE.
-//! ```
 
 use core::cmp::Ordering;
 

@@ -1,10 +1,46 @@
 //! Correctly rounded `sinpi(x) = sin(πx)` and `cospi(x) = cos(πx)`: a port of CORE-MATH.
 //!
-//! Source: CORE-MATH `src/binary64/sinpi/sinpi.c` and `src/binary64/cospi/cospi.c` at commit
-//! `0ce0cbc15935e24c656280e5a46c34e89f301b7a`
-//! (<https://gitlab.inria.fr/core-math/core-math/-/tree/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64>),
-//! by Alexei Sibidanov, MIT licence. The copyright notice is reproduced at the end of this
-//! documentation, as the licence requires.
+//! Method: Ziv's strategy, as in CORE-MATH; the method and the proof of its bound are below.
+//! Source: PORT from CORE-MATH `src/binary64/sinpi/sinpi.c` and `src/binary64/cospi/cospi.c` at
+//!   commit `0ce0cbc15935e24c656280e5a46c34e89f301b7a`, by Alexei Sibidanov, MIT,
+//!   <https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/sinpi/sinpi.c>
+//!   <https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/cospi/cospi.c>
+//!   Copyright (c) 2023-2026 Alexei Sibidanov <sibid@uvic.ca>.
+//!   Changed for Spare Kit: translated to safe `no_std` Rust, with total shifts and table reads
+//!   and the integer steps under the crate's rule (`lib.rs`); round-to-nearest only, without the
+//!   exception flags or `errno`; the canonical NaN for NaN and infinite inputs; the main fast
+//!   path's error constant raised from 2^−78 to `ER0 = 0x1.1p−78`, which the proof covers; a
+//!   written proof of the error bound. Every change is listed under "Changes from the C source"
+//!   below; none changes a correctly rounded result.
+//! SPDX-License-Identifier: MPL-2.0 AND MIT
+//!
+//! The original notice of `sinpi.c`, reproduced as the MIT licence requires; `cospi.c` carries the
+//! same notice and author:
+//!
+//! ```text
+//! Copyright (c) 2023-2026 Alexei Sibidanov <sibid@uvic.ca>.
+//!
+//! This file is part of the CORE-MATH project
+//! (https://core-math.gitlabpages.inria.fr/).
+//!
+//! Permission is hereby granted, free of charge, to any person obtaining a copy
+//! of this software and associated documentation files (the "Software"), to deal
+//! in the Software without restriction, including without limitation the rights
+//! to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+//! copies of the Software, and to permit persons to whom the Software is
+//! furnished to do so, subject to the following conditions:
+//!
+//! The above copyright notice and this permission notice shall be included in all
+//! copies or substantial portions of the Software.
+//!
+//! THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+//! IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+//! FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+//! AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+//! LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+//! OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+//! SOFTWARE.
+//! ```
 //!
 //! **Error bound: correctly rounded**, resting on CORE-MATH's worst-case searches as step A of the
 //! proof states. For every binary64 input the result is the binary64 number nearest the exact
@@ -15,8 +51,7 @@
 //! with 43 or more), is correctly rounded; had the lists' searches missed an input, its error
 //! would still be below `½ + 2^−45.6` ulp. Domain: every finite `x`, with no limit on its size,
 //! because the reduction modulo 2 is exact. `±∞` and NaN give the canonical NaN
-//! (`0x7ff8_0000_0000_0000`). The proof is at the end of this documentation, before the
-//! copyright notice.
+//! (`0x7ff8_0000_0000_0000`). The proof is at the end of this documentation.
 //!
 //! **Exact at quarter turns.** At every multiple of ½ the result is exactly 0 or ±1, from a branch
 //! that does no floating-point arithmetic. Signs of zero follow IEEE 754-2019 §9.2.1:
@@ -152,33 +187,6 @@
 //! `2^−44` units from every midpoint and `v` at least `2^−44 − δ`, while the near-zero accurate
 //! path and the tiny path err by less than `2^−104·|v| < 2^−51·ulp(v)`, which is less; so, by the
 //! argument of Lemma 2, they round it correctly [*checked*: `scaled_worst_cases_near_zero`]. ∎
-//!
-//! Original copyright notice (sinpi.c; cospi.c carries the same notice and author):
-//!
-//! ```text
-//! Copyright (c) 2023-2026 Alexei Sibidanov <sibid@uvic.ca>.
-//!
-//! This file is part of the CORE-MATH project
-//! (https://core-math.gitlabpages.inria.fr/).
-//!
-//! Permission is hereby granted, free of charge, to any person obtaining a copy
-//! of this software and associated documentation files (the "Software"), to deal
-//! in the Software without restriction, including without limitation the rights
-//! to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-//! copies of the Software, and to permit persons to whom the Software is
-//! furnished to do so, subject to the following conditions:
-//!
-//! The above copyright notice and this permission notice shall be included in all
-//! copies or substantial portions of the Software.
-//!
-//! THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-//! IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-//! FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-//! AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-//! LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-//! OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-//! SOFTWARE.
-//! ```
 
 use super::hexf::hf;
 use super::support::{

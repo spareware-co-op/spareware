@@ -1,9 +1,43 @@
 //! Correctly rounded `exp(x) = e^x`: a port of CORE-MATH.
 //!
-//! Source: CORE-MATH `src/binary64/exp/exp.c` at commit `0ce0cbc15935e24c656280e5a46c34e89f301b7a`
-//! (<https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/exp/exp.c>),
-//! by Alexei Sibidanov, MIT licence. The copyright notice is reproduced at the end of this
-//! documentation, as the licence requires.
+//! Method: Ziv's strategy, as in CORE-MATH; the method and the proof of its bound are below.
+//! Source: PORT from CORE-MATH `src/binary64/exp/exp.c` at commit
+//!   `0ce0cbc15935e24c656280e5a46c34e89f301b7a`, by Alexei Sibidanov, MIT,
+//!   <https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/exp/exp.c>
+//!   Copyright (c) 2022-2026 Alexei Sibidanov <sibid@uvic.ca>.
+//!   Changed for Spare Kit: translated to safe `no_std` Rust, with total table reads and the
+//!   integer steps under the crate's rule (`lib.rs`); round-to-nearest only, without the exception
+//!   flags or `errno`; the overflow and underflow results returned directly; the canonical NaN for
+//!   a NaN; a written proof of the error bound. Every change is listed under "Changes from the C
+//!   source" below; none changes a result.
+//! SPDX-License-Identifier: MPL-2.0 AND MIT
+//!
+//! The original notice of `exp.c`, reproduced as the MIT licence requires:
+//!
+//! ```text
+//! Copyright (c) 2022-2026 Alexei Sibidanov <sibid@uvic.ca>.
+//!
+//! This file is part of the CORE-MATH project
+//! (https://core-math.gitlabpages.inria.fr/).
+//!
+//! Permission is hereby granted, free of charge, to any person obtaining a copy
+//! of this software and associated documentation files (the "Software"), to deal
+//! in the Software without restriction, including without limitation the rights
+//! to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+//! copies of the Software, and to permit persons to whom the Software is
+//! furnished to do so, subject to the following conditions:
+//!
+//! The above copyright notice and this permission notice shall be included in all
+//! copies or substantial portions of the Software.
+//!
+//! THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+//! IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+//! FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+//! AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+//! LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+//! OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+//! SOFTWARE.
+//! ```
 //!
 //! **Error bound: correctly rounded**, resting on CORE-MATH's worst-case searches, whose
 //! completeness its list does not claim (step A of the proof). For every binary64 input checked
@@ -16,7 +50,7 @@
 //! `exp(x)` is `+∞` for `x ≥ 0x1.62e42fefa39fp+9` (overflow) and `+0` for
 //! `x ≤ −0x1.74910d52d3052p+9` (underflow), as the correctly rounded results; `exp(−∞) = +0`,
 //! `exp(+∞) = +∞`, and NaN gives the canonical NaN (`0x7ff8_0000_0000_0000`). The proof is at the
-//! end of this documentation, before the copyright notice.
+//! end of this documentation.
 //!
 //! Method (Ziv's strategy, as CORE-MATH): `x = (64·i0 + i1 + 4096·ie)·ln 2/4096 + dx` with
 //! `|dx| ≤ ln 2/2^13`, by Cody–Waite reduction with a three-part `ln 2/4096`. Then
@@ -98,33 +132,6 @@
 //! needs with `t = 41` (*checked*: `accurate_path_bound`). In the subnormal range the same
 //! offset as in F3 makes the single final rounding happen at the result's precision, with an extra
 //! error below `2^−50·ulp`, so Lemma 2 applies with `t = 33`. ∎
-//!
-//! Original copyright notice:
-//!
-//! ```text
-//! Copyright (c) 2022-2026 Alexei Sibidanov <sibid@uvic.ca>.
-//!
-//! This file is part of the CORE-MATH project
-//! (https://core-math.gitlabpages.inria.fr/).
-//!
-//! Permission is hereby granted, free of charge, to any person obtaining a copy
-//! of this software and associated documentation files (the "Software"), to deal
-//! in the Software without restriction, including without limitation the rights
-//! to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-//! copies of the Software, and to permit persons to whom the Software is
-//! furnished to do so, subject to the following conditions:
-//!
-//! The above copyright notice and this permission notice shall be included in all
-//! copies or substantial portions of the Software.
-//!
-//! THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-//! IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-//! FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-//! AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-//! LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-//! OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-//! SOFTWARE.
-//! ```
 
 use super::hexf::hf;
 use super::support::{entry, fast_two_sum, fma, pow2, unsigned};
