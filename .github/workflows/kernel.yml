@@ -65,7 +65,9 @@ jobs:
   test:
     name: Test (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    # Every kernel crate in release and in debug on one runner; geom-num's debug suite alone
+    # takes over half an hour on a 12-thread machine, so the limit leaves room as crates grow.
+    timeout-minutes: 240
     strategy:
       # Every target reports, so a golden digest that differs on one target shows which.
       fail-fast: false
@@ -133,7 +135,7 @@ jobs:
   wasm:
     name: Test (wasm32-wasip1 under ${{ matrix.runtime }})
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:
