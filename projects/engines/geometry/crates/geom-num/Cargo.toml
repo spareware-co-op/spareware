@@ -2,6 +2,8 @@
 name = "geom-num"
 version = "0.0.0"
 edition.workspace = true
+# const f64::next_up and next_down, used by the interval bounds, are const from 1.86.
+rust-version = "1.86"
 publish.workspace = true
 license.workspace = true
 description = "Spare Kit geometry kernel: the numbers layer. Grid coordinates, fixed-width integers, exact predicates, intervals, deterministic maths and the tolerance ladder."
@@ -17,7 +19,9 @@ num-bigint = "0.4"
 num-rational = "0.4.2"
 num-traits = "0.2"
 num-integer = "0.1"
-proptest = "1.12.0"
+# Without its default fork and timeout features, which pull in code that has no WebAssembly
+# (WASI) build, so the tests also run on wasm32-wasip1.
+proptest = { version = "1.12.0", default-features = false, features = ["std", "bit-set"] }
 
 [lints.rust]
 unsafe_code = "forbid"

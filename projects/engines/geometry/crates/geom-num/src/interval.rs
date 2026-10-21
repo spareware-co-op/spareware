@@ -19,16 +19,27 @@
 //!
 //! Guarantees:
 //!
-//! - **Inclusion**, as above, for `add`, `sub`, `mul`, `div`, `sqrt` and `neg`.
+//! - **Inclusion**, as above, for `add`, `sub`, `mul`, `div`, `square`, `sqrt` and `neg`; and for
+//!   `sqrt_nonneg`, over the non-negative reals of its operand.
 //! - **Finite, ordered, never NaN.** Both bounds are finite and `lo ≤ hi`. An operation whose widened
 //!   bound would leave the finite doubles (a rounded bound that reaches ±(2 − 2^−52) · 2^1023 or
 //!   overflows) returns [`NumError::NotFinite`] instead.
 //! - **Tight.** Each computed bound is less than two floating-point steps outside the exact bound of
 //!   the result: one rounding and one widening.
 //! - **Deterministic.** Only IEEE 754 basic operations, comparisons, `next_up`, `next_down` and the
-//!   square root of [`crate::math`]. Minimum and maximum are written as comparisons, not with
-//!   `f64::min` and `f64::max`, which may return either zero when given −0 and +0. A zero bound is
-//!   always stored as +0, so equal intervals have equal bits whatever their history.
+//!   square root of [`crate::math`], which Rust computes to IEEE 754 binary64 on every target the
+//!   kernel builds for (RFC 3514, whose own exception, 32-bit x86 without SSE2, is not one of them).
+//!   Minimum and maximum are written as comparisons, not with `f64::min` and `f64::max`, which may
+//!   return either zero when given −0 and +0. A zero bound is always stored as +0, so equal intervals
+//!   have equal bits whatever their history.
+//!
+//! Every rounded bound is widened, even one that happens to be exact: `3 − 3` gives
+//! [−2^−1074, 2^−1074], not [0, 0], so `certain_sign` of a computed zero is `None` and the decision
+//! falls to the exact predicates (chapter 6.2), which is where a zero is decided. The one cost is for
+//! quantities that are never negative by construction, such as a squared distance: widening can put
+//! their lower bound just below zero, where [`Interval::sqrt`] refuses. [`Interval::square`] knows
+//! that x² ≥ 0, and [`Interval::sqrt_nonneg`] takes the root of the non-negative part, so a distance
+//! near zero, even between coincident points, is still certified.
 //!
 //! Method: interval arithmetic in round-to-nearest with outward widening, as in Geogram's
 //! `intervalRN` (after Harris) and in CGAL's widening with `nextafter` when it cannot change the
@@ -221,6 +232,45 @@ impl Interval {
         widened(min2(min2(ll, lh), min2(hl, hh)), max2(max2(ll, lh), max2(hl, hh)))
     }
 
+    /// The square: every x² for x in the interval, which is never negative.
+    ///
+    /// Not the same as `self.mul(self)`, which treats its two operands as independent reals: for
+    /// [−1, 2], `mul` gives about [−2, 4], but the squares are [0, 4]. Over the interval, x² is
+    /// smallest at the point nearest zero and largest at the bound farthest from it, so:
+    ///
+    /// - When the interval holds zero, the lower bound is exactly 0, the square of zero, with no
+    ///   rounding and no widening.
+    /// - Otherwise the lower bound is the square of the bound nearer zero, rounded and moved down one
+    ///   step, but never below 0: when that square underflows to 0, moving down would give −2^−1074,
+    ///   and 0 is still a lower bound because every square is ≥ 0.
+    /// - The upper bound is the square of the bound farther from zero, rounded and moved up one step.
+    ///
+    /// Inclusion follows as for [`Interval::mul`] (faithful rounding, one step outward); the result is
+    /// tight in the same sense, and never has a negative lower bound.
+    ///
+    /// # Errors
+    ///
+    /// [`NumError::NotFinite`] if the widened upper bound is not finite.
+    pub const fn square(self) -> Result<Interval, NumError> {
+        let (near, far) = if self.lo >= 0.0 {
+            (self.lo, self.hi)
+        } else if self.hi <= 0.0 {
+            (-self.hi, -self.lo)
+        } else {
+            (0.0, max2(-self.lo, self.hi))
+        };
+        let hi = canon((far * far).next_up());
+        if !hi.is_finite() {
+            return Err(NumError::NotFinite);
+        }
+        let lo = if near == 0.0 {
+            0.0
+        } else {
+            canon((near * near).next_down())
+        };
+        Ok(Interval { lo: if lo < 0.0 { 0.0 } else { lo }, hi })
+    }
+
     /// The square root: `[√lo, √hi]`, each bound rounded and widened by one step, except that a zero
     /// bound stays zero (the square root of zero is exact).
     ///
@@ -238,5 +288,30 @@ impl Interval {
         let lo = if self.lo == 0.0 { 0.0 } else { canon(math::sqrt(self.lo).next_down()) };
         let hi = if self.hi == 0.0 { 0.0 } else { canon(math::sqrt(self.hi).next_up()) };
         Ok(Interval { lo, hi })
+    }
+
+    /// The square root of the interval's non-negative part: [`Interval::sqrt`] of
+    /// `[max(lo, 0), hi]`.
+    ///
+    /// For a quantity that is never negative by construction, such as a square, a sum of squares or
+    /// a squared distance, whose interval reaches below zero only through rounding and widening:
+    /// for coincident points, dx = x − x is [−2^−1074, 2^−1074] and dx · dx + dy · dy has a negative
+    /// lower bound, where [`Interval::sqrt`] refuses, although the exact distance is 0.
+    ///
+    /// The result contains the square root of every non-negative real in the interval. It says
+    /// nothing about negative reals, which have no real root: the caller vouches that the exact value
+    /// is not one of them, as the construction does. [`Interval::sqrt`] stays the strict form, which
+    /// refuses any interval with a negative value in it.
+    ///
+    /// # Errors
+    ///
+    /// [`NumError::NegativeSqrt`] if `hi < 0`: every real in the interval is negative, so the exact
+    /// value cannot be the non-negative quantity the caller vouched for.
+    pub fn sqrt_nonneg(self) -> Result<Interval, NumError> {
+        if self.hi < 0.0 {
+            return Err(NumError::NegativeSqrt);
+        }
+        let lo = if self.lo < 0.0 { 0.0 } else { self.lo };
+        Interval { lo, hi: self.hi }.sqrt()
     }
 }
