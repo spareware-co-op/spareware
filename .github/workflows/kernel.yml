@@ -1,0 +1,108 @@
+name: Kernel
+
+# Tests the geometry kernel's numbers layer (geom-num) on every target the kernel builds for.
+# The determinism test (tests/determinism.rs) hashes a fixed corpus of kernel results; its golden
+# hash must be the same on every target here, in release and in debug (chapter 21). A target that
+# disagrees is a bug, never a reason to change the golden value.
+
+on:
+  pull_request:
+    paths:
+      - "projects/engines/geometry/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/kernel.yml"
+  push:
+    branches: [main]
+    paths:
+      - "projects/engines/geometry/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/kernel.yml"
+
+permissions:
+  contents: read
+
+env:
+  # One pinned compiler for every job, so a golden hash never moves because the compiler did
+  # (chapter 28, the toolchain guard). Change it only in a pull request that reruns every golden.
+  RUST_TOOLCHAIN: "1.99.0"
+
+jobs:
+  test:
+    name: Test (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Every target reports, so a golden hash that differs on one target shows which.
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x86-64
+            os: ubuntu-latest
+          - name: Linux arm64
+            os: ubuntu-24.04-arm
+          - name: Windows x86-64
+            os: windows-latest
+          - name: macOS arm64
+            os: macos-latest
+          - name: macOS x86-64
+            # GitHub retired macos-13 in December 2025; macos-15-intel is its x86-64 successor.
+            os: macos-15-intel
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Test in release, with overflow checks on
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+        run: cargo test -p geom-num --release
+      - name: Show the golden hash
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+        run: cargo test -p geom-num --release --test determinism -- --nocapture
+      - name: Test in release for this machine's own CPU
+        env:
+          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+        run: cargo test -p geom-num --release --test determinism -- --nocapture
+      - name: Test in debug
+        run: cargo test -p geom-num
+
+  wasm:
+    name: Test (wasm32-wasip1 under wasmtime)
+    runs-on: ubuntu-latest
+    env:
+      WASMTIME_VERSION: v50.0.0
+      CARGO_TARGET_WASM32_WASIP1_RUNNER: wasmtime
+      RUSTFLAGS: -C overflow-checks=on
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: wasm32-wasip1
+      - uses: Swatinem/rust-cache@v2
+      - name: Install wasmtime ${{ env.WASMTIME_VERSION }}
+        run: |
+          curl -sSf https://wasmtime.dev/install.sh | bash -s -- --version "$WASMTIME_VERSION"
+          echo "$HOME/.wasmtime/bin" >> "$GITHUB_PATH"
+      - name: Test in release under wasmtime, with overflow checks on
+        run: cargo test -p geom-num --target wasm32-wasip1 --release
+      - name: Show the golden hash
+        run: cargo test -p geom-num --target wasm32-wasip1 --release --test determinism -- --nocapture
+
+  lint:
+    name: Format and lints
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Formatting
+        run: cargo fmt --check -p geom-num
+      - name: Clippy with the kernel lints
+        run: cargo clippy -p geom-num --all-targets -- -D warnings
