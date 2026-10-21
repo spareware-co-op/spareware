@@ -49,7 +49,9 @@ on:
 permissions:
   contents: read
 
-# A newer push to the same pull request cancels the runs it supersedes; pushes to main all run.
+# A newer push to the same pull request cancels the runs it supersedes. A newer push to main
+# does not cancel a run in progress, but at most one run waits behind it (GitHub's default
+# `queue: single`), so a run on main that is still waiting is cancelled by a newer push.
 concurrency:
   group: kernel-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -84,9 +86,12 @@ jobs:
           - name: macOS arm64
             os: macos-latest
           - name: macOS x86-64
-            # GitHub retired macos-13 in December 2025; macos-15-intel is its x86-64 successor and
-            # GitHub's last Intel macOS image. When GitHub retires it, this leg needs a
-            # self-hosted runner or an owner's decision to drop the target.
+            # GitHub retired macos-13 in December 2025 and named macos-15-intel as the standard
+            # x86-64 label to move to; it said x86-64 macOS ends when the macOS 15 image retires in
+            # fall 2027 (changelog, 2025-09-19). Its macOS 26 image has a standard x86-64 label too,
+            # macos-26-intel (changelog, 2026-02-26), and its runner reference, read 2026-10-22,
+            # lists both, so when Intel images end is not settled. When they end, this leg needs a
+            # self-hosted runner or an owner's decision to drop the target (chapter 32.4).
             os: macos-15-intel
     defaults:
       run:

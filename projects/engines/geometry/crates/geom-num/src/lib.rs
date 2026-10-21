@@ -4,6 +4,8 @@
 //! numbers: where coordinates live, how "which side is this on" is answered exactly, how curved
 //! computations carry proven bounds, where maths functions come from, and the tolerance ladder.
 //!
+//! Layer: 1, Numbers and the contract (chapter 27's proposed layer table).
+//!
 //! Map: chapter 6 of the kernel architecture
 //! (`projects/engines/geometry/architecture/06-numbers.md`), with the numeric parts of chapters 9
 //! (exactness), 21 (determinism) and 28 (testing).
