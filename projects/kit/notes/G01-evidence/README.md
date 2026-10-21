@@ -19,3 +19,4 @@ The three vetting reports checked one project in depth: one agent evaluated each
 | [11 Vetting: projects suggested to the owner](11-vetting-suggested-projects.md) | Truck, cadcore, csgrs, GeoRust geo, RGeometry and SolidCraft, each claim checked against source |
 | [12 Vetting: CADCraft](12-vetting-cadcraft.md) | Whether CADCraft's code or methods fit the kernel, its legal provenance, and what to learn from it |
 | [13 Vetting: NVIDIA SMLib and solidcore](13-vetting-smlib.md) | Whether NVIDIA's newly open NURBS B-rep kernel, or its Rust port, should be the foundation, and what to take from it |
+| [14 Spectral Labs' Quartz](14-spectral-labs-quartz.md) | A closed CAD product built for AI agents on a commercial kernel: what its public claims confirm, and the two failure cases that become our fixtures |
