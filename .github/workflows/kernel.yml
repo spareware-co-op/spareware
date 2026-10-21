@@ -1,7 +1,7 @@
 name: Kernel
 
-# Tests the geometry kernel's numbers layer (geom-num) on every target the kernel builds for.
-# The determinism test (tests/determinism.rs) hashes a fixed corpus of kernel results with
+# Tests every crate of the geometry kernel on every target the kernel builds for.
+# geom-num's determinism test (tests/determinism.rs) hashes a fixed corpus of kernel results with
 # SHA-256; its golden digest must be the same on every target here, in debug and in release,
 # release both with overflow checks on and as it ships (off), and natively with
 # -C target-cpu=native (chapter 21). A target that disagrees is a bug, never a reason to change
@@ -98,6 +98,10 @@ jobs:
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      # Every crate in the kernel's folder is checked here, so a new crate is covered the day it
+      # lands (chapter 27: one folder per crate, folder name = crate name).
+      - name: List the kernel's crates
+        run: echo "KERNEL_CRATES=$(for d in projects/engines/geometry/crates/*/; do printf -- '-p %s ' "$(basename "$d")"; done)" >> "$GITHUB_ENV"
       - name: Golden digest in release, with overflow checks on
         if: ${{ !cancelled() }}
         env:
@@ -121,10 +125,10 @@ jobs:
         if: ${{ !cancelled() }}
         env:
           RUSTFLAGS: -C overflow-checks=on
-        run: cargo test -p geom-num --release --locked --no-fail-fast
+        run: cargo test $KERNEL_CRATES --release --locked --no-fail-fast
       - name: Test suite in debug
         if: ${{ !cancelled() }}
-        run: cargo test -p geom-num --locked --no-fail-fast
+        run: cargo test $KERNEL_CRATES --locked --no-fail-fast
 
   wasm:
     name: Test (wasm32-wasip1 under ${{ matrix.runtime }})
@@ -150,6 +154,10 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           targets: wasm32-wasip1
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      # Every kernel crate in the kernel's folder; the development crates (chapter 27) need
+      # processes and files that WASI test runs do not have, and run natively above.
+      - name: List the kernel's crates
+        run: echo "KERNEL_CRATES=$(for d in projects/engines/geometry/crates/*/; do c="$(basename "$d")"; case "$c" in geom-test|geom-fuzz|geom-gen|geom-bench) ;; *) printf -- '-p %s ' "$c" ;; esac; done)" >> "$GITHUB_ENV"
       - name: Install wasmtime ${{ env.WASMTIME_VERSION }}
         if: matrix.runtime == 'wasmtime'
         uses: bytecodealliance/actions/wasmtime/setup@9152e710e9f7182e4c29ad218e4f335a7b203613 # v1.1.3
@@ -202,7 +210,7 @@ jobs:
         if: ${{ !cancelled() }}
         env:
           RUSTFLAGS: -C overflow-checks=on
-        run: cargo test -p geom-num --target wasm32-wasip1 --release --locked --no-fail-fast
+        run: cargo test $KERNEL_CRATES --target wasm32-wasip1 --release --locked --no-fail-fast
 
   lint:
     name: Format and lints
@@ -220,11 +228,15 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      # Every crate in the kernel's folder is checked here, so a new crate is covered the day it
+      # lands (chapter 27: one folder per crate, folder name = crate name).
+      - name: List the kernel's crates
+        run: echo "KERNEL_CRATES=$(for d in projects/engines/geometry/crates/*/; do printf -- '-p %s ' "$(basename "$d")"; done)" >> "$GITHUB_ENV"
       - name: Formatting
-        run: cargo fmt --check -p geom-num
+        run: cargo fmt --check $KERNEL_CRATES
       # The crate's [lints] table enables clippy's pedantic group and denies native arithmetic,
       # lossy casts, unwrap, expect, panic and unchecked indexing in kernel code; its clippy.toml
       # holds chapter 21's disallowed methods and types. -D warnings makes every one an error.
       - name: Clippy with the kernel lints
         if: ${{ !cancelled() }}
-        run: cargo clippy -p geom-num --all-targets --locked -- -D warnings
+        run: cargo clippy $KERNEL_CRATES --all-targets --locked -- -D warnings
