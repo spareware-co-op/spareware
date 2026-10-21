@@ -1,0 +1,2 @@
+{ "type": "Feature", "id": "feature-1", "properties": { "name": "Karaka Road", "cls": "arterial", "speed": 80, "lanesAB": 2, "lanesBA": 2, "status": "existing", "ref": "SH 22" },
+  "geometry": { "type": "LineString", "coordinates": [[174.9300, -37.0800], [174.9310, -37.0796], [174.9322, -37.0790]] } }
