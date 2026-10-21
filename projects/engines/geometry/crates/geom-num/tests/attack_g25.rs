@@ -1579,16 +1579,20 @@ fn adv_exact_sum_specials_are_order_free_across_merges() {
 // ---------------------------------------------------------------------------------------------
 // Determinism: a digest of the bits of many results, fixed here from a native release run. The
 // same test must pass in debug, in release, and on wasm32 (`cargo test --target wasm32-wasip1`).
+// The digest is SHA-256, as chapters 21 and 28.13 require of goldens; the copy in
+// `tests/common/sha256.rs` brings its own checks against FIPS 180-4, which run with this file.
 
-/// FNV-1a over 64-bit words.
-struct Digest(u64);
+#[path = "common/sha256.rs"]
+mod sha256;
 
-impl Digest {
+/// The bytes the digest is taken over: the bits of each result as 64-bit words, little-endian,
+/// in the order the test makes them, and a code for each error. The encoding is part of the
+/// golden: changing it changes `GOLDEN` and `FNV_BEFORE_SHA256`.
+struct Recorder(Vec<u8>);
+
+impl Recorder {
     fn word(&mut self, w: u64) {
-        for b in w.to_le_bytes() {
-            self.0 ^= u64::from(b);
-            self.0 = self.0.wrapping_mul(0x0000_0100_0000_01b3);
-        }
+        self.0.extend_from_slice(&w.to_le_bytes());
     }
     fn dd(&mut self, r: Result<DD, NumError>) {
         match r {
@@ -1605,34 +1609,55 @@ impl Digest {
     }
 }
 
-/// The golden digest (native x86-64 release run, 2026-10-22). It was `0x58b2_1f7b_3059_4beb` until
-/// `DD::mul` put its operands in a fixed order to be commutative bit for bit, which changes the
-/// last bit of some products; with that order undone the old value is reproduced exactly.
-const GOLDEN: u64 = 0x01fe_5679_df2b_0ede;
+/// 64-bit FNV-1a of `bytes`: the hash this test's digest used before SHA-256.
+fn fnv1a_64(bytes: &[u8]) -> u64 {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for &b in bytes {
+        h ^= u64::from(b);
+        h = h.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    h
+}
+
+/// The golden digest: SHA-256 of the recorded bytes, in hexadecimal (native x86-64 release run,
+/// 2026-10-22; the same 903,792 bytes, written out once, give this digest in three other
+/// implementations: GNU coreutils' `sha256sum`, Windows' `certutil` and Python's `hashlib`).
+/// Before this test followed chapter 28.13 and moved to SHA-256, its digest was 64-bit FNV-1a of
+/// the same bytes, `FNV_BEFORE_SHA256`.
+const GOLDEN: &str = "ce0e1901d8d11ff1b2d490e929b51fae2adfd7479c63126f8359ac917d0cb0fd";
+
+/// The digest before SHA-256 replaced it: 64-bit FNV-1a of the same recorded bytes (native x86-64
+/// release run, 2026-10-22). The test still checks it, so it shows that the recorded bytes are the
+/// ones this value was fixed on and that the move to SHA-256 changed only the hash function. A
+/// change to the results or to the corpus updates it together with `GOLDEN`, from the same run.
+/// It was `0x58b2_1f7b_3059_4beb` until `DD::mul` put its operands in a fixed order to be
+/// commutative bit for bit, which changes the last bit of some products; with that order undone
+/// the old value is reproduced exactly.
+const FNV_BEFORE_SHA256: u64 = 0x01fe_5679_df2b_0ede;
 
 #[test]
 fn adv_bits_are_the_same_on_every_target_and_profile() {
     let mut rng = Mix(0x676f_6c64_656e);
-    let mut h = Digest(0xcbf2_9ce4_8422_2325);
+    let mut rec = Recorder(Vec::new());
     for i in 0..6000 {
         let (lo, hi) = if i % 3 == 0 { (-1074, 1023) } else { (-80, 80) };
         let ex = rng.range(lo, hi);
         let ey = rng.range(lo, hi);
         let x = adv_dd(&mut rng, ex);
         let y = adv_dd(&mut rng, ey);
-        h.dd(x.add(y));
-        h.dd(x.sub(y));
-        h.dd(x.add_f64(y.hi()));
-        h.dd(x.mul(y));
-        h.dd(x.mul_f64(y.hi()));
-        h.dd(x.div(y));
-        h.dd(x.div_f64(y.hi()));
-        h.dd(x.abs().sqrt());
+        rec.dd(x.add(y));
+        rec.dd(x.sub(y));
+        rec.dd(x.add_f64(y.hi()));
+        rec.dd(x.mul(y));
+        rec.dd(x.mul_f64(y.hi()));
+        rec.dd(x.div(y));
+        rec.dd(x.div_f64(y.hi()));
+        rec.dd(x.abs().sqrt());
         let (p, e) = geom_num::dd::two_prod_fma(x.hi(), y.hi());
-        h.word(p.to_bits());
-        h.word(e.to_bits());
+        rec.word(p.to_bits());
+        rec.word(e.to_bits());
         let f = math::fma(x.hi(), y.hi(), x.lo()).map_or(1, |r| r.get().to_bits());
-        h.word(f);
+        rec.word(f);
     }
     for n in [3_usize, 700, 5000] {
         let terms: Vec<f64> = (0..n)
@@ -1640,15 +1665,27 @@ fn adv_bits_are_the_same_on_every_target_and_profile() {
             .collect();
         let mut s = ExactSum::new();
         s.add_slice(&terms);
-        h.word(s.round_ieee().to_bits());
+        rec.word(s.round_ieee().to_bits());
         let mut t = ExactSum::new();
         for &x in &terms {
             t.add(x * 0.75);
         }
-        h.word(t.round_ieee().to_bits());
+        rec.word(t.round_ieee().to_bits());
     }
-    println!("digest {:#018x}", h.0);
-    assert_eq!(h.0, GOLDEN, "bits differ from the native release run");
+    let bytes = rec.0;
+    let mut sha = sha256::Sha256::new();
+    sha.write(&bytes);
+    let digest = sha256::hex(sha.finish());
+    let fnv = fnv1a_64(&bytes);
+    println!(
+        "{} bytes: SHA-256 {digest}, FNV-1a {fnv:#018x}",
+        bytes.len()
+    );
+    assert_eq!(digest, GOLDEN, "bits differ from the native release run");
+    assert_eq!(
+        fnv, FNV_BEFORE_SHA256,
+        "the recorded bytes differ from those the FNV-1a digest was fixed on"
+    );
 }
 
 // ---------------------------------------------------------------------------------------------
