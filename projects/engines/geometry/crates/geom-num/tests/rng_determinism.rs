@@ -1,6 +1,6 @@
 //! The random generator's golden hashes: a fixed set of streams, drawn by every draw function, and
-//! a fixed set of stream ranges, cut every way, hashed, must give the same 64-bit values on every
-//! target.
+//! a fixed set of stream ranges, cut every way, hashed with SHA-256, must give the same digests on
+//! every target.
 //!
 //! A randomised kernel method (RANSAC fitting, sampling) must give the same bits on every machine
 //! (chapter 21; the randomised-method rule in `src/rng.rs`), so its random numbers must too. This
@@ -22,24 +22,35 @@
 //!   to `u64::MAX`) at eight indices, and each asked for streams from 0 to one past its last.
 //!
 //! Every result is written in a canonical little-endian byte encoding behind a one-byte tag naming
-//! the draw, with the stream's position after each draw, and hashed with FNV-1a 64 (written here and
-//! checked against its published test vectors). Doubles go in as their bits. An error is written as
-//! its own tag and fields, so a target that fails a draw another target makes shows.
+//! the draw, with the stream's position after each draw. The recorded bytes are hashed with
+//! SHA-256 (FIPS 180-4), the hash chapters 21 and 28.13 specify for golden hashes, from
+//! `common/sha256.rs`: a copy of `determinism.rs`'s, checked against the standard's test vectors
+//! and constants. Doubles go in as their bits. An error is written as its own tag and fields, so a
+//! target that fails a draw another target makes shows.
+//!
+//! **From FNV-1a to SHA-256.** These goldens were first 64-bit FNV-1a values; chapter 28.13 asks
+//! for SHA-256. Before the piece merged, the hash function changed and nothing else did: the
+//! corpus and its encoding are the same, byte for byte. The test
+//! `rng_goldens_moved_to_sha256_over_the_same_bytes` shows it on every target: it records each
+//! corpus once and hashes that one recording both ways, giving the former FNV-1a value and the
+//! SHA-256 golden. The FNV-1a values are kept beside the goldens, held to the same promise, as the
+//! record that the bytes did not move.
 //!
 //! **The same constants must hold on every target**: Linux, Windows and macOS on x86-64 and arm64,
 //! and wasm32-wasip1 under wasmtime, in debug and release, with overflow checks on or off, and
-//! built for the machine's own CPU. A changed hash is a bug: some target draws different numbers,
-//! so a randomised method would build different geometry on different machines. These constants
-//! are never edited. Under rule 4 of the randomised-method rule nothing in `rng` changes in place:
-//! a new generator, layout or draw definition goes beside the old one, and its corpus gets a golden
-//! of its own beside these, as the stream ranges' did. A bigger corpus is likewise a new test with
-//! its own golden. Never update a constant to make one target pass.
+//! built for the machine's own CPU. A changed digest is a bug: some target draws different numbers,
+//! so a randomised method would build different geometry on different machines. Apart from that
+//! one change of hash function, made before the piece merged, these constants are never edited.
+//! Under rule 4 of the randomised-method rule nothing in `rng` changes in place: a new generator,
+//! layout or draw definition goes beside the old one, and its corpus gets a golden of its own
+//! beside these, as the stream ranges' did. A bigger corpus is likewise a new test with its own
+//! golden. Never update a constant to make one target pass.
 //!
-//! The draw test prints a hash per section, so the CI logs of two targets show which part differs.
-//! Both tests check that their corpus still reaches every outcome it is built to reach (each error,
-//! a rejected word inside `below`, a draw that straddles blocks, a range too small), so a corpus
-//! that silently stopped testing the hard cases fails. This file is separate from
-//! `determinism.rs`, which holds the rest of the numbers layer to the same promise.
+//! The draw test prints a digest per section, so the CI logs of two targets show which part
+//! differs. Both golden tests check that their corpus still reaches every outcome it is built to
+//! reach (each error, a rejected word inside `below`, a draw that straddles blocks, a range too
+//! small), so a corpus that silently stopped testing the hard cases fails. This file is separate
+//! from `determinism.rs`, which holds the rest of the numbers layer to the same promise.
 
 // The crate denies native arithmetic and lossy casts in kernel code (Cargo.toml); tests may use
 // them to build their oracles, models and generators.
@@ -60,20 +71,30 @@
     clippy::indexing_slicing
 )]
 
+mod common;
+
 use std::collections::BTreeSet;
 
+use common::sha256::{Sha256, hex};
 use geom_num::Real;
 use geom_num::rng::{Philox, RngError, Seed, Stream, StreamId, StreamRange, philox4x32_10};
 
-/// The golden hash of the draw corpus.
+/// The golden digest of the draw corpus: SHA-256, in hexadecimal.
 ///
 /// The same constant must hold on every target: Linux, Windows and macOS on x86-64 and arm64, and
 /// wasm32-wasip1, in debug and release, with overflow checks on or off. A change is a bug; this
 /// constant is never edited (see the module documentation).
-const GOLDEN: u64 = 0x23f5_7fe3_69e7_16ab;
+const GOLDEN: &str = "706bf19f86a2ac5ba9be55866a1a5b151702dd6707b9b3b67a5c4c347cbabb7f";
 
-/// The golden hash of the stream-range corpus, held to the same promise as [`GOLDEN`].
-const GOLDEN_RANGES: u64 = 0xbc77_bb37_1b9e_60c5;
+/// The golden digest of the stream-range corpus, held to the same promise as [`GOLDEN`].
+const GOLDEN_RANGES: &str = "4d2c3a986913d7751a8f49eb3a7e5340eb973b591154c7acdaaf0ad47b6472f7";
+
+/// The draw corpus's golden before the move to SHA-256: the FNV-1a 64 hash of the same bytes.
+/// Kept, and held to the same promise as [`GOLDEN`], to show the move changed only the hash.
+const FNV_GOLDEN: u64 = 0x23f5_7fe3_69e7_16ab;
+
+/// The stream-range corpus's golden before the move to SHA-256, kept as [`FNV_GOLDEN`] is.
+const FNV_GOLDEN_RANGES: u64 = 0xbc77_bb37_1b9e_60c5;
 
 /// The draw corpus makes at least this many draws.
 const MIN_CALLS: u64 = 20_000;
@@ -152,6 +173,8 @@ const RANGES: [(u64, u64); 6] = [
 ];
 
 /// FNV-1a, 64 bits: for each byte, xor it into the state, then multiply by the prime modulo 2^64.
+/// The goldens' hash before SHA-256; now it only reproduces [`FNV_GOLDEN`] and
+/// [`FNV_GOLDEN_RANGES`].
 #[derive(Clone, Copy)]
 struct Fnv(u64);
 
@@ -200,21 +223,24 @@ enum Outcome {
     Straddled,
 }
 
-/// Writes results into the hash and keeps count.
+/// Writes results into the recording and keeps count.
 struct Recorder {
-    total: Fnv,
-    section: Fnv,
+    /// Every byte written, in order: the recording the hashes read.
+    recorded: Vec<u8>,
+    /// Where the current section starts in `recorded`.
+    section_start: usize,
     calls: u64,
     section_calls: u64,
     seen: BTreeSet<Outcome>,
-    report: Vec<(&'static str, u64, u64)>,
+    /// Each finished section: name, calls, bytes and SHA-256 digest.
+    report: Vec<(&'static str, u64, usize, [u8; 32])>,
 }
 
 impl Recorder {
     fn new() -> Recorder {
         Recorder {
-            total: Fnv::new(),
-            section: Fnv::new(),
+            recorded: Vec::new(),
+            section_start: 0,
             calls: 0,
             section_calls: 0,
             seen: BTreeSet::new(),
@@ -223,8 +249,7 @@ impl Recorder {
     }
 
     fn bytes(&mut self, bytes: &[u8]) {
-        self.total.write(bytes);
-        self.section.write(bytes);
+        self.recorded.extend_from_slice(bytes);
     }
 
     fn op(&mut self, op: Op) {
@@ -337,10 +362,26 @@ impl Recorder {
     }
 
     fn end_section(&mut self, name: &'static str) {
-        self.report.push((name, self.section_calls, self.section.0));
-        self.section = Fnv::new();
+        let section = &self.recorded[self.section_start..];
+        self.report
+            .push((name, self.section_calls, section.len(), sha256(section)));
+        self.section_start = self.recorded.len();
         self.section_calls = 0;
     }
+}
+
+/// The SHA-256 digest of `bytes`.
+fn sha256(bytes: &[u8]) -> [u8; 32] {
+    let mut h = Sha256::new();
+    h.write(bytes);
+    h.finish()
+}
+
+/// The FNV-1a 64 hash of `bytes`.
+fn fnv1a_64(bytes: &[u8]) -> u64 {
+    let mut h = Fnv::new();
+    h.write(bytes);
+    h.0
 }
 
 /// Every outcome the corpus is built to reach.
@@ -532,10 +573,8 @@ fn fnv1a_64_matches_its_published_test_vectors() {
     assert_eq!(hash("foobar"), 0x8594_4171_f739_67e8);
 }
 
-/// The golden hash. The same constant must hold on every target; a change is a bug (see the module
-/// documentation and `GOLDEN`).
-#[test]
-fn rng_golden_hash_is_the_same_on_every_target() {
+/// The draw corpus, recorded section by section.
+fn draw_corpus() -> Recorder {
     let mut r = Recorder::new();
     streams(&mut r);
     r.end_section("streams");
@@ -543,13 +582,36 @@ fn rng_golden_hash_is_the_same_on_every_target() {
     r.end_section("blocks");
     long_stream(&mut r);
     r.end_section("long");
+    r
+}
 
-    let hash = r.total.0;
-    println!("geom-num rng corpus: {} calls", r.calls);
-    for (name, calls, section_hash) in &r.report {
-        println!("  {name:<8} {calls:>6} calls  {section_hash:#018x}");
+/// The stream-range corpus, recorded.
+fn range_corpus() -> Recorder {
+    let mut r = Recorder::new();
+    ranges(&mut r);
+    r.end_section("ranges");
+    r
+}
+
+/// The golden hash. The same constant must hold on every target; a change is a bug (see the module
+/// documentation and `GOLDEN`).
+#[test]
+fn rng_golden_hash_is_the_same_on_every_target() {
+    let r = draw_corpus();
+
+    let hash = hex(sha256(&r.recorded));
+    println!(
+        "geom-num rng corpus: {} calls, {} bytes",
+        r.calls,
+        r.recorded.len()
+    );
+    for (name, calls, bytes, digest) in &r.report {
+        println!(
+            "  {name:<8} {calls:>6} calls {bytes:>7} bytes  {}",
+            hex(*digest)
+        );
     }
-    println!("geom-num rng golden hash: {hash:#018x}");
+    println!("geom-num rng golden hash: {hash}");
 
     let missing: Vec<_> = required()
         .into_iter()
@@ -559,10 +621,10 @@ fn rng_golden_hash_is_the_same_on_every_target() {
     assert!(r.calls >= MIN_CALLS, "only {} calls", r.calls);
     assert_eq!(
         hash, GOLDEN,
-        "geom-num's rng golden hash is {hash:#018x} here but {GOLDEN:#018x} is expected. Either \
-         this target draws different numbers (a bug: compare the section hashes above with another \
-         target's log) or a definition was edited in place, which rule 4 forbids: a new definition \
-         goes beside the old one with a golden of its own, and this constant never changes"
+        "geom-num's rng golden digest is {hash} here but {GOLDEN} is expected. Either this target \
+         draws different numbers (a bug: compare the section digests above with another target's \
+         log) or a definition was edited in place, which rule 4 forbids: a new definition goes \
+         beside the old one with a golden of its own, and this constant never changes"
     );
 }
 
@@ -570,13 +632,15 @@ fn rng_golden_hash_is_the_same_on_every_target() {
 /// The same constant must hold on every target; a change is a bug.
 #[test]
 fn rng_stream_range_golden_hash_is_the_same_on_every_target() {
-    let mut r = Recorder::new();
-    ranges(&mut r);
-    r.end_section("ranges");
+    let r = range_corpus();
 
-    let hash = r.total.0;
-    println!("geom-num rng stream-range corpus: {} calls", r.calls);
-    println!("geom-num rng stream-range golden hash: {hash:#018x}");
+    let hash = hex(sha256(&r.recorded));
+    println!(
+        "geom-num rng stream-range corpus: {} calls, {} bytes",
+        r.calls,
+        r.recorded.len()
+    );
+    println!("geom-num rng stream-range golden hash: {hash}");
 
     let missing: Vec<_> = required_ranges()
         .into_iter()
@@ -586,8 +650,41 @@ fn rng_stream_range_golden_hash_is_the_same_on_every_target() {
     assert!(r.calls >= MIN_RANGE_CALLS, "only {} calls", r.calls);
     assert_eq!(
         hash, GOLDEN_RANGES,
-        "geom-num's rng stream-range golden hash is {hash:#018x} here but {GOLDEN_RANGES:#018x} is \
-         expected. Either this target cuts ranges differently (a bug) or a definition was edited \
-         in place, which rule 4 forbids"
+        "geom-num's rng stream-range golden digest is {hash} here but {GOLDEN_RANGES} is expected. \
+         Either this target cuts ranges differently (a bug) or a definition was edited in place, \
+         which rule 4 forbids"
     );
+}
+
+/// The goldens moved from FNV-1a 64 to SHA-256 and the corpora did not move: each corpus is
+/// recorded once, and that one recording hashes to its former FNV-1a golden and to its SHA-256
+/// golden, on every target. So the move changed the hash function and nothing else.
+#[test]
+fn rng_goldens_moved_to_sha256_over_the_same_bytes() {
+    for (name, r, fnv_golden, golden) in [
+        ("draw", draw_corpus(), FNV_GOLDEN, GOLDEN),
+        (
+            "stream-range",
+            range_corpus(),
+            FNV_GOLDEN_RANGES,
+            GOLDEN_RANGES,
+        ),
+    ] {
+        let fnv = fnv1a_64(&r.recorded);
+        let digest = hex(sha256(&r.recorded));
+        println!(
+            "geom-num rng {name} corpus: {} bytes, FNV-1a 64 {fnv:#018x}, SHA-256 {digest}",
+            r.recorded.len()
+        );
+        assert_eq!(
+            fnv, fnv_golden,
+            "the {name} corpus's FNV-1a 64 hash is {fnv:#018x} here but {fnv_golden:#018x} before \
+             the move to SHA-256: these are not the bytes the former golden hashed"
+        );
+        assert_eq!(
+            digest, golden,
+            "the {name} corpus's bytes are the ones its FNV-1a golden hashed, but their SHA-256 is \
+             {digest}, not the golden {golden}"
+        );
+    }
 }
