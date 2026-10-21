@@ -7,6 +7,11 @@
 //! changed input. This first piece (G11) has one target, [`predicates`]: `geom-num`'s exact
 //! predicates never panic, and swapping two points flips their sign, on arbitrary grid points.
 //!
+//! Layer: Development, in chapter 27's proposed crate table: a development crate, outside the
+//! thirteen layers of the crates that ship. It never ships, and its dependencies are as needed
+//! (chapter 27) within the licence allow-list of 29.2. No kernel crate may have a normal
+//! dependency on it, only a development dependency (chapter 27; 28.1).
+//!
 //! How a harness is built (28.5, "Tooling"): each harness is a plain function from bytes to
 //! `Result<(), Finding>`, here in the library, so one function serves every engine:
 //!
@@ -54,11 +59,21 @@
 //! pull-request fuzzing, and calls these same functions. Targets for operations, readers and
 //! operation sequences arrive with them.
 //!
-//! Rules this crate keeps: development only (no kernel crate depends on it; `geom-test`'s
-//! dependency rule checks that), so it may use `std` (chapter 27); `#![forbid(unsafe_code)]`; no
-//! `unwrap`, `expect`, `panic!` or indexing outside tests, so a harness reports a law it found
-//! broken as a [`Finding`] and only the kernel code under test can panic; no randomness of its own
-//! (seeds come from `geom-test` and are printed; bolero's come from bolero, as above).
+//! Invariants this crate keeps:
+//!
+//! - **Development only.** No kernel crate depends on it (`geom-test`'s dependency rule checks
+//!   that), so it may use `std` (chapter 27).
+//! - **The kernel's lints.** `#![forbid(unsafe_code)]`, and no `unwrap`, `expect`, `panic!` or
+//!   indexing outside tests, so a harness reports a law it found broken as a [`Finding`] and only
+//!   the kernel code under test can panic.
+//! - **No randomness of its own.** Seeds come from `geom-test` and are printed; bolero's come from
+//!   bolero, as above.
+//!
+//! Sections: chapter 27's `geom-fuzz` row, and 28.5 of the kernel architecture
+//! (`projects/engines/geometry/architecture/`), in part: its tooling (one plain harness function,
+//! bolero's `check!` and the cargo-bolero command) and one target, on the swap law of 28.6; the
+//! seeded leg 28.2 asks for; the replay of every stored crash, 28.16; and the short fuzz and fixed
+//! seeds of 28.17.
 //!
 //! Dependencies, every one permissive (29.1):
 //!

@@ -6,6 +6,11 @@
 //! tools: the completeness gate, the golden store, the minimiser and the triage tool. Crates used as
 //! outside oracles may be development dependencies of this crate only (28.10).
 //!
+//! Layer: Development, in chapter 27's proposed crate table: a development crate, outside the
+//! thirteen layers of the crates that ship. It never ships, and its dependencies are as needed
+//! (chapter 27) within the licence allow-list of 29.2. No kernel crate may have a normal
+//! dependency on it, only a development dependency (chapter 27; 28.1).
+//!
 //! This first piece (G11) holds the parts every later test leans on:
 //!
 //! - [`seed`]: the seed discipline. Every seeded test prints `seed: <hex>` before it draws anything,
@@ -27,7 +32,7 @@
 //! generator whose output is committed) and `geom-bench` (benchmarks). `geom-bench` is built by
 //! piece G06 in its own worktree, so this piece leaves the benchmark to it.
 //!
-//! Rules this crate keeps:
+//! Invariants this crate keeps:
 //!
 //! - **Development only.** No kernel crate depends on it except as a development dependency; the
 //!   [`deps`] check enforces that. It may use `std` (chapter 27 exempts the development crates from
@@ -42,6 +47,13 @@
 //!   [`grid`] and [`prop`] check it, and CI runs them natively and under wasm32-wasip1.
 //! - **The kernel's lints.** `#![forbid(unsafe_code)]`, and no `unwrap`, `expect`, `panic!` or
 //!   indexing outside tests. A helper fails with a typed error and the test decides.
+//!
+//! Sections: 27 and 28 of the kernel architecture (`projects/engines/geometry/architecture/`), in
+//! part: chapter 27's `geom-test` row and its rule that a development crate is never a kernel
+//! crate's normal dependency; 28.1, "Where the code lives", for that rule's check; the property
+//! tests of 28.2, run from a fixed seed; the generators aimed at the hard cases of 28.5; the seed
+//! discipline of 28.17; and, for the development crates' own dependencies, the permissive-licence
+//! promise of 28.1's table (principle 11; 29.1).
 //!
 //! Dependencies, every one permissive (29.1):
 //!

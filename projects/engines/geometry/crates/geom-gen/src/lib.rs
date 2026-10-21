@@ -10,6 +10,12 @@
 //! depends on this crate (`geom-test`'s dependency rule checks that), so whatever a generator needs,
 //! a multiprecision library or a proof tool, never enters a kernel build.
 //!
+//! Layer: Development, in chapter 27's proposed crate table: a development crate, outside the
+//! thirteen layers of the crates that ship. It never ships, and its dependencies are as needed
+//! (chapter 27) within the licence allow-list of 29.2. No kernel crate depends on it, by chapter
+//! 27's rule for `geom-gen` above, which is stricter than the development layer's rule that no
+//! kernel crate has a normal dependency on a development crate (chapter 27; 28.1).
+//!
 //! How it works:
 //!
 //! - [`generator::Generator`]: one generator: a name, the one output file it owns (a path relative
@@ -31,7 +37,7 @@
 //! and the tolerance ladder, from `geom-num`'s own constants, written to
 //! `projects/engines/geometry/crates/geom-gen/generated/grid-steps.md`.
 //!
-//! Rules this crate keeps:
+//! Invariants this crate keeps:
 //!
 //! - **Pure generators.** A generator reads nothing (no files, no environment, no clock) and gives
 //!   the same bytes on every target, so `check` means the same everywhere; `tests/purity.rs` checks
@@ -45,6 +51,11 @@
 //!   ending conversion for them, so a Windows checkout compares the committed bytes.
 //! - **Development only**, so it may use `std` (chapter 27); `#![forbid(unsafe_code)]`; no
 //!   `unwrap`, `expect`, `panic!` or indexing outside tests.
+//!
+//! Sections: chapter 27's proposed rule "Generated code and data have one home: `geom-gen`" and its
+//! `geom-gen` row, in the kernel architecture (`projects/engines/geometry/architecture/`), with the
+//! seed discipline of 28.5 and 28.17 for its generators; and, for the first generator, the grid
+//! steps of 6.1 and the tolerance ladder of 6.5, tabulated from `geom-num`'s constants.
 //!
 //! Dependencies: `geom-num` (MPL-2.0, ours), whose constants the generators tabulate, and
 //! `geom-test` (MPL-2.0, ours), for the seed type and `SplitMix64`. Their own dependencies are
