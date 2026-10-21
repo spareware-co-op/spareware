@@ -17,6 +17,8 @@
 //! Sections: 7, 8.4, 10.2 and 30.5, in the kernel architecture
 //! (`projects/engines/geometry/architecture/`).
 //!
+//! Family: Make and Transform.
+//!
 //! Chapter 30 places primitives here because no crate in chapter 27 owns them, and they cannot live
 //! in `geom-topo`: every operation runs the checker before it returns, and `geom-check` sits above
 //! `geom-topo`.

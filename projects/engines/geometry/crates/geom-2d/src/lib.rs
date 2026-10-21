@@ -20,6 +20,8 @@
 //! Sections: 14 and 17.2; open questions OQ-12.1 and OQ-14.9, in the kernel architecture
 //! (`projects/engines/geometry/architecture/`).
 //!
+//! Family: 2D.
+//!
 //! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //! Direct dependencies still to add when geom-run merges (G04): geom-run.

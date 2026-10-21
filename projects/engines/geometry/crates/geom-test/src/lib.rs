@@ -11,7 +11,7 @@
 //! (chapter 27) within the licence allow-list of 29.2. No kernel crate may have a normal
 //! dependency on it, only a development dependency (chapter 27; 28.1).
 //!
-//! This first piece (G11) holds the parts every later test leans on:
+//! The first piece (G11) holds the parts every later test leans on, and G15 adds the map:
 //!
 //! - [`seed`]: the seed discipline. Every seeded test prints `seed: <hex>` before it draws anything,
 //!   and the environment variable `SPAREKIT_SEED` replays any printed seed exactly (28.5, 28.17).
@@ -26,6 +26,13 @@
 //!   also checks that CI reruns the rule whenever a manifest it reads changes.
 //! - [`licence`]: whether a licence expression is permissive, and the licence records each
 //!   development crate keeps in its header, which `tests/licences.rs` checks against `cargo tree`.
+//! - [`map`]: the map for people and AI (26.3): `projects/engines/geometry/MAP.json`, generated
+//!   from every crate and module header under `projects/engines/geometry/crates`, and the
+//!   facade's under `projects/engines/crates`, by the grammar in
+//!   `projects/engines/geometry/HEADERS.md`, with its `Source:` and `Consulted:` records and their
+//!   licences judged by chapter 29.2's classes (29.20), every published dependency, and every
+//!   kernel crate's error kinds. The binary `map` writes it (`cargo run -p geom-test --bin map --
+//!   write`) and checks it in CI (`-- check`): every header complete, the map current.
 //!
 //! Fixtures, reference implementations, oracle clients and the CI tools arrive with the pieces that
 //! need them. The sister development crates are `geom-fuzz` (fuzz harnesses), `geom-gen` (every
@@ -48,12 +55,15 @@
 //! - **The kernel's lints.** `#![forbid(unsafe_code)]`, and no `unwrap`, `expect`, `panic!` or
 //!   indexing outside tests. A helper fails with a typed error and the test decides.
 //!
-//! Sections: 27 and 28 of the kernel architecture (`projects/engines/geometry/architecture/`), in
-//! part: chapter 27's `geom-test` row and its rule that a development crate is never a kernel
-//! crate's normal dependency; 28.1, "Where the code lives", for that rule's check; the property
-//! tests of 28.2, run from a fixed seed; the generators aimed at the hard cases of 28.5; the seed
-//! discipline of 28.17; and, for the development crates' own dependencies, the permissive-licence
-//! promise of 28.1's table (principle 11; 29.1).
+//! Sections: 26, 27, 28 and 29 of the kernel architecture
+//! (`projects/engines/geometry/architecture/`), in part: the map for people and AI of 26.3;
+//! chapter 27's `geom-test` row and its rule that a development crate is never a kernel crate's
+//! normal dependency; 28.1, "Where the code lives", for that rule's check; the property tests of
+//! 28.2, run from a fixed seed; the generators aimed at the hard cases of 28.5; the outside oracles
+//! of 28.10, development dependencies of this crate only; the seed discipline of 28.17; for the
+//! development crates' own dependencies, the permissive-licence promise of 28.1's table (the
+//! architecture's eleventh principle; 29.1); and, for the map, the `Source:` and `Consulted:`
+//! records of 29.20, their licences judged by the classes of 29.2.
 //!
 //! Dependencies, every one permissive (29.1):
 //!
@@ -79,6 +89,7 @@
 pub mod deps;
 pub mod grid;
 pub mod licence;
+pub mod map;
 pub mod prop;
 pub mod rng;
 pub mod seed;

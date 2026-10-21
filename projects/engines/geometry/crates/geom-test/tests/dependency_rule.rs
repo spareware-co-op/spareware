@@ -199,34 +199,39 @@ fn workspace_keeps_the_dependency_rule() {
 /// A mutation of the real metadata, and the one violation it must produce.
 type Case = (&'static str, fn(&mut Value), Violation);
 
+/// Asserts that `found` is the seeded violation `want`, and, for every other kernel crate that
+/// reaches the seeded crate, that crate's violation through it: the scaffold crates depend on
+/// `geom-num` (G09), so a development crate seeded under `geom-num` is reached from each of them
+/// too, and each such chain must end with the seeded crate and its chain.
+fn assert_seeded(found: &[Violation], want: &Violation, what: &str) {
+    assert!(
+        found.contains(want),
+        "case: {what}: {want} not in {found:#?}"
+    );
+    for v in found.iter().filter(|v| *v != want) {
+        let tail = v.chain.len().checked_sub(want.chain.len() + 1);
+        let through = tail.is_some_and(|t| {
+            v.chain[t].to == want.kernel_crate && v.chain[t + 1..] == want.chain[..]
+        });
+        assert!(
+            through,
+            "case: {what}: {v} does not reach the seeded {} and its chain",
+            want.kernel_crate
+        );
+    }
+    let mut crates: Vec<&str> = found.iter().map(|v| v.kernel_crate.as_str()).collect();
+    crates.dedup();
+    assert_eq!(
+        crates.len(),
+        found.len(),
+        "case: {what}: one violation per kernel crate"
+    );
+}
+
 fn violation(kernel: &str, chain: Vec<Step>) -> Violation {
     Violation {
         kernel_crate: kernel.into(),
         chain,
-    }
-}
-
-/// Asserts a seed was caught: `violations` holds `want`, and every other violation is the same one
-/// seen from a kernel crate that reaches `want`'s crate, its chain ending in a step to that crate
-/// and then `want`'s chain. Since G09's scaffold put every kernel crate on `geom-num`, a seed on
-/// `geom-num` is reached from each of them, which the check rightly reports one by one (merged
-/// onto this branch before the merge gate, G12, which fixed these assertions).
-fn assert_caught(what: &str, violations: &[Violation], want: &Violation) {
-    assert!(
-        violations.contains(want),
-        "case: {what}: {want} not among {violations:#?}"
-    );
-    let tail = want.chain.len();
-    for v in violations.iter().filter(|v| *v != want) {
-        let n = v.chain.len();
-        let through = n > tail
-            && v.chain[n - tail..] == want.chain[..]
-            && v.chain[n - tail - 1].to == want.kernel_crate;
-        assert!(
-            through,
-            "case: {what}: {v} does not reach the seed through {}",
-            want.kernel_crate
-        );
     }
 }
 
@@ -387,7 +392,7 @@ fn seeded_violations_are_caught() {
         let mut m = base.clone();
         mutate(&mut m);
         let report = check(&m).unwrap();
-        assert_caught(what, &report.violations, &want);
+        assert_seeded(&report.violations, &want, what);
         println!("caught ({what}): {want}");
     }
 
@@ -447,19 +452,17 @@ fn development_edges_are_allowed() {
     resolve_edge(&mut m, &middle, &test, &[Value::Null]);
     assert_eq!(check(&m).unwrap().violations, Vec::<Violation>::new());
 
-    // The fixture's chain is live: the same edge as a normal one is caught.
+    // The fixture's chain is live: the same edge as a normal one is caught, in geom-num and in
+    // every kernel crate that reaches it.
     resolve_edge(&mut m, &num, &middle, &[Value::Null]);
-    assert_caught(
-        "the dev edge made normal",
-        &check(&m).unwrap().violations,
-        &violation(
-            "geom-num",
-            vec![
-                step("fixture-middle", Kind::Normal),
-                step("geom-test", Kind::Normal),
-            ],
-        ),
+    let want = violation(
+        "geom-num",
+        vec![
+            step("fixture-middle", Kind::Normal),
+            step("geom-test", Kind::Normal),
+        ],
     );
+    assert_seeded(&check(&m).unwrap().violations, &want, "a live dev chain");
 
     // Development crates may depend on each other and on kernel crates.
     let mut m = base.clone();

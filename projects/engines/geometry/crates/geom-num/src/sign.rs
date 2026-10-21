@@ -1,7 +1,13 @@
 //! The result of every exact predicate: negative, zero or positive.
 //!
-//! Predicates return a sign, never a number, so no caller can compare a rounded value against a
-//! threshold by accident. `Zero` means "exactly on it", decided exactly.
+//! Guarantees: predicates return a sign, never a number, so no caller can compare a rounded value
+//! against a threshold by accident. `Zero` means "exactly on it", decided exactly.
+//!
+//! Method: the sign of an exactly computed quantity, as chapter 6.2's exact predicates return it
+//! (`projects/engines/geometry/architecture/06-numbers.md`): a comparison with zero, and the sign
+//! rules of negation and multiplication of the reals.
+//!
+//! Cost: constant: every function is one comparison or one `match`.
 
 /// The sign of an exactly computed quantity.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]

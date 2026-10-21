@@ -40,6 +40,11 @@
 //!   [`math`], which uses the pure-Rust `libm` crate; where `libm` uses a processor instruction
 //!   instead (the square root, and the fused multiply-add where the processor has one), it is one
 //!   IEEE 754 defines exactly, so results are identical on every target.
+//!
+//! Licences of the published crates this crate depends on (DEPEND, chapter 29.1), as each one's
+//! manifest at the version in `Cargo.lock` states it:
+//!
+//! - MIT: `libm`.
 #![cfg_attr(not(test), no_std)]
 
 pub mod eft;

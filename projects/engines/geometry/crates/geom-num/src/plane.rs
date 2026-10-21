@@ -80,6 +80,12 @@
 //! and the total path cannot overflow. Each could be reached only if the checked arithmetic
 //! itself, Rust's on `i128` or [`Wide`]'s (tested against big integers in its own module),
 //! reported an overflow for a result that fits; then the caller gets the error.
+//!
+//! Cost: constant time and no allocation. Every function is a fixed number of products and sums in
+//! `i128` and fixed-width integers: [`Plane::side_of_tpi`] is four products in [`I384`] after the
+//! point's homogeneous coordinates, repeated in [`I512`] only on the total path; [`Tpi::to_grid`]
+//! is one restoring long division per coordinate, 40 steps when the point lies within the frame's
+//! range and at most 127 otherwise, each step a few operations on six or eight 64-bit limbs.
 
 use core::cmp::Ordering;
 
