@@ -27,19 +27,32 @@
 //!   on overflow checks being on: a result that does not fit is `None` or an error, never a
 //!   silently wrapped value. Only the compiler's evaluation of constants uses native operators,
 //!   where an overflow stops the build. Counts of steps never saturate: a saturated bound would
-//!   understate the truth.
+//!   understate the truth. The one other kind of step is in the CORE-MATH ports of [`math`]: a
+//!   `wrapping_*` method where the C source computes modulo 2^64 or 2^128 on purpose, each with a
+//!   comment saying why the C does it (a two's complement negation, a sum of which only the low
+//!   bits are read, or a limb sum whose carry is kept by comparison as [`wide`] keeps its own),
+//!   so a wrap there is the computation the proof describes, never a lost value. Every other
+//!   integer step in the ports is checked too: its `None`, which each step proves cannot come,
+//!   ends the computation with the canonical NaN, which the public functions report as
+//!   `NotFinite`.
 //! - No floating-point value produced here from finite inputs is NaN. [`math`] returns a
 //!   [`real::Real`] or an error; an [`interval::Interval`] has finite bounds or is refused as
-//!   `NotFinite`; [`eft`] reports a pair that is not exact with an infinite second part.
+//!   `NotFinite`; [`eft`] reports a pair that is not exact with an infinite second part. Inside
+//!   [`math`], where the ports compute on raw doubles, any NaN is the canonical
+//!   `0x7ff8_0000_0000_0000`, and no public function returns one.
 //! - Every interval operation encloses the exact result of its operation on any reals in its
 //!   operands, and an enclosure that needs a maths function without a proven error is refused
 //!   ([`NumError::UnprovenMaths`]).
 //! - A bound carries its grid step, and bounds add exactly in the finer step
 //!   ([`exactness::Exactness`]).
 //! - No `unsafe`, no panics outside tests, no platform maths: every maths function comes from
-//!   [`math`], which uses the pure-Rust `libm` crate; where `libm` uses a processor instruction
-//!   instead (the square root, and the fused multiply-add where the processor has one), it is one
-//!   IEEE 754 defines exactly, so results are identical on every target.
+//!   [`math`]. `sinpi`, `cospi`, `exp`, `ln` and `atan2` are correctly rounded CORE-MATH ports
+//!   with proven error bounds, so their bits are fixed by their specification. Everything else
+//!   comes from the pure-Rust `libm` crate, the same code on every target; where `libm` uses a
+//!   processor instruction instead (the square root, and the fused multiply-add where the
+//!   processor has one), it is one IEEE 754 defines exactly, so results are identical on every
+//!   target. The `libm` functions without a proven bound are kept apart in [`math::unproven`],
+//!   and nothing in this crate uses them.
 #![cfg_attr(not(test), no_std)]
 
 pub mod eft;

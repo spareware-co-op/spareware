@@ -39,8 +39,8 @@ disallowed-methods = [
     { path = "f64::log2", reason = "platform maths; use geom_num::math (chapter 21)" },
     { path = "f64::log10", reason = "platform maths; use geom_num::math (chapter 21)" },
     { path = "f64::ln_1p", reason = "platform maths; use geom_num::math (chapter 21)" },
-    { path = "f64::powf", reason = "platform maths; use geom_num::math::pow (chapter 21)" },
-    { path = "f64::powi", reason = "platform maths; use geom_num::math::powi (chapter 21)" },
+    { path = "f64::powf", reason = "platform maths; use geom_num::math::unproven::pow (chapter 21)" },
+    { path = "f64::powi", reason = "platform maths; use geom_num::math::unproven::powi (chapter 21)" },
     { path = "f64::cbrt", reason = "platform maths; use geom_num::math (chapter 21)" },
     { path = "f64::hypot", reason = "platform maths; use geom_num::math (chapter 21)" },
 ]

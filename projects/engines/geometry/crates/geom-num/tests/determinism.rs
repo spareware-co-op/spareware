@@ -3,7 +3,7 @@
 //!
 //! The kernel promises the same bits on every machine (chapter 21): one model, one geometry, on
 //! Windows, Linux, macOS and in the browser. This test holds the numbers layer to that promise. It
-//! makes a fixed corpus of 84,920 calls (the test prints the count per section, and fails, naming
+//! makes a fixed corpus of 87,618 calls (the test prints the count per section, and fails, naming
 //! the section, if one shrinks):
 //!
 //! - every exact predicate (`orient2d`, `orient3d`, `incircle`, `insphere`), on random points at
@@ -19,9 +19,12 @@
 //! - wide-integer arithmetic in `I256`, `I320`, `I384` and `I512`, at the edges of each range;
 //! - the error-free transformations, on doubles of every exponent, with subnormals, the overflow
 //!   edge, the special values and fixed pairs for their rare routes; and every interval operation,
-//!   the length `norm` and the refusals of the functions whose error is not proven;
-//! - every function in `geom_num::math`, over its domain, and outside it, at its poles, past its
-//!   overflow and with arguments that are not finite, each of which must be reported;
+//!   the length `norm` and the refusals of the enclosures that are not certified (`sin`, `cos`
+//!   and `atan2`);
+//! - every function in `geom_num::math` and `geom_num::math::unproven`, over its domain, and
+//!   outside it, at its poles, past its overflow and with arguments that are not finite, each of
+//!   which must be reported; and the interval versions of the proven ones (`Interval::sinpi`,
+//!   `cospi`, `exp` and `ln`), inside and outside their domains;
 //! - the scalars and small types: `Real` and its total order (both orders of ±0 included),
 //!   `Coord` and `P3` at and beyond the frame's edges, `Sign`, `GridStep` and its units, `Steps`,
 //!   `Exactness`, the ladder's constants and `Wide`'s sign tests.
@@ -85,6 +88,7 @@ use geom_num::grid::{
     QUARTER_NM_PER_NM, coarsen, refine,
 };
 use geom_num::interval::Interval;
+use geom_num::math::unproven;
 use geom_num::plane::{Plane, Tpi};
 use geom_num::predicate::{incircle, insphere, orient2d, orient3d};
 use geom_num::{Coord, Exactness, GridStep, NumError, P2, P3, Real, Rounded, Sign, Steps, Wide};
@@ -97,7 +101,23 @@ use geom_num::{ladder, math};
 /// same model would give different geometry on different machines) or a deliberate kernel edition
 /// change, made in a pull request that updates this constant, says which, and is approved by a
 /// kernel owner. See the module documentation.
-const GOLDEN: &str = "c9c61875e6da8cff4ffa79f147d8f32187fa2929564100ce834849bb43a211f8";
+///
+/// Changes, each deliberate:
+///
+/// - From `c9c61875e6da8cff4ffa79f147d8f32187fa2929564100ce834849bb43a211f8` (piece G02) when the
+///   correctly rounded maths of piece G05 (issue #174) merged. The sections `predicates`,
+///   `planes`, `tpi`, `grid`, `wide`, `eft` and `scalars` give G02's digests unchanged. `interval`
+///   no longer records the refusals of `Interval::exp` and `Interval::ln` (indices 3 and 4), which
+///   are certified now and recorded in `math`; with those two records put back it gives G02's
+///   digest, so nothing else in it moved. `math`: of G02's 7,677 records, 92 moved, each by one
+///   unit in the last place to the correctly rounded value, where `libm` (and, for `sinpi` and
+///   `cospi`, G02's reduction before `libm`) was one unit off: `exp` 9, `ln` 3, `sinpi` 52,
+///   `cospi` 19 and `atan2` 9 (for example `exp(1)`, from 2.7182818284590455 to 2.718281828459045,
+///   the double nearest e). No error changed, and no other function's result. 2,700 records were
+///   added, from a generator of their own (`SEED_G05`): the `libm` twins of the five, now in
+///   `math::unproven` (indices 23 to 27), and the interval versions `Interval::sinpi`, `cospi`,
+///   `exp` and `ln` (28 to 31).
+const GOLDEN: &str = "fb19edfc7c58ca5e93a8921dfbdd2ab2dfacc2d180fbe6dec540efbede954564";
 
 /// The calls each section makes, in order: the corpus is fixed, so these are its exact counts,
 /// and a section that loses calls fails by name.
@@ -108,8 +128,8 @@ const SECTION_CALLS: [(&str, u64); 9] = [
     ("grid", 4_000),
     ("wide", 15_616),
     ("eft", 6_044),
-    ("interval", 19_151),
-    ("math", 7_677),
+    ("interval", 19_149),
+    ("math", 10_377),
     ("scalars", 4_209),
 ];
 
@@ -207,6 +227,12 @@ const SEED: u64 = 0x5350_4152_454b_4954;
 
 /// The bits any NaN would be written as: the quiet NaN with a clear sign and an empty payload.
 const CANONICAL_NAN: u64 = 0x7ff8_0000_0000_0000;
+
+/// The seed of the maths corpus's second generator, for the calls added with the correctly
+/// rounded functions (their `libm` twins and the interval versions): `G05_MATH` in ASCII. A
+/// generator of their own, so that the calls before them and the sections after them see the
+/// same inputs as before they were added.
+const SEED_G05: u64 = 0x4730_355f_4d41_5448;
 
 /// The sign bit of a double.
 const SIGN_BIT: u64 = 1 << 63;
@@ -449,7 +475,8 @@ enum Op {
 ///
 /// - a call: its `Op` discriminant as one byte, then its result (a maths call also writes the
 ///   function's index, one byte, before its result, and so does each refusal of an unproven
-///   interval function);
+///   interval function; an interval version of a maths function is a maths call whose result is
+///   an interval);
 /// - a predicate's or a plane's `Result`: only its `Ok` value, unwrapped, since no grid input can
 ///   make one an error (a `BudgetExceeded` here would stop the test, louder than a changed hash);
 /// - `Real`: its value as an `f64`;
@@ -1577,16 +1604,12 @@ fn intervals(g: &mut Gen, r: &mut Recorder) {
     norm_call(r, &[]);
     norm_call(r, &[d, d, d]);
     norm_call(r, &[Interval::point(f64::MAX).unwrap()]);
-    // The functions whose error is not proven yet refuse every interval: one call each, the
-    // function's index before the result.
+    // The enclosures that are not certified refuse every interval: one call each, the function's
+    // index before the result. Indices 3 and 4 were `exp` and `ln`, refused until piece G05 made
+    // them certified; they are recorded with the maths functions now (`maths`), and their indices
+    // here are not reused.
     let unit = Interval::new(-1.0, 1.0).unwrap();
-    let refusals = [
-        unit.sin(),
-        unit.cos(),
-        unit.atan2(unit),
-        unit.exp(),
-        unit.ln(),
-    ];
+    let refusals = [unit.sin(), unit.cos(), unit.atan2(unit)];
     for (index, refused) in (0u8..).zip(refusals) {
         r.call(Op::IntervalUnproven);
         r.put_u8(index);
@@ -1726,6 +1749,35 @@ fn math_call(r: &mut Recorder, index: u8, v: Result<Real, NumError>) {
     r.result(v, Recorder::real);
 }
 
+/// Records one call of an interval version of a maths function: the function's index, then its
+/// result.
+fn interval_math_call(r: &mut Recorder, index: u8, v: Result<Interval, NumError>) {
+    r.call(Op::Math);
+    r.put_u8(index);
+    r.result(v, Recorder::interval);
+}
+
+/// The largest finite double's bits: `math_interval` keeps a bound's magnitude at or below it.
+const MAX_BITS: u64 = 0x7fef_ffff_ffff_ffff;
+
+/// An argument for an interval version of a maths function, from inputs of `domain`: a point, two
+/// inputs in order, or an input and the double up to 2^32 steps farther from zero (narrow
+/// intervals at and next to the peaks of `sinpi` and `cospi` and the edges of the domains).
+fn math_interval(g: &mut Gen, domain: Domain) -> Interval {
+    let x = math_input(g, domain);
+    let (lo, hi) = match g.below(3) {
+        0 => (x, x),
+        1 => sorted(x, math_input(g, domain)),
+        _ => {
+            let bits = x.to_bits();
+            let far = (bits & !SIGN_BIT) + g.below(1 << 32);
+            let magnitude = if far > MAX_BITS { MAX_BITS } else { far };
+            sorted(x, f64::from_bits((bits & SIGN_BIT) | magnitude))
+        }
+    };
+    Interval::new(lo, hi).unwrap()
+}
+
 /// A one-argument maths function and the inputs it is sampled on.
 type Unary = (fn(f64) -> Result<Real, NumError>, Domain);
 
@@ -1733,19 +1785,23 @@ type Unary = (fn(f64) -> Result<Real, NumError>, Domain);
 const NOT_FINITE: [f64; 3] = [f64::NAN, f64::INFINITY, f64::NEG_INFINITY];
 
 fn maths(g: &mut Gen, r: &mut Recorder) {
+    // A function's index is its place in the encoding: never renumber. The correctly rounded
+    // `exp`, `ln`, `sinpi`, `cospi` and `atan2` of `math` hold 7, 8, 16, 17 and 18, which the
+    // `libm` versions held before them; those are now `math::unproven`'s and hold 23 to 27. The
+    // other `libm` functions moved to `math::unproven` with their indices.
     let unary: [Unary; 18] = [
         (math::sqrt, Domain::NonNegative),
-        (math::sin, Domain::Angle),
-        (math::cos, Domain::Angle),
-        (math::tan, Domain::Angle),
-        (math::asin, Domain::Unit),
-        (math::acos, Domain::Unit),
-        (math::atan, Domain::Any),
+        (unproven::sin, Domain::Angle),
+        (unproven::cos, Domain::Angle),
+        (unproven::tan, Domain::Angle),
+        (unproven::asin, Domain::Unit),
+        (unproven::acos, Domain::Unit),
+        (unproven::atan, Domain::Any),
         (math::exp, Domain::Exponent),
         (math::ln, Domain::Positive),
-        (math::log2, Domain::Positive),
-        (math::log10, Domain::Positive),
-        (math::cbrt, Domain::Any),
+        (unproven::log2, Domain::Positive),
+        (unproven::log10, Domain::Positive),
+        (unproven::cbrt, Domain::Any),
         (math::abs, Domain::Any),
         (math::floor, Domain::Rounding),
         (math::ceil, Domain::Rounding),
@@ -1765,7 +1821,7 @@ fn maths(g: &mut Gen, r: &mut Recorder) {
     }
     for _ in 0..300 {
         let (x, y) = pow_input(g);
-        math_call(r, 19, math::pow(x, y));
+        math_call(r, 19, unproven::pow(x, y));
     }
     for _ in 0..300 {
         let (x, y) = if g.one_in(2) {
@@ -1774,7 +1830,7 @@ fn maths(g: &mut Gen, r: &mut Recorder) {
             let e = g.int(-1074, 1023);
             (g.double(e, e), g.double(e, e))
         };
-        math_call(r, 20, math::hypot(x, y));
+        math_call(r, 20, unproven::hypot(x, y));
     }
     for _ in 0..300 {
         let (a, b, c) = (g.any_or_zero(), g.any_or_zero(), g.any_or_zero());
@@ -1783,10 +1839,49 @@ fn maths(g: &mut Gen, r: &mut Recorder) {
     for _ in 0..300 {
         let x = g.double(-10, 10);
         let n = i32::try_from(g.int(-80, 80)).unwrap();
-        math_call(r, 22, math::powi(x, n));
+        math_call(r, 22, unproven::powi(x, n));
     }
     for _ in 0..300 {
         maths_outside(g, r, &unary);
+    }
+    proven_twins_and_intervals(r);
+}
+
+/// The calls added with the correctly rounded functions, from a generator of their own
+/// (`SEED_G05`): the `libm` twins of the proven functions, on the same domains, then the interval
+/// versions of the proven ones, inside and outside their domains (`ln` over any interval one time
+/// in four, so its refusals of negative numbers and of the pole are recorded too).
+fn proven_twins_and_intervals(r: &mut Recorder) {
+    let g = &mut Gen(SEED_G05);
+    let twins: [Unary; 4] = [
+        (unproven::exp, Domain::Exponent),
+        (unproven::ln, Domain::Positive),
+        (unproven::sinpi, Domain::HalfTurns),
+        (unproven::cospi, Domain::HalfTurns),
+    ];
+    for (index, (f, domain)) in (23u8..).zip(twins) {
+        for _ in 0..300 {
+            let x = math_input(g, domain);
+            math_call(r, index, f(x));
+        }
+    }
+    for _ in 0..300 {
+        let (y, x) = (g.any_or_zero(), g.any_or_zero());
+        math_call(r, 27, unproven::atan2(y, x));
+    }
+    for _ in 0..300 {
+        let x = math_interval(g, Domain::HalfTurns);
+        interval_math_call(r, 28, x.sinpi());
+        interval_math_call(r, 29, x.cospi());
+        let x = math_interval(g, Domain::Exponent);
+        interval_math_call(r, 30, x.exp());
+        let domain = if g.one_in(4) {
+            Domain::Any
+        } else {
+            Domain::Positive
+        };
+        let x = math_interval(g, domain);
+        interval_math_call(r, 31, x.ln());
     }
 }
 
@@ -1801,33 +1896,33 @@ fn maths_outside(g: &mut Gen, r: &mut Recorder, unary: &[Unary; 18]) {
         0 => math_call(r, 0, math::sqrt(-g.positive(-1074, 1023))),
         1 => {
             let x = beyond_one(g);
-            math_call(r, 4, math::asin(x));
-            math_call(r, 5, math::acos(x));
+            math_call(r, 4, unproven::asin(x));
+            math_call(r, 5, unproven::acos(x));
         }
         2 => {
             let x = -g.positive(-1074, 1023);
             math_call(r, 8, math::ln(x));
-            math_call(r, 9, math::log2(x));
-            math_call(r, 10, math::log10(x));
+            math_call(r, 9, unproven::log2(x));
+            math_call(r, 10, unproven::log10(x));
         }
         3 => {
             let zero = g.pick(&[0.0, -0.0]);
             math_call(r, 8, math::ln(zero));
-            math_call(r, 9, math::log2(zero));
-            math_call(r, 10, math::log10(zero));
+            math_call(r, 9, unproven::log2(zero));
+            math_call(r, 10, unproven::log10(zero));
         }
         4 => {
             // A negative base and a power with a half in it: no real value.
             let y = f64::from(i32::try_from(g.int(-20, 20)).unwrap()) + 0.5;
-            math_call(r, 19, math::pow(-g.positive(-30, 30), y));
+            math_call(r, 19, unproven::pow(-g.positive(-30, 30), y));
         }
         5 => {
             let zero = g.pick(&[0.0, -0.0]);
-            math_call(r, 19, math::pow(zero, -g.positive(-10, 10)));
+            math_call(r, 19, unproven::pow(zero, -g.positive(-10, 10)));
             math_call(
                 r,
                 22,
-                math::powi(zero, -1 - i32::try_from(g.int(0, 9)).unwrap()),
+                unproven::powi(zero, -1 - i32::try_from(g.int(0, 9)).unwrap()),
             );
         }
         6 => {
@@ -1835,13 +1930,13 @@ fn maths_outside(g: &mut Gen, r: &mut Recorder, unary: &[Unary; 18]) {
             math_call(
                 r,
                 20,
-                math::hypot(g.double(1023, 1023), g.double(1023, 1023)),
+                unproven::hypot(g.double(1023, 1023), g.double(1023, 1023)),
             );
         }
         7 => {
             let (a, b) = (g.double(600, 1023), g.double(600, 1023));
             math_call(r, 21, math::fma(a, b, g.any_or_zero()));
-            math_call(r, 22, math::powi(g.double(4, 20), 1100));
+            math_call(r, 22, unproven::powi(g.double(4, 20), 1100));
         }
         _ => {
             let bad = g.pick(&NOT_FINITE);
@@ -1851,8 +1946,8 @@ fn maths_outside(g: &mut Gen, r: &mut Recorder, unary: &[Unary; 18]) {
             let x = g.any();
             let (y, z) = if g.one_in(2) { (bad, x) } else { (x, bad) };
             math_call(r, 18, math::atan2(y, z));
-            math_call(r, 19, math::pow(y, z));
-            math_call(r, 20, math::hypot(y, z));
+            math_call(r, 19, unproven::pow(y, z));
+            math_call(r, 20, unproven::hypot(y, z));
             math_call(r, 21, math::fma(y, z, x));
         }
     }
