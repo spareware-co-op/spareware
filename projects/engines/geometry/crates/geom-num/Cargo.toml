@@ -1,0 +1,31 @@
+[package]
+name = "geom-num"
+version = "0.0.0"
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+description = "Spare Kit geometry kernel: the numbers layer. Grid coordinates, fixed-width integers, exact predicates, intervals, deterministic maths and the tolerance ladder."
+
+[dependencies]
+# The only source of maths functions (sin, cos, atan2, exp and so on): pure Rust, the same
+# result on every target. MIT OR Apache-2.0.
+libm = "0.2.16"
+
+[dev-dependencies]
+# Exact oracles for tests only, never linked into the kernel. All MIT OR Apache-2.0.
+num-bigint = "0.4"
+num-rational = "0.4.2"
+num-traits = "0.2"
+num-integer = "0.1"
+proptest = "1.12.0"
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "deny"
+float_cmp = "allow"
