@@ -1,0 +1,59 @@
+# Kernel lints deny unwrap, expect, panic and unchecked indexing in kernel code. Tests may use them:
+# a failing test should stop loudly.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-indexing-slicing-in-tests = true
+
+# `arithmetic_side_effects` (denied in Cargo.toml) checks every operator on a type it does not know.
+# The double-double's one operator, negation, negates both doubles: exact IEEE negation, which
+# cannot overflow, like the `f64` operations the lint does not check. The name is the type as it
+# prints inside this crate.
+arithmetic-side-effects-allowed = ["dd::DD"]
+
+# Chapter 21 (determinism), enforced as its table says, by clippy: maths functions come only from
+# `geom_num::math`, never the platform's, whose results differ by target; and `f64::max` and
+# `f64::min` may return either zero when given −0 and +0, so the crate compares instead. These
+# rules hold in the tests and the benchmark too, so their inputs and oracles are the same on every
+# target.
+disallowed-methods = [
+  { path = "f64::sin", reason = "platform maths differ by target: use geom_num::math (chapter 21)" },
+  { path = "f64::cos", reason = "platform maths differ by target: use geom_num::math (chapter 21)" },
+  { path = "f64::tan", reason = "platform maths differ by target: use geom_num::math (chapter 21)" },
+  { path = "f64::sin_cos", reason = "platform maths differ by target: use geom_num::math (chapter 21)" },
+  { path = "f64::asin", reason = "platform maths differ by target: use geom_num::math (chapter 21)" },
+  { path = "f64::acos", reason = "platform maths differ by target: use geom_num::math (chapter 21)" },
+  { path = "f64::atan", reason = "platform maths differ by target: use geom_num::math (chapter 21)" },
+  { path = "f64::atan2", reason = "platform maths differ by target: use geom_num::math (chapter 21)" },
+  { path = "f64::sinh", reason = "platform maths differ by target: use geom_num::math (chapter 21)" },
+  { path = "f64::cosh", reason = "platform maths differ by target: use geom_num::math (chapter 21)" },
+  { path = "f64::tanh", reason = "platform maths differ by target: use geom_num::math (chapter 21)" },
+  { path = "f64::asinh", reason = "platform maths differ by target: use geom_num::math (chapter 21)" },
+  { path = "f64::acosh", reason = "platform maths differ by target: use geom_num::math (chapter 21)" },
+  { path = "f64::atanh", reason = "platform maths differ by target: use geom_num::math (chapter 21)" },
+  { path = "f64::exp", reason = "platform maths differ by target: use geom_num::math (chapter 21)" },
+  { path = "f64::exp2", reason = "platform maths differ by target: use geom_num::math (chapter 21)" },
+  { path = "f64::exp_m1", reason = "platform maths differ by target: use geom_num::math (chapter 21)" },
+  { path = "f64::ln", reason = "platform maths differ by target: use geom_num::math (chapter 21)" },
+  { path = "f64::ln_1p", reason = "platform maths differ by target: use geom_num::math (chapter 21)" },
+  { path = "f64::log", reason = "platform maths differ by target: use geom_num::math (chapter 21)" },
+  { path = "f64::log2", reason = "platform maths differ by target: use geom_num::math (chapter 21)" },
+  { path = "f64::log10", reason = "platform maths differ by target: use geom_num::math (chapter 21)" },
+  { path = "f64::powi", reason = "platform maths differ by target: use geom_num::math (chapter 21)" },
+  { path = "f64::powf", reason = "platform maths differ by target: use geom_num::math (chapter 21)" },
+  { path = "f64::hypot", reason = "platform maths differ by target: use geom_num::math (chapter 21)" },
+  { path = "f64::cbrt", reason = "platform maths differ by target: use geom_num::math (chapter 21)" },
+  { path = "f64::sqrt", reason = "maths functions come from geom_num::math only (chapter 21)" },
+  { path = "f64::abs", reason = "maths functions come from geom_num::math only (chapter 21)" },
+  { path = "f64::floor", reason = "maths functions come from geom_num::math only (chapter 21)" },
+  { path = "f64::ceil", reason = "maths functions come from geom_num::math only (chapter 21)" },
+  { path = "f64::round_ties_even", reason = "maths functions come from geom_num::math only (chapter 21)" },
+  { path = "f64::max", reason = "may return either zero for −0 and +0: compare explicitly (chapter 21)" },
+  { path = "f64::min", reason = "may return either zero for −0 and +0: compare explicitly (chapter 21)" },
+]
+
+# Chapter 21: no iteration over hash maps in kernel crates; their order is random.
+disallowed-types = [
+  { path = "std::collections::HashMap", reason = "iteration order is random (chapter 21): use BTreeMap" },
+  { path = "std::collections::HashSet", reason = "iteration order is random (chapter 21): use BTreeSet" },
+]
