@@ -1,0 +1,23 @@
+# Kernel lints deny unwrap, expect, panic and unchecked indexing in kernel code. Tests may use them:
+# a failing test should stop loudly.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-indexing-slicing-in-tests = true
+
+# Architecture chapter 23.4: no atomic counters in kernel crates (an ID or index taken from a
+# shared counter depends on scheduling; indices come from `count_then_fill`), and no collection
+# sum or product outside an exact or documented integer helper. `CancelToken`'s `AtomicBool` is a
+# flag, not a counter, and stays allowed. Threads are out of reach: this crate is `no_std`.
+disallowed-types = [
+  { path = "core::sync::atomic::AtomicUsize", reason = "no atomic counters in kernel crates (23.4)" },
+  { path = "core::sync::atomic::AtomicIsize", reason = "no atomic counters in kernel crates (23.4)" },
+  { path = "core::sync::atomic::AtomicU64", reason = "no atomic counters in kernel crates (23.4)" },
+  { path = "core::sync::atomic::AtomicI64", reason = "no atomic counters in kernel crates (23.4)" },
+  { path = "core::sync::atomic::AtomicU32", reason = "no atomic counters in kernel crates (23.4)" },
+  { path = "core::sync::atomic::AtomicI32", reason = "no atomic counters in kernel crates (23.4)" },
+]
+disallowed-methods = [
+  { path = "core::iter::Iterator::sum", reason = "sums go through ExactSum or a documented integer helper (23.4)" },
+  { path = "core::iter::Iterator::product", reason = "products go through a documented helper (23.4)" },
+]
