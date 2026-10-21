@@ -17,6 +17,9 @@
     reason = "oracles and generators; the rules are for kernel code"
 )]
 
+#[path = "common/sha256.rs"]
+mod sha256;
+
 use std::cmp::Ordering;
 
 use num_bigint::BigInt;
@@ -34,6 +37,7 @@ use geom_math::{
 use geom_num::grid::{COORD_MAX, GridStep, P2, P3};
 use geom_num::ladder::ANGULAR;
 use geom_num::{NumError, math};
+use sha256::{Sha256, hex};
 
 // ---------------------------------------------------------------------------------------------
 // A deterministic generator (SplitMix64), so every run sees the same cases.
@@ -2206,20 +2210,19 @@ fn grid_boxes_against_brute_force() {
 // Determinism across targets and thread counts.
 // ---------------------------------------------------------------------------------------------
 
-struct Fnv(u64);
+/// The workload's hash: SHA-256 (chapter 28.13), each value taken as its 8 little-endian bytes.
+struct Digest(Sha256);
 
-impl Fnv {
+impl Digest {
     fn eat(&mut self, v: u64) {
-        for b in v.to_le_bytes() {
-            self.0 ^= u64::from(b);
-            self.0 = self.0.wrapping_mul(0x0100_0000_01B3);
-        }
+        self.0.write(&v.to_le_bytes());
     }
 }
 
-fn workload(seed: u64) -> u64 {
+/// The workload's SHA-256 digest, in hexadecimal.
+fn workload(seed: u64) -> String {
     let mut rng = Rng(seed);
-    let mut h = Fnv(0xCBF2_9CE4_8422_2325);
+    let mut h = Digest(Sha256::new());
     let s = s_int(GridStep::Q0);
     let o = [
         i64::try_from(1_757_000 * s).unwrap(),
@@ -2288,12 +2291,15 @@ fn workload(seed: u64) -> u64 {
             }
         }
     }
-    h.0
+    hex(h.0.finish())
 }
 
-/// The workload's digest on one thread. Every target the kernel builds for must give this value
-/// (x86_64 natively and wasm32-wasip1 under wasmtime both run this file).
-const WORKLOAD_DIGEST: u64 = 0x32b6_dcb7_d33c_e019;
+/// The workload's SHA-256 digest on one thread, in hexadecimal. Every target the kernel builds for
+/// must give this value (x86_64 natively and wasm32-wasip1 under wasmtime both run this file).
+///
+/// It replaced the workload's 64-bit FNV-1a digest, `0x32b6_dcb7_d33c_e019`, when the hash moved
+/// to SHA-256 (chapter 28.13): both are hashes of the same bytes, so no result changed.
+const WORKLOAD_DIGEST: &str = "c1c5d1b624f95d7ce6b6640acef43dda0a90ae2c4beb6c30483fa87a234747c9";
 
 /// Principle 5 and chapter 21: bit-identical results on every target. The workload covers map
 /// conversions both ways, double-double arithmetic and transform classification and inversion;
@@ -2303,7 +2309,7 @@ fn results_identical_across_targets() {
     let one = workload(0x0D5E_ED00);
     assert_eq!(
         one, WORKLOAD_DIGEST,
-        "digest {one:#018x} differs from the pinned {WORKLOAD_DIGEST:#018x}"
+        "digest {one} differs from the pinned {WORKLOAD_DIGEST}"
     );
 }
 
@@ -2317,7 +2323,7 @@ fn results_identical_across_targets() {
 fn results_identical_across_thread_counts() {
     let one = workload(0x0D5E_ED00);
     for threads in [2usize, 3, 8] {
-        let digests: Vec<u64> = std::thread::scope(|sc| {
+        let digests: Vec<String> = std::thread::scope(|sc| {
             let handles: Vec<_> = (0..threads)
                 .map(|_| sc.spawn(|| workload(0x0D5E_ED00)))
                 .collect();
@@ -2325,7 +2331,7 @@ fn results_identical_across_thread_counts() {
         });
         assert!(
             digests.iter().all(|d| *d == one),
-            "{threads} threads: {digests:x?} vs {one:x}"
+            "{threads} threads: {digests:?} vs {one}"
         );
     }
 }

@@ -1,5 +1,5 @@
-//! The golden hash: a fixed corpus of calls into every public operation of `geom-math`, hashed,
-//! must give the same 64-bit value on every target and on every number of threads.
+//! The golden hash: a fixed corpus of calls into every public operation of `geom-math`, hashed
+//! with SHA-256, must give the same digest on every target and on every number of threads.
 //!
 //! The kernel promises the same bits on every machine and for any thread count (principle 5,
 //! chapter 21). `geom-num`'s golden hash holds the numbers layer to that promise; this test holds
@@ -39,25 +39,26 @@
 //! differ.
 //!
 //! Every result, success or error, is written in a canonical little-endian byte encoding, in a
-//! fixed field order (see `Recorder`), and hashed with FNV-1a 64, written here and checked against
-//! its published test vectors. Doubles go in as their bits, so a difference of one unit in the
+//! fixed field order (see `Recorder`), and hashed with SHA-256 (FIPS 180-4), the hash chapters 21
+//! and 28.13 specify: `common/sha256.rs`, a copy of `geom-num`'s, checked against the standard's
+//! own test vectors and constants. Doubles go in as their bits, so a difference of one unit in the
 //! last place shows. No result of this crate is ever NaN; a NaN would be written as one canonical
 //! pattern, because Rust does not fix a NaN's sign or payload (RFC 3514), and the test fails on
 //! any.
 //!
-//! **The same constant must hold on every target**: Linux, Windows and macOS on x86-64 and arm64,
+//! **The same digest must hold on every target**: Linux, Windows and macOS on x86-64 and arm64,
 //! and wasm32-wasip1 under wasmtime, in debug and release, with overflow checks on or off and with
-//! `-C target-cpu=native`; and the corpus must give the same hash on 1, 2, 3 and 8 threads at once
-//! (chapter 21's thread-count test), which also runs every case more than once in one process
-//! (section 28.13), so a hidden cache or global state would show. A changed hash is one of two
+//! `-C target-cpu=native`; and the corpus must give the same digest on 1, 2, 3 and 8 threads at
+//! once (chapter 21's thread-count test), which also runs every case more than once in one process
+//! (section 28.13), so a hidden cache or global state would show. A changed digest is one of two
 //! things. Either it is a bug: some target or thread count computes different bits, so the same
 //! model would give different geometry on different machines. Or the crate's results were changed
 //! on purpose, which is a deliberate kernel edition change (chapter 21, section 28.13): its pull
 //! request updates `GOLDEN`, says which results changed and why, and a kernel owner approves it.
-//! A change to this corpus changes the hash too and is reviewed the same way. Never update the
+//! A change to this corpus changes the digest too and is reviewed the same way. Never update the
 //! constant to make one target pass.
 //!
-//! To help find the cause when one target disagrees, the test prints a hash per section: compare
+//! To help find the cause when one target disagrees, the test prints a digest per section: compare
 //! the logs of two targets to see which part of the crate differs. It also checks that the corpus
 //! still reaches every outcome it is built to reach (every transform kind, exact and inexact
 //! roundings, every error these calls document), so a corpus that silently stopped testing the
@@ -77,6 +78,9 @@
     reason = "the corpus generator; the rules are for kernel code"
 )]
 
+#[path = "common/sha256.rs"]
+mod sha256;
+
 use std::collections::BTreeSet;
 
 use geom_math::frame::{CELL_HALF, ORIGIN_MAX, steps_per_metre};
@@ -89,22 +93,20 @@ use geom_math::{
 };
 use geom_num::NumError;
 use geom_num::grid::{COORD_MAX, GridStep, P2, P3};
+use sha256::{Sha256, hex};
 
-/// The golden hash of the corpus.
+/// The golden digest of the corpus: SHA-256, in hexadecimal.
 ///
 /// The same constant must hold on every target and thread count: see the module documentation. A
 /// change is either a bug or a deliberate kernel edition change, made in a pull request that
 /// updates this constant, says which, and is approved by a kernel owner.
-const GOLDEN: u64 = 0x8643_5a99_5463_851e;
+///
+/// It replaced the corpus's 64-bit FNV-1a golden, `0x8643_5a99_5463_851e`, when the hash moved to
+/// SHA-256 (chapter 28.13): both are hashes of the same bytes, so no result changed.
+const GOLDEN: &str = "d79932a18468bf79d55bdb204597c001ad9b512c5000fae5e87d7db01a72f126";
 
 /// The corpus makes at least this many calls into the crate.
 const MIN_CALLS: u64 = 30_000;
-
-/// FNV-1a 64-bit offset basis (Fowler, Noll and Vo).
-const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
-
-/// FNV-1a 64-bit prime, 2^40 + 2^8 + 0xb3.
-const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
 
 /// Multiplier of the corpus generator: Knuth's MMIX linear congruential generator modulo 2^64
 /// (*The Art of Computer Programming*, volume 2, section 3.3.4).
@@ -198,27 +200,8 @@ fn pow2(k: i32) -> f64 {
 }
 
 // ---------------------------------------------------------------------------------------------
-// The hash and the canonical encoding.
+// The canonical encoding. The hash, SHA-256, is in `common/sha256.rs`.
 // ---------------------------------------------------------------------------------------------
-
-/// FNV-1a, 64 bits: for each byte, xor it into the state, then multiply by the prime modulo 2^64.
-#[derive(Clone, Copy)]
-struct Fnv(u64);
-
-impl Fnv {
-    /// The empty hash, the offset basis.
-    const fn new() -> Fnv {
-        Fnv(FNV_OFFSET)
-    }
-
-    /// Hashes `bytes`, in order.
-    fn write(&mut self, bytes: &[u8]) {
-        for &b in bytes {
-            self.0 ^= u64::from(b);
-            self.0 = self.0.wrapping_mul(FNV_PRIME);
-        }
-    }
-}
 
 /// The crate's operations the corpus calls. A call writes its discriminant first, so the byte
 /// stream says which operation each result came from. The discriminants are part of the encoding:
@@ -334,9 +317,9 @@ enum Op {
 ///   a map point: easting, northing, height.
 struct Recorder {
     /// The hash of everything.
-    total: Fnv,
+    total: Sha256,
     /// The hash of the current section.
-    section: Fnv,
+    section: Sha256,
     /// Calls so far.
     calls: u64,
     /// Calls in the current section.
@@ -347,16 +330,16 @@ struct Recorder {
     op: Op,
     /// The outcome classes each operation has reached.
     seen: BTreeSet<(Op, &'static str)>,
-    /// Each finished section: name, calls, hash.
-    report: Vec<(&'static str, u64, u64)>,
+    /// Each finished section: name, calls, digest.
+    report: Vec<(&'static str, u64, [u8; 32])>,
 }
 
 impl Recorder {
     /// Nothing recorded yet.
     fn new() -> Recorder {
         Recorder {
-            total: Fnv::new(),
-            section: Fnv::new(),
+            total: Sha256::new(),
+            section: Sha256::new(),
             calls: 0,
             section_calls: 0,
             nans: 0,
@@ -366,10 +349,11 @@ impl Recorder {
         }
     }
 
-    /// Closes the current section under `name`, keeping its count and hash for the report.
+    /// Closes the current section under `name`, keeping its count and digest for the report.
     fn end_section(&mut self, name: &'static str) {
-        self.report.push((name, self.section_calls, self.section.0));
-        self.section = Fnv::new();
+        let section = std::mem::replace(&mut self.section, Sha256::new());
+        self.report
+            .push((name, self.section_calls, section.finish()));
         self.section_calls = 0;
     }
 
@@ -1882,29 +1866,17 @@ fn corpus() -> Recorder {
     r
 }
 
-#[test]
-fn fnv1a_64_matches_its_published_test_vectors() {
-    let hash = |s: &str| {
-        let mut h = Fnv::new();
-        h.write(s.as_bytes());
-        h.0
-    };
-    assert_eq!(hash(""), 0xcbf2_9ce4_8422_2325);
-    assert_eq!(hash("a"), 0xaf63_dc4c_8601_ec8c);
-    assert_eq!(hash("foobar"), 0x8594_4171_f739_67e8);
-}
-
-/// The golden hash. The same constant must hold on every target; a change is a bug or a
+/// The golden digest. The same constant must hold on every target; a change is a bug or a
 /// deliberate kernel edition change (see the module documentation and `GOLDEN`).
 #[test]
 fn golden_hash_is_the_same_on_every_target() {
     let r = corpus();
-    let hash = r.total.0;
+    let hash = hex(r.total.clone().finish());
     println!("geom-math determinism corpus: {} calls", r.calls);
-    for (name, calls, section_hash) in &r.report {
-        println!("  {name:<10} {calls:>6} calls  {section_hash:#018x}");
+    for (name, calls, digest) in &r.report {
+        println!("  {name:<10} {calls:>6} calls  {}", hex(*digest));
     }
-    println!("geom-math golden hash: {hash:#018x}");
+    println!("geom-math golden hash: {hash}");
 
     // The corpus must still reach every outcome it is built for, make enough calls, and never see
     // a NaN (the crate never makes one).
@@ -1925,15 +1897,15 @@ fn golden_hash_is_the_same_on_every_target() {
     assert!(defects.is_empty(), "defects reported: {defects:?}");
     assert_eq!(
         hash, GOLDEN,
-        "geom-math's golden hash is {hash:#018x} here but {GOLDEN:#018x} is expected. Either this \
-         target computes different bits (a bug: compare the section hashes above with another \
-         target's log) or the crate's results changed (a deliberate kernel edition change must \
-         update GOLDEN and say so)"
+        "geom-math's golden digest is {hash} here but {GOLDEN} is expected. Either this target \
+         computes different bits (a bug: compare the section digests above with another target's \
+         log) or the crate's results changed (a deliberate kernel edition change must update \
+         GOLDEN and say so)"
     );
 }
 
-/// Principle 5 and chapter 21's thread-count test: the corpus gives the same hash on 1, 2, 3 and
-/// 8 threads running it at once, every run in one process.
+/// Principle 5 and chapter 21's thread-count test: the corpus gives the same digest on 1, 2, 3
+/// and 8 threads running it at once, every run in one process.
 #[test]
 #[cfg_attr(
     all(target_family = "wasm", not(target_feature = "atomics")),
@@ -1941,17 +1913,17 @@ fn golden_hash_is_the_same_on_every_target() {
               std::thread::scope cannot spawn"
 )]
 fn golden_hash_is_the_same_on_every_thread_count() {
-    let one = corpus().total.0;
+    let one = hex(corpus().total.finish());
     for threads in [1usize, 2, 3, 8] {
-        let hashes: Vec<u64> = std::thread::scope(|sc| {
+        let hashes: Vec<String> = std::thread::scope(|sc| {
             let handles: Vec<_> = (0..threads)
-                .map(|_| sc.spawn(|| corpus().total.0))
+                .map(|_| sc.spawn(|| hex(corpus().total.finish())))
                 .collect();
             handles.into_iter().map(|h| h.join().unwrap()).collect()
         });
         assert!(
             hashes.iter().all(|h| *h == one),
-            "{threads} threads: {hashes:x?} against {one:#018x} on one"
+            "{threads} threads: {hashes:?} against {one} on one"
         );
     }
 }
