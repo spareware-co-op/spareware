@@ -1,0 +1,298 @@
+# 17. Survey, terrain and civil
+
+*Part of the [Spare Kit geometry kernel architecture](../ARCHITECTURE.md). Decided in [G01](../../../kit/notes/G01-geometry-kernel.md); section numbers match across the set.*
+
+Evidence: [08](../../../kit/notes/G01-evidence/08-standards-coverage-testing.md) sections A1, B and D, [04](../../../kit/notes/G01-evidence/04-nurbs-surfaces.md) sections 2, 3, 5 and 7, [05](../../../kit/notes/G01-evidence/05-exact-arithmetic-determinism.md) sections 1, 5, 6, 7 and 9, [10](../../../kit/notes/G01-evidence/10-github-sweep.md) sections 1 to 3, [06](../../../kit/notes/G01-evidence/06-2d-drafting.md) section 3, [03](../../../kit/notes/G01-evidence/03-rust-kernels-crates.md) section 4, [07](../../../kit/notes/G01-evidence/07-persistent-naming.md) section 6, [09](../../../kit/notes/G01-evidence/09-freeform-subd-implicit.md) section 3, and the pinned primary sources linked below. It serves Spare Construct's [Survey](../../spare-construct/ARCHITECTURE.md#survey), [Disciplines and civil](../../spare-construct/ARCHITECTURE.md#disciplines-and-civil) and [Point clouds](../../spare-construct/ARCHITECTURE.md#point-clouds) sections.
+
+Surveyors and designers work on one geometry. A surveyed kerb line is the same kernel curve that a road corridor ties to and a building's drainage joins. The kernel supplies the geometry; survey practice stays in Spare Construct, because the kernel knows nothing about programs (section 5). In this chapter, **plan** means seen from above: easting and northing only.
+
+| The kernel does | Spare Construct's survey and civil crates do |
+| --- | --- |
+| Frames, and exact or certified conversion into them | Choosing coordinate systems; calling PROJ; writing each transformation's record |
+| Survey points, linework, COGO constructions | Turning field codes into linework, from each firm's code library |
+| Traverse misclosure, with a bound | Adjustment (the Bowditch rule, which spreads a traverse's misclosure in proportion to leg length, and least squares) and its statistics; scale factors; convergence |
+| TINs, contours, volumes, terrain solids, grading, flow and sight queries | Which surfaces to build; design rules; earthworks reports |
+| Alignments, stations, corridor geometry | Cross-section templates, superelevation (the cross-fall a road takes on a curve), country rule packs |
+| Point-cloud queries, snaps and fits | Reading E57 and LAS, storing COPC, classifying ground points |
+
+Each subsection names the crate that owns it. Four things combine terrain with alignments: corridor daylighting, ground profiles by station, mass haul, and sight distance along a road. They live in a small domain toolkit, `geom-civil` (section 26.1), which depends on `geom-terrain` and `geom-align` while neither depends on the other.
+
+## 17.1 Frames and map projections (`geom-math`, with `geom-num`)
+
+A frame is the kernel's flat coordinate space for one model, or one piece of a network (section 6.1). Its record ties it to the real world.
+
+```rust
+struct FrameRecord {
+    step: GridStep,                         // q0 for survey and civil work
+    horizontal_crs: CrsRef,                 // e.g. EPSG:2193, NZGD2000 / NZTM2000
+    vertical_crs: Option<CrsRef>,           // e.g. EPSG:7839, NZVD2016 height
+    linear_unit: ExactRatio,                // metres per CRS unit: 1, 3048/10000, 1200/3937
+    coordinate_epoch: Option<DecimalYear>,  // required for dynamic and semi-dynamic datums
+    deformation_model: Option<ModelRef>,    // name, version and content hash
+    origin: [i64; 3],                       // easting, northing, height of the origin, in steps
+    kind: FrameKind,
+    lattice: Option<LatticeCell>,           // set when the frame is one cell of a network's lattice
+}
+enum FrameKind {
+    Map,                                                 // map grid coordinates: no rotation, no scale
+    Ground { rotation: AngleUnits, scale: ExactRatio },  // a site grid: rotated, scaled horizontally only
+}
+```
+
+**The NZTM2000 example.** NZTM2000 is a transverse Mercator projection: central meridian 173° E, scale factor 0.9996, false easting 1,600,000 m, false northing 10,000,000 m ([EPSG:2193](https://github.com/OSGeo/PROJ/blob/5fa31c29f0a806568ed7bc76c1a557604db4a804/data/sql/projected_crs.sql#L375) and [its conversion](https://github.com/OSGeo/PROJ/blob/5fa31c29f0a806568ed7bc76c1a557604db4a804/data/sql/conversion.sql#L6506), in PROJ's copy of the EPSG data). Central Auckland is near N 5,921,000 m, about 2^45 steps from the grid's zero: too far for fixed-size exact predicates. So the frame origin sits at the site, as a whole number of steps, and every model coordinate is a short offset from it.
+
+**Epochs.** NZGD2000 is semi-dynamic: coordinates are fixed at a reference date, and a deformation model carries observations made on other dates to it. PROJ ships seven versions of LINZ's model ([grid_alternatives.sql L308-L314](https://github.com/OSGeo/PROJ/blob/5fa31c29f0a806568ed7bc76c1a557604db4a804/data/sql/grid_alternatives.sql#L308-L314)), and its deformation-model operation takes the observation date as input ([defmodel.rst](https://github.com/OSGeo/PROJ/blob/5fa31c29f0a806568ed7bc76c1a557604db4a804/docs/source/operations/transformations/defmodel.rst), since PROJ 7.1). Over decades, plate motion and earthquakes move survey marks by centimetres to metres, so a frame without its epoch and model version is ambiguous. Two frames whose epochs or models differ are combined only through a recorded transformation; otherwise the operation fails with `FrameMismatch`.
+
+**Conversion is exact where it can be, and deterministic everywhere.**
+
+- A value converts exactly when it lands on a whole number of steps. Metres given to 0.01 mm do (one millimetre is 6,400 steps), and so do international feet (0.3048 m, 1,950,720 steps).
+- Anything else rounds once, half to even, to the nearest step, is Certified within half a step, and logs a diagnostic: US survey feet (1200/3937 m, 1,950,723.9 steps), Gunter's links (0.201168 m, 1,287,475.2 steps), metres with six or more decimals. The original text stays in the operation's recipe, so export gives back the value as given.
+- Binary `f64` values, from PROJ or a file, convert in double-double arithmetic (a pair of `f64` values holding about 106 bits, built from the error-free TwoSum and TwoProduct of [05](../../../kit/notes/G01-evidence/05-exact-arithmetic-determinism.md), section 1) and round once.
+- A Ground frame stores its rotation as whole angle units (section 17.2) and its scale as an exact decimal ratio, such as 0.99987654 = 99,987,654/10^8. Its sine and cosine come from the kernel's deterministic `sinpi` and `cospi` (section 17.2), so every machine gets the same bits.
+- Heights are never scaled: a site's combined scale factor applies to horizontal distances only. IFC can say that only with IfcMapConversionScaled (new in IFC 4.3), whose per-axis factors carry the scale with a height factor of one; plain IfcMapConversion's single Scale also scales heights ([IFC source](https://github.com/buildingSMART/IFC4.3.x-development/blob/7256780bd95fcc5b3653e07b3e8ec2f8389c9f3d/docs/schemas/resource/IfcRepresentationResource/Entities/IfcMapConversionScaled.md)).
+
+**PROJ does the transformations, outside the kernel.** Moving between coordinate reference systems (datums, projections, geoid models, deformation models) is the job of PROJ ([MIT](https://github.com/OSGeo/PROJ/blob/5fa31c29f0a806568ed7bc76c1a557604db4a804/COPYING)), called by Spare Construct's survey crates. Its transverse Mercator reaches full double precision within 3,900 km of the central meridian ([tmerc docs](https://github.com/OSGeo/PROJ/blob/5fa31c29f0a806568ed7bc76c1a557604db4a804/docs/source/operations/projections/tmerc.rst#L115-L127)). But PROJ is C++ on the platform's maths library, so its last bits may differ between machines (our inference, not tested). The rule that keeps principle 5: a transformation is an import or export step, like healing. It runs once. The command layer (`kit-ops`) writes its record to the operation log; the kernel defines the record's shape:
+
+```rust
+struct TransformRecord {
+    from: CrsRef, from_epoch: Option<DecimalYear>, to_frame: FrameId,
+    pipeline: Text, proj_version: Text,
+    grids: Vec<(Text, ContentHash)>,    // geoid and deformation-model files it used
+    stated_accuracy: Steps,             // the accuracy the transformation publishes
+    source_values: Vec<SourceValue>,    // the original text or numbers
+    result: Vec<[i64; 3]>,              // the grid integers it produced
+}
+```
+
+Replay uses `result` and never calls PROJ. Accuracy belongs to the transformation, not to the frame, because one frame can be reached several ways. The NZVD2016 geoid step states 0.1 m ([EPSG:7840](https://github.com/OSGeo/PROJ/blob/5fa31c29f0a806568ed7bc76c1a557604db4a804/data/sql/grid_transformation.sql#L451)), so nobody mistakes the grid's 156 nm resolution for absolute accuracy. A result that went through a transformation is Certified, with that stated accuracy as its bound against the source system.
+
+**One project system, many sources.** A model has one project CRS. Data in any other system enters through a recorded transformation. New Zealand shows why: cadastral titles use the NZGD2000 meridional circuits, such as Mount Eden 2000 ([EPSG:2105](https://github.com/OSGeo/PROJ/blob/5fa31c29f0a806568ed7bc76c1a557604db4a804/data/sql/projected_crs.sql#L213)), while design uses NZTM. The cadastral bearings and distances are kept as recipe data under their own frame record, so the legal values stay the source of truth and the transformed geometry is derived from them. A GNSS site calibration (a fitted horizontal transformation plus an inclined height plane) is a local CRS reached through its own transformation record, not a Ground frame, which holds only a rotation and a scale.
+
+**A frame is a map space, not the round Earth.** Coordinates are easting, northing and height above the vertical datum. Where the projection's scale changes along a long corridor, ground lengths come from the survey crates, which apply PROJ's point scale factors; the geometry is the same either way.
+
+**Lattices for long networks.** One frame reaches ±2^40 steps (±171.8 km at q0) on each axis. A regional network uses a lattice of Map frames on one CRS, with origins every 2^39 steps (85.9 km) in easting and northing. Neighbouring frames overlap by three quarters of a frame's width, so a point moves between them by an exact integer shift. Each frame owns the half-open cell within 2^38 steps of its origin on each axis. An element belongs to the frame whose cell holds the centre of its bounding box, so anything up to 3 × 2^39 steps (257.7 km) across fits its frame. An operation runs in the frame whose cell holds the centre of all its operands' combined box; if they do not fit, it fails with `FrameRangeExceeded` and offers to split at a lattice line. A 300 km highway is split into station ranges, one per frame, with stations continuous across the splits.
+
+**It never** stores a map coordinate as a float inside an operation, calls PROJ during an operation or a replay, scales heights, combines frames with different epochs or models, or mixes frames without an exact shift.
+
+## 17.2 Survey points, linework and COGO (`geom-2d`, with `geom-curve` and `geom-num`)
+
+**Survey points** are Acorn (point) bodies (section 8). Each is named by its dataset's import operation and a stable record key: `Created { op, role: survey.point(key) }`. The key is the point's ID at first import, frozen; the ID itself is an attribute, so renaming a point changes no name. When a dataset is updated, its import operation runs again with the same OpId and points match by ID, so their names hold. Two points with one ID in one import are an error naming both, never a silent suffix.
+
+**Linework.** Spare Construct's code library turns coded field points into 3D polylines through kernel calls, in `geom-curve`. A segment is one of:
+
+- a line;
+- an arc in plan with a steady grade along it: a circular helix, which the kernel holds exactly (section 7), so a surveyed kerb return keeps its true shape instead of becoming chords. An arc through three surveyed points whose heights are not on one grade becomes two helices meeting at the middle point, so all three heights are kept;
+- a smooth figure through many points: a NURBS curve interpolating them (The NURBS Book, algorithm A9.1; [04](../../../kit/notes/G01-evidence/04-nurbs-surfaces.md) section 3), passing within ε_fit of every point, Certified.
+
+Any line can be flagged as a terrain breakline (section 17.3).
+
+**Angles are whole numbers.** COGO (coordinate geometry: points from bearings, distances and arcs) starts from values people write down, so the kernel stores them exactly, in `geom-num`.
+
+- An angle is a whole number of **angle units**, each 1/2,500 of an arc-second (`AngleUnits`, an `i64`). That is the largest unit making both 0.01″ and 0.00001 gon (0.0324″) whole numbers, so degree-minute-second readings to 0.01″, gon readings to 0.00001 gon and decimal degrees to six places all round-trip exactly. A full circle is 3,240,000,000 units; ε_ang (section 6.5) is about a thirtieth of one unit. Finer angles, and angles in radians, round half to even to the nearest unit and are Certified within half a unit, by the same rule as lengths. The word "step" is kept for lengths only.
+- A distance is a whole number of steps, under section 17.1's rule.
+- **Two direction forms, one rule.** Bearings people enter are angle units, measured clockwise from frame north. Directions the kernel derives, such as an alignment's tangent, are integer direction vectors fine to about 2^-40 rad. Whichever form the user entered is primary. Converting either way is Certified: a bearing becomes a vector through `sinpi` and `cospi`, and a vector becomes a bearing through `atan2`, rounded to the nearest unit. IFC measures directions anticlockwise from the x axis (east), so an IFC angle α is the bearing 90° − α. A bearing on a Ground frame plus the frame's rotation is the map grid bearing, an exact integer sum. Convergence to true north comes from PROJ, through the survey crates.
+
+**Deterministic trigonometry.** Forward COGO needs the sine and cosine of an exact angle. The pinned pure-Rust `libm` has `sin`, `cos`, `sincos` and `atan2` but no `sinpi` or `cospi` ([libm/src/math](https://github.com/rust-lang/compiler-builtins/tree/aeab328368d6ed8dc6acba47b7db6ad08be953d2/libm/src/math)); CORE-MATH (MIT) has correctly rounded versions of all of them ([05](../../../kit/notes/G01-evidence/05-exact-arithmetic-determinism.md) section 7). The kernel's maths module (section 21) gains `sinpi`, `cospi` and `atan2` with proven error bounds, ported from CORE-MATH or written to its specification. The integer angle is first reduced to an octant (an eighth of a turn) exactly, in integers; only the remaining fraction becomes a float, so right angles and their multiples give exact results. Until this piece exists, operations that need it (forward COGO, rotated Ground frames, spirals) fail with an error naming it.
+
+**Forward and inverse.**
+
+- Forward (a point, a bearing and a distance give a new point) commits the result to the grid: Certified within half a step per axis plus the maths bound. The point keeps its recipe. Change the bearing and the point moves, keeping its name (section 20), so lots and dimensions built on it follow.
+- Inverse (bearing and distance between two grid points): squared distances are exact integers, so "which is longer" is exact. The distance is the integer square root of the squared distance n, in `u128`, rounded to the nearest step by comparing (2k + 1)² with 4n exactly. No tie can occur, because (2k + 1)² is odd. Taking `sqrt` of an `f64` would not do: beyond about 14.8 m the squared distance in steps passes 2^53, where `f64` stops holding every integer. So the distance printed is the same on every machine. The bearing is Certified to ε_ang. If a value rounded for display has a certified interval straddling the rounding boundary, the kernel says so rather than guessing.
+- Intersections: bearing with bearing (one point, or none when parallel), distance with distance, and bearing with distance (none, one or two points). Every solution is returned, ordered along the first given line, or clockwise from the first given bearing. Perpendicular offsets give the foot point and the along and across distances.
+- Arcs are given by two of radius, arc length, chord and central angle, with their ends, a sense (turning left or right) and a flag for the minor or major arc. The kernel returns every arc that fits the data given and fails only when none does.
+
+**Arcs wait on section 14.** An arc with two grid ends and a given radius has an irrational centre, and offsets and skeletons of grid lines need square roots. Whether 2D arcs become exact (CGAL-style one-root numbers, a + b√c; [06](../../../kit/notes/G01-evidence/06-2d-drafting.md) section 3) is section 14's decision. Until it decides, an arc is stored by its primary data (two grid ends, the radius as given, sense and minor-or-major flag), and every value derived from it is Certified.
+
+**Traverses and boundaries.** A traverse's misclosure is a certified vector. The kernel never distributes it: adjustment belongs to the survey crates, whose adjusted coordinates enter the kernel as new points. Cadastral parcels are cells of a 2D arrangement (section 14), so a shared boundary is stored once and two lots can never disagree about it. Areas are exact for straight sides (twice the area, as an integer) and Certified where a side is an arc. Splitting a parcel to a target area, by a line of given bearing or one swinging about a point, solves for the cut with certified intervals and is Certified.
+
+## 17.3 Terrain surfaces (TINs) (`geom-terrain`)
+
+A TIN (triangulated irregular network) is a surface of triangles with one height at each plan position. In the kernel it is an exact mesh (section 9) with that rule as an invariant, every vertex a grid point, and IFC's per-triangle flags for breaklines, holes and voids ([08](../../../kit/notes/G01-evidence/08-standards-coverage-testing.md) section A1).
+
+**Built by constrained Delaunay triangulation on exact predicates.** Delaunay triangulation joins points into triangles as close to equal-sided as the points allow (it makes the smallest angle as large as possible). "Constrained" means breaklines (kerbs, tops and toes of banks) are forced in as edges. Breaklines are inserted by Sloan's flip method ([1993](https://doi.org/10.1016/0045-7949(93)90239-A)), which Geogram's exact triangulator also follows ([CDT_2d.cpp L40-L42](https://github.com/BrunoLevy/geogram/blob/40d72165ceeeb0a61977d6fdf74d929bfdd77b7b/src/lib/geogram/delaunay/CDT_2d.cpp#L40-L42)).
+
+- `orient2d` runs in `i128` and `incircle` in 256 bits, on plan coordinates (section 6.2).
+- Four or more points exactly on one circle are separated by symbolic perturbation ordered by persistent names, as section 6.2 requires, in the form Devillers and Teillaud give for Delaunay ([2011](https://doi.org/10.1016/j.comgeo.2010.09.010)). No point moves. Survey point names do not change on a rename or a dataset update (section 17.2), so neither does the surface. Two separate imports of the same points have different names and may choose different diagonals where points are cocircular; this chapter asks the owner to order these ties by plan position instead (an open question).
+- **Gridded LiDAR is the hard case for speed.** The four corners of every grid square lie exactly on one circle, so nearly every circle test is a tie: the `f64` filter cannot decide it, and it falls to 256-bit integers and the perturbation. On WebAssembly, 128-bit multiplication runs in software ([05](../../../kit/notes/G01-evidence/05-exact-arithmetic-determinism.md) open question 7). The build pieces set a numeric target for gridded input. A fast path for regular grids is allowed only if tests prove it gives the same triangles as the general path.
+- A point exactly on a breakline splits it, decided exactly.
+- Two breaklines that cross away from a shared vertex: the crossing is found by exact orientation tests and constructed exactly from the two original breakline ends, as Geogram's triangulator does to keep its numbers small ([`create_intersection`](https://github.com/BrunoLevy/geogram/blob/40d72165ceeeb0a61977d6fdf74d929bfdd77b7b/src/lib/geogram/delaunay/CDT_2d.cpp#L1717-L1745), BSD-3). Its height is a survey decision, so the operation's crossing policy is `Error` (the default, naming both lines and both heights), `Prefer(priority)` or `Average`. The vertex is committed by snap rounding ([Hobby 1999](https://www.nokia.com/bell-labs/publications-and-media/publications/practical-segment-intersection-with-finite-precision-output), as in JTS; [06](../../../kit/notes/G01-evidence/06-2d-drafting.md) section 3): it moves to the centre of its grid cell, at most half a step on each axis, and every segment passing through that cell is bent through it, so no new crossing appears. A third breakline bent through the vertex joins the crossing under the same policy.
+- Loose points at one plan position with different heights follow an explicit rule: first, last, highest or lowest, the set startin offers ([lib.rs L141-L147](https://github.com/hugoledoux/startin/blob/012f9741d5162a5b7993f9fe33722bf63601111a/src/lib.rs#L141-L147)). First and last follow the order of records in the operation's input, as the log holds it.
+- Breaklines meeting at one plan position with different heights describe a vertical face, which a TIN cannot hold. That is an error naming both lines, with two remedies: move one line in plan by a stated distance, or model the face in the terrain solid (section 17.6).
+- Arc and helix breaklines are cut into chords within ε_fit, so a TIN built from them is Certified with that bound against its linework.
+- Deleting a loose point uses flips, the method [startin](https://github.com/hugoledoux/startin/blob/012f9741d5162a5b7993f9fe33722bf63601111a/README.md) adapts from Mostafavi, Gold and Dakowicz ([2003](https://doi.org/10.1016/S0098-3004(03)00017-7)). Removing a constrained vertex or a breakline empties the triangles around it and re-triangulates the hole as a constrained Delaunay triangulation of a polygon ([Chew 1989](https://doi.org/10.1007/BF01553881); constraint removal as in [Kallmann, Bieri and Thalmann 2004](https://doi.org/10.1007/978-3-662-07443-5_15)).
+- A manual edge swap, a standard surface edit, is stored as an added constraint edge, so it survives later edits and the surface is still fixed by its inputs.
+
+**One answer, however it is built.** With every tie broken by one rule, the constrained Delaunay triangulation of a set of points and breaklines is unique. A parallel build, an incremental edit and a full rebuild give the same triangles, stored in canonical order by name, so the bytes match too. That makes fast re-triangulation after an edit safe, and tests check every local edit against a full rebuild. Large surfaces are stored in spatial chunks. Each triangle belongs to the half-open cell holding its centroid, so chunking never changes the surface.
+
+**Given triangulations.** A TIN imported from IFC or LandXML is usually not Delaunay, and re-triangulating it would change its surface and its volumes. So the kernel keeps it as given and checks it exactly on import: every triangle has non-zero plan area and the same orientation, and no two triangles overlap in plan. A failure is an error naming the triangles, with the remedies "drop the overlapping triangles" or "re-triangulate as Delaunay". An edit to a given surface re-triangulates only the cavity it touches.
+
+**Why our own triangulator.** spade (MIT or Apache-2.0) is the structural model, but it computes breakline crossings in floating point and limits the coordinate range ([03](../../../kit/notes/G01-evidence/03-rust-kernels-crates.md) section 4). startin (MIT) has deletion and five interpolators but no breaklines, and its point location draws random numbers ([lib.rs L1236](https://github.com/hugoledoux/startin/blob/012f9741d5162a5b7993f9fe33722bf63601111a/src/lib.rs#L1236)). Geogram's exact triangulator is constrained, exact in its orientation tests and deterministic for one insertion order. But in its open build the circle test on crossing points uses an approximate lifted coordinate plus extra checks ([CDT_2d.cpp L1534-L1544](https://github.com/BrunoLevy/geogram/blob/40d72165ceeeb0a61977d6fdf74d929bfdd77b7b/src/lib/geogram/delaunay/CDT_2d.cpp#L1534-L1544)), and its result depends on insertion order. Committing crossings to the grid keeps every circle test inside 256 bits. No open triangulator the research found is constrained, exact in every test and independent of insertion order; Spare Kit's must be all three, and its tests check each.
+
+**Names and history.** Every entity is named from the surface's own operation and the names of vertices, so names do not depend on how the surface was built:
+
+- a vertex carries its survey point name; a crossing vertex is `Created { op, role: tin.crossing, from: [the two crossing segments' names] }`; a point from a scan or a raster carries its asset and index (sections 17.10 and 17.11);
+- an edge is `Created { op, role: tin.edge, from: [its two vertex names] }`;
+- a triangle is `Created { op, role: tin.face, from: [its three vertex names] }`.
+
+`op` is the surface's build operation, whose OpId stays the same when the surface regenerates. Every TIN operation emits the section 20.3 history: a triangle with the same three vertices is unchanged (or modified, if a vertex moved); a missing one is deleted; a new one is generated from the inserted or removed input; an edge cut by a new point is split from its parent. Names built on Delaunay's diagonals are valid only while those diagonals exist, because adding a point can change them. So anything resting on the ground (a tree, a set-out peg, a spot level) holds a surface-point reference (section 17.12), not a triangle's name.
+
+**Operations on surfaces.**
+
+- Boundaries: outer, hole and void, with IFC's meaning. When surfaces combine, a hole lets another surface show through and a void stays empty ([IFC source](https://github.com/buildingSMART/IFC4.3.x-development/blob/7256780bd95fcc5b3653e07b3e8ec2f8389c9f3d/docs/schemas/resource/IfcGeometricModelResource/Entities/IfcTriangulatedIrregularNetwork.md)).
+- Paste (one surface replaces another inside its boundary) and envelope (the higher or lower of two), on the exact plan overlay of both triangulations. Along a paste seam the base surface takes the pasted surface's heights, and the base triangles beside the seam are re-triangulated to meet it. The operation reports that change, and its volume, outside the pasted boundary.
+- Height at any plan point is an exact rational, and so is each triangle's gradient (the direction and rate of steepest rise), because its plane has integer coefficients. Comparing a slope with a limit ("steeper than 1 in 3?") is exact, by comparing squares. Slope as a number, and aspect (the compass direction a slope faces), need a square root and an arctangent, so they are Certified.
+- Drape a 2D curve on the surface; cut a ground profile along a line or any curve. Crossings stay implicit until drawn; drawn results are committed and Certified.
+- Simplify by greedy insertion to a vertical error bound (Garland and Heckbert 1995, the method of delatin, ISC, [README](https://github.com/mapbox/delatin/blob/9bb2f3455c0435bb66eafd9000a6f3161d8451a4/README.md#L5)). The largest height difference between two piecewise-flat surfaces lies at a vertex of their overlay, so the kernel computes it exactly. The result is Certified with that bound, and the change in volume is reported.
+- Difference (isopach) surface: one surface's height minus another's, on their exact overlay.
+- Flat triangles (all three corners at one height, the classic flaw when contour lines are triangulated) are detected exactly and reported. Filling them is an explicit operation whose result is Approximate, because the added heights are an interpretation.
+
+**Exactness.** A TIN is Exact when every vertex is an input point. Once any vertex has been committed by rounding (a breakline crossing, a paste seam, an envelope, the top of a boolean), the TIN is Certified. Its bound is reported: half a step of movement on each axis at each committed vertex, and the height difference that makes there.
+
+## 17.4 Contours (`geom-terrain`)
+
+A contour at height h crosses every triangle edge whose ends lie either side of h. The crossing is an exact implicit point in `i128` homogeneous coordinates. A vertex exactly at h counts as slightly above it, a symbolic perturbation, so exact contours are closed loops or run to the boundary, never branch and never cross. When drawn, their vertices are committed by snap rounding: drawn contours still never cross, though two may touch at one rounded point, which the drawing reports. Smoothed contours for presentation are a separate operation, marked Approximate and checked against their neighbours with exact predicates; where a smoothed line would cross a neighbour, the exact line is kept there.
+
+## 17.5 Cut, fill and volumes (`geom-terrain`; mass haul in `geom-civil`)
+
+- **Prisms are exact.** The volume between a TIN triangle and a level datum, or between two surfaces over the same plan triangle where they do not cross, is twice the plan area times the sum of the three height differences, over six: integer arithmetic in fixed-size integers (256 bits is ample).
+- **Where two surfaces cross** inside a triangle, the triangle is first split exactly along the crossing line, so cut and fill are never netted inside one piece.
+- **Surfaces with different triangles** are compared on their exact plan overlay. Each piece's volume is an exact rational. The kernel rounds each piece outward to whole cubic steps and adds them, so cut and fill are Certified within one q³ (about 4 × 10^-21 m³) per piece. Nothing physical can see that bound, but it is stated. Exact rational totals at this scale would not fit fixed-size integers (an open question).
+- **Net volume** (fill minus cut) equals the difference of the two surfaces' volumes to a datum, within N·q³ for N pieces. That identity is a property test.
+- **The average-end-area method**, which many contracts still specify, is a separately named method over cross-sections, never what "volume" means by default.
+- **Mass haul**, the running balance of cut and fill along a road that plans where earth is moved, groups the same pieces by station range.
+
+Revit's recorded failures, cut and fill that ignore added volumes and simplification that changes volumes ([08](../../../kit/notes/G01-evidence/08-standards-coverage-testing.md) section B), cannot happen here: volumes come from the surfaces and solids that are drawn, and simplification reports what it changed.
+
+## 17.6 Terrain as a solid (`geom-terrain`, with `geom-poly` and `geom-bool`)
+
+A toposolid is the terrain as a solid: the TIN on top, vertical sides along its boundary, and a flat base at a chosen datum. Every face is a plane through grid points, so it is an exact plane-based polyhedron (section 6.3), and its class is its TIN's.
+
+- **It booleans with buildings** (section 11): excavate a basement, add a pad, cut a trench, split along lot lines. With flat-faced solids the result is exact; with curved ones it is Certified. Revit users report its terrain sub-division failing intermittently on complex shapes ([08](../../../kit/notes/G01-evidence/08-standards-coverage-testing.md) section B); exact plane-based booleans do not fail that way.
+- **Strata** (topsoil, fill, rock from boreholes) are the toposolid of an upper surface minus that of a lower one, both to one datum, kept as regions of one cellular body (section 8.1). Their volumes follow section 17.5.
+- **Vertical and overhanging faces**, which a TIN cannot hold, come from booleans: a retaining wall united with the ground, a kerb face cut into it.
+- **Size.** A large toposolid is one solid region stored in section 8.2's shared chunks, so an excavation copies only the chunks it touches. Chunks are storage, never faces: they add no walls to sections, volumes or names. Regions are kept for real strata and cells.
+- **Names.** Faces carry the roles `top`, `side(boundary edge)` and `base`. Each top face is `Created { op, role: top, from: [its triangle's three vertex names] }`, and all top faces share one carrier, the terrain surface, so a reference to "the ground" survives re-triangulation (section 17.12). Every toposolid operation emits the section 20.3 history.
+- **Back to a TIN.** The top of a boolean result has implicit corners. Turning it into a TIN commits them to the grid, so that surface is Certified within half a step per axis.
+
+The research found no open project joining a constrained TIN to exact solid booleans ([10](../../../kit/notes/G01-evidence/10-github-sweep.md) section 3, gap 7). Spare Kit leads here.
+
+## 17.7 Grading (`geom-terrain`, with `geom-skeleton`)
+
+Grading projects slopes from a feature line (a 3D polyline of lines, arcs and helices) or a pad's edge until they meet a target. Where a slope meets a target surface is the daylight line.
+
+- **The slope surface.** With rounded corners, the default, a constant-slope surface is the envelope of cones with their tips along the feature line and their sides at the given slope. In fill (ground below the feature line) it is the upper envelope of downward cones; in cut, the lower envelope of upward ones. A straight piece contributes two planes, with cones at its ends; an arc or helix contributes a developable surface (one that unrolls flat without stretching) with no simpler exact form.
+- **How it is built.** Every piece is faceted within ε_fit, the plan projections of the facets are overlaid exactly, and each cell keeps its highest piece (fill) or lowest (cut): the envelope of triangles in space, whose theory and size bounds Sharir and Agarwal give (*Davenport–Schinzel Sequences and Their Geometric Applications*, Cambridge University Press, 1995). It is the same overlay machinery as a TIN envelope (section 17.3).
+- **Mitred corners and different slopes per side** on a level pad follow the weighted straight skeleton, in which each edge moves at its own speed and the slope planes meet along the skeleton's arcs ([Eppstein and Erickson 1999](https://doi.org/10.1007/PL00009479)). Weights for which it is ill-defined ([Biedl and others 2015](https://doi.org/10.1016/j.comgeo.2014.08.006)) are reported as an error. The method is ported from campskeleton (Apache-2.0) onto exact predicates in `geom-skeleton` ([10](../../../kit/notes/G01-evidence/10-github-sweep.md) sections 1 and 3, gap 1). Mitred corners along a feature line that is not level generalise the skeleton to sloping edges. We found no published method, so Spare Kit leads; meanwhile the operation offers rounded corners there, and asking for a mitre returns an error naming the missing piece.
+- **Cut and fill switch** where the feature line crosses the target surface. That point, a line meeting a triangle's plane, is found exactly; the operation splits there and applies the cut slope on one side and the fill slope on the other.
+- **Targets**: a surface (daylight), a horizontal distance, an elevation, or a height relative to the feature line, with optional benches (level steps of a given width at every given height) on long slopes.
+- **Daylight** is where the faceted slope surface meets the target TIN, computed exactly on the facets. Overlaps at inside corners and tight curves are resolved by the envelope, so a daylight line never loops back on itself. Spare Construct names this as grading's hard part.
+- **Exactness.** A plane at a given slope through a line between grid points has irrational coefficients, because the unit perpendicular needs a square root. So slope planes are committed to rational planes through the feature line, close enough to the slope asked for, and grading results are Certified, within ε_fit by default. Contours of a level pad's slopes are offsets of the pad, with arcs at rounded corners (section 14), and Certified until section 14 decides on exact arcs.
+- The graded surface is pasted into the design surface (section 17.3).
+
+## 17.8 Alignments (`geom-align`; curve kinds in `geom-curve`)
+
+An alignment is a road, rail or pipe centreline: a horizontal path, a vertical profile along it, and for rail the cant (the tilt of the track). The curve kinds are section 7's, evaluated in `geom-curve`; `geom-align` joins them, keeps stations and resolves placements. IFC 4.3's segment types ([horizontal](https://github.com/buildingSMART/IFC4.3.x-development/blob/7256780bd95fcc5b3653e07b3e8ec2f8389c9f3d/docs/schemas/resource/IfcGeometricConstraintResource/Types/IfcAlignmentHorizontalSegmentTypeEnum.md), [vertical](https://github.com/buildingSMART/IFC4.3.x-development/blob/7256780bd95fcc5b3653e07b3e8ec2f8389c9f3d/docs/schemas/resource/IfcGeometricConstraintResource/Types/IfcAlignmentVerticalSegmentTypeEnum.md), [cant](https://github.com/buildingSMART/IFC4.3.x-development/blob/7256780bd95fcc5b3653e07b3e8ec2f8389c9f3d/docs/schemas/resource/IfcGeometricConstraintResource/Types/IfcAlignmentCantSegmentTypeEnum.md)) all map onto them.
+
+| Part | Segment kinds | How it is evaluated | Class |
+| --- | --- | --- | --- |
+| Horizontal | Line | Directly; a point at a station needs one square root | Exact shape, Certified points |
+| | Circular arc | Closed form | Certified |
+| | Clothoid (curvature changes steadily with length), and the other transitions: Helmert (two quadratic halves), Bloss, cosine, sine, the Viennese bend, and IFC's second-, third- and seventh-order polynomial spirals | Heading is the exact integral of curvature: a polynomial, or polynomial plus `sinpi` and `cospi` terms. Position integrates the cosine and sine of heading by certified Gauss–Legendre quadrature | Certified |
+| | Cubic (IFC's CUBIC: the cubic parabola y = x³/6RL, and a cubic spiral variant) | The cubic parabola is a polynomial curve, exact in its own parameter, with its length by certified quadrature. The spiral variant's exact form is fixed by the decision note | Exact shape, Certified length |
+| Vertical | Constant grade; parabolic curve | Polynomials in station: rational grades give exact rational heights | Exact |
+| | Circular arc; clothoid | As above | Certified |
+| Cant | Constant, linear, and the transition shapes above | Functions of station | Exact or Certified |
+
+**How spirals are evaluated.** IFC defines a transition's position as the integral of the cosine and sine of its heading ([04](../../../kit/notes/G01-evidence/04-nurbs-surfaces.md) section 2), and none of these integrals has a closed form in elementary functions. IfcOpenShell uses a fixed 15-point Gauss–Kronrod rule ([08](../../../kit/notes/G01-evidence/08-standards-coverage-testing.md) section A1). Spare Kit uses Gauss–Legendre quadrature: the integral is a weighted sum of the integrand at fixed points in each panel. The integrand is analytic (smooth enough to extend into the complex plane), so the classical bound for analytic integrands ([Trefethen 2008](https://doi.org/10.1137/060659831)) gives the error from the integrand's size on an ellipse around each panel. The kernel bounds that size with interval arithmetic and picks the number of panels from it. The count depends only on the segment's parameters, so every machine evaluates identically, and the result carries its proven bound.
+
+**The clothoid uses the same evaluator.** Its position is given by the Fresnel integrals (the integrals of the cosine and sine of t²). We do not port the Fresnel routine of Bertolazzi and Frego's Clothoids library (BSD-2). Its own header says it is adapted from a 1997 Wiley book through a 2005 rewrite by another author ([Fresnel.cc L60-L78](https://github.com/ebertolazzi/Clothoids/blob/dafdc29acee5c4f25e777c6cffe56ecb39b0ec11/src/Fresnel.cc#L60-L78)), so its coefficient tables may not be Bertolazzi's to licence, and it states no error bound. A faster clothoid path may later use our own power series and asymptotic expansion, written from their published mathematical forms ([DLMF §7.6](https://dlmf.nist.gov/7.6) and [§7.12](https://dlmf.nist.gov/7.12), read 2026-10-21) with derived remainder bounds, and tested against the general evaluator. The Clothoids library is only an out-of-process test oracle. Bertolazzi and Frego's published methods, G1 fitting ([2014](https://doi.org/10.1002/mma.3114)) and point projection ([2019](https://doi.org/10.1137/18M1200439)), are written from their papers.
+
+**The Viennese bend depends on cant.** It optimises the path of a centre of gravity at height h above the rails, so its horizontal curvature includes a term in the cant's change Δψ and h ([IFC source L163-L175](https://github.com/buildingSMART/IFC4.3.x-development/blob/7256780bd95fcc5b3653e07b3e8ec2f8389c9f3d/docs/schemas/resource/IfcGeometricConstraintResource/Types/IfcAlignmentHorizontalSegmentTypeEnum.md?plain=1#L163-L175)). When an alignment is built from design segments, a Viennese bend takes Δψ and h from its cant segment, and the two are checked to cover the same stations. The curve that results is a seventh-order polynomial spiral and needs no cant to evaluate.
+
+**Lengths are primary, so stations are exact.** A station (chainage) is distance along the horizontal alignment. Each segment carries its length, as IFC's segments do, and the kernel stores it as whole steps, so every station is an exact integer. Positions are what is computed, to a certified bound. An alignment designed from intersection points and radii has its lengths computed once and committed, and the kernel reports how far the result misses the ideal tangent points (a few half-steps). Two invariants are checked: each segment's computed end lies within half a step plus its evaluation bound of the next segment's start, and where the design says tangent, the directions agree within ε_ang. On IFC import, larger gaps up to ε_heal are healed and logged; gaps beyond that are errors naming both segments. Station equations, where stationing jumps, are pairs of exact stations.
+
+**Finding a station.** Projecting a point to get its station and offset uses Frego and Bertolazzi's point-to-clothoid method for clothoids, and bound-based pruning with safeguarded Newton ([Ma and Hewitt 2003](https://doi.org/10.1016/S0167-8396(03)00021-9)) for the rest. Distances are certified intervals, so every candidate whose interval overlaps the smallest is returned, in station order: a point near a hairpin gets both answers, never a guess.
+
+**Placement along an alignment.** IFC's linear placements (a station, then lateral, vertical and along offsets) become station references (section 17.12). Moving the alignment moves everything on it, the way a wall carries its doors. Segments are named by their design handles, such as `spiral.in(IP-3)`.
+
+**It never** converts a spiral to NURBS behind the user's back, derives a station from coordinates when a length is given, or integrates without a bound.
+
+## 17.9 Corridors (`geom-align` for the corridor, `geom-sweep` for its solid, daylight in `geom-civil`)
+
+A corridor is a road, rail or channel body: cross-section templates (lanes, kerbs, footpaths, batters) swept along an alignment. Spare Construct evaluates the templates and superelevation at each station; the kernel turns the sections into geometry by IfcSectionedSolidHorizontal's rules ([IFC source](https://github.com/buildingSMART/IFC4.3.x-development/blob/7256780bd95fcc5b3653e07b3e8ec2f8389c9f3d/docs/schemas/resource/IfcGeometricModelResource/Entities/IfcSectionedSolidHorizontal.md?plain=1#L24-L30); [08](../../../kit/notes/G01-evidence/08-standards-coverage-testing.md) section A1). Each section is set by its own linear placement at a station, which fixes its plane; the sweep follows those placements, not necessarily the alignment's tangent. Points with the same tag are joined by straight interpolation between sections. Consecutive sections must match, and tangent breaks are mitred at the half angle. IfcOpenCrossProfileDef's widths and slopes feed the same model.
+
+- **Two representations.** The definition is a procedural sweep (section 13), in `geom-sweep`. For earthworks and booleans it is also built as an exact faceted solid, with sections close enough that its flat triangles stay within a stated bound of the sweep. The bound comes from second derivatives ([04](../../../kit/notes/G01-evidence/04-nurbs-surfaces.md) section 5), and every segment kind's curvature is known in closed form. At ε_fit a 300 m radius curve needs a section about every 0.15 m. The faceted corridor is Certified with its bound, and its booleans with terrain are exact plane-based ones. A coarser bound must be asked for, and the result says so.
+- **Facets.** The four-sided piece between two sections and two tags is usually not flat, so it is split into two triangles along its shorter diagonal, compared exactly in integers, with ties broken by name.
+- **Built in station ranges.** Each range is a separate piece, rebuilt only when an edit touches it, in parallel. The section at a range boundary is computed once and shared, bit for bit, by both neighbours.
+- **Names.** A section is `Created { op, role: section(station) }`. A facet is `Created { op, role: strip(tag_a, tag_b).lower, from: [the two sections' names] }`, or `.upper` for the other triangle of the pair. Every facet's carrier is its strip (the procedural surface between two tags), so a reference to "the left lane" survives a change of section spacing. Every corridor operation emits the section 20.3 history.
+- **Self-intersection.** On the inside of a tight curve, a section wider than the radius of curvature folds the sweep back on itself. IFC forbids consecutive sections that intersect, and warns that sharp tangent breaks can make mitres "nearly impossible" (propositions 1 and 4 at the link above). The kernel detects both exactly on the faceted solid and returns `SelfIntersection` with the station range and the largest width that fits there.
+- **Junctions** (where corridors meet, with kerb returns) are booleans of corridor bodies plus kerb-return geometry (helices in plan with grade), not a special corridor feature.
+- **Daylight** hands each outer edge to grading (section 17.7); that composition lives in `geom-civil`.
+- **Cross-sections** at a station cut the TIN, the corridor and any body with one section plane (section 18).
+- **Pipes, channels, bridges, tunnels and walls** along alignments use section 13's other sweeps: profile sweeps along 3D lines, and IFC's fixed-reference and directrix-derived swept solids. Pipe inverts and grades are exact.
+
+The parts for alignment-to-solid exist in the open, but nobody has joined them to a kernel ([10](../../../kit/notes/G01-evidence/10-github-sweep.md) section 3, gap 5). Spare Kit leads here too.
+
+## 17.10 Point clouds as reference (`geom-cloud`)
+
+Point clouds are reference only (section 9): never part of a solid, never stored in the operation log. Spare Construct reads scans (E57, the ASTM exchange format for 3D imaging data, and LAS, the ASPRS LiDAR format) and stores them as COPC (a compressed LAS file arranged as an octree, so parts can be read alone). `geom-cloud` answers questions about them.
+
+- **Coordinates.** Cloud points enter the kernel as frame-relative grid integers. LAS and COPC store scaled integers; they convert exactly when the scale and offset are whole numbers of steps (0.001 m is 6,400 steps), and otherwise round half to even, Certified within half a step.
+- **Pure queries over chunks.** The kernel reads no files. A query first names the chunks it needs, the program supplies them, and the query runs. A point's index is its position in the whole immutable asset, not within a chunk. Results are ordered by distance, then index, so they match on every machine.
+- **Queries:** nearest points; box, slab and section clipping; picking along a ray; and distance from each point to a body (section 19), which gives deviation maps for as-built checks.
+- **Snaps** take a point and a radius: snap to a scan point, to a plane fitted to the points within the radius, or to the edge where two fitted planes meet. A snap names the scan asset and point index. A replaced scan is a new asset, so references to the old one report `Deleted` with their stored position.
+- **Fits:**
+  - planes by total least squares (minimising perpendicular distances);
+  - cylinders, spheres, cones and tori by the least-squares methods Eberly documents in Geometric Tools (BSL-1.0, [ApprCylinder3.h](https://github.com/davideberly/GeometricTools/blob/e09f5b39a33da6b4bfd0ff8dbb64ddcb7fdfc763/GTE/Mathematics/ApprCylinder3.h#L10-L12)), with its internal threads replaced by the kernel's one parallel helper (section 21);
+  - many shapes at once by efficient RANSAC (random sample consensus: fit small random samples and keep the fits most points agree with; [Schnabel, Wahl and Klein 2007](https://doi.org/10.1111/j.1467-8659.2007.01016.x)). Its random numbers come from a counter-based generator (Philox, [Salmon and others 2011](https://doi.org/10.1145/2063384.2063405)) keyed by a seed stored in the operation's input; the generator is part of the operation's version;
+  - free-form surfaces by least-squares NURBS approximation ([04](../../../kit/notes/G01-evidence/04-nurbs-surfaces.md) section 3).
+- Every fit is Approximate. Its deviation from the committed shape (largest and RMS distance over its inliers) is Certified, computed with interval arithmetic.
+- **A fit is recorded, never redone.** When a person accepts a fit, its parameters become the inputs of a new operation in the log. Replay uses them, so reprocessing a scan never changes the model.
+- **Ground surfaces from scans.** A TIN built from the points a program classed as ground records the scan asset's content hash and the hash of the ground subset (or the classification's version). Its vertices are named by asset and index. Replay fetches the points by hash; if they are gone, the surface reports `UnresolvedRef` and keeps its stored geometry (section 26.2).
+
+## 17.11 Flow, sight and rasters (`geom-terrain`; sight distance in `geom-civil`)
+
+- **Flow paths.** Water on a TIN runs down each triangle's steepest descent, the negative gradient, an exact rational direction; where both triangles beside an edge drain into it, the path follows the edge. Each crossing is committed to the grid, so a path is Certified. A single path can cross Θ(n²) edges on a terrain of n triangles ([de Berg and others 1996](https://doi.org/10.1515/9780773591134-057); the full text was not read, so this is unverified), so path queries carry budgets (section 10.1).
+- **Sinks and catchments.** Sinks (vertices with no lower neighbour, and flat areas) are found exactly. A catchment is the set of surface pieces draining to one outlet, following the flow routing of de Berg, Haverkort and Tsirogiannis ([2011](https://doi.org/10.1137/1.9781611973082.24)).
+- **Line of sight** between two grid points, over a TIN, corridors and solids, is a segment tested against triangles and planes with exact predicates: exact on exact inputs. Sight distance along an alignment repeats it at stations and is Certified, because positions along curves are.
+- **Raster DEMs** (digital elevation models: heights on a regular grid, such as national 1 m LiDAR products). Grid posts become TIN vertices, exactly when the spacing, origin and heights are whole steps and otherwise rounded and Certified. The TIN is then usually simplified (section 17.3). Each post is named by the raster asset's hash and its row and column.
+
+## 17.12 References onto terrain and alignments (`geom-name`)
+
+Section 20.4 resolves references to named entities and carriers. Civil work needs two more forms, added to `geom-name` under the same rules: resolve exactly, follow history, or fail with a reason; never guess.
+
+```rust
+enum PlacementRef {
+    OnSurface { surface: Ref, plan: [i64; 2] },   // the ground at a plan position; Ref is section 20.4's reference
+    Station { alignment: Ref, anchor: StationAnchor, along: Steps, lateral: Steps, vertical: Steps },
+}
+enum StationAnchor {
+    Start,                // absolute station, as IFC measures distance along: the default
+    DesignPoint(NameId),  // from a named design point, such as the end of spiral.in(IP-3)
+}
+```
+
+- `OnSurface` resolves to the surface's height at that plan position in the current version. Outside the boundary, or in a hole or void, it is `UnresolvedRef` with the reason. A tree or a spot level follows the ground this way.
+- `Station` resolves to a position on the current alignment. With `Start`, a culvert at station 1,250 m stays at station 1,250 m when an earlier segment lengthens; with `DesignPoint`, a set-out peg at the end of a spiral stays with that spiral. A station beyond the end of a shortened alignment is `UnresolvedRef` with the reason.
+- The carrier of a toposolid's top faces is the terrain's TIN itself, referenced as one entity, not a surface kind of section 7.
+
+## 17.13 Exchange, and what each result guarantees
+
+IFC 4.3 terrain, alignments, corridors and map conversions go through `geom-ifc`. LandXML 1.2 surfaces, alignments, profiles, COGO points and parcels go through a `geom-landxml` crate, added by the format playbook (section 26.1). LandXML names sixteen spiral types without formulas ([LandXML-1.2.xsd L715-L734](http://www.landxml.org/schema/LandXML-1.2/LandXML-1.2.xsd), read 2026-10-21; it cannot be pinned to a commit). On our reading, clothoid, bloss, cosine, sinusoid (sine), biquadratic (Helmert), weinerBogen (the Viennese bend), cubic and cubicParabola map to the kinds above, and the `rev` types are the same curves run from the other end; the decision note confirms each. sineHalfWave, biquadraticParabola, japaneseCubic and radioid need a published definition and a decision note before they become kinds (section 26.1). Until then they are kept as their LandXML data, and any operation that must evaluate them fails with an error naming the missing kind.
+
+| Result | Class | Crate |
+| --- | --- | --- |
+| Values landing on whole steps or angle units | Exact | `geom-num` |
+| Other values; `f64`, Ground-frame and transformed conversions | Certified: half a step or unit, plus the transformation's stated accuracy where one was used | `geom-math` |
+| Distance comparisons; inverse distances rounded to the step; straight-sided parcel areas | Exact | `geom-2d` |
+| COGO forward points and intersections; arcs and arc-sided areas until section 14 decides | Certified | `geom-2d` |
+| TIN of input points; contour crossings; prism volumes; toposolid of an exact TIN; slope-limit tests; line of sight on exact inputs | Exact | `geom-terrain` |
+| TIN with committed vertices; slope and aspect values; drawn contours and profiles | Certified | `geom-terrain` |
+| Overlay cut and fill | Certified, q³ per piece | `geom-terrain` |
+| Simplified TIN; graded surface; flow paths | Certified, stated bound | `geom-terrain` |
+| Stations; vertical grades and parabolas | Exact | `geom-align` |
+| Points on arcs and spirals | Certified, ε_fit | `geom-curve` |
+| Faceted corridor | Certified, stated bound | `geom-sweep` |
+| Point-cloud fits | Approximate; deviation Certified | `geom-cloud` |
+
+A property test checks every operation's result against the class it declares. Until each piece is built, imported terrain, alignments and corridors are kept as their IFC or LandXML definitions, and an operation the kernel cannot yet certify fails with an error naming the missing piece. It never approximates silently.
