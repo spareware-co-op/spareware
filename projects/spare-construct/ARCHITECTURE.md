@@ -112,30 +112,15 @@ The model is a database of elements stored column by column, the way game engine
 
 ## Geometry kernel
 
-We write our own kernel in Rust, built for what buildings are made of, with exact arithmetic so booleans never fail. It lives in the shared engines as `engine-geometry`, so every program that works in 3D uses the same core: Spare Studio's 3D app, the simulation engine and any future 3D program. Revit runs Autodesk ShapeManager, a general-purpose CAD kernel. A kernel built only for BIM can be smaller and faster, because most building geometry is flat-faced.
+The kernel is Spare Kit's, not Spare Construct's alone: every program that models anything uses it. Its full architecture is the decision note [G01](../kit/notes/G01-geometry-kernel.md), which replaces the earlier plan here (flat faces first with curves later, a port of Manifold's float booleans, one 0.01 mm tolerance) once an owner accepts it. In short, for Spare Construct:
 
-**High level**
-
-- **Scope v1**: flat-faced solids. Extrude, sweep along lines and arcs, revolve, blend, and booleans (cut, join, intersect). That covers walls, floors, roofs, doors, windows, beams, ducts and most families.
-- **Scope v2**: curved surfaces (NURBS) for free-form roofs and facades, added later behind the same interface.
-- **Method**: port Manifold's published boolean method (its Apache-2.0 licence allows reuse) rather than inventing one. It was the strongest open option in the 2026-10-18 check, and IfcOpenShell has just added Manifold as a kernel.
-- **Two representations**: an exact boundary model for editing and drawing (faces, edges, curves), and a triangle mesh made from it for display and clash.
-
-**Low level**
-
-- Exact predicates: orientation and in-circle tests use adaptive exact arithmetic (Shewchuk's method), so "which side of this plane" is never wrong. Coordinates stay f64.
-- Topology: half-edge structure with manifold guarantees. Every operation returns a valid solid or a clear error, never a broken shape.
-- Tolerance: one model-wide tolerance (proposed 0.01 mm) for merging points and snapping, separate from the exact tests.
-- Bulk booleans: 300 openings in one wall are cut as one batched operation, not 300 cuts in a row, and walls are processed in parallel.
-- Tessellation: curves split by on-screen error, so a far-away arc uses few triangles. Results are cached per type and detail level.
-- Determinism: no fast-math, no fused multiply-add contraction, a fixed operation order. Native and browser builds give bit-identical results.
-- Testing: fuzzing with random solids (cargo-fuzz), plus the Revit family geometry we already hold as truth data.
-
-**Discuss**
-
-- Wrap Manifold's C++ for the first stretch while our Rust port matures, or Rust from the start?
-- Is 0.01 mm the right tolerance? Revit's short-curve limit is about 0.8 mm (1/32 inch) and causes real modelling pain.
-- When do curved surfaces become necessary?
+- **One kernel, all geometry**: 2D drafting, flat and curved solids (analytic and NURBS), subdivision surfaces, fields, meshes, terrain, alignments and point clouds, mapped at full scale from the start and built in layers, each proven before the next.
+- **Exact where it decides topology**: coordinates on a 156.25 nm integer grid (0.01 mm and 1/256 inch exact), exact integer predicates, and flat-faced solids kept as exact planes so cutting a wall 300 times never rounds anything. Curved geometry is certified to within 0.01 mm. No hard minimum curve length like Revit's 0.8 mm.
+- **Never a broken result**: every operation returns a valid model or a structured error naming what failed, where, and what would make it succeed.
+- **Deterministic**: bit-identical results natively and in the browser, on any number of cores.
+- **Names that do not break**: faces and edges are named by the operations that made them, with roles (a wall's exterior, interior, top, base and ends), so hosted doors and dimensions find the same face after edits or report why not.
+- **Batch operations**: 300 openings in one wall are one call, and walls rebuild in parallel.
+- **Truth data**: the Revit family geometry we hold remains a truth test for the kernel.
 
 ## Regeneration and constraints
 
