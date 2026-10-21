@@ -72,6 +72,7 @@ use geom_num::{Exactness, NumError, Sign, eft, math, predicate};
 const GATE: &str = include_str!("../benches/instructions/gate.rs");
 const KERNELS: &str = include_str!("../src/kernels.rs");
 const WORKFLOW: &str = include_str!("../../../../../../.github/workflows/kernel-bench.yml");
+const KERNEL_WORKFLOW: &str = include_str!("../../../../../../.github/workflows/kernel.yml");
 
 // ------------------------------------------------------------------------------------------------
 // An exact big integer, and exact rationals, for the oracles.
@@ -2573,10 +2574,16 @@ fn the_toolchain_is_pinned() {
         pinned_file || !WORKFLOW.contains("dtolnay/rust-toolchain@stable"),
         "no rust-toolchain file, and the workflow uses dtolnay/rust-toolchain@stable"
     );
-    // Every toolchain is installed as kernel.yml installs its own, by dtolnay/rust-toolchain with
-    // an exact `toolchain:`, here the one each tree pins in geom-bench/toolchain.txt (the first job
-    // reads it and refuses anything but an exact release); nothing installs one another way.
+    // Every toolchain is installed as kernel.yml installs its own, by the commit of
+    // dtolnay/rust-toolchain kernel.yml pins, with an exact `toolchain:`, here the one each tree
+    // pins in geom-bench/toolchain.txt (the first job reads it and refuses anything but an exact
+    // release); nothing installs one another way.
     assert!(!WORKFLOW.contains("rustup toolchain install") && !WORKFLOW.contains("rustup default"));
+    let kernel_install = KERNEL_WORKFLOW
+        .lines()
+        .map(|line| line.trim().trim_start_matches("- "))
+        .find(|line| line.starts_with("uses: dtolnay/rust-toolchain@"))
+        .expect("kernel.yml installs its toolchain with dtolnay/rust-toolchain");
     let lines: Vec<&str> = WORKFLOW.lines().collect();
     let installs: Vec<usize> = lines
         .iter()
@@ -2586,7 +2593,7 @@ fn the_toolchain_is_pinned() {
         .collect();
     assert!(!installs.is_empty());
     for at in installs {
-        assert_eq!(lines[at].trim(), "uses: dtolnay/rust-toolchain@master");
+        assert_eq!(lines[at].trim(), kernel_install);
         // The step's `with:` block: the lines after `uses:`, up to the next step.
         let with: Vec<&str> = lines[at + 1..]
             .iter()
@@ -2723,6 +2730,104 @@ fn a_removed_benchmark_fails_the_gate() {
     let step = workflow_step("List changes over 1% and benchmarks not compared");
     let fails = step.contains("::error::") || !step.trim_end().ends_with("exit 0");
     assert!(fails, "a removed benchmark only raises a warning:\n{step}");
+}
+
+#[test]
+fn an_unfinished_listing_fails_the_gate() {
+    // 23.13: every change over 1% is listed. The two 1% listings exit with a failure whenever they
+    // list something, so the step knows a listing finished only by Gungraun's closing line. One
+    // without it could leave a change over 1% unlisted while the summary said "None.", so it is an
+    // error that fails the step after everything else is reported, and the summary says so.
+    let step = workflow_step("List changes over 1% and benchmarks not compared");
+    let lines: Vec<&str> = step.lines().map(str::trim).collect();
+    let check = lines
+        .iter()
+        .position(|line| *line == "if ! grep -q '^Gungraun result:' \"$log\"; then")
+        .expect("the listing step checks that each listing finished");
+    let unfinished: Vec<&str> = lines[check + 1..]
+        .iter()
+        .copied()
+        .take_while(|line| *line != "fi")
+        .collect();
+    assert!(
+        unfinished
+            .iter()
+            .any(|line| line.starts_with("echo \"::error::"))
+            && unfinished.contains(&"incomplete=1"),
+        "an unfinished listing only warns: {unfinished:#?}"
+    );
+    assert!(!step.contains("::warning::"), "{step}");
+    let fails = ["if [ \"$incomplete\" -ne 0 ]; then", "exit 1", "fi"];
+    assert!(
+        lines.windows(3).any(|w| w == fails.as_slice()),
+        "an unfinished listing does not fail the step:\n{step}"
+    );
+    let summary = workflow_step("Write the summary");
+    assert!(
+        summary.contains("the listing did not complete"),
+        "the summary reports an unfinished listing as listing nothing:\n{summary}"
+    );
+}
+
+#[test]
+fn every_step_is_written_for_bash_e() {
+    // GitHub runs every `run:` step with `bash -e`, and `set -uo pipefail` leaves `-e` on. On #190
+    // (run 39598200605) the fuel job's summary printed the comparison's report with `cat`; with no
+    // comparison to make (the merge base had no fuel benchmarks) there was no report, `cat` failed,
+    // and `-e` ended the job in failure although every gate had passed. The same shell never
+    // reached a `status=$?` after a failing check, so the check's annotation was never written, and
+    // the listing of changes over 1% would have ended at the first change it listed.
+    //
+    // So: an exit status a step reports is caught where the command fails (`|| status=$?`), and a
+    // step that runs on with `-e` off says so (`set +e`) before `set -uo pipefail`.
+    let lines: Vec<&str> = WORKFLOW.lines().map(str::trim).collect();
+    for (at, line) in lines.iter().enumerate() {
+        // Comments may describe the rule.
+        if line.starts_with('#') {
+            continue;
+        }
+        if line.contains("=$?") {
+            assert!(
+                line.starts_with("|| ") || line.contains(" || "),
+                "kernel-bench.yml line {}: `bash -e` ends the step before this reads a failing \
+                 exit status: {line}",
+                at + 1
+            );
+        }
+        if *line == "set -uo pipefail" {
+            let before = at.checked_sub(1).and_then(|b| lines.get(b)).copied();
+            assert_eq!(
+                before,
+                Some("set +e"),
+                "kernel-bench.yml line {}: GitHub's `-e` is still on here; write `set -euo \
+                 pipefail`, or turn `-e` off first",
+                at + 1
+            );
+        }
+    }
+    // Both summaries only report: they run whatever an earlier step did, with `-e` off, and pass.
+    // A step is its `- name:` line and the lines indented under it (a summary is the last step of
+    // its job, so the next step or job ends it).
+    let raw: Vec<&str> = WORKFLOW.lines().collect();
+    let summaries: Vec<Vec<&str>> = raw
+        .iter()
+        .enumerate()
+        .filter(|(_, line)| line.trim() == "- name: Write the summary")
+        .map(|(at, _)| {
+            raw[at + 1..]
+                .iter()
+                .take_while(|line| line.trim().is_empty() || line.starts_with("        "))
+                .map(|line| line.trim())
+                .filter(|line| !line.is_empty())
+                .collect()
+        })
+        .collect();
+    assert_eq!(summaries.len(), 2, "one summary per measuring job");
+    for step in summaries {
+        assert!(step.contains(&"if: always()"), "{step:#?}");
+        assert!(step.contains(&"set +e"), "{step:#?}");
+        assert_eq!(step.last(), Some(&"exit 0"), "{step:#?}");
+    }
 }
 
 #[test]

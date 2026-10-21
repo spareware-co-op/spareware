@@ -14,7 +14,9 @@
 //! the same benchmarks; every public function of `geom-num` is measured or excused with a reason,
 //! and every function excused as a constant refusal still refuses;
 //! the limits are principle 12's in the crate, the gate and the workflow alike; the toolchain,
-//! Gungraun and Wasmtime pins agree wherever they are written; and no retired name is reused.
+//! Gungraun and Wasmtime pins agree wherever they are written; every action the workflow runs is
+//! pinned to the full commit `kernel.yml` runs, and no checkout keeps credentials; and no retired
+//! name is reused.
 //!
 //! Method: a traceability check (<https://en.wikipedia.org/wiki/Traceability_matrix>): each check
 //! reads the files it compares as text (line by line, so a checkout with either line ending reads
@@ -549,6 +551,64 @@ fn the_pins_are_exact_and_agree() {
         "the fuel host must be its own workspace"
     );
     assert!(MANIFEST.contains("exclude = [\"fuel\"]"));
+}
+
+#[test]
+fn every_action_is_pinned_to_the_commit_kernel_yml_runs() {
+    // A tag or a branch can be moved to other code; a full commit cannot. Every action the gates
+    // run is pinned to a full commit (40 hexadecimal digits) with a comment naming the tag or
+    // branch it was checked against, and to the very commit kernel.yml runs for that action, so
+    // the two workflows move together and only after review; and every checkout keeps no
+    // credentials.
+    let uses = |text: &'static str| -> Vec<&'static str> {
+        text.lines()
+            .map(|line| line.trim().trim_start_matches("- "))
+            .filter(|line| line.starts_with("uses: "))
+            .collect()
+    };
+    let kernel = uses(KERNEL_WORKFLOW);
+    let ours = uses(WORKFLOW);
+    assert!(!ours.is_empty());
+    for line in &ours {
+        let pin = line
+            .split_once('@')
+            .and_then(|(_, pin)| pin.split_once(" # "));
+        assert!(
+            pin.is_some_and(|(commit, checked_against)| commit.len() == 40
+                && commit
+                    .chars()
+                    .all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c))
+                && !checked_against.trim().is_empty()),
+            "not pinned to a full commit with the tag it was checked against: {line}"
+        );
+        assert!(
+            kernel.contains(line),
+            "kernel.yml runs another commit of this action, or does not run it: {line}"
+        );
+    }
+    let lines: Vec<&str> = WORKFLOW.lines().map(str::trim).collect();
+    let checkouts: Vec<usize> = lines
+        .iter()
+        .enumerate()
+        .filter(|(_, line)| {
+            line.trim_start_matches("- ")
+                .starts_with("uses: actions/checkout@")
+        })
+        .map(|(at, _)| at)
+        .collect();
+    assert!(!checkouts.is_empty());
+    for at in checkouts {
+        // The step's `with:` block: the lines after `uses:`, up to the next step.
+        let with: Vec<&str> = lines[at + 1..]
+            .iter()
+            .copied()
+            .take_while(|line| !line.is_empty() && !line.starts_with("- "))
+            .collect();
+        assert!(
+            with.contains(&"persist-credentials: false"),
+            "a checkout keeps its credentials: {with:?}"
+        );
+    }
 }
 
 #[test]

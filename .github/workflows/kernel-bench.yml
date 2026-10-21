@@ -46,6 +46,15 @@ name: Kernel benchmarks
 #
 # Read-only: the jobs report in their summaries and annotations, and never write to the repository
 # or the pull request (pull requests from forks get no write token).
+#
+# Every action is pinned to a full commit, the same commit kernel.yml pins for it (a test checks
+# they agree), and every checkout keeps no credentials; update a pin in both workflows, and only
+# after reviewing the new commit.
+#
+# Every `run:` step runs in GitHub's default shell, `bash -e`, so a failing command ends its step
+# even after `set -uo pipefail`. A step that reports a check's verdict therefore catches the
+# check's exit status itself (`|| status=$?`) before reporting it, and the summaries, which only
+# report, never fail the job: the steps before them are the gates.
 
 on:
   # Anything that can change a count: the kernel, Cargo.lock (a dependency bump), the workspace
@@ -113,7 +122,7 @@ jobs:
       head_toolchain: ${{ steps.scope.outputs.head_toolchain }}
     steps:
       - name: Check out the change
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.HEAD_SHA }}
           fetch-depth: 0
@@ -198,19 +207,19 @@ jobs:
       HEAD_TOOLCHAIN: ${{ needs.scope.outputs.head_toolchain }}
     steps:
       - name: Check out the change
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.HEAD_SHA }}
           persist-credentials: false
 
       - name: Install the pinned toolchain (geom-bench/toolchain.txt)
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
         with:
           toolchain: ${{ env.HEAD_TOOLCHAIN }}
           components: rustfmt, clippy
 
       - name: Cache the Rust build
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: |
             . -> target
@@ -262,7 +271,7 @@ jobs:
       HEAD_TOOLCHAIN: ${{ needs.scope.outputs.head_toolchain }}
     steps:
       - name: Check out the change
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.HEAD_SHA }}
           path: head
@@ -275,17 +284,17 @@ jobs:
       # Each tree's own geom-bench/toolchain.txt; the change's last, so it is also the default.
       - name: Install the merge base's pinned toolchain
         if: env.BASE_TOOLCHAIN != env.HEAD_TOOLCHAIN
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
         with:
           toolchain: ${{ env.BASE_TOOLCHAIN }}
 
       - name: Install the pinned toolchain (geom-bench/toolchain.txt)
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
         with:
           toolchain: ${{ env.HEAD_TOOLCHAIN }}
 
       - name: Cache the Rust build
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: head -> ../target
           key: ${{ needs.scope.outputs.base_toolchain }}-${{ needs.scope.outputs.head_toolchain }}
@@ -371,10 +380,10 @@ jobs:
             2>&1 | tee "$RUNNER_TEMP/head.log"
 
       # Chapter 23.13 lists every change over 1%. The two saved runs are compared again with 1%
-      # limits each way; these runs read the saved results and measure nothing, and their failing
-      # exit status only means "something was listed". A benchmark of the merge base that this pull
-      # request no longer has fails the gate unless retired.txt names it: a rename must not hide a
-      # regression.
+      # limits each way; these runs read the saved results and measure nothing. Their failing exit
+      # status only means "something was listed"; a listing that does not complete fails the step.
+      # A benchmark of the merge base that this pull request no longer has fails the gate unless
+      # retired.txt names it: a rename must not hide a regression.
       - name: List changes over 1% and benchmarks not compared
         id: listing
         if: always() && needs.scope.outputs.base_gate == 'true' && steps.gate.outcome != 'skipped'
@@ -382,29 +391,38 @@ jobs:
         env:
           GUNGRAUN_RUNNER: ${{ env.HEAD_RUNNER }}
         run: |
-          set -uo pipefail
+          set -euo pipefail
           cargo "+$HEAD_TOOLCHAIN" bench --locked -p geom-bench --bench instructions -- --list \
             | sed -nE 's/^instructions::([a-z0-9_]+)::([a-z0-9_]+)::([a-z0-9_]+): benchmark$/\1\/\2\/\3/p' \
             | sort > "$RUNNER_TEMP/head.names"
           comm -13 "$RUNNER_TEMP/base.names" "$RUNNER_TEMP/head.names" > "$RUNNER_TEMP/added.names"
           cargo "+$HEAD_TOOLCHAIN" build --locked --release -p geom-bench --bin geom-bench-counts
+          # Exit status 1: a benchmark was removed without being retired; 2: the check could not
+          # run. Either fails the step, after the listing below.
+          removed_status=0
           "$CARGO_TARGET_DIR/release/geom-bench-counts" removed "$RUNNER_TEMP/base.names" \
-            "$RUNNER_TEMP/head.names" "$BENCH/retired.txt" > "$RUNNER_TEMP/removed.names"
-          removed_status=$?
+            "$RUNNER_TEMP/head.names" "$BENCH/retired.txt" > "$RUNNER_TEMP/removed.names" \
+            || removed_status=$?
           while read -r name; do
             echo "::error::$name is at the merge base but not in this pull request. Name it in geom-bench/retired.txt if that is intended."
           done < "$RUNNER_TEMP/removed.names"
+          # A listing that does not complete could leave a change over 1% unlisted, so it fails the
+          # step too, after the rest is reported.
+          incomplete=0
           for way in rises:1 falls:-1; do
             limit=${way#*:}
             log="$RUNNER_TEMP/${way%%:*}.log"
+            # Its failing exit status only means something was listed; whether the run completed
+            # is checked next.
             cargo "+$HEAD_TOOLCHAIN" bench --locked -p geom-bench --bench instructions -- \
               --load-baseline=head --baseline=base \
               --callgrind-limits="ir=${limit}%,estimatedcycles=${limit}%,i1mr=${limit}%,d1mr=${limit}%,d1mw=${limit}%,ilmr=${limit}%,dlmr=${limit}%,dlmw=${limit}%" \
               --dhat-limits="totalbytes=${limit}%,totalblocks=${limit}%,attgmaxbytes=${limit}%,maximumbytes=${limit}%" \
-              > "$log" 2>&1
+              > "$log" 2>&1 || true
             if ! grep -q '^Gungraun result:' "$log"; then
-              echo "::warning::Listing the ${way%%:*} over 1% did not complete; see its output below."
+              echo "::error::Listing the ${way%%:*} over 1% did not complete, so the job summary may miss changes; see its output below."
               cat "$log"
+              incomplete=1
             fi
           done
           listed=$(cat "$RUNNER_TEMP/rises.log" "$RUNNER_TEMP/falls.log" 2>/dev/null \
@@ -412,8 +430,18 @@ jobs:
           if [ "${listed:-0}" -gt 0 ]; then
             echo "::notice::Instruction, cache or heap counts changed by more than 1%: the job summary lists every change."
           fi
-          if [ "$removed_status" -ne 0 ]; then
-            echo "::error::Benchmarks were removed without being retired; see the job summary."
+          case "$removed_status" in
+            0) ;;
+            1)
+              echo "::error::Benchmarks were removed without being retired; see the job summary."
+              exit 1
+              ;;
+            *)
+              echo "::error::geom-bench-counts could not check for removed benchmarks (exit status $removed_status); see the job log."
+              exit 1
+              ;;
+          esac
+          if [ "$incomplete" -ne 0 ]; then
             exit 1
           fi
 
@@ -422,6 +450,9 @@ jobs:
         env:
           GATE_OUTCOME: ${{ steps.gate.outcome }}
         run: |
+          # Only reports: the steps before it decide whether the job passes, so nothing here may
+          # fail it, and a file an earlier step did not write is left out.
+          set +e
           set -uo pipefail
           t=$RUNNER_TEMP
           regressions() { sed -n '/^Regressions:/,/^Gungraun result/p' "$1" 2>/dev/null; }
@@ -466,16 +497,22 @@ jobs:
                   echo '```text'
                   regressions "$t/$way.log"
                   echo '```'
-                else
+                elif grep -q '^Gungraun result:' "$t/$way.log" 2>/dev/null; then
                   echo "None."
+                else
+                  echo "**Not listed:** the listing did not complete, which blocks the merge. See the job log."
                 fi
               done
               echo
               echo "### Benchmarks not compared"
               echo
               if [ -s "$t/removed.names" ] || [ -s "$t/added.names" ]; then
-                sed 's/^/- Removed without being retired (blocks the merge): /' "$t/removed.names"
-                sed 's/^/- New: /' "$t/added.names"
+                if [ -f "$t/removed.names" ]; then
+                  sed 's/^/- Removed without being retired (blocks the merge): /' "$t/removed.names"
+                fi
+                if [ -f "$t/added.names" ]; then
+                  sed 's/^/- New: /' "$t/added.names"
+                fi
               else
                 echo "None: every benchmark exists in both, or was retired."
               fi
@@ -507,7 +544,7 @@ jobs:
       HEAD_TOOLCHAIN: ${{ needs.scope.outputs.head_toolchain }}
     steps:
       - name: Check out the change
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.HEAD_SHA }}
           path: head
@@ -520,19 +557,19 @@ jobs:
       # Each tree's own geom-bench/toolchain.txt; the change's last, so it is also the default.
       - name: Install the merge base's pinned toolchain with the wasm32-wasip1 target
         if: env.BASE_TOOLCHAIN != env.HEAD_TOOLCHAIN
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
         with:
           toolchain: ${{ env.BASE_TOOLCHAIN }}
           targets: wasm32-wasip1
 
       - name: Install the pinned toolchain with the wasm32-wasip1 target
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
         with:
           toolchain: ${{ env.HEAD_TOOLCHAIN }}
           targets: wasm32-wasip1
 
       - name: Cache the Rust build
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: |
             head -> ../target
@@ -581,17 +618,20 @@ jobs:
         id: compare
         if: needs.scope.outputs.base_fuel == 'true'
         run: |
-          set -uo pipefail
+          set -euo pipefail
+          # Exit status 1: the gate failed; 2: the check could not run (its message is in the log).
+          status=0
           "$COUNTS" compare "$RUNNER_TEMP/base-fuel.txt" "$RUNNER_TEMP/head-fuel.txt" \
             "$GATE_PERCENT" "$LIST_PERCENT" "head/$BENCH/retired.txt" "WebAssembly fuel" \
-            > "$RUNNER_TEMP/fuel-report.md"
-          status=$?
+            > "$RUNNER_TEMP/fuel-report.md" || status=$?
           if grep -q '^| ' "$RUNNER_TEMP/fuel-report.md"; then
             echo "::notice::WebAssembly fuel changed by more than $LIST_PERCENT% on some benchmarks: the job summary lists every change."
           fi
-          if [ "$status" -ne 0 ]; then
-            echo "::error::WebAssembly fuel: a rise over $GATE_PERCENT% or a benchmark removed without being retired. See the job summary."
-          fi
+          case "$status" in
+            0) ;;
+            1) echo "::error::WebAssembly fuel: a rise over $GATE_PERCENT% or a benchmark removed without being retired. See the job summary." ;;
+            *) echo "::error::geom-bench-counts could not compare the fuel (exit status $status); see the job log." ;;
+          esac
           exit "$status"
 
       # Chapter 28.14: each scale benchmark runs at n, 2n and 4n, and its work must grow no faster
@@ -599,12 +639,16 @@ jobs:
       - name: Check growth at n, 2n and 4n
         id: growth
         run: |
-          set -uo pipefail
-          "$COUNTS" growth "$RUNNER_TEMP/head-fuel.txt" > "$RUNNER_TEMP/growth-report.md"
-          status=$?
-          if [ "$status" -ne 0 ]; then
-            echo "::error::A scale benchmark grows faster than its stated cost. See the job summary."
-          fi
+          set -euo pipefail
+          # Exit status 1: the check failed; 2: it could not run (its message is in the log).
+          status=0
+          "$COUNTS" growth "$RUNNER_TEMP/head-fuel.txt" > "$RUNNER_TEMP/growth-report.md" \
+            || status=$?
+          case "$status" in
+            0) ;;
+            1) echo "::error::A scale benchmark grows faster than its stated cost. See the job summary." ;;
+            *) echo "::error::geom-bench-counts could not check growth (exit status $status); see the job log." ;;
+          esac
           exit "$status"
 
       - name: Write the summary
@@ -612,6 +656,10 @@ jobs:
         env:
           MEASURE_OUTCOME: ${{ steps.measure.outcome }}
         run: |
+          # Only reports: the steps before it decide whether the job passes, so nothing here may
+          # fail it, and a report an earlier step did not write (no comparison when the merge base
+          # has no fuel benchmarks) is left out.
+          set +e
           set -uo pipefail
           t=$RUNNER_TEMP
           {
@@ -631,8 +679,11 @@ jobs:
               echo "**Recorded.** The merge base has no fuel benchmarks, so nothing was compared."
               echo
             fi
-            cat "$t/fuel-report.md" 2>/dev/null
-            cat "$t/growth-report.md" 2>/dev/null
+            for report in fuel-report growth-report; do
+              if [ -f "$t/$report.md" ]; then
+                cat "$t/$report.md"
+              fi
+            done
             if [ -s "$t/head-fuel.txt" ]; then
               echo "<details><summary>Fuel of every benchmark</summary>"
               echo
