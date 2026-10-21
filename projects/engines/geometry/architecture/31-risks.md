@@ -34,7 +34,7 @@ Evidence is cited as in the chapters: a bracketed report number such as [03] is 
 | R10 | Imported data cannot be healed without raising tolerances | Medium to High | High | Healed fraction on the STEP corpus |
 | R11 | Too strict to use | Medium | High | Refusals per 1,000 operations in scenario runs |
 | R12 | Research items do not land | High | Medium each | How often each "unsupported" error is hit |
-| R13 | Proven-bound maths is late or does not port | Medium | High | The maths piece not merged before the first survey piece |
+| R13 | Proven-bound maths is late or does not port | Low for the five functions ported (G05); Medium for the rest | High | The maths piece not merged before the first survey piece |
 | R14 | Keeping every old version forever | Medium | High | Format museum failures; size of kept versions |
 | R15 | Hostile files | Medium | Medium to High | Reader fuzzing crashes, hangs or memory spikes |
 | R16 | Patents on methods we use | Low each, Medium overall | Severe for core methods | Unsearched families on the build path |
@@ -149,7 +149,7 @@ Evidence is cited as in the chapters: a bracketed report number such as [03] is 
 
 ### R6. Error bounds pile up until curved work refuses
 
-**What could go wrong.** Section 9 says bounds add up. Read literally, each curved boolean adds about ε_fit/128, so a curved part fails with ExactnessWouldDrop after about 128 booleans (11). Chains such as a fillet on a fillet, or an offset of an offset, eventually return ToleranceExceeded (28). Even under 32.3's recommended reading, fits still add along each face's own history. Each fitting step may spend up to ε_step = ε_fit/4 (13.2), so on one face the fifth fit at full budget refuses. Lofts, network surfaces, knot merging, rational-to-polynomial approximation and subdivision-to-NURBS conversion are all fits. Ordinary long editing histories could start to fail.
+**What could go wrong.** Section 9 says bounds add up. Read literally, each curved boolean adds about ε_fit/128, so a curved part fails with ExactnessNotAccepted after about 128 booleans (11). Chains such as a fillet on a fillet, or an offset of an offset, eventually return it too (28.2; section 22). Even under 32.3's recommended reading, fits still add along each face's own history. Each fitting step may spend up to ε_step = ε_fit/4 (13.2), so on one face the fifth fit at full budget refuses. Lofts, network surfaces, knot merging, rational-to-polynomial approximation and subdivision-to-NURBS conversion are all fits. Ordinary long editing histories could start to fail.
 
 **Likelihood:** High under the literal rule. If 32.3's recommendation is accepted: Low for booleans and procedural kinds, Medium for chains of fitted operations. **Impact:** High.
 
@@ -160,7 +160,7 @@ Evidence is cited as in the chapters: a bracketed report number such as [03] is 
 
 **Early warning (proposed).**
 - Long-chain laws in the law catalogue, each reporting the summed bound beside the re-proven one: 300 successive curved booleans on one part; ten-deep fillet and offset chains; and a chain of five fitting operations on one face.
-- Any ExactnessWouldDrop or ToleranceExceeded in a Spare Construct scenario run.
+- Any ExactnessNotAccepted or ToleranceExceeded in a Spare Construct scenario run.
 
 ### R7. A mistake in our own proofs or bit budgets
 
@@ -172,12 +172,13 @@ Evidence is cited as in the chapters: a bracketed report number such as [03] is 
 - pipe and torus outlines as offsets of the projected spine (18);
 - symbolic division at collapsed edges (12).
 
-A wrong derivation means an overflow or a wrong sign, which is a silently wrong answer: the worst failure for a kernel meant to be iron-clad. The checker is a consistency check, not an independent oracle (28.4).
+A wrong derivation means an overflow or a wrong sign, which is a silently wrong answer: the worst failure for a kernel meant to be iron-clad. The checker is a consistency check, not an independent oracle (28.4). In `geom-num` (G02) a wrong bit budget can no longer do this: each derivation's arithmetic is asserted when the crate compiles, so a wrong figure stops the build; every fixed-width step is a checked method; and a budget that still failed falls to an exact total path (`I384` for the explicit predicates, `I512` for planes) or returns `BudgetExceeded`, never a sign (6.2). The risk stays for code that does not follow that rule, such as generated limb code (23.3) and other crates, and for derivations that are not arithmetic, such as the proofs listed above.
 
 **Likelihood:** Medium. **Impact:** Severe if it reaches users unseen.
 
 **Mitigation built into the plan.**
 - Each predicate module carries its written derivation and a test at ±(2^40 − 1).
+- Each derivation's arithmetic is a compile-time assertion, every fixed-width step is checked, and an exact total path stands behind each budget (6.2; built in `geom-num`, G02).
 - Differential fuzzing against exact rational oracles.
 - Kani overflow proofs for every limb step. Kani is a tool that checks a Rust function for every possible input in a range, here proving that no step overflows.
 - Verus twins of the generated predicate code (Verus checks written proofs about Rust code by machine), and FPTaylor or Gappa certificates for the filters (tools that prove bounds on floating-point rounding error) (28.6, 28.7).
@@ -193,7 +194,7 @@ A wrong derivation means an overflow or a wrong sign, which is a silently wrong 
 
 ### R8. The same answer everywhere breaks
 
-**What could go wrong.** Any of these could change a bit somewhere: a Rust or LLVM upgrade, the planned move from libm to correctly rounded CORE-MATH functions, a change in a browser engine, or a CI runner that retires. Shared models would then diverge between machines, and replays would stop matching.
+**What could go wrong.** Any of these could change a bit somewhere: a Rust or LLVM upgrade, the planned move from libm to correctly rounded CORE-MATH functions, a change in a browser engine, or a CI runner that retires. Shared models would then diverge between machines, and replays would stop matching. The move to CORE-MATH has happened for five functions (G05) and changed bits as expected: of G02's 7,677 maths results, 92 moved by one ulp to the correctly rounded value (`exp(1)`, for example, from 2.7182818284590455 to 2.718281828459045), no error changed, and `geom-num`'s golden changed with them, before any edition existed (28.13, 32.12).
 
 **Likelihood:** Medium over the years. **Impact:** High.
 
@@ -287,16 +288,16 @@ Some may stay open for years, leaving gaps where the incumbents give an approxim
 
 ### R13. Proven-bound maths is late or does not port
 
-**What could go wrong.** Survey angles and COGO (coordinate geometry: bearings and distances), spirals, rotated frames, lattices and minimal-surface fields all need sinpi, cospi, atan2, exp and ln with proven error bounds and the same bits on every target (16, 17, 21). The plan is to port CORE-MATH's correctly rounded functions. Neither the porting effort nor its wasm32 build has been checked (16, 17), and two pieces are listed for overlapping functions. If the maths is late, survey, alignments and field lattices wait. If a port gives different bits on some target, R8 follows.
+**What could go wrong.** Survey angles and COGO (coordinate geometry: bearings and distances), spirals, rotated frames, lattices and minimal-surface fields all need sinpi, cospi, atan2, exp and ln with proven error bounds and the same bits on every target (16, 17, 21). The plan was to port CORE-MATH's correctly rounded functions, and G05 has ported those five: safe, panic-free `no_std` Rust with written proofs. It builds for wasm32-unknown-unknown and wasm32v1-none, and every test passes on wasm32-wasip1 under wasmtime with the golden of native x86-64 in release, debug, with overflow checks and with `-C target-cpu=native`, and natively at 1, 2, 3, 8 and 16 threads. Natively it runs within twice `libm`'s time (over three runs on one machine: sinpi 0.96 to 1.28 times, cospi 0.89 to 0.95, exp 1.33 to 1.37, ln 1.59 to 1.80, atan2 0.75 to 0.88). What remains: correct rounding is proven only under conditions (21); radian `sin` and `cos` did not port to the proven standard, and no piece is listed for them (29.4); `Interval::atan2` is not built (12.3); speed on wasm32, where `fma` is a software routine, is unmeasured; and the Node, Linux, macOS and arm64 legs have run only in CI. If a port gives different bits on some target, R8 follows.
 
-**Likelihood:** Medium. **Impact:** High for survey, civil and lattices.
+**Likelihood:** Low for the five functions ported; Medium for radian sin and cos and the interval atan2. **Impact:** High for survey, civil and lattices.
 
 **Mitigation built into the plan.**
-- Angle units are reduced exactly, in integers, to an octant before any floating-point number is formed (17).
-- Point versions come from exact range reduction plus a polynomial with a proven remainder, so a CORE-MATH port can come later (16).
-- Differential tests against a big-number oracle, and bit identity on every CI target.
-- 31.7 merges the two maths pieces into one early piece.
-- libm is audited and benchmarked first, so a port can be compared with it (29).
+- Angle units are to be reduced exactly, in integers, to an octant before any floating-point number is formed (17.2); that step is not built yet.
+- The port came first, so the interim polynomial once planned was not needed (G05).
+- Differential tests against a big-number oracle and CORE-MATH's worst-case lists, and bit identity on every CI target.
+- The two maths pieces are one board piece, "Proven-bound sinpi, cospi, atan2, exp and ln".
+- The ports are benchmarked against libm (G05); libm's audit is still to come (piece "NaN-free scalar, total order and deterministic maths module").
 
 **Early warning (proposed).**
 - The merged maths piece is not merged before piece "Angle units and core COGO" is ready to start.
@@ -461,7 +462,7 @@ If such code entered Spare Kit, it would have to be torn out and rewritten clean
 **Likelihood:** High. **Impact:** High.
 
 **Mitigation built into the plan.**
-- Section 32 narrows the owner's part to eleven decisions and one member vote, which covers G01, those decisions and one consolidated amendment note together (32.5).
+- Section 32 narrows the owner's part to twelve decisions and one member vote, which covers G01, those decisions and one consolidated amendment note together (32.5).
 - After that vote, kernel owners accept most later decision notes, as 26.1 allows. Principles, the grid and tolerance ladders, the same-answer and edition promises and the licence stay with the owner (32.5).
 - Section 31.7 gives every other question a home.
 - Every piece has a "done when" test, so a review is checkable.
@@ -480,7 +481,7 @@ If such code entered Spare Kit, it would have to be torn out and rewritten clean
 - a box tree in geom-math (11, 23) or in a new geom-bvh (19);
 - linear algebra in geom-num (15, 29) or in a new geom-linalg (16);
 - the maximal-face merge, with T-junction insertion, kept in geom-bool (11) or moved into geom-poly so geom-mesh can share it (19);
-- two pieces for the same proven-bound maths functions (16, 17);
+- two pieces for the same proven-bound maths functions (16, 17), since merged into one on the board (30) and built by G05;
 - about fifteen proposed new crates on top of about thirty, and dozens of new dependencies. Fornjot found that splitting into many crates did not pay off ([03] section 2).
 
 A future person or AI who reads one chapter could build the wrong thing, against the owner's bar that nobody gets confused.
@@ -536,7 +537,7 @@ A future person or AI who reads one chapter could build the wrong thing, against
 
 ### R26. The test machines cost more than the co-op can pay
 
-**What could go wrong.** The determinism promise needs, on every pull request, macOS runners on both chip types and aarch64 Linux runners. It also needs a dedicated benchmark machine, nightly fuzzing hours, a private oracle registry, and licensed Revit and AutoCAD machines (28). Intel macOS runners may retire; the date is unverified. If the matrix is trimmed to save money, the promise is no longer checked.
+**What could go wrong.** The determinism promise needs, on every pull request, macOS runners on both chip types and aarch64 Linux runners. It also needs a dedicated benchmark machine, nightly fuzzing hours, a private oracle registry, and licensed Revit and AutoCAD machines (28). GitHub retired its macOS 13 image on 4 December 2025 and said x86-64 macOS ends when the macOS 15 image retires in fall 2027 (changelog, 2025-09-19); its runner reference, read 2026-10-22, also lists a `macos-26-intel` image, so the date is not settled. When Intel images end, the kernel's x86-64 macOS leg needs a self-hosted machine or the owner's decision to drop the target (32.4). Today every pull-request leg, Windows on Arm included, runs on GitHub's standard hosted runners, free and unlimited for public repositories, and this repository is public (G02's `kernel.yml`), so the per-pull-request matrix costs nothing until then. If the matrix is trimmed to save money, the promise is no longer checked.
 
 **Likelihood:** Medium to High. **Impact:** High.
 
@@ -582,7 +583,7 @@ Chapters 11 to 29 raised 212 open questions. This appendix merges the ones that 
 
 A row whose answer is a decision note, or a note to a section of chapters 6 to 10, 20 or 27, is a spine amendment. Under 32.5 it goes into the consolidated amendment note if it can be settled now. If it waits on a piece's measurement, kernel owners accept a later decision note, except where it touches the principles, the grid and tolerance ladders, the edition promise or the licence, which stay with the owner.
 
-The questions the owner settles in section 32 are listed once, in the first table, and not repeated.
+The questions the owner settles in section 32 are listed once, in the first table, and not repeated. Building the first pieces (30.0) answered some questions, listed in the second table, and raised others; a row raised by a build names the piece whose build found it, such as "G02 build".
 
 ### Settled by the owner in section 32
 
@@ -601,6 +602,14 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | Writing to EMBER's authors, the csgrs and Hyper author, CADCraft, tangency-labs, McNeel (openNURBS, and so Rhino subdivision exchange) and Pixar (OpenSubdiv's TOST licence); the order of contacts | 11, 14, 16, 24, 29 | 32.9 |
 | Revit exports in a public repository; anonymised real projects; an AutoCAD seat and terms check; the ruling on black-box observation of proprietary programs, and so CADCraft's test scenarios; checking our exports in proprietary programs | 14, 28, 29 | 32.10 |
 | The licence of our own fixtures; ABC, IFC4.x-IF, Thingi10K, NIST STEP files, the CC BY-ND IFC samples, and step-conformance's exported parts | 28, 29 | 32.11 |
+
+### Answered by the pieces built so far
+
+| Question | Raised in | Answer |
+| --- | --- | --- |
+| Proven-bound sinpi, cospi, atan2, exp and ln: one early piece, not two; the CORE-MATH port effort and its wasm32 build were unverified (risk R13) | 16, 17 | Answered by G05 (issue #174, pull request #191). The board holds one piece. The five functions are ported in safe `no_std` Rust with written proofs, build for wasm32-unknown-unknown and wasm32v1-none, pass every test on wasm32-wasip1 under wasmtime with native's golden, and run within twice `libm`'s time natively (R13). What remains is under chapters 12, 21 and 28 below |
+| When GitHub retires its Intel macOS test machines (R26, 32.4) | 28 | In part. macOS 13 retired on 4 December 2025, and GitHub said x86-64 macOS ends when the macOS 15 image retires in fall 2027 (changelog, 2025-09-19). Its runner reference, read 2026-10-22, also lists `macos-26-intel`, so recheck before relying on the date. Dropping or keeping the target stays the owner's (32.4) |
+| What the per-pull-request determinism matrix costs (R26, 32.4, owner action "CI hosting and cost") | 28 | In part. Every target of chapter 21, and Windows on Arm, runs on GitHub's standard hosted runners (G02's `kernel.yml`), which are free and unlimited for public repositories, and this one is public. The benchmark machine, nightly fuzzing, the oracle registry and the licensed Revit and AutoCAD machines are not covered |
 
 ### Chapter 6: Numbers
 
@@ -622,9 +631,11 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | A named import angle on the ladder for marking imported edges smooth, or no kernel default (chapter 18's choice) | 18 | Piece "Line classes, bands and continuity records" |
 | Designed tangency travels as a recorded intent, and downstream code never compares angles with epsilon_ang. Committed lines tilt by about q/L, and subdivision G1 leaves kinks of about 1e-5 rad | 15, 16, 18 | Decision note to 6.5; pieces "Local-operation driver and topology-change taxonomy" and "Line classes, bands and continuity records" |
 | Break TIN ties in plan-coordinate order (x, then y) rather than by persistent name, so identical points give identical surfaces whatever they are called | 17 | Decision note to 6.2 and 21; piece "Exact Delaunay core with name-ordered tie-breaks" |
-| Proven-bound sinpi, cospi, atan2, exp and ln: one early piece, not the two now listed. The CORE-MATH port effort and its wasm32 build are unverified (risk R13) | 16, 17 | Section 30 merges "Deterministic sinpi, cospi and atan2" and "Proven-bound maths: sinpi, cospi, exp and ln with interval versions" |
 | A stricter rule for local operations near tolerant edges of imported STEP models than 6.5's "work within, never raise" | 13 | Note to 6.5; piece "Local-operation driver and topology-change taxonomy" |
 | May a file's declared precision below 640q lower epsilon_heal's default? Today it can only raise it, up to the cap | 24 | Piece "geom-exchange basics: units, numbers to grid, frames, reports" |
+| Wider integers already in code: `geom-num`'s `I512`, the total path of the plane classification and commit (G02), and `geom-math`'s exact stages in `Wide<4>`, `Wide<10>`, `Wide<20>`, `Wide<34>` and `Wide<40>`, up to 2,560 bits (G03). Accept each into 6.2's list, 23's cost model, 28.7's proofs and 29.3, or remove it | G02 and G03 builds | Decision note to 6.2, with piece "Wide integers I128 to I384" and owner action "576- and 768-bit predicates" |
+| The commit's tie rule: half to even, chosen by G02 after 6.1's rule for angles, so a coordinate at 2^40 − 1/2 leaves the frame (6.3) | G02 build | Decision note to 6.3 and 6.5, with the ladder (32.5) |
+| ε_ang as the relative length bound that classifies floating-point transforms as Rigid or UniformScale (G03), a second meaning of the rung (6.5's proposed rungs) | G03 build | Decision note to 6.5 and 7; piece "Points, vectors, boxes, frames and typed transforms" |
 
 ### Chapter 7: Geometry types
 
@@ -693,6 +704,8 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | Primary details still to re-read: Hohmeyer's loop criterion, Schulz 2009, Nishita-Sederberg-Kakimoto clipping generalised to curves, characteristic-map charts, symbolic division at collapsed edges, and msun's ulp bounds; the licence of the QI code | 12 | Each in its piece: "General SSI part 1", "Poles, seams, knot lines and extraordinary vertices", "Analytic and transcendental enclosures" |
 | The ssi-corpus adapter: accept matching flagged regions; place cases on the grid at a scale where the corpus tolerance is at least epsilon_fit; check that rounding kept the truth; carry the CC-BY attribution | 12 | Piece "Intersection oracles and acceptance harness" |
 | Review points: valence-3 derivatives vanish rather than blow up (the fix is unchanged), and flagged items carry no exactness class | 12 | Acceptance of chapter 12 |
+| `Interval::atan2`: an enclosure over a box that handles the branch cut on the negative x-axis and the origin. Until it exists, fields that use the atan2 opcode (16.2) and intersections that need it are Approximate only | G05 build; 12, 16 | Piece "Proven-bound sinpi, cospi, atan2, exp and ln", whose remaining scope keeps it (30.0) |
+| Radian `sin`, `cos` and `pow` have no board piece: CORE-MATH's published sources do not support a port to the proven standard (29.4). Add a piece, with new worst-case searches, or state in 12.3, 12.16 and 29.4 that radian enclosures are never certified and callers use half-turns | G05 build; 12, 29 | Kernel owners: a new piece in section 30, or an editorial fix |
 
 ### Chapter 13: Sweeps, blends and offsets
 
@@ -753,6 +766,12 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | Mitred grading corners along a sloping feature line: no published method | 17 | A new research piece in section 30 |
 | PROJ in the browser: a wasm32 build, or a pure-Rust port of the methods used (PROJ's MIT licence allows it) | 17 | The kit-ops work board |
 | The Θ(n²) edge-crossing bound for steepest-descent paths is unverified | 17 | Piece "Flow, sight and raster DEM input" |
+| A Ground frame's rotation: `AngleUnits` turned into a direction by proven sinpi and cospi (17.1), the exact integer direction G03 built (32-bit components, about 2^-31 rad, 17.2's second form), or both, and its width. The board builds `AngleUnits` only in piece "Angle units and core COGO", which needs piece "Frame records, units, epochs and lattices", the piece 17.1 says stores them, so either the order or 17.1 changes | G03 build; 6, 17 | Kernel owners; pieces "Frame records, units, epochs and lattices" and "Angle units and core COGO" |
+| The widths a frame record allows: G03 takes an origin within 2^60 steps, map inputs within 2^62 m and a scale whose numerator and denominator are below 2^32, so a scale factor given to ten decimal places does not fit | G03 build | Piece "Frame records, units, epochs and lattices" |
+| Rounding into a frame is half to even, which is not shift-invariant: frames whose origins differ by an odd number of steps may round a midpoint map value to different map positions | G03 build | Piece "Frame records, units, epochs and lattices" |
+| What an out-of-range conversion reports. `to_frame` reports an estimate (the scaled map value, or the double-double's leading part), which can state a false "at least" bound in a Ground frame with a scale above one. `shift_to` checks overflow before the lattice, so two frames both off the lattice and far apart report `OutOfRange` with a value that is not a coordinate, not `FrameMismatch::NotOnLattice`. Making the values exact means extending the exact machinery past its documented budget | G03 build; 22 | Piece "Frame records, units, epochs and lattices" |
+| Moving `geom-math` onto `geom-num`'s double-double type once G03 and G25 have both merged: G03's own `DD` has looser, hand-derived bounds, and the move changes two errors (division by zero becomes `NotFinite`, not `Degenerate`; the root of a negative becomes `OutsideDomain`, not `NegativeSqrt`). No board piece holds the move | G03 and G25 builds | Kernel owners; proposed: piece "Frame records, units, epochs and lattices", whose conversions use it |
+| `sinpi` and `cospi` take an `f64` in half-turns, and `atan2` returns radians. Who reduces an integer angle to an octant exactly, and turns a radian `atan2` into whole angle units with a certified rounding: piece "Angle units and core COGO", or the maths module, with an `atan2` in half-turns | G05 build; 17 | Piece "Angle units and core COGO" |
 
 ### Chapter 18: Drawings
 
@@ -783,12 +802,21 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | The name scheme fixes NFC normalisation of hashed text, and its Unicode version | 24 | NameScheme v1 note; piece "geom-format: names, history, recipe envelope, attributes and provenance records" |
 | The 128-bit NameId value and the history record types live in geom-topo, so geom-mesh can use them; geom-name keeps the naming graph and resolution | 19 | Crate-list note (27) |
 
+### Chapter 21: Determinism
+
+| Question | Raised in | Decided in |
+| --- | --- | --- |
+| One zero: a zero `sinpi` or `cospi`, a zero error part of an error-free transformation, a zero interval bound and an exact zero `ExactSum` are +0, while the other maths functions keep IEEE 754's −0 (21). Accept the rule and its exceptions | G02, G05 and G25 builds | Decision note to 21; the same-answer promise stays with the owner (32.5) |
+| Debug tripwires on the NaN-free scalar, which the board asks for: G02 has none, and behind its one constructor a tripwire on a `Real` could never fire. Keep the requirement, aim it elsewhere, or drop it. And whether `ExactSum::round_ieee`, which can return NaN by design, stays public with only a written rule against kernel use | G02 and G25 builds | Piece "NaN-free scalar, total order and deterministic maths module" |
+| wasm32's thread legs: wasm32-wasip1 has no threads, so the tests at 2, 3 and 8 threads that 21, 23.4 and 30.3 ask for are skipped there (G03, G05) or run every task on one thread (G04). Add a threaded target (wasm32-wasip1-threads, or browser workers), or state that wasm32 runs serially, with pools that permute the order | G03, G04 and G05 builds | Pieces "CI matrix and check tiers" and "Browser builds: threads, memory ceiling and cancellation" |
+
 ### Chapter 22: Errors, queries and AI
 
 | Question | Raised in | Decided in |
 | --- | --- | --- |
 | Confirm the new error kinds: ExactnessNotAccepted, NotRepresentable, OutOfRange and UnboundedResult; Degenerate added to the base; RootChoiceUndetermined refining Ambiguous; BranchLost and CommitFlip | 14, 15 | The chapter 22 error catalogue, generated from the code |
 | The output shape of the model-diff query used to review a proposed change (22) | 22 | The piece that builds the diff query |
+| How `geom-num`'s `NotFinite`, `OutsideDomain`, `WrongDirection`, `DivisorContainsZero`, `NegativeSqrt` and `EmptyInterval` map to base kinds; whether `NumError::BudgetExceeded` (a defect, so `Internal`) and `ToleranceExceeded` (a certified bound, so `ExactnessNotAccepted`) are renamed so their names stop inviting the wrong kind; and a `geom-math` error for its own defects, which now carry `geom-num`'s message (22) | G02, G03 and G05 builds | Piece "Operation contract and error types" |
 
 ### Chapter 23: Performance
 
@@ -803,6 +831,16 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | Two browser builds, with and without wide arithmetic, chosen at load | 23 | The same piece |
 | Plane storage at building scale (estimated at 64 to 96 bytes per plane) and its fallbacks: compact widths, f64 copies made on demand, shared planes | 23 | Piece "Arena layout and plane memory benchmarks" |
 | Remote global edits: replay the operations, or fetch the changed chunks by content hash | 23 | Spare Construct's owners |
+| Generated exact code (the plain-`i128` and width-aware-limb variants of 23.3) needs native or wrapping multiplies, which `geom-num`'s lints deny: a checked step at every site (cost unmeasured), or an allowance with its written bound and Kani certificate | G02 build; 23, 27 | Pieces "Predicate generator" and "Wide-integer variants and WebAssembly benchmark" |
+| Whether a three-plane point caches its homogeneous coordinates (152 more bytes per point) or recomputes them at each use (6.3) | G02 build | Piece "Plane type, canonical planes and arrangement predicates" |
+| A phase's work is bounded by its item count times R, not by R (23.10). Do phases need a size limit? | G04 build | Piece "Budgets in the operation contract" |
+| Cancellation within 1 ms: `geom-run` polls every 64 charges, and its one measurement, under full load, had a 3.5 ms worst case. Measure on an idle machine, and choose the interval for costly items | G04 build | Piece "Budgets in the operation contract" |
+| The helper's own cost: serially 27 ns per item against 4 ns for a plain loop on trivial items, measured under load. An overhead budget, and a rule for when small loops bypass the helper | G04 build | Piece "Deterministic parallel helper (geom-run, geom-pool)" |
+| A repeated key in a batch: `map_each` takes equal keys in input order, which makes batch-total failures depend on input order (10.1). Which layer rejects a repeated key as `InvalidInput`: `geom-run` or the batch runner | G04 build; 10, 22 | Piece "Batch runner" |
+| The count gates as built (G06): a comment on the pull request itself needs a trusted workflow with a write token; the loop around each benchmark dilutes the 5% gate for the cheapest operations (about 46% for interval negation); the growth check is damped by fixed costs (28.14); `catalogue::UNMEASURED` exempts functions from principle 12's benchmark; the fuel host starts each run with 2^50 fuel, so a stuck benchmark runs to the job's timeout; and a failed fuel comparison skips the growth table | G06 build | Piece "Benchmark harness and count gates", with kernel owners |
+| No board piece owns the per-benchmark logical-bytes gate of 23.13's Memory row, or moving the wall-clock benchmarks written before `geom-bench` (G03, G04, G05, G25) under the count gates | G04 and G06 builds | Piece "Benchmark harness and count gates" |
+| Principle 12's "every operation ships with a benchmark": each numeric primitive, such as each double-double operation, or at least one per piece, as 30.1's standard bar says | G25 build | Kernel owners; the principles stay with the owner (32.5) |
+| The double-double type's fused multiply-adds run as `libm`'s software routine on wasm32, and its products, quotients and roots use them inside each operation, so they cannot fall back to Dekker without changing bits. Confirm the proven FMA algorithms and measure them on wasm32, or choose algorithms without FMA, with other, weaker published bounds; evidence 05, section 1, advised keeping Dekker | G25 build; 17, 23 | Piece "Double-double arithmetic and ExactSum", with a double-double benchmark on wasm32 |
 
 ### Chapter 24: File format and exchange
 
@@ -832,7 +870,7 @@ Proposed in 31.5 (R23) and 32.5: one consolidated crate-list note settles all of
 | --- | --- | --- |
 | A home below the facade for the cross-representation boolean: a new geom-combine, or bool added to geom-convert's dependencies | 11 | Crate-list note; piece "Cross-representation boolean entry point (geom-combine)" |
 | One deterministic box tree below geom-bool, geom-mesh, geom-2d and geom-terrain: in geom-math (11, 23), or in a new geom-bvh (19) | 11, 19, 23 | Crate-list note; piece "Deterministic integer box tree and culling" |
-| geom-run (a no_std parallel helper, budgets and cancellation) and geom-pool (rayon and Web Workers behind a threads feature) | 23 | Piece "geom-run and geom-pool: the deterministic parallel helper" |
+| geom-run (a no_std parallel helper, budgets and cancellation) and geom-pool (rayon and Web Workers behind a threads feature). The adapter's name, folder and dependency disagree: `engine-geometry-pool` in `projects/engines/crates/`, with a `no_std` facade that re-exports only the `Pool` trait (23.4), or `geom-pool` in layer 13, with `engine-geometry` on it behind a `threads` feature and allowed `std` (27, 29.4, the board, G04's `pool.rs`, G09's crate table) | 23; G04 and G09 builds | Crate-list note; piece "Deterministic parallel helper (geom-run, geom-pool)" |
 | Deterministic linear algebra inside geom-num (15, 29), in a new geom-linalg (16), or in geom-math | 15, 16, 29 | Crate-list note; one of the pieces "Deterministic dense linear algebra in geom-num" and "Deterministic linear algebra (geom-linalg)" is dropped |
 | geom-profile, to carry geometry between sketches and the model | 15 | Piece "geom-profile: references in, profiles out" |
 | geom-panel and geom-analysis, with chapter 16's dependency additions | 16 | Crate-list note; pieces "Panelisation and rationalisation" and "Class-A analysis" |
@@ -852,6 +890,9 @@ Proposed in 31.5 (R23) and 32.5: one consolidated crate-list note settles all of
 | Continuous collision detection lives in geom-spatial | 19 | Piece "Time of first contact (Tight Inclusion method)" |
 | Sheet metal reuses geom-panel's unroll, or unrolling moves to a shared crate; subdivision displacement belongs to a content-creation toolkit | 16 | Decision note under 26.1 when a second program needs it |
 | Add geometry/PROVENANCE.md, NOTICE, methods/ and PATENTS.md to 26.3's file table and 27's folder tree | 29 | Editorial fix; piece "Provenance records" |
+| Chapter 27's table and the scaffold's `table.rs` (G09) are two copies of the crate graph that nothing compares | G09 build | Piece "MAP.json generator and module-header grammar", or the merge gate |
+| The header grammar: G09's interim grammar (job, layer, invariants, sections), its Status and "dependencies still to add" lines, which name board pieces and go stale when a piece splits (30.7), and which chapters a Sections line lists. `geom-num` has no Layer line, which G09's table records as a known gap. G11's development crates state their job but no layer, invariants or sections in that grammar, so the scaffold check fails on them when G09 and G11 have both merged | G09 and G11 builds; 26, 27 | Piece "MAP.json generator and module-header grammar" |
+| One lint posture: which crates carry `geom-num`'s `[lints]` table and `clippy.toml` (G09's check says the crates that ship; G11's test holds the development crates to it word for word); whether `float_cmp = "allow"` and its reason hold everywhere; and which `clippy.toml` bans the binding crates carry | G09 and G11 builds | Crate-list note; piece "Merge gate: licences, lints and builds" |
 
 ### Chapter 28: Testing
 
@@ -863,6 +904,14 @@ Proposed in 31.5 (R23) and 32.5: one consolidated crate-list note settles all of
 | SMLib's limits as an oracle: booleans, fillets and offsets cannot be automated (they are nondeterministic), and the NLib routines solidcore lacks need new FFI shims and their own audit. Under 32.6's recommendation its Numerical Recipes routines are stubbed out | 29 | Piece "Oracles: SMLib NLib and geomdl" |
 | ClusterFuzzLite's build-clusterfuzz path is unverified | 28 | Piece "Fuzz toolchain spike" |
 | Revit's tolerance values (VertexTolerance, ShortCurveTolerance, AngleTolerance), and whether its triangulation states an error bound | 28 | Piece "Revit truth-test harness" |
+| One call's stack budget on WebAssembly, which has no guard page: the predicate tests allow 32 KiB per call, a thirty-second of the default 1 MiB, and `ExactSum` puts 41 KB on the stack for one call (23.4). Set the stack the recursion check tests on, and each call's share | G02 and G25 builds; 19, 23 | Piece "Recursion check" |
+| Whether the full unit and property suites must also run in debug on wasm32, where they take over an hour, and at which tier; `target-cpu=native` has no wasm32 meaning | G02 build | Piece "CI matrix and check tiers" |
+| `geom-math`, `geom-run` and the seeded generator hash their goldens, and G25's tests their digest, with 64-bit FNV-1a; 21 and 28.13 ask for SHA-256 | G03, G04, G25 and G32 builds | Each piece before it merges, or piece "Determinism matrix and golden store" |
+| A minimum supported Rust version: `geom-num` declares 1.86, which no CI leg builds, while the pin is 1.99.0. Promise one and test it, or drop the field | G02 and G32 builds | Piece "Toolchain and dependency guard" |
+| `geom-bench`'s fuel host is a second workspace with its own `Cargo.lock`, outside the toolchain guard and chapter 27's map | G06 build | Piece "Toolchain and dependency guard" |
+| Keeping the commit pins of third-party CI actions current (Dependabot for actions, or another rule), and pinning `kernel-bench.yml`'s actions, which G06 names by tag or branch | G02 and G06 builds | Piece "Toolchain and dependency guard" |
+| "The kernel has no randomness" (28.17) and "never lets a seed decide a replayable result" (28.19), against seeded methods whose seed is an operation input (16.2, 16.3, 16.4, 17.10). G32 reads both as forbidding hidden seeds, and its rule stands on that reading until this is decided | G32 build; 16, 17 | Kernel owners; editorial fix to 28.17 and 28.19 |
+| The maths functions' strongest test, every input in CORE-MATH's worst-case lists (about 3.6 million), needs a CORE-MATH checkout at a pinned commit and runs in no CI tier, while the board asks for an oracle on 10 million inputs. Which check G47 keeps, and a nightly job that fetches and pins the lists | G05 build | Piece "Proven-bound sinpi, cospi, atan2, exp and ln" (remaining scope) |
 
 ### Chapter 29: Sources and licences
 
@@ -882,6 +931,7 @@ Proposed in 31.5 (R23) and 32.5: one consolidated crate-list note settles all of
 | The JTS conformance files are no longer unverified: chapter 14 settles them as EDL-1.0, reusable with their notice | 14, 29 | Editorial fix to chapter 29's list of unverified licence facts |
 | Sample data licences: KiCad boards and Gerber reference files, ezdxf examples, PDAL and las-rs clouds, rhino3dm files, LINZ LandXML examples, the buildingSMART alignment set (fetch only), and the LandXML 1.2 schema (which cannot be pinned) | 17, 28 | Piece "Test-corpus register and fetcher"; fetch-only until checked |
 | Copyright in largely AI-generated code (solidcore, CADCraft, csgrs) matters only if one of them is promoted to PORT | 29 | Risk R20 |
+| G05's CORE-MATH ports put the MIT notice at the end of each module's documentation, with no SPDX identifier, and `geom-num`'s licence field is MPL-2.0 alone; rule 4 (29.20) asks for the copyright lines at the start, the identifier, `MPL-2.0 AND MIT` and a `geometry/NOTICE` entry. Fix the ports before G05 merges; relaxing rule 4 would be the owner's (32.6) | G05 build | G05, before it merges |
 
 ### Across chapters
 

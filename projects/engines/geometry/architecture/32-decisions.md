@@ -2,7 +2,7 @@
 
 *Part of the [Spare Kit geometry kernel architecture](../ARCHITECTURE.md). Proposed in [G01](../../../kit/notes/G01-geometry-kernel.md); section numbers match across the set.*
 
-Almost all of the set's 289 decisions and 212 open questions are technical. Kernel owners settle them in the pieces listed in [31.7](31-risks.md#317-open-technical-questions). The eleven below need the owner, because each one fixes a promise to users, spends money, carries legal weight, or decides who decides. Each says in plain words what is being decided, gives the options and our recommendation with the reason, and names the chapters it changes.
+Almost all of the set's 289 decisions and 212 open questions are technical. Kernel owners settle them in the pieces listed in [31.7](31-risks.md#317-open-technical-questions). The twelve below need the owner, because each one fixes a promise to users, spends money, carries legal weight, or decides who decides. Each says in plain words what is being decided, gives the options and our recommendation with the reason, and names the chapters it changes.
 
 Accepting G01 changes architecture decisions: it replaces three choices in Spare Construct's map. The README puts such a change to a vote of the members, which an owner opens. Section 32.5 recommends one vote that covers G01, these decisions and one consolidated note of spine amendments, rather than a poll for each.
 
@@ -15,7 +15,7 @@ No agent acts on any of these, writes to anyone, or signs anything. The owner de
 | 32.1 | The grid ladder (decision 1) | Three steps, as written | 6, 14, 17, 19, 24 | G02, under way and built to option A |
 | 32.2 | Exact arcs in 2D from the start | Yes, gated by an early benchmark, with named fallbacks; never grid-rounded centres | 6, 7, 9, 14, 15, 17, 18, 24 | G192, the first geom-2d piece |
 | 32.3 | The tolerance numbers, how errors add up, and what "certified" means | Numbers as written; results re-proven, fits still add; interim states only when labelled | 6, 9, 11, 12, 13, 15, 16, 19, 28 | The first curved piece in phase 5 |
-| 32.4 | The same-answer guarantee: which computers, what it covers, who pays | Chapter 21's list; valid results only; co-op-funded test machines | 21, 23, 26, 28 | G10, the CI matrix |
+| 32.4 | The same-answer guarantee: which computers, what it covers, who pays | Chapter 21's list, and Windows on Arm once its CI leg merges; valid results only; co-op-funded test machines | 21, 23, 26, 28 | G10, the CI matrix |
 | 32.5 | Who decides: kernel owners, and how spine changes are accepted | At least two named people; one member vote, then delegation | 23, 26, 27, 28, 29 | The first kernel merge (G02) |
 | 32.6 | Licence lines for code and tools | Run copyleft tools as separate programs; never compile Numerical Recipes code; keep CC0, take the Unlicense only beside another licence | 28, 29 | G113, the oracle runner |
 | 32.7 | Patent searches: who, when, and who pays | A funded patent lawyer, booleans first, with a named fallback | 11, 13, 16, 17, 19, 29 | G123, the first geom-poly piece |
@@ -23,6 +23,7 @@ No agent acts on any of these, writes to anyone, or signs anything. The owner de
 | 32.9 | Who we write to | EMBER, Schmidt and McNeel now; the rest in a stated order | 11, 14, 16, 17, 24, 29 | Varies |
 | 32.10 | Revit truth data, and watching proprietary programs | Co-op models only; watching only checks our results against our own rules | 14, 28, 29 | G460, the Revit harness |
 | 32.11 | The licence of our test cases | CC0 if the vote confirms test cases are not "core", otherwise MPL-2.0; strict rules for outside data | 28, 29 | G97, the fixture format |
+| 32.12 | Pieces built ahead of the board: merge order, cost rises for correctness, goldens before the first edition | Merge in the board's order; accept a recorded rise; kernel owners approve goldens until the first Stable release | 23, 28, 30 | The next merge after G02 |
 
 ## 32.1 The grid ladder (decision 1)
 
@@ -72,7 +73,7 @@ The second question is whether each operation's error is added to the error befo
 
 **Recommendation: B.** The promise then reads: curved geometry stays within 0.01 mm of each step's exact result on its stored inputs (6.5).
 - Through booleans and procedural operations, that holds however long the history.
-- Through fitted operations, such as lofts, knot merging and subdivision-to-NURBS conversion, it holds until the fits on one face use up the fit bound. That is about four fits at full budget. The next fit then refuses with ToleranceExceeded and its remedies, never silently.
+- Through fitted operations, such as lofts, knot merging and subdivision-to-NURBS conversion, it holds until the fits on one face use up the fit bound. That is about four fits at full budget. The next fit then refuses with ExactnessNotAccepted, section 22's kind for a bound past the accepted one, and its remedies, never silently.
 - It is not a bound against replaying the whole history exactly. Near-tangent blends and shallow intersections can amplify an error in their inputs (13).
 
 Why: it keeps the 0.01 mm promise without loosening it, and says plainly where it stops. Confirm the fit bound as the default for road earthworks only after the corridor benchmark (17).
@@ -95,15 +96,15 @@ Why: it keeps the 0.01 mm promise without loosening it, and says plainly where i
 | Option | What it means |
 | --- | --- |
 | A. Chapter 21's list | Windows, Linux and macOS on Intel and AMD chips; Linux and macOS on Arm chips; WebAssembly, which every browser runs. Old 32-bit PCs and some 32-bit Arm chips that break the floating-point rules are left out |
-| B. A shorter list, to save cost | For example, dropping Intel Macs when GitHub retires those test machines (date unverified) |
-| C. A longer list | Adding Windows on Arm, phones or RISC-V as test machines become available |
+| B. A shorter list, to save cost | For example, dropping Intel Macs when GitHub retires those test machines. GitHub retired its macOS 13 image on 4 December 2025 and said x86-64 macOS ends when the macOS 15 image retires in fall 2027 ([changelog, 2025-09-19](https://github.blog/changelog/2025-09-19-github-actions-macos-13-runner-image-is-closing-down/)); its [runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners), read 2026-10-22, also lists a `macos-26-intel` image, so the date is not settled. The kernel's x86-64 macOS leg (`macos-15-intel`) then needs a self-hosted machine, or this option |
+| C. A longer list | Adding Windows on Arm, phones or RISC-V as test machines become available. G02's kernel CI already runs a Windows on Arm leg (`windows-11-arm`) on every pull request (21) |
 
-**Recommendation: A now, with three rules.**
+**Recommendation: A now, with three rules, and Windows on Arm added once G02's CI merges.** Windows on Arm then meets the first rule below and costs nothing; if the owner declines it, the leg is removed.
 - A kind of computer joins the list only when a test machine checks it on every pull request. Today that means the native targets, and WebAssembly in Wasmtime and Node (21). Browsers run the same WebAssembly and are checked nightly in Chrome, Firefox and Safari (23).
 - A kind of computer leaves the list only at a new kernel edition, announced in advance.
 - Within an edition, results never change for valid results. If a better checker finds that an old operation version returned an invalid body, replaying it now fails, and that change is reported element by element, like an upgrade (26.2, 28).
 
-**Who pays.** Recommendation: fuzzing on Google's free OSS-Fuzz if it accepts the project, otherwise on co-op machines. The co-op funds the CI runners, a dedicated benchmark machine and the licensed Revit and AutoCAD machines (28), with a line in K06 once piece "CI infrastructure" records the cost.
+**Who pays.** Recommendation: fuzzing on Google's free OSS-Fuzz if it accepts the project, otherwise on co-op machines. The co-op funds the CI runners, a dedicated benchmark machine and the licensed Revit and AutoCAD machines (28), with a line in K06 once owner action "CI hosting and cost" records the cost. Today every pull-request leg runs on GitHub's standard hosted runners, which are free and unlimited for public repositories ([runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners), read 2026-10-22), and this repository is public. So the per-pull-request matrix costs nothing until GitHub's Intel macOS images end; the benchmark machine, nightly fuzzing, the oracle registry and the licensed machines still need the co-op's money.
 
 Why: a guarantee without a machine that checks it is a hope, not a guarantee. And no kernel can promise to keep returning a body it now knows is invalid.
 
@@ -128,6 +129,7 @@ Why: a guarantee without a machine that checks it is a hope, not a guarantee. An
   2. After that vote, kernel owners accept decision notes for operations, queries, kinds, formats, toolkits and crates, as 26.1 allows. That includes spine amendments that wait on a piece's measurement.
   3. The principles (section 3), the grid and tolerance ladders (6.1, 6.5), the same-answer and edition promises (21, 26.2) and the licence stay with the owner, and go to a member vote when a change is major.
 - **Spare Construct's targets:** kernel owners and Spare Construct's owners set the kernel's share of each target together. 23.1's proposed figures stand until then.
+- **Already waiting on kernel owners:** the goldens that G02 to G06, G25 and G32 set or change (28.13, 32.12), and the review of every change to the benchmark gate's workflow and `geom-bench`, on which the gate's integrity rests (23.13).
 
 Why: without names, every approval falls to the owner, which is the bottleneck in R22. With two people, one can review the other's work. One vote keeps the README's rule without a poll for every amendment.
 
@@ -253,3 +255,19 @@ Separately, some outside test data has unclear terms:
 Why: shared hard cases make every kernel better, ours included, but not at the cost of a licence rule the README calls permanent. Non-commercial data cannot sit in a co-op's public CI.
 
 **Changes:** chapters 28 and 29, and AGENTS.md section 6 if B is taken.
+
+## 32.12 Pieces built ahead of the board
+
+**What it is.** The owner's rule for the board is to build layer by layer, and prove each layer before the next one leans on it (30). Pieces have been built faster than that. G03 and G05 started before the board was numbered and build phase-2 work (points, frames and the proven maths functions) before gate 1 (G43). G09, G11, G25 and G32 were built on G02's unmerged branch before the pieces they need had merged or been recorded; G09 needs the owner's crate-table decision (G08), which is not recorded. All of them are proposed as pull requests stacked on G02's (30.0). Three questions follow, and each touches a rule only the owner holds.
+
+1. **Merge order.** May pieces that build phase-2 work merge before gate 1? And may a crate's pull request edit the manifests of crates in other pieces when the scaffold check asks for it (42 manifests when `geom-run` merges, 26 when `geom-math` does), which AGENTS.md's "stay inside the piece" does not foresee?
+2. **Deliberate cost rises.** Principle 12 blocks any speed regression over 5%. G02's second round made results more correct and some operations slower: against the tree before it, 66 benchmarks rose more than 5% in WebAssembly fuel, among them the I256-to-i128 conversion by 632%, `Exactness::combine` by 201% and `abs` by 136%, from checked steps, finiteness checks and `Result` returns (G06's measurement). No rule says how a deliberate rise for correctness is accepted; `geom-bench`'s procedure asks for an owner's decision in the decision log (23.13).
+3. **Goldens before the first edition.** 28.13 versions goldens per kernel edition and per operation version, keeping old ones beside new. No edition exists yet, the first goldens are single constants per crate, and they already move on purpose: G02 changed `geom-num`'s within its own pull request, G05 changes it again for the move to CORE-MATH, and G03, G04, G06, G25 and G32 add goldens of their own.
+
+| Question | Options | Recommendation |
+| --- | --- | --- |
+| Merge order | A. Merge in the board's order: phase-1 pieces as they pass review, G09 once G08 is recorded, and the phase-2 parts of G03 and G05 after gate 1, their pull requests kept open and rebased until then. B. Merge each piece when it passes its own checks and review, and run gate 1 over whatever has merged | A. It is the owner's rule, and the gates exist so that nothing leans on a layer before it is proven. The cross-crate manifest edits are mechanical and spelled out by the scaffold check, so allow them in the pull request of the crate that merges, recorded there |
+| Deliberate cost rises | A. Never: a correctness change that costs more than 5% waits for a faster version. B. Allowed when the pull request shows the rise comes from a correctness change and lists every benchmark it moves, and a kernel owner records the acceptance in the decision log; the gate's limits do not change | B. A correct answer that costs more is worth more than a fast wrong one, and the record keeps principle 12's purpose: no rise passes unseen |
+| Goldens before the first edition | A. A kernel owner approves each change in its pull request, which says what moved and why and replaces the constant; editions and operation versions start with the first Stable release (G482). B. Treat every change now as a new edition | A. Nobody depends on a released result yet, and 26.2's edition promise is made to users of released versions |
+
+**Changes:** chapters 23 (23.13), 28 (28.13) and 30 (30.0), and AGENTS.md if cross-piece edits are allowed.

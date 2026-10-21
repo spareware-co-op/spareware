@@ -99,7 +99,7 @@ Section numbers match the decision note [G01](../../kit/notes/G01-geometry-kerne
 | [29. Sources and licences](architecture/29-sources-licences.md) | What we may take from each source, under what conditions, and the patents to avoid |
 | [30. Build order](architecture/30-build-order.md) | Every build piece, in order, with what done means, and the gate closing each phase |
 | [31. Risks](architecture/31-risks.md) | What could go wrong, what we do about it, and every open technical question |
-| [32. Decisions for the owner](architecture/32-decisions.md) | The eleven choices the chapters raise for an owner to settle |
+| [32. Decisions for the owner](architecture/32-decisions.md) | The twelve choices the chapters raise for an owner to settle |
 | 33. Sources | The evidence reports in [G01-evidence](../../kit/notes/G01-evidence/README.md); each links the exact source files it read |
 
 ## Where to start reading

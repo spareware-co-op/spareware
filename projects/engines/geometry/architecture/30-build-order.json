@@ -25,7 +25,7 @@
   "phase": "Phase 1",
   "crate": "workspace",
   "size": "Small",
-  "done_when": "Root Cargo.toml gains projects/engines/geometry/crates/*; every crate of the accepted section 27 table exists as a lib.rs stating its one job, layer, invariants and sections; kernel crates are no_std (geom-pool and the development crates may use std); forbid(unsafe_code) in every kernel crate and engine-geometry; each Cargo.toml names exactly the accepted direct dependencies; rust-toolchain.toml pinned and Cargo.lock committed; cargo build passes natively and for wasm32-unknown-unknown.",
+  "done_when": "Root Cargo.toml gains projects/engines/geometry/crates/*; every crate of the accepted section 27 table exists as a lib.rs stating its one job, layer, invariants and sections, except those section 27 defers (domain toolkits and board-exchange crates until a second program needs them, binding crates until phase 13) and those other pieces build, which join when they merge; kernel crates are no_std (geom-pool and the development crates may use std); forbid(unsafe_code) in every kernel crate and engine-geometry; each Cargo.toml names exactly the accepted direct dependencies; rust-toolchain.toml pinned and Cargo.lock committed; cargo build of every kernel crate and engine-geometry passes natively and for wasm32-unknown-unknown (the development crates are tested on wasm32-wasip1 instead).",
   "depends_on": [
    "G08"
   ],
@@ -55,7 +55,8 @@
   "depends_on": [
    "G09"
   ],
-  "chapter": "28"
+  "chapter": "28",
+  "partly_covered_by": "G06 (#175)"
  },
  {
   "id": "G12",
@@ -63,12 +64,13 @@
   "phase": "Phase 1",
   "crate": "CI",
   "size": "Medium",
-  "done_when": "cargo-deny with exactly the section 29.2 allow-list, advisories and allowed sources: git dependencies refused, libm the only registry crate in kernel crates, rayon allowed only in geom-pool; clippy with section 21's disallowed methods and types (platform maths, HashMap and HashSet, f64 max and min, Iterator::sum) and section 27's denials (unwrap, expect, panic, unchecked indexing); a check rejecting statics, thread-locals and lazy globals; section 27's crate-graph check (every Cargo.toml matches the accepted table, layers kept, no cycle); no_std and wasm32 builds of every kernel crate. Each check is shown to fail on a seeded violation.",
+  "done_when": "cargo-deny with exactly the section 29.2 allow-list, advisories and allowed sources: git dependencies refused, libm the only registry crate in kernel crates, rayon allowed only in geom-pool; clippy with section 21's disallowed methods and types (platform maths, HashMap and HashSet, f64 max and min, Iterator::sum and product, randomness, clocks and thread identity), section 27's denials (unwrap, expect, panic, unchecked indexing) and its proposed checked-arithmetic and lossy-cast denials, failing also on clippy's 'does not refer to a reachable' message so that no ban lapses in silence; a check rejecting statics, thread-locals and lazy globals; section 27's crate-graph check (every Cargo.toml matches the accepted table, layers kept, no cycle); no_std and wasm32 builds of every kernel crate. Each check is shown to fail on a seeded violation.",
   "depends_on": [
    "G10",
    "G11"
   ],
-  "chapter": "21, 27, 28, 29"
+  "chapter": "21, 27, 28, 29",
+  "partly_covered_by": "G09 (#178), G11 (#179), G02 (#171), G32 (#180)"
  },
  {
   "id": "G13",
@@ -92,7 +94,8 @@
   "depends_on": [
    "G12"
   ],
-  "chapter": "28"
+  "chapter": "28",
+  "partly_covered_by": "G11 (#179)"
  },
  {
   "id": "G15",
@@ -105,7 +108,8 @@
    "G09",
    "G12"
   ],
-  "chapter": "26, 29"
+  "chapter": "26, 29",
+  "partly_covered_by": "G09 (#178)"
  },
  {
   "id": "G16",
@@ -126,7 +130,7 @@
   "phase": "Phase 1",
   "crate": "geometry/ docs",
   "size": "Medium",
-  "done_when": "geometry/README.md (the ten-minute tour), AGENTS.md (the thirteen principles as a pull-request checklist, how to add a module and a predicate) and GLOSSARY.md (every term used in phases 1 to 3); a fresh agent session given only these files adds a toy predicate that passes CI.",
+  "done_when": "geometry/README.md (the ten-minute tour), AGENTS.md (the thirteen principles as a pull-request checklist, how to add a module and a predicate) and GLOSSARY.md (every term used in phases 1 to 3); a fresh agent session given only these files adds a toy predicate that passes CI; the randomised-method rule lifted from geom_num::rng's header (G32), with the test that reads the rule pointed at AGENTS.md.",
   "depends_on": [
    "G15"
   ],
@@ -143,7 +147,7 @@
    "G12"
   ],
   "chapter": "23, 28",
-  "covered_by": "G06 (#175)"
+  "partly_covered_by": "G06 (#175)"
  },
  {
   "id": "G19",
@@ -189,7 +193,7 @@
   "phase": "Phase 1",
   "crate": "geom-num",
   "size": "Medium",
-  "done_when": "GridStep (q0, q1, q2) with exact multiply-by-25 refinement and reported coarsening; i64 coordinates refused beyond 2^40 steps; exact unit ratios (mm, inch, micron, mil); the ladder (commit rounding per coordinate, eps_fit = 64q, eps_ang = 2^-34, eps_heal, short-edge warning, h_min = 8q) as named constants, each with its derivation in the module header. Tests at \u00b1(2^40 \u2212 1) and 2^40; property tests that refining then coarsening is identity.",
+  "done_when": "GridStep (q0, q1, q2) with exact multiply-by-25 refinement and reported coarsening; i64 coordinates refused at magnitude 2^40 and beyond (the range is \u00b1(2^40 \u2212 1)); exact unit ratios (mm, inch, micron, mil); the ladder (commit rounding per coordinate, ties to even, eps_fit = 64q, eps_ang = 2^-34, eps_heal, short-edge warning; proposed rungs such as h_min = 8q join only when an owner accepts them, 6.5) as named constants, each with its derivation in the module header. Tests at \u00b1(2^40 \u2212 1) and 2^40; property tests that refining then coarsening is identity.",
   "depends_on": [
    "G12",
    "G13",
@@ -229,13 +233,13 @@
   "phase": "Phase 1",
   "crate": "geom-num",
   "size": "Medium",
-  "done_when": "A scalar type that refuses NaN and infinity at construction with debug tripwires; total-order min, max and compare with named tie rules; the maths module wrapping vendored libm (the only source of sin, cos, atan2, exp, ln, powi); the committed libm audit (notices, unsafe, panics, allocation); native and wasm32 replay of every function inside the determinism matrix; libm benchmarks recorded for the later CORE-MATH comparison.",
+  "done_when": "A scalar type that refuses NaN and infinity at construction with debug tripwires; total-order min, max and compare with named tie rules; the maths module wrapping vendored libm (the source of sqrt, fma, rounding and the functions with no proven bound; the proven sinpi, cospi, exp, ln and atan2 are G47's CORE-MATH ports); the committed libm audit (notices, unsafe, panics, allocation); native and wasm32 replay of every function inside the determinism matrix; libm benchmarks recorded for the later CORE-MATH comparison.",
   "depends_on": [
    "G22",
    "G12"
   ],
   "chapter": "21, 29",
-  "covered_by": "G02 (#171)"
+  "partly_covered_by": "G02 (#171)"
  },
  {
   "id": "G25",
@@ -243,12 +247,11 @@
   "phase": "Phase 1",
   "crate": "geom-num",
   "size": "Medium",
-  "done_when": "TwoSum, TwoProduct (via mul_add) and double-double add, multiply, divide and square root with stated error bounds; ExactSum superaccumulator after Neal 2015, correctly rounded against a dashu oracle, identical bits under any permutation and chunking, merge by integer addition; benchmark on 10^6 terms at most 2 times a plain ordered sum natively.",
+  "done_when": "TwoSum, TwoProduct (by fused multiply-add, written math::fma, since no_std code has no mul_add) and double-double add, multiply, divide and square root with stated error bounds; ExactSum superaccumulator after Neal 2015, correctly rounded against a dashu oracle, identical bits under any permutation and chunking, merge by integer addition; benchmark on 10^6 terms at most 2 times a plain ordered sum natively, on a quiet machine, for the collection entry points (add_slice, add_iter, collect).",
   "depends_on": [
    "G24"
   ],
-  "chapter": "17, 21, 23",
-  "partly_covered_by": "G03 (#172)"
+  "chapter": "17, 21, 23"
  },
  {
   "id": "G26",
@@ -256,12 +259,12 @@
   "phase": "Phase 1",
   "crate": "geom-num",
   "size": "Medium",
-  "done_when": "I128, I256, I320 and I384 (and the I576 and I768 widths reserved for later predicates) with add, subtract, multiply, compare and sign, overflow checked in debug and in CI release runs; differential fuzzing against dashu for 24 hours clean; extreme-value tests at every width's limits; benchmark per operation on x86-64, aarch64 and wasm32.",
+  "done_when": "I128, I256, I320 and I384 (and the I576 and I768 widths reserved for later predicates) with add, subtract, multiply, compare and sign, every step checked, so overflow is reported in every build; differential fuzzing against a big-integer oracle (num-bigint or dashu, 29.3) for 24 hours clean; extreme-value tests at every width's limits; benchmark per operation on x86-64, aarch64 and wasm32.",
   "depends_on": [
    "G22"
   ],
   "chapter": "6",
-  "covered_by": "G02 (#171)"
+  "partly_covered_by": "G02 (#171)"
  },
  {
   "id": "G27",
@@ -282,12 +285,12 @@
   "phase": "Phase 1",
   "crate": "geom-num",
   "size": "Medium",
-  "done_when": "orient2d and orient3d (i128), incircle and insphere (256 bits), each returning a sign behind its generated filter, with the written bit-budget derivation in the module header. Tests: all 4,096 sign corners of orient3d and the equivalent sets for the others; every coordinate at \u00b1(2^40 \u2212 1); antisymmetry, permutation and translation laws; dashu oracle on random, one-step-degenerate and filter-boundary inputs; robust-crate cross-check. Benchmark: filtered and exact cost on three targets.",
+  "done_when": "orient2d and orient3d (i128), incircle and insphere (256 bits), each returning a sign (in a Result whose error only an internal defect can cause, 6.2) behind its generated filter, with the written bit-budget derivation in the module header. Tests: all 4,096 sign corners of orient3d and the equivalent sets for the others; every coordinate at \u00b1(2^40 \u2212 1); antisymmetry, permutation and translation laws; big-integer oracle (num-bigint or dashu) on random, one-step-degenerate and filter-boundary inputs; robust-crate cross-check, with robust's orient3d and insphere negated. Benchmark: filtered and exact cost on three targets.",
   "depends_on": [
    "G27"
   ],
   "chapter": "6",
-  "covered_by": "G02 (#171)"
+  "partly_covered_by": "G02 (#171)"
  },
  {
   "id": "G29",
@@ -295,7 +298,7 @@
   "phase": "Phase 1",
   "crate": "geom-num",
   "size": "Medium",
-  "done_when": "Plane from three grid points, three-plane points (I256 weight, I320 coordinates), line-plane points, classification of an implicit point against a plane in I384, and 2D segment crossings, each with generated filter and written bit budget. Tests: maximal-term corners at \u00b1(2^40 \u2212 1); dashu oracle; property tests that the implicit point satisfies its defining planes exactly.",
+  "done_when": "Plane from three grid points, three-plane points (I256 weight, I320 coordinates), line-plane points, classification of an implicit point against a plane in I384, and 2D segment crossings, each with generated filter and written bit budget. Tests: maximal-term corners at \u00b1(2^40 \u2212 1); big-integer oracle (num-bigint or dashu); property tests that the implicit point satisfies its defining planes exactly.",
   "depends_on": [
    "G28"
   ],
@@ -321,13 +324,13 @@
   "phase": "Phase 1",
   "crate": "geom-num",
   "size": "Medium",
-  "done_when": "Interval arithmetic rounded outward with next_up and next_down for the correctly rounded operations only (+, \u2212, \u00d7, \u00f7, sqrt, mul_add); an enclosure that needs sin, cos, atan2, exp or ln returns UnprovenMaths, or Approximate when asked, until G47 merges (12, principle 2); containment property tests for every operation; no rounding-mode change anywhere. The comparison of libm with a correctly rounded reference on 1,000,000 seeded inputs per function stays as a regression test, never as a bound.",
+  "done_when": "Interval arithmetic rounded outward with next_up and next_down for the correctly rounded operations only (+, \u2212, \u00d7, \u00f7, sqrt, mul_add), with the square and the sum of squares, which know they are never negative; an enclosure that needs sin, cos, atan2, exp or ln returns UnprovenMaths until a proven version exists (exp and ln with G47; atan2 when its interval version is built; radian sin and cos have no piece), and a caller that accepts Approximate computes the unproven function itself and labels what it makes (12, principle 2); containment property tests for every operation; no rounding-mode change anywhere. The comparison of libm with a correctly rounded reference on 1,000,000 seeded inputs per function stays as a regression test, never as a bound.",
   "depends_on": [
    "G24",
    "G25"
   ],
   "chapter": "6, 12",
-  "covered_by": "G02 (#171)"
+  "partly_covered_by": "G02 (#171)"
  },
  {
   "id": "G32",
@@ -335,7 +338,7 @@
   "phase": "Phase 1",
   "crate": "geom-num",
   "size": "Small",
-  "done_when": "A specified counter-based generator (Philox) with seeds as explicit inputs only; the randomised-method rule written in AGENTS.md; identical streams on every target; a clippy rule bans any other randomness in kernel crates.",
+  "done_when": "A specified counter-based generator (Philox) with seeds as explicit inputs only; the randomised-method rule written in geom_num::rng's module header, for G17 to lift into AGENTS.md; identical streams on every target; a clippy rule bans any other randomness in kernel crates.",
   "depends_on": [
    "G24"
   ],
@@ -353,7 +356,7 @@
    "G19"
   ],
   "chapter": "21, 23",
-  "covered_by": "G04 (#173)"
+  "partly_covered_by": "G04 (#173)"
  },
  {
   "id": "G34",
@@ -361,7 +364,7 @@
   "phase": "Phase 1",
   "crate": "geom-test",
   "size": "Medium",
-  "done_when": "Every predicate compared with a dashu oracle on random, \u00b11-step-degenerate and filter-boundary inputs on every pull request; corner sets as above; perturbation laws; failures minimised into fixtures; nightly fresh seeds.",
+  "done_when": "Every predicate compared with a big-integer oracle (num-bigint and num-rational, or dashu, 28.6) on random, \u00b11-step-degenerate and filter-boundary inputs on every pull request; corner sets as above; perturbation laws; failures minimised into fixtures; nightly fresh seeds.",
   "depends_on": [
    "G28",
    "G29",
@@ -466,7 +469,7 @@
   "phase": "Phase 1",
   "crate": "geom-num",
   "size": "Large",
-  "done_when": "Every exact path in three variants (plain i128, generated width-aware limbs, wide-arithmetic build) plus Avnaim's sign method as reference; Kani proves each generated limb step overflow-free within its certificate; differential fuzzing against dashu; a committed report for x86-64, aarch64, Wasmtime, Node, Chrome, Firefox and Safari choosing the variant per target, with the I384 cost on wasm32 reported to section 31.",
+  "done_when": "Every exact path in three variants (plain i128, generated width-aware limbs, wide-arithmetic build) plus Avnaim's sign method as reference; Kani proves each generated limb step overflow-free within its certificate; differential fuzzing against a big-integer oracle (num-bigint or dashu); a committed report for x86-64, aarch64, Wasmtime, Node, Chrome, Firefox and Safari choosing the variant per target, with the I384 cost on wasm32 reported to section 31.",
   "depends_on": [
    "G28",
    "G29",
@@ -519,7 +522,7 @@
    "G43"
   ],
   "chapter": "7, 27",
-  "covered_by": "G03 (#172)"
+  "partly_covered_by": "G03 (#172)"
  },
  {
   "id": "G46",
@@ -547,7 +550,7 @@
    "G43"
   ],
   "chapter": "16, 17, 21",
-  "covered_by": "G05 (#174)"
+  "partly_covered_by": "G05 (#174)"
  },
  {
   "id": "G48",
@@ -1538,7 +1541,8 @@
    "G122",
    "G118"
   ],
-  "chapter": "11, 23"
+  "chapter": "11, 23",
+  "partly_covered_by": "G02 (#171)"
  },
  {
   "id": "G124",

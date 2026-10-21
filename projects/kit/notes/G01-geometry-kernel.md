@@ -254,7 +254,7 @@ The full chapter: [20-naming-history.md](../../engines/geometry/architecture/20-
 
 ## 21. Determinism
 
-The same inputs give bit-identical outputs on every supported target and thread count. The chapter separates what Rust already guarantees from what the kernel polices: maths functions from one deterministic library, no NaN ever produced, no iteration over hash maps, one ordered parallel helper, and a test matrix, WebAssembly included, that compares golden hashes on every change.
+The same inputs give bit-identical outputs on every supported target and thread count. The chapter separates what Rust already guarantees from what the kernel polices: maths functions only from the kernel's own maths module (correctly rounded CORE-MATH ports for the proven functions, the pure-Rust `libm` crate for the rest), no NaN returned by any public function or made from finite inputs, one rule for the sign of zero, randomness only from one seeded generator, no iteration over hash maps, one ordered parallel helper, and a test matrix, WebAssembly included, that compares golden hashes on every change.
 
 The full chapter: [21-determinism.md](../../engines/geometry/architecture/21-determinism.md).
 
@@ -308,26 +308,26 @@ The full chapter: [29-sources-licences.md](../../engines/geometry/architecture/2
 
 ## 30. Build order
 
-476 pieces in thirteen phases, from the ground and the numbers layer up to scale, truth tests and bindings, each with what done means, what it depends on and its crate, and a gate closing every phase: each layer is proven before the next leans on it. G02 to G06 started before the board was numbered (30.0), so the board starts at G07; the tables are generated from `30-build-order.json`.
+476 pieces in thirteen phases, from the ground and the numbers layer up to scale, truth tests and bindings, each with what done means, what it depends on and its crate, and a gate closing every phase: each layer is proven before the next leans on it. G02 to G06 started before the board was numbered, so the board starts at G07; G09, G11, G12, G15, G21, G25, G27 and G32 are also built or under way, and 30.0 says what each covers in full or in part. The tables are generated from `30-build-order.json`.
 
 The full chapter: [30-build-order.md](../../engines/geometry/architecture/30-build-order.md).
 
 ## 31. Open risks
 
-Twenty-seven risks, technical, legal and to people and process, each with how likely and how bad it is, what the plan already does, and an early warning that would show it coming true while there is still time to act. The chapter ends with every open technical question, chapter by chapter, and the piece that settles it (31.7).
+Twenty-seven risks, technical, legal and to people and process, each with how likely and how bad it is, what the plan already does, and an early warning that would show it coming true while there is still time to act. The chapter ends with every open technical question, chapter by chapter, and the piece that settles it, with the questions the first pieces built have answered (31.7).
 
 The full chapter: [31-risks.md](../../engines/geometry/architecture/31-risks.md).
 
 ## 32. Decisions for the owner
 
-Eleven choices need the owner, because each fixes a promise to users, spends money, carries legal weight or decides who decides; kernel owners settle the technical questions in the pieces listed in 31.7. Accepting G01 replaces three choices in Spare Construct's map, so 32.5 recommends one member vote covering G01, these decisions and one note of spine amendments. No agent acts on any of these. The owner decides.
+Twelve choices need the owner, because each fixes a promise to users, spends money, carries legal weight or decides who decides; kernel owners settle the technical questions in the pieces listed in 31.7. Accepting G01 replaces three choices in Spare Construct's map, so 32.5 recommends one member vote covering G01, these decisions and one note of spine amendments. No agent acts on any of these. The owner decides.
 
 | | Decision | Recommendation | Chapters | Needed before |
 | --- | --- | --- | --- | --- |
 | 32.1 | The grid ladder (decision 1) | Three steps, as written | 6, 14, 17, 19, 24 | G02, under way and built to option A |
 | 32.2 | Exact arcs in 2D from the start | Yes, gated by an early benchmark, with named fallbacks; never grid-rounded centres | 6, 7, 9, 14, 15, 17, 18, 24 | G192, the first geom-2d piece |
 | 32.3 | The tolerance numbers, how errors add up, and what "certified" means | Numbers as written; results re-proven, fits still add; interim states only when labelled | 6, 9, 11, 12, 13, 15, 16, 19, 28 | The first curved piece in phase 5 |
-| 32.4 | The same-answer guarantee: which computers, what it covers, who pays | Chapter 21's list; valid results only; co-op-funded test machines | 21, 23, 26, 28 | G10, the CI matrix |
+| 32.4 | The same-answer guarantee: which computers, what it covers, who pays | Chapter 21's list, and Windows on Arm once its CI leg merges; valid results only; co-op-funded test machines | 21, 23, 26, 28 | G10, the CI matrix |
 | 32.5 | Who decides: kernel owners, and how spine changes are accepted | At least two named people; one member vote, then delegation | 23, 26, 27, 28, 29 | The first kernel merge (G02) |
 | 32.6 | Licence lines for code and tools | Run copyleft tools as separate programs; never compile Numerical Recipes code; keep CC0, take the Unlicense only beside another licence | 28, 29 | G113, the oracle runner |
 | 32.7 | Patent searches: who, when, and who pays | A funded patent lawyer, booleans first, with a named fallback | 11, 13, 16, 17, 19, 29 | G123, the first geom-poly piece |
@@ -335,6 +335,7 @@ Eleven choices need the owner, because each fixes a promise to users, spends mon
 | 32.9 | Who we write to | EMBER, Schmidt and McNeel now; the rest in a stated order | 11, 14, 16, 17, 24, 29 | Varies |
 | 32.10 | Revit truth data, and watching proprietary programs | Co-op models only; watching only checks our results against our own rules | 14, 28, 29 | G460, the Revit harness |
 | 32.11 | The licence of our test cases | CC0 if the vote confirms test cases are not "core", otherwise MPL-2.0; strict rules for outside data | 28, 29 | G97, the fixture format |
+| 32.12 | Pieces built ahead of the board: merge order, cost rises for correctness, goldens before the first edition | Merge in the board's order; accept a recorded rise; kernel owners approve goldens until the first Stable release | 23, 28, 30 | The next merge after G02 |
 
 Each decision, with its options, reasons and the chapters it changes: [32-decisions.md](../../engines/geometry/architecture/32-decisions.md).
 
