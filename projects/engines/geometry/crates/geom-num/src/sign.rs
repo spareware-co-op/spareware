@@ -71,6 +71,15 @@ impl Sign {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::disallowed_methods,
+    reason = "tests may use native arithmetic, casts and std reductions"
+)]
 mod tests {
     use super::Sign;
 

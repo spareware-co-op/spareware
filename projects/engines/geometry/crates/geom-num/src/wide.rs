@@ -2,8 +2,8 @@
 //!
 //! The deepest exact predicates need more than 128 bits: an in-circle test about 168 bits, an
 //! in-sphere test about 212, a point made by three planes tested against a fourth plane about 379
-//! (chapter 6.2). These types hold such values in a fixed number of 64-bit limbs, on the stack, with
-//! no allocation, so they are fast, deterministic and usable in `no_std`.
+//! (chapter 6.2). These types hold such values in a fixed number of 64-bit limbs, on the stack,
+//! with no allocation, so they are fast, deterministic and usable in `no_std`.
 //!
 //! Representation: two's complement, limbs little-endian (limb 0 is the least significant).
 //! A `Wide<L>` holds values from −2^(64L−1) to 2^(64L−1) − 1.
@@ -11,6 +11,15 @@
 //! Every arithmetic operation is checked: it returns `None` when the true result does not fit, and
 //! never wraps silently. The kernel proves that its predicates never overflow; these checks turn a
 //! wrong proof into a detectable failure instead of a wrong sign.
+//!
+//! The same holds inside, limb by limb, so nothing here depends on overflow checks being on. A
+//! limb sum or difference uses `overflowing_add` and `overflowing_sub`, which return the full
+//! result as the low 64 bits and the carry or borrow, so nothing is lost: the carry is propagated
+//! to the next limb, and only the carry out of the top limb is dropped, as two's complement
+//! defines, before the sign test that decides overflow. A limb product uses `checked_mul` and
+//! `checked_add` on `u128`, which cannot fail ((2^64 − 1)² + 2 (2^64 − 1) = 2^128 − 1, written
+//! beside each), and is split into its two 64-bit halves through its bytes, with no cast and no
+//! shift.
 //!
 //! Method: schoolbook addition, subtraction and multiplication on magnitudes with 128-bit
 //! intermediates (Knuth, *The Art of Computer Programming*, volume 2, section 4.3.1). There is no
@@ -31,8 +40,26 @@ pub type I256 = Wide<4>;
 pub type I320 = Wide<5>;
 /// 384-bit signed integer: classifying a three-plane point against a plane.
 pub type I384 = Wide<6>;
-/// 512-bit signed integer: headroom for tests and later predicates.
+/// 512-bit signed integer: the fallback width of [`crate::plane`], which repeats a classification
+/// or a commit in it should a step in [`I384`] not fit (unreachable, by the budgets asserted there
+/// when the crate compiles), and a wider width for tests. Chapter 6.2 lists only `I256`, `I320`
+/// and `I384` as accepted kernel widths, each wider one needing an owner's acceptance; this one is
+/// raised for that list as a fallback that adds no budget of its own.
 pub type I512 = Wide<8>;
+
+/// The top bit of a limb: the sign bit of the top limb.
+const TOP_BIT: u64 = 1 << 63;
+
+/// The low and high 64-bit halves of `t`, t = high · 2^64 + low: read from its little-endian
+/// bytes, so there is no cast and no shift.
+fn halves(t: u128) -> (u64, u64) {
+    let mut words = [[0u8; 8]; 2];
+    for (byte, &b) in words.iter_mut().flatten().zip(t.to_le_bytes().iter()) {
+        *byte = b;
+    }
+    let [low, high] = words.map(u64::from_le_bytes);
+    (low, high)
+}
 
 impl<const L: usize> Wide<L> {
     /// Evaluated when a width is used: a `Wide` needs at least two limbs to hold an `i128`.
@@ -58,7 +85,7 @@ impl<const L: usize> Wide<L> {
         let () = Self::AT_LEAST_TWO_LIMBS;
         let mut limbs = [u64::MAX; L];
         if let Some(top) = limbs.last_mut() {
-            *top = u64::MAX >> 1;
+            *top = !TOP_BIT;
         }
         Self(limbs)
     }
@@ -69,7 +96,7 @@ impl<const L: usize> Wide<L> {
         let () = Self::AT_LEAST_TWO_LIMBS;
         let mut limbs = [0u64; L];
         if let Some(top) = limbs.last_mut() {
-            *top = 1 << 63;
+            *top = TOP_BIT;
         }
         Self(limbs)
     }
@@ -79,9 +106,10 @@ impl<const L: usize> Wide<L> {
     pub fn from_i128(v: i128) -> Self {
         let () = Self::AT_LEAST_TWO_LIMBS;
         let mut limbs = [Self::fill(v < 0); L];
-        // Truncation to the low and high 64 bits is intended: together they are v's two's complement.
-        let parts = [v as u64, (v >> 64) as u64];
-        for (limb, part) in limbs.iter_mut().zip(parts) {
+        // The low and high 64 bits of v's two's complement, read from its bytes; the limbs above
+        // them are the sign fill.
+        let (low, high) = halves(u128::from_le_bytes(v.to_le_bytes()));
+        for (limb, part) in limbs.iter_mut().zip([low, high]) {
             *limb = part;
         }
         Self(limbs)
@@ -105,10 +133,10 @@ impl<const L: usize> Wide<L> {
         self.0
     }
 
-    /// Whether the value is below zero.
+    /// Whether the value is below zero: whether the top limb's top bit is set.
     #[must_use]
     pub fn is_negative(&self) -> bool {
-        self.0.last().is_some_and(|top| top >> 63 == 1)
+        self.0.last().is_some_and(|top| top & TOP_BIT != 0)
     }
 
     /// Whether the value is exactly zero.
@@ -129,19 +157,28 @@ impl<const L: usize> Wide<L> {
         }
     }
 
-    /// Limb-wise addition with carry; the carry out of the top limb is dropped (two's complement wrap).
+    /// Limb-wise addition with carry; the carry out of the top limb is dropped (two's complement
+    /// wrap), and the caller decides overflow from the signs.
+    ///
+    /// Each limb: x + y + carry ≤ 2 (2^64 − 1) + 1 = 2^65 − 1, so it is the low 64 bits and one
+    /// carry bit. The two `overflowing_add`s cannot both carry (if x + y carries, its low 64 bits
+    /// are at most 2^64 − 2, and adding 1 does not carry again), so the carry out is either one's
+    /// carry.
     fn wrapping_add_limbs(a: &[u64; L], b: &[u64; L]) -> [u64; L] {
         let mut out = [0u64; L];
-        let mut carry = 0u128;
+        let mut carry = false;
         for ((o, &x), &y) in out.iter_mut().zip(a.iter()).zip(b.iter()) {
-            let s = u128::from(x) + u128::from(y) + carry;
-            *o = s as u64;
-            carry = s >> 64;
+            let (s1, c1) = x.overflowing_add(y);
+            let (s2, c2) = s1.overflowing_add(u64::from(carry));
+            *o = s2;
+            carry = c1 || c2;
         }
         out
     }
 
-    /// Limb-wise subtraction with borrow; the borrow out of the top limb is dropped.
+    /// Limb-wise subtraction with borrow; the borrow out of the top limb is dropped, and the caller
+    /// decides overflow from the signs. As for addition, the two `overflowing_sub`s cannot both
+    /// borrow, so the borrow out is either one's borrow.
     fn wrapping_sub_limbs(a: &[u64; L], b: &[u64; L]) -> [u64; L] {
         let mut out = [0u64; L];
         let mut borrow = false;
@@ -154,14 +191,15 @@ impl<const L: usize> Wide<L> {
         out
     }
 
-    /// Two's-complement negation, wrapping at the minimum value.
+    /// Two's-complement negation, wrapping at the minimum value: the complement of every limb, plus
+    /// one, carried limb by limb.
     fn wrapping_neg(&self) -> Self {
         let mut out = [0u64; L];
-        let mut carry = 1u128;
+        let mut carry = true;
         for (o, &x) in out.iter_mut().zip(self.0.iter()) {
-            let s = u128::from(!x) + carry;
-            *o = s as u64;
-            carry = s >> 64;
+            let (s, c) = (!x).overflowing_add(u64::from(carry));
+            *o = s;
+            carry = c;
         }
         Self(out)
     }
@@ -190,7 +228,8 @@ impl<const L: usize> Wide<L> {
     #[must_use]
     pub fn checked_sub(&self, other: &Self) -> Option<Self> {
         let r = Self(Self::wrapping_sub_limbs(&self.0, &other.0));
-        // Overflow happens exactly when the operands differ in sign and the result's sign is not self's.
+        // Overflow happens exactly when the operands differ in sign and the result's sign is not
+        // self's.
         let overflow =
             self.is_negative() != other.is_negative() && r.is_negative() != self.is_negative();
         (!overflow).then_some(r)
@@ -216,17 +255,22 @@ impl<const L: usize> Wide<L> {
             if ai == 0 {
                 continue;
             }
-            let mut carry = 0u128;
+            let mut carry = 0u64;
             for (j, &bj) in b.iter().enumerate() {
-                let prod = u128::from(ai) * u128::from(bj);
-                match out.get_mut(i + j) {
+                // At most (2^64 − 1)², below 2^128: `checked_mul` never fails here.
+                let prod = u128::from(ai).checked_mul(u128::from(bj))?;
+                // Limb indices are below L, so their sum is below 2L: never fails.
+                match out.get_mut(i.checked_add(j)?) {
                     Some(slot) => {
-                        // slot < 2^64, prod <= (2^64 − 1)^2, carry < 2^64: the sum is below 2^128.
-                        let t = u128::from(*slot) + prod + carry;
-                        *slot = t as u64;
-                        carry = t >> 64;
+                        // slot and carry are below 2^64 and prod at most (2^64 − 1)², so the sum
+                        // is at most (2^64 − 1)² + 2 (2^64 − 1) = 2^128 − 1: never fails.
+                        let t = prod
+                            .checked_add(u128::from(*slot))?
+                            .checked_add(u128::from(carry))?;
+                        (*slot, carry) = halves(t);
                     }
-                    // Any non-zero contribution at or above limb L makes the magnitude at least 2^(64L).
+                    // Any non-zero contribution at or above limb L makes the magnitude at least
+                    // 2^(64L).
                     None => {
                         if prod != 0 || carry != 0 {
                             return None;
@@ -238,19 +282,20 @@ impl<const L: usize> Wide<L> {
                 return None;
             }
         }
-        // The magnitude fits in 64 × L unsigned bits. It must also fit the signed range: below 2^(64L−1)
-        // for a positive result, at most 2^(64L−1) for a negative one.
-        let top_bit_set = out.last().is_some_and(|top| top >> 63 == 1);
+        // The magnitude fits in 64 × L unsigned bits. It must also fit the signed range: below
+        // 2^(64L−1) for a positive result, at most 2^(64L−1) for a negative one.
+        let top_bit_set = out.last().is_some_and(|top| top & TOP_BIT != 0);
         if !top_bit_set {
             let m = Self(out);
             return Some(if negative { m.wrapping_neg() } else { m });
         }
-        // Top bit set: only the exact magnitude 2^(64L−1) with a negative sign fits (the minimum value).
+        // Top bit set: only the exact magnitude 2^(64L−1) with a negative sign fits (the minimum
+        // value).
         let is_power = out
             .iter()
             .rev()
             .enumerate()
-            .all(|(k, &limb)| if k == 0 { limb == 1 << 63 } else { limb == 0 });
+            .all(|(k, &limb)| if k == 0 { limb == TOP_BIT } else { limb == 0 });
         if negative && is_power {
             Some(Self::min_value())
         } else {
@@ -285,13 +330,19 @@ impl<const L: usize> Wide<L> {
         if !self.0.iter().skip(2).all(|&x| x == fill) {
             return None;
         }
-        // Start from the sign fill, so a value with fewer than two limbs is sign-extended, not zero-extended.
+        // Start from the sign fill, so a value with fewer than two limbs is sign-extended, not
+        // zero-extended.
         let mut parts = [fill; 2];
         for (p, &x) in parts.iter_mut().zip(self.0.iter()) {
             *p = x;
         }
-        let [lo, hi] = parts;
-        let v = (i128::from(hi as i64) << 64) | i128::from(lo);
+        // The two limbs' bytes, low limb first, are v's two's complement in 128 bits.
+        let mut bytes = [0u8; 16];
+        let limb_bytes = parts.iter().flat_map(|limb| limb.to_le_bytes());
+        for (byte, b) in bytes.iter_mut().zip(limb_bytes) {
+            *byte = b;
+        }
+        let v = i128::from_le_bytes(bytes);
         // The sign of the 128-bit value must match.
         (Sign::of_i128(v) == self.signum()).then_some(v)
     }
@@ -333,6 +384,15 @@ impl<const L: usize> fmt::Debug for Wide<L> {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::disallowed_methods,
+    reason = "tests may use native arithmetic, casts and std reductions"
+)]
 mod tests {
     use super::{I256, I384, Wide};
     use crate::sign::Sign;

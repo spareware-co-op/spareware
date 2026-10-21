@@ -28,8 +28,19 @@ unsafe_code = "forbid"
 missing_docs = "warn"
 
 [lints.clippy]
+# The crate is written to clippy's pedantic idioms; CI denies every warning.
+pedantic = { level = "warn", priority = -1 }
 unwrap_used = "deny"
 expect_used = "deny"
 panic = "deny"
 indexing_slicing = "deny"
+# Every fixed-width arithmetic step in kernel code is a checked method, and no cast loses a value
+# silently. Tests may use native arithmetic and casts: each test file and test module allows these
+# four, and kernel code allows a cast only where its bound is written beside it.
+arithmetic_side_effects = "deny"
+cast_possible_truncation = "deny"
+cast_possible_wrap = "deny"
+cast_sign_loss = "deny"
+# Exact comparison of doubles is the point of this crate: the interval and error-free code compare
+# bits and bounds exactly, never against a tolerance.
 float_cmp = "allow"

@@ -4,21 +4,37 @@
 //! `I512`): every public operation (`from_i128`, `from_i64`, `from_le_limbs`, `to_le_limbs`,
 //! `checked_add`, `checked_sub`, `checked_neg`, `checked_mul`, `resize` to every width, `to_i128`,
 //! `signum`, `is_zero`, `is_negative`, `Ord`, `max_value`, `min_value`, `ZERO`, `one`, `Debug`)
-//! agrees with exact big-integer arithmetic, and every checked operation returns `None` exactly when
-//! the true result leaves −2^(64L−1) ..= 2^(64L−1) − 1, never otherwise.
+//! agrees with exact big-integer arithmetic, and every checked operation returns `None` exactly
+//! when the true result leaves −2^(64L−1) ..= 2^(64L−1) − 1, never otherwise.
 //!
 //! How the file is built:
 //! - `oracle` reads limbs as a `BigInt` and writes a `BigInt` as limbs, independently of the code
 //!   under test. It is checked on its own first, against `i128` and hand-written limbs.
 //! - `strategies` makes values for one width, weighted towards where bugs live: random limbs, limb
-//!   patterns (0, 1, all ones, the sign bit), values near zero, near the limits, of every bit length
-//!   and next to powers of two; and pairs whose sum, difference or product straddles a limit.
-//! - `checks` holds one generic function per operation. Each compares with the oracle and checks the
-//!   laws the operation must keep. Property tests and exhaustive edge tests share them.
+//!   patterns (0, 1, all ones, the sign bit), values near zero, near the limits, of every bit
+//!   length and next to powers of two; and pairs whose sum, difference or product straddles a
+//!   limit.
+//! - `checks` holds one generic function per operation. Each compares with the oracle and checks
+//!   the laws the operation must keep. Property tests and exhaustive edge tests share them.
 //! - `width_suite!` instantiates every property test and every exhaustive edge test for one width.
 //! - `kernel_use` feeds grid coordinates at ±(2^40 − 1), the kernel's extreme inputs, through
 //!   products and determinant expansions, every step against the oracle.
 
+// The crate denies native arithmetic and lossy casts in kernel code (Cargo.toml); tests may use
+// them, and std's reductions, to build their oracles.
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::disallowed_methods,
+    reason = "oracles and generators; the rules are for kernel code"
+)]
+#![allow(
+    clippy::many_single_char_names,
+    reason = "points and values are named a, b, c and so on, as in the formulas they check"
+)]
 // Helpers outside `#[test]` functions are not covered by clippy.toml's allow-*-in-tests settings.
 // A broken oracle or strategy must stop the test loudly, so the kernel's panic lints are relaxed
 // for this test file only (clippy.toml: "Tests may use them").
@@ -260,7 +276,8 @@ mod strategies {
             .boxed()
     }
 
-    /// Pairs whose difference is within 3 of the largest or smallest value (unless clamping moved b).
+    /// Pairs whose difference is within 3 of the largest or smallest value (unless clamping moved
+    /// b).
     pub fn difference_at_limit(l: usize) -> BoxedStrategy<(BigInt, BigInt)> {
         (value(l), -3i32..=3, any::<bool>())
             .prop_map(move |(a, d, high)| {
@@ -646,8 +663,8 @@ mod checks {
         Ok(())
     }
 
-    /// `resize::<M>` from `Wide<L>` against the oracle: `Some` exactly when the value fits `Wide<M>`,
-    /// and then resizing back gives the original.
+    /// `resize::<M>` from `Wide<L>` against the oracle: `Some` exactly when the value fits
+    /// `Wide<M>`, and then resizing back gives the original.
     pub fn resize_to<const L: usize, const M: usize>(a: &BigInt) -> TestResult {
         let x = w::<L>(a);
         let got = x.resize::<M>();
@@ -803,8 +820,8 @@ mod kernel_use {
     pub const INCIRCLE_BITS: usize = 168;
 
     /// A `Wide<L>` from the code under test, alongside its exact value. Each operation compares its
-    /// result with the oracle (a disagreement panics, which proptest reports as a failure) and gives
-    /// `None` exactly when the true result leaves the range.
+    /// result with the oracle (a disagreement panics, which proptest reports as a failure) and
+    /// gives `None` exactly when the true result leaves the range.
     #[derive(Clone)]
     pub struct Tracked<const L: usize> {
         w: Wide<L>,

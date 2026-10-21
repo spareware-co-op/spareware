@@ -12,8 +12,8 @@
 //! - grid commits: floor division with remainder in big integers, ties to even.
 //!
 //! Attacks: exact cancellation of 82-bit products, collinear points on lines across the whole
-//! frame, parallel, anti-parallel, scaled, repeated, coaxial (pencil) and prism plane triples at the
-//! extremes, three-plane points within 2^-116 of a half step and of grid planes with w of both
+//! frame, parallel, anti-parallel, scaled, repeated, coaxial (pencil) and prism plane triples at
+//! the extremes, three-plane points within 2^-116 of a half step and of grid planes with w of both
 //! signs, exact ties with |w| near 2^235 of both signs, ties on the frame's edge, coordinates
 //! around ±2^127 where the reported value saturates, and the order in which out-of-range axes are
 //! reported.
@@ -23,6 +23,21 @@
 //! to an exact `I512` computation if a step in `I384` does not fit, so an `I384` overflow could
 //! never show in their results; these checks are what show the budgeted path suffices.
 
+// The crate denies native arithmetic and lossy casts in kernel code (Cargo.toml); tests may use
+// them, and std's reductions, to build their oracles.
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::disallowed_methods,
+    reason = "oracles and generators; the rules are for kernel code"
+)]
+#![allow(
+    clippy::many_single_char_names,
+    reason = "points and values are named a, b, c and so on, as in the formulas they check"
+)]
 // Helpers outside `#[test]` functions are not covered by clippy.toml's allow-*-in-tests settings;
 // clippy.toml says tests may use these, and a broken oracle must stop the test loudly.
 #![allow(
@@ -38,12 +53,34 @@ use std::cmp::Ordering;
 use geom_num::grid::COORD_MAX;
 use geom_num::plane::{Plane, Tpi};
 use geom_num::predicate::orient3d;
-use geom_num::{NumError, P3, Rounded, Sign, Wide};
+use geom_num::{NumError, P3, Sign, Wide};
 use num_bigint::BigInt;
 use num_integer::Integer;
 use num_rational::BigRational;
 use num_traits::{One, Signed, ToPrimitive, Zero};
 use proptest::prelude::*;
+
+/// A grid commit with public fields, for comparing with expected values: `Rounded`'s fields are
+/// private, so that only the crate can say a value is exact.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Commit {
+    value: P3,
+    exact: bool,
+}
+
+/// `Tpi::to_grid` as a [`Commit`].
+trait ToCommit {
+    fn commit(&self) -> Result<Commit, NumError>;
+}
+
+impl ToCommit for Tpi {
+    fn commit(&self) -> Result<Commit, NumError> {
+        self.to_grid().map(|r| Commit {
+            value: r.value(),
+            exact: r.is_exact(),
+        })
+    }
+}
 
 const M: i64 = COORD_MAX;
 const ID: [usize; 3] = [0, 1, 2];
@@ -195,8 +232,8 @@ fn oracle_plane(a: P3, b: P3, c: P3) -> ([BigInt; 3], BigInt) {
     (n, d)
 }
 
-/// The orientation of a, b, c, q as −det[[a, 1], [b, 1], [c, 1], [q, 1]], by Laplace expansion along
-/// the column of ones.
+/// The orientation of a, b, c, q as −det[[a, 1], [b, 1], [c, 1], [q, 1]], by Laplace expansion
+/// along the column of ones.
 fn orient_oracle(a: P3, b: P3, c: P3, q: P3) -> Sign {
     let r = [big3(a), big3(b), big3(c), big3(q)];
     let minor = |skip: usize| {
@@ -258,7 +295,7 @@ fn check_plane(a: P3, b: P3, c: P3) -> Option<Plane> {
     );
     assert_eq!(flipped.d(), -pl.d(), "transposition must negate d exactly");
     for q in [a, b, c] {
-        assert_eq!(pl.side(q), Sign::Zero);
+        assert_eq!(pl.side(q).unwrap(), Sign::Zero);
     }
     Some(pl)
 }
@@ -267,12 +304,12 @@ fn check_plane(a: P3, b: P3, c: P3) -> Option<Plane> {
 fn check_side(pl: &Plane, a: P3, b: P3, c: P3, q: P3) {
     let want = orient_oracle(a, b, c, q);
     assert_eq!(
-        pl.side(q),
+        pl.side(q).unwrap(),
         want,
         "side of {q:?} against plane through {a:?} {b:?} {c:?}"
     );
     assert_eq!(
-        orient3d(a, b, c, q),
+        orient3d(a, b, c, q).unwrap(),
         want,
         "orient3d disagrees with the plane"
     );
@@ -282,13 +319,13 @@ fn check_side(pl: &Plane, a: P3, b: P3, c: P3, q: P3) {
     assert!(bound.bits() <= 126, "a partial sum of the side over budget");
 }
 
-/// |u_x v_x| + |u_y v_y| + |u_z v_z|: a bound on every partial sum of u · v.
+/// |`u_x` `v_x`| + |`u_y` `v_y`| + |`u_z` `v_z`|: a bound on every partial sum of u · v.
 fn abs_dot(u: &[BigInt; 3], v: &[BigInt; 3]) -> BigInt {
     u.iter().zip(v).map(|(a, b)| a.abs() * b.abs()).sum()
 }
 
 /// The budgets of `homogeneous` and of the `I384` path of `to_grid`, on bounds of every partial
-/// sum: cross products below 2^167, w below 2^252, X below 2^294; then 2 |X_i| below 2^295,
+/// sum: cross products below 2^167, w below 2^252, X below 2^294; then 2 |`X_i`| below 2^295,
 /// (2^41 − 1) |w| below 2^293 and 2^127 |w| below 2^379, which also bounds twice the division's
 /// T = 2^126 |w| at 127 bits.
 fn check_wide_budgets(planes: &[Plane; 3], x: &[BigInt; 3], w: &BigInt) {
@@ -332,7 +369,7 @@ fn check_wide_budgets(planes: &[Plane; 3], x: &[BigInt; 3], w: &BigInt) {
     );
 }
 
-/// (X, w) by Cramer's rule with Leibniz determinants: w = det N, X_i = det of N with column i
+/// (X, w) by Cramer's rule with Leibniz determinants: w = det N, `X_i` = det of N with column i
 /// replaced by −d.
 fn cramer(planes: &[Plane; 3]) -> ([BigInt; 3], BigInt) {
     let rows: [[BigInt; 3]; 3] = (*planes).map(|pl| pl.n().map(BigInt::from));
@@ -341,7 +378,7 @@ fn cramer(planes: &[Plane; 3]) -> ([BigInt; 3], BigInt) {
     let x = std::array::from_fn(|col| {
         let mut m = rows.clone();
         for (row, r) in m.iter_mut().zip(&rhs) {
-            row[col] = r.clone();
+            row[col].clone_from(r);
         }
         det3(&m)
     });
@@ -374,7 +411,7 @@ fn saturate(v: &BigInt) -> i128 {
 }
 
 /// What `to_grid` must return for the point X / w.
-fn expected_grid(x: &[BigInt; 3], w: &BigInt) -> Result<Rounded<P3>, NumError> {
+fn expected_grid(x: &[BigInt; 3], w: &BigInt) -> Result<Commit, NumError> {
     let mut out = [0i64; 3];
     let mut exact = true;
     for (o, xi) in out.iter_mut().zip(x) {
@@ -387,7 +424,7 @@ fn expected_grid(x: &[BigInt; 3], w: &BigInt) -> Result<Rounded<P3>, NumError> {
         *o = r.to_i64().unwrap();
         exact &= e;
     }
-    Ok(Rounded {
+    Ok(Commit {
         value: pa(out),
         exact,
     })
@@ -425,7 +462,7 @@ fn check_tpi(planes: [Plane; 3]) -> Option<(Tpi, [BigRational; 3])> {
     let [a, b, c] = planes;
     let t = Tpi::new(a, b, c).unwrap_or_else(|e| panic!("{planes:?} meet in one point, got {e:?}"));
     assert_eq!(t.planes(), &planes);
-    let (x, w) = t.homogeneous();
+    let (x, w) = t.homogeneous().unwrap();
     let (xb, wb) = (x.map(|v| wide_to_big(&v)), wide_to_big(&w));
     assert_eq!(wb, cw, "w is not det(n_1, n_2, n_3)");
     assert_eq!(xb, cx, "X is not the Cramer numerator");
@@ -436,23 +473,23 @@ fn check_tpi(planes: [Plane; 3]) -> Option<(Tpi, [BigRational; 3])> {
     for pl in &planes {
         assert_eq!(side_at(pl, &pt), Sign::Zero);
         assert_eq!(
-            pl.side_of_tpi(&t),
+            pl.side_of_tpi(&t).unwrap(),
             Sign::Zero,
             "a defining plane must contain its point"
         );
     }
-    assert_eq!(t.to_grid(), expected_grid(&cx, &cw), "to_grid of {pt:?}");
+    assert_eq!(t.commit(), expected_grid(&cx, &cw), "to_grid of {pt:?}");
     Some((t, pt))
 }
 
 /// Checks `side_of_tpi` against the plane evaluated at the exact rational point, with its budget.
 fn check_side_of_tpi(pl: &Plane, t: &Tpi, pt: &[BigRational; 3]) {
     assert_eq!(
-        pl.side_of_tpi(t),
+        pl.side_of_tpi(t).unwrap(),
         side_at(pl, pt),
         "side_of_tpi of {pt:?} against {pl:?}"
     );
-    let (x, w) = t.homogeneous();
+    let (x, w) = t.homogeneous().unwrap();
     let class = dot3(&pl.n().map(BigInt::from), &x.map(|v| wide_to_big(&v)))
         + BigInt::from(pl.d()) * wide_to_big(&w);
     assert!(class.bits() <= 379, "classification over budget");
@@ -476,12 +513,12 @@ fn d_of(pp: i64, e: [i64; 3]) -> BigInt {
 
 /// Planes 1 and 2 pass through the grid points a and a + e (through a, a + e, a + (1, 0, 0) and
 /// through a, a + e, a + (0, 0, 1)), so they meet in the line a + λe. Plane 3 passes through c,
-/// c + u, c + v with u = (P, 1, 0) and v = (0, P, 1), so its normal is n3 = (1, −P, P²); c is solved
-/// so that n3 · (a − c) = t (balanced base-P digits, then shifted by whole multiples of u and v, which
-/// n3 is orthogonal to, until every point lies in the frame). So the planes meet where λ = −t / D,
-/// D = n3 · e: at a − (t / D) e. All points are then permuted by `perm` and negated if `mirror`, and
-/// planes 1 and 2 swapped if `swap` (which negates w). Returns the planes and the designed exact
-/// point, or `None` if a point would leave the frame or D = 0.
+/// c + u, c + v with u = (P, 1, 0) and v = (0, P, 1), so its normal is n3 = (1, −P, P²); c is
+/// solved so that n3 · (a − c) = t (balanced base-P digits, then shifted by whole multiples of u
+/// and v, which n3 is orthogonal to, until every point lies in the frame). So the planes meet where
+/// λ = −t / D, D = n3 · e: at a − (t / D) e. All points are then permuted by `perm` and negated if
+/// `mirror`, and planes 1 and 2 swapped if `swap` (which negates w). Returns the planes and the
+/// designed exact point, or `None` if a point would leave the frame or D = 0.
 fn line_meets_plane(
     pp: i64,
     e: [i64; 3],
@@ -494,9 +531,10 @@ fn line_meets_plane(
     line_meets_plane_scaled(pp, e, a, t, [1, 1], perm, mirror, swap)
 }
 
-/// [`line_meets_plane`] with planes 1 and 2 made through a + m_1 (1, 0, 0) and a + m_2 (0, 0, 1)
-/// instead: the same planes as point sets, with normals scaled by m_1 and m_2, so the same point has
-/// w scaled by m_1 m_2 (unswapped and unpermuted, w = −m_1 m_2 e_y D).
+/// [`line_meets_plane`] with planes 1 and 2 made through a + `m_1` (1, 0, 0) and
+/// a + `m_2` (0, 0, 1) instead: the same planes as point sets, with normals scaled by `m_1` and
+/// `m_2`, so the same point has w scaled by `m_1` `m_2` (unswapped and unpermuted,
+/// w = −`m_1` `m_2` `e_y` D).
 #[allow(clippy::too_many_arguments)]
 fn line_meets_plane_scaled(
     pp: i64,
@@ -581,10 +619,10 @@ fn line_meets_plane_scaled(
 
 /// P for the near-tie construction: odd, just below 2^39.
 const P_NEAR: i64 = (1 << 39) - 1;
-/// e_z for the near-tie construction: even, so D = 1 − P + P² e_z is even.
+/// `e_z` for the near-tie construction: even, so D = 1 − P + P² `e_z` is even.
 const EZ_NEAR: i64 = 1 << 38;
 
-/// Planes meeting at x = x2 / 2 + δ / D, y = (x2 − 2 a_x) / 2 + δ / D, z = 2^38 · y, with
+/// Planes meeting at x = x2 / 2 + δ / D, y = (x2 − 2 `a_x`) / 2 + δ / D, z = 2^38 · y, with
 /// D = 1 − P + P² 2^38, just below 2^116. Unpermuted and unmirrored, w = −D (or +D if swapped).
 fn near_tie(
     ax: i64,
@@ -597,7 +635,8 @@ fn near_tie(
     near_tie_scaled(ax, x2, delta, [1, 1], perm, mirror, swap)
 }
 
-/// [`near_tie`] with planes 1 and 2 scaled by m_1 and m_2: w = −m_1 m_2 D (or +m_1 m_2 D swapped).
+/// [`near_tie`] with planes 1 and 2 scaled by `m_1` and `m_2`: w = −`m_1` `m_2` D (or +`m_1` `m_2`
+/// D swapped).
 fn near_tie_scaled(
     ax: i64,
     x2: i64,
@@ -625,7 +664,8 @@ fn half_far(x2: &BigInt, mirror: bool, swap: bool) -> Option<([Plane; 3], [BigRa
     half_far_scaled(x2, [1, 1], mirror, swap)
 }
 
-/// [`half_far`] with planes 1 and 2 scaled by m_1 and m_2: w = −2 m_1 m_2 (or +2 m_1 m_2 swapped).
+/// [`half_far`] with planes 1 and 2 scaled by `m_1` and `m_2`: w = −2 `m_1` `m_2` (or +2 `m_1`
+/// `m_2` swapped).
 fn half_far_scaled(
     x2: &BigInt,
     m: [i64; 2],
@@ -652,8 +692,8 @@ fn integral_far(x: &BigInt, perm: [usize; 3], swap: bool) -> ([Plane; 3], [BigRa
     line_meets_plane(P_NEAR, [ex, 1, 0], [ax, 0, 0], &t, perm, false, swap).expect("fits the frame")
 }
 
-/// Planes x − z = s, x + z = t and y = y0 with every normal scaled by k·l, so w = 2 (k l)^3, and the
-/// point ((s + t) / 2, y0, (t − s) / 2) is a tie on x and z whenever s + t is odd.
+/// Planes x − z = s, x + z = t and y = y0 with every normal scaled by k·l, so w = 2 (k l)^3, and
+/// the point ((s + t) / 2, y0, (t − s) / 2) is a tie on x and z whenever s + t is odd.
 fn scaled_tie(s: i64, t: i64, y0: i64, k: i64, l: i64) -> Option<[Plane; 3]> {
     let h = s.div_euclid(2);
     let p1 = through_in_frame([h, 0, h - s], [0, l, 0], [k, 0, k])?;
@@ -700,21 +740,21 @@ fn perm() -> impl Strategy<Value = [usize; 3]> {
 fn plane_hand_examples() {
     let pl = Plane::through(p(0, 0, 0), p(1, 0, 0), p(0, 1, 0)).unwrap();
     assert_eq!((pl.n(), pl.d()), ([0, 0, 1], 0));
-    assert_eq!(pl.side(p(0, 0, 5)), Sign::Positive);
-    assert_eq!(pl.side(p(M, -M, -1)), Sign::Negative);
-    assert_eq!(pl.side(p(-M, M, 0)), Sign::Zero);
+    assert_eq!(pl.side(p(0, 0, 5)).unwrap(), Sign::Positive);
+    assert_eq!(pl.side(p(M, -M, -1)).unwrap(), Sign::Negative);
+    assert_eq!(pl.side(p(-M, M, 0)).unwrap(), Sign::Zero);
     let pl = Plane::through(p(1, 0, 0), p(1, 1, 0), p(1, 0, 1)).unwrap();
     assert_eq!((pl.n(), pl.d()), ([1, 0, 0], -1));
     let pl = Plane::through(p(6, 0, 0), p(0, 6, 0), p(0, 0, 6)).unwrap();
     assert_eq!((pl.n(), pl.d()), ([36, 36, 36], -216));
-    assert_eq!(pl.side(p(2, 2, 2)), Sign::Zero);
-    assert_eq!(pl.side(p(2, 2, 3)), Sign::Positive);
+    assert_eq!(pl.side(p(2, 2, 2)).unwrap(), Sign::Zero);
+    assert_eq!(pl.side(p(2, 2, 3)).unwrap(), Sign::Positive);
     // The largest axis plane: x = 0 through (0, ±M, ±M) has n = (4M², 0, 0).
     let pl = Plane::through(p(0, -M, -M), p(0, M, -M), p(0, -M, M)).unwrap();
     let m = i128::from(M);
     assert_eq!((pl.n(), pl.d()), ([4 * m * m, 0, 0], 0));
-    assert_eq!(pl.side(p(1, M, M)), Sign::Positive);
-    assert_eq!(pl.side(p(-1, -M, M)), Sign::Negative);
+    assert_eq!(pl.side(p(1, M, M)).unwrap(), Sign::Positive);
+    assert_eq!(pl.side(p(-1, -M, M)).unwrap(), Sign::Negative);
 }
 
 /// Normals made of 82-bit products that cancel to ±1 or ±2, and to exactly zero.
@@ -723,8 +763,8 @@ fn plane_exact_cancellation_of_82_bit_products() {
     // n_z = 2M(2M − 2) − (2M − 1)² = −1.
     let pl = check_plane(p(-M, -M, 0), p(M, M - 1, 0), p(M - 1, M - 2, 0)).unwrap();
     assert_eq!((pl.n(), pl.d()), ([0, 0, -1], 0));
-    assert_eq!(pl.side(p(0, 0, 1)), Sign::Negative);
-    assert_eq!(pl.side(p(M, -M, 0)), Sign::Zero);
+    assert_eq!(pl.side(p(0, 0, 1)).unwrap(), Sign::Negative);
+    assert_eq!(pl.side(p(M, -M, 0)).unwrap(), Sign::Zero);
     // All three components cancel: u = (2M, 2M − 1, 2M − 2), v = (2M − 1, 2M − 2, 2M − 3).
     let (a, b, c) = (p(-M, -M, -M), p(M, M - 1, M - 2), p(M - 1, M - 2, M - 3));
     let pl = check_plane(a, b, c).unwrap();
@@ -852,10 +892,13 @@ const FLOOR: Plane = match Plane::through(ORIGIN, X_END, Y_END) {
     Ok(pl) => pl,
     Err(_) => panic!("collinear"),
 };
-const ABOVE: Sign = FLOOR.side(match P3::new(0, 0, 1) {
+const ABOVE: Sign = match FLOOR.side(match P3::new(0, 0, 1) {
     Ok(q) => q,
     Err(_) => panic!("above"),
-});
+}) {
+    Ok(s) => s,
+    Err(_) => panic!("side"),
+};
 
 #[test]
 fn const_evaluation() {
@@ -890,7 +933,7 @@ proptest! {
             }
             None => {
                 for &q in &qs {
-                    prop_assert_eq!(orient3d(a, b, c, q), Sign::Zero);
+                    prop_assert_eq!(orient3d(a, b, c, q).unwrap(), Sign::Zero);
                 }
             }
         }
@@ -911,7 +954,7 @@ proptest! {
             if in_frame(c) {
                 prop_assert_eq!(Plane::through(a, b, pa(c)), Err(NumError::Degenerate));
                 prop_assert_eq!(Plane::through(pa(c), a, b), Err(NumError::Degenerate));
-                prop_assert_eq!(orient3d(a, b, pa(c), q), Sign::Zero);
+                prop_assert_eq!(orient3d(a, b, pa(c), q).unwrap(), Sign::Zero);
                 let mut off = c;
                 off[axis] += sgn;
                 if !in_frame(off) {
@@ -951,19 +994,35 @@ fn tpi_hand_sign_convention() {
     for (perm, even) in PERMS {
         let [a, b, c] = permuted(planes, perm);
         let t = Tpi::new(a, b, c).unwrap();
-        let (x, w) = t.homogeneous();
+        let (x, w) = t.homogeneous().unwrap();
         let s = if even { 1 } else { -1 };
         assert_eq!(
             x.map(|v| wide_to_big(&v)),
             [1, 2, 3].map(|v| BigInt::from(s * v))
         );
         assert_eq!(wide_to_big(&w), BigInt::from(s));
-        assert_eq!(x0.side_of_tpi(&t), Sign::Positive, "order {perm:?}");
-        assert_eq!(x0_flipped.side_of_tpi(&t), Sign::Negative, "order {perm:?}");
-        assert_eq!(z4.side_of_tpi(&t), Sign::Negative, "order {perm:?}");
-        assert_eq!(through_point.side_of_tpi(&t), Sign::Zero, "order {perm:?}");
+        assert_eq!(
+            x0.side_of_tpi(&t).unwrap(),
+            Sign::Positive,
+            "order {perm:?}"
+        );
+        assert_eq!(
+            x0_flipped.side_of_tpi(&t).unwrap(),
+            Sign::Negative,
+            "order {perm:?}"
+        );
+        assert_eq!(
+            z4.side_of_tpi(&t).unwrap(),
+            Sign::Negative,
+            "order {perm:?}"
+        );
+        assert_eq!(
+            through_point.side_of_tpi(&t).unwrap(),
+            Sign::Zero,
+            "order {perm:?}"
+        );
         for pl in [a, b, c] {
-            assert_eq!(pl.side_of_tpi(&t), Sign::Zero);
+            assert_eq!(pl.side_of_tpi(&t).unwrap(), Sign::Zero);
         }
         // The bare classification value, without the sign of w, is wrong for odd orders.
         let bare = dot3(&x0.n().map(BigInt::from), &x.map(|v| wide_to_big(&v)))
@@ -973,8 +1032,8 @@ fn tpi_hand_sign_convention() {
             if even { Sign::Positive } else { Sign::Negative }
         );
         assert_eq!(
-            t.to_grid(),
-            Ok(Rounded {
+            t.commit(),
+            Ok(Commit {
                 value: p(1, 2, 3),
                 exact: true
             })
@@ -1148,14 +1207,14 @@ proptest! {
     fn tpi_vs_cramer((p1, _) in plane3(), (p2, _) in plane3(), (p3, _) in plane3(),
                      others in prop::collection::vec(plane3(), 3)) {
         if let Some((t, pt)) = check_tpi([p1, p2, p3]) {
-            let (x, w) = t.homogeneous();
+            let (x, w) = t.homogeneous().unwrap();
             for (q, _) in &others {
                 check_side_of_tpi(q, &t, &pt);
             }
             for (perm, even) in PERMS {
                 let [a, b, c] = permuted([p1, p2, p3], perm);
                 let u = Tpi::new(a, b, c).unwrap();
-                let (ux, uw) = u.homogeneous();
+                let (ux, uw) = u.homogeneous().unwrap();
                 if even {
                     prop_assert_eq!((ux, uw), (x, w));
                 } else {
@@ -1163,9 +1222,9 @@ proptest! {
                     prop_assert_eq!(ux.map(|v| wide_to_big(&v)), x.map(|v| -wide_to_big(&v)));
                 }
                 for (q, _) in &others {
-                    prop_assert_eq!(q.side_of_tpi(&u), q.side_of_tpi(&t));
+                    prop_assert_eq!(q.side_of_tpi(&u).unwrap(), q.side_of_tpi(&t).unwrap());
                 }
-                prop_assert_eq!(u.to_grid(), t.to_grid());
+                prop_assert_eq!(u.commit(), t.commit());
             }
         }
     }
@@ -1222,7 +1281,7 @@ fn to_grid_exact_ties_with_huge_w_of_both_signs() {
                 });
             }
         }
-        Ok(Rounded {
+        Ok(Commit {
             value: p(x, y0, z),
             exact: (s + t) % 2 == 0,
         })
@@ -1262,14 +1321,14 @@ fn to_grid_exact_ties_with_huge_w_of_both_signs() {
                         .unwrap_or_else(|| panic!("s {s} t {t} k {k} l {l}"));
                     let planes = if swap { [p2, p1, p3] } else { [p1, p2, p3] };
                     let (tpi, _) = check_tpi(planes).unwrap();
-                    let (_, w) = tpi.homogeneous();
+                    let (_, w) = tpi.homogeneous().unwrap();
                     let kl = BigInt::from(k) * BigInt::from(l);
                     assert_eq!(
                         wide_to_big(&w),
                         BigInt::from(if swap { -2 } else { 2 }) * &kl * &kl * &kl
                     );
                     assert_eq!(
-                        tpi.to_grid(),
+                        tpi.commit(),
                         want(s, t, y0),
                         "s {s} t {t} y0 {y0} k {k} l {l} swap {swap}"
                     );
@@ -1318,7 +1377,7 @@ fn to_grid_within_2_pow_minus_116_of_a_half_step() {
                 assert_eq!(pt[1], rat(j, 2) + &tiny, "construction");
                 let (t, got) = check_tpi(planes).unwrap();
                 assert_eq!(got, pt, "Cramer and the line formula disagree");
-                let (_, w) = t.homogeneous();
+                let (_, w) = t.homogeneous().unwrap();
                 assert_eq!(wide_to_big(&w), if swap { d.clone() } else { -d.clone() });
                 let (xr, yr, zr) = (
                     round_near(x2, delta),
@@ -1330,12 +1389,12 @@ fn to_grid_within_2_pow_minus_116_of_a_half_step() {
                         value: i128::from(xr),
                     })
                 } else {
-                    Ok(Rounded {
+                    Ok(Commit {
                         value: p(xr, yr, zr),
                         exact: delta == 0 && j % 2 == 0,
                     })
                 };
-                assert_eq!(t.to_grid(), want, "x = {x2}/2 + {delta}/D, swap {swap}");
+                assert_eq!(t.commit(), want, "x = {x2}/2 + {delta}/D, swap {swap}");
                 for (perm, _) in PERMS {
                     for mirror in [false, true] {
                         let (planes, pt2) = near_tie(ax, x2, delta, perm, mirror, swap);
@@ -1345,8 +1404,8 @@ fn to_grid_within_2_pow_minus_116_of_a_half_step() {
                             let v =
                                 permuted([xr, yr, zr], perm).map(|c| if mirror { -c } else { c });
                             assert_eq!(
-                                t2.to_grid(),
-                                Ok(Rounded {
+                                t2.commit(),
+                                Ok(Commit {
                                     value: pa(v),
                                     exact: r.exact
                                 })
@@ -1369,7 +1428,7 @@ fn side_of_tpi_within_2_pow_minus_116_of_grid_planes() {
             for swap in [false, true] {
                 let (planes, pt) = near_tie(k, 2 * k, delta, ID, false, swap);
                 let (t, _) = check_tpi(planes).unwrap();
-                let (_, w) = t.homogeneous();
+                let (_, w) = t.homogeneous().unwrap();
                 assert_eq!(w.is_negative(), !swap);
                 let s = Sign::of_i64(delta);
                 let g = |a, u, v| through_in_frame(a, u, v).unwrap();
@@ -1385,13 +1444,17 @@ fn side_of_tpi_within_2_pow_minus_116_of_grid_planes() {
                 assert_eq!(z_0.n(), [0, 0, 1]);
                 assert_eq!(x_minus_y.n(), [1, -1, 0]);
                 assert_eq!(sum.n(), [1, 1, 1]);
-                assert_eq!(x_k.side_of_tpi(&t), s, "k {k} delta {delta} swap {swap}");
-                assert_eq!(x_k_flipped.side_of_tpi(&t), s.negate());
-                assert_eq!(y_0.side_of_tpi(&t), s);
-                assert_eq!(z_0.side_of_tpi(&t), s);
-                assert_eq!(sum.side_of_tpi(&t), s);
-                assert_eq!(x_minus_y.side_of_tpi(&t), Sign::Zero);
-                assert_eq!(along.side_of_tpi(&t), Sign::Zero);
+                assert_eq!(
+                    x_k.side_of_tpi(&t).unwrap(),
+                    s,
+                    "k {k} delta {delta} swap {swap}"
+                );
+                assert_eq!(x_k_flipped.side_of_tpi(&t).unwrap(), s.negate());
+                assert_eq!(y_0.side_of_tpi(&t).unwrap(), s);
+                assert_eq!(z_0.side_of_tpi(&t).unwrap(), s);
+                assert_eq!(sum.side_of_tpi(&t).unwrap(), s);
+                assert_eq!(x_minus_y.side_of_tpi(&t).unwrap(), Sign::Zero);
+                assert_eq!(along.side_of_tpi(&t).unwrap(), Sign::Zero);
                 for pl in [x_k, x_k_flipped, y_0, z_0, x_minus_y, along, sum] {
                     check_side_of_tpi(&pl, &t, &pt);
                 }
@@ -1457,10 +1520,10 @@ fn to_grid_around_plus_minus_2_pow_127() {
                 );
                 let (t, got) = check_tpi(planes).unwrap();
                 assert_eq!(got, pt);
-                let (_, w) = t.homogeneous();
+                let (_, w) = t.homogeneous().unwrap();
                 assert_eq!(wide_to_big(&w), BigInt::from(if swap { 2 } else { -2 }));
                 assert_eq!(
-                    t.to_grid(),
+                    t.commit(),
                     Err(NumError::OutOfRange { value: want }),
                     "x = ({x2}) / 2"
                 );
@@ -1472,11 +1535,11 @@ fn to_grid_around_plus_minus_2_pow_127() {
                 let (planes, pt) = half_far_scaled(&x2, SCALE, false, swap).unwrap();
                 let (t, got) = check_tpi(planes).unwrap();
                 assert_eq!(got, pt);
-                let (_, w) = t.homogeneous();
+                let (_, w) = t.homogeneous().unwrap();
                 let mw = BigInt::from(2) * BigInt::from(SCALE[0]) * BigInt::from(SCALE[1]);
                 assert_eq!(wide_to_big(&w), if swap { mw } else { -mw });
                 assert_eq!(
-                    t.to_grid(),
+                    t.commit(),
                     Err(NumError::OutOfRange { value: want }),
                     "scaled, x = ({x2}) / 2"
                 );
@@ -1485,7 +1548,7 @@ fn to_grid_around_plus_minus_2_pow_127() {
     }
 }
 
-/// The near ties again with planes 1 and 2 scaled by about 2^38 each: |w| = m_1 m_2 D, about
+/// The near ties again with planes 1 and 2 scaled by about 2^38 each: |w| = `m_1` `m_2` D, about
 /// 2^192, still deciding points 2^-116 from a half step exactly.
 #[test]
 fn to_grid_near_ties_with_w_near_2_pow_192() {
@@ -1512,7 +1575,7 @@ fn to_grid_near_ties_with_w_near_2_pow_192() {
                     pt[0],
                     rat(x2, 2) + BigRational::new(BigInt::from(delta), d.clone())
                 );
-                let (_, w) = t.homogeneous();
+                let (_, w) = t.homogeneous().unwrap();
                 assert_eq!(wide_to_big(&w), if swap { mw.clone() } else { -mw.clone() });
                 let (xr, yr, zr) = (
                     round_near(x2, delta),
@@ -1524,15 +1587,15 @@ fn to_grid_near_ties_with_w_near_2_pow_192() {
                         value: i128::from(xr),
                     })
                 } else {
-                    Ok(Rounded {
+                    Ok(Commit {
                         value: p(xr, yr, zr),
                         exact: delta == 0 && j % 2 == 0,
                     })
                 };
-                assert_eq!(t.to_grid(), want, "x = {x2}/2 + {delta}/D, swap {swap}");
+                assert_eq!(t.commit(), want, "x = {x2}/2 + {delta}/D, swap {swap}");
                 let x_k = through_in_frame([ax, 0, 0], [0, 1, 0], [0, 0, 1]).unwrap();
                 if j == 0 {
-                    assert_eq!(x_k.side_of_tpi(&t), Sign::of_i64(delta));
+                    assert_eq!(x_k.side_of_tpi(&t).unwrap(), Sign::of_i64(delta));
                 }
                 check_side_of_tpi(&x_k, &t, &pt);
             }
@@ -1545,24 +1608,24 @@ fn to_grid_near_ties_with_w_near_2_pow_192() {
 fn to_grid_integral_points_at_frame_and_i128_edges() {
     let m = BigInt::from(M);
     let two127 = BigInt::one() << 127u32;
-    let cases: Vec<(BigInt, Result<Rounded<P3>, NumError>)> = vec![
+    let cases: Vec<(BigInt, Result<Commit, NumError>)> = vec![
         (
             m.clone(),
-            Ok(Rounded {
+            Ok(Commit {
                 value: p(M, 2, 0),
                 exact: true,
             }),
         ),
         (
             -m.clone(),
-            Ok(Rounded {
+            Ok(Commit {
                 value: p(-M, -2, 0),
                 exact: true,
             }),
         ),
         (
             &m - 1,
-            Ok(Rounded {
+            Ok(Commit {
                 value: p(M - 1, 2, 0),
                 exact: true,
             }),
@@ -1599,9 +1662,9 @@ fn to_grid_integral_points_at_frame_and_i128_edges() {
             assert_eq!(pt[0], BigRational::from_integer(x.clone()), "construction");
             let (t, got) = check_tpi(planes).unwrap();
             assert_eq!(got, pt);
-            let (_, w) = t.homogeneous();
+            let (_, w) = t.homogeneous().unwrap();
             assert_eq!(wide_to_big(&w), BigInt::from(if swap { 1 } else { -1 }));
-            assert_eq!(t.to_grid(), want, "x = {x}");
+            assert_eq!(t.commit(), want, "x = {x}");
         }
     }
 }
@@ -1629,7 +1692,7 @@ fn to_grid_reports_the_first_out_of_range_axis() {
             assert_eq!(got, pt);
             let want = if mirror { -want } else { want };
             assert_eq!(
-                tpi.to_grid(),
+                tpi.commit(),
                 Err(NumError::OutOfRange { value: want }),
                 "perm {perm:?} mirror {mirror}"
             );
@@ -1638,11 +1701,11 @@ fn to_grid_reports_the_first_out_of_range_axis() {
     // x in range, y = 2^88 (exact) reported before x = 2^127 − 1 when y comes first.
     let (planes, _) = integral_far(&((BigInt::one() << 127u32) - 1), [1, 0, 2], false);
     let (tpi, _) = check_tpi(planes).unwrap();
-    assert_eq!(tpi.to_grid(), Err(NumError::OutOfRange { value: 1 << 88 }));
+    assert_eq!(tpi.commit(), Err(NumError::OutOfRange { value: 1 << 88 }));
 }
 
-/// Integral points with |w| = (k l)^3, about 2^234: the commit is exact and unmoved, and every plane
-/// classifies the implicit point exactly as it classifies the grid point.
+/// Integral points with |w| = (k l)^3, about 2^234: the commit is exact and unmoved, and every
+/// plane classifies the implicit point exactly as it classifies the grid point.
 #[test]
 fn to_grid_integral_points_with_huge_w_are_exact() {
     let (k, l) = (549_755_813_881i64, 549_755_813_869i64);
@@ -1663,14 +1726,14 @@ fn to_grid_integral_points_with_huge_w_are_exact() {
         ];
         for (perm, even) in PERMS {
             let (t, pt) = check_tpi(permuted(base, perm)).unwrap();
-            let (_, w) = t.homogeneous();
+            let (_, w) = t.homogeneous().unwrap();
             assert_eq!(
                 wide_to_big(&w),
                 if even { kl3.clone() } else { -kl3.clone() }
             );
             assert_eq!(
-                t.to_grid(),
-                Ok(Rounded {
+                t.commit(),
+                Ok(Commit {
                     value: pa(gp),
                     exact: true
                 })
@@ -1684,7 +1747,7 @@ fn to_grid_integral_points_with_huge_w_are_exact() {
                 for (i, &o1) in others.iter().enumerate() {
                     for &o2 in &others[i + 1..] {
                         if let Ok(pl) = Plane::through(q, o1, o2) {
-                            assert_eq!(pl.side_of_tpi(&t), pl.side(g));
+                            assert_eq!(pl.side_of_tpi(&t).unwrap(), pl.side(g).unwrap());
                             check_side_of_tpi(&pl, &t, &pt);
                         }
                     }
@@ -1697,8 +1760,8 @@ fn to_grid_integral_points_with_huge_w_are_exact() {
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(512))]
 
-    /// Random near ties: P odd, e = (1, e_y odd, e_z even) so D is even, the point at
-    /// x = a_x + j/2 + δ/D with |D| up to about 2^116, any order, mirror and plane order. The
+    /// Random near ties: P odd, e = (1, `e_y` odd, `e_z` even) so D is even, the point at
+    /// x = `a_x` + j/2 + δ/D with |D| up to about 2^116, any order, mirror and plane order. The
     /// commit, the homogeneous coordinates and the designed point all agree with the oracles.
     #[test]
     fn near_ties_random(pp in prop_oneof![3i64..=1023, (1i64 << 20)..=((1i64 << 39) - 1)].prop_map(|v| v | 1),

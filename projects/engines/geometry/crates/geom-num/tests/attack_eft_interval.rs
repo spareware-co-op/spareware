@@ -1,7 +1,7 @@
 //! Adversarial tests of `geom_num::eft` and `geom_num::interval`: they try to break the
 //! error-free transformations and the outward-rounded intervals, not to confirm them.
 //!
-//! Oracles (none shared with tests/eft_interval.rs, none calling the code under test):
+//! Oracles (none shared with tests/`eft_interval`.rs, none calling the code under test):
 //! - `dy`: a finite double as an exact dyadic number m · 2^e on `num-bigint`, for the error-free
 //!   transformations. Checked against `num-rational`'s own `BigRational::from_float`.
 //! - `rn`: round to nearest, ties to even, of any rational to a double, written from the definition
@@ -24,23 +24,40 @@
 //!   significand patterns that make both splits round up a binade.
 //! - Every former precondition from outside (the functions now have none): a pair must be exact or
 //!   reported (a non-finite output), never a finite wrong pair. Stronger, against the oracle: each
-//!   function is exact whenever an exact pair exists at all, and a reported pair carries an infinity
-//!   with the sign of the exact error. The crate's "never NaN" invariant (lib.rs) is checked for every
-//!   function on finite inputs; on infinite inputs, NaN only where IEEE 754 makes the sum or product
-//!   itself NaN.
+//!   function is exact whenever an exact pair exists at all, and a reported pair carries an
+//!   infinity with the sign of the exact error. The crate's "never NaN" invariant (lib.rs) is
+//!   checked for every function on finite inputs; on infinite inputs, NaN only where IEEE 754 makes
+//!   the sum or product itself NaN.
 //! - The claims about `split` that the two-product proof leans on: halves are whole multiples of
-//!   u_a, the high half is at most 2^(e_a + 1) and a single bit when it is that large.
+//!   `u_a`, the high half is at most 2^(`e_a` + 1) and a single bit when it is that large.
 //! - Intervals: every operation bit for bit against the documented method, in regimes built to
 //!   break it: sums near Ω, products near 2^1024 and near 2^−1074, quotients by small and subnormal
 //!   divisors, operands touching zero, ±0 bounds, the whole line [−Ω, Ω], and the tie at Ω − 2^970.
-//! - `sqrt` bit for bit against an integer-square-root oracle, at zero and subnormal bounds, and the
-//!   correct rounding of `math::sqrt` it relies on. `square` and `sqrt_nonneg` bit for bit against
-//!   their documented methods, with containment and monotone inclusion.
+//! - `sqrt` bit for bit against an integer-square-root oracle, at zero and subnormal bounds, and
+//!   the correct rounding of `math::sqrt` it relies on. `square` bit for bit against its
+//!   documented method, and the root of the non-negative part by its method (the crate's
+//!   `sqrt_nonneg` is private since the third review round; its unit tests hold it to that method),
+//!   with containment and monotone inclusion.
 //! - Chains of operations against exact rational evaluation; `certain_sign` on expressions that
 //!   cancel exactly and on sub-ulp quantities (the error of a rounded sum or product).
 //! - The distance between coincident and nearly coincident points: its squared interval reaches
 //!   below zero only through widening, and must still be certified.
 
+// The crate denies native arithmetic and lossy casts in kernel code (Cargo.toml); tests may use
+// them, and std's reductions, to build their oracles.
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::disallowed_methods,
+    reason = "oracles and generators; the rules are for kernel code"
+)]
+#![allow(
+    clippy::many_single_char_names,
+    reason = "points and values are named a, b, c and so on, as in the formulas they check"
+)]
 // Helpers outside `#[test]` functions are not covered by clippy.toml's allow-*-in-tests settings;
 // clippy.toml says tests may use these, and a broken oracle must stop the test loudly.
 #![allow(
@@ -242,7 +259,8 @@ mod dy {
             }
         }
 
-        /// The position of the lowest set bit (the value is a whole multiple of 2^that), if nonzero.
+        /// The position of the lowest set bit (the value is a whole multiple of 2^that), if
+        /// nonzero.
         pub fn lowest_bit(&self) -> Option<i64> {
             if self.m.is_zero() { None } else { Some(self.e) }
         }
@@ -345,10 +363,10 @@ mod rn {
         if negative { -magnitude } else { magnitude }
     }
 
-    /// The double nearest to √x for a finite x ≥ 0, by integer square root: x = n / 2^j with j even,
-    /// √x = √(n · 2^128) / 2^(j/2 + 64), and the integer root s ≥ 2^64 has at least 11 bits below the
-    /// last kept bit, so s + ½ stands in for every irrational root between s and s + 1 (no tie or
-    /// rounding boundary lies strictly between two whole numbers at that scale).
+    /// The double nearest to √x for a finite x ≥ 0, by integer square root: x = n / 2^j with j
+    /// even, √x = √(n · 2^128) / 2^(j/2 + 64), and the integer root s ≥ 2^64 has at least 11 bits
+    /// below the last kept bit, so s + ½ stands in for every irrational root between s and s + 1
+    /// (no tie or rounding boundary lies strictly between two whole numbers at that scale).
     pub fn round_sqrt(x: f64) -> f64 {
         assert!(x.is_finite() && x >= 0.0, "round_sqrt({x})");
         if x == 0.0 {
@@ -457,7 +475,8 @@ mod strat {
         v
     }
 
-    /// A double of any kind: random bits, every exponent, subnormal, near overflow, edges, integers.
+    /// A double of any kind: random bits, every exponent, subnormal, near overflow, edges,
+    /// integers.
     pub fn wild() -> BoxedStrategy<f64> {
         prop_oneof![
             2 => any_finite(),
@@ -694,8 +713,9 @@ mod eft_attacks {
         check_sum("two_sum", eft::two_sum, a, b)
     }
 
-    /// Whether a pair is inside the range `two_prod`'s former precondition named (both factors below
-    /// 2^996, and zero or both normal with −970 ≤ e_a + e_b ≤ 1021), where no exact pair can fail.
+    /// Whether a pair is inside the range `two_prod`'s former precondition named (both factors
+    /// below 2^996, and zero or both normal with −970 ≤ `e_a` + `e_b` ≤ 1021), where no exact pair
+    /// can fail.
     fn in_prod_domain(a: f64, b: f64) -> bool {
         let limit = fp::pow2(996);
         if !(a.abs() < limit && b.abs() < limit) {
@@ -709,13 +729,13 @@ mod eft_attacks {
             && (-970..=1021).contains(&(fp::exponent(a) + fp::exponent(b)))
     }
 
-    /// `two_prod` on any finite pair, against its whole contract. An exact pair exists exactly when the
-    /// rounded product is finite and the exact product is a whole multiple of 2^−1074 (the oracle's
-    /// own reading: `p` and `e` are doubles, so both are such multiples; conversely such an error is at
-    /// most half a unit of `p` and a multiple of the product's lowest bit, so it has at most 53 bits).
-    /// Then the pair must be exact, IEEE and non-overlapping. Otherwise `e` must be an infinity with the
-    /// sign of the exact error `a · b − p`, and for an overflowed `p` the opposite infinity. The laws
-    /// (symmetry, oddness) hold either way.
+    /// `two_prod` on any finite pair, against its whole contract. An exact pair exists exactly when
+    /// the rounded product is finite and the exact product is a whole multiple of 2^−1074 (the
+    /// oracle's own reading: `p` and `e` are doubles, so both are such multiples; conversely such
+    /// an error is at most half a unit of `p` and a multiple of the product's lowest bit, so it has
+    /// at most 53 bits). Then the pair must be exact, IEEE and non-overlapping. Otherwise `e` must
+    /// be an infinity with the sign of the exact error `a · b − p`, and for an overflowed `p` the
+    /// opposite infinity. The laws (symmetry, oddness) hold either way.
     fn check_two_prod_total(a: f64, b: f64) -> TestResult {
         let (p, e) = eft::two_prod(a, b);
         prop_assert_eq!(
@@ -805,9 +825,9 @@ mod eft_attacks {
     }
 
     /// `split` on any finite double, against its whole contract: exact, two halves of at most 26
-    /// bits, |hi| ≥ |lo|, both whole multiples of u_a, |hi| ≤ 2^(e_a + 1); or, only when the high half
-    /// would be 2^1024 (which needs |a| > 2^1024 − 2^999, since |lo| ≤ 2^(e_a − 26)), the pair
-    /// (±∞, ∓∞) with the sign of `a`.
+    /// bits, |hi| ≥ |lo|, both whole multiples of `u_a`, |hi| ≤ 2^(`e_a` + 1); or, only when the
+    /// high half would be 2^1024 (which needs |a| > 2^1024 − 2^999, since |lo| ≤ 2^(`e_a` − 26)),
+    /// the pair (±∞, ∓∞) with the sign of `a`.
     fn check_split_total(a: f64) -> TestResult {
         let (hi, lo) = eft::split(a);
         if !hi.is_finite() {
@@ -868,8 +888,9 @@ mod eft_attacks {
         Ok(())
     }
 
-    /// `two_prod` on a pair the caller guarantees exact for: `p` is the rounded product by the oracle
-    /// and by the hardware, the pair is exact, does not overlap, and the laws (symmetry, oddness) hold.
+    /// `two_prod` on a pair the caller guarantees exact for: `p` is the rounded product by the
+    /// oracle and by the hardware, the pair is exact, does not overlap, and the laws (symmetry,
+    /// oddness) hold.
     fn check_two_prod(a: f64, b: f64) -> TestResult {
         let (p, e) = eft::two_prod(a, b);
         let exact = Dy::of(a).mul(&Dy::of(b));
@@ -1000,7 +1021,8 @@ mod eft_attacks {
         }
 
         /// `fast_two_sum` is documented for |a| ≥ |b|; Dekker's condition is only that the exponent
-        /// of `a` is at least that of `b`. Shows whether the documented precondition is the true one.
+        /// of `a` is at least that of `b`. Shows whether the documented precondition is the true
+        /// one.
         #[test]
         fn fast_two_sum_is_exact_when_exponents_are_ordered(
             e in -1022i32..=1023,
@@ -1148,8 +1170,8 @@ mod eft_attacks {
             prop_assert!(s.to_bits() == s2.to_bits() && e == e2, "fast_two_sum and two_sum differ at ({:e}, {:e})", a, b);
         }
 
-        /// `two_prod` on any finite pair, every regime: exact whenever an exact pair exists, otherwise
-        /// an infinite error with the right sign.
+        /// `two_prod` on any finite pair, every regime: exact whenever an exact pair exists,
+        /// otherwise an infinite error with the right sign.
         #[test]
         fn two_prod_whole_contract_any_pair(
             a in prop_oneof![strat::wild(), strat::subnormal(), strat::normal(990..=1023)],
@@ -1184,8 +1206,8 @@ mod eft_attacks {
             check_two_prod_total(a, b)?;
         }
 
-        /// `two_prod` with a factor at or above 2^996 and products anywhere from overflow down to the
-        /// subnormal range.
+        /// `two_prod` with a factor at or above 2^996 and products anywhere from overflow down to
+        /// the subnormal range.
         #[test]
         fn two_prod_whole_contract_large_factor(
             a in strat::normal(996..=1023),
@@ -1203,10 +1225,10 @@ mod eft_attacks {
         }
     }
 
-    /// Every pair at the overflow frontier of `two_sum`: tops within 48 units of Ω and 16 either side
-    /// of 2^1023, small values from 2^966 to 2^982 and either side of 2^970 (half a unit of Ω), every
-    /// sign and order. The guard must make each finite sum exact and each overflowed sum carry the
-    /// opposite infinity.
+    /// Every pair at the overflow frontier of `two_sum`: tops within 48 units of Ω and 16 either
+    /// side of 2^1023, small values from 2^966 to 2^982 and either side of 2^970 (half a unit of
+    /// Ω), every sign and order. The guard must make each finite sum exact and each overflowed sum
+    /// carry the opposite infinity.
     #[test]
     fn two_sum_overflow_frontier_exhaustive() {
         let mut tops = Vec::new();
@@ -1307,9 +1329,9 @@ mod eft_attacks {
     }
 
     /// The claims about `split` that the two-product proof leans on, for every exponent in its
-    /// domain and many significands: the halves add up, have at most 26 bits each, |hi| ≥ |lo|, both
-    /// are whole multiples of u_a = 2^(e_a − 52), |hi| ≤ 2^(e_a + 1), and hi is a single bit when it
-    /// reaches 2^(e_a + 1).
+    /// domain and many significands: the halves add up, have at most 26 bits each, |hi| ≥ |lo|,
+    /// both are whole multiples of `u_a` = 2^(`e_a` − 52), |hi| ≤ 2^(`e_a` + 1), and hi is a single
+    /// bit when it reaches 2^(`e_a` + 1).
     #[test]
     fn split_claims_the_product_proof_relies_on() {
         let mut rng = Lcg(0x5917);
@@ -1453,7 +1475,7 @@ mod eft_attacks {
         );
     }
 
-    /// Products below the former exponent limit of `two_prod` (e_a + e_b < −970, both factors
+    /// Products below the former exponent limit of `two_prod` (`e_a` + `e_b` < −970, both factors
     /// normal), which its old precondition excluded without checking: reported or exact, never a
     /// finite wrong pair, and exact whenever an exact pair exists (the whole contract).
     #[test]
@@ -1522,9 +1544,9 @@ mod eft_attacks {
         );
     }
 
-    /// A factor at or above 2^996 (outside part 1 of the former precondition) with any partner whose
-    /// product is in range, and a zero against such a factor: reported or exact, and exact whenever
-    /// an exact pair exists.
+    /// A factor at or above 2^996 (outside part 1 of the former precondition) with any partner
+    /// whose product is in range, and a zero against such a factor: reported or exact, and exact
+    /// whenever an exact pair exists.
     #[test]
     fn two_prod_with_a_factor_at_or_above_2_996_is_reported_or_exact() {
         let mut rng = Lcg(0x3e4);
@@ -1552,8 +1574,9 @@ mod eft_attacks {
         }
     }
 
-    /// Products above the former exponent limit of `two_prod` (e_a + e_b ≥ 1022, both factors below
-    /// 2^996): reported or exact, never a finite wrong pair, and exact whenever an exact pair exists.
+    /// Products above the former exponent limit of `two_prod` (`e_a` + `e_b` ≥ 1022, both factors
+    /// below 2^996): reported or exact, never a finite wrong pair, and exact whenever an exact pair
+    /// exists.
     #[test]
     fn two_prod_above_its_exponent_limit_is_reported_or_exact() {
         let mut rng = Lcg(0xab0e);
@@ -1665,8 +1688,8 @@ mod eft_attacks {
         );
     }
 
-    /// On infinite inputs (NaN aside) the second part is NaN only where IEEE 754 makes the first part
-    /// NaN (∞ − ∞, 0 · ∞); otherwise it is an infinity, opposite to the first part.
+    /// On infinite inputs (NaN aside) the second part is NaN only where IEEE 754 makes the first
+    /// part NaN (∞ − ∞, 0 · ∞); otherwise it is an infinity, opposite to the first part.
     #[test]
     fn infinite_inputs_give_nan_only_where_ieee_does() {
         let inf = [f64::INFINITY, f64::NEG_INFINITY];
@@ -1710,8 +1733,8 @@ mod eft_attacks {
         }
     }
 
-    /// A reported pair keeps the sign of the exact error, so a product that underflows to zero still
-    /// says which side of zero it is on; an overflowed product carries the opposite infinity.
+    /// A reported pair keeps the sign of the exact error, so a product that underflows to zero
+    /// still says which side of zero it is on; an overflowed product carries the opposite infinity.
     #[test]
     fn reported_pairs_carry_the_sign_of_the_error() {
         let t = fp::pow2(-600);
@@ -1761,9 +1784,10 @@ mod eft_attacks {
         );
     }
 
-    /// `two_prod` across the underflow frontier, deterministically: every exponent sum from −1080 to
-    /// −955 with significand patterns, both factors normal, and a subnormal factor of every length.
-    /// Both outcomes must occur (exact pairs and reported ones), and each must meet the whole contract.
+    /// `two_prod` across the underflow frontier, deterministically: every exponent sum from −1080
+    /// to −955 with significand patterns, both factors normal, and a subnormal factor of every
+    /// length. Both outcomes must occur (exact pairs and reported ones), and each must meet the
+    /// whole contract.
     #[test]
     fn two_prod_dense_across_the_underflow_frontier() {
         let patterns = [
@@ -2109,10 +2133,10 @@ mod interval_attacks {
     }
 
     /// `square`: bit for bit its documented method (lower bound exactly 0 when the interval holds
-    /// zero, else the nearer bound's square rounded, stepped down and kept at or above 0; upper bound
-    /// the farther bound's square rounded and stepped up; `NotFinite` when that is infinite), and
-    /// independently a non-negative result holding both extreme squares, with a sound sign, inside
-    /// `mul(a, a)` whenever that succeeds.
+    /// zero, else the nearer bound's square rounded, stepped down and kept at or above 0; upper
+    /// bound the farther bound's square rounded and stepped up; `NotFinite` when that is infinite),
+    /// and independently a non-negative result holding both extreme squares, with a sound sign,
+    /// inside `mul(a, a)` whenever that succeeds.
     fn check_square(a: Interval) -> TestResult {
         let got = a.square();
         let (l, h) = (exact(a.lo()), exact(a.hi()));
@@ -2174,10 +2198,25 @@ mod interval_attacks {
         Ok(())
     }
 
+    /// The root of the non-negative part of `a`, by its documented method: `NegativeSqrt` when
+    /// every value is negative, otherwise `sqrt` of [max(lo, 0), hi].
+    ///
+    /// The crate's own operation is private since the third review round: on a caller's word that
+    /// the value is not negative it would certify a negative value as an exact zero, so only
+    /// `Interval::norm`, which proves its radicand non-negative, takes it. The crate's unit tests
+    /// hold it to this method bit for bit; here the method stands in for it, through the public
+    /// `sqrt`.
+    fn sqrt_nonneg(a: Interval) -> Result<Interval, NumError> {
+        if a.hi() < 0.0 {
+            return Err(NumError::NegativeSqrt);
+        }
+        Interval::new(if a.lo() < 0.0 { 0.0 } else { a.lo() }, a.hi())?.sqrt()
+    }
+
     /// `sqrt_nonneg`: `NegativeSqrt` exactly when every value is negative; otherwise bit for bit
     /// `sqrt` of the non-negative part, which `check_sqrt` holds to the integer-square-root oracle.
     fn check_sqrt_nonneg(a: Interval) -> TestResult {
-        let got = a.sqrt_nonneg();
+        let got = sqrt_nonneg(a);
         if a.hi() < 0.0 {
             prop_assert_eq!(got, Err(NumError::NegativeSqrt), "sqrt_nonneg {:?}", a);
             return Ok(());
@@ -2237,7 +2276,7 @@ mod interval_attacks {
         #[test]
         fn math_sqrt_is_correctly_rounded(x in prop_oneof![strat::any_finite(), strat::subnormal(), strat::wild()]) {
             let x = x.abs();
-            prop_assert_eq!(math::sqrt(x).to_bits(), rn::round_sqrt(x).to_bits(), "sqrt({:e})", x);
+            prop_assert_eq!(math::sqrt(x).unwrap().get().to_bits(), rn::round_sqrt(x).to_bits(), "sqrt({:e})", x);
         }
 
         /// Every binary operation, bit for bit, in every regime of `strat::pair`.
@@ -2297,8 +2336,9 @@ mod interval_attacks {
             }
         }
 
-        /// Expressions whose exact value is zero, and sub-ulp quantities (the exact error of a rounded
-        /// sum or product): the interval holds the exact value and never claims a wrong sign.
+        /// Expressions whose exact value is zero, and sub-ulp quantities (the exact error of a
+        /// rounded sum or product): the interval holds the exact value and never claims a wrong
+        /// sign.
         #[test]
         fn certain_sign_is_never_wrong_on_cancellation(
             a in prop_oneof![strat::moderate(), strat::wild()],
@@ -2331,8 +2371,8 @@ mod interval_attacks {
             }
         }
 
-        /// The interval of a product minus its rounded value holds `two_prod`'s exact error, and its
-        /// certain sign, if any, is the sign of that error.
+        /// The interval of a product minus its rounded value holds `two_prod`'s exact error, and
+        /// its certain sign, if any, is the sign of that error.
         #[test]
         fn interval_agrees_with_two_prod_on_the_sign_of_the_rounding_error(
             a in strat::normal(-400..=400),
@@ -2700,7 +2740,7 @@ mod interval_attacks {
     /// √(dx² + dy²) with dx = dy = x − x. The exact value is 0, but every bound is widened, so
     /// dx = [−2^−1074, 2^−1074] and dx² + dy² has a negative lower bound, with `mul` and with
     /// `square` alike (the sum widens 0 + 0 too). The strict `sqrt` must refuse that interval: its
-    /// documentation and tests/eft_interval.rs (`square_root_cases`, `checks::sqrt`) require
+    /// documentation and tests/`eft_interval`.rs (`square_root_cases`, `checks::sqrt`) require
     /// `NegativeSqrt` whenever the lower bound is negative, and the always-widen method is pinned
     /// there too (`overflow_gives_not_finite`, `zero_bounds_are_stored_as_positive_zero`, and the
     /// collinear cases of `orient2d_at_extreme_coordinates`, which must stay undecided). The
@@ -2723,7 +2763,7 @@ mod interval_attacks {
                     "the strict root of {d2:?}"
                 );
                 run(check_sqrt_nonneg(d2));
-                let r = d2.sqrt_nonneg();
+                let r = sqrt_nonneg(d2);
                 assert!(
                     matches!(r, Ok(i) if i.lo().to_bits() == 0 && i.contains(0.0) && i.hi() < fp::pow2(-530)),
                     "√(dx² + dy²) for coincident points: dx = {dx:?}, dx² + dy² = {d2:?}, sqrt_nonneg gave {r:?}"
@@ -2733,8 +2773,8 @@ mod interval_attacks {
     }
 
     /// `square` and `sqrt_nonneg` at their edges: zero and ±0 bounds, intervals straddling zero,
-    /// squares that underflow (the lower bound must stay at 0, not step to −2^−1074), squares at the
-    /// overflow threshold, wholly negative intervals.
+    /// squares that underflow (the lower bound must stay at 0, not step to −2^−1074), squares at
+    /// the overflow threshold, wholly negative intervals.
     #[test]
     fn square_and_sqrt_nonneg_at_the_edges() {
         let tiny = f64::from_bits(1);
@@ -2768,14 +2808,11 @@ mod interval_attacks {
         assert_eq!(pt(fp::pow2(512)).square(), Err(NumError::NotFinite));
         // Wholly negative: no non-negative part to take the root of.
         assert_eq!(
-            Interval::new(-2.0, -1.0).unwrap().sqrt_nonneg(),
+            sqrt_nonneg(Interval::new(-2.0, -1.0).unwrap()),
             Err(NumError::NegativeSqrt)
         );
         assert_eq!(
-            Interval::new(-tiny, 0.0)
-                .unwrap()
-                .sqrt_nonneg()
-                .map(bits_of),
+            sqrt_nonneg(Interval::new(-tiny, 0.0).unwrap()).map(bits_of),
             Ok((0, 0))
         );
     }
@@ -2815,12 +2852,12 @@ mod interval_attacks {
     proptest! {
         #![proptest_config(config(1024))]
 
-        /// Points known only to boxes a few steps wide (the output of a curved construction), the two
-        /// boxes overlapping, touching or a few steps apart. The distance √(dx² + dy²), with `square`
-        /// and with `mul`, through `sqrt_nonneg`, is always certified: it never refuses, holds the
-        /// exact distance between every pair of corner points (checked by squaring, in rationals),
-        /// starts at exactly 0 when both coordinate differences can be zero, and the `square` form is
-        /// inside the `mul` form.
+        /// Points known only to boxes a few steps wide (the output of a curved construction), the
+        /// two boxes overlapping, touching or a few steps apart. The distance √(dx² + dy²), with
+        /// `square` and with `mul`, through `sqrt_nonneg`, is always certified: it never refuses,
+        /// holds the exact distance between every pair of corner points (checked by squaring, in
+        /// rationals), starts at exactly 0 when both coordinate differences can be zero, and the
+        /// `square` form is inside the `mul` form.
         #[test]
         fn distance_between_nearly_coincident_points_is_certified(
             x in strat::moderate(),
@@ -2838,7 +2875,7 @@ mod interval_attacks {
             let (Ok(s2), Ok(m2)) = (by_square, by_mul) else { return Ok(()) };
             check_sqrt_nonneg(s2)?;
             check_sqrt_nonneg(m2)?;
-            let (rs, rm) = (s2.sqrt_nonneg().unwrap(), m2.sqrt_nonneg().unwrap());
+            let (rs, rm) = (sqrt_nonneg(s2).unwrap(), sqrt_nonneg(m2).unwrap());
             prop_assert!(rm.lo() <= rs.lo() && rs.hi() <= rm.hi(), "square form {:?} not inside mul form {:?}", rs, rm);
             for (pxv, qxv) in [(px.lo(), qx.lo()), (px.lo(), qx.hi()), (px.hi(), qx.lo()), (px.hi(), qx.hi())] {
                 for (pyv, qyv) in [(py.lo(), qy.lo()), (py.lo(), qy.hi()), (py.hi(), qy.lo()), (py.hi(), qy.hi())] {

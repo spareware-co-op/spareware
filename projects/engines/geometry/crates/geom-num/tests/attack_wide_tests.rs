@@ -1,4 +1,5 @@
-//! Adversarial tests of `geom_num::wide`: they try to break the fixed-width integers, not confirm them.
+//! Adversarial tests of `geom_num::wide`: they try to break the fixed-width integers, not confirm
+//! them.
 //!
 //! What they attack, each against an exact oracle:
 //! - A second, independent oracle. For `Wide<2>`, whose range is exactly `i128`'s, native `i128`
@@ -10,14 +11,30 @@
 //! - Exhaustive sweeps of raw limb patterns (0, 1, 2, all ones, the sign bit and its neighbours),
 //!   every pair, where carry, borrow and sign logic break.
 //! - Laws that tie operations and widths together: x·2 = x + x and x·k = repeated addition, with
-//!   overflow at the same place; order is translation invariant and scales with the sign; a sum fits
-//!   one limb wider and a product fits twice as wide; every operation agrees with the same operation
-//!   done wider and narrowed back.
+//!   overflow at the same place; order is translation invariant and scales with the sign; a sum
+//!   fits one limb wider and a product fits twice as wide; every operation agrees with the same
+//!   operation done wider and narrowed back.
 //! - The `L >= 2` guard. `Wide<1>` and `Wide<0>` can still be built through `ZERO` and
 //!   `from_le_limbs`, and every operation that compiles for them must still be right.
-//! - The kernel's extreme inputs: products of two `i128` values in `I256` (what the predicate module
-//!   relies on) and the in-sphere determinant at coordinates ±(2^40 − 1), every step checked.
+//! - The kernel's extreme inputs: products of two `i128` values in `I256` (what the predicate
+//!   module relies on) and the in-sphere determinant at coordinates ±(2^40 − 1), every step
+//!   checked.
 
+// The crate denies native arithmetic and lossy casts in kernel code (Cargo.toml); tests may use
+// them, and std's reductions, to build their oracles.
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::disallowed_methods,
+    reason = "oracles and generators; the rules are for kernel code"
+)]
+#![allow(
+    clippy::many_single_char_names,
+    reason = "points and values are named a, b, c and so on, as in the formulas they check"
+)]
 // Helpers outside `#[test]` functions are not covered by clippy.toml's allow-*-in-tests settings;
 // clippy.toml says tests may use these, and a broken oracle must stop the test loudly.
 #![allow(
@@ -152,7 +169,8 @@ fn ordering_sign(o: Ordering) -> Sign {
     }
 }
 
-/// What `Debug` must print: the two's-complement bits, most significant first, 16 hex digits a limb.
+/// What `Debug` must print: the two's-complement bits, most significant first, 16 hex digits a
+/// limb.
 fn debug_of<const L: usize>(x: &Wide<L>) -> String {
     format!(
         "Wide<{L}>(0x{:0w$x})",
@@ -583,7 +601,8 @@ fn limit_pair<const L: usize>() -> BoxedStrategy<(Wide<L>, Wide<L>)> {
 // Per-width suites, at widths tests/wide.rs does and does not use.
 // ---------------------------------------------------------------------------------------------
 
-/// Every property and fixed attack for one width: `$wider` is one limb wider, `$double` twice as wide.
+/// Every property and fixed attack for one width: `$wider` is one limb wider, `$double` twice as
+/// wide.
 macro_rules! width_attack {
     ($module:ident, $limbs:literal, $wider:literal, $double:literal) => {
         mod $module {
@@ -963,8 +982,8 @@ mod guard {
             .collect()
     }
 
-    /// `Wide<1>` cannot be made by `from_i128`, `one`, `max_value` or `min_value` (they evaluate the
-    /// guard), but `ZERO` and `from_le_limbs` do not: once built, its arithmetic must be right.
+    /// `Wide<1>` cannot be made by `from_i128`, `one`, `max_value` or `min_value` (they evaluate
+    /// the guard), but `ZERO` and `from_le_limbs` do not: once built, its arithmetic must be right.
     #[test]
     fn wide1_arithmetic_that_compiles_is_exact() {
         for a in one_limb_values() {
@@ -1011,8 +1030,8 @@ mod guard {
     }
 
     /// `to_i128` of a negative `Wide<1>`: "the value as an i128, if it fits" — every i64 fits.
-    /// `to_i128` reads the missing second limb as 0 instead of the sign fill, gets 2^64 + a, sees the
-    /// sign disagree and returns `None`.
+    /// `to_i128` reads the missing second limb as 0 instead of the sign fill, gets 2^64 + a, sees
+    /// the sign disagree and returns `None`.
     #[test]
     fn wide1_to_i128_of_negative_values() {
         for a in one_limb_values().into_iter().filter(|&a| a < 0) {
@@ -1050,7 +1069,8 @@ mod kernel_extremes {
     use super::*;
 
     /// Products of two `i128` values in `I256`, the predicate module's `sum_of_products` step: the
-    /// largest, 2^254, fits; two of them do not; the most negative pair sums exactly to the minimum.
+    /// largest, 2^254, fits; two of them do not; the most negative pair sums exactly to the
+    /// minimum.
     #[test]
     fn i128_products_fill_i256_exactly() {
         let (lo, hi) = (I256::from_i128(i128::MIN), I256::from_i128(i128::MAX));
@@ -1205,8 +1225,8 @@ mod kernel_extremes {
         total
     }
 
-    /// Where e sits for corner configuration `bits`: a corner (C, C, C), the box centre, a face centre
-    /// or an edge midpoint, in turn.
+    /// Where e sits for corner configuration `bits`: a corner (C, C, C), the box centre, a face
+    /// centre or an edge midpoint, in turn.
     fn e_for(bits: u32) -> [i64; 3] {
         match bits % 4 {
             0 => [C, C, C],
@@ -1228,14 +1248,14 @@ mod kernel_extremes {
         ]
     }
 
-    /// The module doc's in-sphere budget (about 212 bits): at every corner pattern of a, b, c, d the
-    /// I256 evaluation succeeds, matches the Leibniz determinant, and stays below 2^212.
+    /// The module doc's in-sphere budget (about 212 bits): at every corner pattern of a, b, c, d
+    /// the I256 evaluation succeeds, matches the Leibniz determinant, and stays below 2^212.
     ///
     /// Degenerate inputs: the eight corners of a box lie on one sphere, so with e at a corner the
     /// determinant must be exactly zero, even though its intermediates exceed 2^191.
     ///
-    /// `Wide<3>` (limit 2^191) is too narrow: it must overflow on some inputs, fit on others, and agree
-    /// with the oracle at every step either way.
+    /// `Wide<3>` (limit 2^191) is too narrow: it must overflow on some inputs, fit on others, and
+    /// agree with the oracle at every step either way.
     #[test]
     fn insphere_at_every_extreme_corner() {
         let (mut fitted, mut overflowed) = (0, 0);

@@ -15,6 +15,21 @@
 //!
 //! and `conventions_*` pin those signs with geometric cases that use no determinant at all.
 
+// The crate denies native arithmetic and lossy casts in kernel code (Cargo.toml); tests may use
+// them, and std's reductions, to build their oracles.
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::disallowed_methods,
+    reason = "oracles and generators; the rules are for kernel code"
+)]
+#![allow(
+    clippy::many_single_char_names,
+    reason = "points and values are named a, b, c and so on, as in the formulas they check"
+)]
 // Helpers outside `#[test]` functions are not covered by clippy.toml's allow-*-in-tests settings;
 // clippy.toml says tests may use these, and a broken oracle must stop the test loudly.
 #![allow(
@@ -55,22 +70,22 @@ fn p3([x, y, z]: Pt3) -> P3 {
 
 fn orient2d_of(p: [Pt2; 3]) -> Sign {
     let [a, b, c] = p.map(p2);
-    orient2d(a, b, c)
+    orient2d(a, b, c).unwrap()
 }
 
 fn orient3d_of(p: [Pt3; 4]) -> Sign {
     let [a, b, c, d] = p.map(p3);
-    orient3d(a, b, c, d)
+    orient3d(a, b, c, d).unwrap()
 }
 
 fn incircle_of(p: [Pt2; 4]) -> Sign {
     let [a, b, c, d] = p.map(p2);
-    incircle(a, b, c, d)
+    incircle(a, b, c, d).unwrap()
 }
 
 fn insphere_of(p: [Pt3; 5]) -> Sign {
     let [a, b, c, d, e] = p.map(p3);
-    insphere(a, b, c, d, e)
+    insphere(a, b, c, d, e).unwrap()
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -394,7 +409,8 @@ fn spheres() -> &'static [Vec<Pt3>] {
     S.get_or_init(|| RADII.iter().map(|&l| sphere(l)).collect())
 }
 
-/// Points on a lattice circle of radius `RADII[r]`, centred anywhere that keeps the circle on the grid.
+/// Points on a lattice circle of radius `RADII[r]`, centred anywhere that keeps the circle on the
+/// grid.
 fn on_circle<const N: usize>(r: usize, centre: [u64; 2], picks: [Index; N]) -> [Pt2; N] {
     let l = RADII[r];
     let pts = &circles()[r];
@@ -405,7 +421,8 @@ fn on_circle<const N: usize>(r: usize, centre: [u64; 2], picks: [Index; N]) -> [
     })
 }
 
-/// Points on a lattice sphere of radius `RADII[r]`, centred anywhere that keeps the sphere on the grid.
+/// Points on a lattice sphere of radius `RADII[r]`, centred anywhere that keeps the sphere on the
+/// grid.
 fn on_sphere<const N: usize>(r: usize, centre: [u64; 3], picks: [Index; N]) -> [Pt3; N] {
     let l = RADII[r];
     let pts = &spheres()[r];
@@ -628,10 +645,10 @@ fn corners_and_midpoints<const D: usize>() -> Vec<[i64; D]> {
         .collect()
 }
 
-/// Every ordered choice of N points from `set`, repeats allowed, with `f` checked against the oracle
-/// `value` on each. The oracle runs once per set of distinct points: another order of the same
-/// points multiplies the determinant by the order's sign, and a repeated point makes two rows equal,
-/// so the determinant is zero. Returns the largest |value| and the signs seen.
+/// Every ordered choice of N points from `set`, repeats allowed, with `f` checked against the
+/// oracle `value` on each. The oracle runs once per set of distinct points: another order of the
+/// same points multiplies the determinant by the order's sign, and a repeated point makes two rows
+/// equal, so the determinant is zero. Returns the largest |value| and the signs seen.
 fn sweep<const D: usize, const N: usize>(
     set: &[[i64; D]],
     f: fn([[i64; D]; N]) -> Sign,

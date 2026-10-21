@@ -1,29 +1,46 @@
-//! Tests of `geom_num::eft` and `geom_num::interval` against exact rational arithmetic (`num-rational`).
+//! Tests of `geom_num::eft` and `geom_num::interval` against exact rational arithmetic
+//! (`num-rational`).
 //!
 //! What this file proves:
 //!
 //! - Error-free transformations. `two_sum`, `fast_two_sum` and `two_prod` return a pair whose exact
-//!   rational sum equals the exact sum or product of the inputs, whose first part is the IEEE result,
-//!   and which does not overlap (`s + e` rounds back to `s`), for every input inside each function's
-//!   documented precondition: random doubles of every exponent, overlapping and cancelling pairs, ties,
-//!   subnormals, powers of two, the edges of the precondition, the overflow edge of `two_sum` (including
-//!   the case where Knuth's textbook form overflows and the fallback must act) and grid coordinates at
-//!   ±(2^40 − 1). `split` gives two 26-bit halves that add up to the input exactly. A product just
-//!   outside `two_prod`'s lower exponent limit has an error no double can hold, so the limit is sharp.
+//!   rational sum equals the exact sum or product of the inputs, whose first part is the IEEE
+//!   result, and which does not overlap (`s + e` rounds back to `s`), for every input inside each
+//!   function's documented precondition: random doubles of every exponent, overlapping and
+//!   cancelling pairs, ties, subnormals, powers of two, the edges of the precondition, the overflow
+//!   edge of `two_sum` (including the case where Knuth's textbook form overflows and the fallback
+//!   must act) and grid coordinates at ±(2^40 − 1). `split` gives two 26-bit halves that add up to
+//!   the input exactly. A product just outside `two_prod`'s lower exponent limit has an error no
+//!   double can hold, so the limit is sharp.
 //! - Intervals. For every operation (`add`, `sub`, `mul`, `div`, `sqrt`, `neg`) and random operands
 //!   of every magnitude, the result contains the exact rational result at every corner and at an
 //!   exact interior point; each bound is less than two steps outside the exact bound (tight);
 //!   `NotFinite` is returned exactly when a bound cannot be widened to a finite double; the other
 //!   errors exactly when the operation is undefined somewhere in the operands. Laws: commutativity,
 //!   `a − b = a + (−b)`, negation is an exact involution, inclusion is monotone. `certain_sign` is
-//!   right whenever it answers and answers whenever the interval alone decides the sign, including on
-//!   orientation determinants of grid points at ±(2^40 − 1).
+//!   right whenever it answers and answers whenever the interval alone decides the sign, including
+//!   on orientation determinants of grid points at ±(2^40 − 1).
 //!
-//! How the file is built: `oracle` reads doubles as exact rationals from their bits and steps between
-//! neighbouring doubles by their bits, independently of the code under test (and is checked on its
-//! own first). `strategies` makes doubles weighted towards where bugs live. `checks` holds one
-//! function per property, shared by the property tests and the exhaustive edge sweeps.
+//! How the file is built: `oracle` reads doubles as exact rationals from their bits and steps
+//! between neighbouring doubles by their bits, independently of the code under test (and is checked
+//! on its own first). `strategies` makes doubles weighted towards where bugs live. `checks` holds
+//! one function per property, shared by the property tests and the exhaustive edge sweeps.
 
+// The crate denies native arithmetic and lossy casts in kernel code (Cargo.toml); tests may use
+// them, and std's reductions, to build their oracles.
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::disallowed_methods,
+    reason = "oracles and generators; the rules are for kernel code"
+)]
+#![allow(
+    clippy::many_single_char_names,
+    reason = "points and values are named a, b, c and so on, as in the formulas they check"
+)]
 // Helpers outside `#[test]` functions are not covered by clippy.toml's allow-*-in-tests settings.
 // A broken oracle or strategy must stop the test loudly, so the kernel's panic lints are relaxed
 // for this test file only (clippy.toml: "Tests may use them").
@@ -60,8 +77,8 @@ fn run(result: TestResult) {
     }
 }
 
-/// The exact model: doubles read as rationals from their bits, neighbouring doubles found from their
-/// bits, signs of rationals. None of it calls the code under test.
+/// The exact model: doubles read as rationals from their bits, neighbouring doubles found from
+/// their bits, signs of rationals. None of it calls the code under test.
 mod oracle {
     use geom_num::Sign;
     use num_bigint::BigInt;
@@ -126,7 +143,7 @@ mod oracle {
     pub fn significant_bits(x: f64) -> u32 {
         let bits = x.to_bits();
         let fraction = bits & FRACTION_MASK;
-        let significand = if (bits >> 52) & 0x7ff == 0 {
+        let significand = if bits & 0x7ff0_0000_0000_0000 == 0 {
             fraction
         } else {
             fraction | (1 << 52)
@@ -401,7 +418,7 @@ mod strategies {
     }
 
     /// A pair inside `two_prod`'s precondition: both normal, exponents at most 995, and
-    /// −970 ≤ e_a + e_b ≤ 1021, with the exponent sum often at one of its limits.
+    /// −970 ≤ `e_a` + `e_b` ≤ 1021, with the exponent sum often at one of its limits.
     pub fn prod_pair() -> BoxedStrategy<(f64, f64)> {
         (-1022i32..=995)
             .prop_flat_map(|ea| {
@@ -683,9 +700,9 @@ mod checks {
         }
     }
 
-    /// An operation on two intervals: errors exactly when it should; otherwise the result contains the
-    /// exact result at all four corners and at an exact interior point, and each bound is less than
-    /// two steps outside the exact range.
+    /// An operation on two intervals: errors exactly when it should; otherwise the result contains
+    /// the exact result at all four corners and at an exact interior point, and each bound is less
+    /// than two steps outside the exact range.
     pub fn binary(op: Op, a: Interval, b: Interval, t: (u32, u32)) -> TestResult {
         let result = op.interval(a, b);
         if op == Op::Div && b.lo() <= 0.0 && b.hi() >= 0.0 {
@@ -838,27 +855,24 @@ mod checks {
     }
 
     /// `certain_sign` is right whenever it answers (every real in the interval has that sign), and
-    /// answers whenever the interval alone decides the sign (`None` only when the interval holds zero
-    /// and a nonzero real).
+    /// answers whenever the interval alone decides the sign (`None` only when the interval holds
+    /// zero and a nonzero real).
     pub fn certain_sign(r: Interval) -> TestResult {
         let (lo, hi) = (exact(r.lo()), exact(r.hi()));
-        match r.certain_sign() {
-            Some(s) => {
-                prop_assert_eq!(sign(&lo), s, "{:?}", r);
-                prop_assert_eq!(sign(&hi), s, "{:?}", r);
-            }
-            None => {
-                prop_assert!(
-                    lo <= zero() && hi >= zero(),
-                    "{:?}: undecided but zero is outside",
-                    r
-                );
-                prop_assert!(
-                    !(lo == zero() && hi == zero()),
-                    "{:?}: undecided but exactly zero",
-                    r
-                );
-            }
+        if let Some(s) = r.certain_sign() {
+            prop_assert_eq!(sign(&lo), s, "{:?}", r);
+            prop_assert_eq!(sign(&hi), s, "{:?}", r);
+        } else {
+            prop_assert!(
+                lo <= zero() && hi >= zero(),
+                "{:?}: undecided but zero is outside",
+                r
+            );
+            prop_assert!(
+                !(lo == zero() && hi == zero()),
+                "{:?}: undecided but exactly zero",
+                r
+            );
         }
         Ok(())
     }

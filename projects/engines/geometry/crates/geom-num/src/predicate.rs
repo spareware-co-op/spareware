@@ -2,7 +2,7 @@
 //!
 //! Every topological decision in the kernel is one of these questions (chapter 6.2): which way do
 //! three points turn, which side of a plane is a point on, is a point inside a circle or a sphere.
-//! Each answer is a [`Sign`], never a number.
+//! Each answer is a [`Sign`], never a number, or an error that no input can cause (below).
 //!
 //! Guarantees:
 //!
@@ -13,32 +13,47 @@
 //!   module uses no native `+`, `-` or `*` on a fixed-width integer, and no cast: every operation
 //!   is a checked method (`checked_sub`, `checked_mul`, `checked_add`, `checked_neg`) that returns
 //!   `None` instead of wrapping. So nothing here depends on overflow checks being on, which they
-//!   are not in a default release build. tests/attack_predicate.rs scans this file's code to keep
-//!   it that way.
+//!   are not in a default release build. `tests/attack_predicate.rs` scans this file's code to
+//!   keep it that way.
 //! - **Deterministic.** Integer arithmetic only: the same answer on every target.
 //!
 //! Two evaluation paths, both exact:
 //!
-//! 1. **The fast path**, taken for every grid input. Every grid coordinate has magnitude at most
-//!    [`COORD_MAX`](crate::grid::COORD_MAX) = 2^40 − 1, which [`Coord`](crate::grid::Coord)
-//!    enforces. Orientation runs in `i128`; in-circle and in-sphere compute their factors in
-//!    `i128` and sum the products in [`I256`](crate::wide::I256). Each predicate's doc comment
-//!    carries the bit-budget derivation proving that none of its checked operations returns `None`
-//!    for any grid input.
-//! 2. **The total path**, reached only if a fast-path operation returns `None`, which the budgets
-//!    prove never happens. It evaluates the same determinant from the raw `i64` coordinates in
-//!    [`I384`](crate::wide::I384), which holds every intermediate for any `i64` coordinates
-//!    whatsoever, not only grid ones (the derivation is written in the source where the total
-//!    path begins). So a mistake in a fast-path budget, or a coordinate that somehow broke the grid
-//!    invariant, would cost time, never a wrong sign. The total path's own operations are checked
-//!    too, and none of them can return `None` for any value its argument types can hold. If one
-//!    somehow did, the predicate would return `Zero`, and that answer would be wrong, since it
-//!    claims exact degeneracy: with no exact value left and no panic allowed, there is no right
-//!    answer to give.
+//! 1. **The fast path**, which answers every public call. Every grid coordinate has magnitude at
+//!    most [`COORD_MAX`](crate::grid::COORD_MAX) = 2^40 − 1, and no other coordinate can be made:
+//!    [`Coord`](crate::grid::Coord) keeps its value private, and its constants and every function
+//!    that makes one (`Coord::new`, `Coord::from_i128`, `refine` and `coarsen`) keep it within
+//!    that range (`tests/attack2_predicate.rs` checks the functions). Orientation runs in `i128`;
+//!    in-circle and in-sphere compute their factors in `i128` and sum the products in
+//!    [`I256`]. Each predicate's doc comment carries the bit-budget derivation
+//!    proving that none of its checked operations returns `None` for any grid input, and the
+//!    derivations' arithmetic is checked when the crate compiles (the budget exponents below, from
+//!    `FAST_DIFF_BITS` on), so a wrong one is a build error.
+//! 2. **The total path**, defence in depth, which no public call reaches. It would answer only if
+//!    a fast-path budget were wrong, so such a mistake would cost time, never a wrong sign. It
+//!    evaluates the same determinant from the raw `i64` coordinates in
+//!    [`I384`], which holds every intermediate for any `i64` coordinates
+//!    whatsoever, not only grid ones. Here the bounds are not only written: every value on the
+//!    total path carries its bound in its type, and each operation asserts, when the crate is
+//!    compiled, that the bound its result's type declares follows from its operands' bounds and
+//!    that `I384` holds it. A wrong bound is a build error (the derivation and the rules are
+//!    written where the total path begins). Only this module's unit tests and
+//!    `tests/attack2_predicate.rs`, which compiles this code a second time to call it directly,
+//!    run the total path.
 //!
-//! The fast-path budgets are derived for [`COORD_BITS`](crate::grid::COORD_BITS) = 40, and a
-//! compile-time assertion below stops the build if it is ever raised: the written derivations
-//! would then be false (at 41 bits, orient3d's bound 6δ³ already exceeds 2^127).
+//! What the types cannot rule out is reported. The total path's operations are still checked
+//! methods returning `Option`, because stable Rust has no multiplication that cannot fail by its
+//! type other than the native `*` and the wrapping and overflowing methods, which this module
+//! never uses (`u64::widening_mul` is unstable). With every bound checked at compile time, one of
+//! them could return `None` only if [`Wide`](crate::wide::Wide)'s checked arithmetic reported an
+//! overflow for a result that fits, a defect its own tests look for against big integers. The
+//! predicate then returns [`NumError::BudgetExceeded`]: an error, never a sign, so a defect can
+//! never pass for an exact degeneracy. That is why each predicate returns a `Result`; for grid
+//! points it is always `Ok`.
+//!
+//! The fast-path budgets are derived for [`COORD_BITS`] bits, as
+//! exponents computed from it and asserted when the crate compiles: raising it to 41 makes
+//! orient3d's exponent 129, over `i128`'s 127, and the build stops.
 //!
 //! Method: the determinant forms of Shewchuk, *Adaptive Precision Floating-Point Arithmetic and
 //! Fast Robust Geometric Predicates*, Discrete & Computational Geometry 18 (1997)
@@ -49,7 +64,11 @@
 //! small difference. Shewchuk evaluates these in floating point with adaptive expansions; on the
 //! grid the inputs are integers below 2^40, so the same determinants evaluate exactly in
 //! fixed-width integers. There is no floating-point filter yet: a generated filter (chapter 6.2) is
-//! a later piece, and it may only ever return early with the sign this exact path gives.
+//! a later piece, and it may only ever return early with the sign this exact path gives. The
+//! total path's bounds follow the static bit-length analysis of Fortune and Van Wyk, *Static
+//! Analysis Yields Efficient Exact Integer Arithmetic for Computational Geometry*, ACM
+//! Transactions on Graphics 15(3) (1996), carried in Rust's type system so that the compiler
+//! checks them.
 //!
 //! Conventions: [`orient2d`] and [`incircle`] have the signs of `predicates.c`. [`orient3d`] and
 //! [`insphere`] have the **opposite** signs to `predicates.c`, whose `orient3d` is positive when
@@ -61,12 +80,97 @@
 //! largest magnitude of a difference of two coordinates. Every bound is on absolute values, and a
 //! sum's bound also bounds each of its partial sums, so the order of evaluation never matters.
 
+use crate::error::NumError;
 use crate::grid::{COORD_BITS, P2, P3};
 use crate::sign::Sign;
 use crate::wide::{I256, I384};
 
-// Every fast-path bit budget in this module assumes coordinates of at most 40 bits.
-const _: () = assert!(COORD_BITS <= 40, "the budgets below assume 40 bits");
+use bounded::Bounded;
+
+// The fast path's bit budget as exponents, for coordinates of B = `COORD_BITS` bits: each quantity
+// has magnitude below 2 to its constant. A product of values below 2^a and 2^b is below 2^(a + b);
+// a sum or difference of two values below 2^a is below 2^(a + 1), and of three or four below
+// 2^(a + 2). The derivations in words are on the predicates. Even here every step is a checked
+// method (this file has no native arithmetic), and a step that overflowed would give `u32::MAX`,
+// which every assertion below refuses.
+
+/// a + b for budget exponents, or `u32::MAX` if that overflows.
+const fn exponent_sum(a: u32, b: u32) -> u32 {
+    match a.checked_add(b) {
+        Some(sum) => sum,
+        None => u32::MAX,
+    }
+}
+
+/// A difference of two grid coordinates: |p − q| ≤ δ = 2M < 2^(B + 1).
+const FAST_DIFF_BITS: u32 = exponent_sum(COORD_BITS, 1);
+
+/// A product of two differences, δ² < 2^(2B + 2).
+const FAST_PRODUCT_BITS: u32 = exponent_sum(FAST_DIFF_BITS, FAST_DIFF_BITS);
+
+/// A 2 × 2 determinant of differences, a difference of two products: 2δ² < 2^(2B + 3).
+const FAST_DET2_BITS: u32 = exponent_sum(FAST_PRODUCT_BITS, 1);
+
+/// A squared length in 2D, two squares: 2δ² < 2^(2B + 3).
+const FAST_LIFT2_BITS: u32 = exponent_sum(FAST_PRODUCT_BITS, 1);
+
+/// A squared length in 3D, three squares: 3δ² < 2^(2B + 4).
+const FAST_LIFT3_BITS: u32 = exponent_sum(FAST_PRODUCT_BITS, 2);
+
+/// A 3 × 3 determinant of differences, three terms each a difference times a 2 × 2 determinant:
+/// 6δ³ < 2^(3B + 6).
+const FAST_DET3_BITS: u32 = exponent_sum(exponent_sum(FAST_DIFF_BITS, FAST_DET2_BITS), 2);
+
+/// The in-circle determinant, three products of a 2D lift and a 2 × 2 determinant:
+/// 12δ⁴ < 2^(4B + 8).
+const FAST_INCIRCLE_BITS: u32 = exponent_sum(exponent_sum(FAST_LIFT2_BITS, FAST_DET2_BITS), 2);
+
+/// The in-sphere determinant, four products of a 3D lift and a 3 × 3 determinant:
+/// 72δ⁵ < 2^(5B + 12).
+const FAST_INSPHERE_BITS: u32 = exponent_sum(exponent_sum(FAST_LIFT3_BITS, FAST_DET3_BITS), 2);
+
+/// `i128` holds every magnitude below 2^127.
+const I128_MAGNITUDE_BITS: u32 = match i128::BITS.checked_sub(1) {
+    Some(bits) => bits,
+    None => 0,
+};
+
+/// [`I256`] holds every magnitude below 2^255: four limbs of 64 bits (checked below against the
+/// type itself), less the sign bit.
+const I256_MAGNITUDE_BITS: u32 = match u64::BITS.checked_mul(4) {
+    Some(bits) => match bits.checked_sub(1) {
+        Some(magnitude) => magnitude,
+        None => 0,
+    },
+    None => 0,
+};
+
+/// Checks, at compile time, the arithmetic of every fast-path budget, the figures the predicates'
+/// documentation states (at B = 40), and that each value fits the type it is computed in.
+const _: () = {
+    assert!(I256::ZERO.to_le_limbs().len() == 4, "I256 has four limbs");
+    assert!(I128_MAGNITUDE_BITS == 127 && I256_MAGNITUDE_BITS == 255);
+    assert!(
+        FAST_DIFF_BITS == 41 && FAST_PRODUCT_BITS == 82,
+        "the figures at 40 bits"
+    );
+    assert!(FAST_DET2_BITS == 83 && FAST_LIFT2_BITS == 83 && FAST_LIFT3_BITS == 84);
+    assert!(FAST_DET3_BITS == 126 && FAST_INCIRCLE_BITS == 168 && FAST_INSPHERE_BITS == 212);
+    // `i128`: orient2d (a 2 × 2 determinant), orient3d (a 3 × 3 one, and its negation, since
+    // |v| < 2^126 leaves room for it) and every factor of the in-circle and in-sphere sums.
+    assert!(FAST_DET2_BITS <= I128_MAGNITUDE_BITS, "orient2d fits i128");
+    assert!(FAST_DET3_BITS <= I128_MAGNITUDE_BITS, "orient3d fits i128");
+    assert!(FAST_LIFT2_BITS <= I128_MAGNITUDE_BITS && FAST_LIFT3_BITS <= I128_MAGNITUDE_BITS);
+    // `I256`: the in-circle and in-sphere sums of products.
+    assert!(
+        FAST_INCIRCLE_BITS <= I256_MAGNITUDE_BITS,
+        "incircle fits I256"
+    );
+    assert!(
+        FAST_INSPHERE_BITS <= I256_MAGNITUDE_BITS,
+        "insphere fits I256"
+    );
+};
 
 // ---------------------------------------------------------------------------------------------
 // The fast path: `i128`, then `I256` for the in-circle and in-sphere sums.
@@ -152,17 +256,21 @@ impl D3 {
 /// is at most 6δ³ < 2^126 (6 < 2^3, δ³ < 2^123). Every intermediate fits `i128` (|v| < 2^127), and
 /// so does the negation of the result.
 fn det3(p: D3, q: D3, r: D3) -> Option<i128> {
-    let x = p.x.checked_mul(det2(q.y, q.z, r.y, r.z)?)?;
-    let y = p.y.checked_mul(det2(q.z, q.x, r.z, r.x)?)?;
-    let z = p.z.checked_mul(det2(q.x, q.y, r.x, r.y)?)?;
-    x.checked_add(y)?.checked_add(z)
+    let tx = p.x.checked_mul(det2(q.y, q.z, r.y, r.z)?)?;
+    let ty = p.y.checked_mul(det2(q.z, q.x, r.z, r.x)?)?;
+    let tz = p.z.checked_mul(det2(q.x, q.y, r.x, r.y)?)?;
+    tx.checked_add(ty)?.checked_add(tz)
 }
 
 /// x₀·y₀ + x₁·y₁ + … for `i128` factors, evaluated in [`I256`] (range ±2^255), or `None` if a
 /// product or a partial sum does not fit: the wide step of [`incircle`] and [`insphere`].
 ///
 /// Every product of two `i128` values fits (|x · y| ≤ 2^127 · 2^127 = 2^254), and the callers' bit
-/// budgets keep every partial sum below 2^212, so for every grid input the result is `Some`.
+/// budgets keep every partial sum below 2^212, so for every grid input the result is `Some`. Off
+/// the grid the sum can leave `I256` while every factor still fits `i128`: in-sphere with a, b, c
+/// and d near (±(2^63 − 1), ±(2^63 − 1)) at small heights, around e at the origin, reaches about
+/// −2^256, which wrapped to 256 bits would be positive, and only the checked addition here stops
+/// it (`tests/attack2_predicate.rs`, `insphere_where_the_i256_sum_overflows_off_the_grid`).
 /// Because the exact total path stands behind it, a failure here could never show up as a wrong
 /// sign, so this module's unit tests check the budget itself. They cover every choice of points
 /// with coordinates in {−M, 1 − M, 0, M − 1, M} for in-circle and in {−M, 0, M} for in-sphere
@@ -206,6 +314,10 @@ fn incircle_fast(a: [i64; 2], b: [i64; 2], c: [i64; 2], d: [i64; 2]) -> Option<I
 /// The (lift, signed 3 × 3 cofactor) pairs whose products sum to [`insphere`]'s determinant.
 /// Budgets as derived there: lifts below 2^84, cofactors below 2^126, every product below 2^210,
 /// the sum below 2^212.
+#[allow(
+    clippy::many_single_char_names,
+    reason = "a to e name the points of the documented formula"
+)]
 fn insphere_terms(
     a: [i64; 3],
     b: [i64; 3],
@@ -226,126 +338,309 @@ fn insphere_terms(
 }
 
 /// insphere's determinant on the fast path. Budget on [`insphere`].
+#[allow(
+    clippy::many_single_char_names,
+    reason = "a to e name the points of the documented formula"
+)]
 fn insphere_fast(a: [i64; 3], b: [i64; 3], c: [i64; 3], d: [i64; 3], e: [i64; 3]) -> Option<I256> {
     sum_of_products(&insphere_terms(a, b, c, d, e)?)
 }
 
 // ---------------------------------------------------------------------------------------------
-// The total path: the same determinants in `I384`, for any `i64` coordinates.
+// The total path: the same determinants in `I384`, for any `i64` coordinates, every bound
+// checked by the compiler.
 //
-// Budget for any `i64` coordinates: each coordinate is in [−2^63, 2^63 − 1], so each difference
-// has magnitude at most 2^64 − 1 < 2^64. Then each 2 × 2 determinant is below 2 · 2^128 = 2^129;
-// each squared length below 2^129 in 2D and 3 · 2^128 < 2^130 in 3D; each 3 × 3 determinant below
-// 3 · 2^64 · 2^129 < 2^195; each in-circle product below 2^129 · 2^129 = 2^258 and their sum below
-// 3 · 2^258 < 2^260; each in-sphere product below 2^130 · 2^195 = 2^325 and their sum below
-// 4 · 2^325 = 2^327. Everything stays 56 bits or more below the I384 limit of 2^383, so for every
-// value of the argument types no checked operation here returns `None`.
+// Budget for any `i64` coordinates. Each coordinate is in [−2^63, 2^63 − 1], so each difference
+// has magnitude at most 2^64 − 1 < 2^64. Two rules give every other bound: for |x| < 2^a and
+// |y| < 2^b, the product has |x · y| < 2^(a + b), and the sum or difference has
+// |x ± y| ≤ |x| + |y| < 2^a + 2^b ≤ 2^(max(a, b) + 1). So:
+//
+// - each product of two differences, inside a 2 × 2 determinant or as a square, is below 2^128;
+// - each 2 × 2 determinant, a difference of two such products, is below 2^129;
+// - each squared length is below 2^129 in 2D; in 3D, below 2^129 after two squares and 2^130
+//   after the third;
+// - each term of a 3 × 3 determinant, a difference times a 2 × 2 determinant, is below 2^193; the
+//   first two terms together are below 2^194, and the determinant, all three, below 2^195;
+// - each in-circle product, a 2D squared length times a 2 × 2 determinant, is below 2^258; the
+//   first two together are below 2^259, and the sum of all three below 2^260;
+// - each in-sphere product, a 3D squared length times a 3 × 3 determinant, is below 2^325; the
+//   sum is formed as (t₀ − t₁) + (t₂ − t₃), whose halves are below 2^326 and whole below 2^327.
+//
+// Everything stays at least 56 bits below the I384 limit of 2^383. None of this rests on the
+// text alone: each bound above is the `BITS` of the `Bounded<BITS>` type its value has in the code
+// below, and each operation asserts, when the crate is compiled, that the bound its result's type
+// declares follows from its operands' bounds by these rules and that I384 holds it.
 // ---------------------------------------------------------------------------------------------
 
 /// The total path's integer type: holds every intermediate of every predicate for any `i64`
 /// coordinates (budget above).
 type Total = I384;
 
-/// p − q for two coordinates in [`Total`]: below 2^64 in magnitude.
-fn total_diff(p: i64, q: i64) -> Option<Total> {
-    Total::from_i64(p).checked_sub(&Total::from_i64(q))
+/// Total-path values that carry their bound in their type. A module of its own, so that nothing
+/// else in this file can make a [`Bounded`] except through the operations that check its bound.
+mod bounded {
+    use super::Total;
+
+    /// The bits of a difference of any two `i64` values: |p − q| ≤ 2^64 − 1 < 2^64. Not the
+    /// fast path's bound, `FAST_DIFF_BITS`, which is for grid coordinates (41 bits).
+    const ANY_I64_DIFFERENCE_BITS: usize = 64;
+
+    /// 64L − 1 for a [`Wide`](crate::wide::Wide) of L limbs of 64 bits, which holds every value
+    /// from −2^(64L − 1) to 2^(64L − 1) − 1, so every magnitude below 2^(64L − 1). Every step is
+    /// checked; an overflow gives 0, which no bound fits.
+    const fn magnitude_bits(limbs: usize) -> usize {
+        let Some(bits) = limbs.checked_mul(64) else {
+            return 0;
+        };
+        let Some(magnitude) = bits.checked_sub(1) else {
+            return 0;
+        };
+        magnitude
+    }
+
+    /// [`Total`] holds every magnitude below 2^`TOTAL_BITS`, computed from its limb count: 2^383
+    /// for [`I384`](crate::wide::I384).
+    pub(super) const TOTAL_BITS: usize = magnitude_bits(Total::ZERO.to_le_limbs().len());
+
+    /// The product rule: values below 2^`left` and 2^`right` have a product below
+    /// 2^(left + right). `None` if the exponent overflows.
+    pub(super) const fn product_bits(left: usize, right: usize) -> Option<usize> {
+        left.checked_add(right)
+    }
+
+    /// The sum rule: values below 2^`left` and 2^`right` have a sum and a difference below
+    /// 2^left + 2^right ≤ 2^(max(left, right) + 1). `None` if the exponent overflows.
+    pub(super) const fn sum_bits(left: usize, right: usize) -> Option<usize> {
+        let larger = if left < right { right } else { left };
+        larger.checked_add(1)
+    }
+
+    /// Whether a value that a rule bounds by 2^`needed` may be declared below 2^`declared`: the
+    /// rule's bound is no larger, and [`Total`] holds every magnitude below 2^`declared`.
+    pub(super) const fn declarable(needed: Option<usize>, declared: usize) -> bool {
+        matches!(needed, Some(bits) if bits <= declared) && declared <= TOTAL_BITS
+    }
+
+    // The figures the documentation states, and the bound of a difference.
+    const _: () = assert!(TOTAL_BITS == 383, "I384 holds magnitudes below 2^383");
+    const _: () = assert!(declarable(
+        Some(ANY_I64_DIFFERENCE_BITS),
+        ANY_I64_DIFFERENCE_BITS
+    ));
+
+    /// The compile-time checks, one constant per rule. Each is evaluated for every choice of
+    /// bounds an operation is used with, when the crate is compiled, so a declared bound that does
+    /// not follow from its operands' bounds, or that [`Total`] cannot hold, is a build error.
+    /// (`cargo check` stops before this step; `cargo build` and `cargo test` do not.)
+    struct Rule<const LEFT: usize, const RIGHT: usize, const OUT: usize>;
+
+    impl<const LEFT: usize, const RIGHT: usize, const OUT: usize> Rule<LEFT, RIGHT, OUT> {
+        /// A product of values below 2^LEFT and 2^RIGHT may be declared below 2^OUT.
+        const PRODUCT: () = assert!(
+            declarable(product_bits(LEFT, RIGHT), OUT),
+            "a product's declared bound does not follow from its factors' bounds"
+        );
+
+        /// A sum or difference of values below 2^LEFT and 2^RIGHT may be declared below 2^OUT.
+        const SUM: () = assert!(
+            declarable(sum_bits(LEFT, RIGHT), OUT),
+            "a sum's declared bound does not follow from its terms' bounds"
+        );
+    }
+
+    /// A total-path value v with |v| < 2^BITS, where BITS ≤ 383.
+    ///
+    /// Only this module can make one, in four ways: [`Bounded::difference`] from two `i64`
+    /// coordinates, and [`times`](Bounded::times), [`plus`](Bounded::plus) and
+    /// [`minus`](Bounded::minus) from two bounded values, each checking the bound it declares at
+    /// compile time ([`Rule`]). So every `Bounded<BITS>` that exists has |v| < 2^BITS.
+    #[derive(Clone, Copy)]
+    pub(super) struct Bounded<const BITS: usize>(Total);
+
+    impl Bounded<ANY_I64_DIFFERENCE_BITS> {
+        /// p − q for two `i64` coordinates. Each lies in [−2^63, 2^63 − 1], so
+        /// |p − q| ≤ 2^63 + (2^63 − 1) = 2^64 − 1 < 2^64 for every value of the argument types.
+        pub(super) fn difference(p: i64, q: i64) -> Option<Self> {
+            let (p, q) = (Total::from_i64(p), Total::from_i64(q));
+            p.checked_sub(&q).map(Bounded)
+        }
+    }
+
+    impl<const BITS: usize> Bounded<BITS> {
+        /// self · other, declared below 2^OUT: [`Rule::PRODUCT`] checks BITS + OTHER ≤ OUT ≤ 383.
+        pub(super) fn times<const OTHER: usize, const OUT: usize>(
+            &self,
+            other: &Bounded<OTHER>,
+        ) -> Option<Bounded<OUT>> {
+            let () = Rule::<BITS, OTHER, OUT>::PRODUCT;
+            self.0.checked_mul(&other.0).map(Bounded)
+        }
+
+        /// self + other, declared below 2^OUT: [`Rule::SUM`] checks
+        /// max(BITS, OTHER) + 1 ≤ OUT ≤ 383.
+        pub(super) fn plus<const OTHER: usize, const OUT: usize>(
+            &self,
+            other: &Bounded<OTHER>,
+        ) -> Option<Bounded<OUT>> {
+            let () = Rule::<BITS, OTHER, OUT>::SUM;
+            self.0.checked_add(&other.0).map(Bounded)
+        }
+
+        /// self − other, declared below 2^OUT: [`Rule::SUM`] checks
+        /// max(BITS, OTHER) + 1 ≤ OUT ≤ 383.
+        pub(super) fn minus<const OTHER: usize, const OUT: usize>(
+            &self,
+            other: &Bounded<OTHER>,
+        ) -> Option<Bounded<OUT>> {
+            let () = Rule::<BITS, OTHER, OUT>::SUM;
+            self.0.checked_sub(&other.0).map(Bounded)
+        }
+
+        /// The value.
+        pub(super) fn value(self) -> Total {
+            self.0
+        }
+    }
 }
 
-/// p − q for two 2D points in [`Total`].
-fn total_sub2(p: [i64; 2], q: [i64; 2]) -> Option<[Total; 2]> {
+/// A coordinate difference on the total path: below 2^64.
+type Diff = Bounded<64>;
+
+/// A 2 × 2 determinant of differences: below 2^129.
+type Det2 = Bounded<129>;
+
+/// A squared length in 2D: below 2^129.
+type Lift2 = Bounded<129>;
+
+/// A squared length in 3D: below 2^130.
+type Lift3 = Bounded<130>;
+
+/// A 3 × 3 determinant of differences: below 2^195.
+type Det3 = Bounded<195>;
+
+/// p − q for two 2D points.
+fn total_sub2(p: [i64; 2], q: [i64; 2]) -> Option<[Diff; 2]> {
     let ([px, py], [qx, qy]) = (p, q);
-    Some([total_diff(px, qx)?, total_diff(py, qy)?])
+    Some([Diff::difference(px, qx)?, Diff::difference(py, qy)?])
 }
 
-/// p − q for two 3D points in [`Total`].
-fn total_sub3(p: [i64; 3], q: [i64; 3]) -> Option<[Total; 3]> {
+/// p − q for two 3D points.
+fn total_sub3(p: [i64; 3], q: [i64; 3]) -> Option<[Diff; 3]> {
     let ([px, py, pz], [qx, qy, qz]) = (p, q);
     Some([
-        total_diff(px, qx)?,
-        total_diff(py, qy)?,
-        total_diff(pz, qz)?,
+        Diff::difference(px, qx)?,
+        Diff::difference(py, qy)?,
+        Diff::difference(pz, qz)?,
     ])
 }
 
-/// a·d − b·c in [`Total`]: below 2^129 for differences of `i64` values.
-fn total_det2(a: &Total, b: &Total, c: &Total, d: &Total) -> Option<Total> {
-    a.checked_mul(d)?.checked_sub(&b.checked_mul(c)?)
+/// a·d − b·c: each product below 2^128, the difference below 2^129.
+fn total_det2(a: &Diff, b: &Diff, c: &Diff, d: &Diff) -> Option<Det2> {
+    let ad: Bounded<128> = a.times(d)?;
+    let bc: Bounded<128> = b.times(c)?;
+    ad.minus(&bc)
 }
 
-/// The squared length of a difference vector in [`Total`]: below 2^129 in 2D, 2^130 in 3D.
-fn total_norm2(p: &[Total]) -> Option<Total> {
-    let mut sum = Total::ZERO;
-    for x in p {
-        sum = sum.checked_add(&x.checked_mul(x)?)?;
-    }
-    Some(sum)
+/// x² + y²: each square below 2^128, the sum below 2^129.
+fn total_norm2_2d([x, y]: &[Diff; 2]) -> Option<Lift2> {
+    let xx: Bounded<128> = x.times(x)?;
+    let yy: Bounded<128> = y.times(y)?;
+    xx.plus(&yy)
 }
 
-/// The 3 × 3 determinant p · (q × r) in [`Total`]: below 2^195 for differences of `i64` values.
-fn total_det3(p: &[Total; 3], q: &[Total; 3], r: &[Total; 3]) -> Option<Total> {
+/// x² + y² + z²: each square below 2^128, two below 2^129, all three below 2^130.
+fn total_norm2_3d([x, y, z]: &[Diff; 3]) -> Option<Lift3> {
+    let xx: Bounded<128> = x.times(x)?;
+    let yy: Bounded<128> = y.times(y)?;
+    let zz: Bounded<128> = z.times(z)?;
+    let xy: Bounded<129> = xx.plus(&yy)?;
+    xy.plus(&zz)
+}
+
+/// The 3 × 3 determinant p · (q × r): each term below 2^193, two below 2^194, all three below
+/// 2^195.
+fn total_det3(p: &[Diff; 3], q: &[Diff; 3], r: &[Diff; 3]) -> Option<Det3> {
     let ([px, py, pz], [qx, qy, qz], [rx, ry, rz]) = (p, q, r);
-    let x = px.checked_mul(&total_det2(qy, qz, ry, rz)?)?;
-    let y = py.checked_mul(&total_det2(qz, qx, rz, rx)?)?;
-    let z = pz.checked_mul(&total_det2(qx, qy, rx, ry)?)?;
-    x.checked_add(&y)?.checked_add(&z)
+    let tx: Bounded<193> = px.times(&total_det2(qy, qz, ry, rz)?)?;
+    let ty: Bounded<193> = py.times(&total_det2(qz, qx, rz, rx)?)?;
+    let tz: Bounded<193> = pz.times(&total_det2(qx, qy, rx, ry)?)?;
+    let txy: Bounded<194> = tx.plus(&ty)?;
+    txy.plus(&tz)
 }
 
 /// orient2d's determinant (b − a) × (c − a) for any `i64` coordinates: below 2^129.
-fn orient2d_total(a: [i64; 2], b: [i64; 2], c: [i64; 2]) -> Option<Total> {
+fn orient2d_total(a: [i64; 2], b: [i64; 2], c: [i64; 2]) -> Option<Det2> {
     let [ux, uy] = total_sub2(b, a)?;
     let [vx, vy] = total_sub2(c, a)?;
     total_det2(&ux, &uy, &vx, &vy)
 }
 
 /// orient3d's determinant ((b − a) × (c − a)) · (d − a) for any `i64` coordinates: below 2^195.
-fn orient3d_total(a: [i64; 3], b: [i64; 3], c: [i64; 3], d: [i64; 3]) -> Option<Total> {
-    let u = total_sub3(b, a)?;
-    let v = total_sub3(c, a)?;
-    let w = total_sub3(d, a)?;
-    total_det3(&u, &v, &w)
+/// `ab` is b − a, and so on.
+fn orient3d_total(a: [i64; 3], b: [i64; 3], c: [i64; 3], d: [i64; 3]) -> Option<Det3> {
+    let ab = total_sub3(b, a)?;
+    let ac = total_sub3(c, a)?;
+    let ad = total_sub3(d, a)?;
+    total_det3(&ab, &ac, &ad)
 }
 
-/// incircle's determinant, the same formula as on [`incircle`], for any `i64` coordinates: below
-/// 2^260.
-fn incircle_total(a: [i64; 2], b: [i64; 2], c: [i64; 2], d: [i64; 2]) -> Option<Total> {
+/// incircle's determinant, the same formula as on [`incircle`], for any `i64` coordinates: each
+/// product below 2^258, two below 2^259, all three below 2^260.
+fn incircle_total(a: [i64; 2], b: [i64; 2], c: [i64; 2], d: [i64; 2]) -> Option<Bounded<260>> {
     let a = total_sub2(a, d)?;
     let b = total_sub2(b, d)?;
     let c = total_sub2(c, d)?;
     let ([ax, ay], [bx, by], [cx, cy]) = (&a, &b, &c);
-    let ta = total_norm2(&a)?.checked_mul(&total_det2(bx, by, cx, cy)?)?;
-    let tb = total_norm2(&b)?.checked_mul(&total_det2(cx, cy, ax, ay)?)?;
-    let tc = total_norm2(&c)?.checked_mul(&total_det2(ax, ay, bx, by)?)?;
-    ta.checked_add(&tb)?.checked_add(&tc)
+    let ta: Bounded<258> = total_norm2_2d(&a)?.times(&total_det2(bx, by, cx, cy)?)?;
+    let tb: Bounded<258> = total_norm2_2d(&b)?.times(&total_det2(cx, cy, ax, ay)?)?;
+    let tc: Bounded<258> = total_norm2_2d(&c)?.times(&total_det2(ax, ay, bx, by)?)?;
+    let tab: Bounded<259> = ta.plus(&tb)?;
+    tab.plus(&tc)
 }
 
-/// insphere's determinant, the same formula as on [`insphere`], for any `i64` coordinates: below
-/// 2^327.
+/// insphere's determinant, the same formula as on [`insphere`], for any `i64` coordinates: each
+/// product below 2^325, summed as (t₀ − t₁) + (t₂ − t₃), whose halves are below 2^326 and whole
+/// below 2^327. The same value as the formula's order t₀ − t₁ + t₂ − t₃, since nothing rounds.
+#[allow(
+    clippy::many_single_char_names,
+    reason = "a to e name the points of the documented formula"
+)]
 fn insphere_total(
     a: [i64; 3],
     b: [i64; 3],
     c: [i64; 3],
     d: [i64; 3],
     e: [i64; 3],
-) -> Option<Total> {
+) -> Option<Bounded<327>> {
     let a = total_sub3(a, e)?;
     let b = total_sub3(b, e)?;
     let c = total_sub3(c, e)?;
     let d = total_sub3(d, e)?;
-    let ta = total_norm2(&a)?.checked_mul(&total_det3(&b, &c, &d)?)?;
-    let tb = total_norm2(&b)?.checked_mul(&total_det3(&a, &c, &d)?)?;
-    let tc = total_norm2(&c)?.checked_mul(&total_det3(&a, &b, &d)?)?;
-    let td = total_norm2(&d)?.checked_mul(&total_det3(&a, &b, &c)?)?;
-    ta.checked_sub(&tb)?.checked_add(&tc)?.checked_sub(&td)
+    let ta: Bounded<325> = total_norm2_3d(&a)?.times(&total_det3(&b, &c, &d)?)?;
+    let tb: Bounded<325> = total_norm2_3d(&b)?.times(&total_det3(&a, &c, &d)?)?;
+    let tc: Bounded<325> = total_norm2_3d(&c)?.times(&total_det3(&a, &b, &d)?)?;
+    let td: Bounded<325> = total_norm2_3d(&d)?.times(&total_det3(&a, &b, &c)?)?;
+    let first: Bounded<326> = ta.minus(&tb)?;
+    let second: Bounded<326> = tc.minus(&td)?;
+    first.plus(&second)
 }
 
-/// The fast path's sign when it succeeded, otherwise the sign of the total path's value.
+/// The fast path's sign when it answered, otherwise the sign of the total path's value.
 ///
-/// The total path's `None` arm cannot be reached for any value of its argument types (budget
-/// above). If it were, `Zero` would be a wrong answer (see the module documentation).
-fn fast_else_total(fast: Option<Sign>, total: impl FnOnce() -> Option<Total>) -> Sign {
+/// The `None` arm of the total path cannot be reached through any argument of the four
+/// `*_total` functions: their arguments are `i64` coordinates, and every bound from those to the
+/// result is checked at compile time (above). It could be reached only through a defect in
+/// [`Wide`](crate::wide::Wide)'s checked arithmetic, and then it is reported as
+/// [`NumError::BudgetExceeded`], never answered (see the module documentation).
+fn fast_else_total<const BITS: usize>(
+    fast: Option<Sign>,
+    total: impl FnOnce() -> Option<Bounded<BITS>>,
+) -> Result<Sign, NumError> {
     match fast {
-        Some(sign) => sign,
-        None => total().map_or(Sign::Zero, |value| value.signum()),
+        Some(sign) => Ok(sign),
+        None => total()
+            .map(|exact| exact.value().signum())
+            .ok_or(NumError::BudgetExceeded),
     }
 }
 
@@ -375,8 +670,12 @@ fn xyz(p: P3) -> [i64; 3] {
 /// δ² < 2^82; their difference at most 2δ² < 2^83, far below 2^127. The largest value over the
 /// whole grid is δ² = 4M², reached by a triangle that is half the bounding square, such as
 /// (−M, −M), (M, −M), (M, M): no triangle in a square has more than half its area.
-#[must_use]
-pub fn orient2d(a: P2, b: P2, c: P2) -> Sign {
+///
+/// # Errors
+///
+/// [`NumError::BudgetExceeded`] only if both paths failed, which no grid points can cause (the
+/// module documentation): never a sign that was not computed.
+pub fn orient2d(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
     let [a, b, c] = [a, b, c].map(xy);
     let fast = orient2d_fast(a, b, c).map(Sign::of_i128);
     fast_else_total(fast, || orient2d_total(a, b, c))
@@ -396,8 +695,12 @@ pub fn orient2d(a: P2, b: P2, c: P2) -> Sign {
 /// at most 2δ³ < 2^124; the sum at most 6δ³ < 2^126 (6 < 2^3, δ³ < 2^123), below 2^127. The largest
 /// value over the whole grid is 2δ³ = 16M³: the regular tetrahedron on alternate corners of the
 /// bounding cube, the largest tetrahedron in a cube (a third of its volume).
-#[must_use]
-pub fn orient3d(a: P3, b: P3, c: P3, d: P3) -> Sign {
+///
+/// # Errors
+///
+/// [`NumError::BudgetExceeded`] only if both paths failed, which no grid points can cause (the
+/// module documentation): never a sign that was not computed.
+pub fn orient3d(a: P3, b: P3, c: P3, d: P3) -> Result<Sign, NumError> {
     let [a, b, c, d] = [a, b, c, d].map(xyz);
     let fast = orient3d_fast(a, b, c, d).map(Sign::of_i128);
     fast_else_total(fast, || orient3d_total(a, b, c, d))
@@ -435,8 +738,12 @@ pub fn orient3d(a: P3, b: P3, c: P3, d: P3) -> Sign {
 /// {−M, 0, M} the largest value is 8M⁴ = δ⁴ / 2, reached by three corners of the bounding square
 /// and its centre. That is not claimed to be the largest over the whole grid, which is not derived
 /// here; nothing depends on it, since the proof uses only the bound 12δ⁴.
-#[must_use]
-pub fn incircle(a: P2, b: P2, c: P2, d: P2) -> Sign {
+///
+/// # Errors
+///
+/// [`NumError::BudgetExceeded`] only if both paths failed, which no grid points can cause (the
+/// module documentation): never a sign that was not computed.
+pub fn incircle(a: P2, b: P2, c: P2, d: P2) -> Result<Sign, NumError> {
     let [a, b, c, d] = [a, b, c, d].map(xy);
     let fast = incircle_fast(a, b, c, d).map(|sum| sum.signum());
     fast_else_total(fast, || incircle_total(a, b, c, d))
@@ -488,14 +795,32 @@ pub fn incircle(a: P2, b: P2, c: P2, d: P2) -> Sign {
 /// 48M⁵ = 3δ⁵ / 2, reached by a regular tetrahedron on alternate corners of the bounding cube and
 /// its centre. That is not claimed to be the largest over the whole grid, which is not derived
 /// here; nothing depends on it, since the proof uses only the bound 72δ⁵.
-#[must_use]
-pub fn insphere(a: P3, b: P3, c: P3, d: P3, e: P3) -> Sign {
+///
+/// # Errors
+///
+/// [`NumError::BudgetExceeded`] only if both paths failed, which no grid points can cause (the
+/// module documentation): never a sign that was not computed.
+#[allow(
+    clippy::many_single_char_names,
+    reason = "a to e name the points of the documented formula"
+)]
+pub fn insphere(a: P3, b: P3, c: P3, d: P3, e: P3) -> Result<Sign, NumError> {
     let [a, b, c, d, e] = [a, b, c, d, e].map(xyz);
     let fast = insphere_fast(a, b, c, d, e).map(|sum| sum.signum());
     fast_else_total(fast, || insphere_total(a, b, c, d, e))
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::disallowed_methods,
+    clippy::many_single_char_names,
+    reason = "tests may use native arithmetic, casts and std reductions"
+)]
 mod tests {
     //! The two paths on their own. On the grid the fast path always succeeds, so no public call
     //! reaches the total path, and since the total path is exact, taking it could never show up as
@@ -503,15 +828,17 @@ mod tests {
     //! product and sum within its bound, on the point sets each test names and on random points),
     //! check that the total path gives the same value wherever the fast path runs, and drive the
     //! total path with coordinates far off the grid, up to the limits of `i64`, against an
-    //! independent `num-bigint` determinant.
+    //! independent `num-bigint` determinant. They also check the rules the compiler applies to the
+    //! total path's bounds: sound on every small case, and refusing what does not follow.
 
     use num_bigint::BigInt;
     use proptest::prelude::*;
 
+    use super::bounded::{TOTAL_BITS, declarable, product_bits, sum_bits};
     use super::{
-        Total, fast_else_total, incircle_fast, incircle_terms, incircle_total, insphere_fast,
-        insphere_terms, insphere_total, orient2d_fast, orient2d_total, orient3d_fast,
-        orient3d_total, sum_of_products,
+        Bounded, Diff, Total, fast_else_total, incircle_fast, incircle_terms, incircle_total,
+        insphere_fast, insphere_terms, insphere_total, orient2d_fast, orient2d_total,
+        orient3d_fast, orient3d_total, sum_of_products,
     };
     use crate::grid::COORD_MAX;
     use crate::sign::Sign;
@@ -561,6 +888,11 @@ mod tests {
     /// The fast path's value widened to the total path's type.
     fn widen(v: I256) -> Total {
         v.resize::<6>().unwrap()
+    }
+
+    /// A total path's value, without the bound its type carries.
+    fn total_value<const BITS: usize>(v: Option<Bounded<BITS>>) -> Option<Total> {
+        v.map(Bounded::value)
     }
 
     /// The fast path's (lift, determinant) pairs against their budget: for bits = [x, y, p, s], the
@@ -623,7 +955,7 @@ mod tests {
                 for &c in &points {
                     let det = orient2d_fast(a, b, c).expect("i128 must hold orient2d");
                     assert!(det.unsigned_abs() < 1 << 83, "{a:?} {b:?} {c:?}");
-                    let total = orient2d_total(a, b, c);
+                    let total = total_value(orient2d_total(a, b, c));
                     assert_eq!(total, Some(Total::from_i128(det)), "{a:?} {b:?} {c:?}");
                     largest = largest.max(det.unsigned_abs());
                 }
@@ -639,7 +971,7 @@ mod tests {
                         let terms = incircle_terms(a, b, c, d).expect("i128 holds the terms");
                         let sum = assert_within(&terms, INCIRCLE_BITS);
                         assert_eq!(incircle_fast(a, b, c, d), Some(sum));
-                        let total = incircle_total(a, b, c, d);
+                        let total = total_value(incircle_total(a, b, c, d));
                         assert_eq!(total, Some(widen(sum)), "{:?}", [a, b, c, d]);
                         if on_levels_3(&[&a, &b, &c, &d]) {
                             largest = largest.max(magnitude(sum));
@@ -666,7 +998,7 @@ mod tests {
                     for &d in points.iter().skip(j) {
                         let det = orient3d_fast(a, b, c, d).expect("i128 must hold orient3d");
                         assert!(det.unsigned_abs() < 1 << 126, "{:?}", [a, b, c, d]);
-                        let total = orient3d_total(a, b, c, d);
+                        let total = total_value(orient3d_total(a, b, c, d));
                         assert_eq!(total, Some(Total::from_i128(det)), "{:?}", [a, b, c, d]);
                         largest = largest.max(det.unsigned_abs());
                     }
@@ -684,7 +1016,7 @@ mod tests {
                             let terms = insphere_terms(a, b, c, d, e).expect("i128 holds terms");
                             let sum = assert_within(&terms, INSPHERE_BITS);
                             assert_eq!(insphere_fast(a, b, c, d, e), Some(sum));
-                            let total = insphere_total(a, b, c, d, e);
+                            let total = total_value(insphere_total(a, b, c, d, e));
                             assert_eq!(total, Some(widen(sum)), "{:?}", [a, b, c, d, e]);
                             largest = largest.max(magnitude(sum));
                         }
@@ -708,16 +1040,16 @@ mod tests {
             let p2 = |k: usize| [v[k], v[k + 1]];
             let (a, b, c, d) = (p2(0), p2(2), p2(4), p2(6));
             let det = orient2d_fast(a, b, c).unwrap();
-            prop_assert_eq!(orient2d_total(a, b, c), Some(Total::from_i128(det)));
+            prop_assert_eq!(total_value(orient2d_total(a, b, c)), Some(Total::from_i128(det)));
             let sum = assert_within(&incircle_terms(a, b, c, d).unwrap(), INCIRCLE_BITS);
-            prop_assert_eq!(incircle_total(a, b, c, d), Some(widen(sum)));
+            prop_assert_eq!(total_value(incircle_total(a, b, c, d)), Some(widen(sum)));
 
             let p3 = |k: usize| [v[k], v[k + 1], v[k + 2]];
             let (a, b, c, d, e) = (p3(0), p3(3), p3(6), p3(9), p3(12));
             let det = orient3d_fast(a, b, c, d).unwrap();
-            prop_assert_eq!(orient3d_total(a, b, c, d), Some(Total::from_i128(det)));
+            prop_assert_eq!(total_value(orient3d_total(a, b, c, d)), Some(Total::from_i128(det)));
             let sum = assert_within(&insphere_terms(a, b, c, d, e).unwrap(), INSPHERE_BITS);
-            prop_assert_eq!(insphere_total(a, b, c, d, e), Some(widen(sum)));
+            prop_assert_eq!(total_value(insphere_total(a, b, c, d, e)), Some(widen(sum)));
         }
     }
 
@@ -776,34 +1108,38 @@ mod tests {
     }
 
     /// The total path's value equals the oracle's and stays below 2^bits in magnitude.
-    fn assert_exact(value: Option<Total>, expected: BigInt, bits: u64, what: &str) {
+    fn assert_exact(value: Option<Total>, expected: &BigInt, bits: u64, what: &str) {
         let value = big(&value.unwrap_or_else(|| panic!("{what}: I384 overflowed")));
-        assert_eq!(value, expected, "{what}");
+        assert_eq!(&value, expected, "{what}");
         assert!(value.bits() <= bits, "{what}: over 2^{bits}");
     }
 
     fn exact_orient2d(a: [i64; 2], b: [i64; 2], c: [i64; 2]) {
         let expected = oracle(&[&a, &b, &c], false, false);
         let what = format!("orient2d {:?}", [a, b, c]);
-        assert_exact(orient2d_total(a, b, c), expected, 129, &what);
+        let value = total_value(orient2d_total(a, b, c));
+        assert_exact(value, &expected, 129, &what);
     }
 
     fn exact_orient3d(a: [i64; 3], b: [i64; 3], c: [i64; 3], d: [i64; 3]) {
         let expected = oracle(&[&a, &b, &c, &d], false, true);
         let what = format!("orient3d {:?}", [a, b, c, d]);
-        assert_exact(orient3d_total(a, b, c, d), expected, 195, &what);
+        let value = total_value(orient3d_total(a, b, c, d));
+        assert_exact(value, &expected, 195, &what);
     }
 
     fn exact_incircle(a: [i64; 2], b: [i64; 2], c: [i64; 2], d: [i64; 2]) {
         let expected = oracle(&[&a, &b, &c, &d], true, false);
         let what = format!("incircle {:?}", [a, b, c, d]);
-        assert_exact(incircle_total(a, b, c, d), expected, 260, &what);
+        let value = total_value(incircle_total(a, b, c, d));
+        assert_exact(value, &expected, 260, &what);
     }
 
     fn exact_insphere(a: [i64; 3], b: [i64; 3], c: [i64; 3], d: [i64; 3], e: [i64; 3]) {
         let expected = oracle(&[&a, &b, &c, &d, &e], true, true);
         let what = format!("insphere {:?}", [a, b, c, d, e]);
-        assert_exact(insphere_total(a, b, c, d, e), expected, 327, &what);
+        let value = total_value(insphere_total(a, b, c, d, e));
+        assert_exact(value, &expected, 327, &what);
     }
 
     /// Every ordering of `items`.
@@ -824,7 +1160,7 @@ mod tests {
     }
 
     /// p with the axes whose bit is set in `mask` reflected about −1/2 (v ↦ −1 − v), which swaps
-    /// i64::MIN and i64::MAX and keeps every coordinate an `i64`.
+    /// `i64::MIN` and `i64::MAX` and keeps every coordinate an `i64`.
     fn reflect<const D: usize>(p: [i64; D], mask: usize) -> [i64; D] {
         std::array::from_fn(|k| if (mask >> k) & 1 == 1 { !p[k] } else { p[k] })
     }
@@ -833,7 +1169,8 @@ mod tests {
     /// orient2d half the bounding square, for orient3d the regular tetrahedron on alternate
     /// corners, for incircle and insphere a corner and the opposite corner (largest lift) with the
     /// corners adjacent to the opposite one (largest determinant). Every order and reflection, and
-    /// orient2d and incircle on every choice of points with coordinates in {i64::MIN, 0, i64::MAX}.
+    /// orient2d and incircle on every choice of points with coordinates in
+    /// {`i64::MIN`, 0, `i64::MAX`}.
     #[test]
     fn total_path_is_exact_where_its_intermediates_peak_at_the_limits_of_i64() {
         for mask in 0..4 {
@@ -903,19 +1240,70 @@ mod tests {
     }
 
     /// The fast path's answer is used whenever it has one, without evaluating the total path;
-    /// otherwise the total path's sign. The last case cannot arise (the total path never fails),
-    /// and pins the documented answer if it ever did: `Zero`.
+    /// otherwise the total path's sign. The last case cannot arise unless `Wide`'s checked
+    /// arithmetic is wrong (module documentation), and pins what happens if it ever did: an
+    /// error, not a sign.
     #[test]
     fn fast_else_total_routes_as_documented() {
-        let never = || -> Option<Total> { panic!("the total path must not run") };
+        let never = || -> Option<Diff> { panic!("the total path must not run") };
         for sign in [Sign::Negative, Sign::Zero, Sign::Positive] {
-            assert_eq!(fast_else_total(Some(sign), never), sign);
+            assert_eq!(fast_else_total(Some(sign), never), Ok(sign));
         }
         let cases = [(-3, Sign::Negative), (0, Sign::Zero), (7, Sign::Positive)];
         for (v, sign) in cases {
-            assert_eq!(fast_else_total(None, || Some(Total::from_i64(v))), sign);
+            assert_eq!(fast_else_total(None, || Diff::difference(v, 0)), Ok(sign));
         }
-        assert_eq!(fast_else_total(None, || None), Sign::Zero);
+        let failed = fast_else_total::<64>(None, || None);
+        assert_eq!(failed, Err(crate::error::NumError::BudgetExceeded));
+    }
+
+    /// The two rules the compiler applies to the total path's bounds are sound: on every pair of
+    /// values with magnitudes below 2^a and 2^b, for a and b up to 6, the product is below the
+    /// product rule's bound and the sum and difference below the sum rule's. Each rule's bound is
+    /// also reached as closely as the rule claims: (2^a − 1)(2^b − 1) ≥ 2^(a + b − 1) once a and
+    /// b are at least 2, and (2^a − 1) + (2^b − 1) ≥ 2^max(a, b) once both are at least 1.
+    #[test]
+    fn the_bound_rules_are_sound() {
+        let below = |v: i64, bits: Option<usize>| v.unsigned_abs() < 1u64 << bits.unwrap();
+        for a in 0..=6usize {
+            for b in 0..=6usize {
+                let (ra, rb) = (1i64 << a, 1i64 << b);
+                for x in 1 - ra..ra {
+                    for y in 1 - rb..rb {
+                        let at = format!("{x} and {y}, below 2^{a} and 2^{b}");
+                        assert!(below(x * y, product_bits(a, b)), "{at}");
+                        assert!(below(x + y, sum_bits(a, b)), "{at}");
+                        assert!(below(x - y, sum_bits(a, b)), "{at}");
+                    }
+                }
+                let top = (ra - 1) * (rb - 1);
+                if a >= 2 && b >= 2 {
+                    assert!(!below(top, product_bits(a, b).map(|p| p - 1)), "{a}, {b}");
+                }
+                if a >= 1 && b >= 1 {
+                    let sum = (ra - 1) + (rb - 1);
+                    assert!(!below(sum, sum_bits(a, b).map(|s| s - 1)), "{a}, {b}");
+                }
+            }
+        }
+    }
+
+    /// The check accepts a declared bound exactly when the rule's bound is no larger and `I384`
+    /// holds it, which is every magnitude below 2^383; an exponent that overflows is refused.
+    #[test]
+    fn declared_bounds_are_accepted_only_when_they_follow_and_fit() {
+        assert_eq!(TOTAL_BITS, 383);
+        assert!(declarable(product_bits(64, 129), 193));
+        assert!(declarable(product_bits(64, 129), 200));
+        assert!(!declarable(product_bits(64, 129), 192));
+        assert!(declarable(sum_bits(194, 193), 195));
+        assert!(!declarable(sum_bits(194, 193), 194));
+        assert!(!declarable(sum_bits(193, 194), 194));
+        assert!(declarable(sum_bits(382, 381), 383));
+        assert!(!declarable(sum_bits(383, 0), 384));
+        assert!(!declarable(Some(0), 384));
+        assert!(!declarable(product_bits(usize::MAX, 1), usize::MAX));
+        assert!(!declarable(sum_bits(usize::MAX, 0), usize::MAX));
     }
 
     /// Every product of two `i128` values fits `I256`, including the largest, 2^254.

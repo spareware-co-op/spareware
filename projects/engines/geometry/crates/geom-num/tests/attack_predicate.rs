@@ -24,6 +24,21 @@
 //! configurations that maximise its intermediates; and a scan of the module's code for native
 //! arithmetic, which would let a build with overflow checks off change an answer.
 
+// The crate denies native arithmetic and lossy casts in kernel code (Cargo.toml); tests may use
+// them, and std's reductions, to build their oracles.
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::disallowed_methods,
+    reason = "oracles and generators; the rules are for kernel code"
+)]
+#![allow(
+    clippy::many_single_char_names,
+    reason = "points and values are named a, b, c and so on, as in the formulas they check"
+)]
 // Helpers outside `#[test]` functions are not covered by clippy.toml's allow-*-in-tests settings;
 // clippy.toml says tests may use these, and a broken oracle must stop the test loudly.
 #![allow(
@@ -78,22 +93,22 @@ fn p3([x, y, z]: Pt3) -> P3 {
 
 fn o2(p: [Pt2; 3]) -> Sign {
     let [a, b, c] = p.map(p2);
-    orient2d(a, b, c)
+    orient2d(a, b, c).unwrap()
 }
 
 fn o3(p: [Pt3; 4]) -> Sign {
     let [a, b, c, d] = p.map(p3);
-    orient3d(a, b, c, d)
+    orient3d(a, b, c, d).unwrap()
 }
 
 fn ic(p: [Pt2; 4]) -> Sign {
     let [a, b, c, d] = p.map(p2);
-    incircle(a, b, c, d)
+    incircle(a, b, c, d).unwrap()
 }
 
 fn ins(p: [Pt3; 5]) -> Sign {
     let [a, b, c, d, e] = p.map(p3);
-    insphere(a, b, c, d, e)
+    insphere(a, b, c, d, e).unwrap()
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -237,7 +252,7 @@ fn combos(n: usize, k: usize) -> Vec<Vec<usize>> {
     out
 }
 
-/// A tiny deterministic generator (SplitMix64) for constructions driven by a proptest seed.
+/// A tiny deterministic generator (`SplitMix64`) for constructions driven by a proptest seed.
 struct Rng(u64);
 
 impl Rng {
@@ -283,7 +298,7 @@ fn bareiss(mut a: Vec<Vec<BigInt>>) -> BigInt {
                 a[i][j] = v;
             }
         }
-        prev = a[k][k].clone();
+        prev.clone_from(&a[k][k]);
     }
     if negate { -prev } else { prev }
 }
@@ -420,7 +435,7 @@ fn sphere_power([a, b, c, d, e]: [Pt3; 5]) -> BigRational {
     let o: [BigRational; 3] = std::array::from_fn(|k| {
         let mut m = rows.clone();
         for i in 0..3 {
-            m[i][k] = r[i].clone();
+            m[i][k].clone_from(&r[i]);
         }
         BigRational::new(det3b(&m), den.clone())
     });
@@ -885,7 +900,7 @@ fn unimodular<const D: usize>(rng: &mut Rng, negative: bool) -> [[i64; D]; D] {
 /// every seed in a fixed sweep, in 2D and 3D, with both determinant signs.
 #[test]
 fn unimodular_generator_always_reaches_the_grid() {
-    let largest = |rows: &[i64]| rows.iter().map(|v| v.abs()).max().unwrap();
+    let largest = |rows: &[i64]| rows.iter().map(num_traits::Signed::abs).max().unwrap();
     let m = unimodular::<2>(&mut Rng(6_214_692_301_197_557_477), false);
     assert!(largest(m.as_flattened()) > 1 << 30, "{m:?}");
     for seed in 0..20_000u64 {
@@ -977,7 +992,7 @@ proptest! {
     ) {
         let mut rng = Rng(seed);
         let m = unimodular::<2>(&mut rng, negative);
-        let largest = m.iter().flatten().map(|v| v.abs()).max().unwrap();
+        let largest = m.iter().flatten().map(num_traits::Signed::abs).max().unwrap();
         prop_assert!(largest > 1 << 30, "the generator did not grow the matrix: {:?}", m);
         let a = place(&mut rng, &m);
         let tri = [a, add(a, m[0]), add(a, m[1])];
@@ -1000,7 +1015,7 @@ proptest! {
     ) {
         let mut rng = Rng(seed);
         let m = unimodular::<3>(&mut rng, negative);
-        let largest = m.iter().flatten().map(|v| v.abs()).max().unwrap();
+        let largest = m.iter().flatten().map(num_traits::Signed::abs).max().unwrap();
         prop_assert!(largest > 1 << 30, "the generator did not grow the matrix: {:?}", m);
         let a = place(&mut rng, &m);
         let tet = [a, add(a, m[0]), add(a, m[1]), add(a, m[2])];
@@ -1158,7 +1173,12 @@ fn check_all_laws<const D: usize, const N: usize>(
         odd_if(s, D % 2 == 0),
         "cyclic axis shift of {p:?}"
     );
-    let largest = p.iter().flatten().map(|v| v.abs()).max().unwrap();
+    let largest = p
+        .iter()
+        .flatten()
+        .map(num_traits::Signed::abs)
+        .max()
+        .unwrap();
     if largest > 0 {
         let k = k.min(M / largest);
         if k >= 2 {
@@ -1360,7 +1380,13 @@ fn along_normal(o: Pt3, j: i64) -> Pt3 {
 /// The largest |component| of x·u + y·v over the given plane points.
 fn reach(pts: &[Pt2]) -> i64 {
     pts.iter()
-        .map(|&q| tilt([0, 0, 0], q).iter().map(|v| v.abs()).max().unwrap())
+        .map(|&q| {
+            tilt([0, 0, 0], q)
+                .iter()
+                .map(num_traits::Signed::abs)
+                .max()
+                .unwrap()
+        })
         .max()
         .unwrap()
 }
@@ -1734,7 +1760,7 @@ fn wide_sum<const L: usize>(terms: &[(i128, i128)]) -> Option<Wide<L>> {
     })
 }
 
-fn to_i128(v: BigInt) -> i128 {
+fn to_i128(v: &BigInt) -> i128 {
     v.to_i128()
         .unwrap_or_else(|| panic!("an i128-stage value left i128: {v}"))
 }
@@ -1742,8 +1768,8 @@ fn to_i128(v: BigInt) -> i128 {
 /// incircle's documented (lift, 2 × 2 determinant) pairs relative to d, computed exactly.
 fn incircle_terms(p: [Pt2; 4]) -> Vec<(i128, i128)> {
     let [a, b, c] = [0usize, 1, 2].map(|i| diff(p[i], p[3]));
-    let lift = |u: &[BigInt; 2]| to_i128(&u[0] * &u[0] + &u[1] * &u[1]);
-    let cross = |u: &[BigInt; 2], v: &[BigInt; 2]| to_i128(cross2(u, v));
+    let lift = |u: &[BigInt; 2]| to_i128(&(&u[0] * &u[0] + &u[1] * &u[1]));
+    let cross = |u: &[BigInt; 2], v: &[BigInt; 2]| to_i128(&cross2(u, v));
     vec![
         (lift(&a), cross(&b, &c)),
         (lift(&b), cross(&c, &a)),
@@ -1754,9 +1780,9 @@ fn incircle_terms(p: [Pt2; 4]) -> Vec<(i128, i128)> {
 /// insphere's documented (lift, signed 3 × 3 cofactor) pairs relative to e, computed exactly.
 fn insphere_terms(p: [Pt3; 5]) -> Vec<(i128, i128)> {
     let [a, b, c, d] = [0usize, 1, 2, 3].map(|i| diff(p[i], p[4]));
-    let lift = |u: &[BigInt; 3]| to_i128(u.iter().map(|x| x * x).sum::<BigInt>());
+    let lift = |u: &[BigInt; 3]| to_i128(&u.iter().map(|x| x * x).sum::<BigInt>());
     let det = |u: &[BigInt; 3], v: &[BigInt; 3], w: &[BigInt; 3]| {
-        to_i128(det3b(&[u.clone(), v.clone(), w.clone()]))
+        to_i128(&det3b(&[u.clone(), v.clone(), w.clone()]))
     };
     vec![
         (lift(&a), det(&b, &c, &d)),
@@ -1766,7 +1792,7 @@ fn insphere_terms(p: [Pt3; 5]) -> Vec<(i128, i128)> {
     ]
 }
 
-/// The factors within 2^x_bits and 2^y_bits, each product within 2^product_bits, the I256
+/// The factors within 2^`x_bits` and 2^`y_bits`, each product within 2^`product_bits`, the I256
 /// evaluation never overflowing (so the module never needs its total path) and equal to the exact
 /// determinant, and the I512 evaluation equal too.
 fn check_wide_step(terms: &[(i128, i128)], exact: &BigInt, bits: [u32; 3], what: &str) {
