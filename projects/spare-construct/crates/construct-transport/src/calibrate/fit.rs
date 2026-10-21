@@ -16,7 +16,6 @@ use crate::util::{clamp, fmt};
 use serde::Serialize;
 use serde_json::{Map, Value};
 use std::collections::HashSet;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 /// The options of [`fit`] (the `opts` of `Calibrate.fit`); every field is optional and defaults as the prototype's do.
 #[derive(Clone, Copy, Default)]
@@ -112,11 +111,7 @@ pub fn iso_of_ms(ms: f64) -> String {
 }
 
 fn now_iso() -> String {
-    let ms = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as f64)
-        .unwrap_or(0.0);
-    iso_of_ms(ms)
+    iso_of_ms(crate::util::now_ms())
 }
 
 /// `meOf()`: the project's matrix estimation record, made empty when the project has none.

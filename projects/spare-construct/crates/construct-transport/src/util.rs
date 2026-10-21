@@ -280,6 +280,31 @@ impl Heap {
     }
 }
 
+/// The clock the engine stamps runs with, set by a host that has no system clock (WebAssembly).
+static CLOCK: std::sync::OnceLock<fn() -> f64> = std::sync::OnceLock::new();
+
+/// Sets the clock [`now_ms`] reads (milliseconds since 1970). The first call wins. Natively the system clock is used unless this is set.
+pub fn set_clock(f: fn() -> f64) {
+    let _ = CLOCK.set(f);
+}
+
+/// `Date.now()`: milliseconds since 1970 from the clock set with [`set_clock`], otherwise the system clock (0 where there is none, as in a browser build that set no clock).
+pub fn now_ms() -> f64 {
+    if let Some(f) = CLOCK.get() {
+        return f();
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0.0, |d| d.as_millis() as f64)
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        0.0
+    }
+}
+
 /// `U.clamp(x, a, b)`: x limited to [a, b]; NaN stays NaN.
 pub fn clamp(x: f64, a: f64, b: f64) -> f64 {
     if x < a {

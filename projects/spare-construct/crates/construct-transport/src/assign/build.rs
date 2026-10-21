@@ -15,7 +15,6 @@ use crate::standards::{LOS_VC, STANDARDS, ef, growth, growth_basis, junction_set
 use crate::util::{r1, r3};
 use crate::routes::bus_freq;
 use std::collections::HashMap;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 /// The assignment's `ZCLASS`: the development classes in the order the class flows list them.
 const ZCLASS: [&str; 3] = ["existing", "committed", "development"];
@@ -425,7 +424,7 @@ pub(super) fn build_res(
         Some(o) => (Some(o.sites), Some(o.site_turns), Some(if o.traced { "paths" } else { "shares" }.to_string())),
         None => (None, None, None),
     };
-    let ts = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0.0, |d| d.as_millis() as f64);
+    let ts = crate::util::now_ms();
     Res {
         period: run.period.clone(),
         year: year_of(Some(sc), s),
