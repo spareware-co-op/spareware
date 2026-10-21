@@ -37,7 +37,7 @@ the owner decides, the table, chapter 27 and these crates change in one pull req
 | Crates | Layer | Why not yet | Built by |
 | --- | --- | --- | --- |
 | `geom-math` | 2 | Under way in another piece | G03 |
-| `geom-run`, `geom-pool` | 1, 13 | Under way in another piece | G04 |
+| `geom-run` | 1 | Under way in another piece | G04 |
 | `geom-bench` | Development | Under way in another piece | G06 |
 | `geom-test`, `geom-fuzz`, `geom-gen` | Development | Under way in another piece | G11 |
 | `geom-sheet`, `geom-thread`, `geom-board`, `geom-stair`, `geom-civil`, `geom-assembly` | 11 | Domain toolkits enter the kernel only when a second program needs them (section 26.1); until then each lives in the program that does | G472, G258, G473, G281, G378, G479 |
@@ -60,9 +60,10 @@ request meets the scaffold check whichever merges first:
   its header under "Direct dependencies still to add when ... merges", and the table's `PENDING`
   list holds the same. When one merges, the scaffold test fails until the path dependency is added
   to every crate waiting for it, its `PENDING` entry is deleted and those header lines are deleted.
-  `engine-geometry` waits for `geom-pool` (G04) the same way, behind its `threads` feature.
+  `geom-pool`, scaffolded here because G04 built only `geom-run`, waits for `geom-run` the same
+  way; `engine-geometry` names it behind its `threads` feature, off by default.
 
-The last step touches files outside the merging piece (42 manifests for `geom-run`, `geom-num`'s
+The last step touches files outside the merging piece (43 manifests for `geom-run`, `geom-num`'s
 among them, and 26 for `geom-math`), which AGENTS.md's "stay inside the piece" does not foresee. It is a mechanical edit the
 check spells out crate by crate. If G09 merges first, the owner either allows that edit in the G03
 and G04 pull requests or merges them first and has G09 rebase and wire them itself; the check

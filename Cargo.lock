@@ -217,6 +217,7 @@ dependencies = [
 name = "engine-geometry"
 version = "0.0.0"
 dependencies = [
+ "geom-pool",
  "kit-core",
 ]
 
@@ -686,6 +687,10 @@ dependencies = [
  "geom-op",
  "geom-topo",
 ]
+
+[[package]]
+name = "geom-pool"
+version = "0.0.0"
 
 [[package]]
 name = "geom-profile"

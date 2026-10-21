@@ -615,7 +615,7 @@ mod repository {
             .filter(|r| observed.packages.contains_key(r.name))
             .map(|r| r.name)
             .collect();
-        assert_eq!(present.len(), 44, "{present:?}");
+        assert_eq!(present.len(), 45, "{present:?}");
     }
 
     // -------------------------------------------------------------- chapter 27, row by row
@@ -1135,7 +1135,19 @@ mod repository {
                 .lines()
                 .filter(|l| !l.starts_with("//!") && !l.trim().is_empty())
                 .collect();
-            if body != ["#![cfg_attr(not(test), no_std)]", "#![forbid(unsafe_code)]"] {
+            // geom-pool may use std (27): it forbids unsafe code and declares nothing else.
+            let kind = table::TABLE
+                .rows
+                .iter()
+                .find(|r| r.name == name)
+                .unwrap()
+                .kind;
+            let expected: &[&str] = if kind == Kind::KernelStd {
+                &["#![forbid(unsafe_code)]"]
+            } else {
+                &["#![cfg_attr(not(test), no_std)]", "#![forbid(unsafe_code)]"]
+            };
+            if body != expected {
                 wrong.push(format!("{name}: {body:?}"));
             }
         }
@@ -1204,6 +1216,7 @@ mod repository {
         ("geom-p21", "G415"),
         ("geom-panel", "G342 G343 G344 G345"),
         ("geom-poly", "G123 G124 G125 G126 G127 G128 G142"),
+        ("geom-pool", "G33 G456"),
         ("geom-profile", "G229 G230"),
         ("geom-skeleton", "G271 G272 G274 G471"),
         (

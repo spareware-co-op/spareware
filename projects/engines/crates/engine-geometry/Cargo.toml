@@ -5,10 +5,16 @@ edition.workspace = true
 publish.workspace = true
 
 [dependencies]
-# kit-core for permanent IDs and units at the boundary (section 5), and every kernel crate this
-# facade re-exports (none yet: G100 adds them). geom-pool joins behind a `threads` feature when it
-# merges (G04). Checked by tests/scaffold, which holds the kernel's crate table (chapter 27).
+# kit-core for permanent IDs and units at the boundary (section 5), every kernel crate this
+# facade re-exports (none yet: G100 adds them), and geom-pool behind the `threads` feature. Checked
+# by tests/scaffold, which holds the kernel's crate table (chapter 27).
 kit-core = { path = "../../../kit/crates/kit-core" }
+geom-pool = { path = "../../geometry/crates/geom-pool", optional = true }
+
+[features]
+# Threads for geom-run's helper, through geom-pool alone (23.4, 27). Off by default, so a default
+# build of the facade, wasm32-unknown-unknown included, links no threads.
+threads = ["dep:geom-pool"]
 
 [lints.rust]
 unsafe_code = "forbid"
