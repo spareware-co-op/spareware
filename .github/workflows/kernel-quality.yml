@@ -1,0 +1,772 @@
+name: Kernel quality
+
+# The geometry kernel's mutation and coverage gates and its weekly Miri run (chapter 28 of the
+# kernel architecture, projects/engines/geometry/architecture/28-testing.md, section 28.8; when
+# each runs is 28.17). geom-test's `kernel-quality` binary judges every result, so this file holds
+# no copy of the foundation set or the bars (geom_test::foundation):
+#
+# - Mutants in the diff, on every pull request that touches the kernel: cargo-mutants mutates the
+#   lines the pull request changes (`--in-diff`), in four shards, and each mutant is judged by the
+#   mutated crate's integration tests, which reach only its public interface (.cargo/mutants.toml).
+#   A mutant that survives or times out fails the gate unless the quality ledger
+#   (projects/engines/geometry/quality-ledger.json) keeps it: in the foundation set only as
+#   equivalent, with a written reason; elsewhere also as harmless or as a known, older survivor, so
+#   no new one merges.
+# - The full sharded mutation run, weekly and on demand: every mutant of every kernel crate, in 24
+#   shards, judged against the ledger as a whole. The judge also proves the shards together tested
+#   exactly the full list of mutants, and fails on any ledger entry no survivor matches any more.
+# - Coverage, on every pull request that touches the kernel and weekly and on demand: each crate
+#   measured by its own tests with cargo-llvm-cov, lines and branches, on the pinned nightly that
+#   branch coverage needs. The foundation set needs 100% of lines and branches, every other kernel
+#   crate 90% of lines, and every `coverage(off)` mark must cite a Kani or Verus proof that the
+#   ledger records. A pull request measures the crates it changes and every kernel crate that
+#   depends on one of them; the weekly run measures all.
+# - Miri over the kernel crates' test suites, weekly and on demand (28.8: to catch undefined
+#   behaviour inside dependencies, which `forbid(unsafe_code)` does not reach).
+#
+# Only geom-test's judges decide: a cargo-mutants run that finds survivors (exit 2) or timeouts
+# (exit 3) passes its step and leaves the verdict to the ledger; any other failure of a tool fails
+# its step.
+#
+# Toolchains: the same pinned compiler as kernel.yml (28.13, the toolchain guard), and for branch
+# coverage and Miri one dated nightly, installed with rustup by its date and used only through
+# RUSTUP_TOOLCHAIN in the steps that need it; an instrumented or interpreted build never ships. The
+# nightly is at least two weeks old when pinned; change it in its own pull request.
+#
+# Tools: cargo-mutants (MIT) and cargo-llvm-cov (Apache-2.0 OR MIT), each built from crates.io at a
+# pinned version with --locked. Miri (MIT OR Apache-2.0) is a component of the pinned nightly.
+#
+# Supply chain: every action is pinned to a full commit; checkout, rust-toolchain and rust-cache to
+# the same commits as kernel.yml, and upload-artifact and download-artifact to the commits of their
+# tags (beside each), checked when they were pinned. The workflow can only read the repository.
+#
+# If any job becomes a required check, note that a pull request outside the paths below never runs
+# this workflow, so it would never report (see kernel.yml).
+
+on:
+  pull_request:
+    paths:
+      - "projects/engines/geometry/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".cargo/**"
+      - "rust-toolchain.toml"
+      - "rust-toolchain"
+      - ".github/workflows/kernel-quality.yml"
+  schedule:
+    # Weekly, Saturdays at 02:17 UTC.
+    - cron: "17 2 * * 6"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same pull request cancels the runs it supersedes; scheduled runs all run.
+concurrency:
+  group: kernel-quality-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # The same pinned compiler as kernel.yml (28.13, the toolchain guard).
+  RUST_TOOLCHAIN: "1.99.0"
+  # The pinned nightly for branch coverage (28.8) and Miri, by date: rustc 1.101.0-nightly
+  # (21b707e3f 2026-09-30), LLVM 23.1.1, with llvm-tools-preview and miri.
+  RUST_NIGHTLY: "nightly-2026-10-01"
+  CARGO_MUTANTS_VERSION: "27.1.0"
+  CARGO_LLVM_COV_VERSION: "0.9.1"
+  CARGO_TERM_COLOR: always
+  # The release profile, as the mutation and coverage builds use it: overflow checks and debug
+  # assertions on, so tests that use native arithmetic still stop where a mutant overflows and code
+  # behind debug assertions is built, tested and measured.
+  CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS: "true"
+  CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: "true"
+
+jobs:
+  mutants-diff:
+    name: Mutants in the diff (shard ${{ matrix.shard }} of 4)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      # Every shard reports, so the judge sees every survivor.
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    env:
+      # The number of shards: the length of the matrix above.
+      SHARDS: 4
+      # Mutated builds are tests only: optimise lightly and build incrementally, so each mutant
+      # rebuilds in seconds rather than minutes.
+      CARGO_PROFILE_RELEASE_OPT_LEVEL: "1"
+      CARGO_PROFILE_RELEASE_INCREMENTAL: "true"
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "256"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # The merge commit and its parents: the first parent is the base branch.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: mutants
+      - name: Install cargo-mutants ${{ env.CARGO_MUTANTS_VERSION }}
+        run: cargo install --locked cargo-mutants --version "$CARGO_MUTANTS_VERSION"
+      - name: The pull request's diff
+        run: |
+          # actions/checkout checks out the merge commit of a pull request; its first parent is
+          # the base, so this is exactly the change as it would merge. Only Rust files can hold
+          # mutants, and a rename is written as a deletion and an addition, so cargo-mutants reads
+          # nothing but plain hunks.
+          test "$(git rev-list --parents -n 1 HEAD | wc -w)" -eq 3
+          git diff --no-ext-diff --no-color --no-renames HEAD^1 HEAD -- '*.rs' > "$RUNNER_TEMP/pr.diff"
+      - name: Mutate the diff's kernel code (shard ${{ matrix.shard }})
+        run: |
+          # rust-cache turns incremental compilation off for the whole job; turn it back on here.
+          export CARGO_INCREMENTAL=1
+          set +e
+          cargo mutants --in-diff "$RUNNER_TEMP/pr.diff" --shard "${{ matrix.shard }}/$SHARDS" \
+            --no-shuffle --in-place -vV --output "$RUNNER_TEMP/out"
+          code=$?
+          set -e
+          # 0: every mutant caught; 2: survivors; 3: timeouts. The judge below decides those. Any
+          # other code (a usage error, a failing baseline, a diff that does not match the tree, an
+          # internal error) means the run itself failed.
+          case "$code" in 0|2|3) ;; *) exit "$code" ;; esac
+          test -f "$RUNNER_TEMP/out/mutants.out/mutants.json"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: mutants-diff-${{ matrix.shard }}
+          path: ${{ runner.temp }}/out
+          if-no-files-found: error
+
+  mutants-diff-judge:
+    name: Mutants in the diff, judged against the ledger
+    needs: mutants-diff
+    if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Install cargo-mutants ${{ env.CARGO_MUTANTS_VERSION }}
+        run: cargo install --locked cargo-mutants --version "$CARGO_MUTANTS_VERSION"
+      - name: Every mutant in the diff, which the shards together must have tested
+        run: |
+          test "$(git rev-list --parents -n 1 HEAD | wc -w)" -eq 3
+          git diff --no-ext-diff --no-color --no-renames HEAD^1 HEAD -- '*.rs' > "$RUNNER_TEMP/pr.diff"
+          cargo mutants --in-diff "$RUNNER_TEMP/pr.diff" --list --json > "$RUNNER_TEMP/expected.json"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: mutants-diff-*
+          path: ${{ runner.temp }}/shards
+      - name: Judge every survivor against the ledger
+        run: |
+          shopt -s nullglob
+          outs=("$RUNNER_TEMP"/shards/mutants-diff-*/mutants.out)
+          cargo run --locked -p geom-test --bin kernel-quality -- mutants --mode diff \
+            --expected "$RUNNER_TEMP/expected.json" "${outs[@]}"
+
+  mutants-full:
+    name: Mutants, full run (shard ${{ matrix.shard }} of 24)
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+    env:
+      # The number of shards: the length of the matrix above. About 40 of geom-num's 865 mutants
+      # each today, at about four minutes a mutant; raise both together as the kernel grows.
+      SHARDS: 24
+      CARGO_PROFILE_RELEASE_OPT_LEVEL: "1"
+      CARGO_PROFILE_RELEASE_INCREMENTAL: "true"
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "256"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: mutants
+      - name: Install cargo-mutants ${{ env.CARGO_MUTANTS_VERSION }}
+        run: cargo install --locked cargo-mutants --version "$CARGO_MUTANTS_VERSION"
+      - name: Mutate every kernel crate (shard ${{ matrix.shard }})
+        run: |
+          export CARGO_INCREMENTAL=1
+          set +e
+          cargo mutants --shard "${{ matrix.shard }}/$SHARDS" --no-shuffle --in-place -vV \
+            --output "$RUNNER_TEMP/out"
+          code=$?
+          set -e
+          # As in the diff run: survivors (2) and timeouts (3) are for the judge.
+          case "$code" in 0|2|3) ;; *) exit "$code" ;; esac
+          test -f "$RUNNER_TEMP/out/mutants.out/mutants.json"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: mutants-full-${{ matrix.shard }}
+          path: ${{ runner.temp }}/out
+          if-no-files-found: error
+
+  mutants-full-judge:
+    name: Mutants, full run, judged against the ledger
+    needs: mutants-full
+    if: ${{ !cancelled() && github.event_name != 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Install cargo-mutants ${{ env.CARGO_MUTANTS_VERSION }}
+        run: cargo install --locked cargo-mutants --version "$CARGO_MUTANTS_VERSION"
+      - name: Every mutant, which the shards together must have tested
+        run: cargo mutants --list --json > "$RUNNER_TEMP/expected.json"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: mutants-full-*
+          path: ${{ runner.temp }}/shards
+      - name: Judge every survivor against the ledger, and every ledger entry against the run
+        run: |
+          shopt -s nullglob
+          outs=("$RUNNER_TEMP"/shards/mutants-full-*/mutants.out)
+          cargo run --locked -p geom-test --bin kernel-quality -- mutants --mode full \
+            --expected "$RUNNER_TEMP/expected.json" "${outs[@]}"
+
+  coverage:
+    name: Coverage (lines, and branches on the pinned nightly)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Install the pinned nightly with llvm-tools
+        run: |
+          rustup toolchain install "$RUST_NIGHTLY" --profile minimal --component llvm-tools-preview
+          rustc "+$RUST_NIGHTLY" -vV
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: coverage
+      - name: Install cargo-llvm-cov ${{ env.CARGO_LLVM_COV_VERSION }}
+        run: cargo install --locked cargo-llvm-cov --version "$CARGO_LLVM_COV_VERSION"
+      - name: The crates to measure
+        run: |
+          if [ "${{ github.event_name }}" = pull_request ]; then
+            test "$(git rev-list --parents -n 1 HEAD | wc -w)" -eq 3
+            git diff --no-ext-diff --no-renames --name-only HEAD^1 HEAD > "$RUNNER_TEMP/changed.txt"
+            echo "SCOPE=--changed $RUNNER_TEMP/changed.txt" >> "$GITHUB_ENV"
+          else
+            echo "SCOPE=--all" >> "$GITHUB_ENV"
+          fi
+      - name: Measure each crate with its own tests
+        env:
+          RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
+          # Optimised builds let rustc inline small functions into other crates, and llvm-cov then
+          # reads a function's coverage from whichever test binary it meets first, so a function
+          # used only by another binary is reported as never run; this keeps every function's
+          # coverage in its own crate (geom_test::coverage::check_log fails a run where it did not).
+          RUSTFLAGS: -Z cross-crate-inline-threshold=never
+        run: |
+          # The list comes from the judge itself, so it measures what it will judge.
+          RUSTUP_TOOLCHAIN="$RUST_TOOLCHAIN" RUSTFLAGS= cargo run --locked -p geom-test \
+            --bin kernel-quality -- affected $SCOPE > "$RUNNER_TEMP/crates.txt"
+          cat "$RUNNER_TEMP/crates.txt"
+          mkdir -p "$RUNNER_TEMP/cov"
+          while read -r crate; do
+            echo "::group::$crate"
+            cargo llvm-cov --locked -p "$crate" --release --branch \
+              --lcov --output-path "$RUNNER_TEMP/cov/$crate.lcov" 2>&1 | tee "$RUNNER_TEMP/cov/$crate.log"
+            echo "::endgroup::"
+          done < "$RUNNER_TEMP/crates.txt"
+      - name: Judge the coverage against 28.8's bars, and every coverage(off) mark against its proof
+        run: |
+          cargo run --locked -p geom-test --bin kernel-quality -- coverage $SCOPE \
+            --lcov-dir "$RUNNER_TEMP/cov"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: coverage
+          path: ${{ runner.temp }}/cov
+          if-no-files-found: ignore
+
+  miri-plan:
+    name: Miri plan
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      jobs: ${{ steps.plan.outputs.jobs }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      # One job per test target of every kernel crate with integration tests, and one for the unit
+      # tests of the others (geom_test::miri): a new test file runs under Miri the week it lands.
+      - name: One Miri job per kernel test suite
+        id: plan
+        run: |
+          jobs=$(cargo run --locked -p geom-test --bin kernel-quality -- miri-plan)
+          echo "$jobs"
+          echo "jobs=$jobs" >> "$GITHUB_OUTPUT"
+
+  miri:
+    name: Miri (${{ matrix.job.name }})
+    needs: miri-plan
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        job: ${{ fromJSON(needs.miri-plan.outputs.jobs) }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the pinned nightly with Miri
+        run: |
+          rustup toolchain install "$RUST_NIGHTLY" --profile minimal --component miri,rust-src
+          cargo "+$RUST_NIGHTLY" miri setup
+      - name: The tests under Miri
+        env:
+          RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
+          JOB: ${{ matrix.job.name }}
+          ARGS: ${{ matrix.job.args }}
+          # Miri's defaults stay: isolation from the host (no clock, no outside entropy, environment
+          # variables hidden), so a seeded test runs its fixed default seed; and extra rounding
+          # error on the float operations whose precision Rust does not guarantee, so a golden
+          # hash that rests on one of them fails here. One change: an operation isolation refuses
+          # returns an error with a warning instead of stopping the run, because proptest's
+          # failure persistence asks for the working directory (getcwd) before every property
+          # and carries on without it.
+          MIRIFLAGS: -Zmiri-isolation-error=warn-nobacktrace
+        run: |
+          # Filters for tests too slow to interpret. Miri ran geom-num's tests 3,200 to 4,300 times
+          # slower than an unoptimised native build (orient2d_at_the_extremes: 0.005 s native, 22 s
+          # under Miri; orient3d_at_the_extremes: 0.025 s and 103 s; i320::from_i64_is_exact:
+          # 0.056 s and 179 s), and a job has six hours. So each job keeps its fastest tests up to 3 s
+          # of native time, about 3.6 hours under Miri, and skips the rest: each skip names one test
+          # exactly, with its native time (an unoptimised build with three test threads, measured
+          # on 2026-10-22 when this table was made). The determinism job keeps all three of its
+          # tests, 4.1 s, because the golden hash is what Miri's extra rounding of unguaranteed
+          # float operations would break. A test this table does not name runs; when a new test
+          # makes a job overrun, add it here with its time.
+          skips=()
+          case "$JOB" in
+            "geom-num attack2_eft")
+              # Keeps 10 of 23 tests, 2.40 s in all.
+              skips=(
+                'split_at_and_around_two_pow_996' # 1.215 s
+                'split_overflow_frontier_below_omega' # 1.265 s
+                'split_subnormals_and_the_whole_range' # 3.374 s
+                'sums_against_the_oracle' # 16.738 s
+                'two_prod_acceptance_at_the_exact_pair_frontier' # 7.643 s
+                'two_prod_every_exponent_split_of_every_edge_sum' # 7.475 s
+                'two_prod_factor_at_two_pow_996_against_every_exponent' # 3.961 s
+                'two_prod_grid_coordinate_products' # 7.137 s
+                'two_prod_products_exactly_at_the_thresholds' # 1.481 s
+                'two_prod_products_straddling_every_threshold' # 8.748 s
+                'two_prod_random_over_the_whole_range' # 25.624 s
+                'two_prod_reported_infinity_has_the_sign_of_the_exact_error' # 3.543 s
+                'two_sum_knuth_steps_overflow_only_when_b_is_larger' # 1.211 s
+              )
+              ;;
+            "geom-num attack2_interval")
+              # Keeps 18 of 41 tests, 2.93 s in all.
+              skips=(
+                'eft_agreement::intervals_agree_with_the_error_free_pairs' # 8.399 s
+                'eft_agreement::intervals_agree_with_two_prod_below_the_underflow_threshold' # 6.313 s
+                'eft_agreement::intervals_agree_with_two_sum_at_the_overflow_frontier' # 1.845 s
+                'every_binade::products_and_quotients_at_every_binade_boundary' # 92.012 s
+                'every_binade::roots_at_every_binade' # 2.582 s
+                'every_binade::sums_at_every_binade_boundary' # 5.450 s
+                'expression_trees::every_node_holds_the_exact_value' # 3.124 s
+                'laws::every_operation_against_the_oracle' # 13.715 s
+                'laws::every_operation_is_monotone_for_inclusion' # 2.398 s
+                'laws::laws_hold_bit_for_bit' # 1.215 s
+                'norm::coincident_points_at_every_scale' # 2.221 s
+                'norm::points_one_step_apart_have_a_positive_certified_length' # 1.401 s
+                'oracle_checks::brackets_match_the_hardware_and_each_other' # 34.327 s
+                'oracle_checks::floors_match_bisection' # 3.171 s
+                'oracle_checks::sqrt_bracket_matches_math_sqrt' # 1.109 s
+                'roots::coincident_points_in_3d_at_every_scale' # 1.084 s
+                'roots::root_of_a_square_holds_the_magnitude' # 1.467 s
+                'roots::sqrt_hard_cases_next_to_midpoints' # 4.152 s
+                'roots::sqrt_nonneg_holds_the_root_of_every_non_negative_value' # 0.824 s
+                'tightness_claim::at_most_two_and_a_half_steps_of_the_exact_bound' # 1.087 s
+                'tightness_claim::at_most_two_steps_of_the_computed_bound' # 1.804 s
+                'tightness_claim::each_bound_is_the_first_or_second_double_beyond' # 0.694 s
+                'zeros_and_signs::every_operation_on_the_zero_grid' # 1.804 s
+              )
+              ;;
+            "geom-num attack2_plane")
+              # Keeps 6 of 16 tests, 0.43 s in all.
+              skips=(
+                'commits_move_at_most_half_a_step' # 15.036 s
+                'corner_tpis_reach_the_largest_w_x_and_classification_exactly' # 225.929 s
+                'near_corner_inputs_stay_within_the_corner_maxima' # 5.138 s
+                'near_pencils' # 12.232 s
+                'order_orientation_mirror_and_translation_laws' # 33.854 s
+                'planes_one_normal_unit_apart_meet_far_away' # 12.876 s
+                'planes_one_step_from_parallel' # 27.310 s
+                'side_of_tpi_against_both_oracles' # 18.109 s
+                'ties_round_half_to_even_at_every_scale_and_sign' # 10.297 s
+                'tpis_at_a_grid_point_classify_like_the_grid_point' # 12.431 s
+              )
+              ;;
+            "geom-num attack2_predicate")
+              # Keeps 13 of 25 tests, 2.78 s in all.
+              skips=(
+                'cocircular_points_in_general_position_at_large_scale' # 1.660 s
+                'cospherical_points_in_general_position_at_large_scale' # 3.867 s
+                'fast_and_total_paths_agree_exactly_on_the_grid' # 1.734 s
+                'grid_signs_obey_every_symmetry_by_both_paths' # 36.007 s
+                'insphere_where_the_i256_sum_overflows_off_the_grid' # 4.538 s
+                'insphere_with_coplanar_a_b_c_d_keeps_the_documented_identity' # 1.216 s
+                'off_the_grid_the_fast_path_is_exact_or_silent' # 4.087 s
+                'stack::every_predicate_runs_in_a_small_fixed_stack' # 16.336 s
+                'total_path_is_exact_at_every_extreme_configuration_in_2d' # 54.136 s
+                'total_path_is_exact_at_extreme_configurations_in_3d' # 16.831 s
+                'total_path_is_exact_for_any_i64_coordinates' # 2.467 s
+                'total_path_values_obey_every_symmetry_anywhere_in_i64' # 26.133 s
+              )
+              ;;
+            "geom-num attack_eft_interval")
+              # Keeps 23 of 53 tests, 2.13 s in all.
+              skips=(
+                'eft_attacks::expansions_of_many_doubles_are_exact' # 19.719 s
+                'eft_attacks::fast_two_sum_any_finite_pair' # 76.229 s
+                'eft_attacks::fast_two_sum_is_exact_when_exponents_are_ordered' # 3.431 s
+                'eft_attacks::fast_two_sum_never_gives_nan_on_finite_inputs' # 2.438 s
+                'eft_attacks::fast_two_sum_out_of_order_is_reported_or_exact' # 44.520 s
+                'eft_attacks::orient2d_by_expansion_is_exact_at_the_grid_extremes' # 3.016 s
+                'eft_attacks::split_outside_its_precondition_is_exact_or_reported' # 0.947 s
+                'eft_attacks::split_whole_contract_any_double' # 3.603 s
+                'eft_attacks::sums_in_the_subnormal_range_have_zero_error' # 5.312 s
+                'eft_attacks::two_prod_dense_at_both_exponent_limits' # 82.106 s
+                'eft_attacks::two_prod_inside_its_precondition' # 4.992 s
+                'eft_attacks::two_prod_is_exact_whenever_the_documented_product_range_holds' # 5.809 s
+                'eft_attacks::two_prod_whole_contract_any_pair' # 1.887 s
+                'eft_attacks::two_prod_whole_contract_large_factor' # 1.376 s
+                'eft_attacks::two_prod_whole_contract_near_underflow' # 1.964 s
+                'eft_attacks::two_sum_any_finite_pair' # 31.404 s
+                'eft_attacks::two_sum_near_overflow' # 13.631 s
+                'eft_attacks::two_sum_overflow_frontier_exhaustive' # 63.037 s
+                'interval_attacks::binade_boundaries_bit_for_bit' # 36.712 s
+                'interval_attacks::binary_operations_follow_the_documented_method_bit_for_bit' # 143.150 s
+                'interval_attacks::certain_sign_is_never_wrong_on_cancellation' # 1.276 s
+                'interval_attacks::chained_operations_hold_the_exact_value' # 9.237 s
+                'interval_attacks::distance_between_nearly_coincident_points_is_certified' # 10.738 s
+                'interval_attacks::edge_grid_every_operation_bit_for_bit' # 133.362 s
+                'interval_attacks::math_sqrt_is_correctly_rounded' # 3.903 s
+                'interval_attacks::oracle_dyadic_matches_num_rational' # 0.902 s
+                'interval_attacks::oracle_round_matches_the_hardware' # 42.706 s
+                'interval_attacks::sqrt_follows_the_documented_method_bit_for_bit' # 9.179 s
+                'interval_attacks::sqrt_nonneg_follows_the_documented_method' # 17.287 s
+                'interval_attacks::square_follows_the_documented_method' # 6.579 s
+              )
+              ;;
+            "geom-num attack_plane")
+              # Keeps 9 of 23 tests, 2.90 s in all.
+              skips=(
+                'collinear_points_on_long_lines' # 1.440 s
+                'extreme_tpis_within_budget' # 7.561 s
+                'half_steps_from_the_frame_to_beyond_i128' # 3.474 s
+                'near_ties_random' # 4.385 s
+                'pencils_and_prisms_are_degenerate' # 2.429 s
+                'plane_and_side_vs_independent_oracles' # 3.649 s
+                'plane_exhaustive_frame_corners_and_centres' # 8.358 s
+                'plane_exhaustive_unit_cube' # 3.112 s
+                'side_of_tpi_within_2_pow_minus_116_of_grid_planes' # 13.394 s
+                'to_grid_integral_points_with_huge_w_are_exact' # 2.461 s
+                'to_grid_within_2_pow_minus_116_of_a_half_step' # 8.426 s
+                'tpi_degenerate_configurations_at_the_extremes' # 65.849 s
+                'tpi_exhaustive_small_planes' # 288.763 s
+                'tpi_vs_cramer' # 42.388 s
+              )
+              ;;
+            "geom-num attack_predicate")
+              # Keeps 15 of 34 tests, 2.60 s in all.
+              skips=(
+                'any_two_equal_points_give_zero' # 0.699 s
+                'box_spheres_decide_insphere_at_full_scale' # 0.537 s
+                'four_points_on_a_tilted_circle_make_insphere_zero_for_every_e' # 2.597 s
+                'grid_corners_with_a_point_on_or_one_step_inside_their_sphere' # 9.721 s
+                'incircle_is_orientation_times_the_power_of_d' # 0.755 s
+                'incircle_obeys_every_symmetry' # 0.446 s
+                'insphere_is_orientation_times_the_power_of_e' # 1.723 s
+                'insphere_obeys_every_symmetry' # 2.793 s
+                'insphere_with_four_points_in_a_tilted_plane_is_orient3d_of_a_b_c_e_times_the_power_of_d' # 1.360 s
+                'insphere_with_four_points_in_a_tilted_plane_is_orient3d_times_incircle' # 0.524 s
+                'insphere_with_four_points_in_an_axis_plane_is_orient3d_of_a_b_c_e_times_the_power_of_d' # 0.702 s
+                'random_points_against_bareiss_and_predicates_c' # 0.907 s
+                'rectangle_circles_decide_incircle_at_full_scale' # 0.456 s
+                'small_grid_configurations_keep_their_signs_scaled_to_the_full_grid' # 69.899 s
+                'unimodular_generator_always_reaches_the_grid' # 13.647 s
+                'unimodular_tetrahedra_have_orient3d_plus_or_minus_one' # 1.931 s
+                'unimodular_triangles_have_orient2d_plus_or_minus_one' # 1.137 s
+                'wide_step_is_exact_on_extreme_and_random_points' # 3.152 s
+                'wide_step_is_exact_where_its_intermediates_peak' # 3.476 s
+              )
+              ;;
+            "geom-num attack_wide_tests")
+              # Keeps 31 of 70 tests, 2.94 s in all.
+              skips=(
+                'kernel_extremes::insphere_at_every_extreme_corner' # 9.565 s
+                'kernel_extremes::insphere_near_the_extremes' # 1.463 s
+                'native_i128::raw_limbs_match_i128' # 0.323 s
+                'sweeps::every_i256_limb_pattern_and_pair' # 4.058 s
+                'sweeps::every_wide2_limb_pattern_and_pair' # 0.308 s
+                'sweeps::every_wide3_limb_pattern_and_pair' # 5.931 s
+                'w16::binary_matches_oracle' # 1.271 s
+                'w16::constants_and_threshold_splits' # 8.512 s
+                'w16::multiplication_is_repeated_addition' # 0.449 s
+                'w16::narrow_agrees_with_wide' # 1.099 s
+                'w16::narrow_agrees_with_wide_at_the_threshold' # 1.033 s
+                'w16::products_at_the_threshold' # 0.603 s
+                'w16::small_operand_laws' # 0.258 s
+                'w16::sums_and_differences_at_the_limits' # 1.251 s
+                'w16::three_operand_laws' # 1.594 s
+                'w16::unary_matches_oracle' # 0.987 s
+                'w2::narrow_agrees_with_wide' # 0.259 s
+                'w2::three_operand_laws' # 0.917 s
+                'w2::unary_matches_oracle' # 0.252 s
+                'w3::binary_matches_oracle' # 0.255 s
+                'w3::constants_and_threshold_splits' # 0.301 s
+                'w3::narrow_agrees_with_wide_at_the_threshold' # 0.479 s
+                'w3::three_operand_laws' # 0.305 s
+                'w3::unary_matches_oracle' # 0.228 s
+                'w4::binary_matches_oracle' # 1.181 s
+                'w4::constants_and_threshold_splits' # 1.235 s
+                'w4::narrow_agrees_with_wide' # 0.286 s
+                'w4::narrow_agrees_with_wide_at_the_threshold' # 0.233 s
+                'w4::sums_and_differences_at_the_limits' # 0.594 s
+                'w4::three_operand_laws' # 0.387 s
+                'w4::unary_matches_oracle' # 0.312 s
+                'w7::binary_matches_oracle' # 0.350 s
+                'w7::constants_and_threshold_splits' # 1.349 s
+                'w7::multiplication_is_repeated_addition' # 0.374 s
+                'w7::narrow_agrees_with_wide' # 0.576 s
+                'w7::narrow_agrees_with_wide_at_the_threshold' # 0.319 s
+                'w7::products_at_the_threshold' # 0.258 s
+                'w7::three_operand_laws' # 0.777 s
+                'w7::unary_matches_oracle' # 0.774 s
+              )
+              ;;
+            "geom-num eft_interval")
+              # Keeps 20 of 41 tests, 2.46 s in all.
+              skips=(
+                'eft_tests::edge_pairs_are_exact' # 4.469 s
+                'eft_tests::fast_two_sum_is_exact_when_ordered' # 4.652 s
+                'eft_tests::powers_of_two_are_exact' # 0.827 s
+                'eft_tests::split_at_its_edges' # 0.834 s
+                'eft_tests::split_is_exact' # 1.147 s
+                'eft_tests::two_prod_at_the_edges_of_its_precondition' # 1.210 s
+                'eft_tests::two_prod_is_exact' # 2.929 s
+                'eft_tests::two_prod_of_grid_differences_is_exact' # 2.416 s
+                'eft_tests::two_sum_is_exact' # 4.138 s
+                'eft_tests::two_sum_survives_the_intermediate_overflow_of_knuths_form' # 3.197 s
+                'interval_tests::add_contains_the_exact_sum' # 7.834 s
+                'interval_tests::certain_sign_is_right_and_complete' # 1.179 s
+                'interval_tests::determinant_sign_is_sound' # 2.013 s
+                'interval_tests::div_contains_the_exact_quotient' # 4.099 s
+                'interval_tests::edge_intervals_every_operation' # 10.211 s
+                'interval_tests::edge_points_every_operation' # 14.470 s
+                'interval_tests::inclusion_is_monotone' # 0.663 s
+                'interval_tests::mul_contains_the_exact_product' # 5.090 s
+                'interval_tests::orient2d_sign_is_sound_on_grid_points' # 0.598 s
+                'interval_tests::sqrt_contains_the_exact_root' # 3.586 s
+                'interval_tests::sub_contains_the_exact_difference' # 6.460 s
+              )
+              ;;
+            "geom-num lib")
+              # Keeps 41 of 46 tests, 2.24 s in all.
+              skips=(
+                'interval::tests::mul_add_encloses_every_corner' # 30.595 s
+                'plane::tests::small_values_match_the_oracle_in_both_widths' # 9.334 s
+                'predicate::tests::fast_path_budgets_hold_at_the_extremes_in_2d' # 37.548 s
+                'predicate::tests::fast_path_budgets_hold_at_the_extremes_in_3d' # 737.228 s
+                'predicate::tests::total_path_is_exact_where_its_intermediates_peak_at_the_limits_of_i64' # 9.232 s
+              )
+              ;;
+            "geom-num plane")
+              # Keeps 8 of 19 tests, 2.41 s in all.
+              skips=(
+                'extreme_tpis' # 76.378 s
+                'far_points_match_oracle' # 2.313 s
+                'ties_match_oracle' # 2.168 s
+                'tpi_degenerate_exactly' # 1.954 s
+                'tpi_matches_oracle' # 16.899 s
+                'tpi_nearly_parallel' # 17.200 s
+                'tpi_on_a_fourth_plane' # 9.260 s
+                'tpi_on_a_grid_point' # 13.375 s
+                'tpi_permutation_laws' # 12.616 s
+                'tpi_structural_degeneracies' # 2.395 s
+                'tpi_translation_and_mirror_laws' # 3.451 s
+              )
+              ;;
+            "geom-num predicates")
+              # Keeps 16 of 19 tests, 2.01 s in all.
+              skips=(
+                'incircle_on_cocircular_points_and_one_step_off' # 2.188 s
+                'insphere_at_the_extremes' # 6.982 s
+                'insphere_on_cospherical_points_and_one_step_off' # 11.191 s
+              )
+              ;;
+            "geom-num wide")
+              # Keeps 40 of 138 tests, 2.99 s in all.
+              skips=(
+                'extreme_corners::incircle_overflow_is_reported_exactly_at_every_corner' # 0.189 s
+                'extreme_corners::orient3d_fits_wide2_at_every_corner' # 0.668 s
+                'i256::add_at_the_limits' # 0.211 s
+                'i256::add_matches_oracle' # 0.315 s
+                'i256::edge_values_exhaustively' # 0.934 s
+                'i256::incircle_at_extreme_coordinates' # 0.870 s
+                'i256::mul_at_the_overflow_threshold' # 0.238 s
+                'i256::mul_matches_oracle' # 0.381 s
+                'i256::mul_units' # 0.286 s
+                'i256::neg_matches_oracle' # 0.188 s
+                'i256::order_is_transitive' # 0.435 s
+                'i256::order_matches_oracle' # 0.280 s
+                'i256::order_of_close_values' # 0.196 s
+                'i256::orient3d_at_extreme_coordinates' # 1.377 s
+                'i256::products_at_every_split_of_the_threshold' # 0.387 s
+                'i256::products_of_extreme_coordinates' # 0.719 s
+                'i256::resize_to_every_width' # 0.196 s
+                'i256::ring_laws' # 0.425 s
+                'i256::signs_match_oracle' # 0.183 s
+                'i256::sub_at_the_limits' # 0.220 s
+                'i256::sub_matches_oracle' # 0.364 s
+                'i320::add_at_the_limits' # 0.214 s
+                'i320::add_matches_oracle' # 0.344 s
+                'i320::edge_values_exhaustively' # 1.948 s
+                'i320::incircle_at_extreme_coordinates' # 0.870 s
+                'i320::limbs_round_trip' # 0.178 s
+                'i320::mul_at_the_overflow_threshold' # 0.333 s
+                'i320::mul_matches_oracle' # 0.324 s
+                'i320::mul_units' # 0.254 s
+                'i320::neg_matches_oracle' # 0.198 s
+                'i320::order_is_transitive' # 0.584 s
+                'i320::order_matches_oracle' # 0.601 s
+                'i320::order_of_close_values' # 0.405 s
+                'i320::orient3d_at_extreme_coordinates' # 1.102 s
+                'i320::products_at_every_split_of_the_threshold' # 0.542 s
+                'i320::products_of_extreme_coordinates' # 0.746 s
+                'i320::resize_to_every_width' # 0.219 s
+                'i320::ring_laws' # 0.539 s
+                'i320::signs_match_oracle' # 0.181 s
+                'i320::sub_at_the_limits' # 0.227 s
+                'i320::sub_matches_oracle' # 0.350 s
+                'i384::add_at_the_limits' # 0.287 s
+                'i384::add_matches_oracle' # 0.688 s
+                'i384::edge_values_exhaustively' # 2.294 s
+                'i384::incircle_at_extreme_coordinates' # 1.105 s
+                'i384::mul_at_the_overflow_threshold' # 0.333 s
+                'i384::mul_matches_oracle' # 0.415 s
+                'i384::mul_units' # 0.321 s
+                'i384::neg_matches_oracle' # 0.306 s
+                'i384::order_is_transitive' # 0.845 s
+                'i384::order_matches_oracle' # 0.453 s
+                'i384::order_of_close_values' # 0.321 s
+                'i384::orient3d_at_extreme_coordinates' # 1.411 s
+                'i384::products_at_every_split_of_the_threshold' # 1.252 s
+                'i384::products_of_extreme_coordinates' # 1.165 s
+                'i384::resize_to_every_width' # 0.278 s
+                'i384::ring_laws' # 0.653 s
+                'i384::signs_match_oracle' # 0.219 s
+                'i384::sub_at_the_limits' # 0.240 s
+                'i384::sub_matches_oracle' # 0.675 s
+                'i384::to_i128_matches_oracle' # 0.277 s
+                'i512::add_at_the_limits' # 0.508 s
+                'i512::add_matches_oracle' # 0.688 s
+                'i512::edge_values_exhaustively' # 4.184 s
+                'i512::incircle_at_extreme_coordinates' # 1.224 s
+                'i512::mul_at_the_overflow_threshold' # 0.380 s
+                'i512::mul_matches_oracle' # 0.564 s
+                'i512::mul_units' # 0.448 s
+                'i512::neg_matches_oracle' # 0.276 s
+                'i512::order_is_transitive' # 0.682 s
+                'i512::order_matches_oracle' # 0.445 s
+                'i512::order_of_close_values' # 0.262 s
+                'i512::orient3d_at_extreme_coordinates' # 1.483 s
+                'i512::products_at_every_split_of_the_threshold' # 1.615 s
+                'i512::products_of_extreme_coordinates' # 0.865 s
+                'i512::resize_to_every_width' # 0.205 s
+                'i512::ring_laws' # 0.748 s
+                'i512::signs_match_oracle' # 0.271 s
+                'i512::sub_at_the_limits' # 0.260 s
+                'i512::sub_matches_oracle' # 0.529 s
+                'i512::to_i128_matches_oracle' # 0.218 s
+                'wide2::add_at_the_limits' # 0.222 s
+                'wide2::add_matches_oracle' # 0.263 s
+                'wide2::edge_values_exhaustively' # 0.283 s
+                'wide2::incircle_at_extreme_coordinates' # 0.814 s
+                'wide2::mul_at_the_overflow_threshold' # 0.201 s
+                'wide2::mul_matches_oracle' # 0.253 s
+                'wide2::mul_units' # 0.213 s
+                'wide2::neg_matches_oracle' # 0.191 s
+                'wide2::order_is_transitive' # 0.343 s
+                'wide2::order_matches_oracle' # 0.256 s
+                'wide2::order_of_close_values' # 0.226 s
+                'wide2::orient3d_at_extreme_coordinates' # 1.209 s
+                'wide2::products_of_extreme_coordinates' # 0.689 s
+                'wide2::resize_to_every_width' # 0.295 s
+                'wide2::ring_laws' # 0.376 s
+                'wide2::sub_at_the_limits' # 0.191 s
+                'wide2::sub_matches_oracle' # 0.282 s
+              )
+              ;;
+            *) ;;
+          esac
+          filter=()
+          for s in "${skips[@]}"; do filter+=(--skip "$s"); done
+          # shellcheck disable=SC2086 # ARGS holds several arguments, none with a space.
+          cargo miri test --locked $ARGS -- --exact "${filter[@]}"

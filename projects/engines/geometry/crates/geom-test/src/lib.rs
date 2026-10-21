@@ -22,8 +22,20 @@
 //! - [`licence`]: whether a licence expression is permissive, and the licence records each
 //!   development crate keeps in its header, which `tests/licences.rs` checks against `cargo tree`.
 //!
-//! Fixtures, reference implementations, oracle clients and the CI tools arrive with the pieces that
-//! need them. The sister development crates are `geom-fuzz` (fuzz harnesses), `geom-gen` (every
+//! Piece G21 adds the mutation and coverage gates of section 28.8, and the binary
+//! `kernel-quality` that runs them in CI (`.github/workflows/kernel-quality.yml`):
+//!
+//! - [`foundation`]: the foundation set, the kernel crates the gates cover, and their bars.
+//! - [`ledger`]: the quality ledger (`projects/engines/geometry/quality-ledger.json`): every
+//!   surviving mutant the kernel keeps, with why, and every `coverage(off)` mark, with its proof.
+//! - [`mutants`]: judges cargo-mutants' results against the ledger.
+//! - [`coverage`]: judges cargo-llvm-cov's LCOV data against the bars, and checks every
+//!   `coverage(off)` mark's proof.
+//! - [`rust_source`]: reads Rust source for them: test code, functions, branch sites and marks.
+//! - [`miri`]: the plan of the weekly Miri run, one job per kernel test suite.
+//!
+//! Fixtures, reference implementations, oracle clients and the other CI tools arrive with the
+//! pieces that need them. The sister development crates are `geom-fuzz` (fuzz harnesses), `geom-gen` (every
 //! generator whose output is committed) and `geom-bench` (benchmarks). `geom-bench` is built by
 //! piece G06 in its own worktree, so this piece leaves the benchmark to it.
 //!
@@ -64,11 +76,17 @@
 //! - MIT: `zmij`.
 #![forbid(unsafe_code)]
 
+pub mod coverage;
 pub mod deps;
+pub mod foundation;
 pub mod grid;
+pub mod ledger;
 pub mod licence;
+pub mod miri;
+pub mod mutants;
 pub mod prop;
 pub mod rng;
+pub mod rust_source;
 pub mod seed;
 
 pub use rng::{ByteSource, Entropy, SplitMix64};
