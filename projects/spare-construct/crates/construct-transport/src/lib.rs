@@ -22,6 +22,8 @@ pub mod util;
 
 pub mod analysis;
 pub mod assign;
+pub mod calibrate;
+pub mod datahub;
 pub mod demand;
 pub mod econ;
 pub mod edit;
