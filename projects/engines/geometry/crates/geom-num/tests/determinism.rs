@@ -1352,8 +1352,11 @@ fn math_call(r: &mut Recorder, index: u8, v: f64) {
     r.put_f64(v);
 }
 
+/// A one-argument maths function and the inputs it is sampled on.
+type Unary = (fn(f64) -> f64, Domain);
+
 fn maths(g: &mut Gen, r: &mut Recorder) {
-    let unary: [(fn(f64) -> f64, Domain); 18] = [
+    let unary: [Unary; 18] = [
         (math::sqrt, Domain::NonNegative),
         (math::sin, Domain::Angle),
         (math::cos, Domain::Angle),

@@ -57,7 +57,11 @@ type Pt3 = [i64; 3];
 /// Every property runs with this configuration. Failures are not persisted to a regressions file:
 /// this file is the only one the attack may write.
 fn cfg(cases: u32) -> Config {
-    Config { cases, failure_persistence: None, ..Config::default() }
+    Config {
+        cases,
+        failure_persistence: None,
+        ..Config::default()
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -150,12 +154,20 @@ fn pick(lo: i64, hi: i64, seed: u64) -> i64 {
 
 fn floor_div(a: i64, b: i64) -> i64 {
     let q = a / b;
-    if a % b != 0 && ((a < 0) != (b < 0)) { q - 1 } else { q }
+    if a % b != 0 && ((a < 0) != (b < 0)) {
+        q - 1
+    } else {
+        q
+    }
 }
 
 fn ceil_div(a: i64, b: i64) -> i64 {
     let q = a / b;
-    if a % b != 0 && ((a < 0) == (b < 0)) { q + 1 } else { q }
+    if a % b != 0 && ((a < 0) == (b < 0)) {
+        q + 1
+    } else {
+        q
+    }
 }
 
 /// The k for which r + k·s stays on the grid (every component within ±M). Contains 0 when r is on
@@ -445,7 +457,13 @@ fn insphere_by_geometry(p: [Pt3; 5]) -> Option<BigRational> {
 
 /// A corner of an axis-aligned box: bit `axis` of `k` picks the low or high side.
 fn corner<const D: usize>(bx: &[(i64, i64); D], k: usize) -> [i64; D] {
-    std::array::from_fn(|axis| if (k >> axis) & 1 == 0 { bx[axis].0 } else { bx[axis].1 })
+    std::array::from_fn(|axis| {
+        if (k >> axis) & 1 == 0 {
+            bx[axis].0
+        } else {
+            bx[axis].1
+        }
+    })
 }
 
 /// 4 (r² − |p − o|²) for the sphere (circle in 2D) through every corner of the box: o is the box's
@@ -500,7 +518,11 @@ fn near_sphere<const D: usize>(bx: &[(i64, i64); D], head: [i64; D], limit: i64)
 
 fn check_o2(p: [Pt2; 3]) -> BigInt {
     let v = orient2d_det(p);
-    assert_eq!(sh_orient2d(p), v, "test oracles disagree (orient2d) at {p:?}");
+    assert_eq!(
+        sh_orient2d(p),
+        v,
+        "test oracles disagree (orient2d) at {p:?}"
+    );
     assert_eq!(o2(p), sign_of(&v), "orient2d {p:?}: exact value {v}");
     // The documented largest value, 4M² (half the bounding square).
     assert!(
@@ -512,7 +534,11 @@ fn check_o2(p: [Pt2; 3]) -> BigInt {
 
 fn check_o3(p: [Pt3; 4]) -> BigInt {
     let v = orient3d_det(p);
-    assert_eq!(-sh_orient3d(p), v, "test oracles disagree (orient3d) at {p:?}");
+    assert_eq!(
+        -sh_orient3d(p),
+        v,
+        "test oracles disagree (orient3d) at {p:?}"
+    );
     assert_eq!(o3(p), sign_of(&v), "orient3d {p:?}: exact value {v}");
     // The documented largest value, 16M³ (the largest tetrahedron in the cube).
     assert!(
@@ -524,17 +550,31 @@ fn check_o3(p: [Pt3; 4]) -> BigInt {
 
 fn check_ic(p: [Pt2; 4]) -> BigInt {
     let v = incircle_det(p);
-    assert_eq!(sh_incircle(p), v, "test oracles disagree (incircle) at {p:?}");
+    assert_eq!(
+        sh_incircle(p),
+        v,
+        "test oracles disagree (incircle) at {p:?}"
+    );
     assert_eq!(ic(p), sign_of(&v), "incircle {p:?}: exact value {v}");
-    assert!(v.abs() < pow2(168), "incircle {p:?} exceeds the documented budget 2^168: {v}");
+    assert!(
+        v.abs() < pow2(168),
+        "incircle {p:?} exceeds the documented budget 2^168: {v}"
+    );
     v
 }
 
 fn check_ins(p: [Pt3; 5]) -> BigInt {
     let v = insphere_det(p);
-    assert_eq!(-sh_insphere(p), v, "test oracles disagree (insphere) at {p:?}");
+    assert_eq!(
+        -sh_insphere(p),
+        v,
+        "test oracles disagree (insphere) at {p:?}"
+    );
     assert_eq!(ins(p), sign_of(&v), "insphere {p:?}: exact value {v}");
-    assert!(v.abs() < pow2(212), "insphere {p:?} exceeds the documented budget 2^212: {v}");
+    assert!(
+        v.abs() < pow2(212),
+        "insphere {p:?} exceeds the documented budget 2^212: {v}"
+    );
     v
 }
 
@@ -891,7 +931,12 @@ fn fibonacci_slivers_at_full_scale() {
         assert_eq!(o2(mirrored), odd_if(Sign::Positive, odd));
     }
     // In 3D: the same triangle in the plane z = −M and d one step above it, far across the grid.
-    let q = [[-M, -M, -M], [-M + f60, -M + f59, -M], [-M + f59, -M + f58, -M], [M, M, 1 - M]];
+    let q = [
+        [-M, -M, -M],
+        [-M + f60, -M + f59, -M],
+        [-M + f59, -M + f58, -M],
+        [M, M, 1 - M],
+    ];
     assert_eq!(check_o3(q), big(-1));
     for (perm, odd) in permutations::<4>() {
         assert_eq!(o3(apply(q, &perm)), odd_if(Sign::Negative, odd));
@@ -900,12 +945,24 @@ fn fibonacci_slivers_at_full_scale() {
     for d in [[M, M], [-M, M], [0, 0], [M, -M], [-M + f59 + 1, -M + f58]] {
         let r = [p[0], p[1], p[2], d];
         let v = check_ic(r);
-        assert_eq!(BigRational::from_integer(v), incircle_by_geometry(r).unwrap());
+        assert_eq!(
+            BigRational::from_integer(v),
+            incircle_by_geometry(r).unwrap()
+        );
     }
-    for e in [[M, M, M], [-M, M, -M], [0, 0, 0], [M, -M, 1 - M], [-M + f59, -M + f58, M]] {
+    for e in [
+        [M, M, M],
+        [-M, M, -M],
+        [0, 0, 0],
+        [M, -M, 1 - M],
+        [-M + f59, -M + f58, M],
+    ] {
         let r = [q[0], q[1], q[2], q[3], e];
         let v = check_ins(r);
-        assert_eq!(BigRational::from_integer(v), insphere_by_geometry(r).unwrap());
+        assert_eq!(
+            BigRational::from_integer(v),
+            insphere_by_geometry(r).unwrap()
+        );
     }
 }
 
@@ -971,7 +1028,9 @@ proptest! {
 #[test]
 fn small_grid_configurations_keep_their_signs_scaled_to_the_full_grid() {
     let s2 = (M - 1) / 2; // 2·s2 + 1 = M.
-    let grid2: Vec<Pt2> = (-2i64..=2).flat_map(|x| (-2i64..=2).map(move |y| [x, y])).collect();
+    let grid2: Vec<Pt2> = (-2i64..=2)
+        .flat_map(|x| (-2i64..=2).map(move |y| [x, y]))
+        .collect();
     let shifts2: [Pt2; 3] = [[0, 0], [1, -1], [-1, 1]];
     let perms3 = permutations::<3>();
     for (n, set) in combos(grid2.len(), 3).iter().enumerate() {
@@ -982,7 +1041,11 @@ fn small_grid_configurations_keep_their_signs_scaled_to_the_full_grid() {
         for t in shifts2 {
             for r in [1, -1] {
                 let scaled = q.map(|p| [r * s2 * p[0] + t[0], r * s2 * p[1] + t[1]]);
-                assert_eq!(o2(scaled), odd_if(s0, *odd), "orient2d {small:?} scaled to {scaled:?}");
+                assert_eq!(
+                    o2(scaled),
+                    odd_if(s0, *odd),
+                    "orient2d {small:?} scaled to {scaled:?}"
+                );
             }
         }
     }
@@ -995,7 +1058,11 @@ fn small_grid_configurations_keep_their_signs_scaled_to_the_full_grid() {
         for t in shifts2 {
             for r in [1, -1] {
                 let scaled = q.map(|p| [r * s2 * p[0] + t[0], r * s2 * p[1] + t[1]]);
-                assert_eq!(ic(scaled), odd_if(s0, *odd), "incircle {small:?} scaled to {scaled:?}");
+                assert_eq!(
+                    ic(scaled),
+                    odd_if(s0, *odd),
+                    "incircle {small:?} scaled to {scaled:?}"
+                );
             }
         }
     }
@@ -1023,7 +1090,11 @@ fn small_grid_configurations_keep_their_signs_scaled_to_the_full_grid() {
             for r in [1, -1] {
                 let scaled = q.map(|p| std::array::from_fn(|k| r * s * p[k] + t[k]));
                 let expected = odd_if(odd_if(s0, *odd), r < 0);
-                assert_eq!(o3(scaled), expected, "orient3d {small:?} scaled to {scaled:?}");
+                assert_eq!(
+                    o3(scaled),
+                    expected,
+                    "orient3d {small:?} scaled to {scaled:?}"
+                );
             }
         }
     }
@@ -1037,7 +1108,11 @@ fn small_grid_configurations_keep_their_signs_scaled_to_the_full_grid() {
             for r in [1, -1] {
                 let scaled = q.map(|p| std::array::from_fn(|k| r * s * p[k] + t[k]));
                 let expected = odd_if(odd_if(s0, *odd), r < 0);
-                assert_eq!(ins(scaled), expected, "insphere {small:?} scaled to {scaled:?}");
+                assert_eq!(
+                    ins(scaled),
+                    expected,
+                    "insphere {small:?} scaled to {scaled:?}"
+                );
             }
         }
     }
@@ -1058,10 +1133,18 @@ fn check_all_laws<const D: usize, const N: usize>(
     k: i64,
 ) {
     for (perm, odd) in permutations::<N>() {
-        assert_eq!(f(apply(p, &perm)), odd_if(s, odd), "permutation {perm:?} of {p:?}");
+        assert_eq!(
+            f(apply(p, &perm)),
+            odd_if(s, odd),
+            "permutation {perm:?} of {p:?}"
+        );
     }
     let reflected = p.map(|q| q.map(|v| -v));
-    assert_eq!(f(reflected), odd_if(s, D % 2 == 1), "point reflection of {p:?}");
+    assert_eq!(
+        f(reflected),
+        odd_if(s, D % 2 == 1),
+        "point reflection of {p:?}"
+    );
     let turned = p.map(|q| {
         let mut r = q;
         r[0] = -q[1];
@@ -1070,7 +1153,11 @@ fn check_all_laws<const D: usize, const N: usize>(
     });
     assert_eq!(f(turned), s, "quarter turn of {p:?}");
     let cycled: [[i64; D]; N] = p.map(|q| std::array::from_fn(|axis| q[(axis + 1) % D]));
-    assert_eq!(f(cycled), odd_if(s, D % 2 == 0), "cyclic axis shift of {p:?}");
+    assert_eq!(
+        f(cycled),
+        odd_if(s, D % 2 == 0),
+        "cyclic axis shift of {p:?}"
+    );
     let largest = p.iter().flatten().map(|v| v.abs()).max().unwrap();
     if largest > 0 {
         let k = k.min(M / largest);
@@ -1082,7 +1169,11 @@ fn check_all_laws<const D: usize, const N: usize>(
         let t: [i64; D] = std::array::from_fn(|axis| {
             let lo = p.iter().map(|q| q[axis]).min().unwrap();
             let hi = p.iter().map(|q| q[axis]).max().unwrap();
-            if (side >> axis) & 1 == 0 { -M - lo } else { M - hi }
+            if (side >> axis) & 1 == 0 {
+                -M - lo
+            } else {
+                M - hi
+            }
         });
         let moved = p.map(|q| add(q, t));
         assert_eq!(f(moved), s, "translating {p:?} by {t:?}");
@@ -1189,7 +1280,11 @@ fn circle_points(l: i64) -> Vec<Pt2> {
     let l2 = i128::from(l) * i128::from(l);
     let norm2 = |q: &Pt2| i128::from(q[0]).pow(2) + i128::from(q[1]).pow(2);
     assert!(pts.iter().all(|q| norm2(q) == l2));
-    assert!(pts.len() >= 12, "radius {l}: only {} lattice points", pts.len());
+    assert!(
+        pts.len() >= 12,
+        "radius {l}: only {} lattice points",
+        pts.len()
+    );
     pts
 }
 
@@ -1264,26 +1359,35 @@ fn along_normal(o: Pt3, j: i64) -> Pt3 {
 
 /// The largest |component| of x·u + y·v over the given plane points.
 fn reach(pts: &[Pt2]) -> i64 {
-    pts.iter().map(|&q| tilt([0, 0, 0], q).iter().map(|v| v.abs()).max().unwrap()).max().unwrap()
+    pts.iter()
+        .map(|&q| tilt([0, 0, 0], q).iter().map(|v| v.abs()).max().unwrap())
+        .max()
+        .unwrap()
 }
 
 /// 2D quadruples within ±limit: random, or three corners of a rectangle with the fourth point
 /// within a step or two of their circle.
 fn quad(limit: i64) -> impl Strategy<Value = [Pt2; 4]> {
-    let c = move || {
-        prop_oneof![4 => -limit..=limit, 1 => -3i64..=3, 1 => Just(limit), 1 => Just(-limit)]
-    };
+    let c = move || prop_oneof![4 => -limit..=limit, 1 => -3i64..=3, 1 => Just(limit), 1 => Just(-limit)];
     prop_oneof![
         uniform::<_, 4>(uniform::<_, 2>(c())),
-        (uniform::<_, 2>((c(), c())), uniform::<_, 3>(0usize..4), c(), any::<Index>()).prop_map(
-            move |(axes, idx, x, which)| {
+        (
+            uniform::<_, 2>((c(), c())),
+            uniform::<_, 3>(0usize..4),
+            c(),
+            any::<Index>()
+        )
+            .prop_map(move |(axes, idx, x, which)| {
                 let bx = axes.map(|(u, v)| (u.min(v), u.max(v)));
                 let [a, b, c] = idx.map(|k| corner(&bx, k));
                 let near = near_sphere(&bx, [x, 0], limit);
-                let d = if near.is_empty() { [x, 0] } else { near[which.index(near.len())] };
+                let d = if near.is_empty() {
+                    [x, 0]
+                } else {
+                    near[which.index(near.len())]
+                };
                 [a, b, c, d]
-            }
-        ),
+            }),
     ]
 }
 
@@ -1468,7 +1572,10 @@ fn circle3_power_outside([a, b, c, d]: [Pt3; 4]) -> BigRational {
     let dot = |p: &[BigInt; 3], q: &[BigInt; 3]| -> BigInt { (0..3).map(|k| &p[k] * &q[k]).sum() };
     let (uu, vv, uv) = (dot(&u, &u), dot(&v, &v), dot(&u, &v));
     let den = BigInt::from(2) * (&uu * &vv - &uv * &uv);
-    assert!(!den.is_zero(), "circle3_power_outside needs a, b, c not collinear");
+    assert!(
+        !den.is_zero(),
+        "circle3_power_outside needs a, b, c not collinear"
+    );
     let alpha = &vv * (&uu - &uv);
     let beta = &uu * (&vv - &uv);
     let w_dot_o = BigRational::new(alpha * dot(&w, &u) + beta * dot(&w, &v), den);
@@ -1505,15 +1612,27 @@ fn degenerate_signs_follow_the_documented_rules_at_full_scale() {
     assert_eq!(o3([a, b, d, e]), Sign::Negative);
     assert_eq!(o3([a, o, d, e]), Sign::Negative);
     assert_eq!(ins([a, b, o, d, e]), Sign::Negative, "c between a and b");
-    assert_eq!(ins([a, o, b, d, e]), Sign::Positive, "c outside the segment");
+    assert_eq!(
+        ins([a, o, b, d, e]),
+        Sign::Positive,
+        "c outside the segment"
+    );
     check_ins([a, b, o, d, e]);
     check_ins([a, o, b, d, e]);
 
     let (a, b, c) = ([M, 0, 0], [0, M, 0], [-M, 0, 0]);
     let e = [0, 0, M];
     assert_eq!(o3([a, b, c, e]), Sign::Positive);
-    assert_eq!(ins([a, b, c, [0, 0, 0], e]), Sign::Negative, "d inside the circle");
-    assert_eq!(ins([a, b, c, [M, M, 0], e]), Sign::Positive, "d outside the circle");
+    assert_eq!(
+        ins([a, b, c, [0, 0, 0], e]),
+        Sign::Negative,
+        "d inside the circle"
+    );
+    assert_eq!(
+        ins([a, b, c, [M, M, 0], e]),
+        Sign::Positive,
+        "d outside the circle"
+    );
     assert_eq!(ins([a, b, c, [0, -M, 0], e]), Sign::Zero, "d on the circle");
     for d in [[0, 0, 0], [M, M, 0], [0, -M, 0]] {
         check_ins([a, b, c, d, e]);
@@ -1599,7 +1718,11 @@ proptest! {
 
 /// The value a `Wide` holds, read from its two's-complement limbs by `num-bigint`.
 fn wide_value<const L: usize>(w: &Wide<L>) -> BigInt {
-    let bytes: Vec<u8> = w.to_le_limbs().iter().flat_map(|limb| limb.to_le_bytes()).collect();
+    let bytes: Vec<u8> = w
+        .to_le_limbs()
+        .iter()
+        .flat_map(|limb| limb.to_le_bytes())
+        .collect();
     BigInt::from_signed_bytes_le(&bytes)
 }
 
@@ -1612,7 +1735,8 @@ fn wide_sum<const L: usize>(terms: &[(i128, i128)]) -> Option<Wide<L>> {
 }
 
 fn to_i128(v: BigInt) -> i128 {
-    v.to_i128().unwrap_or_else(|| panic!("an i128-stage value left i128: {v}"))
+    v.to_i128()
+        .unwrap_or_else(|| panic!("an i128-stage value left i128: {v}"))
 }
 
 /// incircle's documented (lift, 2 × 2 determinant) pairs relative to d, computed exactly.
@@ -1620,7 +1744,11 @@ fn incircle_terms(p: [Pt2; 4]) -> Vec<(i128, i128)> {
     let [a, b, c] = [0usize, 1, 2].map(|i| diff(p[i], p[3]));
     let lift = |u: &[BigInt; 2]| to_i128(&u[0] * &u[0] + &u[1] * &u[1]);
     let cross = |u: &[BigInt; 2], v: &[BigInt; 2]| to_i128(cross2(u, v));
-    vec![(lift(&a), cross(&b, &c)), (lift(&b), cross(&c, &a)), (lift(&c), cross(&a, &b))]
+    vec![
+        (lift(&a), cross(&b, &c)),
+        (lift(&b), cross(&c, &a)),
+        (lift(&c), cross(&a, &b)),
+    ]
 }
 
 /// insphere's documented (lift, signed 3 × 3 cofactor) pairs relative to e, computed exactly.
@@ -1644,26 +1772,53 @@ fn insphere_terms(p: [Pt3; 5]) -> Vec<(i128, i128)> {
 fn check_wide_step(terms: &[(i128, i128)], exact: &BigInt, bits: [u32; 3], what: &str) {
     let [x_bits, y_bits, product_bits] = bits;
     for &(x, y) in terms {
-        assert!(x.unsigned_abs() < 1u128 << x_bits, "{what}: lift {x} over 2^{x_bits}");
-        assert!(y.unsigned_abs() < 1u128 << y_bits, "{what}: determinant {y} over 2^{y_bits}");
+        assert!(
+            x.unsigned_abs() < 1u128 << x_bits,
+            "{what}: lift {x} over 2^{x_bits}"
+        );
+        assert!(
+            y.unsigned_abs() < 1u128 << y_bits,
+            "{what}: determinant {y} over 2^{y_bits}"
+        );
         let product = (BigInt::from(x) * y).abs();
-        assert!(product < pow2(product_bits), "{what}: product over 2^{product_bits}");
+        assert!(
+            product < pow2(product_bits),
+            "{what}: product over 2^{product_bits}"
+        );
     }
     let narrow = wide_sum::<4>(terms)
         .unwrap_or_else(|| panic!("{what}: I256 overflowed, the module would need its total path"));
-    assert_eq!(&wide_value(&narrow), exact, "{what}: I256 sum is not the determinant");
+    assert_eq!(
+        &wide_value(&narrow),
+        exact,
+        "{what}: I256 sum is not the determinant"
+    );
     let wide = wide_sum::<8>(terms).unwrap();
-    assert_eq!(&wide_value(&wide), exact, "{what}: I512 sum is not the determinant");
+    assert_eq!(
+        &wide_value(&wide),
+        exact,
+        "{what}: I512 sum is not the determinant"
+    );
 }
 
 fn check_wide_incircle(p: [Pt2; 4]) {
     let exact = check_ic(p);
-    check_wide_step(&incircle_terms(p), &exact, [83, 83, 166], &format!("incircle {p:?}"));
+    check_wide_step(
+        &incircle_terms(p),
+        &exact,
+        [83, 83, 166],
+        &format!("incircle {p:?}"),
+    );
 }
 
 fn check_wide_insphere(p: [Pt3; 5]) {
     let exact = check_ins(p);
-    check_wide_step(&insphere_terms(p), &exact, [84, 126, 210], &format!("insphere {p:?}"));
+    check_wide_step(
+        &insphere_terms(p),
+        &exact,
+        [84, 126, 210],
+        &format!("insphere {p:?}"),
+    );
 }
 
 /// The configurations that maximise each intermediate: for incircle d at a corner, a at the
@@ -1689,8 +1844,16 @@ fn wide_step_is_exact_where_its_intermediates_peak() {
     }
     let base3: [Pt3; 5] = [[M, M, M], [M, M, -M], [M, -M, M], [-M, M, M], [-M, -M, -M]];
     let peak = insphere_terms(base3);
-    assert_eq!(peak[0].0, 3 * i128::from(2 * M).pow(2), "the lift peaks at 3δ²");
-    assert_eq!(peak[0].1.abs(), 2 * i128::from(2 * M).pow(3), "the cofactor peaks at 2δ³");
+    assert_eq!(
+        peak[0].0,
+        3 * i128::from(2 * M).pow(2),
+        "the lift peaks at 3δ²"
+    );
+    assert_eq!(
+        peak[0].1.abs(),
+        2 * i128::from(2 * M).pow(3),
+        "the cofactor peaks at 2δ³"
+    );
     for (perm, _) in permutations::<5>() {
         for refl in 0..8 {
             let p = apply(base3, &perm).map(|q| mirror(q, refl));
@@ -1702,7 +1865,10 @@ fn wide_step_is_exact_where_its_intermediates_peak() {
     }
     // Every configuration on {−M, 0, M}², exactly.
     let level = [-M, 0, M];
-    let square: Vec<Pt2> = level.iter().flat_map(|&x| level.iter().map(move |&y| [x, y])).collect();
+    let square: Vec<Pt2> = level
+        .iter()
+        .flat_map(|&x| level.iter().map(move |&y| [x, y]))
+        .collect();
     let n = square.len();
     for code in 0..n.pow(4) {
         let p: [Pt2; 4] = std::array::from_fn(|k| square[code / n.pow(k as u32) % n]);
@@ -1712,7 +1878,15 @@ fn wide_step_is_exact_where_its_intermediates_peak() {
 
 /// A coordinate at an edge, one step inside it, at the centre, or anywhere. Boxed, like `coord`.
 fn edge_coord() -> BoxedStrategy<i64> {
-    prop_oneof![Just(-M), Just(0i64), Just(M), Just(M - 1), Just(1 - M), -M..=M].boxed()
+    prop_oneof![
+        Just(-M),
+        Just(0i64),
+        Just(M),
+        Just(M - 1),
+        Just(1 - M),
+        -M..=M
+    ]
+    .boxed()
 }
 
 proptest! {
@@ -1766,7 +1940,9 @@ const NOT_IN_PREDICATE_CODE: [&str; 14] = [
 #[test]
 fn predicate_code_has_no_native_arithmetic_so_no_build_profile_can_change_an_answer() {
     let source = include_str!("../src/predicate.rs");
-    let end = source.find("#[cfg(test)]").expect("predicate.rs keeps its tests in a test module");
+    let end = source
+        .find("#[cfg(test)]")
+        .expect("predicate.rs keeps its tests in a test module");
     let mut code_lines = 0;
     for (number, line) in source[..end].lines().enumerate() {
         let code = line.split("//").next().unwrap().replace("->", "");
@@ -1776,9 +1952,16 @@ fn predicate_code_has_no_native_arithmetic_so_no_build_profile_can_change_an_ans
         code_lines += 1;
         for token in NOT_IN_PREDICATE_CODE {
             let at = number + 1;
-            assert!(!code.contains(token), "predicate.rs line {at} has `{token}`: {}", line.trim());
+            assert!(
+                !code.contains(token),
+                "predicate.rs line {at} has `{token}`: {}",
+                line.trim()
+            );
         }
     }
     // The scan read the module's code, not an empty prefix of it.
-    assert!(code_lines > 150, "only {code_lines} lines of code before the test module");
+    assert!(
+        code_lines > 150,
+        "only {code_lines} lines of code before the test module"
+    );
 }

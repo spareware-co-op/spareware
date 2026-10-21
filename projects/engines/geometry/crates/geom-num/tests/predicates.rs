@@ -15,6 +15,15 @@
 //!
 //! and `conventions_*` pin those signs with geometric cases that use no determinant at all.
 
+// Helpers outside `#[test]` functions are not covered by clippy.toml's allow-*-in-tests settings;
+// clippy.toml says tests may use these, and a broken oracle must stop the test loudly.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::OnceLock;
 
@@ -110,7 +119,15 @@ fn incircle_value(p: [Pt2; 4]) -> BigInt {
 }
 
 fn insphere_value(p: [Pt3; 5]) -> BigInt {
-    -det(&p.map(|q| vec![q[0].into(), q[1].into(), q[2].into(), lift(&q), BigInt::one()]))
+    -det(&p.map(|q| {
+        vec![
+            q[0].into(),
+            q[1].into(),
+            q[2].into(),
+            lift(&q),
+            BigInt::one(),
+        ]
+    }))
 }
 
 fn sign_of(v: &BigInt) -> Sign {
@@ -162,12 +179,20 @@ fn pick(lo: i64, hi: i64, seed: u64) -> i64 {
 
 fn floor_div(a: i64, b: i64) -> i64 {
     let q = a / b;
-    if a % b != 0 && (a < 0) != (b < 0) { q - 1 } else { q }
+    if a % b != 0 && (a < 0) != (b < 0) {
+        q - 1
+    } else {
+        q
+    }
 }
 
 fn ceil_div(a: i64, b: i64) -> i64 {
     let q = a / b;
-    if a % b != 0 && (a < 0) == (b < 0) { q + 1 } else { q }
+    if a % b != 0 && (a < 0) == (b < 0) {
+        q + 1
+    } else {
+        q
+    }
 }
 
 /// The k for which p + k·w stays on the grid: an interval that always contains 0.
@@ -182,7 +207,11 @@ fn k_range<const D: usize>(p: [i64; D], w: [i64; D]) -> (i64, i64) {
         }
         // −M − pc ≤ k·wc ≤ M − pc.
         let (s, e) = (-M - pc, M - pc);
-        let (klo, khi) = if wc > 0 { (ceil_div(s, wc), floor_div(e, wc)) } else { (ceil_div(e, wc), floor_div(s, wc)) };
+        let (klo, khi) = if wc > 0 {
+            (ceil_div(s, wc), floor_div(e, wc))
+        } else {
+            (ceil_div(e, wc), floor_div(s, wc))
+        };
         lo = lo.max(klo);
         hi = hi.min(khi);
     }
@@ -207,7 +236,9 @@ fn on_line<const D: usize>(p: [i64; D], w: [i64; D], seed: u64) -> [i64; D] {
 
 /// Every way of moving one point one grid step along one axis and staying on the grid, as
 /// (index of the moved point, axis, moved configuration).
-fn one_step_moves<const D: usize, const N: usize>(p: [[i64; D]; N]) -> Vec<(usize, usize, [[i64; D]; N])> {
+fn one_step_moves<const D: usize, const N: usize>(
+    p: [[i64; D]; N],
+) -> Vec<(usize, usize, [[i64; D]; N])> {
     let mut out = Vec::new();
     for i in 0..N {
         for axis in 0..D {
@@ -224,14 +255,26 @@ fn one_step_moves<const D: usize, const N: usize>(p: [[i64; D]; N]) -> Vec<(usiz
 }
 
 /// The points other than the one at index `skip`, in order.
-fn others<const D: usize, const N: usize, const K: usize>(p: [[i64; D]; N], skip: usize) -> [[i64; D]; K] {
-    let rest: Vec<[i64; D]> = p.iter().enumerate().filter(|&(i, _)| i != skip).map(|(_, q)| *q).collect();
+fn others<const D: usize, const N: usize, const K: usize>(
+    p: [[i64; D]; N],
+    skip: usize,
+) -> [[i64; D]; K] {
+    let rest: Vec<[i64; D]> = p
+        .iter()
+        .enumerate()
+        .filter(|&(i, _)| i != skip)
+        .map(|(_, q)| *q)
+        .collect();
     rest.try_into().unwrap()
 }
 
 fn cross3(u: Pt3, v: Pt3) -> [i128; 3] {
     let [u, v] = [u, v].map(|w| w.map(i128::from));
-    [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]]
+    [
+        u[1] * v[2] - u[2] * v[1],
+        u[2] * v[0] - u[0] * v[2],
+        u[0] * v[1] - u[1] * v[0],
+    ]
 }
 
 fn sub3(a: Pt3, b: Pt3) -> Pt3 {
@@ -249,7 +292,11 @@ fn collinear3(p: [Pt3; 3]) -> bool {
 /// Antisymmetry under every transposition of two points; invariance under a grid translation that
 /// keeps every point in range (chosen by `seeds`); a sign flip under mirroring each axis and under
 /// swapping two axes (also a reflection).
-fn check_laws<const D: usize, const N: usize>(f: fn([[i64; D]; N]) -> Sign, p: [[i64; D]; N], seeds: [u64; D]) {
+fn check_laws<const D: usize, const N: usize>(
+    f: fn([[i64; D]; N]) -> Sign,
+    p: [[i64; D]; N],
+    seeds: [u64; D],
+) {
     let s = f(p);
     for i in 0..N {
         for j in i + 1..N {
@@ -320,7 +367,14 @@ fn sphere(l: i64) -> Vec<Pt3> {
                 if n > 0 && l % n == 0 {
                     let k = l / n;
                     let [x, y, z] = [k * 2 * p * s, k * 2 * q * s, k * (p * p + q * q - s * s)];
-                    for v in [[x, y, z], [x, z, y], [y, x, z], [y, z, x], [z, x, y], [z, y, x]] {
+                    for v in [
+                        [x, y, z],
+                        [x, z, y],
+                        [y, x, z],
+                        [y, z, x],
+                        [z, x, y],
+                        [z, y, x],
+                    ] {
                         set.insert(v);
                     }
                 }
@@ -368,9 +422,24 @@ fn lattice_circles_and_spheres_are_exact() {
         let l2 = i128::from(l) * i128::from(l);
         let c = &circles()[r];
         let s = &spheres()[r];
-        assert!(c.len() >= 12 && s.len() >= 48, "radius {l}: {} circle and {} sphere points", c.len(), s.len());
-        assert!(c.iter().all(|q| q.iter().map(|&v| i128::from(v) * i128::from(v)).sum::<i128>() == l2));
-        assert!(s.iter().all(|q| q.iter().map(|&v| i128::from(v) * i128::from(v)).sum::<i128>() == l2));
+        assert!(
+            c.len() >= 12 && s.len() >= 48,
+            "radius {l}: {} circle and {} sphere points",
+            c.len(),
+            s.len()
+        );
+        assert!(c.iter().all(|q| {
+            q.iter()
+                .map(|&v| i128::from(v) * i128::from(v))
+                .sum::<i128>()
+                == l2
+        }));
+        assert!(s.iter().all(|q| {
+            q.iter()
+                .map(|&v| i128::from(v) * i128::from(v))
+                .sum::<i128>()
+                == l2
+        }));
     }
 }
 
@@ -389,7 +458,8 @@ fn coord() -> impl Strategy<Value = i64> {
 
 /// A direction for a construction: tiny, middling, or spanning nearly the whole grid.
 fn direction<const D: usize>() -> impl Strategy<Value = [i64; D]> {
-    prop_oneof![Just(3i64), Just(1i64 << 20), Just(1i64 << 39)].prop_flat_map(|s| uniform::<_, D>(-s..=s))
+    prop_oneof![Just(3i64), Just(1i64 << 20), Just(1i64 << 39)]
+        .prop_flat_map(|s| uniform::<_, D>(-s..=s))
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -413,7 +483,10 @@ fn conventions_orient3d() {
     assert_eq!(with([0, 0, 1]), Sign::Positive);
     assert_eq!(with([5, -7, -1]), Sign::Negative);
     assert_eq!(with([5, -7, 0]), Sign::Zero);
-    assert_eq!(orient3d_of([[-M, -M, -M], [M, -M, -M], [-M, M, -M], [M, M, M]]), Sign::Positive);
+    assert_eq!(
+        orient3d_of([[-M, -M, -M], [M, -M, -M], [-M, M, -M], [M, M, M]]),
+        Sign::Positive
+    );
 }
 
 #[test]
@@ -425,11 +498,23 @@ fn conventions_incircle() {
     assert_eq!(with([3, 3]), Sign::Negative);
     assert_eq!(with([2, 2]), Sign::Zero);
     // Clockwise a, b, c flip the answer.
-    assert_eq!(incircle_of([abc[0], abc[2], abc[1], [1, 1]]), Sign::Negative);
+    assert_eq!(
+        incircle_of([abc[0], abc[2], abc[1], [1, 1]]),
+        Sign::Negative
+    );
     // At full scale: three corners of the grid counter-clockwise, centre inside, fourth corner on.
-    assert_eq!(incircle_of([[-M, -M], [M, -M], [M, M], [0, 0]]), Sign::Positive);
-    assert_eq!(incircle_of([[-M, -M], [M, -M], [M, M], [-M, M]]), Sign::Zero);
-    assert_eq!(incircle_of([[-M, -M], [M, -M], [0, 0], [M, M]]), Sign::Negative);
+    assert_eq!(
+        incircle_of([[-M, -M], [M, -M], [M, M], [0, 0]]),
+        Sign::Positive
+    );
+    assert_eq!(
+        incircle_of([[-M, -M], [M, -M], [M, M], [-M, M]]),
+        Sign::Zero
+    );
+    assert_eq!(
+        incircle_of([[-M, -M], [M, -M], [0, 0], [M, M]]),
+        Sign::Negative
+    );
 }
 
 #[test]
@@ -442,21 +527,35 @@ fn conventions_insphere() {
     assert_eq!(with([3, 3, 3]), Sign::Negative);
     assert_eq!(with([2, 2, 0]), Sign::Zero);
     // Negative orientation flips the answer.
-    assert_eq!(insphere_of([abcd[1], abcd[0], abcd[2], abcd[3], [1, 1, 1]]), Sign::Negative);
+    assert_eq!(
+        insphere_of([abcd[1], abcd[0], abcd[2], abcd[3], [1, 1, 1]]),
+        Sign::Negative
+    );
     // At full scale: a positively oriented regular tetrahedron on the grid's corners, centre inside.
     let t = [[-M, -M, -M], [M, M, -M], [-M, M, M], [M, -M, M]];
     assert_eq!(orient3d_of(t), Sign::Positive);
-    assert_eq!(insphere_of([t[0], t[1], t[2], t[3], [0, 0, 0]]), Sign::Positive);
+    assert_eq!(
+        insphere_of([t[0], t[1], t[2], t[3], [0, 0, 0]]),
+        Sign::Positive
+    );
     assert_eq!(insphere_of([t[0], t[1], t[2], t[3], [M, M, M]]), Sign::Zero);
 }
 
 #[test]
 fn orient3d_of_a_flat_triangle_is_orient2d() {
     // Points in a plane z = z0, d above it: orient3d = (d.z − z0) · orient2d, so the signs agree.
-    for p in [[[0, 0], [1, 0], [0, 1]], [[0, 0], [0, 1], [1, 0]], [[-M, -M], [M, M], [3, 3]], [[M, -M], [-M, M], [M, M]]] {
+    for p in [
+        [[0, 0], [1, 0], [0, 1]],
+        [[0, 0], [0, 1], [1, 0]],
+        [[-M, -M], [M, M], [3, 3]],
+        [[M, -M], [-M, M], [M, M]],
+    ] {
         for (z0, d) in [(0, [0, 0, 1]), (-M, [M, -M, M]), (M - 1, [-M, 5, M])] {
             let lifted = [p[0], p[1], p[2]].map(|[x, y]| [x, y, z0]);
-            assert_eq!(orient3d_of([lifted[0], lifted[1], lifted[2], d]), orient2d_of(p));
+            assert_eq!(
+                orient3d_of([lifted[0], lifted[1], lifted[2], d]),
+                orient2d_of(p)
+            );
         }
     }
 }
@@ -465,20 +564,35 @@ fn orient3d_of_a_flat_triangle_is_orient2d() {
 fn degenerate_inputs_mean_what_the_docs_say() {
     // incircle with collinear distinct a, b, c: zero exactly when d is on their line.
     let line = [[0, 0], [1, 1], [3, 3]];
-    assert_eq!(checked_incircle([line[0], line[1], line[2], [-M, -M]]), BigInt::zero());
+    assert_eq!(
+        checked_incircle([line[0], line[1], line[2], [-M, -M]]),
+        BigInt::zero()
+    );
     assert!(!checked_incircle([line[0], line[1], line[2], [0, 1]]).is_zero());
     // Two of a, b, c coinciding: zero for every d.
     for d in [[0, 1], [M, -M], [7, 7]] {
-        assert_eq!(checked_incircle([[2, 3], [2, 3], [9, -4], d]), BigInt::zero());
+        assert_eq!(
+            checked_incircle([[2, 3], [2, 3], [9, -4], d]),
+            BigInt::zero()
+        );
     }
     // insphere with coplanar a, b, c, d not on one circle: zero exactly when e is in their plane.
     let flat = [[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 2, 0]];
-    assert_eq!(checked_insphere([flat[0], flat[1], flat[2], flat[3], [5, 7, 0]]), BigInt::zero());
+    assert_eq!(
+        checked_insphere([flat[0], flat[1], flat[2], flat[3], [5, 7, 0]]),
+        BigInt::zero()
+    );
     assert!(!checked_insphere([flat[0], flat[1], flat[2], flat[3], [5, 7, 1]]).is_zero());
     // Coplanar and on one circle (a square), or on one line: zero for every e.
     for e in [[1, 1, 5], [-M, M, -M], [3, 3, 0]] {
-        assert_eq!(checked_insphere([[0, 0, 0], [2, 0, 0], [0, 2, 0], [2, 2, 0], e]), BigInt::zero());
-        assert_eq!(checked_insphere([[0, 0, 0], [1, 1, 1], [2, 2, 2], [-5, -5, -5], e]), BigInt::zero());
+        assert_eq!(
+            checked_insphere([[0, 0, 0], [2, 0, 0], [0, 2, 0], [2, 2, 0], e]),
+            BigInt::zero()
+        );
+        assert_eq!(
+            checked_insphere([[0, 0, 0], [1, 1, 1], [2, 2, 2], [-5, -5, -5], e]),
+            BigInt::zero()
+        );
     }
 }
 
@@ -499,7 +613,9 @@ fn digits(mut code: usize, base: usize, n: usize) -> Vec<usize> {
 
 /// The corners of the grid's square or cube: every coordinate ±M.
 fn corners<const D: usize>() -> Vec<[i64; D]> {
-    (0..1usize << D).map(|k| std::array::from_fn(|axis| if k >> axis & 1 == 0 { -M } else { M })).collect()
+    (0..1usize << D)
+        .map(|k| std::array::from_fn(|axis| if k >> axis & 1 == 0 { -M } else { M }))
+        .collect()
 }
 
 /// Every point whose coordinates are in {−M, 0, M}: corners, edge midpoints, centre.
@@ -530,8 +646,14 @@ fn sweep<const D: usize, const N: usize>(
         let v = if sorted.windows(2).any(|w| w[0] == w[1]) {
             BigInt::zero()
         } else {
-            let base = by_choice.entry(sorted).or_insert_with(|| value(sorted.map(|i| set[i]))).clone();
-            let inversions = (0..N).flat_map(|i| (i + 1..N).map(move |j| (i, j))).filter(|&(i, j)| idx[i] > idx[j]).count();
+            let base = by_choice
+                .entry(sorted)
+                .or_insert_with(|| value(sorted.map(|i| set[i])))
+                .clone();
+            let inversions = (0..N)
+                .flat_map(|i| (i + 1..N).map(move |j| (i, j)))
+                .filter(|&(i, j)| idx[i] > idx[j])
+                .count();
             if inversions % 2 == 1 { -base } else { base }
         };
         let p = idx.map(|i| set[i]);
@@ -553,7 +675,10 @@ fn orient2d_at_the_extremes() {
     assert_eq!(seen.len(), 3);
     // δ² = 4M²: half the bounding square, the largest triangle in a square.
     assert_eq!(max, BigInt::from(4) * m_pow(2));
-    assert_eq!(checked_orient2d([[-M, -M], [M, -M], [M, M]]), BigInt::from(4) * m_pow(2));
+    assert_eq!(
+        checked_orient2d([[-M, -M], [M, -M], [M, M]]),
+        BigInt::from(4) * m_pow(2)
+    );
 }
 
 #[test]
@@ -578,7 +703,10 @@ fn incircle_at_the_extremes() {
     assert_eq!(seen.len(), 3);
     // 8M⁴ = δ⁴ / 2: three corners and the centre.
     assert_eq!(max, BigInt::from(8) * m_pow(4));
-    assert_eq!(checked_incircle([[-M, -M], [M, -M], [M, M], [0, 0]]), BigInt::from(8) * m_pow(4));
+    assert_eq!(
+        checked_incircle([[-M, -M], [M, -M], [M, M], [0, 0]]),
+        BigInt::from(8) * m_pow(4)
+    );
 }
 
 #[test]
@@ -595,7 +723,10 @@ fn insphere_at_the_extremes() {
     // 48M⁵ = 3δ⁵ / 2: a regular tetrahedron on alternate corners and e at the centre.
     assert_eq!(max, BigInt::from(48) * m_pow(5));
     let t = [[-M, -M, -M], [M, M, -M], [-M, M, M], [M, -M, M]];
-    assert_eq!(checked_insphere([t[0], t[1], t[2], t[3], [0, 0, 0]]), BigInt::from(48) * m_pow(5));
+    assert_eq!(
+        checked_insphere([t[0], t[1], t[2], t[3], [0, 0, 0]]),
+        BigInt::from(48) * m_pow(5)
+    );
 }
 
 // ---------------------------------------------------------------------------------------------

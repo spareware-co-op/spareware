@@ -43,7 +43,12 @@
 
 // Helpers outside `#[test]` functions are not covered by clippy.toml's allow-*-in-tests settings;
 // clippy.toml says tests may use these, and a broken oracle must stop the test loudly.
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
 
 use proptest::test_runner::{Config, TestCaseError};
 
@@ -52,7 +57,10 @@ type TestResult = Result<(), TestCaseError>;
 
 /// A property's configuration: `cases` random cases.
 fn config(cases: u32) -> Config {
-    Config { cases, ..Config::default() }
+    Config {
+        cases,
+        ..Config::default()
+    }
 }
 
 /// Runs a check outside `proptest!`, failing the test loudly.
@@ -71,7 +79,10 @@ struct Lcg(u64);
 impl Lcg {
     /// The next 64 pseudo-random bits.
     fn next(&mut self) -> u64 {
-        self.0 = self.0.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+        self.0 = self
+            .0
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
         let x = self.0;
         (x ^ (x >> 33)).wrapping_mul(0xff51_afd7_ed55_8ccd) ^ (x >> 29)
     }
@@ -108,7 +119,10 @@ mod fp {
 
     /// A normal double from its sign, unbiased exponent (−1022 ..= 1023) and fraction bits.
     pub fn make(negative: bool, exponent: i32, fraction: u64) -> f64 {
-        assert!((-1022..=1023).contains(&exponent), "exponent {exponent} is not normal");
+        assert!(
+            (-1022..=1023).contains(&exponent),
+            "exponent {exponent} is not normal"
+        );
         let biased = u64::try_from(exponent + 1023).unwrap();
         f64::from_bits((u64::from(negative) << 63) | (biased << 52) | (fraction & FRAC))
     }
@@ -116,7 +130,11 @@ mod fp {
     /// 2^k, for every k a double holds (−1074 ..= 1023).
     pub fn pow2(k: i32) -> f64 {
         assert!((-1074..=1023).contains(&k), "2^{k} is not a double");
-        if k >= -1022 { make(false, k, 0) } else { f64::from_bits(1u64 << (k + 1074)) }
+        if k >= -1022 {
+            make(false, k, 0)
+        } else {
+            f64::from_bits(1u64 << (k + 1074))
+        }
     }
 
     /// The next double up; +∞ stays, −∞ goes to −Ω.
@@ -151,7 +169,10 @@ mod fp {
 
     /// The unbiased exponent e of a normal double: 2^e ≤ |x| < 2^(e + 1).
     pub fn exponent(x: f64) -> i32 {
-        assert!(x.is_normal(), "exponent({x:e}) of a double that is not normal");
+        assert!(
+            x.is_normal(),
+            "exponent({x:e}) of a double that is not normal"
+        );
         format_exponent(x)
     }
 }
@@ -175,7 +196,10 @@ mod dy {
         fn norm(m: BigInt, e: i64) -> Dy {
             match m.trailing_zeros() {
                 None => Dy { m, e: 0 },
-                Some(tz) => Dy { m: m >> tz, e: e + i64::try_from(tz).unwrap() },
+                Some(tz) => Dy {
+                    m: m >> tz,
+                    e: e + i64::try_from(tz).unwrap(),
+                },
             }
         }
 
@@ -185,8 +209,11 @@ mod dy {
             let bits = x.to_bits();
             let biased = i64::try_from((bits >> 52) & 0x7ff).unwrap();
             let fraction = bits & ((1u64 << 52) - 1);
-            let (significand, e) =
-                if biased == 0 { (fraction, -1074) } else { (fraction | (1 << 52), biased - 1075) };
+            let (significand, e) = if biased == 0 {
+                (fraction, -1074)
+            } else {
+                (fraction | (1 << 52), biased - 1075)
+            };
             let m = BigInt::from(significand);
             Dy::norm(if bits >> 63 == 1 { -m } else { m }, e)
         }
@@ -222,7 +249,11 @@ mod dy {
 
         /// The position of the highest set bit, if nonzero: 2^that ≤ |value| < 2^(that + 1).
         pub fn highest_bit(&self) -> Option<i64> {
-            if self.m.is_zero() { None } else { Some(self.e + i64::try_from(self.m.bits()).unwrap() - 1) }
+            if self.m.is_zero() {
+                None
+            } else {
+                Some(self.e + i64::try_from(self.m.bits()).unwrap() - 1)
+            }
         }
 
         /// The number of significant bits.
@@ -260,7 +291,11 @@ mod rn {
     /// 2^k exactly.
     pub fn pow2(k: i64) -> BigRational {
         let p = BigInt::one() << k.unsigned_abs();
-        if k >= 0 { BigRational::from_integer(p) } else { BigRational::new_raw(BigInt::one(), p) }
+        if k >= 0 {
+            BigRational::from_integer(p)
+        } else {
+            BigRational::new_raw(BigInt::one(), p)
+        }
     }
 
     /// The sign of a rational.
@@ -283,7 +318,8 @@ mod rn {
         let negative = q.is_negative();
         let a = q.abs();
         // 2^(e − 1) < a < 2^(e + 1) from the bit lengths; then fix e so that 2^e ≤ a < 2^(e + 1).
-        let mut e = i64::try_from(a.numer().bits()).unwrap() - i64::try_from(a.denom().bits()).unwrap();
+        let mut e =
+            i64::try_from(a.numer().bits()).unwrap() - i64::try_from(a.denom().bits()).unwrap();
         if a < pow2(e) {
             e -= 1;
         }
@@ -291,7 +327,8 @@ mod rn {
         let quantum = (e - 52).max(-1074);
         let scaled = &a * pow2(-quantum);
         let k = scaled.floor().to_integer();
-        let twice_rest = (scaled - BigRational::from_integer(k.clone())) * BigRational::from_integer(BigInt::from(2));
+        let twice_rest = (scaled - BigRational::from_integer(k.clone()))
+            * BigRational::from_integer(BigInt::from(2));
         let k = match twice_rest.cmp(&BigRational::one()) {
             Ordering::Greater => k + 1u32,
             Ordering::Equal if k.is_odd() => k + 1u32,
@@ -321,7 +358,11 @@ mod rn {
         let mut n = q.numer().clone();
         let d = q.denom().clone();
         let mut j = d.bits() - 1;
-        assert_eq!(d, BigInt::one() << j, "the denominator of a double is a power of two");
+        assert_eq!(
+            d,
+            BigInt::one() << j,
+            "the denominator of a double is a power of two"
+        );
         if j % 2 == 1 {
             n <<= 1u32;
             j += 1;
@@ -340,8 +381,8 @@ mod rn {
 
 /// Doubles and intervals weighted towards where bugs live.
 mod strat {
-    use super::fp::{self, FRAC};
     use super::OMEGA;
+    use super::fp::{self, FRAC};
     use geom_num::interval::Interval;
     use proptest::prelude::*;
 
@@ -362,17 +403,24 @@ mod strat {
 
     /// A normal double with its exponent in `range`, either sign.
     pub fn normal(range: std::ops::RangeInclusive<i32>) -> BoxedStrategy<f64> {
-        (any::<bool>(), range, fraction()).prop_map(|(s, e, f)| fp::make(s, e, f)).boxed()
+        (any::<bool>(), range, fraction())
+            .prop_map(|(s, e, f)| fp::make(s, e, f))
+            .boxed()
     }
 
     /// A nonzero subnormal double, either sign.
     pub fn subnormal() -> BoxedStrategy<f64> {
-        (any::<bool>(), 1u64..(1 << 52)).prop_map(|(s, f)| f64::from_bits((u64::from(s) << 63) | f)).boxed()
+        (any::<bool>(), 1u64..(1 << 52))
+            .prop_map(|(s, f)| f64::from_bits((u64::from(s) << 63) | f))
+            .boxed()
     }
 
     /// Any finite double, uniform over bit patterns.
     pub fn any_finite() -> BoxedStrategy<f64> {
-        any::<u64>().prop_map(f64::from_bits).prop_filter("finite", |x| x.is_finite()).boxed()
+        any::<u64>()
+            .prop_map(f64::from_bits)
+            .prop_filter("finite", |x| x.is_finite())
+            .boxed()
     }
 
     /// Fixed doubles at the edges of the format and of the kernel's ranges, both signs.
@@ -437,7 +485,11 @@ mod strat {
 
     /// The interval between two doubles, in either order.
     pub fn hull(x: f64, y: f64) -> Interval {
-        if x <= y { Interval::new(x, y).unwrap() } else { Interval::new(y, x).unwrap() }
+        if x <= y {
+            Interval::new(x, y).unwrap()
+        } else {
+            Interval::new(y, x).unwrap()
+        }
     }
 
     /// An interval whose bounds come from `values`: two of them, a point, or a few steps wide.
@@ -551,8 +603,16 @@ mod eft_attacks {
         if !(a.is_finite() && b.is_finite()) {
             return Verdict::SilentlyWrong;
         }
-        let want = if product { Dy::of(a).mul(&Dy::of(b)) } else { Dy::of(a).add(&Dy::of(b)) };
-        if Dy::of(hi).add(&Dy::of(lo)) == want { Verdict::Exact } else { Verdict::SilentlyWrong }
+        let want = if product {
+            Dy::of(a).mul(&Dy::of(b))
+        } else {
+            Dy::of(a).add(&Dy::of(b))
+        };
+        if Dy::of(hi).add(&Dy::of(lo)) == want {
+            Verdict::Exact
+        } else {
+            Verdict::SilentlyWrong
+        }
     }
 
     /// Knuth's six operations exactly as published, with no overflow guard.
@@ -570,12 +630,51 @@ mod eft_attacks {
         let (s, e) = f(a, b);
         let exact = Dy::of(a).add(&Dy::of(b));
         let rounded = rn::round(&exact.rational());
-        prop_assert!(s == rounded, "{}({:e}, {:e}): s = {:e}, but the sum rounds to {:e}", name, a, b, s, rounded);
-        prop_assert_eq!(s.to_bits(), (a + b).to_bits(), "{}({:e}, {:e}): s is not the IEEE sum", name, a, b);
+        prop_assert!(
+            s == rounded,
+            "{}({:e}, {:e}): s = {:e}, but the sum rounds to {:e}",
+            name,
+            a,
+            b,
+            s,
+            rounded
+        );
+        prop_assert_eq!(
+            s.to_bits(),
+            (a + b).to_bits(),
+            "{}({:e}, {:e}): s is not the IEEE sum",
+            name,
+            a,
+            b
+        );
         if rounded.is_finite() {
-            prop_assert!(e.is_finite(), "{}({:e}, {:e}): error {:e} is not finite", name, a, b, e);
-            prop_assert_eq!(Dy::of(s).add(&Dy::of(e)), exact, "{}({:e}, {:e}) = ({:e}, {:e}) is not exact", name, a, b, s, e);
-            prop_assert!(s + e == s, "{}({:e}, {:e}) = ({:e}, {:e}) overlaps", name, a, b, s, e);
+            prop_assert!(
+                e.is_finite(),
+                "{}({:e}, {:e}): error {:e} is not finite",
+                name,
+                a,
+                b,
+                e
+            );
+            prop_assert_eq!(
+                Dy::of(s).add(&Dy::of(e)),
+                exact,
+                "{}({:e}, {:e}) = ({:e}, {:e}) is not exact",
+                name,
+                a,
+                b,
+                s,
+                e
+            );
+            prop_assert!(
+                s + e == s,
+                "{}({:e}, {:e}) = ({:e}, {:e}) overlaps",
+                name,
+                a,
+                b,
+                s,
+                e
+            );
         } else {
             prop_assert!(
                 e.is_infinite() && e.is_sign_positive() != s.is_sign_positive(),
@@ -605,7 +704,9 @@ mod eft_attacks {
         if a == 0.0 || b == 0.0 {
             return true;
         }
-        a.is_normal() && b.is_normal() && (-970..=1021).contains(&(fp::exponent(a) + fp::exponent(b)))
+        a.is_normal()
+            && b.is_normal()
+            && (-970..=1021).contains(&(fp::exponent(a) + fp::exponent(b)))
     }
 
     /// `two_prod` on any finite pair, against its whole contract. An exact pair exists exactly when the
@@ -617,8 +718,20 @@ mod eft_attacks {
     /// (symmetry, oddness) hold either way.
     fn check_two_prod_total(a: f64, b: f64) -> TestResult {
         let (p, e) = eft::two_prod(a, b);
-        prop_assert_eq!(p.to_bits(), (a * b).to_bits(), "two_prod({:e}, {:e}): p is not the IEEE product", a, b);
-        prop_assert!(!e.is_nan(), "two_prod({:e}, {:e}) = ({:e}, NaN) from finite inputs", a, b, p);
+        prop_assert_eq!(
+            p.to_bits(),
+            (a * b).to_bits(),
+            "two_prod({:e}, {:e}): p is not the IEEE product",
+            a,
+            b
+        );
+        prop_assert!(
+            !e.is_nan(),
+            "two_prod({:e}, {:e}) = ({:e}, NaN) from finite inputs",
+            a,
+            b,
+            p
+        );
         let exact = Dy::of(a).mul(&Dy::of(b));
         if !p.is_finite() {
             prop_assert!(
@@ -630,9 +743,31 @@ mod eft_attacks {
                 e
             );
         } else if exact.lowest_bit().is_none_or(|bit| bit >= -1074) {
-            prop_assert!(e.is_finite(), "two_prod({:e}, {:e}) = ({:e}, {:e}): an exact pair exists but was not given", a, b, p, e);
-            prop_assert_eq!(Dy::of(p).add(&Dy::of(e)), exact, "two_prod({:e}, {:e}) = ({:e}, {:e}) is not exact", a, b, p, e);
-            prop_assert!(p + e == p, "two_prod({:e}, {:e}) = ({:e}, {:e}) overlaps", a, b, p, e);
+            prop_assert!(
+                e.is_finite(),
+                "two_prod({:e}, {:e}) = ({:e}, {:e}): an exact pair exists but was not given",
+                a,
+                b,
+                p,
+                e
+            );
+            prop_assert_eq!(
+                Dy::of(p).add(&Dy::of(e)),
+                exact,
+                "two_prod({:e}, {:e}) = ({:e}, {:e}) is not exact",
+                a,
+                b,
+                p,
+                e
+            );
+            prop_assert!(
+                p + e == p,
+                "two_prod({:e}, {:e}) = ({:e}, {:e}) overlaps",
+                a,
+                b,
+                p,
+                e
+            );
         } else {
             let error = exact.add(&Dy::of(-p));
             let got = if e == f64::INFINITY {
@@ -653,9 +788,19 @@ mod eft_attacks {
             );
         }
         let (p2, e2) = eft::two_prod(b, a);
-        prop_assert!(p2.to_bits() == p.to_bits() && e2 == e, "two_prod is not symmetric at ({:e}, {:e})", a, b);
+        prop_assert!(
+            p2.to_bits() == p.to_bits() && e2 == e,
+            "two_prod is not symmetric at ({:e}, {:e})",
+            a,
+            b
+        );
         let (p3, e3) = eft::two_prod(-a, b);
-        prop_assert!(p3 == -p && e3 == -e, "two_prod is not odd at ({:e}, {:e})", a, b);
+        prop_assert!(
+            p3 == -p && e3 == -e,
+            "two_prod is not odd at ({:e}, {:e})",
+            a,
+            b
+        );
         Ok(())
     }
 
@@ -673,18 +818,52 @@ mod eft_attacks {
                 hi,
                 lo
             );
-            prop_assert!(a.abs() > fp::pow2(1023) * (2.0 - fp::pow2(-24)), "split({:e}) reported although its high half fits", a);
+            prop_assert!(
+                a.abs() > fp::pow2(1023) * (2.0 - fp::pow2(-24)),
+                "split({:e}) reported although its high half fits",
+                a
+            );
             return Ok(());
         }
         let (dh, dl) = (Dy::of(hi), Dy::of(lo));
-        prop_assert_eq!(dh.add(&dl), Dy::of(a), "split({:e}) = ({:e}, {:e}) does not add up", a, hi, lo);
-        prop_assert!(dh.significant_bits() <= 26 && dl.significant_bits() <= 26, "split({:e}) = ({:e}, {:e}): a half has more than 26 bits", a, hi, lo);
-        prop_assert!(hi.abs() >= lo.abs(), "split({:e}) = ({:e}, {:e}): |hi| < |lo|", a, hi, lo);
+        prop_assert_eq!(
+            dh.add(&dl),
+            Dy::of(a),
+            "split({:e}) = ({:e}, {:e}) does not add up",
+            a,
+            hi,
+            lo
+        );
+        prop_assert!(
+            dh.significant_bits() <= 26 && dl.significant_bits() <= 26,
+            "split({:e}) = ({:e}, {:e}): a half has more than 26 bits",
+            a,
+            hi,
+            lo
+        );
+        prop_assert!(
+            hi.abs() >= lo.abs(),
+            "split({:e}) = ({:e}, {:e}): |hi| < |lo|",
+            a,
+            hi,
+            lo
+        );
         if let Some(ea) = Dy::of(a).highest_bit() {
             for half in [&dh, &dl] {
-                prop_assert!(half.lowest_bit().is_none_or(|b| b >= ea - 52), "split({:e}) = ({:e}, {:e}): a half is not a multiple of u_a", a, hi, lo);
+                prop_assert!(
+                    half.lowest_bit().is_none_or(|b| b >= ea - 52),
+                    "split({:e}) = ({:e}, {:e}): a half is not a multiple of u_a",
+                    a,
+                    hi,
+                    lo
+                );
             }
-            prop_assert!(dh.highest_bit().is_some_and(|t| t <= ea + 1), "split({:e}): |hi| = {:e} exceeds 2^(e_a + 1)", a, hi);
+            prop_assert!(
+                dh.highest_bit().is_some_and(|t| t <= ea + 1),
+                "split({:e}): |hi| = {:e} exceeds 2^(e_a + 1)",
+                a,
+                hi
+            );
         }
         Ok(())
     }
@@ -694,15 +873,58 @@ mod eft_attacks {
     fn check_two_prod(a: f64, b: f64) -> TestResult {
         let (p, e) = eft::two_prod(a, b);
         let exact = Dy::of(a).mul(&Dy::of(b));
-        prop_assert_eq!(p.to_bits(), (a * b).to_bits(), "two_prod({:e}, {:e}): p is not the IEEE product", a, b);
-        prop_assert!(p == rn::round(&exact.rational()), "two_prod({:e}, {:e}): p = {:e} is not the rounded product", a, b, p);
-        prop_assert!(e.is_finite(), "two_prod({:e}, {:e}): error {:e} is not finite", a, b, e);
-        prop_assert_eq!(Dy::of(p).add(&Dy::of(e)), exact, "two_prod({:e}, {:e}) = ({:e}, {:e}) is not exact", a, b, p, e);
-        prop_assert!(p + e == p, "two_prod({:e}, {:e}) = ({:e}, {:e}) overlaps", a, b, p, e);
+        prop_assert_eq!(
+            p.to_bits(),
+            (a * b).to_bits(),
+            "two_prod({:e}, {:e}): p is not the IEEE product",
+            a,
+            b
+        );
+        prop_assert!(
+            p == rn::round(&exact.rational()),
+            "two_prod({:e}, {:e}): p = {:e} is not the rounded product",
+            a,
+            b,
+            p
+        );
+        prop_assert!(
+            e.is_finite(),
+            "two_prod({:e}, {:e}): error {:e} is not finite",
+            a,
+            b,
+            e
+        );
+        prop_assert_eq!(
+            Dy::of(p).add(&Dy::of(e)),
+            exact,
+            "two_prod({:e}, {:e}) = ({:e}, {:e}) is not exact",
+            a,
+            b,
+            p,
+            e
+        );
+        prop_assert!(
+            p + e == p,
+            "two_prod({:e}, {:e}) = ({:e}, {:e}) overlaps",
+            a,
+            b,
+            p,
+            e
+        );
         let (p2, e2) = eft::two_prod(b, a);
-        prop_assert!(p2.to_bits() == p.to_bits() && e2 == e, "two_prod is not symmetric at ({:e}, {:e})", a, b);
+        prop_assert!(
+            p2.to_bits() == p.to_bits() && e2 == e,
+            "two_prod is not symmetric at ({:e}, {:e})",
+            a,
+            b
+        );
         let (p3, e3) = eft::two_prod(-a, b);
-        prop_assert!(p3 == -p && e3 == -e, "two_prod is not odd at ({:e}, {:e})", a, b);
+        prop_assert!(
+            p3 == -p && e3 == -e,
+            "two_prod is not odd at ({:e}, {:e})",
+            a,
+            b
+        );
         Ok(())
     }
 
@@ -1008,13 +1230,25 @@ mod eft_attacks {
         let (mut fallbacks, mut overflows) = (0u32, 0u32);
         for &t in &tops {
             for &x in &smalls {
-                for (a, b) in [(t, x), (x, t), (t, -x), (-x, t), (-t, x), (x, -t), (-t, -x), (-x, -t)] {
+                for (a, b) in [
+                    (t, x),
+                    (x, t),
+                    (t, -x),
+                    (-x, t),
+                    (-t, x),
+                    (x, -t),
+                    (-t, -x),
+                    (-x, -t),
+                ] {
                     if (a + b).is_finite() {
                         if !knuth_unguarded(a, b).1.is_finite() {
                             fallbacks += 1;
                             // The proof's key step: an intermediate overflows only when |b| > |a|,
                             // which is what makes the fallback fast_two_sum(b, a) exact.
-                            assert!(b.abs() > a.abs(), "Knuth's form overflowed with |a| ≥ |b|: ({a:e}, {b:e})");
+                            assert!(
+                                b.abs() > a.abs(),
+                                "Knuth's form overflowed with |a| ≥ |b|: ({a:e}, {b:e})"
+                            );
                         }
                     } else {
                         overflows += 1;
@@ -1023,15 +1257,30 @@ mod eft_attacks {
                 }
             }
         }
-        assert!(fallbacks >= 50, "the sweep reached the overflow guard only {fallbacks} times");
-        assert!(overflows > 100, "the sweep overflowed only {overflows} times");
+        assert!(
+            fallbacks >= 50,
+            "the sweep reached the overflow guard only {fallbacks} times"
+        );
+        assert!(
+            overflows > 100,
+            "the sweep overflowed only {overflows} times"
+        );
     }
 
     /// `two_prod` at both limits of its exponent condition, for every exponent of `a`, with
     /// significand patterns that make both splits round up a binade (all ones), carry, or not.
     #[test]
     fn two_prod_dense_at_both_exponent_limits() {
-        let patterns = [0u64, fp::FRAC, 1, 0x5_5555_5555_5555, 0xA_AAAA_AAAA_AAAA, 1 << 51, fp::FRAC >> 1, fp::FRAC ^ (1 << 26)];
+        let patterns = [
+            0u64,
+            fp::FRAC,
+            1,
+            0x5_5555_5555_5555,
+            0xA_AAAA_AAAA_AAAA,
+            1 << 51,
+            fp::FRAC >> 1,
+            fp::FRAC ^ (1 << 26),
+        ];
         let mut rng = Lcg(0x0171);
         let mut checked = 0u32;
         for ea in -1022..=995 {
@@ -1047,7 +1296,10 @@ mod eft_attacks {
                         checked += 1;
                     }
                 }
-                let (a, b) = (fp::make(rng.sign(), ea, rng.fraction()), fp::make(rng.sign(), eb, rng.fraction()));
+                let (a, b) = (
+                    fp::make(rng.sign(), ea, rng.fraction()),
+                    fp::make(rng.sign(), eb, rng.fraction()),
+                );
                 run(check_two_prod(a, b));
             }
         }
@@ -1063,21 +1315,52 @@ mod eft_attacks {
         let mut rng = Lcg(0x5917);
         for ea in -1022..=995 {
             for k in 0..24 {
-                let fraction = if k < 6 { [0, fp::FRAC, 1, fp::FRAC >> 26, (fp::FRAC >> 25) << 25, 1 << 25][k] } else { rng.fraction() };
+                let fraction = if k < 6 {
+                    [
+                        0,
+                        fp::FRAC,
+                        1,
+                        fp::FRAC >> 26,
+                        (fp::FRAC >> 25) << 25,
+                        1 << 25,
+                    ][k]
+                } else {
+                    rng.fraction()
+                };
                 let a = fp::make(rng.sign(), ea, fraction);
                 let (hi, lo) = eft::split(a);
                 let (dh, dl) = (Dy::of(hi), Dy::of(lo));
-                assert_eq!(dh.add(&dl), Dy::of(a), "split({a:e}) = ({hi:e}, {lo:e}) does not add up");
-                assert!(dh.significant_bits() <= 26 && dl.significant_bits() <= 26, "split({a:e}) = ({hi:e}, {lo:e}): a half has more than 26 bits");
-                assert!(hi.abs() >= lo.abs(), "split({a:e}) = ({hi:e}, {lo:e}): |hi| < |lo|");
+                assert_eq!(
+                    dh.add(&dl),
+                    Dy::of(a),
+                    "split({a:e}) = ({hi:e}, {lo:e}) does not add up"
+                );
+                assert!(
+                    dh.significant_bits() <= 26 && dl.significant_bits() <= 26,
+                    "split({a:e}) = ({hi:e}, {lo:e}): a half has more than 26 bits"
+                );
+                assert!(
+                    hi.abs() >= lo.abs(),
+                    "split({a:e}) = ({hi:e}, {lo:e}): |hi| < |lo|"
+                );
                 let u = i64::from(ea) - 52;
                 for half in [&dh, &dl] {
-                    assert!(half.lowest_bit().is_none_or(|b| b >= u), "split({a:e}) = ({hi:e}, {lo:e}): a half is not a multiple of u_a");
+                    assert!(
+                        half.lowest_bit().is_none_or(|b| b >= u),
+                        "split({a:e}) = ({hi:e}, {lo:e}): a half is not a multiple of u_a"
+                    );
                 }
                 let top = dh.highest_bit().unwrap();
-                assert!(top <= i64::from(ea) + 1, "split({a:e}): |hi| = {hi:e} exceeds 2^(e_a + 1)");
+                assert!(
+                    top <= i64::from(ea) + 1,
+                    "split({a:e}): |hi| = {hi:e} exceeds 2^(e_a + 1)"
+                );
                 if top == i64::from(ea) + 1 {
-                    assert_eq!(dh.significant_bits(), 1, "split({a:e}): hi = {hi:e} reached 2^(e_a + 1) but is not a single bit");
+                    assert_eq!(
+                        dh.significant_bits(),
+                        1,
+                        "split({a:e}): hi = {hi:e} reached 2^(e_a + 1) but is not a single bit"
+                    );
                 }
             }
         }
@@ -1109,8 +1392,15 @@ mod eft_attacks {
                     continue;
                 }
                 let (dh, dl) = (Dy::of(hi), Dy::of(lo));
-                assert_eq!(dh.add(&dl), Dy::of(a), "split({a:e}) = ({hi:e}, {lo:e}) is finite and wrong");
-                assert!(dh.significant_bits() <= 26 && dl.significant_bits() <= 26, "split({a:e}) = ({hi:e}, {lo:e}): a half has more than 26 bits");
+                assert_eq!(
+                    dh.add(&dl),
+                    Dy::of(a),
+                    "split({a:e}) = ({hi:e}, {lo:e}) is finite and wrong"
+                );
+                assert!(
+                    dh.significant_bits() <= 26 && dl.significant_bits() <= 26,
+                    "split({a:e}) = ({hi:e}, {lo:e}): a half has more than 26 bits"
+                );
                 if a.abs() >= fp::pow2(996) {
                     exact_large += 1;
                 }
@@ -1127,11 +1417,19 @@ mod eft_attacks {
         let mut rng = Lcg(0xfa57);
         let mut wrong = Vec::new();
         let mut total = 0u32;
-        let mut cases = vec![(1.0, fp::pow2(60)), (f64::from_bits(1), 1.0), (-1.0, 3.0 * fp::pow2(53)), (1.0e-300, 1.0e300)];
+        let mut cases = vec![
+            (1.0, fp::pow2(60)),
+            (f64::from_bits(1), 1.0),
+            (-1.0, 3.0 * fp::pow2(53)),
+            (1.0e-300, 1.0e300),
+        ];
         for _ in 0..20_000 {
             let eb = rng.range(-1022, 1023);
             let ea = rng.range(-1022, eb);
-            let (a, b) = (fp::make(rng.sign(), ea, rng.fraction()), fp::make(rng.sign(), eb, rng.fraction()));
+            let (a, b) = (
+                fp::make(rng.sign(), ea, rng.fraction()),
+                fp::make(rng.sign(), eb, rng.fraction()),
+            );
             if a.abs() < b.abs() {
                 cases.push((a, b));
             }
@@ -1171,7 +1469,10 @@ mod eft_attacks {
                     continue;
                 }
                 let ea = rng.range(lo, hi);
-                let (a, b) = (fp::make(rng.sign(), ea, rng.fraction()), fp::make(rng.sign(), sum - ea, rng.fraction()));
+                let (a, b) = (
+                    fp::make(rng.sign(), ea, rng.fraction()),
+                    fp::make(rng.sign(), sum - ea, rng.fraction()),
+                );
                 run(check_two_prod_total(a, b));
                 let (p, e) = eft::two_prod(a, b);
                 total += 1;
@@ -1200,7 +1501,10 @@ mod eft_attacks {
         let mut wrong = Vec::new();
         let mut total = 0u32;
         for _ in 0..20_000 {
-            let a = f64::from_bits((u64::from(rng.sign()) << 63) | ((rng.next() & fp::FRAC) >> (rng.next() % 52)).max(1));
+            let a = f64::from_bits(
+                (u64::from(rng.sign()) << 63)
+                    | ((rng.next() & fp::FRAC) >> (rng.next() % 52)).max(1),
+            );
             let b = fp::make(rng.sign(), rng.range(-1022, 995), rng.fraction());
             run(check_two_prod_total(a, b));
             let (p, e) = eft::two_prod(a, b);
@@ -1227,12 +1531,24 @@ mod eft_attacks {
         for _ in 0..20_000 {
             let ea = rng.range(996, 1023);
             let a = fp::make(rng.sign(), ea, rng.fraction());
-            let b = if rng.next() % 16 == 0 { 0.0 } else { fp::make(rng.sign(), rng.range(-1022, 1021 - ea), rng.fraction()) };
+            let b = if rng.next() % 16 == 0 {
+                0.0
+            } else {
+                fp::make(rng.sign(), rng.range(-1022, 1021 - ea), rng.fraction())
+            };
             run(check_two_prod_total(a, b));
             let (p, e) = eft::two_prod(a, b);
-            assert_ne!(verdict(a, b, p, e, true), Verdict::SilentlyWrong, "two_prod({a:e}, {b:e}) = ({p:e}, {e:e}) is finite and wrong");
+            assert_ne!(
+                verdict(a, b, p, e, true),
+                Verdict::SilentlyWrong,
+                "two_prod({a:e}, {b:e}) = ({p:e}, {e:e}) is finite and wrong"
+            );
             let (p, e) = eft::two_prod(b, a);
-            assert_ne!(verdict(b, a, p, e, true), Verdict::SilentlyWrong, "two_prod({b:e}, {a:e}) = ({p:e}, {e:e}) is finite and wrong");
+            assert_ne!(
+                verdict(b, a, p, e, true),
+                Verdict::SilentlyWrong,
+                "two_prod({b:e}, {a:e}) = ({p:e}, {e:e}) is finite and wrong"
+            );
         }
     }
 
@@ -1244,24 +1560,44 @@ mod eft_attacks {
         for sum in 1022..=1990 {
             for _ in 0..16 {
                 let ea = rng.range(sum - 995, 995);
-                let (a, b) = (fp::make(rng.sign(), ea, rng.fraction()), fp::make(rng.sign(), sum - ea, rng.fraction()));
+                let (a, b) = (
+                    fp::make(rng.sign(), ea, rng.fraction()),
+                    fp::make(rng.sign(), sum - ea, rng.fraction()),
+                );
                 run(check_two_prod_total(a, b));
                 let (p, e) = eft::two_prod(a, b);
-                assert_ne!(verdict(a, b, p, e, true), Verdict::SilentlyWrong, "two_prod({a:e}, {b:e}) = ({p:e}, {e:e}) is finite and wrong");
+                assert_ne!(
+                    verdict(a, b, p, e, true),
+                    Verdict::SilentlyWrong,
+                    "two_prod({a:e}, {b:e}) = ({p:e}, {e:e}) is finite and wrong"
+                );
             }
         }
         // All-ones significands at e_a + e_b = 1022: both splits round up and a_hi · b_hi = 2^1024.
         let x = fp::down(fp::pow2(512));
         run(check_two_prod_total(x, x));
         let (p, e) = eft::two_prod(x, x);
-        assert_ne!(verdict(x, x, p, e, true), Verdict::SilentlyWrong, "two_prod({x:e}, {x:e}) = ({p:e}, {e:e})");
+        assert_ne!(
+            verdict(x, x, p, e, true),
+            Verdict::SilentlyWrong,
+            "two_prod({x:e}, {x:e}) = ({p:e}, {e:e})"
+        );
     }
 
     /// A non-finite input is always reported: no function returns two finite outputs for it.
     #[test]
     fn non_finite_inputs_are_always_reported() {
         let bad = [f64::INFINITY, f64::NEG_INFINITY, f64::NAN];
-        let good = [0.0, -0.0, 1.0, -3.5, f64::from_bits(1), OMEGA, -OMEGA, fp::pow2(-600)];
+        let good = [
+            0.0,
+            -0.0,
+            1.0,
+            -3.5,
+            f64::from_bits(1),
+            OMEGA,
+            -OMEGA,
+            fp::pow2(-600),
+        ];
         for &x in &bad {
             let (h, l) = eft::split(x);
             assert!(!(h.is_finite() && l.is_finite()), "split({x}) = ({h}, {l})");
@@ -1273,7 +1609,10 @@ mod eft_attacks {
                         ("two_prod", eft::two_prod),
                     ] {
                         let (h, l) = f(a, b);
-                        assert!(!(h.is_finite() && l.is_finite()), "{name}({a}, {b}) = ({h}, {l}): a non-finite input gave a finite pair");
+                        assert!(
+                            !(h.is_finite() && l.is_finite()),
+                            "{name}({a}, {b}) = ({h}, {l}): a non-finite input gave a finite pair"
+                        );
                     }
                 }
             }
@@ -1292,21 +1631,38 @@ mod eft_attacks {
                 nans.push(format!("split({a:e}) = ({h:e}, {l:e})"));
             }
         }
-        for (a, b) in [(big, fp::pow2(-100)), (0.0, OMEGA), (OMEGA, OMEGA), (OMEGA, 1.0), (fp::pow2(-1000), big)] {
+        for (a, b) in [
+            (big, fp::pow2(-100)),
+            (0.0, OMEGA),
+            (OMEGA, OMEGA),
+            (OMEGA, 1.0),
+            (fp::pow2(-1000), big),
+        ] {
             let (p, e) = eft::two_prod(a, b);
             if p.is_nan() || e.is_nan() {
                 nans.push(format!("two_prod({a:e}, {b:e}) = ({p:e}, {e:e})"));
             }
         }
-        for (a, b) in [(OMEGA, OMEGA), (-OMEGA, -OMEGA), (OMEGA, fp::pow2(970)), (-3.0 * fp::pow2(970), OMEGA)] {
-            for (name, f) in [("two_sum", eft::two_sum as fn(f64, f64) -> (f64, f64)), ("fast_two_sum", eft::fast_two_sum)] {
+        for (a, b) in [
+            (OMEGA, OMEGA),
+            (-OMEGA, -OMEGA),
+            (OMEGA, fp::pow2(970)),
+            (-3.0 * fp::pow2(970), OMEGA),
+        ] {
+            for (name, f) in [
+                ("two_sum", eft::two_sum as fn(f64, f64) -> (f64, f64)),
+                ("fast_two_sum", eft::fast_two_sum),
+            ] {
                 let (s, e) = f(a, b);
                 if s.is_nan() || e.is_nan() {
                     nans.push(format!("{name}({a:e}, {b:e}) = ({s:e}, {e:e})"));
                 }
             }
         }
-        assert!(nans.is_empty(), "finite inputs produced NaN, against lib.rs's crate invariant: {nans:#?}");
+        assert!(
+            nans.is_empty(),
+            "finite inputs produced NaN, against lib.rs's crate invariant: {nans:#?}"
+        );
     }
 
     /// On infinite inputs (NaN aside) the second part is NaN only where IEEE 754 makes the first part
@@ -1314,10 +1670,24 @@ mod eft_attacks {
     #[test]
     fn infinite_inputs_give_nan_only_where_ieee_does() {
         let inf = [f64::INFINITY, f64::NEG_INFINITY];
-        let others = [0.0, -0.0, 1.0, -3.5, f64::from_bits(1), OMEGA, -OMEGA, fp::pow2(-600), f64::INFINITY, f64::NEG_INFINITY];
+        let others = [
+            0.0,
+            -0.0,
+            1.0,
+            -3.5,
+            f64::from_bits(1),
+            OMEGA,
+            -OMEGA,
+            fp::pow2(-600),
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+        ];
         for &x in &inf {
             let (h, l) = eft::split(x);
-            assert!(h.to_bits() == x.to_bits() && l.to_bits() == (-x).to_bits(), "split({x}) = ({h}, {l})");
+            assert!(
+                h.to_bits() == x.to_bits() && l.to_bits() == (-x).to_bits(),
+                "split({x}) = ({h}, {l})"
+            );
             for &y in &others {
                 for (a, b) in [(x, y), (y, x)] {
                     for (name, f) in [
@@ -1329,7 +1699,10 @@ mod eft_attacks {
                         if h.is_nan() {
                             assert!(l.is_nan(), "{name}({a}, {b}) = ({h}, {l})");
                         } else {
-                            assert!(h.is_infinite() && l == -h, "{name}({a}, {b}) = ({h}, {l}): expected an infinity and its opposite");
+                            assert!(
+                                h.is_infinite() && l == -h,
+                                "{name}({a}, {b}) = ({h}, {l}): expected an infinity and its opposite"
+                            );
                         }
                     }
                 }
@@ -1343,24 +1716,49 @@ mod eft_attacks {
     fn reported_pairs_carry_the_sign_of_the_error() {
         let t = fp::pow2(-600);
         let pos = eft::two_prod(t, t);
-        assert!(pos.0.to_bits() == 0 && pos.1 == f64::INFINITY, "two_prod(2^−600, 2^−600) = {pos:?}");
+        assert!(
+            pos.0.to_bits() == 0 && pos.1 == f64::INFINITY,
+            "two_prod(2^−600, 2^−600) = {pos:?}"
+        );
         let neg = eft::two_prod(-t, t);
-        assert!(neg.0.to_bits() == (-0.0f64).to_bits() && neg.1 == f64::NEG_INFINITY, "two_prod(−2^−600, 2^−600) = {neg:?}");
+        assert!(
+            neg.0.to_bits() == (-0.0f64).to_bits() && neg.1 == f64::NEG_INFINITY,
+            "two_prod(−2^−600, 2^−600) = {neg:?}"
+        );
         // The adversary's examples, all reported now with the right sign.
-        for (a, b) in [(3.7555e-308, -2.2598e-308), (-4.0256e-320, 1.2385e-90), (fp::pow2(-1074), 0.75)] {
+        for (a, b) in [
+            (3.7555e-308, -2.2598e-308),
+            (-4.0256e-320, 1.2385e-90),
+            (fp::pow2(-1074), 0.75),
+        ] {
             run(check_two_prod_total(a, b));
-            assert!(eft::two_prod(a, b).1.is_infinite(), "two_prod({a:e}, {b:e}) has no exact pair");
+            assert!(
+                eft::two_prod(a, b).1.is_infinite(),
+                "two_prod({a:e}, {b:e}) has no exact pair"
+            );
         }
         // Exact pairs that the former precondition excluded: a factor at 2^1000, a zero against Ω,
         // a subnormal factor with a product in range, and a product at the top of the range.
-        assert_eq!(eft::two_prod(fp::pow2(1000), fp::pow2(-100)), (fp::pow2(900), 0.0));
+        assert_eq!(
+            eft::two_prod(fp::pow2(1000), fp::pow2(-100)),
+            (fp::pow2(900), 0.0)
+        );
         assert_eq!(eft::two_prod(0.0, OMEGA), (0.0, 0.0));
-        assert_eq!(eft::two_prod(f64::from_bits(3), fp::pow2(1000)), (3.0 * fp::pow2(-74), 0.0));
+        assert_eq!(
+            eft::two_prod(f64::from_bits(3), fp::pow2(1000)),
+            (3.0 * fp::pow2(-74), 0.0)
+        );
         assert_eq!(eft::two_prod(OMEGA, 1.0), (OMEGA, 0.0));
-        assert_eq!(eft::two_prod(OMEGA, OMEGA), (f64::INFINITY, f64::NEG_INFINITY));
+        assert_eq!(
+            eft::two_prod(OMEGA, OMEGA),
+            (f64::INFINITY, f64::NEG_INFINITY)
+        );
         // The out-of-order sums from the report are exact now.
         assert_eq!(eft::fast_two_sum(1.0, fp::pow2(60)), (fp::pow2(60), 1.0));
-        assert_eq!(eft::fast_two_sum(f64::from_bits(1), 1.0), (1.0, f64::from_bits(1)));
+        assert_eq!(
+            eft::fast_two_sum(f64::from_bits(1), 1.0),
+            (1.0, f64::from_bits(1))
+        );
     }
 
     /// `two_prod` across the underflow frontier, deterministically: every exponent sum from −1080 to
@@ -1368,7 +1766,16 @@ mod eft_attacks {
     /// Both outcomes must occur (exact pairs and reported ones), and each must meet the whole contract.
     #[test]
     fn two_prod_dense_across_the_underflow_frontier() {
-        let patterns = [0u64, fp::FRAC, 1, 0x5_5555_5555_5555, 1 << 51, fp::FRAC ^ (1 << 26), 0xF_FFFF_F000_0000, 0x8_0000_0000_0001];
+        let patterns = [
+            0u64,
+            fp::FRAC,
+            1,
+            0x5_5555_5555_5555,
+            1 << 51,
+            fp::FRAC ^ (1 << 26),
+            0xF_FFFF_F000_0000,
+            0x8_0000_0000_0001,
+        ];
         let mut rng = Lcg(0x1074);
         let (mut exact, mut reported) = (0u32, 0u32);
         for sum in -1080..=-955 {
@@ -1394,7 +1801,10 @@ mod eft_attacks {
                 run(check_two_prod_total(a, b));
             }
         }
-        assert!(exact > 1000 && reported > 1000, "the sweep met only {exact} exact and {reported} reported pairs");
+        assert!(
+            exact > 1000 && reported > 1000,
+            "the sweep met only {exact} exact and {reported} reported pairs"
+        );
     }
 
     /// `split` at the top of the range: every exponent from 990 up with significand patterns, the
@@ -1404,7 +1814,15 @@ mod eft_attacks {
     fn split_at_the_top_of_the_range() {
         let mut rng = Lcg(0x5e1);
         for e in 990..=1023 {
-            for f in [0u64, fp::FRAC, 1, fp::FRAC >> 26, (fp::FRAC >> 25) << 25, 1 << 25, fp::FRAC ^ (1 << 25)] {
+            for f in [
+                0u64,
+                fp::FRAC,
+                1,
+                fp::FRAC >> 26,
+                (fp::FRAC >> 25) << 25,
+                1 << 25,
+                fp::FRAC ^ (1 << 25),
+            ] {
                 run(check_split_total(fp::make(false, e, f)));
                 run(check_split_total(fp::make(true, e, f)));
             }
@@ -1415,7 +1833,9 @@ mod eft_attacks {
         let threshold = fp::make(false, 1023, (fp::FRAC >> 26) << 26);
         for k in 0..4096u64 {
             run(check_split_total(f64::from_bits(OMEGA.to_bits() - k)));
-            run(check_split_total(f64::from_bits(threshold.to_bits() + 2048 - k)));
+            run(check_split_total(f64::from_bits(
+                threshold.to_bits() + 2048 - k,
+            )));
         }
         assert_eq!(eft::split(OMEGA), (f64::INFINITY, f64::NEG_INFINITY));
         assert_eq!(eft::split(-OMEGA), (f64::NEG_INFINITY, f64::INFINITY));
@@ -1451,7 +1871,12 @@ mod eft_attacks {
         let mut i = 0;
         while i < CT_INPUTS.len() {
             let (a, b) = CT_INPUTS[i];
-            out[i] = [eft::two_sum(a, b), eft::fast_two_sum(a, b), eft::two_prod(a, b), eft::split(a)];
+            out[i] = [
+                eft::two_sum(a, b),
+                eft::fast_two_sum(a, b),
+                eft::two_prod(a, b),
+                eft::split(a),
+            ];
             i += 1;
         }
         out
@@ -1468,9 +1893,20 @@ mod eft_attacks {
         let same = |x: f64, y: f64| x.to_bits() == y.to_bits() || (x.is_nan() && y.is_nan());
         for (i, &(a, b)) in CT_INPUTS.iter().enumerate() {
             let (a, b) = (std::hint::black_box(a), std::hint::black_box(b));
-            let runtime = [eft::two_sum(a, b), eft::fast_two_sum(a, b), eft::two_prod(a, b), eft::split(a)];
-            for (name, (ct, rt)) in ["two_sum", "fast_two_sum", "two_prod", "split"].iter().zip(COMPILE_TIME[i].iter().zip(runtime.iter())) {
-                assert!(same(ct.0, rt.0) && same(ct.1, rt.1), "{name}({a:e}, {b:e}): compile time {ct:?}, run time {rt:?}");
+            let runtime = [
+                eft::two_sum(a, b),
+                eft::fast_two_sum(a, b),
+                eft::two_prod(a, b),
+                eft::split(a),
+            ];
+            for (name, (ct, rt)) in ["two_sum", "fast_two_sum", "two_prod", "split"]
+                .iter()
+                .zip(COMPILE_TIME[i].iter().zip(runtime.iter()))
+            {
+                assert!(
+                    same(ct.0, rt.0) && same(ct.1, rt.1),
+                    "{name}({a:e}, {b:e}): compile time {ct:?}, run time {rt:?}"
+                );
             }
         }
     }
@@ -1581,12 +2017,38 @@ mod interval_attacks {
             return Ok(());
         }
         let (al, ah, bl, bh) = (exact(a.lo()), exact(a.hi()), exact(b.lo()), exact(b.hi()));
-        let corners = [op.exact(&al, &bl), op.exact(&al, &bh), op.exact(&ah, &bl), op.exact(&ah, &bh)];
+        let corners = [
+            op.exact(&al, &bl),
+            op.exact(&al, &bh),
+            op.exact(&ah, &bl),
+            op.exact(&ah, &bh),
+        ];
         let (m, big_m) = min_max(&corners);
-        prop_assert_eq!(bits(got), spec(&m, &big_m), "{:?} {:?} {:?} = {:?}, not the documented method", op, a, b, got);
+        prop_assert_eq!(
+            bits(got),
+            spec(&m, &big_m),
+            "{:?} {:?} {:?} = {:?}, not the documented method",
+            op,
+            a,
+            b,
+            got
+        );
         if let Ok(r) = got {
-            prop_assert!(r.lo().is_finite() && r.hi().is_finite() && r.lo() <= r.hi(), "{:?} broken", r);
-            prop_assert!(holds(r, &m) && holds(r, &big_m), "{:?} {:?} {:?} = {:?} misses [{}, {}]", op, a, b, r, m, big_m);
+            prop_assert!(
+                r.lo().is_finite() && r.hi().is_finite() && r.lo() <= r.hi(),
+                "{:?} broken",
+                r
+            );
+            prop_assert!(
+                holds(r, &m) && holds(r, &big_m),
+                "{:?} {:?} {:?} = {:?} misses [{}, {}]",
+                op,
+                a,
+                b,
+                r,
+                m,
+                big_m
+            );
             sign_is_sound(r, &[&m, &big_m])?;
         }
         Ok(())
@@ -1600,20 +2062,49 @@ mod interval_attacks {
             prop_assert_eq!(got, Err(NumError::NegativeSqrt), "sqrt {:?}", a);
             return Ok(());
         }
-        let lo = if a.lo() == 0.0 { 0.0 } else { canon(down(rn::round_sqrt(a.lo()))) };
-        let hi = if a.hi() == 0.0 { 0.0 } else { canon(up(rn::round_sqrt(a.hi()))) };
-        prop_assert_eq!(bits(got), Ok((lo.to_bits(), hi.to_bits())), "sqrt {:?} = {:?}, not the documented method", a, got);
+        let lo = if a.lo() == 0.0 {
+            0.0
+        } else {
+            canon(down(rn::round_sqrt(a.lo())))
+        };
+        let hi = if a.hi() == 0.0 {
+            0.0
+        } else {
+            canon(up(rn::round_sqrt(a.hi())))
+        };
+        prop_assert_eq!(
+            bits(got),
+            Ok((lo.to_bits(), hi.to_bits())),
+            "sqrt {:?} = {:?}, not the documented method",
+            a,
+            got
+        );
         let r = got.unwrap();
-        prop_assert!(r.lo() >= 0.0 && r.lo() <= r.hi() && r.hi().is_finite(), "sqrt {:?} = {:?}", a, r);
+        prop_assert!(
+            r.lo() >= 0.0 && r.lo() <= r.hi() && r.hi().is_finite(),
+            "sqrt {:?} = {:?}",
+            a,
+            r
+        );
         let (rl, rh) = (exact(r.lo()), exact(r.hi()));
-        prop_assert!(&rl * &rl <= exact(a.lo()) && exact(a.hi()) <= &rh * &rh, "sqrt {:?} = {:?} misses a root", a, r);
+        prop_assert!(
+            &rl * &rl <= exact(a.lo()) && exact(a.hi()) <= &rh * &rh,
+            "sqrt {:?} = {:?} misses a root",
+            a,
+            r
+        );
         Ok(())
     }
 
     /// `neg`: exactly `[−hi, −lo]` with zero as +0.
     fn check_neg(a: Interval) -> TestResult {
         let r = a.neg();
-        prop_assert_eq!((r.lo().to_bits(), r.hi().to_bits()), (canon(-a.hi()).to_bits(), canon(-a.lo()).to_bits()), "neg {:?}", a);
+        prop_assert_eq!(
+            (r.lo().to_bits(), r.hi().to_bits()),
+            (canon(-a.hi()).to_bits(), canon(-a.lo()).to_bits()),
+            "neg {:?}",
+            a
+        );
         Ok(())
     }
 
@@ -1637,19 +2128,47 @@ mod interval_attacks {
         let (near2, far2) = (&near * &near, &far * &far);
         let top = up(rn::round(&far2));
         let want = if top.is_finite() {
-            let stepped = if near.is_zero() { 0.0 } else { canon(down(rn::round(&near2))) };
+            let stepped = if near.is_zero() {
+                0.0
+            } else {
+                canon(down(rn::round(&near2)))
+            };
             let bottom: f64 = if stepped < 0.0 { 0.0 } else { stepped };
             Ok((bottom.to_bits(), canon(top).to_bits()))
         } else {
             Err(NumError::NotFinite)
         };
-        prop_assert_eq!(bits(got), want, "square {:?} = {:?}, not the documented method", a, got);
+        prop_assert_eq!(
+            bits(got),
+            want,
+            "square {:?} = {:?}, not the documented method",
+            a,
+            got
+        );
         if let Ok(r) = got {
-            prop_assert!(r.lo() >= 0.0 && r.lo() <= r.hi() && r.hi().is_finite(), "square {:?} = {:?}", a, r);
-            prop_assert!(holds(r, &near2) && holds(r, &far2), "square {:?} = {:?} misses [{}, {}]", a, r, near2, far2);
+            prop_assert!(
+                r.lo() >= 0.0 && r.lo() <= r.hi() && r.hi().is_finite(),
+                "square {:?} = {:?}",
+                a,
+                r
+            );
+            prop_assert!(
+                holds(r, &near2) && holds(r, &far2),
+                "square {:?} = {:?} misses [{}, {}]",
+                a,
+                r,
+                near2,
+                far2
+            );
             sign_is_sound(r, &[&near2, &far2])?;
             if let Ok(m) = a.mul(a) {
-                prop_assert!(m.lo() <= r.lo() && r.hi() <= m.hi(), "square {:?} = {:?} is not inside mul {:?}", a, r, m);
+                prop_assert!(
+                    m.lo() <= r.lo() && r.hi() <= m.hi(),
+                    "square {:?} = {:?} is not inside mul {:?}",
+                    a,
+                    r,
+                    m
+                );
             }
         }
         Ok(())
@@ -1664,7 +2183,13 @@ mod interval_attacks {
             return Ok(());
         }
         let part = Interval::new(if a.lo() < 0.0 { 0.0 } else { a.lo() }, a.hi()).unwrap();
-        prop_assert_eq!(bits(got), bits(part.sqrt()), "sqrt_nonneg {:?} is not sqrt of {:?}", a, part);
+        prop_assert_eq!(
+            bits(got),
+            bits(part.sqrt()),
+            "sqrt_nonneg {:?} is not sqrt of {:?}",
+            a,
+            part
+        );
         check_sqrt(part)
     }
 
@@ -1880,7 +2405,13 @@ mod interval_attacks {
                     }
                 }
             }
-            for f in [1.0 + f64::EPSILON, 1.0 - f64::EPSILON / 2.0, 2.0 - f64::EPSILON, 0.5 + f64::EPSILON / 4.0, 3.0] {
+            for f in [
+                1.0 + f64::EPSILON,
+                1.0 - f64::EPSILON / 2.0,
+                2.0 - f64::EPSILON,
+                0.5 + f64::EPSILON / 4.0,
+                3.0,
+            ] {
                 for op in [Op::Mul, Op::Div] {
                     run(check_binary(op, pt(x), pt(f)));
                     run(check_binary(op, pt(-x), pt(f)));
@@ -1953,7 +2484,11 @@ mod interval_attacks {
             let a = Interval::new(std::hint::black_box(x.0), std::hint::black_box(x.1)).unwrap();
             let b = Interval::new(std::hint::black_box(y.0), std::hint::black_box(y.1)).unwrap();
             for (k, op) in Op::ALL.iter().enumerate() {
-                assert_eq!(bits(COMPILE_TIME[i][k]), bits(op.apply(a, b)), "{op:?} {a:?} {b:?}");
+                assert_eq!(
+                    bits(COMPILE_TIME[i][k]),
+                    bits(op.apply(a, b)),
+                    "{op:?} {a:?} {b:?}"
+                );
                 run(check_binary(*op, a, b));
             }
         }
@@ -1970,8 +2505,16 @@ mod interval_attacks {
         assert_eq!((r.lo(), r.hi()), (down(below), OMEGA), "Ω − 2^971 + 2^970");
         let r = pt(OMEGA).sub(pt(half)).unwrap();
         assert_eq!((r.lo(), r.hi()), (down(below), OMEGA), "Ω − 2^970");
-        assert_eq!(pt(below).add(pt(up(half))), Err(NumError::NotFinite), "just above the midpoint");
-        assert_eq!(pt(OMEGA).sub(pt(down(half))), Err(NumError::NotFinite), "just above the midpoint");
+        assert_eq!(
+            pt(below).add(pt(up(half))),
+            Err(NumError::NotFinite),
+            "just above the midpoint"
+        );
+        assert_eq!(
+            pt(OMEGA).sub(pt(down(half))),
+            Err(NumError::NotFinite),
+            "just above the midpoint"
+        );
         // Mirrored below −Ω + 2^971.
         let r = pt(-below).sub(pt(half)).unwrap();
         assert_eq!((r.lo(), r.hi()), (-OMEGA, up(-below)));
@@ -1983,7 +2526,14 @@ mod interval_attacks {
         assert_eq!(pt(below).div(pt(1.0)).map(Interval::hi), Ok(OMEGA));
         assert_eq!(pt(below).div(pt(down(1.0))), Err(NumError::NotFinite));
         // Every result here also follows the documented method bit for bit.
-        for (x, y) in [(below, half), (OMEGA, -half), (below, up(half)), (-below, -half), (OMEGA / 2.0, 2.0), (below, down(1.0))] {
+        for (x, y) in [
+            (below, half),
+            (OMEGA, -half),
+            (below, up(half)),
+            (-below, -half),
+            (OMEGA / 2.0, 2.0),
+            (below, down(1.0)),
+        ] {
             for op in Op::ALL {
                 run(check_binary(op, pt(x), pt(y)));
             }
@@ -2025,7 +2575,10 @@ mod interval_attacks {
             }
         }
         // A divisor that touches zero only through −0 still contains zero.
-        assert_eq!(pt(1.0).div(Interval::new(-1.0, -0.0).unwrap()), Err(NumError::DivisorContainsZero));
+        assert_eq!(
+            pt(1.0).div(Interval::new(-1.0, -0.0).unwrap()),
+            Err(NumError::DivisorContainsZero)
+        );
         // 2^−1060 / 2^−1074 = 2^14 exactly: a subnormal divisor that does not overflow.
         let q = pt(fp::pow2(-1060)).div(pt(tiny)).unwrap();
         assert!(q.contains(16_384.0) && q.certain_sign() == Some(Sign::Positive));
@@ -2052,32 +2605,63 @@ mod interval_attacks {
             run(check_sqrt(a));
         }
         let z = Interval::new(-0.0, -0.0).unwrap().sqrt().unwrap();
-        assert_eq!((z.lo().to_bits(), z.hi().to_bits(), z.certain_sign()), (0, 0, Some(Sign::Zero)));
+        assert_eq!(
+            (z.lo().to_bits(), z.hi().to_bits(), z.certain_sign()),
+            (0, 0, Some(Sign::Zero))
+        );
         // √(2^−1072) = 2^−536 exactly; the widened lower bound stays positive.
         let r = pt(f64::from_bits(4)).sqrt().unwrap();
-        assert!(r.lo() > 0.0 && r.contains(fp::pow2(-536)) && r.certain_sign() == Some(Sign::Positive));
+        assert!(
+            r.lo() > 0.0 && r.contains(fp::pow2(-536)) && r.certain_sign() == Some(Sign::Positive)
+        );
     }
 
     /// Signed zeros in every position give the same bits as +0, and every zero bound is +0.
     #[test]
     fn signed_zeros_never_change_a_result() {
-        let others = [1.0, -1.0, f64::from_bits(1), -f64::from_bits(1), OMEGA, -OMEGA, 0.0];
+        let others = [
+            1.0,
+            -1.0,
+            f64::from_bits(1),
+            -f64::from_bits(1),
+            OMEGA,
+            -OMEGA,
+            0.0,
+        ];
         for &x in &others {
             let plus = strat::hull(0.0, x);
             let minus = strat::hull(-0.0, x);
-            assert_eq!((plus.lo().to_bits(), plus.hi().to_bits()), (minus.lo().to_bits(), minus.hi().to_bits()));
+            assert_eq!(
+                (plus.lo().to_bits(), plus.hi().to_bits()),
+                (minus.lo().to_bits(), minus.hi().to_bits())
+            );
             for &y in &others {
                 let b = strat::hull(y, y);
                 for op in Op::ALL {
-                    assert_eq!(bits(op.apply(plus, b)), bits(op.apply(minus, b)), "{op:?} [±0, {x:e}] with {y:e}");
-                    assert_eq!(bits(op.apply(b, plus)), bits(op.apply(b, minus)), "{op:?} {y:e} with [±0, {x:e}]");
+                    assert_eq!(
+                        bits(op.apply(plus, b)),
+                        bits(op.apply(minus, b)),
+                        "{op:?} [±0, {x:e}] with {y:e}"
+                    );
+                    assert_eq!(
+                        bits(op.apply(b, plus)),
+                        bits(op.apply(b, minus)),
+                        "{op:?} {y:e} with [±0, {x:e}]"
+                    );
                     if let Ok(r) = op.apply(plus, b) {
-                        assert!(r.lo().to_bits() != (-0.0f64).to_bits() && r.hi().to_bits() != (-0.0f64).to_bits(), "{r:?}");
+                        assert!(
+                            r.lo().to_bits() != (-0.0f64).to_bits()
+                                && r.hi().to_bits() != (-0.0f64).to_bits(),
+                            "{r:?}"
+                        );
                     }
                 }
             }
             let n = minus.neg();
-            assert!(n.lo().to_bits() != (-0.0f64).to_bits() && n.hi().to_bits() != (-0.0f64).to_bits(), "{n:?}");
+            assert!(
+                n.lo().to_bits() != (-0.0f64).to_bits() && n.hi().to_bits() != (-0.0f64).to_bits(),
+                "{n:?}"
+            );
         }
     }
 
@@ -2090,7 +2674,9 @@ mod interval_attacks {
         let r = Interval::new(-1.0, -0.0).unwrap();
         assert!(r.contains(0.0) && r.contains(-0.0) && !r.contains(tiny));
         let all = Interval::new(-OMEGA, OMEGA).unwrap();
-        assert!(!all.contains(f64::INFINITY) && !all.contains(f64::NEG_INFINITY) && all.contains(OMEGA));
+        assert!(
+            !all.contains(f64::INFINITY) && !all.contains(f64::NEG_INFINITY) && all.contains(OMEGA)
+        );
         let bounds = [-OMEGA, -1.0, -tiny, -0.0, 0.0, tiny, 1.0, OMEGA];
         for (i, &lo) in bounds.iter().enumerate() {
             for &hi in &bounds[i..] {
@@ -2100,7 +2686,9 @@ mod interval_attacks {
                     Some(s) => assert!(sign(&l) == s && sign(&h) == s, "{r:?} claims {s:?}"),
                     // Undecided only when the interval holds zero and a nonzero real.
                     None => assert!(
-                        sign(&l) != Sign::Positive && sign(&h) != Sign::Negative && !(lo == 0.0 && hi == 0.0),
+                        sign(&l) != Sign::Positive
+                            && sign(&h) != Sign::Negative
+                            && !(lo == 0.0 && hi == 0.0),
                         "{r:?} undecided"
                     ),
                 }
@@ -2129,7 +2717,11 @@ mod interval_attacks {
             let by_square = dx.square().unwrap().add(dx.square().unwrap()).unwrap();
             for d2 in [by_mul, by_square] {
                 assert!(d2.contains(0.0) && d2.lo() < 0.0, "{d2:?}");
-                assert_eq!(d2.sqrt(), Err(NumError::NegativeSqrt), "the strict root of {d2:?}");
+                assert_eq!(
+                    d2.sqrt(),
+                    Err(NumError::NegativeSqrt),
+                    "the strict root of {d2:?}"
+                );
                 run(check_sqrt_nonneg(d2));
                 let r = d2.sqrt_nonneg();
                 assert!(
@@ -2175,8 +2767,17 @@ mod interval_attacks {
         assert!(pt(fp::down(fp::pow2(512))).square().is_ok());
         assert_eq!(pt(fp::pow2(512)).square(), Err(NumError::NotFinite));
         // Wholly negative: no non-negative part to take the root of.
-        assert_eq!(Interval::new(-2.0, -1.0).unwrap().sqrt_nonneg(), Err(NumError::NegativeSqrt));
-        assert_eq!(Interval::new(-tiny, 0.0).unwrap().sqrt_nonneg().map(bits_of), Ok((0, 0)));
+        assert_eq!(
+            Interval::new(-2.0, -1.0).unwrap().sqrt_nonneg(),
+            Err(NumError::NegativeSqrt)
+        );
+        assert_eq!(
+            Interval::new(-tiny, 0.0)
+                .unwrap()
+                .sqrt_nonneg()
+                .map(bits_of),
+            Ok((0, 0))
+        );
     }
 
     /// The bits of an interval's bounds.
@@ -2256,7 +2857,13 @@ mod interval_attacks {
     }
 
     /// Operands of `square`, evaluated at compile time like the other operations.
-    const CT_SQUARES: [(f64, f64); 5] = [(-1.0, 2.0), (0.1, 0.3), (-3.0, -2.0), (1.0e-300, 1.0e-200), (-1.0e200, 1.0e154)];
+    const CT_SQUARES: [(f64, f64); 5] = [
+        (-1.0, 2.0),
+        (0.1, 0.3),
+        (-3.0, -2.0),
+        (1.0e-300, 1.0e-200),
+        (-1.0e200, 1.0e154),
+    ];
 
     /// `square` of each operand, at compile time.
     const fn compile_time_squares() -> [Result<Interval, NumError>; 5] {
@@ -2280,7 +2887,11 @@ mod interval_attacks {
     fn square_compile_time_and_run_time_agree() {
         for (i, &(lo, hi)) in CT_SQUARES.iter().enumerate() {
             let a = Interval::new(std::hint::black_box(lo), std::hint::black_box(hi)).unwrap();
-            assert_eq!(bits(COMPILE_TIME_SQUARES[i]), bits(a.square()), "square {a:?}");
+            assert_eq!(
+                bits(COMPILE_TIME_SQUARES[i]),
+                bits(a.square()),
+                "square {a:?}"
+            );
             run(check_square(a));
         }
     }

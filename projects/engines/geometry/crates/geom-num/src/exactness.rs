@@ -35,12 +35,16 @@ impl Exactness {
         match (self, other) {
             (Exactness::Exact, x) | (x, Exactness::Exact) => x,
             (Exactness::Certified { bound: a }, Exactness::Certified { bound: b }) => {
-                Exactness::Certified { bound: a.saturating_add(b) }
+                Exactness::Certified {
+                    bound: a.saturating_add(b),
+                }
             }
             (Exactness::Certified { bound: a }, Exactness::Approximate { deviation: b })
             | (Exactness::Approximate { deviation: b }, Exactness::Certified { bound: a })
             | (Exactness::Approximate { deviation: a }, Exactness::Approximate { deviation: b }) => {
-                Exactness::Approximate { deviation: a.saturating_add(b) }
+                Exactness::Approximate {
+                    deviation: a.saturating_add(b),
+                }
             }
         }
     }
@@ -63,7 +67,9 @@ mod tests {
     #[test]
     fn combine_takes_the_least_exact_and_adds_bounds() {
         let c = |b| Exactness::Certified { bound: Steps(b) };
-        let a = |d| Exactness::Approximate { deviation: Steps(d) };
+        let a = |d| Exactness::Approximate {
+            deviation: Steps(d),
+        };
         assert_eq!(Exactness::Exact.combine(Exactness::Exact), Exactness::Exact);
         assert_eq!(Exactness::Exact.combine(c(3)), c(3));
         assert_eq!(c(3).combine(c(4)), c(7));

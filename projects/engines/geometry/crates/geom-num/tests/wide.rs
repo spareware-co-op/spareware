@@ -22,7 +22,12 @@
 // Helpers outside `#[test]` functions are not covered by clippy.toml's allow-*-in-tests settings.
 // A broken oracle or strategy must stop the test loudly, so the kernel's panic lints are relaxed
 // for this test file only (clippy.toml: "Tests may use them").
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
 
 use proptest::test_runner::{Config, TestCaseError};
 
@@ -35,7 +40,10 @@ const CASES: u32 = 1024;
 
 /// The configuration every property in this file runs with.
 fn config() -> Config {
-    Config { cases: CASES, ..Config::default() }
+    Config {
+        cases: CASES,
+        ..Config::default()
+    }
 }
 
 /// Turns a check's failure into a test failure, for checks run outside `proptest!`.
@@ -87,7 +95,10 @@ mod oracle {
 
     /// Limbs, least significant first, read as an unsigned number.
     pub fn unsigned(limbs: &[u64]) -> BigInt {
-        limbs.iter().rev().fold(BigInt::zero(), |acc, &limb| (acc << 64u32) + limb)
+        limbs
+            .iter()
+            .rev()
+            .fold(BigInt::zero(), |acc, &limb| (acc << 64u32) + limb)
     }
 
     /// Limbs, least significant first, read as a two's-complement number: the unsigned value, less
@@ -112,7 +123,11 @@ mod oracle {
             return None;
         }
         // In range, so 0 <= u < 2^(64L): at most L base-2^64 digits.
-        let u = if v.is_negative() { v + pow2(64 * L) } else { v.clone() };
+        let u = if v.is_negative() {
+            v + pow2(64 * L)
+        } else {
+            v.clone()
+        };
         let (_, digits) = u.to_u64_digits();
         assert!(digits.len() <= L, "{v} needs {} limbs", digits.len());
         let mut out = [0u64; L];
@@ -297,7 +312,11 @@ mod strategies {
     /// Any value, any `i128`, or a value within 3 of an `i128` limit.
     pub fn near_i128_limits(l: usize) -> BoxedStrategy<BigInt> {
         let edge = (-3i32..=3, any::<bool>()).prop_map(move |(d, high)| {
-            let limit = if high { BigInt::from(i128::MAX) } else { BigInt::from(i128::MIN) };
+            let limit = if high {
+                BigInt::from(i128::MAX)
+            } else {
+                BigInt::from(i128::MIN)
+            };
             clamp(limit + d, l)
         });
         let any_i128 = any::<i128>().prop_map(move |v| clamp(BigInt::from(v), l));
@@ -307,12 +326,15 @@ mod strategies {
     /// Any value, or one within 3 of the limits of some width (clamped into this one): resizing to
     /// that width must succeed just inside its limits and fail just outside.
     pub fn near_every_width_limit(l: usize) -> BoxedStrategy<BigInt> {
-        let edge = (prop::sample::select(WIDTHS.to_vec()), -3i32..=3, any::<bool>()).prop_map(
-            move |(m, d, negative)| {
+        let edge = (
+            prop::sample::select(WIDTHS.to_vec()),
+            -3i32..=3,
+            any::<bool>(),
+        )
+            .prop_map(move |(m, d, negative)| {
                 let p = pow2(top(m));
                 clamp(if negative { -p + d } else { p + d }, l)
-            },
-        );
+            });
         prop_oneof![value(l), edge].boxed()
     }
 
@@ -334,7 +356,22 @@ mod strategies {
     /// square root of the range (products of two land on the limit), and at the limits themselves.
     pub fn edge_values(l: usize) -> Vec<BigInt> {
         let p = top(l);
-        let mut exponents = vec![0, 1, 31, 32, 62, 63, 64, 126, 127, 128, p - 1, p, p / 2, p / 2 + 1];
+        let mut exponents = vec![
+            0,
+            1,
+            31,
+            32,
+            62,
+            63,
+            64,
+            126,
+            127,
+            128,
+            p - 1,
+            p,
+            p / 2,
+            p / 2 + 1,
+        ];
         for k in 1..l {
             exponents.extend([64 * k - 1, 64 * k, 64 * k + 1]);
         }
@@ -400,7 +437,13 @@ mod checks {
     /// `from_i64`: exact value, and the same as going through `i128`.
     pub fn from_i64<const L: usize>(v: i64) -> TestResult {
         let x = Wide::<L>::from_i64(v);
-        prop_assert_eq!(value_of(&x), BigInt::from(v), "Wide<{}>::from_i64({})", L, v);
+        prop_assert_eq!(
+            value_of(&x),
+            BigInt::from(v),
+            "Wide<{}>::from_i64({})",
+            L,
+            v
+        );
         prop_assert_eq!(x, Wide::<L>::from_i128(i128::from(v)));
         prop_assert_eq!(x.to_i128(), Some(i128::from(v)));
         Ok(())
@@ -413,7 +456,11 @@ mod checks {
         prop_assert_eq!(x.to_le_limbs(), raw);
         let v = oracle::signed(&raw);
         prop_assert_eq!(wide::<L>(&v), Some(x), "oracle limbs of {} disagree", v);
-        let expected = format!("Wide<{L}>(0x{:0width$x})", oracle::unsigned(&raw), width = 16 * L);
+        let expected = format!(
+            "Wide<{L}>(0x{:0width$x})",
+            oracle::unsigned(&raw),
+            width = 16 * L
+        );
         prop_assert_eq!(format!("{x:?}"), expected);
         Ok(())
     }
@@ -477,7 +524,11 @@ mod checks {
         prop_assert_eq!(x.checked_mul(&one), Some(x), "a × 1 = a");
         prop_assert_eq!(one.checked_mul(&x), Some(x), "1 × a = a");
         prop_assert_eq!(x.checked_mul(&zero), Some(zero), "a × 0 = 0");
-        prop_assert_eq!(x.checked_mul(&Wide::<L>::from_i64(-1)), x.checked_neg(), "a × (−1) = −a");
+        prop_assert_eq!(
+            x.checked_mul(&Wide::<L>::from_i64(-1)),
+            x.checked_neg(),
+            "a × (−1) = −a"
+        );
         Ok(())
     }
 
@@ -490,8 +541,16 @@ mod checks {
         let total = a + b + c;
         let lhs = x.checked_add(&y).and_then(|s| s.checked_add(&z));
         let rhs = y.checked_add(&z).and_then(|s| x.checked_add(&s));
-        prop_assert_eq!(lhs.is_some(), fits(&(a + b)) && fits(&total), "(a + b) + c defined");
-        prop_assert_eq!(rhs.is_some(), fits(&(b + c)) && fits(&total), "a + (b + c) defined");
+        prop_assert_eq!(
+            lhs.is_some(),
+            fits(&(a + b)) && fits(&total),
+            "(a + b) + c defined"
+        );
+        prop_assert_eq!(
+            rhs.is_some(),
+            fits(&(b + c)) && fits(&total),
+            "a + (b + c) defined"
+        );
         if let (Some(l), Some(r)) = (lhs, rhs) {
             prop_assert_eq!(l, r, "+ is associative");
             prop_assert_eq!(value_of(&l), total);
@@ -500,8 +559,16 @@ mod checks {
         let total = a * b * c;
         let lhs = x.checked_mul(&y).and_then(|p| p.checked_mul(&z));
         let rhs = y.checked_mul(&z).and_then(|p| x.checked_mul(&p));
-        prop_assert_eq!(lhs.is_some(), fits(&(a * b)) && fits(&total), "(a × b) × c defined");
-        prop_assert_eq!(rhs.is_some(), fits(&(b * c)) && fits(&total), "a × (b × c) defined");
+        prop_assert_eq!(
+            lhs.is_some(),
+            fits(&(a * b)) && fits(&total),
+            "(a × b) × c defined"
+        );
+        prop_assert_eq!(
+            rhs.is_some(),
+            fits(&(b * c)) && fits(&total),
+            "a × (b × c) defined"
+        );
         if let (Some(l), Some(r)) = (lhs, rhs) {
             prop_assert_eq!(l, r, "× is associative");
             prop_assert_eq!(value_of(&l), total);
@@ -509,8 +576,15 @@ mod checks {
 
         let total = a * (b + c);
         let lhs = y.checked_add(&z).and_then(|s| x.checked_mul(&s));
-        let rhs = x.checked_mul(&y).zip(x.checked_mul(&z)).and_then(|(p, q)| p.checked_add(&q));
-        prop_assert_eq!(lhs.is_some(), fits(&(b + c)) && fits(&total), "a × (b + c) defined");
+        let rhs = x
+            .checked_mul(&y)
+            .zip(x.checked_mul(&z))
+            .and_then(|(p, q)| p.checked_add(&q));
+        prop_assert_eq!(
+            lhs.is_some(),
+            fits(&(b + c)) && fits(&total),
+            "a × (b + c) defined"
+        );
         prop_assert_eq!(
             rhs.is_some(),
             fits(&(a * b)) && fits(&(a * c)) && fits(&total),
@@ -610,8 +684,16 @@ mod checks {
         prop_assert_eq!(min.checked_sub(&one), None, "min − 1 overflows");
         prop_assert_eq!(min.checked_neg(), None, "−min overflows");
         prop_assert_eq!(max.checked_neg(), wide::<L>(&-max_of(L)), "−max = min + 1");
-        prop_assert_eq!(min.checked_mul(&Wide::<L>::from_i64(-1)), None, "min × (−1) overflows");
-        prop_assert_eq!(min.checked_add(&max), Some(Wide::<L>::from_i64(-1)), "min + max = −1");
+        prop_assert_eq!(
+            min.checked_mul(&Wide::<L>::from_i64(-1)),
+            None,
+            "min × (−1) overflows"
+        );
+        prop_assert_eq!(
+            min.checked_add(&max),
+            Some(Wide::<L>::from_i64(-1)),
+            "min + max = −1"
+        );
         Ok(())
     }
 
@@ -645,15 +727,23 @@ mod checks {
     /// oracle's answer.
     pub fn factorisations_of_max<const L: usize>() -> TestResult {
         let max = max_of(L);
-        let mut divisors: Vec<BigInt> =
-            (1u32..=1 << 16).map(BigInt::from).filter(|q| max.is_multiple_of(q)).collect();
+        let mut divisors: Vec<BigInt> = (1u32..=1 << 16)
+            .map(BigInt::from)
+            .filter(|q| max.is_multiple_of(q))
+            .collect();
         let p = top(L);
         divisors.extend((2..p).filter(|d| p % d == 0).map(|d| pow2(d) - 1u32));
         for q in &divisors {
             prop_assert!(max.is_multiple_of(q), "{} divides {}", q, max);
             let r = &max / q;
             let (x, y) = (w::<L>(q), w::<L>(&r));
-            prop_assert_eq!(x.checked_mul(&y), Some(Wide::<L>::max_value()), "{} × {} = max", q, r);
+            prop_assert_eq!(
+                x.checked_mul(&y),
+                Some(Wide::<L>::max_value()),
+                "{} × {} = max",
+                q,
+                r
+            );
             prop_assert_eq!(
                 x.checked_neg().and_then(|n| n.checked_mul(&y)),
                 wide::<L>(&-&max),
@@ -724,7 +814,10 @@ mod kernel_use {
     impl<const L: usize> Tracked<L> {
         /// A coordinate.
         pub fn of(c: i64) -> Self {
-            Self { w: Wide::from_i64(c), v: BigInt::from(c) }
+            Self {
+                w: Wide::from_i64(c),
+                v: BigInt::from(c),
+            }
         }
 
         /// The exact value.
@@ -984,27 +1077,51 @@ mod oracle_self_test {
         assert_eq!(oracle::signed(&[0, 0]), BigInt::from(0));
         assert_eq!(oracle::signed(&[u64::MAX, u64::MAX]), BigInt::from(-1));
         assert_eq!(oracle::signed(&[0, 1 << 63]), BigInt::from(i128::MIN));
-        assert_eq!(oracle::signed(&[u64::MAX, u64::MAX >> 1]), BigInt::from(i128::MAX));
+        assert_eq!(
+            oracle::signed(&[u64::MAX, u64::MAX >> 1]),
+            BigInt::from(i128::MAX)
+        );
         assert_eq!(oracle::signed(&[0, 0, 1, 0]), oracle::pow2(128));
         assert_eq!(oracle::signed(&[1, 0, 0, 1 << 63]), -oracle::pow2(255) + 1);
-        assert_eq!(oracle::unsigned(&[u64::MAX, u64::MAX]), oracle::pow2(128) - 1);
+        assert_eq!(
+            oracle::unsigned(&[u64::MAX, u64::MAX]),
+            oracle::pow2(128) - 1
+        );
     }
 
     #[test]
     fn writes_hand_written_limbs() {
-        assert_eq!(oracle::limbs::<4>(&BigInt::from(-2)), Some([u64::MAX - 1, u64::MAX, u64::MAX, u64::MAX]));
-        assert_eq!(oracle::limbs::<2>(&BigInt::from(i128::MIN)), Some([0, 1 << 63]));
+        assert_eq!(
+            oracle::limbs::<4>(&BigInt::from(-2)),
+            Some([u64::MAX - 1, u64::MAX, u64::MAX, u64::MAX])
+        );
+        assert_eq!(
+            oracle::limbs::<2>(&BigInt::from(i128::MIN)),
+            Some([0, 1 << 63])
+        );
         assert_eq!(oracle::limbs::<2>(&(BigInt::from(i128::MAX) + 1)), None);
         assert_eq!(oracle::limbs::<2>(&(BigInt::from(i128::MIN) - 1)), None);
-        assert_eq!(oracle::limbs::<5>(&oracle::pow2(256)), Some([0, 0, 0, 0, 1]));
+        assert_eq!(
+            oracle::limbs::<5>(&oracle::pow2(256)),
+            Some([0, 0, 0, 0, 1])
+        );
     }
 
     #[test]
     fn ranges_match_the_widths() {
         for l in WIDTHS {
-            assert_eq!(oracle::max_of(l) - oracle::min_of(l) + 1, oracle::pow2(64 * l));
-            assert!(oracle::in_range(&oracle::max_of(l), l) && !oracle::in_range(&(oracle::max_of(l) + 1), l));
-            assert!(oracle::in_range(&oracle::min_of(l), l) && !oracle::in_range(&(oracle::min_of(l) - 1), l));
+            assert_eq!(
+                oracle::max_of(l) - oracle::min_of(l) + 1,
+                oracle::pow2(64 * l)
+            );
+            assert!(
+                oracle::in_range(&oracle::max_of(l), l)
+                    && !oracle::in_range(&(oracle::max_of(l) + 1), l)
+            );
+            assert!(
+                oracle::in_range(&oracle::min_of(l), l)
+                    && !oracle::in_range(&(oracle::min_of(l) - 1), l)
+            );
         }
         assert_eq!(oracle::max_of(2), BigInt::from(i128::MAX));
         assert_eq!(oracle::min_of(2), BigInt::from(i128::MIN));
@@ -1044,8 +1161,16 @@ mod extreme_corners {
         assert!(oracle::top(2) >= ORIENT3D_BITS);
         for bits in 0u32..1 << 12 {
             let c = |i| corner(bits, i);
-            let p = [[c(0), c(1), c(2)], [c(3), c(4), c(5)], [c(6), c(7), c(8)], [c(9), c(10), c(11)]];
-            assert!(kernel_use::orient3d::<2>(&p).is_some(), "orient3d overflowed at {p:?}");
+            let p = [
+                [c(0), c(1), c(2)],
+                [c(3), c(4), c(5)],
+                [c(6), c(7), c(8)],
+                [c(9), c(10), c(11)],
+            ];
+            assert!(
+                kernel_use::orient3d::<2>(&p).is_some(),
+                "orient3d overflowed at {p:?}"
+            );
         }
     }
 
@@ -1066,7 +1191,10 @@ mod extreme_corners {
             assert_eq!(wide.value(), wider.value());
         }
         // Both outcomes occur, so both paths of the narrow evaluation were exercised.
-        assert!(fitted > 0 && overflowed > 0, "fitted {fitted}, overflowed {overflowed}");
+        assert!(
+            fitted > 0 && overflowed > 0,
+            "fitted {fitted}, overflowed {overflowed}"
+        );
     }
 
     #[test]

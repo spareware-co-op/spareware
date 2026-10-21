@@ -19,7 +19,11 @@ impl Real {
 
     /// A `Real`, or `NotFinite` for NaN and infinities.
     pub const fn new(v: f64) -> Result<Real, NumError> {
-        if v.is_finite() { Ok(Real(v)) } else { Err(NumError::NotFinite) }
+        if v.is_finite() {
+            Ok(Real(v))
+        } else {
+            Err(NumError::NotFinite)
+        }
     }
 
     /// The value.
@@ -32,13 +36,21 @@ impl Real {
     /// `f64::max`, which may return either zero.
     #[must_use]
     pub fn total_max(self, other: Real) -> Real {
-        if self.0.total_cmp(&other.0) == Ordering::Less { other } else { self }
+        if self.0.total_cmp(&other.0) == Ordering::Less {
+            other
+        } else {
+            self
+        }
     }
 
     /// The smaller of two values in IEEE totalOrder.
     #[must_use]
     pub fn total_min(self, other: Real) -> Real {
-        if self.0.total_cmp(&other.0) == Ordering::Greater { other } else { self }
+        if self.0.total_cmp(&other.0) == Ordering::Greater {
+            other
+        } else {
+            self
+        }
     }
 }
 

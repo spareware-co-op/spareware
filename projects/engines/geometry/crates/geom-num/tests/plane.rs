@@ -9,6 +9,15 @@
 //! and extreme (every coordinate at ±(2^40 − 1)), and the bit budgets the module documents are
 //! asserted on every value.
 
+// Helpers outside `#[test]` functions are not covered by clippy.toml's allow-*-in-tests settings;
+// clippy.toml says tests may use these, and a broken oracle must stop the test loudly.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
+
 use std::cmp::Ordering;
 
 use geom_num::grid::COORD_MAX;
@@ -62,7 +71,11 @@ fn nudge(q: P3, axis: usize, dir: i64) -> P3 {
 }
 
 fn wide_to_big<const L: usize>(w: &Wide<L>) -> BigInt {
-    let bytes: Vec<u8> = w.to_le_limbs().iter().flat_map(|l| l.to_le_bytes()).collect();
+    let bytes: Vec<u8> = w
+        .to_le_limbs()
+        .iter()
+        .flat_map(|l| l.to_le_bytes())
+        .collect();
     BigInt::from_signed_bytes_le(&bytes)
 }
 
@@ -83,7 +96,11 @@ fn sub3(a: &[BigInt; 3], b: &[BigInt; 3]) -> [BigInt; 3] {
 }
 
 fn cross3(u: &[BigInt; 3], v: &[BigInt; 3]) -> [BigInt; 3] {
-    [&u[1] * &v[2] - &u[2] * &v[1], &u[2] * &v[0] - &u[0] * &v[2], &u[0] * &v[1] - &u[1] * &v[0]]
+    [
+        &u[1] * &v[2] - &u[2] * &v[1],
+        &u[2] * &v[0] - &u[0] * &v[2],
+        &u[0] * &v[1] - &u[1] * &v[0],
+    ]
 }
 
 fn dot3(u: &[BigInt; 3], v: &[BigInt; 3]) -> BigInt {
@@ -153,8 +170,11 @@ fn solve(planes: &[Plane; 3]) -> Option<[BigRational; 3]> {
     let mut m: Vec<Vec<BigRational>> = planes
         .iter()
         .map(|pl| {
-            let mut row: Vec<BigRational> =
-                pl.n().iter().map(|&v| BigRational::from_integer(BigInt::from(v))).collect();
+            let mut row: Vec<BigRational> = pl
+                .n()
+                .iter()
+                .map(|&v| BigRational::from_integer(BigInt::from(v)))
+                .collect();
             row.push(BigRational::from_integer(-BigInt::from(pl.d())));
             row
         })
@@ -199,12 +219,21 @@ fn expected_to_grid(pt: &[BigRational; 3]) -> Result<Rounded<P3>, NumError> {
     for (o, v) in out.iter_mut().zip(pt) {
         let r = round_half_even(v);
         if r.abs() > BigInt::from(M) {
-            let saturated = if r.is_negative() { i128::MIN } else { i128::MAX };
-            return Err(NumError::OutOfRange { value: r.to_i128().unwrap_or(saturated) });
+            let saturated = if r.is_negative() {
+                i128::MIN
+            } else {
+                i128::MAX
+            };
+            return Err(NumError::OutOfRange {
+                value: r.to_i128().unwrap_or(saturated),
+            });
         }
         *o = r.to_i64().unwrap();
     }
-    Ok(Rounded { value: p(out[0], out[1], out[2]), exact: pt.iter().all(BigRational::is_integer) })
+    Ok(Rounded {
+        value: p(out[0], out[1], out[2]),
+        exact: pt.iter().all(BigRational::is_integer),
+    })
 }
 
 /// The largest magnitude bit-lengths seen, to show the tests reach near each budget.
@@ -223,11 +252,17 @@ fn check_plane(a: P3, b: P3, c: P3, max: &mut MaxBits) -> Option<Plane> {
     match Plane::through(a, b, c) {
         Err(e) => {
             assert_eq!(e, NumError::Degenerate);
-            assert!(n.iter().all(BigInt::is_zero), "{a:?} {b:?} {c:?} are not collinear");
+            assert!(
+                n.iter().all(BigInt::is_zero),
+                "{a:?} {b:?} {c:?} are not collinear"
+            );
             None
         }
         Ok(pl) => {
-            assert!(!n.iter().all(BigInt::is_zero), "{a:?} {b:?} {c:?} are collinear");
+            assert!(
+                !n.iter().all(BigInt::is_zero),
+                "{a:?} {b:?} {c:?} are collinear"
+            );
             assert_eq!(plane_big(&pl), (n.clone(), d.clone()));
             for ni in &n {
                 assert!(ni.bits() <= 83, "normal over budget");
@@ -282,7 +317,10 @@ fn check_tpi_with(planes: [Plane; 3], oracle: Oracle, max: &mut MaxBits) -> Opti
             assert_eq!(e, NumError::Degenerate);
             assert!(det.is_zero(), "{planes:?} meet in one point");
             if oracle == Oracle::Eliminate {
-                assert!(solve(&planes).is_none(), "elimination and determinant disagree");
+                assert!(
+                    solve(&planes).is_none(),
+                    "elimination and determinant disagree"
+                );
             }
             return None;
         }
@@ -300,13 +338,17 @@ fn check_tpi_with(planes: [Plane; 3], oracle: Oracle, max: &mut MaxBits) -> Opti
         assert!(xi.bits() <= 294, "numerator over budget");
         max.x = max.x.max(xi.bits());
     }
-    let coords: [BigRational; 3] = std::array::from_fn(|i| BigRational::new(xb[i].clone(), wb.clone()));
+    let coords: [BigRational; 3] =
+        std::array::from_fn(|i| BigRational::new(xb[i].clone(), wb.clone()));
     match oracle {
         Oracle::Eliminate => assert_eq!(solve(&planes).unwrap(), coords, "wrong point"),
         Oracle::Substitute => {
             for pl in &planes {
                 let (n, d) = plane_big(pl);
-                assert!((dot3(&n, &xb) + d * &wb).is_zero(), "the point is not on {pl:?}");
+                assert!(
+                    (dot3(&n, &xb) + d * &wb).is_zero(),
+                    "the point is not on {pl:?}"
+                );
             }
         }
     }
@@ -315,7 +357,11 @@ fn check_tpi_with(planes: [Plane; 3], oracle: Oracle, max: &mut MaxBits) -> Opti
         assert_eq!(pt.side(pl), Sign::Zero);
         assert_eq!(pl.side_of_tpi(&t), Sign::Zero);
     }
-    assert_eq!(t.to_grid(), expected_to_grid(&pt.coords), "to_grid of {pt:?}");
+    assert_eq!(
+        t.to_grid(),
+        expected_to_grid(&pt.coords),
+        "to_grid of {pt:?}"
+    );
     Some((t, pt))
 }
 
@@ -360,12 +406,14 @@ fn point_within(r: i64) -> impl Strategy<Value = P3> {
 
 /// A plane through three random points, with the points.
 fn plane() -> impl Strategy<Value = (Plane, [P3; 3])> {
-    (point(), point(), point())
-        .prop_filter_map("collinear", |(a, b, c)| Plane::through(a, b, c).ok().map(|pl| (pl, [a, b, c])))
+    (point(), point(), point()).prop_filter_map("collinear", |(a, b, c)| {
+        Plane::through(a, b, c).ok().map(|pl| (pl, [a, b, c]))
+    })
 }
 
 fn small_plane() -> impl Strategy<Value = Plane> {
-    (small_point(), small_point(), small_point()).prop_filter_map("collinear", |(a, b, c)| Plane::through(a, b, c).ok())
+    (small_point(), small_point(), small_point())
+        .prop_filter_map("collinear", |(a, b, c)| Plane::through(a, b, c).ok())
 }
 
 const PERMUTATIONS: [([usize; 3], bool); 6] = [
@@ -565,12 +613,11 @@ proptest! {
             let p2 = Plane::through(nudge(a, axes.0, sgns.0), b, c);
             let p2b = Plane::through(a, nudge(b, axes.1, sgns.1), c);
             let mut max = MaxBits::default();
-            for planes in [p2.map(|p2| [p1, p2, p3]), p2.and_then(|p2| p2b.map(|p2b| [p1, p2, p2b]))] {
-                if let Ok(planes) = planes {
-                    if let Some((t, pt)) = check_tpi(planes, &mut max) {
-                        check_side_of_tpi(&other, &t, &pt, &mut max);
-                        check_side_of_tpi(&p1, &t, &pt, &mut max);
-                    }
+            let triples = [p2.map(|p2| [p1, p2, p3]), p2.and_then(|p2| p2b.map(|p2b| [p1, p2, p2b]))];
+            for planes in triples.into_iter().flatten() {
+                if let Some((t, pt)) = check_tpi(planes, &mut max) {
+                    check_side_of_tpi(&other, &t, &pt, &mut max);
+                    check_side_of_tpi(&p1, &t, &pt, &mut max);
                 }
             }
         }
@@ -717,26 +764,90 @@ fn ties_round_to_even() {
         Tpi::new(a, b, c).unwrap().to_grid()
     };
     // (x, z) = (1/2, 1/2), (3/2, 1/2), (−1/2, −3/2), (5/2, −1/2), (−5/2, 1/2).
-    let cases = [(0, 1, 0, 0), (1, 2, 2, 0), (1, -2, 0, -2), (3, 2, 2, 0), (-3, -2, -2, 0)];
+    let cases = [
+        (0, 1, 0, 0),
+        (1, 2, 2, 0),
+        (1, -2, 0, -2),
+        (3, 2, 2, 0),
+        (-3, -2, -2, 0),
+    ];
     for (s, t, x, z) in cases {
-        assert_eq!(commit(s, t), Ok(Rounded { value: p(x, 7, z), exact: false }), "s = {s}, t = {t}");
+        assert_eq!(
+            commit(s, t),
+            Ok(Rounded {
+                value: p(x, 7, z),
+                exact: false
+            }),
+            "s = {s}, t = {t}"
+        );
     }
     // Not a tie: s + t even gives an exact point.
-    assert_eq!(commit(3, 5), Ok(Rounded { value: p(4, 7, 1), exact: true }));
+    assert_eq!(
+        commit(3, 5),
+        Ok(Rounded {
+            value: p(4, 7, 1),
+            exact: true
+        })
+    );
     // At the frame's edge (M = 2^40 − 1 is odd): x = M + 1/2 is a tie between M and the even
     // 2^40, which is outside the frame.
-    assert_eq!(commit(M, M + 1), Err(NumError::OutOfRange { value: 1 << 40 }));
-    assert_eq!(commit(-M - 1, -M), Err(NumError::OutOfRange { value: -(1 << 40) }));
+    assert_eq!(
+        commit(M, M + 1),
+        Err(NumError::OutOfRange { value: 1 << 40 })
+    );
+    assert_eq!(
+        commit(-M - 1, -M),
+        Err(NumError::OutOfRange { value: -(1 << 40) })
+    );
     // x = M − 1/2 is a tie between the even M − 1 and M: inside. z = ∓1/2 rounds to 0.
-    assert_eq!(commit(M, M - 1), Ok(Rounded { value: p(M - 1, 7, 0), exact: false }));
-    assert_eq!(commit(-M + 1, -M), Ok(Rounded { value: p(-M + 1, 7, 0), exact: false }));
+    assert_eq!(
+        commit(M, M - 1),
+        Ok(Rounded {
+            value: p(M - 1, 7, 0),
+            exact: false
+        })
+    );
+    assert_eq!(
+        commit(-M + 1, -M),
+        Ok(Rounded {
+            value: p(-M + 1, 7, 0),
+            exact: false
+        })
+    );
     // x = M − 3/2 is a tie between M − 2 (odd) and the even M − 1.
-    assert_eq!(commit(M - 1, M - 2), Ok(Rounded { value: p(M - 1, 7, 0), exact: false }));
+    assert_eq!(
+        commit(M - 1, M - 2),
+        Ok(Rounded {
+            value: p(M - 1, 7, 0),
+            exact: false
+        })
+    );
     // x exactly M, z exactly 2 − M: on the frame's edge, exact.
-    assert_eq!(commit(TIE_MAX, 2), Ok(Rounded { value: p(M, 7, 2 - M), exact: true }));
+    assert_eq!(
+        commit(TIE_MAX, 2),
+        Ok(Rounded {
+            value: p(M, 7, 2 - M),
+            exact: true
+        })
+    );
     // x = 2^41 − 9/2 on the far side of the frame: reported rounded, half to even.
-    assert_eq!(commit(TIE_MAX, TIE_MAX - 1), Err(NumError::OutOfRange { value: (1 << 41) - 4 }));
-    for (s, t) in [(0, 1), (1, 2), (-3, -2), (M, M + 1), (-M - 1, -M), (M, M - 1), (TIE_MAX, 2), (TIE_MAX, TIE_MAX - 1), (-TIE_MAX, TIE_MAX)] {
+    assert_eq!(
+        commit(TIE_MAX, TIE_MAX - 1),
+        Err(NumError::OutOfRange {
+            value: (1 << 41) - 4
+        })
+    );
+    for (s, t) in [
+        (0, 1),
+        (1, 2),
+        (-3, -2),
+        (M, M + 1),
+        (-M - 1, -M),
+        (M, M - 1),
+        (TIE_MAX, 2),
+        (TIE_MAX, TIE_MAX - 1),
+        (-TIE_MAX, TIE_MAX),
+    ] {
         check_tpi(tie_planes(s, t, 7), &mut max).unwrap();
         check_tpi(tie_planes(s, t, -M), &mut max).unwrap();
     }
@@ -764,17 +875,33 @@ fn far_points_report_their_rounded_coordinate() {
     let m = i128::from(M);
     let far = m * (m - 1) * (m - 1);
     let commit = |perm, mirror| {
-        let (t, pt) = check_tpi(far_planes(M, 1, a, b, perm, mirror).unwrap(), &mut MaxBits::default()).unwrap();
+        let (t, pt) = check_tpi(
+            far_planes(M, 1, a, b, perm, mirror).unwrap(),
+            &mut MaxBits::default(),
+        )
+        .unwrap();
         // The line meets the plane at a − M(M − 1)² e: a grid point, about 2^160 steps away.
         assert!(pt.coords.iter().all(BigRational::is_integer));
         t.to_grid()
     };
     // x = −M(M − 1)², about −2^120: outside the frame, reported exactly.
-    assert_eq!(commit([0, 1, 2], false), Err(NumError::OutOfRange { value: -far }));
-    assert_eq!(commit([0, 1, 2], true), Err(NumError::OutOfRange { value: far }));
+    assert_eq!(
+        commit([0, 1, 2], false),
+        Err(NumError::OutOfRange { value: -far })
+    );
+    assert_eq!(
+        commit([0, 1, 2], true),
+        Err(NumError::OutOfRange { value: far })
+    );
     // Axes swapped so x is −M²(M − 1)², about −2^160: beyond `i128`, saturated.
-    assert_eq!(commit([1, 0, 2], false), Err(NumError::OutOfRange { value: i128::MIN }));
-    assert_eq!(commit([1, 0, 2], true), Err(NumError::OutOfRange { value: i128::MAX }));
+    assert_eq!(
+        commit([1, 0, 2], false),
+        Err(NumError::OutOfRange { value: i128::MIN })
+    );
+    assert_eq!(
+        commit([1, 0, 2], true),
+        Err(NumError::OutOfRange { value: i128::MAX })
+    );
     // k = 2 halves the distance and leaves a fraction; the oracle decides it.
     for k in [-3, -2, 2, 3] {
         for (perm, _) in PERMUTATIONS {
@@ -815,15 +942,23 @@ proptest! {
 /// plane's point b, within a window of random size so the meeting point lands anywhere from inside
 /// the frame to far beyond `i128`, and whether to mirror.
 fn far_case() -> impl Strategy<Value = (i64, i64, P3, P3, bool)> {
-    (prop_oneof![1i64..=64, 1i64..=M], -3i64..=3, 0u32..=40, any::<bool>()).prop_flat_map(|(pp, k, bits, mirror)| {
-        let r = (1i64 << bits).min(M);
-        // Each range is [−r, r] cut to leave room for the step added to that coordinate.
-        let range = |room: i64| (-r).max(-M)..=r.min(M - room);
-        let a = (range(3).prop_map(|x| x.max(-M + 3)), range(pp), range(1));
-        let b = (range(pp), range(pp), range(1));
-        (Just(pp), Just(k), a, b, Just(mirror))
-    })
-    .prop_map(|(pp, k, (ax, ay, az), (bx, by, bz), mirror)| (pp, k, p(ax, ay, az), p(bx, by, bz), mirror))
+    (
+        prop_oneof![1i64..=64, 1i64..=M],
+        -3i64..=3,
+        0u32..=40,
+        any::<bool>(),
+    )
+        .prop_flat_map(|(pp, k, bits, mirror)| {
+            let r = (1i64 << bits).min(M);
+            // Each range is [−r, r] cut to leave room for the step added to that coordinate.
+            let range = |room: i64| (-r).max(-M)..=r.min(M - room);
+            let a = (range(3).prop_map(|x| x.max(-M + 3)), range(pp), range(1));
+            let b = (range(pp), range(pp), range(1));
+            (Just(pp), Just(k), a, b, Just(mirror))
+        })
+        .prop_map(|(pp, k, (ax, ay, az), (bx, by, bz), mirror)| {
+            (pp, k, p(ax, ay, az), p(bx, by, bz), mirror)
+        })
 }
 
 /// A plane's coefficients divided by their greatest common divisor, with the normal's first
@@ -867,7 +1002,11 @@ fn extreme_tpis() {
     for i in 0..n {
         for j in (i + 1)..n {
             for k in (j + 1)..n {
-                if let Some((t, pt)) = check_tpi_with([planes[i], planes[j], planes[k]], Oracle::Substitute, &mut max) {
+                if let Some((t, pt)) = check_tpi_with(
+                    [planes[i], planes[j], planes[k]],
+                    Oracle::Substitute,
+                    &mut max,
+                ) {
                     tpis += 1;
                     for q in planes.iter().skip((i + j + k) % 8).step_by(8) {
                         check_side_of_tpi(q, &t, &pt, &mut max);
@@ -879,5 +1018,9 @@ fn extreme_tpis() {
     // Every quantity inside its budget (checked on each), and the largest within a few bits of it:
     // n 82 of 83, d 122 of 125, w 248 of 252, X 288 of 294, n · X + d · w 372 of 379.
     assert_eq!(tpis, 8396);
-    assert_eq!((max.n, max.d, max.w, max.x, max.class), (82, 122, 248, 288, 372), "{max:?}");
+    assert_eq!(
+        (max.n, max.d, max.w, max.x, max.class),
+        (82, 122, 248, 288, 372),
+        "{max:?}"
+    );
 }

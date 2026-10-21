@@ -218,7 +218,10 @@ pub const fn coarsen(c: Coord, from: GridStep, to: GridStep) -> Result<Rounded<C
     // r is in 0..d. Round up when the remainder is more than half the divisor; 2r == d is impossible.
     let q = if 2 * r > d { q + 1 } else { q };
     // Coarsening never increases a magnitude, so the result is always in range.
-    Ok(Rounded { value: Coord(q as i64), exact: r == 0 })
+    Ok(Rounded {
+        value: Coord(q as i64),
+        exact: r == 0,
+    })
 }
 
 #[cfg(test)]
@@ -248,31 +251,86 @@ mod tests {
     fn coordinate_range_is_enforced() {
         assert!(Coord::new(COORD_MAX).is_ok());
         assert!(Coord::new(-COORD_MAX).is_ok());
-        assert_eq!(Coord::new(COORD_MAX + 1), Err(NumError::OutOfRange { value: (COORD_MAX + 1) as i128 }));
+        assert_eq!(
+            Coord::new(COORD_MAX + 1),
+            Err(NumError::OutOfRange {
+                value: (COORD_MAX + 1) as i128
+            })
+        );
         assert!(P3::new(0, 0, -COORD_MAX - 1).is_err());
     }
 
     #[test]
     fn refine_then_coarsen_round_trips() {
-        for v in [0i64, 1, -1, 12_345, -987_654_321, COORD_MAX / 625, -(COORD_MAX / 625)] {
+        for v in [
+            0i64,
+            1,
+            -1,
+            12_345,
+            -987_654_321,
+            COORD_MAX / 625,
+            -(COORD_MAX / 625),
+        ] {
             let c = Coord::new(v).unwrap();
             let fine = refine(c, GridStep::Q0, GridStep::Q2).unwrap();
             assert_eq!(fine.get(), v * 625);
             let back = coarsen(fine, GridStep::Q2, GridStep::Q0).unwrap();
-            assert_eq!(back, Rounded { value: c, exact: true });
+            assert_eq!(
+                back,
+                Rounded {
+                    value: c,
+                    exact: true
+                }
+            );
         }
         assert!(refine(Coord::MAX, GridStep::Q0, GridStep::Q1).is_err());
-        assert_eq!(refine(Coord::ZERO, GridStep::Q1, GridStep::Q0), Err(NumError::WrongDirection));
-        assert_eq!(coarsen(Coord::ZERO, GridStep::Q0, GridStep::Q1), Err(NumError::WrongDirection));
+        assert_eq!(
+            refine(Coord::ZERO, GridStep::Q1, GridStep::Q0),
+            Err(NumError::WrongDirection)
+        );
+        assert_eq!(
+            coarsen(Coord::ZERO, GridStep::Q0, GridStep::Q1),
+            Err(NumError::WrongDirection)
+        );
     }
 
     #[test]
     fn coarsen_rounds_to_nearest() {
         let q1 = |v: i64| coarsen(Coord::new(v).unwrap(), GridStep::Q1, GridStep::Q0).unwrap();
-        assert_eq!(q1(12), Rounded { value: Coord(0), exact: false });
-        assert_eq!(q1(13), Rounded { value: Coord(1), exact: false });
-        assert_eq!(q1(-12), Rounded { value: Coord(0), exact: false });
-        assert_eq!(q1(-13), Rounded { value: Coord(-1), exact: false });
-        assert_eq!(q1(50), Rounded { value: Coord(2), exact: true });
+        assert_eq!(
+            q1(12),
+            Rounded {
+                value: Coord(0),
+                exact: false
+            }
+        );
+        assert_eq!(
+            q1(13),
+            Rounded {
+                value: Coord(1),
+                exact: false
+            }
+        );
+        assert_eq!(
+            q1(-12),
+            Rounded {
+                value: Coord(0),
+                exact: false
+            }
+        );
+        assert_eq!(
+            q1(-13),
+            Rounded {
+                value: Coord(-1),
+                exact: false
+            }
+        );
+        assert_eq!(
+            q1(50),
+            Rounded {
+                value: Coord(2),
+                exact: true
+            }
+        );
     }
 }

@@ -20,7 +20,12 @@
 
 // Helpers outside `#[test]` functions are not covered by clippy.toml's allow-*-in-tests settings;
 // clippy.toml says tests may use these, and a broken oracle must stop the test loudly.
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
 
 use std::cmp::Ordering;
 
@@ -42,7 +47,11 @@ const C: i64 = (1 << 40) - 1;
 /// Every property runs with this configuration. Failures are not persisted to a regressions file:
 /// this file is the only one the attack may write.
 fn cfg() -> Config {
-    Config { cases: CASES, failure_persistence: None, ..Config::default() }
+    Config {
+        cases: CASES,
+        failure_persistence: None,
+        ..Config::default()
+    }
 }
 
 /// Turns a check's failure into a test failure, for checks run outside `proptest!`.
@@ -59,7 +68,11 @@ fn run(result: TestResult) {
 /// The value a `Wide` holds: its limbs as little-endian bytes, read by `num-bigint` as two's
 /// complement.
 fn val<const L: usize>(x: &Wide<L>) -> BigInt {
-    let bytes: Vec<u8> = x.to_le_limbs().iter().flat_map(|limb| limb.to_le_bytes()).collect();
+    let bytes: Vec<u8> = x
+        .to_le_limbs()
+        .iter()
+        .flat_map(|limb| limb.to_le_bytes())
+        .collect();
     BigInt::from_signed_bytes_le(&bytes)
 }
 
@@ -141,7 +154,11 @@ fn ordering_sign(o: Ordering) -> Sign {
 
 /// What `Debug` must print: the two's-complement bits, most significant first, 16 hex digits a limb.
 fn debug_of<const L: usize>(x: &Wide<L>) -> String {
-    format!("Wide<{L}>(0x{:0w$x})", unsigned(&x.to_le_limbs()), w = 16 * L)
+    format!(
+        "Wide<{L}>(0x{:0w$x})",
+        unsigned(&x.to_le_limbs()),
+        w = 16 * L
+    )
 }
 
 /// Every combination of `set` in each of L limbs.
@@ -163,8 +180,17 @@ fn patterns<const L: usize>(set: &[u64]) -> Vec<Wide<L>> {
 }
 
 /// The limb values carry, borrow and sign logic trip on.
-const LIMB_EDGES: [u64; 9] =
-    [0, 1, 2, (1 << 63) - 1, 1 << 63, (1 << 63) + 1, u64::MAX - 2, u64::MAX - 1, u64::MAX];
+const LIMB_EDGES: [u64; 9] = [
+    0,
+    1,
+    2,
+    (1 << 63) - 1,
+    1 << 63,
+    (1 << 63) + 1,
+    u64::MAX - 2,
+    u64::MAX - 1,
+    u64::MAX,
+];
 
 // ---------------------------------------------------------------------------------------------
 // Generic checks.
@@ -209,13 +235,35 @@ fn unary<const L: usize>(x: Wide<L>) -> TestResult {
         prop_assert_eq!(Wide::<L>::from_i64(v), x);
     }
     let two = Wide::<L>::from_i64(2);
-    prop_assert_eq!(x.checked_mul(&two), mk::<L>(&(&a * 2)), "Wide<{}>: {} × 2", L, a);
-    prop_assert_eq!(x.checked_mul(&two), x.checked_add(&x), "x·2 = x + x, overflow included");
-    prop_assert_eq!(x.checked_mul(&Wide::<L>::from_i64(-1)), x.checked_neg(), "x·(−1) = −x");
-    prop_assert_eq!(x.checked_mul(&Wide::<L>::ZERO), Some(Wide::<L>::ZERO), "x·0 = 0, never −0 bits");
+    prop_assert_eq!(
+        x.checked_mul(&two),
+        mk::<L>(&(&a * 2)),
+        "Wide<{}>: {} × 2",
+        L,
+        a
+    );
+    prop_assert_eq!(
+        x.checked_mul(&two),
+        x.checked_add(&x),
+        "x·2 = x + x, overflow included"
+    );
+    prop_assert_eq!(
+        x.checked_mul(&Wide::<L>::from_i64(-1)),
+        x.checked_neg(),
+        "x·(−1) = −x"
+    );
+    prop_assert_eq!(
+        x.checked_mul(&Wide::<L>::ZERO),
+        Some(Wide::<L>::ZERO),
+        "x·0 = 0, never −0 bits"
+    );
     prop_assert_eq!(x.checked_sub(&x), Some(Wide::<L>::ZERO), "x − x = 0");
     prop_assert_eq!(x.checked_add(&Wide::<L>::ZERO), Some(x), "x + 0 = x");
-    prop_assert_eq!(Wide::<L>::ZERO.checked_sub(&x), x.checked_neg(), "0 − x = −x");
+    prop_assert_eq!(
+        Wide::<L>::ZERO.checked_sub(&x),
+        x.checked_neg(),
+        "0 − x = −x"
+    );
     let square = x.checked_mul(&x);
     prop_assert_eq!(square, mk::<L>(&(&a * &a)), "Wide<{}>: {}²", L, a);
     if let Some(s) = square {
@@ -229,9 +277,30 @@ fn unary<const L: usize>(x: Wide<L>) -> TestResult {
 /// Every two-operand operation against the oracle.
 fn binary<const L: usize>(x: Wide<L>, y: Wide<L>) -> TestResult {
     let (a, b) = (val(&x), val(&y));
-    prop_assert_eq!(x.checked_add(&y), mk::<L>(&(&a + &b)), "Wide<{}>: {} + {}", L, a, b);
-    prop_assert_eq!(x.checked_sub(&y), mk::<L>(&(&a - &b)), "Wide<{}>: {} − {}", L, a, b);
-    prop_assert_eq!(x.checked_mul(&y), mk::<L>(&(&a * &b)), "Wide<{}>: {} × {}", L, a, b);
+    prop_assert_eq!(
+        x.checked_add(&y),
+        mk::<L>(&(&a + &b)),
+        "Wide<{}>: {} + {}",
+        L,
+        a,
+        b
+    );
+    prop_assert_eq!(
+        x.checked_sub(&y),
+        mk::<L>(&(&a - &b)),
+        "Wide<{}>: {} − {}",
+        L,
+        a,
+        b
+    );
+    prop_assert_eq!(
+        x.checked_mul(&y),
+        mk::<L>(&(&a * &b)),
+        "Wide<{}>: {} × {}",
+        L,
+        a,
+        b
+    );
     let expected = a.cmp(&b);
     prop_assert_eq!(x.cmp(&y), expected, "Wide<{}>: {} vs {}", L, a, b);
     prop_assert_eq!(x.partial_cmp(&y), Some(expected));
@@ -247,7 +316,11 @@ fn laws<const L: usize>(x: Wide<L>, y: Wide<L>, z: Wide<L>) -> TestResult {
         prop_assert_eq!(d.checked_neg(), Some(e), "x − y = −(y − x)");
     }
     if let (Some(nx), Some(ny)) = (x.checked_neg(), y.checked_neg()) {
-        prop_assert_eq!(nx.checked_mul(&ny), x.checked_mul(&y), "(−x)(−y) = xy, overflow included");
+        prop_assert_eq!(
+            nx.checked_mul(&ny),
+            x.checked_mul(&y),
+            "(−x)(−y) = xy, overflow included"
+        );
     }
     if let (Some(nx), Some(p)) = (x.checked_neg(), x.checked_mul(&y)) {
         // |xy| <= max, so −xy is representable and (−x)·y must give it.
@@ -267,7 +340,11 @@ fn laws<const L: usize>(x: Wide<L>, y: Wide<L>, z: Wide<L>) -> TestResult {
             Sign::Negative => x.cmp(&y).reverse(),
             Sign::Zero => Ordering::Equal,
         };
-        prop_assert_eq!(p.cmp(&q), expected, "scaling keeps or reverses order by the sign");
+        prop_assert_eq!(
+            p.cmp(&q),
+            expected,
+            "scaling keeps or reverses order by the sign"
+        );
     }
     if let Some(d) = x.checked_sub(&y) {
         prop_assert_eq!(d.signum(), ordering_sign(x.cmp(&y)), "sign of x − y");
@@ -286,10 +363,23 @@ fn laws<const L: usize>(x: Wide<L>, y: Wide<L>, z: Wide<L>) -> TestResult {
 fn repeated<const L: usize>(x: Wide<L>, k: i64) -> TestResult {
     let mut acc = Some(Wide::<L>::ZERO);
     for _ in 0..k.unsigned_abs() {
-        acc = acc.and_then(|s| if k > 0 { s.checked_add(&x) } else { s.checked_sub(&x) });
+        acc = acc.and_then(|s| {
+            if k > 0 {
+                s.checked_add(&x)
+            } else {
+                s.checked_sub(&x)
+            }
+        });
     }
     let product = x.checked_mul(&Wide::<L>::from_i64(k));
-    prop_assert_eq!(product, acc, "Wide<{}>: {} × {} vs repeated addition", L, val(&x), k);
+    prop_assert_eq!(
+        product,
+        acc,
+        "Wide<{}>: {} × {} vs repeated addition",
+        L,
+        val(&x),
+        k
+    );
     prop_assert_eq!(product, mk::<L>(&(val(&x) * k)));
     Ok(())
 }
@@ -305,16 +395,37 @@ fn widen<const L: usize, const M: usize>(x: Wide<L>, y: Wide<L>) -> TestResult {
     prop_assert_eq!(xw.to_i128(), x.to_i128());
     let s = xw.checked_add(&yw);
     prop_assert!(s.is_some(), "a sum of two Wide<{}> fits Wide<{}>", L, M);
-    prop_assert_eq!(x.checked_add(&y), s.and_then(|s| s.resize::<L>()), "add narrow = add wide");
+    prop_assert_eq!(
+        x.checked_add(&y),
+        s.and_then(|s| s.resize::<L>()),
+        "add narrow = add wide"
+    );
     let d = xw.checked_sub(&yw);
-    prop_assert!(d.is_some(), "a difference of two Wide<{}> fits Wide<{}>", L, M);
-    prop_assert_eq!(x.checked_sub(&y), d.and_then(|d| d.resize::<L>()), "sub narrow = sub wide");
+    prop_assert!(
+        d.is_some(),
+        "a difference of two Wide<{}> fits Wide<{}>",
+        L,
+        M
+    );
+    prop_assert_eq!(
+        x.checked_sub(&y),
+        d.and_then(|d| d.resize::<L>()),
+        "sub narrow = sub wide"
+    );
     let p = xw.checked_mul(&yw);
     if M >= 2 * L {
         prop_assert!(p.is_some(), "a product of two Wide<{}> fits Wide<{}>", L, M);
     }
-    prop_assert_eq!(x.checked_mul(&y), p.and_then(|p| p.resize::<L>()), "mul narrow = mul wide");
-    prop_assert_eq!(x.checked_neg(), xw.checked_neg().and_then(|n| n.resize::<L>()), "neg narrow = neg wide");
+    prop_assert_eq!(
+        x.checked_mul(&y),
+        p.and_then(|p| p.resize::<L>()),
+        "mul narrow = mul wide"
+    );
+    prop_assert_eq!(
+        x.checked_neg(),
+        xw.checked_neg().and_then(|n| n.resize::<L>()),
+        "neg narrow = neg wide"
+    );
     Ok(())
 }
 
@@ -335,7 +446,11 @@ fn constants<const L: usize>() -> TestResult {
     prop_assert_eq!(min.checked_mul(&minus_one), None, "min × −1");
     prop_assert_eq!(minus_one.checked_mul(&min), None, "−1 × min");
     prop_assert_eq!(min.checked_mul(&zero), Some(zero), "min × 0");
-    prop_assert_eq!(max.checked_mul(&minus_one), mk::<L>(&-max_of(L)), "max × −1");
+    prop_assert_eq!(
+        max.checked_mul(&minus_one),
+        mk::<L>(&-max_of(L)),
+        "max × −1"
+    );
     prop_assert_eq!(max.checked_mul(&max), None);
     prop_assert_eq!(min.checked_mul(&min), None);
     prop_assert_eq!(min.checked_mul(&max), None);
@@ -347,18 +462,43 @@ fn constants<const L: usize>() -> TestResult {
     prop_assert_eq!(minus_one.checked_sub(&min), Some(max), "−1 − min = max");
     prop_assert_eq!(min.checked_add(&minus_one), None);
     prop_assert_eq!(max.checked_add(&one), None);
-    prop_assert_eq!(format!("{max:?}"), format!("Wide<{L}>(0x7{})", "f".repeat(16 * L - 1)));
-    prop_assert_eq!(format!("{min:?}"), format!("Wide<{L}>(0x8{})", "0".repeat(16 * L - 1)));
+    prop_assert_eq!(
+        format!("{max:?}"),
+        format!("Wide<{L}>(0x7{})", "f".repeat(16 * L - 1))
+    );
+    prop_assert_eq!(
+        format!("{min:?}"),
+        format!("Wide<{L}>(0x8{})", "0".repeat(16 * L - 1))
+    );
     let p = top(L);
     for k in 0..=p {
         for da in -1i32..=1 {
             for db in -1i32..=1 {
                 let (ma, mb) = (pow2(k) + da, pow2(p - k) + db);
-                for (a, b) in [(ma.clone(), mb.clone()), (-&ma, mb.clone()), (ma.clone(), -&mb), (-&ma, -&mb)] {
+                for (a, b) in [
+                    (ma.clone(), mb.clone()),
+                    (-&ma, mb.clone()),
+                    (ma.clone(), -&mb),
+                    (-&ma, -&mb),
+                ] {
                     if fits(&a, L) && fits(&b, L) {
                         let (x, y) = (must::<L>(&a), must::<L>(&b));
-                        prop_assert_eq!(x.checked_mul(&y), mk::<L>(&(&a * &b)), "Wide<{}>: {} × {}", L, a, b);
-                        prop_assert_eq!(y.checked_mul(&x), mk::<L>(&(&a * &b)), "Wide<{}>: {} × {}", L, b, a);
+                        prop_assert_eq!(
+                            x.checked_mul(&y),
+                            mk::<L>(&(&a * &b)),
+                            "Wide<{}>: {} × {}",
+                            L,
+                            a,
+                            b
+                        );
+                        prop_assert_eq!(
+                            y.checked_mul(&x),
+                            mk::<L>(&(&a * &b)),
+                            "Wide<{}>: {} × {}",
+                            L,
+                            b,
+                            a
+                        );
                     }
                 }
             }
@@ -429,7 +569,11 @@ fn limit_pair<const L: usize>() -> BoxedStrategy<(Wide<L>, Wide<L>)> {
         .prop_map(|(x, d, high, difference)| {
             let a = val(&x);
             let limit = if high { max_of(L) } else { min_of(L) };
-            let b = if difference { &a - limit - d } else { limit - &a + d };
+            let b = if difference {
+                &a - limit - d
+            } else {
+                limit - &a + d
+            };
             (x, must::<L>(&clamp(b, L)))
         })
         .boxed()
@@ -539,7 +683,12 @@ mod native_i128 {
         let root = pow2(127).sqrt().to_i128().unwrap();
         v.extend([root - 1, root, root + 1, -(root - 1), -root, -(root + 1)]);
         v.extend([i128::MAX, i128::MAX - 1, i128::MIN, i128::MIN + 1]);
-        v.extend([i128::from(i64::MAX), i128::from(i64::MIN), i128::from(u64::MAX), -i128::from(u64::MAX)]);
+        v.extend([
+            i128::from(i64::MAX),
+            i128::from(i64::MIN),
+            i128::from(u64::MAX),
+            -i128::from(u64::MAX),
+        ]);
         v.sort_unstable();
         v.dedup();
         v
@@ -550,10 +699,33 @@ mod native_i128 {
         let (x, y) = (Wide::<2>::from_i128(a), Wide::<2>::from_i128(b));
         prop_assert_eq!(x.to_le_limbs(), limbs_of(a), "from_i128({})", a);
         prop_assert_eq!(Wide::<2>::from_le_limbs(limbs_of(a)), x);
-        prop_assert_eq!(x.checked_add(&y).map(Wide::to_le_limbs), a.checked_add(b).map(limbs_of), "{} + {}", a, b);
-        prop_assert_eq!(x.checked_sub(&y).map(Wide::to_le_limbs), a.checked_sub(b).map(limbs_of), "{} − {}", a, b);
-        prop_assert_eq!(x.checked_mul(&y).map(Wide::to_le_limbs), a.checked_mul(b).map(limbs_of), "{} × {}", a, b);
-        prop_assert_eq!(x.checked_neg().map(Wide::to_le_limbs), a.checked_neg().map(limbs_of), "−({})", a);
+        prop_assert_eq!(
+            x.checked_add(&y).map(Wide::to_le_limbs),
+            a.checked_add(b).map(limbs_of),
+            "{} + {}",
+            a,
+            b
+        );
+        prop_assert_eq!(
+            x.checked_sub(&y).map(Wide::to_le_limbs),
+            a.checked_sub(b).map(limbs_of),
+            "{} − {}",
+            a,
+            b
+        );
+        prop_assert_eq!(
+            x.checked_mul(&y).map(Wide::to_le_limbs),
+            a.checked_mul(b).map(limbs_of),
+            "{} × {}",
+            a,
+            b
+        );
+        prop_assert_eq!(
+            x.checked_neg().map(Wide::to_le_limbs),
+            a.checked_neg().map(limbs_of),
+            "−({})",
+            a
+        );
         prop_assert_eq!(x.cmp(&y), a.cmp(&b), "{} vs {}", a, b);
         prop_assert_eq!(x.to_i128(), Some(a));
         prop_assert_eq!(x.signum(), Sign::of_i128(a));
@@ -586,8 +758,14 @@ mod native_i128 {
         assert_eq!(min, Wide::<2>::from_i128(i128::MIN));
         assert_eq!(of_limbs(min.to_le_limbs()), i128::MIN);
         assert_eq!(of_limbs(max.to_le_limbs()), i128::MAX);
-        assert_eq!(format!("{:?}", Wide::<2>::from_i64(-2)), "Wide<2>(0xfffffffffffffffffffffffffffffffe)");
-        assert_eq!(format!("{:?}", Wide::<2>::one()), "Wide<2>(0x00000000000000000000000000000001)");
+        assert_eq!(
+            format!("{:?}", Wide::<2>::from_i64(-2)),
+            "Wide<2>(0xfffffffffffffffffffffffffffffffe)"
+        );
+        assert_eq!(
+            format!("{:?}", Wide::<2>::one()),
+            "Wide<2>(0x00000000000000000000000000000001)"
+        );
     }
 
     proptest! {
@@ -628,14 +806,26 @@ mod sweeps {
 
     #[test]
     fn oracle_reads_and_writes_hand_written_limbs() {
-        assert_eq!(val(&Wide::<2>::from_le_limbs([0, 1 << 63])), BigInt::from(i128::MIN));
-        assert_eq!(val(&Wide::<3>::from_le_limbs([u64::MAX; 3])), BigInt::from(-1));
+        assert_eq!(
+            val(&Wide::<2>::from_le_limbs([0, 1 << 63])),
+            BigInt::from(i128::MIN)
+        );
+        assert_eq!(
+            val(&Wide::<3>::from_le_limbs([u64::MAX; 3])),
+            BigInt::from(-1)
+        );
         assert_eq!(val(&Wide::<3>::from_le_limbs([0, 0, 1 << 63])), -pow2(191));
-        assert_eq!(mk::<3>(&BigInt::from(-2)).map(Wide::to_le_limbs), Some([u64::MAX - 1, u64::MAX, u64::MAX]));
+        assert_eq!(
+            mk::<3>(&BigInt::from(-2)).map(Wide::to_le_limbs),
+            Some([u64::MAX - 1, u64::MAX, u64::MAX])
+        );
         assert_eq!(mk::<3>(&pow2(128)).map(Wide::to_le_limbs), Some([0, 0, 1]));
         assert_eq!(mk::<3>(&pow2(191)), None);
         assert_eq!(mk::<3>(&(-pow2(191) - 1u32)), None);
-        assert_eq!(mk::<7>(&(-pow2(447))).map(Wide::to_le_limbs), Some([0, 0, 0, 0, 0, 0, 1 << 63]));
+        assert_eq!(
+            mk::<7>(&(-pow2(447))).map(Wide::to_le_limbs),
+            Some([0, 0, 0, 0, 0, 0, 1 << 63])
+        );
     }
 
     #[test]
@@ -652,7 +842,15 @@ mod sweeps {
 
     #[test]
     fn every_wide3_limb_pattern_and_pair() {
-        let set = [0, 1, (1 << 63) - 1, 1 << 63, (1 << 63) + 1, u64::MAX - 1, u64::MAX];
+        let set = [
+            0,
+            1,
+            (1 << 63) - 1,
+            1 << 63,
+            (1 << 63) + 1,
+            u64::MAX - 1,
+            u64::MAX,
+        ];
         let all = patterns::<3>(&set);
         assert_eq!(all.len(), 343);
         for &x in &all {
@@ -677,12 +875,23 @@ mod sweeps {
 
     #[test]
     fn sorting_by_ord_sorts_by_value() {
-        let set = [0, 1, (1 << 63) - 1, 1 << 63, (1 << 63) + 1, u64::MAX - 1, u64::MAX];
+        let set = [
+            0,
+            1,
+            (1 << 63) - 1,
+            1 << 63,
+            (1 << 63) + 1,
+            u64::MAX - 1,
+            u64::MAX,
+        ];
         let mut all = patterns::<3>(&set);
         all.reverse();
         all.sort();
         let values: Vec<BigInt> = all.iter().map(val).collect();
-        assert!(values.windows(2).all(|w| w[0] < w[1]), "Ord sorts strictly by value, distinct limbs distinct values");
+        assert!(
+            values.windows(2).all(|w| w[0] < w[1]),
+            "Ord sorts strictly by value, distinct limbs distinct values"
+        );
         for (i, x) in all.iter().enumerate() {
             assert_eq!(all.binary_search(x), Ok(i));
         }
@@ -701,7 +910,10 @@ mod sweeps {
             assert_eq!(chain, Some(x), "2 → 3 → 7 → 16 → 5 → 2 restores {a}");
             let raw = x.resize::<7>().unwrap().to_le_limbs();
             let fill = if a.is_negative() { u64::MAX } else { 0 };
-            assert!(raw[2..].iter().all(|&l| l == fill), "widening sign-extends {a}");
+            assert!(
+                raw[2..].iter().all(|&l| l == fill),
+                "widening sign-extends {a}"
+            );
         }
         // Narrowing checks the dropped limbs and the surviving sign bit, in odd widths too.
         let just_out = Wide::<7>::from_le_limbs([0, 0, 1 << 63, 0, 0, 0, 0]);
@@ -710,7 +922,15 @@ mod sweeps {
         assert_eq!(just_in.resize::<3>(), Some(Wide::<3>::max_value()));
         let low = Wide::<7>::from_le_limbs([0, 0, 1 << 63, u64::MAX, u64::MAX, u64::MAX, u64::MAX]);
         assert_eq!(low.resize::<3>(), Some(Wide::<3>::min_value()));
-        let below = Wide::<7>::from_le_limbs([u64::MAX, u64::MAX, (1 << 63) - 1, u64::MAX, u64::MAX, u64::MAX, u64::MAX]);
+        let below = Wide::<7>::from_le_limbs([
+            u64::MAX,
+            u64::MAX,
+            (1 << 63) - 1,
+            u64::MAX,
+            u64::MAX,
+            u64::MAX,
+            u64::MAX,
+        ]);
         assert_eq!(below.resize::<3>(), None, "−2^191 − 1 does not fit Wide<3>");
     }
 
@@ -736,7 +956,11 @@ mod guard {
 
     /// Values of a one-limb `Wide`, as `i64`.
     fn one_limb_values() -> Vec<i64> {
-        LIMB_EDGES.iter().map(|&l| l as i64).chain([-1, 7, -12_345, i64::MIN, i64::MAX]).collect()
+        LIMB_EDGES
+            .iter()
+            .map(|&l| l as i64)
+            .chain([-1, 7, -12_345, i64::MIN, i64::MAX])
+            .collect()
     }
 
     /// `Wide<1>` cannot be made by `from_i128`, `one`, `max_value` or `min_value` (they evaluate the
@@ -747,12 +971,27 @@ mod guard {
             let x = Wide::<1>::from_le_limbs([a as u64]);
             assert_eq!(x.signum(), Sign::of_i64(a));
             assert_eq!(x.is_negative(), a < 0);
-            assert_eq!(x.checked_neg().map(|n| n.to_le_limbs()[0] as i64), a.checked_neg());
-            assert_eq!(x.resize::<2>(), Some(Wide::<2>::from_i64(a)), "Wide<1>({a}) widened");
+            assert_eq!(
+                x.checked_neg().map(|n| n.to_le_limbs()[0] as i64),
+                a.checked_neg()
+            );
+            assert_eq!(
+                x.resize::<2>(),
+                Some(Wide::<2>::from_i64(a)),
+                "Wide<1>({a}) widened"
+            );
             for b in one_limb_values() {
                 let y = Wide::<1>::from_le_limbs([b as u64]);
-                assert_eq!(x.checked_add(&y).map(|r| r.to_le_limbs()[0] as i64), a.checked_add(b), "{a} + {b}");
-                assert_eq!(x.checked_sub(&y).map(|r| r.to_le_limbs()[0] as i64), a.checked_sub(b), "{a} − {b}");
+                assert_eq!(
+                    x.checked_add(&y).map(|r| r.to_le_limbs()[0] as i64),
+                    a.checked_add(b),
+                    "{a} + {b}"
+                );
+                assert_eq!(
+                    x.checked_sub(&y).map(|r| r.to_le_limbs()[0] as i64),
+                    a.checked_sub(b),
+                    "{a} − {b}"
+                );
                 assert_eq!(x.cmp(&y), a.cmp(&b), "{a} vs {b}");
             }
         }
@@ -763,7 +1002,11 @@ mod guard {
     #[test]
     fn wide1_to_i128_of_non_negative_values() {
         for a in one_limb_values().into_iter().filter(|&a| a >= 0) {
-            assert_eq!(Wide::<1>::from_le_limbs([a as u64]).to_i128(), Some(i128::from(a)), "Wide<1>({a})");
+            assert_eq!(
+                Wide::<1>::from_le_limbs([a as u64]).to_i128(),
+                Some(i128::from(a)),
+                "Wide<1>({a})"
+            );
         }
     }
 
@@ -773,7 +1016,11 @@ mod guard {
     #[test]
     fn wide1_to_i128_of_negative_values() {
         for a in one_limb_values().into_iter().filter(|&a| a < 0) {
-            assert_eq!(Wide::<1>::from_le_limbs([a as u64]).to_i128(), Some(i128::from(a)), "Wide<1>({a})");
+            assert_eq!(
+                Wide::<1>::from_le_limbs([a as u64]).to_i128(),
+                Some(i128::from(a)),
+                "Wide<1>({a})"
+            );
         }
     }
 
@@ -809,19 +1056,41 @@ mod kernel_extremes {
         let (lo, hi) = (I256::from_i128(i128::MIN), I256::from_i128(i128::MAX));
         let big = lo.checked_mul(&lo).unwrap();
         assert_eq!(val(&big), pow2(254), "(−2^127)² = 2^254");
-        assert_eq!(big.checked_add(&big), None, "2^254 + 2^254 = 2^255 leaves I256");
+        assert_eq!(
+            big.checked_add(&big),
+            None,
+            "2^254 + 2^254 = 2^255 leaves I256"
+        );
         let neg = big.checked_neg().unwrap();
-        assert_eq!(neg.checked_add(&neg), Some(I256::min_value()), "−2^254 − 2^254 = −2^255 = min");
-        assert_eq!(neg.checked_add(&neg).and_then(|m| m.checked_sub(&I256::one())), None);
+        assert_eq!(
+            neg.checked_add(&neg),
+            Some(I256::min_value()),
+            "−2^254 − 2^254 = −2^255 = min"
+        );
+        assert_eq!(
+            neg.checked_add(&neg)
+                .and_then(|m| m.checked_sub(&I256::one())),
+            None
+        );
         let mixed = lo.checked_mul(&hi).unwrap();
         assert_eq!(val(&mixed), BigInt::from(i128::MIN) * i128::MAX);
-        assert_eq!(val(&hi.checked_mul(&hi).unwrap()), BigInt::from(i128::MAX) * i128::MAX);
+        assert_eq!(
+            val(&hi.checked_mul(&hi).unwrap()),
+            BigInt::from(i128::MAX) * i128::MAX
+        );
         // Three products of 2^254 magnitude: the partial sums leave I256 even when the total would not.
         let total = big.checked_add(&neg).and_then(|s| s.checked_add(&big));
         assert_eq!(total, Some(big));
-        assert_eq!(big.checked_add(&big).and_then(|s| s.checked_add(&neg)), None, "order of a sum matters");
+        assert_eq!(
+            big.checked_add(&big).and_then(|s| s.checked_add(&neg)),
+            None,
+            "order of a sum matters"
+        );
         // Wide<2> holds none of these products.
-        assert_eq!(Wide::<2>::from_i128(i128::MIN).checked_mul(&Wide::<2>::from_i128(2)), None);
+        assert_eq!(
+            Wide::<2>::from_i128(i128::MIN).checked_mul(&Wide::<2>::from_i128(2)),
+            None
+        );
     }
 
     /// A `Wide<L>` with its exact value: every operation is checked against the oracle, and gives
@@ -834,7 +1103,10 @@ mod kernel_extremes {
 
     impl<const L: usize> Tracked<L> {
         fn of(c: i64) -> Self {
-            Self { w: Wide::from_i64(c), v: BigInt::from(c) }
+            Self {
+                w: Wide::from_i64(c),
+                v: BigInt::from(c),
+            }
         }
 
         fn step(&self, got: Option<Wide<L>>, v: BigInt, op: &str, other: &Self) -> Option<Self> {
@@ -865,7 +1137,11 @@ mod kernel_extremes {
     }
 
     /// The 3 × 3 determinant of the first three columns of rows p, q, r.
-    fn det3<const L: usize>(p: &[Tracked<L>; 4], q: &[Tracked<L>; 4], r: &[Tracked<L>; 4]) -> Option<Tracked<L>> {
+    fn det3<const L: usize>(
+        p: &[Tracked<L>; 4],
+        q: &[Tracked<L>; 4],
+        r: &[Tracked<L>; 4],
+    ) -> Option<Tracked<L>> {
         let m1 = q[1].mul(&r[2])?.sub(&q[2].mul(&r[1])?)?;
         let m2 = q[0].mul(&r[2])?.sub(&q[2].mul(&r[0])?)?;
         let m3 = q[0].mul(&r[1])?.sub(&q[1].mul(&r[0])?)?;
@@ -876,8 +1152,18 @@ mod kernel_extremes {
     /// `None` at the first intermediate that leaves `Wide<L>`.
     fn insphere<const L: usize>(p: &[[i64; 3]; 5]) -> Option<Tracked<L>> {
         let e = &p[4];
-        let (a, b, c, d) = (row::<L>(&p[0], e)?, row::<L>(&p[1], e)?, row::<L>(&p[2], e)?, row::<L>(&p[3], e)?);
-        let (ma, mb, mc, md) = (det3(&b, &c, &d)?, det3(&a, &c, &d)?, det3(&a, &b, &d)?, det3(&a, &b, &c)?);
+        let (a, b, c, d) = (
+            row::<L>(&p[0], e)?,
+            row::<L>(&p[1], e)?,
+            row::<L>(&p[2], e)?,
+            row::<L>(&p[3], e)?,
+        );
+        let (ma, mb, mc, md) = (
+            det3(&b, &c, &d)?,
+            det3(&a, &c, &d)?,
+            det3(&a, &b, &d)?,
+            det3(&a, &b, &c)?,
+        );
         let t1 = b[3].mul(&mb)?.sub(&a[3].mul(&ma)?)?;
         let t2 = d[3].mul(&md)?.sub(&c[3].mul(&mc)?)?;
         t1.add(&t2)
@@ -903,7 +1189,9 @@ mod kernel_extremes {
                         if (0..4).any(|i| (i + 1..4).any(|j| s[i] == s[j])) {
                             continue;
                         }
-                        let inversions = (0..4).map(|i| (i + 1..4).filter(|&j| s[i] > s[j]).count()).sum::<usize>();
+                        let inversions = (0..4)
+                            .map(|i| (i + 1..4).filter(|&j| s[i] > s[j]).count())
+                            .sum::<usize>();
                         let term = &m[0][s0] * &m[1][s1] * &m[2][s2] * &m[3][s3];
                         if inversions % 2 == 0 {
                             total += term;
@@ -931,7 +1219,13 @@ mod kernel_extremes {
     /// Five points: a, b, c, d at the corners ±(2^40 − 1) chosen by the 12 bits, e from [`e_for`].
     fn corners(bits: u32) -> [[i64; 3]; 5] {
         let c = |i: u32| if (bits >> i) & 1 == 1 { C } else { -C };
-        [[c(0), c(1), c(2)], [c(3), c(4), c(5)], [c(6), c(7), c(8)], [c(9), c(10), c(11)], e_for(bits)]
+        [
+            [c(0), c(1), c(2)],
+            [c(3), c(4), c(5)],
+            [c(6), c(7), c(8)],
+            [c(9), c(10), c(11)],
+            e_for(bits),
+        ]
     }
 
     /// The module doc's in-sphere budget (about 212 bits): at every corner pattern of a, b, c, d the
@@ -953,7 +1247,11 @@ mod kernel_extremes {
             assert_eq!(det.v, exact, "the expansion is the determinant at {p:?}");
             assert!(exact.abs() < pow2(212), "below 2^212 at {p:?}");
             if bits % 4 == 0 {
-                assert_eq!(det.w.signum(), Sign::Zero, "box corners are cospherical: {p:?}");
+                assert_eq!(
+                    det.w.signum(),
+                    Sign::Zero,
+                    "box corners are cospherical: {p:?}"
+                );
                 assert_eq!(det.w, I256::ZERO);
             }
             largest = largest.max(exact.abs());
@@ -965,8 +1263,15 @@ mod kernel_extremes {
                 None => overflowed += 1,
             }
         }
-        assert!(fitted > 0 && overflowed > 0, "fitted {fitted}, overflowed {overflowed}");
-        assert!(largest.bits() > 191, "the extremes exceed Wide<3>: {} bits", largest.bits());
+        assert!(
+            fitted > 0 && overflowed > 0,
+            "fitted {fitted}, overflowed {overflowed}"
+        );
+        assert!(
+            largest.bits() > 191,
+            "the extremes exceed Wide<3>: {} bits",
+            largest.bits()
+        );
     }
 
     /// A coordinate, weighted towards the extremes.

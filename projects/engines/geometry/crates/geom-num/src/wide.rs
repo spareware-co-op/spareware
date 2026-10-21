@@ -169,7 +169,11 @@ impl<const L: usize> Wide<L> {
     /// The magnitude as an unsigned `64 × L`-bit number (the minimum value's magnitude, 2^(64L−1),
     /// fits as unsigned).
     fn magnitude(&self) -> [u64; L] {
-        if self.is_negative() { self.wrapping_neg().0 } else { self.0 }
+        if self.is_negative() {
+            self.wrapping_neg().0
+        } else {
+            self.0
+        }
     }
 
     /// `self + other`, or `None` if the true sum does not fit.
@@ -177,7 +181,8 @@ impl<const L: usize> Wide<L> {
     pub fn checked_add(&self, other: &Self) -> Option<Self> {
         let r = Self(Self::wrapping_add_limbs(&self.0, &other.0));
         // Overflow happens exactly when both operands share a sign and the result does not.
-        let overflow = self.is_negative() == other.is_negative() && r.is_negative() != self.is_negative();
+        let overflow =
+            self.is_negative() == other.is_negative() && r.is_negative() != self.is_negative();
         (!overflow).then_some(r)
     }
 
@@ -186,7 +191,8 @@ impl<const L: usize> Wide<L> {
     pub fn checked_sub(&self, other: &Self) -> Option<Self> {
         let r = Self(Self::wrapping_sub_limbs(&self.0, &other.0));
         // Overflow happens exactly when the operands differ in sign and the result's sign is not self's.
-        let overflow = self.is_negative() != other.is_negative() && r.is_negative() != self.is_negative();
+        let overflow =
+            self.is_negative() != other.is_negative() && r.is_negative() != self.is_negative();
         (!overflow).then_some(r)
     }
 
@@ -240,8 +246,16 @@ impl<const L: usize> Wide<L> {
             return Some(if negative { m.wrapping_neg() } else { m });
         }
         // Top bit set: only the exact magnitude 2^(64L−1) with a negative sign fits (the minimum value).
-        let is_power = out.iter().rev().enumerate().all(|(k, &limb)| if k == 0 { limb == 1 << 63 } else { limb == 0 });
-        if negative && is_power { Some(Self::min_value()) } else { None }
+        let is_power = out
+            .iter()
+            .rev()
+            .enumerate()
+            .all(|(k, &limb)| if k == 0 { limb == 1 << 63 } else { limb == 0 });
+        if negative && is_power {
+            Some(Self::min_value())
+        } else {
+            None
+        }
     }
 
     /// The same value in a `Wide<M>`, or `None` if it does not fit.
@@ -325,7 +339,15 @@ mod tests {
 
     #[test]
     fn from_i128_round_trips() {
-        for v in [0i128, 1, -1, i128::MAX, i128::MIN, 1 << 100, -(1 << 100) + 7] {
+        for v in [
+            0i128,
+            1,
+            -1,
+            i128::MAX,
+            i128::MIN,
+            1 << 100,
+            -(1 << 100) + 7,
+        ] {
             assert_eq!(I256::from_i128(v).to_i128(), Some(v));
             assert_eq!(I256::from_i128(v).signum(), Sign::of_i128(v));
         }
@@ -339,7 +361,11 @@ mod tests {
         assert_eq!(min.checked_sub(&I256::one()), None);
         assert_eq!(min.checked_neg(), None);
         assert_eq!(min.checked_mul(&I256::from_i64(-1)), None);
-        assert_eq!(max.checked_mul(&I256::from_i64(-1)).and_then(|v| v.checked_sub(&I256::one())), Some(min));
+        assert_eq!(
+            max.checked_mul(&I256::from_i64(-1))
+                .and_then(|v| v.checked_sub(&I256::one())),
+            Some(min)
+        );
         assert!(min < max);
         // 2^127 × 2^127 = 2^254 fits; 2^127 × 2^128 = 2^255 does not (positive).
         let p127 = I256::from_le_limbs([0, 1 << 63, 0, 0]);
@@ -347,7 +373,10 @@ mod tests {
         assert!(p127.checked_mul(&p127).is_some());
         assert_eq!(p127.checked_mul(&p128), None);
         // −2^127 × 2^128 = −2^255 is exactly the minimum.
-        assert_eq!(p127.checked_neg().and_then(|n| n.checked_mul(&p128)), Some(min));
+        assert_eq!(
+            p127.checked_neg().and_then(|n| n.checked_mul(&p128)),
+            Some(min)
+        );
     }
 
     #[test]
