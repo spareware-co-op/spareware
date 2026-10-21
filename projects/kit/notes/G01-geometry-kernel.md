@@ -2,6 +2,8 @@
 
 *Piece G01, Spare Kit. Decision note. Written 2026-10-21 by Claude Opus 5.5 for the owner. Proposed: an owner accepts it by merging the pull request that carries it. Evidence: ten research reports and three vetting reports in [G01-evidence](G01-evidence/README.md), each reading the actual source of the projects it cites.*
 
+*What merging accepts: this note together with the kernel's [architecture front page](../../engines/geometry/ARCHITECTURE.md) and its chapters in [architecture/](../../engines/geometry/architecture/), one file for each of sections 6 to 32, numbered as here. A chapter holds its section in full. Anything a chapter marks as proposed, pending or an open question, including a change it proposes to a section of this note, stays open until an owner settles it in section 32 or in a later decision note.*
+
 ## The answer in plain words
 
 Spareware writes its own geometry kernel in Rust, as part of Spare Kit, and every program uses it: Spare Construct for every discipline and survey, Spare Studio's 3D app, the simulation engine, and programs still to come, such as mechanical design, car design and manufacturing, a Spare Electronics for circuit boards, and 3D content creation, movie and game tools (which use its meshes, subdivision, booleans, fields and collision queries, while animation, physics and rendering live in their own engines on top). One kernel covers all geometry anyone needs to model: AutoCAD-class 2D drafting, Revit-class building solids, mechanical parts and assemblies, car body surfaces, manufacturing (machining, moulds, 3D printing), circuit boards, free-form surfaces, subdivision surfaces, implicit fields, meshes, terrain, road alignments and point clouds.
@@ -162,480 +164,180 @@ Rules that keep the layers honest:
 
 ## 6. Numbers: the grid, exact predicates and tolerances
 
-This section decides the foundation everything else stands on. Evidence: [05](G01-evidence/05-exact-arithmetic-determinism.md), with [01](G01-evidence/01-manifold-mesh-booleans.md) for plane-based booleans and [02](G01-evidence/02-occt-parasolid-acis.md) for tolerant modelling.
+Every coordinate is a whole number of grid steps in a 64-bit integer: 156.25 nm for buildings, sites and roads (±171.8 km per frame), 6.25 nm for parts and circuit boards, and 0.25 nm in reserve, each step 25 times finer than the one above, so moving to a finer step loses nothing. Every decision about topology is the exact sign of an integer expression whose width is proven in advance, and constructed points stay implicit until an operation commits them to the grid, moving each coordinate by at most half a step. Curved work is certified, and a tolerance ladder names every bound: a fit bound of 64 steps (0.01 mm for buildings, 0.4 µm for parts), an angular bound of 2^-34 radians, and import healing of 640 steps by default, capped at 6,400. Tolerant bodies exist only as an import state.
 
-### 6.1 The grid
-
-Every coordinate the kernel stores is a whole number of grid steps.
-
-- **The standard grid step, q0, is 156.25 nanometres: 1/6400 of a millimetre.** It is the largest step that makes both 0.01 mm (64 steps) and 1/256 inch (635 steps) exact whole numbers, so metric and imperial models both round-trip exactly. One millimetre is 6,400 steps and one inch is 162,560.
-- **Coordinates are `i64` in a local frame, kept within 2^40 steps of its origin: ±171.8 km at q0.** That covers any building, any site and a 50 km road corridor in one frame. Keeping within 40 bits is what lets every predicate below run in fixed-size integers, whatever the step.
-- **Frames hold the real world.** Each model has a project frame. Its link to a map projection (for example NZTM2000) is a frame record: the coordinate system's ID, the origin in grid steps (an NZTM northing is about 2^45 steps), a rotation and a scale factor. Survey and map data are converted into the frame once, in double-double arithmetic, and rounded to the grid. Networks wider than ±171.8 km, such as a regional road model, use several frames on a shared lattice, so moving between neighbouring frames is an exact integer shift.
-- **A ladder of grid steps, each exactly 25 times finer than the one above.** Every frame picks one:
-
-  | Step | Size | Exact units | Range per frame | For |
-  | --- | --- | --- | --- | --- |
-  | q0 | 156.25 nm | 0.01 mm, 1 mm, 1/256 inch | ±171.8 km | Buildings, sites, roads, survey |
-  | q1 | 6.25 nm | 1 µm, 0.01 mm, 1 mil (1/1000 inch), 1/256 inch | ±6.87 km | Mechanical parts, products, circuit boards |
-  | q2 | 0.25 nm | 1 nm, and everything above | ±275 m | Reserved, for example chip layout |
-
-  A finer step divides every coarser one exactly, so a building's coordinates convert into a part's fine frame by multiplying by 25, with nothing lost. A precision part or a circuit board placed in a building keeps its own fine frame, and a boolean between the two converts the building's geometry into the fine frame and stays exact. Converting fine to coarse rounds, and the result says so. Why 25: 156.25 nm is the largest step making 0.01 mm and 1/256 inch exact, and 6.25 nm, which is 156.25 nm divided by 25, is the largest step that also makes 1 µm and 1 mil exact (it is the greatest common divisor of 1 µm, 1 mil, 0.01 mm and 1/256 inch). This is decision 1 in section 32.
-
-Why a grid and not floating point: Revit and OpenCascade store doubles and pay for it with tolerances that leak into every decision. On a grid, the data the kernel decides from is exact, and the only rounding happens at known points: when a new point is committed (at most half a step, 78 nm) and when curved geometry is fitted (at most the certified bound below).
-
-### 6.2 Exact predicates
-
-A predicate is a yes, no or "exactly on it" question: which side of this plane is this point, does this point lie inside this circle. Topology is decided only by predicates, and every predicate in the kernel is exact.
-
-- **They return a sign, never a number:** `Negative`, `Zero` or `Positive`.
-- **They are computed in fixed-size integers.** With coordinates under 2^40, orientation in 2D and 3D fits in `i128`; circle and sphere tests in 256 bits; the deepest plane-based test (a point made by three planes, tested against a fourth plane) in 384 bits. Each predicate's module carries the written derivation of its bit budget and a test at the extreme values (every coordinate at ±(2^40 − 1)). Evidence: the bit-budget table in [05](G01-evidence/05-exact-arithmetic-determinism.md), section 4, matching EMBER's published 256-bit bound at 26-bit inputs.
-- **A cheap filter goes first.** Each predicate first runs in `f64` with a semi-static error bound (the method of Meyer and Pion's generator, as used in Geogram's PCK, BSD-3) and returns at once when the sign is certain. Only uncertain cases fall through to the exact integer path. There is no interval stage and no change of rounding mode, which Rust forbids and WebAssembly cannot do.
-- **Filter constants are generated, not hand-typed**, from a small description of each predicate, the way Geogram's PCK generator does it. Hand-typed error bounds are where predicate libraries go wrong.
-- **Degenerate ties are handled on purpose.** Where an algorithm needs every sign to be non-zero (Delaunay triangulation, ray parity), it uses symbolic perturbation (Simulation of Simplicity, Edelsbrunner and Mücke 1990), ordered by persistent names, never by memory address as Geogram's default does. Where a tie means something real (two walls sharing a face), booleans handle it explicitly, because a perturbation would turn a shared face into an arbitrary tiny gap or overlap.
-
-### 6.3 Constructions stay implicit until committed
-
-A construction makes a new point or plane: where three planes meet, where a line hits a plane. Rounding a constructed point and then deciding things about the rounded point is the classic way kernels lose consistency (CGAL's own manual warns of it; [05](G01-evidence/05-exact-arithmetic-determinism.md), section 3).
-
-- Inside an operation, constructed points stay implicit: a point is stored as "the meeting of these three planes" in homogeneous integer coordinates, and predicates act on that definition exactly (the method of Attene's indirect predicates and EMBER's plane-based arithmetic, re-derived in our own code because Attene's library is LGPL and changes the rounding mode).
-- **Flat-faced solids stay plane-based for good.** A polyhedral solid is stored as its planes, and every vertex is a meeting of planes. Booleans make new solids out of the same input planes, so cutting a wall 300 times never rounds anything and never drifts (section 11).
-- A point is rounded to the grid only when it must become explicit (export, a 2D drawing, a curved construction). The rounded result is re-checked with exact predicates. If rounding would flip anything, the implicit form is kept instead.
-
-### 6.4 Curved geometry: deterministic and certified
-
-Curves and surfaces other than lines and planes are evaluated in `f64` arithmetic in grid units, which Rust computes exactly to IEEE rules on every target. The maths functions (`sin`, `cos`, `atan2`, `exp` and so on) come only from one pure-Rust library, never the platform's, because the standard ones differ by platform (section 21). Every curved computation that feeds a decision carries a certified bound from interval or Bernstein arithmetic, rounded outward with `next_up` and `next_down` (stable in Rust since 1.86).
-
-### 6.5 The tolerance ladder
-
-There is no per-entity tolerance that grows. There is one fixed ladder, derived from the frame's grid step q, so it scales with the step: a circuit board's fit bound is 25 times tighter than a building's.
-
-| Name | In steps | At q0 (buildings) | At q1 (parts, boards) | Used for |
-| --- | --- | --- | --- | --- |
-| Commit rounding | at most q/2 | 78 nm | 3.1 nm | Making an implicit point explicit |
-| Fit bound, ε_fit | 64q | 0.01 mm | 0.4 µm | The largest certified error of any curved construction (intersection curves, fitted surfaces, offsets of NURBS) that feeds topology |
-| Angular bound, ε_ang | 2^-34 rad | about 5.8 × 10^-11 rad | the same | Angles in curved code only. It equals ε_fit over the frame's range (64q over 2^40 q), so it is the same at every step; the same construction as Parasolid's 1e-11 |
-| Import healing, ε_heal | 640q by default, capped at 6,400q | 0.1 mm, capped at 1 mm | 4 µm, capped at 40 µm | Closing gaps in imported data, once, at import, recorded in the operation log |
-| Short-edge warning | 3,200q | 0.5 mm | 20 µm | A warning only. There is no hard minimum edge length; the true minimum is one grid step |
-
-- The exact polyhedral core uses no tolerance at all.
-- **Tolerant bodies exist only as an import state.** An imported body whose edges do not quite meet carries per-edge tolerances up to ε_heal, marked Tolerant. No operation ever raises a tolerance. Operations either work within the existing ones or refuse with `ToleranceExceeded`, and healing turns a Tolerant body into a Certified or Exact one. This is Parasolid's published model ("exact by default, tolerant only where needed") with OpenCascade's monotone growth removed.
-- Every operation has a tolerance ceiling. Exceeding it is an error that rolls back, never silent growth (Parasolid's `max_tol`, made mandatory).
+The full chapter: [06-numbers.md](../../engines/geometry/architecture/06-numbers.md).
 
 ## 7. Geometry types
 
-One curve family serves 2D and 3D. Each kind is stored as itself, exactly, never converted to NURBS behind the user's back: arcs stay arcs, so dimensioning, snapping, offsets and file exchange stay exact. Conversion to NURBS is on demand and returns the NURBS, whether it is exact, and its maximum error. Evidence: [04](G01-evidence/04-nurbs-surfaces.md), sections 2 and 7.
+One curve family serves 2D and 3D: lines, arcs, conics, helices, road and rail spirals, splines and NURBS, with the matching surfaces. Each kind is stored as itself, exactly, never converted to NURBS behind the user's back, so dimensions, snaps, offsets and file exchange stay exact. Conversion to NURBS is on demand and returns the NURBS, whether it is exact, and its maximum error.
 
-**Curves (2D and 3D)**
-
-- Line, ray, infinite line
-- Circle and arc; ellipse and elliptical arc (by parameter, not polar angle); parabola; hyperbola
-- Helix (exact; neither STEP nor IFC has one)
-- Clothoid, and IFC 4.3's cosine, sine and second-, third- and seventh-order polynomial spirals, for road and rail alignments
-- Polynomial curve; circular involute
-- NURBS, rational or not, periodic or clamped
-- Bulge polyline (lines and arcs with optional widths, as in DXF), composite curve, trimmed curve
-- Offset curve (2D, 3D, and IFC's offset by distances); curve on surface (pcurve)
-- Intersection curve: procedural, defined by its two surfaces, with a cached fitted curve and its certified error
-
-**Surfaces**
-
-- Plane; cylinder; cone; sphere; torus, including the degenerate "lemon" and "apple" forms
-- Surface of revolution; linear extrusion; ruled surface
-- Sweep (profile, path and frame rule); fixed-reference and directrix sweeps as IFC defines them
-- Offset surface
-- Rolling-ball blend: procedural, with a cached NURBS and its error
-- NURBS
-- Subdivision limit surface (section 16)
-
-**How they are written in code.** Storage uses closed enums, one variant per kind: exhaustive matching, stable serialisation, and easy to read for people and AI. Behaviour uses traits: a curve can evaluate, give derivatives, give a conservative bound over any parameter interval, give derivative bounds, convert to NURBS with an error, split, reverse and transform. Procedural kinds carry their definition plus an optional cached approximation and its error. Trimming belongs to the topology's loops, not to a surface kind. Every algorithm's doc comment names its source: a NURBS Book algorithm number or a paper's DOI.
-
-**Transforms can change a kind.** A non-uniform scale turns a circle into an ellipse, and a mirror reverses an arc. Transforms are typed so that this is explicit. Translations by whole grid steps, rotations by multiples of 90 degrees and mirrors stay exact; other rotations round to the grid and the result says so.
+The full chapter: [07-geometry-types.md](../../engines/geometry/architecture/07-geometry-types.md).
 
 ## 8. Topology: how shapes are stored
 
-Evidence: [02](G01-evidence/02-occt-parasolid-acis.md) sections 1, 5, 8 and 9; [03](G01-evidence/03-rust-kernels-crates.md) section 5; [07](G01-evidence/07-persistent-naming.md).
+Shapes are boundary representations in the structure Parasolid documents publicly: body, region, shell, face, loop, fin, edge and vertex, with explicit fins and regions. Entities live in immutable arenas with typed 32-bit indices, so an edit shares everything it does not change. Every result passes the validity checker before it is returned, and attributes travel with entities through operations.
 
-### 8.1 Entities
-
-The kernel uses the boundary-representation structure that Parasolid documents publicly, with explicit fins and regions. It is richer than OpenCascade's, which has no fin entity and keys curves on faces by pointer.
-
-| Entity | What it is |
-| --- | --- |
-| Body | One shape. Its kind is Solid, Sheet (open surfaces), Wire (curves), Acorn (points) or General (mixed and non-manifold) |
-| Region | A connected volume of a body, solid or void. Every body has one infinite void region outside it. Regions make cellular models: rooms and spaces are regions bounded by shared faces |
-| Shell | A connected set of faces bounding a region |
-| Face | A bounded piece of one surface, with a sense (which side is material) |
-| Loop | A closed boundary of a face: one outer loop and any number of holes |
-| Fin | The use of an edge by a loop, in one direction. In non-manifold models fins around an edge are kept in radial order |
-| Edge | A bounded piece of one curve, between two vertices (or closed) |
-| Vertex | A point |
-
-Geometry attaches by index into the body's geometry pools: a face to a surface, an edge to a 3D curve, and a fin on a curved face to a curve in that face's parameter space (a pcurve). Each edge has one primary geometry: its 3D curve, exact or certified. Pcurves are derived and checked against it. An imported Tolerant edge has its pcurves as primary and its 3D curve derived, as Parasolid and ACIS do. The two are never kept in loose agreement by a growing tolerance.
-
-### 8.2 Storage
-
-- **Arenas with typed indices.** Each body stores each entity kind in a vector, addressed by a 32-bit typed index (`FaceIx`, `EdgeIx` and so on), assigned in operation order. No pointers, no reference counting between entities, no identity by memory address. Truck, Fornjot and OpenCascade all used address identity and all lost determinism through it; Fornjot ended on exactly this arena design ([03](G01-evidence/03-rust-kernels-crates.md), section 2).
-- **Immutable after building.** A body is made through a builder and is never changed afterwards. An edit makes a new version. Large bodies are split into shared chunks so a new version copies only what changed. Undo, multi-user replay and "try and see" come free; OpenCascade's optional safe mode becomes the only mode.
-- **Ordered containers only.** Maps that can be iterated are ordered by stable keys. Hash maps are used only where they are never iterated.
-- **Indices are not names.** An index is valid inside one body version. Persistent names (section 20) are what references and files hold.
-
-### 8.3 The validity checker
-
-Every operation's result passes the checker before it is returned. The checker runs in groups, like Parasolid's published body check:
-
-1. **Combinatorial:** every loop closes, every fin has a partner or is a recorded boundary, shells are closed and consistently oriented, regions nest correctly, and Euler's formula holds.
-2. **Geometric consistency:** vertices lie on their edges' curves and their faces' surfaces, edges lie on their faces, and pcurves match their 3D curves. These are certified with bounds, not sampled. OpenCascade samples 23 points, and its own documentation shows edges that pass and are still invalid.
-3. **Self-intersection:** no face crosses itself; no two faces cross except along shared edges.
-4. **Exactness record:** every body's exactness class and bounds are consistent with its geometry.
-
-The cheap groups run after every operation in every build. The full set runs in debug builds, in continuous integration, on every import, and on request.
+The full chapter: [08-topology.md](../../engines/geometry/architecture/08-topology.md).
 
 ## 9. Representations and exactness
 
-"The most complex geometry people want, reliably" needs more than one way to represent shape. Spare Kit has five, in one model, each first-class. Evidence: [09](G01-evidence/09-freeform-subd-implicit.md), [01](G01-evidence/01-manifold-mesh-booleans.md), [04](G01-evidence/04-nurbs-surfaces.md).
+Five ways to represent shape live in one model, each first-class: B-rep, exact meshes, subdivision surfaces, implicit fields and point clouds. Every body carries its exactness class: Exact, Certified with a bound, or Approximate with a measured deviation. A result is as exact as its least exact input, bounds add up, and an operation that would make a result less exact without being asked returns an error offering the explicit alternative.
 
-| Representation | What it is for | Exactness |
-| --- | --- | --- |
-| B-rep (sections 7 and 8) | Everything editable and drawable: walls, slabs, roofs, families, free-form NURBS surfaces | Exact for flat faces and 2D lines and arcs; Certified for curved |
-| Exact mesh | Imported meshes (IFC triangle sets, scans), fast clash, display, the universal fallback | Exact (plane-based, on the grid) |
-| Subdivision surface | Organic and sculpted forms, Catmull-Clark with creases | Exact cage; limit surface certified; conversion to NURBS exact on regular regions and approximate with a stored deviation at extraordinary points |
-| Field (implicit) | Lattices, variable-thickness shells, smooth blends of many shapes, forms that are simplest as "distance from" | Certified by interval bounds when turned into a mesh or B-rep |
-| Point cloud | Scans as reference: snapping, fitting, comparison | Reference only. Never part of a solid |
-
-**Every body carries an exactness class:**
-
-- **Exact:** decided entirely by exact predicates on exact data.
-- **Certified(ε):** within a proven bound ε of the true shape, with ε ≤ ε_fit unless the caller asked for more.
-- **Approximate(ε):** within a measured, not proven, deviation ε. For example, a subdivision surface's extraordinary points converted to NURBS, or a mesh fitted to a scan.
-
-The class of a result is the least exact of its inputs, and bounds add up. An operation that would lower the class without being asked returns an error offering the explicit alternative instead.
-
-**One boolean across representations.** If all operands are B-rep, the B-rep boolean runs. If any is a mesh, the exact mesh boolean runs on certified tessellations. If any is a field, the field boolean runs (B-rep operands enter as exact distance plus winding number). The result's class follows the rule above. A B-rep boolean that cannot be certified returns an error that offers the mesh or field path explicitly. It never falls back silently.
-
-**The conversion graph.** Every conversion between representations is an operation whose edge is labelled exact, certified or approximate, and which returns its bound. The full graph is in section 16.
+The full chapter: [09-representations.md](../../engines/geometry/architecture/09-representations.md).
 
 ## 10. Operations: the contract and the catalogue
 
-### 10.1 The contract
+Every operation, from making a box to filleting forty edges, has one shape: a pure function from a context and inputs to new immutable bodies with their history, names, exactness and diagnostics, or a typed error naming what failed and what would make it succeed. Operations are transactional (nothing is published until the checker passes), budgeted, cancellable, batch first and versioned. The catalogue lists every operation the kernel offers, area by area.
 
-Every operation, from "make a box" to "fillet these 40 edges", has the same shape:
-
-```rust
-fn operation(ctx: &OpContext, input: &OpInput) -> Result<OpOutput, OpError>
-```
-
-- **`OpContext`** carries the operation's permanent ID from the operation log, its budgets (work units, memory, time), a cancellation token, and the precision level (final, or a coarser preview the caller asked for). It holds no randomness and no clock that can affect the result.
-- **`OpOutput`** carries:
-  - the new bodies, immutable;
-  - the **history**: for every output face, edge and vertex, whether it is unchanged, modified, generated, split from, or merged from which inputs, and which inputs were deleted (section 20);
-  - the new **names**;
-  - each body's **exactness class** and bounds;
-  - **diagnostics**: warnings with the entities they concern (a short edge, a near-tangency handled).
-- **`OpError`** is typed per operation, on a shared base (section 22). It names the entities involved, the parameter values and points, and what would make it succeed.
-- **Transactional.** Nothing is published until the result passes the checker. A failed or cancelled operation changes nothing.
-- **Budgeted and cancellable.** Long operations check their budget and the cancellation token at bounded steps and stop cleanly. They never unwind a panic, which WebAssembly builds cannot catch.
-- **Batch first.** Operations take many inputs where that is natural: 300 openings cut from a wall in one call; a thousand panels evaluated in one call with one result per item, so one failure does not fail the list.
-
-### 10.2 The catalogue
-
-Each family below is a section of this note or of its build order.
-
-| Family | Operations |
-| --- | --- |
-| Make | Points, curves and surfaces of every kind; primitives (box, cylinder, cone, sphere, torus, prism); bodies from faces (sew) |
-| 2D | Drafting entities, regions, hatches, 2D booleans and offsets, trim, extend, fillet, chamfer, break, join, stretch, arrays, divide and measure, snaps (section 14) |
-| Sketch | Constrained profiles for families, walls and floors (section 15) |
-| Sweep | Extrude (with taper), revolve, sweep along a path with frame rules, swept blend, loft through sections with guides, network (Gordon) surfaces, IFC's sectioned solids along alignments (section 13) |
-| Combine | Unite, subtract, intersect; general fuse and imprint; split; cells and regions; batch cutting (section 11) |
-| Blend | Fillet and chamfer, constant and variable; vertex blends; blends with chosen continuity (G1, G2, G3) for Class-A surfaces (section 13) |
-| Offset | Offset faces and bodies, shell, thicken, draft; face move, replace and delete with healing (section 13) |
-| Transform | Move, rotate, mirror, scale (uniform and not), patterns |
-| Repair | Import healing within ε_heal, sewing, small-feature removal |
-| Query | Classify a point, measure, distance and clearance, time of first contact between moving bodies (continuous collision detection that never misses a contact, the Tight Inclusion method, MIT; used by door swings, crane and machine-tool paths, construction sequencing, games and the simulation engine), mass properties (exact for flat solids: twice-area and six-times-volume in integers), bounding boxes; surface quality: curvature, continuity across edges, zebra and highlight lines, draft angle against a pull direction |
-| Draw | Section cuts, projections, hidden lines, silhouettes (section 18). Line patterns laid out along curves by exact arc length (certified on ellipses and splines); hatch and fill pattern lines clipped exactly to their regions, arcs and islands included; surface patterns (brick coursing, tiles) mapped onto faces. The kernel makes this geometry, with provenance. Which pattern, weight and colour each category uses is the program's view rules; weights, colours and drawing to screen, print and PDF are `engine-draw2d`'s |
-| Mesh | Watertight tessellation with a proven bound, levels of detail, mesh booleans, repair, volume (tetrahedral) meshes for simulation (section 19) |
-| Manufacture | Swept volumes of moving tools, slicing into layers, parting lines from silhouettes; the strategies themselves (toolpaths, nesting) belong to a manufacturing program or domain toolkit built on these (section 26) |
-| Free-form | Subdivision surfaces, fields, conversions, panelisation, surface division, unrolling (section 16) |
-| Ground | Terrain from points and breaklines, contours, cut and fill, alignments, corridors, straight skeletons for roofs (sections 13 and 17) |
+The full chapter: [10-operations.md](../../engines/geometry/architecture/10-operations.md).
 
 ## 11. Booleans and the arrangement engine
 
-*Drafted from the evidence in the next stage.*
+Every boolean, imprint, split, batch cut and room is a selection from one arrangement: all the inputs are cut against each other once, and the space between them falls into cells, each labelled by winding numbers with the inputs it lies inside. Flat-faced solids use an exact plane-based builder (the EMBER method) that adds no error however often a wall is cut; curved, subdivision and Tolerant operands use a certified builder in the style of OpenCascade's General Fuse.
+
+The full chapter: [11-booleans.md](../../engines/geometry/architecture/11-booleans.md).
 
 ## 12. Intersections
 
-*Drafted from the evidence in the next stage.*
+`geom-intersect` answers where two curves meet, where a curve pierces a surface and where two surfaces cross, for every pair of geometry kinds; projection to the nearest point runs on the same machinery. Every point it returns is an enclosure proven to hold the true value, touching and coincidence are claimed only from exact arithmetic, and any part it cannot prove comes back as a flagged region with a reason, never dropped or guessed.
+
+The full chapter: [12-intersections.md](../../engines/geometry/architecture/12-intersections.md).
 
 ## 13. Sweeps, lofts, blends, offsets and shells
 
-*Drafted from the evidence in the next stage.*
+Every operation that makes a solid from profiles or edits one locally: extrude, revolve, sweeps, lofts, network surfaces, the IFC sweeps, fillets and Class-A blends, offsets, shells, draft, face edits, straight-skeleton roofs, sheet metal and the swept volumes of moving tools. Each runs as plan, carriers, arrangement, select, name and check on section 11's engine, chooses every new face's kind by exact predicates as it builds it, and reports every change of topology it makes.
+
+The full chapter: [13-sweeps-blends-offsets.md](../../engines/geometry/architecture/13-sweeps-blends-offsets.md).
 
 ## 14. 2D drafting
 
-*Drafted from the evidence in the next stage.*
+`geom-2d` is the AutoCAD-class drafting kernel under every flat drawing, on the same grid, predicates, curve kinds and names as the 3D kernel: DXF-class entities, an exact arrangement, regions, hatches, booleans, offsets, edits, snaps, blocks and dimensions. Lines, arcs and ellipses are never approximated, and every "does this cross, touch or contain that" question about them is answered exactly; splines and spirals carry a certified bound and say so.
+
+The full chapter: [14-2d-drafting.md](../../engines/geometry/architecture/14-2d-drafting.md).
 
 ## 15. Sketches and constraint solving
 
-*Drafted from the evidence in the next stage.*
+`geom-sketch` is Spare Kit's own constraint solver, for family profiles, part sketches, board outlines and drafting constraints. It splits a sketch into rigid clusters, solves each by the least-change step, counts the freedoms left, and when rules cannot all hold it fails with the conflicting group and the values that would work, changing nothing.
+
+The full chapter: [15-sketches.md](../../engines/geometry/architecture/15-sketches.md).
 
 ## 16. Free-form: subdivision surfaces and fields
 
-*Drafted from the evidence in the next stage.*
+Subdivision surfaces use Catmull-Clark with creases on an exact control net and a certified limit surface; fields are shapes given by a function, certified by interval bounds when turned into a mesh or a B-rep. The chapter also sets the conversion graph between all five representations, panelisation and unrolling, and how Class-A surface quality is measured, and no shape changes representation or loses exactness unless the caller asked.
+
+The full chapter: [16-free-form.md](../../engines/geometry/architecture/16-free-form.md).
 
 ## 17. Survey, terrain and civil
 
-*Drafted from the evidence in the next stage.*
+Surveyors and designers work on one geometry: frames tied to map projections, survey points and linework, COGO, TINs, contours, volumes, terrain solids, alignments, corridors, and point clouds as reference. The kernel supplies the geometry and Spare Construct keeps survey practice (code libraries, adjustment, design rules); PROJ runs outside the kernel, once, at import or export, and every transformation is recorded.
+
+The full chapter: [17-survey-terrain-civil.md](../../engines/geometry/architecture/17-survey-terrain-civil.md).
 
 ## 18. Drawings: sections, projections and hidden lines
 
-*Drafted from the evidence in the next stage.*
+A drawing is a pure query that turns the 3D model into the linework people build from: sections, projections, silhouettes and hidden lines, each line classed and traced back to the face or edge it came from. Nothing is rounded to make a drawing, hidden lines follow Appel's quantitative invisibility with a fixed rule for every degenerate case, and how lines look stays program data.
+
+The full chapter: [18-drawings.md](../../engines/geometry/architecture/18-drawings.md).
 
 ## 19. Meshes, tessellation, spatial index and clash
 
-*Drafted from the evidence in the next stage.*
+A Spare Kit mesh is exact plane-based data on the grid, decided by the same exact predicates as the rest of the kernel, with a proven bound on how far it is from the shape it stands for; only the copy sent to the screen is approximate, and no operation accepts it. `geom-mesh` makes watertight tessellations, levels of detail, mesh booleans and volume meshes, and `geom-spatial` holds the bounding-volume hierarchy, distance, clearance, clash, contact over time and instancing for huge assemblies.
+
+The full chapter: [19-meshes-spatial-clash.md](../../engines/geometry/architecture/19-meshes-spatial-clash.md).
 
 ## 20. Persistent naming and history
 
-Evidence: [07](G01-evidence/07-persistent-naming.md), with OpenCascade's history contract in [02](G01-evidence/02-occt-parasolid-acis.md).
+Every face, edge and vertex is named by the operation that made it and its role there, never by its position in a list, a random number or how its geometry looks. Every operation emits its history (unchanged, modified, generated, split, merged, deleted), and a stored reference resolves exactly, follows a recorded split or merge, or fails with a reason. Names are identical on every machine.
 
-The problem: a reference such as "fillet this edge", "dimension to this face" or "this door is hosted on that wall face" is stored against something that regeneration rebuilds. Kernels that name faces by their position in a list (Face1, Face2) silently point at the wrong face after an upstream change. FreeCAD fought this for fifteen years; its 2024 fix still draws a random number for duplicate names, starts each document's counter at a random offset, and, when a name is lost, picks the nearest-looking face by geometry. All three make names differ between machines.
-
-### 20.1 Three kinds of identity
-
-| Identity | What it is | Lives |
-| --- | --- | --- |
-| `OpId` | The permanent ID of one operation, set when the operation is authored and stored in the operation log. An `OpPath` adds sub-step labels | In the log and in files, forever |
-| `NameId` | A persistent name: a 128-bit hash of a canonical encoding of how the entity was made. Names are hash-consed, so a name is a node in a shared graph that refers to its parents by their `NameId` | In files, forever. The hash function and encoding are versioned (`NameScheme v1`) |
-| Index | A typed index into a body version's arena | In memory only, never persisted |
-
-### 20.2 How each operation names what it makes
-
-```rust
-enum TopoName {
-    Created { op: OpPath, role: Role, from: SortedVec<NameId> },  // made new by this step
-    Split   { op: OpPath, of: NameId, piece: PieceKey },           // one input became several
-    Merged  { op: OpPath, of: SortedSet<NameId> },                 // several inputs became one
-    Bounded { kind: EdgeOrVertex, by: SortedSet<NameId>, ord: u8 },// named by the faces it bounds
-}
-enum PieceKey {
-    ByTools { tools: SortedSet<NameId>, side: Side }, // which cutting faces, which side
-    Ordinal { n: u16, of: u16 },                      // last resort, ordered in parameter space; marked weak
-}
-```
-
-- An unchanged entity keeps its name. **An entity modified one-to-one keeps its name too**; the change is recorded in the history, not in the name.
-- **Roles are part of every operation's contract.** An extrusion names its faces `cap.start`, `cap.end` and `side(source edge)`; a wall's layer faces are `exterior`, `interior`, `top`, `base`, `end0`, `end1`; a fillet names `roll(edge)`. This is how Revit's stable door references (left, right, centre, top) work, made general.
-- A split is named by the faces that cut it and the side. Only when two pieces still collide is an ordinal used, ordered in the parent surface's parameter space, and marked weak.
-- Everything is sorted by name, never by the order a kernel happened to report it or by memory address.
-- A duplicate name is a bug caught by tests. In production it gets a weak ordinal, never a random suffix.
-
-### 20.3 History every operation must emit
-
-For every output entity: unchanged, modified from, generated from (with role), split from (with tools and side), or merged from; and the list of deleted inputs. The rules, checked by property tests on every operation: a deleted input has no modified outputs; an input's generated and modified sets do not overlap; every output traces to an input or is generated; histories compose across operations. This is OpenCascade's `BRepTools_History` contract, adopted as a tested invariant.
-
-### 20.4 How a reference resolves
-
-A reference is `{ element, name, kind, want, signature }`, where `want` is `One`, `AllPieces` or `Carrier`.
-
-1. If the name exists in the element's current body, that is the answer.
-2. Otherwise the resolver walks forward through the recorded splits, merges and modifications. One descendant resolves with a note that it followed history. Several resolve if the reference wants all pieces, and otherwise return `Ambiguous` with the candidates. None returns `Deleted` with the operation that deleted it.
-3. **Carrier references**, the default for dimensions and hosting, resolve to the underlying plane, axis or surface. When a door opening splits a wall face, every piece shares its carrier, so a dimension to "the exterior face of the wall" does not break.
-4. **There is no geometric guessing.** The stored signature is used only to suggest a repair in the interface. An accepted repair is a new operation in the log, so every copy of the model applies the same fix.
-5. An unresolved reference is model state, the same on every machine: the feature shows `UnresolvedRef` with the reason.
+The full chapter: [20-naming-history.md](../../engines/geometry/architecture/20-naming-history.md).
 
 ## 21. Determinism
 
-Evidence: [05](G01-evidence/05-exact-arithmetic-determinism.md) section 7 and [03](G01-evidence/03-rust-kernels-crates.md) section 5.
+The same inputs give bit-identical outputs on every supported target and thread count. The chapter separates what Rust already guarantees from what the kernel polices: maths functions from one deterministic library, no NaN ever produced, no iteration over hash maps, one ordered parallel helper, and a test matrix, WebAssembly included, that compares golden hashes on every change.
 
-**What Rust already guarantees.** Addition, subtraction, multiplication, division, remainder, square root, fused multiply-add (only when written as `mul_add`), casts and comparisons follow IEEE 754 exactly on every supported target, and Rust never fuses a multiply and an add on its own (RFC 3514).
-
-**What the kernel must police, and how:**
-
-| Hazard | Rule | Enforced by |
-| --- | --- | --- |
-| Maths functions (`sin`, `cos`, `atan2`, `exp`, `powi` and so on) differ by platform | Only from the kernel's own deterministic maths module: the pure-Rust `libm` crate now, moving to correctly rounded CORE-MATH ports, which are identical by specification | Kernel crates are `no_std` (the standard ones are not even available); `clippy` disallowed-methods |
-| NaN sign and payload are not deterministic, even in WebAssembly | The kernel never produces NaN. Scalars are checked at construction | A NaN-free scalar type; fuzzing; tripwires in debug builds |
-| `max` and `min` may return either zero sign | Use the kernel's own total-order helpers | `clippy` disallowed-methods |
-| Relaxed and "algebraic" operations, relaxed SIMD | Forbidden | `clippy` disallowed-methods; no relaxed SIMD feature |
-| Parallel float reductions change order | Fixed chunk sizes independent of thread count, results collected in order, no float reduction across chunks | One shared parallel helper; a thread-count test (1, 2, 3 and 8 threads) |
-| Hash map iteration order is random | No iteration over hash maps | `clippy` disallowed-types for `HashMap` and `HashSet` in kernel crates |
-| Tie-breaks by memory address | Never. Ties break by persistent name | Code review rule; tests that shuffle allocation |
-| Targets that break IEEE (i586 x87, 32-bit ARM NEON flushing denormals) | Excluded from the guarantee | Documented platform list |
-
-**Checked on every pull request:** an operation-log replay corpus runs on x86-64 Linux, Windows and macOS, aarch64 Linux and macOS, and wasm32 under wasmtime and Node, in debug and release, with `-C target-cpu=native`, and with 1, 2, 3 and 8 threads. The SHA-256 of each canonical output must match the golden value. This is the method Rapier and Box2D use to keep their physics deterministic ([05](G01-evidence/05-exact-arithmetic-determinism.md) section 7).
+The full chapter: [21-determinism.md](../../engines/geometry/architecture/21-determinism.md).
 
 ## 22. Errors, queries and what AI agents see
 
-The kernel is headless by design. An AI agent cannot look at the screen, so everything it needs to know is data.
+The kernel is headless, so everything a person, a script or an AI agent needs is data: structured errors with a kind from a closed set, the entities involved and a remedy; queries for everything; and every operation described by a schema from which the command layer generates its API, MCP tools and documentation. For reviewing an AI's proposed change, the kernel supplies previews (operations never touch the model they read) and a model diff by persistent names.
 
-**Errors explain themselves.** Every error is structured, in the same shape for people and AI:
-
-```rust
-struct OpError {
-    kind: ErrorKind,            // e.g. SelfIntersection, ToleranceExceeded, RadiusTooLarge, Ambiguous, NoSolution, Cancelled
-    op: OpPath,                 // which operation, which step
-    entities: Vec<NameId>,      // the faces, edges and vertices involved
-    at: Vec<Evidence>,          // points, parameters, distances, the bound that was exceeded
-    message: Text,              // plain words, translatable
-    remedies: Vec<Remedy>,      // what would make it succeed: "radius at most 4.2 mm here", "use the mesh boolean", "heal with ε_heal 0.3 mm"
-}
-```
-
-Compare "Can't create form element" in Revit with "fillet radius 6 mm exceeds the 4.2 mm available between faces exterior and top of wall W-12 at station 3.40 m; largest radius that fits: 4.2 mm".
-
-**Everything can be asked.** Queries are first-class operations: classify a point, list a body's faces with their names and roles, measure, find the distance or clearance between two things, area and volume, exactness class and bounds, validity report, curvature, section a body to get a plan. An AI can check its own work the way a person looks at the screen.
-
-**Every operation is described as data.** Each operation has a schema: inputs with types and units, outputs, roles it names, errors it can return, its exactness, and an example. Spare Kit's command layer generates the API, the MCP tools and the documentation from these schemas (EXTENDING.md, section 2.1), so AI tools are never written by hand and never drift from the kernel.
-
-**Determinism makes AI work safe.** An agent can try an operation, inspect the result, and replay or undo it, and get exactly the same answer every time.
+The full chapter: [22-errors-queries-ai.md](../../engines/geometry/architecture/22-errors-queries-ai.md).
 
 ## 23. Performance and parallel work
 
-*Drafted from the evidence in the next stage.*
+The kernel is fast for the same reasons it is exact, and every fast path must return the same bits as the plain path it replaces. The chapter proposes the kernel's share of each of Spare Construct's ten targets, and saves time through stored geometry and caches keyed by content, incremental and batch work, cheap filters before exact arithmetic, and one parallel helper that cannot change a bit.
+
+The full chapter: [23-performance.md](../../engines/geometry/architecture/23-performance.md).
 
 ## 24. File format, versions and exchange
 
-*Drafted from the evidence in the next stage.*
+SKG, the native format (its name is proposed), is deterministic CBOR with machine-checkable schemas: the same model gives the same bytes on every machine, loses nothing, keeps names and history, and opens without replaying anything. Exchange with IFC, STEP, DXF, 3dm and mesh formats follows one rule: nothing exact is made less exact without saying so, and nothing is left out without a typed reason in the report.
+
+The full chapter: [24-file-format-exchange.md](../../engines/geometry/architecture/24-file-format-exchange.md).
 
 ## 25. Public interface and stability
 
-The kernel follows Spareware's three stability tiers (EXTENDING.md, section 4).
+Programs and bindings use one facade, `engine-geometry`, with stability tiers: what is marked stable keeps its meaning across releases, while the inside may change freely. Geometry moves between Spareware programs with nothing lost: exact data, names and history travel together.
 
-| Tier | What | Promise |
-| --- | --- | --- |
-| Stable | `engine-geometry`: the operation schemas, the value types (grid points, curves, surfaces, bodies, names, errors), the native file format | Semantic versioning. A breaking change is a new major version that runs beside the old one; formats are read forever |
-| Preview | New operations and types being tried | May change. Not usable by published plugins. Graduate or drop within 12 months |
-| Internal | Every `geom-*` crate | May change at any time. Nothing outside the kernel depends on them |
-
-- Programs, the C interface, the WebAssembly bindings and the Python bindings all go through `engine-geometry`.
-- **Geometry moves between programs with nothing lost.** Every Spareware program reads and writes the same native geometry through the same kernel. A building modelled in Spare Construct opens in a rendering or 3D studio program as the same bodies, with the same names and the same exactness, and can stay linked so edits flow through. There is no export and re-import between our own programs, and so no translation loss.
-- `cargo-semver-checks` runs on `engine-geometry` before every release.
-- Plugins reach geometry only through Spare Construct's or Spare Studio's command API, never by linking kernel crates (EXTENDING.md, section 1).
+The full chapter: [25-public-interface.md](../../engines/geometry/architecture/25-public-interface.md).
 
 ## 26. How the kernel grows
 
-The kernel will be extended for decades, by people and AI agents who were not here when it was written, for programs nobody has thought of yet. Growth is part of the design, not an afterthought. The rule underneath it all: **a closed, carefully guarded core, and an open edge that grows along written contracts.**
+A closed, guarded core (numbers, geometry kinds, topology, naming and the file format), which changes only through a decision note, and an open edge that grows along written contracts. Each kind of addition (an operation, a geometry kind, a format, a domain toolkit such as sheet metal or circuit boards) has a playbook. Versioned operations and kernel editions mean an old model never changes meaning, and a generated map of the code and a glossary keep future people and AI from getting lost.
 
-### 26.1 What can be added, and how
-
-| To add | Where it goes | What it must come with | Who says yes |
-| --- | --- | --- | --- |
-| An operation | A module in the operation crate it belongs to | Its schema (inputs with units, outputs, the roles it names, the errors it returns, its exactness), the history contract, the checker postcondition, unit, property and fuzz tests, a benchmark, and a doc comment naming the published method | Kernel owners, after a short design note |
-| A query | `engine-geometry` and the crate that owns the data | Its schema, tests, and a cost bound | Kernel owners |
-| A curve or surface kind | A new enum variant in `geom-curve` or `geom-surface` | Evaluation, derivatives, conservative bounds, conversion to NURBS with an error, transforms, intersection with every existing kind (directly, or through an explicit and certified NURBS route), a file-format tag and reader, and tests | Kernel owners, with a decision note: kinds are part of the file format forever |
-| A representation | A new crate, and new edges in the conversion graph | Its exactness rules, conversions both ways with bounds, and how it takes part in the one boolean | A decision note an owner accepts |
-| An exchange format | A `geom-<format>` crate | Round-trip tests against real files, and a legal check for any closed format | Kernel owners |
-| A domain toolkit | A `geom-<domain>` crate when two programs need it, otherwise inside the program | Built only from existing operations and geometry kinds, adding its own roles, schemas and checks. Examples: sheet metal (bends, unfolding), threads, gears, layered circuit boards (traces with widths, pads, vias, copper pours with clearance), roofs, stairs, moulds (draft, parting lines, shrinkage), machining (toolpath strategies), 3D-printing preparation | Kernel owners for kernel crates; the program's owners otherwise |
-| A plugin's own shapes | The plugin, through the command API, in its sandbox | The plugin composes kernel operations. The result is stored as the plugin's recipe plus the evaluated geometry in native kinds, so the file opens and draws correctly even where the plugin is not installed | The plugin directory's review |
-
-The core (the numbers layer, the geometry kinds, the topology, naming and the file format) changes only through a decision note. Everything else grows freely along the contracts above. If two programs need the same thing, it moves down into the kernel; neither keeps a copy (the root layering rule).
-
-### 26.2 Versions, so old models never change meaning
-
-- **Every operation is versioned.** The operation log records each operation's name and version. Fixing a bug or improving a result makes a new version. The old version's behaviour is kept.
-- **Kernel editions.** A document records the kernel edition it was built with. Within an edition, results never change, so replaying a log gives the same model, bit for bit. A new edition may change results. A document moves to it only by an explicit upgrade operation that reports every difference, element by element. This is how Rust's editions let the language change without breaking old code.
-- **Evaluated geometry is stored, not only recipes.** A document opens from its stored geometry without replaying anything, so a model saved in 2027 opens in 2077 exactly as it was, even if the operations that made it have long since been improved.
-- **Names and formats are never reinterpreted.** A new naming scheme or format version is a new version number, and readers for every old one are kept (section 24).
-- **Multi-user sessions agree first.** Everyone editing one model at once uses the same kernel edition, agreed when they join.
-
-### 26.3 Finding your way, for people and AI
-
-A newcomer, human or AI, should be able to find where anything is done, what it guarantees and why, without asking anyone.
-
-| File | What it holds |
-| --- | --- |
-| `geometry/README.md` | Start here: what the kernel is, the ten-minute tour, where everything lives |
-| `geometry/ARCHITECTURE.md` | The decisions in this note, kept current. Every later change links its decision note |
-| `geometry/AGENTS.md` | Playbooks for agents and people: how to add an operation, a geometry kind, a format, a domain toolkit; the checklist each pull request must pass; the principles in section 3 |
-| `geometry/GLOSSARY.md` | Every term defined once in plain words: fin, pcurve, pave block, region, ε_fit, Certified, role, carrier |
-| `geometry/MAP.json` | A machine-readable map of every crate, module, operation, geometry kind, invariant and error kind, with links. Generated from annotations in the code and checked in CI, so it can never drift from the code |
-| Each crate's `lib.rs` | Its one job, the invariants it keeps, and the sections of this note it implements |
-| Each module's header | What it does, what it guarantees, the published method it follows with a link, and its cost |
-| The invariant and error catalogues | Every invariant the checker enforces and every error the kernel can return, with an example of each, generated from the code |
-
-Agents get the same map people do. An AI asked to "add a fillet option" reads `AGENTS.md`, finds blends in `MAP.json`, reads the module header and the invariants it must keep, and finds the playbook's checklist. The checklist is enforced by CI, not by memory.
+The full chapter: [26-how-it-grows.md](../../engines/geometry/architecture/26-how-it-grows.md).
 
 ## 27. Crates and folders
 
-The kernel lives in Spare Kit's engines layer, in its own folder, so that programs that do not use 3D (Spare Ride, Spare Food) never build it.
+The kernel lives in its own folder in Spare Kit's engines layer, so programs that do not use 3D never build it. The chapter lists every crate, its one job and what it may depend on, and the rules that keep the code readable: small modules, stated and checked invariants, and the published method named in every algorithm.
 
-```text
-projects/engines/
-├─ crates/engine-geometry/        the stable public facade (exists today, empty)
-└─ geometry/
-   ├─ README.md                   start here: what the kernel is, how to find anything
-   ├─ ARCHITECTURE.md             this note's decisions, kept current after acceptance
-   ├─ AGENTS.md                   playbooks for adding operations, kinds, formats, toolkits
-   ├─ GLOSSARY.md                 every term, defined once
-   ├─ MAP.json                    generated map of crates, modules, operations, invariants, errors
-   └─ crates/                     one folder per crate, folder name = crate name
-```
-
-The root `Cargo.toml` gains one member line, `projects/engines/geometry/crates/*`.
-
-| Crate | One job | Depends on |
-| --- | --- | --- |
-| `geom-num` | Grid coordinates, wide integers, exact predicates and filters, intervals rounded outward, deterministic maths, the tolerance ladder | — |
-| `geom-math` | Points, vectors, frames, exact and general transforms, boxes | num |
-| `geom-nurbs` | NURBS algorithms: basis, evaluation, knot operations, degree change, fitting | num, math |
-| `geom-curve` | Every curve kind in 2D and 3D: evaluation, bounds, projection, conversion | num, math, nurbs |
-| `geom-surface` | Every surface kind: evaluation, bounds, projection, conversion | num, math, nurbs, curve |
-| `geom-intersect` | Certified curve-curve, curve-surface and surface-surface intersection | num, math, curve, surface |
-| `geom-topo` | Bodies to vertices in arenas; the builder; attributes; regions and cells | num, math, curve, surface |
-| `geom-name` | Persistent names, history, reference resolution | num, topo |
-| `geom-check` | The validity checker | topo, intersect |
-| `geom-poly` | Exact plane-based polyhedra and their arrangements | num, math, topo |
-| `geom-bool` | The arrangement engine: booleans, imprint, split, cells, batch cuts | poly, intersect, topo, name, check |
-| `geom-sweep` | Extrude, revolve, sweep, loft, network surfaces, sectioned solids | topo, surface, name, check |
-| `geom-blend` | Fillets, chamfers, vertex blends | bool, intersect, surface |
-| `geom-offset` | Offsets, shells, thickening, drafts, face edits | bool, intersect, surface |
-| `geom-2d` | Drafting entities, the 2D arrangement, regions, hatches, 2D booleans and offsets, edits, snaps | num, math, curve |
-| `geom-sketch` | The constraint solver | num, math, curve |
-| `geom-mesh` | Exact meshes, watertight tessellation, mesh booleans, levels of detail, repair | num, math, topo, poly |
-| `geom-spatial` | Bounding-volume hierarchy, spatial queries, distance, clearance, clash | num, math, mesh |
-| `geom-subd` | Catmull-Clark subdivision surfaces | num, math, nurbs, surface |
-| `geom-field` | Implicit fields: expression graph, evaluation, interval bounds, meshing | num, math, mesh |
-| `geom-cloud` | Point clouds as reference: index, snapping, fitting | num, math, spatial |
-| `geom-terrain` | TINs from points and breaklines, contours, volumes, terrain solids | num, math, 2d, mesh, topo |
-| `geom-align` | Alignments, spirals, stationing, corridors | num, math, curve, sweep |
-| `geom-skeleton` | Straight skeletons and roof generation | num, math, 2d, topo |
-| `geom-draw` | Sections, projections, hidden lines, drawing curves with provenance | topo, name, 2d, intersect, spatial |
-| `geom-convert` | The conversion graph between representations | topo, mesh, subd, field, nurbs |
-| `geom-format` | The native file format and its versions | everything stored |
-| `geom-ifc`, `geom-step`, `geom-dxf`, `geom-3dm`, `geom-meshio` | Geometry mapping to and from each exchange format | format and the kinds they map |
-| Domain toolkits, added when two programs need them: `geom-sheet` (sheet metal), `geom-thread`, `geom-board` (layered circuit boards), `geom-stair` and others | One domain each, built only from existing operations and kinds (section 26) | the operation crates they compose |
-| `geom-test`, `geom-fuzz`, `geom-bench` | The shared test corpus and generators, fuzz targets, benchmarks (development only) | as needed |
-| `engine-geometry` | The stable facade, its schemas and bindings | all of the above |
-
-Rules for every crate, so the kernel stays readable at millions of lines:
-
-- One job per crate, stated in the first lines of its `lib.rs`, with the invariants it keeps and the sections of this note it implements.
-- One concept per module. A module starts with what it does, what it guarantees, the published method it follows (with a link), and its cost.
-- Concrete types across crate boundaries; generics stay inside a crate, so compile times stay short.
-- `#![forbid(unsafe_code)]`, and `clippy` denies `unwrap`, `expect`, `panic` and unchecked indexing in kernel code.
-- Every tolerance and threshold comes from the ladder in `geom-num`, named and justified. No magic numbers.
-- Files stay small enough to read whole. OpenCascade's 5,000-line files are the warning.
+The full chapter: [27-crates-folders.md](../../engines/geometry/architecture/27-crates-folders.md).
 
 ## 28. Testing and verification
 
-*Drafted from the evidence in the next stage.*
+Every promise in section 3 has a named check, every check runs by itself in continuous integration, and a failing check blocks the merge. The chapter sets the full checker after every operation in every test build, contract and history laws for every operation, fuzzing, machine-checked proofs of predicate bounds, independent oracles, test corpora filtered by licence, golden determinism hashes and benchmark gates.
+
+The full chapter: [28-testing.md](../../engines/geometry/architecture/28-testing.md).
 
 ## 29. What we may take from each source
 
-*Drafted from the evidence in the next stage.*
+The ledger behind principle 11: for every project, paper, document and dataset the evidence examined, its exact licence, how far that licence lets us go, what the kernel plans to take (depend, port, port the method only, run as an oracle, study or reject) and on what conditions. It also keeps GPL, AGPL and LGPL code out of the kernel, lists the patents to avoid and the areas no report has vetted, and sets the rules every contributor follows when taking anything.
+
+The full chapter: [29-sources-licences.md](../../engines/geometry/architecture/29-sources-licences.md).
 
 ## 30. Build order
 
-*Drafted from the evidence in the next stage.*
+476 pieces in thirteen phases, from the ground and the numbers layer up to scale, truth tests and bindings, each with what done means, what it depends on and its crate, and a gate closing every phase: each layer is proven before the next leans on it. G02 to G06 started before the board was numbered (30.0), so the board starts at G07; the tables are generated from `30-build-order.json`.
+
+The full chapter: [30-build-order.md](../../engines/geometry/architecture/30-build-order.md).
 
 ## 31. Open risks
 
-*Drafted from the evidence in the next stage.*
+Twenty-seven risks, technical, legal and to people and process, each with how likely and how bad it is, what the plan already does, and an early warning that would show it coming true while there is still time to act. The chapter ends with every open technical question, chapter by chapter, and the piece that settles it (31.7).
+
+The full chapter: [31-risks.md](../../engines/geometry/architecture/31-risks.md).
 
 ## 32. Decisions for the owner
 
-*Drafted from the evidence in the next stage.*
+Eleven choices need the owner, because each fixes a promise to users, spends money, carries legal weight or decides who decides; kernel owners settle the technical questions in the pieces listed in 31.7. Accepting G01 replaces three choices in Spare Construct's map, so 32.5 recommends one member vote covering G01, these decisions and one note of spine amendments. No agent acts on any of these. The owner decides.
+
+| | Decision | Recommendation | Chapters | Needed before |
+| --- | --- | --- | --- | --- |
+| 32.1 | The grid ladder (decision 1) | Three steps, as written | 6, 14, 17, 19, 24 | G02, under way and built to option A |
+| 32.2 | Exact arcs in 2D from the start | Yes, gated by an early benchmark, with named fallbacks; never grid-rounded centres | 6, 7, 9, 14, 15, 17, 18, 24 | G192, the first geom-2d piece |
+| 32.3 | The tolerance numbers, how errors add up, and what "certified" means | Numbers as written; results re-proven, fits still add; interim states only when labelled | 6, 9, 11, 12, 13, 15, 16, 19, 28 | The first curved piece in phase 5 |
+| 32.4 | The same-answer guarantee: which computers, what it covers, who pays | Chapter 21's list; valid results only; co-op-funded test machines | 21, 23, 26, 28 | G10, the CI matrix |
+| 32.5 | Who decides: kernel owners, and how spine changes are accepted | At least two named people; one member vote, then delegation | 23, 26, 27, 28, 29 | The first kernel merge (G02) |
+| 32.6 | Licence lines for code and tools | Run copyleft tools as separate programs; never compile Numerical Recipes code; keep CC0, take the Unlicense only beside another licence | 28, 29 | G113, the oracle runner |
+| 32.7 | Patent searches: who, when, and who pays | A funded patent lawyer, booleans first, with a named fallback | 11, 13, 16, 17, 19, 29 | G123, the first geom-poly piece |
+| 32.8 | How closely we follow NLib | Methods from the books; NLib for failure cases only | 4, 12, 13, 16, 29 | G56, the first NURBS piece |
+| 32.9 | Who we write to | EMBER, Schmidt and McNeel now; the rest in a stated order | 11, 14, 16, 17, 24, 29 | Varies |
+| 32.10 | Revit truth data, and watching proprietary programs | Co-op models only; watching only checks our results against our own rules | 14, 28, 29 | G460, the Revit harness |
+| 32.11 | The licence of our test cases | CC0 if the vote confirms test cases are not "core", otherwise MPL-2.0; strict rules for outside data | 28, 29 | G97, the fixture format |
+
+Each decision, with its options, reasons and the chapters it changes: [32-decisions.md](../../engines/geometry/architecture/32-decisions.md).
 
 ## 33. Sources
 
-Every claim in this note links to an evidence report in [G01-evidence](G01-evidence/README.md), and each report links to the exact source files, at pinned commits, that it read.
+Every claim in this note and its chapters links to an evidence report in [G01-evidence](G01-evidence/README.md), and each report links to the exact source files, at pinned commits, that it read.

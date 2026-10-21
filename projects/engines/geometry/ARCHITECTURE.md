@@ -18,9 +18,9 @@ These hold for every crate, every operation and every pull request. A change tha
 8. **One kernel for 2D and 3D.** The same numbers, the same curve family and the same naming serve drafting, modelling, survey and drawings.
 9. **Built to last.** The native file format is documented, versioned and readable forever. The public facade is stable; the inside may change freely ([25](architecture/25-public-interface.md)).
 10. **Readable by people and AI.** Small modules with one job. Every module states its invariants and checks them in code. Every algorithm names the published method it follows. No unexplained constant.
-11. **Proven methods, our code, raised to our bar.** We port published methods. We take permissive code only where it meets every principle here, and keep its licence and credit. No GPL or AGPL code; LGPL code is studied for method only ([29](architecture/29-sources-licences.md)). Nothing enters as it is: every method or piece of code we take is rebuilt to these principles before it merges, and the pull request says what changed and why. If it cannot be raised to the bar, it is not taken.
+11. **Proven methods, our code, raised to our bar.** We port published methods. We take permissive code only where it meets every principle here, and keep its licence and credit. No GPL or AGPL code; LGPL code is studied for method only ([29](architecture/29-sources-licences.md)). **Nothing enters as it is.** Every method or piece of code we take is rebuilt to these principles before it merges: our types, exact predicates where topology is decided, certified bounds elsewhere, deterministic maths, our error model, names and history, and the same tests, fuzzing and benchmarks as code we wrote ourselves. Where a source has a known weakness (a fixed tolerance, a silent fallback, a sampled check), the port fixes it, and the pull request says what changed and why. If it cannot be raised to the bar, it is not taken.
 12. **Measured.** Every operation ships with unit, property and fuzz tests and a benchmark. Correctness and determinism regressions block a merge; speed regressions over 5% block a merge.
-13. **Safe Rust.** No `unsafe`; no panics in kernel paths; bounded recursion; cooperative cancellation.
+13. **Safe Rust.** No `unsafe`; no panics in kernel paths; bounded recursion (WebAssembly stacks have no guard page); cooperative cancellation.
 
 ## Layers
 
@@ -43,8 +43,9 @@ flowchart TB
   end
   subgraph CORE[Core]
     direction LR
-    TOPO[Topology, checker, names]
+    TOPO[Topology and names]
     INTER[Intersections]
+    CHECK[Validity checker]
     GEOM[Curves and surfaces]
     MESH[Meshes and spatial index]
   end
@@ -57,8 +58,9 @@ flowchart TB
 | --- | --- | --- |
 | Numbers | The coordinate grid, wide integers, exact predicates, interval bounds, deterministic maths functions, the tolerance ladder | Nothing in the kernel |
 | Geometry | Points, vectors, transforms and frames; every curve and surface kind; NURBS algorithms | Numbers |
-| Topology | Bodies, regions, shells, faces, loops, fins, edges, vertices in arenas; the builder; the validity checker; persistent names and history | Numbers, geometry |
+| Topology | Bodies, regions, shells, faces, loops, fins, edges, vertices in arenas; the builder; persistent names and history | Numbers, geometry |
 | Intersections | Curve with curve, curve with surface, surface with surface, all certified | Numbers, geometry |
+| Validity checker | `geom-check`: the checks every result passes before it is returned ([8.3](architecture/08-topology.md#83-the-validity-checker)); its self-intersection checks use the same intersections the operations do | Numbers, geometry, topology, intersections |
 | Meshes and spatial | Exact meshes, watertight tessellation, the bounding-volume hierarchy, distance and clash | The layers above it in this table |
 | Operations | Everything that makes or changes shapes, each a pure function with a typed result | The core |
 | Facade | `engine-geometry`: the one stable interface programs and bindings use | Operations and core |
@@ -95,8 +97,10 @@ Section numbers match the decision note [G01](../../kit/notes/G01-geometry-kerne
 | [27. Crates and folders](architecture/27-crates-folders.md) | Every crate, its one job, its dependencies, and the rules for readable code |
 | [28. Testing](architecture/28-testing.md) | Unit, property and fuzz tests, proofs, oracles, corpora, determinism hashes, benchmarks |
 | [29. Sources and licences](architecture/29-sources-licences.md) | What we may take from each source, under what conditions, and the patents to avoid |
-| [30. Build order](architecture/30-build-order.md) | Every build piece, in order, with what done means |
-| [31. Risks](architecture/31-risks.md) | What could go wrong, and what we do about it |
+| [30. Build order](architecture/30-build-order.md) | Every build piece, in order, with what done means, and the gate closing each phase |
+| [31. Risks](architecture/31-risks.md) | What could go wrong, what we do about it, and every open technical question |
+| [32. Decisions for the owner](architecture/32-decisions.md) | The eleven choices the chapters raise for an owner to settle |
+| 33. Sources | The evidence reports in [G01-evidence](../../kit/notes/G01-evidence/README.md); each links the exact source files it read |
 
 ## Where to start reading
 

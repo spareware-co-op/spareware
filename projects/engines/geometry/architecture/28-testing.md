@@ -27,8 +27,8 @@ Four words are used throughout:
 | Pure, with no global state (principle 7) | A ban on statics and thread-locals; every case run twice in one process (28.8, 28.13) |
 | No panics, bounded recursion (principle 13) | Lints, fuzzing, bounded proofs, a recursion check, a small WebAssembly stack (28.5, 28.7, 28.8) |
 | Permissive dependencies only (principle 11) | A licence gate on the dependency graph (28.8) |
-| Measured (principle 12) | Benchmark gates (28.14) |
-| Agrees with the world | Reference implementations, outside kernels, Revit, AutoCAD-class drawings, corpora (28.9 to 28.12) |
+| Measured (principle 12) | Benchmark gates (23.13, 28.14) |
+| Agrees with the world | Reference implementations, outside kernels, corpora (28.9, 28.10, 28.12); never a proprietary program (28.11) |
 | Built to last (principle 9) | The format museum; byte-identical round trips (28.13) |
 | Grows without gaps (section 26.1) | The completeness gate (28.2) |
 
@@ -144,7 +144,7 @@ A test checks some inputs; a proof covers all of them. Proofs are used where cod
 
 Proofs must cover the code that ships:
 
-- **Predicates, by generated twins (our proposal, unproven).** The predicate generator also emits a Verus-annotated twin of each integer path, and CI checks that the twin, with its annotations removed, is token for token the shipped code. No precedent is known, so the first build piece is a spike. If it fails, the fallback is to write the predicate code inside Verus's `verus!` macro and let Verus erase the proof code at compile time, which makes Verus's `vstd` library and macros build dependencies of `geom-num` (an open question).
+- **Predicates, by generated twins (our proposal, unproven).** The predicate generator also emits a Verus-annotated twin of each integer path, and CI checks that the twin, with its annotations removed, is token for token the shipped code. No precedent is known, so the first build piece is a spike. If it fails, the fallback is to write the predicate code inside Verus's `verus!` macro and let Verus erase the proof code at compile time, which makes Verus's `vstd` library and macros build dependencies of `geom-num`. That is a DEPEND inside a kernel crate, which 29.1 allows only for `libm`, so the fallback needs an owner's exception to 29.1, a written audit (29.20, rule 3) and a row in the ledger (an open question).
 - **Topology, by a model.** Verus proves the Euler operators on an abstract model. Model-based tests then tie the model to the code: they drive the real `geom-topo` arena and the model with the same long random operation sequences and require them to agree at every step.
 - **Kani harnesses** sit beside the code under `#[cfg(kani)]`. A harness that cannot finish within its CI budget is narrowed, and the module header says exactly what is proven and what is only tested.
 
@@ -201,7 +201,7 @@ The starting set is below. The maintained list, with pinned commits, lives in th
 | --- | --- | --- |
 | CGAL: Nef polyhedra on an exact kernel; 2D arrangements with circle-segment traits | GPL or LGPL by package; out of process | Flat booleans and line-and-arc arrangements, compared exactly |
 | OpenCascade, through its DRAW harness | LGPL-2.1 with exception; out of process | B-rep booleans, fillets, offsets, hidden lines (`HLRBRep`), STEP reading; `checkshape` and `bopargcheck` as a second opinion on our STEP output |
-| SMLib's NLib layer, through solidcore's harness | Apache-2.0; out of process | NURBS evaluation, knot insertion and removal, degree elevation. Never the fitting routines, which use a hidden random-number generator, and never booleans or validity ([13](../../../kit/notes/G01-evidence/13-vetting-smlib.md)); routines solidcore has not ported need new shims |
+| SMLib's NLib layer, through solidcore's harness | Apache-2.0; out of process, built from pinned source, and only after an owner's yes, because the build compiles Numerical Recipes-derived routines (29.5; 29.20, rule 8) | NURBS evaluation, knot insertion and removal, degree elevation. Never the fitting routines, which use a hidden random-number generator, and never booleans or validity ([13](../../../kit/notes/G01-evidence/13-vetting-smlib.md)); routines solidcore has not ported need new shims |
 | geomdl (NURBS-Python) | MIT; out of process | NURBS basis, evaluation, knot operations |
 | IfcConvert (OpenCascade, CGAL and Manifold backends); web-ifc | LGPL-3.0; MPL-2.0; out of process | IFC geometry |
 | Manifold; manifold-rust's rational engine | Apache-2.0; C++ out of process, the Rust port as a development dependency | Mesh booleans |
@@ -216,20 +216,15 @@ The starting set is below. The maintained list, with pinned commits, lives in th
 
 Sources: [08](../../../kit/notes/G01-evidence/08-standards-coverage-testing.md) sections C and D, [01](../../../kit/notes/G01-evidence/01-manifold-mesh-booleans.md) section 6, [04](../../../kit/notes/G01-evidence/04-nurbs-surfaces.md) section 4, [09](../../../kit/notes/G01-evidence/09-freeform-subd-implicit.md) sections 1 and 2, [10](../../../kit/notes/G01-evidence/10-github-sweep.md) sections 1 and 2, [11](../../../kit/notes/G01-evidence/11-vetting-suggested-projects.md) GeoRust, [13](../../../kit/notes/G01-evidence/13-vetting-smlib.md); PROJ's [COPYING](https://github.com/OSGeo/PROJ/blob/5fa31c29f0a806568ed7bc76c1a557604db4a804/COPYING); LibreCAD's [LICENSE](https://github.com/LibreCAD/LibreCAD/blob/2af4873798fe5e2b4119720c351fc66835cad5bc/LICENSE). Oracles run nightly; they take too long for every pull request.
 
-## 28.11 Truth tests against Revit and AutoCAD-class drafting
+## 28.11 Proprietary programs, and interoperability
 
-Spare Construct must match or beat Revit on the same building, so the kernel's geometry is compared with Revit's for the same elements (Spare Construct feature CON-A2-F9-P3).
+Proprietary programs are never oracles for kernel behaviour (29.20, rule 8). Nothing that Revit, AutoCAD or any other proprietary program produces becomes an expected value, a tolerance or a fixture, and no difference from one is triaged as our bug. Expected values come only from exact mathematics, closed forms, the reference implementations (28.9) and the open oracles of 28.10, as section 14.14 also requires for drafting. Rule 8 has no exception, and an API terms check does not make one.
 
-- **How Revit's geometry gets out.** Only through Spare Construct's exporter add-in on Revit's published API (CON-A18-F2-P1), and only once the API terms check clears (CON-A18-F2-P2). Never by decompiling, never by reading `.rvt` files directly. Until then no Revit-derived file is committed and these tests do not run.
-- **Models.** Only models the co-op authors for testing, never client data, each built in both programs from the same recipe.
-- **What is compared.** Revit's volumes and face areas, and points sampled on Revit's own faces and edges, measured against our geometry by certified distance. In reverse, Revit's triangulation, with a looser bound, because its triangulation call takes a level of detail and does not appear to state an error (our reading, to confirm when the exporter is built).
-- **The tolerance τ depends on the geometry.** For flat geometry, τ is our commit rounding, plus Revit's double precision at that coordinate magnitude, plus Revit's own merge tolerances, read through the API at export time and stored in the fixture (`Application.VertexTolerance`, `ShortCurveTolerance` and `AngleTolerance`; values unverified). For curved geometry, τ is ε_fit plus Revit's stated fit, or a looser documented bound where Revit states none. Volumes must agree within τ times the surface area, face areas within τ times the perimeter, and sampled points within τ. A fixture may override τ only with a written reason.
-- **What a difference means.** Our bug becomes a fixture. A deliberate difference of convention, such as how layers clean up at a join, or one caused by Revit's own precision, is recorded in the fixture with its reason and approved in review.
-- **When.** Revit never runs in CI. Exports are made on a licensed machine when a new Revit version ships, stored with the Revit and add-in versions, and compared on every pull request.
-
-The tested set follows the Revit coverage map in [08](../../../kit/notes/G01-evidence/08-standards-coverage-testing.md) section B: walls with layer joins (L, T, X, mitre), walls attached to roofs and floors, hundreds of openings in one wall, sketched floors with shape edits, footprint roofs with slopes, stairs and railings, curtain grids on curved faces, MEP fittings, beam joins and cutbacks, rebar, and toposolids with sub-divisions and cut and fill. Revit's public failure cases are fixtures too: very short curves, failed lofts, joins that will not hold, voids that will not cut, slab shape edits, toposolid sub-divisions. On each, Spare Kit must succeed or return a typed error naming the cause. Plans and sections are compared the same way (CON-A2-F9-P5; 28.15).
-
-**AutoCAD-class drafting** gets the same treatment. Co-op-authored drawings are made by the same command sequence (offset, trim, extend, fillet, chamfer, hatch, boundary) in AutoCAD and in Spare Kit, exported from AutoCAD to DXF on a licensed seat, and compared: entities exactly where DXF holds them exactly, and constructed geometry within τ. These tests wait on a terms check like Revit's (an open question). LibreCAD runs meanwhile as an out-of-process oracle for the same edits.
+- **Interoperability, only if an owner decides.** Rule 8 leaves one check to an owner: whether our exported files open in proprietary programs. If an owner allows it, a check confirms that our exported IFC and DXF files open in other programs, and reports pass or fail. Nothing read back from those programs becomes an expected value.
+- **Spare Construct's truth tests.** Spare Construct's feature list plans geometry and drawing comparisons with Revit (CON-A2-F9-P3 and CON-A2-F9-P5). The kernel does not run them. If owners want them, a decision note with legal advice must amend rule 8 first.
+- **Building coverage, in plain language.** The building fixtures follow the functional coverage map in [08](../../../kit/notes/G01-evidence/08-standards-coverage-testing.md) section B, which states Revit-class needs in our own words: walls with layer joins (L, T, X, mitre), walls attached to roofs and floors, hundreds of openings in one wall, sketched floors with shape edits, footprint roofs with slopes, stairs and railings, curtain grids on curved faces, MEP fittings, beam joins and cutbacks, rebar, and toposolids with sub-divisions and cut and fill. The models are co-op-authored, never client data, and are checked by the laws of 28.3, the reference implementations and closed forms.
+- **Revit's public failure reports** become fixtures rebuilt from their descriptions with our own inputs (29.20, rule 9): very short curves, failed lofts, joins that will not hold, voids that will not cut, slab shape edits, toposolid sub-divisions. On each, Spare Kit must succeed or return a typed error naming the cause.
+- **AutoCAD-class drafting** (offset, trim, extend, fillet, chamfer, hatch, boundary) is checked by the 2D laws of 28.3, the one-root arrangement reference of 28.9, and LibreCAD and ezdxf as out-of-process oracles (28.10). Its needs reach us only in plain language, never as behaviour observed in AutoCAD (29.21).
 
 ## 28.12 Corpora
 
@@ -243,16 +238,16 @@ A corpus is a collection of models the tests run over. A manifest in `geom-test`
 | The [ssi-corpus](https://github.com/jyviko/ssi-corpus/tree/b04c8a6093a8b3505d865d1dd874ec3879ccb1f9): 119 surface-intersection cases with exact truth | MIT or Apache-2.0 | Stored, with notice | Section 12's acceptance gate |
 | NIST CAD models and STEP files with PMI ([doi:10.18434/mds2-1452](https://doi.org/10.18434/mds2-1452)) | Not under US copyright (17 U.S.C. §105); may be abroad ([NIST statement](https://www.nist.gov/open/copyright-fair-use-and-licensing-statements-srd-data-software-and-technical-series-publications), read 2026-10-21) | Fetched | STEP import, B-rep validity |
 | [step-conformance](https://github.com/dan335/step-conformance/blob/96f30bbe09549ef37dbd0a956d70bd8a183fd5d2/README.md#L287-L292): 27 STEP parts, 19 of exactly known shape | Corpus CC0; code MIT or Apache-2.0; its brepkit adapter is AGPL and never taken | Corpus stored | STEP import scored against exact shape |
-| ABC dataset, about a million CAD models | Copyright held by each creator | A hash-pinned sample, licence-checked, fetched | Import robustness at scale |
+| ABC dataset, about a million CAD models | Copyright held by each creator | Not used until an owner decides (29.15) | Import robustness at scale |
 | CadQuery's test cases | Apache-2.0 | Recipes rebuilt as our operation logs, stored | Mechanical parts and features |
-| OpenSCAD's CSG test files | GPL-2.0 | Fetched, never stored | CSG trees |
+| OpenSCAD's CSG test files | GPL-2.0 | Not used; pending the owner decision in the open questions (29.8 and 29.15: not read, not vendored) | CSG trees |
 | buildingSMART Sample-Test-Files | CC BY 4.0 | Stored, with attribution | IFC |
 | IFC 4.3 sample models | CC BY-ND | Fetched, unmodified | Advanced B-rep, alignments, tessellation |
-| IFC 4.x alignment atomic test set | None given | Fetched only | Spirals, cant, gradients |
+| IFC 4.x alignment atomic test set | None given | Not used until an owner decides (29.15) | Spirals, cant, gradients |
 | JTS XML conformance suite | EDL-1.0 | Stored | 2D overlay |
 | ezdxf's example DXF files | MIT repository; each file's origin to check | Fetched | DXF reading, 2D drafting |
 | PDAL and las-rs sample point clouds | BSD-3, MIT; each file's origin to check | Fetched | Point-cloud reading, indexing, fitting |
-| rhino3dm's sample 3dm files | MIT repository; each file's origin to check | Fetched | 3dm reading. openNURBS code is never read ([09](../../../kit/notes/G01-evidence/09-freeform-subd-implicit.md), section 1) |
+| rhino3dm's sample 3dm files | MIT repository; each file's origin to check | Fetched | 3dm reading. openNURBS code is not ported until McNeel confirms in writing (29.7; [09](../../../kit/notes/G01-evidence/09-freeform-subd-implicit.md), section 1) |
 | KiCad demo boards; Gerber reference files | Unverified | Fetched only after a licence check | Circuit boards |
 | Failure catalogues: Truck #57, #114, #134, #135; SolidCraft's vendor notes; GeoRust's boolean issues; IfcOpenShell and web-ifc issues; Manifold's tie-rule changes and the regression fixed in #1898; SMLib's known issues | Rebuilt in our own files from the descriptions | Stored (ours) | Adversarial fixtures |
 | Generated buildings, cities, 50 km corridors, parts, assemblies, boards, and Class-A surface sets | MPL-2.0 (ours) | Generated | Scale, determinism, benchmarks |
@@ -277,20 +272,22 @@ No open kernel gates on this. Manifold compares six small serial cases on three 
 
 ## 28.14 Benchmarks
 
-Principle 12 blocks any speed regression over 5%, and Spare Construct's architecture runs its benchmarks on every pull request. Wall-clock time on shared CI machines varies by more than 5%, so the kernel has two kinds of gate.
+Principle 12 blocks any speed regression over 5%, and Spare Construct's architecture runs its benchmarks on every pull request. Section 23.13 owns the benchmark gates: what each one measures, when it runs and what a miss blocks. This section says how they sit in the test suite, and adds one gate.
 
-**Count gates, on every pull request.** The merge base and the change are built in the same job with the same pinned toolchain and compared:
+**Count gates, on every pull request (23.13).** Wall-clock time on shared CI machines varies by more than 5%, so pull requests are gated on counts that do not vary. The merge base and the change are built in the same job with the same pinned toolchain and compared:
 
 - **Instruction counts** under Valgrind (which runs a program on a simulated processor and counts what it executes), with gungraun, formerly iai-callgrind (Apache-2.0 or MIT), on single-threaded benchmarks ([README](https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md)).
 - **WebAssembly fuel** in wasmtime, a count of executed operations that wasmtime documents as deterministic ([config.rs](https://github.com/bytecodealliance/wasmtime/blob/5afd63588b1f5520391c6a37fc38dfd3ccd607c2/crates/wasmtime/src/config.rs#L627-L646)).
-- **Peak memory**, from a counting allocator.
-- **Growth.** Each scale benchmark runs at n, 2n and 4n, and its work must grow no faster than the operation's stated cost. This catches quadratic traps such as web-ifc's stalled face matching on waffle slabs ([08](../../../kit/notes/G01-evidence/08-standards-coverage-testing.md), section A3).
+- **Memory:** peak heap bytes from gungraun's DHAT runs, and logical bytes on every target.
+- 23.13's other deterministic gates: golden counts, output hashes, reference mode and scenarios at reduced scale.
 
-Any count that rises more than 5% blocks the merge.
+Each blocks the merge as 23.13 sets out: counts, memory and scenarios on a rise over 5%; golden counts on any change without a version bump; output hashes and reference mode on any difference.
 
-**Wall-clock gates, on dedicated hardware.** Every pull request that changes a kernel crate is timed on a dedicated benchmark machine, with repeated runs and a statistical test, using criterion or divan. A regression over 5% that the test is confident of blocks the merge. A parallel-scaling gate runs the parallel benchmarks at 1, 2 and 8 threads, and a speed-up that falls by more than 5% blocks too (section 23). A weekly full run catches slow drift: a regression over 5% opens a release-blocking issue and freezes merges to the affected crate until it is fixed.
+**Growth, a gate this chapter adds to 23.13.** Each scale benchmark runs at n, 2n and 4n, on every pull request, and its work must grow no faster than the operation's stated cost; faster growth blocks the merge. This catches quadratic traps such as web-ifc's stalled face matching on waffle slabs ([08](../../../kit/notes/G01-evidence/08-standards-coverage-testing.md), section A3). 23.13 does not list it yet; it belongs in 23.13's table, so that one list holds every gate.
 
-**Spare Construct's targets** ([ARCHITECTURE.md](../../spare-construct/ARCHITECTURE.md#performance-targets-and-testing), Performance targets) become kernel scenarios: open a 230,000-element building to first view in under 3 s; move a door and see it in under 16 ms; change a level height affecting 2,000 walls in under 1 s; draw a floor plan in under 500 ms, and under 16 ms after an edit. Each scenario gets a kernel budget, its share of the target agreed with Spare Construct, and the kernel benchmark for it blocks a merge when it exceeds the budget. The mesh boolean is also timed on the EMBER pairs, where EMBER reports a geometric mean of 1.6 ms per boolean ([01](../../../kit/notes/G01-evidence/01-manifold-mesh-booleans.md), section 5).
+**Wall clock and scaling, nightly and before each release (23.13).** criterion or divan time the benchmarks on the dedicated reference runner, at 1 and 8 threads, natively and in browsers, against the kernel's shares in 23.1. A nightly miss is traced to its change by bisection, and blocks further merges to `main`, except the fix or a revert, until the target is met again.
+
+**Spare Construct's targets** ([ARCHITECTURE.md](../../spare-construct/ARCHITECTURE.md#performance-targets-and-testing), Performance targets) become kernel scenarios: open a 230,000-element building to first view in under 3 s; move a door and see it in under 16 ms; change a level height affecting 2,000 walls in under 1 s; draw a floor plan in under 500 ms, and under 16 ms after an edit. Each scenario gets a kernel budget, its share of the target (23.1), and the nightly wall-clock run checks it against that budget, with the consequence for a miss that 23.13 sets. The mesh boolean is also timed on the EMBER pairs, where EMBER reports a geometric mean of 1.6 ms per boolean ([01](../../../kit/notes/G01-evidence/01-manifold-mesh-booleans.md), section 5).
 
 ## 28.15 Drawings
 
@@ -299,12 +296,11 @@ Drawings (section 18) are vectors with names, so they are compared as vectors, n
 - **The gate is exact.** A drawing's canonical output (every curve with its line class, visibility and the names it came from) is hashed like any other result.
 - **Laws.** The visible and hidden pieces of every edge cover its projection exactly once, and a cut region's area equals the exact section area.
 - **An independent visibility oracle.** For flat scenes, the whole visible arrangement is compared exactly with the reference implementation's exact plane cuts and exact ray tests. For curved scenes, rays are certified, with bounds, and are tested at several deterministic points along each visible and hidden interval, including near both ends, so a missed pair of visibility changes inside one interval is found. Nightly, the number of visibility changes and the set of silhouettes are compared with OpenCascade's hidden-line removal, and quadric scenes with Krbn.
-- **Against Revit,** plans and sections are compared geometrically within τ (CON-A2-F9-P5).
 - **Pictures are for people.** When a drawing changes, CI renders before, after and an overlay with [tiny-skia](https://github.com/linebender/tiny-skia/tree/5d4754777746eef0828be166896eaf482c49f8f2) (BSD-3-Clause) for the reviewer, and rerun (MIT or Apache-2.0) serves interactive visual debugging ([10](../../../kit/notes/G01-evidence/10-github-sweep.md)). Pixels never gate.
 
 ## 28.16 How a failure becomes a permanent test
 
-Every failure ends as a fixture that runs forever, whatever found it: a fuzz crash, a property counterexample, a missed checker fault, an oracle difference, a Revit difference, or a bug report from a person or an AI.
+Every failure ends as a fixture that runs forever, whatever found it: a fuzz crash, a property counterexample, a missed checker fault, an oracle difference, or a bug report from a person or an AI.
 
 1. **Minimise.** The fuzzer's minimiser or the property tool's shrinking reduces the input. For operation logs, `geom-test` removes operations and inputs one at a time while the failure persists.
 2. **Record.**
@@ -312,7 +308,7 @@ Every failure ends as a fixture that runs forever, whatever found it: a fuzz cra
    ```rust
    struct Fixture {
        id: FixtureId,         // e.g. "bool/0412-coplanar-wall-cut"
-       source: Source,        // issue, fuzz seed, oracle triage, truth test, closed form
+       source: Source,        // issue, fuzz seed, oracle triage, failure catalogue, closed form
        log: OpLog,            // operations and inputs, in the native format
        expect: BTreeMap<(Edition, OpVersions), Expect>, // one golden per edition and set of operation versions
        status: Status,
@@ -327,7 +323,7 @@ Every failure ends as a fixture that runs forever, whatever found it: a fuzz cra
    }
    ```
 
-3. **Prove it catches the bug.** A fixture whose source records a fix in our code must fail on the merge base and pass with the fix; CI checks both. The rule does not apply to oracle outcomes "their bug" or "both within bounds", to recorded conventions, or to `Known` fixtures.
+3. **Prove it catches the bug.** A fixture whose source records a fix in our code must fail on the merge base and pass with the fix; CI checks both. The rule does not apply to oracle outcomes "their bug" or "both within bounds", or to `Known` fixtures.
 4. **Keep it.** Fixtures are never deleted; old operation versions are kept forever (section 26.2), and so are their fixtures. Every fixture also seeds the fuzz corpora.
 
 The statuses follow OpenCascade's test suite ([08](../../../kit/notes/G01-evidence/08-standards-coverage-testing.md), section D). Only a typed error can be `Known`. A run reports Pass, Fail or Improved; Improved means a `Known` fixture now returns its wanted result, and the fixture moves to `Pass`. A panic, a hang, an invalid body, a broken law, a wrong but valid result, or a disagreement with an exact oracle can never be `Known`: each blocks every release until fixed.
@@ -336,11 +332,11 @@ The statuses follow OpenCascade's test suite ([08](../../../kit/notes/G01-eviden
 
 | When | What runs |
 | --- | --- |
-| Every pull request | Unit and property tests with fixed seeds; the checker after every operation; fast fixtures; reference implementations; predicate oracles and extremes; proofs whose call graph reaches the change (all foundation proofs on a foundation change); the determinism matrix; mutants in the diff; coverage, with branch coverage on foundation changes; the merge gate (28.8); count gates, and wall-clock gates for kernel changes; a short fuzz; the fails-on-base check; the completeness gate; Revit comparisons against stored exports |
-| Nightly | Property tests with fresh, logged seeds; hours of fuzzing per target; slow fixtures; outside oracles; fetched corpora; all proofs; filter-bound certificates |
-| Weekly | The full sharded mutation run; full wall-clock and scale benchmarks on dedicated hardware; Miri over the test suites |
+| Every pull request | Unit and property tests with fixed seeds; the checker after every operation; fast fixtures; reference implementations; predicate oracles and extremes; proofs whose call graph reaches the change (all foundation proofs on a foundation change); the determinism matrix; mutants in the diff; coverage, with branch coverage on foundation changes; the merge gate (28.8); 23.13's count gates and the growth gate (28.14); a short fuzz; the fails-on-base check; the completeness gate |
+| Nightly | Property tests with fresh, logged seeds; hours of fuzzing per target; slow fixtures; outside oracles; fetched corpora; all proofs; filter-bound certificates; wall-clock and scaling benchmarks on the dedicated runner, where a miss blocks merges to `main` (23.13) |
+| Weekly | The full sharded mutation run; Miri over the test suites |
 | Toolchain or dependency change | Every golden and the format museum across the whole matrix |
-| Each release and edition | Everything; the format museum; the edition's goldens frozen; Revit exports refreshed for a new Revit version |
+| Each release and edition | Everything; the format museum; the edition's goldens frozen |
 
 The kernel has no randomness. Seeds belong to test generators only, and every one is printed.
 

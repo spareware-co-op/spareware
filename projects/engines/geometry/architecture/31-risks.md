@@ -1,0 +1,891 @@
+# 31. Open risks
+
+*Part of the [Spare Kit geometry kernel architecture](../ARCHITECTURE.md). Decided in [G01](../../../kit/notes/G01-geometry-kernel.md); section numbers match across the set.*
+
+This chapter lists the real risks to the kernel succeeding: being finished, keeping its promises of exactness and determinism, being fast enough to use, and staying legally clean. For each risk it says what could go wrong, how likely that is, how bad it would be, what the plan already does about it, and the early warning: a test or measurement that would show the risk coming true while there is still time to act. Where an early warning sets a threshold the chapters do not already set, it is marked "proposed".
+
+Evidence is cited as in the chapters: a bracketed report number such as [03] is a report in G01-evidence, and a plain number such as 12.14 is a section of this set. Where a rating depends on an owner decision in section 32, the risk says so.
+
+## 31.1 How to read the ratings
+
+| Rating | Low | Medium | High |
+| --- | --- | --- | --- |
+| Likelihood | No sign of it yet; several things would have to go wrong | Plausible; parts of the evidence point to it | Already partly seen in the evidence, or the default outcome if nothing is done |
+
+| Impact | What it means |
+| --- | --- |
+| Medium | One feature, format, oracle or data set waits or is weaker |
+| High | A major capability is late, weaker than promised, or slower than its targets |
+| Severe | A principle in section 3 fails, or the kernel is never finished |
+
+## 31.2 The risks at a glance
+
+| | Risk | Likelihood | Impact | First early warning |
+| --- | --- | --- | --- | --- |
+| R1 | Never finishing: the scope, and Fornjot's lesson | High | Severe | The first vertical slice is not running end to end before curved work starts |
+| R2 | Certified surface intersection stays incomplete | High | Severe | Flag counts per class in the intersection acceptance harness |
+| R3 | Exact arcs and conics in 2D cost too much | Medium | High | Generated widths and costs from piece "2D-01" |
+| R4 | Wide integers are slow in WebAssembly | Medium native, High browser | High | The committed wide-integer benchmark report |
+| R5 | Exactness costs too much time or memory at building scale | Medium | High | Plane memory on the generated 230,000-element building |
+| R6 | Error bounds pile up until curved work refuses | High under the literal rule; under 32.3, Low for booleans, Medium for fitted chains | High | Long-chain law tests |
+| R7 | A mistake in our own proofs or bit budgets | Medium | Severe | Any disagreement with an exact oracle |
+| R8 | The same answer everywhere breaks | Medium | High | A golden-hash mismatch on any target |
+| R9 | Names collide or depend on the wrong thing | High | High | Weak ordinals and Ambiguous results in the naming corpus |
+| R10 | Imported data cannot be healed without raising tolerances | Medium to High | High | Healed fraction on the STEP corpus |
+| R11 | Too strict to use | Medium | High | Refusals per 1,000 operations in scenario runs |
+| R12 | Research items do not land | High | Medium each | How often each "unsupported" error is hit |
+| R13 | Proven-bound maths is late or does not port | Medium | High | The maths piece not merged before the first survey piece |
+| R14 | Keeping every old version forever | Medium | High | Format museum failures; size of kept versions |
+| R15 | Hostile files | Medium | Medium to High | Reader fuzzing crashes, hangs or memory spikes |
+| R16 | Patents on methods we use | Low each, Medium overall | Severe for core methods | Unsearched families on the build path |
+| R17 | Licences and terms awaiting confirmation | High | Medium each | Number and age of ledger rows waiting on an owner |
+| R18 | Copyleft or non-free code hiding inside permissive sources | High that it is met; Medium that it gets in | High | A banned-source scanner hit |
+| R19 | Learning from proprietary programs crosses the line | Medium | High | An expected value that cites Revit or AutoCAD behaviour |
+| R20 | Copyright in AI-written code is uncertain | Medium | Medium | Rulings on AI authorship |
+| R21 | Legal work has no budget or counsel | High | High | Items waiting on counsel, and their age |
+| R22 | Owner decisions and reviews become the bottleneck | High | High | Pieces blocked on an owner answer |
+| R23 | The map contradicts itself | High | Medium, rising | Unresolved conflicts in 31.7 |
+| R24 | Agent-written work shares blind spots | High | High | "Unverified" reaching a Stable module |
+| R25 | Thin expertise and many handovers | High | High | Handovers per piece |
+| R26 | The test machines cost more than the co-op can pay | Medium to High | High | Any matrix leg skipped |
+| R27 | Programs work around a late kernel | Medium | High | Geometry code appearing in program crates |
+
+## 31.3 Technical risks
+
+### R1. Never finishing: the scope, and Fornjot's lesson
+
+**What could go wrong.** The thirteen drafted chapters alone hold 373 build pieces, 112 of them Large and 20 Extra large, for every kind of geometry every future program might need. Work could stall part way, so the kernel serves no program fully while programs build their own geometry. Fornjot, the most serious open Rust B-rep kernel, shut down in 2026 with its goals "never reached". Its author's listed mistakes were: extrapolating from early success (progress hit a cliff after moving from distance fields to B-rep), prototyping too late, making small changes where a re-architecture was needed, building a generic kernel instead of a focused tool, half-measures after funding fell, and never finishing the move to the new architecture ([03] section 2). Spare Kit is generic by design, which is the fourth mistake exactly, so it needs strong counterweights. Mapping everything before writing code also pulls against the second mistake, prototyping too late.
+
+**Likelihood:** High. **Impact:** Severe.
+
+**Mitigation built into the plan.**
+- The whole architecture is mapped before any code, so the core should not need re-architecting part way (lessons three and six).
+- The answer to lesson two is to prototype the hardest parts before anything depends on them: the vertical slice below, and spikes before commitments. The spikes are the Verus twins, filter certificates, the fuzz toolchain, the recursion check, the volume mesher design, certify mode, exact rank and the curved winding number.
+- The build order (section 30) proves each layer before the next.
+- Spare Construct is the focused first user: its ten targets become kernel scenarios that block merges (23.1, 28.14).
+- Domain toolkits wait until two programs need them (26.1).
+- Research is kept apart from promises. Unsolved items return named errors meanwhile (13, 16).
+- Fornjot also found that splitting into many crates did not pay off ([03] section 2). The set names more than 40 kernel crates once the proposed ones are counted. The consolidated crate-list note (R23) is where that count is challenged.
+
+**Early warning (proposed).**
+- A first vertical slice runs end to end before any curved-path piece starts: a wall with 300 openings cut exactly, named, checked, saved, reopened and replayed bit for bit on every section 21 target.
+- Merged pieces per month are tracked against the build order.
+- A piece handed over more than twice is split or re-scoped.
+- The owner reviews scope whenever a layer takes more than twice the effort its piece sizes imply.
+
+### R2. Certified surface intersection stays incomplete
+
+**What could go wrong.** Every curved boolean, blend, offset, curved drawing and curved clash rests on surface-surface intersection (12). No open method guarantees the right topology for every near-tangent pair of NURBS surfaces, and a 2026 paper still calls this an open challenge (12.14). Default mode could leave so many flagged regions on real models that curved operations fail often. A flagged region is a small area the kernel could not prove either way, returned with its reason. Near-tangent contacts and singular crossings are the likely cases, such as fillets meeting at near tangency (12.9). Every kernel measured so far loses answers there. Certify mode might be too slow to serve as the fallback. And some cases that are never flagged can still be slow: a surface against its own offset one step away needs very fine subdivision before it separates (12.8).
+
+**Likelihood:** High that some classes stay flagged; Medium that this blocks product use. **Impact:** Severe.
+
+**Mitigation built into the plan.**
+- Nothing is dropped: an unprovable part comes back as a flagged region with a reason and a size (12.2).
+- Planes, spheres, cylinders and cones, and tori in special positions, are intersected in closed form, with exact decisions when their defining data is exact (12.7). Flat solids never reach this code (11.3). Together these cover most of a building. General quadric pairs take the filtered path until their several-thousand-bit predicates land, and inexact data, such as a STEP cone given by an angle, is Certified.
+- Certify mode is opt-in, and an operation can escalate one region at a time (12.14).
+- A failed B-rep operation offers the mesh or field route explicitly, never silently (9).
+- The ssi-corpus is the acceptance gate (12.17). Certify mode must pass all 119 cases. Default mode must leave zero flagged regions in the transversal, seam-and-pole, coincident, patch-boundary and high-degree classes.
+
+**Early warning.**
+- Flag counts and sizes per corpus class, published on every pull request by piece "Intersection oracles and acceptance harness". They may not grow.
+- The robustness scoreboard per operation family (28).
+- The measured cost of certify mode, and of extreme default-mode cases such as a NURBS against its own offset at one step (pieces "Certify mode (a)" to "(c)").
+- Flagged regions per 1,000 curved booleans on piece "Curved boolean corpus".
+
+### R3. Exact arcs and conics in 2D cost too much
+
+**What could go wrong.** Chapter 14 decides every crossing and touch of lines, arcs and ellipses exactly. Constructed tangencies need rational positions far finer than the grid. The deepest predicates may need several thousand bits, and conic roots more. These widths are estimates, not yet derived, and the earlier 1,280-bit estimate was withdrawn (14). The cost has not been measured on any target. Tangency-heavy drawings are exactly where the cheap floating-point filters fail. Drafting could become slow, or ordinary fillets and offsets could hit the construction budget and return NotRepresentable.
+
+**Likelihood:** Medium. **Impact:** High. The 2D layer sits under drafting, sketches (15), survey linework (17), drawings (18) and board copper (14).
+
+**Mitigation built into the plan.**
+- Every width is generated from its expression, never typed by hand (14).
+- A fixed construction budget applies. Beyond it, inputs commit to the grid with 6.3's re-check, or the operation returns NotRepresentable with remedies.
+- Three fallbacks are named for the owner, each used only for the class of predicate whose cost fails: certified decisions on ellipse pairs, a coarser angle target for constructions that stay in 2D, or certified decisions on constructed circles (32.2).
+- Rounding constructed circle centres to the grid, as the brief's literal wording says, is not a fallback. A 5 mm fillet with a rounded centre opens a 47 µm gap, five times ε_fit (14).
+
+**Early warning.**
+- Piece "2D-01": the generated widths, the filter hit rate and the exact-path cost on a tangency-heavy drawing corpus, natively and in wasm32, compared with chapter 14's estimates.
+- The rate of NotRepresentable and ExactnessNotAccepted on the DXF corpus (piece "2D-28").
+
+### R4. Wide integers are slow in WebAssembly
+
+**What could go wrong.** Exact predicates run in 256-, 320- and 384-bit integers, and the chapters propose wider ones: 576 and 768 bits for skeleton events (13), 576 and 640 for hidden lines (18), and several thousand for general quadric pairs (12). WebAssembly has no 128-bit multiply. V8, Chrome's engine, was not on the wide-arithmetic proposal's implementation list at the pinned commit. None of this has been measured ([05] open question 7). Buildings are also full of designed ties, such as walls sharing a face or aligned openings. There a filter can never settle the sign, so the exact path always runs. Browser builds could miss Spare Construct's targets by large factors.
+
+**Likelihood:** Medium natively, High in the browser. **Impact:** High.
+
+**Mitigation built into the plan.**
+- The predicate step ladder settles shared planes by identity, and small cases in 64-bit integers, before any filter runs (23).
+- The generator writes width-aware code with bit-range certificates.
+- Browser packages ship with and without wide arithmetic and are chosen at load (23).
+- A double-double filter stage is held in reserve (11).
+- The benchmark comes early in the build order.
+
+**Early warning.**
+- The committed report of piece "Wide-integer variants and WebAssembly benchmark", covering x86-64, aarch64, Wasmtime, Node, Chrome, Firefox and Safari.
+- The filter must settle at least 99% of calls on the EMBER case list (piece "Plane type and arrangement predicates").
+- Step statistics: the share of calls that reach the exact path on scenario models (piece "Predicate step ladder, rounded-input filters and step statistics").
+- Browser scenario runs against the proposed target of within three times native (17).
+
+### R5. Exactness costs too much time or memory at building scale
+
+**What could go wrong.** Spare Construct's targets are tight. The kernel's proposed share is 4 ms for a door move and 1 s for opening a 230,000-element building (23.1). A full re-cut meets 4 ms only for hosts with up to about 50 openings. Above that, a local re-cut must give bit-identical output, which needs the arrangement to split cells at positions that do not depend on content. That is still open (23). Plane coefficients reach 83 and 125 bits, so one plane may cost 64 to 96 bytes (23). A 50 km road corridor at ε_fit may hold millions of vertices (17). And the reference machine all targets assume is not yet chosen.
+
+**Likelihood:** Medium. **Impact:** High.
+
+**Mitigation built into the plan.**
+- Instances share geometry (19, 23).
+- N-ary cuts and batch evaluation.
+- A deterministic parallel helper.
+- Stored display data, so opening a model needs no regeneration (23).
+- Named fallbacks for plane memory: compact widths, floating-point copies made on demand, planes shared across instances.
+- Corridors are coarser only on request.
+
+**Early warning.**
+- Piece "Arena layout and plane memory benchmarks" on the generated 230,000-element building.
+- Piece "Local re-cut": CI equality of local and full re-cuts, and door moves at 3, 50 and 300 openings, natively and in wasm32.
+- The corridor benchmark (proposed: 50 km in 60 s and 4 GB) before ε_fit is confirmed for earthworks.
+- Nightly scenario runs against each kernel share once the reference machine is chosen.
+
+### R6. Error bounds pile up until curved work refuses
+
+**What could go wrong.** Section 9 says bounds add up. Read literally, each curved boolean adds about ε_fit/128, so a curved part fails with ExactnessWouldDrop after about 128 booleans (11). Chains such as a fillet on a fillet, or an offset of an offset, eventually return ToleranceExceeded (28). Even under 32.3's recommended reading, fits still add along each face's own history. Each fitting step may spend up to ε_step = ε_fit/4 (13.2), so on one face the fifth fit at full budget refuses. Lofts, network surfaces, knot merging, rational-to-polynomial approximation and subdivision-to-NURBS conversion are all fits. Ordinary long editing histories could start to fail.
+
+**Likelihood:** High under the literal rule. If 32.3's recommendation is accepted: Low for booleans and procedural kinds, Medium for chains of fitted operations. **Impact:** High.
+
+**Mitigation built into the plan.**
+- Faces never move and new edges are procedural, so true error can be re-proven against the stored carriers each time (11).
+- Procedural definitions add no error, and each step's bound is proven against the exact operation on its stored inputs (13).
+- Section 32.3 asks the owner to confirm this reading, and says plainly where it stops.
+
+**Early warning (proposed).**
+- Long-chain laws in the law catalogue, each reporting the summed bound beside the re-proven one: 300 successive curved booleans on one part; ten-deep fillet and offset chains; and a chain of five fitting operations on one face.
+- Any ExactnessWouldDrop or ToleranceExceeded in a Spare Construct scenario run.
+
+### R7. A mistake in our own proofs or bit budgets
+
+**What could go wrong.** Several load-bearing results are ours, not published:
+- the bit budgets above 384 bits (13, 18);
+- EMBER's extension to cutters (11);
+- interior-only refinement in tessellation, and the error bound credited to Waldron (19);
+- the isotopy proof for Manifold Dual Contouring, which says the output mesh has the same shape, topologically, as the true surface (16);
+- pipe and torus outlines as offsets of the projected spine (18);
+- symbolic division at collapsed edges (12).
+
+A wrong derivation means an overflow or a wrong sign, which is a silently wrong answer: the worst failure for a kernel meant to be iron-clad. The checker is a consistency check, not an independent oracle (28.4).
+
+**Likelihood:** Medium. **Impact:** Severe if it reaches users unseen.
+
+**Mitigation built into the plan.**
+- Each predicate module carries its written derivation and a test at ±(2^40 − 1).
+- Differential fuzzing against exact rational oracles.
+- Kani overflow proofs for every limb step. Kani is a tool that checks a Rust function for every possible input in a range, here proving that no step overflows.
+- Verus twins of the generated predicate code (Verus checks written proofs about Rust code by machine), and FPTaylor or Gappa certificates for the filters (tools that prove bounds on floating-point rounding error) (28.6, 28.7).
+- Reference implementations written by a different author without reading kernel code (28.9).
+- An independent big-integer checker, and a refutation-only checker for curved bodies that shares no code with the kernel (28.4).
+- Each unpublished proof is a reviewed deliverable with a named fallback (16, 19).
+
+**Early warning.**
+- Any disagreement between a predicate and its rational oracle. It blocks the merge.
+- Surviving mutants in the foundation set (28.8). A mutant is a deliberately broken copy of the code; one that no test catches shows a gap in the tests.
+- A failed proof spike (pieces "Verus twin spike" and "Filter-bound certificates").
+- A proof review that does not pass.
+
+### R8. The same answer everywhere breaks
+
+**What could go wrong.** Any of these could change a bit somewhere: a Rust or LLVM upgrade, the planned move from libm to correctly rounded CORE-MATH functions, a change in a browser engine, or a CI runner that retires. Shared models would then diverge between machines, and replays would stop matching.
+
+**Likelihood:** Medium over the years. **Impact:** High.
+
+**Mitigation built into the plan.**
+- The replay corpus runs on every target, in debug and release, at 1, 2, 3 and 8 threads, on every pull request (21).
+- The toolchain is pinned, numeric dependencies are vendored per edition, and each operation version stays on the numeric code it shipped with (28.13).
+- Results change only through a new kernel edition with a reported upgrade (26.2).
+- Models open from stored geometry, so a mismatch never stops a file opening.
+
+**Early warning.**
+- A golden-hash mismatch on any leg. A golden hash is the recorded fingerprint of a correct result.
+- Any hash change in a toolchain-bump pull request, which re-baselines on its own (23, 28).
+
+### R9. Names collide or depend on the wrong thing
+
+**What could go wrong.** Dimensions, hosted doors and AI references all hold persistent names. The evidence already shows gaps:
+- Bounded names overflow at 256 edges between the same two faces (11).
+- Breaking TIN ties by name hash makes contours depend on what the points are called (17).
+- Adding an operand to a symmetric boolean can rename faces (11).
+- Free-form silhouettes fall back to weak ordinals (18).
+
+References would then break, or differ because of naming rather than geometry.
+
+**Likelihood:** High: gaps are already seen in the evidence. Each one found so far has a fix in 31.7. **Impact:** High.
+
+**Mitigation built into the plan.**
+- Every name is derived from the operation that made it, sorted, and never random (20.2).
+- The history contract is a property test on every operation (20.3).
+- Weak ordinals are marked as weak.
+- Naming fixtures (28).
+- The name scheme is versioned, so a fix is a new scheme, never a reinterpretation.
+
+**Early warning.**
+- The share of weak ordinals and Ambiguous resolutions in the naming corpus and in scenario regenerations (piece "Naming and reference-resolution fixtures").
+- Any duplicate name in a test. That is a bug (20.2).
+
+### R10. Imported data cannot be healed without raising tolerances
+
+**What could go wrong.** Real STEP and IFC files are full of gaps and near misses. Spare Kit heals within ε_heal and never raises a tolerance (6.5, 24.9). So many files may stay Tolerant, and later operations then refuse, or they may come in as Sheet bodies with free edges. Proven 3D vertex rounding has no open implementation and a worst case of O(n^4) or worse (24). People judge a kernel by its first import.
+
+**Likelihood:** Medium to High. **Impact:** High.
+
+**Mitigation built into the plan.**
+- The healing order of 24.9.
+- Sewing only on unique matches.
+- An exact Sheet or General body offered as the first remedy.
+- A finer frame offered when rounding fails.
+- IfcConvert and web-ifc as outside oracles (28).
+
+**Early warning.**
+- The healed fraction per step on the STEP corpus. Its first measurement is the baseline, which may only rise (piece "geom-heal: healing Tolerant bodies").
+- The share of IFC sample imports that end Tolerant or as Sheet bodies.
+- ExportRoundingFlip counts on export round trips.
+
+### R11. Too strict to use
+
+**What could go wrong.** The kernel refuses where other programs guess: ExactnessNotAccepted, NearContact, BranchLost, flagged regions, read-only bodies opened with fallbacks, CurvedSkeletonUnsupported. People used to Revit or Rhino "just working" may find it obstructive, even when each refusal is correct.
+
+**Likelihood:** Medium. **Impact:** High for adoption.
+
+**Mitigation built into the plan.**
+- Every error names the entities involved and gives numeric remedies (22).
+- Drafting commands pass a standard acceptance, recorded in the operation log (14).
+- Explicit Approximate, mesh and field routes are one remedy away (9, 13).
+- Previews run at coarser bounds (11).
+
+**Early warning (proposed).**
+- Refusals per 1,000 operations in Spare Construct scenario runs and early users' sessions, by error kind.
+- The share of refusals where the first remedy succeeds.
+
+### R12. Research items do not land
+
+**What could go wrong.** Some capabilities depend on open research:
+- a certified winding number for trimmed NURBS (11);
+- curved skeletons for arc eaves, degenerate 3D mitre events, a proven bound for rotation-minimising frames, more G2 corner classes, and certified general swept volumes (13);
+- certified field meshing at sharp CSG edges, and eigen-tables for darts and corners (16);
+- mitred grading on sloping feature lines (17).
+
+Some may stay open for years, leaving gaps where the incumbents give an approximate answer.
+
+**Likelihood:** High that some stay open. **Impact:** Medium each; together a visible product gap.
+
+**Mitigation built into the plan.**
+- Each returns a named error, or an Approximate result on request, until it lands (13, 16).
+- Research has its own pieces and never blocks the core.
+- Nothing degrades silently. Interim states are allowed only when labelled (32.3).
+
+**Early warning.**
+- How often each "unsupported" error kind is hit in the Class-A corpus and in scenario runs.
+- The outcomes of the research spikes, recorded in their pieces.
+
+### R13. Proven-bound maths is late or does not port
+
+**What could go wrong.** Survey angles and COGO (coordinate geometry: bearings and distances), spirals, rotated frames, lattices and minimal-surface fields all need sinpi, cospi, atan2, exp and ln with proven error bounds and the same bits on every target (16, 17, 21). The plan is to port CORE-MATH's correctly rounded functions. Neither the porting effort nor its wasm32 build has been checked (16, 17), and two pieces are listed for overlapping functions. If the maths is late, survey, alignments and field lattices wait. If a port gives different bits on some target, R8 follows.
+
+**Likelihood:** Medium. **Impact:** High for survey, civil and lattices.
+
+**Mitigation built into the plan.**
+- Angle units are reduced exactly, in integers, to an octant before any floating-point number is formed (17).
+- Point versions come from exact range reduction plus a polynomial with a proven remainder, so a CORE-MATH port can come later (16).
+- Differential tests against a big-number oracle, and bit identity on every CI target.
+- 31.7 merges the two maths pieces into one early piece.
+- libm is audited and benchmarked first, so a port can be compared with it (29).
+
+**Early warning (proposed).**
+- The merged maths piece is not merged before piece "Angle units and core COGO" is ready to start.
+- Any golden-hash difference in the maths module between targets.
+- The benchmark against libm (the piece's target: within 2 times).
+
+### R14. Keeping every old version forever
+
+**What could go wrong.** Permanence means keeping a decoder for every schema version, every operation version on its original numeric code, and every name scheme (24, 26.2, 28.13). The kept code grows for decades and must still build on future toolchains. And when a better checker finds that an old operation version returned an invalid body, replaying that version must now fail, so a result changes inside an edition (28).
+
+**Likelihood:** Medium. **Impact:** High over decades.
+
+**Mitigation built into the plan.**
+- Files store evaluated geometry and open without replay (26.2).
+- The format museum reads every archived file on every target, big-endian included (28).
+- An independent Python reader is written from SPEC.md alone (24).
+- The rule recommended in 32.4: the edition promise covers valid results only, and a replay that a better checker now rejects is reported element by element, like an upgrade.
+
+**Early warning.**
+- A failure in the format museum, or a disagreement with the Python reader.
+- Build time and size of the kept versions, tracked per release (proposed).
+
+### R15. Hostile files
+
+**What could go wrong.** The kernel reads files from anyone, in browsers and on servers. A crafted SKG, STEP, IFC or DXF file could hang a reader, exhaust memory, or reach a path the checker misses.
+
+**Likelihood:** Medium. **Impact:** Medium to High.
+
+**Mitigation built into the plan.**
+- Mandatory range checks in every reader, and again after numbers reach the grid.
+- Byte-source readers whose results cannot depend on how reads are split, fuzzed.
+- Trust as an explicit read option, with the full checker for unknown sources.
+- Hardened XML and zip readers.
+- A Kani harness on the native reader (24, 28).
+
+**Early warning.**
+- Fuzzing crashes, hangs or memory spikes on any reader.
+- Peak memory per input byte on the reader fuzz corpus (proposed).
+
+## 31.4 Legal risks
+
+### R16. Patents on methods we use
+
+**What could go wrong.** A patent protects a method, so writing our own code does not escape it. Only subdivision, T-splines, watertight trimming and lattices have been searched. Sixteen catalogue families have had no search at all (29.17), including booleans, Class-A blends, naming, offsets, clash, hidden lines and skeleton roofs. Nobody has searched EMBER, the method under the whole flat-solid core (11). Even inside the areas already searched, 18 methods adopted in chapters 13 and 16 have had no search, among them PCCM, Manifold Dual Contouring and Instant Meshes (13, 16). Known active patents sit near planned work: Autodesk's lattice hollowing (US 10,635,088), and the watertightCAD family (US 10,614,195 and two related patents), which is close to edge-first tessellation. The status of the patents found so far was read from Google Patents and is an assumption until counsel confirms it (16). Apache-2.0's patent grant does not clearly cover a re-implementation.
+
+**Likelihood:** Low for any one family; Medium over decades. **Impact:** Severe for a core method, which could be pulled after files depend on it; Medium for a niche one.
+
+**Mitigation built into the plan.**
+- The patent register. No family enters the Build stage without a recorded search and owner review, and CI enforces it (29.17; piece "Patent register").
+- The EMBER check is the first boolean piece.
+- Versioned operations let a method be replaced while old files still open from stored geometry (26.2).
+- Section 32.7 asks who searches, and who pays.
+
+**Early warning.**
+- The register's count of unsearched families and methods on the build path.
+- Any hit in a search.
+
+### R17. Licences and terms awaiting confirmation
+
+**What could go wrong.** Some work waits on answers that may be slow, or "no":
+- McNeel's written openNURBS grant (geom-3dm waits);
+- the legal review of OpenSubdiv's TOST licence;
+- NLib's chain of title;
+- Gerber's terms, which ask for no derivative versions without Ucamco's approval;
+- IPC-2581, ODB++, EPSG and LINZ data, and ISO's EXPRESS schemas;
+- test data with no licence (ABC, the IFC4.x-IF alignment set);
+- many smaller items (24, 29).
+
+Worse than waiting would be using something before it clears and having to remove it later.
+
+**Likelihood:** High that some answers are slow or negative. **Impact:** Medium each: one format, oracle or data set.
+
+**Mitigation built into the plan.**
+- Every source has an Allowed and a Planned column, and Planned never exceeds Allowed (29.1).
+- Work waits for the owner.
+- Methods come from papers.
+- Unclear data is fetch-only.
+- An exact SPDX allow-list is checked by cargo-deny on every pull request (28.8, 29.2).
+
+**Early warning.**
+- The number and age of ledger rows waiting on an owner (proposed: listed in each status report).
+- Any licence-gate failure.
+
+### R18. Copyleft or non-free code hiding inside permissive sources
+
+**What could go wrong.** A file under a permissive licence turns out to come from GPL or non-free work. The evidence has already found several cases:
+- Numerical Recipes routines in SMLib, NLib and solidcore;
+- a Fresnel routine in Clothoids adapted from a Wiley book;
+- acadrust drawing on LibreDWG;
+- NVIDIA's parsers mirroring OpenCascade's LGPL readers;
+- Geogram's bundled TetGen (AGPL), Triangle and HLBFGS (non-free), which fTetWild inherits;
+- Lifted Surfacing's build pulling in Adobe Research Licence code and libigl's GPL module;
+- hypermesh relicensed under a notice for someone not among its contributors;
+- AI-written code reproducing known tables (29).
+
+If such code entered Spare Kit, it would have to be torn out and rewritten clean, possibly after files depend on its behaviour. Spareware is never relicensed, so there is no other way out.
+
+**Likelihood:** High that tainted sources are met, because several already have been. Medium that tainted code gets into Spare Kit, given the checks below. **Impact:** High.
+
+**Mitigation built into the plan.**
+- Chain-of-title checks before reading (29.20, rule 2).
+- The method-only procedure, with separate reading and writing sessions (29.20).
+- Source and Consulted lines in every module header, which generate PROVENANCE.md.
+- The banned-source scanner on every pull request (piece "Banned-source scanner").
+- Numerical Recipes excluded everywhere, with clean replacements (29.4).
+- A tainted method can be replaced by a new operation version (26.2).
+
+**Early warning.**
+- A scanner hit.
+- A module without a pinned Source line.
+- A new "taken from" or "based on" comment found during an audit.
+
+### R19. Learning from proprietary programs crosses the line
+
+**What could go wrong.** The plan compares Spare Kit with Revit and AutoCAD on co-op-authored models (28.11). Done carelessly, that becomes copying a proprietary program's behaviour, which Spareware forbids (29). CADCraft was built by observing AutoCAD as a black box ([12]). Some of the evidence read Parasolid, ACIS and Revit documentation through third-party copies (29.20). The Revit API terms check has not been done.
+
+**Likelihood:** Medium. **Impact:** High.
+
+**Mitigation built into the plan.**
+- Truth tests wait for the API terms check, and use only co-op-authored models.
+- Differences are judged against our own specification, never adopted as one.
+- No expected value comes from CADCraft or from observing proprietary software (14).
+- Third-party documentation copies are "stop and ask" (29).
+- Section 32.10 sets the line: watching a proprietary program only checks our results against our own specification, on co-op models, and never sets behaviour, expected values or requirements.
+
+**Early warning (proposed).**
+- A review checklist item that flags any fixture or pull request whose expected value cites Revit or AutoCAD behaviour rather than our specification.
+
+### R20. Copyright in AI-written code is uncertain
+
+**What could go wrong.** Chapter 29 notes that copyright in largely AI-generated code is legally uncertain, for solidcore, CADCraft and csgrs. The same question applies to Spare Kit, which agents largely write. Spareware relies on copyright staying spread across its contributors, so that nobody can relicense it. If contributions carry thin copyright, that protection, and MPL-2.0's force against closed forks, weaken. This is our reading of 29's open question applied to ourselves. It is unverified and is for counsel.
+
+**Likelihood:** Medium that the question stays open. **Impact:** Medium. The code still works and stays open; protection weakens.
+
+**Mitigation built into the plan.** None beyond counsel's view. DCO sign-off and contributors keeping their copyright (AGENTS.md section 6) say who holds whatever rights exist, but they do not make AI-written code more protectable. Nothing merges on AI review alone (README).
+- Proposed: each pull request records the human direction and review behind it, which counsel may find helps. AGENTS.md section 6 does not ask for this today.
+
+**Early warning.**
+- Court rulings or official guidance on AI authorship where the co-op operates (an owner watch item).
+
+### R21. Legal work has no budget or counsel
+
+**What could go wrong.** The set leans on lawyers throughout: a patent search before the first geom-poly merge (32.7), a legal review of OpenSubdiv's TOST licence (32.9), a reading of Onshape's terms for the ABC dataset and of step-conformance's parts (32.11), the Revit and AutoCAD terms checks (32.10), any clearance of DWG (README), and counsel's view on AI-written code (R20). K06's cost model leaves legal advice out, because no public rates were found. If no lawyer is funded, all of these wait, and under 32.7's recommendation the boolean core cannot start.
+
+**Likelihood:** High. **Impact:** High.
+
+**Mitigation built into the plan.**
+- Work that needs counsel waits rather than going ahead without it.
+- Meanwhile methods come from papers and unclear data stays fetch-only (29).
+- Section 32.7 asks the owner to fund the work, and names a fallback if a lawyer cannot be funded in time.
+
+**Early warning (proposed).**
+- The number of items waiting on counsel, and the age of the oldest, in STATUS.md.
+- The first geom-poly piece ready to start with no recorded search.
+
+## 31.5 People and process risks
+
+### R22. Owner decisions and reviews become the bottleneck
+
+**What could go wrong.** The set raises 212 open questions and routes dozens of approvals to "an owner" or "a kernel owner": golden-hash changes, reference implementations, ledger rows, method notes, patent reviews and CI cost. Kernel owners are not named anywhere. The README also puts any change to an architecture decision to a member vote, and the set proposes dozens of amendments to the spine. A poll for each would stall the work. Pieces queue behind decisions, and contributors' tokens go elsewhere.
+
+**Likelihood:** High. **Impact:** High.
+
+**Mitigation built into the plan.**
+- Section 32 narrows the owner's part to eleven decisions and one member vote, which covers G01, those decisions and one consolidated amendment note together (32.5).
+- After that vote, kernel owners accept most later decision notes, as 26.1 allows. Principles, the grid and tolerance ladders, the same-answer and edition promises and the licence stay with the owner (32.5).
+- Section 31.7 gives every other question a home.
+- Every piece has a "done when" test, so a review is checkable.
+- AGENTS.md's checkout and handover rules.
+
+**Early warning (proposed).**
+- The number of build pieces blocked on an owner answer, and the age of the oldest, reported in STATUS.md.
+- Spine amendments waiting outside the consolidated note.
+
+### R23. The map contradicts itself
+
+**What could go wrong.** Chapters drafted in parallel already disagree:
+- three answers for the one constrained Delaunay triangulation: our own code (17), a port of spade (19), a port of Geogram's (29);
+- instance records of 56 bytes (19) against up to 88 (23);
+- arena-ordered against name-ordered file encoding (23, 24);
+- a box tree in geom-math (11, 23) or in a new geom-bvh (19);
+- linear algebra in geom-num (15, 29) or in a new geom-linalg (16);
+- the maximal-face merge, with T-junction insertion, kept in geom-bool (11) or moved into geom-poly so geom-mesh can share it (19);
+- two pieces for the same proven-bound maths functions (16, 17);
+- about fifteen proposed new crates on top of about thirty, and dozens of new dependencies. Fornjot found that splitting into many crates did not pay off ([03] section 2).
+
+A future person or AI who reads one chapter could build the wrong thing, against the owner's bar that nobody gets confused.
+
+**Likelihood:** High (already present). **Impact:** Medium, rising with every merged piece.
+
+**Mitigation built into the plan.**
+- One decision note per change (26.1).
+- MAP.json is generated from the code and checked in CI (26.3).
+- Section 31.7 lists every conflict with where it is settled.
+- Proposed: one consolidated note covering the crate list and the spine amendments, accepted with G01 before the first kernel code merges (32.5).
+
+**Early warning.**
+- Unresolved conflicts in 31.7 (proposed target: zero before the Build stage).
+- A MAP.json diff failing.
+- The same question asked twice by different pieces.
+
+### R24. Agent-written work shares blind spots
+
+**What could go wrong.** AI agents will write and review most of the kernel. A plausible derivation can be wrong. A claim marked "unverified" can lose its marker when it is copied. The README sets Claude Opus 5.5 or newer as everyone's minimum model, so in practice nearly all writing and reviewing comes from one model family. Two sessions of the same model are far less independent than two people, so a reference implementation by a "different author" (28.9) may repeat the kernel's own mistake.
+
+**Likelihood:** High: with one model family, shared blind spots are the expected outcome. **Impact:** High.
+
+**Mitigation built into the plan.** The main counterweight is checks that do not come from a model:
+- Exact oracles, which decide by arithmetic, not judgement.
+- Outside oracles from different lineages: CGAL, OpenCascade, Manifold, SMLib.
+- Formal proofs where they reach.
+- Property and fuzz tests.
+- A kernel owner reviews every reference implementation (28.9).
+- Proposed: for the foundation set, at least one reference implementation written by a person or by a different model family. A different model family may need an owner exception to the README's model rule.
+
+**Early warning (proposed).**
+- A CI check that no Stable-tier module header or doc comment still says "unverified".
+- The disagreement rate between reference implementations and the kernel, reviewed per release.
+
+### R25. Thin expertise and many handovers
+
+**What could go wrong.** The kernel needs rare skills: interval analysis, computer algebra, formal proofs in Verus and Kani, surface intersection, subdivision theory. Pieces are done in token-sized sittings and handed over, so a Large piece may pass through several sessions and lose context each time. Few reviewers can judge a 768-bit predicate derivation or an isotopy proof.
+
+**Likelihood:** High. **Impact:** High.
+
+**Mitigation built into the plan.**
+- Small pieces with "done when" tests.
+- Handover sections in draft pull requests.
+- Module headers state the method, the invariants and the cost.
+- GLOSSARY.md and the AGENTS.md playbooks (26.3).
+- Proposed in 32.5: a paid or academic reviewer for proof deliverables when no kernel owner can review them.
+
+**Early warning (proposed).**
+- Handovers per piece, with a piece split after two.
+- Pieces in review for more than two weeks.
+- Proof deliverables waiting for a qualified reviewer.
+
+### R26. The test machines cost more than the co-op can pay
+
+**What could go wrong.** The determinism promise needs, on every pull request, macOS runners on both chip types and aarch64 Linux runners. It also needs a dedicated benchmark machine, nightly fuzzing hours, a private oracle registry, and licensed Revit and AutoCAD machines (28). Intel macOS runners may retire; the date is unverified. If the matrix is trimmed to save money, the promise is no longer checked.
+
+**Likelihood:** Medium to High. **Impact:** High.
+
+**Mitigation built into the plan.**
+- Deterministic count gates are cheap and run on every pull request; wall clock runs nightly.
+- Each check runs at a stated tier (28.17).
+- Costs are recorded in K06.
+- OSS-Fuzz is an option (28).
+- Section 32.4 asks the owner who provides and pays for the machines.
+
+**Early warning.**
+- Monthly CI cost against K06.
+- Any matrix leg skipped or made optional.
+
+### R27. Programs work around a late kernel
+
+**What could go wrong.** If the kernel lags, Spare Construct or Spare Studio may write their own floating-point geometry so they can ship, as the old map planned with a Manifold port. Two geometry stacks then diverge, and moving to the kernel later changes models.
+
+**Likelihood:** Medium. **Impact:** High.
+
+**Mitigation built into the plan.**
+- The layering rule: programs depend only on engine-geometry, and shared needs move into the kernel (5, 25).
+- The build order puts Spare Construct's first needs first: flat solids, cuts, names and drawings.
+
+**Early warning (proposed).**
+- A scan of program crates for geometric predicates, boolean code or geometry dependencies.
+- Program pieces asking for geometry the build order has not reached yet.
+
+## 31.6 What we accept, knowingly
+
+These are not risks to manage. They are limits the plan states openly.
+
+- Default-mode surface intersection does not promise correct topology in every degenerate configuration (12.14).
+- Bounds alone cannot decide whether two general curved surfaces truly touch. Contacts are bounded and reported instead (12.9).
+- A sketch can have very many solutions. The intended one is kept by stored root choices, not found again (15.17).
+- The kernel never computes results on a GPU or with a JIT (23), so field evaluation is slower than in tools that do. Display may use both outside the kernel.
+- A foreign file's round trip may move lengths by at most q/2 (24).
+- Platforms that break IEEE floating-point rules (32-bit x87 PCs, 32-bit Arm NEON) are outside the same-answer guarantee (21).
+
+## 31.7 Open technical questions
+
+Chapters 11 to 29 raised 212 open questions. This appendix merges the ones that ask the same thing. Each is filed under the chapter whose text its answer changes, so spine amendments sit under chapters 6 to 10, 20 and 27. A row gives the question, the chapters that raised it, and where it is decided: a build piece by its title in section 30, a decision note, an editorial fix, or another team. Kernel owners decide unless the row says otherwise.
+
+A row whose answer is a decision note, or a note to a section of chapters 6 to 10, 20 or 27, is a spine amendment. Under 32.5 it goes into the consolidated amendment note if it can be settled now. If it waits on a piece's measurement, kernel owners accept a later decision note, except where it touches the principles, the grid and tolerance ladders, the edition promise or the licence, which stay with the owner.
+
+The questions the owner settles in section 32 are listed once, in the first table, and not repeated.
+
+### Settled by the owner in section 32
+
+| Question | Raised in | Settled by |
+| --- | --- | --- |
+| Whether circuit boards use q1 or q2 frames, given Gerber's 1 nm coordinates | 24 | 32.1 |
+| Circle centres on the grid, as the brief literally says, or rational for constructed circles; exact arcs and conics; the fallbacks if their predicates cost too much (certified ellipse pairs, a coarser 2D angle target, certified decisions on constructed circles) | 14, 15, 17 | 32.2 |
+| How "bounds add up" counts across repeated operations | 11, 13, 28 | 32.3 |
+| What "certified" allows: a Taylor-style bound; rotation-minimising frames measured, not proven, against the ideal frame; filters "checked, not proven"; refusing at sharp field edges instead of a "topology unproven" class | 12, 13, 16, 28 | 32.3 |
+| CI cost and hosting; OSS-Fuzz or co-op machines | 28 | 32.4 |
+| The edition guarantee and checker fixes: the guarantee covers valid results only | 28 | 32.4 |
+| Who approves as a kernel owner; who reviews proofs; who accepts spine amendments; who sets the kernel's share of Spare Construct's targets | 23, 26, 28, 29 | 32.5 |
+| GPL and LGPL tools as out-of-process oracles; reading GPL source; Numerical Recipes code in oracle builds; the method-only procedure as the standard; the Unlicense and CC0-1.0 on the code allow-list | 24, 28, 29 | 32.6 |
+| Patent searches, who does them and who pays: EMBER, Lifted Surfacing, Topological Offsets, transfinite patches, developable lofts, sheet-metal unfolding, the section 16 methods, Autodesk US 10,635,088, nTop's filings, IntegrityWare's claim, the sixteen unsearched families, and the trade mark and any patent on "Viennese Bend". The Google Patents status of the Pixar, Stam, T-spline and watertightCAD patents is an assumption until counsel confirms | 11, 13, 16, 17, 29 | 32.7, then piece "Patent register" |
+| NLib's chain of title, the narrowing of option D, how "notices kept" is done, and an issue to NVIDIA | 12, 29 | 32.8 |
+| Writing to EMBER's authors, the csgrs and Hyper author, CADCraft, tangency-labs, McNeel (openNURBS, and so Rhino subdivision exchange) and Pixar (OpenSubdiv's TOST licence); the order of contacts | 11, 14, 16, 24, 29 | 32.9 |
+| Revit exports in a public repository; anonymised real projects; an AutoCAD seat and terms check; the ruling on black-box observation of proprietary programs, and so CADCraft's test scenarios; checking our exports in proprietary programs | 14, 28, 29 | 32.10 |
+| The licence of our own fixtures; ABC, IFC4.x-IF, Thingi10K, NIST STEP files, the CC BY-ND IFC samples, and step-conformance's exported parts | 28, 29 | 32.11 |
+
+### Chapter 6: Numbers
+
+| Question | Raised in | Decided in |
+| --- | --- | --- |
+| Extend 6.2's fixed-width predicates past 384 bits for straight-skeleton events: 576 bits for 2D event order and about 768 bits for 3D mitre offsets (our derivations, to be written out) | 13 | Decision note to 6.2; pieces "Exact weighted straight skeleton" and "3D weighted straight skeleton for mitre offsets" |
+| The same for exact hidden lines: about 547 bits on grid-axis views and 633 bits for any direction or perspective (576- and 640-bit types), or exact visibility on grid-axis views only | 18 | Decision note to 6.2; piece "Exact view predicates" |
+| Fixed-width integers of several thousand bits on a cold path for general quadric pairs (Dupont, Lazard, Lazard and Petitjean), rather than arbitrary precision | 12 | Piece "Bit budgets for the exact algebraic decisions in intersections" |
+| The real widths of 2D construction predicates: rational directions of about 44 bits, tangency positions about 70 bits finer than a step, the deepest possibly thousands of bits | 14 | Piece "2D-01", with its width generator and benchmark |
+| Exact incircle on implicit TIN crossings would need about 1,024 bits (an estimate). Not planned; recorded as a limit | 17 | No piece; chapter 17 text |
+| A predicate step ladder: identity, narrow i64 and axis checks before the filter, with a filter switched off on a target where it measures slower | 23 | Decision note to 6.2; piece "Predicate step ladder, rounded-input filters and step statistics" |
+| Integer 2D carriers (n below 2^41, c below 2^82), depth-one 2D points and arcs with rational centres, as an exception to "every stored coordinate is whole grid steps", like 6.3's exception for planes | 14, 15 | After 32.2: pieces "2D carrier, depth-one point and rational-centre arc predicates in geom-num" and "2D-04" |
+| One rotation type for 2D and 3D: rational rotations from Pythagorean triples, as quaternions in 3D. Rotated planes then exceed 6.2's 384-bit assumption, so 6.2 and 11 must agree | 14 | Piece "2D-03 Rational directions and typed transforms", with a note to 6.2 and 11 |
+| Sketch-plane frames: lattice frames only where cells are at most 16 steps, rotated frames elsewhere. Should section 13 build swept bodies on rotated planes from the exact carrier now? | 15 | Piece "Sketch planes and the 2D-3D maps" |
+| A committed plane whose proven deviation over its face is within q/2 counts as Exact, as a committed point does | 13 | Decision note to 6 and 9; piece "Plane commit routine" |
+| A designed irrational tie (four roof planes meeting at one apex) keeps the committed sign and reports a short edge, rather than failing | 13 | Piece "Plane commit routine" |
+| Derived values to name on the ladder: a resolution floor of 1q; epsilon_step = epsilon_fit/4; the solver block (tau = q/64, sigma_ind = 2^-12, sigma_dep = 1/(64S) and the rest); h_min = 8q; a default cap for close_near_contacts | 11, 12, 13, 15, 19 | Ladder module in geom-num, after 32.3 |
+| Commit rounding is q/2 per coordinate, about 135 nm as a distance at q0. 6.5 should say so | 19 | Editorial fix to 6.5 |
+| A named import angle on the ladder for marking imported edges smooth, or no kernel default (chapter 18's choice) | 18 | Piece "Line classes, bands and continuity records" |
+| Designed tangency travels as a recorded intent, and downstream code never compares angles with epsilon_ang. Committed lines tilt by about q/L, and subdivision G1 leaves kinks of about 1e-5 rad | 15, 16, 18 | Decision note to 6.5; pieces "Local-operation driver and topology-change taxonomy" and "Line classes, bands and continuity records" |
+| Break TIN ties in plan-coordinate order (x, then y) rather than by persistent name, so identical points give identical surfaces whatever they are called | 17 | Decision note to 6.2 and 21; piece "Exact Delaunay core with name-ordered tie-breaks" |
+| Proven-bound sinpi, cospi, atan2, exp and ln: one early piece, not the two now listed. The CORE-MATH port effort and its wasm32 build are unverified (risk R13) | 16, 17 | Section 30 merges "Deterministic sinpi, cospi and atan2" and "Proven-bound maths: sinpi, cospi, exp and ln with interval versions" |
+| A stricter rule for local operations near tolerant edges of imported STEP models than 6.5's "work within, never raise" | 13 | Note to 6.5; piece "Local-operation driver and topology-change taxonomy" |
+| May a file's declared precision below 640q lower epsilon_heal's default? Today it can only raise it, up to the cap | 24 | Piece "geom-exchange basics: units, numbers to grid, frames, reports" |
+
+### Chapter 7: Geometry types
+
+| Question | Raised in | Decided in |
+| --- | --- | --- |
+| Let an arc be stored by three points, or by two end points and a bulge, so IfcArcIndex and DXF bulge arcs with rational centres stay exact | 14, 24 | After 32.2: decision note to 7; piece "2D-04" |
+| Ellipse axis ratio as a bounded fraction (denominator about sqrt(2a/q), at most about 2^21), and the rule for converting DXF's floating-point ratio | 14 | Pieces "2D-04" and "2D-07 DXF import commit and healing" |
+| NURBS knot and weight storage: f64, or dyadic knots with bounded denominators and small rational weights, which would make many more curved decisions Exact | 12, 14 | Decision note to 7 before piece "Bernstein toolkit in geom-nurbs" |
+| Where the IntersectionCurve variant lives: geom-curve with opaque pool references (chapter 12's choice), or geom-surface | 12 | Decision note to 7 and 27; piece "Procedural intersection curve with certified cached fit" |
+| Subdivision limit surface: the local rules and evaluator sit in geom-surface, only the net is stored, and the patch tree is a cache (16's choice, against the review's stored hierarchy). geom-intersect and geom-draw reach contours through the surface trait | 12, 16, 18 | Piece "SubD limit surface kind" |
+| The surface trait gains an Unbounded derivative-bound result and a normal-cone query, because Stam's derivatives are unbounded from valence 5 | 16 | Piece "SubD limit surface kind" |
+| Alignment curve kinds: named kinds or compositions for Helmert, Bloss, the Viennese bend, the cubic variant, and IFC's gradient curve and segmented reference curve; the four LandXML-only spirals; our LandXML-to-IFC mapping | 17 | Decision note to 7 before piece "Spiral evaluation with certified bounds" |
+| A conical helix (tapered springs, scrolls) as an exact curve kind | 13 | Decision note to 7; piece "Helical sweeps and geom-thread" |
+| What the Sweep kind stores: the full FrameRule, twist and scale laws, bit-exact station frames and the cylindrical profile morph; draft surfaces as Sweep and Ruled kinds | 13 | Piece "Frame rules and laws"; encoding in "geom-format: body records" |
+| A procedural 2D projected-curve kind (a 3D curve plus a view, with a cached certified fit) | 18 | Decision note under 26.1; piece "Projected curve kinds and the canonical drawing form" |
+| The TIN as the carrier of toposolid top faces, rather than a new piecewise-flat surface kind | 17 | Piece "Toposolid" |
+| STEP B-spline volumes and locally refined splines: add them as kinds, leave them unsupported, or convert them with a bound | 24 | Decision note under 26.1 |
+| A variable-width offset curve kind for wide polylines needs its decision note | 14 | Piece "2D-25 Wide polylines" |
+| Mirrors keep grid points on the grid only about axis-aligned and 45-degree lines; other whole-number mirror lines are exact in fractions. 7 should say so | 14 | Editorial fix to 7 |
+
+### Chapter 8: Topology
+
+| Question | Raised in | Decided in |
+| --- | --- | --- |
+| Can geom-topo's arenas hold 2D arrangements efficiently, with fins as half-edges, or is a planar specialisation needed? | 14 | Piece "2D-09 Arrangement of lines, arcs and conics" |
+| Re-check 8.1's "the structure Parasolid documents publicly" against Siemens's own pages and cite Weiler, Mäntylä and Jackson, because the evidence read a third-party copy | 29 | Editorial fix to 8.1 |
+
+### Chapter 9: Representations and exactness
+
+| Question | Raised in | Decided in |
+| --- | --- | --- |
+| Lift a closed exact mesh to a plane-based body by default when it is mixed with B-rep operands, or only on request | 11 | Piece "Cross-representation boolean entry point" |
+| Move converted subdivision faces near extraordinary points from Approximate to Certified once their bound is implemented | 16 | Piece "SubD to NURBS: packed patches and PCCM" |
+| List RawMesh as an import state, with its rules | 19 | Piece "Exact mesh data model, RawMesh and the mesh checker group" |
+| A sketch's stored geometry is Exact as data; how well it meets its constraints lives in diagnostics, not in its class | 15 | Piece "Commit plan and exact incidences" |
+| A conversion edge from RawMesh through Field to Mesh, labelled Approximate | 19 | Piece "Conversion graph registry and route query" |
+| Wording: field booleans take "certified distance plus winding number (exact sign for closed plane-based bodies)"; the table says "exact topology for 2D lines, arcs and conics" | 14, 16 | Editorial fixes to 9, the second after 32.2 |
+
+### Chapter 10: Operations
+
+| Question | Raised in | Decided in |
+| --- | --- | --- |
+| Mass properties: exact rationals for flat solids and polygonal regions (whole numbers only when every vertex is a grid point), certified for arcs and curves. Big-rational totals on request? | 17, 19, 28 | Editorial fix to 10.2; pieces "Cut, fill and volumes" and "Exact mesh data model, RawMesh and the mesh checker group", and the law catalogue |
+| Line patterns use "certified arc length", not "exact arc length" | 14 | Editorial fix to 10.2 |
+| Budgets: time is enforced only by the caller's cancellation, and memory is counted in kernel units, so 32-bit and 64-bit targets agree | 28 | Note to 10.1; piece "Work meter, logical memory and cancellation" |
+| Budget failures: persistent, deterministic model state (recommended), or never stored, like cancellation | 23 | Piece "Work meter, logical memory and cancellation" |
+| Default for batch cutting: Atomic (chosen) or SkipFailedTools | 11 | Piece "Batch cutting (geom-bool)" |
+| Blend defaults: overflow order; a batch blend all-or-nothing or per cluster; an unprovable G2 corner fails with a G1 offer or falls back with a warning; the default mitre limit; self-contact as an error or a self-union | 13 | Pieces "Blend feasibility analysis and preview query" and "Constant-radius fillets and chamfers with overflows", with Spare Construct's and the mechanical program's owners |
+| Should a failed B-rep fillet offer a field blend as an explicit alternative? | 16 | The same pieces, with "Field opcode library" |
+
+### Chapter 11: Booleans
+
+| Question | Raised in | Decided in |
+| --- | --- | --- |
+| Confirm the departures from the review: IfcBoxedHalfSpace treated as a plain half-space; Contact::Within replaced by close_near_contacts; the exact path chosen by form, not class; milling on the exact path | 11 | Acceptance of chapter 11 |
+| Can the arrangement split cells at grid positions that do not depend on content, so a local re-cut is bit-identical to a full one? Otherwise the 4 ms door move holds only up to about 50 openings | 23 | Pieces "Adaptive subdivision and the parallel task tree" and "Local re-cut" |
+| Names in symmetric selections: qualify by operand key only on a collision (chosen), or always | 11 | Piece "Boolean names and history" |
+| Booleans with subdivision operands near extraordinary vertices depend on section 16's certified Stam bounds; otherwise they fail, with a NURBS conversion as the remedy | 11 | Piece "SubD limit surface kind" (16) |
+
+### Chapter 12: Intersections
+
+| Question | Raised in | Decided in |
+| --- | --- | --- |
+| Contact policy: epsilon_fit serves as a contact radius only when certification cannot separate two entities. An unproven contact counts only when an input is Certified or Tolerant, never between two Exact inputs, and is always recorded | 11, 12 | Decision note against 6.5; pieces "Curved builder data model, broad phase and contact rule" (11) and "Tangent, singular and coincident analysis" |
+| The cost of certify mode, and of extreme default-mode cases (a NURBS against its own offset at one step), is unmeasured; the default escalation policy waits for both | 12 | Pieces "Certify mode (a)" to "Certify mode (c)" |
+| Primary details still to re-read: Hohmeyer's loop criterion, Schulz 2009, Nishita-Sederberg-Kakimoto clipping generalised to curves, characteristic-map charts, symbolic division at collapsed edges, and msun's ulp bounds; the licence of the QI code | 12 | Each in its piece: "General SSI part 1", "Poles, seams, knot lines and extraordinary vertices", "Analytic and transcendental enclosures" |
+| The ssi-corpus adapter: accept matching flagged regions; place cases on the grid at a scale where the corpus tolerance is at least epsilon_fit; check that rounding kept the truth; carry the CC-BY attribution | 12 | Piece "Intersection oracles and acceptance harness" |
+| Review points: valence-3 derivatives vanish rather than blow up (the fix is unchanged), and flagged items carry no exactness class | 12 | Acceptance of chapter 12 |
+
+### Chapter 13: Sweeps, blends and offsets
+
+| Question | Raised in | Decided in |
+| --- | --- | --- |
+| Exact sign tests over square-root expressions, for skeletons and offsets with arbitrary edge directions | 13 | A new research piece in section 30 |
+| Curved skeletons for arc eaves | 13 | Piece "Curved-eave skeletons (research)" |
+| Degenerate 3D mitre-offset events beyond the cross-section rule | 13 | Piece "3D weighted straight skeleton for mitre offsets", plus research |
+| Interval certification of Lifted Surfacing output, for general swept volumes | 13, 16 | Piece "Swept volumes: general route" |
+| G2 n-sided corners for more corner classes | 13 | Piece "Vertex blends and the corner matrix" |
+| A proven bound for rotation-minimising frames (Wang et al., with interval derivatives) | 13 | A new research piece in section 30 |
+
+### Chapter 14: 2D drafting
+
+| Question | Raised in | Decided in |
+| --- | --- | --- |
+| Constructed circles (fillets, tangent circles, three-point and bulge arcs) get implicit rational centres, while drawn and imported circles stay on the grid. Section 13 stores 3D tangent constructions the same way | 14 | After 32.2: pieces "2D-04" and "2D-05 Tangent constructions" |
+| Splines: exact spline-line crossings by root isolation need a bound on knot and weight sizes; the EXTEND default; choosing and versioning the fit-point algorithm | 14 | Pieces "2D-08 Spline and spiral contacts in 2D" and "2D-27 Spline fitting and biarc conversion" |
+| Values to set: the bound on whole-number directions converted from DXF hatch angles; the default hatch line budget; the default acceptance kit-ops passes (proposed: Certified with epsilon_fit and epsilon_ang) | 14 | Pieces "2D-21 Hatches and linetypes" and "2D-04" |
+| The 2D R-tree: chapter 29 keeps rstar out of kernel crates unless it is ported (29.8). geom-2d writes its own small integer R-tree, or ports rstar; if ported, a test shows its results do not depend on insertion order | 14, 29 | Piece "2D-19 Snaps, tracking and the 2D index" |
+| The engines README says engine-draw2d does "2D booleans"; restate that as display-only linearised booleans | 14 | Editorial fix to the engines README |
+| Review points kept: the JTS test files are reusable with their notice (EDL-1.0), and snap points are exact on their carriers using fractions | 14 | Acceptance of chapter 14 |
+
+### Chapter 15: Sketches
+
+| Question | Raised in | Decided in |
+| --- | --- | --- |
+| 3D sketches in geom-sketch and assembly mates in geom-assembly; when the mechanical program's mapping splits that piece | 15 | Piece "3D sketches and assembly mates (geom-assembly)", timed with the mechanical program's mapping |
+| Which layer records SketchUnsolved (kit-ops or each program); whether the default is to accept the upstream edit and mark the sketch unsolved, or to refuse it | 15 | Piece "Regeneration state for unsolved sketches", with kit-ops' owners |
+| Exact commit of fillets, and of points on circles other than a defining point | 14, 15 | Piece "Commit plan and exact incidences", with "2D-05 Tangent constructions" |
+| Exact rank by Bareiss elimination: its cost on blocks of about 1,000 unknowns | 15 | Piece "Exact-rank spike: Bareiss elimination on a rational witness" |
+| The size limit N (2,000 until measured) above which rigid-cluster search is skipped, measured on outlines of 5,000 to 10,000 entities | 15 | Piece "Rigid clusters (Hoffmann-Lomonosov-Sitharam), generic in D" |
+| Solving with inequalities (an active-set extension) for mechanical design | 15 | Scheduled with the mechanical program's mapping |
+| The boundary for family formulas: the kernel takes numbers and polynomial relations, and kit-ops evaluates formulas, conditionals and lookup tables | 15 | Spare Construct's owners |
+| Fixed-width SIMD in geom-num's factorisations in a later edition, checked by the replay matrix | 15 | A later edition's decision note |
+| faer's behaviour across platforms is inferred from its manifests, not tested; this matters only if depending on faer is ever reconsidered | 15 | The section 21 replay matrix, if reconsidered |
+| Confirm fiksi's density-test sign and its randomly seeded hasher by running the code before quoting them | 15 | Piece "Sketch test corpus, oracles and fuzzing" |
+| Review departures: the undamped minimum-norm step instead of keeping lambda above zero; hold-and-release dragging instead of a weighted projection | 15 | Acceptance of chapter 15; the corpus can test both |
+
+### Chapter 16: Free-form
+
+| Question | Raised in | Decided in |
+| --- | --- | --- |
+| Biermann, Levin and Zorin's modified boundary rules as an option, which breaks OpenSubdiv and USD parity | 16 | Piece "SubD control net, options and uniform refinement" |
+| Evaluation parity with Rhino at extraordinary vertices (Rhino's G2 claim is unverified) | 16 | Piece "SubD exchange: Rhino .3dm", after McNeel's answer (32.9) |
+| The isotopy proof for Manifold Dual Contouring under Plantinga and Vegter's condition is unpublished. If it fails, certified output uses Plantinga and Vegter's own construction | 16 | Piece "Certified field mesher" |
+| Is valence 50 the right ceiling for the constant eigen-tables? | 16 | Piece "Eigen-table generator and constant tables" |
+
+### Chapter 17: Survey, terrain and civil
+
+| Question | Raised in | Decided in |
+| --- | --- | --- |
+| Default for crossing breaklines: Error (chosen) or Prefer(priority); the paste seam rule, or an error instead. Ask practising surveyors | 17 | Piece "Breaklines, crossings and snap rounding" |
+| The angle unit (1/2,500 arc-second) and lattice spacing (2^39 steps): confirm that no instrument or legal record needs finer, such as 0.000001 gon | 17 | Pieces "Frame records, units, epochs and lattices" and "Angle units and core COGO" |
+| Earthworks at epsilon_fit by default: a 50 km corridor may hold millions of vertices, so benchmark first | 17 | Piece "Corridor sectioned solid and faceting" (proposed target: 60 s and 4 GB) |
+| IfcMapConversionScaled with unequal X and Y factors, or Z not one: per-axis factors in the frame record, or kept in the foreign recipe (chapter 24's choice) | 24 | Piece "Frame records, units, epochs and lattices" |
+| IfcCurveSegment's spiral parameter spaces need an implementer agreement; our stations follow segment lengths | 17, 24 | Piece "IFC 4.3 terrain, alignment and corridor mapping", with buildingSMART |
+| Mitred grading corners along a sloping feature line: no published method | 17 | A new research piece in section 30 |
+| PROJ in the browser: a wasm32 build, or a pure-Rust port of the methods used (PROJ's MIT licence allows it) | 17 | The kit-ops work board |
+| The Θ(n²) edge-crossing bound for steepest-descent paths is unverified | 17 | Piece "Flow, sight and raster DEM input" |
+
+### Chapter 18: Drawings
+
+| Question | Raised in | Decided in |
+| --- | --- | --- |
+| Chapter 14 now gives rational points, exact arcs and conics, and loops that touch at a point. Still open: how arcs and conics are committed at explode, since snap rounding is proven for segments only | 18 | Pieces "2D-26 Snap rounding for explicit output" and "Drawing storage, versions, explode and export" |
+| Dimensions to free-form silhouettes: allow weak ordinal branch keys, or force them onto model or carrier references | 18 | Piece "Drawing references: dimensions and overrides" |
+
+### Chapter 19: Meshes, spatial index and clash
+
+| Question | Raised in | Decided in |
+| --- | --- | --- |
+| One exact constrained Delaunay triangulation has three answers: our own code with spade as a model (17), a port of spade into geom-mesh::cdt (19), and a port of Geogram's CDT_2d (29). Pick one source and one home | 17, 19, 29 | Piece "Exact constrained Delaunay triangulation, shared with terrain" |
+| Review the interior-only refinement proof (Jung's theorem, apex points, three spacing limits) and the 1/2·M·r² bound credited to Waldron 1998. The fallback is edge-level refinement rounds | 19 | Piece "Edge-first certified tessellation" |
+| Port meshoptimizer to safe Rust (Large), or keep the C++ library in the renderer and give up bit-identical display chunks | 19 | Piece "Safe-Rust port of meshoptimizer's simplifier and meshlet builder" |
+| Simulation meshes: is a boundary proven to lie inside an envelope (rather than keeping every input triangle) acceptable, and what is the default envelope width? | 19 | The simulation engine's owners; piece "Volume mesher design spike" |
+| Topological Offsets: confirm its guarantees and whether it needs a background tet mesh; add Panozzo to chapter 13's citation | 19 | A design note before piece "Mesh offsets, hollow and thicken (Topological Offsets method)" |
+| Clash for Spare Construct A13: general curved pairs give proven intervals, not single exact numbers; how NearLimit pairs are shown; whether "largest ball inside both" matches A13's depth rule | 19 | Spare Construct A13 |
+
+### Chapter 20: Naming and history
+
+| Question | Raised in | Decided in |
+| --- | --- | --- |
+| Bounded names become Bounded { kind, by, ends, ord: u16 }, because ord: u8 overflows at 256 edges between the same two faces | 11 | Decision note to 20.2; piece "Boolean names and history" |
+| A regenerated step keeps its OpId. Re-importing a revised file is a new version of the same import operation, so Spare Construct's log treats an import as an editable operation with its source file as an input | 17, 24 | Note to 20.1; Spare Construct's operation log |
+| Reword "indices are never persisted" to "never used as a reference outside its body record", because arena positions are record-local in the file | 24 | Editorial fix to 20.1 |
+| A new resolution result, HistoryPruned, distinct from Deleted | 24 | Piece "PruneHistory operation and HistoryPruned resolution" |
+| The name scheme fixes NFC normalisation of hashed text, and its Unicode version | 24 | NameScheme v1 note; piece "geom-format: names, history, recipe envelope, attributes and provenance records" |
+| The 128-bit NameId value and the history record types live in geom-topo, so geom-mesh can use them; geom-name keeps the naming graph and resolution | 19 | Crate-list note (27) |
+
+### Chapter 22: Errors, queries and AI
+
+| Question | Raised in | Decided in |
+| --- | --- | --- |
+| Confirm the new error kinds: ExactnessNotAccepted, NotRepresentable, OutOfRange and UnboundedResult; Degenerate added to the base; RootChoiceUndetermined refining Ambiguous; BranchLost and CommitFlip | 14, 15 | The chapter 22 error catalogue, generated from the code |
+| The output shape of the model-diff query used to review a proposed change (22) | 22 | The piece that builds the diff query |
+
+### Chapter 23: Performance
+
+| Question | Raised in | Decided in |
+| --- | --- | --- |
+| The reference machine for all targets: proposed an 8-core x86-64 desktop with 32 GB and NVMe for gates, plus an aarch64 laptop nightly | 23, 28 | With Spare Construct's owners; piece "Benchmark harness and merge gates (geom-bench)" |
+| Accept the proposed kernel shares of Spare Construct's ten targets, the browser estimates and the 5 µs overhead per trivial operation until scenarios measure them. Who sets the split is settled in 32.5 | 23, 28 | Piece "Spare Construct scenario generator, calibration and target benchmarks" |
+| Benchmark targets in other chapters are proposals to replace with first measurements: drawing targets (a full plan, every open view after a door move, a 50 km corridor plan); gridded LiDAR at 40 s per 10 million points; wasm within three times native; a 1 ms live clash re-test; 30 s to tessellate the reference model | 17, 18, 19 | Each chapter's benchmark piece, gathered in the scenario pieces |
+| Instance records: 56 bytes with the box in the tree leaf (19), or up to 88 bytes (23); f64 or integer boxes | 19, 23 | Piece "Placed instances", aligned with "Instance tree for huge and nested assemblies" |
+| I320 and I384 arithmetic on wasm32 is unmeasured; a double-double filter stage is the reserve if the section 23 gates fail | 11 | Piece "Wide-integer variants and WebAssembly benchmark" |
+| Browser threads need pinned nightly Rust with build-std, and cross-origin isolation: ship a separately built threaded variant, or run serial-in-worker until threads reach stable Rust | 23 | Piece "Browser builds: threads, wide arithmetic, memory ceiling and cancellation" |
+| Two browser builds, with and without wide arithmetic, chosen at load | 23 | The same piece |
+| Plane storage at building scale (estimated at 64 to 96 bytes per plane) and its fallbacks: compact widths, f64 copies made on demand, shared planes | 23 | Piece "Arena layout and plane memory benchmarks" |
+| Remote global edits: replay the operations, or fetch the changed chunks by content hash | 23 | Spare Construct's owners |
+
+### Chapter 24: File format and exchange
+
+| Question | Raised in | Decided in |
+| --- | --- | --- |
+| Canonical body encoding: arena order with fixed 4,096-row chunks (24), or name order (23's draft). Name order first needs an "outputs independent of input arena order" invariant, with a shuffle test | 23, 24 | Piece "geom-format: body records" |
+| The content hash: SHA-256 or BLAKE3, in a safe portable implementation or an audited exception crate (both common crates use unsafe SIMD); and whether to adopt the name-ordered bucket-tree hash | 23 | Piece "Content hashes and cache keys", by benchmark |
+| Sign chunks written by a released kernel edition, or rely on per-chunk checker versions and lazy re-checks | 23 | Piece "Container mapping and trust on open" |
+| Bodies opened with fallbacks stay read-only until an acknowledgement is logged | 24 | Piece "Container mapping and trust on open" |
+| Register CBOR tag 0x534B4746 with IANA, and check the SKG name and the .skg extension for clashes | 24 | Piece "Native format specification: SPEC.md, REGISTRY.md and CDDL"; name check under name-protection |
+| Proposed figures to replace with measurements: the 64 MiB payload cap, 4,096-row chunks, 500 MB/s CBOR decoding, 100 MB/s Part 21 parsing | 24 | The geom-format and geom-p21 pieces |
+| One shared hardened XML and zip crate for the kernel and Spare Office would change section 5's "no other Kit crate" rule | 24 | Spare Kit's owners, by decision note |
+| 3D vertex rounding has no open implementation and a steep worst case: apply it only to flagged regions within a budget (chosen), or default imported meshes to q1 frames | 24 | Piece "Rounding imported polyhedra" |
+| LAS and COPC: read a scale stored as f64 as the shortest decimal that produces it | 24 | Piece "Point-cloud exchange rules" |
+| Items to check against primary sources: MBx-IF practices; DXF MESH subdivision rules and HELIX fields; Part 21 third edition; whether AP242 includes Part 42's clothoid; 3dm mesh vertex precision; E57; Pratt's rational Dupin cyclides | 24 | Each format's piece |
+| ARC_DIMENSION has no record in the public DXF reference, so its mapping is open | 14 | Piece "geom-dxf read and write" |
+| USD: which crate owns subdivision exchange, and a convention for carrying Chaikin creasing in custom data | 16 | Piece "Decision notes for formats not yet owned" |
+| DWG and other reverse-engineered formats | 14, 24, 29 | Stays REJECT. Only an owner can clear it, after legal advice (README); Spare Construct's owners say whether they want it |
+| laz-rs contains unsafe code: allow it in Spare Construct's adapter, or port the codec | 24 | Spare Construct's owners |
+| Whether format crates may use std: answered by chapter 24. Readers use no_std byte sources, and point clouds stay in the program adapter | 29 | Answered |
+
+### Chapter 27: Crates and folders
+
+Proposed in 31.5 (R23) and 32.5: one consolidated crate-list note settles all of these, accepted with G01 before the first kernel code merges.
+
+| Question | Raised in | Decided in |
+| --- | --- | --- |
+| A home below the facade for the cross-representation boolean: a new geom-combine, or bool added to geom-convert's dependencies | 11 | Crate-list note; piece "Cross-representation boolean entry point (geom-combine)" |
+| One deterministic box tree below geom-bool, geom-mesh, geom-2d and geom-terrain: in geom-math (11, 23), or in a new geom-bvh (19) | 11, 19, 23 | Crate-list note; piece "Deterministic integer box tree and culling" |
+| geom-run (a no_std parallel helper, budgets and cancellation) and geom-pool (rayon and Web Workers behind a threads feature) | 23 | Piece "geom-run and geom-pool: the deterministic parallel helper" |
+| Deterministic linear algebra inside geom-num (15, 29), in a new geom-linalg (16), or in geom-math | 15, 16, 29 | Crate-list note; one of the pieces "Deterministic dense linear algebra in geom-num" and "Deterministic linear algebra (geom-linalg)" is dropped |
+| geom-profile, to carry geometry between sketches and the model | 15 | Piece "geom-profile: references in, profiles out" |
+| geom-panel and geom-analysis, with chapter 16's dependency additions | 16 | Crate-list note; pieces "Panelisation and rationalisation" and "Class-A analysis" |
+| geom-civil in the kernel, so terrain and alignments stay independent, or inside Spare Construct under a strict reading of 26.1; and geom-landxml | 17 | Crate-list note; piece "geom-civil compositions" |
+| geom-exchange, geom-p21, geom-heal and a development-only EXPRESS generator (geom-express); geom-cloudio withdrawn | 24 | Crate-list note |
+| A development-only geom-proof crate for the predicate generator's proofs, or keep them in geom-num and geom-test. The cargo-verus fallback makes vstd a build dependency of geom-num | 28 | After piece "Verus twin spike" |
+| geom-2d also depends on topo, name and intersect; line and arc predicates sit where both crates reach them; conic predicates in geom-num; the 2D R-tree in geom-2d or shared | 12, 14 | Crate-list note; piece "2D-09 Arrangement of lines, arcs and conics" |
+| geom-intersect also depends on geom-nurbs, and an ImplicitBound trait in geom-surface lets fields be traced without upward dependencies | 12 | Crate-list note; piece "Implicit-parametric tracer and level curves" |
+| geom-mesh also depends on curve, surface and intersect | 19 | Crate-list note; piece "Edge-first certified tessellation" |
+| geom-poly's job line names indicators and piece selection (decided in 11). Still open: whether the maximal-face merge, with T-junction insertion, moves out of geom-bool's rebuild into geom-poly so geom-mesh can share it (19), or stays in geom-bool (11) | 11, 19 | Crate-list note; editorial fix to 27 |
+| Chapter 13's placements: frame rules, station frames and surface extension in geom-surface; skinning, Gordon, Coons and N-sided fills in geom-nurbs and geom-surface; plane commit in geom-poly; the local-operation arrangement step and change classification in geom-bool; TopologyChange records in geom-name; isoclines in geom-intersect. Its additions: sweep on poly, intersect, bool and skeleton; offset on skeleton, name and topo; skeleton on poly; blend on name, topo and check. Its reading of section 5: an operation may use another operation's public interface (geom-offset using geom-skeleton's skeleton), never its internals | 13 | Crate-list note |
+| Chapter 17's additions: terrain on poly, bool, skeleton, curve, surface and name; sweep on poly; align on name; cloud on nurbs and surface. The corridor solid goes in geom-sweep and the corridor model in geom-align | 17 | Crate-list note |
+| geom-draw's row adds mesh, and every row lists all its direct dependencies | 18 | Crate-list note |
+| Swept volumes: routes 1 and 2 as a module of geom-sweep, route 3 as a space-time module of geom-field, with no new crate | 13 | Crate-list note; pieces "Swept volumes: exact routes" and "Swept volumes as fields" |
+| Closed-form distances as a geom-intersect module reached through a trait the facade implements, or geom-spatial depending on geom-intersect | 19 | Crate-list note; piece "Analytic closed-form distances" |
+| The drawing checker in geom-draw (chosen), or one checker crate moved above geom-draw | 18 | Piece "Drawing checker" |
+| Continuous collision detection lives in geom-spatial | 19 | Piece "Time of first contact (Tight Inclusion method)" |
+| Sheet metal reuses geom-panel's unroll, or unrolling moves to a shared crate; subdivision displacement belongs to a content-creation toolkit | 16 | Decision note under 26.1 when a second program needs it |
+| Add geometry/PROVENANCE.md, NOTICE, methods/ and PATENTS.md to 26.3's file table and 27's folder tree | 29 | Editorial fix; piece "Provenance records" |
+
+### Chapter 28: Testing
+
+| Question | Raised in | Decided in |
+| --- | --- | --- |
+| Can Kani prove whole 384-bit predicates in reasonable time? If not: per-step proofs, bit-range certificates, extreme values and fuzzing | 23 | Pieces "Wide-integer variants and WebAssembly benchmark" and "Kani harnesses: foundation" |
+| Thresholds: 100% of lines and branches and zero unexplained mutants in the foundation set; 90% elsewhere; the 5% gates; the 1,000-times loose-bound report; the scoreboard rule | 28 | Kernel owners; piece "Mutation and coverage gates" |
+| Wall clock: a nightly target miss blocks further merges until it is fixed (proposed), because per-pull-request wall clock varies by more than 5%; work units stay out of the speed gate | 23 | Pieces "Benchmark harness and merge gates (geom-bench)" and "Wall-clock and scaling gates" |
+| SMLib's limits as an oracle: booleans, fillets and offsets cannot be automated (they are nondeterministic), and the NLib routines solidcore lacks need new FFI shims and their own audit. Under 32.6's recommendation its Numerical Recipes routines are stubbed out | 29 | Piece "Oracles: SMLib NLib and geomdl" |
+| ClusterFuzzLite's build-clusterfuzz path is unverified | 28 | Piece "Fuzz toolchain spike" |
+| Revit's tolerance values (VertexTolerance, ShortCurveTolerance, AngleTolerance), and whether its triangulation states an error bound | 28 | Piece "Revit truth-test harness" |
+
+### Chapter 29: Sources and licences
+
+| Question | Raised in | Decided in |
+| --- | --- | --- |
+| hypermesh's history (forked from MPL-2.0 boolmesh, relicensed MIT under a notice), before any reuse | 11, 29 | After the 32.9 contact; ledger row |
+| List Lifted Surfacing's Adobe Research Licence dependencies (mtetcol, space-time-functions, arrangement-benchmark, mtet) and libigl's GPL CGAL module as never read; VolumeRemesher (LGPL by repository) and GMP as method only | 13 | Ledger rows in 29 |
+| TiGL is built on OpenCascade types, so its Gordon method is re-derived, not translated; Parasolid concepts read through a mirror are used as concepts only | 13 | Ledger rows; piece "Network surfaces, Coons patches and N-sided fills" |
+| Check every Clothoids and G1fitting file header for third-party provenance before any port (Fresnel.cc derives from a book) | 17 | Piece "Spiral evaluation with certified bounds" |
+| EPSG's terms of use and the LINZ grid licences (believed to be CC BY 4.0) | 17 | Before PROJ data ships (kit-ops) |
+| Standards and format terms: Gerber section 1.4 (confirm the quotes from the PDF), job files, XNC and Excellon, IPC-2581C, ODB++, IDX, IDF 3.0; IGES 5.3; USD (TOST and AOUSD terms), Alembic, FBX; Parasolid XT, ACIS, JT; OpenCascade .brep (NVIDIA's reader mirrors OpenCascade's LGPL one) | 24, 29 | Each format's piece waits for its check |
+| ISO's EXPRESS schemas: where they may be obtained, what may be generated from them, and which edition of ISO 10303-42 is current | 24, 29 | Piece "EXPRESS code generation and schema validator (development tool)" |
+| Thread and gear tables are copyrighted standards, so geom-thread takes them as supplied or licensed data | 13 | Piece "Helical sweeps and geom-thread" |
+| How entries in our own pattern and linetype library are authored | 14 | Piece "2D-22 Our own pattern and linetype library" |
+| SMLib's .smp and .smb fixtures: the stricter reading applies, so they are not copied and the configurations are rebuilt | 12 | Answered; ledger row |
+| Unverified licence facts: EISPACK, the LAPACK text, ShapeOp, NIST SFA and MBE PMI, BRL-CAD's LGPL version, linesweeper, laz-rs's history, Geogram's other third_party folders, OpenMesh, the 3MF and glTF terms, Lacewell-Burley and Biermann-Levin-Zorin reference code, and the Wang et al. 2021 collision dataset | 16, 19, 29 | Before each source is used; pieces "Licence and dependency gate for the kernel workspace" and "Dependency audit" |
+| The JTS conformance files are no longer unverified: chapter 14 settles them as EDL-1.0, reusable with their notice | 14, 29 | Editorial fix to chapter 29's list of unverified licence facts |
+| Sample data licences: KiCad boards and Gerber reference files, ezdxf examples, PDAL and las-rs clouds, rhino3dm files, LINZ LandXML examples, the buildingSMART alignment set (fetch only), and the LandXML 1.2 schema (which cannot be pinned) | 17, 28 | Piece "Test-corpus register and fetcher"; fetch-only until checked |
+| Copyright in largely AI-generated code (solidcore, CADCraft, csgrs) matters only if one of them is promoted to PORT | 29 | Risk R20 |
+
+### Across chapters
+
+| Question | Raised in | Decided in |
+| --- | --- | --- |
+| Chapter lines that say an item is "raised in section 32" or "pending decision (section 32)" now point at the wrong place for most items. Each should name 32.n for the owner's decisions and 31.7 for everything else: geom-2d's dependencies, geom-bvh, the step ladder, the threaded browser build, the nightly wall-clock rule, the kernel shares, the two topology amendments, epsilon_step and the size rungs, the sketch constants and reference shape, and the crate amendments | 8, 13, 14, 15, 19, 23, 27 | Editorial fix to those chapter lines |
+| Chapters 14 (about 6,500 words), 16 (7,000), 19 (9,000) and 24 (8,500) run long. Candidates to split out: 14.12 and 14.14; 16.4 and 16.5; 19.7 and 19.8; 24.11's tables into crate design notes. Chapter 28 keeps its full oracle and corpus tables | 14, 16, 19, 24, 28 | Kernel owners at acceptance, as an editorial choice |
