@@ -1,0 +1,14 @@
+# One pinned compiler for the whole workspace, so a golden hash never moves because the compiler
+# did (kernel architecture, chapter 28: the toolchain guard). Keep it equal to RUST_TOOLCHAIN in
+# .github/workflows/kernel.yml and kernel-build.yml, and change all three together, in a pull
+# request that reruns every golden: the scaffold check in kernel-build.yml fails until the three
+# agree, and changing kernel.yml's pin reruns its golden hashes.
+#
+# The first cargo or rustup command run inside this repository makes rustup download and install
+# this toolchain with the components and targets below, once, if it is not installed yet. To run
+# one command on another installed toolchain, set RUSTUP_TOOLCHAIN for that command; chapter
+# 28.8's pinned nightly for branch coverage is meant to run that way.
+[toolchain]
+channel = "1.99.0"
+components = ["rustfmt", "clippy"]
+targets = ["wasm32-wasip1", "wasm32-unknown-unknown"]
