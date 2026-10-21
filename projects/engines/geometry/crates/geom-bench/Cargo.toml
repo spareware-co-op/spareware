@@ -1,0 +1,64 @@
+[package]
+name = "geom-bench"
+version = "0.0.0"
+edition.workspace = true
+# Development only: never published, never a dependency of any kernel or program crate.
+publish = false
+license.workspace = true
+description = "Spare Kit geometry kernel: benchmarks of every numbers-layer operation, with the count gates that block a regression over 5%."
+# The WebAssembly fuel host (fuel/) is a separate workspace, so Wasmtime never enters this one.
+exclude = ["fuel"]
+
+[lib]
+# The library holds the inputs, kernels and checks the harnesses share. It has no benchmarks of its
+# own, and leaving it out of `cargo bench` keeps libtest from rejecting the gate's arguments.
+bench = false
+
+# The program the WebAssembly fuel gate runs inside Wasmtime (built for wasm32-wasip1).
+[[bin]]
+name = "geom-bench-guest"
+path = "src/bin/guest.rs"
+test = false
+bench = false
+
+# The checks the gates run on count files: comparison with the merge base, removals, growth.
+[[bin]]
+name = "geom-bench-counts"
+path = "src/bin/counts.rs"
+test = false
+bench = false
+
+[dependencies]
+geom-num = { path = "../geom-num" }
+
+[dev-dependencies]
+# Wall-clock timings for people, on every platform. MIT OR Apache-2.0.
+divan = "0.1.21"
+
+# The merge gate: instruction counts, cache misses and heap use under Valgrind, through Gungraun.
+# Valgrind runs on Linux here, so the gate is Linux only and other platforms never build it.
+# Apache-2.0 OR MIT. The `gungraun-runner` binary must have exactly this version (see the crate
+# documentation).
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+gungraun = "=0.20.0"
+
+[[bench]]
+name = "instructions"
+harness = false
+
+[[bench]]
+name = "wall_clock"
+harness = false
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+unreachable = "deny"
+todo = "deny"
+unimplemented = "deny"
+indexing_slicing = "deny"
