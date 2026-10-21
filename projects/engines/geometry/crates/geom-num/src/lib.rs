@@ -27,23 +27,37 @@
 //!   on overflow checks being on: a result that does not fit is `None` or an error, never a
 //!   silently wrapped value. Only the compiler's evaluation of constants uses native operators,
 //!   where an overflow stops the build. Counts of steps never saturate: a saturated bound would
-//!   understate the truth.
+//!   understate the truth. The one modular arithmetic is by design: the large accumulator inside
+//!   [`exact_sum::ExactSum::add_slice`] and [`exact_sum::ExactSum::add_iter`] sums a double's
+//!   whole bit pattern modulo 2^64, as Neal's method specifies, and recovers the exact sum of the
+//!   significands from it.
 //! - No floating-point value produced here from finite inputs is NaN. [`math`] returns a
 //!   [`real::Real`] or an error; an [`interval::Interval`] has finite bounds or is refused as
-//!   `NotFinite`; [`eft`] reports a pair that is not exact with an infinite second part.
+//!   `NotFinite`; [`eft`] reports a pair that is not exact with an infinite second part; a
+//!   [`dd::DD`] is finite by construction; [`exact_sum::ExactSum`] gives a `Real` or `NotFinite`.
 //! - Every interval operation encloses the exact result of its operation on any reals in its
 //!   operands, and an enclosure that needs a maths function without a proven error is refused
 //!   ([`NumError::UnprovenMaths`]).
 //! - A bound carries its grid step, and bounds add exactly in the finer step
 //!   ([`exactness::Exactness`]).
+//! - Every double-double operation ([`dd::DD`]) is within its stated error bound of the exact
+//!   result: the published, machine-checked bound of its algorithm (the theorem is named on each
+//!   operation), plus, from the range of binary64, 2^−398 relative for products, quotients and
+//!   roots and 2^−1074 absolute for products and quotients. A `DD` is never NaN or infinite: an
+//!   overflow is [`NumError::NotFinite`].
+//! - A sum of doubles taken with [`exact_sum::ExactSum`] is exact until it is rounded once, to
+//!   nearest with ties to even, so its bits depend only on the terms, never on their order, on how
+//!   they were split into chunks, or on the order of merges.
 //! - No `unsafe`, no panics outside tests, no platform maths: every maths function comes from
 //!   [`math`], which uses the pure-Rust `libm` crate; where `libm` uses a processor instruction
 //!   instead (the square root, and the fused multiply-add where the processor has one), it is one
 //!   IEEE 754 defines exactly, so results are identical on every target.
 #![cfg_attr(not(test), no_std)]
 
+pub mod dd;
 pub mod eft;
 pub mod error;
+pub mod exact_sum;
 pub mod exactness;
 pub mod grid;
 pub mod interval;
@@ -55,7 +69,9 @@ pub mod real;
 pub mod sign;
 pub mod wide;
 
+pub use dd::DD;
 pub use error::NumError;
+pub use exact_sum::ExactSum;
 pub use exactness::Exactness;
 pub use grid::{Coord, GridStep, P2, P3, Rounded, Steps};
 pub use real::Real;
