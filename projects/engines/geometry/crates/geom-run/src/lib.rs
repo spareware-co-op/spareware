@@ -1,5 +1,8 @@
 //! Spare Kit geometry kernel: the parallel helper, budgets and cancellation.
 //!
+//! One job: the one way kernel code spreads work over threads, the budgets every operation runs
+//! inside, and the caller's cancellation.
+//!
 //! Layer 1, the bottom of the kernel (architecture chapter 27): `no_std`, no dependencies, no
 //! threads of its own. It holds the one way kernel code spreads work over threads ([`Exec`]), the
 //! budgets every operation runs inside ([`Budget`], [`BatchBudget`], [`WorkMeter`]) and the
