@@ -31,31 +31,42 @@
 //! - Integer arithmetic on fixed-width values in kernel code is a checked method (`checked_*`, or
 //!   in [`wide`] the `overflowing_*` limb steps, whose carry or borrow is kept), so nothing depends
 //!   on overflow checks being on: a result that does not fit is `None` or an error, never a
-//!   silently wrapped value. Two kinds of step compute modulo a power of two on purpose, and
+//!   silently wrapped value. Three kinds of step compute modulo a power of two on purpose, and
 //!   each cites what defines it so. In [`rng`], Philox's multiplications and key schedule, modulo
 //!   2^32 (its 32 × 32-bit product is formed modulo 2^64, as its reference does, and never reaches
-//!   2^64), and Lemire's threshold, a negation modulo 2^64: there a `wrapping_*` method is the
-//!   specified operation, not a result that failed to fit, and each place cites the specification.
-//!   In the CORE-MATH ports of [`math`], a `wrapping_*` method where the C source computes modulo
-//!   2^64 or 2^128 on purpose, each with a comment saying why the C does it (a two's complement
-//!   negation, a sum of which only the low bits are read, or a limb sum whose carry is kept by
-//!   comparison as [`wide`] keeps its own), so a wrap there is the computation the proof
-//!   describes, never a lost value. Every other integer step in the ports is checked too: its
-//!   `None`, which each step proves cannot come, ends the computation with the canonical NaN,
-//!   which the public functions report as `NotFinite`. Only the compiler's evaluation of constants
-//!   uses native operators, where an overflow stops the build. Counts of steps never saturate: a
-//!   saturated bound would understate the truth.
+//!   2^64), and Lemire's threshold, a negation modulo 2^64. In the large accumulator inside
+//!   [`exact_sum::ExactSum::add_slice`] and [`exact_sum::ExactSum::add_iter`], the sum of a
+//!   double's whole bit pattern modulo 2^64, as Neal's method specifies, from which the exact sum
+//!   of the significands is recovered. In those two a `wrapping_*` method is the specified
+//!   operation, not a result that failed to fit. And in the CORE-MATH ports of [`math`], a
+//!   `wrapping_*` method where the C source computes modulo 2^64 or 2^128 on purpose, each with a
+//!   comment saying why the C does it (a two's complement negation, a sum of which only the low
+//!   bits are read, or a limb sum whose carry is kept by comparison as [`wide`] keeps its own), so
+//!   a wrap there is the computation the proof describes, never a lost value. Every other integer
+//!   step in the ports is checked too: its `None`, which each step proves cannot come, ends the
+//!   computation with the canonical NaN, which the public functions report as `NotFinite`. Only
+//!   the compiler's evaluation of constants uses native operators, where an overflow stops the
+//!   build. Counts of steps never saturate: a saturated bound would understate the truth.
 //! - No floating-point value produced here from finite inputs is NaN. [`math`] returns a
 //!   [`real::Real`] or an error; an [`interval::Interval`] has finite bounds or is refused as
-//!   `NotFinite`; [`eft`] reports a pair that is not exact with an infinite second part; [`rng`]
-//!   draws its doubles as `Real`s in [0, 1). Inside [`math`], where the ports compute on raw
-//!   doubles, any NaN is the canonical `0x7ff8_0000_0000_0000`, and no public function returns
-//!   one.
+//!   `NotFinite`; [`eft`] reports a pair that is not exact with an infinite second part; a
+//!   [`dd::DD`] is finite by construction; [`exact_sum::ExactSum`] gives a `Real` or `NotFinite`;
+//!   [`rng`] draws its doubles as `Real`s in [0, 1). Inside [`math`], where the ports compute on
+//!   raw doubles, any NaN is the canonical `0x7ff8_0000_0000_0000`, and no public function
+//!   returns one.
 //! - Every interval operation encloses the exact result of its operation on any reals in its
 //!   operands, and an enclosure that needs a maths function without a proven error is refused
 //!   ([`NumError::UnprovenMaths`]).
 //! - A bound carries its grid step, and bounds add exactly in the finer step
 //!   ([`exactness::Exactness`]).
+//! - Every double-double operation ([`dd::DD`]) is within its stated error bound of the exact
+//!   result: the published, machine-checked bound of its algorithm (the theorem is named on each
+//!   operation), plus, from the range of binary64, 2^−398 relative for products, quotients and
+//!   roots and 2^−1074 absolute for products and quotients. A `DD` is never NaN or infinite: an
+//!   overflow is [`NumError::NotFinite`].
+//! - A sum of doubles taken with [`exact_sum::ExactSum`] is exact until it is rounded once, to
+//!   nearest with ties to even, so its bits depend only on the terms, never on their order, on how
+//!   they were split into chunks, or on the order of merges.
 //! - No `unsafe`, no panics outside tests, no platform maths: every maths function comes from
 //!   [`math`]. `sinpi`, `cospi`, `exp`, `ln` and `atan2` are correctly rounded CORE-MATH ports
 //!   with proven error bounds, so their bits are fixed by their specification. Everything else
@@ -66,8 +77,10 @@
 //!   and nothing in this crate uses them.
 #![cfg_attr(not(test), no_std)]
 
+pub mod dd;
 pub mod eft;
 pub mod error;
+pub mod exact_sum;
 pub mod exactness;
 pub mod grid;
 pub mod interval;
@@ -80,7 +93,9 @@ pub mod rng;
 pub mod sign;
 pub mod wide;
 
+pub use dd::DD;
 pub use error::NumError;
+pub use exact_sum::ExactSum;
 pub use exactness::Exactness;
 pub use grid::{Coord, GridStep, P2, P3, Rounded, Steps};
 pub use real::Real;
