@@ -4,7 +4,8 @@
 //! Run with `cargo bench -p geom-math`. It uses the standard library's clock only, so it builds
 //! with no extra dependency; when the benchmark harness of chapter 28 (`geom-bench`, piece G06)
 //! merges, these cases move there and gain its regression gate and instruction counts. Points are
-//! drawn from a fixed `SplitMix64` sequence, so every run measures the same work.
+//! drawn from the kernel's one generator, `geom_num::rng` (Philox4x32-10), with a fixed seed and
+//! stream, so every run measures the same work.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -13,6 +14,10 @@
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
     reason = "a benchmark is development code, like a test; the rules are for kernel code"
+)]
+#![allow(
+    clippy::disallowed_methods,
+    reason = "a benchmark measures wall-clock time by design (Instant::now and elapsed); the time is               printed, never fed into anything the kernel computes"
 )]
 
 use std::hint::black_box;
@@ -23,25 +28,19 @@ use geom_math::{
     Transform, TypedTransform,
 };
 use geom_num::grid::{GridStep, P3};
+use geom_num::rng::{Philox, Seed, Stream, StreamId};
 
 const POINTS: usize = 1_000_000;
 const FRAME_POINTS: usize = 200_000;
 
-struct Rng(u64);
-
-impl Rng {
-    fn next(&mut self) -> u64 {
-        self.0 = self.0.wrapping_add(0x9E37_79B9_7F4A_7C15);
-        let mut z = self.0;
-        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
-        z ^ (z >> 31)
-    }
-
-    /// A coordinate within ±2^38, so every transform below keeps it in range.
-    fn coord(&mut self) -> i64 {
-        (self.next() % (1 << 39)) as i64 - (1 << 38)
-    }
+/// A coordinate within ±2^38, so every transform below keeps it in range: a whole number drawn
+/// uniformly from [0, 2^39), less 2^38.
+#[allow(
+    clippy::unwrap_used,
+    reason = "a benchmark is development code, like a test: a failure should stop it loudly"
+)]
+fn coord(stream: &mut Stream) -> i64 {
+    stream.below(1 << 39).unwrap() as i64 - (1 << 38)
 }
 
 #[allow(
@@ -49,9 +48,12 @@ impl Rng {
     reason = "a benchmark is development code, like a test: a failure should stop it loudly"
 )]
 fn points(n: usize) -> Vec<P3> {
-    let mut rng = Rng(0x06E0_3BE7);
+    let mut stream = Philox::new(Seed(0x06E0_3BE7), StreamId(0)).stream();
     (0..n)
-        .map(|_| P3::new(rng.coord(), rng.coord(), rng.coord() >> 8).unwrap())
+        .map(|_| {
+            let (x, y, z) = (coord(&mut stream), coord(&mut stream), coord(&mut stream));
+            P3::new(x, y, z >> 8).unwrap()
+        })
         .collect()
 }
 
