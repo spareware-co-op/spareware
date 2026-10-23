@@ -124,6 +124,10 @@ jobs:
         if: ${{ !cancelled() }}
         env:
           RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+          # Its own build folder, which the build cache never saves or restores: the cache's key
+          # does not name the processor, so a restored native build from another machine's CPU
+          # can hold instructions this one lacks (SIGILL). Built fresh here, it is this CPU's.
+          CARGO_TARGET_DIR: target-native
         run: cargo test -p geom-num --release --locked --test determinism -- --nocapture
       - name: Golden digest in debug
         if: ${{ !cancelled() }}
