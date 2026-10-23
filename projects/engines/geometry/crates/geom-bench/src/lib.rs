@@ -1,5 +1,9 @@
 //! Spare Kit geometry kernel: benchmarks, and the count gates that block a regression over 5%.
 //!
+//! One job: the kernel's benchmarks, and the count gates that block a regression over 5%.
+//!
+//! Layer: Development, in chapter 27's proposed crate table: a development crate, never shipped.
+//!
 //! Development only (`publish = false`): no kernel or program crate depends on this one. It
 //! measures every operation of the numbers layer, `geom-num` ([`catalogue::OPS`]): the four exact
 //! predicates on typical, degenerate, nearly degenerate and extreme inputs; fixed-width integer
@@ -13,13 +17,15 @@
 //! of the kernel architecture, `projects/engines/geometry/architecture/`; board entry G18, which
 //! this piece (G06) covers.
 //!
-//! Guarantees, each checked by this crate's tests: every benchmark runs the operation it is named
-//! after (`tests/attack_g06.rs`), on inputs that are what their class claims (`tests/inputs.rs`),
-//! with inputs and results pinned by golden digests that must match in every build profile and on
-//! wasm32 (`tests/golden.rs`, and the fuel gate); the gate, the catalogue and `geom-num`'s public
-//! functions agree (`tests/coverage.rs`). The library has no `unsafe` code, no panicking calls or
-//! indexing outside tests, no recursion, no hash maps, no randomness (inputs come from fixed seeds)
-//! and no platform maths.
+//! Invariants this crate keeps, each checked by its tests:
+//!
+//! - Every benchmark runs the operation it is named after (`tests/attack_g06.rs`), on inputs that
+//!   are what their class claims (`tests/inputs.rs`).
+//! - Inputs and results are pinned by golden digests that must match in every build profile and on
+//!   wasm32 (`tests/golden.rs`, and the fuel gate).
+//! - The gate, the catalogue and `geom-num`'s public functions agree (`tests/coverage.rs`).
+//! - The library has no `unsafe` code, no panicking calls or indexing outside tests, no recursion,
+//!   no hash maps, no randomness (inputs come from fixed seeds) and no platform maths.
 //!
 //! Method: deterministic count gates in place of timing, as chapter 23.13 sets them out: Valgrind's
 //! Callgrind and DHAT through Gungraun (<https://github.com/gungraun/gungraun>), Wasmtime's fuel
