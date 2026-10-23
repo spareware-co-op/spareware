@@ -1,5 +1,7 @@
 # Shared kit status
 
+**The geometry kernel is owner-built for now.** An owner is building the Spare Kit geometry kernel (`projects/engines/geometry`, pieces G01 onwards) and is not taking kernel contributions until it asks for feedback. Please don't check out, open or work on kernel pieces; the pieces below are open as usual. Follow the kernel on [issue #169](https://github.com/spareware-co-op/spareware/issues/169).
+
 **Stage: Mapping.** Map: [ARCHITECTURE.md](ARCHITECTURE.md), one level deeper than the overview in the root [ARCHITECTURE.md](../../ARCHITECTURE.md). No code yet.
 
 ## Work board
