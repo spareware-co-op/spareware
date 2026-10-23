@@ -1,0 +1,47 @@
+[package]
+name = "geom-exchange"
+version = "0.0.0"
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+description = "Spare Kit geometry kernel: units, numbers to grid and the shared mappings every format crate uses."
+
+[dependencies]
+geom-run = { path = "../geom-run", default-features = false }
+# Exactly this crate's row of chapter 27's proposed crate table, checked by the scaffold test
+# in engine-geometry (tests/scaffold).
+# Still to add when they merge: geom-math (G03).
+geom-check = { path = "../geom-check" }
+geom-curve = { path = "../geom-curve" }
+geom-format = { path = "../geom-format" }
+geom-intersect = { path = "../geom-intersect" }
+geom-num = { path = "../geom-num" }
+geom-op = { path = "../geom-op" }
+geom-p21 = { path = "../geom-p21" }
+geom-surface = { path = "../geom-surface" }
+geom-topo = { path = "../geom-topo" }
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[lints.clippy]
+# The kernel's one lint posture: exactly geom-num's settings, here and in clippy.toml (the scaffold
+# check in engine-geometry, tests/scaffold/lints.rs, fails until they match). The crate is written
+# to clippy's pedantic idioms; CI denies every warning.
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "deny"
+# Every fixed-width arithmetic step in kernel code is a checked method, and no cast loses a value
+# silently. Tests may use native arithmetic and casts: each test file and test module allows these
+# four, and kernel code allows a cast only where its bound is written beside it.
+arithmetic_side_effects = "deny"
+cast_possible_truncation = "deny"
+cast_possible_wrap = "deny"
+cast_sign_loss = "deny"
+# Doubles are compared exactly, never against a tolerance: the kernel decides with exact predicates
+# and certified bounds (principles 1 and 2), so clippy's advice to compare within an epsilon does
+# not apply.
+float_cmp = "allow"

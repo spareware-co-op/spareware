@@ -1,0 +1,267 @@
+name: Kernel build
+
+# What only this workflow checks. kernel.yml tests, formats and lints every crate in the kernel's
+# folder (projects/engines/geometry/crates) natively on six runners and on wasm32-wasip1, so this
+# workflow runs none of those tests and lints again. It adds, with Cargo.lock as committed:
+#
+# - a build of every crate of chapter 27's crate table on its own, natively, for
+#   wasm32-unknown-unknown (the browsers' target) and for wasm32-wasip1, warnings denied, so a crate
+#   that builds only beside another, or warns on one of these targets, fails. kernel.yml does not
+#   prove this: it builds the kernel's folder in one cargo run, where one crate's features can let
+#   another build, denies warnings only through clippy and only natively, and builds no crate
+#   outside the kernel's folder;
+# - the proof that the kernel crates are no_std: each builds on its own for wasm32v1-none, a target
+#   that has no std at all (chapter 28.8);
+# - formatting and clippy for the table's crates outside the kernel's folder, which kernel.yml does
+#   not list (today the facade, engine-geometry);
+# - the scaffold check: every crate of chapter 27's crate table exists with a header stating its
+#   one job, layer, invariants and sections, kernel crates are no_std and forbid unsafe code, every
+#   Cargo.toml names exactly the table's direct dependencies, the graph has no cycle, every edge
+#   keeps the layer rule, every crate that ships carries exactly geom-num's lint settings, and
+#   rust-toolchain.toml and the kernel workflows pin one compiler
+#   (projects/engines/crates/engine-geometry/tests/scaffold, which holds the table).
+#
+# The list of crates to build comes from that table too, so this file holds no copy of it. The
+# development crates (geom-test, geom-fuzz, geom-bench, geom-gen) use std and never ship, so their
+# own workflows build them.
+#
+# Every action is pinned to a full commit, the same commit kernel.yml pins it to; change the two
+# files together, after reviewing the new commit.
+
+on:
+  pull_request:
+    paths:
+      - "projects/engines/geometry/**"
+      - "projects/engines/crates/engine-geometry/**"
+      - "projects/kit/crates/kit-core/**"
+      - "**/Cargo.toml"
+      - "Cargo.lock"
+      - ".cargo/**"
+      - "rust-toolchain.toml"
+      - "rust-toolchain"
+      # clippy and rustfmt read the nearest configuration above a crate's files, and the scaffold
+      # check reads the clippy configuration each crate is built with.
+      - "**/clippy.toml"
+      - "**/.clippy.toml"
+      - "**/rustfmt.toml"
+      - "**/.rustfmt.toml"
+      - ".github/workflows/kernel.yml"
+      - ".github/workflows/kernel-build.yml"
+  push:
+    branches: [main]
+    paths:
+      - "projects/engines/geometry/**"
+      - "projects/engines/crates/engine-geometry/**"
+      - "projects/kit/crates/kit-core/**"
+      - "**/Cargo.toml"
+      - "Cargo.lock"
+      - ".cargo/**"
+      - "rust-toolchain.toml"
+      - "rust-toolchain"
+      - "**/clippy.toml"
+      - "**/.clippy.toml"
+      - "**/rustfmt.toml"
+      - "**/.rustfmt.toml"
+      - ".github/workflows/kernel.yml"
+      - ".github/workflows/kernel-build.yml"
+
+permissions:
+  contents: read
+
+# A newer push to the same branch or pull request replaces a run still in progress.
+concurrency:
+  group: kernel-build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Equal to rust-toolchain.toml and to kernel.yml: one pinned compiler (chapter 28, the toolchain
+  # guard). Change all three together; the scaffold check fails until they agree.
+  RUST_TOOLCHAIN: "1.99.0"
+  CARGO_TERM_COLOR: always
+
+jobs:
+  list:
+    name: Crates to build, from the crate table
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      all: ${{ steps.list.outputs.all }}
+      no_std: ${{ steps.list.outputs.no_std }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: List the kernel crates in the workspace
+        id: list
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Every crate of the table that is in the workspace: "no_std" lines are the kernel
+          # crates, "std" lines geom-pool and the facade.
+          cargo test --locked --package engine-geometry --test scaffold -- \
+            --ignored --exact kernel_build_list --nocapture --test-threads 1 > list.txt
+          all=$(sed -n 's/^kernel-build: \(no_std\|std\) //p' list.txt | tr '\n' ' ')
+          no_std=$(sed -n 's/^kernel-build: no_std //p' list.txt | tr '\n' ' ')
+          test -n "$no_std"
+          echo "all: $all"
+          echo "no_std: $no_std"
+          echo "all=$all" >> "$GITHUB_OUTPUT"
+          echo "no_std=$no_std" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build (${{ matrix.target }})
+    needs: list
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      # Every target reports, so a crate that fails on one target shows which.
+      fail-fast: false
+      matrix:
+        # Each crate on its own, warnings denied. kernel.yml builds the kernel's folder natively and
+        # for wasm32-wasip1 too, but all its crates in one cargo run and with warnings allowed, so
+        # it cannot show that a crate builds alone (see the top of this file).
+        target:
+          - x86_64-unknown-linux-gnu
+          - wasm32-unknown-unknown
+          - wasm32-wasip1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: ${{ matrix.target }}
+      - name: Build every kernel crate on its own
+        env:
+          TARGET: ${{ matrix.target }}
+          PACKAGES: ${{ needs.list.outputs.all }}
+          # A misplaced crate attribute, such as #![no_std] in a module, is only a warning.
+          RUSTFLAGS: -D warnings
+        shell: bash
+        run: |
+          set -euo pipefail
+          # One build per crate, so a crate that builds only beside another fails.
+          test -n "$PACKAGES"
+          for package in $PACKAGES; do
+            echo "::group::$package for $TARGET"
+            cargo build --locked --target "$TARGET" --package "$package"
+            echo "::endgroup::"
+          done
+
+  no-std:
+    name: Build without std (${{ matrix.target }})
+    needs: list
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      matrix:
+        # A WebAssembly target with core and alloc only: a kernel crate that links std, through
+        # its own source or any dependency, does not build here.
+        target:
+          - wasm32v1-none
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: ${{ matrix.target }}
+      - name: Build every no_std kernel crate on its own
+        env:
+          TARGET: ${{ matrix.target }}
+          PACKAGES: ${{ needs.list.outputs.no_std }}
+          RUSTFLAGS: -D warnings
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$PACKAGES"
+          for package in $PACKAGES; do
+            echo "::group::$package for $TARGET"
+            cargo build --locked --target "$TARGET" --package "$package"
+            echo "::endgroup::"
+          done
+
+  lints:
+    name: Format and lints (the table's crates outside the kernel's folder)
+    needs: list
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: rustfmt, clippy
+      - name: The crates kernel.yml does not format or lint
+        id: outside
+        env:
+          PACKAGES: ${{ needs.list.outputs.all }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # kernel.yml formats and lints every crate in projects/engines/geometry/crates, each in
+          # the folder named after it (the scaffold check holds every crate to that); these are the
+          # table's other crates.
+          test -n "$PACKAGES"
+          outside=""
+          for package in $PACKAGES; do
+            if [ ! -d "projects/engines/geometry/crates/$package" ]; then
+              outside="$outside $package"
+            fi
+          done
+          test -n "$outside"
+          echo "outside the kernel's folder:$outside"
+          echo "packages=$outside" >> "$GITHUB_OUTPUT"
+      - name: Formatting
+        env:
+          PACKAGES: ${{ steps.outside.outputs.packages }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=()
+          for package in $PACKAGES; do args+=(--package "$package"); done
+          test "${#args[@]}" -gt 0
+          cargo fmt --check "${args[@]}"
+      - name: Clippy with the kernel lints, on every target
+        env:
+          PACKAGES: ${{ steps.outside.outputs.packages }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=()
+          for package in $PACKAGES; do args+=(--package "$package"); done
+          test "${#args[@]}" -gt 0
+          cargo clippy --locked --all-targets "${args[@]}" -- -D warnings
+
+  scaffold:
+    name: Scaffold check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: The compiler in use is the pinned one
+        shell: bash
+        run: |
+          set -euo pipefail
+          # rust-toolchain.toml overrides the toolchain installed above, so this shows the two
+          # agree; the scaffold check compares the files themselves.
+          version=$(rustc --version)
+          echo "$version"
+          case "$version" in
+            "rustc $RUST_TOOLCHAIN "*) ;;
+            *) echo "::error::rustc is not $RUST_TOOLCHAIN: rust-toolchain.toml and RUST_TOOLCHAIN disagree"; exit 1 ;;
+          esac
+      - name: The repository holds exactly chapter 27's crate table
+        run: cargo test --locked --package engine-geometry --test scaffold
