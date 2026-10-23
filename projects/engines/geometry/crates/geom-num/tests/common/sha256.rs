@@ -1,23 +1,25 @@
-//! SHA-256 (FIPS 180-4), the hash chapters 21 and 28.13 require for golden digests, for the tests
-//! of `geom-num` that record one.
+//! SHA-256 (FIPS 180-4), the hash chapters 21 and 28.13 specify for golden hashes, with the
+//! standard's test vectors and a check of its constants against their definitions.
 //!
-//! **A copy.** This is the SHA-256 of `tests/determinism.rs`, `geom-num`'s golden-hash test,
-//! copied with the checks that hold it to the standard: FIPS 180-4's test vectors, whatever the
-//! size of the pieces the bytes arrive in, and its constants computed from their definitions. It
-//! stays a copy until the golden store (piece G19, "Determinism matrix and golden store") holds the
-//! one shared copy that every kernel crate's goldens use; then the tests take that one and this
-//! file goes. Until then, a change to either copy is made to both.
-//!
-//! A test includes it with `#[path = "common/sha256.rs"] mod sha256;`. Cargo builds no test from
-//! a file in a subfolder of `tests/`, so these checks run inside each test that includes it.
+//! **This is a copy** of the SHA-256 in geom-num's `tests/determinism.rs`, so that the random
+//! generator's goldens (`rng_determinism.rs`) are hashed with the same checked code. It is copied
+//! as it stands there, its two tests included; the only change is `pub` on what the golden tests
+//! call (`Sha256`, its `new`, `write` and `finish`, and `hex`). It stays a copy only until the
+//! golden store (piece G19, "Determinism matrix and golden store") holds the one shared copy that
+//! every golden test uses. Until then a fix to either copy is made to both.
 
-// Native arithmetic, unwrap and indexing are denied in kernel code (Cargo.toml); test code may use
-// them, and a hash that went wrong must stop the test loudly.
+// The crate denies native arithmetic, unwrap and unchecked indexing in kernel code (Cargo.toml);
+// this test support uses them, as `determinism.rs` does. Helpers outside `#[test]` functions are
+// not covered by clippy.toml's allow-*-in-tests settings.
 #![allow(
     clippy::arithmetic_side_effects,
     clippy::unwrap_used,
     clippy::indexing_slicing,
-    reason = "test code; the rules are for kernel code"
+    reason = "test support; the rules are for kernel code"
+)]
+#![allow(
+    clippy::many_single_char_names,
+    reason = "a to h and w are FIPS 180-4's names for the working variables and message schedule"
 )]
 
 use std::fmt::Write;
@@ -106,8 +108,8 @@ const SHA256_ROUND: [u32; 64] = [
 
 /// SHA-256, as FIPS 180-4 (*Secure Hash Standard*, NIST, 2015) specifies it: the message is
 /// padded with a one bit, zeros and its length in bits (section 5.1.1), and compressed 512 bits at
-/// a time by the function of section 6.2.2. Bytes are taken as they come, so a long message need
-/// never be held in memory. Every addition is modulo 2^32, as the standard defines it.
+/// a time by the function of section 6.2.2. Bytes are taken as they come, so the whole corpus is
+/// never held in memory. Every addition is modulo 2^32, as the standard defines it.
 #[derive(Clone)]
 pub struct Sha256 {
     /// The hash value so far, H(i).

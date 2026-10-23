@@ -33,6 +33,10 @@
 //! - Counters are behind locks, not atomics: chapter 23.4 forbids atomic counters in kernel
 //!   crates, and this crate's tests keep the same rule (`kernel_rules.rs` checks both).
 
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests check which threads ran the work and time cancellation; no kernel result depends on thread identity or the clock"
+)]
 // The crate denies native arithmetic and lossy casts in kernel code (Cargo.toml); tests may use
 // them to build their cases and oracles.
 #![allow(

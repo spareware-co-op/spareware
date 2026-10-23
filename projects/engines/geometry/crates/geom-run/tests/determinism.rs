@@ -10,6 +10,11 @@
 //! really runs chunks on several threads, that the helper itself never leaves the calling thread,
 //! and that chunks past an early failure stop being run within one wave.
 
+#![allow(
+    clippy::disallowed_methods,
+    clippy::disallowed_types,
+    reason = "tests check which threads ran the work; no kernel result depends on thread identity or the clock"
+)]
 // The crate denies native arithmetic and lossy casts in kernel code (Cargo.toml); tests may use
 // them to build their cases and oracles.
 #![allow(
