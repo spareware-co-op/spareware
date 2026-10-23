@@ -1,0 +1,249 @@
+name: Kernel
+
+# Tests every crate of the geometry kernel on every target the kernel builds for.
+# geom-num's determinism test (tests/determinism.rs) hashes a fixed corpus of kernel results with
+# SHA-256; its golden digest must be the same on every target here, in debug and in release,
+# release both with overflow checks on and as it ships (off), and natively with
+# -C target-cpu=native (chapter 21). A target that disagrees is a bug, never a reason to change
+# the golden value.
+#
+# The golden digest runs first, in every configuration, and every step runs even when an earlier
+# one failed (`if: !cancelled()`), so a failing suite never hides the digest of a target.
+#
+# Every action is pinned to a full commit, checked against its tag when it was pinned; update a
+# pin only after reviewing the new commit.
+#
+# If this workflow becomes a required check, note that a pull request outside the paths below
+# never runs it, so it would never report: then drop the pull_request path filter and skip inside
+# the jobs, or require a small summary job that always runs.
+
+on:
+  pull_request:
+    paths:
+      - "projects/engines/geometry/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".cargo/**"
+      - "rust-toolchain.toml"
+      - "rust-toolchain"
+      - "clippy.toml"
+      - ".clippy.toml"
+      - "rustfmt.toml"
+      - ".rustfmt.toml"
+      - ".github/workflows/kernel.yml"
+  push:
+    branches: [main]
+    paths:
+      - "projects/engines/geometry/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".cargo/**"
+      - "rust-toolchain.toml"
+      - "rust-toolchain"
+      - "clippy.toml"
+      - ".clippy.toml"
+      - "rustfmt.toml"
+      - ".rustfmt.toml"
+      - ".github/workflows/kernel.yml"
+
+permissions:
+  contents: read
+
+# A newer push to the same pull request cancels the runs it supersedes. A newer push to main
+# does not cancel a run in progress, but at most one run waits behind it (GitHub's default
+# `queue: single`), so a run on main that is still waiting is cancelled by a newer push.
+concurrency:
+  group: kernel-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # One pinned compiler for every job, so a golden digest never moves because the compiler did
+  # (chapter 28.13, the toolchain guard). Change it only in a pull request that reruns every
+  # golden. Chapter 28.13 asks for the pin in a committed rust-toolchain.toml at the repository
+  # root; until an owner adds one, it is held here, and the path filters above already watch it.
+  RUST_TOOLCHAIN: "1.99.0"
+
+jobs:
+  test:
+    name: Test (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    # Every kernel crate in release and in debug on one runner; geom-num's debug suite alone
+    # takes over half an hour on a 12-thread machine, so the limit leaves room as crates grow.
+    timeout-minutes: 240
+    strategy:
+      # Every target reports, so a golden digest that differs on one target shows which.
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x86-64
+            os: ubuntu-latest
+          - name: Linux arm64
+            os: ubuntu-24.04-arm
+          - name: Windows x86-64
+            os: windows-latest
+          - name: Windows arm64
+            os: windows-11-arm
+          - name: macOS arm64
+            os: macos-latest
+          - name: macOS x86-64
+            # GitHub retired macos-13 in December 2025 and named macos-15-intel as the standard
+            # x86-64 label to move to; it said x86-64 macOS ends when the macOS 15 image retires in
+            # fall 2027 (changelog, 2025-09-19). Its macOS 26 image has a standard x86-64 label too,
+            # macos-26-intel (changelog, 2026-02-26), and its runner reference, read 2026-10-22,
+            # lists both, so when Intel images end is not settled. When they end, this leg needs a
+            # self-hosted runner or an owner's decision to drop the target (chapter 32.4).
+            os: macos-15-intel
+    defaults:
+      run:
+        # bash with -eo pipefail on every runner, Windows included.
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      # Every crate in the kernel's folder is checked here, so a new crate is covered the day it
+      # lands (chapter 27: one folder per crate, folder name = crate name).
+      - name: List the kernel's crates
+        run: echo "KERNEL_CRATES=$(for d in projects/engines/geometry/crates/*/; do printf -- '-p %s ' "$(basename "$d")"; done)" >> "$GITHUB_ENV"
+      - name: Golden digest in release, with overflow checks on
+        if: ${{ !cancelled() }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+        run: cargo test -p geom-num --release --locked --test determinism -- --nocapture
+      - name: Golden digest in release as shipped, without overflow checks
+        if: ${{ !cancelled() }}
+        run: cargo test -p geom-num --release --locked --test determinism -- --nocapture
+      - name: Show this machine's CPU features
+        if: ${{ !cancelled() }}
+        run: rustc -vV && rustc --print cfg -C target-cpu=native
+      - name: Golden digest in release for this machine's own CPU
+        if: ${{ !cancelled() }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+        run: cargo test -p geom-num --release --locked --test determinism -- --nocapture
+      - name: Golden digest in debug
+        if: ${{ !cancelled() }}
+        run: cargo test -p geom-num --locked --test determinism -- --nocapture
+      - name: Test suite in release, with overflow checks on
+        if: ${{ !cancelled() }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+        run: cargo test $KERNEL_CRATES --release --locked --no-fail-fast
+      - name: Test suite in debug
+        if: ${{ !cancelled() }}
+        run: cargo test $KERNEL_CRATES --locked --no-fail-fast
+
+  wasm:
+    name: Test (wasm32-wasip1 under ${{ matrix.runtime }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        # Chapter 21: wasm32 under wasmtime and under Node.
+        runtime: [wasmtime, node]
+    env:
+      WASMTIME_VERSION: "50.0.0"
+      NODE_VERSION: "24"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: wasm32-wasip1
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      # Every kernel crate in the kernel's folder; the development crates (chapter 27) need
+      # processes and files that WASI test runs do not have, and run natively above.
+      - name: List the kernel's crates
+        run: echo "KERNEL_CRATES=$(for d in projects/engines/geometry/crates/*/; do c="$(basename "$d")"; case "$c" in geom-test|geom-fuzz|geom-gen|geom-bench) ;; *) printf -- '-p %s ' "$c" ;; esac; done)" >> "$GITHUB_ENV"
+      - name: Install wasmtime ${{ env.WASMTIME_VERSION }}
+        if: matrix.runtime == 'wasmtime'
+        uses: bytecodealliance/actions/wasmtime/setup@9152e710e9f7182e4c29ad218e4f335a7b203613 # v1.1.3
+        with:
+          version: ${{ env.WASMTIME_VERSION }}
+      - name: Run the tests under wasmtime
+        if: matrix.runtime == 'wasmtime'
+        run: |
+          wasmtime --version
+          echo "CARGO_TARGET_WASM32_WASIP1_RUNNER=wasmtime" >> "$GITHUB_ENV"
+      - name: Install Node ${{ env.NODE_VERSION }}
+        if: matrix.runtime == 'node'
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Run the tests under Node's WASI (preview1)
+        if: matrix.runtime == 'node'
+        run: |
+          node --version
+          cat > "$RUNNER_TEMP/wasi-run.mjs" <<'EOF'
+          // Runs a wasm32-wasip1 test binary under Node's WASI: cargo's runner for that target.
+          // A failing test traps or exits non-zero, and either makes this process exit non-zero.
+          import { readFile } from 'node:fs/promises';
+          import { WASI } from 'node:wasi';
+          import { argv, env, exit } from 'node:process';
+
+          const [file, ...args] = argv.slice(2);
+          const wasi = new WASI({ version: 'preview1', args: [file, ...args], env, returnOnExit: true });
+          const module = await WebAssembly.compile(await readFile(file));
+          const instance = await WebAssembly.instantiate(module, wasi.getImportObject());
+          exit(wasi.start(instance));
+          EOF
+          echo "CARGO_TARGET_WASM32_WASIP1_RUNNER=node --no-warnings $RUNNER_TEMP/wasi-run.mjs" >> "$GITHUB_ENV"
+      - name: Golden digest in release, with overflow checks on
+        if: ${{ !cancelled() }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+        run: cargo test -p geom-num --target wasm32-wasip1 --release --locked --test determinism -- --nocapture
+      - name: Golden digest in release as shipped, without overflow checks
+        if: ${{ !cancelled() }}
+        run: cargo test -p geom-num --target wasm32-wasip1 --release --locked --test determinism -- --nocapture
+      - name: Golden digest in debug
+        if: ${{ !cancelled() }}
+        run: cargo test -p geom-num --target wasm32-wasip1 --locked --test determinism -- --nocapture
+      # The whole suite in release. In debug, wasm32-wasip1 runs every test on one thread with no
+      # optimisation, which takes well over an hour, so the debug leg here is the golden digest
+      # above (chapter 21 asks for the corpus in debug and release); the native jobs run the whole
+      # suite in debug.
+      - name: Test suite in release, with overflow checks on
+        if: ${{ !cancelled() }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+        run: cargo test $KERNEL_CRATES --target wasm32-wasip1 --release --locked --no-fail-fast
+
+  lint:
+    name: Format and lints
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      # Every crate in the kernel's folder is checked here, so a new crate is covered the day it
+      # lands (chapter 27: one folder per crate, folder name = crate name).
+      - name: List the kernel's crates
+        run: echo "KERNEL_CRATES=$(for d in projects/engines/geometry/crates/*/; do printf -- '-p %s ' "$(basename "$d")"; done)" >> "$GITHUB_ENV"
+      - name: Formatting
+        run: cargo fmt --check $KERNEL_CRATES
+      # The crate's [lints] table enables clippy's pedantic group and denies native arithmetic,
+      # lossy casts, unwrap, expect, panic and unchecked indexing in kernel code; its clippy.toml
+      # holds chapter 21's disallowed methods and types. -D warnings makes every one an error.
+      - name: Clippy with the kernel lints
+        if: ${{ !cancelled() }}
+        run: cargo clippy $KERNEL_CRATES --all-targets --locked -- -D warnings
