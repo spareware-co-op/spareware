@@ -25,7 +25,7 @@ mod gate;
 use gate::{
     dd::dd, eft::eft, exact_sum::exact_sum, exactness::exactness, grid::grid, growth::growth,
     interval::interval, math::math, plane::plane, predicate::predicate, real::real, rng::rng,
-    sign::sign, wide::wide,
+    sign::sign, unproven::unproven, wide::wide,
 };
 
 #[cfg(target_os = "linux")]
