@@ -2304,8 +2304,12 @@ fn workload(seed: u64) -> String {
 /// must give this value (`x86_64` natively and wasm32-wasip1 under wasmtime both run this file).
 ///
 /// It replaced the workload's 64-bit FNV-1a digest, `0x32b6_dcb7_d33c_e019`, when the hash moved
-/// to SHA-256 (chapter 28.13): both are hashes of the same bytes, so no result changed.
-const WORKLOAD_DIGEST: &str = "c1c5d1b624f95d7ce6b6640acef43dda0a90ae2c4beb6c30483fa87a234747c9";
+/// to SHA-256 (chapter 28.13): both are hashes of the same bytes, so no result changed. It replaced
+/// `c1c5d1b6…747c9` when piece G05 made `geom_num::math::sinpi` and `cospi`, which the workload's
+/// rotations call, correctly rounded (ports of CORE-MATH in place of an msun-method
+/// approximation): of the maths functions geom-math calls, only those two changed, so every
+/// rotation now uses the correctly rounded sine and cosine.
+const WORKLOAD_DIGEST: &str = "977828731c890a725eae9d2f6eb79b9d04a69f927ffcf20525228c93f2cfda25";
 
 /// Principle 5 and chapter 21: bit-identical results on every target. The workload covers map
 /// conversions both ways, double-double arithmetic and transform classification and inversion;
