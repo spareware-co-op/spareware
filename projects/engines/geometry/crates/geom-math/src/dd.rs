@@ -25,10 +25,10 @@
 //!
 //! | Operation | Algorithm | Proven here | Reported by the authors |
 //! | --- | --- | --- | --- |
-//! | [`DD::add`], [`DD::sub`] | AccurateDWPlusDW | 6u² + 45u³ | 3u²/(1 − 4u) |
-//! | [`DD::add_f64`] | DWPlusFP | 3u²/(1 − 3u) < 3u² + 10u³ | 2u² + 5u³ |
-//! | [`DD::mul_f64`] | DWTimesFP1 | 3u² + 7u³ | 2u² |
-//! | [`DD::mul`] | DWTimesDW1 | 8u² + 23u³ | 7u² |
+//! | [`DD::add`], [`DD::sub`] | `AccurateDWPlusDW` | 6u² + 45u³ | 3u²/(1 − 4u) |
+//! | [`DD::add_f64`] | `DWPlusFP` | 3u²/(1 − 3u) < 3u² + 10u³ | 2u² + 5u³ |
+//! | [`DD::mul_f64`] | `DWTimesFP1` | 3u² + 7u³ | 2u² |
+//! | [`DD::mul`] | `DWTimesDW1` | 8u² + 23u³ | 7u² |
 //! | [`DD::div`] | QD's accurate division | 6u² + 79u³ | (not analysed there) |
 //! | [`DD::sqrt`] | one Newton step from the rounded root | 4.13u² | (not analysed there) |
 //!
@@ -41,7 +41,7 @@
 //! falls below 2^−1022 (*Range* below says what happens when one does).
 //!
 //! - (R) RN(a) = a(1 + θ) with |θ| ≤ u, and |RN(a) − a| ≤ u·|RN(a)|.
-//! - (N) For a normalized pair x = (x_h, x_l): |x_l| ≤ u|x_h|, so (1 − u)|x_h| ≤ |x| ≤ (1 + u)|x_h|.
+//! - (N) For a normalized pair x = (`x_h`, `x_l)`: |`x_l`| ≤ `u|x_h`|, so (1 − `u)|x_h`| ≤ |x| ≤ (1 + `u)|x_h`|.
 //! - (S) If `two_sum(a, b)` returns a nonzero error, then |a + b| ≥ max(|a|, |b|)/2, and so
 //!   |RN(a + b)| ≥ max(|a|, |b|)/2. Proof: say |a| ≥ |b|. If a and b have the same sign,
 //!   |a + b| ≥ |a|; if they have opposite signs and |b| < |a|/2, |a + b| > |a|/2; in the remaining
@@ -70,8 +70,8 @@
 //!
 //! Changes from the sources, and why:
 //!
-//! - Every Fast2Sum of the published algorithms is replaced by `two_sum`. Where the published
-//!   proof shows Fast2Sum exact, both return the same pair (the rounded sum and its exact error are
+//! - Every `Fast2Sum` of the published algorithms is replaced by `two_sum`. Where the published
+//!   proof shows `Fast2Sum` exact, both return the same pair (the rounded sum and its exact error are
 //!   unique), so the published bounds carry over unchanged; `two_sum` needs no ordering
 //!   precondition and cannot be misused. The proofs here use only that `two_sum` is exact.
 //! - Products, quotients and roots scale their operands by powers of two, as above, so `two_prod`
@@ -96,7 +96,7 @@
 //!   <https://doi.org/10.1145/3121432>: the algorithm names, and the tighter bounds in the table as
 //!   the authors state them in their JNCF 2017 slides,
 //!   <https://jncf2017.lip6.fr/files/slides/popescu.pdf>, slide 17 (read 2026-10-21), with the
-//!   AccurateDWPlusDW bound as 3u²/(1 − 4u) in J.-M. Muller's NAC 2024 talk,
+//!   `AccurateDWPlusDW` bound as 3u²/(1 − 4u) in J.-M. Muller's NAC 2024 talk,
 //!   <https://webusers.imj-prg.fr/~jean-claude.bajard/NAC2024/Supports/NAC2024_JMM.pdf>
 //!   (read 2026-10-21). That talk also reports the Coq formalisation of these proofs by Muller and
 //!   Rideau, *ACM TOMS* 48(1) (2022), <https://doi.org/10.1145/3484514>, which found and repaired
@@ -112,6 +112,11 @@
 //! division and square root, add a power-of-two scaling of each part going in and of the result
 //! coming out (`scale_b`: a bit decomposition and one or two multiplications). [`DD::round_shifted`]
 //! is two roundings to integers, one `two_sum` and a few `i128` additions and comparisons.
+
+#![allow(
+    clippy::many_single_char_names,
+    reason = "variable names follow the formulas of the method each function cites"
+)]
 
 use core::ops::Neg;
 
@@ -272,7 +277,7 @@ impl DD {
     }
 
     /// The exact product `a · b` of two doubles, when it is certain that [`two_prod`] gives it
-    /// exactly: either factor zero, or both normal with |a|, |b| < 2^996 and exponents e_a + e_b
+    /// exactly: either factor zero, or both normal with |a|, |b| < 2^996 and exponents `e_a` + `e_b`
     /// between −970 and 1021. `None` otherwise (an operand not finite, subnormal, or a product too
     /// close to the underflow or overflow threshold for this range to vouch for its error).
     #[must_use]
@@ -309,8 +314,8 @@ impl DD {
         self.hi
     }
 
-    /// The sum, by AccurateDWPlusDW (Joldes, Muller and Popescu 2017; QD's `ieee_add`), with
-    /// `two_sum` in place of Fast2Sum:
+    /// The sum, by `AccurateDWPlusDW` (Joldes, Muller and Popescu 2017; QD's `ieee_add`), with
+    /// `two_sum` in place of `Fast2Sum`:
     ///
     /// ```text
     /// (s_h, s_l) = two_sum(x_h, y_h);  (t_h, t_l) = two_sum(x_l, y_l)
@@ -318,18 +323,18 @@ impl DD {
     /// w = RN(t_l + v_l);               result = two_sum(v_h, w)
     /// ```
     ///
-    /// Proof of the bound 6u² + 45u³ (x = self, y = other, S = x + y = s_h + s_l + t_h + t_l). With
-    /// e₁ = c − (s_l + t_h) and e₂ = w − (t_l + v_l), the result is v_h + w = S + e₁ + e₂.
+    /// Proof of the bound 6u² + 45u³ (x = self, y = other, S = x + y = `s_h` + `s_l` + `t_h` + `t_l`). With
+    /// e₁ = c − (`s_l` + `t_h`) and e₂ = w − (`t_l` + `v_l`), the result is `v_h` + w = S + e₁ + e₂.
     ///
-    /// - If s_l = 0, then c = t_h exactly. If also v_l = 0, w = t_l and the result is S exactly.
-    ///   If v_l ≠ 0, (S) gives |t_h| ≤ 2|s_h + t_h| = 2|v_h + v_l| ≤ 2(1 + u)|v_h|, so
-    ///   |t_l| ≤ 2u(1 + u)|v_h|, e₁ = 0 and |e₂| ≤ u(|t_l| + |v_l|) ≤ u²(3 + 2u)|v_h|, while
-    ///   |S| ≥ |v_h|(1 − u − 2u(1 + u)): relative error at most u²(3 + 2u)/(1 − 3u − 2u²).
-    /// - If s_l ≠ 0, (S) gives max(|x_h|, |y_h|) ≤ 2|s_h|, so (N) gives |x_l| + |y_l| ≤ 4u|s_h|,
-    ///   |t_h| ≤ 4u(1 + u)|s_h|, |t_l| ≤ 4u²(1 + u)|s_h| and |s_l| ≤ u|s_h|. Then
-    ///   |e₁| ≤ u|s_l + t_h| ≤ u²(5 + 4u)|s_h|; |c| ≤ u(1 + u)(5 + 4u)|s_h|;
-    ///   |v_h| ≤ (1 + u)(1 + u(1 + u)(5 + 4u))|s_h| and |v_l| ≤ u|v_h|; |e₂| ≤ u(|t_l| + |v_l|);
-    ///   and |S| ≥ |s_h| − |s_l| − |x_l| − |y_l| ≥ (1 − 5u)|s_h|. So (|e₁| + |e₂|)/|S| is below
+    /// - If `s_l` = 0, then c = `t_h` exactly. If also `v_l` = 0, w = `t_l` and the result is S exactly.
+    ///   If `v_l` ≠ 0, (S) gives |`t_h`| ≤ `2|s_h` + `t_h`| = `2|v_h` + `v_l`| ≤ 2(1 + `u)|v_h`|, so
+    ///   |`t_l`| ≤ 2u(1 + `u)|v_h`|, e₁ = 0 and |e₂| ≤ `u(|t_l`| + |`v_l`|) ≤ u²(3 + `2u)|v_h`|, while
+    ///   |S| ≥ |`v_h|(1` − u − 2u(1 + u)): relative error at most u²(3 + 2u)/(1 − 3u − 2u²).
+    /// - If `s_l` ≠ 0, (S) gives `max(|x_h`|, |`y_h`|) ≤ `2|s_h`|, so (N) gives |`x_l`| + |`y_l`| ≤ `4u|s_h`|,
+    ///   |`t_h`| ≤ 4u(1 + `u)|s_h`|, |`t_l`| ≤ 4u²(1 + `u)|s_h`| and |`s_l`| ≤ `u|s_h`|. Then
+    ///   |e₁| ≤ `u|s_l` + `t_h`| ≤ u²(5 + `4u)|s_h`|; |c| ≤ u(1 + u)(5 + `4u)|s_h`|;
+    ///   |`v_h`| ≤ (1 + u)(1 + u(1 + u)(5 + `4u))|s_h`| and |`v_l`| ≤ `u|v_h`|; |e₂| ≤ `u(|t_l`| + |`v_l`|);
+    ///   and |S| ≥ |`s_h`| − |`s_l`| − |`x_l`| − |`y_l`| ≥ (1 − `5u)|s_h`|. So (|e₁| + |e₂|)/|S| is below
     ///   6u² + 45u³.
     ///
     /// # Errors
@@ -355,18 +360,19 @@ impl DD {
     /// [`NumError::NotFinite`] if the result overflows.
     #[allow(
         clippy::should_implement_trait,
-        reason = "returns Result (it may overflow), so it cannot be core::ops::Sub"
+        clippy::arithmetic_side_effects,
+        reason = "returns Result (it may overflow), so it cannot be core::ops::Sub; negating a double-double flips both parts' signs, exactly"
     )]
     pub fn sub(self, other: DD) -> Result<DD, NumError> {
         self.add(-other)
     }
 
-    /// The sum with a double, by DWPlusFP (Joldes, Muller and Popescu 2017):
-    /// (s_h, s_l) = two_sum(x_h, y); v = RN(x_l + s_l); result = two_sum(s_h, v).
+    /// The sum with a double, by `DWPlusFP` (Joldes, Muller and Popescu 2017):
+    /// (`s_h`, `s_l`) = `two_sum(x_h`, y); v = `RN(x_l` + `s_l`); result = `two_sum(s_h`, v).
     ///
-    /// Proof of the bound 3u²/(1 − 3u): the result is x + y + E with E = v − (x_l + s_l), and
-    /// |E| ≤ u|x_l + s_l|. If s_l = 0, v = x_l and E = 0. Otherwise (S) gives |x_h| ≤ 2|s_h|, so
-    /// |x_l + s_l| ≤ u|x_h| + u|s_h| ≤ 3u|s_h| while |x + y| = |s_h + s_l + x_l| ≥ (1 − 3u)|s_h|.
+    /// Proof of the bound 3u²/(1 − 3u): the result is x + y + E with E = v − (`x_l` + `s_l`), and
+    /// |E| ≤ `u|x_l` + `s_l`|. If `s_l` = 0, v = `x_l` and E = 0. Otherwise (S) gives |`x_h`| ≤ `2|s_h`|, so
+    /// |`x_l` + `s_l`| ≤ `u|x_h`| + `u|s_h`| ≤ `3u|s_h`| while |x + y| = |`s_h` + `s_l` + `x_l`| ≥ (1 − `3u)|s_h`|.
     ///
     /// # Errors
     ///
@@ -380,7 +386,7 @@ impl DD {
         DD::normalized(sh, v)
     }
 
-    /// The product with a double, by DWTimesFP1 (Joldes, Muller and Popescu 2017), on operands
+    /// The product with a double, by `DWTimesFP1` (Joldes, Muller and Popescu 2017), on operands
     /// scaled into `two_prod`'s range when they are outside it (see the module's *Range*):
     ///
     /// ```text
@@ -388,10 +394,10 @@ impl DD {
     /// (t_h, t_l1) = two_sum(c_h, c_l2); t_l2 = RN(t_l1 + c_l1);  result = two_sum(t_h, t_l2)
     /// ```
     ///
-    /// Proof of the bound 3u² + 7u³ (P = |x_h·y|): the result is x·y + e₂ + e₃ with
-    /// e₂ = c_l2 − x_l·y and e₃ = t_l2 − (t_l1 + c_l1). |e₂| ≤ u|x_l·y| ≤ u²P;
-    /// |c_l1| ≤ uP, |c_h| ≤ (1 + u)P and |c_l2| ≤ u(1 + u)P, so |t_h| ≤ (1 + u)³P and
-    /// |t_l1| ≤ u(1 + u)³P; |e₃| ≤ u(|t_l1| + |c_l1|) ≤ u²(1 + (1 + u)³)P. With |x·y| ≥ (1 − u)P
+    /// Proof of the bound 3u² + 7u³ (P = |`x_h·y|)`: the result is x·y + e₂ + e₃ with
+    /// e₂ = `c_l2` − `x_l·y` and e₃ = `t_l2` − (`t_l1` + `c_l1`). |e₂| ≤ `u|x_l·y`| ≤ u²P;
+    /// |`c_l1`| ≤ uP, |`c_h`| ≤ (1 + u)P and |`c_l2`| ≤ u(1 + u)P, so |`t_h`| ≤ (1 + u)³P and
+    /// |`t_l1`| ≤ u(1 + u)³P; |e₃| ≤ `u(|t_l1`| + |`c_l1`|) ≤ u²(1 + (1 + u)³)P. With |x·y| ≥ (1 − u)P
     /// the relative error is at most u²(2 + (1 + u)³)/(1 − u) < 3u² + 7u³.
     ///
     /// # Errors
@@ -415,7 +421,7 @@ impl DD {
         x.mul_f64_core(budget(scale_b(y, uy))?)?.scaled(back)
     }
 
-    /// DWTimesFP1 itself, for operands inside `two_prod`'s range.
+    /// `DWTimesFP1` itself, for operands inside `two_prod`'s range.
     fn mul_f64_core(self, y: f64) -> Result<DD, NumError> {
         let (ch, cl1) = two_prod(self.hi, y);
         let cl2 = self.lo * y;
@@ -424,7 +430,7 @@ impl DD {
         DD::normalized(th, tl2)
     }
 
-    /// The product, by DWTimesDW1 (Dekker 1971; Joldes, Muller and Popescu 2017), on operands
+    /// The product, by `DWTimesDW1` (Dekker 1971; Joldes, Muller and Popescu 2017), on operands
     /// scaled into `two_prod`'s range when they are outside it (see the module's *Range*):
     ///
     /// ```text
@@ -432,11 +438,11 @@ impl DD {
     /// c_l2 = RN(t_l1 + t_l2);  c_l3 = RN(c_l1 + c_l2);  result = two_sum(c_h, c_l3)
     /// ```
     ///
-    /// Proof of the bound 8u² + 23u³ (P = |x_h·y_h|): the result is
-    /// x·y + e₁ + e₂ + e₃ + e₄ − x_l·y_l, with e₁ and e₂ the roundings of t_l1 and t_l2 (each at most
-    /// u²P, since |x_h·y_l|, |x_l·y_h| ≤ uP), e₃ that of c_l2 (|t_l1|, |t_l2| ≤ u(1 + u)P, so
-    /// |e₃| ≤ 2u²(1 + u)P and |c_l2| ≤ 2u(1 + u)²P), e₄ that of c_l3 (|c_l1| ≤ uP, so
-    /// |e₄| ≤ u²(1 + 2(1 + u)²)P), and |x_l·y_l| ≤ u²P. In total at most u²(8 + 6u + 2u²)P, and
+    /// Proof of the bound 8u² + 23u³ (P = |`x_h·y_h|)`: the result is
+    /// x·y + e₁ + e₂ + e₃ + e₄ − `x_l·y_l`, with e₁ and e₂ the roundings of `t_l1` and `t_l2` (each at most
+    /// u²P, since |`x_h·y_l`|, |`x_l·y_h`| ≤ uP), e₃ that of `c_l2` (|`t_l1`|, |`t_l2`| ≤ u(1 + u)P, so
+    /// |e₃| ≤ 2u²(1 + u)P and |`c_l2`| ≤ 2u(1 + u)²P), e₄ that of `c_l3` (|`c_l1`| ≤ uP, so
+    /// |e₄| ≤ u²(1 + 2(1 + u)²)P), and |`x_l·y_l`| ≤ u²P. In total at most u²(8 + 6u + 2u²)P, and
     /// |x·y| ≥ (1 − u)²P, so the relative error is at most u²(8 + 6u + 2u²)/(1 − u)² < 8u² + 23u³.
     ///
     /// # Errors
@@ -459,7 +465,7 @@ impl DD {
         self.scaled(ux)?.mul_core(other.scaled(uy)?)?.scaled(back)
     }
 
-    /// DWTimesDW1 itself, for operands inside `two_prod`'s range.
+    /// `DWTimesDW1` itself, for operands inside `two_prod`'s range.
     fn mul_core(self, other: DD) -> Result<DD, NumError> {
         let (ch, cl1) = two_prod(self.hi, other.hi);
         let tl1 = self.hi * other.lo;
@@ -480,24 +486,24 @@ impl DD {
     /// result = two_sum(q₁, q₂) + q₃         (add_f64)
     /// ```
     ///
-    /// Proof of the bound 6u² + 79u³ (x = self, y = other, ρ = x/y; B_m, B_a and B_f the proven
+    /// Proof of the bound 6u² + 79u³ (x = self, y = other, ρ = x/y; `B_m`, `B_a` and `B_f` the proven
     /// bounds of `mul_f64`, `add` and `add_f64` above; D = (3u + u²)/(1 − u)).
     ///
-    /// 1. By (N) and (R), q₁ = ρ(1 + δ₁) with |δ₁| ≤ D: x_h/y_h = ρ(1 + β)/(1 + α) with
+    /// 1. By (N) and (R), q₁ = ρ(1 + δ₁) with |δ₁| ≤ D: `x_h/y_h` = ρ(1 + β)/(1 + α) with
     ///    |α|, |β| ≤ u, then one rounding. Likewise q₂ = (r₁/y)(1 + δ₂) and q₃ = (r₂/y)(1 + δ₃),
     ///    |δ₂|, |δ₃| ≤ D.
     /// 2. The exact remainder x − y·q₁ = −x·δ₁. The computed product is y·q₁ + E₁ with
-    ///    |E₁| ≤ B_m|y·q₁| ≤ B_m(1 + D)|x|, and r₁ = (−x·δ₁ − E₁)(1 + η₁) with |η₁| ≤ B_a, so
-    ///    |r₁| ≤ K|x| with K = (D + B_m(1 + D))(1 + B_a). In the same way r₂ = (−r₁δ₂ − E₂)(1 + η₂),
-    ///    |E₂| ≤ B_m(1 + D)|r₁|, |r₂| ≤ K²|x|.
+    ///    |E₁| ≤ `B_m|y·q₁`| ≤ `B_m(1` + D)|x|, and r₁ = (−x·δ₁ − E₁)(1 + η₁) with |η₁| ≤ `B_a`, so
+    ///    |r₁| ≤ K|x| with K = (D + `B_m(1` + D))(1 + `B_a`). In the same way r₂ = (−r₁δ₂ − E₂)(1 + η₂),
+    ///    |E₂| ≤ `B_m(1` + D)|r₁|, |r₂| ≤ K²|x|.
     /// 3. Unwinding the steps, x = y·q₁ + E₁ + (y·q₂ + E₂ + y·q₃/((1 + η₂)(1 + δ₃)))/(1 + η₁), so
     ///    with Q = q₁ + q₂ + q₃, the difference y·Q − x is y·q₂(1 − 1/(1 + η₁)) plus
     ///    y·q₃(1 − 1/((1 + η₁)(1 + η₂)(1 + δ₃))) minus E₁ + E₂/(1 + η₁). Bounding each term with
     ///    |y·q₂| ≤ (1 + D)K|x| and |y·q₃| ≤ (1 + D)K²|x| gives |Q − ρ| ≤ G|ρ| with
-    ///    G = (1 + D)K·B_a/(1 − B_a) + (1 + D)K²(1/((1 − B_a)²(1 − D)) − 1) + B_m(1 + D) plus
-    ///    B_m(1 + D)K/(1 − B_a).
-    /// 4. `two_sum` is exact and `add_f64` adds a relative B_f: the result is within
-    ///    G + (1 + G)B_f of ρ, relatively, which is below 6u² + 79u³.
+    ///    G = (1 + `D)K·B_a/(1` − `B_a`) + (1 + D)K²(1/((1 − `B_a)²(1` − D)) − 1) + `B_m(1` + D) plus
+    ///    `B_m(1` + D)K/(1 − `B_a`).
+    /// 4. `two_sum` is exact and `add_f64` adds a relative `B_f`: the result is within
+    ///    G + (1 + `G)B_f` of ρ, relatively, which is below 6u² + 79u³.
     ///
     /// # Errors
     ///
@@ -537,14 +543,14 @@ impl DD {
     /// result = two_sum(x₀, RN(r_h / (2x₀)))
     /// ```
     ///
-    /// Proof of the bound 4.13u² (a = self, s = √a, B_a the proven bound of `add`). By (N) and (R),
+    /// Proof of the bound 4.13u² (a = self, s = √a, `B_a` the proven bound of `add`). By (N) and (R),
     /// x₀ = s(1 + ε) with |ε| ≤ ε̂ = (1 + u)/√(1 − u) − 1 < (1 + u)(1 + u/2 + u²/2) − 1. The exact
     /// Newton step N = x₀ + (a − x₀²)/(2x₀) satisfies N − s = (x₀ − s)²/(2x₀) = sε²/(2(1 + ε)), so
     /// 0 ≤ N − s ≤ s·ε̂²/(2(1 − ε̂)). The exact correction C = (a − x₀²)/(2x₀) has
     /// |C| = s|ε||2 + ε|/(2(1 + ε)) ≤ s·ε̂(2 + ε̂)/(2(1 − ε̂)). The computed correction is
-    /// c = C(1 + η)(1 + d)/(1 + κ): η from `sub` (|η| ≤ B_a), κ from dropping r_l (|κ| ≤ u, by
+    /// c = C(1 + η)(1 + d)/(1 + κ): η from `sub` (|η| ≤ `B_a`), κ from dropping `r_l` (|κ| ≤ u, by
     /// (N)), d from the division (|d| ≤ u; the factor 2x₀ is exact). So
-    /// |c − C| ≤ |C|((1 + B_a)(1 + u)/(1 − u) − 1), and the result x₀ + c (an exact `two_sum`)
+    /// |c − C| ≤ |C|((1 + `B_a)(1` + u)/(1 − u) − 1), and the result x₀ + c (an exact `two_sum`)
     /// differs from s by at most |N − s| + |c − C| < 4.13u²·s.
     ///
     /// # Errors
@@ -577,15 +583,15 @@ impl DD {
     ///
     /// No step rounds:
     ///
-    /// 1. r_h = rint(hi) and d_h = hi − r_h, and likewise r_l, d_l for lo. For any double x,
+    /// 1. `r_h` = rint(hi) and `d_h` = hi − `r_h`, and likewise `r_l`, `d_l` for lo. For any double x,
     ///    x − rint(x) is exact: for |x| < 1/2 it is x itself; for |x| ≥ 2^52 it is 0; otherwise
     ///    rint(x) is a nonzero integer within 1/2 of x, so rint(x)/2 ≤ x ≤ 2·rint(x) and Sterbenz's
-    ///    lemma applies. So |d_h|, |d_l| ≤ 1/2 and hi + lo = r_h + r_l + d_h + d_l exactly.
-    /// 2. n = r_h + r_l − offset, in `i128` (both integers are below 2^100 in magnitude).
-    /// 3. (t, t_e) = two_sum(d_h, d_l): the fraction F = d_h + d_l = t + t_e exactly, |F| ≤ 1.
+    ///    lemma applies. So |`d_h`|, |`d_l`| ≤ 1/2 and hi + lo = `r_h` + `r_l` + `d_h` + `d_l` exactly.
+    /// 2. n = `r_h` + `r_l` − offset, in `i128` (both integers are below 2^100 in magnitude).
+    /// 3. (t, `t_e`) = `two_sum(d_h`, `d_l)`: the fraction F = `d_h` + `d_l` = t + `t_e` exactly, |F| ≤ 1.
     /// 4. The value is n + F. F is compared with ±1/2 exactly: t is F rounded to nearest, and
     ///    rounding is monotone, so t > 1/2 implies F > 1/2 and t < 1/2 implies F < 1/2; when
-    ///    t = 1/2 exactly, the sign of t_e decides. Then n + F rounds to n − 1, n or n + 1, with a
+    ///    t = 1/2 exactly, the sign of `t_e` decides. Then n + F rounds to n − 1, n or n + 1, with a
     ///    tie at F = ±1/2 going to the even neighbour.
     #[must_use]
     pub fn round_shifted(self, offset: i128) -> Option<Rounded<i128>> {

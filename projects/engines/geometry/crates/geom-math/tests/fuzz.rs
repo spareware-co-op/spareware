@@ -13,6 +13,15 @@
 //! - every rounded grid result is inside the frame's range (by its type) and every classification
 //!   is consistent (a `Degenerate` transform is never a mirror and has no inverse).
 
+#![allow(
+    clippy::many_single_char_names,
+    clippy::similar_names,
+    clippy::disallowed_methods,
+    clippy::too_many_lines,
+    clippy::single_match_else,
+    clippy::unreadable_literal,
+    reason = "test cases and oracles, named as in the formulas they check; the rules are for kernel code"
+)]
 // Helpers outside `#[test]` functions are not covered by clippy.toml's allow-*-in-tests settings;
 // clippy.toml says tests may use these, and a broken oracle must stop the test loudly.
 #![allow(clippy::unwrap_used, clippy::panic, clippy::indexing_slicing)]
@@ -198,7 +207,7 @@ fn rational_harness(m: [[i64; 3]; 3], t: [i128; 3], d: i64, p: [i64; 3], v: [i64
             }
         }
         Err(MathError::Singular) => {
-            assert_eq!(r.classify().unwrap().kind, TransformKind::Degenerate)
+            assert_eq!(r.classify().unwrap().kind, TransformKind::Degenerate);
         }
         Err(MathError::Num(NumError::OutOfRange { .. })) => {}
         Err(e) => panic!("undocumented error {e:?}"),

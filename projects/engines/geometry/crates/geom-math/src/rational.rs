@@ -23,7 +23,7 @@
 //! - inverting: det M below 6·2^120 < 2^123, the adjugate below 2^81, d·adj(M) below 2^121, all in
 //!   `i128`; adj(M)·t below 3·2^165 < 2^167, in a 256-bit integer, reduced by the common divisor
 //!   with exact long division, and refused with `OutOfRange` if still outside the bounds;
-//! - classifying: the Gram matrix MᵀM below 3·2^80 and d² ≤ 2^80, in `i128`.
+//! - classifying: the Gram matrix `MᵀM` below 3·2^80 and d² ≤ 2^80, in `i128`.
 //!
 //! Every integer step is a checked method, never a native operator, so nothing depends on overflow
 //! checks being on. A step the budgets above prove fits can fail only through a defect in this
@@ -44,6 +44,11 @@
 //! [`RationalTransform::classify`] is at most 28 `i128` products. A reduction folds 13 values into
 //! their greatest common divisor, then divides each by it. Every greatest common divisor is
 //! Euclid's algorithm on `u128`, at most 257 remainder steps.
+
+#![allow(
+    clippy::many_single_char_names,
+    reason = "variable names follow the formulas of the method each function cites"
+)]
 
 use geom_num::NumError;
 use geom_num::grid::{Coord, P3};
@@ -234,11 +239,11 @@ impl RationalTransform {
         RationalTransform::new(m, [0; 3], r)
     }
 
-    /// The uniform scale by the exact ratio k = k_n/k_d about the origin.
+    /// The uniform scale by the exact ratio k = `k_n/k_d` about the origin.
     ///
     /// # Errors
     ///
-    /// [`NumError::OutOfRange`] if k_n or k_d exceeds 2^40 after reduction (a [`Scale`] is
+    /// [`NumError::OutOfRange`] if `k_n` or `k_d` exceeds 2^40 after reduction (a [`Scale`] is
     /// reduced, so only ratios with very large parts are refused).
     pub fn uniform_scale(scale: Scale) -> Result<RationalTransform, NumError> {
         let (n, d) = (i64::from(scale.num()), i64::from(scale.den()));
@@ -510,8 +515,8 @@ impl RationalTransform {
     }
 
     /// The exact classification (no tolerance): `Identity` and `Translation` when M = d·I;
-    /// `Degenerate` when det M = 0; otherwise `Rigid` when MᵀM = d²·I, `UniformScale` when
-    /// MᵀM = λ·I with λ ≠ d², else `NonUniform`; a mirror when det M < 0.
+    /// `Degenerate` when det M = 0; otherwise `Rigid` when `MᵀM` = d²·I, `UniformScale` when
+    /// `MᵀM` = λ·I with λ ≠ d², else `NonUniform`; a mirror when det M < 0.
     ///
     /// # Errors
     ///

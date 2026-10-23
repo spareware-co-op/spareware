@@ -1,5 +1,10 @@
 //! Spare Kit geometry kernel: points, vectors, transforms, boxes and frames.
 //!
+//! One job: points, vectors, exact and general transforms, boxes and frames, the small
+//! vocabulary every geometry crate above the numbers layer shares.
+//!
+//! Layer: 2, Geometry (chapter 27's proposed layer table).
+//!
 //! This crate sits directly on the numbers layer (`geom-num`) and gives every geometry crate above
 //! it the same small vocabulary:
 //!

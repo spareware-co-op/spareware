@@ -45,6 +45,11 @@
 //! shift-and-subtract steps. [`gcd_u128`] takes at most 257 remainder steps (the remainder at least
 //! halves every two steps). [`divrem_u128`] takes exactly 64·L shift-and-subtract steps.
 
+#![allow(
+    clippy::many_single_char_names,
+    reason = "variable names follow the formulas of the method each function cites"
+)]
+
 use geom_num::sign::Sign;
 use geom_num::wide::Wide;
 

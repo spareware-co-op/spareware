@@ -31,6 +31,11 @@
 //! canonical form. [`TypedTransform::rotation`] for an irrational direction adds one double-double
 //! square root and two double-double divisions.
 
+#![allow(
+    clippy::many_single_char_names,
+    reason = "variable names follow the formulas of the method each function cites"
+)]
+
 use geom_num::grid::P3;
 use geom_num::{NumError, math};
 

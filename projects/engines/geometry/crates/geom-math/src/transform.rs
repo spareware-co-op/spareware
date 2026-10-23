@@ -9,7 +9,7 @@
 //! exact `f64` entries.
 //!
 //! **Classification** ([`Transform::classify`]) tells a caller what a transform does to kinds of
-//! geometry (chapter 7: "transforms can change a kind"). With ε = ε_ang = 2^−34
+//! geometry (chapter 7: "transforms can change a kind"). With ε = `ε_ang` = 2^−34
 //! ([`geom_num::ladder::ANGULAR`]), the ladder's angular bound and the only tolerance used:
 //!
 //! | Kind | Linear part | Circles | Lengths |
@@ -28,7 +28,7 @@
 //!
 //! How each test is certified, never guessed:
 //!
-//! - **Lengths.** |L·v|² = vᵀGv with the Gram matrix G = LᵀL, so every |L·v|² lies within
+//! - **Lengths.** |L·v|² = vᵀGv with the Gram matrix G = `LᵀL`, so every |L·v|² lies within
 //!   λ|v|² of |v|², where λ bounds the eigenvalues of G − I. Gershgorin's theorem bounds them by
 //!   the largest absolute row sum of G − I. `Rigid` requires that row sum to be certainly at most
 //!   2ε − ε², computed in interval arithmetic (`geom_num::interval`) on the exact entries; then
@@ -66,7 +66,7 @@
 //! Method: the hierarchy of planar and spatial transformations (isometry, similarity, affinity) of
 //! R. Hartley and A. Zisserman, *Multiple View Geometry in Computer Vision*, 2nd ed., Cambridge
 //! University Press (2004), section 2.4, <https://doi.org/10.1017/CBO9780511811685>, with each
-//! level recognised from the Gram matrix LᵀL; Gershgorin's theorem for the eigenvalue bound
+//! level recognised from the Gram matrix `LᵀL`; Gershgorin's theorem for the eigenvalue bound
 //! (R. A. Horn and C. R. Johnson, *Matrix Analysis*, 2nd ed., Cambridge University Press (2012),
 //! section 6.1, <https://doi.org/10.1017/CBO9781139020411>); the inverse by the adjugate (Cramer's
 //! rule) on the row-scaled matrix; the certified tests by interval arithmetic (R. E. Moore,
@@ -85,6 +85,11 @@
 //! four shifted terms in an integer of 128 bits up to 2176 bits (34 limbs, chosen by how far apart
 //! the exponents are) and one exact rounding, each linear in the limbs. A coordinate outside the
 //! frame always takes that exact stage, which finds the rounded coordinate its error reports.
+
+#![allow(
+    clippy::many_single_char_names,
+    reason = "variable names follow the formulas of the method each function cites"
+)]
 
 use geom_num::grid::{Coord, P3};
 use geom_num::interval::Interval;
@@ -108,10 +113,10 @@ pub enum TransformKind {
     /// A pure translation: linear part exactly the identity matrix.
     Translation,
     /// A rotation, possibly with a mirror and a translation: every length is kept within a
-    /// relative ε_ang.
+    /// relative `ε_ang`.
     Rigid,
     /// A rigid transform followed by a uniform scale s ≠ 1: every length is multiplied by s within
-    /// a relative ε_ang.
+    /// a relative `ε_ang`.
     UniformScale,
     /// Any other invertible transform: a circle becomes an ellipse, a sphere an ellipsoid.
     NonUniform,
@@ -145,7 +150,7 @@ impl Classification {
         )
     }
 
-    /// Whether lengths are kept (within a relative ε_ang for `Rigid`).
+    /// Whether lengths are kept (within a relative `ε_ang` for `Rigid`).
     #[must_use]
     pub const fn keeps_lengths(self) -> bool {
         matches!(
@@ -240,7 +245,7 @@ fn det_of(m: &Enclosed) -> Option<Interval> {
         .ok()
 }
 
-/// The Gram matrix LᵀL (dot products of the columns of L) of an enclosed matrix, in the order
+/// The Gram matrix `LᵀL` (dot products of the columns of L) of an enclosed matrix, in the order
 /// [G₀₀, G₁₁, G₂₂, G₀₁, G₀₂, G₁₂]. `None` if a bound overflows.
 fn gram_of(m: &Enclosed) -> Option<[Interval; 6]> {
     let [[a, b, c], [d, e, f], [g, h, k]] = *m;
@@ -454,7 +459,7 @@ impl Transform {
     ///
     /// Each coordinate l₀x + l₁y + l₂z + t is first evaluated as a double-double from the exact
     /// products (`two_prod`, the coordinates being integers below 2^40); three additions lose at
-    /// most (2·B_a + B_f)(|l₀x| + |l₁y| + |l₂z| + |t|) < 15.01u²·Σ (bounds from [`crate::dd`]), far
+    /// most (`2·B_a` + `B_f)(|l₀x`| + |l₁y| + |l₂z| + |t|) < 15.01u²·Σ (bounds from [`crate::dd`]), far
     /// below the filter 2^−98·Σ. A value farther than the filter from every whole step and every
     /// midpoint rounds like the exact value. Otherwise, and whenever a product is outside
     /// `two_prod`'s range, the exact value is formed as an integer: every entry is m·2^e exactly,
@@ -486,7 +491,7 @@ impl Transform {
     }
 
     /// The composition `self ∘ first`: the transform that applies `first`, then `self`. Linear part
-    /// L_self · L_first, translation L_self · t_first + t_self.
+    /// `L_self` · `L_first`, translation `L_self` · `t_first` + `t_self`.
     ///
     /// # Errors
     ///
@@ -560,7 +565,7 @@ impl Transform {
         Ok(det_of(&scaled).and_then(Interval::certain_sign))
     }
 
-    /// Whether every length is certainly kept within a relative ε (the `Rigid` test on G = LᵀL).
+    /// Whether every length is certainly kept within a relative ε (the `Rigid` test on G = `LᵀL`).
     fn is_rigid(&self) -> bool {
         let point = |x: f64| Interval::point(x).ok();
         let row = |r: [f64; 4]| -> Option<[Interval; 3]> {
@@ -720,7 +725,7 @@ fn round_row(row: [f64; 4], v: [i64; 3]) -> Result<Rounded<Coord>, NumError> {
 /// its magnitude, or by at most 2^−1075 if it falls below 2^−1022, and every partial sum is at most
 /// (1 + u)³·Σ in magnitude, with Σ = |l₀x| + |l₁y| + |l₂z| + |t|. So the computed value is within
 /// ((1 + u)⁴ − 1)·Σ + 7·2^−1075 < 4.01u·Σ + 2^−1071 of the exact one. The filter is
-/// 2^−50·Σ_f + 2^−1070 (2^−50 = 8u), Σ_f being Σ of the rounded products and |t| summed in `f64`,
+/// `2^−50·Σ_f` + 2^−1070 (2^−50 = 8u), `Σ_f` being Σ of the rounded products and |t| summed in `f64`,
 /// which is at least (1 − u)⁷·Σ, so the filter exceeds the error. v − rint(v) is exact (see
 /// [`DD::round_shifted`]).
 ///
@@ -767,9 +772,9 @@ fn float_row(row: [f64; 4], v: [i64; 3]) -> Option<Result<Rounded<Coord>, NumErr
 
 /// The double-double filter of [`round_row`]: `None` when it cannot decide.
 ///
-/// The products are exact (`exact_product`). The three additions err by at most B_a|p₀ + p₁|,
-/// B_a|s₁ + p₂| and B_f|s₂ + t| (B_a < 6u² + 45u³, B_f < 3u² + 10u³), so the double-double value
-/// lies within (2B_a + B_f)(1 + 13u²)·Σ < 15.01u²·Σ of the exact value, with Σ = |p₀| + |p₁| +
+/// The products are exact (`exact_product`). The three additions err by at most `B_a|p₀` + p₁|,
+/// `B_a|s₁` + p₂| and `B_f|s₂` + t| (`B_a` < 6u² + 45u³, `B_f` < 3u² + 10u³), so the double-double value
+/// lies within (`2B_a` + `B_f)(1` + 13u²)·Σ < 15.01u²·Σ of the exact value, with Σ = |p₀| + |p₁| +
 /// |p₂| + |t|. The filter `err` is 2^−98 times Σ computed from the leading parts, which is at least
 /// 255u²·Σ even after the rounding of that sum, and `frac` (the distance of the double-double
 /// value from its nearest integer x, one rounding) is compared with a further 2^−52 of slack.

@@ -11,6 +11,15 @@
 //! The test files that hash with it (`determinism.rs` and `attack_g03.rs`) include it with
 //! `#[path = "common/sha256.rs"]`, so its test vectors run in each of them.
 
+#![allow(
+    clippy::many_single_char_names,
+    clippy::similar_names,
+    clippy::disallowed_methods,
+    clippy::too_many_lines,
+    clippy::single_match_else,
+    clippy::unreadable_literal,
+    reason = "test cases and oracles, named as in the formulas they check; the rules are for kernel code"
+)]
 // Helpers outside `#[test]` functions are not covered by clippy.toml's allow-*-in-tests settings;
 // clippy.toml says tests may use these, and a broken hash must stop the test loudly.
 #![allow(clippy::unwrap_used, clippy::indexing_slicing)]

@@ -4,7 +4,7 @@
 //! Run with `cargo bench -p geom-math`. It uses the standard library's clock only, so it builds
 //! with no extra dependency; when the benchmark harness of chapter 28 (`geom-bench`, piece G06)
 //! merges, these cases move there and gain its regression gate and instruction counts. Points are
-//! drawn from a fixed SplitMix64 sequence, so every run measures the same work.
+//! drawn from a fixed `SplitMix64` sequence, so every run measures the same work.
 
 #![allow(
     clippy::arithmetic_side_effects,

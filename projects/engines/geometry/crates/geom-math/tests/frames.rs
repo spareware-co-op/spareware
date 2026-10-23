@@ -24,6 +24,15 @@
 //! - Regional lattices: cell origins every 2^39 steps, half-open cell ownership, the home cell of a
 //!   box and of operands spread over several cells, and `FrameRangeExceeded` when they do not fit.
 
+#![allow(
+    clippy::many_single_char_names,
+    clippy::similar_names,
+    clippy::disallowed_methods,
+    clippy::too_many_lines,
+    clippy::single_match_else,
+    clippy::unreadable_literal,
+    reason = "test cases and oracles, named as in the formulas they check; the rules are for kernel code"
+)]
 // Helpers outside `#[test]` functions are not covered by clippy.toml's allow-*-in-tests settings;
 // clippy.toml says tests may use these, and a broken oracle must stop the test loudly.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
@@ -92,7 +101,7 @@ fn s_of(step: GridStep) -> i128 {
     i128::from(steps_per_metre(step))
 }
 
-/// The exact frame coordinate along (α, β) for a rational frame: k_d·(α·u + β·v)/(k_n·r).
+/// The exact frame coordinate along (α, β) for a rational frame: `k_d·(α·u` + `β·v)/(k_n·r`).
 fn exact_horizontal(f: &FrameRecord, e: f64, n: f64, alpha: i128, beta: i128) -> BigRational {
     let s = int(s_of(f.step()));
     let [oe, on, _] = f.origin();

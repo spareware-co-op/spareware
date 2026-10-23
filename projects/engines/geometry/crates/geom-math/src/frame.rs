@@ -15,8 +15,8 @@
 //! H·S = O_H + z                            heights are never rotated or scaled
 //! ```
 //!
-//! where (O_E, O_N, O_H) is the origin in steps, θ the angle of the rotation's direction (c, s)
-//! from the easting axis (cos θ = c/r, sin θ = s/r, r = √(c² + s²)), and k = k_n/k_d the scale
+//! where (`O_E`, `O_N`, `O_H`) is the origin in steps, θ the angle of the rotation's direction (c, s)
+//! from the easting axis (cos θ = c/r, sin θ = s/r, r = √(c² + s²)), and k = `k_n/k_d` the scale
 //! factor. A Map frame has θ = 0 and k = 1.
 //!
 //! **The NZTM2000 example.** NZTM2000 (EPSG:2193) is a transverse Mercator projection with false
@@ -36,8 +36,8 @@
 //!   and `exact` says whether it already was a whole step. Metres given to 0.01 mm convert exactly
 //!   when their binary value is exact (one millimetre is 6,400 steps).
 //! - *Other rotations or scales (Ground frames).* The value is computed in double-double from the
-//!   exact E·S: subtract the origin, rotate by the integer direction, multiply by k_d and divide by
-//!   r·k_n (with r a double-double square root when c² + s² is not a perfect square). The error
+//!   exact E·S: subtract the origin, rotate by the integer direction, multiply by `k_d` and divide by
+//!   `r·k_n` (with r a double-double square root when c² + s² is not a perfect square). The error
 //!   derivation on [`FrameRecord::to_frame`] bounds the double-double value within 2^−59 steps of
 //!   the exact value for every in-range result; the conversion uses the far looser 2^−40. Every
 //!   value within 2^−40 of a whole step or of a midpoint is settled exactly, on the input doubles'
@@ -86,7 +86,7 @@
 //! form (fine to about 2^−31 rad with 32-bit components), for which every conversion above is
 //! exact or correctly rounded.
 //!
-//! Bit budgets (|c|, |s| ≤ 2^31; k_n, k_d < 2^32; integer r < 2^32; |O| ≤ 2^60; S < 2^32;
+//! Bit budgets (|c|, |s| ≤ 2^31; `k_n`, `k_d` < 2^32; integer r < 2^32; |O| ≤ 2^60; S < 2^32;
 //! |x|, |y| ≤ 2^40; |E|, |N| ≤ 2^62 m) are derived where each integer is formed. Every integer
 //! step is a checked method, never a native operator, so nothing depends on overflow checks being
 //! on; a step its budget proves fits can fail only through a defect in this crate, and is then
@@ -123,6 +123,11 @@
 //!   1280-bit integers.
 //! - [`FrameRecord::shift_to`] and [`FrameShift::apply`]: a few `i128` products and divisions and
 //!   three range checks.
+
+#![allow(
+    clippy::many_single_char_names,
+    reason = "variable names follow the formulas of the method each function cites"
+)]
 
 use geom_num::grid::{COORD_MAX, Coord, GridStep, P3, QUARTER_NM_PER_MM};
 use geom_num::sign::Sign;
@@ -395,13 +400,13 @@ impl Scale {
         })
     }
 
-    /// The numerator k_n.
+    /// The numerator `k_n`.
     #[must_use]
     pub const fn num(self) -> u32 {
         self.num
     }
 
-    /// The denominator k_d.
+    /// The denominator `k_d`.
     #[must_use]
     pub const fn den(self) -> u32 {
         self.den
@@ -516,6 +521,10 @@ impl Scaled {
 ///
 /// A tiny scaled value is a nonzero number below 2^−968 in magnitude, so ±(tiny − origin) rounds
 /// to ∓origin, never a tie, and is not exact.
+#[allow(
+    clippy::arithmetic_side_effects,
+    reason = "negating a double-double flips both parts' signs, exactly"
+)]
 fn round_axis(v: Scaled, origin: i64, negate: bool) -> Result<Rounded<Coord>, NumError> {
     let (dd, offset) = if negate {
         (-v.dd, budget(i128::from(origin).checked_neg())?)
@@ -537,10 +546,10 @@ const fn even(a: i128, b: i128) -> i128 {
 
 /// The exact inputs of a Ground-frame conversion, for settling ties and exactness.
 ///
-/// For a coordinate whose exact value is X = k_d·(α·u + β·v)/(k_n·ρ), with u = E·S − O_E,
-/// v = N·S − O_N and ρ = √(c² + s²), and a candidate half-integer t/2, the sign of X − t/2 is the
-/// sign of F = 2·k_d·(α·u + β·v) − t·k_n·ρ (k_n, ρ > 0). E = m_E·2^k_E and N = m_N·2^k_N exactly,
-/// so with B = max(0, −k_E, −k_N), F·2^B = A − T·ρ with the integers
+/// For a coordinate whose exact value is X = `k_d·(α·u` + `β·v)/(k_n·ρ`), with u = E·S − `O_E`,
+/// v = N·S − `O_N` and ρ = √(c² + s²), and a candidate half-integer t/2, the sign of X − t/2 is the
+/// sign of F = `2·k_d·(α·u` + β·v) − `t·k_n·ρ` (`k_n`, ρ > 0). E = `m_E·2^k_E` and N = `m_N·2^k_N` exactly,
+/// so with B = max(0, −`k_E`, −`k_N`), F·2^B = A − T·ρ with the integers
 ///
 /// ```text
 /// A = 2·k_d·(α·m_E·S·2^(k_E+B) + β·m_N·S·2^(k_N+B) − (α·O_E + β·O_N)·2^B),   T = t·k_n·2^B
@@ -549,10 +558,10 @@ const fn even(a: i128, b: i128) -> i128 {
 /// When ρ = r is an integer, A − T·r is formed exactly; otherwise its sign is the sign of
 /// A − T·√(c² + s²), decided by comparing A² with T²·(c² + s²).
 ///
-/// Budget (|E|, |N| ≤ 2^62, so |m|·2^k ≤ 2^62; B ≤ 1074; |α|, |β| ≤ 2^31; S, k_n, k_d, r < 2^32;
+/// Budget (|E|, |N| ≤ 2^62, so |m|·2^k ≤ 2^62; B ≤ 1074; |α|, |β| ≤ 2^31; S, `k_n`, `k_d`, r < 2^32;
 /// |O| ≤ 2^60; |t| ≤ 2^42 + 1): α·m·S < 2^116 fits `i128`; each scaled term is at most
-/// 2^31·2^32·2^62·2^1074 = 2^1199; their sum, times 2k_d < 2^33, is below 2^1233; the integer
-/// part (|α·O_E + β·O_N| < 2^92, times 2k_d) times 2^B is below 2^1200. So |A| < 2^1234,
+/// 2^31·2^32·2^62·2^1074 = 2^1199; their sum, times `2k_d` < 2^33, is below 2^1233; the integer
+/// part (|`α·O_E` + `β·O_N`| < 2^92, times `2k_d`) times 2^B is below 2^1200. So |A| < 2^1234,
 /// |T| < 2^43·2^32·2^1074 = 2^1149 and |T·r| < 2^1181, inside [`Big`]'s ±2^1279. For the
 /// irrational test, A² < 2^2468 and T²·(c² + s²) < 2^2298·2^63 = 2^2361, inside `Wide<40>`'s
 /// ±2^2559.
@@ -635,15 +644,12 @@ impl ExactInputs {
     /// `None` if a checked operation overflowed, which the budget rules out.
     fn sign(&self, alpha: i64, beta: i64, t: i128) -> Option<Sign> {
         let (a, tt) = self.parts(alpha, beta, t)?;
-        match self.r {
-            Some(r) => {
-                let tr = tt.checked_mul(&Big::from_i128(i128::from(r)))?;
-                Some(a.checked_sub(&tr)?.signum())
-            }
-            None => {
-                let (a, tt) = (a.resize::<40>()?, tt.resize::<40>()?);
-                sign_minus_sqrt::<40>(&a, &tt, self.n2)
-            }
+        if let Some(r) = self.r {
+            let tr = tt.checked_mul(&Big::from_i128(i128::from(r)))?;
+            Some(a.checked_sub(&tr)?.signum())
+        } else {
+            let (a, tt) = (a.resize::<40>()?, tt.resize::<40>()?);
+            sign_minus_sqrt::<40>(&a, &tt, self.n2)
         }
     }
 }
@@ -722,7 +728,7 @@ fn quotient(num: i128, den: u128) -> Result<Rounded<f64>, NumError> {
 }
 
 /// One horizontal map coordinate of a frame with an irrational direction, as exact integers:
-/// V = (O + k_n·a/(k_d·√n))/S metres, with a ≠ 0 the rotated integer offset, n = c² + s² not a
+/// V = (O + `k_n·a/(k_d·√n))/S` metres, with a ≠ 0 the rotated integer offset, n = c² + s² not a
 /// square.
 struct IrrationalMap {
     origin: i128,
@@ -735,14 +741,14 @@ struct IrrationalMap {
 impl IrrationalMap {
     /// The exact sign of V − w for w = p·2^f.
     ///
-    /// V − w = (O + q − w·S)/S with q = k_n·a/(k_d·√n), so its sign is the sign of
-    /// k_n·a − (w·S − O)·k_d·√n (multiplying by S·k_d·√n > 0). For f < 0 both sides are
-    /// multiplied by 2^(−f): A = k_n·a·2^(−f) and B = (p·S − O·2^(−f))·k_d; for f ≥ 0, A = k_n·a
-    /// and B = (p·S·2^f − O)·k_d. The sign of A − B·√n is decided exactly by comparing squares.
+    /// V − w = (O + q − w·S)/S with q = `k_n·a/(k_d·√n)`, so its sign is the sign of
+    /// `k_n·a` − (w·S − `O)·k_d·√n` (multiplying by `S·k_d·√n` > 0). For f < 0 both sides are
+    /// multiplied by 2^(−f): A = `k_n·a·2^(−f)` and B = (p·S − `O·2^(−f))·k_d`; for f ≥ 0, A = `k_n·a`
+    /// and B = (p·S·2^f − `O)·k_d`. The sign of A − B·√n is decided exactly by comparing squares.
     ///
     /// Budget, for the w the conversion uses (zero, the two ends of the bracket and the midpoints
     /// between neighbouring doubles inside it, so 2^−221 ≤ |w| ≤ 2^84 otherwise, with |p| < 2^55
-    /// and 2^−276 ≤ 2^f ≤ 2^84): |k_n·a| < 2^104 and |p·S| < 2^87 in `i128`; for f < 0,
+    /// and 2^−276 ≤ 2^f ≤ 2^84): |`k_n·a`| < 2^104 and |p·S| < 2^87 in `i128`; for f < 0,
     /// |A| < 2^380 and |B| < (2^87 + 2^60·2^276)·2^32 < 2^369; for f ≥ 0, |A| < 2^104 and, since
     /// |p·2^f| = |w| ≤ 2^84, |B| < (2^116 + 2^60)·2^32 < 2^149. So A² < 2^760 and
     /// B²·n < 2^738·2^63 = 2^801, inside [`Big`]'s ±2^1279.
@@ -961,21 +967,21 @@ impl FrameRecord {
     /// step, ties to even, with whether no rounding happened (see the module documentation).
     ///
     /// Error bound of the double-double value in a Ground frame, which the settling relies on
-    /// (u = 2^−53; B_a, B_m, B_d and B_s the proven bounds of `add`, `mul_f64`, `div` and `sqrt` in
-    /// [`crate::dd`]). u = E·S − O_E and v = N·S − O_N are one `sub` each of exact values:
-    /// u(1 + η_u), v(1 + η_v), |η| ≤ B_a. Each product by c or s adds a relative B_m and their sum
-    /// a relative B_a of the sum, whose magnitude is at most |c||u| + |s||v|, so the rotated
+    /// (u = 2^−53; `B_a`, `B_m`, `B_d` and `B_s` the proven bounds of `add`, `mul_f64`, `div` and `sqrt` in
+    /// [`crate::dd`]). u = E·S − `O_E` and v = N·S − `O_N` are one `sub` each of exact values:
+    /// u(1 + `η_u`), v(1 + `η_v`), |η| ≤ `B_a`. Each product by c or s adds a relative `B_m` and their sum
+    /// a relative `B_a` of the sum, whose magnitude is at most |c||u| + |s||v|, so the rotated
     /// numerator is within K₁·(|c||u| + |s||v|) of its exact value, with
-    /// K₁ = B_a + (1 + B_a)(B_a + B_m + B_a·B_m). The product by k_d, the divisor ρ·k_n (exact when
+    /// K₁ = `B_a` + (1 + `B_a)(B_a` + `B_m` + `B_a·B_m`). The product by `k_d`, the divisor `ρ·k_n` (exact when
     /// ρ = r is an integer, else a square root and a product) and the division multiply by a factor
-    /// F with |F − 1| ≤ (1 + B_m)(1 + B_d)/((1 − B_s)(1 − B_m)) − 1. Since
-    /// k_d(|c||u| + |s||v|)/(k_n·ρ) ≤ k_d·|(u, v)|/k_n = |(x, y)| by Cauchy–Schwarz ((u, v) is k
+    /// F with |F − 1| ≤ (1 + `B_m)(1` + `B_d)/((1` − `B_s)(1` − `B_m`)) − 1. Since
+    /// `k_d(|c||u`| + |`s||v|)/(k_n·ρ`) ≤ `k_d·|(u`, `v)|/k_n` = |(x, y)| by Cauchy–Schwarz ((u, v) is k
     /// times a rotation of (x, y)), the value is within (|F − 1| + K₁(1 + |F − 1|))·|(x, y)| of
     /// the exact coordinate, below 31.2u²·|(x, y)| (evaluated exactly at u = 2^−53). Every
     /// in-range result has |x|, |y| ≤ 2^41, so the error is below 31.2·2^−106·2^41.5 < 2^−59
     /// steps. A tiny input (one whose product with S is below 2^−968, taken as zero) moves the
     /// value by less than 2^−966 steps more, and an underflow anywhere by a few multiples of
-    /// 2^−1074 times k_d < 2^32 (see the double-double module's *Range*): far below the bound.
+    /// 2^−1074 times `k_d` < 2^32 (see the double-double module's *Range*): far below the bound.
     ///
     /// # Errors
     ///
@@ -1021,6 +1027,10 @@ impl FrameRecord {
 
     /// The horizontal part of [`FrameRecord::to_frame`] for a rotation other than a quarter turn
     /// or a scale other than one.
+    #[allow(
+        clippy::single_match_else,
+        reason = "the two cases each carry their bound in a comment, side by side"
+    )]
     fn ground_to_frame(
         &self,
         map: MapPoint,
@@ -1068,16 +1078,16 @@ impl FrameRecord {
     /// exact values, ties to even, with whether they are exact (see the module documentation).
     ///
     /// Bit budgets of the exact divisions: heights and map frames divide O + z (below 2^61) by S;
-    /// a rational Ground frame divides O_E·k_d·r + k_n·(c·x − s·y) (below 2^124 + 2^104 < 2^125)
-    /// by k_d·r·S (below 2^96).
+    /// a rational Ground frame divides `O_E·k_d·r` + `k_n·(c·x` − s·y) (below 2^124 + 2^104 < 2^125)
+    /// by `k_d·r·S` (below 2^96).
     ///
     /// For an irrational direction each horizontal coordinate is V = (O + q)/S with
-    /// q = k_n·a/(k_d·√n), a = c·x − s·y (or s·x + c·y) a nonzero integer below 2^72 and
+    /// q = `k_n·a/(k_d·√n)`, a = c·x − s·y (or s·x + c·y) a nonzero integer below 2^72 and
     /// n = c² + s² not a square (a = 0 gives the rational O/S). Bounds: |V| is below
-    /// (2^60 + 2^104)/2^22, so below 2^84; and |V| > 2^−220, because V = (A − B√n)/(k_d·S·√n)
-    /// with A = k_n·a and B = −O·k_d, A² − B²n is a nonzero integer, so
+    /// (2^60 + 2^104)/2^22, so below 2^84; and |V| > 2^−220, because V = (A − `B√n)/(k_d·S·√n`)
+    /// with A = `k_n·a` and B = −`O·k_d`, A² − B²n is a nonzero integer, so
     /// |A − B√n| = |A² − B²n|/|A + B√n| ≥ 1/(|A| + |B|√n), which is above 2^−124, while
-    /// k_d·S·√n < 2^95.5. The double-double value (q by a square root, a product and a division,
+    /// `k_d·S·√n` < 2^95.5. The double-double value (q by a square root, a product and a division,
     /// then one addition and one division) is within 12.3u²·|V| + 13.6u²·|q|/S of V (the bounds
     /// of [`crate::dd`] composed as on [`FrameRecord::to_frame`]). With a margin of
     /// 2^−98 = 256u² times |V| + |q|/S, doubled, the nearest double to the double-double value is
@@ -1148,7 +1158,7 @@ impl FrameRecord {
     }
 
     /// One horizontal map coordinate for an irrational direction: the nearest double to
-    /// (O + k_n·a/(k_d·√n))/S (see [`FrameRecord::to_map`]).
+    /// (O + `k_n·a/(k_d·√n))/S` (see [`FrameRecord::to_map`]).
     fn irrational_to_map(&self, origin: i128, a: i128, s: u64) -> Result<Rounded<f64>, NumError> {
         if a == 0 {
             return quotient(origin, u128::from(s));
@@ -1332,10 +1342,10 @@ impl FrameRecord {
     /// The exact shift from this frame's grid to `target`'s: multiply by 25 per rung of refinement,
     /// then add an integer offset.
     ///
-    /// With f = 25^(rungs) and ΔO = f·O_self − O_target (each component below 2^70), the offset is
-    /// k_d·R⁻¹(ΔO_E, ΔO_N)/k_n horizontally, that is
-    /// (k_d·(c·ΔO_E + s·ΔO_N), k_d·(−s·ΔO_E + c·ΔO_N)) / (k_n·r), and ΔO_H vertically (heights are
-    /// never rotated or scaled). c·ΔO_E + s·ΔO_N is below 2^102; its product by k_d is checked,
+    /// With f = 25^(rungs) and ΔO = `f·O_self` − `O_target` (each component below 2^70), the offset is
+    /// `k_d·R⁻¹(ΔO_E`, `ΔO_N)/k_n` horizontally, that is
+    /// (`k_d·(c·ΔO_E` + `s·ΔO_N`), `k_d·(−s·ΔO_E` + `c·ΔO_N`)) / (`k_n·r`), and `ΔO_H` vertically (heights are
+    /// never rotated or scaled). `c·ΔO_E` + `s·ΔO_N` is below 2^102; its product by `k_d` is checked,
     /// and overflows only when the offset would exceed 2^62 anyway.
     ///
     /// # Errors
@@ -1514,6 +1524,10 @@ mod tests {
         settle(d.round_shifted(0).unwrap(), d, sign)
     }
 
+    #[allow(
+        clippy::unnecessary_wraps,
+        reason = "the same Result the functions under test return, for assert_eq"
+    )]
     fn inexact(value: i128) -> Result<Rounded<i128>, NumError> {
         Ok(Rounded::new(value, false))
     }

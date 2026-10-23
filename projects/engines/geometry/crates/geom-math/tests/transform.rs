@@ -15,6 +15,15 @@
 //! - Finite values only: NaN and infinities are refused at every entry point, and overflow is
 //!   reported as `NotFinite`.
 
+#![allow(
+    clippy::many_single_char_names,
+    clippy::similar_names,
+    clippy::disallowed_methods,
+    clippy::too_many_lines,
+    clippy::single_match_else,
+    clippy::unreadable_literal,
+    reason = "test cases and oracles, named as in the formulas they check; the rules are for kernel code"
+)]
 // Helpers outside `#[test]` functions are not covered by clippy.toml's allow-*-in-tests settings;
 // clippy.toml says tests may use these, and a broken oracle must stop the test loudly.
 #![allow(clippy::unwrap_used, clippy::indexing_slicing)]

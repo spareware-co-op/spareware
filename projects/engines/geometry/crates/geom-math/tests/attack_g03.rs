@@ -5,6 +5,15 @@
 //! claim in the crate's own documentation, a rule of chapters 6.1, 7 and 17.1, or a difference
 //! between targets or thread counts. A test that fails names the claim it breaks.
 
+#![allow(
+    clippy::many_single_char_names,
+    clippy::similar_names,
+    clippy::disallowed_methods,
+    clippy::too_many_lines,
+    clippy::single_match_else,
+    clippy::unreadable_literal,
+    reason = "test cases and oracles, named as in the formulas they check; the rules are for kernel code"
+)]
 // Helpers outside `#[test]` functions are not covered by clippy.toml's allow-*-in-tests settings;
 // clippy.toml says tests may use these, and a broken oracle must stop the test loudly.
 #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
@@ -637,13 +646,13 @@ fn transform_uniform_scale_with_underflowing_determinant_is_not_degenerate() {
 }
 
 /// The module table and `Classification::keeps_lengths` say a `Rigid` transform keeps every length
-/// within a relative ε_ang, and a `UniformScale` multiplies every length by s = |L·e_x| within a
-/// relative ε_ang. L = c·(I + a·J) (J all ones) stretches (1, 1, 1) by c(1 + 3a) and the plane
+/// within a relative `ε_ang`, and a `UniformScale` multiplies every length by s = |`L·e_x`| within a
+/// relative `ε_ang`. L = c·(I + a·J) (J all ones) stretches (1, 1, 1) by c(1 + 3a) and the plane
 /// orthogonal to it by c, so its extreme squared length ratios are exact rationals. The attack
-/// found a = 0.495·ε_ang classified `Rigid` although it stretches (1, 1, 1) by 1.485·ε_ang.
+/// found a = `0.495·ε_ang` classified `Rigid` although it stretches (1, 1, 1) by `1.485·ε_ang`.
 ///
 /// Fixer: the original test asserted `Rigid` for that matrix as a precondition. The classification
-/// is now certified by a Gershgorin bound on LᵀL − I (and on LᵀL/G₀₀ − I), which correctly no
+/// is now certified by a Gershgorin bound on `LᵀL` − I (and on LᵀL/G₀₀ − I), which correctly no
 /// longer calls that matrix `Rigid`, so the precondition no longer holds. The test now checks the
 /// promise itself across a sweep of a over the classification boundary, for both kinds and with a
 /// mirror, and requires both kinds to occur, so it is no weaker.
@@ -722,8 +731,8 @@ fn det3(m: [[i64; 3]; 3]) -> i64 {
 }
 
 /// Classification of small integer matrices against the exact determinant and Gram matrix:
-/// Degenerate exactly when det = 0, mirror exactly when det < 0, Rigid exactly when LᵀL = I,
-/// UniformScale exactly when LᵀL = s²I with s² ≠ 1.
+/// Degenerate exactly when det = 0, mirror exactly when det < 0, Rigid exactly when `LᵀL` = I,
+/// `UniformScale` exactly when `LᵀL` = s²I with s² ≠ 1.
 #[test]
 fn transform_classification_of_integer_matrices_matches_exact_gram() {
     let mut rng = Rng(0xC1A5_5157);
@@ -1402,18 +1411,15 @@ fn exact_map(f: &FrameRecord, p: P3) -> [BigRational; 5] {
     let kn = int(f.scale().num().into());
     let kd = int(f.scale().den().into());
     let height = (oh + int(z)) / &s;
-    match f.rotation().exact_norm() {
-        Some(r) => {
-            let r = int(r.into());
-            let e = (&oe + &kn * &ae / (&kd * &r)) / &s;
-            let n = (&on + &kn * &an / (&kd * &r)) / &s;
-            [e, BigRational::zero(), n, BigRational::zero(), height]
-        }
-        None => {
-            let qe = &kn * &ae / (&kd * &s);
-            let qn = &kn * &an / (&kd * &s);
-            [oe / &s, qe, on / &s, qn, height]
-        }
+    if let Some(r) = f.rotation().exact_norm() {
+        let r = int(r.into());
+        let e = (&oe + &kn * &ae / (&kd * &r)) / &s;
+        let n = (&on + &kn * &an / (&kd * &r)) / &s;
+        [e, BigRational::zero(), n, BigRational::zero(), height]
+    } else {
+        let qe = &kn * &ae / (&kd * &s);
+        let qn = &kn * &an / (&kd * &s);
+        [oe / &s, qe, on / &s, qn, height]
     }
 }
 
@@ -1555,9 +1561,9 @@ fn hostile_map_points(rng: &mut Rng, f: &FrameRecord) -> Vec<MapPoint> {
         if let Ok(m2) = f.to_map(q) {
             let m2 = m2.value();
             out.push(MapPoint {
-                easting: (m.easting + m2.easting) / 2.0,
-                northing: (m.northing + m2.northing) / 2.0,
-                height: (m.height + m2.height) / 2.0,
+                easting: f64::midpoint(m.easting, m2.easting),
+                northing: f64::midpoint(m.northing, m2.northing),
+                height: f64::midpoint(m.height, m2.height),
             });
         }
     }
@@ -1578,7 +1584,7 @@ fn hostile_map_points(rng: &mut Rng, f: &FrameRecord) -> Vec<MapPoint> {
     out
 }
 
-/// to_frame against the exact oracle on every direction (quarter turns, Pythagorean, the largest
+/// `to_frame` against the exact oracle on every direction (quarter turns, Pythagorean, the largest
 /// i32 directions, irrational), every scale (the 1/2 and 2 limits, 32-bit coprime ratios), every
 /// step, and origins up to ±2^60.
 #[test]
@@ -1598,7 +1604,7 @@ fn frame_to_frame_matches_the_exact_oracle() {
     f.assert_none("to_frame");
 }
 
-/// to_map against the exact oracle: correctly rounded for every frame (for irrational directions
+/// `to_map` against the exact oracle: correctly rounded for every frame (for irrational directions
 /// too, since the fix), with the exact flag right.
 #[test]
 fn frame_to_map_matches_the_exact_oracle() {
@@ -1621,10 +1627,10 @@ fn frame_to_map_matches_the_exact_oracle() {
     f.assert_none("to_map");
 }
 
-/// The frame module documented to_map for an irrational direction as "within half an ulp plus a
+/// The frame module documented `to_map` for an irrational direction as "within half an ulp plus a
 /// relative 2^−100", and the builder reported "within an ulp". When the origin nearly cancels the
 /// rotated offset, the double-double error of the offset is magnified: direction (1, 1),
-/// x − y = 2q and O_E = −p, with p² − 2q² = ±1 (Pell), puts the easting at (q√2 − p)/S, about
+/// x − y = 2q and `O_E` = −p, with p² − 2q² = ±1 (Pell), puts the easting at (q√2 − p)/S, about
 /// 1/(2√2·q·S) metres, and the error of q√2 (about 2^−106·q) is then a relative 2^−105·q².
 /// Since the fix, `check_to_map` requires the correctly rounded double, which is stronger than the
 /// name of this test says.
@@ -1669,7 +1675,7 @@ fn frame_to_map_irrational_with_cancellation_is_within_an_ulp() {
     assert!(errs.is_empty(), "{errs:#?}");
 }
 
-/// shift_to against the exact lattice oracle, and every accepted shift moves points to the same
+/// `shift_to` against the exact lattice oracle, and every accepted shift moves points to the same
 /// exact map position.
 #[test]
 fn frame_shift_matches_the_exact_oracle() {
@@ -2072,7 +2078,7 @@ fn frame_non_finite_and_out_of_range_inputs() {
     );
 }
 
-/// The frame module documented ORIGIN_MAX = 2^60 steps as "180,000 km at q0, 288,000 km at q2";
+/// The frame module documented `ORIGIN_MAX` = 2^60 steps as "180,000 km at q0, 288,000 km at q2";
 /// 2^60 steps at q0 are in fact about 180 million km.
 ///
 /// Fixer: the documentation now says "about 180 million km at q0 and 288,000 km at q2", and this
@@ -2295,7 +2301,7 @@ fn workload(seed: u64) -> String {
 }
 
 /// The workload's SHA-256 digest on one thread, in hexadecimal. Every target the kernel builds for
-/// must give this value (x86_64 natively and wasm32-wasip1 under wasmtime both run this file).
+/// must give this value (`x86_64` natively and wasm32-wasip1 under wasmtime both run this file).
 ///
 /// It replaced the workload's 64-bit FNV-1a digest, `0x32b6_dcb7_d33c_e019`, when the hash moved
 /// to SHA-256 (chapter 28.13): both are hashes of the same bytes, so no result changed.
