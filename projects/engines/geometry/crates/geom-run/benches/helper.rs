@@ -15,6 +15,10 @@
 //! Timings depend on the machine; only the answers are deterministic. A helper call that does not
 //! give the expected answer ends the run with an error, never a panic.
 
+#![allow(
+    clippy::disallowed_methods,
+    reason = "a benchmark measures time; no kernel result depends on the clock"
+)]
 // The crate denies native arithmetic and lossy casts in kernel code (Cargo.toml); a benchmark may
 // use them to build its inputs and report its timings.
 #![allow(
