@@ -6,7 +6,7 @@ Lead: what it replaces and the one idea that makes it better.
 
 ## Goals
 
-## What it uses from the shared kit
+## What it uses from Spare Kit
 
 ## Its own parts
 

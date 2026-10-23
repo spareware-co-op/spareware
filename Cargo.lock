@@ -310,6 +310,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "geom-run"
+version = "0.0.0"
+dependencies = [
+ "proptest",
+]
+
+[[package]]
 name = "getrandom"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"

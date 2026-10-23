@@ -13,7 +13,7 @@ body:
       label: What would you like to work on?
       options:
         - Spare Construct (the Revit replacement)
-        - The shared kit (accounts, payments, matching and more)
+        - Spare Kit (accounts, payments, matching and more)
         - One of the marketplaces (Ride, Food, Stay, Home, Rent, Work, Market)
         - Wherever I'm needed
     validations:

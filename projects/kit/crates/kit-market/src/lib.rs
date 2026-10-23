@@ -1,4 +1,4 @@
-//! Shared kit: marketplace engine.
+//! Spare Kit: marketplace engine.
 //!
 //! The loop every marketplace runs: list or ask, match, agree, pay and hold,
 //! do it, confirm, pay out, rate, and resolve disputes. Orders are operations,

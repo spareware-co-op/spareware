@@ -6,7 +6,7 @@ Every piece is a GitHub issue. See who's working on what: [checked out](https://
 
 | Project | Stage | Open pieces | Folder |
 | --- | --- | --- | --- |
-| Shared kit | Mapping | 6 | [projects/kit](projects/kit/STATUS.md) |
+| Spare Kit | Mapping | 7 | [projects/kit](projects/kit/STATUS.md) |
 | Spare Construct | Mapping; traffic and public transport has a working prototype | 14 | [projects/spare-construct](projects/spare-construct/STATUS.md) |
 | Spare Studio (working name) | Mapping | 8 | [projects/spare-studio](projects/spare-studio/STATUS.md) |
 | Spare Social (working name) | Mapping | 9 | [projects/spare-social](projects/spare-social/STATUS.md) |
@@ -23,6 +23,8 @@ Every piece is a GitHub issue. See who's working on what: [checked out](https://
 | Spare Rent | Mapping | 5 | [projects/spare-rent](projects/spare-rent/STATUS.md) |
 | Spare Work | Mapping | 5 | [projects/spare-work](projects/spare-work/STATUS.md) |
 | Spare Market | Mapping | 7 | [projects/spare-market](projects/spare-market/STATUS.md) |
+
+**The Spare Kit geometry kernel is owner-built for now** (`projects/engines/geometry`, pieces G01 onwards). An owner is building it and is not taking kernel contributions until it asks for feedback: please pick pieces from the other projects, and leave kernel pieces, the kernel's folders and its pull requests alone. Follow it on [issue #169](https://github.com/spareware-co-op/spareware/issues/169).
 
 Spare Studio replaces Adobe's apps. [ArtCraft](https://github.com/storytold) already builds most of them in Rust under Apache-2.0; an owner is inviting its author to come under the Spareware umbrella before we build our own.
 
