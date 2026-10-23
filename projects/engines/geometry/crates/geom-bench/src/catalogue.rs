@@ -228,10 +228,35 @@ pub static OPS: &[Op] = &[
     Op { group: "rng", name: "range_inclusive", measures: "Stream::range_inclusive", classes: TEO, prepare: |c| bind(inputs::rng::range_inclusive(c), kernels::rng::range_inclusive) },
     Op { group: "rng", name: "range_philox", measures: "StreamRange::philox", classes: TO, prepare: |c| bind(inputs::rng::range_philox(c), kernels::rng::range_philox) },
     Op { group: "rng", name: "chunk", measures: "StreamRange::chunk", classes: TEO, prepare: |c| bind(inputs::rng::chunk(c), kernels::rng::chunk) },
+    // Double-double arithmetic.
+    Op { group: "dd", name: "two_prod_fma", measures: "dd::two_prod_fma", classes: TE, prepare: |c| bind(inputs::dd::two_prod_fma(c), kernels::dd::two_prod_fma) },
+    Op { group: "dd", name: "from_sum", measures: "DD::from_sum", classes: TE, prepare: |c| bind(inputs::dd::from_sum(c), kernels::dd::from_sum) },
+    Op { group: "dd", name: "exact_product", measures: "DD::exact_product", classes: TE, prepare: |c| bind(inputs::dd::exact_product(c), kernels::dd::exact_product) },
+    Op { group: "dd", name: "from_i64", measures: "DD::from_i64", classes: T, prepare: |c| bind(inputs::dd::from_i64(c), kernels::dd::from_i64) },
+    Op { group: "dd", name: "from_i128", measures: "DD::from_i128", classes: TO, prepare: |c| bind(inputs::dd::from_i128(c), kernels::dd::from_i128) },
+    Op { group: "dd", name: "sign", measures: "DD::sign", classes: T, prepare: |c| bind(inputs::dd::sign(c), kernels::dd::sign) },
+    Op { group: "dd", name: "negate", measures: "DD::negate", classes: T, prepare: |c| bind(inputs::dd::negate(c), kernels::dd::negate) },
+    Op { group: "dd", name: "abs", measures: "DD::abs", classes: T, prepare: |c| bind(inputs::dd::abs(c), kernels::dd::abs) },
+    Op { group: "dd", name: "add", measures: "DD::add", classes: TE, prepare: |c| bind(inputs::dd::add(c), kernels::dd::add) },
+    Op { group: "dd", name: "add_f64", measures: "DD::add_f64", classes: TE, prepare: |c| bind(inputs::dd::add_f64(c), kernels::dd::add_f64) },
+    Op { group: "dd", name: "mul_f64", measures: "DD::mul_f64", classes: TE, prepare: |c| bind(inputs::dd::mul_f64(c), kernels::dd::mul_f64) },
+    Op { group: "dd", name: "mul", measures: "DD::mul", classes: TE, prepare: |c| bind(inputs::dd::mul(c), kernels::dd::mul) },
+    Op { group: "dd", name: "div_f64", measures: "DD::div_f64", classes: TE, prepare: |c| bind(inputs::dd::div_f64(c), kernels::dd::div_f64) },
+    Op { group: "dd", name: "div", measures: "DD::div", classes: TE, prepare: |c| bind(inputs::dd::div(c), kernels::dd::div) },
+    Op { group: "dd", name: "sqrt", measures: "DD::sqrt", classes: TE, prepare: |c| bind(inputs::dd::sqrt(c), kernels::dd::sqrt) },
+    Op { group: "dd", name: "round_shifted", measures: "DD::round_shifted", classes: TEO, prepare: |c| bind(inputs::dd::round_shifted(c), kernels::dd::round_shifted) },
+    Op { group: "dd", name: "cmp", measures: "DD::cmp", classes: T, prepare: |c| bind(inputs::dd::cmp(c), kernels::dd::cmp) },
+    // The exact sum of doubles.
+    Op { group: "exact_sum", name: "add", measures: "ExactSum::add", classes: TE, prepare: |c| bind(inputs::exact_sum::add(c), kernels::exact_sum::add) },
+    Op { group: "exact_sum", name: "add_slice", measures: "ExactSum::add_slice", classes: TE, prepare: |c| bind(inputs::exact_sum::add_slice(c), kernels::exact_sum::add_slice) },
+    Op { group: "exact_sum", name: "add_iter", measures: "ExactSum::add_iter", classes: TE, prepare: |c| bind(inputs::exact_sum::add_iter(c), kernels::exact_sum::add_iter) },
+    Op { group: "exact_sum", name: "merge", measures: "ExactSum::merge", classes: TE, prepare: |c| bind(inputs::exact_sum::merge(c), kernels::exact_sum::merge) },
+    Op { group: "exact_sum", name: "round", measures: "ExactSum::round", classes: TE, prepare: |c| bind(inputs::exact_sum::round(c), kernels::exact_sum::round) },
+    Op { group: "exact_sum", name: "round_ieee", measures: "ExactSum::round_ieee", classes: TE, prepare: |c| bind(inputs::exact_sum::round_ieee(c), kernels::exact_sum::round_ieee) },
 ];
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 11] = [
+pub const GROUPS: [&str; 13] = [
     "predicate",
     "sign",
     "wide",
@@ -243,6 +268,8 @@ pub const GROUPS: [&str; 11] = [
     "exactness",
     "math",
     "rng",
+    "dd",
+    "exact_sum",
 ];
 
 /// The group of the growth checks.
@@ -445,6 +472,14 @@ pub static UNMEASURED: &[(&str, &str)] = &[
     ("Stream::philox", "field accessor"),
     ("Stream::position", "field accessor"),
     ("Stream::remaining", "field accessor: a constant, 2^66, less the position field"),
+    ("DD::from_f64", "one finiteness test, and a zero made +0: the test Real::new makes"),
+    ("DD::from_real", "raw constructor: the Real's double, a zero made +0"),
+    ("DD::hi", "field accessor"),
+    ("DD::lo", "field accessor"),
+    ("DD::to_f64", "field accessor: the leading part, which is the value correctly rounded"),
+    ("DD::sub", "one call to DD::add, which is measured, on the exact negation DD::negate gives"),
+    ("DD::sub_f64", "one call to DD::add_f64, which is measured, on the negated double"),
+    ("ExactSum::new", "a constant: every chunk zero"),
 ];
 
 #[cfg(test)]

@@ -23,15 +23,16 @@ mod gate;
 
 #[cfg(target_os = "linux")]
 use gate::{
-    eft::eft, exactness::exactness, grid::grid, growth::growth, interval::interval, math::math,
-    plane::plane, predicate::predicate, real::real, rng::rng, sign::sign, wide::wide,
+    dd::dd, eft::eft, exact_sum::exact_sum, exactness::exactness, grid::grid, growth::growth,
+    interval::interval, math::math, plane::plane, predicate::predicate, real::real, rng::rng,
+    sign::sign, wide::wide,
 };
 
 #[cfg(target_os = "linux")]
 gungraun::main!(
     config = gate::config();
     library_benchmark_groups = predicate, sign, wide, plane, eft, interval, grid, real, exactness,
-        math, rng, growth
+        math, rng, dd, exact_sum, growth
 );
 
 /// Off Linux: explain where the gate runs, and succeed.

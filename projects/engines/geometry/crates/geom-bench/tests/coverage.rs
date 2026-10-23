@@ -46,9 +46,11 @@ const LOCK: &str = include_str!("../../../../../../Cargo.lock");
 const KERNEL_WORKFLOW: &str = include_str!("../../../../../../.github/workflows/kernel.yml");
 
 /// The source of every module of `geom-num`, by module name.
-const GEOM_NUM: [(&str, &str); 14] = [
+const GEOM_NUM: [(&str, &str); 16] = [
+    ("dd", include_str!("../../geom-num/src/dd.rs")),
     ("eft", include_str!("../../geom-num/src/eft.rs")),
     ("error", include_str!("../../geom-num/src/error.rs")),
+    ("exact_sum", include_str!("../../geom-num/src/exact_sum.rs")),
     ("exactness", include_str!("../../geom-num/src/exactness.rs")),
     ("grid", include_str!("../../geom-num/src/grid.rs")),
     ("interval", include_str!("../../geom-num/src/interval.rs")),
@@ -311,8 +313,8 @@ fn public_functions(module: &str, source: &str) -> Vec<String> {
 #[test]
 fn every_public_function_of_geom_num_is_measured_or_says_why_not() {
     // Principle 12: every operation ships with a benchmark.
-    let declared: BTreeSet<String> = GEOM_NUM[6]
-        .1
+    let (_, lib) = GEOM_NUM.iter().find(|(m, _)| *m == "lib").unwrap();
+    let declared: BTreeSet<String> = lib
         .lines()
         .filter_map(|l| l.strip_prefix("pub mod "))
         .map(ident)

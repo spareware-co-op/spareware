@@ -25,6 +25,8 @@
 
 use core::cmp::Ordering;
 
+use geom_num::dd::DD;
+use geom_num::exact_sum::ExactSum;
 use geom_num::grid::{Coord, GridStep, P2, P3, Rounded, Steps};
 use geom_num::interval::Interval;
 use geom_num::plane::{Plane, Tpi};
@@ -234,6 +236,25 @@ impl Canonical for NumError {
     }
 }
 
+impl Canonical for DD {
+    // The leading part, then the trailing part (through its getters): the pair's two fields.
+    fn encode(&self, h: &mut Sha256) {
+        self.hi().encode(h);
+        self.lo().encode(h);
+    }
+}
+
+impl Canonical for ExactSum {
+    // Its fields are private to geom-num, whose only readers of them are the roundings, which lose
+    // the state. Its `Debug` text writes every field (the chunks, the additions left, the special
+    // flags and the NaN payload), so the encoding is that text's length and bytes.
+    fn encode(&self, h: &mut Sha256) {
+        let text = format!("{self:?}");
+        (text.len() as u64).encode(h);
+        h.update(text.as_bytes());
+    }
+}
+
 impl Canonical for Seed {
     fn encode(&self, h: &mut Sha256) {
         self.0.encode(h);
@@ -353,6 +374,16 @@ impl<T: Canonical> Canonical for Result<T, RngError> {
                 h.update(&[1]);
                 e.encode(h);
             }
+        }
+    }
+}
+
+impl<T: Canonical> Canonical for Vec<T> {
+    // The length, then each item, so a sequence of vectors splits back one way.
+    fn encode(&self, h: &mut Sha256) {
+        (self.len() as u64).encode(h);
+        for item in self {
+            item.encode(h);
         }
     }
 }

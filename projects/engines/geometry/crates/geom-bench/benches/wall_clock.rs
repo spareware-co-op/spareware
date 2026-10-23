@@ -121,6 +121,18 @@ fn rng(bencher: Bencher, case: Case) {
     time_case(bencher, case);
 }
 
+/// Double-double arithmetic.
+#[divan::bench(args = cases_in("dd"))]
+fn dd(bencher: Bencher, case: Case) {
+    time_case(bencher, case);
+}
+
+/// The exact sum of doubles.
+#[divan::bench(args = cases_in("exact_sum"))]
+fn exact_sum(bencher: Bencher, case: Case) {
+    time_case(bencher, case);
+}
+
 /// The scale benchmarks at n, 2n and 4n limbs.
 #[divan::bench(args = growth_cases())]
 fn growth(bencher: Bencher, case: GrowthCase) {

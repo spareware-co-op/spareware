@@ -574,3 +574,195 @@ pub mod rng {
         run(batch, out, |&(range, index, size)| range.chunk(index, size));
     }
 }
+
+/// Double-double arithmetic: `geom_num::dd`. Each returns its pair, its `Option` or its `Result`,
+/// and the kernel stores whichever it returns.
+pub mod dd {
+    use core::cmp::Ordering;
+
+    use geom_num::NumError;
+    use geom_num::Sign;
+    use geom_num::dd::{self as d, DD};
+    use geom_num::grid::Rounded;
+
+    use super::run;
+
+    /// `two_prod_fma` on each pair.
+    #[inline(never)]
+    pub fn two_prod_fma(batch: &[(f64, f64)], out: &mut Vec<(f64, f64)>) {
+        run(batch, out, |&(a, b)| d::two_prod_fma(a, b));
+    }
+
+    /// `DD::from_sum` on each pair.
+    #[inline(never)]
+    pub fn from_sum(batch: &[(f64, f64)], out: &mut Vec<Result<DD, NumError>>) {
+        run(batch, out, |&(a, b)| DD::from_sum(a, b));
+    }
+
+    /// `DD::exact_product` on each pair.
+    #[inline(never)]
+    pub fn exact_product(batch: &[(f64, f64)], out: &mut Vec<Option<DD>>) {
+        run(batch, out, |&(a, b)| DD::exact_product(a, b));
+    }
+
+    /// `DD::from_i64` on each value.
+    #[inline(never)]
+    pub fn from_i64(batch: &[i64], out: &mut Vec<DD>) {
+        run(batch, out, |&v| DD::from_i64(v));
+    }
+
+    /// `DD::from_i128` on each value.
+    #[inline(never)]
+    pub fn from_i128(batch: &[i128], out: &mut Vec<Option<DD>>) {
+        run(batch, out, |&v| DD::from_i128(v));
+    }
+
+    /// `DD::sign` of each value.
+    #[inline(never)]
+    pub fn sign(batch: &[DD], out: &mut Vec<Sign>) {
+        run(batch, out, |x| x.sign());
+    }
+
+    /// `DD::negate` of each value.
+    #[inline(never)]
+    pub fn negate(batch: &[DD], out: &mut Vec<DD>) {
+        run(batch, out, |x| x.negate());
+    }
+
+    /// `DD::abs` of each value.
+    #[inline(never)]
+    pub fn abs(batch: &[DD], out: &mut Vec<DD>) {
+        run(batch, out, |x| x.abs());
+    }
+
+    /// `DD::add` on each pair.
+    #[inline(never)]
+    pub fn add(batch: &[(DD, DD)], out: &mut Vec<Result<DD, NumError>>) {
+        run(batch, out, |&(x, y)| x.add(y));
+    }
+
+    /// `DD::add_f64` on each pair.
+    #[inline(never)]
+    pub fn add_f64(batch: &[(DD, f64)], out: &mut Vec<Result<DD, NumError>>) {
+        run(batch, out, |&(x, y)| x.add_f64(y));
+    }
+
+    /// `DD::mul_f64` on each pair.
+    #[inline(never)]
+    pub fn mul_f64(batch: &[(DD, f64)], out: &mut Vec<Result<DD, NumError>>) {
+        run(batch, out, |&(x, y)| x.mul_f64(y));
+    }
+
+    /// `DD::mul` on each pair.
+    #[inline(never)]
+    pub fn mul(batch: &[(DD, DD)], out: &mut Vec<Result<DD, NumError>>) {
+        run(batch, out, |&(x, y)| x.mul(y));
+    }
+
+    /// `DD::div_f64` on each pair.
+    #[inline(never)]
+    pub fn div_f64(batch: &[(DD, f64)], out: &mut Vec<Result<DD, NumError>>) {
+        run(batch, out, |&(x, y)| x.div_f64(y));
+    }
+
+    /// `DD::div` on each pair.
+    #[inline(never)]
+    pub fn div(batch: &[(DD, DD)], out: &mut Vec<Result<DD, NumError>>) {
+        run(batch, out, |&(x, y)| x.div(y));
+    }
+
+    /// `DD::sqrt` of each value.
+    #[inline(never)]
+    pub fn sqrt(batch: &[DD], out: &mut Vec<Result<DD, NumError>>) {
+        run(batch, out, |x| x.sqrt());
+    }
+
+    /// `DD::round_shifted` on each (value, offset) pair.
+    #[inline(never)]
+    pub fn round_shifted(batch: &[(DD, i128)], out: &mut Vec<Option<Rounded<i128>>>) {
+        run(batch, out, |&(x, offset)| x.round_shifted(offset));
+    }
+
+    /// `DD::cmp` on each pair.
+    #[inline(never)]
+    pub fn cmp(batch: &[(DD, DD)], out: &mut Vec<Ordering>) {
+        run(batch, out, |(x, y)| x.cmp(y));
+    }
+}
+
+/// The exact sum of doubles: `geom_num::exact_sum::ExactSum`.
+///
+/// A sum's cost is per term, so the three adding kernels take a group of terms per input, add them
+/// to a new accumulator and store it: the accumulator's making (a constant) and its storing, a
+/// copy of a few hundred bytes, are in every count, and `add` is called once per term rather than
+/// once per input. `merge` adds into a clone of its first sum, whose copy is in its count; the
+/// roundings read their sum and take one call per input.
+pub mod exact_sum {
+    use geom_num::NumError;
+    use geom_num::exact_sum::ExactSum;
+    use geom_num::real::Real;
+
+    use super::run;
+    use crate::inputs::exact_sum::TERMS;
+
+    /// `ExactSum::add` on each term of each group, into a new accumulator per group.
+    #[inline(never)]
+    pub fn add(batch: &[[f64; TERMS]], out: &mut Vec<ExactSum>) {
+        run(batch, out, |terms| {
+            let mut sum = ExactSum::new();
+            for &x in terms {
+                sum.add(x);
+            }
+            sum
+        });
+    }
+
+    /// `ExactSum::add_slice` on each slice, into a new accumulator per slice.
+    #[inline(never)]
+    pub fn add_slice(batch: &[Vec<f64>], out: &mut Vec<ExactSum>) {
+        run(batch, out, |terms| {
+            let mut sum = ExactSum::new();
+            sum.add_slice(terms);
+            sum
+        });
+    }
+
+    /// `ExactSum::add_iter` on each slice's terms, through its iterator, or through one that does
+    /// not know its length (`iter::from_fn` over it, whose size hint is (0, None)), into a new
+    /// accumulator per slice.
+    #[inline(never)]
+    pub fn add_iter(batch: &[(Vec<f64>, bool)], out: &mut Vec<ExactSum>) {
+        run(batch, out, |(terms, known)| {
+            let mut sum = ExactSum::new();
+            if *known {
+                sum.add_iter(terms.iter().copied());
+            } else {
+                let mut rest = terms.iter().copied();
+                sum.add_iter(core::iter::from_fn(move || rest.next()));
+            }
+            sum
+        });
+    }
+
+    /// `ExactSum::merge` of each pair's second sum into a clone of its first.
+    #[inline(never)]
+    pub fn merge(batch: &[(ExactSum, ExactSum)], out: &mut Vec<ExactSum>) {
+        run(batch, out, |(a, b)| {
+            let mut sum = a.clone();
+            sum.merge(b);
+            sum
+        });
+    }
+
+    /// `ExactSum::round` of each sum.
+    #[inline(never)]
+    pub fn round(batch: &[ExactSum], out: &mut Vec<Result<Real, NumError>>) {
+        run(batch, out, ExactSum::round);
+    }
+
+    /// `ExactSum::round_ieee` of each sum.
+    #[inline(never)]
+    pub fn round_ieee(batch: &[ExactSum], out: &mut Vec<f64>) {
+        run(batch, out, ExactSum::round_ieee);
+    }
+}

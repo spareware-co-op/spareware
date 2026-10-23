@@ -62,6 +62,8 @@ use geom_bench::inputs::{self, BATCH, Class};
 use geom_bench::kernels;
 use geom_bench::rng::{SplitMix64, fnv1a, seed_for};
 use geom_bench::sha256::{Digest, Sha256};
+use geom_num::dd::{self as dd, DD};
+use geom_num::exact_sum::ExactSum;
 use geom_num::grid::{self, COORD_MAX, Coord, GridStep, P2, P3, Rounded, Steps};
 use geom_num::interval::Interval;
 use geom_num::plane::{Plane, Tpi};
@@ -1029,6 +1031,96 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
         ),
         ("math", _) => math_digest(name, class)?,
         ("rng", _) => rng_digest(name, class)?,
+        ("dd", _) => dd_digest(name, class)?,
+        ("exact_sum", _) => exact_sum_digest(name, class)?,
+        _ => return None,
+    })
+}
+
+/// The digest of the double-double benchmark `name` on `class`, from direct calls on its inputs.
+fn dd_digest(name: &str, class: Class) -> Option<Digest> {
+    use inputs::dd as i;
+    let unary = |f: fn(DD) -> Result<DD, NumError>, xs: Vec<DD>| fold(xs.into_iter().map(f));
+    let with_f64 = |f: fn(DD, f64) -> Result<DD, NumError>, xs: Vec<(DD, f64)>| {
+        fold(xs.into_iter().map(|(x, y)| f(x, y)))
+    };
+    let with_dd = |f: fn(DD, DD) -> Result<DD, NumError>, xs: Vec<(DD, DD)>| {
+        fold(xs.into_iter().map(|(x, y)| f(x, y)))
+    };
+    Some(match name {
+        "two_prod_fma" => fold(
+            i::two_prod_fma(class)
+                .into_iter()
+                .map(|(a, b)| dd::two_prod_fma(a, b)),
+        ),
+        "from_sum" => fold(
+            i::from_sum(class)
+                .into_iter()
+                .map(|(a, b)| DD::from_sum(a, b)),
+        ),
+        "exact_product" => fold(
+            i::exact_product(class)
+                .into_iter()
+                .map(|(a, b)| DD::exact_product(a, b)),
+        ),
+        "from_i64" => fold(i::from_i64(class).into_iter().map(DD::from_i64)),
+        "from_i128" => fold(i::from_i128(class).into_iter().map(DD::from_i128)),
+        "sign" => fold(i::sign(class).into_iter().map(DD::sign)),
+        "negate" => fold(i::negate(class).into_iter().map(DD::negate)),
+        "abs" => fold(i::abs(class).into_iter().map(DD::abs)),
+        "add" => with_dd(DD::add, i::add(class)),
+        "add_f64" => with_f64(DD::add_f64, i::add_f64(class)),
+        "mul_f64" => with_f64(DD::mul_f64, i::mul_f64(class)),
+        "mul" => with_dd(DD::mul, i::mul(class)),
+        "div_f64" => with_f64(DD::div_f64, i::div_f64(class)),
+        "div" => with_dd(DD::div, i::div(class)),
+        "sqrt" => unary(DD::sqrt, i::sqrt(class)),
+        "round_shifted" => fold(
+            i::round_shifted(class)
+                .into_iter()
+                .map(|(x, k)| x.round_shifted(k)),
+        ),
+        "cmp" => fold(i::cmp(class).into_iter().map(|(x, y)| x.cmp(&y))),
+        _ => return None,
+    })
+}
+
+/// The digest of the exact-sum benchmark `name` on `class`, from direct calls on its inputs.
+fn exact_sum_digest(name: &str, class: Class) -> Option<Digest> {
+    use inputs::exact_sum as i;
+    let fresh = |add: &dyn Fn(&mut ExactSum)| {
+        let mut sum = ExactSum::new();
+        add(&mut sum);
+        sum
+    };
+    Some(match name {
+        "add" => fold(
+            i::add(class)
+                .iter()
+                .map(|terms| fresh(&|s: &mut ExactSum| terms.iter().for_each(|&x| s.add(x)))),
+        ),
+        "add_slice" => fold(
+            i::add_slice(class)
+                .iter()
+                .map(|terms| fresh(&|s: &mut ExactSum| s.add_slice(terms))),
+        ),
+        "add_iter" => fold(i::add_iter(class).iter().map(|(terms, known)| {
+            fresh(&|s: &mut ExactSum| {
+                if *known {
+                    s.add_iter(terms.iter().copied());
+                } else {
+                    let mut rest = terms.iter().copied();
+                    s.add_iter(core::iter::from_fn(move || rest.next()));
+                }
+            })
+        })),
+        "merge" => fold(i::merge(class).iter().map(|(a, b)| {
+            let mut sum = a.clone();
+            sum.merge(b);
+            sum
+        })),
+        "round" => fold(i::round(class).iter().map(ExactSum::round)),
+        "round_ieee" => fold(i::round_ieee(class).iter().map(ExactSum::round_ieee)),
         _ => return None,
     })
 }
@@ -2323,6 +2415,470 @@ fn every_random_number_result_matches_the_independent_philox() {
                 chunk_oracle(range, index, size),
                 "{range:?} {index} {size}"
             );
+        }
+    }
+}
+
+// ------------------------------------------------------------------------------------------------
+// Double-double arithmetic and the exact sum, against exact rationals.
+// ------------------------------------------------------------------------------------------------
+
+/// The exact value of a pair.
+fn rat_dd(x: DD) -> Rat {
+    Rat::of(x.hi()).plus(&Rat::of(x.lo()))
+}
+
+/// |q|.
+fn rat_abs(q: &Rat) -> Rat {
+    if q.num.negative {
+        q.negated()
+    } else {
+        q.clone()
+    }
+}
+
+/// (1 − 2^−52)·2^1024 = 2^1024 − 2^972: an operation refuses a result as too large only above it
+/// (`geom_num::dd`, *Never NaN, never infinite*).
+fn refusal_floor() -> Rat {
+    Rat::int(Big::pow2(1024).minus(&Big::pow2(972)))
+}
+
+/// 2^1024 − 2^970: no pair holds a value this large, since its leading part would round to
+/// infinity.
+fn holdable_ceiling() -> Rat {
+    Rat::int(Big::pow2(1024).minus(&Big::pow2(970)))
+}
+
+/// A pair in the invariant `geom_num::dd` documents: both parts finite, the leading part the value
+/// rounded to nearest (so adding the parts in binary64 gives it back), and no −0.
+fn assert_pair(x: DD, what: &str) {
+    assert!(x.hi().is_finite() && x.lo().is_finite(), "{what}: {x:?}");
+    assert_eq!(x.hi() + x.lo(), x.hi(), "{what}: {x:?} is not normalised");
+    let minus_zero = (-0.0f64).to_bits();
+    assert!(
+        x.hi().to_bits() != minus_zero && x.lo().to_bits() != minus_zero,
+        "{what}: {x:?} holds a −0"
+    );
+}
+
+/// A pair's bits, for comparing results bit for bit.
+fn dd_bits(x: Result<DD, NumError>) -> Result<(u64, u64), NumError> {
+    x.map(|v| (v.hi().to_bits(), v.lo().to_bits()))
+}
+
+/// Checks a rounded operation's answer against its exact result: `Err` when an operand must be
+/// refused (with that error); otherwise within B·|r| + A, a pair in the invariant, or refused as
+/// too large only above [`refusal_floor`].
+fn check_bound(
+    what: &str,
+    got: Result<DD, NumError>,
+    exact: Result<Rat, NumError>,
+    b: f64,
+    a: f64,
+) {
+    match (got, exact) {
+        (got, Err(e)) => assert_eq!(got.map(|_| ()), Err(e), "{what}"),
+        (Ok(x), Ok(r)) => {
+            assert_pair(x, what);
+            let err = rat_abs(&rat_dd(x).minus(&r));
+            let allowed = Rat::of(b).times(&rat_abs(&r)).plus(&Rat::of(a));
+            assert_ne!(
+                err.compare(&allowed),
+                Ordering::Greater,
+                "{what}: {x:?} is outside its bound"
+            );
+        }
+        (Err(e), Ok(r)) => {
+            assert_eq!(e, NumError::NotFinite, "{what}");
+            assert_eq!(
+                rat_abs(&r).compare(&refusal_floor()),
+                Ordering::Greater,
+                "{what}: refused a result below the documented limit"
+            );
+        }
+    }
+}
+
+/// Whether the exact error `a·b − p` of a finite product is a double: a whole multiple of 2^−1074
+/// (it is at most half a unit of `p`, so never too large).
+fn product_error_is_a_double(a: f64, b: f64, p: f64) -> bool {
+    let d = scaled(a).times(&scaled(b)).minus(&scaled(p).shifted(1074));
+    (0..1074).all(|i| !d.bit(i))
+}
+
+/// The exact real `v` rounded to the nearest whole number, ties to even, and whether it was whole.
+fn rat_round_half_even(v: &Rat) -> (Big, bool) {
+    let (q, r) = v.num.div_rem(&v.den);
+    // v = floor + rem / den with 0 ≤ rem < den.
+    let (floor, rem) = match (v.num.negative, r.is_zero()) {
+        (false, _) => (q, r),
+        (true, true) => (q.negated(), r),
+        (true, false) => (q.negated().minus(&Big::one()), v.den.minus(&r)),
+    };
+    let up = match rem.shifted(1).cmp(&v.den) {
+        Ordering::Less => false,
+        Ordering::Greater => true,
+        Ordering::Equal => floor.bit(0),
+    };
+    let whole = rem.is_zero();
+    (if up { floor.plus(&Big::one()) } else { floor }, whole)
+}
+
+#[test]
+fn the_double_double_bounds_are_at_least_the_published_ones() {
+    use geom_num::dd::{
+        ADD_BOUND, ADD_F64_BOUND, DIV_BOUND, DIV_F64_BOUND, MUL_BOUND, MUL_F64_BOUND, SQRT_BOUND,
+    };
+    // u = 2^−53. JMP Theorems 3.1, 2.2, 4.3, 6.2 and 7.2, Muller and Rideau's 2.8, and Lefèvre et
+    // al.'s 3.6, as `geom_num::dd`'s table cites them.
+    let u = Rat::of(f64::from_bits(0x3ca0_0000_0000_0000));
+    let u2 = u.times(&u);
+    let int = |v: i64| Rat::int(Big::from_i64(v));
+    let one = int(1);
+    let add = int(3).times(&u2).over(&one.minus(&int(4).times(&u)));
+    let mul = int(4)
+        .times(&u2)
+        .plus(&u2.times(&u).over(&int(2)))
+        .over(&one.plus(&u).times(&one.plus(&u)));
+    let published = [
+        ("add", ADD_BOUND, add),
+        ("add_f64", ADD_F64_BOUND, int(2).times(&u2)),
+        ("mul_f64", MUL_F64_BOUND, int(2).times(&u2)),
+        ("mul", MUL_BOUND, mul),
+        ("div_f64", DIV_F64_BOUND, int(3).times(&u2)),
+        ("div", DIV_BOUND, int(98).times(&u2).over(&int(10))),
+        ("sqrt", SQRT_BOUND, int(25).times(&u2).over(&int(8))),
+    ];
+    for (what, bound, theorem) in published {
+        assert_ne!(Rat::of(bound).compare(&theorem), Ordering::Less, "{what}");
+    }
+}
+
+#[test]
+fn every_double_double_result_meets_its_proven_bound() {
+    use geom_num::dd::{
+        ADD_BOUND, ADD_F64_BOUND, DIV_BOUND, DIV_F64_BOUND, MUL_BOUND, MUL_F64_BOUND, SQRT_BOUND,
+        UNDERFLOW_BOUND,
+    };
+    use inputs::dd as i;
+    let finite = |y: f64| {
+        if y.is_finite() {
+            Ok(Rat::of(y))
+        } else {
+            Err(NumError::NotFinite)
+        }
+    };
+    for class in Class::ALL {
+        for (x, y) in i::add(class) {
+            let exact = Ok(rat_dd(x).plus(&rat_dd(y)));
+            check_bound("add", x.add(y), exact, ADD_BOUND, 0.0);
+            assert_eq!(dd_bits(x.add(y)), dd_bits(y.add(x)), "add commutes");
+        }
+        for (x, y) in i::add_f64(class) {
+            let exact = finite(y).map(|y| rat_dd(x).plus(&y));
+            check_bound("add_f64", x.add_f64(y), exact, ADD_F64_BOUND, 0.0);
+        }
+        for (x, y) in i::mul_f64(class) {
+            let exact = finite(y).map(|y| rat_dd(x).times(&y));
+            check_bound(
+                "mul_f64",
+                x.mul_f64(y),
+                exact,
+                MUL_F64_BOUND,
+                UNDERFLOW_BOUND,
+            );
+        }
+        for (x, y) in i::mul(class) {
+            let exact = Ok(rat_dd(x).times(&rat_dd(y)));
+            check_bound("mul", x.mul(y), exact, MUL_BOUND, UNDERFLOW_BOUND);
+            assert_eq!(dd_bits(x.mul(y)), dd_bits(y.mul(x)), "mul commutes");
+        }
+        for (x, y) in i::div_f64(class) {
+            let exact = match finite(y) {
+                Ok(q) if y != 0.0 => Ok(rat_dd(x).over(&q)),
+                _ => Err(NumError::NotFinite),
+            };
+            check_bound(
+                "div_f64",
+                x.div_f64(y),
+                exact,
+                DIV_F64_BOUND,
+                UNDERFLOW_BOUND,
+            );
+        }
+        for (x, y) in i::div(class) {
+            let exact = if y.hi() == 0.0 {
+                Err(NumError::NotFinite)
+            } else {
+                Ok(rat_dd(x).over(&rat_dd(y)))
+            };
+            check_bound("div", x.div(y), exact, DIV_BOUND, UNDERFLOW_BOUND);
+        }
+        for x in i::sqrt(class) {
+            if x.hi() < 0.0 {
+                assert_eq!(x.sqrt(), Err(NumError::OutsideDomain), "{x:?}");
+                continue;
+            }
+            // |s − √v| ≤ B·√v, for s ≥ 0, is (1 − B)²·v ≤ s² ≤ (1 + B)²·v.
+            let s = x.sqrt().unwrap();
+            assert_pair(s, "sqrt");
+            assert!(s.hi() >= 0.0, "{x:?}");
+            let (v, s) = (rat_dd(x), rat_dd(s));
+            let b = Rat::of(SQRT_BOUND);
+            let one = Rat::int(Big::one());
+            let (low, high) = (one.minus(&b), one.plus(&b));
+            let s2 = s.times(&s);
+            assert_ne!(
+                s2.compare(&low.times(&low).times(&v)),
+                Ordering::Less,
+                "{x:?}"
+            );
+            assert_ne!(
+                s2.compare(&high.times(&high).times(&v)),
+                Ordering::Greater,
+                "{x:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn every_exact_double_double_result_is_exact() {
+    use inputs::dd as i;
+    let ceiling = holdable_ceiling();
+    for class in Class::ALL {
+        for (a, b) in i::from_sum(class) {
+            let got = DD::from_sum(a, b);
+            if !a.is_finite() || !b.is_finite() {
+                assert_eq!(got, Err(NumError::NotFinite));
+                continue;
+            }
+            let r = Rat::of(a).plus(&Rat::of(b));
+            match got {
+                Ok(x) => {
+                    assert_pair(x, "from_sum");
+                    assert_eq!(rat_dd(x).compare(&r), Ordering::Equal, "{a:e} + {b:e}");
+                }
+                Err(e) => {
+                    assert_eq!(e, NumError::NotFinite);
+                    assert_ne!(
+                        rat_abs(&r).compare(&ceiling),
+                        Ordering::Less,
+                        "{a:e} + {b:e}"
+                    );
+                }
+            }
+        }
+        let products = i::two_prod_fma(class)
+            .into_iter()
+            .chain(i::exact_product(class));
+        for (a, b) in products {
+            let exact = DD::exact_product(a, b);
+            if !a.is_finite() || !b.is_finite() {
+                assert_eq!(exact, None);
+                continue;
+            }
+            let (p, e) = dd::two_prod_fma(a, b);
+            assert_eq!(p.to_bits(), (a * b).to_bits(), "{a:e} · {b:e}");
+            let holds = p.is_finite() && product_error_is_a_double(a, b, p);
+            assert_eq!(e.is_finite(), holds, "{a:e} · {b:e}: ({p:e}, {e:e})");
+            let r = Rat::of(a).times(&Rat::of(b));
+            if holds {
+                let pair = Rat::of(p).plus(&Rat::of(e));
+                assert_eq!(pair.compare(&r), Ordering::Equal, "{a:e} · {b:e}");
+                let x = exact.unwrap();
+                assert_pair(x, "exact_product");
+                assert_eq!(rat_dd(x).compare(&r), Ordering::Equal, "{a:e} · {b:e}");
+            } else {
+                assert_eq!(exact, None, "{a:e} · {b:e}");
+            }
+        }
+        for v in i::from_i64(class) {
+            let x = DD::from_i64(v);
+            assert_pair(x, "from_i64");
+            let r = Rat::int(Big::from_i64(v));
+            assert_eq!(rat_dd(x).compare(&r), Ordering::Equal, "{v}");
+        }
+        for v in i::from_i128(class) {
+            match DD::from_i128(v) {
+                Some(x) => {
+                    assert!(v.unsigned_abs() < 1 << 106, "{v}");
+                    assert_pair(x, "from_i128");
+                    let r = Rat::int(Big::from_i128(v));
+                    assert_eq!(rat_dd(x).compare(&r), Ordering::Equal, "{v}");
+                }
+                None => assert!(v.unsigned_abs() >= 1 << 106, "{v}"),
+            }
+        }
+        for x in i::sign(class) {
+            assert_eq!(x.sign(), rat_dd(x).num.sign(), "{x:?}");
+        }
+        for x in i::negate(class) {
+            let n = x.negate();
+            assert_pair(n, "negate");
+            let r = rat_dd(x).negated();
+            assert_eq!(rat_dd(n).compare(&r), Ordering::Equal, "{x:?}");
+        }
+        for x in i::abs(class) {
+            let m = x.abs();
+            assert_pair(m, "abs");
+            let r = rat_abs(&rat_dd(x));
+            assert_eq!(rat_dd(m).compare(&r), Ordering::Equal, "{x:?}");
+        }
+        for (x, y) in i::cmp(class) {
+            assert_eq!(x.cmp(&y), rat_dd(x).compare(&rat_dd(y)), "{x:?} {y:?}");
+        }
+        for (x, offset) in i::round_shifted(class) {
+            // 2^100, the largest leading part answered.
+            let expected = if x.hi().abs() > f64::from_bits(0x4630_0000_0000_0000) {
+                None
+            } else {
+                let v = rat_dd(x).minus(&Rat::int(Big::from_i128(offset)));
+                let (n, whole) = rat_round_half_even(&v);
+                n.to_i128().map(|n| (n, whole))
+            };
+            let got = x.round_shifted(offset).map(|r| (r.value(), r.is_exact()));
+            assert_eq!(got, expected, "{x:?} − {offset}");
+        }
+    }
+}
+
+/// Every double from a whole multiple `s` of 2^−1074: the nearest, ties to the even significand;
+/// ±∞ from 2^1024 − 2^970 up, where rounding to nearest overflows; +0 for zero.
+fn nearest_double(s: &Big) -> f64 {
+    let m = s.magnitude();
+    let overflow = Big::pow2(1024).minus(&Big::pow2(970)).shifted(1074);
+    let bits = if m >= overflow {
+        0x7ff0_0000_0000_0000
+    } else if m.bit_len() <= 53 {
+        // Below 2^53 steps of 2^−1074 a double's bits are the count itself: subnormal below 2^52,
+        // exponent field 1 from there.
+        u64::try_from(m.to_i128().unwrap()).unwrap()
+    } else {
+        let shift = m.bit_len() - 53;
+        let (q, r) = m.div_rem(&Big::pow2(shift));
+        let mut q = u64::try_from(q.to_i128().unwrap()).unwrap();
+        let mut shift = shift;
+        let up = match r.shifted(1).cmp(&Big::pow2(shift)) {
+            Ordering::Less => false,
+            Ordering::Greater => true,
+            Ordering::Equal => q % 2 == 1,
+        };
+        if up {
+            q += 1;
+            if q == 1 << 53 {
+                q >>= 1;
+                shift += 1;
+            }
+        }
+        // The value is q·2^shift steps, q in [2^52, 2^53): exponent field shift + 1.
+        (u64::from(shift + 1) << 52) | (q - (1 << 52))
+    };
+    let sign = if s.negative { 1u64 << 63 } else { 0 };
+    f64::from_bits(if bits == 0 { 0 } else { bits | sign })
+}
+
+/// What `ExactSum::round_ieee` must give for `terms` (`geom_num::exact_sum`, *Special values as
+/// Neal specifies*): the NaN with the largest payload, sign cleared; a NaN for both infinities;
+/// the one infinity; or the exact sum of the finite terms rounded once.
+fn exact_sum_oracle(terms: &[f64]) -> f64 {
+    let fraction = (1u64 << 52) - 1;
+    let payload = terms
+        .iter()
+        .filter(|x| x.is_nan())
+        .map(|x| x.to_bits() & fraction)
+        .max();
+    if let Some(payload) = payload {
+        return f64::from_bits(0x7ff0_0000_0000_0000 | payload);
+    }
+    match (
+        terms.contains(&f64::INFINITY),
+        terms.contains(&f64::NEG_INFINITY),
+    ) {
+        (true, true) => return f64::from_bits(0x7ff8_0000_0000_0000),
+        (true, false) => return f64::INFINITY,
+        (false, true) => return f64::NEG_INFINITY,
+        (false, false) => {}
+    }
+    nearest_double(
+        &terms
+            .iter()
+            .fold(Big::zero(), |acc, &x| acc.plus(&scaled(x))),
+    )
+}
+
+#[test]
+fn the_nearest_double_oracle_rounds_as_ieee_does() {
+    // Sums binary64 rounds once: two terms whose exact sum it rounds to nearest, ties to even.
+    let mut g = SplitMix64::new(seed_for("attack_g06", "nearest_double"));
+    for _ in 0..2000 {
+        // Any finite double: a sign, an exponent field below 2047, and a fraction.
+        let pick = |g: &mut SplitMix64| {
+            let sign = g.next_u64() & (1 << 63);
+            f64::from_bits(sign | (g.below(2047) << 52) | (g.next_u64() >> 12))
+        };
+        let (a, b) = (pick(&mut g), pick(&mut g));
+        let expected = a + b;
+        let got = nearest_double(&scaled(a).plus(&scaled(b)));
+        if expected == 0.0 {
+            assert_eq!(got.to_bits(), 0, "{a:e} + {b:e}");
+        } else {
+            assert_eq!(got.to_bits(), expected.to_bits(), "{a:e} + {b:e}");
+        }
+    }
+}
+
+#[test]
+fn every_exact_sum_result_is_the_sum_rounded_once() {
+    use inputs::exact_sum as i;
+    let same = |what: &str, got: f64, expected: f64| {
+        assert_eq!(
+            got.to_bits(),
+            expected.to_bits(),
+            "{what}: {got:e} against {expected:e}"
+        );
+    };
+    for class in Class::ALL {
+        for terms in i::add(class) {
+            let mut sum = ExactSum::new();
+            for &x in &terms {
+                sum.add(x);
+            }
+            same("add", sum.round_ieee(), exact_sum_oracle(&terms));
+        }
+        for terms in i::add_slice(class) {
+            let mut sum = ExactSum::new();
+            sum.add_slice(&terms);
+            same("add_slice", sum.round_ieee(), exact_sum_oracle(&terms));
+        }
+        for (terms, known) in i::add_iter(class) {
+            let mut sum = ExactSum::new();
+            if known {
+                sum.add_iter(terms.iter().copied());
+            } else {
+                let mut rest = terms.iter().copied();
+                sum.add_iter(core::iter::from_fn(move || rest.next()));
+            }
+            same("add_iter", sum.round_ieee(), exact_sum_oracle(&terms));
+        }
+        for (terms, sum) in i::round_terms(class).iter().zip(i::round(class)) {
+            let expected = exact_sum_oracle(terms);
+            match sum.round() {
+                Ok(r) => same("round", r.get(), expected),
+                Err(e) => {
+                    assert_eq!(e, NumError::NotFinite);
+                    assert!(!expected.is_finite(), "round refused {expected:e}");
+                }
+            }
+        }
+        for (terms, sum) in i::round_ieee_terms(class).iter().zip(i::round_ieee(class)) {
+            same("round_ieee", sum.round_ieee(), exact_sum_oracle(terms));
+        }
+        for ((a, b), (sa, sb)) in i::merge_terms(class).iter().zip(i::merge(class)) {
+            let mut merged = sa.clone();
+            merged.merge(&sb);
+            let all: Vec<f64> = a.iter().chain(b).copied().collect();
+            same("merge", merged.round_ieee(), exact_sum_oracle(&all));
         }
     }
 }

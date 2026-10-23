@@ -1460,3 +1460,225 @@ fn rng_classes_take_every_path() {
         .collect();
     assert_eq!(streams.len(), BATCH);
 }
+
+#[test]
+fn dd_classes_take_every_path() {
+    use geom_num::dd::{self as d, DD};
+    use inputs::dd as i;
+    let below_normal = |x: DD| x.hi() != 0.0 && x.hi().abs() < f64::MIN_POSITIVE;
+    // 2^−968, from which dd::two_prod_fma uses the fused multiply-add.
+    let threshold = pow2(-968);
+    // The products: the fused multiply-add's path, the scaled path below 2^−968, a zero factor,
+    // an overflow, an error below 2^−1074, and for exact_product a factor that is not finite.
+    let products = [
+        ("two_prod_fma", i::two_prod_fma(Extreme)),
+        ("exact_product", i::exact_product(Extreme)),
+    ];
+    for (name, batch) in products {
+        let paths: Vec<(f64, f64)> = batch.iter().map(|&(a, b)| d::two_prod_fma(a, b)).collect();
+        let fma = |&(p, e): &(f64, f64)| p.is_finite() && p.abs() >= threshold && e.is_finite();
+        assert!(paths.iter().any(fma), "{name}");
+        let scaled = |&(p, e): &(f64, f64)| p != 0.0 && p.abs() < threshold && e.is_finite();
+        assert!(paths.iter().any(scaled), "{name}");
+        assert!(batch.iter().any(|&(a, b)| a == 0.0 || b == 0.0), "{name}");
+        assert!(paths.iter().any(|&(p, _)| p.is_infinite()), "{name}");
+        assert!(
+            paths.iter().any(|&(p, e)| p.is_finite() && !e.is_finite()),
+            "{name}"
+        );
+        let all_finite = batch.iter().all(|&(a, b)| a.is_finite() && b.is_finite());
+        assert_eq!(all_finite, name == "two_prod_fma", "{name}");
+    }
+    assert!(
+        i::two_prod_fma(Typical)
+            .iter()
+            .all(|&(a, b)| (a * b).abs() >= threshold)
+    );
+    // The exact sum of two doubles: near overflow, overflowing, subnormal, huge plus tiny, and not
+    // finite.
+    let sums = i::from_sum(Extreme);
+    let made: Vec<_> = sums.iter().map(|&(a, b)| DD::from_sum(a, b)).collect();
+    assert!(
+        made.iter()
+            .any(|x| x.is_ok_and(|x| x.hi().abs() > pow2(1000)))
+    );
+    let overflowed = |(&(a, b), x): (&(f64, f64), &Result<DD, NumError>)| {
+        a.is_finite() && b.is_finite() && x.is_err()
+    };
+    assert!(sums.iter().zip(&made).any(overflowed));
+    assert!(made.iter().any(|x| x.is_ok_and(below_normal)));
+    assert!(
+        made.iter()
+            .any(|x| x.is_ok_and(|x| x.lo() != 0.0 && x.hi().abs() > pow2(800)))
+    );
+    assert!(sums.iter().any(|&(a, _)| !a.is_finite()));
+    // The integers: the ends of i64; every size below 2^106, its ends included; and from 2^106 up.
+    let small = i::from_i64(Typical);
+    assert!([i64::MIN, i64::MAX, 0].iter().all(|v| small.contains(v)));
+    let typical = i::from_i128(Typical);
+    assert!(typical.iter().all(|v| v.unsigned_abs() < 1 << 106));
+    assert!(typical.contains(&((1 << 106) - 1)));
+    assert!(typical.iter().any(|v| v.unsigned_abs() < 1 << 40));
+    assert!(
+        i::from_i128(Overflow)
+            .iter()
+            .all(|v| v.unsigned_abs() >= 1 << 106)
+    );
+    // Sign, negation and magnitude: both signs and zero.
+    for batch in [i::sign(Typical), i::negate(Typical), i::abs(Typical)] {
+        let signs: BTreeSet<_> = batch.iter().map(|x| x.sign()).collect();
+        assert_eq!(signs.len(), 3);
+    }
+    // The arithmetic: overflow refused, results below the normal range, zero operands, exact
+    // cancellation, non-finite doubles refused, zero divisors refused.
+    let add = i::add(Extreme);
+    assert!(add.iter().any(|&(x, y)| x.add(y).is_err()));
+    assert!(add.iter().any(|&(x, y)| x.add(y).is_ok_and(below_normal)));
+    assert!(
+        add.iter()
+            .any(|&(x, y)| x.hi() != 0.0 && x.add(y) == Ok(DD::ZERO))
+    );
+    assert!(add.iter().any(|&(_, y)| y == DD::ZERO));
+    let add_f64 = i::add_f64(Extreme);
+    assert!(add_f64.iter().any(|&(_, y)| !y.is_finite()));
+    assert!(
+        add_f64
+            .iter()
+            .any(|&(x, y)| y.is_finite() && x.add_f64(y).is_err())
+    );
+    let mul_f64 = i::mul_f64(Extreme);
+    assert!(
+        mul_f64
+            .iter()
+            .any(|&(x, y)| y.is_finite() && x.mul_f64(y).is_err())
+    );
+    assert!(
+        mul_f64
+            .iter()
+            .any(|&(x, y)| x.mul_f64(y).is_ok_and(below_normal))
+    );
+    assert!(mul_f64.iter().any(|&(_, y)| y == 0.0));
+    assert!(mul_f64.iter().any(|&(_, y)| !y.is_finite()));
+    let mul = i::mul(Extreme);
+    assert!(mul.iter().any(|&(x, y)| x.mul(y).is_err()));
+    assert!(
+        mul.iter()
+            .any(|&(x, y)| x.hi() != 0.0 && x.mul(y) == Ok(DD::ZERO))
+    );
+    let huge_by_tiny = |&(x, y): &(DD, DD)| {
+        x.hi().abs() > pow2(1000) && y.hi().abs() < pow2(-1000) && x.mul(y).is_ok()
+    };
+    assert!(mul.iter().any(huge_by_tiny));
+    let div_f64 = i::div_f64(Extreme);
+    assert!(div_f64.iter().any(|&(_, y)| y == 0.0));
+    assert!(div_f64.iter().any(|&(_, y)| !y.is_finite()));
+    assert!(
+        div_f64
+            .iter()
+            .any(|&(x, y)| y != 0.0 && y.is_finite() && x.div_f64(y).is_err())
+    );
+    assert!(
+        div_f64
+            .iter()
+            .any(|&(x, y)| x.div_f64(y).is_ok_and(below_normal))
+    );
+    assert!(div_f64.iter().any(|&(x, _)| x == DD::ZERO));
+    let div = i::div(Extreme);
+    assert!(div.iter().any(|&(_, y)| y == DD::ZERO));
+    assert!(div.iter().any(|&(x, _)| x == DD::ZERO));
+    assert!(div.iter().any(|&(x, y)| y != DD::ZERO && x.div(y).is_err()));
+    assert!(div.iter().any(|&(x, y)| x.div(y).is_ok_and(below_normal)));
+    let roots = i::sqrt(Extreme);
+    assert!(
+        roots
+            .iter()
+            .any(|x| x.sqrt() == Err(NumError::OutsideDomain))
+    );
+    assert!(roots.contains(&DD::ZERO));
+    assert!(roots.iter().any(|x| x.hi() > pow2(1022)));
+    assert!(roots.iter().any(|x| below_normal(*x)));
+    assert!(i::sqrt(Typical).iter().all(|x| x.hi() > 0.0));
+    // Rounding to a whole number: halves (in the leading part, and as the trailing part), whole
+    // numbers, 2^100, and the ends of i128, all answered; refused above 2^100 or past i128.
+    let rounds = i::round_shifted(Extreme);
+    let leading_half = |&(x, _): &(DD, i128)| x.lo() == 0.0 && (x.hi() * 2.0) % 2.0 != 0.0;
+    assert!(rounds.iter().any(leading_half));
+    assert!(rounds.iter().any(|&(x, _)| x.lo() == 0.5));
+    assert!(
+        rounds
+            .iter()
+            .any(|&(x, k)| x.round_shifted(k).is_some_and(|r| r.is_exact()))
+    );
+    assert!(rounds.iter().any(|&(x, _)| x.hi() == pow2(100)));
+    assert!(rounds.iter().any(|&(_, k)| k == i128::MAX));
+    assert!(rounds.iter().any(|&(_, k)| k == i128::MIN + 1));
+    assert!(rounds.iter().all(|&(x, k)| x.round_shifted(k).is_some()));
+    assert!(
+        i::round_shifted(Overflow)
+            .iter()
+            .all(|&(x, k)| x.round_shifted(k).is_none())
+    );
+    // The order: equal pairs, the same leading part with different trailing parts, opposite signs.
+    let pairs = i::cmp(Typical);
+    assert!(pairs.iter().any(|(x, y)| x == y));
+    assert!(
+        pairs
+            .iter()
+            .any(|(x, y)| x.hi() == y.hi() && x.lo() != y.lo())
+    );
+    assert!(pairs.iter().any(|(x, y)| x.sign() != y.sign()));
+}
+
+#[test]
+fn exact_sum_classes_take_every_path() {
+    use geom_num::exact_sum::LARGE_SLICE;
+    use inputs::exact_sum as i;
+    // Typical terms are finite; extreme ones reach subnormals, the top of the range and the
+    // special values.
+    assert!(i::add(Typical).iter().flatten().all(|x| x.is_finite()));
+    let extreme: Vec<f64> = i::add(Extreme).iter().flatten().copied().collect();
+    assert!(extreme.iter().any(|x| x.is_nan()));
+    assert!(extreme.contains(&f64::INFINITY) && extreme.contains(&f64::NEG_INFINITY));
+    assert!(extreme.iter().any(|x| x.is_subnormal()));
+    assert!(extreme.iter().any(|x| x.abs() > pow2(1015)));
+    // The slices: short ones one term at a time, long ones through the large superaccumulator.
+    assert!(i::add_slice(Typical).iter().all(|t| t.len() < LARGE_SLICE));
+    assert!(i::add_slice(Extreme).iter().all(|t| t.len() >= LARGE_SLICE));
+    let iters = i::add_iter(Extreme);
+    assert!(iters.iter().all(|(t, _)| t.len() > LARGE_SLICE));
+    assert!(iters.iter().any(|(_, known)| *known));
+    assert!(iters.iter().any(|(_, known)| !known));
+    // The roundings: an exact zero, a tie, a subnormal sum, an overflow of finite terms, and
+    // special values.
+    let roundings = [
+        (i::round_terms(Extreme), i::round(Extreme)),
+        (i::round_ieee_terms(Extreme), i::round_ieee(Extreme)),
+    ];
+    for (terms, sums) in roundings {
+        let rounded: Vec<f64> = sums.iter().map(|s| s.round_ieee()).collect();
+        let pairs: Vec<(f64, &Vec<f64>)> = rounded.iter().copied().zip(&terms).collect();
+        assert!(
+            pairs
+                .iter()
+                .any(|(r, t)| r.to_bits() == 0 && t.iter().any(|x| *x != 0.0))
+        );
+        assert!(terms.iter().any(|t| t == &[1.0, pow2(-53)]));
+        assert!(rounded.iter().any(|r| r.is_subnormal()));
+        assert!(
+            pairs
+                .iter()
+                .any(|(r, t)| r.is_infinite() && t.iter().all(|x| x.is_finite()))
+        );
+        assert!(rounded.iter().any(|r| r.is_nan()));
+    }
+    // Merging: special values, and pairs that cancel exactly.
+    let merges = i::merge_terms(Extreme);
+    assert!(
+        merges
+            .iter()
+            .any(|(a, b)| a.iter().chain(b).any(|x| !x.is_finite()))
+    );
+    let cancels =
+        |(a, b): &(Vec<f64>, Vec<f64>)| a.iter().zip(b).all(|(x, y)| x.to_bits() == (-y).to_bits());
+    assert!(merges.iter().any(cancels));
+}

@@ -1089,6 +1089,206 @@ pub mod rng {
     );
 }
 
+/// Double-double arithmetic.
+pub mod dd {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("dd/two_prod_fma/typical"))]
+    #[bench::extreme(leak("dd/two_prod_fma/extreme"))]
+    fn two_prod_fma(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("dd/from_sum/typical"))]
+    #[bench::extreme(leak("dd/from_sum/extreme"))]
+    fn from_sum(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("dd/exact_product/typical"))]
+    #[bench::extreme(leak("dd/exact_product/extreme"))]
+    fn exact_product(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("dd/from_i64/typical"))]
+    fn from_i64(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("dd/from_i128/typical"))]
+    #[bench::overflow(leak("dd/from_i128/overflow"))]
+    fn from_i128(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("dd/sign/typical"))]
+    fn sign(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("dd/negate/typical"))]
+    fn negate(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("dd/abs/typical"))]
+    fn abs(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("dd/add/typical"))]
+    #[bench::extreme(leak("dd/add/extreme"))]
+    fn add(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("dd/add_f64/typical"))]
+    #[bench::extreme(leak("dd/add_f64/extreme"))]
+    fn add_f64(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("dd/mul_f64/typical"))]
+    #[bench::extreme(leak("dd/mul_f64/extreme"))]
+    fn mul_f64(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("dd/mul/typical"))]
+    #[bench::extreme(leak("dd/mul/extreme"))]
+    fn mul(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("dd/div_f64/typical"))]
+    #[bench::extreme(leak("dd/div_f64/extreme"))]
+    fn div_f64(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("dd/div/typical"))]
+    #[bench::extreme(leak("dd/div/extreme"))]
+    fn div(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("dd/sqrt/typical"))]
+    #[bench::extreme(leak("dd/sqrt/extreme"))]
+    fn sqrt(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("dd/round_shifted/typical"))]
+    #[bench::extreme(leak("dd/round_shifted/extreme"))]
+    #[bench::overflow(leak("dd/round_shifted/overflow"))]
+    fn round_shifted(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("dd/cmp/typical"))]
+    fn cmp(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = dd;
+        benchmarks = two_prod_fma, from_sum, exact_product, from_i64, from_i128, sign, negate, abs, add, add_f64, mul_f64, mul, div_f64, div, sqrt, round_shifted, cmp
+    );
+}
+
+/// The exact sum of doubles.
+pub mod exact_sum {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("exact_sum/add/typical"))]
+    #[bench::extreme(leak("exact_sum/add/extreme"))]
+    fn add(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("exact_sum/add_slice/typical"))]
+    #[bench::extreme(leak("exact_sum/add_slice/extreme"))]
+    fn add_slice(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("exact_sum/add_iter/typical"))]
+    #[bench::extreme(leak("exact_sum/add_iter/extreme"))]
+    fn add_iter(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("exact_sum/merge/typical"))]
+    #[bench::extreme(leak("exact_sum/merge/extreme"))]
+    fn merge(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("exact_sum/round/typical"))]
+    #[bench::extreme(leak("exact_sum/round/extreme"))]
+    fn round(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("exact_sum/round_ieee/typical"))]
+    #[bench::extreme(leak("exact_sum/round_ieee/extreme"))]
+    fn round_ieee(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = exact_sum;
+        benchmarks = add, add_slice, add_iter, merge, round, round_ieee
+    );
+}
+
 /// The growth checks: each scale benchmark at n, 2n and 4n limbs.
 pub mod growth {
     use super::*;
