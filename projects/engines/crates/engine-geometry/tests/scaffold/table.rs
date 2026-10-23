@@ -397,14 +397,7 @@ const SAME_LAYER: &[(&str, &str)] = &[
 ];
 
 /// Dependencies on crates under way in other pieces, added when each merges.
-const PENDING: &[Pending<'static>] = &[Pending {
-    dep: "math",
-    piece: "G03",
-    crates: concat!(
-        "bvh nurbs curve surface topo intersect poly 2d mesh spatial subd field cloud ",
-        "skeleton make sketch terrain align draw format exchange ifc step dxf 3dm meshio",
-    ),
-}];
+const PENDING: &[Pending<'static>] = &[];
 
 /// The facade reaches threads only through `geom-pool`, behind its `threads` feature (27).
 const FEATURE_GATES: &[FeatureGate<'static>] = &[FeatureGate {
