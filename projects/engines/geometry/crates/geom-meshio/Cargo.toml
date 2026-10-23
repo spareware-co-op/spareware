@@ -7,9 +7,10 @@ license.workspace = true
 description = "Spare Kit geometry kernel: geometry to and from glTF, OBJ, STL, PLY and 3MF."
 
 [dependencies]
+geom-run = { path = "../geom-run", default-features = false }
 # Exactly this crate's row of chapter 27's proposed crate table, checked by the scaffold test
 # in engine-geometry (tests/scaffold).
-# Still to add when they merge: geom-run (G04), geom-math (G03).
+# Still to add when they merge: geom-math (G03).
 geom-exchange = { path = "../geom-exchange" }
 geom-format = { path = "../geom-format" }
 geom-heal = { path = "../geom-heal" }

@@ -91,7 +91,7 @@ flowchart LR
 | Moving in and out | Author and journal exports, past papers from ORCID | RES-A21 |
 | Conferences (later) | Calls for papers, bidding, discussion and bulk decisions | RES-A22 |
 
-## What it uses from the shared kit
+## What it uses from Spare Kit
 
 Spare Research is a thin layer of research rules on the kit. It never depends on another program.
 

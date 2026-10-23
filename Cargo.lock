@@ -275,6 +275,7 @@ dependencies = [
  "geom-name",
  "geom-num",
  "geom-op",
+ "geom-run",
  "geom-topo",
 ]
 
@@ -289,6 +290,7 @@ dependencies = [
  "geom-mesh",
  "geom-num",
  "geom-op",
+ "geom-run",
  "geom-subd",
  "geom-surface",
  "geom-topo",
@@ -302,6 +304,7 @@ dependencies = [
  "geom-name",
  "geom-num",
  "geom-op",
+ "geom-run",
  "geom-sweep",
 ]
 
@@ -312,6 +315,7 @@ dependencies = [
  "geom-intersect",
  "geom-num",
  "geom-op",
+ "geom-run",
  "geom-spatial",
  "geom-surface",
  "geom-topo",
@@ -326,6 +330,7 @@ dependencies = [
  "geom-intersect",
  "geom-num",
  "geom-op",
+ "geom-run",
  "geom-surface",
  "geom-topo",
 ]
@@ -341,6 +346,7 @@ dependencies = [
  "geom-num",
  "geom-op",
  "geom-poly",
+ "geom-run",
  "geom-topo",
 ]
 
@@ -349,6 +355,7 @@ name = "geom-bvh"
 version = "0.0.0"
 dependencies = [
  "geom-num",
+ "geom-run",
 ]
 
 [[package]]
@@ -358,6 +365,7 @@ dependencies = [
  "geom-intersect",
  "geom-num",
  "geom-op",
+ "geom-run",
  "geom-topo",
 ]
 
@@ -369,6 +377,7 @@ dependencies = [
  "geom-num",
  "geom-nurbs",
  "geom-op",
+ "geom-run",
  "geom-spatial",
  "geom-surface",
 ]
@@ -384,6 +393,7 @@ dependencies = [
  "geom-mesh",
  "geom-num",
  "geom-op",
+ "geom-run",
  "geom-subd",
 ]
 
@@ -400,6 +410,7 @@ dependencies = [
  "geom-num",
  "geom-nurbs",
  "geom-op",
+ "geom-run",
  "geom-spatial",
  "geom-subd",
  "geom-sweep",
@@ -413,6 +424,7 @@ dependencies = [
  "geom-num",
  "geom-nurbs",
  "geom-op",
+ "geom-run",
 ]
 
 [[package]]
@@ -427,6 +439,7 @@ dependencies = [
  "geom-name",
  "geom-num",
  "geom-op",
+ "geom-run",
  "geom-spatial",
  "geom-surface",
  "geom-topo",
@@ -444,6 +457,7 @@ dependencies = [
  "geom-mesh",
  "geom-num",
  "geom-op",
+ "geom-run",
  "geom-subd",
  "geom-sweep",
  "geom-topo",
@@ -460,6 +474,7 @@ dependencies = [
  "geom-num",
  "geom-op",
  "geom-p21",
+ "geom-run",
  "geom-surface",
  "geom-topo",
 ]
@@ -473,6 +488,7 @@ dependencies = [
  "geom-mesh",
  "geom-num",
  "geom-op",
+ "geom-run",
  "geom-surface",
 ]
 
@@ -490,6 +506,7 @@ dependencies = [
  "geom-num",
  "geom-op",
  "geom-poly",
+ "geom-run",
  "geom-sketch",
  "geom-subd",
  "geom-surface",
@@ -505,6 +522,7 @@ dependencies = [
  "geom-mesh",
  "geom-num",
  "geom-op",
+ "geom-run",
  "geom-topo",
 ]
 
@@ -525,6 +543,7 @@ dependencies = [
  "geom-op",
  "geom-p21",
  "geom-poly",
+ "geom-run",
  "geom-surface",
  "geom-sweep",
  "geom-terrain",
@@ -540,6 +559,7 @@ dependencies = [
  "geom-num",
  "geom-nurbs",
  "geom-op",
+ "geom-run",
  "geom-surface",
 ]
 
@@ -553,6 +573,7 @@ dependencies = [
  "geom-format",
  "geom-num",
  "geom-op",
+ "geom-run",
  "geom-terrain",
 ]
 
@@ -571,6 +592,7 @@ dependencies = [
  "geom-curve",
  "geom-num",
  "geom-op",
+ "geom-run",
  "geom-surface",
  "geom-topo",
 ]
@@ -587,6 +609,7 @@ dependencies = [
  "geom-num",
  "geom-op",
  "geom-poly",
+ "geom-run",
  "geom-surface",
  "geom-topo",
 ]
@@ -601,6 +624,7 @@ dependencies = [
  "geom-mesh",
  "geom-num",
  "geom-op",
+ "geom-run",
  "geom-subd",
 ]
 
@@ -610,6 +634,7 @@ version = "0.0.0"
 dependencies = [
  "geom-num",
  "geom-op",
+ "geom-run",
  "geom-topo",
 ]
 
@@ -617,6 +642,7 @@ dependencies = [
 name = "geom-num"
 version = "0.0.0"
 dependencies = [
+ "geom-run",
  "libm",
  "num-bigint",
  "num-integer",
@@ -632,6 +658,7 @@ dependencies = [
  "geom-linalg",
  "geom-num",
  "geom-op",
+ "geom-run",
 ]
 
 [[package]]
@@ -642,6 +669,7 @@ dependencies = [
  "geom-intersect",
  "geom-num",
  "geom-op",
+ "geom-run",
  "geom-skeleton",
  "geom-surface",
  "geom-topo",
@@ -652,6 +680,7 @@ name = "geom-op"
 version = "0.0.0"
 dependencies = [
  "geom-num",
+ "geom-run",
 ]
 
 [[package]]
@@ -661,6 +690,7 @@ dependencies = [
  "geom-format",
  "geom-num",
  "geom-op",
+ "geom-run",
 ]
 
 [[package]]
@@ -675,6 +705,7 @@ dependencies = [
  "geom-num",
  "geom-op",
  "geom-poly",
+ "geom-run",
  "geom-surface",
  "geom-topo",
 ]
@@ -685,12 +716,16 @@ version = "0.0.0"
 dependencies = [
  "geom-num",
  "geom-op",
+ "geom-run",
  "geom-topo",
 ]
 
 [[package]]
 name = "geom-pool"
 version = "0.0.0"
+dependencies = [
+ "geom-run",
+]
 
 [[package]]
 name = "geom-profile"
@@ -702,8 +737,16 @@ dependencies = [
  "geom-name",
  "geom-num",
  "geom-op",
+ "geom-run",
  "geom-sketch",
  "geom-topo",
+]
+
+[[package]]
+name = "geom-run"
+version = "0.0.0"
+dependencies = [
+ "proptest",
 ]
 
 [[package]]
@@ -714,6 +757,7 @@ dependencies = [
  "geom-num",
  "geom-op",
  "geom-poly",
+ "geom-run",
  "geom-topo",
 ]
 
@@ -725,6 +769,7 @@ dependencies = [
  "geom-linalg",
  "geom-num",
  "geom-op",
+ "geom-run",
 ]
 
 [[package]]
@@ -737,6 +782,7 @@ dependencies = [
  "geom-num",
  "geom-op",
  "geom-poly",
+ "geom-run",
 ]
 
 [[package]]
@@ -752,6 +798,7 @@ dependencies = [
  "geom-op",
  "geom-p21",
  "geom-poly",
+ "geom-run",
  "geom-surface",
  "geom-topo",
 ]
@@ -763,6 +810,7 @@ dependencies = [
  "geom-num",
  "geom-nurbs",
  "geom-op",
+ "geom-run",
  "geom-surface",
 ]
 
@@ -774,6 +822,7 @@ dependencies = [
  "geom-num",
  "geom-nurbs",
  "geom-op",
+ "geom-run",
 ]
 
 [[package]]
@@ -787,6 +836,7 @@ dependencies = [
  "geom-num",
  "geom-op",
  "geom-poly",
+ "geom-run",
  "geom-skeleton",
  "geom-surface",
  "geom-topo",
@@ -805,6 +855,7 @@ dependencies = [
  "geom-num",
  "geom-op",
  "geom-poly",
+ "geom-run",
  "geom-skeleton",
  "geom-surface",
  "geom-topo",
@@ -817,6 +868,7 @@ dependencies = [
  "geom-curve",
  "geom-num",
  "geom-op",
+ "geom-run",
  "geom-surface",
 ]
 

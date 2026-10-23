@@ -4,13 +4,13 @@
 
 Spareware is free software for everyone, built together with the spare weekly AI tokens contributors don't finish. It is international: every app is for anyone, anywhere. On the apps where people earn a living, the workers keep all of the profit except the running costs. Workers vote on their own app's fees and rules, and major changes go to a vote of members as a poll in Discussions. Every app is practical and easy to use.
 
-Each program has a feature map, read top-down: areas, then what a person can do in each, then the buildable parts, each marked **core** (needed for a first usable release), **next** or **later**. Every program is built on the shared kit and the shared engines, and no program depends on another. How they fit together is in [ARCHITECTURE.md](ARCHITECTURE.md); the work boards are in [STATUS.md](STATUS.md).
+Each program has a feature map, read top-down: areas, then what a person can do in each, then the buildable parts, each marked **core** (needed for a first usable release), **next** or **later**. Every program is built on Spare Kit, and no program depends on another. How they fit together is in [ARCHITECTURE.md](ARCHITECTURE.md); the work boards are in [STATUS.md](STATUS.md).
 
 ## Every program
 
 | Program | Replaces | Areas | Features | Parts | Core parts | Feature map | Demo |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Shared kit and co-op portal, with the shared engines | The parts every platform rebuilds or rents | 28 | 369 | 765 | 656 | [projects/kit/FEATURES.md](projects/kit/FEATURES.md) | [Demo](https://spareware.app/kit/) |
+| Spare Kit and co-op portal | The parts every platform rebuilds or rents | 28 | 369 | 765 | 656 | [projects/kit/FEATURES.md](projects/kit/FEATURES.md) | [Demo](https://spareware.app/kit/) |
 | Spare Construct | Revit, and the add-ins people buy for it | 24 | 194 | 639 | 340 | [projects/spare-construct/FEATURES.md](projects/spare-construct/FEATURES.md) | [Demo](https://spareware.app/spare-construct/) |
 | Spare Studio (working name) | Adobe's apps | 21 | 202 | 562 | 320 | [projects/spare-studio/FEATURES.md](projects/spare-studio/FEATURES.md) | [Demo](https://spareware.app/spare-studio/) |
 | Spare Social (working name) | TikTok, YouTube, Instagram and Facebook | 23 | 199 | 525 | 345 | [projects/spare-social/FEATURES.md](projects/spare-social/FEATURES.md) | [Demo](https://spareware.app/spare-social/) |
@@ -25,9 +25,9 @@ Each program has a feature map, read top-down: areas, then what a person can do 
 | Spare Market | Trade Me, eBay, Etsy, Shopify | 22 | 177 | 388 | 157 | [projects/spare-market/FEATURES.md](projects/spare-market/FEATURES.md) | [Demo](https://spareware.app/spare-market/) |
 | **All maps** |  | **288** | **2728** | **6466** | **4257** |  |  |
 
-Core parts are the parts of core features. The shared kit row includes the shared engines (KIT-A27), which are built in `projects/engines` and mapped in the kit's map so every program has one place to depend on. The demos are published on the [Spareware site](https://spareware.app/).
+Core parts are the parts of core features. The Spare Kit row includes the engines (KIT-A27), which are built in `projects/engines` and mapped in the kit's map so every program has one place to depend on. The demos are published on the [Spareware site](https://spareware.app/).
 
-## What each program takes from the shared kit
+## What each program takes from Spare Kit
 
 Each number is how many of that program's parts depend on that kit area, either by part ID or by the crate, service or engine the area builds. A blank means none. The maps were checked on 2026-10-19: every dependency resolves, and no program depends on another program.
 
@@ -85,7 +85,7 @@ A lean for discussion, from what the maps show. The first marketplace is decided
 
 ## Feature maps and demos
 
-- **Shared kit and co-op portal, with the shared engines:** [feature map](projects/kit/FEATURES.md) · [demo](https://spareware.app/kit/)
+- **Spare Kit and co-op portal:** [feature map](projects/kit/FEATURES.md) · [demo](https://spareware.app/kit/)
 - **Spare Construct:** [feature map](projects/spare-construct/FEATURES.md) · [demo](https://spareware.app/spare-construct/)
 - **Spare Studio (working name):** [feature map](projects/spare-studio/FEATURES.md) · [demo](https://spareware.app/spare-studio/)
 - **Spare Social (working name):** [feature map](projects/spare-social/FEATURES.md) · [demo](https://spareware.app/spare-social/)

@@ -2,7 +2,7 @@
 
 *Working name. Stage: Mapping. Every choice below is open until an owner accepts a decision note.*
 
-Spare Studio is one creative suite that replaces Adobe's apps: photo, vector, layout, video, motion, raw photos, PDF, audio and more. Every app shares one studio core (layers, non-destructive edits, colour, text, GPU image pipeline) on top of the Spareware shared kit, so each app is a thin layer of its own tools. Partner first: [ArtCraft](https://github.com/storytold) already builds most of these from scratch in Rust under Apache-2.0, and we want to invite it under the Spareware umbrella before building our own.
+Spare Studio is one creative suite that replaces Adobe's apps: photo, vector, layout, video, motion, raw photos, PDF, audio and more. Every app shares one studio core (layers, non-destructive edits, colour, text, GPU image pipeline) on top of Spare Kit, so each app is a thin layer of its own tools. Partner first: [ArtCraft](https://github.com/storytold) already builds most of these from scratch in Rust under Apache-2.0, and we want to invite it under the Spareware umbrella before building our own.
 
 ## Why not just use what's free already
 
@@ -38,7 +38,7 @@ Our products use their own names. Adobe's names appear only to say what each rep
 
 | Part | What it does | Shared with |
 | --- | --- | --- |
-| Document model | Layers, groups, masks, artboards and pages; every edit is a non-destructive operation, so undo, history, sync and AI use one path | Same operation log as the shared kit |
+| Document model | Layers, groups, masks, artboards and pages; every edit is a non-destructive operation, so undo, history, sync and AI use one path | Same operation log as Spare Kit |
 | GPU image pipeline | Filters, adjustments, blending, raw development and video effects as GPU compute (wgpu) | Spare Construct's renderer |
 | Colour management | ICC profiles for print and photo, OpenColorIO (BSD-3) for video and film | All studio apps |
 | Vector engine | Paths, strokes, 2D booleans, text on paths | Spare Construct's 2D drawing engine |

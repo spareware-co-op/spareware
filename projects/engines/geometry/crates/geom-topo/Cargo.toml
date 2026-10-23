@@ -7,9 +7,10 @@ license.workspace = true
 description = "Spare Kit geometry kernel: topology in arenas, the builder and attributes."
 
 [dependencies]
+geom-run = { path = "../geom-run", default-features = false }
 # Exactly this crate's row of chapter 27's proposed crate table, checked by the scaffold test
 # in engine-geometry (tests/scaffold).
-# Still to add when they merge: geom-run (G04), geom-math (G03).
+# Still to add when they merge: geom-math (G03).
 geom-curve = { path = "../geom-curve" }
 geom-num = { path = "../geom-num" }
 geom-op = { path = "../geom-op" }
