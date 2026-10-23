@@ -111,8 +111,12 @@ use sha256::{Sha256, hex};
 /// updates this constant, says which, and is approved by a kernel owner.
 ///
 /// It replaced the corpus's 64-bit FNV-1a golden, `0x8643_5a99_5463_851e`, when the hash moved to
-/// SHA-256 (chapter 28.13): both are hashes of the same bytes, so no result changed.
-const GOLDEN: &str = "d79932a18468bf79d55bdb204597c001ad9b512c5000fae5e87d7db01a72f126";
+/// SHA-256 (chapter 28.13): both are hashes of the same bytes, so no result changed. It replaced
+/// `d79932a1…72f126` when piece G05 made `geom_num::math::sinpi` and `cospi` correctly rounded
+/// (ports of CORE-MATH in place of an msun-method approximation): only the two sections that build
+/// rotations from them changed, `transform` (`6773dadd…852b18` before) and `boxes`
+/// (`2e8f3297…bc7e3e` before); every other section's digest is the same.
+const GOLDEN: &str = "dd9daf8861292fda5cd2de1d789a6f9739a4672145c9756cdc5299a6fe772ab6";
 
 /// The corpus makes at least this many calls into the crate.
 const MIN_CALLS: u64 = 30_000;
