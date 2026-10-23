@@ -615,7 +615,9 @@ mod repository {
             .filter(|r| observed.packages.contains_key(r.name))
             .map(|r| r.name)
             .collect();
-        assert_eq!(present.len(), 45, "{present:?}");
+        // 44 scaffold crates, the facade and geom-pool, plus geom-run (G04), geom-math (G03) and the
+        // development crates geom-test, geom-fuzz and geom-gen (G11) now that they have merged.
+        assert_eq!(present.len(), 50, "{present:?}");
     }
 
     // -------------------------------------------------------------- chapter 27, row by row
@@ -1078,6 +1080,11 @@ mod repository {
     }
 
     #[test]
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "the process id only names this test's own temporary 
+              folder so parallel runs do not collide; nothing the kernel computes depends on it"
+    )]
     fn the_clippy_configuration_is_the_one_clippy_reads() {
         // clippy 1.99.0, run on a probe crate, reads `.clippy.toml` before `clippy.toml` in one
         // folder (warning that it ignores the other), and the nearest folder above a crate that

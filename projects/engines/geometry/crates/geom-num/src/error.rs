@@ -54,9 +54,10 @@ pub enum NumError {
     /// the ceiling is an error that rolls back, never silent growth), or would be too large to
     /// count.
     ToleranceExceeded,
-    /// An enclosure needs a maths function (sine, cosine, arctangent, exponential, logarithm) whose
-    /// error is not yet proven. `libm` does not prove its error bounds, so an interval built from
-    /// its results would not be a certificate. Proven versions are build piece G47.
+    /// An enclosure needs a maths function whose error is not proven, or whose interval version is
+    /// not built yet: the sine and cosine of radians, which only `libm` supplies, without a proven
+    /// bound, and the arctangent of a box. An interval built without that proof would not be a
+    /// certificate. The certified interval functions are `sinpi`, `cospi`, `exp` and `ln`.
     UnprovenMaths,
 }
 
@@ -94,9 +95,9 @@ impl fmt::Display for NumError {
             NumError::ToleranceExceeded => {
                 f.write_str("a bound would exceed its tolerance ceiling")
             }
-            NumError::UnprovenMaths => {
-                f.write_str("an enclosure needs a maths function whose error is not yet proven")
-            }
+            NumError::UnprovenMaths => f.write_str(
+                "an enclosure needs a maths function that has no certified enclosure yet",
+            ),
         }
     }
 }

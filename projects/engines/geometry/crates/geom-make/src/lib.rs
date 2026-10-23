@@ -25,8 +25,6 @@
 //!
 //! Its direct dependencies are its row in chapter 30.5's amendment to chapter 27's crate table,
 //! checked by the scaffold test in `engine-geometry` (`tests/scaffold`).
-//! Direct dependencies still to add when geom-run merges (G04): geom-run.
-//! Direct dependencies still to add when geom-math merges (G03): geom-math.
 //!
 //! Proposed in chapter 30, pending the owner's decision G08.
 //!

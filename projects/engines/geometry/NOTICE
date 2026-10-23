@@ -1,0 +1,88 @@
+Spare Kit geometry kernel: notices
+==================================
+
+The geometry kernel (projects/engines/geometry) is Spare Kit's own work under the Mozilla Public
+License 2.0 (LICENSE at the repository root), except where a file says it is ported from an
+outside source. This file holds the licence text of every outside source the kernel takes code
+from, and the credit owed to each, as rule 4 of section 29.20 of the kernel's architecture
+(chapter 29, sources and licences) requires. It ships with every binary built from the kernel.
+
+Each entry gives the source's name, how the kernel takes it (section 29.1), its link pinned to a
+commit, its licence as the source states it, the kernel files that take from it with the origin
+files each comes from, the origin's copyright lines copied exactly, any further credit, and the
+licence text in full. Each ported file also starts with its origin files' notices in full.
+
+The notices of the crates compiled into a shipped binary, such as libm, are not kept here: they
+go in the generated third-party notices file (rule 4).
+
+
+CORE-MATH
+---------
+
+Name:      CORE-MATH, correctly rounded mathematical functions (Inria)
+Project:   https://core-math.gitlabpages.inria.fr/
+Taken as:  PORT (section 29.1)
+Link:      https://gitlab.inria.fr/core-math/core-math/-/tree/0ce0cbc15935e24c656280e5a46c34e89f301b7a
+Commit:    0ce0cbc15935e24c656280e5a46c34e89f301b7a
+Licence:   MIT (SPDX-License-Identifier: MIT), as the repository's LICENSE file states; its text
+           is reproduced in full below, from
+           https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/LICENSE
+           Each ported file below is SPDX-License-Identifier: MPL-2.0 AND MIT.
+
+Ported files, under projects/engines/geometry/crates/geom-num/src/math/, each with the origin
+files it ports (paths in the CORE-MATH repository at the commit above) and their copyright lines:
+
+  sincospi.rs   src/binary64/sinpi/sinpi.c
+                  Copyright (c) 2023-2026 Alexei Sibidanov <sibid@uvic.ca>.
+                src/binary64/cospi/cospi.c
+                  Copyright (c) 2023-2026 Alexei Sibidanov <sibid@uvic.ca>.
+
+  exp.rs        src/binary64/exp/exp.c
+                  Copyright (c) 2022-2026 Alexei Sibidanov <sibid@uvic.ca>.
+
+  log.rs        src/binary64/log/log.c
+                  Copyright (c) 2022 INRIA and CERN.
+                  Authors: Paul Zimmermann and Tom Hubrecht.
+                src/binary64/log/dint.h
+                  Copyright (c) 2022 CERN.
+                  Author: Tom Hubrecht
+
+  atan2.rs      src/binary64/atan2/atan2.c
+                  Copyright (c) 2024-2025 Paul Zimmermann and Alexei Sibidanov
+                src/binary64/atan2/tint.h
+                  Copyright (c) 2023-2024 Paul Zimmermann and Alexei Sibidanov
+
+Test data, under projects/engines/geometry/crates/geom-num/tests/ (never compiled into a
+shipped binary): samples of CORE-MATH's lists of hard-to-round inputs. Those lists carry the MIT
+permission notice below and no copyright line of their own.
+
+  math_sinpi_cospi.rs   src/binary64/sinpi/sinpi.wc and src/binary64/cospi/cospi.wc
+  attack_g05.rs         src/binary64/sinpi/sinpi.wc (its set (b))
+  math_exp_ln.rs        src/binary64/exp/exp.wc and src/binary64/log/log.wc
+  math_atan2.rs         src/binary64/atan2/atan2.wc
+
+Credit: atan2.c credits Silviu-Ioan Filip, who designed the code that generates its rational
+approximation of atan(z) over (0, 1), which atan2.rs ports.
+
+Licence text (LICENSE at the commit above):
+
+The CORE-MATH code is distributed under the following license
+(MIT license, https://spdx.org/licenses/MIT).
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

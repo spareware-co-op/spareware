@@ -6,7 +6,8 @@
 //! crate's own dev-dependencies, every path to every package) and takes the packages the crate
 //! brings in itself: every package in the tree outside the subtrees of our own path crates, whose
 //! headers record theirs. Each must have a permissive licence (`geom_test::licence`), our own crates
-//! must be MPL-2.0, and each must appear in a record of the crate's `Licences` section under an
+//! must be MPL-2.0 (or MPL-2.0 AND permissive licences, for a crate that holds code ported under
+//! them, as geom-num holds CORE-MATH's under MIT), and each must appear in a record of the crate's `Licences` section under an
 //! expression of the same meaning. A record naming a package the crate does not bring in fails too,
 //! so the records can neither fall behind nor run ahead of `Cargo.lock`.
 
@@ -130,6 +131,30 @@ fn brought_in(krate: &str) -> (BTreeMap<String, BTreeSet<String>>, BTreeMap<Stri
     (outside, ours)
 }
 
+/// Whether one of our crates' licence is MPL-2.0: alone, or with permissive licences beside it
+/// (`MPL-2.0 AND MIT`), for code ported into the crate under its own licence.
+fn ours_is_mpl(licence: &str) -> bool {
+    let mpl = |e: &Expr| matches!(e, Expr::Licence { id, exception: None } if id == "MPL-2.0");
+    match Expr::parse(licence) {
+        Ok(e) if mpl(&e) => true,
+        Ok(Expr::And(terms)) => {
+            terms.iter().any(mpl) && terms.iter().all(|t| mpl(t) || t.permissive())
+        }
+        _ => false,
+    }
+}
+
+#[test]
+fn our_crates_are_mpl_with_only_permissive_licences_beside_it() {
+    assert!(ours_is_mpl("MPL-2.0"));
+    assert!(ours_is_mpl("MPL-2.0 AND MIT"));
+    assert!(ours_is_mpl("MIT AND MPL-2.0"));
+    assert!(!ours_is_mpl("MIT"));
+    assert!(!ours_is_mpl("MPL-2.0 OR MIT"));
+    assert!(!ours_is_mpl("MPL-2.0 AND GPL-3.0-only"));
+    assert!(!ours_is_mpl("MPL-2.0 WITH LLVM-exception"));
+}
+
 #[cfg_attr(
     target_family = "wasm",
     ignore = "runs cargo as a child process, which WebAssembly cannot"
@@ -140,9 +165,9 @@ fn every_outside_package_is_permissive_and_recorded() {
     for krate in CRATES {
         let (outside, ours) = brought_in(krate);
         for (name, licence) in &ours {
-            if licence != "MPL-2.0" {
+            if !ours_is_mpl(licence) {
                 problems.push(format!(
-                    "{krate}: our crate {name} is {licence}, not MPL-2.0"
+                    "{krate}: our crate {name} is {licence}, not MPL-2.0 (with only permissive                      licences beside it)"
                 ));
             }
         }

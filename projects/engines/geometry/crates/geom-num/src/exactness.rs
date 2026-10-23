@@ -73,6 +73,18 @@ const fn in_finer_step(
     }
 }
 
+/// A count of `from` steps as a count of `to` steps, exactly, in `u128`, for `to` at least as fine
+/// as `from`: the factor is 1, 25 or 625, so the product is below 2^64 · 2^10 = 2^74 and always
+/// fits. `None` only if `to` is coarser than `from`.
+const fn in_step_u128(count: Steps, from: GridStep, to: GridStep) -> Option<u128> {
+    // Widening casts of u32 and u64 into u128: lossless (`u128::from` is not const).
+    let (coarse, fine) = (from.quarter_nm() as u128, to.quarter_nm() as u128);
+    match (coarse.checked_rem(fine), coarse.checked_div(fine)) {
+        (Some(0), Some(factor)) => (count.0 as u128).checked_mul(factor),
+        _ => None,
+    }
+}
+
 /// The sum of two bounds, in the finer of their steps; `None` if it does not fit.
 const fn sum(a: Steps, a_step: GridStep, b: Steps, b_step: GridStep) -> Option<(Steps, GridStep)> {
     match in_finer_step(a, a_step, b, b_step) {
@@ -148,16 +160,30 @@ impl Exactness {
     /// The class itself if its bound is at most `ceiling` steps of `step`, compared exactly in the
     /// finer of the two steps; `Exact` always passes.
     ///
+    /// The comparison is in `u128`, where neither count can overflow: a `u64` count times the
+    /// largest conversion factor, 625, is below 2^74. So a small bound on a fine step is compared
+    /// correctly with a large ceiling on a coarse one (one step of `Q2` against 2^60 steps of `Q0`
+    /// passes), which a comparison in `u64` would get wrong.
+    ///
     /// # Errors
     ///
-    /// [`NumError::ToleranceExceeded`] if the bound is above the ceiling, or does not fit a `u64`
-    /// count in the finer step (so is far above any ceiling).
+    /// [`NumError::ToleranceExceeded`] if the bound is above the ceiling.
     pub const fn within(self, ceiling: Steps, step: GridStep) -> Result<Exactness, NumError> {
         let Some((bound, bound_step)) = self.bound() else {
             return Ok(self);
         };
-        match in_finer_step(bound, bound_step, ceiling, step) {
-            Some((bound, ceiling, _)) if bound.0 <= ceiling.0 => Ok(self),
+        let finer = if bound_step.rung() >= step.rung() {
+            bound_step
+        } else {
+            step
+        };
+        // Both conversions are to a step at least as fine as their own, so neither is `None`;
+        // were one ever `None`, the ceiling is not shown to hold, and that is reported.
+        match (
+            in_step_u128(bound, bound_step, finer),
+            in_step_u128(ceiling, step, finer),
+        ) {
+            (Some(bound), Some(ceiling)) if bound <= ceiling => Ok(self),
             _ => Err(NumError::ToleranceExceeded),
         }
     }
@@ -289,6 +315,49 @@ mod tests {
         assert_eq!(huge, Err(NumError::ToleranceExceeded));
         assert_eq!(
             c(u64::MAX, Q0).within(Steps(1), Q1),
+            Err(NumError::ToleranceExceeded)
+        );
+    }
+
+    /// A ceiling whose count in the finer step does not fit `u64` is still compared exactly: one
+    /// step of `Q2` is far inside 2^60 steps of `Q0` (found by G06's review, where the comparison
+    /// in `u64` overflowed and reported the bound as exceeding the ceiling).
+    #[test]
+    fn large_ceilings_on_coarse_steps_are_compared_exactly() {
+        use GridStep::{Q0, Q1, Q2};
+        assert_eq!(c(1, Q2).within(Steps(1 << 60), Q0), Ok(c(1, Q2)));
+        assert_eq!(a(1, Q2).within(Steps(u64::MAX), Q0), Ok(a(1, Q2)));
+        assert_eq!(
+            c(u64::MAX, Q2).within(Steps(u64::MAX), Q0),
+            Ok(c(u64::MAX, Q2))
+        );
+        assert_eq!(
+            c(u64::MAX, Q1).within(Steps(u64::MAX), Q0),
+            Ok(c(u64::MAX, Q1))
+        );
+        // The boundary, both ways round: u64::MAX steps of Q0 are u64::MAX · 625 steps of Q2.
+        assert_eq!(
+            c(u64::MAX, Q0).within(Steps(u64::MAX), Q0),
+            Ok(c(u64::MAX, Q0))
+        );
+        assert_eq!(c(25, Q1).within(Steps(1), Q0), Ok(c(25, Q1)));
+        assert_eq!(
+            c(26, Q1).within(Steps(1), Q0),
+            Err(NumError::ToleranceExceeded)
+        );
+        assert_eq!(c(625, Q2).within(Steps(1), Q0), Ok(c(625, Q2)));
+        assert_eq!(
+            c(626, Q2).within(Steps(1), Q0),
+            Err(NumError::ToleranceExceeded)
+        );
+        // A bound on a coarse step against a ceiling on a finer one.
+        assert_eq!(c(1, Q0).within(Steps(625), Q2), Ok(c(1, Q0)));
+        assert_eq!(
+            c(1, Q0).within(Steps(624), Q2),
+            Err(NumError::ToleranceExceeded)
+        );
+        assert_eq!(
+            c(u64::MAX, Q0).within(Steps(u64::MAX), Q2),
             Err(NumError::ToleranceExceeded)
         );
     }

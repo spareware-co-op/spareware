@@ -397,26 +397,7 @@ const SAME_LAYER: &[(&str, &str)] = &[
 ];
 
 /// Dependencies on crates under way in other pieces, added when each merges.
-const PENDING: &[Pending<'static>] = &[
-    Pending {
-        dep: "run",
-        piece: "G04",
-        crates: concat!(
-            "num op bvh nurbs curve surface topo name intersect check poly bool 2d mesh spatial ",
-            "subd field cloud skeleton sweep make blend offset sketch profile terrain align draw ",
-            "convert combine panel analysis format exchange p21 heal ifc step dxf 3dm meshio ",
-            "landxml pool",
-        ),
-    },
-    Pending {
-        dep: "math",
-        piece: "G03",
-        crates: concat!(
-            "bvh nurbs curve surface topo intersect poly 2d mesh spatial subd field cloud ",
-            "skeleton make sketch terrain align draw format exchange ifc step dxf 3dm meshio",
-        ),
-    },
-];
+const PENDING: &[Pending<'static>] = &[];
 
 /// The facade reaches threads only through `geom-pool`, behind its `threads` feature (27).
 const FEATURE_GATES: &[FeatureGate<'static>] = &[FeatureGate {
@@ -425,13 +406,9 @@ const FEATURE_GATES: &[FeatureGate<'static>] = &[FeatureGate {
     feature: "threads",
 }];
 
-/// Header fields missing from crates this piece may not edit.
-const HEADER_GAPS: &[HeaderGap<'static>] = &[HeaderGap {
-    krate: "num",
-    field: Field::Layer,
-    reason: "G02 wrote geom-num's header before chapter 27's layer table; the next piece that \
-             edits geom-num adds its Layer line and deletes this entry",
-}];
+/// Header fields missing from crates this piece may not edit. None now: G02 added geom-num's
+/// Layer line, the last gap.
+const HEADER_GAPS: &[HeaderGap<'static>] = &[];
 
 /// Inside kernel crates the only published crate used as it is, is `libm` (29.1), and every maths
 /// function reaches the kernel through `geom_num::math` (21), so only `geom-num` names it. The

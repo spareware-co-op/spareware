@@ -23,9 +23,11 @@
 //!
 //! - **Inclusion**, as above, for `add`, `sub`, `mul`, `div`, `mul_add`, `square`, `sqrt`, `norm`
 //!   and `neg`. These are built from the operations IEEE 754 rounds correctly, so one step outward
-//!   is a proven enclosure. An enclosure that needs a function whose error `libm` does not prove
-//!   (`sin`, `cos`, `atan2`, `exp`, `ln`) is refused with [`NumError::UnprovenMaths`] until proven
-//!   versions exist (build piece G47).
+//!   is a proven enclosure. The same holds for `sinpi`, `cospi`, `exp` and `ln`, built from the
+//!   correctly rounded functions of [`crate::math`] in `math/enclose.rs`, which carries their
+//!   proofs. An enclosure that needs a function whose error is not proven (the radian `sin` and
+//!   `cos`, which only `libm` supplies) or whose interval version is not built yet (`atan2`) is
+//!   refused with [`NumError::UnprovenMaths`].
 //! - **Finite, ordered, never NaN.** Both bounds are finite and `lo ≤ hi`. An operation whose
 //!   widened bound would leave the finite doubles (a rounded bound that reaches
 //!   ±(2 − 2^−52) · 2^1023 or overflows) returns [`NumError::NotFinite`] instead.
@@ -36,8 +38,9 @@
 //!   the upper bound at most the double above the smallest double at or above the exact upper
 //!   bound. A bound that is exact by construction is not widened, so it is the exact bound
 //!   itself: both bounds of `neg`, the lower bound 0 of `square` over an interval holding zero,
-//!   and a zero bound of `sqrt`. `norm` chains several operations, so each of its steps is tight
-//!   in this sense but the whole is not.
+//!   a zero bound of `sqrt`, and the exact values and peaks of `sinpi`, `cospi`, `exp` and `ln`
+//!   (`math/enclose.rs`). `norm` chains several operations, so each of its steps is tight in this
+//!   sense but the whole is not.
 //!
 //!   Counted in steps, where the step at a value is the spacing of the doubles in its binade, a
 //!   computed bound is at most 2.5 steps of the exact bound outside it, at most 2 steps of the
@@ -50,7 +53,9 @@
 //! - **Deterministic.** Only IEEE 754 basic operations and comparisons, which Rust computes to IEEE
 //!   754 binary64 on every target the kernel builds for (RFC 3514, whose own exception, 32-bit x86
 //!   without SSE2, is not one of them); `next_up` and `next_down`, which are integer operations on
-//!   the bits; and the square root and fused multiply-add of [`crate::math`]. The fused
+//!   the bits; the correctly rounded `sinpi`, `cospi`, `exp` and `ln` of [`crate::math`], fixed
+//!   bit for bit by their specification; and the square root and fused multiply-add of
+//!   [`crate::math`]. The fused
 //!   multiply-add is `libm` 0.2.16's `fma`, correctly rounded as IEEE 754 requires whether `libm`
 //!   uses the processor's instruction or its own routine. That root is not Rust's but `libm`
 //!   0.2.16's `sqrt`, which is the processor's IEEE 754 square root on x86-64 (`sqrtsd`, with SSE2)
@@ -143,15 +148,16 @@ pub struct Interval {
 /// The smaller of two doubles that are not NaN; either zero when given −0 and +0, which the
 /// widening that always follows makes irrelevant (`next_down` of either zero is −2^−1074). Not
 /// [`crate::real::Real::total_min`], which orders the zeros: these are raw rounded bounds, made
-/// finite and given one zero only by [`widened`].
-const fn min2(x: f64, y: f64) -> f64 {
+/// finite and given one zero only by [`widened`], or, in the interval versions of the maths
+/// functions (`math/enclose.rs`), by [`Interval::new`], which stores a zero bound as +0.
+pub(crate) const fn min2(x: f64, y: f64) -> f64 {
     if y < x { y } else { x }
 }
 
 /// The larger of two doubles that are not NaN; either zero when given −0 and +0, which the widening
 /// that always follows makes irrelevant (`next_up` of either zero is +2^−1074). Not
 /// [`crate::real::Real::total_max`], for the same reason as [`min2`].
-const fn max2(x: f64, y: f64) -> f64 {
+pub(crate) const fn max2(x: f64, y: f64) -> f64 {
     if y > x { y } else { x }
 }
 
@@ -359,12 +365,13 @@ impl Interval {
         widened(lo, max2(max2(ll, lh), max2(hl, hh)))
     }
 
-    /// The sine over the interval: refused, until a sine with a proven error bound exists.
+    /// The sine of an angle in radians over the interval: refused, as no radian sine has a proven
+    /// error bound.
     ///
     /// `libm`'s sine is accurate, but its error is not proven, so an interval built from it would
-    /// not be a certificate (principle 2). Proven versions are build piece G47, which keeps this
-    /// signature. Until then, a caller that can accept an unproven value computes
-    /// [`crate::math::sin`] and marks what it makes from it
+    /// not be a certificate (principle 2). Angles in half-turns have one: [`Interval::sinpi`]
+    /// (`math/enclose.rs`), the certified form. A caller that can accept an unproven value
+    /// computes [`crate::math::unproven::sin`] and marks what it makes from it
     /// [`Approximate`](crate::exactness::Exactness::Approximate).
     ///
     /// # Errors
@@ -372,66 +379,43 @@ impl Interval {
     /// Always [`NumError::UnprovenMaths`].
     #[allow(
         clippy::unused_self,
-        reason = "refuses every interval until G47, which keeps this signature"
+        reason = "refuses every interval: no radian sine is proven; Interval::sinpi is certified"
     )]
     pub const fn sin(self) -> Result<Interval, NumError> {
         Err(NumError::UnprovenMaths)
     }
 
-    /// The cosine over the interval: refused, until a cosine with a proven error bound exists, for
-    /// the reason given on [`Interval::sin`].
+    /// The cosine of an angle in radians over the interval: refused, for the reason given on
+    /// [`Interval::sin`]. The certified form is [`Interval::cospi`], on half-turns.
     ///
     /// # Errors
     ///
     /// Always [`NumError::UnprovenMaths`].
     #[allow(
         clippy::unused_self,
-        reason = "refuses every interval until G47, which keeps this signature"
+        reason = "refuses every interval: no radian cosine is proven; Interval::cospi is certified"
     )]
     pub const fn cos(self) -> Result<Interval, NumError> {
         Err(NumError::UnprovenMaths)
     }
 
-    /// The angle of the points (x, y) for y in this interval and x in `x`: refused, until an
-    /// arctangent with a proven error bound exists, for the reason given on [`Interval::sin`].
+    /// The angle of the points (x, y) for y in this interval and x in `x`: refused, until its
+    /// interval version is built.
+    ///
+    /// The point function [`crate::math::atan2()`] has a proven error bound, but an enclosure of
+    /// its values over a box is not built yet: its extremes are at the box's corners except across
+    /// the branch cut on the negative x-axis and at the origin, which it must handle before its
+    /// result is a certificate (`math/enclose.rs`). It keeps this signature.
     ///
     /// # Errors
     ///
     /// Always [`NumError::UnprovenMaths`].
     #[allow(
         clippy::unused_self,
-        reason = "refuses every interval until G47, which keeps this signature"
+        reason = "refuses every interval until its enclosure is built, which keeps this signature"
     )]
     pub const fn atan2(self, x: Interval) -> Result<Interval, NumError> {
         let _ = x;
-        Err(NumError::UnprovenMaths)
-    }
-
-    /// e to the power of the interval: refused, until an exponential with a proven error bound
-    /// exists, for the reason given on [`Interval::sin`].
-    ///
-    /// # Errors
-    ///
-    /// Always [`NumError::UnprovenMaths`].
-    #[allow(
-        clippy::unused_self,
-        reason = "refuses every interval until G47, which keeps this signature"
-    )]
-    pub const fn exp(self) -> Result<Interval, NumError> {
-        Err(NumError::UnprovenMaths)
-    }
-
-    /// The natural logarithm over the interval: refused, until a logarithm with a proven error
-    /// bound exists, for the reason given on [`Interval::sin`].
-    ///
-    /// # Errors
-    ///
-    /// Always [`NumError::UnprovenMaths`].
-    #[allow(
-        clippy::unused_self,
-        reason = "refuses every interval until G47, which keeps this signature"
-    )]
-    pub const fn ln(self) -> Result<Interval, NumError> {
         Err(NumError::UnprovenMaths)
     }
 
@@ -736,15 +720,17 @@ mod tests {
         assert!(r.contains(-(e * e)));
     }
 
-    /// The functions whose error `libm` does not prove refuse every interval.
+    /// The enclosures that are not certified yet refuse every interval: the radian sine and
+    /// cosine, whose error `libm` does not prove, and `atan2`, whose interval version is not built.
+    /// `exp` and `ln` are certified (`math/enclose.rs`) and refuse only outside their domains.
     #[test]
     fn unproven_functions_are_refused() {
         for x in intervals() {
             assert_eq!(x.sin(), Err(NumError::UnprovenMaths));
             assert_eq!(x.cos(), Err(NumError::UnprovenMaths));
             assert_eq!(x.atan2(x), Err(NumError::UnprovenMaths));
-            assert_eq!(x.exp(), Err(NumError::UnprovenMaths));
-            assert_eq!(x.ln(), Err(NumError::UnprovenMaths));
+            assert_ne!(x.exp(), Err(NumError::UnprovenMaths));
+            assert_ne!(x.ln(), Err(NumError::UnprovenMaths));
         }
     }
 }

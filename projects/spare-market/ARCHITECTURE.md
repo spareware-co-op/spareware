@@ -11,7 +11,7 @@ Buying and selling where sellers pay only the at-cost fee, buyers' money is held
 - Scams are hard: no taking deals off the platform to avoid protection, verified sellers, clear warnings.
 - Any business can run its own online shop and in-store till at cost, replacing Shopify.
 
-## What it uses from the shared kit
+## What it uses from Spare Kit
 
 Accounts and ID checks, payments (held until delivery), matching (search), maps (local pickup), messaging, ratings and disputes, member voting, the open cost ledger, and the marketplace engine.
 
