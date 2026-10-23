@@ -16,6 +16,10 @@
 //!   `Cancelled`, never partial results, and a long item that charges stops soon after it.
 //! - Errors print what happened, with remedies, and expose the function's error as their source.
 
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests time how fast cancellation is seen; no kernel result depends on the clock"
+)]
 // The crate denies native arithmetic and lossy casts in kernel code (Cargo.toml); tests may use
 // them to build their cases and oracles.
 #![allow(
