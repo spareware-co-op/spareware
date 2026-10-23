@@ -425,6 +425,7 @@ dependencies = [
  "geom-bvh",
  "geom-curve",
  "geom-intersect",
+ "geom-math",
  "geom-name",
  "geom-num",
  "geom-op",
@@ -440,6 +441,7 @@ dependencies = [
  "geom-exchange",
  "geom-format",
  "geom-heal",
+ "geom-math",
  "geom-mesh",
  "geom-num",
  "geom-op",
@@ -454,6 +456,7 @@ name = "geom-align"
 version = "0.0.0"
 dependencies = [
  "geom-curve",
+ "geom-math",
  "geom-name",
  "geom-num",
  "geom-op",
@@ -507,6 +510,7 @@ dependencies = [
 name = "geom-bvh"
 version = "0.0.0"
 dependencies = [
+ "geom-math",
  "geom-num",
  "geom-run",
 ]
@@ -527,6 +531,7 @@ name = "geom-cloud"
 version = "0.0.0"
 dependencies = [
  "geom-linalg",
+ "geom-math",
  "geom-num",
  "geom-nurbs",
  "geom-op",
@@ -574,6 +579,7 @@ dependencies = [
 name = "geom-curve"
 version = "0.0.0"
 dependencies = [
+ "geom-math",
  "geom-num",
  "geom-nurbs",
  "geom-op",
@@ -588,6 +594,7 @@ dependencies = [
  "geom-bvh",
  "geom-curve",
  "geom-intersect",
+ "geom-math",
  "geom-mesh",
  "geom-name",
  "geom-num",
@@ -607,6 +614,7 @@ dependencies = [
  "geom-exchange",
  "geom-format",
  "geom-heal",
+ "geom-math",
  "geom-mesh",
  "geom-num",
  "geom-op",
@@ -624,6 +632,7 @@ dependencies = [
  "geom-curve",
  "geom-format",
  "geom-intersect",
+ "geom-math",
  "geom-num",
  "geom-op",
  "geom-p21",
@@ -638,6 +647,7 @@ version = "0.0.0"
 dependencies = [
  "geom-2d",
  "geom-bvh",
+ "geom-math",
  "geom-mesh",
  "geom-num",
  "geom-op",
@@ -654,6 +664,7 @@ dependencies = [
  "geom-curve",
  "geom-draw",
  "geom-field",
+ "geom-math",
  "geom-mesh",
  "geom-name",
  "geom-num",
@@ -708,6 +719,7 @@ dependencies = [
  "geom-exchange",
  "geom-format",
  "geom-heal",
+ "geom-math",
  "geom-mesh",
  "geom-num",
  "geom-op",
@@ -726,6 +738,7 @@ version = "0.0.0"
 dependencies = [
  "geom-bvh",
  "geom-curve",
+ "geom-math",
  "geom-num",
  "geom-nurbs",
  "geom-op",
@@ -760,11 +773,25 @@ version = "0.0.0"
 dependencies = [
  "geom-check",
  "geom-curve",
+ "geom-math",
  "geom-num",
  "geom-op",
  "geom-run",
  "geom-surface",
  "geom-topo",
+]
+
+[[package]]
+name = "geom-math"
+version = "0.0.0"
+dependencies = [
+ "geom-num",
+ "geom-op",
+ "num-bigint",
+ "num-integer",
+ "num-rational",
+ "num-traits",
+ "proptest",
 ]
 
 [[package]]
@@ -776,6 +803,7 @@ dependencies = [
  "geom-curve",
  "geom-intersect",
  "geom-linalg",
+ "geom-math",
  "geom-num",
  "geom-op",
  "geom-poly",
@@ -791,6 +819,7 @@ dependencies = [
  "geom-exchange",
  "geom-format",
  "geom-heal",
+ "geom-math",
  "geom-mesh",
  "geom-num",
  "geom-op",
@@ -828,6 +857,7 @@ name = "geom-nurbs"
 version = "0.0.0"
 dependencies = [
  "geom-linalg",
+ "geom-math",
  "geom-num",
  "geom-op",
  "geom-run",
@@ -886,6 +916,7 @@ dependencies = [
 name = "geom-poly"
 version = "0.0.0"
 dependencies = [
+ "geom-math",
  "geom-num",
  "geom-op",
  "geom-run",
@@ -926,6 +957,7 @@ name = "geom-skeleton"
 version = "0.0.0"
 dependencies = [
  "geom-2d",
+ "geom-math",
  "geom-num",
  "geom-op",
  "geom-poly",
@@ -939,6 +971,7 @@ version = "0.0.0"
 dependencies = [
  "geom-curve",
  "geom-linalg",
+ "geom-math",
  "geom-num",
  "geom-op",
  "geom-run",
@@ -950,6 +983,7 @@ version = "0.0.0"
 dependencies = [
  "geom-bvh",
  "geom-intersect",
+ "geom-math",
  "geom-mesh",
  "geom-num",
  "geom-op",
@@ -965,6 +999,7 @@ dependencies = [
  "geom-exchange",
  "geom-format",
  "geom-heal",
+ "geom-math",
  "geom-mesh",
  "geom-num",
  "geom-op",
@@ -979,6 +1014,7 @@ dependencies = [
 name = "geom-subd"
 version = "0.0.0"
 dependencies = [
+ "geom-math",
  "geom-num",
  "geom-nurbs",
  "geom-op",
@@ -991,6 +1027,7 @@ name = "geom-surface"
 version = "0.0.0"
 dependencies = [
  "geom-curve",
+ "geom-math",
  "geom-num",
  "geom-nurbs",
  "geom-op",
@@ -1022,6 +1059,7 @@ dependencies = [
  "geom-bool",
  "geom-bvh",
  "geom-curve",
+ "geom-math",
  "geom-mesh",
  "geom-name",
  "geom-num",
@@ -1047,6 +1085,7 @@ name = "geom-topo"
 version = "0.0.0"
 dependencies = [
  "geom-curve",
+ "geom-math",
  "geom-num",
  "geom-op",
  "geom-run",
