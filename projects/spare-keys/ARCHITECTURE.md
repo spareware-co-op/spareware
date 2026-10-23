@@ -4,7 +4,7 @@
 
 Spare Keys keeps every password, sign-in code and passkey you own in one place, free for everyone. It replaces paid password managers and separate authenticator apps (1Password, LastPass, Dashlane, Google Authenticator, Authy and similar). The one idea that makes it better: your vault is encrypted on your own device before it is stored anywhere, so nobody else, including Spareware, can ever read it, and you can take it with you in an open format at any time.
 
-Signing in to Spareware itself is already planned in the shared kit (passkeys, backup codes, a list of your devices). Spare Keys is for all your other accounts.
+Signing in to Spareware itself is already planned in Spare Kit (passkeys, backup codes, a list of your devices). Spare Keys is for all your other accounts.
 
 ## Goals
 
@@ -15,7 +15,7 @@ Signing in to Spareware itself is already planned in the shared kit (passkeys, b
 - **Share safely:** share a login with family or a team without showing the password, and hand access to a trusted person in an emergency.
 - **Leave any time:** export everything in an open, documented format, and import from the big password managers.
 
-## What it uses from the shared kit
+## What it uses from Spare Kit
 
 - Accounts and passkey sign-in, devices and recovery.
 - Sync and storage, holding encrypted data only: the server stores data it cannot read.

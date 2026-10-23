@@ -11,7 +11,7 @@ Food delivery where restaurants pay only the at-cost fee instead of a large comm
 - Menu prices match the restaurant's own prices.
 - Pickup orders cost restaurants almost nothing.
 
-## What it uses from the shared kit
+## What it uses from Spare Kit
 
 Accounts and ID checks, payments, matching and dispatch, maps and live location, messaging, ratings and disputes, member voting, the open cost ledger, and the marketplace engine.
 
