@@ -416,6 +416,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "geom-run"
+version = "0.0.0"
+dependencies = [
+ "proptest",
+]
+
+[[package]]
 name = "geom-test"
 version = "0.0.0"
 dependencies = [

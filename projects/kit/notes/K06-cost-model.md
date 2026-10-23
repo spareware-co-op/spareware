@@ -1,6 +1,6 @@
 # K06: Cost model and open cost ledger
 
-*Piece K06, shared kit. Written 2026-10-19. An estimate for planning, not a quote. The numbers are in [cost-model.json](../cost-model.json) and on the [costs page](https://spareware.app/costs.html).*
+*Piece K06, Spare Kit. Written 2026-10-19. An estimate for planning, not a quote. The numbers are in [cost-model.json](../cost-model.json) and on the [costs page](https://spareware.app/costs.html).*
 
 ## The answer in plain words
 
@@ -22,7 +22,7 @@ All figures are US dollars, excluding sales tax. Each country adds its own (GST,
 
 ## How the model works
 
-**At-cost fee per unit = fixed monthly cost / monthly volume + variable cost per unit.** Fixed means the app's own servers, the shared kit's common items (backup, bookkeeping software, monitoring, sign-in, app store fee) and a small team. The card or bank fee is passed through on top, per transaction. This matches the rule in the root [ARCHITECTURE.md](../../../ARCHITECTURE.md): the fee is last period's running cost divided by the jobs, with no margin.
+**At-cost fee per unit = fixed monthly cost / monthly volume + variable cost per unit.** Fixed means the app's own servers, Spare Kit's common items (backup, bookkeeping software, monitoring, sign-in, app store fee) and a small team. The card or bank fee is passed through on top, per transaction. This matches the rule in the root [ARCHITECTURE.md](../../../ARCHITECTURE.md): the fee is last period's running cost divided by the jobs, with no margin.
 
 - **Low:** the cheapest researched setup with light use: small rented servers (OVHcloud Sydney or Auckland, Hetzner Europe), Cloudflare R2 storage, open-source maps, search and chat on our own servers, Amazon SES email.
 - **High:** the dearest researched setup with heavy use: AWS Auckland or Azure New Zealand North plus paid services (Mapbox, Algolia, Stream Chat, Postmark, Twilio, Sumsub, AWS MediaConvert and Rekognition).
@@ -89,7 +89,7 @@ Fixed US$122 (low, Hetzner Europe) to US$540 (high, AWS Auckland). Per user: Con
 
 Fixed US$106 (low, OVHcloud Auckland mirror and build box) to US$365 (high, AWS Auckland build server plus the kit's paid services). Per computer US$0.0001 (low, updates from R2 with free bandwidth) to US$0.82 (high, 7.2 GB a month through AWS). Original research: NZ$0.0002 to NZ$1.588 per computer.
 
-### The shared kit and the people layer
+### Spare Kit and the people layer
 
 Common items on top of each app's own servers: off-site backup (US$0.70), bookkeeping software (US$21 to US$50, example Xero NZ), company filing (US$2.35), app store fee (US$8.25), a text sender number (US$1.15), and in the high case monitoring (US$48), DDoS protection (US$25), hosted sign-in (US$100) and an email plan (US$15). Total US$33 to US$251 a month. Member apps also carry account messages: US$0.0004 to US$0.23 a member a month.
 

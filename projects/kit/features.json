@@ -1,6 +1,6 @@
 {
   "program": "kit",
-  "name": "Shared kit and co-op portal",
+  "name": "Spare Kit and co-op portal",
   "replaces": "The services every platform rebuilds or rents: sign-in and identity services (such as Auth0 and Okta), map and routing services (such as Google Maps Platform and Mapbox), chat, call and notification services (such as Twilio, SendGrid, Firebase and Zoom), e-signature services (such as DocuSign), trust and safety tools, voting tools (such as Loomio and Decidim), open budget tools (such as Open Collective) and back-office systems, plus the member register and portal a co-op would otherwise run by hand.",
   "summary": "One set of libraries and services every Spareware app is built on: accounts, payments and payouts, tax, matching, maps, messaging, trust and safety, worker law, property records, member voting, the open cost ledger, sync and history, plugins and AI access, and it maps the shared engines the programs use. It also runs the member portal, where people join for free, vote and check the costs.",
   "areas": [
