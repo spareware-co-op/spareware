@@ -29,7 +29,7 @@ Spare Social removes only what the law requires to be removed, by published rule
 | Human and AI sections | Mixed feeds | Separate sections for human-made and AI-made posts; each person picks what they see |
 | Creator support | Platform revenue shares | Members tip or subscribe to creators directly; creators keep everything except payment fees |
 
-## What it uses from the shared kit
+## What it uses from Spare Kit
 
 Accounts (one Spareware login), payments (creator support), messaging, trust (reports, labels, appeals), member voting (moderator elections and rules), the open cost ledger, sync, plugins and the MCP server. Video uses the shared `engine-media`, the same video engine as Spare Studio.
 

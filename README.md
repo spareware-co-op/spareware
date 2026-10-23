@@ -20,7 +20,7 @@ Big platforms take a large cut from the people who do the work, and design and o
 
 To build on Spareware, add a program, a plugin, a country pack or a language, read [EXTENDING.md](EXTENDING.md): how it stays open and expandable for decades.
 
-Every program sits on one shared kit, so each new app gets accounts, payments, AI access and the open cost ledger from day one, and a fix to the kit improves every app at once. The full map is [ARCHITECTURE.md](ARCHITECTURE.md).
+Every program sits on Spare Kit, so each new app gets accounts, payments, AI access and the open cost ledger from day one, and a fix to the kit improves every app at once. The full map is [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ```mermaid
 flowchart TB
@@ -79,7 +79,7 @@ flowchart TB
   end
   CMD["`**One command layer per app**
 *people, AI agents and add-ins all use the same path*`"]
-  KIT["`**Shared kit**
+  KIT["`**Spare Kit**
 *accounts, payments, matching, maps, messaging, ratings, member voting, open cost ledger, sync, plugins*`"]
   RUN["`**Servers run at cost**
 *any member group can host its own*`"]
@@ -97,7 +97,7 @@ flowchart TB
 
 | Program | Replaces | Stage | Architecture |
 | --- | --- | --- | --- |
-| Shared kit | The parts every platform rebuilds | Mapping | [Map](ARCHITECTURE.md) · [Work board](projects/kit/STATUS.md) |
+| Spare Kit | The parts every platform rebuilds | Mapping | [Map](ARCHITECTURE.md) · [Work board](projects/kit/STATUS.md) |
 | Spare Construct | Revit, and the add-ins people buy for it | Mapping | [Map](projects/spare-construct/ARCHITECTURE.md) · [Work board](projects/spare-construct/STATUS.md) |
 | Spare Studio (working name) | Adobe's apps: Photoshop, Illustrator, InDesign, Premiere, After Effects, Lightroom, Acrobat and more | Mapping | [Map](projects/spare-studio/ARCHITECTURE.md) · [Work board](projects/spare-studio/STATUS.md) |
 | Spare Social (working name) | TikTok, YouTube, Instagram and Facebook, together | Mapping | [Map](projects/spare-social/ARCHITECTURE.md) · [Work board](projects/spare-social/STATUS.md) |

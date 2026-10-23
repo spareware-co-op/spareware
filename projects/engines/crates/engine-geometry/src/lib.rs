@@ -1,11 +1,11 @@
-//! Shared engine: geometry core.
+//! Spare Kit engine: the geometry kernel's stable public facade.
 //!
-//! The one 3D core every program builds on. Exact predicates, flat-faced solids,
-//! extrude, sweep, revolve, blend and robust booleans, porting Manifold's published
-//! method; curved surfaces later behind the same interface. Turns exact solids into
-//! triangle meshes for the renderer, and holds the spatial index for fast "what is
-//! near what" queries (clash, snapping, simulation, streaming).
-//! Used by Spare Construct (every discipline, civil ground included), Spare Studio's
-//! 3D app and the simulation engine.
-//! Map: Spare Construct, "Geometry kernel". Waits on research: piece A01.
-//! No code yet: this crate waits until its first program reaches the Design stage.
+//! The one geometry kernel every Spareware program builds on, for everything anyone
+//! models: 2D drafting, building solids, survey and civil, mechanical parts, Class-A
+//! surfaces, circuit boards, subdivision surfaces, fields, meshes and point clouds.
+//! Exact where it decides topology (integer grid, exact predicates), certified where
+//! exact is impossible, deterministic on every target, persistently named, headless.
+//! This crate is the only one programs depend on; the kernel's internal crates live in
+//! projects/engines/geometry/crates (geom-*).
+//! Map: projects/kit/notes/G01-geometry-kernel.md (decision note, piece G01).
+//! No code yet: this crate waits until an owner accepts G01.
