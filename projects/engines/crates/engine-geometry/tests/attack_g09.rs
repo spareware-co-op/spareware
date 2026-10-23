@@ -615,8 +615,8 @@ mod repository {
             .filter(|r| observed.packages.contains_key(r.name))
             .map(|r| r.name)
             .collect();
-        // 44 scaffold crates, the facade and geom-pool, plus geom-run now that G04 has merged.
-        assert_eq!(present.len(), 46, "{present:?}");
+        // 44 scaffold crates, the facade and geom-pool, plus geom-run (G04) and the development crates geom-test, geom-fuzz and geom-gen (G11) now that they have merged.
+        assert_eq!(present.len(), 49, "{present:?}");
     }
 
     // -------------------------------------------------------------- chapter 27, row by row
