@@ -9,6 +9,7 @@ license.workspace = true
 description = "Spare Kit geometry kernel: the numbers layer. Grid coordinates, fixed-width integers, exact predicates, intervals, deterministic maths and the tolerance ladder."
 
 [dependencies]
+geom-run = { path = "../geom-run", default-features = false }
 # The only source of maths functions (sin, cos, atan2, exp and so on): pure Rust, the same
 # result on every target. MIT OR Apache-2.0.
 libm = "0.2.16"
