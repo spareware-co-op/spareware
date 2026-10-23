@@ -93,11 +93,13 @@ impl fmt::Display for Case {
 const TDNE: &[Class] = &[Typical, Degenerate, NearlyDegenerate, Extreme];
 /// Classes of `Plane::through` and `Tpi::new`.
 const TDE: &[Class] = &[Typical, Degenerate, Extreme];
-/// Classes of checked wide-integer arithmetic.
+/// Classes of checked wide-integer arithmetic, of the random draws and of cutting stream ranges.
 const TEO: &[Class] = &[Typical, Extreme, Overflow];
-/// Classes of most floating-point operations, `Tpi::homogeneous`, `coarsen` and comparisons.
+/// Classes of most floating-point operations, `Tpi::homogeneous`, `coarsen`, comparisons and
+/// starting a stream at a block.
 const TE: &[Class] = &[Typical, Extreme];
-/// Classes of conversions that can fail: in range, and out of range.
+/// Classes of conversions that can fail, and of a stream range's stream by index: in range, and
+/// out of range.
 const TO: &[Class] = &[Typical, Overflow];
 /// The class of operations with a single path, or whose paths one batch covers in rotation.
 const T: &[Class] = &[Typical];
@@ -216,10 +218,20 @@ pub static OPS: &[Op] = &[
     Op { group: "math", name: "round_ties_even", measures: "math::round_ties_even", classes: TE, prepare: |c| bind(inputs::math::round_ties_even(c), kernels::math::round_ties_even) },
     Op { group: "math", name: "sinpi", measures: "math::sinpi", classes: TE, prepare: |c| bind(inputs::math::sinpi(c), kernels::math::sinpi) },
     Op { group: "math", name: "cospi", measures: "math::cospi", classes: TE, prepare: |c| bind(inputs::math::cospi(c), kernels::math::cospi) },
+    // Counter-based random numbers.
+    Op { group: "rng", name: "philox4x32_10", measures: "rng::philox4x32_10", classes: T, prepare: |c| bind(inputs::rng::philox4x32_10(c), kernels::rng::philox4x32_10) },
+    Op { group: "rng", name: "stream_from", measures: "Philox::stream_from", classes: TE, prepare: |c| bind(inputs::rng::stream_from(c), kernels::rng::stream_from) },
+    Op { group: "rng", name: "next_u32", measures: "Stream::next_u32", classes: TEO, prepare: |c| bind(inputs::rng::next_u32(c), kernels::rng::next_u32) },
+    Op { group: "rng", name: "next_u64", measures: "Stream::next_u64", classes: TEO, prepare: |c| bind(inputs::rng::next_u64(c), kernels::rng::next_u64) },
+    Op { group: "rng", name: "next_f64", measures: "Stream::next_f64", classes: TEO, prepare: |c| bind(inputs::rng::next_f64(c), kernels::rng::next_f64) },
+    Op { group: "rng", name: "below", measures: "Stream::below", classes: TEO, prepare: |c| bind(inputs::rng::below(c), kernels::rng::below) },
+    Op { group: "rng", name: "range_inclusive", measures: "Stream::range_inclusive", classes: TEO, prepare: |c| bind(inputs::rng::range_inclusive(c), kernels::rng::range_inclusive) },
+    Op { group: "rng", name: "range_philox", measures: "StreamRange::philox", classes: TO, prepare: |c| bind(inputs::rng::range_philox(c), kernels::rng::range_philox) },
+    Op { group: "rng", name: "chunk", measures: "StreamRange::chunk", classes: TEO, prepare: |c| bind(inputs::rng::chunk(c), kernels::rng::chunk) },
 ];
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 10] = [
+pub const GROUPS: [&str; 11] = [
     "predicate",
     "sign",
     "wide",
@@ -230,6 +242,7 @@ pub const GROUPS: [&str; 10] = [
     "real",
     "exactness",
     "math",
+    "rng",
 ];
 
 /// The group of the growth checks.
@@ -417,6 +430,21 @@ pub static UNMEASURED: &[(&str, &str)] = &[
     ("Exactness::bound", "one match on a three-valued enum"),
     ("Steps::checked_add", "one match on one checked addition, inside Exactness::combine's benchmark"),
     ("ladder::quarter_nm", "one checked multiplication by GridStep::quarter_nm, for reports; never on a kernel path"),
+    ("Philox::new", "raw constructor"),
+    ("Philox::seed", "field accessor"),
+    ("Philox::stream_id", "field accessor"),
+    ("Philox::key", "field accessor: the seed's two 32-bit halves"),
+    ("Philox::counter", "field accessor: the block index's and the stream id's 32-bit halves, laid out as the counter"),
+    ("Philox::block", "one call to rng::philox4x32_10, which is measured, on the counter and key Philox::counter and Philox::key lay out"),
+    ("Philox::stream", "one call to Philox::stream_from, which is measured"),
+    ("StreamRange::all", "raw constructor"),
+    ("StreamRange::seed", "field accessor"),
+    ("StreamRange::first", "field accessor"),
+    ("StreamRange::last", "field accessor"),
+    ("StreamRange::count", "one match on one checked addition, of one to last − first"),
+    ("Stream::philox", "field accessor"),
+    ("Stream::position", "field accessor"),
+    ("Stream::remaining", "field accessor: a constant, 2^66, less the position field"),
 ];
 
 #[cfg(test)]

@@ -508,3 +508,69 @@ pub mod math {
     );
     binary!(atan2, pow, hypot);
 }
+
+/// Counter-based random numbers: `geom_num::rng`. A draw moves its stream on, so each draw kernel
+/// clones the input stream and draws from the clone, leaving the batch as it was for the next pass:
+/// the clone, a copy of a few dozen bytes, is in every count of a draw.
+pub mod rng {
+    use geom_num::real::Real;
+    use geom_num::rng::{self as r, Philox, RngError, Stream, StreamRange};
+
+    use super::run;
+
+    /// `philox4x32_10` on each (counter, key) pair.
+    #[inline(never)]
+    pub fn philox4x32_10(batch: &[([u32; 4], [u32; 2])], out: &mut Vec<[u32; 4]>) {
+        run(batch, out, |&(counter, key)| r::philox4x32_10(counter, key));
+    }
+
+    /// `Philox::stream_from` on each (generator, block) pair.
+    #[inline(never)]
+    pub fn stream_from(batch: &[(Philox, u64)], out: &mut Vec<Stream>) {
+        run(batch, out, |&(philox, block)| philox.stream_from(block));
+    }
+
+    /// `Stream::next_u32` on a clone of each stream.
+    #[inline(never)]
+    pub fn next_u32(batch: &[Stream], out: &mut Vec<Result<u32, RngError>>) {
+        run(batch, out, |stream| stream.clone().next_u32());
+    }
+
+    /// `Stream::next_u64` on a clone of each stream.
+    #[inline(never)]
+    pub fn next_u64(batch: &[Stream], out: &mut Vec<Result<u64, RngError>>) {
+        run(batch, out, |stream| stream.clone().next_u64());
+    }
+
+    /// `Stream::next_f64` on a clone of each stream.
+    #[inline(never)]
+    pub fn next_f64(batch: &[Stream], out: &mut Vec<Result<Real, RngError>>) {
+        run(batch, out, |stream| stream.clone().next_f64());
+    }
+
+    /// `Stream::below` on a clone of each stream, with its bound.
+    #[inline(never)]
+    pub fn below(batch: &[(Stream, u64)], out: &mut Vec<Result<u64, RngError>>) {
+        run(batch, out, |(stream, bound)| stream.clone().below(*bound));
+    }
+
+    /// `Stream::range_inclusive` on a clone of each stream, with its two ends.
+    #[inline(never)]
+    pub fn range_inclusive(batch: &[(Stream, u64, u64)], out: &mut Vec<Result<u64, RngError>>) {
+        run(batch, out, |(stream, low, high)| {
+            stream.clone().range_inclusive(*low, *high)
+        });
+    }
+
+    /// `StreamRange::philox` on each (range, index) pair.
+    #[inline(never)]
+    pub fn range_philox(batch: &[(StreamRange, u64)], out: &mut Vec<Result<Philox, RngError>>) {
+        run(batch, out, |&(range, index)| range.philox(index));
+    }
+
+    /// `StreamRange::chunk` on each (range, index, size) triple.
+    #[inline(never)]
+    pub fn chunk(batch: &[(StreamRange, u64, u64)], out: &mut Vec<Result<StreamRange, RngError>>) {
+        run(batch, out, |&(range, index, size)| range.chunk(index, size));
+    }
+}

@@ -9,8 +9,9 @@
 //! predicates on typical, degenerate, nearly degenerate and extreme inputs; fixed-width integer
 //! arithmetic, comparison and conversion at every width the kernel uses; planes, the points where
 //! three planes meet, and committing them to the grid; the error-free transformations; interval
-//! arithmetic; grid coordinates and grid steps; total order on doubles; exactness classes; and the
-//! deterministic maths functions. Public functions of `geom-num` without a benchmark of their own
+//! arithmetic; grid coordinates and grid steps; total order on doubles; exactness classes; the
+//! deterministic maths functions; and the counter-based random numbers (the Philox4x32-10 block,
+//! a stream's draws, and stream ranges). Public functions of `geom-num` without a benchmark of their own
 //! are listed with the reason in [`catalogue::UNMEASURED`], and a test keeps that list complete.
 //!
 //! Map: chapter 23.13 (benchmarks and regression gates) and 28.14 (benchmarks in the test suite)

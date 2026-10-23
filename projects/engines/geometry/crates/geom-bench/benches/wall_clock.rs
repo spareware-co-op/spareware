@@ -115,6 +115,12 @@ fn math(bencher: Bencher, case: Case) {
     time_case(bencher, case);
 }
 
+/// Counter-based random numbers.
+#[divan::bench(args = cases_in("rng"))]
+fn rng(bencher: Bencher, case: Case) {
+    time_case(bencher, case);
+}
+
 /// The scale benchmarks at n, 2n and 4n limbs.
 #[divan::bench(args = growth_cases())]
 fn growth(bencher: Bencher, case: GrowthCase) {

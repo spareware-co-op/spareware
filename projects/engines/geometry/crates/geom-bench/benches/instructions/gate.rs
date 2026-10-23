@@ -1002,6 +1002,93 @@ pub mod math {
     );
 }
 
+/// Counter-based random numbers.
+pub mod rng {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("rng/philox4x32_10/typical"))]
+    fn philox4x32_10(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("rng/stream_from/typical"))]
+    #[bench::extreme(leak("rng/stream_from/extreme"))]
+    fn stream_from(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("rng/next_u32/typical"))]
+    #[bench::extreme(leak("rng/next_u32/extreme"))]
+    #[bench::overflow(leak("rng/next_u32/overflow"))]
+    fn next_u32(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("rng/next_u64/typical"))]
+    #[bench::extreme(leak("rng/next_u64/extreme"))]
+    #[bench::overflow(leak("rng/next_u64/overflow"))]
+    fn next_u64(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("rng/next_f64/typical"))]
+    #[bench::extreme(leak("rng/next_f64/extreme"))]
+    #[bench::overflow(leak("rng/next_f64/overflow"))]
+    fn next_f64(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("rng/below/typical"))]
+    #[bench::extreme(leak("rng/below/extreme"))]
+    #[bench::overflow(leak("rng/below/overflow"))]
+    fn below(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("rng/range_inclusive/typical"))]
+    #[bench::extreme(leak("rng/range_inclusive/extreme"))]
+    #[bench::overflow(leak("rng/range_inclusive/overflow"))]
+    fn range_inclusive(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("rng/range_philox/typical"))]
+    #[bench::overflow(leak("rng/range_philox/overflow"))]
+    fn range_philox(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("rng/chunk/typical"))]
+    #[bench::extreme(leak("rng/chunk/extreme"))]
+    #[bench::overflow(leak("rng/chunk/overflow"))]
+    fn chunk(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = rng;
+        benchmarks = philox4x32_10, stream_from, next_u32, next_u64, next_f64, below, range_inclusive, range_philox, chunk
+    );
+}
+
 /// The growth checks: each scale benchmark at n, 2n and 4n limbs.
 pub mod growth {
     use super::*;

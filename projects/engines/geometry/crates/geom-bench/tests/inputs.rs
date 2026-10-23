@@ -1331,3 +1331,132 @@ fn maths_inputs_stay_in_each_domain() {
         .count();
     assert!(exact >= BATCH / 4);
 }
+
+/// Whether Lemire's method rejects the first word a draw of `below(n)` from `stream` takes: the
+/// low half of w · n is below 2^64 mod n.
+fn first_word_rejected(stream: &geom_num::rng::Stream, n: u64) -> bool {
+    let w = stream.clone().next_u64().unwrap();
+    let low = (u128::from(w) * u128::from(n)) % (1 << 64);
+    n != 0 && low < (1u128 << 64) % u128::from(n)
+}
+
+#[test]
+fn rng_classes_take_every_path() {
+    use geom_num::rng::{RngError, Seed, StreamId};
+    use inputs::rng as r;
+    const END: u128 = 1 << 66;
+    // stream_from: every combination of 0 and 2^64 − 1 for the seed, the stream id and the block.
+    let ends: BTreeSet<(u64, u64, u64)> = r::stream_from(Extreme)
+        .iter()
+        .map(|(p, b)| (p.seed().0, p.stream_id().0, *b))
+        .collect();
+    assert_eq!(ends.len(), 8);
+    assert!(
+        ends.iter()
+            .all(|&(s, i, b)| [s, i, b].iter().all(|&v| v == 0 || v == u64::MAX))
+    );
+    // The draws: typical streams at all four places of a block, far from the end, so one draw in
+    // four computes the next block; extreme streams in their last block with enough words left;
+    // overflow streams with too few.
+    let words_needed = [
+        (r::next_u32 as fn(Class) -> Vec<_>, 1),
+        (r::next_u64, 2),
+        (r::next_f64, 2),
+    ];
+    for (build, words) in words_needed {
+        let places: BTreeSet<u128> = build(Typical).iter().map(|s| s.position() % 4).collect();
+        assert_eq!(places.len(), 4);
+        assert!(build(Typical).iter().all(|s| s.remaining() > END / 4));
+        let left: BTreeSet<u128> = build(Extreme).iter().map(|s| s.remaining()).collect();
+        assert_eq!(left, (words..=4).collect());
+        let left: BTreeSet<u128> = build(Overflow).iter().map(|s| s.remaining()).collect();
+        assert_eq!(left, (0..words).collect());
+    }
+    // below: typical bounds of every size up to about 2^40, never rejected; the extreme bounds,
+    // with words really rejected; overflow streams with too few words for a 64-bit draw.
+    let typical = r::below(Typical);
+    assert!(
+        typical
+            .iter()
+            .all(|&(_, n)| (2..=(1 << 40) + 1).contains(&n))
+    );
+    assert!(typical.iter().any(|&(_, n)| n < 1 << 8) && typical.iter().any(|&(_, n)| n > 1 << 32));
+    let extreme = r::below(Extreme);
+    for wanted in [0, 1, u64::MAX, (1 << 63) + 1] {
+        assert!(extreme.iter().any(|&(_, n)| n == wanted), "{wanted}");
+    }
+    assert!(
+        extreme
+            .iter()
+            .any(|(s, n)| *n > 1 << 63 && first_word_rejected(s, *n))
+    );
+    assert!(r::below(Overflow).iter().all(|(s, _)| s.remaining() < 2));
+    // range_inclusive: the same, and the whole of u64, one value, and an empty range.
+    let typical = r::range_inclusive(Typical);
+    assert!(
+        typical
+            .iter()
+            .all(|&(_, lo, hi)| lo <= hi && hi - lo < 1 << 41)
+    );
+    let extreme = r::range_inclusive(Extreme);
+    assert!(extreme.iter().any(|&(_, lo, hi)| (lo, hi) == (0, u64::MAX)));
+    assert!(extreme.iter().any(|&(_, lo, hi)| lo == hi));
+    assert!(extreme.iter().any(|&(_, lo, hi)| lo > hi));
+    assert!(extreme.iter().any(|(s, lo, hi)| {
+        hi.checked_sub(*lo) == Some(1 << 63) && first_word_rejected(s, (1 << 63) + 1)
+    }));
+    assert!(
+        r::range_inclusive(Overflow)
+            .iter()
+            .all(|(s, _, _)| s.remaining() < 2)
+    );
+    // range_philox: inside the range, then past its last stream, including a first id plus an
+    // index past 2^64 − 1.
+    for (range, index) in r::range_philox(Typical) {
+        assert!(range.philox(index).is_ok());
+    }
+    let past = r::range_philox(Overflow);
+    assert!(
+        past.iter().all(|(range, index)| matches!(
+            range.philox(*index),
+            Err(RngError::TooFewStreams { .. })
+        ))
+    );
+    assert!(
+        past.iter()
+            .any(|(range, index)| range.first().0.checked_add(*index).is_none())
+    );
+    // chunk: inside the range; the last chunks of a whole range and a chunk of no streams; past
+    // the range, including an index times a size past 2^64 − 1.
+    for (range, index, size) in r::chunk(Typical) {
+        assert!(range.chunk(index, size).is_ok());
+    }
+    let extreme = r::chunk(Extreme);
+    let lasts: BTreeSet<(u64, u64)> = extreme
+        .iter()
+        .filter_map(|(range, index, size)| range.chunk(*index, *size).ok())
+        .map(|c| (c.first().0, c.last().0))
+        .collect();
+    let expected = [(1 << 63, u64::MAX), (0, u64::MAX - 1), (u64::MAX, u64::MAX)];
+    assert_eq!(lasts, expected.into_iter().collect());
+    assert!(
+        extreme
+            .iter()
+            .any(|(range, index, size)| range.chunk(*index, *size) == Err(RngError::EmptyChunk))
+    );
+    let past = r::chunk(Overflow);
+    assert!(past.iter().all(|(range, index, size)| matches!(
+        range.chunk(*index, *size),
+        Err(RngError::TooFewStreams { .. })
+    )));
+    assert!(
+        past.iter()
+            .any(|(_, index, size)| index.checked_mul(*size).is_none())
+    );
+    // Every typical seed and stream id is its own: no two inputs share a stream.
+    let streams: BTreeSet<(Seed, StreamId)> = r::next_u32(Typical)
+        .iter()
+        .map(|s| (s.philox().seed(), s.philox().stream_id()))
+        .collect();
+    assert_eq!(streams.len(), BATCH);
+}

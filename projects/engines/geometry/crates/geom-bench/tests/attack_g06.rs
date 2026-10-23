@@ -66,6 +66,7 @@ use geom_num::grid::{self, COORD_MAX, Coord, GridStep, P2, P3, Rounded, Steps};
 use geom_num::interval::Interval;
 use geom_num::plane::{Plane, Tpi};
 use geom_num::real::Real;
+use geom_num::rng::{self as rng, Philox, RngError, Seed, Stream, StreamId, StreamRange};
 use geom_num::wide::Wide;
 use geom_num::{Exactness, NumError, Sign, eft, math, predicate};
 
@@ -1027,6 +1028,36 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 .map(|(c, f, t)| grid::coarsen(c, f, t)),
         ),
         ("math", _) => math_digest(name, class)?,
+        ("rng", _) => rng_digest(name, class)?,
+        _ => return None,
+    })
+}
+
+/// The digest of the random-number benchmark `name` on `class`, from direct calls on its inputs.
+fn rng_digest(name: &str, class: Class) -> Option<Digest> {
+    use inputs::rng as i;
+    Some(match name {
+        "philox4x32_10" => fold(
+            i::philox4x32_10(class)
+                .into_iter()
+                .map(|(c, k)| rng::philox4x32_10(c, k)),
+        ),
+        "stream_from" => fold(
+            i::stream_from(class)
+                .into_iter()
+                .map(|(p, b)| p.stream_from(b)),
+        ),
+        "next_u32" => fold(i::next_u32(class).into_iter().map(|mut s| s.next_u32())),
+        "next_u64" => fold(i::next_u64(class).into_iter().map(|mut s| s.next_u64())),
+        "next_f64" => fold(i::next_f64(class).into_iter().map(|mut s| s.next_f64())),
+        "below" => fold(i::below(class).into_iter().map(|(mut s, n)| s.below(n))),
+        "range_inclusive" => fold(
+            i::range_inclusive(class)
+                .into_iter()
+                .map(|(mut s, lo, hi)| s.range_inclusive(lo, hi)),
+        ),
+        "range_philox" => fold(i::range_philox(class).into_iter().map(|(r, k)| r.philox(k))),
+        "chunk" => fold(i::chunk(class).into_iter().map(|(r, k, n)| r.chunk(k, n))),
         _ => return None,
     })
 }
@@ -2056,6 +2087,241 @@ fn fma_is_correctly_rounded_and_powi_is_pow_on_every_input() {
                 math::powi(x, n),
                 math::pow(x, f64::from(n)),
                 "powi({x:e}, {n})"
+            );
+        }
+    }
+}
+
+// ------------------------------------------------------------------------------------------------
+// Counter-based random numbers: an independent Philox4x32-10, and the draws as `geom_num::rng`
+// defines them.
+// ------------------------------------------------------------------------------------------------
+
+/// 2^32.
+const TWO_32: u64 = 1 << 32;
+
+/// The words in one stream: 2^64 blocks of four.
+const STREAM_WORDS: u128 = 1 << 66;
+
+/// Philox4x32-10 (Salmon, Moraes, Dror and Shaw, "Parallel random numbers: as easy as 1, 2, 3",
+/// SC 2011, <https://doi.org/10.1145/2063384.2063405>), in 64-bit arithmetic: each product of two
+/// 32-bit words is exact in 64 bits, its high word is the quotient by 2^32 and its low word the
+/// remainder; before every round but the first the key steps by the Weyl constants, modulo 2^32.
+fn philox_oracle(counter: [u32; 4], key: [u32; 2]) -> [u32; 4] {
+    const MUL: [u64; 2] = [0xD251_1F53, 0xCD9E_8D57];
+    const WEYL: [u64; 2] = [0x9E37_79B9, 0xBB67_AE85];
+    let mut x = counter.map(u64::from);
+    let mut k = key.map(u64::from);
+    for round in 0..10 {
+        if round > 0 {
+            k = [(k[0] + WEYL[0]) % TWO_32, (k[1] + WEYL[1]) % TWO_32];
+        }
+        let (p0, p1) = (MUL[0] * x[0], MUL[1] * x[2]);
+        x = [
+            (p1 / TWO_32) ^ x[1] ^ k[0],
+            p1 % TWO_32,
+            (p0 / TWO_32) ^ x[3] ^ k[1],
+            p0 % TWO_32,
+        ];
+    }
+    x.map(|w| u32::try_from(w).unwrap())
+}
+
+/// A 64-bit value's low and high 32-bit words.
+fn halves(v: u64) -> [u32; 2] {
+    [
+        u32::try_from(v % TWO_32).unwrap(),
+        u32::try_from(v / TWO_32).unwrap(),
+    ]
+}
+
+/// A stream as a seed, a stream id and a position, every word recomputed by [`philox_oracle`] in
+/// the layout `geom_num::rng` documents: word p is word p mod 4 of block p / 4, whose counter is
+/// the block index's low and high words then the stream id's, keyed by the seed's low and high
+/// words.
+struct StreamModel {
+    seed: u64,
+    stream: u64,
+    pos: u128,
+}
+
+impl StreamModel {
+    fn of(s: &Stream) -> StreamModel {
+        StreamModel {
+            seed: s.philox().seed().0,
+            stream: s.philox().stream_id().0,
+            pos: s.position(),
+        }
+    }
+
+    fn exhausted(&self) -> RngError {
+        RngError::Exhausted {
+            stream: StreamId(self.stream),
+        }
+    }
+
+    /// The next word, or `Exhausted` past the stream's 2^66 words.
+    fn word(&mut self) -> Result<u32, RngError> {
+        if self.pos >= STREAM_WORDS {
+            return Err(self.exhausted());
+        }
+        let block = u64::try_from(self.pos / 4).unwrap();
+        let [b0, b1] = halves(block);
+        let [s0, s1] = halves(self.stream);
+        let words = philox_oracle([b0, b1, s0, s1], halves(self.seed));
+        let word = words[usize::try_from(self.pos % 4).unwrap()];
+        self.pos += 1;
+        Ok(word)
+    }
+
+    /// The next two words, low then high, or `Exhausted` with fewer than two left.
+    fn word64(&mut self) -> Result<u64, RngError> {
+        if self.pos + 2 > STREAM_WORDS {
+            return Err(self.exhausted());
+        }
+        let low = u64::from(self.word()?);
+        Ok(low + u64::from(self.word()?) * TWO_32)
+    }
+
+    /// The top 53 bits of the next 64-bit word, times 2^−53.
+    fn unit(&mut self) -> Result<Real, RngError> {
+        let k = self.word64()? >> 11;
+        // k < 2^53 converts exactly, and dividing by 2^53 only moves the exponent.
+        #[allow(clippy::cast_precision_loss, reason = "k is below 2^53, so exact")]
+        let x = k as f64 / 9_007_199_254_740_992.0;
+        Ok(Real::new(x).unwrap())
+    }
+
+    /// Lemire's method (2019, <https://doi.org/10.1145/3230636>): a word w gives ⌊w · n / 2^64⌋
+    /// unless the low half of w · n is below 2^64 mod n, when the next word is drawn instead.
+    fn below(&mut self, n: u64) -> Result<u64, RngError> {
+        if n == 0 {
+            return Err(RngError::ZeroBound);
+        }
+        let threshold = (1u128 << 64) % u128::from(n);
+        loop {
+            let m = u128::from(self.word64()?) * u128::from(n);
+            if m % (1u128 << 64) >= threshold {
+                return Ok(u64::try_from(m >> 64).unwrap());
+            }
+        }
+    }
+
+    /// low + below(high − low + 1), or one 64-bit word for the whole of `u64`.
+    fn range_inclusive(&mut self, low: u64, high: u64) -> Result<u64, RngError> {
+        if low > high {
+            return Err(RngError::LowAboveHigh { low, high });
+        }
+        match (high - low).checked_add(1) {
+            Some(values) => Ok(low + self.below(values)?),
+            None => self.word64(),
+        }
+    }
+}
+
+#[test]
+fn the_independent_philox_gives_random123s_known_answers() {
+    // The three philox4x32 10 lines of Random123's tests/kat_vectors
+    // (<https://github.com/DEShawResearch/random123/blob/9545ff6413f258be2f04c1d319d99aaef7521150/tests/kat_vectors>,
+    // BSD-3-Clause, "Copyright 2010-2012, D. E. Shaw Research"; test vectors are facts).
+    let kats: [([u32; 4], [u32; 2], [u32; 4]); 3] = [
+        (
+            [0; 4],
+            [0; 2],
+            [0x6627_e8d5, 0xe169_c58d, 0xbc57_ac4c, 0x9b00_dbd8],
+        ),
+        (
+            [u32::MAX; 4],
+            [u32::MAX; 2],
+            [0x408f_276d, 0x41c8_3b0e, 0xa20b_c7c6, 0x6d54_51fd],
+        ),
+        (
+            [0x243f_6a88, 0x85a3_08d3, 0x1319_8a2e, 0x0370_7344],
+            [0xa409_3822, 0x299f_31d0],
+            [0xd16c_fe09, 0x94fd_cceb, 0x5001_e420, 0x2412_6ea1],
+        ),
+    ];
+    for (counter, key, expected) in kats {
+        assert_eq!(philox_oracle(counter, key), expected, "{counter:x?}");
+    }
+}
+
+/// What `StreamRange::chunk` must give, as (seed, first id, last id), in exact 128-bit arithmetic.
+fn chunk_oracle(range: StreamRange, index: u64, size: u64) -> Result<(Seed, u128, u128), RngError> {
+    let (first, last) = (u128::from(range.first().0), u128::from(range.last().0));
+    let start = first + u128::from(index) * u128::from(size);
+    match (start + u128::from(size)).checked_sub(1) {
+        _ if size == 0 => Err(RngError::EmptyChunk),
+        Some(end) if end <= last => Ok((range.seed(), start, end)),
+        _ => Err(RngError::TooFewStreams {
+            first: range.first(),
+            last: range.last(),
+        }),
+    }
+}
+
+#[test]
+fn every_random_number_result_matches_the_independent_philox() {
+    use inputs::rng as i;
+    for class in Class::ALL {
+        for (counter, key) in i::philox4x32_10(class) {
+            assert_eq!(
+                rng::philox4x32_10(counter, key),
+                philox_oracle(counter, key)
+            );
+        }
+        for (philox, block) in i::stream_from(class) {
+            let mut stream = philox.stream_from(block);
+            assert_eq!(stream.philox(), philox);
+            assert_eq!(stream.position(), u128::from(block) * 4);
+            // The block the stream holds is the right one: its first word is the oracle's.
+            let mut model = StreamModel::of(&stream);
+            assert_eq!(stream.next_u32(), model.word(), "{philox:?} {block}");
+        }
+        for mut s in i::next_u32(class) {
+            let mut model = StreamModel::of(&s);
+            assert_eq!(s.next_u32(), model.word(), "{s:?}");
+        }
+        for mut s in i::next_u64(class) {
+            let mut model = StreamModel::of(&s);
+            assert_eq!(s.next_u64(), model.word64(), "{s:?}");
+        }
+        for mut s in i::next_f64(class) {
+            let mut model = StreamModel::of(&s);
+            assert_eq!(s.next_f64(), model.unit(), "{s:?}");
+        }
+        for (mut s, n) in i::below(class) {
+            let mut model = StreamModel::of(&s);
+            assert_eq!(s.below(n), model.below(n), "{s:?} {n}");
+        }
+        for (mut s, low, high) in i::range_inclusive(class) {
+            let mut model = StreamModel::of(&s);
+            let expected = model.range_inclusive(low, high);
+            assert_eq!(s.range_inclusive(low, high), expected, "{s:?} {low} {high}");
+        }
+        for (range, index) in i::range_philox(class) {
+            let id = u128::from(range.first().0) + u128::from(index);
+            let expected = if id <= u128::from(range.last().0) {
+                Ok(Philox::new(
+                    range.seed(),
+                    StreamId(u64::try_from(id).unwrap()),
+                ))
+            } else {
+                Err(RngError::TooFewStreams {
+                    first: range.first(),
+                    last: range.last(),
+                })
+            };
+            assert_eq!(range.philox(index), expected, "{range:?} {index}");
+        }
+        for (range, index, size) in i::chunk(class) {
+            let got = range
+                .chunk(index, size)
+                .map(|c| (c.seed(), u128::from(c.first().0), u128::from(c.last().0)));
+            assert_eq!(
+                got,
+                chunk_oracle(range, index, size),
+                "{range:?} {index} {size}"
             );
         }
     }

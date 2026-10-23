@@ -41,6 +41,7 @@ pub mod math;
 pub mod plane;
 pub mod predicate;
 pub mod real;
+pub mod rng;
 pub mod sign;
 pub mod wide;
 

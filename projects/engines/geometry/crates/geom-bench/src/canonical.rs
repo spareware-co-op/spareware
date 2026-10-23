@@ -29,6 +29,7 @@ use geom_num::grid::{Coord, GridStep, P2, P3, Rounded, Steps};
 use geom_num::interval::Interval;
 use geom_num::plane::{Plane, Tpi};
 use geom_num::real::Real;
+use geom_num::rng::{Philox, RngError, Seed, Stream, StreamId, StreamRange};
 use geom_num::wide::Wide;
 use geom_num::{Exactness, NumError, Sign};
 
@@ -68,7 +69,19 @@ impl Canonical for i64 {
     }
 }
 
+impl Canonical for u32 {
+    fn encode(&self, h: &mut Sha256) {
+        h.update(&self.to_le_bytes());
+    }
+}
+
 impl Canonical for u64 {
+    fn encode(&self, h: &mut Sha256) {
+        h.update(&self.to_le_bytes());
+    }
+}
+
+impl Canonical for u128 {
     fn encode(&self, h: &mut Sha256) {
         h.update(&self.to_le_bytes());
     }
@@ -221,6 +234,78 @@ impl Canonical for NumError {
     }
 }
 
+impl Canonical for Seed {
+    fn encode(&self, h: &mut Sha256) {
+        self.0.encode(h);
+    }
+}
+
+impl Canonical for StreamId {
+    fn encode(&self, h: &mut Sha256) {
+        self.0.encode(h);
+    }
+}
+
+impl Canonical for Philox {
+    // The seed, then the stream id: the generator's two fields (through its getters).
+    fn encode(&self, h: &mut Sha256) {
+        self.seed().encode(h);
+        self.stream_id().encode(h);
+    }
+}
+
+impl Canonical for StreamRange {
+    // The seed, the first stream id and the last (through its getters).
+    fn encode(&self, h: &mut Sha256) {
+        self.seed().encode(h);
+        self.first().encode(h);
+        self.last().encode(h);
+    }
+}
+
+impl Canonical for Stream {
+    // The generator, then the number of words drawn. A stream's other field, the block it holds,
+    // is a pure function of those two (`geom_num::rng` keeps it so after every draw), so two
+    // streams encode alike exactly when they are equal.
+    fn encode(&self, h: &mut Sha256) {
+        self.philox().encode(h);
+        self.position().encode(h);
+    }
+}
+
+impl Canonical for RngError {
+    // A tag, then the variant's fields. `RngError` is `#[non_exhaustive]`: a variant added after
+    // this was written takes tag 255, then the length and bytes of its `Debug` text, which writes
+    // every field, so the encoding stays lossless until it gets a tag of its own.
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            RngError::Exhausted { stream } => {
+                h.update(&[0]);
+                stream.encode(h);
+            }
+            RngError::ZeroBound => h.update(&[1]),
+            RngError::LowAboveHigh { low, high } => {
+                h.update(&[2]);
+                low.encode(h);
+                high.encode(h);
+            }
+            RngError::EmptyChunk => h.update(&[3]),
+            RngError::TooFewStreams { first, last } => {
+                h.update(&[4]);
+                first.encode(h);
+                last.encode(h);
+            }
+            RngError::Defect => h.update(&[5]),
+            other => {
+                let text = format!("{other:?}");
+                h.update(&[255]);
+                (text.len() as u64).encode(h);
+                h.update(text.as_bytes());
+            }
+        }
+    }
+}
+
 impl<T: Canonical + Copy> Canonical for Rounded<T> {
     // The value, then whether it is exact (the fields are private to geom-num; these are its
     // getters).
@@ -243,6 +328,21 @@ impl<T: Canonical> Canonical for Option<T> {
 }
 
 impl<T: Canonical> Canonical for Result<T, NumError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                e.encode(h);
+            }
+        }
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, RngError> {
     fn encode(&self, h: &mut Sha256) {
         match self {
             Ok(v) => {
@@ -357,6 +457,35 @@ mod tests {
         ];
         let tags: std::collections::BTreeSet<Digest> = errors.iter().map(bytes).collect();
         assert_eq!(tags.len(), errors.len());
+        // And every error of the random-number module, with its fields.
+        let errors = [
+            RngError::Exhausted {
+                stream: StreamId(0),
+            },
+            RngError::Exhausted {
+                stream: StreamId(1),
+            },
+            RngError::ZeroBound,
+            RngError::LowAboveHigh { low: 2, high: 1 },
+            RngError::LowAboveHigh { low: 3, high: 1 },
+            RngError::EmptyChunk,
+            RngError::TooFewStreams {
+                first: StreamId(0),
+                last: StreamId(5),
+            },
+            RngError::Defect,
+        ];
+        let tags: std::collections::BTreeSet<Digest> = errors.iter().map(bytes).collect();
+        assert_eq!(tags.len(), errors.len());
+        // A stream is its generator and its position: one word drawn is a different stream.
+        let philox = Philox::new(Seed(7), StreamId(9));
+        let mut drawn = philox.stream();
+        assert!(drawn.next_u32().is_ok());
+        assert_ne!(bytes(&philox.stream()), bytes(&drawn));
+        assert_ne!(bytes(&philox), bytes(&Philox::new(Seed(9), StreamId(7))));
+        let ok: Result<u32, RngError> = Ok(0);
+        let err: Result<u32, RngError> = Err(RngError::ZeroBound);
+        assert_ne!(bytes(&ok), bytes(&err));
     }
 
     #[test]
