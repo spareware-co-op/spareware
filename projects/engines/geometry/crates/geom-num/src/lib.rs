@@ -31,21 +31,29 @@
 //! - Integer arithmetic on fixed-width values in kernel code is a checked method (`checked_*`, or
 //!   in [`wide`] the `overflowing_*` limb steps, whose carry or borrow is kept), so nothing depends
 //!   on overflow checks being on: a result that does not fit is `None` or an error, never a
-//!   silently wrapped value. Two places compute modulo a power of two because a published method
-//!   defines them so, and each cites its specification: in [`rng`], Philox's multiplications and
-//!   key schedule, modulo 2^32 (its 32 × 32-bit product is formed modulo 2^64, as its reference
-//!   does, and never reaches 2^64), and Lemire's threshold, a negation modulo 2^64; and the large
-//!   accumulator inside [`exact_sum::ExactSum::add_slice`] and [`exact_sum::ExactSum::add_iter`],
-//!   which sums a double's whole bit pattern modulo 2^64, as Neal's method specifies, and recovers
-//!   the exact sum of the significands from it. There a `wrapping_*` method is the specified
-//!   operation, not a result that failed to fit. Only the compiler's evaluation of constants uses
-//!   native operators, where an overflow stops the build. Counts of steps never saturate: a
-//!   saturated bound would understate the truth.
+//!   silently wrapped value. Three kinds of step compute modulo a power of two on purpose, and
+//!   each cites what defines it so. In [`rng`], Philox's multiplications and key schedule, modulo
+//!   2^32 (its 32 × 32-bit product is formed modulo 2^64, as its reference does, and never reaches
+//!   2^64), and Lemire's threshold, a negation modulo 2^64. In the large accumulator inside
+//!   [`exact_sum::ExactSum::add_slice`] and [`exact_sum::ExactSum::add_iter`], the sum of a
+//!   double's whole bit pattern modulo 2^64, as Neal's method specifies, from which the exact sum
+//!   of the significands is recovered. In those two a `wrapping_*` method is the specified
+//!   operation, not a result that failed to fit. And in the CORE-MATH ports of [`math`], a
+//!   `wrapping_*` method where the C source computes modulo 2^64 or 2^128 on purpose, each with a
+//!   comment saying why the C does it (a two's complement negation, a sum of which only the low
+//!   bits are read, or a limb sum whose carry is kept by comparison as [`wide`] keeps its own), so
+//!   a wrap there is the computation the proof describes, never a lost value. Every other integer
+//!   step in the ports is checked too: its `None`, which each step proves cannot come, ends the
+//!   computation with the canonical NaN, which the public functions report as `NotFinite`. Only
+//!   the compiler's evaluation of constants uses native operators, where an overflow stops the
+//!   build. Counts of steps never saturate: a saturated bound would understate the truth.
 //! - No floating-point value produced here from finite inputs is NaN. [`math`] returns a
 //!   [`real::Real`] or an error; an [`interval::Interval`] has finite bounds or is refused as
 //!   `NotFinite`; [`eft`] reports a pair that is not exact with an infinite second part; a
 //!   [`dd::DD`] is finite by construction; [`exact_sum::ExactSum`] gives a `Real` or `NotFinite`;
-//!   [`rng`] draws its doubles as `Real`s in [0, 1).
+//!   [`rng`] draws its doubles as `Real`s in [0, 1). Inside [`math`], where the ports compute on
+//!   raw doubles, any NaN is the canonical `0x7ff8_0000_0000_0000`, and no public function
+//!   returns one.
 //! - Every interval operation encloses the exact result of its operation on any reals in its
 //!   operands, and an enclosure that needs a maths function without a proven error is refused
 //!   ([`NumError::UnprovenMaths`]).
@@ -60,9 +68,13 @@
 //!   nearest with ties to even, so its bits depend only on the terms, never on their order, on how
 //!   they were split into chunks, or on the order of merges.
 //! - No `unsafe`, no panics outside tests, no platform maths: every maths function comes from
-//!   [`math`], which uses the pure-Rust `libm` crate; where `libm` uses a processor instruction
-//!   instead (the square root, and the fused multiply-add where the processor has one), it is one
-//!   IEEE 754 defines exactly, so results are identical on every target.
+//!   [`math`]. `sinpi`, `cospi`, `exp`, `ln` and `atan2` are correctly rounded CORE-MATH ports
+//!   with proven error bounds, so their bits are fixed by their specification. Everything else
+//!   comes from the pure-Rust `libm` crate, the same code on every target; where `libm` uses a
+//!   processor instruction instead (the square root, and the fused multiply-add where the
+//!   processor has one), it is one IEEE 754 defines exactly, so results are identical on every
+//!   target. The `libm` functions without a proven bound are kept apart in [`math::unproven`],
+//!   and nothing in this crate uses them.
 #![cfg_attr(not(test), no_std)]
 
 pub mod dd;
