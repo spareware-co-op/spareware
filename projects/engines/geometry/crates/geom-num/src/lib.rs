@@ -2,13 +2,17 @@
 //!
 //! Everything the kernel decides about shape rests on the numbers in this crate. Its one job is
 //! numbers: where coordinates live, how "which side is this on" is answered exactly, how curved
-//! computations carry proven bounds, where maths functions come from, and the tolerance ladder.
+//! computations carry proven bounds, where maths functions come from, where a randomised method's
+//! random numbers come from (a counter-based generator keyed by explicit seeds), and the tolerance
+//! ladder.
 //!
 //! Layer: 1, Numbers and the contract (chapter 27's proposed layer table).
 //!
 //! Map: chapter 6 of the kernel architecture
 //! (`projects/engines/geometry/architecture/06-numbers.md`), with the numeric parts of chapters 9
-//! (exactness), 21 (determinism) and 28 (testing).
+//! (exactness), 21 (determinism) and 28 (testing), and the random generator chapters 16
+//! (free-form) and 17 (survey, terrain and civil) ask of this crate ([`rng`], which also holds the
+//! randomised-method rule).
 //!
 //! Invariants this crate keeps:
 //!
@@ -27,12 +31,17 @@
 //! - Integer arithmetic on fixed-width values in kernel code is a checked method (`checked_*`, or
 //!   in [`wide`] the `overflowing_*` limb steps, whose carry or borrow is kept), so nothing depends
 //!   on overflow checks being on: a result that does not fit is `None` or an error, never a
-//!   silently wrapped value. Only the compiler's evaluation of constants uses native operators,
-//!   where an overflow stops the build. Counts of steps never saturate: a saturated bound would
-//!   understate the truth.
+//!   silently wrapped value. The exception is arithmetic a published method defines modulo a power
+//!   of two, in [`rng`]: Philox's multiplications and key schedule, modulo 2^32 (its 32 × 32-bit
+//!   product is formed modulo 2^64, as its reference does, and never reaches 2^64), and Lemire's
+//!   threshold, a negation modulo 2^64. There a `wrapping_*` method is the specified operation, not
+//!   a result that failed to fit, and each place cites the specification. Only the compiler's
+//!   evaluation of constants uses native operators, where an overflow stops the build. Counts of
+//!   steps never saturate: a saturated bound would understate the truth.
 //! - No floating-point value produced here from finite inputs is NaN. [`math`] returns a
 //!   [`real::Real`] or an error; an [`interval::Interval`] has finite bounds or is refused as
-//!   `NotFinite`; [`eft`] reports a pair that is not exact with an infinite second part.
+//!   `NotFinite`; [`eft`] reports a pair that is not exact with an infinite second part; [`rng`]
+//!   draws its doubles as `Real`s in [0, 1).
 //! - Every interval operation encloses the exact result of its operation on any reals in its
 //!   operands, and an enclosure that needs a maths function without a proven error is refused
 //!   ([`NumError::UnprovenMaths`]).
@@ -54,6 +63,7 @@ pub mod math;
 pub mod plane;
 pub mod predicate;
 pub mod real;
+pub mod rng;
 pub mod sign;
 pub mod wide;
 

@@ -1079,6 +1079,11 @@ mod repository {
     }
 
     #[test]
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "the process id only names this test's own temporary 
+              folder so parallel runs do not collide; nothing the kernel computes depends on it"
+    )]
     fn the_clippy_configuration_is_the_one_clippy_reads() {
         // clippy 1.99.0, run on a probe crate, reads `.clippy.toml` before `clippy.toml` in one
         // folder (warning that it ignores the other), and the nearest folder above a crate that
