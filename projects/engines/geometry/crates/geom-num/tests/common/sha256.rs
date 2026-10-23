@@ -2,11 +2,12 @@
 //! standard's test vectors and a check of its constants against their definitions.
 //!
 //! **This is a copy** of the SHA-256 in geom-num's `tests/determinism.rs`, so that the random
-//! generator's goldens (`rng_determinism.rs`) are hashed with the same checked code. It is copied
-//! as it stands there, its two tests included; the only change is `pub` on what the golden tests
-//! call (`Sha256`, its `new`, `write` and `finish`, and `hex`). It stays a copy only until the
-//! golden store (piece G19, "Determinism matrix and golden store") holds the one shared copy that
-//! every golden test uses. Until then a fix to either copy is made to both.
+//! generator's goldens (`rng_determinism.rs`) and the double-double and exact-sum attack digest
+//! (`attack_g25.rs`) are hashed with the same checked code. It is copied as it stands there, its
+//! two tests included; the only change is `pub` on what the golden tests call (`Sha256`, its
+//! `new`, `write` and `finish`, and `hex`). It stays a copy only until the golden store (piece
+//! G19, "Determinism matrix and golden store") holds the one shared copy that every golden test
+//! uses. Until then a fix to either copy is made to both.
 
 // The crate denies native arithmetic, unwrap and unchecked indexing in kernel code (Cargo.toml);
 // this test support uses them, as `determinism.rs` does. Helpers outside `#[test]` functions are
