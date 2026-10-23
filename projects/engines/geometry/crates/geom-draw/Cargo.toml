@@ -7,10 +7,11 @@ license.workspace = true
 description = "Spare Kit geometry kernel: sections, projections and hidden lines."
 
 [dependencies]
+geom-math = { path = "../geom-math", default-features = false }
 geom-run = { path = "../geom-run", default-features = false }
 # Exactly this crate's row of chapter 27's proposed crate table, checked by the scaffold test
 # in engine-geometry (tests/scaffold).
-# Still to add when they merge: geom-math (G03).
+
 geom-2d = { path = "../geom-2d" }
 geom-bvh = { path = "../geom-bvh" }
 geom-curve = { path = "../geom-curve" }
