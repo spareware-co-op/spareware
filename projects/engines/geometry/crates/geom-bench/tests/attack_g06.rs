@@ -23,7 +23,9 @@
 //! oracle here (equal to the exact value, or for intervals enclosing it within two steps, except
 //! `Interval::norm`, whose roundings compound as `geom-num` documents: its length encloses the
 //! exact one and is, bit for bit, its documented composition of operations checked here), and so
-//! does the fused multiply-add, which IEEE 754 rounds correctly; the digests change when any
+//! does the fused multiply-add, which IEEE 754 rounds correctly; the certified enclosures of the
+//! maths functions find every peak and trough exactly (decided here in exact rationals), refuse
+//! only where documented, and hold the correctly rounded values at their ends; the digests change when any
 //! result does and do not depend on thread count or order; and the gate and workflow have each
 //! property listed above.
 //!
@@ -775,19 +777,10 @@ type Binary = (
 
 fn math_digest(name: &str, class: Class) -> Option<Digest> {
     use inputs::math as m;
-    let unary: [(&str, Unary); 18] = [
+    let unary: [(&str, Unary); 9] = [
         ("sqrt", (m::sqrt, math::sqrt)),
-        ("sin", (m::sin, math::sin)),
-        ("cos", (m::cos, math::cos)),
-        ("tan", (m::tan, math::tan)),
-        ("asin", (m::asin, math::asin)),
-        ("acos", (m::acos, math::acos)),
-        ("atan", (m::atan, math::atan)),
         ("exp", (m::exp, math::exp)),
         ("ln", (m::ln, math::ln)),
-        ("log2", (m::log2, math::log2)),
-        ("log10", (m::log10, math::log10)),
-        ("cbrt", (m::cbrt, math::cbrt)),
         ("abs", (m::abs, math::abs)),
         ("floor", (m::floor, math::floor)),
         ("ceil", (m::ceil, math::ceil)),
@@ -798,31 +791,53 @@ fn math_digest(name: &str, class: Class) -> Option<Digest> {
         ("sinpi", (m::sinpi, math::sinpi)),
         ("cospi", (m::cospi, math::cospi)),
     ];
-    let binary: [(&str, Binary); 3] = [
-        ("atan2", (m::atan2, math::atan2)),
-        ("pow", (m::pow, math::pow)),
-        ("hypot", (m::hypot, math::hypot)),
-    ];
     if let Some((_, (build, f))) = unary.iter().find(|(n, _)| *n == name) {
         return Some(fold(build(class).into_iter().map(*f)));
     }
-    match name {
-        "powi" => {
-            return Some(fold(
-                m::powi(class).into_iter().map(|(x, n)| math::powi(x, n)),
-            ));
-        }
-        "fma" => {
-            return Some(fold(
-                m::fma(class)
-                    .into_iter()
-                    .map(|(a, b, c)| math::fma(a, b, c)),
-            ));
-        }
-        _ => {}
+    Some(match name {
+        "atan2" => fold(m::atan2(class).into_iter().map(|(y, x)| math::atan2(y, x))),
+        "fma" => fold(
+            m::fma(class)
+                .into_iter()
+                .map(|(a, b, c)| math::fma(a, b, c)),
+        ),
+        _ => return None,
+    })
+}
+
+/// The digest of the benchmark of `math::unproven`'s function `name` on `class`, from direct
+/// calls on its inputs.
+fn unproven_digest(name: &str, class: Class) -> Option<Digest> {
+    use geom_num::math::unproven as f;
+    use inputs::math::unproven as m;
+    let unary: [(&str, Unary); 13] = [
+        ("sin", (m::sin, f::sin)),
+        ("cos", (m::cos, f::cos)),
+        ("tan", (m::tan, f::tan)),
+        ("asin", (m::asin, f::asin)),
+        ("acos", (m::acos, f::acos)),
+        ("atan", (m::atan, f::atan)),
+        ("exp", (m::exp, f::exp)),
+        ("ln", (m::ln, f::ln)),
+        ("log2", (m::log2, f::log2)),
+        ("log10", (m::log10, f::log10)),
+        ("cbrt", (m::cbrt, f::cbrt)),
+        ("sinpi", (m::sinpi, f::sinpi)),
+        ("cospi", (m::cospi, f::cospi)),
+    ];
+    let binary: [(&str, Binary); 3] = [
+        ("atan2", (m::atan2, f::atan2)),
+        ("pow", (m::pow, f::pow)),
+        ("hypot", (m::hypot, f::hypot)),
+    ];
+    if let Some((_, (build, g))) = unary.iter().find(|(n, _)| *n == name) {
+        return Some(fold(build(class).into_iter().map(*g)));
     }
-    let (_, (build, f)) = binary.iter().find(|(n, _)| *n == name)?;
-    Some(fold(build(class).into_iter().map(|(x, y)| f(x, y))))
+    if name == "powi" {
+        return Some(fold(m::powi(class).into_iter().map(|(x, n)| f::powi(x, n))));
+    }
+    let (_, (build, g)) = binary.iter().find(|(n, _)| *n == name)?;
+    Some(fold(build(class).into_iter().map(|(x, y)| g(x, y))))
 }
 
 fn wide_digest_at<const L: usize>(kind: &str, class: Class) -> Option<Digest> {
@@ -972,6 +987,10 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
         ("interval", "sqrt") => fold(ii::sqrt(class).into_iter().map(Interval::sqrt)),
         ("interval", "norm") => fold(ii::norm(class).iter().map(|v| Interval::norm(v))),
         ("interval", "neg") => fold(ii::neg(class).into_iter().map(Interval::neg)),
+        ("interval", "sinpi") => fold(ii::sinpi(class).into_iter().map(Interval::sinpi)),
+        ("interval", "cospi") => fold(ii::cospi(class).into_iter().map(Interval::cospi)),
+        ("interval", "exp") => fold(ii::exp(class).into_iter().map(Interval::exp)),
+        ("interval", "ln") => fold(ii::ln(class).into_iter().map(Interval::ln)),
         ("interval", "certain_sign") => fold(
             ii::certain_sign(class)
                 .into_iter()
@@ -1030,6 +1049,7 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 .map(|(c, f, t)| grid::coarsen(c, f, t)),
         ),
         ("math", _) => math_digest(name, class)?,
+        ("unproven", _) => unproven_digest(name, class)?,
         ("rng", _) => rng_digest(name, class)?,
         ("dd", _) => dd_digest(name, class)?,
         ("exact_sum", _) => exact_sum_digest(name, class)?,
@@ -2174,10 +2194,10 @@ fn fma_is_correctly_rounded_and_powi_is_pow_on_every_input() {
                 None => assert_eq!(got, Err(NumError::NotFinite), "fma({a:e}, {b:e}, {c:e})"),
             }
         }
-        for (x, n) in m::powi(class) {
+        for (x, n) in m::unproven::powi(class) {
             assert_eq!(
-                math::powi(x, n),
-                math::pow(x, f64::from(n)),
+                math::unproven::powi(x, n),
+                math::unproven::pow(x, f64::from(n)),
                 "powi({x:e}, {n})"
             );
         }
@@ -2884,6 +2904,116 @@ fn every_exact_sum_result_is_the_sum_rounded_once() {
 }
 
 // ------------------------------------------------------------------------------------------------
+// The certified enclosures of the proven maths functions: exact peak tests, domains, and the ends.
+// ------------------------------------------------------------------------------------------------
+
+/// ⌊v⌋ of an exact rational.
+fn rat_floor(v: &Rat) -> Big {
+    let (q, r) = v.num.div_rem(&v.den);
+    match (v.num.negative, r.is_zero()) {
+        (false, _) => q,
+        (true, true) => q.negated(),
+        (true, false) => q.negated().minus(&Big::one()),
+    }
+}
+
+/// Whether the real interval [lo, hi] holds a point ≡ `a` (mod 2), decided exactly: some whole k
+/// has lo ≤ 2k + a ≤ hi, that is ⌈(lo − a)/2⌉ ≤ ⌊(hi − a)/2⌋.
+fn holds_point_mod_2(x: Interval, a: f64) -> bool {
+    let two = Rat::int(Big::from_i64(2));
+    let low = Rat::of(x.lo()).minus(&Rat::of(a)).over(&two);
+    let high = Rat::of(x.hi()).minus(&Rat::of(a)).over(&two);
+    let ceil_low = rat_floor(&low.negated()).negated();
+    ceil_low <= rat_floor(&high)
+}
+
+#[test]
+fn every_enclosure_finds_its_peaks_exactly_and_holds_its_ends() {
+    use inputs::interval as i;
+    // sin(πt) peaks at ½ (mod 2), troughs at 3/2; cos(πt) peaks at 0 (mod 2), troughs at 1.
+    type Periodic = (
+        fn(Class) -> Vec<Interval>,
+        fn(Interval) -> Result<Interval, NumError>,
+    );
+    type Point = fn(f64) -> Result<Real, NumError>;
+    let periodic: [(&str, Periodic, Point, f64, f64); 2] = [
+        ("sinpi", (i::sinpi, Interval::sinpi), math::sinpi, 0.5, 1.5),
+        ("cospi", (i::cospi, Interval::cospi), math::cospi, 0.0, 1.0),
+    ];
+    for (name, (build, enclose), point, peak, trough) in periodic {
+        for class in Class::ALL {
+            for x in build(class) {
+                let y = enclose(x).unwrap();
+                assert!(-1.0 <= y.lo() && y.hi() <= 1.0, "{name}({x:?}) = {y:?}");
+                if holds_point_mod_2(x, peak) {
+                    assert_eq!(y.hi(), 1.0, "{name}({x:?}) missed a peak");
+                }
+                if holds_point_mod_2(x, trough) {
+                    assert_eq!(y.lo(), -1.0, "{name}({x:?}) missed a trough");
+                }
+                for t in [x.lo(), x.hi()] {
+                    let v = point(t).unwrap().get();
+                    assert!(
+                        y.contains(v),
+                        "{name}({x:?}) = {y:?} leaves out {name}({t:e})"
+                    );
+                }
+            }
+        }
+    }
+    // exp: refused exactly when e^hi overflows; the lower bound at least +0; the ends held.
+    let overflow = f64::from_bits(0x4086_2e42_fefa_39f0);
+    for class in Class::ALL {
+        for x in i::exp(class) {
+            match x.exp() {
+                Ok(y) => {
+                    assert!(x.hi() < overflow, "exp({x:?})");
+                    assert!(y.lo() >= 0.0 && y.lo() <= y.hi(), "exp({x:?}) = {y:?}");
+                    for t in [x.lo(), x.hi()] {
+                        let v = math::exp(t).map_or(0.0, |v| v.get());
+                        assert!(y.contains(v), "exp({x:?}) = {y:?} leaves out exp({t:e})");
+                    }
+                    if x.lo() == 0.0 {
+                        assert_eq!(y.lo(), 1.0, "exp({x:?}): e^0 is exactly 1");
+                    }
+                }
+                Err(e) => {
+                    assert_eq!(e, NumError::NotFinite, "exp({x:?})");
+                    assert!(x.hi() >= overflow, "exp({x:?}) refused below overflow");
+                }
+            }
+        }
+        // ln: below zero OutsideDomain, a zero lower bound NotFinite, otherwise the ends held.
+        for x in i::ln(class) {
+            let y = x.ln();
+            if x.lo() < 0.0 {
+                assert_eq!(y, Err(NumError::OutsideDomain), "ln({x:?})");
+            } else if x.lo() == 0.0 {
+                assert_eq!(y, Err(NumError::NotFinite), "ln({x:?})");
+            } else {
+                let y = y.unwrap();
+                for t in [x.lo(), x.hi()] {
+                    let v = math::ln(t).unwrap().get();
+                    assert!(y.contains(v), "ln({x:?}) = {y:?} leaves out ln({t:e})");
+                }
+                if x.lo() == 1.0 {
+                    assert_eq!(y.lo(), 0.0, "ln({x:?}): ln 1 is exactly 0");
+                }
+            }
+        }
+    }
+    // The exact peak test itself, on cases worked by hand.
+    let iv = |lo: f64, hi: f64| Interval::new(lo, hi).unwrap();
+    assert!(holds_point_mod_2(iv(0.25, 0.75), 0.5));
+    assert!(!holds_point_mod_2(iv(0.6, 2.4), 0.5));
+    assert!(holds_point_mod_2(iv(-0.5, -0.5), 1.5));
+    assert!(holds_point_mod_2(
+        iv(2f64.powi(53), 2f64.powi(53) + 2.0),
+        0.5
+    ));
+}
+
+// ------------------------------------------------------------------------------------------------
 // Determinism.
 // ------------------------------------------------------------------------------------------------
 
@@ -3201,16 +3331,17 @@ fn the_digest_sees_two_sign_errors() {
     let right = kernel_digest(kernels::math::round_ties_even, &[1.5, 2.5]);
     let wrong = kernel_digest(kernels::math::round_ties_even, &[-1.5, -2.5]);
     assert_ne!(right, wrong, "[2, 2] and [−2, −2] have one digest");
-    let batch = inputs::math::sin(Typical);
-    let mut results: Vec<Result<Real, NumError>> = batch.iter().copied().map(math::sin).collect();
+    let batch = inputs::math::unproven::sin(Typical);
+    let mut results: Vec<Result<Real, NumError>> =
+        batch.iter().copied().map(math::unproven::sin).collect();
     assert_eq!(
         fold(results.iter().copied()),
-        kernel_digest(kernels::math::sin, &batch)
+        kernel_digest(kernels::math::unproven::sin, &batch)
     );
     let flip = |r: Result<Real, NumError>| r.and_then(|v| Real::new(-v.get()));
     results[0] = flip(results[0]);
     results[1] = flip(results[1]);
-    let right = kernel_digest(kernels::math::sin, &batch);
+    let right = kernel_digest(kernels::math::unproven::sin, &batch);
     assert_ne!(fold(results), right, "sin with two signs wrong passes");
 }
 

@@ -1,4 +1,5 @@
-//! Inputs for the deterministic maths functions of `geom_num::math`, one builder per function.
+//! Inputs for the deterministic maths functions of `geom_num::math`, one builder per function:
+//! the proven ones here, and those without a proven bound in [`unproven`].
 //!
 //! Each function draws finite arguments from the domain it is defined on, so no input is refused
 //! as `NotFinite` for its argument or as `OutsideDomain`: every result is a `Real`, or
@@ -263,42 +264,6 @@ pub fn sqrt(class: Class) -> Vec<f64> {
     unary("math::sqrt", Domain::Positive, class)
 }
 
-/// Arguments for `math::sin`.
-#[must_use]
-pub fn sin(class: Class) -> Vec<f64> {
-    unary("math::sin", Domain::Angle, class)
-}
-
-/// Arguments for `math::cos`.
-#[must_use]
-pub fn cos(class: Class) -> Vec<f64> {
-    unary("math::cos", Domain::Angle, class)
-}
-
-/// Arguments for `math::tan`.
-#[must_use]
-pub fn tan(class: Class) -> Vec<f64> {
-    unary("math::tan", Domain::Angle, class)
-}
-
-/// Arguments for `math::asin`.
-#[must_use]
-pub fn asin(class: Class) -> Vec<f64> {
-    unary("math::asin", Domain::Unit, class)
-}
-
-/// Arguments for `math::acos`.
-#[must_use]
-pub fn acos(class: Class) -> Vec<f64> {
-    unary("math::acos", Domain::Unit, class)
-}
-
-/// Arguments for `math::atan`.
-#[must_use]
-pub fn atan(class: Class) -> Vec<f64> {
-    unary("math::atan", Domain::Any, class)
-}
-
 /// (y, x) pairs for `math::atan2`.
 #[must_use]
 pub fn atan2(class: Class) -> Vec<(f64, f64)> {
@@ -315,36 +280,6 @@ pub fn exp(class: Class) -> Vec<f64> {
 #[must_use]
 pub fn ln(class: Class) -> Vec<f64> {
     unary("math::ln", Domain::Positive, class)
-}
-
-/// Arguments for `math::log2`.
-#[must_use]
-pub fn log2(class: Class) -> Vec<f64> {
-    unary("math::log2", Domain::Positive, class)
-}
-
-/// Arguments for `math::log10`.
-#[must_use]
-pub fn log10(class: Class) -> Vec<f64> {
-    unary("math::log10", Domain::Positive, class)
-}
-
-/// (base, exponent) pairs for `math::pow`.
-#[must_use]
-pub fn pow(class: Class) -> Vec<(f64, f64)> {
-    binary("math::pow", Domain2::Pow, class)
-}
-
-/// (x, y) pairs for `math::hypot`.
-#[must_use]
-pub fn hypot(class: Class) -> Vec<(f64, f64)> {
-    binary("math::hypot", Domain2::Hypot, class)
-}
-
-/// Arguments for `math::cbrt`.
-#[must_use]
-pub fn cbrt(class: Class) -> Vec<f64> {
-    unary("math::cbrt", Domain::Any, class)
 }
 
 /// Arguments for `math::abs`.
@@ -383,20 +318,6 @@ pub fn cospi(class: Class) -> Vec<f64> {
     unary("math::cospi", Domain::HalfTurns, class)
 }
 
-/// (base, whole exponent) pairs for `math::powi`.
-#[must_use]
-pub fn powi(class: Class) -> Vec<(f64, i32)> {
-    let mut g = rng("math::powi", class);
-    match class {
-        Class::Typical | Class::Extreme => batch_of(|n| powi_arguments(&mut g, class, n)),
-        Class::Degenerate
-        | Class::NearlyDegenerate
-        | Class::Overflow
-        | Class::OnGrid
-        | Class::WrongDirection => Vec::new(),
-    }
-}
-
 /// (a, b, c) triples for `math::fma`, a · b + c.
 #[must_use]
 pub fn fma(class: Class) -> Vec<(f64, f64, f64)> {
@@ -408,5 +329,125 @@ pub fn fma(class: Class) -> Vec<(f64, f64, f64)> {
         | Class::Overflow
         | Class::OnGrid
         | Class::WrongDirection => Vec::new(),
+    }
+}
+
+/// Inputs for the maths functions without a proven error bound, `geom_num::math::unproven`.
+///
+/// The same domains and classes as the proven functions above. A function that moved here from
+/// `math` keeps its seed, so its batch is the one it had there; one that also has a proven
+/// version above (`exp`, `ln`, `atan2`, `sinpi`, `cospi`) has a seed of its own, so the two
+/// benchmarks measure different inputs.
+pub mod unproven {
+    use super::{Class, Domain, Domain2, batch_of, binary, powi_arguments, rng, unary};
+
+    /// Arguments for `math::unproven::sin`.
+    #[must_use]
+    pub fn sin(class: Class) -> Vec<f64> {
+        unary("math::sin", Domain::Angle, class)
+    }
+
+    /// Arguments for `math::unproven::cos`.
+    #[must_use]
+    pub fn cos(class: Class) -> Vec<f64> {
+        unary("math::cos", Domain::Angle, class)
+    }
+
+    /// Arguments for `math::unproven::tan`.
+    #[must_use]
+    pub fn tan(class: Class) -> Vec<f64> {
+        unary("math::tan", Domain::Angle, class)
+    }
+
+    /// Arguments for `math::unproven::asin`.
+    #[must_use]
+    pub fn asin(class: Class) -> Vec<f64> {
+        unary("math::asin", Domain::Unit, class)
+    }
+
+    /// Arguments for `math::unproven::acos`.
+    #[must_use]
+    pub fn acos(class: Class) -> Vec<f64> {
+        unary("math::acos", Domain::Unit, class)
+    }
+
+    /// Arguments for `math::unproven::atan`.
+    #[must_use]
+    pub fn atan(class: Class) -> Vec<f64> {
+        unary("math::atan", Domain::Any, class)
+    }
+
+    /// (y, x) pairs for `math::unproven::atan2`.
+    #[must_use]
+    pub fn atan2(class: Class) -> Vec<(f64, f64)> {
+        binary("math::unproven::atan2", Domain2::Atan2, class)
+    }
+
+    /// Arguments for `math::unproven::exp`.
+    #[must_use]
+    pub fn exp(class: Class) -> Vec<f64> {
+        unary("math::unproven::exp", Domain::Exp, class)
+    }
+
+    /// Arguments for `math::unproven::ln`.
+    #[must_use]
+    pub fn ln(class: Class) -> Vec<f64> {
+        unary("math::unproven::ln", Domain::Positive, class)
+    }
+
+    /// Arguments for `math::unproven::log2`.
+    #[must_use]
+    pub fn log2(class: Class) -> Vec<f64> {
+        unary("math::log2", Domain::Positive, class)
+    }
+
+    /// Arguments for `math::unproven::log10`.
+    #[must_use]
+    pub fn log10(class: Class) -> Vec<f64> {
+        unary("math::log10", Domain::Positive, class)
+    }
+
+    /// (base, exponent) pairs for `math::unproven::pow`.
+    #[must_use]
+    pub fn pow(class: Class) -> Vec<(f64, f64)> {
+        binary("math::pow", Domain2::Pow, class)
+    }
+
+    /// (base, whole exponent) pairs for `math::unproven::powi`.
+    #[must_use]
+    pub fn powi(class: Class) -> Vec<(f64, i32)> {
+        let mut g = rng("math::powi", class);
+        match class {
+            Class::Typical | Class::Extreme => batch_of(|n| powi_arguments(&mut g, class, n)),
+            Class::Degenerate
+            | Class::NearlyDegenerate
+            | Class::Overflow
+            | Class::OnGrid
+            | Class::WrongDirection => Vec::new(),
+        }
+    }
+
+    /// (x, y) pairs for `math::unproven::hypot`.
+    #[must_use]
+    pub fn hypot(class: Class) -> Vec<(f64, f64)> {
+        binary("math::hypot", Domain2::Hypot, class)
+    }
+
+    /// Arguments for `math::unproven::cbrt`.
+    #[must_use]
+    pub fn cbrt(class: Class) -> Vec<f64> {
+        unary("math::cbrt", Domain::Any, class)
+    }
+
+    /// Arguments, in half-turns, for `math::unproven::sinpi`.
+    #[must_use]
+    pub fn sinpi(class: Class) -> Vec<f64> {
+        unary("math::unproven::sinpi", Domain::HalfTurns, class)
+    }
+
+    /// Arguments, in half-turns, for `math::unproven::cospi`.
+    #[must_use]
+    pub fn cospi(class: Class) -> Vec<f64> {
+        unary("math::unproven::cospi", Domain::HalfTurns, class)
     }
 }

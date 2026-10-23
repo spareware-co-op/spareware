@@ -1,5 +1,16 @@
 //! Inputs for interval arithmetic: [`new`], [`contains`], [`add`], [`sub`], [`mul`], [`div`],
-//! [`mul_add`], [`square`], [`sqrt`], [`norm`], [`neg`] and [`certain_sign`].
+//! [`mul_add`], [`square`], [`sqrt`], [`norm`], [`neg`] and [`certain_sign`]; and for the certified
+//! enclosures of the proven maths functions, [`sinpi`], [`cospi`], [`exp`] and [`ln`].
+//!
+//! The enclosures' classes: `typical`, narrow intervals of half-turns around a peak, strictly
+//! between peaks, and anywhere, within 2^10 half-turns; exponents within ±32; logarithms of
+//! positive intervals from 2^−30 to 2^30. `extreme`, in rotation: for the periodic two, intervals
+//! wider than a turn, real intervals between doubles from 2^53 up that hold a whole turn, ends at
+//! multiples of ½ (exact values), a point at a peak, subnormal ends around zero, and an interval
+//! ending one double short of a peak; for `exp`, upper ends either side of overflow (past it,
+//! `NotFinite`), the deep underflow (the lower bound held at +0), an end at exactly 0, and subnormal
+//! ends; for `ln`, intervals reaching below zero (`OutsideDomain`), a lower end of zero
+//! (`NotFinite`), an end at exactly 1, subnormal lower ends and the top of the range.
 //!
 //! Classes:
 //!
@@ -420,5 +431,114 @@ pub fn certain_sign(class: Class) -> Vec<Interval> {
         | Class::Overflow
         | Class::OnGrid
         | Class::WrongDirection => Vec::new(),
+    }
+}
+
+/// A narrow interval of half-turns near `centre`: from `centre − a` to `centre + b`, with `a` and
+/// `b` from 2^−30 to 2^−3.
+fn narrow_around(g: &mut SplitMix64, centre: f64) -> Option<Interval> {
+    let a = positive(g, -30, -3);
+    let b = positive(g, -30, -3);
+    between(centre - a, centre + b)
+}
+
+/// Half-turns for the periodic enclosures, with `peak` the offset of a peak in each turn (½ for
+/// the sine's maximum, 0 for the cosine's): typical intervals, in rotation, around a peak, strictly
+/// between two peaks, and anywhere; or the extreme ones.
+fn half_turns(g: &mut SplitMix64, class: Class, peak: f64) -> Vec<Interval> {
+    match class {
+        Class::Typical => batch_of(|n| {
+            // A whole turn below 2^10, of either sign.
+            let turn = 2.0 * f64::from(u16::try_from(g.below(512)).unwrap_or(0)) * g.sign() as f64;
+            match n % 3 {
+                0 => narrow_around(g, turn + peak),
+                // A quarter turn past the peak, at least 2^−4 from either peak or trough.
+                1 => narrow_around(g, turn + peak + 0.25),
+                _ => {
+                    let offset = positive(g, -10, 0);
+                    narrow_around(g, turn + peak + offset)
+                }
+            }
+        }),
+        Class::Extreme => batch_of(|n| match n % 6 {
+            // Wider than a turn: [−1, 1].
+            0 => between(-positive(g, 0, 10), positive(g, 1, 10)),
+            // From 2^53 the doubles are even integers, but a real interval between two of them
+            // holds a whole turn.
+            1 => {
+                let x = pow2(53 + g.range(0, 900));
+                between(x, x + 2.0 * x * pow2(-52))
+            }
+            // Ends at multiples of ½, whose values are exact.
+            2 => {
+                let k = f64::from(u16::try_from(g.below(64)).unwrap_or(0)) * 0.5;
+                between(k, k + 0.5)
+            }
+            // A point interval at a peak.
+            3 => between(peak + 2.0, peak + 2.0),
+            // Around zero, subnormal ends.
+            4 => between(-subnormal(g).abs(), subnormal(g).abs()),
+            // Up to one double short of a peak.
+            _ => between(peak + 1.75, (peak + 2.0).next_down()),
+        }),
+        _ => Vec::new(),
+    }
+}
+
+/// Intervals for [`Interval::sinpi`], in half-turns.
+#[must_use]
+pub fn sinpi(class: Class) -> Vec<Interval> {
+    half_turns(&mut rng("interval::sinpi", class), class, 0.5)
+}
+
+/// Intervals for [`Interval::cospi`], in half-turns.
+#[must_use]
+pub fn cospi(class: Class) -> Vec<Interval> {
+    half_turns(&mut rng("interval::cospi", class), class, 0.0)
+}
+
+/// Intervals for [`Interval::exp`]: typical ones within ±32; or, in rotation, near overflow on
+/// either side of 709.78 (past it, `NotFinite`), deep in the underflow (the lower bound held at
+/// +0), with an end exactly 0 (whose value is exactly 1), and tiny ones around zero.
+#[must_use]
+pub fn exp(class: Class) -> Vec<Interval> {
+    let mut g = rng("interval::exp", class);
+    match class {
+        Class::Typical => batch_of(|_| between(double(&mut g, -10, 4), double(&mut g, -10, 4))),
+        Class::Extreme => batch_of(|n| {
+            let g = &mut g;
+            match n % 5 {
+                0 => between(700.0, 709.0 + positive(g, -10, -1)),
+                1 => between(700.0, 709.79 + positive(g, -10, 4)),
+                2 => between(-1000.0 - positive(g, 0, 8), -745.0 - positive(g, -10, 4)),
+                3 => between(0.0, positive(g, -10, 4)),
+                _ => between(-subnormal(g).abs(), subnormal(g).abs()),
+            }
+        }),
+        _ => Vec::new(),
+    }
+}
+
+/// Intervals for [`Interval::ln`]: typical positive ones from 2^−30 to 2^30; or, in rotation, ones
+/// reaching below zero (`OutsideDomain`), a lower bound of zero (`NotFinite`), an end exactly 1
+/// (whose logarithm is exactly 0), subnormal lower bounds, and bounds near the largest double.
+#[must_use]
+pub fn ln(class: Class) -> Vec<Interval> {
+    let mut g = rng("interval::ln", class);
+    match class {
+        Class::Typical => {
+            batch_of(|_| between(positive(&mut g, -30, 30), positive(&mut g, -30, 30)))
+        }
+        Class::Extreme => batch_of(|n| {
+            let g = &mut g;
+            match n % 5 {
+                0 => around_zero(g),
+                1 => between(0.0, positive(g, -10, 10)),
+                2 => between(1.0, positive(g, 0, 10)),
+                3 => between(subnormal(g).abs(), positive(g, -10, 10)),
+                _ => huge(g),
+            }
+        }),
+        _ => Vec::new(),
     }
 }

@@ -109,9 +109,15 @@ fn exactness(bencher: Bencher, case: Case) {
     time_case(bencher, case);
 }
 
-/// The deterministic maths functions.
+/// The deterministic maths functions with proven error bounds.
 #[divan::bench(args = cases_in("math"))]
 fn math(bencher: Bencher, case: Case) {
+    time_case(bencher, case);
+}
+
+/// The maths functions without a proven error bound.
+#[divan::bench(args = cases_in("unproven"))]
+fn unproven(bencher: Bencher, case: Case) {
     time_case(bencher, case);
 }
 

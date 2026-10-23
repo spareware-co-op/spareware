@@ -32,7 +32,7 @@ use gate::{
 gungraun::main!(
     config = gate::config();
     library_benchmark_groups = predicate, sign, wide, plane, eft, interval, grid, real, exactness,
-        math, rng, dd, exact_sum, growth
+        math, unproven, rng, dd, exact_sum, growth
 );
 
 /// Off Linux: explain where the gate runs, and succeed.

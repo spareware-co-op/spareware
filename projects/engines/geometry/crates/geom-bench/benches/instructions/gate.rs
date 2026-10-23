@@ -661,10 +661,42 @@ pub mod interval {
         run
     }
 
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("interval/sinpi/typical"))]
+    #[bench::extreme(leak("interval/sinpi/extreme"))]
+    fn sinpi(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("interval/cospi/typical"))]
+    #[bench::extreme(leak("interval/cospi/extreme"))]
+    fn cospi(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("interval/exp/typical"))]
+    #[bench::extreme(leak("interval/exp/extreme"))]
+    fn exp(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("interval/ln/typical"))]
+    #[bench::extreme(leak("interval/ln/extreme"))]
+    fn ln(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
     library_benchmark_group!(
         name = interval;
-        benchmarks = new, contains, add, sub, mul, div, mul_add, square, sqrt, norm, neg,
-            certain_sign
+        benchmarks = new, contains, add, sub, mul, div, mul_add, square, sqrt, norm, neg, sinpi,
+            cospi, exp, ln, certain_sign
     );
 }
 
@@ -807,7 +839,7 @@ pub mod exactness {
     );
 }
 
-/// The deterministic maths functions.
+/// The deterministic maths functions with proven error bounds.
 pub mod math {
     use super::*;
 
@@ -820,57 +852,17 @@ pub mod math {
     }
 
     #[library_benchmark(teardown = verify)]
-    #[bench::typical(leak("math/sin/typical"))]
-    #[bench::extreme(leak("math/sin/extreme"))]
-    fn sin(run: &'static mut Named) -> &'static mut Named {
+    #[bench::typical(leak("math/sinpi/typical"))]
+    #[bench::extreme(leak("math/sinpi/extreme"))]
+    fn sinpi(run: &'static mut Named) -> &'static mut Named {
         run.bench.measure();
         run
     }
 
     #[library_benchmark(teardown = verify)]
-    #[bench::typical(leak("math/cos/typical"))]
-    #[bench::extreme(leak("math/cos/extreme"))]
-    fn cos(run: &'static mut Named) -> &'static mut Named {
-        run.bench.measure();
-        run
-    }
-
-    #[library_benchmark(teardown = verify)]
-    #[bench::typical(leak("math/tan/typical"))]
-    #[bench::extreme(leak("math/tan/extreme"))]
-    fn tan(run: &'static mut Named) -> &'static mut Named {
-        run.bench.measure();
-        run
-    }
-
-    #[library_benchmark(teardown = verify)]
-    #[bench::typical(leak("math/asin/typical"))]
-    #[bench::extreme(leak("math/asin/extreme"))]
-    fn asin(run: &'static mut Named) -> &'static mut Named {
-        run.bench.measure();
-        run
-    }
-
-    #[library_benchmark(teardown = verify)]
-    #[bench::typical(leak("math/acos/typical"))]
-    #[bench::extreme(leak("math/acos/extreme"))]
-    fn acos(run: &'static mut Named) -> &'static mut Named {
-        run.bench.measure();
-        run
-    }
-
-    #[library_benchmark(teardown = verify)]
-    #[bench::typical(leak("math/atan/typical"))]
-    #[bench::extreme(leak("math/atan/extreme"))]
-    fn atan(run: &'static mut Named) -> &'static mut Named {
-        run.bench.measure();
-        run
-    }
-
-    #[library_benchmark(teardown = verify)]
-    #[bench::typical(leak("math/atan2/typical"))]
-    #[bench::extreme(leak("math/atan2/extreme"))]
-    fn atan2(run: &'static mut Named) -> &'static mut Named {
+    #[bench::typical(leak("math/cospi/typical"))]
+    #[bench::extreme(leak("math/cospi/extreme"))]
+    fn cospi(run: &'static mut Named) -> &'static mut Named {
         run.bench.measure();
         run
     }
@@ -892,33 +884,9 @@ pub mod math {
     }
 
     #[library_benchmark(teardown = verify)]
-    #[bench::typical(leak("math/log2/typical"))]
-    #[bench::extreme(leak("math/log2/extreme"))]
-    fn log2(run: &'static mut Named) -> &'static mut Named {
-        run.bench.measure();
-        run
-    }
-
-    #[library_benchmark(teardown = verify)]
-    #[bench::typical(leak("math/log10/typical"))]
-    #[bench::extreme(leak("math/log10/extreme"))]
-    fn log10(run: &'static mut Named) -> &'static mut Named {
-        run.bench.measure();
-        run
-    }
-
-    #[library_benchmark(teardown = verify)]
-    #[bench::typical(leak("math/pow/typical"))]
-    #[bench::extreme(leak("math/pow/extreme"))]
-    fn pow(run: &'static mut Named) -> &'static mut Named {
-        run.bench.measure();
-        run
-    }
-
-    #[library_benchmark(teardown = verify)]
-    #[bench::typical(leak("math/powi/typical"))]
-    #[bench::extreme(leak("math/powi/extreme"))]
-    fn powi(run: &'static mut Named) -> &'static mut Named {
+    #[bench::typical(leak("math/atan2/typical"))]
+    #[bench::extreme(leak("math/atan2/extreme"))]
+    fn atan2(run: &'static mut Named) -> &'static mut Named {
         run.bench.measure();
         run
     }
@@ -927,22 +895,6 @@ pub mod math {
     #[bench::typical(leak("math/fma/typical"))]
     #[bench::extreme(leak("math/fma/extreme"))]
     fn fma(run: &'static mut Named) -> &'static mut Named {
-        run.bench.measure();
-        run
-    }
-
-    #[library_benchmark(teardown = verify)]
-    #[bench::typical(leak("math/hypot/typical"))]
-    #[bench::extreme(leak("math/hypot/extreme"))]
-    fn hypot(run: &'static mut Named) -> &'static mut Named {
-        run.bench.measure();
-        run
-    }
-
-    #[library_benchmark(teardown = verify)]
-    #[bench::typical(leak("math/cbrt/typical"))]
-    #[bench::extreme(leak("math/cbrt/extreme"))]
-    fn cbrt(run: &'static mut Named) -> &'static mut Named {
         run.bench.measure();
         run
     }
@@ -979,26 +931,155 @@ pub mod math {
         run
     }
 
+    library_benchmark_group!(
+        name = math;
+        benchmarks = sqrt, sinpi, cospi, exp, ln, atan2, fma, abs, floor, ceil, round_ties_even
+    );
+}
+
+/// The maths functions without a proven error bound.
+pub mod unproven {
+    use super::*;
+
     #[library_benchmark(teardown = verify)]
-    #[bench::typical(leak("math/sinpi/typical"))]
-    #[bench::extreme(leak("math/sinpi/extreme"))]
+    #[bench::typical(leak("unproven/sin/typical"))]
+    #[bench::extreme(leak("unproven/sin/extreme"))]
+    fn sin(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("unproven/cos/typical"))]
+    #[bench::extreme(leak("unproven/cos/extreme"))]
+    fn cos(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("unproven/tan/typical"))]
+    #[bench::extreme(leak("unproven/tan/extreme"))]
+    fn tan(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("unproven/asin/typical"))]
+    #[bench::extreme(leak("unproven/asin/extreme"))]
+    fn asin(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("unproven/acos/typical"))]
+    #[bench::extreme(leak("unproven/acos/extreme"))]
+    fn acos(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("unproven/atan/typical"))]
+    #[bench::extreme(leak("unproven/atan/extreme"))]
+    fn atan(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("unproven/atan2/typical"))]
+    #[bench::extreme(leak("unproven/atan2/extreme"))]
+    fn atan2(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("unproven/exp/typical"))]
+    #[bench::extreme(leak("unproven/exp/extreme"))]
+    fn exp(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("unproven/ln/typical"))]
+    #[bench::extreme(leak("unproven/ln/extreme"))]
+    fn ln(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("unproven/log2/typical"))]
+    #[bench::extreme(leak("unproven/log2/extreme"))]
+    fn log2(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("unproven/log10/typical"))]
+    #[bench::extreme(leak("unproven/log10/extreme"))]
+    fn log10(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("unproven/pow/typical"))]
+    #[bench::extreme(leak("unproven/pow/extreme"))]
+    fn pow(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("unproven/powi/typical"))]
+    #[bench::extreme(leak("unproven/powi/extreme"))]
+    fn powi(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("unproven/hypot/typical"))]
+    #[bench::extreme(leak("unproven/hypot/extreme"))]
+    fn hypot(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("unproven/cbrt/typical"))]
+    #[bench::extreme(leak("unproven/cbrt/extreme"))]
+    fn cbrt(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("unproven/sinpi/typical"))]
+    #[bench::extreme(leak("unproven/sinpi/extreme"))]
     fn sinpi(run: &'static mut Named) -> &'static mut Named {
         run.bench.measure();
         run
     }
 
     #[library_benchmark(teardown = verify)]
-    #[bench::typical(leak("math/cospi/typical"))]
-    #[bench::extreme(leak("math/cospi/extreme"))]
+    #[bench::typical(leak("unproven/cospi/typical"))]
+    #[bench::extreme(leak("unproven/cospi/extreme"))]
     fn cospi(run: &'static mut Named) -> &'static mut Named {
         run.bench.measure();
         run
     }
 
     library_benchmark_group!(
-        name = math;
-        benchmarks = sqrt, sin, cos, tan, asin, acos, atan, atan2, exp, ln, log2, log10, pow,
-            powi, fma, hypot, cbrt, abs, floor, ceil, round_ties_even, sinpi, cospi
+        name = unproven;
+        benchmarks = sin, cos, tan, asin, acos, atan, atan2, exp, ln, log2, log10, pow, powi, hypot, cbrt, sinpi, cospi
     );
 }
 

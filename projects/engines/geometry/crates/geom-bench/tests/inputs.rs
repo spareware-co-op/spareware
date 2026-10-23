@@ -86,8 +86,8 @@ fn classes_an_operation_lacks_are_empty() {
     assert!(inputs::interval::neg(Extreme).is_empty());
     assert!(inputs::grid::refine(Extreme).is_empty());
     assert!(inputs::grid::coarsen(Overflow).is_empty());
-    assert!(inputs::math::sin(OnGrid).is_empty());
-    assert!(inputs::math::sin(WrongDirection).is_empty());
+    assert!(inputs::math::unproven::sin(OnGrid).is_empty());
+    assert!(inputs::math::unproven::sin(WrongDirection).is_empty());
 }
 
 #[test]
@@ -1212,26 +1212,32 @@ fn in_domain(r: Result<Real, NumError>) -> bool {
 #[test]
 fn maths_inputs_stay_in_each_domain() {
     use geom_num::math as f;
+    use geom_num::math::unproven as fu;
     use inputs::math as m;
-    let unary: [(&str, Doubles, Unary); 18] = [
+    use inputs::math::unproven as u;
+    let unary: [(&str, Doubles, Unary); 22] = [
         ("sqrt", m::sqrt, f::sqrt),
-        ("sin", m::sin, f::sin),
-        ("cos", m::cos, f::cos),
-        ("tan", m::tan, f::tan),
-        ("asin", m::asin, f::asin),
-        ("acos", m::acos, f::acos),
-        ("atan", m::atan, f::atan),
         ("exp", m::exp, f::exp),
         ("ln", m::ln, f::ln),
-        ("log2", m::log2, f::log2),
-        ("log10", m::log10, f::log10),
-        ("cbrt", m::cbrt, f::cbrt),
         ("abs", m::abs, f::abs),
         ("floor", m::floor, f::floor),
         ("ceil", m::ceil, f::ceil),
         ("round_ties_even", m::round_ties_even, f::round_ties_even),
         ("sinpi", m::sinpi, f::sinpi),
         ("cospi", m::cospi, f::cospi),
+        ("unproven::sin", u::sin, fu::sin),
+        ("unproven::cos", u::cos, fu::cos),
+        ("unproven::tan", u::tan, fu::tan),
+        ("unproven::asin", u::asin, fu::asin),
+        ("unproven::acos", u::acos, fu::acos),
+        ("unproven::atan", u::atan, fu::atan),
+        ("unproven::exp", u::exp, fu::exp),
+        ("unproven::ln", u::ln, fu::ln),
+        ("unproven::log2", u::log2, fu::log2),
+        ("unproven::log10", u::log10, fu::log10),
+        ("unproven::cbrt", u::cbrt, fu::cbrt),
+        ("unproven::sinpi", u::sinpi, fu::sinpi),
+        ("unproven::cospi", u::cospi, fu::cospi),
     ];
     for (name, build, func) in unary {
         for class in [Typical, Extreme] {
@@ -1248,10 +1254,11 @@ fn maths_inputs_stay_in_each_domain() {
             "{name}"
         );
     }
-    let binary: [(&str, DoublePairs, Binary); 3] = [
+    let binary: [(&str, DoublePairs, Binary); 4] = [
         ("atan2", m::atan2, f::atan2),
-        ("pow", m::pow, f::pow),
-        ("hypot", m::hypot, f::hypot),
+        ("unproven::atan2", u::atan2, fu::atan2),
+        ("unproven::pow", u::pow, fu::pow),
+        ("unproven::hypot", u::hypot, fu::hypot),
     ];
     for (name, build, func) in binary {
         for class in [Typical, Extreme] {
@@ -1266,9 +1273,9 @@ fn maths_inputs_stay_in_each_domain() {
         );
     }
     for class in [Typical, Extreme] {
-        for (x, n) in m::powi(class) {
+        for (x, n) in u::powi(class) {
             assert!(
-                x.is_finite() && in_domain(math::powi(x, n)),
+                x.is_finite() && in_domain(fu::powi(x, n)),
                 "powi({x:e}, {n})"
             );
         }
@@ -1281,9 +1288,9 @@ fn maths_inputs_stay_in_each_domain() {
         }
     }
     assert!(
-        m::powi(Typical)
+        u::powi(Typical)
             .into_iter()
-            .all(|(x, n)| math::powi(x, n).is_ok())
+            .all(|(x, n)| fu::powi(x, n).is_ok())
     );
     assert!(
         m::fma(Typical)
@@ -1298,9 +1305,9 @@ fn maths_inputs_stay_in_each_domain() {
         m::exp(Extreme).into_iter().map(math::exp).collect()
     ));
     assert!(overflows(
-        m::powi(Extreme)
+        u::powi(Extreme)
             .into_iter()
-            .map(|(x, n)| math::powi(x, n))
+            .map(|(x, n)| fu::powi(x, n))
             .collect()
     ));
     assert!(overflows(
@@ -1310,11 +1317,11 @@ fn maths_inputs_stay_in_each_domain() {
             .collect()
     ));
     // powi: both ends of the exponent's type, and both signs of base in the typical class.
-    let powers = m::powi(Extreme);
+    let powers = u::powi(Extreme);
     assert!(
         powers.iter().any(|&(_, n)| n == i32::MAX) && powers.iter().any(|&(_, n)| n == i32::MIN)
     );
-    assert!(m::powi(Typical).iter().any(|&(x, _)| x < 0.0));
+    assert!(u::powi(Typical).iter().any(|&(x, _)| x < 0.0));
     // fma: the addend cancels the rounded product exactly, so the result is the product's
     // rounding error, which the single rounding keeps.
     assert!(
@@ -1323,7 +1330,7 @@ fn maths_inputs_stay_in_each_domain() {
             .any(|&(a, b, c)| c == -(a * b) && math::fma(a, b, c).is_ok_and(|r| r.get() != 0.0))
     );
     // The extreme sines need the longest argument reduction.
-    assert!(m::sin(Extreme).iter().any(|&x| x.abs() > pow2(1000)));
+    assert!(u::sin(Extreme).iter().any(|&x| x.abs() > pow2(1000)));
     // A quarter of the typical half-turn inputs take the exact branch.
     let exact = m::sinpi(Typical)
         .iter()
@@ -1681,4 +1688,62 @@ fn exact_sum_classes_take_every_path() {
     let cancels =
         |(a, b): &(Vec<f64>, Vec<f64>)| a.iter().zip(b).all(|(x, y)| x.to_bits() == (-y).to_bits());
     assert!(merges.iter().any(cancels));
+}
+
+#[test]
+fn enclosure_classes_take_every_path() {
+    use inputs::interval as i;
+    // The periodic two: typical intervals around a peak and between peaks; extreme ones wider than
+    // a turn ([−1, 1]), from 2^53 up, with ends at multiples of ½, a point at a peak, subnormal ends
+    // and one double short of a peak.
+    type Intervals = fn(Class) -> Vec<Interval>;
+    type Enclosure = fn(Interval) -> Result<Interval, NumError>;
+    let periodic: [(Intervals, Enclosure); 2] =
+        [(i::sinpi, Interval::sinpi), (i::cospi, Interval::cospi)];
+    for (build, enclose) in periodic {
+        let typical: Vec<Interval> = build(Typical)
+            .into_iter()
+            .map(|x| enclose(x).unwrap())
+            .collect();
+        assert!(typical.iter().any(|y| y.hi() == 1.0));
+        assert!(typical.iter().any(|y| y.hi() < 1.0 && y.lo() > -1.0));
+        let extreme = build(Extreme);
+        let enclosed: Vec<Interval> = extreme.iter().map(|x| enclose(*x).unwrap()).collect();
+        assert!(enclosed.iter().any(|y| (y.lo(), y.hi()) == (-1.0, 1.0)));
+        assert!(extreme.iter().any(|x| x.lo() >= pow2(53)));
+        assert!(extreme.iter().any(|x| x.lo() != x.hi()
+            && (x.lo() * 2.0).fract() == 0.0
+            && (x.hi() * 2.0).fract() == 0.0));
+        assert!(extreme.iter().any(|x| x.lo() == x.hi()));
+        assert!(
+            extreme
+                .iter()
+                .any(|x| x.lo() != 0.0 && x.lo().is_subnormal())
+        );
+        assert!(
+            extreme
+                .iter()
+                .any(|x| (x.hi() * 2.0).fract() != 0.0 && (x.hi().next_up() * 2.0).fract() == 0.0)
+        );
+    }
+    // exp: within ±32 typically; past overflow refused, below it answered, the deep underflow, an
+    // end at exactly 0.
+    assert!(
+        i::exp(Typical)
+            .iter()
+            .all(|x| x.lo() >= -32.0 && x.hi() <= 32.0)
+    );
+    let exp = i::exp(Extreme);
+    assert!(exp.iter().any(|x| x.exp() == Err(NumError::NotFinite)));
+    assert!(exp.iter().any(|x| x.hi() > 709.0 && x.exp().is_ok()));
+    assert!(exp.iter().any(|x| x.exp().is_ok_and(|y| y.lo() == 0.0)));
+    assert!(exp.iter().any(|x| x.lo() == 0.0));
+    // ln: every refusal and the exact point.
+    assert!(i::ln(Typical).iter().all(|x| x.lo() > 0.0));
+    let ln = i::ln(Extreme);
+    assert!(ln.iter().any(|x| x.ln() == Err(NumError::OutsideDomain)));
+    assert!(ln.iter().any(|x| x.ln() == Err(NumError::NotFinite)));
+    assert!(ln.iter().any(|x| x.lo() == 1.0));
+    assert!(ln.iter().any(|x| x.lo().is_subnormal()));
+    assert!(ln.iter().any(|x| x.hi() > pow2(1020)));
 }

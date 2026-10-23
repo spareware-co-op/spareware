@@ -316,6 +316,30 @@ pub mod interval {
         run(batch, out, |&x| x.neg());
     }
 
+    /// `Interval::sinpi` of each interval (in half-turns).
+    #[inline(never)]
+    pub fn sinpi(batch: &[Interval], out: &mut Vec<Result<Interval, NumError>>) {
+        run(batch, out, |&x| x.sinpi());
+    }
+
+    /// `Interval::cospi` of each interval (in half-turns).
+    #[inline(never)]
+    pub fn cospi(batch: &[Interval], out: &mut Vec<Result<Interval, NumError>>) {
+        run(batch, out, |&x| x.cospi());
+    }
+
+    /// `Interval::exp` of each interval.
+    #[inline(never)]
+    pub fn exp(batch: &[Interval], out: &mut Vec<Result<Interval, NumError>>) {
+        run(batch, out, |&x| x.exp());
+    }
+
+    /// `Interval::ln` of each interval.
+    #[inline(never)]
+    pub fn ln(batch: &[Interval], out: &mut Vec<Result<Interval, NumError>>) {
+        run(batch, out, |&x| x.ln());
+    }
+
     /// `Interval::certain_sign` on each interval.
     #[inline(never)]
     pub fn certain_sign(batch: &[Interval], out: &mut Vec<Option<Sign>>) {
@@ -443,19 +467,19 @@ pub mod exactness {
     }
 }
 
-/// The deterministic maths functions: `geom_num::math`. Each returns a `Real`, or the error it
-/// reports (an argument outside its domain, or a result that would not be finite), and the kernel
-/// stores whichever it returns.
+/// The deterministic maths functions: `geom_num::math`, and in [`math::unproven`] those without a
+/// proven error bound. Each returns a `Real`, or the error it reports (an argument outside its
+/// domain, or a result that would not be finite), and the kernel stores whichever it returns.
 pub mod math {
     use geom_num::math as m;
     use geom_num::{NumError, Real};
 
     use super::run;
 
-    /// Defines a kernel for a one-argument function.
+    /// Defines a kernel for a one-argument function of the module `m` names, `$path` its path.
     macro_rules! unary {
-        ($($name:ident),+ $(,)?) => {$(
-            #[doc = concat!("`math::", stringify!($name), "` on each value.")]
+        ($path:literal; $($name:ident),+ $(,)?) => {$(
+            #[doc = concat!("`", $path, stringify!($name), "` on each value.")]
             #[inline(never)]
             pub fn $name(batch: &[f64], out: &mut Vec<Result<Real, NumError>>) {
                 run(batch, out, |&x| m::$name(x));
@@ -463,21 +487,15 @@ pub mod math {
         )+};
     }
 
-    /// Defines a kernel for a two-argument function.
+    /// Defines a kernel for a two-argument function of the module `m` names, `$path` its path.
     macro_rules! binary {
-        ($($name:ident),+ $(,)?) => {$(
-            #[doc = concat!("`math::", stringify!($name), "` on each pair.")]
+        ($path:literal; $($name:ident),+ $(,)?) => {$(
+            #[doc = concat!("`", $path, stringify!($name), "` on each pair.")]
             #[inline(never)]
             pub fn $name(batch: &[(f64, f64)], out: &mut Vec<Result<Real, NumError>>) {
                 run(batch, out, |&(x, y)| m::$name(x, y));
             }
         )+};
-    }
-
-    /// `math::powi` on each (base, whole exponent) pair.
-    #[inline(never)]
-    pub fn powi(batch: &[(f64, i32)], out: &mut Vec<Result<Real, NumError>>) {
-        run(batch, out, |&(x, n)| m::powi(x, n));
     }
 
     /// `math::fma` on each (a, b, c) triple: a · b + c, rounded once.
@@ -487,18 +505,10 @@ pub mod math {
     }
 
     unary!(
+        "math::";
         sqrt,
-        sin,
-        cos,
-        tan,
-        asin,
-        acos,
-        atan,
         exp,
         ln,
-        log2,
-        log10,
-        cbrt,
         abs,
         floor,
         ceil,
@@ -506,7 +516,39 @@ pub mod math {
         sinpi,
         cospi,
     );
-    binary!(atan2, pow, hypot);
+    binary!("math::"; atan2);
+
+    /// The maths functions without a proven error bound: `geom_num::math::unproven`.
+    pub mod unproven {
+        use geom_num::math::unproven as m;
+        use geom_num::{NumError, Real};
+
+        use super::run;
+
+        /// `math::unproven::powi` on each (base, whole exponent) pair.
+        #[inline(never)]
+        pub fn powi(batch: &[(f64, i32)], out: &mut Vec<Result<Real, NumError>>) {
+            run(batch, out, |&(x, n)| m::powi(x, n));
+        }
+
+        unary!(
+            "math::unproven::";
+            sin,
+            cos,
+            tan,
+            asin,
+            acos,
+            atan,
+            exp,
+            ln,
+            log2,
+            log10,
+            cbrt,
+            sinpi,
+            cospi,
+        );
+        binary!("math::unproven::"; atan2, pow, hypot);
+    }
 }
 
 /// Counter-based random numbers: `geom_num::rng`. A draw moves its stream on, so each draw kernel

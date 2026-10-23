@@ -65,6 +65,25 @@ const GEOM_NUM: [(&str, &str); 16] = [
     ("wide", include_str!("../../geom-num/src/wide.rs")),
 ];
 
+/// The files inside `geom-num`'s `math` module that hold public functions, by name: `unproven`, a
+/// public module, whose free functions are `unproven::name`; and `enclose`, a private module whose
+/// `impl Interval` adds public methods (`Interval::sinpi` and the rest).
+const MATH_PARTS: [(&str, &str); 2] = [
+    (
+        "unproven",
+        include_str!("../../geom-num/src/math/unproven.rs"),
+    ),
+    (
+        "enclose",
+        include_str!("../../geom-num/src/math/enclose.rs"),
+    ),
+];
+
+/// The private modules of `geom-num`'s `math` that hold only crate-internal code: the proven
+/// functions' ports and their support. Their `pub` items are not reachable from outside the crate,
+/// so they are not read; a new module of `math` fails here until it is listed in one of the two.
+const MATH_PRIVATE: [&str; 6] = ["atan2", "exp", "hexf", "log", "sincospi", "support"];
+
 /// The identifier at the start of `s`.
 fn ident(s: &str) -> String {
     s.chars()
@@ -260,9 +279,21 @@ fn public_functions(module: &str, source: &str) -> Vec<String> {
     let mut out = Vec::new();
     // The type of the `impl` block being read, and whether it implements `Ord`.
     let mut current: Option<(String, bool)> = None;
+    // After a `#[cfg(test)]`: a one-line module declaration (`mod x;`) is skipped, and a module
+    // with a body (`mod tests {`) ends the public code.
+    let mut test_item = false;
     for line in source.lines() {
         if line.starts_with("#[cfg(test)]") {
-            break;
+            test_item = true;
+            continue;
+        }
+        if test_item && !line.starts_with("#[") && !line.starts_with(' ') && !line.starts_with(')')
+        {
+            if line.contains("mod ") && line.trim_end().ends_with('{') {
+                break;
+            }
+            test_item = false;
+            continue;
         }
         if let Some(rest) = line.strip_prefix("impl") {
             // Skip generic parameters, then read `Trait for Type` or `Type`.
@@ -325,8 +356,30 @@ fn every_public_function_of_geom_num_is_measured_or_says_why_not() {
         .filter(|m| m != "lib")
         .collect();
     assert_eq!(declared, read, "a geom-num module this test does not read");
+    // Every module the maths module declares is read or listed as crate-internal.
+    let (_, math) = GEOM_NUM.iter().find(|(m, _)| *m == "math").unwrap();
+    let math_modules: BTreeSet<String> = math
+        .lines()
+        .filter_map(|l| {
+            l.strip_prefix("pub mod ")
+                .or_else(|| l.strip_prefix("mod "))
+        })
+        .map(ident)
+        .filter(|m| m != "tests")
+        .collect();
+    let classified: BTreeSet<String> = MATH_PARTS
+        .iter()
+        .map(|(m, _)| *m)
+        .chain(MATH_PRIVATE)
+        .map(str::to_owned)
+        .collect();
+    assert_eq!(
+        math_modules, classified,
+        "a module of geom-num's math this test does not know"
+    );
     let public: BTreeSet<String> = GEOM_NUM
         .iter()
+        .chain(MATH_PARTS.iter())
         .flat_map(|(m, src)| public_functions(m, src))
         .collect();
     assert!(public.len() > 60, "the parser found only {public:?}");
@@ -356,10 +409,9 @@ fn every_public_function_of_geom_num_is_measured_or_says_why_not() {
 }
 
 /// The interval functions `catalogue::UNMEASURED` excuses as constants, because each refuses every
-/// input with `UnprovenMaths` until build piece G47 proves it: they must still refuse every
-/// interval, from every typical and extreme input of the interval benchmarks, or the excuse is
-/// stale and the function needs its benchmark. A new entry with that reason fails here until it
-/// is listed.
+/// input with `UnprovenMaths` until its enclosure is built: they must still refuse every interval,
+/// from every typical and extreme input of the interval benchmarks, or the excuse is stale and the
+/// function needs its benchmark. A new entry with that reason fails here until it is listed.
 #[test]
 fn every_function_excused_as_a_constant_refusal_still_refuses() {
     use geom_bench::inputs::Class::{Extreme, Typical};
@@ -381,22 +433,14 @@ fn every_function_excused_as_a_constant_refusal_still_refuses() {
         .collect();
     assert_eq!(
         refusals,
-        [
-            "Interval::sin",
-            "Interval::cos",
-            "Interval::atan2",
-            "Interval::exp",
-            "Interval::ln"
-        ]
+        ["Interval::sin", "Interval::cos", "Interval::atan2"]
     );
     for name in refusals {
         for x in &intervals {
             let got = match name {
                 "Interval::sin" => x.sin(),
                 "Interval::cos" => x.cos(),
-                "Interval::atan2" => x.atan2(*x),
-                "Interval::exp" => x.exp(),
-                _ => x.ln(),
+                _ => x.atan2(*x),
             };
             assert_eq!(
                 got,
