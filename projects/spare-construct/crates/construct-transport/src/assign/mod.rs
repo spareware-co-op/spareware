@@ -24,7 +24,6 @@ use crate::graph::build_graph;
 use crate::project::{Project, Scenario, Settings};
 use crate::results::{AssignOpts, Res};
 use run::Run;
-use std::time::Instant;
 
 /// `Engine.assign(sc, opts)`: the equilibrium assignment of a scenario in a period, with junction delay and capacity, and its results.
 ///
@@ -48,7 +47,7 @@ pub fn assign(
     opts: &AssignOpts,
     progress: Option<&mut dyn FnMut(u32, f64, &str)>,
 ) -> Res {
-    let t0 = Instant::now();
+    let t0 = crate::util::now_ms();
     let period = match opts.period.as_deref() {
         Some(x) if !x.is_empty() => x,
         _ => s.period.as_str().unwrap_or("AM"),
@@ -63,6 +62,6 @@ pub fn assign(
     }
     let mut run = Run::new(sc, s, period, opts, g, &dem, progress);
     run.solve();
-    let ms = t0.elapsed().as_millis() as f64;
+    let ms = (crate::util::now_ms() - t0).max(0.0).floor();
     build::build_res(p, sc, s, &dem, df, &run, ms)
 }

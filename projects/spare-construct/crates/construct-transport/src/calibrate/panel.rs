@@ -447,7 +447,7 @@ pub fn run_me(
         };
         (sel("valid"), sel("me"))
     };
-    let date = opts.date.map(str::to_string).unwrap_or_else(|| super::fit::iso_of_ms(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as f64).unwrap_or(0.0)));
+    let date = opts.date.map(str::to_string).unwrap_or_else(|| super::fit::iso_of_ms(crate::util::now_ms()));
     let m1 = me_report(p, &sc, &period, &date);
     if let Some(info) = p.me.get_mut().and_then(|m| m.info.get_mut()).and_then(|i| i.get_mut(&period)).and_then(|i| i.get_mut()) {
         info.extra.insert("countIds".into(), Value::Array(ids.iter().map(|i| Value::String(i.clone())).collect()));
