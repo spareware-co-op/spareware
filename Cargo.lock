@@ -317,6 +317,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "dashu-base"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "861a614e79388a4c72aa66b0bdabc91e3a4f30d53e0c8d962953e207d75884d0"
+dependencies = [
+ "num-modular",
+]
+
+[[package]]
+name = "dashu-int"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "64a0490b40a6a3f6427970035f17f76fd59c01d3cd9f9140809672863a0d64c8"
+dependencies = [
+ "cfg-if",
+ "dashu-base",
+ "num-modular",
+ "static_assertions",
+]
+
+[[package]]
+name = "dashu-ratio"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eb0b7e2610ae7f28b2ab8b09229afedc9cbc7a32e7c647b916a3a49ca00123c1"
+dependencies = [
+ "dashu-base",
+ "dashu-int",
+]
+
+[[package]]
 name = "either"
 version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -333,6 +364,7 @@ dependencies = [
 name = "engine-geometry"
 version = "0.0.0"
 dependencies = [
+ "geom-pool",
  "kit-core",
 ]
 
@@ -387,6 +419,265 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c66915cc5391097de7a2b0b972e8505aa33c0df401fd3a6811dbdb32881ba48"
 
 [[package]]
+name = "geom-2d"
+version = "0.0.0"
+dependencies = [
+ "geom-bvh",
+ "geom-curve",
+ "geom-intersect",
+ "geom-math",
+ "geom-name",
+ "geom-num",
+ "geom-op",
+ "geom-run",
+ "geom-topo",
+]
+
+[[package]]
+name = "geom-3dm"
+version = "0.0.0"
+dependencies = [
+ "geom-curve",
+ "geom-exchange",
+ "geom-format",
+ "geom-heal",
+ "geom-math",
+ "geom-mesh",
+ "geom-num",
+ "geom-op",
+ "geom-run",
+ "geom-subd",
+ "geom-surface",
+ "geom-topo",
+]
+
+[[package]]
+name = "geom-align"
+version = "0.0.0"
+dependencies = [
+ "geom-curve",
+ "geom-math",
+ "geom-name",
+ "geom-num",
+ "geom-op",
+ "geom-run",
+ "geom-sweep",
+]
+
+[[package]]
+name = "geom-analysis"
+version = "0.0.0"
+dependencies = [
+ "geom-intersect",
+ "geom-num",
+ "geom-op",
+ "geom-run",
+ "geom-spatial",
+ "geom-surface",
+ "geom-topo",
+]
+
+[[package]]
+name = "geom-blend"
+version = "0.0.0"
+dependencies = [
+ "geom-bool",
+ "geom-check",
+ "geom-intersect",
+ "geom-num",
+ "geom-op",
+ "geom-run",
+ "geom-surface",
+ "geom-topo",
+]
+
+[[package]]
+name = "geom-bool"
+version = "0.0.0"
+dependencies = [
+ "geom-bvh",
+ "geom-check",
+ "geom-intersect",
+ "geom-name",
+ "geom-num",
+ "geom-op",
+ "geom-poly",
+ "geom-run",
+ "geom-topo",
+]
+
+[[package]]
+name = "geom-bvh"
+version = "0.0.0"
+dependencies = [
+ "geom-math",
+ "geom-num",
+ "geom-run",
+]
+
+[[package]]
+name = "geom-check"
+version = "0.0.0"
+dependencies = [
+ "geom-intersect",
+ "geom-num",
+ "geom-op",
+ "geom-run",
+ "geom-topo",
+]
+
+[[package]]
+name = "geom-cloud"
+version = "0.0.0"
+dependencies = [
+ "geom-linalg",
+ "geom-math",
+ "geom-num",
+ "geom-nurbs",
+ "geom-op",
+ "geom-run",
+ "geom-spatial",
+ "geom-surface",
+]
+
+[[package]]
+name = "geom-combine"
+version = "0.0.0"
+dependencies = [
+ "geom-bool",
+ "geom-check",
+ "geom-convert",
+ "geom-field",
+ "geom-mesh",
+ "geom-num",
+ "geom-op",
+ "geom-run",
+ "geom-subd",
+]
+
+[[package]]
+name = "geom-convert"
+version = "0.0.0"
+dependencies = [
+ "geom-bool",
+ "geom-check",
+ "geom-cloud",
+ "geom-field",
+ "geom-intersect",
+ "geom-mesh",
+ "geom-num",
+ "geom-nurbs",
+ "geom-op",
+ "geom-run",
+ "geom-spatial",
+ "geom-subd",
+ "geom-sweep",
+ "geom-topo",
+]
+
+[[package]]
+name = "geom-curve"
+version = "0.0.0"
+dependencies = [
+ "geom-math",
+ "geom-num",
+ "geom-nurbs",
+ "geom-op",
+ "geom-run",
+]
+
+[[package]]
+name = "geom-draw"
+version = "0.0.0"
+dependencies = [
+ "geom-2d",
+ "geom-bvh",
+ "geom-curve",
+ "geom-intersect",
+ "geom-math",
+ "geom-mesh",
+ "geom-name",
+ "geom-num",
+ "geom-op",
+ "geom-run",
+ "geom-spatial",
+ "geom-surface",
+ "geom-topo",
+]
+
+[[package]]
+name = "geom-dxf"
+version = "0.0.0"
+dependencies = [
+ "geom-2d",
+ "geom-curve",
+ "geom-exchange",
+ "geom-format",
+ "geom-heal",
+ "geom-math",
+ "geom-mesh",
+ "geom-num",
+ "geom-op",
+ "geom-run",
+ "geom-subd",
+ "geom-sweep",
+ "geom-topo",
+]
+
+[[package]]
+name = "geom-exchange"
+version = "0.0.0"
+dependencies = [
+ "geom-check",
+ "geom-curve",
+ "geom-format",
+ "geom-intersect",
+ "geom-math",
+ "geom-num",
+ "geom-op",
+ "geom-p21",
+ "geom-run",
+ "geom-surface",
+ "geom-topo",
+]
+
+[[package]]
+name = "geom-field"
+version = "0.0.0"
+dependencies = [
+ "geom-2d",
+ "geom-bvh",
+ "geom-math",
+ "geom-mesh",
+ "geom-num",
+ "geom-op",
+ "geom-run",
+ "geom-surface",
+]
+
+[[package]]
+name = "geom-format"
+version = "0.0.0"
+dependencies = [
+ "geom-2d",
+ "geom-cloud",
+ "geom-curve",
+ "geom-draw",
+ "geom-field",
+ "geom-math",
+ "geom-mesh",
+ "geom-name",
+ "geom-num",
+ "geom-op",
+ "geom-poly",
+ "geom-run",
+ "geom-sketch",
+ "geom-subd",
+ "geom-surface",
+ "geom-topo",
+]
+
+[[package]]
 name = "geom-fuzz"
 version = "0.0.0"
 dependencies = [
@@ -404,9 +695,155 @@ dependencies = [
 ]
 
 [[package]]
+name = "geom-heal"
+version = "0.0.0"
+dependencies = [
+ "geom-check",
+ "geom-exchange",
+ "geom-mesh",
+ "geom-num",
+ "geom-op",
+ "geom-run",
+ "geom-topo",
+]
+
+[[package]]
+name = "geom-ifc"
+version = "0.0.0"
+dependencies = [
+ "geom-2d",
+ "geom-align",
+ "geom-bool",
+ "geom-cloud",
+ "geom-curve",
+ "geom-exchange",
+ "geom-format",
+ "geom-heal",
+ "geom-math",
+ "geom-mesh",
+ "geom-num",
+ "geom-op",
+ "geom-p21",
+ "geom-poly",
+ "geom-run",
+ "geom-surface",
+ "geom-sweep",
+ "geom-terrain",
+ "geom-topo",
+]
+
+[[package]]
+name = "geom-intersect"
+version = "0.0.0"
+dependencies = [
+ "geom-bvh",
+ "geom-curve",
+ "geom-math",
+ "geom-num",
+ "geom-nurbs",
+ "geom-op",
+ "geom-run",
+ "geom-surface",
+]
+
+[[package]]
+name = "geom-landxml"
+version = "0.0.0"
+dependencies = [
+ "geom-2d",
+ "geom-align",
+ "geom-exchange",
+ "geom-format",
+ "geom-num",
+ "geom-op",
+ "geom-run",
+ "geom-terrain",
+]
+
+[[package]]
+name = "geom-linalg"
+version = "0.0.0"
+dependencies = [
+ "geom-num",
+]
+
+[[package]]
+name = "geom-make"
+version = "0.0.0"
+dependencies = [
+ "geom-check",
+ "geom-curve",
+ "geom-math",
+ "geom-num",
+ "geom-op",
+ "geom-run",
+ "geom-surface",
+ "geom-topo",
+]
+
+[[package]]
+name = "geom-math"
+version = "0.0.0"
+dependencies = [
+ "geom-num",
+ "geom-op",
+ "num-bigint",
+ "num-integer",
+ "num-rational",
+ "num-traits",
+ "proptest",
+]
+
+[[package]]
+name = "geom-mesh"
+version = "0.0.0"
+dependencies = [
+ "geom-2d",
+ "geom-bvh",
+ "geom-curve",
+ "geom-intersect",
+ "geom-linalg",
+ "geom-math",
+ "geom-num",
+ "geom-op",
+ "geom-poly",
+ "geom-run",
+ "geom-surface",
+ "geom-topo",
+]
+
+[[package]]
+name = "geom-meshio"
+version = "0.0.0"
+dependencies = [
+ "geom-exchange",
+ "geom-format",
+ "geom-heal",
+ "geom-math",
+ "geom-mesh",
+ "geom-num",
+ "geom-op",
+ "geom-run",
+ "geom-subd",
+]
+
+[[package]]
+name = "geom-name"
+version = "0.0.0"
+dependencies = [
+ "geom-num",
+ "geom-op",
+ "geom-run",
+ "geom-topo",
+]
+
+[[package]]
 name = "geom-num"
 version = "0.0.0"
 dependencies = [
+ "dashu-int",
+ "dashu-ratio",
+ "geom-run",
  "libm",
  "num-bigint",
  "num-integer",
@@ -416,12 +853,243 @@ dependencies = [
 ]
 
 [[package]]
+name = "geom-nurbs"
+version = "0.0.0"
+dependencies = [
+ "geom-linalg",
+ "geom-math",
+ "geom-num",
+ "geom-op",
+ "geom-run",
+]
+
+[[package]]
+name = "geom-offset"
+version = "0.0.0"
+dependencies = [
+ "geom-bool",
+ "geom-intersect",
+ "geom-num",
+ "geom-op",
+ "geom-run",
+ "geom-skeleton",
+ "geom-surface",
+ "geom-topo",
+]
+
+[[package]]
+name = "geom-op"
+version = "0.0.0"
+dependencies = [
+ "geom-num",
+ "geom-run",
+]
+
+[[package]]
+name = "geom-p21"
+version = "0.0.0"
+dependencies = [
+ "geom-format",
+ "geom-num",
+ "geom-op",
+ "geom-run",
+]
+
+[[package]]
+name = "geom-panel"
+version = "0.0.0"
+dependencies = [
+ "geom-2d",
+ "geom-check",
+ "geom-intersect",
+ "geom-linalg",
+ "geom-mesh",
+ "geom-num",
+ "geom-op",
+ "geom-poly",
+ "geom-run",
+ "geom-surface",
+ "geom-topo",
+]
+
+[[package]]
+name = "geom-poly"
+version = "0.0.0"
+dependencies = [
+ "geom-math",
+ "geom-num",
+ "geom-op",
+ "geom-run",
+ "geom-topo",
+]
+
+[[package]]
+name = "geom-pool"
+version = "0.0.0"
+dependencies = [
+ "geom-run",
+]
+
+[[package]]
+name = "geom-profile"
+version = "0.0.0"
+dependencies = [
+ "geom-2d",
+ "geom-check",
+ "geom-intersect",
+ "geom-name",
+ "geom-num",
+ "geom-op",
+ "geom-run",
+ "geom-sketch",
+ "geom-topo",
+]
+
+[[package]]
+name = "geom-run"
+version = "0.0.0"
+dependencies = [
+ "proptest",
+]
+
+[[package]]
+name = "geom-skeleton"
+version = "0.0.0"
+dependencies = [
+ "geom-2d",
+ "geom-math",
+ "geom-num",
+ "geom-op",
+ "geom-poly",
+ "geom-run",
+ "geom-topo",
+]
+
+[[package]]
+name = "geom-sketch"
+version = "0.0.0"
+dependencies = [
+ "geom-curve",
+ "geom-linalg",
+ "geom-math",
+ "geom-num",
+ "geom-op",
+ "geom-run",
+]
+
+[[package]]
+name = "geom-spatial"
+version = "0.0.0"
+dependencies = [
+ "geom-bvh",
+ "geom-intersect",
+ "geom-math",
+ "geom-mesh",
+ "geom-num",
+ "geom-op",
+ "geom-poly",
+ "geom-run",
+]
+
+[[package]]
+name = "geom-step"
+version = "0.0.0"
+dependencies = [
+ "geom-curve",
+ "geom-exchange",
+ "geom-format",
+ "geom-heal",
+ "geom-math",
+ "geom-mesh",
+ "geom-num",
+ "geom-op",
+ "geom-p21",
+ "geom-poly",
+ "geom-run",
+ "geom-surface",
+ "geom-topo",
+]
+
+[[package]]
+name = "geom-subd"
+version = "0.0.0"
+dependencies = [
+ "geom-math",
+ "geom-num",
+ "geom-nurbs",
+ "geom-op",
+ "geom-run",
+ "geom-surface",
+]
+
+[[package]]
+name = "geom-surface"
+version = "0.0.0"
+dependencies = [
+ "geom-curve",
+ "geom-math",
+ "geom-num",
+ "geom-nurbs",
+ "geom-op",
+ "geom-run",
+]
+
+[[package]]
+name = "geom-sweep"
+version = "0.0.0"
+dependencies = [
+ "geom-bool",
+ "geom-check",
+ "geom-intersect",
+ "geom-name",
+ "geom-num",
+ "geom-op",
+ "geom-poly",
+ "geom-run",
+ "geom-skeleton",
+ "geom-surface",
+ "geom-topo",
+]
+
+[[package]]
+name = "geom-terrain"
+version = "0.0.0"
+dependencies = [
+ "geom-2d",
+ "geom-bool",
+ "geom-bvh",
+ "geom-curve",
+ "geom-math",
+ "geom-mesh",
+ "geom-name",
+ "geom-num",
+ "geom-op",
+ "geom-poly",
+ "geom-run",
+ "geom-skeleton",
+ "geom-surface",
+ "geom-topo",
+]
+
+[[package]]
 name = "geom-test"
 version = "0.0.0"
 dependencies = [
  "geom-num",
  "proptest",
  "serde_json",
+]
+
+[[package]]
+name = "geom-topo"
+version = "0.0.0"
+dependencies = [
+ "geom-curve",
+ "geom-math",
+ "geom-num",
+ "geom-op",
+ "geom-run",
+ "geom-surface",
 ]
 
 [[package]]
@@ -564,6 +1232,12 @@ checksum = "7ce2d95d4b3734dc35aa2f45e1aa22cd416814592a4f9d9205e11affd5b8e10b"
 dependencies = [
  "num-traits",
 ]
+
+[[package]]
+name = "num-modular"
+version = "0.6.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bd8e500409e6cd603b03e477c26a6caecdc27ac58979a53e881c75eafc079f44"
 
 [[package]]
 name = "num-rational"
@@ -923,6 +1597,12 @@ name = "shlex"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
+
+[[package]]
+name = "static_assertions"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "syn"

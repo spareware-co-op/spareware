@@ -1,0 +1,196 @@
+# Kernel lints deny unwrap, expect, panic and unchecked indexing in kernel code. Tests may use them:
+# a failing test should stop loudly.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-indexing-slicing-in-tests = true
+
+# Two bans share the one disallowed-types list and the one disallowed-methods list clippy reads;
+# a comment inside each list says which ban the entries below it belong to.
+#
+# Chapter 21's determinism hazards, enforced by clippy as chapter 21's "Enforced by" column and
+# section 28's merge gate require. Each reason names what the kernel uses instead.
+#
+# No randomness but geom_num::rng (the randomised-method rule, rule 1, in src/rng.rs). A kernel
+# crate's random numbers come only from Philox4x32-10 keyed by an explicit seed, so the other sources
+# of randomness or entropy a kernel crate could reach are banned here by path. Every kernel crate
+# copies this file.
+#
+# - std and core: std's randomly seeded hasher, and the HashMap and HashSet types whose every
+#   default construction seeds it (new, with_capacity, default, from, collect: the trait methods
+#   cannot be banned by path, so the types are, as chapter 21 also asks); the clocks; the process id;
+#   the running thread's identity; std's own random module (unstable in Rust 1.99, where it holds
+#   `random` and `SystemRng`; banned before it is stable); and the x86 hardware random-number and
+#   cycle-counter instructions. RDRAND and RDSEED need no `unsafe` inside a `#[target_feature]`
+#   function, so `forbid(unsafe_code)` alone does not keep them out. The std paths carry no
+#   `allow-invalid`, so a toolchain that renames one (std::random is still changing) makes clippy
+#   print "`<path>` does not refer to a reachable function" (or "type") instead of the ban lapsing
+#   in silence. That message is a warning, not an error: under clippy 0.1.99 neither `-D warnings`
+#   nor `RUSTFLAGS=-D warnings` turns it into one, and a `no_std` build, which does not link std,
+#   does not print it at all (the test builds, which link std, do). So a lapsed std entry does not
+#   fail CI by itself; failing on that message belongs to the merge gate (G12). The `core::arch`
+#   paths exist only when compiling for x86, so they carry `allow-invalid`; clippy in CI runs on
+#   x86-64, where they resolve.
+# - Other crates: the entry points of rand (0.8 to 0.10), rand_core (0.6 to 0.10) and getrandom (0.2
+#   to 0.4); hashbrown's maps and its randomly seeded default hasher; foldhash's randomly seeded
+#   hashers; fastrand; and rayon's thread index, which is the thread-numbered stream id rule 3
+#   forbids. A kernel crate depends on none of these (rayon is planned for geom-pool only), so their
+#   paths need not resolve and carry `allow-invalid`. They are defence in depth: the guard that
+#   keeps every other crate out of kernel crates is the merge gate's dependency allow-list (piece
+#   G12: libm the only registry crate, rayon only in geom-pool).
+# - Checked: under clippy 0.1.99, in scratch crates outside the repository, every entry was shown to
+#   resolve and to fire on a call or a use, against rand 0.9.5 and 0.10.3, rand_core 0.9.5 and
+#   0.10.1, getrandom 0.2.15, 0.3.4 and 0.4.3, hashbrown 0.16.1, foldhash 0.2.0, fastrand 2.3.0 and
+#   rayon 1.12.0, and on x86_64-pc-windows-gnu for std and core::arch::x86_64 (std::random under
+#   RUSTC_BOOTSTRAP, since it is unstable), except these, which were not run: rand 0.8's
+#   `rand::rngs::adapter::ReseedingRng` and rand_core 0.6's `SeedableRng::from_entropy`, taken from
+#   those versions' documentation because the versions were not at hand; and the 32-bit
+#   `core::arch::x86` entries, the same items x86-64 re-exports, because no 32-bit x86 target was at
+#   hand. `allow-invalid` means a third-party path that stops resolving goes quiet, so checking in
+#   CI that every entry still resolves and fires on a seeded violation belongs to the merge gate
+#   (G12: "each check is shown to fail on a seeded violation").
+# - Not bannable by path, so review rules (chapter 21): memory addresses (pointer-to-integer casts,
+#   `addr`, `expose_provenance`), which clippy cannot name; and any crate not listed here, which the
+#   dependency allow-list keeps out.
+disallowed-types = [
+    # Hash map iteration order is random (chapter 21): every default construction seeds the hasher
+    # from the operating system's entropy (randomised-method rule 1).
+    { path = "std::collections::HashMap", reason = "every default construction (new, default, from, collect) seeds its hasher from the operating system's entropy, so iteration order differs run to run; use BTreeMap (chapter 21)" },
+    { path = "std::collections::HashSet", reason = "every default construction (new, default, from, collect) seeds its hasher from the operating system's entropy, so iteration order differs run to run; use BTreeSet (chapter 21)" },
+    # Other sources of randomness and entropy (randomised-method rule 1).
+    { path = "std::hash::RandomState", reason = "seeded from the operating system's entropy; the kernel's random numbers come only from geom_num::rng" },
+    { path = "std::thread::ThreadId", reason = "which thread runs a piece of work differs run to run; no result or stream id may depend on it (randomised-method rule 3)" },
+    { path = "std::random::SystemRng", reason = "the operating system's entropy; use geom_num::rng with an explicit seed" },
+    { path = "hashbrown::HashMap", reason = "its default hasher is seeded per process (foldhash), so iteration order differs run to run (chapter 21)", allow-invalid = true },
+    { path = "hashbrown::HashSet", reason = "its default hasher is seeded per process (foldhash), so iteration order differs run to run (chapter 21)", allow-invalid = true },
+    { path = "hashbrown::DefaultHashBuilder", reason = "seeded per process; the kernel's random numbers come only from geom_num::rng", allow-invalid = true },
+    { path = "foldhash::fast::RandomState", reason = "seeded per process; the kernel's random numbers come only from geom_num::rng", allow-invalid = true },
+    { path = "foldhash::quality::RandomState", reason = "seeded per process; the kernel's random numbers come only from geom_num::rng", allow-invalid = true },
+    { path = "fastrand::Rng", reason = "another generator, seeded from entropy by new(); use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "rand::rngs::ThreadRng", reason = "seeded from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "rand::rngs::OsRng", reason = "the operating system's entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "rand::rngs::SysRng", reason = "the operating system's entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "rand::rngs::StdRng", reason = "its algorithm may change in any rand release; use geom_num::rng", allow-invalid = true },
+    { path = "rand::rngs::SmallRng", reason = "its algorithm differs between 32- and 64-bit targets and rand releases; use geom_num::rng", allow-invalid = true },
+    { path = "rand::rngs::ReseedingRng", reason = "reseeds itself from another generator, usually entropy; use geom_num::rng", allow-invalid = true },
+    { path = "rand::rngs::adapter::ReseedingRng", reason = "rand 0.8's path; reseeds itself from another generator, usually entropy; use geom_num::rng", allow-invalid = true },
+    { path = "rand_core::OsRng", reason = "the operating system's entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "getrandom::SysRng", reason = "the operating system's entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+]
+disallowed-methods = [
+    # `max` and `min` may return either zero when given −0 and +0.
+    { path = "f64::max", reason = "may return either zero; use Real::total_max (chapter 21)" },
+    { path = "f64::min", reason = "may return either zero; use Real::total_min (chapter 21)" },
+    { path = "f32::max", reason = "may return either zero; use Real::total_max (chapter 21)" },
+    { path = "f32::min", reason = "may return either zero; use Real::total_min (chapter 21)" },
+    # Reductions whose order is not written out (chapter 23).
+    { path = "core::iter::Iterator::sum", reason = "write the order out, or use ExactSum (chapter 23)" },
+    { path = "core::iter::Iterator::product", reason = "write the order out (chapter 23)" },
+    # The platform's maths functions differ by platform: only geom_num::math supplies them.
+    { path = "f64::sin", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f64::cos", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f64::tan", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f64::sin_cos", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f64::asin", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f64::acos", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f64::atan", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f64::atan2", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f64::sinh", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f64::cosh", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f64::tanh", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f64::asinh", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f64::acosh", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f64::atanh", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f64::exp", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f64::exp2", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f64::exp_m1", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f64::ln", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f64::log", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f64::log2", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f64::log10", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f64::ln_1p", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f64::powf", reason = "platform maths; use geom_num::math::unproven::pow (chapter 21)" },
+    { path = "f64::powi", reason = "platform maths; use geom_num::math::unproven::powi (chapter 21)" },
+    { path = "f64::cbrt", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f64::hypot", reason = "platform maths; use geom_num::math (chapter 21)" },
+    # Randomness and entropy (randomised-method rule 1).
+    { path = "std::hash::RandomState::new", reason = "seeded from the operating system's entropy; the kernel's random numbers come only from geom_num::rng" },
+    { path = "std::collections::HashMap::new", reason = "seeds its hasher from the operating system's entropy, so iteration order differs run to run" },
+    { path = "std::collections::HashMap::with_capacity", reason = "seeds its hasher from the operating system's entropy, so iteration order differs run to run" },
+    { path = "std::collections::HashSet::new", reason = "seeds its hasher from the operating system's entropy, so iteration order differs run to run" },
+    { path = "std::collections::HashSet::with_capacity", reason = "seeds its hasher from the operating system's entropy, so iteration order differs run to run" },
+    { path = "std::time::SystemTime::now", reason = "the clock is entropy; nothing the kernel computes may depend on it" },
+    { path = "std::time::SystemTime::elapsed", reason = "reads the clock; nothing the kernel computes may depend on it" },
+    { path = "std::time::Instant::now", reason = "the clock is entropy; nothing the kernel computes may depend on it" },
+    { path = "std::time::Instant::elapsed", reason = "reads the clock; nothing the kernel computes may depend on it" },
+    { path = "std::process::id", reason = "differs run to run; nothing the kernel computes may depend on it" },
+    { path = "std::thread::current", reason = "which thread runs a piece of work differs run to run; no result or stream id may depend on it (randomised-method rule 3)" },
+    { path = "std::thread::Thread::id", reason = "which thread runs a piece of work differs run to run; no result or stream id may depend on it (randomised-method rule 3)" },
+    { path = "std::random::random", reason = "the operating system's entropy; use geom_num::rng with an explicit seed" },
+    { path = "core::arch::x86_64::_rdrand16_step", reason = "hardware entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "core::arch::x86_64::_rdrand32_step", reason = "hardware entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "core::arch::x86_64::_rdrand64_step", reason = "hardware entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "core::arch::x86_64::_rdseed16_step", reason = "hardware entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "core::arch::x86_64::_rdseed32_step", reason = "hardware entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "core::arch::x86_64::_rdseed64_step", reason = "hardware entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "core::arch::x86_64::_rdtsc", reason = "the cycle counter is a clock; nothing the kernel computes may depend on it", allow-invalid = true },
+    { path = "core::arch::x86_64::__rdtscp", reason = "the cycle counter is a clock; nothing the kernel computes may depend on it", allow-invalid = true },
+    { path = "core::arch::x86::_rdrand16_step", reason = "hardware entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "core::arch::x86::_rdrand32_step", reason = "hardware entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "core::arch::x86::_rdseed16_step", reason = "hardware entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "core::arch::x86::_rdseed32_step", reason = "hardware entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "core::arch::x86::_rdtsc", reason = "the cycle counter is a clock; nothing the kernel computes may depend on it", allow-invalid = true },
+    { path = "core::arch::x86::__rdtscp", reason = "the cycle counter is a clock; nothing the kernel computes may depend on it", allow-invalid = true },
+    { path = "hashbrown::HashMap::new", reason = "seeds its hasher per process (foldhash), so iteration order differs run to run", allow-invalid = true },
+    { path = "hashbrown::HashMap::with_capacity", reason = "seeds its hasher per process (foldhash), so iteration order differs run to run", allow-invalid = true },
+    { path = "hashbrown::HashSet::new", reason = "seeds its hasher per process (foldhash), so iteration order differs run to run", allow-invalid = true },
+    { path = "hashbrown::HashSet::with_capacity", reason = "seeds its hasher per process (foldhash), so iteration order differs run to run", allow-invalid = true },
+    { path = "fastrand::Rng::new", reason = "seeded from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "fastrand::seed", reason = "fastrand's global generator, seeded from entropy unless reseeded; use geom_num::rng", allow-invalid = true },
+    { path = "fastrand::get_seed", reason = "fastrand's global generator is seeded from entropy; use geom_num::rng", allow-invalid = true },
+    { path = "fastrand::bool", reason = "fastrand's global generator, seeded from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "fastrand::alphabetic", reason = "fastrand's global generator, seeded from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "fastrand::alphanumeric", reason = "fastrand's global generator, seeded from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "fastrand::lowercase", reason = "fastrand's global generator, seeded from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "fastrand::uppercase", reason = "fastrand's global generator, seeded from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "fastrand::digit", reason = "fastrand's global generator, seeded from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "fastrand::choice", reason = "fastrand's global generator, seeded from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "fastrand::choose_multiple", reason = "fastrand's global generator, seeded from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "fastrand::shuffle", reason = "fastrand's global generator, seeded from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "fastrand::fill", reason = "fastrand's global generator, seeded from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "fastrand::f32", reason = "fastrand's global generator, seeded from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "fastrand::f64", reason = "fastrand's global generator, seeded from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "fastrand::u8", reason = "fastrand's global generator, seeded from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "fastrand::i8", reason = "fastrand's global generator, seeded from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "fastrand::u16", reason = "fastrand's global generator, seeded from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "fastrand::i16", reason = "fastrand's global generator, seeded from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "fastrand::u32", reason = "fastrand's global generator, seeded from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "fastrand::i32", reason = "fastrand's global generator, seeded from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "fastrand::u64", reason = "fastrand's global generator, seeded from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "fastrand::i64", reason = "fastrand's global generator, seeded from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "fastrand::u128", reason = "fastrand's global generator, seeded from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "fastrand::i128", reason = "fastrand's global generator, seeded from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "fastrand::usize", reason = "fastrand's global generator, seeded from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "fastrand::isize", reason = "fastrand's global generator, seeded from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "fastrand::char", reason = "fastrand's global generator, seeded from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "rayon::current_thread_index", reason = "a thread-numbered stream id; work stealing makes it differ run to run (randomised-method rule 3)", allow-invalid = true },
+    { path = "rayon::ThreadPool::current_thread_index", reason = "a thread-numbered stream id; work stealing makes it differ run to run (randomised-method rule 3)", allow-invalid = true },
+    { path = "rand::thread_rng", reason = "seeded from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "rand::rng", reason = "seeded from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "rand::random", reason = "seeded from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "rand::random_iter", reason = "seeded from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "rand::random_range", reason = "seeded from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "rand::random_bool", reason = "seeded from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "rand::random_ratio", reason = "seeded from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "rand::fill", reason = "seeded from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "rand::make_rng", reason = "seeded from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "rand_core::SeedableRng::from_entropy", reason = "seeds from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "rand_core::SeedableRng::from_os_rng", reason = "seeds from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "rand_core::SeedableRng::try_from_os_rng", reason = "seeds from entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "getrandom::getrandom", reason = "the operating system's entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "getrandom::getrandom_uninit", reason = "the operating system's entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "getrandom::fill", reason = "the operating system's entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "getrandom::fill_uninit", reason = "the operating system's entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "getrandom::u32", reason = "the operating system's entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+    { path = "getrandom::u64", reason = "the operating system's entropy; use geom_num::rng with an explicit seed", allow-invalid = true },
+]
