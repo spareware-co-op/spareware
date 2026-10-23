@@ -1,4 +1,4 @@
-//! Shared kit: storage.
+//! Spare Kit: storage.
 //!
 //! Chunked storage, the spatial index and paging from disk, so an app only loads
 //! what someone is working on.

@@ -6,6 +6,8 @@
 //! random numbers come from (a counter-based generator keyed by explicit seeds), and the tolerance
 //! ladder.
 //!
+//! Layer: 1, Numbers and the contract (chapter 27's proposed layer table).
+//!
 //! Map: chapter 6 of the kernel architecture
 //! (`projects/engines/geometry/architecture/06-numbers.md`), with the numeric parts of chapters 9
 //! (exactness), 21 (determinism) and 28 (testing), and the random generator chapters 16

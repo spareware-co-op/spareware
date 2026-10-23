@@ -13,7 +13,7 @@ Spare Work is also the services layer for the other programs: maintenance for Sp
 - Stage payments are held until each stage is signed off.
 - Licences and registrations are checked, not just claimed.
 
-## What it uses from the shared kit
+## What it uses from Spare Kit
 
 Accounts and ID checks (licence and registration checks), payments (held stage payments), matching, maps, messaging, ratings and disputes, member voting, the open cost ledger, and the marketplace engine.
 
