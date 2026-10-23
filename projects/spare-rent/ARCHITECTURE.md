@@ -11,7 +11,7 @@ Long-term renting where landlords can self-manage with good tools, tenants apply
 - Maintenance requests go straight to trades on Spare Work.
 - Legal records (bond, Healthy Homes, inspections) are kept in order automatically.
 
-## What it uses from the shared kit
+## What it uses from Spare Kit
 
 Accounts and ID checks, payments (rent, if both sides choose), maps, messaging, ratings, member voting, the open cost ledger, and the marketplace engine. Maintenance jobs go to Spare Work.
 

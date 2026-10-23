@@ -2,7 +2,7 @@
 
 *Stage: Mapping. Every choice below is open until an owner accepts a decision note.*
 
-Documents, spreadsheets, slides, email and calendar, chat and video calls, notes, forms and file storage, replacing Microsoft 365 with apps that are free to use and owned by their members. Everything saves in open, published formats and reads and writes Microsoft's formats from their published standards, so nobody is locked in. Several people can edit the same file at once through the shared kit's sync.
+Documents, spreadsheets, slides, email and calendar, chat and video calls, notes, forms and file storage, replacing Microsoft 365 with apps that are free to use and owned by their members. Everything saves in open, published formats and reads and writes Microsoft's formats from their published standards, so nobody is locked in. Several people can edit the same file at once through Spare Kit's sync.
 
 ## The apps
 
@@ -19,7 +19,7 @@ Our products use their own names. Microsoft's names appear only to say what each
 | Spare Drive | OneDrive, SharePoint | File storage, sharing, version history |
 | Spare Forms | Forms | Forms and surveys feeding into Sheets |
 
-## What it uses from the shared kit
+## What it uses from Spare Kit
 
 Accounts (one login for every app), sync and history (live co-editing and version history), storage, messaging and notifications, plugins and the MCP server (so AI agents can read and edit documents), and the shared engines: text, PDF, 2D drawing and rendering. Spare Mail and Spare Chat also use the open protocols below.
 

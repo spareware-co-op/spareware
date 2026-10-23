@@ -6,7 +6,7 @@ Every piece is a GitHub issue. See who's working on what: [checked out](https://
 
 | Project | Stage | Open pieces | Folder |
 | --- | --- | --- | --- |
-| Shared kit | Mapping | 6 | [projects/kit](projects/kit/STATUS.md) |
+| Spare Kit | Mapping | 7 | [projects/kit](projects/kit/STATUS.md) |
 | Spare Construct | Mapping; traffic and public transport has a working prototype | 14 | [projects/spare-construct](projects/spare-construct/STATUS.md) |
 | Spare Studio (working name) | Mapping | 8 | [projects/spare-studio](projects/spare-studio/STATUS.md) |
 | Spare Social (working name) | Mapping | 9 | [projects/spare-social](projects/spare-social/STATUS.md) |

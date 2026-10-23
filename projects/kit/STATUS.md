@@ -1,4 +1,4 @@
-# Shared kit status
+# Spare Kit status
 
 **The geometry kernel is owner-built for now.** An owner is building the Spare Kit geometry kernel (`projects/engines/geometry`, pieces G01 onwards) and is not taking kernel contributions until it asks for feedback. Please don't check out, open or work on kernel pieces; the pieces below are open as usual. Follow the kernel on [issue #169](https://github.com/spareware-co-op/spareware/issues/169).
 
@@ -16,3 +16,4 @@ Sizes: Small fits a little spare, Medium a fair amount, Large a lot. Who has a p
 | K04 | Phone apps: web apps, Tauri mobile or native | Decision note | Medium | Recommendation covering live location, push notifications and app store rules | [#13](https://github.com/spareware-co-op/spareware/issues/13) |
 | K05 | First marketplace to build | Decision note | Small | Ranking of Ride, Food, Work and others on demand, regulation and effort | [#14](https://github.com/spareware-co-op/spareware/issues/14) |
 | K06 | Open cost ledger: what it publishes and how it is checked | Design note | Small | A sample month's ledger and who signs it off | [#15](https://github.com/spareware-co-op/spareware/issues/15) |
+| G01 | Geometry kernel: full architecture of the Spare Kit kernel, 3D and 2D | Decision note | Large | The whole kernel mapped at full scale, each part naming the proven method it follows with links into the source, and the crates and build pieces in order | [#169](https://github.com/spareware-co-op/spareware/issues/169) · [note](notes/G01-geometry-kernel.md) |

@@ -14,7 +14,7 @@ Warm off-white page, white panels, ink text, hairline rules, square-ish corners,
 
 ## Colour
 
-- **Spareware red** (`--spare-red`, #C8102E) belongs to the co-op: the logo, co-op pages (membership, voting, the cost ledger) and the shared kit's screens.
+- **Spareware red** (`--spare-red`, #C8102E) belongs to the co-op: the logo, co-op pages (membership, voting, the cost ledger) and Spare Kit's screens.
 - **Each app has its own light colour** (`--app`), set by `data-app` on the page. It fills the app's mark, primary buttons, active tabs and selected items. Its deeper shade (`--app-strong`) is only for thin borders and icons; its tint (`--app-tint`) is for quiet backgrounds such as notes and highlighted cards.
 
 | App | Light colour | Deeper shade | Tint |
