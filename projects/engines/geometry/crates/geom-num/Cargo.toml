@@ -11,9 +11,10 @@ license = "MPL-2.0 AND MIT"
 description = "Spare Kit geometry kernel: the numbers layer. Grid coordinates, fixed-width integers, exact predicates, intervals, deterministic maths and the tolerance ladder."
 
 [dependencies]
+geom-run = { path = "../geom-run", default-features = false }
 # The source of the unproven maths functions, the fused multiply-add, the correctly rounded
 # square root and the exact rounding functions: pure Rust, the same result on every target. The
-# proven maths functions are CORE-MATH ports in src/math/. MIT OR Apache-2.0.
+# proven maths functions are CORE-MATH ports in src/math/. MIT (libm 0.2.16's licence).
 libm = "0.2.16"
 
 [dev-dependencies]
