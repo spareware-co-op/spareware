@@ -1297,7 +1297,7 @@ IDs are never reused. A part that changed priority moved to a feature of that pr
 - Is the demo's interface our own design, with our own names and icons, and nothing that copies another product's look?
 - Which parts can start now in the Mapping stage as research and decision notes, and which must wait for the first six decisions?
 - Are there features missing that a structural engineer, a services engineer, a builder or a council officer would expect to see?
-- Do the parts lean on the shared kit and engines where they should, rather than building their own accounts, payments, messaging or PDF output?
+- Do the parts lean on Spare Kit where they should, rather than building their own accounts, payments, messaging or PDF output?
 - Has the kit made core the two parts Spare Construct's first release needs (its plugin host KIT-A16-F5-P2 and chunked storage KIT-A15-F6-P2), or should Spare Construct's first release wait for them?
 - Does the house consent checklist (CON-A11-F5-P4) match what councils ask for, and are the items it marks as coming from outside acceptable at Gate D?
 - Do the decisions that gate the Design stage but have no work-board piece yet (storage layout CON-A2-F4-P8, kernel start CON-A3-F1-P7) now have pieces, and does every other decision part have one before its build part starts?

@@ -1,4 +1,4 @@
-//! Shared kit: sync and history.
+//! Spare Kit: sync and history.
 //!
 //! Multi-user sync of operations, version history, branches and offline work.
 //! Map: root ARCHITECTURE.md; Spare Construct ARCHITECTURE.md, "Multi-user and history".

@@ -6497,7 +6497,7 @@
             {
               "id": "RIDE-A19-F9-P1",
               "name": "Simulated riders and drivers",
-              "what": "Rider and driver behaviours for simulated city runs, using the same commands as people on real map data, ready to move into a shared kit simulator.",
+              "what": "Rider and driver behaviours for simulated city runs, using the same commands as people on real map data, ready to move into a Spare Kit simulator.",
               "kind": "library",
               "size": "medium",
               "depends_on": [
