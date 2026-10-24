@@ -2142,6 +2142,11 @@ mod tests {
                 "bans.allow is not set",
             ),
             (
+                "an empty allow-list, which cargo-deny reads as none",
+                swap(&format!("{NO_STD_ENTRY}\n"), ""),
+                "bans.allow is empty",
+            ),
+            (
                 "dev in",
                 swap("exclude-dev = true", "exclude-dev = false"),
                 "graph.exclude-dev",

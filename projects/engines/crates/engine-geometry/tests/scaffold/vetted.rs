@@ -23,7 +23,8 @@
 //! What it guarantees: an entry is vetted only when every clause is there and says something, its
 //! version is exact (`major.minor.patch`, digits only) and its `pinned:` clause names the same
 //! version; anything else is refused with what is missing, never read in part. A crate is named
-//! once. The list says nothing about which kernel crate may name the crate: that is the crate
+//! once. A list that is missing or empty is refused, because cargo-deny checks an allow-list only
+//! when it holds an entry, and would then allow every crate. The list says nothing about which kernel crate may name the crate: that is the crate
 //! table's rule (`table`, `check`), which holds that only `geom-num` names `libm`.
 //!
 //! Method: cargo-deny 0.20.2's `bans.allow` with its `crate` and `reason` keys
@@ -273,6 +274,14 @@ pub fn read(keys: &Keys) -> Result<Vec<Vetted>, Vec<String>> {
     let Some(items) = value.as_array() else {
         return Err(vec![format!("{ALLOW_KEY} is not a list")]);
     };
+    if items.is_empty() {
+        // cargo-deny 0.20.2 checks the list only when it is not empty (`src/bans.rs`, `if
+        // !allowed.0.is_empty()`), so an empty one would let every crate through it.
+        return Err(vec![format!(
+            "{ALLOW_KEY} is empty, which cargo-deny reads as no allow-list at all, so every crate \
+             would pass it"
+        )]);
+    }
     let mut vetted = Vec::new();
     let mut wrong = Vec::new();
     let mut names = BTreeSet::new();
@@ -346,6 +355,21 @@ pub fn against_lock(vetted: &[Vetted], lock: &str) -> Vec<String> {
         }
     }
     wrong
+}
+
+/// Every entry whose record names a committed audit that `exists` does not find, by its path from
+/// the repository root: a record may not point at an audit that is not there.
+pub fn missing_audits(vetted: &[Vetted], exists: impl Fn(&str) -> bool) -> Vec<String> {
+    vetted
+        .iter()
+        .filter_map(|v| match &v.audited {
+            Audit::File(path) if !exists(path) => Some(format!(
+                "{}@{}: its audit {path} is not in the repository",
+                v.name, v.version
+            )),
+            _ => None,
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -512,6 +536,7 @@ mod tests {
         assert!(
             read_text("[bans]\nallow = \"libm\"\n").is_err_and(|e| e[0].contains("not a list"))
         );
+        assert!(read_text("[bans]\nallow = []\n").is_err_and(|e| e[0].contains("is empty")));
         assert!(read_text("[bans\n").is_err());
     }
 
@@ -543,6 +568,26 @@ mod tests {
         for bad in ["G", "Gx", "G12ab", "24", "g24", "G12A"] {
             assert!(!piece_id(bad), "{bad}");
         }
+    }
+
+    #[test]
+    fn a_committed_audit_must_be_there() {
+        let vetted = list(
+            "{ crate = \"a@1.0.0\", reason = \"deterministic: x; no_std: y; audited: \
+             audits/a.md; pinned: 1.0.0\" },\n\
+             { crate = \"b@1.0.0\", reason = \"deterministic: x; no_std: y; audited: pending, \
+             piece G24; pinned: 1.0.0\" },",
+        )
+        .unwrap();
+        assert_eq!(
+            missing_audits(&vetted, |p| p == "audits/a.md"),
+            Vec::<String>::new()
+        );
+        let missing = missing_audits(&vetted, |_| false);
+        assert_eq!(
+            missing,
+            ["a@1.0.0: its audit audits/a.md is not in the repository"]
+        );
     }
 
     const LOCK: &str = "version = 4\n\n\

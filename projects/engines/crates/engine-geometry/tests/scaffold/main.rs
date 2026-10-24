@@ -368,16 +368,9 @@ fn the_vetted_allow_list_pins_what_cargo_lock_holds() {
         "geom-num builds with libm, so the list holds it"
     );
     let mut problems = vetted::against_lock(&list, &read("Cargo.lock"));
-    for v in &list {
-        if let vetted::Audit::File(path) = &v.audited
-            && !root.join(path).is_file()
-        {
-            problems.push(format!(
-                "{}@{}: its audit {path} is not in the repository",
-                v.name, v.version
-            ));
-        }
-    }
+    problems.extend(vetted::missing_audits(&list, |path| {
+        root.join(path).is_file()
+    }));
     assert!(problems.is_empty(), "{problems:#?}");
     for v in &list {
         println!("vetted: {}@{}; audited: {:?}", v.name, v.version, v.audited);
