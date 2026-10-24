@@ -1,0 +1,336 @@
+//! Inputs for plane-based geometry: [`through`] (`Plane::through`), [`side`] (`Plane::side`),
+//! [`tpi_new`] (`Tpi::new`), [`tpi_homogeneous`] (`Tpi::homogeneous`), [`side_of_tpi`]
+//! (`Plane::side_of_tpi`) and [`to_grid`] (`Tpi::to_grid`).
+//!
+//! Classes:
+//!
+//! - `typical`: planes through random points within ±2^30 steps; for `to_grid`, only points that
+//!   land inside the frame.
+//! - `degenerate`: collinear points (no plane); a point on the plane; for `Tpi::new`, each way three
+//!   planes fail to meet in one point, in rotation (two parallel planes with equal normals, two
+//!   with parallel but unequal normals, three planes through one line, a plane given twice); a
+//!   meeting point on the fourth plane.
+//! - `nearly_degenerate`: a point, or a meeting point, exactly one unit of n · p + d off the plane,
+//!   the closest a grid point off it can be: the plane is spanned by two vectors of a unimodular
+//!   lattice basis and the point lies one third basis vector away, so n · p + d = ±1 next to terms
+//!   above 2^100.
+//! - `extreme`: planes through points within 2^10 steps of ±(2^40 − 1) that span the frame, so
+//!   coefficients come close to their bounds (a normal component of at least 2^80, against 2^83).
+//!   The first `through` input is three corners of the bounding cube, whose normal components are
+//!   all 4M² (M = 2^40 − 1): the largest the frame allows, because each component is twice the
+//!   area of the triangle projected on a coordinate plane, and a triangle in a square of side 2M
+//!   has area at most 2M².
+//! - `on_grid`: three planes through one grid point, so committing it is exact.
+//! - `overflow`: three planes that meet beyond the frame, more than 2^40 − 1 steps from the origin
+//!   but less than 2^60, which takes `to_grid`'s longest path: 127 steps of long division.
+//!
+//! Method: the degenerate cases of plane-based geometry as `Tpi::new` documents them (after Campen
+//! and Kobbelt 2010, <https://doi.org/10.1111/j.1467-8659.2009.01609.x>), with Shewchuk's input classes
+//! (<https://doi.org/10.1007/PL00009321>, section 6) and unimodular bases (Knuth, volume 2,
+//! section 4.5.2) for the nearly degenerate ones.
+//!
+//! Guarantees: every batch is full, the same on every target, and its classes are what they
+//! claim (`tests/inputs.rs`); every result is checked against exact cross products, Cramer's
+//! rule and exact rounding by `tests/attack_g06.rs`.
+//!
+//! Cost: a few draws of [`crate::rng::SplitMix64`] per input, once per batch, outside every
+//! measured run.
+
+use geom_num::Sign;
+use geom_num::grid::P3;
+use geom_num::plane::{Plane, Tpi};
+
+use super::predicate::unimodular3;
+use super::{Class, M, TYPICAL_REACH, batch_of, extreme3, p3, rng, typical3, within};
+use crate::rng::SplitMix64;
+
+/// Largest component of a direction or spanning vector in degenerate inputs.
+const STEP: i64 = 1 << 10;
+
+/// The plane through three points, if they are not collinear.
+fn plane([a, b, c]: [P3; 3]) -> Option<Plane> {
+    Plane::through(a, b, c).ok()
+}
+
+/// A plane through three typical points.
+fn typical_plane(g: &mut SplitMix64) -> Option<Plane> {
+    plane([typical3(g), typical3(g), typical3(g)])
+}
+
+/// Whether a plane spans the frame: a normal component of at least 2^80, against the bound of
+/// 2^83. Three extreme points near one corner make a small plane, which is not extreme.
+fn spans(p: &Plane) -> bool {
+    p.n().iter().any(|n| n.unsigned_abs() >= 1 << 80)
+}
+
+/// A plane through three extreme points that spans the frame.
+fn extreme_plane(g: &mut SplitMix64) -> Option<Plane> {
+    plane([extreme3(g), extreme3(g), extreme3(g)]).filter(spans)
+}
+
+/// Whether a side test certainly answered off the plane: `Positive` or `Negative`. A zero, or an
+/// error (`BudgetExceeded`, which no plane and point can cause), is rejected rather than guessed.
+fn off_plane(side: Result<Sign, geom_num::NumError>) -> bool {
+    matches!(side, Ok(Sign::Positive | Sign::Negative))
+}
+
+/// The point where three planes meet, if they meet in exactly one point.
+fn tpi([p, q, r]: [Plane; 3]) -> Option<Tpi> {
+    Tpi::new(p, q, r).ok()
+}
+
+/// A small vector with components within ±[`STEP`].
+fn small(g: &mut SplitMix64) -> [i64; 3] {
+    [0; 3].map(|_| within(g, STEP))
+}
+
+/// A grid point as raw step counts.
+fn raw(p: P3) -> [i64; 3] {
+    [p.x.get(), p.y.get(), p.z.get()]
+}
+
+/// `p + v` for a grid point and raw step offsets.
+fn offset(p: P3, [x, y, z]: [i64; 3]) -> P3 {
+    let [px, py, pz] = raw(p);
+    p3(px + x, py + y, pz + z)
+}
+
+/// `v · k`, componentwise.
+fn scaled([x, y, z]: [i64; 3], k: i64) -> [i64; 3] {
+    [x * k, y * k, z * k]
+}
+
+/// A pseudo-random plane through the grid point `at`.
+fn plane_at(g: &mut SplitMix64, at: P3) -> Option<Plane> {
+    let (u, v) = (small(g), small(g));
+    plane([at, offset(at, u), offset(at, v)])
+}
+
+/// Three pseudo-random planes through the grid point `at`, meeting only there.
+fn tpi_at(g: &mut SplitMix64, at: P3) -> Option<Tpi> {
+    tpi([plane_at(g, at)?, plane_at(g, at)?, plane_at(g, at)?])
+}
+
+/// A meeting point of three typical planes.
+fn typical_tpi(g: &mut SplitMix64) -> Option<Tpi> {
+    tpi([typical_plane(g)?, typical_plane(g)?, typical_plane(g)?])
+}
+
+/// A meeting point of three extreme planes.
+fn extreme_tpi(g: &mut SplitMix64) -> Option<Tpi> {
+    tpi([extreme_plane(g)?, extreme_plane(g)?, extreme_plane(g)?])
+}
+
+/// A plane and a grid point exactly one unit of n · p + d from it: the plane through b, b + u and
+/// b + v, and the point b + w, for a unimodular basis u, v, w, so n · (b + w) + d = n · w =
+/// det[u; v; w] = 1 (with n = u × v). b is placed so that the point is `at`.
+fn one_unit_off(g: &mut SplitMix64, at: P3) -> Option<Plane> {
+    let [u, v, w] = unimodular3(g)?;
+    let b = offset(at, scaled(w, -1));
+    plane([b, offset(b, u), offset(b, v)])
+}
+
+/// Point triples for [`Plane::through`].
+#[must_use]
+pub fn through(class: Class) -> Vec<[P3; 3]> {
+    let mut g = rng("plane::through", class);
+    match class {
+        Class::Typical => batch_of(|_| {
+            let t = [typical3(&mut g), typical3(&mut g), typical3(&mut g)];
+            plane(t).map(|_| t)
+        }),
+        Class::Degenerate => batch_of(|_| {
+            // a, a + s·d and a + t·d lie on one line.
+            let a = typical3(&mut g);
+            let d = small(&mut g);
+            let (s, t) = (within(&mut g, STEP), within(&mut g, STEP));
+            Some([a, offset(a, scaled(d, s)), offset(a, scaled(d, t))])
+        }),
+        Class::Extreme => batch_of(|n| {
+            let t = if n == 0 {
+                // Three corners of the bounding cube: every normal component is 4M², the largest
+                // the frame allows (see the module documentation).
+                [p3(-M, -M, -M), p3(M, M, -M), p3(M, -M, M)]
+            } else {
+                [extreme3(&mut g), extreme3(&mut g), extreme3(&mut g)]
+            };
+            plane(t).filter(spans).map(|_| t)
+        }),
+        Class::NearlyDegenerate | Class::Overflow | Class::OnGrid | Class::WrongDirection => {
+            Vec::new()
+        }
+    }
+}
+
+/// (plane, grid point) pairs for [`Plane::side`].
+#[must_use]
+pub fn side(class: Class) -> Vec<(Plane, P3)> {
+    let mut g = rng("plane::side", class);
+    match class {
+        Class::Typical => batch_of(|_| {
+            let (p, q) = (typical_plane(&mut g)?, typical3(&mut g));
+            off_plane(p.side(q)).then_some((p, q))
+        }),
+        Class::Degenerate => batch_of(|_| {
+            // a + s(b − a) + u(c − a) lies on the plane through a, b and c.
+            let t @ [a, b, c] = [(); 3].map(|()| typical3(&mut g));
+            let p = plane(t)?;
+            let [s, u] = [(); 2].map(|()| g.range(-3, 3));
+            let ([ax, ay, az], [bx, by, bz], [cx, cy, cz]) = (raw(a), raw(b), raw(c));
+            let on = [
+                s * (bx - ax) + u * (cx - ax),
+                s * (by - ay) + u * (cy - ay),
+                s * (bz - az) + u * (cz - az),
+            ];
+            Some((p, offset(a, on)))
+        }),
+        Class::NearlyDegenerate => batch_of(|_| {
+            let at = typical3(&mut g);
+            Some((one_unit_off(&mut g, at)?, at))
+        }),
+        Class::Extreme => batch_of(|_| Some((extreme_plane(&mut g)?, extreme3(&mut g)))),
+        Class::Overflow | Class::OnGrid | Class::WrongDirection => Vec::new(),
+    }
+}
+
+/// Plane triples for [`Tpi::new`].
+#[must_use]
+pub fn tpi_new(class: Class) -> Vec<[Plane; 3]> {
+    let mut g = rng("plane::tpi_new", class);
+    match class {
+        Class::Typical => batch_of(|_| {
+            let planes = [
+                typical_plane(&mut g)?,
+                typical_plane(&mut g)?,
+                typical_plane(&mut g)?,
+            ];
+            tpi(planes).map(|_| planes)
+        }),
+        Class::Degenerate => batch_of(|n| {
+            let t @ [a, b, c] = [(); 3].map(|()| typical3(&mut g));
+            let first = plane(t)?;
+            let other = typical_plane(&mut g)?;
+            Some(match n % 4 {
+                // Parallel, equal normals: the first plane moved by a whole-step offset.
+                0 => {
+                    let shift = small(&mut g);
+                    [first, other, plane([a, b, c].map(|p| offset(p, shift)))?]
+                }
+                // Parallel, unequal normals: a copy scaled by two about a moved point, so its
+                // normal is four times the first's, and reversed every other time.
+                1 => {
+                    let base = offset(a, small(&mut g));
+                    let ([ax, ay, az], [bx, by, bz], [cx, cy, cz]) = (raw(a), raw(b), raw(c));
+                    let u = [2 * (bx - ax), 2 * (by - ay), 2 * (bz - az)];
+                    let v = [2 * (cx - ax), 2 * (cy - ay), 2 * (cz - az)];
+                    let copy = if n % 8 == 1 {
+                        [base, offset(base, u), offset(base, v)]
+                    } else {
+                        [base, offset(base, v), offset(base, u)]
+                    };
+                    [first, plane(copy)?, other]
+                }
+                // Three planes through one line: the line through a and b, and a third point each.
+                2 => {
+                    let mut through_ab = || plane([a, b, typical3(&mut g)]);
+                    [through_ab()?, through_ab()?, through_ab()?]
+                }
+                // A plane given twice.
+                _ => [first, other, first],
+            })
+        }),
+        Class::Extreme => batch_of(|_| {
+            let planes = [
+                extreme_plane(&mut g)?,
+                extreme_plane(&mut g)?,
+                extreme_plane(&mut g)?,
+            ];
+            tpi(planes).map(|_| planes)
+        }),
+        Class::NearlyDegenerate | Class::Overflow | Class::OnGrid | Class::WrongDirection => {
+            Vec::new()
+        }
+    }
+}
+
+/// Meeting points for [`Tpi::homogeneous`].
+#[must_use]
+pub fn tpi_homogeneous(class: Class) -> Vec<Tpi> {
+    let mut g = rng("plane::tpi_homogeneous", class);
+    match class {
+        Class::Typical => batch_of(|_| typical_tpi(&mut g)),
+        Class::Extreme => batch_of(|_| extreme_tpi(&mut g)),
+        Class::Degenerate
+        | Class::NearlyDegenerate
+        | Class::Overflow
+        | Class::OnGrid
+        | Class::WrongDirection => Vec::new(),
+    }
+}
+
+/// (plane, meeting point) pairs for [`Plane::side_of_tpi`].
+#[must_use]
+pub fn side_of_tpi(class: Class) -> Vec<(Plane, Tpi)> {
+    let mut g = rng("plane::side_of_tpi", class);
+    match class {
+        Class::Typical => batch_of(|_| {
+            let (p, t) = (typical_plane(&mut g)?, typical_tpi(&mut g)?);
+            off_plane(p.side_of_tpi(&t)).then_some((p, t))
+        }),
+        Class::Degenerate => batch_of(|_| {
+            // Four planes through one grid point: the meeting point of three lies on the fourth.
+            let at = typical3(&mut g);
+            Some((plane_at(&mut g, at)?, tpi_at(&mut g, at)?))
+        }),
+        Class::NearlyDegenerate => batch_of(|_| {
+            // Three planes meet exactly at a grid point; the fourth is one unit from that point.
+            let at = typical3(&mut g);
+            Some((one_unit_off(&mut g, at)?, tpi_at(&mut g, at)?))
+        }),
+        Class::Extreme => batch_of(|_| Some((extreme_plane(&mut g)?, extreme_tpi(&mut g)?))),
+        Class::Overflow | Class::OnGrid | Class::WrongDirection => Vec::new(),
+    }
+}
+
+/// Meeting points for [`Tpi::to_grid`].
+#[must_use]
+pub fn to_grid(class: Class) -> Vec<Tpi> {
+    let mut g = rng("plane::to_grid", class);
+    match class {
+        Class::Typical => batch_of(|_| typical_tpi(&mut g).filter(|t| t.to_grid().is_ok())),
+        Class::Extreme => batch_of(|_| extreme_tpi(&mut g).filter(|t| t.to_grid().is_ok())),
+        Class::OnGrid => batch_of(|_| {
+            let at = typical3(&mut g);
+            tpi_at(&mut g, at)
+        }),
+        Class::Overflow => batch_of(|_| far_tpi(&mut g)),
+        Class::Degenerate | Class::NearlyDegenerate | Class::WrongDirection => Vec::new(),
+    }
+}
+
+/// Three planes meeting at (x0, y0 + d·2^39, z0), beyond the frame (|y| ≥ 2^40) but below 2^60:
+///
+/// - z = z0, through (x0, y0, z0), (x0 + 1, y0, z0) and (x0, y0 + 1, z0);
+/// - z = z0 + d − (y − y0) / 2^39, through (x0, y0, z0 + d), (x0 + 1, y0, z0 + d) and
+///   (x0, y0 + 2^39, z0 + d − 1), which reaches z = z0 at y = y0 + d·2^39;
+/// - x = x0, through (x0, 0, 0), (x0, 1, 0) and (x0, 0, 1).
+///
+/// With y0 = −2^39 + r (0 ≤ r ≤ 2^20) and 3 ≤ d ≤ 2^20 the meeting point's y is at least 2^40,
+/// and every defining point is inside the frame. A pseudo-random sign mirrors y.
+fn far_tpi(g: &mut SplitMix64) -> Option<Tpi> {
+    const SPAN: i64 = 1 << 39;
+    let [x0, z0] = [(); 2].map(|()| within(g, TYPICAL_REACH));
+    let d = g.range(3, 1 << 20);
+    let y0 = -SPAN + g.range(0, 1 << 20);
+    let s = g.sign();
+    let at = |x: i64, y: i64, z: i64| p3(x, s * y, z);
+    let floor = plane([at(x0, y0, z0), at(x0 + 1, y0, z0), at(x0, y0 + 1, z0)])?;
+    let top = z0 + d;
+    let ramp = plane([
+        at(x0, y0, top),
+        at(x0 + 1, y0, top),
+        at(x0, y0 + SPAN, top - 1),
+    ])?;
+    let wall = plane([at(x0, 0, 0), at(x0, 1, 0), at(x0, 0, 1)])?;
+    tpi([floor, ramp, wall])
+}
