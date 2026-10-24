@@ -194,8 +194,11 @@
 //! step from M, and geom-gen's tests re-derive them with an independent checker and compare them
 //! with these. And `tests/attack_g28.rs` reads this table, re-derives every cell in big integers
 //! from the rules above, and checks every grid configuration with every coordinate at ±M (4,096
-//! for orient3d) against it, the two largest values above included. The total path's own budget,
-//! for any `i64` coordinates in [`I384`], is written where that path begins.
+//! for orient3d) against it, the two largest values above included; it also takes every set of
+//! distinct points with coordinates in {−M, 0, M} through the public in-circle and in-sphere and
+//! their generated exact values, and finds the largest values there to be the 8M⁴ and 48M⁵ above
+//! (this module's unit tests find them on the hand-written and total paths). The total path's own
+//! budget, for any `i64` coordinates in [`I384`], is written where that path begins.
 
 use crate::error::NumError;
 use crate::generated;

@@ -30,7 +30,9 @@
 //!   the budget its header states. And one step inside them: every coordinate in {±M, ±(M − 1)},
 //!   all 4,096 configurations for orient2d and all 65,536 for incircle, a sample for the others.
 //! - **The written bit budget** in the module header: its table is read, and every cell
-//!   re-derived in big integers from the rules it states.
+//!   re-derived in big integers from the rules it states. The largest in-circle and in-sphere
+//!   values it states over the points with coordinates in {−M, 0, M} (8M⁴ and 48M⁵) are found by
+//!   taking every set of distinct such points through the public predicates.
 //! - **The oracle on random inputs**, at every scale and every position on the grid.
 //! - **One step from every degeneracy**: exactly collinear, coplanar, cocircular and cospherical
 //!   points (circles from Gaussian integers and spheres from Lipschitz quaternions, up to full
@@ -372,6 +374,11 @@ impl Oracle {
         let rows: Vec<Vec<IBig>> = points.iter().map(|&p| row(p, lift)).collect();
         self.det(&rows)
     }
+}
+
+/// |v|.
+fn magnitude(v: &IBig) -> IBig {
+    if *v < IBig::ZERO { -v } else { v.clone() }
 }
 
 fn sign_of(v: &IBig) -> Sign {
@@ -1081,6 +1088,142 @@ fn one_step_inside_the_corners() {
         let p = configuration::<3, 5>(&levels, rng.next() % (1 << 30));
         oracle.check_value(&INSPHERE, p, &mut tally);
     }
+}
+
+/// Every k-element subset of 0..n, each in increasing order.
+fn subsets(n: usize, k: usize) -> Vec<Vec<usize>> {
+    let mut all: Vec<Vec<usize>> = vec![Vec::new()];
+    for _ in 0..k {
+        let mut longer = Vec::new();
+        for set in &all {
+            let from = set.last().map_or(0, |&last| last + 1);
+            for v in from..n {
+                let mut next = set.clone();
+                next.push(v);
+                longer.push(next);
+            }
+        }
+        all = longer;
+    }
+    all
+}
+
+/// Every point with coordinates in {−1, 0, 1}.
+fn unit_cube<const D: usize>() -> Vec<[i64; D]> {
+    let count = 3u32.pow(D as u32);
+    (0..count)
+        .map(|code| {
+            let mut rest = code;
+            array::from_fn(|_| {
+                let level = i64::from(rest % 3) - 1;
+                rest /= 3;
+                level
+            })
+        })
+        .collect()
+}
+
+/// The lifted predicates' values over the points with coordinates in {−M, 0, M}, against the
+/// largest the module header states there: 8M⁴ for incircle, at three corners of the bounding
+/// square and its centre, and 48M⁵ for insphere, at a regular tetrahedron on alternate corners of
+/// the bounding cube and its centre. Each value is homogeneous in the coordinates (degree 4 and 5),
+/// so it is M⁴ or M⁵ times the value of the same points of {−1, 0, 1}, which the oracle evaluates
+/// for every set of distinct points: all 126 of incircle and all 80,730 of insphere (a repeated
+/// point gives zero, and an order changes only the sign). Every set, scaled to the full grid, is
+/// then checked: the public predicate and `robust` give the small value's sign, the filter declines
+/// or agrees, and the generated exact value is exactly M⁴ or M⁵ times it; the sets that reach the
+/// largest value, and the configurations the header names, go through the full oracle too.
+#[test]
+fn the_largest_lifted_values_over_minus_m_zero_m_are_the_ones_the_header_states() {
+    let oracle = Oracle::new();
+    let m = IBig::from(M);
+    let mut tally = Tally::default();
+
+    fn scaled<const D: usize, const N: usize>(p: [[i64; D]; N]) -> [[i64; D]; N] {
+        p.map(|q| times(M, q))
+    }
+    /// Checks every set of N distinct points of the unit cube scaled by M, and returns the
+    /// largest magnitude at unit scale and the sets that reach it.
+    fn sweep_scaled<const D: usize, const N: usize>(
+        oracle: &Oracle,
+        pred: &Predicate<D, N>,
+        power: usize,
+        tally: &mut Tally,
+    ) -> (IBig, Vec<[[i64; D]; N]>) {
+        let points = unit_cube::<D>();
+        let scale = IBig::from(M).pow(power);
+        let (mut largest, mut at) = (IBig::ZERO, Vec::new());
+        for set in subsets(points.len(), N) {
+            let small: [[i64; D]; N] = array::from_fn(|i| points[set[i]]);
+            let value = oracle.exact(pred, small);
+            let sign = sign_of(&value);
+            let p = scaled(small);
+            let name = pred.name;
+            assert_eq!((pred.public)(p), Ok(sign), "{name}{p:?}");
+            let shewchuk = sign_of_f64((pred.robust)(p));
+            let robust = if pred.negate {
+                shewchuk.negate()
+            } else {
+                shewchuk
+            };
+            assert_eq!(robust, sign, "{name}{p:?}: robust");
+            let filtered = (pred.filter)(p);
+            if let Some(filtered) = filtered {
+                assert_eq!(filtered, sign, "{name}{p:?}: the filter");
+            }
+            assert_eq!(
+                (pred.value)(p),
+                Some(&value * &scale),
+                "{name}{p:?}: the generated value is M^{power} times the unit one"
+            );
+            tally.note(sign, filtered);
+            let size = magnitude(&value);
+            if size > largest {
+                (largest, at) = (size, vec![small]);
+            } else if size == largest {
+                at.push(small);
+            }
+        }
+        (largest, at)
+    }
+
+    let (largest, at) = sweep_scaled(&oracle, &INCIRCLE, 4, &mut tally);
+    assert_eq!(
+        largest,
+        IBig::from(8),
+        "incircle's largest over {{−M, 0, M}} is 8M⁴"
+    );
+    for small in at {
+        let exact = oracle.check_value(&INCIRCLE, scaled(small), &mut tally);
+        assert_eq!(magnitude(&exact), IBig::from(8) * m.pow(4));
+    }
+    let named = [[-M, -M], [M, -M], [-M, M], [0, 0]];
+    assert_eq!(
+        oracle.check_value(&INCIRCLE, named, &mut tally),
+        IBig::from(8) * m.pow(4),
+        "three corners of the square and its centre"
+    );
+
+    let (largest, at) = sweep_scaled(&oracle, &INSPHERE, 5, &mut tally);
+    assert_eq!(
+        largest,
+        IBig::from(48),
+        "insphere's largest over {{−M, 0, M}} is 48M⁵"
+    );
+    for small in at {
+        let exact = oracle.check_value(&INSPHERE, scaled(small), &mut tally);
+        assert_eq!(magnitude(&exact), IBig::from(48) * m.pow(5));
+    }
+    let named = [[M, M, M], [M, -M, -M], [-M, M, -M], [-M, -M, M], [0, 0, 0]];
+    assert_eq!(
+        magnitude(&oracle.check_value(&INSPHERE, named, &mut tally)),
+        IBig::from(48) * m.pow(5),
+        "a regular tetrahedron on alternate corners of the cube and its centre"
+    );
+    assert!(
+        tally.positive > 0 && tally.negative > 0 && tally.zero > 0,
+        "{tally:?}"
+    );
 }
 
 // ---------------------------------------------------------------------------------------------
