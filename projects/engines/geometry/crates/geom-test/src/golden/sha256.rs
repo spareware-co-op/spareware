@@ -4,10 +4,9 @@
 //! digest; [`sha256`] hashes one buffer; [`hex`] writes a digest as the 64 lowercase hexadecimal
 //! digits the golden store keeps, and [`Digest`] reads them back. The hashing itself is the
 //! `RustCrypto` project's `sha2` crate. Before this module, each crate's golden tests carried a
-//! hand-written copy of `geom-num`'s implementation (chapter 21: "Each crate's tests carry a copy
-//! of `geom-num`'s implementation until the golden store holds the one copy"); every copy now uses
-//! this one, and every digest they pinned is unchanged, since SHA-256 is one function whoever
-//! computes it.
+//! hand-written copy of `geom-num`'s implementation, which chapter 21 left to the golden store's
+//! piece (G19) to replace with one; every copy now uses this one, and every digest they pinned is
+//! unchanged, since SHA-256 is one function whoever computes it.
 //!
 //! Guarantees:
 //!

@@ -10,8 +10,9 @@
 //! - **`DD::add` and `DD::mul`**: "Commutative, bit for bit" (`src/dd.rs`).
 //! - **`two_sum`**: commutative, its pair unique and its zero +0 (`src/eft.rs`, `src/dd.rs`).
 //!
-//! The corpus, from `SplitMix64` with a fixed seed (integer arithmetic only, so the same terms on
-//! every target): 240 term sets, mostly short and a few past the large accumulator's 512-term
+//! The corpus, from `SplitMix64` with a fixed seed (integer arithmetic, and products of doubles by
+//! powers of two, which IEEE 754 makes exact or rounds the same way on every target, so the same
+//! terms on every target): 240 term sets, mostly short and a few past the large accumulator's 512-term
 //! switch and the 2,047-addition carry allowance, drawn from six families (every exponent and both
 //! signs; one binade, for cancellation; pairs that cancel exactly around a residue; exact ties
 //! between two doubles, for round-half-to-even; terms near the largest double, for overflow; and

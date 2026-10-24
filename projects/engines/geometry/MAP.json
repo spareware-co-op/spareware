@@ -4306,7 +4306,7 @@
         },
         {
           "cost": "linear in the message, one compression per 64-byte block; the state is a fixed 112 bytes or so and nothing is allocated, except the 64-character `String` of [`hex`].",
-          "does": "[`Sha256`] takes a canonical byte stream piece by piece and gives its 32-byte digest; [`sha256`] hashes one buffer; [`hex`] writes a digest as the 64 lowercase hexadecimal digits the golden store keeps, and [`Digest`] reads them back. The hashing itself is the `RustCrypto` project's `sha2` crate. Before this module, each crate's golden tests carried a hand-written copy of `geom-num`'s implementation (chapter 21: \"Each crate's tests carry a copy of `geom-num`'s implementation until the golden store holds the one copy\"); every copy now uses this one, and every digest they pinned is unchanged, since SHA-256 is one function whoever computes it.",
+          "does": "[`Sha256`] takes a canonical byte stream piece by piece and gives its 32-byte digest; [`sha256`] hashes one buffer; [`hex`] writes a digest as the 64 lowercase hexadecimal digits the golden store keeps, and [`Digest`] reads them back. The hashing itself is the `RustCrypto` project's `sha2` crate. Before this module, each crate's golden tests carried a hand-written copy of `geom-num`'s implementation, which chapter 21 left to the golden store's piece (G19) to replace with one; every copy now uses this one, and every digest they pinned is unchanged, since SHA-256 is one function whoever computes it.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/golden/sha256.rs",
           "guarantees": [

@@ -123,6 +123,7 @@ impl core::error::Error for GoldenError {}
 
 /// The outcome of [`check`]: the first run's value and digest, and the verdict.
 #[derive(Debug)]
+#[must_use = "a golden fails only through its verdict: call `verdict` or `into_value`"]
 pub struct Checked<T> {
     /// What the first run's closure returned besides its digest.
     pub value: T,
@@ -152,6 +153,7 @@ impl<T> Checked<T> {
 }
 
 /// Checks the golden `id` (with no operation versions) against the store compiled into this crate.
+#[must_use = "a golden fails only through its verdict: call `verdict` or `into_value`"]
 pub fn check<T>(id: &str, case: impl FnMut() -> ([u8; 32], T)) -> Checked<T> {
     match Store::embedded() {
         Ok(store) => check_in(&store, id, case),
@@ -168,6 +170,7 @@ pub fn check<T>(id: &str, case: impl FnMut() -> ([u8; 32], T)) -> Checked<T> {
 }
 
 /// Checks the golden `id` against `store`: [`check`] with the store given.
+#[must_use = "a golden fails only through its verdict: call `verdict` or `into_value`"]
 pub fn check_in<T>(store: &Store, id: &str, mut case: impl FnMut() -> ([u8; 32], T)) -> Checked<T> {
     let mut first: Option<(Digest, T)> = None;
     let mut repeat: Result<(), GoldenError> = Ok(());
