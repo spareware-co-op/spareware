@@ -29,8 +29,9 @@
 //! the allocator from outside gives the same two effects, shifted addresses and shuffled reuse, on
 //! every target with no `unsafe`, and the tests prove the effect rather than assume it: a
 //! computation that orders values by their addresses gives different answers under different seeds
-//! on every target the tests run on, and the same answer under one seed twice in a row is not
-//! required (other threads' allocations perturb it further, which only helps).
+//! on every target `kernel.yml` runs them on, the six native runners (the allocators of glibc,
+//! macOS and Windows) and wasm32-wasip1 (dlmalloc), and the same answer under one seed twice in a
+//! row is not required (other threads' allocations perturb it further, which only helps).
 //!
 //! Guarantees:
 //!
