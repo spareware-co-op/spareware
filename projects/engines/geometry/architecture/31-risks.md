@@ -360,7 +360,7 @@ Some may stay open for years, leaving gaps where the incumbents give an approxim
 **What could go wrong.** Some work waits on answers that may be slow, or "no":
 - McNeel's written openNURBS grant (geom-3dm waits);
 - the legal review of OpenSubdiv's TOST licence;
-- NLib's chain of title;
+- NLib's chain of title: decided by the owner on 2026-10-24 (32.8), who accepted NVIDIA's Apache-2.0 publication for all of the SMLib release, NLib and the IntegrityWare-lineage modules included, so this item no longer waits. The risk left is small but real: if a predecessor owner (GeomWare, SMS or IntegrityWare) ever showed that NVIDIA lacked the right, the affected ports would be rewritten from the primary sources, which their Source and credit lines make findable;
 - Gerber's terms, which ask for no derivative versions without Ucamco's approval;
 - IPC-2581, ODB++, EPSG and LINZ data, and ISO's EXPRESS schemas;
 - test data with no licence (ABC, the IFC4.x-IF alignment set);
@@ -598,7 +598,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | Who approves as a kernel owner; who reviews proofs; who accepts spine amendments; who sets the kernel's share of Spare Construct's targets | 23, 26, 28, 29 | 32.5 |
 | GPL and LGPL tools as out-of-process oracles; reading GPL source; Numerical Recipes code in oracle builds; the method-only procedure as the standard; the Unlicense and CC0-1.0 on the code allow-list | 24, 28, 29 | 32.6 |
 | Patent searches, who does them and who pays: EMBER, Lifted Surfacing, Topological Offsets, transfinite patches, developable lofts, sheet-metal unfolding, the section 16 methods, Autodesk US 10,635,088, nTop's filings, IntegrityWare's claim, the sixteen unsearched families, and the trade mark and any patent on "Viennese Bend". The Google Patents status of the Pixar, Stam, T-spline and watertightCAD patents is an assumption until counsel confirms | 11, 13, 16, 17, 29 | 32.7, then piece "Patent register" |
-| NLib's chain of title, the narrowing of option D, how "notices kept" is done, and an issue to NVIDIA | 12, 29 | 32.8 |
+| NLib's chain of title, the narrowing of option D, how "notices kept" is done, and an issue to NVIDIA | 12, 29 | 32.8, decided 2026-10-24: A, for all of the SMLib release |
 | Writing to EMBER's authors, the csgrs and Hyper author, CADCraft, tangency-labs, McNeel (openNURBS, and so Rhino subdivision exchange) and Pixar (OpenSubdiv's TOST licence); the order of contacts | 11, 14, 16, 24, 29 | 32.9 |
 | Revit exports in a public repository; anonymised real projects; an AutoCAD seat and terms check; the ruling on black-box observation of proprietary programs, and so CADCraft's test scenarios; checking our exports in proprietary programs | 14, 28, 29 | 32.10 |
 | The licence of our own fixtures; ABC, IFC4.x-IF, Thingi10K, NIST STEP files, the CC BY-ND IFC samples, and step-conformance's exported parts | 28, 29 | 32.11 |
