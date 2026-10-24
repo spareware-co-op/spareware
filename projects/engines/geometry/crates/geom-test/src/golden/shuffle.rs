@@ -200,7 +200,7 @@ mod tests {
     /// change every order-free golden's inputs shows here first, by name.
     #[test]
     fn the_permutation_stream_is_pinned() {
-        let checked = super::super::check("geom-test/shuffle-permutations", || {
+        let checked = crate::golden::check("geom-test/shuffle-permutations", || {
             let mut o = Orders::new(Seed::DEFAULT);
             let mut h = Sha256::new();
             for n in 0..64usize {

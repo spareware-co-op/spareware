@@ -1231,11 +1231,13 @@ name = "geom-test"
 version = "0.0.0"
 dependencies = [
  "geom-num",
+ "proc-macro2",
  "proptest",
  "rand 0.10.3",
  "serde",
  "serde_json",
  "sha2",
+ "syn 2.0.119",
 ]
 
 [[package]]

@@ -23,6 +23,14 @@ sha2 = { version = "0.11.0", default-features = false }
 # MIT OR Apache-2.0. Without its default features, so it has no generator of its own and never
 # reaches the operating system's random source.
 rand = { version = "0.10.3", default-features = false }
+# Rust's grammar for the golden store's repository check (`golden::repo`): every kernel source is
+# parsed as Rust, so a comment or a string never counts as code. MIT OR Apache-2.0. Without its
+# default features: the full syntax tree, its parser and its visitor only, no procedural-macro or
+# printing support.
+syn = { version = "2.0.119", default-features = false, features = ["full", "parsing", "visit"] }
+# The token spans syn's parser gives, with `span-locations` so a problem names its line. MIT OR
+# Apache-2.0. Without its default `proc-macro` feature: this is a library, not a procedural macro.
+proc-macro2 = { version = "1.0.107", default-features = false, features = ["span-locations"] }
 
 [lints.rust]
 unsafe_code = "forbid"
