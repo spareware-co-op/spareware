@@ -5,11 +5,17 @@
 //! [`Real::new`], which refuses NaN and the infinities, so every `Real` is finite: the invariant is
 //! kept by construction, not by a later check.
 //!
-//! Floating-point values leave this crate as `Real`s ([`crate::math`]'s results and
-//! [`crate::ladder::ANGULAR`]), with three kinds of exception, each finite or reported by its own
-//! type: an [`crate::interval::Interval`]'s bounds, which its invariant keeps finite; the pairs of
-//! [`crate::eft`], whose second part is an infinity exactly when no exact pair exists, which is its
-//! report; and the constant [`crate::eft::SPLITTER`].
+//! Floating-point values leave this crate as `Real`s ([`crate::math`]'s results,
+//! [`crate::exact_sum::ExactSum::round`] and [`crate::ladder::ANGULAR`]), with these exceptions,
+//! each finite or reported by its own type: an [`crate::interval::Interval`]'s bounds, which its
+//! invariant keeps finite; a [`crate::dd::DD`]'s parts and its rounded value
+//! ([`crate::dd::DD::hi`], [`crate::dd::DD::lo`], [`crate::dd::DD::to_f64`]), which its invariant
+//! keeps finite; the pairs of [`crate::eft`] and [`crate::dd::two_prod_fma`], whose second part is
+//! an infinity exactly when no exact pair exists, which is their report; the constants
+//! [`crate::eft::SPLITTER`] and [`crate::dd`]'s error bounds; and
+//! [`crate::exact_sum::ExactSum::round_ieee`], which returns IEEE 754's sum of what was added, so it
+//! is NaN only when a NaN, or infinities of both signs, were added, and infinite only when an
+//! infinity was added or the exact sum overflows. Kernel code takes `round`, never `round_ieee`.
 //!
 //! Equality and order are both IEEE 754's totalOrder (`f64::total_cmp`), so they agree: −0 sorts
 //! before +0 and the two are not equal, and two `Real`s are equal exactly when their bits are. So

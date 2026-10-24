@@ -209,7 +209,7 @@ Listeners expect all music; the big labels' catalogues will not be there at firs
 
 Lossless masters are large and are kept twice; delivery grows with every listener. Both are measured and published per artist and per listener before any free allowance is set (MUS-A16-F4-P4).
 
-## What it uses from the shared kit
+## What it uses from Spare Kit
 
 Accounts (one Spareware login), ID checks (verified artists), payments and payouts (buying, regular payments for the pass and monthly support, tips, payout runs, refunds), tax (the tax engine, statements and income reporting), messaging (release alerts, the artist's mailing list), trust (reports, the public removal log, statements of reasons, appeals, copyright notices), member voting (fees, rules, moderators), the open cost ledger (fee setting, prices by use, free allowances), sync and storage (uploads, storage at cost, durable timers), country packs, plugins and the MCP server. Records and merch later use the marketplace engine (`kit-market`). Audio uses the shared `engine-media` (audio engine, decoding and encoding, content credentials, captions), and booklets use `engine-pdf`.
 

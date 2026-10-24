@@ -7,9 +7,11 @@ license.workspace = true
 description = "Spare Kit geometry kernel: NURBS algorithms."
 
 [dependencies]
+geom-math = { path = "../geom-math", default-features = false }
+geom-run = { path = "../geom-run", default-features = false }
 # Exactly this crate's row of chapter 27's proposed crate table, checked by the scaffold test
 # in engine-geometry (tests/scaffold).
-# Still to add when they merge: geom-run (G04), geom-math (G03).
+
 geom-linalg = { path = "../geom-linalg" }
 geom-num = { path = "../geom-num" }
 geom-op = { path = "../geom-op" }

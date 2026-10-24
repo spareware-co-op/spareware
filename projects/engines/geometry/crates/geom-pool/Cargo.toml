@@ -7,9 +7,10 @@ license.workspace = true
 description = "Spare Kit geometry kernel: threads for geom-run's parallel helper."
 
 [dependencies]
+geom-run = { path = "../geom-run" }
 # Exactly this crate's row of chapter 27's proposed crate table, checked by the scaffold test
 # in engine-geometry (tests/scaffold).
-# Still to add when they merge: geom-run (G04).
+
 # The only published crates it may name, once its pieces build it: rayon on native targets (G33)
 # and wasm-bindgen-rayon for Web Workers (G456), each by its row of section 29.4. None yet.
 

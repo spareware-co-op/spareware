@@ -7,9 +7,10 @@ license.workspace = true
 description = "Spare Kit geometry kernel: the one boolean, dispatch and the validity query across representations."
 
 [dependencies]
+geom-run = { path = "../geom-run", default-features = false }
 # Exactly this crate's row of chapter 27's proposed crate table, checked by the scaffold test
 # in engine-geometry (tests/scaffold).
-# Still to add when they merge: geom-run (G04).
+
 geom-bool = { path = "../geom-bool" }
 geom-check = { path = "../geom-check" }
 geom-convert = { path = "../geom-convert" }

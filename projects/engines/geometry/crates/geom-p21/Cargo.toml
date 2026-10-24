@@ -7,9 +7,10 @@ license.workspace = true
 description = "Spare Kit geometry kernel: the ISO 10303-21 clear-text encoding."
 
 [dependencies]
+geom-run = { path = "../geom-run", default-features = false }
 # Exactly this crate's row of chapter 27's proposed crate table, checked by the scaffold test
 # in engine-geometry (tests/scaffold).
-# Still to add when they merge: geom-run (G04).
+
 geom-format = { path = "../geom-format" }
 geom-num = { path = "../geom-num" }
 geom-op = { path = "../geom-op" }

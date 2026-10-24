@@ -22,8 +22,6 @@
 //!
 //! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
-//! Direct dependencies still to add when geom-run merges (G04): geom-run.
-//! Direct dependencies still to add when geom-math merges (G03): geom-math.
 //!
 //! Status: scaffold only; built by pieces G192, G193, G194, G195, G196, G197, G198, G199, G200,
 //! G201, G202, G203, G204, G205, G206, G207, G208, G209, G210, G211, G212, G213, G359, G360, G361.

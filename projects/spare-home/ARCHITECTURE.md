@@ -11,7 +11,7 @@ Selling a home yourself, with everything an agent's commission pays for availabl
 - Every professional the seller needs (photographer, lawyer, valuer, building inspector, licensed agent if they want one) is booked through Spare Work at a published price.
 - Floor plans can come straight from Spare Construct.
 
-## What it uses from the shared kit
+## What it uses from Spare Kit
 
 Accounts and ID checks, payments (for services, never the house price), maps, messaging, ratings, member voting, the open cost ledger, and the marketplace engine. Services are booked through Spare Work.
 
