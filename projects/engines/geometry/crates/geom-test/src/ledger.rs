@@ -305,7 +305,8 @@ fn reconcile(map: &Value, sources: &[Source<'_>], problems: &mut Vec<Problem>) {
             file: crate::map::MAP_FILE.to_owned(),
             rule: Rule::Map,
             message: format!(
-                "the map lists the source {} ({}) but no file's record of it, so the ledger                  cannot say who takes it: run `cargo run -p geom-test --bin map -- write`",
+                "the map lists the source {} ({}) but no file's record of it, so the ledger \
+                 cannot say who takes it: run `cargo run -p geom-test --bin map -- write`",
                 source.summary.text("name"),
                 source.summary.text("link")
             ),
@@ -324,7 +325,8 @@ fn reconcile(map: &Value, sources: &[Source<'_>], problems: &mut Vec<Problem>) {
                 file: used.file.to_owned(),
                 rule: Rule::Map,
                 message: format!(
-                    "the {take} record of {} ({link}) is in no source of the map, so the ledger                      would leave it out: run `cargo run -p geom-test --bin map -- write`",
+                    "the {take} record of {} ({link}) is in no source of the map, so the ledger \
+                     would leave it out: run `cargo run -p geom-test --bin map -- write`",
                     used.record.text("name")
                 ),
             });

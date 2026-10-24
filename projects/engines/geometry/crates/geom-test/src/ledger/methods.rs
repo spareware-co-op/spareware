@@ -378,7 +378,10 @@ pub fn check_code_record(sources: &[Source<'_>], notes: &[Note], problems: &mut 
                 file: note.path.clone(),
                 rule: Rule::Note,
                 message: format!(
-                    "{file} names this note in its Consulted: record, but the note's                      \"Code written from it\" field does not record it: add the module's path,                      the session that wrote it and that the source was not in its context (29.20,                      rule 6, step 5)"
+                    "{file} names this note in its Consulted: record, but the note's \
+                     \"Code written from it\" field does not record it: add the module's path, \
+                     the session that wrote it and that the source was not in its context (29.20, \
+                     rule 6, step 5)"
                 ),
             });
         }
