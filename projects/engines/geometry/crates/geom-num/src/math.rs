@@ -110,6 +110,16 @@
 //! **Speed.** `tests/math_bench.rs` times each function against `libm`'s on the same arguments;
 //! piece G47's target is at most twice `libm`'s time.
 //!
+//! Method: the five transcendental functions are ports of CORE-MATH
+//! (<https://core-math.gitlabpages.inria.fr/>), each following Ziv's strategy with its proof in its
+//! own module; the square root and the fused multiply-add are IEEE 754-2019's correctly rounded
+//! operations (<https://doi.org/10.1109/IEEESTD.2019.8766229>), through `libm` 0.2.16
+//! (<https://docs.rs/libm/0.2.16>); `abs` and the roundings are exact operations on the bits.
+//!
+//! Cost: constant per call and no allocation: each function checks its argument, then runs its
+//! port's fast path, and the accurate path only when the fast path's rounding test cannot decide;
+//! each module states its own cost. Speed against `libm` is measured as above.
+//!
 //! # Proofs: the shared lemmas
 //!
 //! Notation: `u = 2^−53`, the unit roundoff; RN is IEEE rounding to nearest, ties to even, the only

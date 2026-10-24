@@ -19,8 +19,12 @@
 //! as for phases (`crate::phase`): the first crossing in key order, however the work was split,
 //! as rayon's `find_first` returns the first match in input order
 //! (<https://github.com/rayon-rs/rayon/blob/ee0a00bdb1ab039e178a215ad5712fb7fa58e58f/src/iter/mod.rs#L1675-L1680>).
+//! Consulted: rayon, MIT OR Apache-2.0,
+//!   <https://github.com/rayon-rs/rayon/blob/ee0a00bdb1ab039e178a215ad5712fb7fa58e58f/src/iter/mod.rs#L1675-L1680>,
+//!   for the lowest-index rule of `find_first`, which this crate applies to failures. No code
+//!   copied.
 //!
-//! Cost, for n items: at most n calls of the function, each with a fresh meter, and one read of
+//! Cost: for n items, at most n calls of the function, each with a fresh meter, and one read of
 //! the cancellation every [`POLL_EVERY`](crate::POLL_EVERY) items of each chunk. Room for a
 //! chunk's results is reserved when the chunk starts, since every item has a result, and the n
 //! results are gathered in the order the items run; the items past the crossing that never ran

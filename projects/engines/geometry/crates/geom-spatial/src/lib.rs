@@ -19,6 +19,8 @@
 //! Sections: 10.2, 19.9 to 19.12 and 23.9; open questions OQ-19.7 and OQ-19.17, in the kernel
 //! architecture (`projects/engines/geometry/architecture/`).
 //!
+//! Family: Query.
+//!
 //! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!

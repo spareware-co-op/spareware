@@ -65,12 +65,12 @@
 //!
 //! Method: each module names the published method it follows, with its source; together they
 //! implement the contracts of chapters 6.1 and 17.1
-//! (<https://github.com/spareware-co-op/spareware/blob/piece/G01/projects/engines/geometry/architecture/06-numbers.md>,
-//! <https://github.com/spareware-co-op/spareware/blob/piece/G01/projects/engines/geometry/architecture/17-survey-terrain-civil.md>),
+//! (`projects/engines/geometry/architecture/06-numbers.md`,
+//! `projects/engines/geometry/architecture/17-survey-terrain-civil.md`),
 //! chapter 7
-//! (<https://github.com/spareware-co-op/spareware/blob/piece/G01/projects/engines/geometry/architecture/07-geometry-types.md>)
+//! (`projects/engines/geometry/architecture/07-geometry-types.md`)
 //! and chapter 21
-//! (<https://github.com/spareware-co-op/spareware/blob/piece/G01/projects/engines/geometry/architecture/21-determinism.md>).
+//! (`projects/engines/geometry/architecture/21-determinism.md`).
 //!
 //! Cost: every operation runs in constant time and allocates nothing (the crate uses neither `std`
 //! nor `alloc`), except `Box2::from_points` and `Box3::from_points`, linear in the points, and

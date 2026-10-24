@@ -1,6 +1,7 @@
 //! Correctly rounded natural logarithm `ln(x)`: a port of CORE-MATH.
 //!
-//! Method: Ziv's strategy, as in CORE-MATH; the method and the proof of its bound are below.
+//! Method: Ziv's strategy, as in CORE-MATH (<https://core-math.gitlabpages.inria.fr/>); the
+//! algorithm and the proof of its bound are below.
 //! Source: PORT from CORE-MATH `src/binary64/log/log.c` and `src/binary64/log/dint.h` at commit
 //!   `0ce0cbc15935e24c656280e5a46c34e89f301b7a`, by Paul Zimmermann and Tom Hubrecht (log.c) and
 //!   Tom Hubrecht (dint.h, from his correctly rounded `pow`), MIT,
@@ -74,7 +75,7 @@
 //! SOFTWARE.
 //! ```
 //!
-//! **Error bound: correctly rounded**, resting on the completeness of the published worst-case
+//! Guarantees: correctly rounded, resting on the completeness of the published worst-case
 //! lists, which their own statement hedges (step A of the proof). For every binary64 input checked
 //! the result is the binary64 number nearest the exact `ln x` (ties to even), so the error is at
 //! most half an ulp. Proven outright: every input whose value has fewer than 55 identical bits
@@ -84,7 +85,12 @@
 //! `ln(±0) = −∞`, `ln(+∞) = +∞`, and a negative input or NaN gives the canonical NaN
 //! (`0x7ff8_0000_0000_0000`). The proof is at the end of this documentation.
 //!
-//! Method (Ziv's strategy, as CORE-MATH). Fast path: `x = 2^e·y` with `y` in `[1/√2, √2)`; a
+//! Cost: constant time, no allocation and no recursion. Almost every argument takes the fast
+//! path, a fixed sequence of floating-point operations and table reads; only when its rounding
+//! test cannot decide does the accurate path run, also of fixed length, with a fixed-degree polynomial in double-double. No loop's
+//! length depends on the argument.
+//!
+//! The algorithm (Ziv's strategy, as CORE-MATH). Fast path: `x = 2^e·y` with `y` in `[1/√2, √2)`; a
 //! 10-bit `r ≈ 1/y` from a table makes `z = r·y − 1` exact with `|z| < 0.00213`; then
 //! `ln x = e·ln 2 − ln r + ln(1 + z)`, with `−ln r` from a double-double table and `ln(1 + z)` from a
 //! degree-6 polynomial. If `h + l ± ERR` round to the same double, that is the result. Otherwise

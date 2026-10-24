@@ -1,0 +1,339 @@
+{
+  "crates": [
+    {
+      "chapters": [
+        25,
+        27
+      ],
+      "depends": [],
+      "errors": [],
+      "family": [],
+      "file": "projects/engines/crates/engine-geometry/src/lib.rs",
+      "folder": "projects/engines/crates/engine-geometry",
+      "invariants": [
+        "No kernel logic."
+      ],
+      "job": "The stable facade.",
+      "kind": "facade",
+      "layer": "13",
+      "modules": [],
+      "name": "engine-geometry",
+      "provenance": [],
+      "sections": "25 and 27.",
+      "spdx": null,
+      "status": null,
+      "summary": "Shared engine: an example facade."
+    },
+    {
+      "chapters": [
+        28
+      ],
+      "depends": [],
+      "errors": [],
+      "family": [],
+      "file": "projects/engines/geometry/crates/geom-fuzz/src/lib.rs",
+      "folder": "projects/engines/geometry/crates/geom-fuzz",
+      "invariants": [
+        "Development only."
+      ],
+      "job": "fuzz harnesses.",
+      "kind": "development",
+      "layer": "Development",
+      "modules": [
+        {
+          "cost": "none at run time.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/lib.rs",
+          "guarantees": [
+            "Development only."
+          ],
+          "job": "Spare Kit geometry kernel, development only: an example.",
+          "method": {
+            "none": "the root defines one type."
+          },
+          "path": "geom_fuzz",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
+      "name": "geom-fuzz",
+      "provenance": [],
+      "sections": "28.5.",
+      "spdx": null,
+      "status": null,
+      "summary": "Spare Kit geometry kernel, development only: an example."
+    },
+    {
+      "chapters": [
+        11,
+        22
+      ],
+      "depends": [
+        {
+          "licence": "MIT",
+          "link": "https://crates.io/crates/libm/0.2.16",
+          "manifest": "projects/engines/geometry/crates/geom-x/Cargo.toml",
+          "method_note": null,
+          "name": "libm",
+          "pinned": false,
+          "purpose": "0.2.16",
+          "take": "depend"
+        }
+      ],
+      "errors": [
+        {
+          "doc": "Why it failed.",
+          "file": "projects/engines/geometry/crates/geom-x/src/error.rs",
+          "kinds": [
+            {
+              "doc": "It was degenerate.",
+              "name": "Degenerate",
+              "shape": "unit"
+            },
+            {
+              "doc": "A value was out of range.",
+              "name": "OutOfRange",
+              "shape": "struct"
+            }
+          ],
+          "module": "geom_x::error",
+          "name": "XError",
+          "non_exhaustive": true
+        },
+        {
+          "doc": "Why a sweep failed: an error enum by its use, not its name.",
+          "file": "projects/engines/geometry/crates/geom-x/src/error.rs",
+          "kinds": [
+            {
+              "doc": "The mitres do not meet.",
+              "name": "MitreMismatch",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_x::error",
+          "name": "SweepFailure",
+          "non_exhaustive": false
+        }
+      ],
+      "family": [
+        "Combine",
+        "2D"
+      ],
+      "file": "projects/engines/geometry/crates/geom-x/src/lib.rs",
+      "folder": "projects/engines/geometry/crates/geom-x",
+      "invariants": [
+        "It keeps one."
+      ],
+      "job": "examples of every field.",
+      "kind": "kernel",
+      "layer": "6",
+      "modules": [
+        {
+          "cost": "constant.",
+          "does": "nothing much.",
+          "family": [
+            "Query"
+          ],
+          "file": "projects/engines/geometry/crates/geom-x/src/a.rs",
+          "guarantees": [
+            "One guarantee, over two lines.",
+            "Another."
+          ],
+          "job": "An example module: every module field, written once.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/PL00009321",
+              "projects/engines/geometry/architecture/06-numbers.md",
+              "https://www.cs.cmu.edu/afs/cs/project/quake/public/code/predicates.c"
+            ],
+            "text": "Shewchuk 1997 (<https://doi.org/10.1007/PL00009321>), as chapter 6 says (`projects/engines/geometry/architecture/06-numbers.md`); his reference code is <https://www.cs.cmu.edu/afs/cs/project/quake/public/code/predicates.c>."
+          },
+          "path": "geom_x::a",
+          "provenance": [
+            {
+              "licence": "public domain",
+              "link": "https://www.cs.cmu.edu/afs/cs/project/quake/public/code/predicates.c",
+              "method_note": null,
+              "name": "J. R. Shewchuk, `predicates.c`",
+              "pinned": false,
+              "purpose": "for its signs.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": "MPL-2.0",
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the arguments.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-x/src/bin/tool/helper.rs",
+          "guarantees": [
+            "it parses arguments."
+          ],
+          "job": "A module of the binary `tool`.",
+          "method": {
+            "none": "argument parsing."
+          },
+          "path": "tool::helper",
+          "provenance": [],
+          "spdx": null,
+          "target": "bin"
+        },
+        {
+          "cost": "one call.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-x/src/bin/tool/main.rs",
+          "guarantees": [
+            "exits 0 or 1."
+          ],
+          "job": "`tool`: an example binary.",
+          "method": {
+            "none": "it calls the library."
+          },
+          "path": "tool",
+          "provenance": [],
+          "spdx": null,
+          "target": "bin"
+        },
+        {
+          "cost": "constant.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-x/src/error.rs",
+          "guarantees": [
+            "every kind is documented."
+          ],
+          "job": "Errors of the example.",
+          "method": {
+            "none": "a closed enum of failures."
+          },
+          "path": "geom_x::error",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in its input.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-x/src/noted.rs",
+          "guarantees": [
+            "as the note says."
+          ],
+          "job": "A module that read LGPL code under the method-only procedure.",
+          "method": {
+            "links": [
+              "doi:10.1000/182"
+            ],
+            "text": "the note's paper, doi:10.1000/182."
+          },
+          "path": "geom_x::noted",
+          "provenance": [
+            {
+              "licence": "LGPL-3.0-or-later OR LicenseRef-Commercial",
+              "link": "https://github.com/example/lgpl/blob/0123456789abcdef0123456789abcdef01234567/widen.h#L1-L9",
+              "method_note": "projects/engines/geometry/methods/example-widening.md",
+              "name": "Example `widen.h`",
+              "pinned": true,
+              "purpose": "for its widening.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in its input.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-x/src/ported.rs",
+          "guarantees": [
+            "as its origin's."
+          ],
+          "job": "A ported module.",
+          "method": {
+            "links": [
+              "doi:10.1000/example"
+            ],
+            "text": "the origin's paper (doi:10.1000/example)."
+          },
+          "path": "geom_x::ported",
+          "provenance": [
+            {
+              "licence": "BSD-3-Clause",
+              "link": "https://github.com/example/example/blob/0123456789abcdef0123456789abcdef01234567/src/x.c",
+              "method_note": null,
+              "name": "Example",
+              "pinned": true,
+              "purpose": "rewritten in Rust with checked arithmetic.",
+              "take": "port"
+            }
+          ],
+          "spdx": "MPL-2.0 AND BSD-3-Clause",
+          "target": "lib"
+        }
+      ],
+      "name": "geom-x",
+      "provenance": [],
+      "sections": "11.3 and 22.",
+      "spdx": null,
+      "status": "scaffold only; built by pieces G1.",
+      "summary": "Spare Kit geometry kernel: an example."
+    }
+  ],
+  "format": 1,
+  "gaps": [],
+  "generated_by": "cargo run -p geom-test --bin map -- write",
+  "grammar": "projects/engines/geometry/HEADERS.md",
+  "pending": [],
+  "sources": [
+    {
+      "licence": "MIT",
+      "link": "https://crates.io/crates/libm/0.2.16",
+      "method_note": null,
+      "name": "libm",
+      "pinned": false,
+      "take": "depend",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-x/Cargo.toml"
+      ]
+    },
+    {
+      "licence": "BSD-3-Clause",
+      "link": "https://github.com/example/example/blob/0123456789abcdef0123456789abcdef01234567/src/x.c",
+      "method_note": null,
+      "name": "Example",
+      "pinned": true,
+      "take": "port",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-x/src/ported.rs"
+      ]
+    },
+    {
+      "licence": "LGPL-3.0-or-later OR LicenseRef-Commercial",
+      "link": "https://github.com/example/lgpl/blob/0123456789abcdef0123456789abcdef01234567/widen.h",
+      "method_note": "projects/engines/geometry/methods/example-widening.md",
+      "name": "Example `widen.h`",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-x/src/noted.rs"
+      ]
+    },
+    {
+      "licence": "public domain",
+      "link": "https://www.cs.cmu.edu/afs/cs/project/quake/public/code/predicates.c",
+      "method_note": null,
+      "name": "J. R. Shewchuk, `predicates.c`",
+      "pinned": false,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-x/src/a.rs"
+      ]
+    }
+  ]
+}

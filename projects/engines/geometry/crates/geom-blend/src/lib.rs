@@ -19,6 +19,8 @@
 //! Sections: 13.10, 13.21 and 13.22; open question OQ-13.3, in the kernel architecture
 //! (`projects/engines/geometry/architecture/`).
 //!
+//! Family: Blend.
+//!
 //! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!

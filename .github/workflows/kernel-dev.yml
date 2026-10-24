@@ -18,13 +18,29 @@ name: Kernel development crates
 # - `cargo run -p geom-gen -- check`, which regenerates every committed generator output in memory
 #   and fails, naming each file, on any difference or on an orphan in a generated folder
 #   (chapter 27, "Generated code and data have one home"). kernel.yml runs no binary.
+# - `cargo run -p geom-test --bin map -- check`, the map for people and AI (chapter 26.3, piece
+#   G15): it reads every crate and module header of the kernel's crates
+#   (projects/engines/geometry/crates) and of the facade and its binding crates
+#   (projects/engines/crates/engine-geometry*) by the grammar in
+#   projects/engines/geometry/HEADERS.md, and fails, naming the file and the field, on any header
+#   that lacks a required field or writes a placeholder for it, any provenance record that is
+#   incomplete or takes more than chapter 29.2 allows, any link to outside code that no Source: or
+#   Consulted: line credits, any method link into the repository that does not exist, any
+#   published dependency whose licence the header does not record, any error kind without a doc
+#   comment, and any known gap or pending folder that no longer applies; and fails if the
+#   committed projects/engines/geometry/MAP.json differs from the map the headers give. kernel.yml's
+#   run of geom-test's suite checks the same (tests/map_repo.rs); this step reports it on its own,
+#   with the command that fixes it. The map reads files under projects/engines/geometry and
+#   projects/engines/crates, and resolves header links into projects/engines/geometry and
+#   projects/kit/notes; the path filters below cover all of them.
 # - The development crates' tests on wasm32-wasip1 under wasmtime, a 32-bit target: kernel.yml's
 #   WebAssembly job leaves the development crates out. A seed must draw the same test data and a
 #   generator give the same bytes there as natively, and the golden hashes and committed-output
 #   tests fail on a target that differs.
 #
-# The dependency rule, the fuzz target and the generator check run natively on every operating
-# system kernel.yml tests, the same six runners.
+# The dependency rule, the fuzz target, the generator check and the map check run natively on every
+# operating system kernel.yml tests, the same six runners, so the map's bytes are proved the same on
+# each of them.
 #
 # Seeds: every seeded test prints its seed as `seed: <hex>` and runs from a fixed default on pull
 # requests, so they run the same cases every time (28.17); SPAREKIT_SEED=<hex> replays any printed
@@ -32,10 +48,12 @@ name: Kernel development crates
 # prints BOLERO_RANDOM_SEED=<seed> with any failure, which replays it. Long libFuzzer runs
 # (cargo-bolero) and nightly runs with fresh seeds belong to later pieces.
 #
-# Path filters: the workflow runs when any file the dependency rule reads changes, as well as the
-# development crates. The rule reads every kernel crate's manifest (projects/engines/geometry/**,
-# and the facade and its binding crates in projects/engines/crates/), every manifest they reach (the
-# facade reaches kit-core, in projects/kit/crates/), the workspace's Cargo.toml ([patch],
+# Path filters: the workflow runs when any file the dependency rule or the map reads changes, as
+# well as the development crates; projects/kit/notes/** is there for the evidence notes that
+# module headers link to, which the map check resolves. The rule reads every kernel crate's
+# manifest (projects/engines/geometry/**, and the facade and its binding crates in
+# projects/engines/crates/), every manifest they reach (the facade reaches kit-core, in
+# projects/kit/crates/), the workspace's Cargo.toml ([patch],
 # [workspace.dependencies], members), Cargo.lock, and cargo's configuration in .cargo/ ([patch],
 # path overrides). Moving a development crate from [dev-dependencies] to [dependencies] changes no
 # line of Cargo.lock, so the manifests themselves must be filtered. geom-test's
@@ -57,6 +75,7 @@ on:
       - "projects/engines/geometry/**"
       - "projects/engines/crates/**"
       - "projects/kit/crates/**"
+      - "projects/kit/notes/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - ".cargo/**"
@@ -69,6 +88,7 @@ on:
       - "projects/engines/geometry/**"
       - "projects/engines/crates/**"
       - "projects/kit/crates/**"
+      - "projects/kit/notes/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - ".cargo/**"
@@ -123,6 +143,8 @@ jobs:
         run: cargo test --locked -p geom-fuzz --test predicates
       - name: Every committed generator output is current, with no orphan
         run: cargo run --locked -p geom-gen -- check
+      - name: Every crate and module header is complete, and MAP.json is current
+        run: cargo run --locked -p geom-test --bin map -- check
 
   wasm:
     name: Development crates (wasm32-wasip1 under wasmtime)

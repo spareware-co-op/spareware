@@ -74,6 +74,10 @@
 //!   exact zero), <https://doi.org/10.1109/IEEESTD.2019.8766229>.
 //! - RFC 3514, "Float semantics": <https://rust-lang.github.io/rfcs/3514-float-semantics.html>.
 //!
+//! Cost: constant time and no allocation. Each function is a fixed sequence of floating-point
+//! operations, comparisons and bit reads; outside Dekker's direct range `split` also scales by
+//! 2^64 and back, and `two_prod` scales by powers of two (`scale`), each scaling at most two steps.
+//!
 //! Notation used in the proofs: Ω = (2 − 2^−52) · 2^1023 is the largest finite double. For a
 //! nonzero finite double x, `e_x` is the exponent of its leading bit, so
 //! `2^e_x ≤ |x| < 2^(e_x + 1)`; `e_x` runs from −1074 (the smallest subnormal) to 1023, and for a

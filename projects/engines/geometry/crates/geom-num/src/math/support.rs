@@ -15,6 +15,13 @@
 //! every input, where the order of the operands is known; and a `wrapping_*` method only where the
 //! C source computes modulo 2^64 or 2^128 on purpose, each with a comment saying why.
 //!
+//! Guarantees: every helper is total and deterministic, so the ports contain no `unsafe`, no
+//! indexing, no cast that could lose a value and no shift that could overflow; a table read out
+//! of range gives the canonical NaN, never a panic or a plausible wrong number.
+//!
+//! Cost: constant time and no allocation: each helper is a few integer or floating-point
+//! operations.
+//!
 //! Methods: the fused multiply-add is IEEE 754-2019's fusedMultiplyAdd (§5.4.1,
 //! <https://doi.org/10.1109/IEEESTD.2019.8766229>); the fast two-sum is Dekker's (T. J. Dekker, "A
 //! floating-point technique for extending the available precision", *Numerische Mathematik* 18

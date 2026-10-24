@@ -21,6 +21,20 @@
 //! before +0 and the two are not equal, and two `Real`s are equal exactly when their bits are. So
 //! sorting, removing duplicates, ordered maps and binary search all treat −0 and +0 as the
 //! different values they are, the same way on every target.
+//!
+//! Guarantees:
+//!
+//! - Every `Real` is finite: [`Real::new`] is the only way to make one, and it refuses NaN and the
+//!   infinities.
+//! - Equality and order are both IEEE 754's `totalOrder`, so they agree, and −0 and +0 are
+//!   different values, on every target.
+//!
+//! Method: IEEE 754-2019's `totalOrder` predicate (section 5.10,
+//! <https://doi.org/10.1109/IEEESTD.2019.8766229>), through `f64::total_cmp`; never producing NaN
+//! follows Rust RFC 3514 (<https://rust-lang.github.io/rfcs/3514-float-semantics.html>).
+//!
+//! Cost: constant: one finiteness check to make a `Real`, and one comparison of bits to compare
+//! two.
 
 use core::cmp::Ordering;
 use core::hash::{Hash, Hasher};

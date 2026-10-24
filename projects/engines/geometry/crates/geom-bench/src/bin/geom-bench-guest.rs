@@ -9,6 +9,9 @@
 //! Method: fuel metering (`Config::consume_fuel`,
 //! <https://github.com/bytecodealliance/wasmtime/blob/5afd63588b1f5520391c6a37fc38dfd3ccd607c2/crates/wasmtime/src/config.rs#L627-L646>)
 //! by differencing two runs (see `geom_bench::guest`).
+//! Consulted: Wasmtime, Apache-2.0 WITH LLVM-exception,
+//!   <https://github.com/bytecodealliance/wasmtime/blob/5afd63588b1f5520391c6a37fc38dfd3ccd607c2/crates/wasmtime/src/config.rs#L627-L646>,
+//!   for what fuel counts and how `Config::consume_fuel` meters it. No code copied.
 //!
 //! Cost: that of the command it runs (`geom_bench::guest`).
 

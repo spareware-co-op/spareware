@@ -1,4 +1,5 @@
-//! Spare Kit geometry kernel: benchmarks, and the count gates that block a regression over 5%.
+//! Spare Kit geometry kernel, development only: benchmarks, and the count gates that block a
+//! regression over 5%.
 //!
 //! One job: the kernel's benchmarks, and the count gates that block a regression over 5%.
 //!
@@ -35,6 +36,9 @@
 //! (<https://docs.wasmtime.dev/api/wasmtime/struct.Config.html#method.consume_fuel>), the doubling
 //! test for growth (<https://algs4.cs.princeton.edu/14analysis/>), and SHA-256 golden digests of
 //! canonical outputs (NIST FIPS 180-4, <https://csrc.nist.gov/pubs/fips/180-4/upd1/final>).
+//! Consulted: Gungraun, Apache-2.0 OR MIT,
+//!   <https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md>,
+//!   for its library-benchmark API and its Callgrind and DHAT settings. No code copied.
 //!
 //! Cost: a benchmark is one pass of its operation over [`inputs::BATCH`] inputs (two passes under
 //! the instruction-count gate, whose first pass warms the caches; one and two runs under the fuel
