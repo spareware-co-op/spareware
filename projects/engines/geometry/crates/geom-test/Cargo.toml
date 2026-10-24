@@ -11,6 +11,14 @@ description = "Spare Kit geometry kernel, development only: shared test support,
 geom-num = { path = "../geom-num" }
 proptest = { version = "1.12.0", default-features = false, features = ["std", "bit-set"] }
 serde_json = "1.0.149"
+# The recursion check (src/recursion): a real Rust parser for the call graph (syn, MIT OR
+# Apache-2.0), with line numbers for every call site (proc-macro2's span-locations, MIT OR
+# Apache-2.0) and token printing for names (quote, MIT OR Apache-2.0); and petgraph (MIT OR
+# Apache-2.0) for the graph and its strongly connected components.
+syn = { version = "3.0.9", default-features = false, features = ["full", "parsing", "printing", "visit", "clone-impls", "extra-traits"] }
+proc-macro2 = { version = "1.0.107", default-features = false, features = ["span-locations"] }
+quote = { version = "1.0.47", default-features = false }
+petgraph = { version = "0.8.3", default-features = false }
 
 [lints.rust]
 unsafe_code = "forbid"

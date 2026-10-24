@@ -91,6 +91,7 @@ pub mod grid;
 pub mod licence;
 pub mod map;
 pub mod prop;
+pub mod recursion;
 pub mod rng;
 pub mod seed;
 
