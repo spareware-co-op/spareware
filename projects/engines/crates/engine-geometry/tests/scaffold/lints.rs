@@ -176,9 +176,7 @@ fn reference_clippy<'o>(
         add(
             source,
             Rule::ClippyConfig,
-            format!(
-                "{file} is not TOML, so the kernel's clippy settings are unknown"
-            ),
+            format!("{file} is not TOML, so the kernel's clippy settings are unknown"),
         );
         return None;
     };
@@ -236,9 +234,7 @@ fn compare_clippy(
         add(
             name,
             Rule::ClippyConfig,
-            format!(
-                "{file}, the clippy configuration it is built with, is not TOML"
-            ),
+            format!("{file}, the clippy configuration it is built with, is not TOML"),
         );
         return;
     };
@@ -274,8 +270,7 @@ pub fn workspace(table: &Table<'_>, observed: &Observed, add: &mut impl FnMut(&s
         add(
             &source,
             Rule::LintTables,
-            "its Cargo.toml is not TOML, so the kernel's lint settings are unknown"
-                .to_owned(),
+            "its Cargo.toml is not TOML, so the kernel's lint settings are unknown".to_owned(),
         );
     }
     let clippy = reference_clippy(&source, &reference.lints, add);

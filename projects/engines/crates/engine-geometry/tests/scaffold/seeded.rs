@@ -1677,10 +1677,26 @@ fn lint_rule_gaps() -> Vec<(&'static str, String, String, &'static str)> {
             "no disallowed-types",
         ),
         (
+            // TOML (mixed arrays are TOML 1.0), but an item that is neither a path nor a table.
             "an unreadable list",
             manifest.clone(),
+            clippy_toml.replace("disallowed-types = [\n", "disallowed-types = [\n    1,\n"),
+            "disallowed-types cannot be read",
+        ),
+        (
+            "a table with no path",
+            manifest.clone(),
+            clippy_toml.replace(
+                "disallowed-types = [\n",
+                "disallowed-types = [\n    { reason = \"x\" },\n",
+            ),
+            "disallowed-types cannot be read",
+        ),
+        (
+            "a clippy configuration that is not TOML",
+            manifest.clone(),
             clippy_toml.replace("disallowed-types = [\n", "disallowed-types = [\n    {,\n"),
-            "cannot be read",
+            "clippy reads no configuration for it that this check can read",
         ),
     ]
 }

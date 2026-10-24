@@ -57,6 +57,7 @@
 )]
 
 use proc_macro2::{Delimiter, Spacing, Span, TokenStream, TokenTree};
+use syn::ext::IdentExt as _;
 use syn::punctuated::Punctuated;
 use syn::visit::{self, Visit};
 use syn::{Attribute, Expr, Lit, Meta, Token};
@@ -95,8 +96,7 @@ fn flatten(stream: TokenStream) -> Vec<(TokenTree, bool)> {
             continue;
         };
         let quoted = *after_quote;
-        *after_quote =
-            matches!(&token, TokenTree::Punct(p) if p.as_char() == '\'' && p.spacing() == Spacing::Joint);
+        *after_quote = matches!(&token, TokenTree::Punct(p) if p.as_char() == '\'' && p.spacing() == Spacing::Joint);
         if let TokenTree::Group(group) = &token {
             let inner = group.stream().into_iter();
             out.push((token.clone(), quoted));
@@ -319,26 +319,24 @@ fn is_test(attrs: &[Attribute]) -> bool {
     attrs.iter().any(marks_test)
 }
 
-/// The path an entry of a lint list names (`clippy::unwrap_used`), or `None` when it is not a plain
-/// path.
+/// The path an entry of a lint list names (`clippy::unwrap_used`, each name without `r#`), parsed
+/// by `syn` as a path; `None` when it is not a plain one (no leading `::`, no generic arguments).
 fn lint_path(entry: &[TokenTree]) -> Option<String> {
-    let mut path = String::new();
-    let mut i = 0;
-    loop {
-        let (name, _) = ident_name(entry.get(i)?)?;
-        path.push_str(&name);
-        i += 1;
-        match (entry.get(i), entry.get(i + 1)) {
-            (None, _) => return Some(path),
-            (Some(TokenTree::Punct(a)), Some(TokenTree::Punct(b)))
-                if a.as_char() == ':' && a.spacing() == Spacing::Joint && b.as_char() == ':' =>
-            {
-                path.push_str("::");
-                i += 2;
-            }
-            _ => return None,
-        }
+    let path: syn::Path = syn::parse2(entry.iter().cloned().collect()).ok()?;
+    if path.leading_colon.is_some() {
+        return None;
     }
+    let names: Option<Vec<String>> = path
+        .segments
+        .iter()
+        .map(|segment| {
+            segment
+                .arguments
+                .is_none()
+                .then(|| segment.ident.unraw().to_string())
+        })
+        .collect();
+    Some(names?.join("::"))
 }
 
 /// Whether a lint path is one the kernel denies, or a clippy group that may hold one.
@@ -359,7 +357,13 @@ impl Rules<'_> {
     /// Reports, into `found`, what one attribute body (its head, then a parenthesised list) lowers:
     /// the entries of every `allow`, `warn` or `expect` list in it, through `cfg_attr` unless its
     /// predicate holds only in test builds. Explicit work list, no recursion.
-    fn check_list(&self, head: &str, inner: Vec<TokenTree>, at: usize, found: &mut Vec<LintOverride>) {
+    fn check_list(
+        &self,
+        head: &str,
+        inner: Vec<TokenTree>,
+        at: usize,
+        found: &mut Vec<LintOverride>,
+    ) {
         let mut queue: Vec<(String, Vec<TokenTree>)> = vec![(head.to_owned(), inner)];
         while let Some((word, inner)) = queue.pop() {
             if word == "cfg_attr" {
@@ -413,7 +417,12 @@ impl Rules<'_> {
             return;
         };
         let inner: Vec<TokenTree> = list.tokens.clone().into_iter().collect();
-        self.check_list(&head.to_string(), inner, line(attr.pound_token.spans[0]), found);
+        self.check_list(
+            &head.to_string(),
+            inner,
+            line(attr.pound_token.spans[0]),
+            found,
+        );
     }
 
     /// Reports, into `found`, what a macro's tokens could carry to an attribute: every attribute
@@ -427,8 +436,12 @@ impl Rules<'_> {
             let mut i = 0;
             while let Some(token) = stream.get(i) {
                 let is_pound = matches!(token, TokenTree::Punct(p) if p.as_char() == '#');
-                let bang = matches!(stream.get(i + 1), Some(TokenTree::Punct(p)) if p.as_char() == '!');
-                let bracket_at = if bang { i + 2 } else { i + 1 };
+                let bang = matches!(stream.get(i.saturating_add(1)), Some(TokenTree::Punct(p)) if p.as_char() == '!');
+                let bracket_at = if bang {
+                    i.saturating_add(2)
+                } else {
+                    i.saturating_add(1)
+                };
                 if is_pound
                     && let Some(body) = stream
                         .get(bracket_at)
@@ -436,7 +449,9 @@ impl Rules<'_> {
                 {
                     let at = line(token.span());
                     match body.as_slice() {
-                        [TokenTree::Punct(dollar), ..] if dollar.as_char() == '$' && body.len() > 2 => {
+                        [TokenTree::Punct(dollar), ..]
+                            if dollar.as_char() == '$' && body.len() > 2 =>
+                        {
                             found.push(LintOverride {
                                 line: at,
                                 what: format!(
@@ -455,13 +470,13 @@ impl Rules<'_> {
                         }
                         _ => {}
                     }
-                    i = bracket_at + 1;
+                    i = bracket_at.saturating_add(1);
                     continue;
                 }
                 if let Some((word, false)) = ident_name(token)
                     && LOWERING_LEVELS.contains(&word.as_str())
                     && let Some(list) = stream
-                        .get(i + 1)
+                        .get(i.saturating_add(1))
                         .and_then(|t| group_of(t, Delimiter::Parenthesis))
                 {
                     for entry in split_commas(&list) {
@@ -488,7 +503,7 @@ impl Rules<'_> {
                 if let TokenTree::Group(group) = token {
                     stack.push(group.stream().into_iter().collect());
                 }
-                i += 1;
+                i = i.saturating_add(1);
             }
         }
     }

@@ -267,21 +267,38 @@ fn a_lint_table_inside_a_string_is_not_a_lint_table() {
 // ------------------------------------------------------------------ the JSON reader's depth bound
 
 /// The scaffold reads `cargo metadata` and cargo-deny's output with `serde_json` (piece G12a put it
-/// in place of G09's reader). Its recursion limit stays on although `cargo_metadata` switches on
-/// the crate's `unbounded_depth` feature, which only adds a way to switch the limit off: JSON
-/// nested one level deeper than the limit is an error, not a stack overflow.
+/// in place of G09's reader): `serde_json::from_str`, `from_slice` and `cargo_metadata`'s
+/// `MetadataCommand::exec` all keep its recursion limit, which `cargo_metadata`'s use of the
+/// crate's `unbounded_depth` feature leaves on (the feature only adds a way to switch it off). JSON
+/// nested one level deeper than the limit is an error, not a stack overflow. Cargo's build
+/// messages are the one input read without the limit: `cargo_metadata`'s `Message::parse_stream`
+/// switches it off on purpose, because rustc nests the spans of macro expansions deeper than 128
+/// levels, and that input is the pinned compiler's own output (gate.rs, `cargo_messages`).
 #[test]
 fn nesting_one_deeper_than_the_json_readers_limit_is_refused() {
-    // serde_json's limit: 128 nested arrays or objects (`remaining_depth: 128` in its de.rs).
+    // serde_json's limit: `remaining_depth` starts at 128 in its de.rs and each array or object
+    // takes one before it is read, refusing the one that reaches 0, so 127 levels read and 128 do
+    // not.
     let parse = |depth: usize| {
         let text = "[".repeat(depth) + &"]".repeat(depth);
         serde_json::from_str::<serde_json::Value>(&text)
     };
-    assert!(parse(128).is_ok(), "128 nested arrays are within serde_json's limit");
-    let got = parse(129);
+    assert!(
+        parse(127).is_ok(),
+        "127 nested arrays are within serde_json's limit"
+    );
+    let got = parse(128);
     assert!(
         got.is_err(),
-        "serde_json read 129 nested arrays: {got:?}; its recursion limit is off"
+        "serde_json read 128 nested arrays: {got:?}; its recursion limit is off"
+    );
+    let objects = "{\"a\":".repeat(128) + "1" + &"}".repeat(128);
+    assert!(serde_json::from_str::<serde_json::Value>(&objects).is_err());
+    assert!(
+        serde_json::from_slice::<serde_json::Value>(
+            ("[".repeat(128) + &"]".repeat(128)).as_bytes()
+        )
+        .is_err()
     );
 }
 

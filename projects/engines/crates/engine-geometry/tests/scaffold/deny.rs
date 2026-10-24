@@ -151,12 +151,7 @@ fn require(keys: &Keys, wrong: &mut Vec<String>, key: &str, want: &str, why: &st
 
 /// Reports, into `wrong`, once each, every one of `prefixes` that some key is (an array of tables
 /// included), or is a table of.
-fn forbid_keys(
-    keys: &Keys,
-    wrong: &mut Vec<String>,
-    prefixes: &[&str],
-    why: &str,
-) {
+fn forbid_keys(keys: &Keys, wrong: &mut Vec<String>, prefixes: &[&str], why: &str) {
     for prefix in prefixes {
         let set = keys
             .keys()
@@ -168,13 +163,7 @@ fn forbid_keys(
 }
 
 /// What is wrong with an array of strings at `key` that must hold exactly `want`, in words.
-fn exact_list(
-    keys: &Keys,
-    wrong: &mut Vec<String>,
-    key: &str,
-    want: &[&str],
-    why: &str,
-) {
+fn exact_list(keys: &Keys, wrong: &mut Vec<String>, key: &str, want: &[&str], why: &str) {
     let Some(list) = keys.get(key).and_then(strings) else {
         wrong.push(format!("{key} is not a list of strings: {why}"));
         return;
@@ -760,8 +749,10 @@ pub mod run {
             .packages
             .iter()
             .find(|p| canonical(p.manifest_path.as_std_path()) == canonical(manifest))
-            .map(|p| p.name.to_string())
-            .unwrap_or_else(|| panic!("no package of {} in the graph", manifest.display()))
+            .map_or_else(
+                || panic!("no package of {} in the graph", manifest.display()),
+                |p| p.name.to_string(),
+            )
     }
 
     /// The record of licence choices, as the rules read it.
@@ -1544,7 +1535,10 @@ pub mod rules {
                     message: format!(
                         "inside kernel crates the only published crate is {NO_STD_ALLOWED}, from \
                          crates.io (29.1, 29.4); this is {name} from {}",
-                        package.source.as_ref().map_or("a folder", |s| s.repr.as_str())
+                        package
+                            .source
+                            .as_ref()
+                            .map_or("a folder", |s| s.repr.as_str())
                     ),
                 });
             }
@@ -1595,7 +1589,13 @@ pub mod rules {
         use serde_json::json;
 
         /// A package as `cargo metadata` lists one, with the fields `cargo_metadata` requires.
-        fn package(id: &str, name: &str, source: Value, licence: Value, publish: Value) -> Value {
+        fn package(
+            id: &str,
+            name: &str,
+            source: &Value,
+            licence: &Value,
+            publish: &Value,
+        ) -> Value {
             json!({
                 "id": id,
                 "name": name,
@@ -1615,10 +1615,11 @@ pub mod rules {
         fn graph(extra: &[(&str, &str, &str, &str)], kinds: &[&str]) -> Value {
             // extra: (name, source or "", licence, publish: "null" or "[]")
             let mut packages = vec![
-                package("a", "geom-a", Value::Null, json!("MPL-2.0"), json!([])),
-                package("k", "kit-x", Value::Null, Value::Null, json!([])),
+                package("a", "geom-a", &Value::Null, &json!("MPL-2.0"), &json!([])),
+                package("k", "kit-x", &Value::Null, &Value::Null, &json!([])),
             ];
-            let mut deps = vec![json!({"name": "kit_x", "pkg": "k", "dep_kinds": [{"kind": null}]})];
+            let mut deps =
+                vec![json!({"name": "kit_x", "pkg": "k", "dep_kinds": [{"kind": null}]})];
             let mut nodes = vec![json!({"id": "k", "deps": [], "dependencies": []})];
             for (i, (name, source, licence, publish)) in extra.iter().enumerate() {
                 let id = format!("x{i}");
@@ -1627,8 +1628,12 @@ pub mod rules {
                 } else {
                     json!(source)
                 };
-                let publish = if *publish == "[]" { json!([]) } else { Value::Null };
-                packages.push(package(&id, name, source, json!(licence), publish));
+                let publish = if *publish == "[]" {
+                    json!([])
+                } else {
+                    Value::Null
+                };
+                packages.push(package(&id, name, &source, &json!(licence), &publish));
                 let kind: Value =
                     serde_json::from_str(kinds.get(i).copied().unwrap_or("null")).unwrap();
                 deps.push(json!({"name": name, "pkg": id, "dep_kinds": [{"kind": kind}]}));
@@ -2418,7 +2423,11 @@ mod gate {
                 "=1.0.0",
                 published("seeded-private-published", "1.0.0", "GPL-3.0-only"),
             )
-            .set_field("geom-num", "license", Value::String("GPL-3.0-only".to_owned()))
+            .set_field(
+                "geom-num",
+                "license",
+                Value::String("GPL-3.0-only".to_owned()),
+            )
             .set_field("seeded-private-path", "publish", Value::Array(Vec::new()))
             .set_field(
                 "seeded-private-published",

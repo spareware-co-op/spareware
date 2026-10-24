@@ -335,7 +335,9 @@ fn shown(output: &Output) -> String {
 }
 
 /// The messages of a run's standard output, read by `cargo_metadata`; a line that is a JSON object
-/// the crate's model does not read stops the test, so no message is skipped unseen.
+/// the crate's model does not read stops the test, so no message is skipped unseen. The crate reads
+/// each line without `serde_json`'s nesting limit, on purpose: rustc nests the spans of macro
+/// expansions deeper than 128 levels, and the input is the pinned compiler's own output.
 fn cargo_messages(output: &Output) -> Vec<CargoMessage> {
     CargoMessage::parse_stream(output.stdout.as_slice())
         .map(|message| match message {
@@ -439,11 +441,7 @@ pub fn compiled_sources(
             continue;
         }
         let name = artifact.target.name.as_str();
-        let filenames: Vec<&Path> = artifact
-            .filenames
-            .iter()
-            .map(|f| f.as_std_path())
-            .collect();
+        let filenames: Vec<&Path> = artifact.filenames.iter().map(|f| f.as_std_path()).collect();
         match dep_info_of(&filenames, name) {
             Some(dep_info) => match fs::read_to_string(&dep_info) {
                 Ok(text) => {

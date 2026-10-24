@@ -136,7 +136,10 @@ mod tests {
         let other_table = "[lints.clippy]\nunsafe_code = \"forbid\"\n";
         assert!(!manifest_forbids_unsafe(other_table, ""));
         // `workspace = "true"` is a string, not the boolean cargo reads.
-        assert!(!manifest_forbids_unsafe("[lints]\nworkspace = \"true\"\n", root));
+        assert!(!manifest_forbids_unsafe(
+            "[lints]\nworkspace = \"true\"\n",
+            root
+        ));
     }
 
     #[test]
@@ -172,7 +175,10 @@ mod tests {
         .unwrap();
         assert_eq!(found["package.name"].as_str(), Some("geom-a"));
         assert_eq!(found["package.edition.workspace"].as_bool(), Some(true));
-        assert_eq!(found["dependencies.geom-num.path"].as_str(), Some("../geom-num"));
+        assert_eq!(
+            found["dependencies.geom-num.path"].as_str(),
+            Some("../geom-num")
+        );
         // An array of tables is one value, every table of it kept.
         let benches = found["bench"].as_array().unwrap();
         assert_eq!(benches.len(), 2);
@@ -185,11 +191,17 @@ mod tests {
 
     #[test]
     fn values_compare_as_toml_reads_them() {
-        let read = |text: &str| keys(&format!("v = {text}\n")).unwrap()["v"].clone();
+        // The value itself, not flattened by `keys`: an inline table is one value here.
+        let read = |text: &str| {
+            let table: toml::Table = format!("v = {text}\n").parse().unwrap();
+            table["v"].clone()
+        };
         // Layout, comments, quote style and an inline table's key order are not values.
         assert_eq!(
-            read("[\n    # max may return either zero.\n    { path = \"f64::max\", \
-                  reason = \"# not a comment\" },\n    { path = 'f64::min' },\n]"),
+            read(
+                "[\n    # max may return either zero.\n    { path = \"f64::max\", \
+                  reason = \"# not a comment\" },\n    { path = 'f64::min' },\n]"
+            ),
             read("[{reason=\"# not a comment\",path=\"f64::max\"},{path=\"f64::min\"}]")
         );
         assert_eq!(read("\"deny\""), read("'deny'"));

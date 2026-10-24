@@ -90,7 +90,10 @@ pub fn pins(toolchain_file: &str, workflows: &[(&str, &str)]) -> Vec<Violation> 
         ("toolchain.targets", &TARGETS),
     ] {
         let listed = keys.get(key).and_then(strings).unwrap_or_default();
-        for item in needed.iter().filter(|item| !listed.iter().any(|l| l == *item)) {
+        for item in needed
+            .iter()
+            .filter(|item| !listed.iter().any(|l| l == *item))
+        {
             found.push(fault(TOOLCHAIN_FILE, format!("{key} lacks {item:?}")));
         }
     }
