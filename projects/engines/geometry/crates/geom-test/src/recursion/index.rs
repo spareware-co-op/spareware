@@ -907,10 +907,48 @@ impl<'p> Index<'p> {
         self.program.imp(imp).scope.generics.iter().map(|g| (*g, infer.fresh())).collect()
     }
 
-    /// Whether implementation `imp` may apply to `ty` (and, for a trait implementation, with
-    /// trait arguments `trait_args` when given): its header unifies and its bounds may hold. On
-    /// success the unification is kept and the implementation's arguments are returned; on
+    /// Whether implementation `imp`, its generic parameters as `map` gives them (variables), may
+    /// apply to `ty` (and, for a trait implementation, with trait arguments `trait_args` when
+    /// given): its header unifies and its bounds may hold. On success the unification is kept; on
     /// failure nothing changes.
+    #[allow(clippy::too_many_arguments, reason = "the match's inputs and the lookup's state")]
+    pub fn try_impl(
+        &self,
+        imp: ImplId,
+        map: &Map,
+        ty: &Ty,
+        trait_args: Option<&[Ty]>,
+        infer: &mut Infer,
+        sigs: ClosureSigs<'_>,
+        depth: usize,
+    ) -> bool {
+        let Some(info) = self.impls.get(imp.0) else {
+            return false;
+        };
+        let snap = infer.snapshot();
+        let pattern = info.self_ty.subst(map);
+        let mut ok = infer.unify(&pattern, ty);
+        if ok
+            && let (Some(args), Some(tr)) = (trait_args, &info.trait_ref)
+        {
+            for (a, b) in tr.args.iter().zip(args) {
+                if !infer.unify(&a.subst(map), b) {
+                    ok = false;
+                    break;
+                }
+            }
+        }
+        if ok && !self.bounds_may_hold(imp, map, infer, sigs, depth) {
+            ok = false;
+        }
+        if !ok {
+            infer.rollback_to(snap);
+        }
+        ok
+    }
+
+    /// [`Index::try_impl`] with fresh variables for the implementation's parameters, which are
+    /// returned on success.
     pub fn match_impl(
         &self,
         imp: ImplId,
@@ -920,30 +958,27 @@ impl<'p> Index<'p> {
         sigs: ClosureSigs<'_>,
         depth: usize,
     ) -> Option<Map> {
-        let info = self.impls.get(imp.0)?;
-        let snap = infer.snapshot();
         let map = self.fresh_impl(imp, infer);
-        let pattern = info.self_ty.subst(&map);
-        let mut ok = infer.unify(&pattern, ty);
-        if ok
-            && let (Some(args), Some(tr)) = (trait_args, &info.trait_ref)
-        {
-            for (a, b) in tr.args.iter().zip(args) {
-                if !infer.unify(&a.subst(&map), b) {
-                    ok = false;
-                    break;
-                }
+        self.try_impl(imp, &map, ty, trait_args, infer, sigs, depth).then_some(map)
+    }
+
+    /// The implementations among `candidates` that may apply to `ty` (with `trait_args`), each
+    /// with variables for its parameters; the unification is kept when exactly one applies.
+    fn applicable(&self, candidates: Vec<ImplId>, ty: &Ty, trait_args: Option<&[Ty]>, infer: &mut Infer, sigs: ClosureSigs<'_>) -> Vec<(ImplId, Map)> {
+        let mut found = Vec::new();
+        for imp in candidates {
+            // The variables are made before the snapshot, so they outlive its rollback.
+            let map = self.fresh_impl(imp, infer);
+            let snap = infer.snapshot();
+            if self.try_impl(imp, &map, ty, trait_args, infer, sigs, 0) {
+                found.push((imp, map));
             }
-        }
-        if ok && !self.bounds_may_hold(imp, &map, infer, sigs, depth) {
-            ok = false;
-        }
-        if ok {
-            Some(map)
-        } else {
             infer.rollback_to(snap);
-            None
         }
+        if let [(imp, map)] = found.as_slice() {
+            let _ = self.try_impl(*imp, map, ty, trait_args, infer, sigs, 0);
+        }
+        found
     }
 
     /// Whether implementation `imp`'s generic parameters, as `map` gives them, may meet their
@@ -983,6 +1018,11 @@ impl<'p> Index<'p> {
         }
         if let Ty::Dyn(traits) = &t
             && traits.iter().any(|x| self.trait_closure(x.id).contains(&tr.id))
+        {
+            return true;
+        }
+        if let Ty::Adt(id, _) = &t
+            && self.program.item(*id).derives().iter().any(|d| *d == self.program.item(tr.id).name)
         {
             return true;
         }
@@ -1037,21 +1077,8 @@ impl<'p> Index<'p> {
             return Vec::new();
         }
         let tr = self.complete(tr, &t);
-        let mut found = Vec::new();
-        for imp in self.candidates_for(&t, Some(tr.id)) {
-            let snap = infer.snapshot();
-            if let Some(map) = self.match_impl(imp, &t, Some(&tr.args), infer, sigs, 0) {
-                found.push((imp, map));
-            }
-            infer.rollback_to(snap);
-        }
-        if let [(imp, _)] = found.as_slice() {
-            let imp = *imp;
-            if let Some(map) = self.match_impl(imp, &t, Some(&tr.args), infer, sigs, 0) {
-                return vec![(imp, map)];
-            }
-        }
-        found
+        let candidates = self.candidates_for(&t, Some(tr.id));
+        self.applicable(candidates, &t, Some(&tr.args), infer, sigs)
     }
 
     /// The function implementation `imp` runs for trait method `name`: its own, or the trait's
@@ -1171,25 +1198,22 @@ impl<'p> Index<'p> {
             if !provides {
                 continue;
             }
-            let snap = infer.snapshot();
+            // The variables are made before the snapshot, so a pick's arguments outlive its
+            // rollback.
             let map = self.fresh_impl(imp, infer);
             let self_ty = info.self_ty.subst(&map);
-            let ok = match self.impl_fn(imp, name, &map, &self_ty, &[]) {
-                Some((node, args)) => {
-                    let args = self.fill_infer(args, infer);
-                    let recv_ty = self.receiver_of(node, &args);
-                    match recv_ty {
-                        Some(r) if infer.unify(&r, adjusted) && self.bounds_may_hold(imp, &map, infer, sigs, 0) => {
-                            Some((Pick::Node { node, args }, self_ty))
-                        }
-                        _ => None,
-                    }
-                }
-                None => None,
+            let Some((node, args)) = self.impl_fn(imp, name, &map, &self_ty, &[]) else {
+                continue;
             };
+            let args = self.fill_infer(args, infer);
+            let Some(recv_ty) = self.receiver_of(node, &args) else {
+                continue;
+            };
+            let snap = infer.snapshot();
+            let ok = infer.unify(&recv_ty, adjusted) && self.bounds_may_hold(imp, &map, infer, sigs, 0);
             infer.rollback_to(snap);
-            if let Some(p) = ok {
-                found.push(p);
+            if ok {
+                found.push((Pick::Node { node, args }, self_ty));
             }
         }
         if !inherent {
@@ -1313,25 +1337,23 @@ impl<'p> Index<'p> {
             return out;
         }
         for inherent in [true, false] {
-            for imp in self.candidates_for(&base, None) {
+            let candidates: Vec<ImplId> = self
+                .candidates_for(&base, None)
+                .into_iter()
+                .filter(|imp| {
+                    self.impls.get(imp.0).is_some_and(|info| {
+                        info.trait_ref.is_some() != inherent
+                            && (self.program.imp(*imp).methods.contains_key(name)
+                                || info.trait_ref.as_ref().is_some_and(|tr| self.trait_default_exists(tr.id, name)))
+                    })
+                })
+                .collect();
+            for (imp, map) in self.applicable(candidates, &base, None, infer, sigs) {
                 let Some(info) = self.impls.get(imp.0) else {
                     continue;
                 };
-                if info.trait_ref.is_some() == inherent {
-                    continue;
-                }
-                let provides = self.program.imp(imp).methods.contains_key(name)
-                    || info.trait_ref.as_ref().is_some_and(|tr| self.trait_default_exists(tr.id, name));
-                if !provides {
-                    continue;
-                }
-                let snap = infer.snapshot();
-                let picked = self.match_impl(imp, &base, None, infer, sigs, 0).and_then(|map| {
-                    let self_ty = info.self_ty.subst(&map);
-                    self.impl_fn(imp, name, &map, &self_ty, &[])
-                });
-                infer.rollback_to(snap);
-                if let Some((node, args)) = picked {
+                let self_ty = info.self_ty.subst(&map);
+                if let Some((node, args)) = self.impl_fn(imp, name, &map, &self_ty, &[]) {
                     out.push(Pick::Node { node, args });
                 }
             }
@@ -1366,23 +1388,17 @@ impl<'p> Index<'p> {
             }
             return None;
         }
-        for imp in self.candidates_for(&base, None) {
-            let it = self.program.imp(imp);
-            let Some(t) = it.consts.get(name) else {
-                continue;
-            };
-            let snap = infer.snapshot();
-            let found = self.match_impl(imp, &base, None, infer, sigs, 0).map(|map| {
-                let mut scope = it.scope.clone();
-                scope.self_ref = SelfRef::Impl(imp);
-                self.resolver.ty(&scope, t).subst(&map)
-            });
-            infer.rollback_to(snap);
-            if found.is_some() {
-                return found;
-            }
-        }
-        None
+        let candidates: Vec<ImplId> = self
+            .candidates_for(&base, None)
+            .into_iter()
+            .filter(|imp| self.program.imp(*imp).consts.contains_key(name))
+            .collect();
+        let (imp, map) = self.applicable(candidates, &base, None, infer, sigs).into_iter().next()?;
+        let it = self.program.imp(imp);
+        let t = it.consts.get(name)?;
+        let mut scope = it.scope.clone();
+        scope.self_ref = SelfRef::Impl(imp);
+        Some(self.resolver.ty(&scope, t).subst(&map))
     }
 
     // ---------------------------------------------------------------- normalisation
@@ -1441,22 +1457,26 @@ impl<'p> Index<'p> {
                         .collect(),
                 };
                 for t in traits {
-                    for imp in self.candidates_for(&base, Some(t)) {
-                        let it = self.program.imp(imp);
+                    let candidates: Vec<ImplId> = self
+                        .candidates_for(&base, Some(t))
+                        .into_iter()
+                        .filter(|imp| self.program.imp(*imp).assoc.contains_key(name))
+                        .collect();
+                    // One implementation applies: its definition, with what matching it fixed
+                    // kept. Several (open variables): the projection waits.
+                    let found = self.applicable(candidates, &base, None, infer, sigs);
+                    if let [(imp, map)] = found.as_slice() {
+                        let it = self.program.imp(*imp);
                         let Some(written) = it.assoc.get(name) else {
                             continue;
                         };
-                        let snap = infer.snapshot();
-                        let Some(map) = self.match_impl(imp, &base, None, infer, sigs, 0) else {
-                            continue;
-                        };
                         let mut scope = it.scope.clone();
-                        scope.self_ref = SelfRef::Impl(imp);
-                        let resolved = self.resolver.ty(&scope, written).subst(&map);
-                        let out = self.normalize_at(&resolved, infer, sigs, depth.saturating_add(1));
-                        let out = infer.resolve(&out);
-                        infer.rollback_to(snap);
-                        return out;
+                        scope.self_ref = SelfRef::Impl(*imp);
+                        let resolved = self.resolver.ty(&scope, written).subst(map);
+                        return self.normalize_at(&resolved, infer, sigs, depth.saturating_add(1));
+                    }
+                    if !found.is_empty() {
+                        return keep();
                     }
                 }
                 keep()
@@ -1540,7 +1560,7 @@ mod tests {
         assert_eq!(names(&ix, &ix.probe(&b, "m", &mut infer, &none).0), ["a::B::m"], "inherent first, no deref");
         assert_eq!(names(&ix, &ix.probe(&Ty::reference(b.clone()), "r", &mut infer, &none).0), ["<a::A as T>::r"]);
         assert_eq!(names(&ix, &ix.probe(&a, "t", &mut infer, &none).0), ["a::T::t"], "the default body");
-        assert_eq!(names(&ix, &ix.probe(&b, "own", &mut infer, &none).0), Vec::<String>::new(), "a by-value method behind Deref is not reachable");
+        assert_eq!(names(&ix, &ix.probe(&b, "own", &mut infer, &none).0), ["a::A::own"], "lookup follows Deref to a by-value method (moving out is the borrow checker's to refuse)");
         let c = Ty::Adt(item(&p, "C"), Vec::new());
         assert_eq!(names(&ix, &ix.probe(&c, "clone", &mut infer, &none).0), ["<a::C as Clone>::clone"]);
     }
@@ -1548,7 +1568,7 @@ mod tests {
     #[test]
     fn generic_implementations_match_and_fix_their_parameters() {
         let p = program(
-            "pub struct W<T>(T); pub struct X;\n\
+            "pub struct W<T>(T); #[derive(Clone)] pub struct X; pub struct NoClone;\n\
              impl<T: Clone> W<T> { pub fn get(&self) -> T { self.0.clone() } }\n\
              impl W<f64> { pub fn only_f(&self) {} }",
         );
@@ -1563,6 +1583,8 @@ mod tests {
             other => panic!("{other:?}"),
         }
         assert!(ix.probe(&wx, "only_f", &mut infer, &none).0.is_empty(), "W<f64> only");
+        let wn = Ty::Adt(w, vec![Ty::Adt(item(&p, "NoClone"), Vec::new())]);
+        assert!(ix.probe(&wn, "get", &mut infer, &none).0.is_empty(), "the implementation's bound does not hold");
         let wf = Ty::Adt(w, vec![Ty::Prim(Prim::F64)]);
         assert_eq!(ix.probe(&wf, "only_f", &mut infer, &none).0.len(), 1);
     }

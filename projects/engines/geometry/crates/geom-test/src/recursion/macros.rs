@@ -1056,7 +1056,10 @@ mod tests {
         };
         assert!(destination.is_some());
         assert_eq!(formatted.len(), 2);
-        assert!(matches!(read(&r, &scope, &mac("matches!(x, Some(_) if y)"), 0), MacroRead::Exprs(e) if e.len() == 2));
+        assert!(
+            matches!(read(&r, &scope, &mac("matches!(x, Some(_) if y)"), 0), MacroRead::Exprs(e) if e.len() == 1),
+            "`matches!` is the `match` it expands to"
+        );
         assert!(matches!(read(&r, &scope, &mac("vec![x; 3]"), 0), MacroRead::Repeat(..)));
         assert!(matches!(read(&r, &scope, &mac("include!(\"x.rs\")"), 0), MacroRead::Unread(_)));
         assert!(matches!(read(&r, &scope, &mac("weird!(=> =>)"), 0), MacroRead::Unread(_)));

@@ -1081,6 +1081,12 @@ impl Loader<'_> {
         });
         self.define(module, &name, Def::Item(id), false, true);
         scope.self_ref = SelfRef::Trait(id, self_gen);
+        // The trait's generic parameters see `Self` too (`trait Add<Rhs = Self>`).
+        for g in &scope.generics {
+            if let Some(generic) = self.program.generics.get_mut(g.0) {
+                generic.scope.self_ref = SelfRef::Trait(id, self_gen);
+            }
+        }
         // `Self` in default bodies is bounded by the trait itself.
         let own = syn::parse2::<syn::TypeParamBound>(quote::ToTokens::to_token_stream(&t.ident));
         if let Some(g) = self.program.generics.get_mut(self_gen.0) {
@@ -1542,7 +1548,12 @@ mod tests {
         assert!(p.problems.is_empty(), "{:?}", p.problems);
         let inner = p.nodes.iter().find(|n| n.ident == "inner").unwrap();
         assert_eq!(inner.name, "a::outer::inner");
-        assert!(p.module(inner.scope.module).block_of.is_none());
+        let outer_id = NodeId(p.nodes.iter().position(|n| n.ident == "outer").unwrap());
+        assert_eq!(
+            p.module(inner.scope.module).block_of,
+            Some(outer_id),
+            "an item of a body sees its sibling items, in its function's block scope"
+        );
         let outer = p.nodes.iter().find(|n| n.ident == "outer").unwrap();
         assert!(p.module(outer.scope.module).block_of.is_some());
         let derived: Vec<&NodeKind> = p
