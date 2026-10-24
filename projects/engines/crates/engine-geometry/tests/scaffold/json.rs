@@ -1,13 +1,17 @@
-//! A small, strict JSON reader for `cargo metadata`'s output.
+//! A small, strict JSON reader for `cargo metadata`'s output, and the writer the merge gate's
+//! seeded `cargo deny` runs use to hand cargo-deny a changed copy of that output.
 //!
-//! What it does: parses one JSON text (RFC 8259) into a tree of values.
+//! What it does: parses one JSON text (RFC 8259) into a tree of values, and writes a tree back as
+//! JSON text (`Json::to_text`).
 //!
 //! What it guarantees: it accepts exactly RFC 8259's grammar (no comments, no trailing commas, no
 //! leading zeros, no unescaped control characters, no lone surrogates), refuses an object that
 //! repeats a key, and returns an error with the byte offset instead of panicking. Nesting deeper
 //! than `MAX_DEPTH` is an error (the outermost value is depth 1, so `MAX_DEPTH` nested arrays are
 //! read and one more is refused), so recursion is bounded (principle 13). Numbers are kept as their
-//! text, because the check never computes with them.
+//! text, because the check never computes with them. The writer writes what the reader reads back
+//! to the same tree: numbers as their text, strings with `"`, `\` and the control characters
+//! escaped (RFC 8259 section 7), and it refuses a tree nested deeper than `MAX_DEPTH`.
 //!
 //! Method: recursive descent over RFC 8259's grammar
 //! (<https://www.rfc-editor.org/rfc/rfc8259>), written here so the check adds no dependency to
@@ -101,6 +105,85 @@ impl Json {
             _ => None,
         }
     }
+
+    /// The member `key` of an object, to change, if this is an object that has it.
+    pub fn get_mut(&mut self, key: &str) -> Option<&mut Json> {
+        match self {
+            Json::Object(members) => members.get_mut(key),
+            _ => None,
+        }
+    }
+
+    /// The items of an array, to change.
+    pub fn as_array_mut(&mut self) -> Option<&mut Vec<Json>> {
+        match self {
+            Json::Array(items) => Some(items),
+            _ => None,
+        }
+    }
+
+    /// The value as JSON text, which `parse` reads back to an equal value.
+    ///
+    /// # Panics
+    ///
+    /// If the value nests deeper than `MAX_DEPTH`, which `parse` would refuse.
+    pub fn to_text(&self) -> String {
+        let mut out = String::new();
+        self.write(&mut out, 1);
+        out
+    }
+
+    fn write(&self, out: &mut String, depth: usize) {
+        assert!(
+            depth <= MAX_DEPTH,
+            "a JSON value nests deeper than MAX_DEPTH"
+        );
+        match self {
+            Json::Null => out.push_str("null"),
+            Json::Bool(value) => out.push_str(if *value { "true" } else { "false" }),
+            Json::Number(text) => out.push_str(text),
+            Json::Str(text) => write_string(out, text),
+            Json::Array(items) => {
+                out.push('[');
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 {
+                        out.push(',');
+                    }
+                    item.write(out, depth + 1);
+                }
+                out.push(']');
+            }
+            Json::Object(members) => {
+                out.push('{');
+                for (i, (key, value)) in members.iter().enumerate() {
+                    if i > 0 {
+                        out.push(',');
+                    }
+                    write_string(out, key);
+                    out.push(':');
+                    value.write(out, depth + 1);
+                }
+                out.push('}');
+            }
+        }
+    }
+}
+
+/// Writes `text` as a JSON string: `"` and `\` escaped, and every control character below U+0020
+/// as `\u00XX` (RFC 8259 section 7); everything else as it is, in UTF-8.
+fn write_string(out: &mut String, text: &str) {
+    use std::fmt::Write as _;
+    out.push('"');
+    for c in text.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            // Writing to a String cannot fail.
+            c if u32::from(c) < 0x20 => write!(out, "\\u{:04x}", u32::from(c)).unwrap(),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
 }
 
 /// Parses one JSON text, with only whitespace around it.
@@ -383,6 +466,29 @@ mod tests {
         ] {
             assert!(parse(bad).is_err(), "accepted {bad:?}");
         }
+    }
+
+    #[test]
+    fn what_is_written_reads_back_the_same() {
+        let text = r#" {"packages": [{"name": "geom-num", "path": "C:\\Users\\x", "optional": false,
+            "kind": null, "deps": [], "version": 1, "e": -1.5e+3, "q": "a \"b\" \t\u0001"}],
+            "root": "\u00e9\ud83d\ude00", "empty": {}} "#;
+        let value = parse(text).unwrap();
+        let written = value.to_text();
+        assert_eq!(parse(&written).unwrap(), value, "{written}");
+        // Escapes and numbers exactly as RFC 8259 writes them; keys in order.
+        assert_eq!(
+            Json::Str("\"\\\u{1}é".to_owned()).to_text(),
+            "\"\\\"\\\\\\u0001é\""
+        );
+        assert_eq!(parse("[1.50,-0,2e-7]").unwrap().to_text(), "[1.50,-0,2e-7]");
+        let mut changed = value.clone();
+        changed
+            .get_mut("packages")
+            .and_then(Json::as_array_mut)
+            .unwrap()
+            .push(Json::Null);
+        assert_ne!(parse(&changed.to_text()).unwrap(), value);
     }
 
     #[test]

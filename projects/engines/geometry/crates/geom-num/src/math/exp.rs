@@ -618,7 +618,7 @@ mod tests {
         );
         assert!(le(&e2, &p2(-99)) && le(&e3, &p2(-152)));
         // S = RN(2^12/ln 2)
-        let s_exact = Iv::point(Dy::pow2(12)).div(ln2(), P);
+        let s_exact = Iv::point(Dy::pow2(12)).div(&ln2(), P);
         let ds = dmax(
             s_exact.lo.sub(&Dy::from_f64(S)).abs(),
             s_exact.hi.sub(&Dy::from_f64(S)).abs(),
