@@ -22,12 +22,22 @@
     clippy::panic,
     clippy::indexing_slicing
 )]
+// The kernel lints deny native arithmetic in kernel code (Cargo.toml). This is test code: the
+// merge gate's seeds (G12) count entries and slice paths, which tests may do with native
+// arithmetic.
+#![allow(
+    clippy::arithmetic_side_effects,
+    reason = "test code; the rule is for kernel code"
+)]
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::check::{self, CRATES_IO, Dep, DepKind, Observed, Package, Rule, Violation};
+use crate::globals::{self, SourceFile, Sources};
 use crate::header::{Field, Header, MARK_27, pending_line};
 use crate::lints::{ClippyConfig, Lints};
+use crate::overrides;
+use crate::posture;
 use crate::source::Attributes;
 use crate::table::{Deps, FeatureGate, HeaderGap, Kind, Layer, Origin, Pending, Row, State, Table};
 use crate::toolchain;
@@ -1222,6 +1232,7 @@ fn the_toolchain_example_passes() {
     let workflows = [
         ("kernel.yml", PINNED),
         ("kernel-build.yml", PINNED),
+        ("kernel-gate.yml", PINNED),
         ("site.yml", "jobs: {}\n"),
     ];
     let found = toolchain::pins(TOOLCHAIN, &workflows);
@@ -1233,33 +1244,67 @@ fn toolchain_pins_that_disagree() {
     let other = PINNED.replace("1.99.0", "1.98.0");
     let twice = format!("{PINNED}  RUST_TOOLCHAIN: \"1.99.0\"\n");
     let hard_coded = PINNED.replace("${{ env.RUST_TOOLCHAIN }}", "stable");
-    let both: [(&str, &str); 2] = [("kernel.yml", PINNED), ("kernel-build.yml", PINNED)];
-    let cases: [(String, [(&str, &str); 2]); 8] = [
+    let all: [(&str, &str); 3] = [
+        ("kernel.yml", PINNED),
+        ("kernel-build.yml", PINNED),
+        ("kernel-gate.yml", PINNED),
+    ];
+    let cases: [(String, [(&str, &str); 3]); 10] = [
         // The file names no exact release, or lacks a component or a target, or is not TOML.
-        (TOOLCHAIN.replace("\"1.99.0\"", "\"stable\""), both),
-        (TOOLCHAIN.replace("\"clippy\"", "\"rust-src\""), both),
-        (TOOLCHAIN.replace(", \"wasm32-unknown-unknown\"", ""), both),
-        ("[toolchain\n".to_owned(), both),
+        (TOOLCHAIN.replace("\"1.99.0\"", "\"stable\""), all),
+        (TOOLCHAIN.replace("\"clippy\"", "\"rust-src\""), all),
+        (TOOLCHAIN.replace(", \"wasm32-unknown-unknown\"", ""), all),
+        ("[toolchain\n".to_owned(), all),
         // A workflow pins another release, pins twice or installs another toolchain; a workflow
         // that must pin does not.
         (
             TOOLCHAIN.to_owned(),
-            [("kernel.yml", PINNED), ("kernel-build.yml", other.as_str())],
+            [
+                ("kernel.yml", PINNED),
+                ("kernel-build.yml", other.as_str()),
+                ("kernel-gate.yml", PINNED),
+            ],
         ),
         (
             TOOLCHAIN.to_owned(),
-            [("kernel.yml", twice.as_str()), ("kernel-build.yml", PINNED)],
+            [
+                ("kernel.yml", twice.as_str()),
+                ("kernel-build.yml", PINNED),
+                ("kernel-gate.yml", PINNED),
+            ],
         ),
         (
             TOOLCHAIN.to_owned(),
             [
                 ("kernel.yml", PINNED),
                 ("kernel-build.yml", hard_coded.as_str()),
+                ("kernel-gate.yml", PINNED),
             ],
         ),
         (
             TOOLCHAIN.to_owned(),
-            [("kernel.yml", PINNED), ("other.yml", PINNED)],
+            [
+                ("kernel.yml", PINNED),
+                ("other.yml", PINNED),
+                ("kernel-gate.yml", PINNED),
+            ],
+        ),
+        // The merge gate's workflow (G12) pins another release, or does not pin at all.
+        (
+            TOOLCHAIN.to_owned(),
+            [
+                ("kernel.yml", PINNED),
+                ("kernel-build.yml", PINNED),
+                ("kernel-gate.yml", other.as_str()),
+            ],
+        ),
+        (
+            TOOLCHAIN.to_owned(),
+            [
+                ("kernel.yml", PINNED),
+                ("kernel-build.yml", PINNED),
+                ("kernel-gate.yml", "jobs: {}\n"),
+            ],
         ),
     ];
     for (file, workflows) in &cases {
@@ -1271,4 +1316,486 @@ fn toolchain_pins_that_disagree() {
             show(&found)
         );
     }
+}
+
+// ---------------------------------------------------------- the merge gate: global state (G12)
+
+/// One clean source file and one that names `extra`, for a crate in `dir`.
+fn sources_of(dir: &[&str], extra: Option<&str>) -> Vec<SourceFile> {
+    let path = |file: &str| -> Vec<String> {
+        dir.iter()
+            .map(|s| (*s).to_owned())
+            .chain(["src".to_owned(), file.to_owned()])
+            .collect()
+    };
+    let mut files = vec![SourceFile::read(
+        path("lib.rs"),
+        "//! Clean.\n#![no_std]\npub const TABLE: [u8; 2] = [1, 2];\npub fn f(s: &'static str) -> &'static str { s }\n",
+    )];
+    if let Some(text) = extra {
+        files.push(SourceFile::read(path("extra.rs"), text));
+    }
+    files
+}
+
+/// The example workspace's sources: every crate clean.
+fn clean_sources() -> Sources {
+    let mut sources = Sources::new();
+    for name in ["geom-a", "geom-b", "geom-c", "geom-e", "geom-p", "geom-dev"] {
+        sources.insert(name.to_owned(), sources_of(&geometry(name), None));
+    }
+    sources.insert(
+        "engine-geometry".to_owned(),
+        sources_of(&["projects", "engines", "crates", "engine-geometry"], None),
+    );
+    sources.insert(
+        "kit-core".to_owned(),
+        sources_of(&["projects", "kit", "crates", "kit-core"], None),
+    );
+    sources
+}
+
+#[test]
+fn global_state_example_passes() {
+    assert_eq!(
+        globals::check(&TABLE, &clean_sources()),
+        Vec::<Violation>::new()
+    );
+}
+
+#[test]
+fn global_state_in_a_crate_that_ships() {
+    // A static in a kernel crate, a thread-local in the facade, a lazy global in the std pool,
+    // a source that does not lex, and a crate none of whose sources were read.
+    for (krate, extra, needle) in [
+        (
+            "geom-c",
+            Some("\n\npub static X: u8 = 0;\n"),
+            "src/extra.rs:3: a `static` item",
+        ),
+        (
+            "engine-geometry",
+            Some("std::thread_local! { }\n"),
+            "src/extra.rs:1: a thread-local (`thread_local`)",
+        ),
+        (
+            "geom-p",
+            Some("pub fn f() -> std::sync::LazyLock<u8> { todo!() }\n"),
+            "a lazy global (`LazyLock`)",
+        ),
+        ("geom-a", Some("/* open\n"), "does not lex"),
+        ("geom-e", None, "no Rust source of it was read"),
+    ] {
+        let mut sources = clean_sources();
+        let dir = sources[krate][0].path[..sources[krate][0].path.len() - 2].to_vec();
+        let dir: Vec<&str> = dir.iter().map(String::as_str).collect();
+        let files = if extra.is_none() {
+            Vec::new()
+        } else {
+            sources_of(&dir, extra)
+        };
+        sources.insert(krate.to_owned(), files);
+        let found = globals::check(&TABLE, &sources);
+        assert_eq!(
+            rules(&found),
+            [Rule::GlobalState].into(),
+            "{}",
+            show(&found)
+        );
+        assert_eq!(crates(&found), [krate].into(), "{}", show(&found));
+        assert!(found[0].detail.contains(needle), "{}", show(&found));
+    }
+}
+
+#[test]
+fn global_state_outside_the_crates_that_ship_is_not_this_rules() {
+    // Development crates hold test tooling, and crates outside the kernel keep their own rules.
+    let mut sources = clean_sources();
+    for (krate, dir) in [
+        ("geom-dev", geometry("geom-dev")),
+        ("kit-core", vec!["projects", "kit", "crates", "kit-core"]),
+    ] {
+        sources.insert(
+            krate.to_owned(),
+            sources_of(
+                &dir,
+                Some("pub static X: std::sync::OnceLock<u8> = std::sync::OnceLock::new();\n"),
+            ),
+        );
+    }
+    assert_eq!(globals::check(&TABLE, &sources), Vec::<Violation>::new());
+}
+
+// ---------------------------------------------------------- the merge gate: lint attributes (G12)
+
+#[test]
+fn lint_attributes_example_passes() {
+    assert_eq!(
+        overrides::check(&TABLE, &clean_sources()),
+        Vec::<Violation>::new()
+    );
+}
+
+#[test]
+fn a_denied_lint_lowered_in_a_crate_that_ships() {
+    // A kernel crate allows at its root, the facade expects a group, the std pool allows behind a
+    // feature, and a source whose braces do not close cannot be read.
+    for (krate, extra, needle) in [
+        (
+            "geom-c",
+            "#![allow(clippy::unwrap_used)]\n",
+            "src/extra.rs:1: allow(clippy::unwrap_used)",
+        ),
+        (
+            "engine-geometry",
+            "\n#[expect(clippy::restriction)]\nfn f() {}\n",
+            "src/extra.rs:2: expect(clippy::restriction)",
+        ),
+        (
+            "geom-p",
+            "#[cfg_attr(feature = \"x\", allow(clippy::disallowed_methods))]\nfn f() {}\n",
+            "allow(clippy::disallowed_methods)",
+        ),
+        ("geom-a", "fn f() {\n", "cannot be read"),
+    ] {
+        let mut sources = clean_sources();
+        let dir = sources[krate][0].path[..sources[krate][0].path.len() - 2].to_vec();
+        let dir: Vec<&str> = dir.iter().map(String::as_str).collect();
+        sources.insert(krate.to_owned(), sources_of(&dir, Some(extra)));
+        let found = overrides::check(&TABLE, &sources);
+        assert_eq!(
+            rules(&found),
+            [Rule::LintOverride].into(),
+            "{}",
+            show(&found)
+        );
+        assert_eq!(crates(&found), [krate].into(), "{}", show(&found));
+        assert!(found[0].detail.contains(needle), "{}", show(&found));
+    }
+}
+
+#[test]
+fn lint_attributes_in_test_code_or_outside_the_crates_that_ship_are_not_this_rules() {
+    let mut sources = clean_sources();
+    // A test module kept in a file of its own, and one under #[path]; a development crate; a crate
+    // outside the kernel.
+    let file = |dir: &[&str], name: &str, text: &str| {
+        let path: Vec<String> = dir
+            .iter()
+            .copied()
+            .chain(["src"])
+            .chain(name.split('/'))
+            .map(str::to_owned)
+            .collect();
+        SourceFile::read(path, text)
+    };
+    let c = geometry("geom-c");
+    sources.insert(
+        "geom-c".to_owned(),
+        vec![
+            file(
+                &c,
+                "lib.rs",
+                "//! C.\n#[cfg(test)]\nmod tests;\n#[cfg(test)]\n#[path = \"other/helpers.rs\"]\n\
+                 mod helpers;\n",
+            ),
+            file(&c, "tests.rs", "#![allow(clippy::unwrap_used)]\n"),
+            file(&c, "other/helpers.rs", "#![allow(clippy::restriction)]\n"),
+        ],
+    );
+    let allow = "#![allow(clippy::unwrap_used)]\n";
+    sources.insert(
+        "geom-dev".to_owned(),
+        sources_of(&geometry("geom-dev"), Some(allow)),
+    );
+    sources.insert(
+        "kit-core".to_owned(),
+        sources_of(&["projects", "kit", "crates", "kit-core"], Some(allow)),
+    );
+    assert_eq!(overrides::check(&TABLE, &sources), Vec::<Violation>::new());
+    // The same file, not declared as a test module, is refused.
+    sources.get_mut("geom-c").unwrap()[0] = file(&c, "lib.rs", "//! C.\nmod tests;\n");
+    let found = overrides::check(&TABLE, &sources);
+    assert_eq!(crates(&found), ["geom-c"].into(), "{}", show(&found));
+    assert_eq!(found.len(), 2, "{}", show(&found));
+}
+
+// ---------------------------------------------------------- the merge gate: lint rules (G12)
+
+/// A lint posture holding chapter 21's lists and chapter 27's denials, from the texts of a
+/// manifest and a clippy configuration, in a crate in `dir`.
+fn gate_lints(dir: &[&str], manifest: &str, clippy_toml: &str) -> Lints {
+    let mut file: Vec<String> = dir.iter().map(|s| (*s).to_owned()).collect();
+    file.push("clippy.toml".to_owned());
+    Lints {
+        tables: crate::manifest::lint_settings(manifest),
+        clippy: Some(ClippyConfig {
+            file,
+            settings: crate::manifest::settings(clippy_toml),
+        }),
+    }
+}
+
+/// The texts of a complete posture: a manifest's lint tables and a clippy configuration. Methods
+/// in both of clippy's forms, a table and a plain path; a group that lowers lints below every
+/// denial, as `geom-num`'s `pedantic` does, and one that raises them above.
+fn complete_posture() -> (String, String) {
+    use std::fmt::Write as _;
+    let manifest = "[package]\nname = \"x\"\n\n[lints.clippy]\n\
+        pedantic = { level = \"warn\", priority = -1 }\nunwrap_used = \"deny\"\n\
+        expect_used = { level = \"deny\", priority = 1 }\npanic = \"forbid\"\n\
+        indexing_slicing = \"deny\"\ntodo = \"deny\"\nunimplemented = \"deny\"\n\
+        unreachable = \"deny\"\ndisallowed_methods = \"deny\"\ndisallowed_types = \"deny\"\n\
+        correctness = { level = \"deny\", priority = 5 }\n"
+        .to_owned();
+    // Writing to a String cannot fail.
+    let mut clippy_toml = String::from("disallowed-methods = [\n");
+    for (i, method) in posture::required_methods().iter().enumerate() {
+        if i % 2 == 0 {
+            writeln!(
+                clippy_toml,
+                "    {{ path = \"{method}\", reason = \"x\" }},"
+            )
+            .unwrap();
+        } else {
+            writeln!(clippy_toml, "    \"{method}\",").unwrap();
+        }
+    }
+    clippy_toml.push_str("]\ndisallowed-types = [\n");
+    for ty in posture::REQUIRED_TYPES {
+        writeln!(clippy_toml, "    {{ path = \"{ty}\" }},").unwrap();
+    }
+    clippy_toml.push_str("]\n");
+    (manifest, clippy_toml)
+}
+
+/// The example workspace with every crate that ships carrying the complete posture, except
+/// geom-c, which carries `manifest` and `clippy_toml`.
+fn posture_workspace(manifest: &str, clippy_toml: &str) -> Observed {
+    let (full_manifest, full_clippy) = complete_posture();
+    let mut observed = good();
+    for name in ["geom-a", "geom-b", "geom-c", "geom-e", "engine-geometry"] {
+        let dir: Vec<String> = observed.packages[name].dir.clone();
+        let dir: Vec<&str> = dir.iter().map(String::as_str).collect();
+        let lints = if name == "geom-c" {
+            gate_lints(&dir, manifest, clippy_toml)
+        } else {
+            gate_lints(&dir, &full_manifest, &full_clippy)
+        };
+        package_mut(&mut observed, name).lints = lints;
+    }
+    observed
+}
+
+#[test]
+fn lint_rules_example_passes() {
+    let (manifest, clippy_toml) = complete_posture();
+    let observed = posture_workspace(&manifest, &clippy_toml);
+    assert_eq!(posture::check(&TABLE, &observed), Vec::<Violation>::new());
+    // The development crate and the crates outside the kernel have no lint settings at all here,
+    // and are not this rule's.
+    assert_eq!(observed.packages["geom-dev"].lints, Lints::default());
+}
+
+/// Gaps in the posture: (name, manifest, clippy configuration, what the violation names).
+fn lint_rule_gaps() -> Vec<(&'static str, String, String, &'static str)> {
+    let (manifest, clippy_toml) = complete_posture();
+    let drop_method = |method: &str| {
+        let table = format!("    {{ path = \"{method}\", reason = \"x\" }},\n");
+        let plain = format!("    \"{method}\",\n");
+        assert!(
+            clippy_toml.contains(&table) || clippy_toml.contains(&plain),
+            "{method}"
+        );
+        clippy_toml.replace(&table, "").replace(&plain, "")
+    };
+    let manifest_without = |line: &str| {
+        assert!(manifest.contains(line), "{line}");
+        manifest.replace(line, "")
+    };
+    vec![
+        (
+            "f32 platform maths",
+            manifest.clone(),
+            drop_method("f32::sin"),
+            "f32::sin",
+        ),
+        (
+            "f64 platform maths",
+            manifest.clone(),
+            drop_method("f64::powi"),
+            "f64::powi",
+        ),
+        ("max", manifest.clone(), drop_method("f64::max"), "f64::max"),
+        (
+            "algebraic",
+            manifest.clone(),
+            drop_method("f32::algebraic_mul"),
+            "f32::algebraic_mul",
+        ),
+        (
+            "sum",
+            manifest.clone(),
+            drop_method("core::iter::Iterator::sum"),
+            "Iterator::sum",
+        ),
+        (
+            "HashSet",
+            manifest.clone(),
+            clippy_toml.replace("    { path = \"std::collections::HashSet\" },\n", ""),
+            "std::collections::HashSet",
+        ),
+        (
+            "unwrap warns",
+            manifest.replace("unwrap_used = \"deny\"", "unwrap_used = \"warn\""),
+            clippy_toml.clone(),
+            "clippy::unwrap_used",
+        ),
+        (
+            "indexing allowed",
+            manifest_without("indexing_slicing = \"deny\"\n"),
+            clippy_toml.clone(),
+            "clippy::indexing_slicing",
+        ),
+        (
+            "disallowed methods only warn",
+            manifest_without("disallowed_methods = \"deny\"\n"),
+            clippy_toml.clone(),
+            "clippy::disallowed_methods",
+        ),
+        (
+            "no disallowed types",
+            manifest.clone(),
+            clippy_toml.replace("disallowed-types", "disallowed-typos"),
+            "no disallowed-types",
+        ),
+        (
+            "an unreadable list",
+            manifest.clone(),
+            clippy_toml.replace("disallowed-types = [\n", "disallowed-types = [\n    {,\n"),
+            "cannot be read",
+        ),
+    ]
+}
+
+/// More gaps in the posture, the merge gate's fixer's: the trait-function reductions, the clock
+/// and thread identity, the other panic macros, and what lowers a denial (a group above it, a
+/// second spelling, an unreadable level, a ban that may lapse in silence).
+fn lint_rule_gaps_lowered() -> Vec<(&'static str, String, String, &'static str)> {
+    let (manifest, clippy_toml) = complete_posture();
+    let drop_method = |method: &str| {
+        let table = format!("    {{ path = \"{method}\", reason = \"x\" }},\n");
+        let plain = format!("    \"{method}\",\n");
+        assert!(
+            clippy_toml.contains(&table) || clippy_toml.contains(&plain),
+            "{method}"
+        );
+        clippy_toml.replace(&table, "").replace(&plain, "")
+    };
+    let manifest_without = |line: &str| {
+        assert!(manifest.contains(line), "{line}");
+        manifest.replace(line, "")
+    };
+    vec![
+        (
+            "Sum::sum called as a trait function",
+            manifest.clone(),
+            drop_method("core::iter::Sum::sum"),
+            "core::iter::Sum::sum",
+        ),
+        (
+            "the clock",
+            manifest.clone(),
+            drop_method("std::time::Instant::now"),
+            "std::time::Instant::now",
+        ),
+        (
+            "thread identity",
+            manifest.clone(),
+            clippy_toml.replace("    { path = \"std::thread::ThreadId\" },\n", ""),
+            "std::thread::ThreadId",
+        ),
+        (
+            "unreachable! allowed",
+            manifest_without("unreachable = \"deny\"\n"),
+            clippy_toml.clone(),
+            "clippy::unreachable",
+        ),
+        (
+            "a group allowed above the denials",
+            format!("{manifest}restriction = {{ level = \"allow\", priority = 1 }}\n"),
+            clippy_toml.clone(),
+            "restriction = { level = \"allow\", priority = 1 }",
+        ),
+        (
+            "a group warned at the denials' priority",
+            format!("{manifest}style = \"warn\"\n"),
+            clippy_toml.clone(),
+            "clippy::disallowed_methods (priority 0)",
+        ),
+        (
+            "a denied lint spelt again",
+            format!("{manifest}unwrap-used = {{ level = \"allow\", priority = -9 }}\n"),
+            clippy_toml.clone(),
+            "rustc reads `-` as `_`",
+        ),
+        (
+            "an unreadable lint level",
+            format!("{manifest}all = \"off\"\n"),
+            clippy_toml.clone(),
+            "[lints.clippy] cannot be read",
+        ),
+        (
+            "a ban that may lapse in silence",
+            manifest.clone(),
+            clippy_toml.replace(
+                "    { path = \"std::collections::HashMap\" },\n",
+                "    { path = \"std::collections::HashMap\", allow-invalid = true },\n",
+            ),
+            "allow-invalid",
+        ),
+    ]
+}
+
+#[test]
+fn every_seeded_gap_in_the_lint_rules_is_refused() {
+    for (name, manifest, clippy_toml, needle) in
+        lint_rule_gaps().iter().chain(&lint_rule_gaps_lowered())
+    {
+        let found = posture::check(&TABLE, &posture_workspace(manifest, clippy_toml));
+        assert_eq!(
+            rules(&found),
+            [Rule::PostureLacks].into(),
+            "{name}:{}",
+            show(&found)
+        );
+        assert_eq!(crates(&found), ["geom-c"].into(), "{name}:{}", show(&found));
+        assert!(
+            found.iter().any(|v| v.detail.contains(needle)),
+            "{name}: no violation names {needle:?}:{}",
+            show(&found)
+        );
+    }
+}
+
+#[test]
+fn lint_rules_that_cannot_be_read_are_refused() {
+    // No clippy configuration at all, and a manifest the reader cannot read.
+    let (manifest, clippy_toml) = complete_posture();
+    let mut observed = posture_workspace(&manifest, &clippy_toml);
+    package_mut(&mut observed, "geom-b").lints.clippy = None;
+    package_mut(&mut observed, "engine-geometry").lints.tables = None;
+    let found = posture::check(&TABLE, &observed);
+    assert_eq!(
+        rules(&found),
+        [Rule::PostureLacks].into(),
+        "{}",
+        show(&found)
+    );
+    assert_eq!(
+        crates(&found),
+        ["geom-b", "engine-geometry"].into(),
+        "{}",
+        show(&found)
+    );
 }

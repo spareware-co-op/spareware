@@ -57,7 +57,6 @@
 )]
 
 use core::cmp::Ordering;
-use std::sync::OnceLock;
 
 use num_bigint::{BigInt, Sign};
 use num_integer::Integer;
@@ -559,56 +558,472 @@ fn atan_inv_int(n: i64, p: u64) -> Iv {
     }
 }
 
-/// π to [`CONST_BITS`] bits, by Machin's formula.
-pub(crate) fn pi() -> &'static Iv {
-    static PI: OnceLock<Iv> = OnceLock::new();
-    PI.get_or_init(|| {
-        let p = CONST_BITS + 32;
-        let a = atan_inv_int(5, p).mul_int(16, p);
-        let b = atan_inv_int(239, p).mul_int(4, p);
-        a.sub(&b, p)
-    })
+/// π to [`CONST_BITS`] bits, by Machin's formula: the series [`pi`]'s stored value comes from
+/// (`tests/math_constants.rs` checks the two agree).
+pub(crate) fn pi_series() -> Iv {
+    let p = CONST_BITS + 32;
+    let a = atan_inv_int(5, p).mul_int(16, p);
+    let b = atan_inv_int(239, p).mul_int(4, p);
+    a.sub(&b, p)
 }
 
-/// ln 2 to [`CONST_BITS`] bits, as `2·atanh(1/3)`.
-pub(crate) fn ln2() -> &'static Iv {
-    static LN2: OnceLock<Iv> = OnceLock::new();
-    LN2.get_or_init(|| {
-        let p = CONST_BITS + 32;
-        atanh_iv(&Iv::int(1).div_int(3, p), p).scale(1)
-    })
+/// ln 2 to [`CONST_BITS`] bits, as `2·atanh(1/3)`: the series [`ln2`]'s stored value comes from.
+pub(crate) fn ln2_series() -> Iv {
+    let p = CONST_BITS + 32;
+    atanh_iv(&Iv::int(1).div_int(3, p), p).scale(1)
 }
 
-/// `atan(j/8)` for `1 ≤ j ≤ 8`, by Euler's series.
-pub(crate) fn atan_eighths(j: i64) -> &'static Iv {
-    static T: OnceLock<Vec<Iv>> = OnceLock::new();
-    let table = T.get_or_init(|| {
-        let p = CONST_BITS + 32;
-        (1..=8)
-            .map(|j| {
-                // term_0 = c/(1 + c²) = 8j/(64 + j²); term_{k+1} = term_k · (2k+2)/(2k+3) · j²/(64 + j²)
-                let den = 64 + j * j;
-                let ratio = Iv::int(j * j).div_int(den, p);
-                let threshold = Dy::pow2(-(p as i64) - 8);
-                let mut term = Iv::int(8 * j).div_int(den, p);
-                let mut sum = term.clone();
-                let mut k: i64 = 0;
-                loop {
-                    term = term
-                        .mul(&ratio, p)
-                        .mul_int(2 * k + 2, p)
-                        .div_int(2 * k + 3, p);
-                    k += 1;
-                    let t = term.mag();
-                    if t.cmp(&threshold) != Ordering::Greater {
-                        break sum.widen(&t.scale(1), p);
-                    }
-                    sum = sum.add(&term, p);
+/// `atan(j/8)` for `1 ≤ j ≤ 8`, by Euler's series: the series [`atan_eighths`]'s stored values
+/// come from.
+pub(crate) fn atan_eighths_series() -> Vec<Iv> {
+    let p = CONST_BITS + 32;
+    (1..=8)
+        .map(|j| {
+            // term_0 = c/(1 + c²) = 8j/(64 + j²); term_{k+1} = term_k · (2k+2)/(2k+3) · j²/(64 + j²)
+            let den = 64 + j * j;
+            let ratio = Iv::int(j * j).div_int(den, p);
+            let threshold = Dy::pow2(-(p as i64) - 8);
+            let mut term = Iv::int(8 * j).div_int(den, p);
+            let mut sum = term.clone();
+            let mut k: i64 = 0;
+            loop {
+                term = term
+                    .mul(&ratio, p)
+                    .mul_int(2 * k + 2, p)
+                    .div_int(2 * k + 3, p);
+                k += 1;
+                let t = term.mag();
+                if t.cmp(&threshold) != Ordering::Greater {
+                    break sum.widen(&t.scale(1), p);
                 }
-            })
-            .collect()
-    });
-    &table[(j - 1) as usize]
+                sum = sum.add(&term, p);
+            }
+        })
+        .collect()
+}
+
+/// A stored constant: its interval's two ends, each a positive significand in hexadecimal and its
+/// binary exponent, exactly as the series above computed them. Stored, not cached: a crate that
+/// ships holds no `static`, even in a test build (the merge gate, G12), and a constant table is
+/// a `const`.
+struct Stored {
+    lo: (&'static str, i64),
+    hi: (&'static str, i64),
+}
+
+/// The interval a stored constant holds.
+fn from_stored(c: &Stored) -> Iv {
+    let end = |(hex, e): (&str, i64)| Dy {
+        m: BigInt::parse_bytes(hex.as_bytes(), 16).expect("stored hexadecimal"),
+        e,
+    };
+    Iv {
+        lo: end(c.lo),
+        hi: end(c.hi),
+    }
+}
+
+/// π to [`CONST_BITS`] bits ([`pi_series`]).
+const PI_STORED: Stored = Stored {
+    lo: (
+        concat!(
+            "c90fdaa22168c234c4c6628b80dc1cd129024e088a67cc74020bbea63b139b22514a08798e3404dd",
+            "ef9519b3cd3a431b302b0a6df25f14374fe1356d6d51c245e485b576625e7ec6f44c42e9a637ed6b",
+            "0bff5cb6f406b7edee386bfb5a899fa5ae9f24117c4b1fe649286651ece45b3dc2007cb8a163bf05",
+            "98da48361c55d39a69163fa8fd24cf5f83655d23dca3ad961c62f356208552bb9ed529077096966d",
+            "670c354e4abc9804f1746c08ca18217c32905e462e36ce3be39e772c180e86039b2783a2ec07a28f",
+            "b5c55df06f4c52c9de2bcbf6955817183995497cea956ae515d2261898fa051015728e5a8aaac42d",
+            "ad33170d04507a33a85521abdf1cba64ecfb850458dbef0a8aea71575d060c7db3970f85a6e1e4c7",
+            "abf5ae8cdb0933d71e8c94e04a25619dcee3d2261ad2ee6bf12ffa06d98a0864d87602733ec86a64",
+            "521f2b18177b200cbbe117577a615d6c770988c0bad946e208e24fa074e5ab3143db5bfce0fd108e",
+            "4b82d120a92108011a723c12a787e6d788719a10bdba5b2699c327186af4e23c1a946834b6150bda",
+            "2583e9ca2ad44ce8dbbbc2db04de8ef92e8efc141fbecaa6287c59474e6bc05d99b2964fa090c3a2",
+            "233ba186515be7ed1f612970cee2d7afb81bdd762170481cd0069127d5b05aa993b4ea988d8fddc1",
+            "86ffb7dc90a6c08f4df435c93402849236c3fab4d27c7026c1d4dcb2602646dec9751cb4",
+        ),
+        -4126,
+    ),
+    hi: (
+        concat!(
+            "c90fdaa22168c234c4c6628b80dc1cd129024e088a67cc74020bbea63b139b22514a08798e3404dd",
+            "ef9519b3cd3a431b302b0a6df25f14374fe1356d6d51c245e485b576625e7ec6f44c42e9a637ed6b",
+            "0bff5cb6f406b7edee386bfb5a899fa5ae9f24117c4b1fe649286651ece45b3dc2007cb8a163bf05",
+            "98da48361c55d39a69163fa8fd24cf5f83655d23dca3ad961c62f356208552bb9ed529077096966d",
+            "670c354e4abc9804f1746c08ca18217c32905e462e36ce3be39e772c180e86039b2783a2ec07a28f",
+            "b5c55df06f4c52c9de2bcbf6955817183995497cea956ae515d2261898fa051015728e5a8aaac42d",
+            "ad33170d04507a33a85521abdf1cba64ecfb850458dbef0a8aea71575d060c7db3970f85a6e1e4c7",
+            "abf5ae8cdb0933d71e8c94e04a25619dcee3d2261ad2ee6bf12ffa06d98a0864d87602733ec86a64",
+            "521f2b18177b200cbbe117577a615d6c770988c0bad946e208e24fa074e5ab3143db5bfce0fd108e",
+            "4b82d120a92108011a723c12a787e6d788719a10bdba5b2699c327186af4e23c1a946834b6150bda",
+            "2583e9ca2ad44ce8dbbbc2db04de8ef92e8efc141fbecaa6287c59474e6bc05d99b2964fa090c3a2",
+            "233ba186515be7ed1f612970cee2d7afb81bdd762170481cd0069127d5b05aa993b4ea988d8fddc1",
+            "86ffb7dc90a6c08f4df435c93402849236c3fab4d27c7026c1d4dcb2602646dec9752031",
+        ),
+        -4126,
+    ),
+};
+
+/// ln 2 to [`CONST_BITS`] bits ([`ln2_series`]).
+const LN2_STORED: Stored = Stored {
+    lo: (
+        concat!(
+            "b17217f7d1cf79abc9e3b39803f2f6af40f343267298b62d8a0d175b8baafa2be7b876206debac98",
+            "559552fb4afa1b10ed2eae35c138214427573b291169b8253e96ca16224ae8c51acbda11317c387e",
+            "b9ea9bc3b136603b256fa0ec7657f74b72ce87b19d6548caf5dfa6bd38303248655fa1872f20e3a2",
+            "da2d97c50f3fd5c607f4ca11fb5bfb90610d30f88fe551a2ee569d6dfc1efa157d2e23de1400b396",
+            "17460775db8990e5c943e732b479cd33cccc4e659393514c4c1a1e0bd1d6095d25669b333564a337",
+            "6a9c7f8a5e148e82074db6015cfe7aa30c480a5417350d2c955d5179b1e17b9dae313cdb6c606cb1",
+            "078f735d1b2db31b5f50b5185064c18b4d162db3b365853d7598a1951ae273ee5570b6c68f969834",
+            "96d4e6d330af889b44a02554731cdc8ea17293d1228a4ef98d6f5177fbcf0755268a5c1f9538b982",
+            "61affd446b1ca3cf5e9222b88c66d3c5422183edc99421090bbb16faf3d949f236e02b20cee886b9",
+            "05c128d53d0bd2f9621363196af503020060e49908391a0c57339ba2beba7d052ac5b61cc4e9207c",
+            "ef2f0ce2d7373958d7622658901e646a95184460dc4e7487156e0c292413d5e361c1696dd24aaebd",
+            "473826fda0c238b90ab111bbbd67c724972cd18bfbbd9d426c472096e76115c05f6f7cebac9f45ae",
+            "cecb72f19c38339d8f6826250dea891ef07afff3a892374e175eb4afc8daadd885db682e",
+        ),
+        -4128,
+    ),
+    hi: (
+        concat!(
+            "b17217f7d1cf79abc9e3b39803f2f6af40f343267298b62d8a0d175b8baafa2be7b876206debac98",
+            "559552fb4afa1b10ed2eae35c138214427573b291169b8253e96ca16224ae8c51acbda11317c387e",
+            "b9ea9bc3b136603b256fa0ec7657f74b72ce87b19d6548caf5dfa6bd38303248655fa1872f20e3a2",
+            "da2d97c50f3fd5c607f4ca11fb5bfb90610d30f88fe551a2ee569d6dfc1efa157d2e23de1400b396",
+            "17460775db8990e5c943e732b479cd33cccc4e659393514c4c1a1e0bd1d6095d25669b333564a337",
+            "6a9c7f8a5e148e82074db6015cfe7aa30c480a5417350d2c955d5179b1e17b9dae313cdb6c606cb1",
+            "078f735d1b2db31b5f50b5185064c18b4d162db3b365853d7598a1951ae273ee5570b6c68f969834",
+            "96d4e6d330af889b44a02554731cdc8ea17293d1228a4ef98d6f5177fbcf0755268a5c1f9538b982",
+            "61affd446b1ca3cf5e9222b88c66d3c5422183edc99421090bbb16faf3d949f236e02b20cee886b9",
+            "05c128d53d0bd2f9621363196af503020060e49908391a0c57339ba2beba7d052ac5b61cc4e9207c",
+            "ef2f0ce2d7373958d7622658901e646a95184460dc4e7487156e0c292413d5e361c1696dd24aaebd",
+            "473826fda0c238b90ab111bbbd67c724972cd18bfbbd9d426c472096e76115c05f6f7cebac9f45ae",
+            "cecb72f19c38339d8f6826250dea891ef07afff3a892374e175eb4afc8daadd885db6d46",
+        ),
+        -4128,
+    ),
+};
+
+/// `atan(j/8)` for `j` from 1 to 8, to [`CONST_BITS`] bits ([`atan_eighths_series`]).
+const ATAN_EIGHTHS_STORED: [Stored; 8] = [
+    Stored {
+        lo: (
+            concat!(
+                "feadd4d5617b6e32c897989f3e888ef78b3957d95d9ad922ec93577dfb6c1768d4d0080201d9c265",
+                "3ffa5d51e234d71d5d73c989f29afbfd2a6cd88abf846f6ddf73a28dfd41142d7d5842cbcb50ebae",
+                "e00ca5a509e8bf8084f277c04b4155a398e8bcb0298c11696d1be70a0790499b02743e1d11b502f8",
+                "9ab89060da2e3f9f4140485afd77c58f2997c78866798fd45f9ef5d1f1b4bc6450aee0cbdec78cf0",
+                "e0c682fe45d8d2f5701377f7d9986f86b845ec3968f964b25814c3b5f124f50121821cea3c6d4d98",
+                "cabb3109de9491f7e8332c52ef67b23e5b6da7f7c5e892334a265ef39395f8f1ab6a8d4283bd146d",
+                "a89778c5d35cd368c55b9f2f8d95f9f5120751bc2d7afe56690003e27533eafa1110fa66cd281524",
+                "028c82fae1c42578c3caa33971db95ffc07a730ccc5b6c37442044590cddd824d5c0f91600b6ff50",
+                "1a742051cc0075066691d9c81ecc9a24bfb6559f9d36af0997ef6488b5720c76b03663f2a965b5f4",
+                "bc41b543d3a36d24785c63f653978680c4ee03eea5f81ac5ac7de9db583da9ed15c9bfd872335ff4",
+                "22ec33c491b6d138170e43915b6e64ebc966e46779ba9c19364126b83c36147a9be4d1055689805f",
+                "dda98c7b84c4b513d697632e7ef6d2ade4d525a3549c4b9da9e553f76b0076e120338cf621bf51e3",
+                "40d7661f3dee39da57d31783f8f407ae805e8eac6aa45ace48bd9a4dfd51aaa2359882c9",
+            ),
+            -4131,
+        ),
+        hi: (
+            concat!(
+                "feadd4d5617b6e32c897989f3e888ef78b3957d95d9ad922ec93577dfb6c1768d4d0080201d9c265",
+                "3ffa5d51e234d71d5d73c989f29afbfd2a6cd88abf846f6ddf73a28dfd41142d7d5842cbcb50ebae",
+                "e00ca5a509e8bf8084f277c04b4155a398e8bcb0298c11696d1be70a0790499b02743e1d11b502f8",
+                "9ab89060da2e3f9f4140485afd77c58f2997c78866798fd45f9ef5d1f1b4bc6450aee0cbdec78cf0",
+                "e0c682fe45d8d2f5701377f7d9986f86b845ec3968f964b25814c3b5f124f50121821cea3c6d4d98",
+                "cabb3109de9491f7e8332c52ef67b23e5b6da7f7c5e892334a265ef39395f8f1ab6a8d4283bd146d",
+                "a89778c5d35cd368c55b9f2f8d95f9f5120751bc2d7afe56690003e27533eafa1110fa66cd281524",
+                "028c82fae1c42578c3caa33971db95ffc07a730ccc5b6c37442044590cddd824d5c0f91600b6ff50",
+                "1a742051cc0075066691d9c81ecc9a24bfb6559f9d36af0997ef6488b5720c76b03663f2a965b5f4",
+                "bc41b543d3a36d24785c63f653978680c4ee03eea5f81ac5ac7de9db583da9ed15c9bfd872335ff4",
+                "22ec33c491b6d138170e43915b6e64ebc966e46779ba9c19364126b83c36147a9be4d1055689805f",
+                "dda98c7b84c4b513d697632e7ef6d2ade4d525a3549c4b9da9e553f76b0076e120338cf621bf51e3",
+                "40d7661f3dee39da57d31783f8f407ae805e8eac6aa45ace48bd9a4dfd51aaa235988579",
+            ),
+            -4131,
+        ),
+    },
+    Stored {
+        lo: (
+            concat!(
+                "fadbafc96406eb156dc79ef5f7a217e5aa7fa90388b3836b7a3a767c9449a76592b9251668e57653",
+                "05be8c5ba5831a3e3c2bc227071e4f9a0f41c3ab039983799e8ab743e3f29a57f689c8c55d5bdc90",
+                "08d12357ace27207e121ce3f3e5bcb2dbb94779f67a848130c6c29964e0918fcd4808c045cb7f4f9",
+                "d85a2adbd4b30439bcf4a40cd8e290f9ded155d017a29674f80c5af85506ba9a3b2438dea2af887b",
+                "53dd19486fb5374ce2c5431d96a6da09a4a22a87ec149c536fec2877f3f2d4a3837ddefc641a6a57",
+                "68dc3983bae861d524ba5431fd598f3af289121c9c0d7d4d1d22649fe808f40c3d05899ed2ecf944",
+                "a1843a9094661a08f96b3800b947bc9ccbeb14370e35900dfbb7d11e061e3e87cab70665410180c2",
+                "6a3f27a2acb45c3e2bbf9bbdd20be923957fa8108f1cc79a03a5e20012515bb05f0f3bc52ea1e7a3",
+                "2f724590478f2f948c067c8691f0b5756f38f75f2f3ad64d7b79bc9fd783668f6ebcc04d3c34ce2d",
+                "5e6babe13aae072d2f80a72251526ceb56d34315ac43a0b7c5a2719fea8570e7fd811d422412b5fe",
+                "0630a640968d31d7d68dc156eb988e6708cc15d570cdce0054c9cd2f4b52f0aecebb60dc9380b0d1",
+                "4f75309a84d7f396691c1a0da838bd7028ed13f6bf0aee78761b6ee58add67fef5bf93546fbc928c",
+                "243cf4bfc23e5cf84f60e5cd5e5f59890f81569862c70d888e862ab4394b4ed02d7b7e67",
+            ),
+            -4130,
+        ),
+        hi: (
+            concat!(
+                "fadbafc96406eb156dc79ef5f7a217e5aa7fa90388b3836b7a3a767c9449a76592b9251668e57653",
+                "05be8c5ba5831a3e3c2bc227071e4f9a0f41c3ab039983799e8ab743e3f29a57f689c8c55d5bdc90",
+                "08d12357ace27207e121ce3f3e5bcb2dbb94779f67a848130c6c29964e0918fcd4808c045cb7f4f9",
+                "d85a2adbd4b30439bcf4a40cd8e290f9ded155d017a29674f80c5af85506ba9a3b2438dea2af887b",
+                "53dd19486fb5374ce2c5431d96a6da09a4a22a87ec149c536fec2877f3f2d4a3837ddefc641a6a57",
+                "68dc3983bae861d524ba5431fd598f3af289121c9c0d7d4d1d22649fe808f40c3d05899ed2ecf944",
+                "a1843a9094661a08f96b3800b947bc9ccbeb14370e35900dfbb7d11e061e3e87cab70665410180c2",
+                "6a3f27a2acb45c3e2bbf9bbdd20be923957fa8108f1cc79a03a5e20012515bb05f0f3bc52ea1e7a3",
+                "2f724590478f2f948c067c8691f0b5756f38f75f2f3ad64d7b79bc9fd783668f6ebcc04d3c34ce2d",
+                "5e6babe13aae072d2f80a72251526ceb56d34315ac43a0b7c5a2719fea8570e7fd811d422412b5fe",
+                "0630a640968d31d7d68dc156eb988e6708cc15d570cdce0054c9cd2f4b52f0aecebb60dc9380b0d1",
+                "4f75309a84d7f396691c1a0da838bd7028ed13f6bf0aee78761b6ee58add67fef5bf93546fbc928c",
+                "243cf4bfc23e5cf84f60e5cd5e5f59890f81569862c70d888e862ab4394b4ed02d7b825c",
+            ),
+            -4130,
+        ),
+    },
+    Stored {
+        lo: (
+            concat!(
+                "b7b0ca0f26f784738aa32122dcfe44833d843977ae5455cc4733e5ca334908e064cc582039fdc0d6",
+                "dccce4a800cf73d28616ee077afa1a60487d5aad34939d5dbe774cd6c1c5e701dfbc2b6487386d59",
+                "dff6921602e38295b6ea50b949d0f6746ad2bf3aebfb3337e090df743e49e9f691c3ecf34f8328e5",
+                "54ab50f87782b47c1d60992a752c83b5fe7979c8e7f33b1dea95bcfd17b74bc6611862eaaf8ac72b",
+                "4222281cc44da737689d4d3ab5448db0660079deb1006f7c21d519cc42e58190cf4af3f6fb732f04",
+                "54e8cfe0421d6c2cb019810930f660ddb54209b21c47ac16e6c787b03c4aba129bf8cf118a208929",
+                "767da715e669580936796377cb1fc01f03ca0398bf8f8a359b4de097636a5f8e5081b6f316c09c38",
+                "ec713873a53ffe481ef577fc65b76e0067a1d55dbf20ddbf07c4dd42897d9d9c77d2e009a2dca856",
+                "57d41f2ea8761af15da903464a76b805260d955ccc23d223bd8a8fbf9808977a870ed2242ef5c5d8",
+                "de54321c2e15b0cda75734a6e6c784d7be34ed08d8676345ebed1a99f68648425ca921892bb11739",
+                "84165bb6f6e0400b127e6cbb33e314f00cd06949c298d04881a6a617fb8a65b1264c9e9a258acb4f",
+                "9f113c344c7c37467c841fe067ebd308d19184c437c93bfa404ab18f4b80ec874f8e6e2f8b68f73c",
+                "3edeb332ed8cf59e4ab6f0c3913fb6e408c6d775af6d23b138e3b9e8c4cb31393b7b53c2",
+            ),
+            -4129,
+        ),
+        hi: (
+            concat!(
+                "b7b0ca0f26f784738aa32122dcfe44833d843977ae5455cc4733e5ca334908e064cc582039fdc0d6",
+                "dccce4a800cf73d28616ee077afa1a60487d5aad34939d5dbe774cd6c1c5e701dfbc2b6487386d59",
+                "dff6921602e38295b6ea50b949d0f6746ad2bf3aebfb3337e090df743e49e9f691c3ecf34f8328e5",
+                "54ab50f87782b47c1d60992a752c83b5fe7979c8e7f33b1dea95bcfd17b74bc6611862eaaf8ac72b",
+                "4222281cc44da737689d4d3ab5448db0660079deb1006f7c21d519cc42e58190cf4af3f6fb732f04",
+                "54e8cfe0421d6c2cb019810930f660ddb54209b21c47ac16e6c787b03c4aba129bf8cf118a208929",
+                "767da715e669580936796377cb1fc01f03ca0398bf8f8a359b4de097636a5f8e5081b6f316c09c38",
+                "ec713873a53ffe481ef577fc65b76e0067a1d55dbf20ddbf07c4dd42897d9d9c77d2e009a2dca856",
+                "57d41f2ea8761af15da903464a76b805260d955ccc23d223bd8a8fbf9808977a870ed2242ef5c5d8",
+                "de54321c2e15b0cda75734a6e6c784d7be34ed08d8676345ebed1a99f68648425ca921892bb11739",
+                "84165bb6f6e0400b127e6cbb33e314f00cd06949c298d04881a6a617fb8a65b1264c9e9a258acb4f",
+                "9f113c344c7c37467c841fe067ebd308d19184c437c93bfa404ab18f4b80ec874f8e6e2f8b68f73c",
+                "3edeb332ed8cf59e4ab6f0c3913fb6e408c6d775af6d23b138e3b9e8c4cb31393b7b591c",
+            ),
+            -4129,
+        ),
+    },
+    Stored {
+        lo: (
+            concat!(
+                "ed63382b0dda7b456fe445ecbc3a8d036e141587261cdf00e2cf16e6e9624709fa9c5917892b516c",
+                "87c812f8c6a46182cee1e80efd3c0013d6d85e3686228dbd7913475341b29b656ebfea02086ccb07",
+                "5336dd0907697538dfd26c5be1547791c1689ec34bd7be5befaeb8b1bfee054d3c36a6b0400bd856",
+                "f0d36426a3baf6a7196cf7ba12c6925e333ec575d9967b05cc47e00763c7bb3b2beed3b88a75fb6a",
+                "be2f2645c8913e64c3ddf33a81c6e1b23957e40f46313b0e2a0b588f9c875376b7f9d6d6828e3e8f",
+                "0ee6e2923889d0ba493bb9721de2d5809c6b61e92b3329d1bdc3044455811a9267e2298b3447ed0c",
+                "f40339dd0b54957a04ef35b342113e3b93b9ceb6d527472f25860ecb3ecf9f23c950fdf8a412c030",
+                "0c2e88b259314d0cce4f48d4b7fb97d100ca90660ca00b8a7e44e68c4b04df22da8ff38f518c1a22",
+                "4a4193bf7b1651fdf2cd895a58333d5584286da04fa09ca4271c23e5f59f28c1ab649e1f649730af",
+                "232c8de18bef78c0a1c60fa2159881867a3f4622a362a873fb7c73f4649cf9853a7c776ec7d54459",
+                "d8a5623c8d135aa61fcdc1aca02a8d25e0e98789a1e45edd12a0ebc624726b8f00f2a38a22a3aa60",
+                "4b7d1c91d87717230f5a150a64f380dece05ffc2f42d6f8d0c7f4f18f998760699dad46b02f76596",
+                "595df2fa9a7fb7172ec888154391f22cc1a69b856dd1aa3e052aa50c63a9fc1d21a9fc07",
+            ),
+            -4129,
+        ),
+        hi: (
+            concat!(
+                "ed63382b0dda7b456fe445ecbc3a8d036e141587261cdf00e2cf16e6e9624709fa9c5917892b516c",
+                "87c812f8c6a46182cee1e80efd3c0013d6d85e3686228dbd7913475341b29b656ebfea02086ccb07",
+                "5336dd0907697538dfd26c5be1547791c1689ec34bd7be5befaeb8b1bfee054d3c36a6b0400bd856",
+                "f0d36426a3baf6a7196cf7ba12c6925e333ec575d9967b05cc47e00763c7bb3b2beed3b88a75fb6a",
+                "be2f2645c8913e64c3ddf33a81c6e1b23957e40f46313b0e2a0b588f9c875376b7f9d6d6828e3e8f",
+                "0ee6e2923889d0ba493bb9721de2d5809c6b61e92b3329d1bdc3044455811a9267e2298b3447ed0c",
+                "f40339dd0b54957a04ef35b342113e3b93b9ceb6d527472f25860ecb3ecf9f23c950fdf8a412c030",
+                "0c2e88b259314d0cce4f48d4b7fb97d100ca90660ca00b8a7e44e68c4b04df22da8ff38f518c1a22",
+                "4a4193bf7b1651fdf2cd895a58333d5584286da04fa09ca4271c23e5f59f28c1ab649e1f649730af",
+                "232c8de18bef78c0a1c60fa2159881867a3f4622a362a873fb7c73f4649cf9853a7c776ec7d54459",
+                "d8a5623c8d135aa61fcdc1aca02a8d25e0e98789a1e45edd12a0ebc624726b8f00f2a38a22a3aa60",
+                "4b7d1c91d87717230f5a150a64f380dece05ffc2f42d6f8d0c7f4f18f998760699dad46b02f76596",
+                "595df2fa9a7fb7172ec888154391f22cc1a69b856dd1aa3e052aa50c63a9fc1d21aa02fc",
+            ),
+            -4129,
+        ),
+    },
+    Stored {
+        lo: (
+            concat!(
+                "8f005d5ef7f59f9b5c835e1665c43747918a67e0652b375cf53da46d13389eb23669dcd3918d712b",
+                "66cd7dd3073d6a5829c4ed1d7e523acc358f6440a4333141b537a12970b8e8b14c84abda2b7c78e3",
+                "a6e8474afffebb461d3c5168ed9c5298ac46b084f3cc4a1d1f4e7c2a0cd9e15f5eacd843bc90c7e2",
+                "2b6cd2696f27ec33aa0ae62ae1bc6398ed1ad15ebe2c0bfeb2f16db8fc66530bd7c55a2920ab4f9f",
+                "341b6c8159d7338afb5db36199c4d8d6e3fd231f70ab2f55c6d415ba14246e901dedd69b8a57afd3",
+                "61259e841b55bcd418ca874f5cb2f727f462e026e8ee8b23da3a261f3cb604a6943cfa7f7d3bf76d",
+                "7eb196d347e97254162e6e280fce6b7d0a9d5502755419f8c793c5a23052d9f63130e701400cfc00",
+                "fe015848f117c8824e8a732fc259b5898c062ce3c21f3fde745d08e8e652804a05075958d922f0f5",
+                "db924f311b03337067698a982165673550c66baedab19a6df20a6e5dab16409bef89efc136aef9f9",
+                "234daf4d319b9ae32200b3c269d7f17c5536076af2324a1cb66361850612643e85d047c836328870",
+                "348a3b172fa1a54bc729e0aa3c5f0b311756d6348a79f696d7288a074c40a33a8b9dd91d33494168",
+                "34df8b201c3fee63d702f379fece172ad6948b52fe4f4020a87e4befa7f09f6cf94e70f5503ab9cb",
+                "1ab3fa5cc57277a63f64c51e93a94329ed5d96c814f8b9e82e30d0226f534d1b8d39224c",
+            ),
+            -4128,
+        ),
+        hi: (
+            concat!(
+                "8f005d5ef7f59f9b5c835e1665c43747918a67e0652b375cf53da46d13389eb23669dcd3918d712b",
+                "66cd7dd3073d6a5829c4ed1d7e523acc358f6440a4333141b537a12970b8e8b14c84abda2b7c78e3",
+                "a6e8474afffebb461d3c5168ed9c5298ac46b084f3cc4a1d1f4e7c2a0cd9e15f5eacd843bc90c7e2",
+                "2b6cd2696f27ec33aa0ae62ae1bc6398ed1ad15ebe2c0bfeb2f16db8fc66530bd7c55a2920ab4f9f",
+                "341b6c8159d7338afb5db36199c4d8d6e3fd231f70ab2f55c6d415ba14246e901dedd69b8a57afd3",
+                "61259e841b55bcd418ca874f5cb2f727f462e026e8ee8b23da3a261f3cb604a6943cfa7f7d3bf76d",
+                "7eb196d347e97254162e6e280fce6b7d0a9d5502755419f8c793c5a23052d9f63130e701400cfc00",
+                "fe015848f117c8824e8a732fc259b5898c062ce3c21f3fde745d08e8e652804a05075958d922f0f5",
+                "db924f311b03337067698a982165673550c66baedab19a6df20a6e5dab16409bef89efc136aef9f9",
+                "234daf4d319b9ae32200b3c269d7f17c5536076af2324a1cb66361850612643e85d047c836328870",
+                "348a3b172fa1a54bc729e0aa3c5f0b311756d6348a79f696d7288a074c40a33a8b9dd91d33494168",
+                "34df8b201c3fee63d702f379fece172ad6948b52fe4f4020a87e4befa7f09f6cf94e70f5503ab9cb",
+                "1ab3fa5cc57277a63f64c51e93a94329ed5d96c814f8b9e82e30d0226f534d1b8d392b1e",
+            ),
+            -4128,
+        ),
+    },
+    Stored {
+        lo: (
+            concat!(
+                "a4bc7d1934f7092419a87f2a457dac9ee3f08689eeb2b9e7214866658cc4ef3aa7f7b7db933cb84f",
+                "5762206ed3d024b391742ccce782285ac8ea0ca45480f6ce4ff82399830a622879d89bd144030fce",
+                "c4c7dc64e0a3faa2fc9e6b9ad3bec7b99bd5a95facbe8170a2a213f219dab12e47ca52c102bba5b4",
+                "40e12c4594f0b08db8bf8797e7830c60d38bf4d1dfb0e0266c7e06a4dd42ea3c11bb7e5656b73170",
+                "0fe94456cce7f1a51f0ae4d7126961462bc8d87d163c61699d3195c89395b8907e55306f55810690",
+                "5ca3d94ea60ed4d9731bde7b0ccd58afd6bf3110a9f7abf86de147ecdc72ef8dc302f329e10d9b4e",
+                "6662f43cfd4c5eed4bbb0da47c28368e463d3b51dc9096e5f04ed3e37b3c79d79ddd2112a9b1095f",
+                "4bbcd4675ce11aa16ec9e0ebdc4f2b6a9cfd13e62905d14d641b0d81680f31a6d65c11572c04baa6",
+                "59fcc270b3dfee1b84f4a5549c8f7d8369eaa3e12611f11feaa87b5af42c2da0dc5219da5d62f06d",
+                "73d9145fc6529741931e688339774c2896a3edfed8120dd93809da3c714ccaf2faac58faa454d35a",
+                "72627157c8953f2b97a9c409699290cc7c34709e9d99366f3e57c6c87865152c327289151e7ddce3",
+                "fafa267aca40b8b72f683dd738d22e80a231bb294eb320ac938dd336b1c83f4c8d8f00c6182855ec",
+                "b4a17cbe86cdca076d1fe37d247316f7abe159e43727360f7e7f14585ca291a071403803",
+            ),
+            -4128,
+        ),
+        hi: (
+            concat!(
+                "a4bc7d1934f7092419a87f2a457dac9ee3f08689eeb2b9e7214866658cc4ef3aa7f7b7db933cb84f",
+                "5762206ed3d024b391742ccce782285ac8ea0ca45480f6ce4ff82399830a622879d89bd144030fce",
+                "c4c7dc64e0a3faa2fc9e6b9ad3bec7b99bd5a95facbe8170a2a213f219dab12e47ca52c102bba5b4",
+                "40e12c4594f0b08db8bf8797e7830c60d38bf4d1dfb0e0266c7e06a4dd42ea3c11bb7e5656b73170",
+                "0fe94456cce7f1a51f0ae4d7126961462bc8d87d163c61699d3195c89395b8907e55306f55810690",
+                "5ca3d94ea60ed4d9731bde7b0ccd58afd6bf3110a9f7abf86de147ecdc72ef8dc302f329e10d9b4e",
+                "6662f43cfd4c5eed4bbb0da47c28368e463d3b51dc9096e5f04ed3e37b3c79d79ddd2112a9b1095f",
+                "4bbcd4675ce11aa16ec9e0ebdc4f2b6a9cfd13e62905d14d641b0d81680f31a6d65c11572c04baa6",
+                "59fcc270b3dfee1b84f4a5549c8f7d8369eaa3e12611f11feaa87b5af42c2da0dc5219da5d62f06d",
+                "73d9145fc6529741931e688339774c2896a3edfed8120dd93809da3c714ccaf2faac58faa454d35a",
+                "72627157c8953f2b97a9c409699290cc7c34709e9d99366f3e57c6c87865152c327289151e7ddce3",
+                "fafa267aca40b8b72f683dd738d22e80a231bb294eb320ac938dd336b1c83f4c8d8f00c6182855ec",
+                "b4a17cbe86cdca076d1fe37d247316f7abe159e43727360f7e7f14585ca291a0714042f6",
+            ),
+            -4128,
+        ),
+    },
+    Stored {
+        lo: (
+            concat!(
+                "b8053e2bc2319e73cb2da55210a4443d3d7aecc114c79a80a012155f64cae5304655f065cec98182",
+                "49c49ec72668272ce8c53e214380781c38257e41945e8cf3b4ed0b1b38a6203d146cd2b24e757ad2",
+                "f67a0a719d2b4cea8817ff1d952a0849f51d7e623bad774e8db35060de1b70dc71452f3b3973153e",
+                "baa246e3d542c0195d9a684203fec39c1adce0bdc1776a0b582ea46ce47d21107d90fa2d8c064a69",
+                "b3d2aa71a96198d85662675d8df67aca11fd8071062bdf11f4ad6779ddf847807088ecdcc8521a32",
+                "6a36a59efc47098029ff348d2c7371156c25ae97ec3bfa5173a96eb69212e000b3527466908c1548",
+                "68e875d9f6c8679d4b9e90f0fa231cbdb847f6cd9e8a169f55aa46fac5a9d03a4c64cc00a1e219f3",
+                "4c6f36cb5925de0e276f11cb5a4f43ea3ddd3354a56d056acfe4cadf5abf6f4ff4428521bcfb2f08",
+                "ffb5cfa75e6d7d76e880352dba6a6cc8f18f4ca7f8663f10c54c14099536db0638cd65420a546345",
+                "33dc302961acbee60e6235807479133ba78d52791df6340d12186d8c7c29621c8e22b3e693998c9c",
+                "07d9719f8cfddfb272b8884690ce8ca3df4dce26a5eb0431d5b79ce995a6f5b35d17b0335aba4314",
+                "f17685d63ee5dd8def79037044ae42469d315cdff68fe7d240aed9d449618b7570bc8beb73b0ce2e",
+                "d03950a2e9ba4420b06ce708f372b62518b029b4e724d190a93885f83a8f9a0312fa38ca",
+            ),
+            -4128,
+        ),
+        hi: (
+            concat!(
+                "b8053e2bc2319e73cb2da55210a4443d3d7aecc114c79a80a012155f64cae5304655f065cec98182",
+                "49c49ec72668272ce8c53e214380781c38257e41945e8cf3b4ed0b1b38a6203d146cd2b24e757ad2",
+                "f67a0a719d2b4cea8817ff1d952a0849f51d7e623bad774e8db35060de1b70dc71452f3b3973153e",
+                "baa246e3d542c0195d9a684203fec39c1adce0bdc1776a0b582ea46ce47d21107d90fa2d8c064a69",
+                "b3d2aa71a96198d85662675d8df67aca11fd8071062bdf11f4ad6779ddf847807088ecdcc8521a32",
+                "6a36a59efc47098029ff348d2c7371156c25ae97ec3bfa5173a96eb69212e000b3527466908c1548",
+                "68e875d9f6c8679d4b9e90f0fa231cbdb847f6cd9e8a169f55aa46fac5a9d03a4c64cc00a1e219f3",
+                "4c6f36cb5925de0e276f11cb5a4f43ea3ddd3354a56d056acfe4cadf5abf6f4ff4428521bcfb2f08",
+                "ffb5cfa75e6d7d76e880352dba6a6cc8f18f4ca7f8663f10c54c14099536db0638cd65420a546345",
+                "33dc302961acbee60e6235807479133ba78d52791df6340d12186d8c7c29621c8e22b3e693998c9c",
+                "07d9719f8cfddfb272b8884690ce8ca3df4dce26a5eb0431d5b79ce995a6f5b35d17b0335aba4314",
+                "f17685d63ee5dd8def79037044ae42469d315cdff68fe7d240aed9d449618b7570bc8beb73b0ce2e",
+                "d03950a2e9ba4420b06ce708f372b62518b029b4e724d190a93885f83a8f9a0312fa462e",
+            ),
+            -4128,
+        ),
+    },
+    Stored {
+        lo: (
+            concat!(
+                "c90fdaa22168c234c4c6628b80dc1cd129024e088a67cc74020bbea63b139b22514a08798e3404dd",
+                "ef9519b3cd3a431b302b0a6df25f14374fe1356d6d51c245e485b576625e7ec6f44c42e9a637ed6b",
+                "0bff5cb6f406b7edee386bfb5a899fa5ae9f24117c4b1fe649286651ece45b3dc2007cb8a163bf05",
+                "98da48361c55d39a69163fa8fd24cf5f83655d23dca3ad961c62f356208552bb9ed529077096966d",
+                "670c354e4abc9804f1746c08ca18217c32905e462e36ce3be39e772c180e86039b2783a2ec07a28f",
+                "b5c55df06f4c52c9de2bcbf6955817183995497cea956ae515d2261898fa051015728e5a8aaac42d",
+                "ad33170d04507a33a85521abdf1cba64ecfb850458dbef0a8aea71575d060c7db3970f85a6e1e4c7",
+                "abf5ae8cdb0933d71e8c94e04a25619dcee3d2261ad2ee6bf12ffa06d98a0864d87602733ec86a64",
+                "521f2b18177b200cbbe117577a615d6c770988c0bad946e208e24fa074e5ab3143db5bfce0fd108e",
+                "4b82d120a92108011a723c12a787e6d788719a10bdba5b2699c327186af4e23c1a946834b6150bda",
+                "2583e9ca2ad44ce8dbbbc2db04de8ef92e8efc141fbecaa6287c59474e6bc05d99b2964fa090c3a2",
+                "233ba186515be7ed1f612970cee2d7afb81bdd762170481cd0069127d5b05aa993b4ea988d8fddc1",
+                "86ffb7dc90a6c08f4df435c93402849236c3fab4d27c7026c1d4dcb2602646dec975167b",
+            ),
+            -4128,
+        ),
+        hi: (
+            concat!(
+                "c90fdaa22168c234c4c6628b80dc1cd129024e088a67cc74020bbea63b139b22514a08798e3404dd",
+                "ef9519b3cd3a431b302b0a6df25f14374fe1356d6d51c245e485b576625e7ec6f44c42e9a637ed6b",
+                "0bff5cb6f406b7edee386bfb5a899fa5ae9f24117c4b1fe649286651ece45b3dc2007cb8a163bf05",
+                "98da48361c55d39a69163fa8fd24cf5f83655d23dca3ad961c62f356208552bb9ed529077096966d",
+                "670c354e4abc9804f1746c08ca18217c32905e462e36ce3be39e772c180e86039b2783a2ec07a28f",
+                "b5c55df06f4c52c9de2bcbf6955817183995497cea956ae515d2261898fa051015728e5a8aaac42d",
+                "ad33170d04507a33a85521abdf1cba64ecfb850458dbef0a8aea71575d060c7db3970f85a6e1e4c7",
+                "abf5ae8cdb0933d71e8c94e04a25619dcee3d2261ad2ee6bf12ffa06d98a0864d87602733ec86a64",
+                "521f2b18177b200cbbe117577a615d6c770988c0bad946e208e24fa074e5ab3143db5bfce0fd108e",
+                "4b82d120a92108011a723c12a787e6d788719a10bdba5b2699c327186af4e23c1a946834b6150bda",
+                "2583e9ca2ad44ce8dbbbc2db04de8ef92e8efc141fbecaa6287c59474e6bc05d99b2964fa090c3a2",
+                "233ba186515be7ed1f612970cee2d7afb81bdd762170481cd0069127d5b05aa993b4ea988d8fddc1",
+                "86ffb7dc90a6c08f4df435c93402849236c3fab4d27c7026c1d4dcb2602646dec975269d",
+            ),
+            -4128,
+        ),
+    },
+];
+
+/// π to [`CONST_BITS`] bits.
+pub(crate) fn pi() -> Iv {
+    from_stored(&PI_STORED)
+}
+
+/// ln 2 to [`CONST_BITS`] bits.
+pub(crate) fn ln2() -> Iv {
+    from_stored(&LN2_STORED)
+}
+
+/// `atan(j/8)` for `1 ≤ j ≤ 8`.
+pub(crate) fn atan_eighths(j: i64) -> Iv {
+    from_stored(&ATAN_EIGHTHS_STORED[(j - 1) as usize])
 }
 
 /// `atan(t)` for `0 ≤ t ≤ 1`.

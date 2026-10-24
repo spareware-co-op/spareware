@@ -141,6 +141,23 @@ pub enum Rule {
     // The toolchain.
     /// `rust-toolchain.toml` and a workflow's `RUST_TOOLCHAIN` do not name one exact release.
     ToolchainPin,
+    // The merge gate (G12): `globals`, `overrides`, `posture`, `deny` and `gate`.
+    /// A crate that ships names global state: a `static`, a thread-local or a lazy global
+    /// (principle 7, 28.8), or a source of it cannot be read.
+    GlobalState,
+    /// A crate that ships lacks one of chapter 21's disallowed methods or types, or one of chapter
+    /// 27's denials, in the lint settings it is built with, or those settings lower one.
+    PostureLacks,
+    /// A crate that ships allows, warns on or expects a lint the kernel denies, outside test code,
+    /// in a lint attribute of its source, or such an attribute cannot be read.
+    LintOverride,
+    /// A cargo configuration file sits in the repository on the way to a crate of the family.
+    CargoConfig,
+    /// A cargo-deny configuration of the kernel says something other than the gate requires
+    /// (29.2's allow-list, advisories, allowed sources, the dependency bans).
+    DenyConfig,
+    /// The merge gate's workflow does not run, pin or require what the gate needs.
+    GateWorkflow,
 }
 
 /// One broken rule, on one crate.

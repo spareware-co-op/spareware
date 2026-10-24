@@ -25,12 +25,16 @@
 //! run on a probe crate, shows both the order (with both files in one folder it reads
 //! `.clippy.toml` and warns that it ignores `clippy.toml`) and the walk upwards. The search here
 //! stops at the workspace root: a file above it is not part of the repository, so this check does
-//! not answer for it. `CLIPPY_CONF_DIR`, which would override the lookup, is set by no workflow.
+//! not answer for it. `CLIPPY_CONF_DIR`, which would override the lookup, is set by no workflow;
+//! the merge gate (G12) starts its own clippy runs without it, refuses a cargo configuration file
+//! on the way to a crate of the family (whose `[env]` could set it: `posture::cargo_configs`), and
+//! refuses any environment in its workflow beyond its own pins (`gate::workflow`).
 //!
-//! What it does not cover: lint attributes in source (`#![allow(...)]`), which each crate's code
-//! review governs; `geom-num`'s settings themselves, which its own piece sets and chapter 28.8's
-//! merge gate (G12) is to check against chapters 21 and 27; development crates, whose test tooling
-//! may use what kernel code may not; and binding crates, which hold the audited `unsafe`.
+//! What it does not cover: lint attributes in source (`#![allow(...)]`), which the merge gate's
+//! `overrides` holds for the lints the kernel denies; `geom-num`'s settings themselves, which its
+//! own piece sets and the merge gate (G12, `posture`) checks against chapters 21 and 27;
+//! development crates, whose test tooling may use what kernel code may not; and binding crates,
+//! which hold the audited `unsafe`.
 //!
 //! Method: key by key comparison of two ordered maps read by `manifest`.
 //!

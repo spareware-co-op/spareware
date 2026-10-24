@@ -33,8 +33,9 @@ use crate::manifest::toml_keys;
 /// The toolchain file's name, at the repository root.
 pub const TOOLCHAIN_FILE: &str = "rust-toolchain.toml";
 
-/// The workflows that build or test the kernel, which must pin the toolchain.
-pub const PINNED_WORKFLOWS: [&str; 2] = ["kernel.yml", "kernel-build.yml"];
+/// The workflows that build or test the kernel, which must pin the toolchain: the merge gate's
+/// (G12) among them.
+pub const PINNED_WORKFLOWS: [&str; 3] = ["kernel.yml", "kernel-build.yml", "kernel-gate.yml"];
 
 /// The components and targets the toolchain file must list.
 const COMPONENTS: [&str; 2] = ["rustfmt", "clippy"];

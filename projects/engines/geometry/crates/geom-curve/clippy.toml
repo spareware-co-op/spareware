@@ -86,6 +86,10 @@ disallowed-methods = [
     # Reductions whose order is not written out (chapter 23).
     { path = "core::iter::Iterator::sum", reason = "write the order out, or use ExactSum (chapter 23)" },
     { path = "core::iter::Iterator::product", reason = "write the order out (chapter 23)" },
+    # The same reductions called as trait functions, `<f64 as Sum<&f64>>::sum(it)` or
+    # `f64::sum(it)`: Iterator::sum and product call these, the order just as unstated.
+    { path = "core::iter::Sum::sum", reason = "write the order out, or use ExactSum (chapter 23)" },
+    { path = "core::iter::Product::product", reason = "write the order out (chapter 23)" },
     # The platform's maths functions differ by platform: only geom_num::math supplies them.
     { path = "f64::sin", reason = "platform maths; use geom_num::math (chapter 21)" },
     { path = "f64::cos", reason = "platform maths; use geom_num::math (chapter 21)" },
@@ -113,6 +117,46 @@ disallowed-methods = [
     { path = "f64::powi", reason = "platform maths; use geom_num::math::unproven::powi (chapter 21)" },
     { path = "f64::cbrt", reason = "platform maths; use geom_num::math (chapter 21)" },
     { path = "f64::hypot", reason = "platform maths; use geom_num::math (chapter 21)" },
+    # The same functions on f32: the platform's maths differ by platform whatever the width.
+    { path = "f32::sin", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f32::cos", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f32::tan", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f32::sin_cos", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f32::asin", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f32::acos", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f32::atan", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f32::atan2", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f32::sinh", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f32::cosh", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f32::tanh", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f32::asinh", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f32::acosh", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f32::atanh", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f32::exp", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f32::exp2", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f32::exp_m1", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f32::ln", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f32::log", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f32::log2", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f32::log10", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f32::ln_1p", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f32::powf", reason = "platform maths; use geom_num::math::unproven::pow (chapter 21)" },
+    { path = "f32::powi", reason = "platform maths; use geom_num::math::unproven::powi (chapter 21)" },
+    { path = "f32::cbrt", reason = "platform maths; use geom_num::math (chapter 21)" },
+    { path = "f32::hypot", reason = "platform maths; use geom_num::math (chapter 21)" },
+    # Relaxed ("algebraic") operations let the compiler reorder and fuse arithmetic, so a result
+    # depends on the optimiser and the target (chapter 21: forbidden). They are in core, so no_std
+    # code can call them.
+    { path = "f64::algebraic_add", reason = "relaxed float operation; forbidden (chapter 21)" },
+    { path = "f64::algebraic_sub", reason = "relaxed float operation; forbidden (chapter 21)" },
+    { path = "f64::algebraic_mul", reason = "relaxed float operation; forbidden (chapter 21)" },
+    { path = "f64::algebraic_div", reason = "relaxed float operation; forbidden (chapter 21)" },
+    { path = "f64::algebraic_rem", reason = "relaxed float operation; forbidden (chapter 21)" },
+    { path = "f32::algebraic_add", reason = "relaxed float operation; forbidden (chapter 21)" },
+    { path = "f32::algebraic_sub", reason = "relaxed float operation; forbidden (chapter 21)" },
+    { path = "f32::algebraic_mul", reason = "relaxed float operation; forbidden (chapter 21)" },
+    { path = "f32::algebraic_div", reason = "relaxed float operation; forbidden (chapter 21)" },
+    { path = "f32::algebraic_rem", reason = "relaxed float operation; forbidden (chapter 21)" },
     # Randomness and entropy (randomised-method rule 1).
     { path = "std::hash::RandomState::new", reason = "seeded from the operating system's entropy; the kernel's random numbers come only from geom_num::rng" },
     { path = "std::collections::HashMap::new", reason = "seeds its hasher from the operating system's entropy, so iteration order differs run to run" },
