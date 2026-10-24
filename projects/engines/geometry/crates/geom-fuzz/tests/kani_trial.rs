@@ -1,6 +1,10 @@
 //! Temporary: Kani trial harnesses for choosing `geom_fuzz::orient2d::PROOF_BOUND`. Each proves
 //! `geom_fuzz::orient2d::check` on the proof's domain with one bound, so CI can show how far the
 //! bound can go within the job's budget. Removed once the bound is chosen.
+//!
+//! Each test calls `check!` itself, never through a helper: bolero names a target after the
+//! function `check!` is written in, and cargo-bolero selects a target by that name, so a target
+//! written in a helper cannot be built for libFuzzer or `ClusterFuzzLite`.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -43,19 +47,15 @@ fn prove(bound: u64, draw: &ProofDraw) -> Result<(), Finding> {
     orient2d::check(&case)
 }
 
-fn trial(bound: u64) {
-    check!()
-        .with_generator(proof_draws(bound))
-        .with_iterations(100)
-        .for_each(|draw| prove(bound, draw));
-}
-
 #[cfg_attr(target_family = "wasm", ignore = "bolero's test mode catches panics")]
 #[test]
 #[cfg_attr(kani, kani::proof)]
 #[cfg_attr(kani, kani::solver(cadical))]
 fn orient2d_trial_b0() {
-    trial(0);
+    check!()
+        .with_generator(proof_draws(0))
+        .with_iterations(100)
+        .for_each(|draw| prove(0, draw));
 }
 
 #[cfg_attr(target_family = "wasm", ignore = "bolero's test mode catches panics")]
@@ -63,7 +63,10 @@ fn orient2d_trial_b0() {
 #[cfg_attr(kani, kani::proof)]
 #[cfg_attr(kani, kani::solver(cadical))]
 fn orient2d_trial_b1() {
-    trial(1);
+    check!()
+        .with_generator(proof_draws(1))
+        .with_iterations(100)
+        .for_each(|draw| prove(1, draw));
 }
 
 #[cfg_attr(target_family = "wasm", ignore = "bolero's test mode catches panics")]
@@ -71,7 +74,10 @@ fn orient2d_trial_b1() {
 #[cfg_attr(kani, kani::proof)]
 #[cfg_attr(kani, kani::solver(cadical))]
 fn orient2d_trial_b7() {
-    trial(7);
+    check!()
+        .with_generator(proof_draws(7))
+        .with_iterations(100)
+        .for_each(|draw| prove(7, draw));
 }
 
 #[cfg_attr(target_family = "wasm", ignore = "bolero's test mode catches panics")]
@@ -79,5 +85,8 @@ fn orient2d_trial_b7() {
 #[cfg_attr(kani, kani::proof)]
 #[cfg_attr(kani, kani::solver(cadical))]
 fn orient2d_trial_b15() {
-    trial(15);
+    check!()
+        .with_generator(proof_draws(15))
+        .with_iterations(100)
+        .for_each(|draw| prove(15, draw));
 }

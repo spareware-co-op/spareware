@@ -340,6 +340,42 @@ fn proof_tests(text: &str) -> Vec<String> {
     out
 }
 
+/// The functions of a test file's `text` that call bolero's `check!` without being `#[test]`
+/// functions themselves. bolero names a target after the function `check!` is written in
+/// (`bolero-engine`'s `TargetLocation::item_path`), and cargo-bolero selects a target by running
+/// the test of that name, so a target written in a helper cannot be built for libFuzzer or for
+/// `ClusterFuzzLite` ("no targets matched"). Comment lines are skipped.
+fn checks_outside_tests(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut marked_test = false;
+    let mut current: Option<(String, bool)> = None;
+    for line in text.lines() {
+        let t = line.trim();
+        if t.starts_with("//") {
+            continue;
+        }
+        if t == "#[test]" {
+            marked_test = true;
+            continue;
+        }
+        if let Some(rest) = t.strip_prefix("fn ").or_else(|| t.strip_prefix("pub fn ")) {
+            let name = rest.split(['(', '<']).next().unwrap_or_default().to_owned();
+            current = Some((name, marked_test));
+            marked_test = false;
+            continue;
+        }
+        // Assembled, so this function is not a call itself.
+        if t.contains(concat!("check", "!(")) {
+            match &current {
+                Some((_, true)) => {}
+                Some((name, false)) => out.push(name.clone()),
+                None => out.push("no function".to_owned()),
+            }
+        }
+    }
+    out
+}
+
 /// What the layout gets wrong: each target's test file and its tests, and the CI matrices.
 fn layout_violations(
     targets: &BTreeSet<String>,
@@ -360,6 +396,14 @@ fn layout_violations(
         if !text.contains("for_each(|data: &[u8]| harness(data))") {
             found.push(format!(
                 "tests/{t}.rs does not hand the fuzzer's raw bytes to its harness"
+            ));
+        }
+    }
+    for (file, text) in tests {
+        for function in checks_outside_tests(text) {
+            found.push(format!(
+                "tests/{file}.rs calls bolero's check! in {function}, which is not a #[test] \
+                 function, so cargo-bolero cannot select that target by its test's name"
             ));
         }
     }
@@ -460,6 +504,32 @@ fn attack_every_target_has_its_tests_and_is_in_both_ci_matrices() {
         layout_violations(&targets, &stray, &workflow)
             .iter()
             .any(|v| v.contains("extra_fuzz"))
+    );
+    // A target written in a helper, as the first Kani trial harnesses were: ClusterFuzzLite's
+    // build failed on it with "no targets matched".
+    // The call is assembled, so this file's own text, which the layout check reads, has none.
+    let call = ["check", "!()"].concat();
+    let mut helper = tests.clone();
+    helper.insert(
+        "helper".to_owned(),
+        format!(
+            "fn trial(bound: u64) {{\n    {call}.for_each(|data: &[u8]| harness(data));\n}}\n\n\
+             #[test]\nfn helper_trial() {{\n    trial(0);\n}}\n"
+        ),
+    );
+    let v = layout_violations(&targets, &helper, &workflow);
+    assert!(
+        v.iter()
+            .any(|v| v.contains("tests/helper.rs") && v.contains("in trial,")),
+        "{v:?}"
+    );
+    // Written in the test itself, the same call passes, and so does a commented-out one.
+    assert_eq!(
+        checks_outside_tests(&format!(
+            "#[test]\n#[cfg_attr(kani, kani::solver(cadical))]\nfn t() {{\n    {call}.for_each(|_| ());\n}}\n\
+             fn helper() {{\n    // {call}\n}}\n"
+        )),
+        Vec::<String>::new()
     );
     let mut missing = targets.clone();
     missing.insert("newtarget".to_owned());
@@ -743,11 +813,20 @@ fn attack_the_tool_pins_agree_everywhere_they_are_written() {
     ];
     assert_eq!(pin_violations(&workflow, &files), Vec::<String>::new());
     // Each file names each pin it should, so the agreement is not vacuous.
-    assert!(!after(&dockerfile, "cargo-bolero --version ").is_empty());
-    assert!(!after(&readme, "cargo-bolero --version ").is_empty());
-    assert!(!after(&readme, "kani-verifier --version ").is_empty());
-    assert!(!nightlies(&readme).is_empty());
-    assert!(!nightlies(&lib).is_empty());
+    assert_ne!(
+        after(&dockerfile, "cargo-bolero --version "),
+        Vec::<String>::new()
+    );
+    assert_ne!(
+        after(&readme, "cargo-bolero --version "),
+        Vec::<String>::new()
+    );
+    assert_ne!(
+        after(&readme, "kani-verifier --version "),
+        Vec::<String>::new()
+    );
+    assert_ne!(nightlies(&readme), Vec::<String>::new());
+    assert_ne!(nightlies(&lib), Vec::<String>::new());
 
     // Seeded violations.
     let old = readme.replace("nightly-2026-10-01", "nightly-2026-09-01");
@@ -891,14 +970,14 @@ fn attack_the_workspace_has_the_profile_cargo_bolero_builds_with() {
     let cargo_toml = read("Cargo.toml");
     assert_eq!(profile_violations(&cargo_toml), Vec::<String>::new());
     let none = cargo_toml.replace("[profile.fuzz]", "[profile.fuzzing]");
-    assert!(!profile_violations(&none).is_empty());
+    assert_ne!(profile_violations(&none), Vec::<String>::new());
     let release = cargo_toml.replace("inherits = \"dev\"", "inherits = \"release\"");
-    assert!(!profile_violations(&release).is_empty());
+    assert_ne!(profile_violations(&release), Vec::<String>::new());
     let unchecked = cargo_toml.replace(
         "codegen-units = 1",
         "codegen-units = 1\noverflow-checks = false",
     );
-    assert!(!profile_violations(&unchecked).is_empty());
+    assert_ne!(profile_violations(&unchecked), Vec::<String>::new());
     let lto = cargo_toml.replace("codegen-units = 1", "codegen-units = 1\nlto = true");
-    assert!(!profile_violations(&lto).is_empty());
+    assert_ne!(profile_violations(&lto), Vec::<String>::new());
 }

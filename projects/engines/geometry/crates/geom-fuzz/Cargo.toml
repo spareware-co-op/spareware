@@ -19,9 +19,6 @@ bolero = "0.13.7"
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"
-# Kani compiles a proof with cfg(kani) set (tests/orient2d.rs marks its proof harness with it), as
-# bolero's own manifest declares; any other unknown cfg stays a warning, which CI denies.
-unexpected_cfgs = { level = "warn", check-cfg = ["cfg(kani)"] }
 
 [lints.clippy]
 # The crate is written to clippy's pedantic idioms; CI denies every warning.
