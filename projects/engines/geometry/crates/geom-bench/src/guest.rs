@@ -26,8 +26,11 @@
 //! Method: fuel metering as Wasmtime documents it (`Config::consume_fuel`,
 //! <https://github.com/bytecodealliance/wasmtime/blob/5afd63588b1f5520391c6a37fc38dfd3ccd607c2/crates/wasmtime/src/config.rs#L627-L646>),
 //! with the measured work isolated by differencing two runs that differ only in it.
+//! Consulted: Wasmtime, Apache-2.0 WITH LLVM-exception,
+//!   <https://github.com/bytecodealliance/wasmtime/blob/5afd63588b1f5520391c6a37fc38dfd3ccd607c2/crates/wasmtime/src/config.rs#L627-L646>,
+//!   for what fuel counts and how `Config::consume_fuel` meters it. No code copied.
 //!
-//! Guarantee: the only difference between `run <name> 1` and `run <name> 2` is one pass and one
+//! Guarantees: the only difference between `run <name> 1` and `run <name> 2` is one pass and one
 //! step of the loop in [`run_passes`], and `check` fails unless both digests match `golden.txt`.
 //!
 //! Cost: each command builds one batch, O([`crate::inputs::BATCH`]), then runs the passes asked

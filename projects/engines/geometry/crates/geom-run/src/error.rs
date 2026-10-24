@@ -9,10 +9,19 @@
 //! logged or cached, and nothing is published (chapter 23.10). [`RunError::Internal`] is a broken
 //! invariant of this crate: a bug, reported instead of a panic or a wrong answer (chapter 22).
 //!
+//! Guarantees: [`RunError::Failed`] and [`RunError::BudgetExceeded`] are the same, field for
+//! field, on every machine, thread count and chunk size; [`RunError::Cancelled`] and
+//! [`RunError::OutOfMemory`] are never stored, logged or cached; and [`RunError::Internal`] reports
+//! a broken invariant instead of a panic or a wrong answer.
+//!
 //! Method: the lowest-index rule of rayon's `find_first`, which returns the first match in input
 //! order however the work was split
 //! (<https://github.com/rayon-rs/rayon/blob/ee0a00bdb1ab039e178a215ad5712fb7fa58e58f/src/iter/mod.rs#L1675-L1680>),
 //! applied to failures, and chapter 22's error kinds and remedies.
+//! Consulted: rayon, MIT OR Apache-2.0,
+//!   <https://github.com/rayon-rs/rayon/blob/ee0a00bdb1ab039e178a215ad5712fb7fa58e58f/src/iter/mod.rs#L1675-L1680>,
+//!   for the lowest-index rule of `find_first`, which this crate applies to failures. No code
+//!   copied.
 //!
 //! Cost: the errors are plain values of a few machine words, plus the function's own error;
 //! making one never allocates, and `Display` writes straight to the formatter.

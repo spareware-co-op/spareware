@@ -1,8 +1,14 @@
 //! Errors from the numbers layer.
 //!
-//! Each variant says what was wrong in plain words, and carries the value that caused it where
-//! one value does, so an operation higher up can turn it into a structured error with remedies
-//! (chapter 22).
+//! Guarantees: each variant says what was wrong in plain words, and carries the value that caused
+//! it where one value does, so an operation higher up can turn it into a structured error with
+//! remedies (chapter 22).
+//!
+//! Method: none; a closed enum of the numbers layer's failures, each defined once, for chapter 22's
+//! error model (`projects/engines/geometry/architecture/22-errors-queries-ai.md`) to wrap.
+//!
+//! Cost: constant: plain `Copy` values with no allocation; formatting writes one fixed message, with
+//! the coordinate for `OutOfRange`.
 
 use core::fmt;
 

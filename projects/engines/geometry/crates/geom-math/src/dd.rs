@@ -17,7 +17,7 @@
 //! negations can fail; one that did would be reported as [`NumError::BudgetExceeded`], never
 //! answered.
 //!
-//! **Accuracy.** Relative error bounds on the exact result of the operation applied to the exact
+//! Guarantees, on accuracy: relative error bounds on the exact result of the operation applied to the exact
 //! values of the operands (u = 2^−53). The middle column is proven on each method below, in full,
 //! with every higher-order term kept; it is the bound the kernel relies on. The last column is the
 //! tighter bound Joldes, Muller and Popescu prove for the same algorithm, as the authors state it
@@ -82,7 +82,7 @@
 //! - [`DD::round_shifted`] rounds the exact value `hi + lo − offset` to the nearest integer, ties to
 //!   even, with no rounding error at all: the published libraries round through `f64` first.
 //!
-//! Method and sources:
+//! Method: the papers below, whose algorithms each operation follows.
 //!
 //! - T. J. Dekker, "A floating-point technique for extending the available precision",
 //!   *Numerische Mathematik* 18 (1971), 224–242, <https://doi.org/10.1007/BF01397083>: the

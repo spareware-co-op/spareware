@@ -25,7 +25,7 @@
 //!
 //! Method: the kernel's error model, chapter 22 of the architecture: each variant says what was
 //! wrong in plain words and carries the value that caused it
-//! (<https://github.com/spareware-co-op/spareware/blob/piece/G01/projects/engines/geometry/architecture/22-errors-queries-ai.md>).
+//! (`projects/engines/geometry/architecture/22-errors-queries-ai.md`).
 //!
 //! Cost: constructing, copying and comparing an error is constant time; `Display` writes one short
 //! sentence and allocates nothing.

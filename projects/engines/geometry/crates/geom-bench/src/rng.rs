@@ -9,6 +9,9 @@
 //! of Vigna's reference code (<https://prng.di.unimi.it/splitmix64.c>, public domain). Seeds are
 //! derived with 64-bit FNV-1a (<http://www.isthe.com/chongo/tech/comp/fnv/>). The tests check
 //! both against their published values.
+//! Consulted: Vigna's SplitMix64 reference code, public domain,
+//!   <https://prng.di.unimi.it/splitmix64.c>, for the constants and steps of SplitMix64, which
+//!   the tests check against its published outputs. No code copied.
 //!
 //! Guarantees: every draw is a pure function of the seed and the number of draws before it, in
 //! wrapping 64-bit integer arithmetic only, so the sequence is the same on every target, in every

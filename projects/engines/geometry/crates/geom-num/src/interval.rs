@@ -113,7 +113,22 @@
 //! - IEEE Std 1788-2015, *IEEE Standard for Interval Arithmetic*: the required elementary functions
 //!   `sqr` and `sqrt`, the set-based flavour, and the decoration `trv` that reports a cut domain.
 //! - `libm` 0.2.16 (MIT), `src/math/sqrt.rs`, `src/math/arch/` and `src/math/generic/sqrt.rs`:
-//!   <https://github.com/rust-lang/compiler-builtins/tree/master/libm/src/math>.
+//!   <https://github.com/rust-lang/compiler-builtins/tree/dfd2203a4d6110820ad7bb65cafe1bf331a03a3d/libm/src/math>.
+//!
+//! Cost: constant time and no allocation per operation; [`Interval::norm`] is linear in its number
+//! of components.
+//!
+//! Consulted: Geogram `interval_nt.h`, BSD-3-Clause,
+//!   <https://github.com/BrunoLevy/geogram/blob/40d72165ceeeb0a61977d6fdf74d929bfdd77b7b/src/lib/geogram/numerics/interval_nt.h#L455-L462>,
+//!   for its round-to-nearest interval class `intervalRN`, which the Method above compares.
+//! Consulted: CGAL `FPU.h`, `LGPL-3.0-or-later OR LicenseRef-Commercial`,
+//!   <https://github.com/CGAL/cgal/blob/cbc3b81d4607c6f3a9d1f3a47d8709a2be3e6bfa/Number_types/include/CGAL/FPU.h#L347-L358>,
+//!   for its widening with `nextafter` when the rounding mode cannot change, which the Method
+//!   above names.
+//! Consulted: `libm` 0.2.16, MIT,
+//!   <https://github.com/rust-lang/compiler-builtins/tree/dfd2203a4d6110820ad7bb65cafe1bf331a03a3d/libm/src/math>,
+//!   for which instruction or routine its square root and fused multiply-add use on each target,
+//!   as the guarantees above state.
 
 use crate::error::NumError;
 use crate::math;

@@ -31,6 +31,10 @@
 //! error reported is the lowest-numbered failure, as in rayon's `find_first`,
 //! <https://github.com/rayon-rs/rayon/blob/ee0a00bdb1ab039e178a215ad5712fb7fa58e58f/src/iter/mod.rs#L1675-L1680>)
 //! and the phase rule of chapter 23.10.
+//! Consulted: rayon, MIT OR Apache-2.0,
+//!   <https://github.com/rayon-rs/rayon/blob/ee0a00bdb1ab039e178a215ad5712fb7fa58e58f/src/iter/mod.rs#L1675-L1680>,
+//!   for the lowest-index rule of `find_first`, which this crate applies to failures. No code
+//!   copied.
 //!
 //! Cost: per item, one fresh meter (a few words, no allocation), one call of the function and,
 //! for a value kept, an amortised push onto its chunk's list; per chunk, one task and one read of

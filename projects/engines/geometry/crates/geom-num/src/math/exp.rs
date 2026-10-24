@@ -1,6 +1,7 @@
 //! Correctly rounded `exp(x) = e^x`: a port of CORE-MATH.
 //!
-//! Method: Ziv's strategy, as in CORE-MATH; the method and the proof of its bound are below.
+//! Method: Ziv's strategy, as in CORE-MATH (<https://core-math.gitlabpages.inria.fr/>); the
+//! algorithm and the proof of its bound are below.
 //! Source: PORT from CORE-MATH `src/binary64/exp/exp.c` at commit
 //!   `0ce0cbc15935e24c656280e5a46c34e89f301b7a`, by Alexei Sibidanov, MIT,
 //!   <https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/exp/exp.c>
@@ -39,7 +40,7 @@
 //! SOFTWARE.
 //! ```
 //!
-//! **Error bound: correctly rounded**, resting on CORE-MATH's worst-case searches, whose
+//! Guarantees: correctly rounded, resting on CORE-MATH's worst-case searches, whose
 //! completeness its list does not claim (step A of the proof). For every binary64 input checked
 //! the result is the binary64 number nearest the exact `e^x` (ties to even), so the error is at
 //! most half an ulp, including in the subnormal range. Proven outright: every input whose result
@@ -52,7 +53,12 @@
 //! `exp(+∞) = +∞`, and NaN gives the canonical NaN (`0x7ff8_0000_0000_0000`). The proof is at the
 //! end of this documentation.
 //!
-//! Method (Ziv's strategy, as CORE-MATH): `x = (64·i0 + i1 + 4096·ie)·ln 2/4096 + dx` with
+//! Cost: constant time, no allocation and no recursion. Almost every argument takes the fast
+//! path, a fixed sequence of floating-point operations and table reads; only when its rounding
+//! test cannot decide does the accurate path run, also of fixed length. No loop's
+//! length depends on the argument.
+//!
+//! The algorithm (Ziv's strategy, as CORE-MATH): `x = (64·i0 + i1 + 4096·ie)·ln 2/4096 + dx` with
 //! `|dx| ≤ ln 2/2^13`, by Cody–Waite reduction with a three-part `ln 2/4096`. Then
 //! `e^x = 2^ie · 2^(i0/64) · 2^(i1/4096) · e^dx`, the two powers of two from 64-entry
 //! double-double tables and `e^dx` from a degree-4 polynomial. If the fast path's result,

@@ -8,9 +8,9 @@
 //! Representation: two's complement, limbs little-endian (limb 0 is the least significant).
 //! A `Wide<L>` holds values from −2^(64L−1) to 2^(64L−1) − 1.
 //!
-//! Every arithmetic operation is checked: it returns `None` when the true result does not fit, and
-//! never wraps silently. The kernel proves that its predicates never overflow; these checks turn a
-//! wrong proof into a detectable failure instead of a wrong sign.
+//! Guarantees: every arithmetic operation is checked: it returns `None` when the true result does
+//! not fit, and never wraps silently. The kernel proves that its predicates never overflow; these
+//! checks turn a wrong proof into a detectable failure instead of a wrong sign.
 //!
 //! The same holds inside, limb by limb, so nothing here depends on overflow checks being on. A
 //! limb sum or difference uses `overflowing_add` and `overflowing_sub`, which return the full
@@ -22,8 +22,13 @@
 //! shift.
 //!
 //! Method: schoolbook addition, subtraction and multiplication on magnitudes with 128-bit
-//! intermediates (Knuth, *The Art of Computer Programming*, volume 2, section 4.3.1). There is no
-//! division: predicates never need it.
+//! intermediates (Knuth, *The Art of Computer Programming*, volume 2, section 4.3.1,
+//! <https://www-cs-faculty.stanford.edu/~knuth/taocp.html>). There is no division: predicates
+//! never need it.
+//!
+//! Cost: for `L` limbs, addition, subtraction, negation, comparison and resizing are O(L) limb
+//! operations and multiplication O(L²), on the stack with no allocation; the kernel's widths are
+//! 4 to 8 limbs.
 
 use core::cmp::Ordering;
 use core::fmt;

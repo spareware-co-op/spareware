@@ -11,6 +11,9 @@
 //! §5.12.3 specifies for hexadecimal significands (<https://doi.org/10.1109/IEEESTD.2019.8766229>);
 //! here it must be a binary64 number exactly.
 //!
+//! Cost: none at run time, since every literal is read by the compiler; reading one is linear in
+//! its length.
+//!
 //! Guarantees:
 //!
 //! - **Evaluated by the compiler, always.** `hf!("…")` expands to an inline `const` block,
