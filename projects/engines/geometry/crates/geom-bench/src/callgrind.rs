@@ -24,7 +24,8 @@
 //!   100 · head > (100 + p) · base, and a count resolves p% exactly when it is at least
 //!   ⌈100 / p⌉. Percentages are computed, as floating point, for display only.
 //! - **Every benchmark judged, or no verdict.** Every benchmark the run lists has exactly one
-//!   summary, every summary is a benchmark the run lists, and every summary carries a whole count
+//!   summary, every summary is a benchmark the run lists and of the schema version the gate's
+//!   Gungraun writes, and every summary carries a whole count
 //!   for each of the eight judged measures, from the pull request and, for a benchmark the merge
 //!   base has, from the merge base; anything else is an error, never a pass.
 //! - **Deterministic reports.** Benchmarks are judged and reported in name order, and measures in
@@ -52,7 +53,7 @@ use std::path::{Path, PathBuf};
 
 use gungraun_runner::api::{EventKind, Tool};
 use gungraun_runner::metrics::model::Metric;
-use gungraun_runner::summary::model::{BenchmarkSummary, ToolMetricResults};
+use gungraun_runner::summary::model::{BenchmarkSummary, SCHEMA_VERSION, ToolMetricResults};
 
 use crate::counts::Change;
 
@@ -144,12 +145,19 @@ fn whole(metric: &Metric, name: &str, side: &str) -> Result<u64, String> {
 ///
 /// # Errors
 ///
-/// A message, if the text is not a Gungraun summary, names no benchmark, has no single Callgrind
+/// A message, if the text is not a Gungraun summary of the schema version this reader is built for
+/// (`gungraun_runner::summary::model::SCHEMA_VERSION`), names no benchmark, has no single Callgrind
 /// run, lacks a judged measure, holds a count that is not whole, or has a merge-base count for
 /// some measures but not others.
 pub fn parse_summary(text: &str) -> Result<Summary, String> {
     let summary: BenchmarkSummary =
         serde_json::from_str(text).map_err(|e| format!("not a Gungraun summary: {e}"))?;
+    if summary.version != SCHEMA_VERSION {
+        return Err(format!(
+            "summary schema version {:?}, but this reader is for version {SCHEMA_VERSION:?}",
+            summary.version
+        ));
+    }
     let mut parts: Vec<&str> = summary.module_path.split("::").skip(1).collect();
     if let Some(id) = summary.id.as_deref() {
         parts.push(id);
