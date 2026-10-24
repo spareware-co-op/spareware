@@ -102,6 +102,37 @@
 //! never pass for an exact degeneracy. That is why each predicate returns a `Result`; for grid
 //! points it is always `Ok`.
 //!
+//! Method: the determinant forms of Shewchuk, *Adaptive Precision Floating-Point Arithmetic and
+//! Fast Robust Geometric Predicates*, Discrete & Computational Geometry 18 (1997)
+//! (<https://doi.org/10.1007/PL00009321>; reference code
+//! <https://www.cs.cmu.edu/afs/cs/project/quake/public/code/predicates.c>): orientation is the
+//! determinant of the edge vectors, and in-circle and in-sphere are the orientation of the points
+//! lifted onto the paraboloid z = |p|², written relative to the query point so every entry is a
+//! small difference. Shewchuk evaluates these in floating point with adaptive expansions; on the
+//! grid the inputs are integers below 2^40, so the same determinants evaluate exactly in
+//! fixed-width integers. The filter and the exact path in front of the hand-written ones are
+//! generated (module [`crate::generated`], whose header states their method, proof and cost). The
+//! total path's bounds follow the static bit-length analysis of Fortune and Van Wyk, *Static
+//! Analysis Yields Efficient Exact Integer Arithmetic for Computational Geometry*, ACM
+//! Transactions on Graphics 15(3) (1996), carried in Rust's type system so that the compiler
+//! checks them.
+//!
+//! Conventions: [`orient2d`] and [`incircle`] have the signs of `predicates.c`. [`orient3d`] and
+//! [`insphere`] have the **opposite** signs to `predicates.c`, whose `orient3d` is positive when
+//! `d` lies *below* the plane of `a`, `b`, `c`; here it is positive when `d` lies on the side that
+//! the right-hand normal (b − a) × (c − a) points to. Code ported from Shewchuk-based libraries
+//! must account for this.
+//!
+//! Cost: per call, the generated filter's few dozen `f64` operations where the routing runs
+//! it, and the exact path only when the filter cannot decide (or first, where the filter does
+//! not pay): a fixed number of checked integer operations, each module's header gives the
+//! counts. No allocation and no recursion.
+//!
+//! Consulted: J. R. Shewchuk, `predicates.c`, public domain,
+//!   <https://www.cs.cmu.edu/afs/cs/project/quake/public/code/predicates.c>, for the determinant
+//!   forms and the sign conventions of `orient2d` and `incircle` that the Method and Conventions
+//!   above follow; chapter 29.3 asks for this credit line.
+//!
 //! # Bit budgets
 //!
 //! Chapter 6.2 asks each predicate's module for the written derivation of its bit budget: why
@@ -165,37 +196,6 @@
 //! from the rules above, and checks every grid configuration with every coordinate at ±M (4,096
 //! for orient3d) against it, the two largest values above included. The total path's own budget,
 //! for any `i64` coordinates in [`I384`], is written where that path begins.
-//!
-//! Method: the determinant forms of Shewchuk, *Adaptive Precision Floating-Point Arithmetic and
-//! Fast Robust Geometric Predicates*, Discrete & Computational Geometry 18 (1997)
-//! (<https://doi.org/10.1007/PL00009321>; reference code
-//! <https://www.cs.cmu.edu/afs/cs/project/quake/public/code/predicates.c>): orientation is the
-//! determinant of the edge vectors, and in-circle and in-sphere are the orientation of the points
-//! lifted onto the paraboloid z = |p|², written relative to the query point so every entry is a
-//! small difference. Shewchuk evaluates these in floating point with adaptive expansions; on the
-//! grid the inputs are integers below 2^40, so the same determinants evaluate exactly in
-//! fixed-width integers. The filter and the exact path in front of the hand-written ones are
-//! generated (module [`crate::generated`], whose header states their method, proof and cost). The
-//! total path's bounds follow the static bit-length analysis of Fortune and Van Wyk, *Static
-//! Analysis Yields Efficient Exact Integer Arithmetic for Computational Geometry*, ACM
-//! Transactions on Graphics 15(3) (1996), carried in Rust's type system so that the compiler
-//! checks them.
-//!
-//! Conventions: [`orient2d`] and [`incircle`] have the signs of `predicates.c`. [`orient3d`] and
-//! [`insphere`] have the **opposite** signs to `predicates.c`, whose `orient3d` is positive when
-//! `d` lies *below* the plane of `a`, `b`, `c`; here it is positive when `d` lies on the side that
-//! the right-hand normal (b − a) × (c − a) points to. Code ported from Shewchuk-based libraries
-//! must account for this.
-//!
-//! Cost: per call, the generated filter's few dozen `f64` operations where the routing runs
-//! it, and the exact path only when the filter cannot decide (or first, where the filter does
-//! not pay): a fixed number of checked integer operations, each module's header gives the
-//! counts. No allocation and no recursion.
-//!
-//! Consulted: J. R. Shewchuk, `predicates.c`, public domain,
-//!   <https://www.cs.cmu.edu/afs/cs/project/quake/public/code/predicates.c>, for the determinant
-//!   forms and the sign conventions of `orient2d` and `incircle` that the Method and Conventions
-//!   above follow; chapter 29.3 asks for this credit line.
 
 use crate::error::NumError;
 use crate::generated;

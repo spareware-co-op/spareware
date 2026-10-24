@@ -1755,8 +1755,8 @@ const INWARD: i64 = 1 << 10;
 /// lattice points a, b, c, the fourth point moving along a tangent. Outside: d(n) = r + n·t, with
 /// r = o + m·g·r̂ a fourth lattice point (r̂ primitive, g its multiple) and t ⊥ r̂, whose power with
 /// respect to the circle is n²|t|², so the exact value grows from zero. Inside: from the axis point
-/// s = o + m·h·x̂, d(n) = s − K·x̂ + n·ŷ (K = [`INWARD`]), whose power n² − 2Kmh + K² shrinks
-/// towards zero as n grows to √(2Kmh − K²), within one step's change of it at the end. Returns the
+/// s = o + m·h·x̂, d(n) = s − K·x̂ + n·ŷ (K = [`INWARD`]), whose power n² − 2Kmh + K² is negative
+/// and shrinks in magnitude as n grows to ⌊√(2Kmh − K²)⌋, where it is at most 2n + 1. Returns the
 /// families and that last index.
 fn incircle_families(rng: &mut Rng) -> (Family<'static, 2, 4>, Family<'static, 2, 4>, i64) {
     let [p, q, h] = pythagorean_triple(rng);
