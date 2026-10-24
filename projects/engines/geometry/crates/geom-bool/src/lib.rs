@@ -20,6 +20,8 @@
 //! Sections: 10.2, 11, 13 (introduction), 13.14, 16.1, 22, 23.5 and 23.6, in the kernel
 //! architecture (`projects/engines/geometry/architecture/`).
 //!
+//! Family: Combine.
+//!
 //! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!

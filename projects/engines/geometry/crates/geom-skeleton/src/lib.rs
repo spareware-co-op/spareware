@@ -18,6 +18,8 @@
 //! Sections: 13.11, 13.15 and 13.22; open question OQ-13.3, in the kernel architecture
 //! (`projects/engines/geometry/architecture/`).
 //!
+//! Family: Ground.
+//!
 //! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!

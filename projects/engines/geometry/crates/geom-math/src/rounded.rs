@@ -16,7 +16,7 @@
 //! - **Plain value.** `Copy`, compared with `==`, hashed; no allocation.
 //!
 //! Method: the rounding report of chapters 6.1 and 7 of the kernel architecture
-//! (<https://github.com/spareware-co-op/spareware/blob/piece/G01/projects/engines/geometry/architecture/07-geometry-types.md>),
+//! (`projects/engines/geometry/architecture/07-geometry-types.md`),
 //! with the same shape as the numbers layer's.
 //!
 //! Cost: a value and one flag; reading either is a copy.

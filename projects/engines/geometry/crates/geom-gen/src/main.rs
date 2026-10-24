@@ -6,12 +6,18 @@
 //! cargo run -p geom-gen -- list                   list the generators and generated folders
 //! ```
 //!
-//! Every command prints each generator's seed (`seed: <hex>`, or `seed: none` for a generator that
-//! uses no randomness) before it runs any generator, so the seeds are printed even when a generator
-//! fails. `--root` names the workspace root to work in; by default it is the workspace this binary
-//! was built in. Exit codes: 0 success; 1 an output differs or is missing, or a generated folder
-//! holds an orphan (`write` too reports orphans, and never deletes them); 2 a usage, registry,
-//! generator or file error.
+//! Guarantees: every command prints each generator's seed (`seed: <hex>`, or `seed: none` for a
+//! generator that uses no randomness) before it runs any generator, so the seeds are printed even
+//! when a generator fails. `--root` names the workspace root to work in; by default it is the
+//! workspace this binary was built in. Exit codes: 0 success; 1 an output differs or is missing, or
+//! a generated folder holds an orphan (`write` too reports orphans, and never deletes them); 2 a
+//! usage, registry, generator or file error.
+//!
+//! Method: none; it parses its arguments and calls [`geom_gen::files`], whose module header
+//! carries the method.
+//!
+//! Cost: one run of every generator and one read or write of each output ([`geom_gen::files`]), or
+//! a listing of the registry.
 #![forbid(unsafe_code)]
 
 use std::ffi::OsString;

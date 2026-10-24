@@ -19,6 +19,9 @@
 //! Method: `geom_bench::counts`: Gungraun's soft limits
 //! (<https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md>)
 //! and the doubling test (<https://algs4.cs.princeton.edu/14analysis/>).
+//! Consulted: Gungraun, Apache-2.0 OR MIT,
+//!   <https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md>,
+//!   for its library-benchmark API and its Callgrind and DHAT settings. No code copied.
 //!
 //! Cost: reading the files, then O(n log n) for n benchmarks.
 

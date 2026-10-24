@@ -21,6 +21,8 @@
 //! Sections: 16.4, 16.6, 17.3, 19.2 to 19.8, 19.14, 23.11 and 24.4; open questions OQ-16.1 and
 //! OQ-19.2, in the kernel architecture (`projects/engines/geometry/architecture/`).
 //!
+//! Family: Mesh.
+//!
 //! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!

@@ -10,6 +10,10 @@
 //! [`crate::math`] and widened by one step outward with `next_down` and `next_up`, as
 //! [`crate::interval`] does after every operation.
 //!
+//! Cost: constant time and no allocation: the point function at each of the two ends (one or two
+//! calls of the correctly rounded `sinpi`, `cospi`, `exp` or `ln`), two widening steps, and for
+//! the periodic two a fixed number of exact integer comparisons for the peak tests.
+//!
 //! Guarantees:
 //!
 //! - **Inclusion.** The result contains `f(t)` for every real `t` in the interval, not only for the

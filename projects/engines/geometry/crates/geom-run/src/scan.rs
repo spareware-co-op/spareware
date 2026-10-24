@@ -17,7 +17,7 @@
 //! (Technical Report CMU-CS-90-190, Carnegie Mellon University, 1990; the 1993 book-chapter
 //! version is at <https://www.cs.cmu.edu/~guyb/papers/Ble93.pdf>).
 //!
-//! Cost, for n counts in c chunks: `scan_exclusive` makes n checked additions to sum the chunks,
+//! Cost: for n counts in c chunks, `scan_exclusive` makes n checked additions to sum the chunks,
 //! c to turn the sums into bases and n to write the offsets; it reads the cancellation once per
 //! chunk in each pass and allocates the n offsets and the c bases. `count_then_fill` adds a count
 //! phase and a fill phase (n calls each, as in `crate::phase`) and room for the n counts. Each

@@ -74,7 +74,7 @@
 //! That reading is this piece's, not an owner's decision. It is raised for chapter 31.7's open
 //! questions, and the rule stands provisionally until it is decided.
 //!
-//! # What this module guarantees
+//! What this module guarantees:
 //!
 //! - **Specified, and checked against the reference.** [`philox4x32_10`] is Philox4x32-10 as its
 //!   authors specify it (Method, below). The tests reproduce Random123's published known answers
@@ -139,7 +139,7 @@
 //!   range starting at id `f` is id `f + i`, and chunk `i` of size `m` is ids `f + i·m` to
 //!   `f + i·m + m − 1`.
 //!
-//! # Method
+//! Method: the published methods below.
 //!
 //! - **Philox4x32-10**: J. K. Salmon, M. A. Moraes, R. O. Dror and D. E. Shaw, "Parallel random
 //!   numbers: as easy as 1, 2, 3", SC '11, section 4.3, <https://doi.org/10.1145/2063384.2063405>.
@@ -164,9 +164,12 @@
 //!   generator reaches any stream directly from its id (Salmon and others, above), so handing each
 //!   consumer its own ids is all that independent streams need.
 //!
-//! # Cost
+//! Consulted: Random123, BSD-3-Clause,
+//!   <https://github.com/DEShawResearch/random123/blob/9545ff6413f258be2f04c1d319d99aaef7521150/include/Random123/philox.h>,
+//!   for the word order, the multiplier for each word and the order of key steps and rounds of
+//!   Philox4x32-10, as the authors' reference implementation fixes them. No code copied.
 //!
-//! A block is ten rounds, each two 32 × 32 → 64-bit multiplies and four exclusive ors, with nine
+//! Cost: a block is ten rounds, each two 32 × 32 → 64-bit multiplies and four exclusive ors, with nine
 //! two-word key additions between them, and gives four 32-bit words. [`Stream::next_u32`] computes
 //! a block on every fourth call, and [`Stream::next_u64`] and [`Stream::next_f64`] on every second
 //! call. [`Stream::below`] draws on average 2^64 / (2^64 − (2^64 mod n)) words of 64 bits, fewer

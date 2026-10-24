@@ -17,14 +17,12 @@ bench = false
 # The program the WebAssembly fuel gate runs inside Wasmtime (built for wasm32-wasip1).
 [[bin]]
 name = "geom-bench-guest"
-path = "src/bin/guest.rs"
 test = false
 bench = false
 
 # The checks the gates run on count files: comparison with the merge base, removals, growth.
 [[bin]]
 name = "geom-bench-counts"
-path = "src/bin/counts.rs"
 test = false
 bench = false
 

@@ -75,6 +75,11 @@
 //!   processor has one), it is one IEEE 754 defines exactly, so results are identical on every
 //!   target. The `libm` functions without a proven bound are kept apart in [`math::unproven`],
 //!   and nothing in this crate uses them.
+//!
+//! Licences of the published crates this crate depends on (DEPEND, chapter 29.1), as each one's
+//! manifest at the version in `Cargo.lock` states it:
+//!
+//! - MIT: `libm`.
 #![cfg_attr(not(test), no_std)]
 
 pub mod dd;

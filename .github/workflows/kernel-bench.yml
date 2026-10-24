@@ -188,7 +188,7 @@ jobs:
             echo "base_gate=false" >> "$GITHUB_OUTPUT"
           fi
           if git cat-file -e "$merge_base:$BENCH/fuel/Cargo.toml" 2>/dev/null \
-            && git cat-file -e "$merge_base:$BENCH/src/bin/guest.rs" 2>/dev/null; then
+            && { git cat-file -e "$merge_base:$BENCH/src/bin/geom-bench-guest.rs" 2>/dev/null \n              || git cat-file -e "$merge_base:$BENCH/src/bin/guest.rs" 2>/dev/null; }; then
             echo "base_fuel=true" >> "$GITHUB_OUTPUT"
           else
             echo "base_fuel=false" >> "$GITHUB_OUTPUT"

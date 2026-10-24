@@ -17,7 +17,7 @@
 //! them. Written here rather than taken from `core`'s sorts so that nothing allocates infallibly
 //! and no comparison, even of an `Ord` that breaks its contract, can make the helper panic.
 //!
-//! Cost, for n items in chunks of s: at most n · (⌈log₂ s⌉ + ⌈log₂ ⌈n / s⌉⌉) comparisons, so
+//! Cost: for n items in chunks of s, at most n · (⌈log₂ s⌉ + ⌈log₂ ⌈n / s⌉⌉) comparisons, so
 //! O(n log n), each calling `key` twice; two buffers of n (index, reference) pairs and the result
 //! of n indices; one read of the cancellation per chunk and per merge.
 //!

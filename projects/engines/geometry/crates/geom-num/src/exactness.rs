@@ -8,19 +8,27 @@
 //! would lower the class without being asked returns an error instead (chapter 9); this type only
 //! records the class.
 //!
-//! A bound is a count of grid steps together with its step, because a count alone means nothing:
-//! 64 steps of `Q0` are 10 µm, 64 steps of `Q1` are 0.4 µm. Combining two bounds first converts
-//! both to the finer of their steps (25 per rung, exactly; chapter 6.1), then adds the counts, so
-//! a body certified to 64 steps of `Q0` with one certified to 64 steps of `Q1` is certified to
-//! 64 · 25 + 64 = 1,664 steps of `Q1`, never to 128 of anything. Every step of that is checked:
-//! a sum that does not fit is `None`, never saturated, because a saturated sum is smaller than the
-//! true one and so would no longer be a bound.
+//! Guarantees: a bound is a count of grid steps together with its step, because a count alone
+//! means nothing: 64 steps of `Q0` are 10 µm, 64 steps of `Q1` are 0.4 µm. Combining two bounds
+//! first converts both to the finer of their steps (25 per rung, exactly; chapter 6.1), then adds
+//! the counts, so a body certified to 64 steps of `Q0` with one certified to 64 steps of `Q1` is
+//! certified to 64 · 25 + 64 = 1,664 steps of `Q1`, never to 128 of anything. Every step of that
+//! is checked: a sum that does not fit is `None`, never saturated, because a saturated sum is
+//! smaller than the true one and so would no longer be a bound.
 //!
 //! Chapter 9 also caps a certified bound: ε ≤ `ε_fit` unless the caller asked for more, and chapter
 //! 6.5 makes exceeding an operation's ceiling an error that rolls back. So operations combine with
 //! [`Exactness::combine_within`] against their ceiling (the frame's [`crate::ladder::FIT`] unless
 //! the caller asked for more), which reports [`NumError::ToleranceExceeded`];
 //! [`Exactness::combine`] alone records a class without judging it.
+//!
+//! Method: the exactness classes of chapter 9
+//! (`projects/engines/geometry/architecture/09-representations.md`); a combined bound is the sum
+//! of the bounds (the triangle inequality), counted in the finer of the two grid steps, which is
+//! exact because each step is exactly 25 times finer than the one above (chapter 6.1).
+//!
+//! Cost: constant and no allocation: combining two bounds is two checked refinements (a division,
+//! a remainder and a multiplication each) and one checked addition.
 
 use crate::error::NumError;
 use crate::grid::{GridStep, Steps};

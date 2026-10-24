@@ -23,7 +23,7 @@
 //!
 //! Method: `SplitMix64` of Steele, Lea and Flood, "Fast Splittable Pseudorandom Number Generators",
 //! OOPSLA 2014 (<https://doi.org/10.1145/2660193.2660195>), with the constants of Vigna's reference
-//! implementation `splitmix64.c` (<https://prng.di.unimi.it/splitmix64.c>, public domain): the
+//! implementation `splitmix.c` (<https://prng.di.unimi.it/splitmix.c>, public domain): the
 //! golden-ratio increment `0x9e3779b97f4a7c15` and Stafford's "Mix13" output function
 //! (<https://zimbry.blogspot.com/2011/09/better-bit-mixing-improving-on.html>). The unit tests check
 //! it against 50 outputs of that reference implementation. Bounded draws use Lemire's
@@ -32,6 +32,9 @@
 //!
 //! Cost: a handful of integer operations per word. [`SplitMix64::below`] draws one word, and draws
 //! again with probability below `n / 2^64`, so fewer than two words on average.
+//!
+//! Consulted: S. Vigna, `splitmix.c`, public domain, <https://prng.di.unimi.it/splitmix.c>, for the
+//!   generator's constants and the 50 reference outputs the unit tests check. No code copied.
 
 use core::num::NonZeroU64;
 

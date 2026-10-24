@@ -18,6 +18,8 @@
 //! Sections: 24.8 and 24.9; open question OQ-24.6; 30.5, in the kernel architecture
 //! (`projects/engines/geometry/architecture/`).
 //!
+//! Family: Repair.
+//!
 //! Its dependency on `geom-exchange`, for the numbers-to-grid rules, is section 30.5's amendment.
 //! Steps 1 and 2 of 24.9 use certified intersection; the edge to `geom-intersect` is added through
 //! chapter 27's route when this crate's design note shows it.

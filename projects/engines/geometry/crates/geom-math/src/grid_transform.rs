@@ -36,7 +36,7 @@
 //! Groups*, Graduate Texts in Mathematics 231, Springer (2005), section 8.1 (the group `B_n` of
 //! signed permutations), <https://doi.org/10.1007/3-540-27596-7>; chapter 7 of the architecture
 //! names which transforms stay exact
-//! (<https://github.com/spareware-co-op/spareware/blob/piece/G01/projects/engines/geometry/architecture/07-geometry-types.md>).
+//! (`projects/engines/geometry/architecture/07-geometry-types.md`).
 //!
 //! Cost: constant time, no allocation. Applying is, per axis, one pick, an optional negation, one
 //! addition and one range check; composing and inverting rebuild three rows (composing checks

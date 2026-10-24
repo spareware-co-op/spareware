@@ -9,6 +9,12 @@
 //! "the result says so"); it composes and inverts exactly; its classification is decided exactly,
 //! with no tolerance at all.
 //!
+//! Guarantees: a [`RationalTransform`] is exact. Its image of a grid point is computed in exact
+//! integer arithmetic and rounded once, half to even, with whether it was already on the grid; it
+//! composes and inverts exactly; its classification is decided exactly, with no tolerance; equal
+//! transforms have equal fields; and a step its budget proves fits that fails all the same is
+//! reported as [`NumError::BudgetExceeded`], never answered.
+//!
 //! **Canonical form.** d > 0 and gcd(all entries of M, all of t, d) = 1, so equal transforms have
 //! equal fields and `==` is equality of transforms.
 //!

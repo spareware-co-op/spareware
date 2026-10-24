@@ -14,7 +14,7 @@
 //! [`Ord`] (by `hi`, then `lo`) is the order of the values. Every operation ends by restoring this
 //! with an exact [`two_sum`] and replacing a −0 by +0.
 //!
-//! **Guarantees.** With u = 2^−53 (the unit roundoff of binary64), each operation returns the exact
+//! Guarantees: with u = 2^−53 (the unit roundoff of binary64), each operation returns the exact
 //! result of the operation on the exact values of its operands, `r`, within
 //! `|result − r| ≤ B·|r| + A`:
 //!
@@ -71,7 +71,8 @@
 //!   `None` from one is reported as `BudgetExceeded` (exponents, a defect) or `None` (the
 //!   documented range of those two functions). No cast loses a value.
 //!
-//! **Method.** The algorithms are those whose bounds are proven and machine-checked:
+//! Method: the algorithms are those whose bounds are proven and machine-checked (Joldes, Muller and
+//! Popescu 2017, <https://doi.org/10.1145/3121432>, and the other references below):
 //!
 //! - addition, `AccurateDWPlusDW` (JMP Algorithm 6, the QD library's "IEEE addition" of Li et al.)
 //!   and `DWPlusFP` (JMP Algorithm 4, QD's);
@@ -170,7 +171,7 @@
 //!   machine-checked algorithms above, and its scaling by the one in *Range*, which also covers
 //!   subnormal operands and trailing parts.
 //!
-//! **Cost.** Constant time, no allocation, and no loops other than at most three power-of-two
+//! Cost: constant time, no allocation, and no loops other than at most three power-of-two
 //! steps per scaling. Counting `two_sum` as 6 floating-point operations, a fused multiply-add as
 //! one call to [`crate::math::fma`] (one instruction where the processor has one, through `libm`'s
 //! runtime dispatch on x86-64; a correctly rounded integer routine on WebAssembly), and the final

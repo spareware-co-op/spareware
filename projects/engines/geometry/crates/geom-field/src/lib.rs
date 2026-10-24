@@ -19,6 +19,8 @@
 //! Sections: 12.1, 13.17, 16.2, 16.6, 19.7 and 19.14; open questions OQ-12.1 and OQ-16.1, in the
 //! kernel architecture (`projects/engines/geometry/architecture/`).
 //!
+//! Family: Free-form.
+//!
 //! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!

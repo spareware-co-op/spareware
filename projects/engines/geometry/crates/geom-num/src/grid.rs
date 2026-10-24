@@ -16,10 +16,19 @@
 //! ([`GridStep::steps_per`]). One millimetre is 6,400 steps of `Q0` and one inch 162,560, checked
 //! when the crate compiles.
 //!
-//! Refining (coarse to fine) multiplies by 25 per rung and is exact. Coarsening divides by 25 per
-//! rung and rounds to the nearest step; because 25 is odd, an exact tie can never happen, so the
-//! rounding needs no tie rule and is the same everywhere. Every integer step is a checked method,
-//! so nothing here depends on overflow checks being on.
+//! Guarantees: refining (coarse to fine) multiplies by 25 per rung and is exact. Coarsening
+//! divides by 25 per rung and rounds to the nearest step; because 25 is odd, an exact tie can never
+//! happen, so the rounding needs no tie rule and is the same everywhere. Every integer step is a
+//! checked method, so nothing here depends on overflow checks being on.
+//!
+//! Method: the grid ladder of chapter 6.1
+//! (`projects/engines/geometry/architecture/06-numbers.md`): exact scaling by 25 per rung, and
+//! coarsening by Euclidean division rounded to the nearest step (R. T. Boute, "The Euclidean
+//! definition of the functions div and mod", ACM Transactions on Programming Languages and Systems
+//! 14(2), 1992, <https://doi.org/10.1145/128861.128862>), as [`coarsen`] derives.
+//!
+//! Cost: constant and no allocation: each function is a few checked integer operations on `i128`
+//! or `u64`.
 
 use crate::error::NumError;
 

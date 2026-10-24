@@ -61,6 +61,10 @@
 //! and budgets as deterministic fuel, after Wasmtime's fuel metering
 //! (<https://docs.rs/wasmtime/50.0.0/wasmtime/struct.Config.html#method.consume_fuel>). Each module
 //! names the method it follows.
+//! Consulted: rayon, MIT OR Apache-2.0,
+//!   <https://github.com/rayon-rs/rayon/blob/ee0a00bdb1ab039e178a215ad5712fb7fa58e58f/src/iter/mod.rs#L1675-L1680>,
+//!   for the lowest-index rule of `find_first`, which this crate applies to failures. No code
+//!   copied.
 //!
 //! Cost: a helper call runs the function passed in at most once per item (a pool that keeps its
 //! contract runs each chunk once), plus a fixed amount of bookkeeping per item and per chunk. It
