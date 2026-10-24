@@ -13,8 +13,8 @@
 //! be ignored without a word, and a toolchain change made in the file alone would not rerun
 //! `kernel.yml`'s golden hashes: this check fails until all of them change together.
 //!
-//! Method: the TOML key reader in `manifest` for the toolchain file, and a line scan of each
-//! workflow.
+//! Method: the `toml` crate, through `manifest`, for the toolchain file
+//! (<https://docs.rs/toml/0.9.6/toml/>), and a line scan of each workflow.
 //!
 //! Cost: linear in the length of the files.
 
@@ -28,7 +28,7 @@
 )]
 
 use crate::check::{Rule, Violation};
-use crate::manifest::toml_keys;
+use crate::manifest::{keys, strings};
 
 /// The toolchain file's name, at the repository root.
 pub const TOOLCHAIN_FILE: &str = "rust-toolchain.toml";
@@ -49,25 +49,14 @@ fn fault(file: &str, detail: String) -> Violation {
     }
 }
 
-/// The text inside the first pair of quotes of `value`, or `value` itself when unquoted.
+/// The text inside the first pair of quotes of a workflow's value, or the value itself when
+/// unquoted.
 fn unquote(value: &str) -> &str {
     let value = value.trim();
     value
         .strip_prefix(['"', '\''])
         .and_then(|v| v.strip_suffix(['"', '\'']))
         .unwrap_or(value)
-}
-
-/// The items of a one-line TOML array of strings, unquoted.
-fn items(array: &str) -> Vec<&str> {
-    array
-        .trim()
-        .trim_start_matches('[')
-        .trim_end_matches(']')
-        .split(',')
-        .map(unquote)
-        .filter(|item| !item.is_empty())
-        .collect()
 }
 
 /// Whether `channel` is an exact release such as `1.99.0`.
@@ -82,13 +71,14 @@ fn is_exact_release(channel: &str) -> bool {
 /// Checks the toolchain file against the workflows, given as (file name, text).
 pub fn pins(toolchain_file: &str, workflows: &[(&str, &str)]) -> Vec<Violation> {
     let mut found = Vec::new();
-    let Some(keys) = toml_keys(toolchain_file) else {
+    let Some(keys) = keys(toolchain_file) else {
         return vec![fault(TOOLCHAIN_FILE, "it is not TOML".to_owned())];
     };
     let channel = keys
         .get("toolchain.channel")
-        .map(|c| unquote(c).to_owned())
-        .unwrap_or_default();
+        .and_then(|c| c.as_str())
+        .unwrap_or_default()
+        .to_owned();
     if !is_exact_release(&channel) {
         found.push(fault(
             TOOLCHAIN_FILE,
@@ -99,8 +89,8 @@ pub fn pins(toolchain_file: &str, workflows: &[(&str, &str)]) -> Vec<Violation> 
         ("toolchain.components", &COMPONENTS),
         ("toolchain.targets", &TARGETS),
     ] {
-        let listed = keys.get(key).map(|a| items(a)).unwrap_or_default();
-        for item in needed.iter().filter(|item| !listed.contains(*item)) {
+        let listed = keys.get(key).and_then(strings).unwrap_or_default();
+        for item in needed.iter().filter(|item| !listed.iter().any(|l| l == *item)) {
             found.push(fault(TOOLCHAIN_FILE, format!("{key} lacks {item:?}")));
         }
     }

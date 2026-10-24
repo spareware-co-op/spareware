@@ -69,9 +69,6 @@ mod globals;
 #[allow(dead_code)]
 #[path = "scaffold/header.rs"]
 mod header;
-#[allow(dead_code)]
-#[path = "scaffold/json.rs"]
-mod json;
 // The fixer's modules: the record of licence choices, and the rule on lint attributes.
 #[allow(dead_code)]
 #[path = "scaffold/licence.rs"]
@@ -105,7 +102,7 @@ use std::process::Output;
 
 use deny::run::{BANS, Edge, Graph, LICENSES, SOURCES, Seed, published};
 use deny::{FAMILY_CONFIG, NO_STD_CONFIG};
-use json::Json;
+use serde_json::Value;
 
 /// What `gate.rs`'s own tests call to show violations (the scaffold's `main.rs` defines it).
 fn report(violations: &[check::Violation]) -> String {
@@ -138,17 +135,17 @@ fn shown(output: &Output) -> String {
 // ------------------------------------------------------------------ cargo-deny
 
 /// The package named `name` of a `cargo metadata` graph, to change.
-fn package_mut<'a>(json: &'a mut Json, name: &str) -> &'a mut Json {
+fn package_mut<'a>(json: &'a mut Value, name: &str) -> &'a mut Value {
     json.get_mut("packages")
-        .and_then(Json::as_array_mut)
+        .and_then(Value::as_array_mut)
         .unwrap()
         .iter_mut()
-        .find(|p| p.get("name").and_then(Json::as_str) == Some(name))
+        .find(|p| p.get("name").and_then(Value::as_str) == Some(name))
         .unwrap_or_else(|| panic!("no package {name} in the graph"))
 }
 
 /// Sets the existing member `key` of an object.
-fn set(object: &mut Json, key: &str, value: Json) {
+fn set(object: &mut Value, key: &str, value: Value) {
     *object
         .get_mut(key)
         .unwrap_or_else(|| panic!("no member {key}")) = value;
@@ -196,13 +193,13 @@ fn attack_licence_gate_skips_every_crate_marked_publish_false() {
     set(
         package_mut(&mut graph.json, "geom-num"),
         "license",
-        Json::Str("GPL-3.0-only".to_owned()),
+        Value::String("GPL-3.0-only".to_owned()),
     );
     let seeded = ["geom-num", "attack-path-agpl", "attack-private-gpl"];
     // Control: the same three with `publish` unset are refused, so the seeds are sound and the
     // only difference below is `publish = false`.
     for name in seeded {
-        set(package_mut(&mut graph.json, name), "publish", Json::Null);
+        set(package_mut(&mut graph.json, name), "publish", Value::Null);
     }
     let control = graph.deny("attack-g12-private-control", FAMILY_CONFIG, &["licenses"]);
     assert!(
@@ -214,7 +211,7 @@ fn attack_licence_gate_skips_every_crate_marked_publish_false() {
         set(
             package_mut(&mut graph.json, name),
             "publish",
-            Json::Array(Vec::new()),
+            Value::Array(Vec::new()),
         );
     }
     let outcome = graph.deny("attack-g12-private", FAMILY_CONFIG, &["licenses"]);
@@ -243,22 +240,22 @@ fn attack_libm_from_a_path_passes_as_the_registry_crate() {
     deny::run::fetch(&repo::workspace_root());
     let mut graph = Graph::of("geom-num");
     let libm = package_mut(&mut graph.json, "libm");
-    let old_id = libm.get("id").and_then(Json::as_str).unwrap().to_owned();
+    let old_id = libm.get("id").and_then(Value::as_str).unwrap().to_owned();
     let version = libm
         .get("version")
-        .and_then(Json::as_str)
+        .and_then(Value::as_str)
         .unwrap()
         .to_owned();
     assert!(
         libm.get("source")
-            .and_then(Json::as_str)
+            .and_then(Value::as_str)
             .is_some_and(|s| s.contains("crates.io-index")),
         "geom-num's libm does not come from crates.io today"
     );
     let new_id = format!("path+file:///attack/vendor/libm#libm@{version}");
-    let text = graph.json.to_text().replace(&old_id, &new_id);
-    graph.json = json::parse(&text).unwrap();
-    set(package_mut(&mut graph.json, "libm"), "source", Json::Null);
+    let text = graph.json.to_string().replace(&old_id, &new_id);
+    graph.json = serde_json::from_str(&text).unwrap();
+    set(package_mut(&mut graph.json, "libm"), "source", Value::Null);
     let no_std = graph.deny("attack-g12-libm-path-no-std", NO_STD_CONFIG, &["bans"]);
     let family = graph.deny(
         "attack-g12-libm-path-family",
@@ -346,11 +343,8 @@ fn attack_a_group_allowed_at_higher_priority_switches_the_rules_off() {
     let mut lints = observed.packages["geom-num"].lints.clone();
     let tables = lints.tables.as_mut().unwrap();
     for group in ["restriction", "style"] {
-        tables.insert(
-            format!("lints.clippy.{group}.level"),
-            "\"allow\"".to_owned(),
-        );
-        tables.insert(format!("lints.clippy.{group}.priority"), "1".to_owned());
+        tables.insert(format!("lints.clippy.{group}.level"), "allow".into());
+        tables.insert(format!("lints.clippy.{group}.priority"), 1.into());
     }
     let lacks = posture::lacks(&lints);
     // The same settings, end to end.

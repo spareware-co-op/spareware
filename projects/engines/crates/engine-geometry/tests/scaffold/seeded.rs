@@ -36,6 +36,7 @@ use crate::check::{self, CRATES_IO, Dep, DepKind, Observed, Package, Rule, Viola
 use crate::globals::{self, SourceFile, Sources};
 use crate::header::{Field, Header, MARK_27, pending_line};
 use crate::lints::{ClippyConfig, Lints};
+use crate::manifest::{Keys, Value};
 use crate::overrides;
 use crate::posture;
 use crate::source::Attributes;
@@ -186,10 +187,16 @@ fn header(layer: Option<&str>, mark: bool, pending: &[(&str, &str)], status: boo
     Header::parse(&text)
 }
 
-fn settings(entries: &[(&str, &str)]) -> BTreeMap<String, String> {
+/// The TOML value `text` writes (`"deny"`, `true`, `[{ path = "f64::max" }]`).
+fn value(text: &str) -> Value {
+    crate::manifest::keys(&format!("v = {text}\n")).unwrap()["v"].clone()
+}
+
+/// Settings from (key, value as TOML writes it) pairs.
+fn settings(entries: &[(&str, &str)]) -> Keys {
     entries
         .iter()
-        .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+        .map(|(key, text)| ((*key).to_owned(), value(text)))
         .collect()
 }
 
@@ -1047,11 +1054,11 @@ fn workspace_cycle() {
 
 // ---------------------------------------------------------- the lint posture
 
-fn lint_tables<'o>(observed: &'o mut Observed, name: &str) -> &'o mut BTreeMap<String, String> {
+fn lint_tables<'o>(observed: &'o mut Observed, name: &str) -> &'o mut Keys {
     package_mut(observed, name).lints.tables.as_mut().unwrap()
 }
 
-fn clippy_settings<'o>(observed: &'o mut Observed, name: &str) -> &'o mut BTreeMap<String, String> {
+fn clippy_settings<'o>(observed: &'o mut Observed, name: &str) -> &'o mut Keys {
     package_mut(observed, name)
         .lints
         .clippy
@@ -1092,11 +1099,11 @@ fn lint_tables_must_be_the_references_exactly() {
     lint_tables(&mut left_out, "geom-a").remove("lints.clippy.pedantic.level");
     let mut added = good();
     lint_tables(&mut added, "geom-c")
-        .insert("lints.clippy.float_cmp".to_owned(), "\"deny\"".to_owned());
+        .insert("lints.clippy.float_cmp".to_owned(), value("\"deny\""));
     let mut looser = good();
     lint_tables(&mut looser, "engine-geometry").insert(
         "lints.clippy.arithmetic_side_effects".to_owned(),
-        "\"warn\"".to_owned(),
+        value("\"warn\""),
     );
     let mut unreadable = good();
     package_mut(&mut unreadable, "geom-b").lints.tables = None;
@@ -1128,11 +1135,11 @@ fn clippy_config_must_hold_the_references_settings_exactly() {
     let mut changed = good();
     clippy_settings(&mut changed, "geom-c").insert(
         "disallowed-methods".to_owned(),
-        "[{path=\"f64::min\",reason=\"either zero\"}]".to_owned(),
+        value("[{path=\"f64::min\",reason=\"either zero\"}]"),
     );
     let mut added = good();
     clippy_settings(&mut added, "engine-geometry")
-        .insert("allow-panic-in-tests".to_owned(), "true".to_owned());
+        .insert("allow-panic-in-tests".to_owned(), value("true"));
     for (observed, krate) in [
         (none, "geom-a"),
         (unreadable, "geom-b"),
@@ -1157,7 +1164,7 @@ fn a_change_to_the_references_settings_reaches_every_crate_that_ships() {
     let mut observed = good();
     lint_tables(&mut observed, "geom-e").insert(
         "lints.clippy.arithmetic_side_effects".to_owned(),
-        "\"allow\"".to_owned(),
+        value("\"allow\""),
     );
     clippy_settings(&mut observed, "geom-e").remove("disallowed-methods");
     let found = check::workspace(&TABLE, &observed);
@@ -1531,7 +1538,7 @@ fn gate_lints(dir: &[&str], manifest: &str, clippy_toml: &str) -> Lints {
         tables: crate::manifest::lint_settings(manifest),
         clippy: Some(ClippyConfig {
             file,
-            settings: crate::manifest::settings(clippy_toml),
+            settings: crate::manifest::keys(clippy_toml),
         }),
     }
 }

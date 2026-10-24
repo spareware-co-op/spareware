@@ -50,8 +50,6 @@ mod deny;
 mod gate;
 mod globals;
 mod header;
-#[cfg(not(target_family = "wasm"))]
-mod json;
 mod licence;
 mod lints;
 mod manifest;
@@ -297,15 +295,16 @@ fn the_real_check_refuses_a_lint_rule_dropped_from_the_repository() {
         .and_then(|c| c.settings.as_mut())
         .and_then(|s| s.get_mut("disallowed-methods"))
         .unwrap();
-    let sin = "{path=\"f32::sin\",reason=\"platform maths; use geom_num::math (chapter 21)\"},";
-    assert!(methods.contains(sin), "{methods}");
-    *methods = methods.replace(sin, "");
+    let list = methods.as_array_mut().unwrap();
+    let before = list.len();
+    list.retain(|item| item.get("path").and_then(|p| p.as_str()) != Some("f32::sin"));
+    assert_eq!(list.len() + 1, before, "f32::sin is listed once");
     observed
         .packages
         .get_mut("geom-bvh")
         .and_then(|p| p.lints.tables.as_mut())
         .unwrap()
-        .insert("lints.clippy.panic".to_owned(), "\"warn\"".to_owned());
+        .insert("lints.clippy.panic".to_owned(), "warn".into());
     let violations = posture::check(&table::TABLE, &observed);
     let found: Vec<(&str, check::Rule)> = violations
         .iter()

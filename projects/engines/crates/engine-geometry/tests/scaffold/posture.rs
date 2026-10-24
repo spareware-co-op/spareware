@@ -71,8 +71,8 @@
 //! What it guarantees: every crate that ships and lacks any of these is reported, with exactly
 //! what it lacks; settings the reader cannot read are reported too, never passed.
 //!
-//! Method: set comparison over the settings `manifest` reads, the items of each disallowed list
-//! read by `manifest::array_items`; cargo's order of lint flags, from `lints_to_rustflags` in
+//! Method: set comparison over the settings `manifest` reads with the `toml` crate, the items of
+//! each disallowed list read as TOML values; cargo's order of lint flags, from `lints_to_rustflags` in
 //! cargo's `src/workspace/parser/mod.rs` (MIT OR Apache-2.0, read at commit
 //! `ce886c7f2994c7cdfa455786ada6d52a383bca3a`: sorted by priority, then by name in reverse) and
 //! the manifest reference's `priority` ("lower ... numbers have lower priority, being overridden
@@ -95,7 +95,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::check::{Observed, Rule, Violation};
 use crate::lints::{Lints, carries_the_posture};
-use crate::manifest::{array_items, string_text, toml_keys};
+use crate::manifest::{Keys, Value};
 use crate::table::Table;
 
 /// The clippy lints chapter 27 denies in kernel code, the other panic macros (principle 13), and
@@ -200,22 +200,23 @@ pub struct Listed {
     pub allow_invalid: bool,
 }
 
-/// The paths a disallowed list names: each item is a path string or an inline table with a `path`
-/// key (clippy's two forms), with whether it allows an invalid path. `None` when the value cannot
-/// be read so.
-pub fn listed_paths(value: &str) -> Option<BTreeMap<String, Listed>> {
+/// The paths a disallowed list names: each item is a path string or a table with a `path` key
+/// (clippy's two forms), with whether it allows an invalid path. `None` when the value cannot be
+/// read so: not an array, an item of another type, a path that is not a string, or an
+/// `allow-invalid` that is not a boolean.
+pub fn listed_paths(value: &Value) -> Option<BTreeMap<String, Listed>> {
     let mut paths = BTreeMap::new();
-    for item in array_items(value)? {
-        let (path, allow_invalid) = if item.starts_with('{') {
-            let keys = toml_keys(&format!("item = {item}\n"))?;
-            let allow_invalid = match keys.get("item.allow-invalid").map(String::as_str) {
-                None | Some("false") => false,
-                Some("true") => true,
-                Some(_) => return None,
-            };
-            (string_text(keys.get("item.path")?)?, allow_invalid)
-        } else {
-            (string_text(&item)?, false)
+    for item in value.as_array()? {
+        let (path, allow_invalid) = match item {
+            Value::String(path) => (path.clone(), false),
+            Value::Table(table) => {
+                let allow_invalid = match table.get("allow-invalid") {
+                    None => false,
+                    Some(flag) => flag.as_bool()?,
+                };
+                (table.get("path")?.as_str()?.to_owned(), allow_invalid)
+            }
+            _ => return None,
         };
         paths.insert(path, Listed { allow_invalid });
     }
@@ -253,7 +254,7 @@ impl Entry {
 /// The entries of `[lints.clippy]` among a manifest's lint keys, by key; `None` when one cannot be
 /// read: a level that is not one of rustc's four, a priority that is not an integer, or a field
 /// other than `level` and `priority`.
-fn clippy_entries(tables: &BTreeMap<String, String>) -> Option<BTreeMap<String, Entry>> {
+fn clippy_entries(tables: &Keys) -> Option<BTreeMap<String, Entry>> {
     let mut fields: BTreeMap<String, (Option<String>, Option<i64>)> = BTreeMap::new();
     for (key, value) in tables {
         let Some(rest) = key.strip_prefix("lints.clippy.") else {
@@ -266,13 +267,13 @@ fn clippy_entries(tables: &BTreeMap<String, String>) -> Option<BTreeMap<String, 
         };
         let entry = fields.entry(lint.to_owned()).or_default();
         if field == "level" {
-            let level = string_text(value)?;
+            let level = value.as_str()?.to_owned();
             if !["allow", "warn", "deny", "forbid"].contains(&level.as_str()) {
                 return None;
             }
             entry.0 = Some(level);
         } else {
-            entry.1 = Some(value.parse().ok()?);
+            entry.1 = Some(value.as_integer()?);
         }
     }
     fields
@@ -360,7 +361,7 @@ pub fn lacks(lints: &Lints) -> Vec<String> {
             REQUIRED_TYPES.iter().map(|t| (*t).to_owned()).collect(),
         ),
     ] {
-        match settings.get(key).map(|value| listed_paths(value)) {
+        match settings.get(key).map(listed_paths) {
             None => wrong.push(format!("its clippy configuration has no {key}")),
             Some(None) => wrong.push(format!("its clippy configuration's {key} cannot be read")),
             Some(Some(listed)) => {
