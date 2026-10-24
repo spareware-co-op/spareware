@@ -224,8 +224,8 @@ fn rounded_bits(d: &Derivation, input: &str) -> Result<u32, EmitError> {
     }
 }
 
-/// The parameter list: `a: P2, b: P2, c: P2`, or `nx: i128, …, p: P3` with rounded inputs.
-fn params(d: &Derivation, ty: Option<&str>) -> Result<String, EmitError> {
+/// The parameters: `a: P2`, `b: P2`, `c: P2`, or `nx: i128`, …, `p: P3` with rounded inputs.
+fn params(d: &Derivation, ty: Option<&str>) -> Result<Vec<String>, EmitError> {
     let mut parts = Vec::new();
     for i in &d.description.inputs {
         let t = match (&i.kind, ty) {
@@ -238,7 +238,127 @@ fn params(d: &Derivation, ty: Option<&str>) -> Result<String, EmitError> {
         };
         parts.push(format!("{}: {t}", i.name));
     }
-    Ok(parts.join(", "))
+    Ok(parts)
+}
+
+/// A generated function's first line, `pub fn <name>(<parameters>) -> <ret> {`, as rustfmt lays
+/// it out: on one line when it fits [`WIDTH`] columns, and otherwise as rustfmt's default
+/// `fn_params_layout`, `Tall`, writes it, one parameter per line, indented four spaces, each
+/// followed by a comma, and the return type after the closing parenthesis.
+fn signature(out: &mut String, name: &str, parameters: &[String], ret: &str) {
+    let one = format!("pub fn {name}({}) -> {ret} {{", parameters.join(", "));
+    if one.chars().count() <= WIDTH {
+        line(out, &one);
+        return;
+    }
+    line(out, &format!("pub fn {name}("));
+    for p in parameters {
+        line(out, &format!("    {p},"));
+    }
+    line(out, &format!(") -> {ret} {{"));
+}
+
+/// The widest argument list rustfmt keeps on one line in a call: its default `fn_call_width`, 60%
+/// of [`WIDTH`].
+const CALL_ARGS_WIDTH: usize = 60;
+
+/// `exact`'s body, `value(<arguments>).map(<sign>)`, as rustfmt lays it out: on one line when the
+/// line fits [`WIDTH`] columns and the arguments [`CALL_ARGS_WIDTH`]; otherwise the call's
+/// arguments on one line of their own, indented eight spaces and followed by a comma, and the
+/// `.map` on the line after the closing parenthesis, as rustfmt breaks a chain whose arguments are
+/// all names. A list of arguments too long for that one line is refused.
+fn value_call(out: &mut String, arguments: &str, sign: &str) -> Result<(), EmitError> {
+    let one = format!("    value({arguments}).map({sign})");
+    if one.chars().count() <= WIDTH && arguments.chars().count() <= CALL_ARGS_WIDTH {
+        line(out, &one);
+        return Ok(());
+    }
+    let inner = format!("        {arguments},");
+    if inner.chars().count() > WIDTH {
+        return fail(format!(
+            "`exact`'s arguments would pass {WIDTH} columns on a line of their own, which rustfmt \
+             lays out over several lines: {arguments}"
+        ));
+    }
+    line(out, "    value(");
+    line(out, &inner);
+    line(out, "    )");
+    line(out, &format!("    .map({sign})"));
+    Ok(())
+}
+
+/// The lines of the filter that compute its scale. On one line, `let scale = <expression>;`, when
+/// that fits [`WIDTH`] columns and the expression is not a `larger` whose arguments pass
+/// [`CALL_ARGS_WIDTH`]. Otherwise the scale is the largest of several terms, times their common
+/// factor if they have one ([`crate::predicate_derive`]'s scale expression), and it is computed one
+/// term per line: the larger of the first two terms, then the larger of the scale so far and each
+/// further term, then the common factor times the scale. Those are the operations the one-line
+/// expression performs, on the same values, so they give the same `f64` and the same roundings;
+/// the header shows the one-line expression they compute. A scale of another form, or a line that
+/// would still be too long, is refused.
+fn scale_lines(e: &ScaleExpr, groups: &[String]) -> Result<Vec<String>, EmitError> {
+    let whole = scale_rust(e, groups)?;
+    let one = format!("    let scale = {whole};");
+    let call_args_fit = match e {
+        ScaleExpr::Larger(l, r) => {
+            let args = format!("{}, {}", scale_rust(l, groups)?, scale_rust(r, groups)?);
+            args.chars().count() <= CALL_ARGS_WIDTH
+        }
+        _ => true,
+    };
+    if one.chars().count() <= WIDTH && call_args_fit {
+        return Ok(vec![one]);
+    }
+    let (common, largest) = match e {
+        ScaleExpr::Mul(c, l) if matches!(**l, ScaleExpr::Larger(..)) => (Some(&**c), &**l),
+        ScaleExpr::Larger(..) => (None, e),
+        _ => {
+            return fail(format!(
+                "the scale `{whole}` passes {WIDTH} columns and is not the largest of several \
+                 terms"
+            ));
+        }
+    };
+    // The terms of the left-nested `larger(larger(t1, t2), t3)`, in order.
+    let mut terms = Vec::new();
+    let mut at = largest;
+    while let ScaleExpr::Larger(l, r) = at {
+        terms.push(scale_rust(r, groups)?);
+        at = l;
+    }
+    terms.push(scale_rust(at, groups)?);
+    terms.reverse();
+    let mut lines = Vec::new();
+    let mut previous: Option<String> = None;
+    for term in terms {
+        lines.push(match previous {
+            None => {
+                previous = Some(term);
+                continue;
+            }
+            Some(p) => {
+                previous = Some("scale".to_owned());
+                format!("    let scale = larger({p}, {term});")
+            }
+        });
+    }
+    if let Some(c) = common {
+        lines.push(format!(
+            "    let scale = {} * scale;",
+            scale_rust(c, groups)?
+        ));
+    }
+    for l in &lines {
+        let args = l
+            .strip_prefix("    let scale = larger(")
+            .and_then(|a| a.strip_suffix(");"));
+        if l.chars().count() > WIDTH || args.is_some_and(|a| a.chars().count() > CALL_ARGS_WIDTH) {
+            return fail(format!(
+                "a line of the scale would still be laid out over several lines by rustfmt: {l}"
+            ));
+        }
+    }
+    Ok(lines)
 }
 
 /// The argument list: `a, b, c`.
@@ -872,16 +992,15 @@ pub fn predicate_module_serving(
     item_para(&mut out, zero);
     line(&mut out, "#[inline]");
     line(&mut out, "#[must_use]");
+    let scale_code = scale_lines(&d.scale_expr, &groups)?;
     let filter_lines = d
         .steps
         .len()
         .saturating_add(d.groups.len())
-        .saturating_add(2);
+        .saturating_add(scale_code.len())
+        .saturating_add(1);
     allowances(&mut out, d, true, filter_lines);
-    line(
-        &mut out,
-        &format!("pub fn filter({parameters}) -> Option<Sign> {{"),
-    );
+    signature(&mut out, "filter", &parameters, "Option<Sign>");
     for step in &d.steps {
         line(&mut out, &filter_statement(step, d)?);
     }
@@ -900,7 +1019,9 @@ pub fn predicate_module_serving(
             ),
         );
     }
-    line(&mut out, &format!("    let scale = {scale};"));
+    for l in &scale_code {
+        line(&mut out, l);
+    }
     line(
         &mut out,
         &format!("    decide({}, ERROR, scale)", root_step.name),
@@ -924,12 +1045,11 @@ pub fn predicate_module_serving(
     line(&mut out, "#[inline]");
     line(&mut out, "#[must_use]");
     allowances(&mut out, d, true, d.steps.len().saturating_add(1));
-    line(
+    signature(
         &mut out,
-        &format!(
-            "pub fn value({parameters}) -> Option<{}> {{",
-            root.width.rust()
-        ),
+        "value",
+        &parameters,
+        &format!("Option<{}>", root.width.rust()),
     );
     for (step, cert) in d.steps.iter().zip(&d.certs) {
         line(&mut out, &exact_statement(step, cert, d)?);
@@ -944,16 +1064,13 @@ pub fn predicate_module_serving(
     line(&mut out, "#[inline]");
     line(&mut out, "#[must_use]");
     allowances(&mut out, d, false, 1);
-    line(
-        &mut out,
-        &format!("pub fn exact({parameters}) -> Option<Sign> {{"),
-    );
+    signature(&mut out, "exact", &parameters, "Option<Sign>");
     let sign = match root.width {
         Width::I64 => "Sign::of_i64",
         Width::I128 => "Sign::of_i128",
         _ => "|v| v.signum()",
     };
-    line(&mut out, &format!("    value({}).map({sign})", args(d)));
+    value_call(&mut out, &args(d), sign)?;
     line(&mut out, "}");
     // rustfmt would rewrap a longer line of code, and the committed file would then fail
     // `cargo fmt --check`: refuse it here, naming the line.
