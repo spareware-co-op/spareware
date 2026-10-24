@@ -1277,6 +1277,7 @@ dependencies = [
  "geom-num",
  "proptest",
  "serde_json",
+ "toml",
 ]
 
 [[package]]

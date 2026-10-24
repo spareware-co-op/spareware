@@ -71,6 +71,8 @@
 //! - `proptest` 1.12, without its default `fork` and `timeout` features, as in `geom-num`. [`prop`]
 //!   always runs it from a fixed seed, so its operating-system random path is never taken.
 //! - `serde_json` 1.0, to read `cargo metadata`.
+//! - `toml` 0.9.6, so the map reads each crate's `Cargo.toml` as cargo does (piece G12a put it in
+//!   place of a line reader; 29.1).
 //!
 //! Licences of every outside package this crate brings into a build, its own and its dependencies'
 //! on every target (`cargo tree --target all`), each record checked by `tests/licences.rs`. Where a
@@ -79,11 +81,12 @@
 //! - MIT OR Apache-2.0: `proptest`, `bit-set`, `bit-vec`, `bitflags`, `chacha20`, `cfg-if`,
 //!   `cpufeatures`, `libc`, `rand`, `rand_core`, `rand_xorshift`, `getrandom`, `core_detect`,
 //!   `num-traits`, `autocfg`, `regex-syntax`, `unarray`, `serde_json`, `serde`, `serde_core`,
-//!   `serde_derive`, `itoa`, `proc-macro2`, `quote` and `syn`.
+//!   `serde_derive`, `itoa`, `proc-macro2`, `quote`, `syn`, `toml`, `toml_datetime`, `toml_parser`,
+//!   `toml_writer` and `serde_spanned`.
 //! - MIT OR Apache-2.0 OR LGPL-2.1-or-later: `r-efi` (UEFI targets only).
 //! - (MIT OR Apache-2.0) AND Unicode-3.0: `unicode-ident`.
 //! - Unlicense OR MIT: `memchr`.
-//! - MIT: `zmij`.
+//! - MIT: `zmij` and `winnow`.
 #![forbid(unsafe_code)]
 
 pub mod deps;
