@@ -150,7 +150,7 @@ fn note() -> String {
 | Read by | Session A, 2026-10-24 |
 | Written by | Session A, 2026-10-24 |
 | Second review | The approval of the pull request that adds this note |
-| Code written from it | `geom-x`'s `noted` module, by session B, without the source |
+| Code written from it | `projects/engines/geometry/crates/geom-x/src/noted.rs`, by session B, without the source in its context |
 
 ## The problem
 

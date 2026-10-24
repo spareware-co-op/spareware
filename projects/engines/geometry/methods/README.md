@@ -22,7 +22,8 @@ Rule 6 of chapter 29.20 is the authority; this is how each step leaves a record 
 - the pinned link does not name a full commit;
 - a required section is missing, out of order or empty;
 - the note holds a fenced or indented code block (rule 6, step 3: "no code");
-- a module's `Consulted:` record names the note but credits a different licence or another repository than the note's.
+- a module's `Consulted:` record names the note but credits a different licence or another repository than the note's;
+- a module's `Consulted:` record names the note but the note's `Code written from it` field does not record that module's path (step 5's record).
 
 Every note, and every module that names it, is listed in [PROVENANCE.md](../PROVENANCE.md). `TEMPLATE.md` is held to the same fields and sections, so the template and the check cannot drift apart.
 

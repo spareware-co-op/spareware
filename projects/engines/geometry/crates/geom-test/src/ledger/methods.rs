@@ -5,7 +5,7 @@
 //! What it does: [`parse`] reads one note ([`Note`]) and reports where it breaks the template;
 //! [`read`] reads every file of the folder, holding `TEMPLATE.md` to the same fields and sections;
 //! [`check_records`] compares each note with the `Consulted:` records whose `Method note:` line
-//! names it.
+//! names it, and [`check_code_record`] checks that the note records each of those files.
 //!
 //! Why: chapter 29.20, rule 6, has one session read a copyleft source and write a note in plain
 //! words, a second reviewer check it, and a different session write the code from it. The note is
@@ -31,6 +31,9 @@
 //! - **The record credits the source the note describes.** A `Consulted:` record naming the note
 //!   gives the note's licence and links into the note's repository (or, off a code-hosting site,
 //!   to the same file); otherwise the note has a problem, and stop and ask an owner (rule 1).
+//! - **The note records the code written from it.** Every file whose `Consulted:` record names
+//!   the note appears, by its path, in the note's `Code written from it` field (rule 6, step 5:
+//!   the module, the session, and that the source was not in its context).
 //!
 //! Method: chapter 29.20, rule 6, the method-only procedure
 //! (`projects/engines/geometry/architecture/29-sources-licences.md`); headings, fences and
@@ -357,6 +360,27 @@ pub fn check_records(sources: &[Source<'_>], notes: &[Note], problems: &mut Vec<
                     ),
                 });
             }
+        }
+    }
+}
+
+/// Each file whose `Consulted:` record names a note is recorded in that note's
+/// `Code written from it` field by its path, so the note keeps rule 6, step 5's record of every
+/// module written from it; a note no file exists for is the map's problem, not repeated.
+pub fn check_code_record(sources: &[Source<'_>], notes: &[Note], problems: &mut Vec<Problem>) {
+    for (path, files) in named_by(sources) {
+        let Some(note) = notes.iter().find(|n| n.path == path) else {
+            continue;
+        };
+        let record = note.field("Code written from it");
+        for file in files.iter().filter(|f| !record.contains(**f)) {
+            problems.push(Problem {
+                file: note.path.clone(),
+                rule: Rule::Note,
+                message: format!(
+                    "{file} names this note in its Consulted: record, but the note's                      \"Code written from it\" field does not record it: add the module's path,                      the session that wrote it and that the source was not in its context (29.20,                      rule 6, step 5)"
+                ),
+            });
         }
     }
 }

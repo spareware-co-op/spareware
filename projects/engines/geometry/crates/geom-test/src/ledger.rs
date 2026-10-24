@@ -35,11 +35,13 @@
 //!   credits, with its licence, link, method note and what each file consulted it for (rule 4: a
 //!   PORT METHOD module "credits every source it consulted").
 //! - **Every method note keeps the procedure's record.** A note that breaks the template, holds
-//!   code, or is named by a record that credits another licence or repository is a problem
+//!   code, is named by a record that credits another licence or repository, or does not record a
+//!   module whose record names it is a problem
 //!   ([`Rule::Note`]; [`methods`]).
 //! - **Nothing generated from an incomplete map passes.** When the map's headers have problems,
 //!   a record may be missing, so the check reports it ([`Rule::Map`]) and the map's own check names
-//!   each one.
+//!   each one. A source the map lists that no file records, and a file's record that no source of
+//!   the map holds, are [`Rule::Map`] problems too, so no record leaves the ledger in silence.
 //!
 //! Method: regenerate and compare, as the map does ([`crate::map`]) and as chapter 27 keeps every
 //! generated file honest ("Generated code and data have one home",
@@ -292,6 +294,44 @@ fn origin_runs(record: &Value) -> Vec<(String, Vec<String>)> {
     out
 }
 
+/// Reports every disagreement between the map's merged `sources` and the files' records of them:
+/// a source no file records, and a file's record that no source holds. The map writes both from the
+/// same headers, so neither occurs in a map [`crate::map::build`] made; a map edited by hand, or
+/// a change to how the map merges records, would otherwise drop a record from the ledger in
+/// silence.
+fn reconcile(map: &Value, sources: &[Source<'_>], problems: &mut Vec<Problem>) {
+    for source in sources.iter().filter(|s| s.uses.is_empty()) {
+        problems.push(Problem {
+            file: crate::map::MAP_FILE.to_owned(),
+            rule: Rule::Map,
+            message: format!(
+                "the map lists the source {} ({}) but no file's record of it, so the ledger                  cannot say who takes it: run `cargo run -p geom-test --bin map -- write`",
+                source.summary.text("name"),
+                source.summary.text("link")
+            ),
+        });
+    }
+    let listed: Vec<(&str, &str)> = sources
+        .iter()
+        .map(|s| (s.take(), s.summary.text("link")))
+        .collect();
+    for ((take, link), list) in uses(map) {
+        if listed.contains(&(take.as_str(), link.as_str())) {
+            continue;
+        }
+        for used in list {
+            problems.push(Problem {
+                file: used.file.to_owned(),
+                rule: Rule::Map,
+                message: format!(
+                    "the {take} record of {} ({link}) is in no source of the map, so the ledger                      would leave it out: run `cargo run -p geom-test --bin map -- write`",
+                    used.record.text("name")
+                ),
+            });
+        }
+    }
+}
+
 /// Builds `PROVENANCE.md` and `NOTICE` from `input`, with every problem.
 #[must_use]
 pub fn build(input: &Input<'_>) -> Ledger {
@@ -309,10 +349,12 @@ pub fn build(input: &Input<'_>) -> Ledger {
         });
     }
     let sources = sources(input.map);
+    reconcile(input.map, &sources, &mut problems);
     let read_notices = notices::read(input.notices, &mut problems);
     let ports = notices::match_ports(&sources, &read_notices, &mut problems);
     let notes = methods::read(input.notes, &mut problems);
     methods::check_records(&sources, &notes, &mut problems);
+    methods::check_code_record(&sources, &notes, &mut problems);
     let provenance = render::provenance(&sources, &notes);
     let notice = render::notice(&sources, &ports);
     problems.sort();

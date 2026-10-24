@@ -19,20 +19,26 @@
 //! Guarantees:
 //!
 //! - **Every marker of [`markers`] is found, wherever it is**: in code, a comment, a string or a
-//!   data file, matched by words, so punctuation, line breaks inside a phrase and comment markers
-//!   (`//!`, `#`, `*`) do not hide it. A routine name is found as a part of an identifier
-//!   (`ST_pythag`, `smosPythag`), a constant as a value however its literal is written (`1.89e-4`,
-//!   `0.000189`, `1.89E-04_f64`).
+//!   data file, matched by words, so punctuation, line breaks inside a phrase and comment marks
+//!   (`//!`, `#`, `*`, `;`, `--`) do not hide it. A routine name is found as a part of an
+//!   identifier (`ST_pythag`, `smosPythag`), with or without a trailing number or the precision
+//!   prefix of the book's variants (`tqli2`, `dpythag`); a variable name as a word or a part; a
+//!   phrase also when it is written as one identifier (`numerical_recipes`, `takenFromCgal`); a
+//!   description also when a string literal escapes its backslashes (`/\\/\\/`); and a constant
+//!   as a value however its decimal literal is written (`1.89e-4`, `0.000189`, `.000189`,
+//!   `1.89E-04_f64`).
 //! - **A taken-from statement needs a taking phrase and a banned source.** A hit needs a taking
 //!   phrase ([`markers::TAKING`], its two words at most [`markers::TAKING_GAP`] words apart)
 //!   followed within [`markers::WINDOW`] words by a copyleft source's
 //!   name ([`markers::COPYLEFT_SOURCES`]), with no negation in the [`markers::NEGATION_REACH`]
-//!   words before the phrase, so "no code is taken from OCCT" is not a hit and "based on CGAL's
-//!   widening" is.
+//!   words before the phrase and in the same sentence, so "no code is taken from OCCT" is not a
+//!   hit, and "based on CGAL's widening" and "No tests. Taken from CGAL." are.
 //! - **Each hit names its line, category and marker**, in the order they occur; one marker on one
 //!   line is reported once.
 //! - **Words, not meaning.** A marker spelt with look-alike characters, split by punctuation
-//!   inside a word, or paraphrased is not found: rule 7 leaves the rest to review.
+//!   inside a word, built at run time, written as an expression or a hexadecimal float, named
+//!   after the phrase that takes it ("CGAL, from which this was taken"), or paraphrased is not
+//!   found: rule 7 leaves the rest to review.
 //! - **Deterministic.** The same text gives the same hits on every target: words are runs of
 //!   Unicode letters, digits and `_`, compared after lower-casing, and numbers are compared as the
 //!   doubles Rust parses them to, which is exact and the same everywhere.
@@ -138,44 +144,73 @@ impl fmt::Display for Hit {
     }
 }
 
-/// A run of word characters in a text, with the line it is on.
+/// A run of word characters in a text, with the line it is on and the sentence it is in.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Word<'t> {
     text: &'t str,
     line: usize,
+    /// How many sentence marks ([`SENTENCE_MARKS`]) come before it in the text, so two words
+    /// with the same count are in one sentence.
+    sentence: usize,
 }
 
-/// The runs of characters in `text` that `inside` accepts, each with its line.
+/// The characters that end a sentence or a clause, for the reach of a negation: a negation in an
+/// earlier sentence never cancels a taking phrase. A mark that ends no sentence (`e.g.`, a path's
+/// `.rs`) only shortens a negation's reach, so the scan errs towards a hit.
+const SENTENCE_MARKS: [char; 4] = ['.', '!', '?', ';'];
+
+/// The runs of characters in `text` that `inside` accepts, each with its line and sentence.
 fn runs(text: &str, inside: impl Fn(char) -> bool) -> Vec<Word<'_>> {
     let mut out = Vec::new();
     let mut line = 1_usize;
-    let mut start: Option<(usize, usize)> = None;
+    let mut sentence = 0_usize;
+    let mut start: Option<(usize, usize, usize)> = None;
     for (at, c) in text.char_indices() {
         if inside(c) {
-            start.get_or_insert((at, line));
+            start.get_or_insert((at, line, sentence));
         } else {
-            if let Some((from, on)) = start.take()
+            if let Some((from, on, within)) = start.take()
                 && let Some(word) = text.get(from..at)
             {
                 out.push(Word {
                     text: word,
                     line: on,
+                    sentence: within,
                 });
             }
             if c == '\n' {
                 line = line.saturating_add(1);
             }
+            if SENTENCE_MARKS.contains(&c) {
+                sentence = sentence.saturating_add(1);
+            }
         }
     }
-    if let Some((from, on)) = start
+    if let Some((from, on, within)) = start
         && let Some(word) = text.get(from..)
     {
         out.push(Word {
             text: word,
             line: on,
+            sentence: within,
         });
     }
     out
+}
+
+/// Every word of `words` split into its identifier parts ([`identifier_parts`]), each keeping
+/// its word's line and sentence, so `numerical_recipes` and `takenFromCgal` read as phrases.
+fn parts_of<'t>(words: &[Word<'t>]) -> Vec<Word<'t>> {
+    words
+        .iter()
+        .flat_map(|w| {
+            identifier_parts(w.text).into_iter().map(move |part| Word {
+                text: part,
+                line: w.line,
+                sentence: w.sentence,
+            })
+        })
+        .collect()
 }
 
 /// Whether `c` is a word character: a letter, a digit or `_`.
@@ -208,9 +243,11 @@ pub fn identifier_parts(word: &str) -> Vec<&str> {
     out
 }
 
-/// Every number literal in `text`, as the double it denotes, with its literal and line: digits,
-/// an optional fraction, an optional exponent, `_` separators and an optional `f32` or `f64`
-/// suffix, starting where no letter, digit, `_` or `.` comes just before.
+/// Every decimal number literal in `text`, as the double it denotes, with its literal and line:
+/// digits, an optional fraction, an optional exponent, `_` separators and any suffix (`f64`, C's
+/// `f` or `L`), starting where no letter, digit, `_` or `.` comes just before; a literal may open
+/// with its point (`.000189`, as C writes it). Hexadecimal float literals (C's `0x1.8p-13`) are not
+/// read.
 fn numbers(text: &str) -> Vec<(f64, &str, usize)> {
     let bytes = text.as_bytes();
     let mut out = Vec::new();
@@ -220,7 +257,9 @@ fn numbers(text: &str) -> Vec<(f64, &str, usize)> {
         if b == b'\n' {
             line = line.saturating_add(1);
         }
-        let starts = b.is_ascii_digit()
+        let opens_with_point =
+            b == b'.' && bytes.get(at.saturating_add(1)).is_some_and(u8::is_ascii_digit);
+        let starts = (b.is_ascii_digit() || opens_with_point)
             && at
                 .checked_sub(1)
                 .and_then(|p| bytes.get(p))
@@ -255,7 +294,10 @@ fn numbers(text: &str) -> Vec<(f64, &str, usize)> {
             end = end.saturating_sub(1);
         }
         if let Some(literal) = text.get(at..end) {
-            let cleaned: String = literal.chars().filter(|c| *c != '_').collect();
+            let mut cleaned: String = literal.chars().filter(|c| *c != '_').collect();
+            if cleaned.starts_with('.') {
+                cleaned.insert(0, '0');
+            }
             if let Ok(value) = cleaned.parse::<f64>() {
                 out.push((value, literal, line));
             }
@@ -298,54 +340,28 @@ pub fn scan_text(text: &str) -> Vec<Hit> {
     let mut hits = Vec::new();
     let words = runs(text, word_char);
     let lower: Vec<String> = words.iter().map(|w| w.text.to_lowercase()).collect();
-    let mut add = |line: usize, category: Category, marker: String| {
-        hits.push(Hit {
-            line,
-            category,
-            marker,
-        });
-    };
 
     for (k, word) in words.iter().enumerate() {
         let low = lower.get(k).map_or("", String::as_str);
-        if markers::NR_MACROS_EXACT.contains(&word.text) {
-            add(word.line, Category::NumericalRecipes, word.text.to_owned());
-        }
-        if markers::NR_VARIABLES.contains(&low) {
-            add(word.line, Category::NumericalRecipes, word.text.to_owned());
-        }
-        if identifier_parts(word.text).iter().any(|part| is_nr_name(part)) {
-            add(word.line, Category::NumericalRecipes, word.text.to_owned());
+        let parts = identifier_parts(word.text);
+        let mut nr = markers::NR_MACROS_EXACT.contains(&word.text);
+        nr |= markers::NR_VARIABLES.contains(&low);
+        nr |= parts
+            .iter()
+            .any(|part| markers::NR_VARIABLES.contains(&part.to_lowercase().as_str()));
+        nr |= parts.iter().any(|part| is_nr_name(part));
+        if nr {
+            hits.push(hit(word.line, Category::NumericalRecipes, word.text));
         }
         if is_acad_iso(low) {
-            add(word.line, Category::AcadPattern, word.text.to_owned());
-        }
-        let phrase_hit = |phrases: &[&[&str]]| {
-            phrases
-                .iter()
-                .find(|p| phrase_at(&lower, k, p))
-                .map(|p| join_words(&words, k, p.len()))
-        };
-        if let Some(found) = phrase_hit(&markers::NR_PHRASES) {
-            add(word.line, Category::NumericalRecipes, found);
-        }
-        if let Some(found) = phrase_hit(&markers::COPYLEFT_NOTICES) {
-            add(word.line, Category::CopyleftNotice, found);
-        }
-        if let Some(after) = taking_end(&lower, k) {
-            let negated = negates(&lower, k);
-            let source = (after..after.saturating_add(markers::WINDOW)).find_map(|s| {
-                markers::COPYLEFT_SOURCES
-                    .iter()
-                    .find(|p| phrase_at(&lower, s, p))
-                    .map(|p| (s, p.len()))
-            });
-            if !negated && let Some((s, len)) = source {
-                let span = s.saturating_add(len).saturating_sub(k);
-                add(word.line, Category::TakenFromCopyleft, join_words(&words, k, span));
-            }
+            hits.push(hit(word.line, Category::AcadPattern, word.text));
         }
     }
+
+    // Phrases, on the words as written and again on their identifier parts, so a phrase written as
+    // one identifier (`numerical_recipes`, `takenFromCgal`) is found too.
+    phrases(&words, &mut hits);
+    phrases(&parts_of(&words), &mut hits);
 
     for term in runs(text, |c| word_char(c) || c == '-') {
         let bare = term.text.trim_matches(['-', '_']).replace('_', "-");
@@ -353,25 +369,31 @@ pub fn scan_text(text: &str) -> Vec<Hit> {
             .iter()
             .any(|p| p.eq_ignore_ascii_case(&bare))
         {
-            add(term.line, Category::AcadPattern, term.text.trim_matches(['-', '_']).to_owned());
+            hits.push(hit(
+                term.line,
+                Category::AcadPattern,
+                term.text.trim_matches(['-', '_']),
+            ));
         }
     }
 
-    let (flat, lines) = flatten(text);
-    for description in markers::ACAD_DESCRIPTIONS {
-        let (wanted, _) = flatten(description);
-        let mut from = 0_usize;
-        while let Some(found) = flat.get(from..).and_then(|rest| rest.find(&wanted)) {
-            let at = from.saturating_add(found);
-            let line = lines.get(at).copied().unwrap_or(1);
-            add(line, Category::AcadPattern, description.to_owned());
-            from = at.saturating_add(wanted.len().max(1));
+    for marks in [CommentMarks::Spaced, CommentMarks::Any] {
+        let (flat, lines) = flatten(text, marks);
+        for description in markers::ACAD_DESCRIPTIONS {
+            let (wanted, _) = flatten(description, marks);
+            let mut from = 0_usize;
+            while let Some(found) = flat.get(from..).and_then(|rest| rest.find(&wanted)) {
+                let at = from.saturating_add(found);
+                let line = lines.get(at).copied().unwrap_or(1);
+                hits.push(hit(line, Category::AcadPattern, description));
+                from = at.saturating_add(wanted.len().max(1));
+            }
         }
     }
 
     for (value, literal, line) in numbers(text) {
         if markers::NR_VALUES.contains(&value) {
-            add(line, Category::NumericalRecipes, literal.to_owned());
+            hits.push(hit(line, Category::NumericalRecipes, literal));
         }
     }
 
@@ -380,13 +402,70 @@ pub fn scan_text(text: &str) -> Vec<Hit> {
     hits
 }
 
+/// A hit.
+fn hit(line: usize, category: Category, marker: &str) -> Hit {
+    Hit {
+        line,
+        category,
+        marker: marker.to_owned(),
+    }
+}
+
+/// Every phrase marker in `words`: the book's name and authors, copyleft notices, and taking
+/// phrases followed by a copyleft source's name, each found at the word it starts on.
+fn phrases(words: &[Word<'_>], hits: &mut Vec<Hit>) {
+    let lower: Vec<String> = words.iter().map(|w| w.text.to_lowercase()).collect();
+    for (k, word) in words.iter().enumerate() {
+        let phrase_hit = |list: &[&[&str]]| {
+            list.iter()
+                .find(|p| phrase_at(&lower, k, p))
+                .map(|p| join_words(words, k, p.len()))
+        };
+        if let Some(found) = phrase_hit(&markers::NR_PHRASES) {
+            hits.push(hit(word.line, Category::NumericalRecipes, &found));
+        }
+        if let Some(found) = phrase_hit(&markers::COPYLEFT_NOTICES) {
+            hits.push(hit(word.line, Category::CopyleftNotice, &found));
+        }
+        if let Some(after) = taking_end(&lower, k) {
+            let source = (after..after.saturating_add(markers::WINDOW)).find_map(|s| {
+                markers::COPYLEFT_SOURCES
+                    .iter()
+                    .find(|p| phrase_at(&lower, s, p))
+                    .map(|p| (s, p.len()))
+            });
+            if !negates(words, &lower, k)
+                && let Some((s, len)) = source
+            {
+                let span = s.saturating_add(len).saturating_sub(k);
+                hits.push(hit(
+                    word.line,
+                    Category::TakenFromCopyleft,
+                    &join_words(words, k, span),
+                ));
+            }
+        }
+    }
+}
+
+/// The prefixes of the book's single- and double-precision variants of a routine (`dpythag`,
+/// `spythag`), which a part may carry before the routine's name.
+const PRECISION_PREFIXES: [char; 2] = ['d', 's'];
+
 /// Whether an identifier part is a Numerical Recipes routine or macro name, ignoring case: the
-/// part itself, or the part without trailing digits (`tqli2` is `tqli`; `tred2` is itself a name).
+/// part itself, the part without trailing digits (`tqli2` is `tqli`; `tred2` is itself a name),
+/// or either without a precision prefix (`dpythag` is `pythag`).
 fn is_nr_name(part: &str) -> bool {
     let lower = part.to_lowercase();
-    let stem = lower.trim_end_matches(|c: char| c.is_ascii_digit());
-    [lower.as_str(), stem].iter().any(|name| {
-        markers::NR_ROUTINES.contains(name)
+    let stem = lower.trim_end_matches(|c: char| c.is_ascii_digit()).to_owned();
+    let mut names = vec![lower.clone(), stem.clone()];
+    for name in [&lower, &stem] {
+        if let Some(rest) = name.strip_prefix(PRECISION_PREFIXES) {
+            names.push(rest.to_owned());
+        }
+    }
+    names.iter().any(|name| {
+        markers::NR_ROUTINES.contains(&name.as_str())
             || markers::NR_MACROS
                 .iter()
                 .any(|m| m.eq_ignore_ascii_case(name))
@@ -394,24 +473,41 @@ fn is_nr_name(part: &str) -> bool {
 }
 
 /// Whether the taking phrase at word `at` is cancelled by a negation in the
-/// [`markers::NEGATION_REACH`] words before it, one not followed by a limiting word such as
-/// "only" ("no code is taken from" is cancelled; "not only taken from" is not).
-fn negates(words: &[String], at: usize) -> bool {
+/// [`markers::NEGATION_REACH`] words before it, in the same sentence ([`SENTENCE_MARKS`]), one not
+/// followed by a limiting word such as "only" ("no code is taken from" is cancelled; "not only
+/// taken from" is not, and neither is "No tests. Taken from").
+fn negates(words: &[Word<'_>], lower: &[String], at: usize) -> bool {
+    let sentence = words.get(at).map(|w| w.sentence);
     let start = at.saturating_sub(markers::NEGATION_REACH);
     (start..at).any(|k| {
-        words
-            .get(k)
-            .is_some_and(|w| markers::NEGATIONS.contains(&w.as_str()))
-            && !words
+        words.get(k).map(|w| w.sentence) == sentence
+            && lower
+                .get(k)
+                .is_some_and(|w| markers::NEGATIONS.contains(&w.as_str()))
+            && !lower
                 .get(k.saturating_add(1))
                 .is_some_and(|w| markers::NEGATION_LIMITS.contains(&w.as_str()))
     })
 }
 
-/// `text` lower-cased, with every run of white space and comment-marker punctuation between
-/// lines (`//!`, `///`, `//`, `#`, `*` at a line's start) read as one space, and the line of each
-/// byte of the result.
-fn flatten(text: &str) -> (String, Vec<usize>) {
+/// The punctuation that opens a comment or a quoted line in the languages and files the scan reads
+/// (`//!`, `///`, `#`, `*`, `;`, `--`, `%`, `>`), which [`flatten`] drops from a line's start.
+const COMMENT_MARKS: [char; 8] = ['/', '!', '#', '*', ';', '-', '%', '>'];
+
+/// Which run of [`COMMENT_MARKS`] at a line's start [`flatten`] drops.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CommentMarks {
+    /// Only a run followed by white space or the line's end, as comments are written (`// a`), so
+    /// a line that opens with marker-like text (`/\/\/`) keeps it.
+    Spaced,
+    /// Any run, so a comment written without a space (`//a`) is dropped too.
+    Any,
+}
+
+/// `text` lower-cased, with every run of white space and the comment marks at each line's start
+/// (`marks`) read as one space, every run of backslashes read as one (a string literal's escape,
+/// `\\`, reads as the backslash it writes), and the line of each byte of the result.
+fn flatten(text: &str, marks: CommentMarks) -> (String, Vec<usize>) {
     let mut out = String::new();
     let mut lines = Vec::new();
     let mut line = 1_usize;
@@ -421,13 +517,19 @@ fn flatten(text: &str) -> (String, Vec<usize>) {
             line = line.saturating_add(1);
             pending_space = true;
         }
-        let body = raw
-            .trim_start()
-            .trim_start_matches(['/', '!', '#', '*'])
-            .trim_start();
+        let trimmed = raw.trim_start();
+        let rest = trimmed.trim_start_matches(COMMENT_MARKS);
+        let drop = match marks {
+            CommentMarks::Any => true,
+            CommentMarks::Spaced => rest.chars().next().is_none_or(char::is_whitespace),
+        };
+        let body = if drop { rest.trim_start() } else { trimmed };
         for c in body.chars() {
             if c.is_whitespace() {
                 pending_space = true;
+                continue;
+            }
+            if c == '\\' && !pending_space && out.ends_with('\\') {
                 continue;
             }
             if pending_space && !out.is_empty() {
