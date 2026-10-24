@@ -664,7 +664,7 @@
   "phase": "Phase 2",
   "crate": "geom-nurbs",
   "size": "Large",
-  "done_when": "The NURBS Book A2 to A5 (basis, derivatives, evaluation, knot insertion, refinement and removal, degree elevation and reduction, Bezier extraction) on our types, NLib consulted as method with notices kept; agreement with the exact rational reference; benchmark per algorithm.",
+  "done_when": "The NURBS Book A2 to A5 (basis, derivatives, evaluation, knot insertion, refinement and removal, degree elevation and reduction, Bezier extraction) on our types, NLib followed closely or ported with its notices kept and its Numerical Recipes routines excluded (29.5, 32.8); agreement with the exact rational reference; benchmark per algorithm.",
   "depends_on": [
    "G45",
    "G16"
