@@ -349,7 +349,7 @@ pub fn scan_text(text: &str) -> Vec<Hit> {
         nr |= parts
             .iter()
             .any(|part| markers::NR_VARIABLES.contains(&part.to_lowercase().as_str()));
-        nr |= parts.iter().any(|part| is_nr_name(part));
+        nr |= is_nr_name(word.text) || parts.iter().any(|part| is_nr_name(part));
         if nr {
             hits.push(hit(word.line, Category::NumericalRecipes, word.text));
         }
@@ -453,19 +453,22 @@ fn phrases(words: &[Word<'_>], hits: &mut Vec<Hit>) {
 const PRECISION_PREFIXES: [char; 2] = ['d', 's'];
 
 /// Whether an identifier part is a Numerical Recipes routine or macro name, ignoring case: the
-/// part itself, the part without trailing digits (`tqli2` is `tqli`; `tred2` is itself a name),
-/// or either without a precision prefix (`dpythag` is `pythag`).
+/// part itself or the part with any number of its trailing digits dropped (`tqli2` is `tqli`;
+/// `tred2` is itself a name, and `tred22` is `tred2`), each also without a precision prefix
+/// (`dpythag` is `pythag`).
 fn is_nr_name(part: &str) -> bool {
     let lower = part.to_lowercase();
-    let stem = lower.trim_end_matches(|c: char| c.is_ascii_digit()).to_owned();
-    let mut names = vec![lower.clone(), stem.clone()];
-    for name in [&lower, &stem] {
-        if let Some(rest) = name.strip_prefix(PRECISION_PREFIXES) {
-            names.push(rest.to_owned());
-        }
-    }
+    let stem = lower.trim_end_matches(|c: char| c.is_ascii_digit());
+    let mut names: Vec<&str> = (stem.len()..=lower.len())
+        .filter_map(|end| lower.get(..end))
+        .collect();
+    let unprefixed: Vec<&str> = names
+        .iter()
+        .filter_map(|name| name.strip_prefix(PRECISION_PREFIXES))
+        .collect();
+    names.extend(unprefixed);
     names.iter().any(|name| {
-        markers::NR_ROUTINES.contains(&name.as_str())
+        markers::NR_ROUTINES.contains(name)
             || markers::NR_MACROS
                 .iter()
                 .any(|m| m.eq_ignore_ascii_case(name))

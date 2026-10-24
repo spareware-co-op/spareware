@@ -9,10 +9,13 @@
 //! Guarantees:
 //!
 //! - **Every file, every kind.** Every regular file under the scanned folders is read, whatever its
-//!   name or extension (source, manifest, data, fixture), as UTF-8 with any invalid byte replaced,
-//!   so a marker in ASCII is found even in a binary file. Folders named `target` (build output) are
-//!   the only ones skipped. A symbolic link or junction is reported, never followed or skipped, and
-//!   so is a folder deeper than [`MAX_DEPTH`].
+//!   name or extension (source, manifest, data, fixture), in every reading [`readings`] gives: as
+//!   UTF-8 with any invalid byte replaced, so a marker in ASCII is found even in a binary file; as
+//!   UTF-16 when the file opens with a UTF-16 byte-order mark; and, when it holds a zero byte,
+//!   again with its zero bytes dropped, so text stored as UTF-16 without a mark is read too. A
+//!   file's hits are those of all its readings. Folders named `target` (build output) are the only
+//!   ones skipped. A symbolic link or junction is reported, never followed or skipped, and so is a
+//!   folder deeper than [`MAX_DEPTH`].
 //! - **Exemptions are named, few and cannot rot.** A file in [`EXEMPT`] (or the list a test
 //!   passes) is not reported, but each exemption must name a file that exists and still holds a
 //!   hit; otherwise the exemption itself is a finding. Only the scanner's own marker tables and
@@ -114,8 +117,34 @@ fn error(path: &Path, e: &io::Error) -> MapError {
     }
 }
 
-/// One scanned file: its path relative to the root, and its text or why it cannot be read.
-pub type Scanned = (String, Result<String, String>);
+/// One scanned file: its path relative to the root, and its readings ([`readings`]) or why it
+/// cannot be read.
+pub type Scanned = (String, Result<Vec<String>, String>);
+
+/// Every reading of a file's bytes as text: UTF-8 with invalid bytes replaced; UTF-16 (little- or
+/// big-endian) when the bytes open with its byte-order mark; and UTF-8 with every zero byte
+/// dropped when there is one, which reads ASCII text stored as UTF-16 without a mark.
+#[must_use]
+pub fn readings(bytes: &[u8]) -> Vec<String> {
+    let mut out = vec![String::from_utf8_lossy(bytes).into_owned()];
+    let utf16 = |rest: &[u8], unit: fn([u8; 2]) -> u16| -> String {
+        let units = rest
+            .chunks_exact(2)
+            .map(|pair| unit([pair.first().copied().unwrap_or(0), pair.get(1).copied().unwrap_or(0)]));
+        char::decode_utf16(units)
+            .map(|c| c.unwrap_or(char::REPLACEMENT_CHARACTER))
+            .collect()
+    };
+    if let Some(rest) = bytes.strip_prefix(&[0xff, 0xfe]) {
+        out.push(utf16(rest, u16::from_le_bytes));
+    } else if let Some(rest) = bytes.strip_prefix(&[0xfe, 0xff]) {
+        out.push(utf16(rest, u16::from_be_bytes));
+    } else if bytes.contains(&0) {
+        let kept: Vec<u8> = bytes.iter().copied().filter(|b| *b != 0).collect();
+        out.push(String::from_utf8_lossy(&kept).into_owned());
+    }
+    out
+}
 
 /// Every file under `folder` (relative to `root`), in path order, skipping build output.
 fn walk(root: &Path, folder: &str, out: &mut Vec<Scanned>) -> Result<(), MapError> {
@@ -149,7 +178,7 @@ fn walk(root: &Path, folder: &str, out: &mut Vec<Scanned>) -> Result<(), MapErro
                 }
             } else {
                 let bytes = fs::read(&path).map_err(|e| error(&path, &e))?;
-                out.push((child, Ok(String::from_utf8_lossy(&bytes).into_owned())));
+                out.push((child, Ok(readings(&bytes))));
             }
         }
     }
@@ -197,8 +226,8 @@ pub fn scan_files(files: &[Scanned], exempt: &[Exempt]) -> Vec<Finding> {
     let mut findings = Vec::new();
     let mut applied = vec![false; exempt.len()];
     for (path, text) in files {
-        let text = match text {
-            Ok(text) => text,
+        let texts = match text {
+            Ok(texts) => texts,
             Err(why) => {
                 findings.push(Finding {
                     file: path.clone(),
@@ -207,7 +236,9 @@ pub fn scan_files(files: &[Scanned], exempt: &[Exempt]) -> Vec<Finding> {
                 continue;
             }
         };
-        let hits = scan_text(text);
+        let mut hits: Vec<Hit> = texts.iter().flat_map(|t| scan_text(t)).collect();
+        hits.sort();
+        hits.dedup();
         match exempt.iter().position(|e| e.file == path) {
             Some(k) => {
                 if let Some(flag) = applied.get_mut(k) {
