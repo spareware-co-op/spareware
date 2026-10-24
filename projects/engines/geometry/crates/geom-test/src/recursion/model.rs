@@ -239,6 +239,9 @@ pub enum ItemKind {
         defaults: BTreeMap<String, NodeId>,
         /// Every method it declares.
         methods: BTreeSet<String>,
+        /// Every method's signature, with the scope its types are read in (the trait's, with the
+        /// method's own generic parameters).
+        sigs: BTreeMap<String, (syn::Signature, Scope)>,
     },
     /// A type alias.
     Alias {
@@ -780,7 +783,8 @@ impl Loader<'_> {
             return;
         }
         match item {
-            syn::Item::Fn(f) => {
+            syn::Item::Fn(mut f) => {
+                lift_impl_params(&mut f.sig);
                 let name = f.sig.ident.to_string();
                 let mut scope = self.base_scope(module);
                 self.declare_generics(&mut scope, &f.sig.generics);
@@ -856,6 +860,7 @@ impl Loader<'_> {
                         supertraits: t.bounds.iter().cloned().collect(),
                         defaults: BTreeMap::new(),
                         methods: BTreeSet::new(),
+                        sigs: BTreeMap::new(),
                     },
                     scope,
                     line,
@@ -1051,6 +1056,7 @@ impl Loader<'_> {
                 supertraits: t.supertraits.iter().cloned().collect(),
                 defaults: BTreeMap::new(),
                 methods: BTreeSet::new(),
+                sigs: BTreeMap::new(),
             },
             scope: scope.clone(),
             line,
@@ -1070,6 +1076,7 @@ impl Loader<'_> {
         }
         let mut defaults = BTreeMap::new();
         let mut methods = BTreeSet::new();
+        let mut sigs = BTreeMap::new();
         for ti in &t.items {
             let syn::TraitItem::Fn(f) = ti else {
                 continue;
@@ -1077,13 +1084,16 @@ impl Loader<'_> {
             if !cfg::ships(&f.attrs) {
                 continue;
             }
-            let mname = f.sig.ident.to_string();
+            let mut sig = f.sig.clone();
+            lift_impl_params(&mut sig);
+            let mname = sig.ident.to_string();
             methods.insert(mname.clone());
+            let mut fscope = scope.clone();
+            self.declare_generics(&mut fscope, &sig.generics);
+            sigs.insert(mname.clone(), (sig.clone(), fscope.clone()));
             let Some(block) = &f.default else {
                 continue;
             };
-            let mut fscope = scope.clone();
-            self.declare_generics(&mut fscope, &f.sig.generics);
             let node = self.new_node(Node {
                 kind: NodeKind::TraitDefault(id),
                 name: format!("{}::{mname}", self.path_of(module, &name)),
@@ -1091,7 +1101,7 @@ impl Loader<'_> {
                 scope: fscope,
                 file: file.to_owned(),
                 line: line_of(f),
-                sig: Some(f.sig.clone()),
+                sig: Some(sig),
                 body: Some(block.clone()),
                 krate: self.program.module(module).krate,
             });
@@ -1103,6 +1113,7 @@ impl Loader<'_> {
                 ItemKind::Trait {
                     defaults: d,
                     methods: m,
+                    sigs: s,
                     ..
                 },
             ..
@@ -1110,6 +1121,7 @@ impl Loader<'_> {
         {
             *d = defaults;
             *m = methods;
+            *s = sigs;
         }
     }
 
@@ -1148,9 +1160,11 @@ impl Loader<'_> {
                     if !cfg::ships(&f.attrs) {
                         continue;
                     }
-                    let mname = f.sig.ident.to_string();
+                    let mut sig = f.sig.clone();
+                    lift_impl_params(&mut sig);
+                    let mname = sig.ident.to_string();
                     let mut fscope = scope.clone();
-                    self.declare_generics(&mut fscope, &f.sig.generics);
+                    self.declare_generics(&mut fscope, &sig.generics);
                     let node = self.new_node(Node {
                         kind: NodeKind::Method(id),
                         name: String::new(),
@@ -1158,7 +1172,7 @@ impl Loader<'_> {
                         scope: fscope,
                         file: file.to_owned(),
                         line: line_of(f),
-                        sig: Some(f.sig.clone()),
+                        sig: Some(sig),
                         body: Some(f.block.clone()),
                         krate: self.program.module(module).krate,
                     });
@@ -1319,6 +1333,36 @@ struct ItemFinder {
 impl<'ast> Visit<'ast> for ItemFinder {
     fn visit_item(&mut self, item: &'ast syn::Item) {
         self.items.push(item.clone());
+    }
+}
+
+/// Makes every `impl Trait` in a function's parameter types a generic parameter of its own, as
+/// the language defines it (an anonymous type parameter, The Rust Reference, "Impl trait type",
+/// <https://doc.rust-lang.org/reference/types/impl-trait.html#anonymous-type-parameters>): each
+/// becomes a parameter named `__impl<n>` with the same bounds, so a call fixes it as it fixes any
+/// other.
+pub fn lift_impl_params(sig: &mut syn::Signature) {
+    struct Lift {
+        found: Vec<(syn::Ident, syn::punctuated::Punctuated<syn::TypeParamBound, syn::Token![+]>)>,
+    }
+    impl syn::visit_mut::VisitMut for Lift {
+        fn visit_type_mut(&mut self, ty: &mut syn::Type) {
+            syn::visit_mut::visit_type_mut(self, ty);
+            if let syn::Type::ImplTrait(it) = ty {
+                let ident = quote::format_ident!("__impl{}", self.found.len());
+                self.found.push((ident.clone(), it.bounds.clone()));
+                *ty = syn::parse_quote!(#ident);
+            }
+        }
+    }
+    let mut lift = Lift { found: Vec::new() };
+    for input in &mut sig.inputs {
+        if let syn::FnArg::Typed(pt) = input {
+            syn::visit_mut::VisitMut::visit_type_mut(&mut lift, &mut pt.ty);
+        }
+    }
+    for (ident, bounds) in lift.found {
+        sig.generics.params.push(syn::parse_quote!(#ident: #bounds));
     }
 }
 

@@ -12,9 +12,9 @@
 //! and its statement or "no stated bound") and every recursive type, and exits 0 unless the code
 //! cannot be read; `check` prints every problem and exits 1 if there is any; `gate` runs `check`,
 //! then every bound test on the small stack in debug and release and the probes, and exits 1 if
-//! anything failed; `path` prints a shortest cycle through the named function, each call with how
-//! it was found (by path, by the receiver's type, through a bound, by name, ...), to show why it
-//! is recursive. Exit code 2 is a usage error or a workspace that cannot be read. None of them
+//! anything failed; `path` prints a shortest path round a cycle holding the named function, each
+//! call with how it was found (by path, on the receiver's type, through a bound, through a value,
+//! as a callback of outside code, ...), to show why it is recursive. Exit code 2 is a usage error or a workspace that cannot be read. None of them
 //! writes anything in the repository; `gate` builds in `target/recursion-stack`.
 //!
 //! Method: none; it parses its arguments and calls [`geom_test::recursion`], whose module headers
@@ -125,21 +125,23 @@ fn parse(args: Vec<String>) -> Result<(Command, Option<PathBuf>, Runner, Option<
     Ok((command, root, runner.unwrap_or(Runner::Wasmtime), function))
 }
 
-/// Prints a shortest cycle through the function named `name` (its full name as listed, or the
-/// end of it).
+/// Prints a shortest path round a cycle that holds the function named `name` (its full name as
+/// listed, or the end of it).
 fn path(report: &Report, name: &str) -> ExitCode {
-    let found = report.cycles.iter().find_map(|c| {
-        c.nodes
+    let found = report.cycles.iter().find(|c| {
+        c.members
             .iter()
-            .find(|n| report.graph.node(**n).is_some_and(|g| g.name == name || g.name.ends_with(&format!("::{name}"))))
-            .map(|n| (c, *n))
+            .any(|m| m == name || m.ends_with(&format!("::{name}")))
     });
-    let Some((cycle, start)) = found else {
+    let Some(cycle) = found else {
         println!("recursion path: `{name}` is in no recursive cycle");
         return ExitCode::SUCCESS;
     };
-    println!("recursion path: a shortest cycle through `{name}`:");
-    for (n, site) in report.graph.path_from(start, &cycle.edges) {
+    println!(
+        "recursion path: a cycle holding `{name}` ({}):",
+        cycle.members.iter().map(|m| format!("`{m}`")).collect::<Vec<_>>().join(", ")
+    );
+    for (n, site) in &cycle.path {
         println!("    {n}\n        calls on at {}:{}, {}", site.file, site.line, site.how);
     }
     ExitCode::SUCCESS
@@ -148,8 +150,8 @@ fn path(report: &Report, name: &str) -> ExitCode {
 /// Prints every cycle and recursive type.
 fn list(report: &Report) {
     println!(
-        "recursion list: {} functions, closures and derived implementations; {} edges",
-        report.functions, report.edges
+        "recursion list: {} functions read; {} instances; {} edges",
+        report.functions, report.instances, report.edges
     );
     for (i, c) in report.cycles.iter().enumerate() {
         let members: Vec<String> = c.members.iter().map(|m| format!("`{m}`")).collect();

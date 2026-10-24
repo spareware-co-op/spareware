@@ -362,6 +362,12 @@ impl<'p> Resolver<'p> {
     }
 
     /// The type arguments of a path segment (`Vec<T>`: `T`; `Fn(A, B) -> C`: `A`, `B`).
+    /// The type arguments written on one path segment, in `scope`.
+    #[must_use]
+    pub fn segment_args(&self, scope: &Scope, seg: &syn::PathSegment) -> Vec<Ty> {
+        self.args(scope, seg, 0)
+    }
+
     fn args(&self, scope: &Scope, seg: &syn::PathSegment, depth: usize) -> Vec<Ty> {
         match &seg.arguments {
             syn::PathArguments::AngleBracketed(a) => a
@@ -391,20 +397,21 @@ impl<'p> Resolver<'p> {
     )]
     fn ty_at(&self, scope: &Scope, ty: &syn::Type, depth: usize) -> Ty {
         if depth > ALIAS_DEPTH {
-            return Ty::Unknown;
+            return Ty::unknown();
         }
         match ty {
             syn::Type::Reference(r) => Ty::Ref(Box::new(self.ty_at(scope, &r.elem, depth))),
-            syn::Type::Ptr(p) => Ty::Ext("ptr".to_owned(), vec![self.ty_at(scope, &p.elem, depth)]),
+            syn::Type::Ptr(p) => Ty::Ref(Box::new(self.ty_at(scope, &p.elem, depth))),
             syn::Type::Slice(s) => Ty::Slice(Box::new(self.ty_at(scope, &s.elem, depth))),
             syn::Type::Array(a) => Ty::Array(Box::new(self.ty_at(scope, &a.elem, depth))),
             syn::Type::Tuple(t) => Ty::Tuple(t.elems.iter().map(|e| self.ty_at(scope, e, depth)).collect()),
             syn::Type::Paren(p) => self.ty_at(scope, &p.elem, depth),
             syn::Type::Group(g) => self.ty_at(scope, &g.elem, depth),
             syn::Type::Never(_) => Ty::Never,
+            syn::Type::Infer(_) => Ty::Infer,
             syn::Type::FnPtr(f) => Ty::FnPtr(f.inputs.len()),
             syn::Type::TraitObject(o) => Ty::Dyn(self.trait_refs(scope, o.bounds.iter())),
-            syn::Type::ImplTrait(i) => Ty::Dyn(self.trait_refs(scope, i.bounds.iter())),
+            syn::Type::ImplTrait(i) => Ty::Opaque(self.trait_refs(scope, i.bounds.iter())),
             syn::Type::Path(tp) => {
                 if let Some(q) = &tp.qself {
                     let base = self.ty_at(scope, &q.ty, depth);
@@ -421,12 +428,18 @@ impl<'p> Resolver<'p> {
                 let last = tp.path.segments.last();
                 let args = last.map(|s| self.args(scope, s, depth)).unwrap_or_default();
                 let Some(res) = resolved.into_iter().next() else {
-                    return Ty::Unknown;
+                    return Ty::unknown();
                 };
                 self.ty_of_res(scope, &res, args, depth)
             }
-            _ => Ty::Unknown,
+            _ => Ty::unknown(),
         }
+    }
+
+    /// The type a resolution names with type arguments `args`, in `scope`.
+    #[must_use]
+    pub fn res_ty(&self, scope: &Scope, res: &Res, args: Vec<Ty>) -> Ty {
+        self.ty_of_res(scope, res, args, 0)
     }
 
     fn ty_of_res(&self, scope: &Scope, res: &Res, args: Vec<Ty>, depth: usize) -> Ty {
@@ -440,9 +453,9 @@ impl<'p> Resolver<'p> {
                 match &item.kind {
                     ItemKind::Struct { .. } | ItemKind::Union { .. } | ItemKind::Enum { .. } => {
                         let mut args = args;
-                        // Missing arguments (defaults, inference) are unknown.
+                        // Missing arguments are left to inference.
                         while args.len() < item.scope.generics.len() {
-                            args.push(Ty::Unknown);
+                            args.push(Ty::Infer);
                         }
                         Ty::Adt(*id, args)
                     }
@@ -453,7 +466,7 @@ impl<'p> Resolver<'p> {
                         inner.subst(&map)
                     }
                     ItemKind::Trait { .. } => Ty::Dyn(vec![TraitRef::Kernel(*id, args)]),
-                    ItemKind::Const { .. } => Ty::Unknown,
+                    ItemKind::Const { .. } => Ty::unknown(),
                 }
             }
             Res::Assoc(base, name) => {
@@ -465,7 +478,7 @@ impl<'p> Resolver<'p> {
             | Res::Variant(..)
             | Res::Fn(_)
             | Res::ConstParam(_)
-            | Res::Macro(_) => Ty::Unknown,
+            | Res::Macro(_) => Ty::unknown(),
         }
     }
 
@@ -481,7 +494,7 @@ impl<'p> Resolver<'p> {
     #[must_use]
     pub fn self_ty(&self, scope: &Scope, depth: usize) -> Ty {
         match scope.self_ref {
-            SelfRef::None => Ty::Unknown,
+            SelfRef::None => Ty::unknown(),
             SelfRef::Impl(id) => {
                 let imp = self.program.imp(id);
                 let mut inner = imp.scope.clone();
@@ -722,7 +735,7 @@ mod tests {
             .iter()
             .map(|i| match i {
                 syn::FnArg::Typed(t) => r.ty(&f.scope, &t.ty),
-                syn::FnArg::Receiver(_) => Ty::Unknown,
+                syn::FnArg::Receiver(_) => Ty::unknown(),
             })
             .collect();
         let w = ItemId(0);

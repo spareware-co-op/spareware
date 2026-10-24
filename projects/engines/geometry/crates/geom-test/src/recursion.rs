@@ -3,14 +3,16 @@
 //!
 //! What it does: [`analyse`] reads every crate that ships (the kernel crates under
 //! `projects/engines/geometry/crates` and the facade `engine-geometry` and its binding crates,
-//! [`sources`]) with `syn`, builds the call graph of every function, method, trait default body,
-//! closure, derived implementation and constant ([`flow`], over [`model`], [`resolve`] and
-//! [`index`]), and finds its recursive cycles and the kernel's recursive types ([`graph`]). It
-//! reads every `Recursion:` statement of the module headers ([`statement`]) and checks each cycle
-//! against them ([`check`]): a cycle without a stated bound, a statement that names no cycle or
-//! not exactly one, a bound constant that disagrees, a test that is missing or does not reach its
-//! cycle, and code the analysis cannot read are all [`Problem`]s. [`stack`] runs the tests on the
-//! small stack. The binary `recursion` lists the cycles, checks them, and runs the tests:
+//! [`sources`]) with `syn` ([`model`], [`resolve`], [`macros`], [`cfg`]), and builds the call graph
+//! of the program as the compiler copies it: one instance for each instantiation of each generic
+//! function, closures as types of their own ([`mono`], [`flow`], over [`index`], [`ty`] and the
+//! standard library's model [`stdlib`]). It finds the graph's recursive cycles, named by the
+//! functions they run, and the kernel's recursive types ([`graph`]); reads every `Recursion:`
+//! statement of the module headers ([`statement`]); and checks each cycle against them
+//! ([`check`]): a cycle without a stated bound, a statement that names no cycle or not exactly
+//! one, a bound constant that disagrees, a test that is missing or does not reach its cycle, and
+//! code the analysis cannot read are all [`Problem`]s. [`stack`] runs the tests on the small
+//! stack. The binary `recursion` lists the cycles, checks them, and runs the tests:
 //!
 //! ```text
 //! cargo run -p geom-test --bin recursion -- list             every cycle and recursive type
@@ -22,29 +24,30 @@
 //! Guarantees:
 //!
 //! - **Every cycle is listed.** The call graph over-approximates every call Rust can make in a
-//!   build that ships, on the one assumption that the standard library calls kernel code only
-//!   through what it is handed ([`index`], [`flow`]); a strongly connected component of it with a
-//!   cycle is a recursive cycle ([`graph`]). Code the analysis cannot read is a problem, never
-//!   skipped, so the check cannot pass over code it did not see.
+//!   build that ships ([`flow`] states the routes and the assumptions: the standard library calls
+//!   kernel code only as [`stdlib`] models it, the naming lints hold, and callables an open
+//!   generic parameter stands for come from outside the crates that ship); a strongly connected
+//!   component of it with a cycle is a recursive cycle ([`graph`]). Code the analysis cannot read
+//!   is a problem, never skipped, so the check cannot pass over code it did not see.
 //! - **A cycle without a stated bound fails**, and so does a statement that is not true to the
 //!   code ([`check`]); CI runs the check in the merge gate (`.github/workflows/kernel-gate.yml`).
 //! - **Each stated bound is run** by its test on the small stack, in debug and in release, and the
 //!   stack's limits are shown in force by probes ([`stack`]).
 //! - **Deterministic**: the same tree gives the same report, in the same order.
 //!
-//! Method: a whole-program call graph from source, as rustc's own MIR-level reachability does
-//! from MIR but here from `syn`'s syntax trees with name resolution and local type inference
-//! (method dispatch by class hierarchy analysis, J. Dean, D. Grove and C. Chambers, ECOOP 1995,
-//! <https://doi.org/10.1007/3-540-49538-X_5>; callable flow by 0-CFA, O. Shivers, 1991,
-//! <https://www.ccs.neu.edu/home/shivers/papers/diss.pdf>); cycles as strongly connected
-//! components (Tarjan, "Depth-first search and linear graph algorithms", SIAM J. Computing 1
-//! (1972), <https://doi.org/10.1137/0201010>, computed by Kosaraju's algorithm). The rule that
-//! input-driven recursion carries a stated bound because wasm32 has no guard page follows
-//! solidcore's (G01 evidence 13, `projects/kit/notes/G01-evidence/13-vetting-smlib.md`).
+//! Method: a whole-program call graph from source by monomorphisation, as rustc's collector builds
+//! it from MIR (<https://rustc-dev-guide.rust-lang.org/backend/monomorph.html>), here from `syn`'s
+//! syntax trees with name resolution and local type inference (method dispatch by class hierarchy
+//! analysis where an instantiation is open, J. Dean, D. Grove and C. Chambers, ECOOP 1995,
+//! <https://doi.org/10.1007/3-540-49538-X_5>); cycles as strongly connected components (Tarjan,
+//! "Depth-first search and linear graph algorithms", SIAM J. Computing 1 (1972),
+//! <https://doi.org/10.1137/0201010>). The rule that input-driven recursion carries a stated bound
+//! because wasm32 has no guard page follows solidcore's (G01 evidence 13,
+//! `projects/kit/notes/G01-evidence/13-vetting-smlib.md`).
 //!
-//! Cost: one parse of every file of the crates that ship, and a fixed point per body (see
-//! [`flow`]); the analysis runs on a thread with [`ANALYSIS_STACK`] bytes of stack, because the
-//! body evaluator recurses over syntax trees.
+//! Cost: one parse of every file of the crates that ship, and a fixed point over the instances
+//! (see [`mono`]); the analysis runs on a thread with [`ANALYSIS_STACK`] bytes of stack, because
+//! the body reader recurses over syntax trees.
 
 pub mod cfg;
 pub mod check;
@@ -53,10 +56,11 @@ pub mod graph;
 pub mod index;
 pub mod macros;
 pub mod model;
+pub mod mono;
 pub mod resolve;
-pub mod sizechange;
 pub mod stack;
 pub mod statement;
+pub mod stdlib;
 pub mod ty;
 
 use core::fmt;
@@ -64,7 +68,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use crate::map::{CrateKind, crate_kind, repo};
-use crate::recursion::graph::{Cycle, Graph, TypeCycle};
+use crate::recursion::graph::{Cycle, TypeCycle};
 use crate::recursion::index::Index;
 use crate::recursion::model::{CrateSource, Role};
 use crate::recursion::statement::Statement;
@@ -167,12 +171,12 @@ pub struct Report {
     /// For each crate with bound tests: its package, its tests file and the tests its statements
     /// name.
     pub bound_tests: Vec<(String, String, Vec<String>)>,
-    /// How many functions, closures and derived implementations the graph holds.
+    /// How many functions, methods, trait default bodies and derived implementations were read.
     pub functions: usize,
+    /// How many instances the call graph holds.
+    pub instances: usize,
     /// How many edges it holds.
     pub edges: usize,
-    /// The call graph itself.
-    pub graph: Graph,
 }
 
 /// The file reader [`analyse`] uses: owned, so the analysis can run on its own thread.
@@ -202,12 +206,9 @@ pub fn analyse(sources: Vec<CrateSource>, read: OwnedReader) -> Report {
 pub fn analyse_here(sources: &[CrateSource], read: &(dyn Fn(&str) -> Result<String, String> + Send + Sync)) -> Report {
     let program = model::load(sources, &|p| read(p));
     let ix = Index::new(&program);
-    let mut graph = Graph::new(&ix);
     let mut problems = program.problems.clone();
-    flow::analyse(&ix, &mut graph, &mut problems);
-    eprintln!("DEBUG flow done");
-    let cycles = graph.cycles();
-    eprintln!("DEBUG cycles done");
+    let mono = mono::analyse(&ix, &mut problems);
+    let cycles = graph::cycles(&ix, &mono);
     let types = graph::type_cycles(&ix);
     let mut statements = Vec::new();
     for c in program.crates.iter().filter(|c| c.source.role == Role::Ships) {
@@ -218,7 +219,7 @@ pub fn analyse_here(sources: &[CrateSource], read: &(dyn Fn(&str) -> Result<Stri
             problems.extend(p);
         }
     }
-    let outcome = check::check(&ix, &graph, &cycles, &types, &statements);
+    let outcome = check::check(&ix, &mono, &cycles, &types, &statements);
     problems.extend(outcome.problems);
     problems.sort();
     problems.dedup();
@@ -237,12 +238,7 @@ pub fn analyse_here(sources: &[CrateSource], read: &(dyn Fn(&str) -> Result<Stri
             tests.push(s.test.clone());
         }
     }
-    let functions = graph
-        .nodes
-        .iter()
-        .filter(|n| !matches!(n.kind, graph::GKind::Carrier | graph::GKind::Any))
-        .count();
-    let edges = graph.edges.values().map(BTreeMap::len).fold(0_usize, usize::saturating_add);
+    let edges = mono.edges.values().map(BTreeMap::len).fold(0_usize, usize::saturating_add);
     Report {
         cycles,
         types,
@@ -254,9 +250,9 @@ pub fn analyse_here(sources: &[CrateSource], read: &(dyn Fn(&str) -> Result<Stri
             .into_iter()
             .map(|(package, (file, tests))| (package, file, tests))
             .collect(),
-        functions,
+        functions: program.nodes.len(),
+        instances: mono.insts.len(),
         edges,
-        graph,
     }
 }
 

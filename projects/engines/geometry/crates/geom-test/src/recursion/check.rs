@@ -35,11 +35,12 @@
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-use crate::recursion::graph::{Cycle, Graph, TypeCycle};
+use crate::recursion::graph::{Cycle, TypeCycle};
 use crate::recursion::index::Index;
 use crate::recursion::model::{ItemKind, ModId, NodeKind, Role};
 use crate::recursion::resolve::{Ns, Res};
 use crate::recursion::statement::{Kind, Statement};
+use crate::recursion::mono::{InstId, InstKind, Mono};
 use crate::recursion::ty::NodeId;
 use crate::recursion::{Problem, Rule};
 
@@ -200,15 +201,15 @@ fn tests_in(text: &str) -> Option<BTreeMap<String, bool>> {
     Some(out)
 }
 
-/// Whether the graph leads from `from` to any of `to`.
-fn reaches(graph: &Graph, from: NodeId, to: &BTreeSet<NodeId>) -> bool {
+/// Whether the call graph leads from `from` to any of `to`.
+fn reaches(mono: &Mono, from: InstId, to: &BTreeSet<InstId>) -> bool {
     let mut seen = BTreeSet::new();
     let mut queue = VecDeque::from([from]);
     while let Some(n) = queue.pop_front() {
         if to.contains(&n) {
             return true;
         }
-        for next in graph.edges.get(&n).into_iter().flat_map(BTreeMap::keys) {
+        for next in mono.edges.get(&n).into_iter().flat_map(BTreeMap::keys) {
             if seen.insert(*next) {
                 queue.push_back(*next);
             }
@@ -236,7 +237,7 @@ fn suggestion(members: &BTreeSet<String>, kind: Kind) -> String {
 #[allow(clippy::too_many_lines, reason = "the rules in their written order; each is short")]
 pub fn check(
     ix: &Index<'_>,
-    graph: &Graph,
+    mono: &Mono,
     cycles: &[Cycle],
     types: &[TypeCycle],
     statements: &[Statement],
@@ -284,7 +285,7 @@ pub fn check(
                 let files: BTreeSet<&str> = cycle
                     .member_nodes
                     .iter()
-                    .filter_map(|n| graph.node(*n).map(|g| g.file.as_str()))
+                    .filter_map(|n| program.node(*n).map(|g| g.file.as_str()))
                     .collect();
                 if !files.contains(s.file.as_str()) {
                     out.problems.push(problem(
@@ -295,7 +296,7 @@ pub fn check(
                         ),
                     ));
                 }
-                check_test(ix, graph, s, Some(&cycle.nodes), &mut out.problems);
+                check_test(ix, mono, s, Some(&cycle.insts), &mut out.problems);
             }
             Kind::Types => {
                 let names: Vec<BTreeSet<String>> = s.names.iter().map(|n| type_candidates(ix, module, n)).collect();
@@ -340,7 +341,7 @@ pub fn check(
                         ),
                     ));
                 }
-                check_test(ix, graph, s, None, &mut out.problems);
+                check_test(ix, mono, s, None, &mut out.problems);
             }
         }
         if let Some(c) = &s.constant {
@@ -395,7 +396,7 @@ pub fn check(
         let (file, line) = c
             .member_nodes
             .iter()
-            .filter_map(|n| graph.node(*n))
+            .filter_map(|n| program.node(*n))
             .map(|g| (g.file.clone(), g.line))
             .next()
             .unwrap_or_default();
@@ -448,9 +449,9 @@ pub fn check(
 /// reaching `nodes` when given.
 fn check_test(
     ix: &Index<'_>,
-    graph: &Graph,
+    mono: &Mono,
     s: &Statement,
-    nodes: Option<&BTreeSet<NodeId>>,
+    nodes: Option<&BTreeSet<InstId>>,
     problems: &mut Vec<Problem>,
 ) {
     let program = ix.program;
@@ -503,9 +504,10 @@ fn check_test(
         .nodes
         .iter()
         .position(|n| n.krate == test_crate && n.ident == s.test && matches!(n.kind, NodeKind::Fn))
-        .map(NodeId);
+        .map(NodeId)
+        .and_then(|t| mono.find(&InstKind::Node(t, Vec::new())));
     match test_node {
-        Some(t) if reaches(graph, t, nodes) => {}
+        Some(t) if reaches(mono, t, nodes) => {}
         Some(_) => problems.push(problem(format!(
             "`{}` does not reach the cycle: it must run the cycle at its bound",
             s.test

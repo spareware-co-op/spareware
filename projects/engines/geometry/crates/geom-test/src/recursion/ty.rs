@@ -1,32 +1,37 @@
 //! Types and abstract values for the recursion check's call graph.
 //!
-//! What it does: [`Ty`] is a static type as far as the source states it: a primitive, one of the
+//! What it does: [`Ty`] is a type as far as the analysis knows it: a primitive, one of the
 //! kernel's own structs, enums or unions with its arguments, an outside type such as `Vec<T>` by
-//! name, a reference, slice, array or tuple, a generic parameter, a trait object or `impl Trait`,
-//! a function pointer, a closure, a function item, or unknown. [`Carries`] is what a value may
-//! carry that the kernel's code can be called through: the kernel types inside it (whose trait
-//! implementations outside code may call), the closures, functions and carrier nodes it may hold
-//! (which a call through the value may run), the generic parameters whose values it may hold, or
-//! anything at all. [`Val`] is the pair the body analysis computes for every expression.
+//! name, a reference, slice, array or tuple, a generic parameter left open, a trait object, a
+//! return-position `impl Trait`, a projection, a function pointer, one closure of one instance, one
+//! kernel function item with its arguments, an outside function item, or [`Ty::Hidden`]: a type
+//! not known, built from the types it lists (and from primitives). [`Val`] is what an expression
+//! may be: a set of such types, its alternatives.
 //!
 //! Guarantees:
 //!
-//! - **A type's carries are complete for what the type states.** [`Ty::carries`] returns every
-//!   kernel type, closure, function item and generic parameter written anywhere inside the type,
-//!   through references, slices, arrays, tuples and the arguments of outside types, so a value of
-//!   a known type never hides a kernel type from the callbacks of outside code.
-//! - **Joins only grow.** [`Carries::join`] and [`Val::join`] are set unions (with `top` absorbing),
-//!   so the body analysis's fixed point exists and is reached.
-//! - **Deterministic.** Every set is ordered (`BTreeSet`), so every walk over a value is in the
-//!   same order on every run.
+//! - **Hidden keeps what it may hide.** A value whose exact type is not known is a
+//!   [`Ty::Hidden`] listing every type it may be built from ([`Ty::parts`]): each kernel type,
+//!   closure, function item and open parameter inside it, so a call dispatched on it reaches every
+//!   implementation those types have.
+//! - **Finite.** Types deeper than [`MAX_DEPTH`] are cut to a [`Ty::Hidden`] of their parts and a
+//!   value holds at most [`MAX_ALTERNATIVES`] alternatives before they merge into one
+//!   [`Ty::Hidden`], so the lattice the analysis climbs has finite height and its fixed point is
+//!   reached.
+//! - **Joins only grow.** [`Val::join`] is a set union followed by the two cuts above, each of
+//!   which keeps every part of what it cuts.
+//! - **Deterministic.** Every set is ordered (`BTreeSet`).
 //!
 //! Method: a type lattice in the style of abstract interpretation (P. Cousot and R. Cousot,
 //! "Abstract interpretation: a unified lattice model for static analysis of programs", POPL 1977,
 //! <https://doi.org/10.1145/512950.512973>), over the type grammar of The Rust Reference
-//! (<https://doc.rust-lang.org/reference/types.html>).
+//! (<https://doc.rust-lang.org/reference/types.html>), with closures and function items as types
+//! of their own, as the compiler gives them
+//! (<https://doc.rust-lang.org/reference/types/closure.html>,
+//! <https://doc.rust-lang.org/reference/types/function-item.html>).
 //!
-//! Cost: each operation is linear in the size of the types and sets it touches; no recursion
-//! beyond the nesting of a type as written.
+//! Cost: each operation is linear in the size of the types it touches; recursion follows the
+//! nesting of a type, which [`MAX_DEPTH`] bounds.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -34,13 +39,19 @@ use std::collections::{BTreeMap, BTreeSet};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ItemId(pub usize);
 
-/// A node of the call graph: a function body, closure, derived implementation or carrier.
+/// A function body or derived implementation of the program.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NodeId(pub usize);
 
 /// A generic type parameter declaration.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct GenId(pub usize);
+
+/// How deep a type may nest before it is cut to a [`Ty::Hidden`] of its parts.
+pub const MAX_DEPTH: usize = 8;
+
+/// How many alternatives a value holds before they merge into one [`Ty::Hidden`].
+pub const MAX_ALTERNATIVES: usize = 12;
 
 /// A trait named in a bound, an `impl` or a trait object.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -50,14 +61,13 @@ pub enum TraitRef {
     /// A trait from outside the kernel, by its last path segment (`Add`, `Iterator`), with its
     /// generic arguments.
     Ext(String, Vec<Ty>),
-    /// A closure trait (`Fn`, `FnMut`, `FnOnce`) written `Fn(A, B) -> R`: its name, its inputs `A`
-    /// and `B`, and its output `R` (the unit type when none is written).
+    /// A closure trait (`Fn`, `FnMut`, `FnOnce`) written `Fn(A, B) -> R`: its name, its inputs and
+    /// its output (the unit type when none is written).
     Fn(String, Vec<Ty>, Box<Ty>),
 }
 
 impl TraitRef {
-    /// The trait's name: its last path segment for an outside trait; `None` for a kernel trait,
-    /// whose name the program knows.
+    /// The trait's name for an outside trait; `None` for a kernel trait.
     #[must_use]
     pub fn ext_name(&self) -> Option<&str> {
         match self {
@@ -66,20 +76,11 @@ impl TraitRef {
         }
     }
 
-    /// The arity of a closure trait (`Fn`, `FnMut`, `FnOnce`), if this is one.
+    /// The arity of a closure trait, if this is one.
     #[must_use]
     pub fn fn_arity(&self) -> Option<usize> {
         match self {
             TraitRef::Fn(_, args, _) => Some(args.len()),
-            _ => None,
-        }
-    }
-
-    /// The output of a closure trait, if this is one.
-    #[must_use]
-    pub fn fn_output(&self) -> Option<&Ty> {
-        match self {
-            TraitRef::Fn(_, _, output) => Some(output),
             _ => None,
         }
     }
@@ -92,11 +93,6 @@ impl TraitRef {
         }
     }
 
-    /// Every type written in the trait: its arguments, and a closure trait's output.
-    pub fn types(&self) -> impl Iterator<Item = &Ty> {
-        self.args().iter().chain(self.fn_output())
-    }
-
     /// The trait with every generic parameter in `map` replaced by its value.
     #[must_use]
     pub fn subst(&self, map: &BTreeMap<GenId, Ty>) -> TraitRef {
@@ -104,7 +100,9 @@ impl TraitRef {
         match self {
             TraitRef::Kernel(id, args) => TraitRef::Kernel(*id, all(args)),
             TraitRef::Ext(name, args) => TraitRef::Ext(name.clone(), all(args)),
-            TraitRef::Fn(name, args, output) => TraitRef::Fn(name.clone(), all(args), Box::new(output.subst(map))),
+            TraitRef::Fn(name, args, output) => {
+                TraitRef::Fn(name.clone(), all(args), Box::new(output.subst(map)))
+            }
         }
     }
 }
@@ -112,8 +110,20 @@ impl TraitRef {
 /// The closure traits.
 pub const FN_TRAITS: [&str; 3] = ["Fn", "FnMut", "FnOnce"];
 
-/// A static type, as far as the source states it.
-#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+/// One closure of one instance: the function whose body holds it, that instance's generic
+/// arguments, and its place among the closures of that body in reading order.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ClosureKey {
+    /// The function, method, trait default body or derived implementation holding it.
+    pub owner: NodeId,
+    /// The owner instance's generic arguments.
+    pub subst: Vec<Ty>,
+    /// Its place among the owner body's closures, counted in reading order from 0.
+    pub index: usize,
+}
+
+/// A type, as far as the analysis knows it.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Ty {
     /// A primitive type: `u64`, `f64`, `bool`, `char`, `str`, ...
     Prim(String),
@@ -121,7 +131,7 @@ pub enum Ty {
     Adt(ItemId, Vec<Ty>),
     /// A type from outside the kernel, by its last path segment, with its generic arguments.
     Ext(String, Vec<Ty>),
-    /// A shared or mutable reference.
+    /// A shared or mutable reference, or a raw pointer.
     Ref(Box<Ty>),
     /// A slice `[T]`.
     Slice(Box<Ty>),
@@ -129,23 +139,39 @@ pub enum Ty {
     Array(Box<Ty>),
     /// A tuple; the unit type is the empty tuple.
     Tuple(Vec<Ty>),
-    /// A generic type parameter.
+    /// A generic type parameter left open: in an instance analysed for every instantiation, or
+    /// one the call did not determine.
     Param(GenId),
-    /// A trait object `dyn ...` or an `impl ...` type: some type with these traits.
+    /// A trait object `dyn ...`.
     Dyn(Vec<TraitRef>),
-    /// An associated type of a type, such as `T::Item` or `Self::Output`, not resolved further.
+    /// A return-position `impl ...`, as a signature writes it; a call's value is the callee
+    /// instance's own result instead.
+    Opaque(Vec<TraitRef>),
+    /// An associated type not resolved further, such as `T::Item` with `T` open.
     Assoc(Box<Ty>, String),
     /// A function pointer type with this many parameters.
     FnPtr(usize),
-    /// The type of one closure.
-    Closure(NodeId),
-    /// The type of one function item, used as a value.
-    FnDef(NodeId),
+    /// One closure.
+    Closure(Box<ClosureKey>),
+    /// One kernel function item used as a value, with its generic arguments (open ones as
+    /// [`Ty::Param`], fixed by the call through it).
+    FnDef(NodeId, Vec<Ty>),
+    /// A function from outside the kernel used as a value (`i128::from` handed to `map`).
+    ExtFn,
     /// The never type.
     Never,
-    /// Not known.
-    #[default]
-    Unknown,
+    /// A type the source leaves to inference (`_`, or generic arguments not written): never a
+    /// value's type, only a written type's part, which a call or literal fills in.
+    Infer,
+    /// A type not known, built only from these types and from primitives and outside types.
+    Hidden(BTreeSet<Ty>),
+}
+
+impl Default for Ty {
+    /// The unit type.
+    fn default() -> Ty {
+        Ty::unit()
+    }
 }
 
 /// The primitive type names.
@@ -161,66 +187,22 @@ impl Ty {
         Ty::Tuple(Vec::new())
     }
 
-    /// Whether this is a primitive (or a reference to one), which carries nothing.
+    /// A type not known that holds no kernel type: [`Ty::Hidden`] of nothing.
     #[must_use]
-    pub fn is_prim(&self) -> bool {
-        match self {
-            Ty::Prim(_) | Ty::Never => true,
-            Ty::Ref(inner) => inner.is_prim(),
-            Ty::Tuple(items) => items.iter().all(Ty::is_prim),
-            _ => false,
-        }
+    pub fn unknown() -> Ty {
+        Ty::Hidden(BTreeSet::new())
     }
 
-    /// Whether a value of this type may hold a closure or function: a generic parameter, trait
-    /// object, function pointer, closure or function item type, associated type or unknown part
-    /// written anywhere in it, outside a kernel type's own fields (whose callables travel through
-    /// their field carriers). A value of any other type holds no callable, whatever it was built
-    /// from.
+    /// A primitive type by name.
     #[must_use]
-    pub fn admits_callables(&self) -> bool {
-        let mut work: Vec<&Ty> = vec![self];
-        while let Some(t) = work.pop() {
-            match t {
-                Ty::Param(_)
-                | Ty::Dyn(_)
-                | Ty::FnPtr(_)
-                | Ty::Closure(_)
-                | Ty::FnDef(_)
-                | Ty::Assoc(..)
-                | Ty::Unknown => return true,
-                Ty::Adt(_, args) | Ty::Ext(_, args) | Ty::Tuple(args) => work.extend(args.iter()),
-                Ty::Ref(inner) | Ty::Slice(inner) | Ty::Array(inner) => work.push(inner),
-                Ty::Prim(_) | Ty::Never => {}
-            }
-        }
-        false
+    pub fn prim(name: &str) -> Ty {
+        Ty::Prim(name.to_owned())
     }
 
-    /// Whether the type is known whole: no unknown part.
+    /// An outside type by name with arguments.
     #[must_use]
-    pub fn is_whole(&self) -> bool {
-        let mut work: Vec<&Ty> = vec![self];
-        while let Some(t) = work.pop() {
-            match t {
-                Ty::Unknown | Ty::Never => return false,
-                Ty::Adt(_, args) | Ty::Ext(_, args) | Ty::Tuple(args) => work.extend(args.iter()),
-                Ty::Ref(inner) | Ty::Slice(inner) | Ty::Array(inner) | Ty::Assoc(inner, _) => work.push(inner),
-                Ty::Dyn(traits) => {
-                    for tr in traits {
-                        work.extend(tr.types());
-                    }
-                }
-                _ => {}
-            }
-        }
-        true
-    }
-
-    /// Whether the type is known at all.
-    #[must_use]
-    pub fn is_known(&self) -> bool {
-        !matches!(self, Ty::Unknown)
+    pub fn ext(name: &str, args: Vec<Ty>) -> Ty {
+        Ty::Ext(name.to_owned(), args)
     }
 
     /// The type behind any number of references.
@@ -233,35 +215,119 @@ impl Ty {
         t
     }
 
-    /// Every kernel type, closure, function item and generic parameter written in the type.
+    /// Whether this type is a closure, kernel function item, outside function item, function
+    /// pointer or closure trait object: something a call through a value may run.
     #[must_use]
-    pub fn carries(&self) -> Carries {
-        let mut out = Carries::default();
-        let mut work: Vec<&Ty> = vec![self];
-        while let Some(t) = work.pop() {
-            match t {
-                Ty::Adt(id, args) => {
-                    out.types.insert(*id);
-                    work.extend(args.iter());
+    pub fn is_callable(&self) -> bool {
+        match self.peel() {
+            Ty::Closure(_) | Ty::FnDef(..) | Ty::ExtFn | Ty::FnPtr(_) => true,
+            Ty::Dyn(traits) => traits.iter().any(|t| t.fn_arity().is_some()),
+            Ty::Ext(name, args) if name == "Box" || name == "Rc" || name == "Arc" => {
+                args.first().is_some_and(Ty::is_callable)
+            }
+            _ => false,
+        }
+    }
+
+    /// Whether the type holds a [`Ty::Param`] anywhere.
+    #[must_use]
+    pub fn has_param(&self) -> bool {
+        let mut found = false;
+        self.walk(&mut |t| {
+            if matches!(t, Ty::Param(_)) {
+                found = true;
+            }
+        });
+        found
+    }
+
+    /// Whether the type holds a [`Ty::Infer`] anywhere.
+    #[must_use]
+    pub fn has_infer(&self) -> bool {
+        let mut found = false;
+        self.walk(&mut |t| {
+            if matches!(t, Ty::Infer) {
+                found = true;
+            }
+        });
+        found
+    }
+
+    /// The type with every [`Ty::Infer`] replaced by `with`.
+    #[must_use]
+    pub fn fill(&self, with: &Ty) -> Ty {
+        let all = |args: &[Ty]| args.iter().map(|a| a.fill(with)).collect::<Vec<_>>();
+        match self {
+            Ty::Infer => with.clone(),
+            Ty::Adt(id, args) => Ty::Adt(*id, all(args)),
+            Ty::Ext(name, args) => Ty::Ext(name.clone(), all(args)),
+            Ty::Ref(inner) => Ty::Ref(Box::new(inner.fill(with))),
+            Ty::Slice(inner) => Ty::Slice(Box::new(inner.fill(with))),
+            Ty::Array(inner) => Ty::Array(Box::new(inner.fill(with))),
+            Ty::Tuple(items) => Ty::Tuple(all(items)),
+            Ty::Assoc(inner, name) => Ty::Assoc(Box::new(inner.fill(with)), name.clone()),
+            Ty::FnDef(n, args) => Ty::FnDef(*n, all(args)),
+            Ty::Hidden(parts) => Ty::Hidden(parts.iter().map(|p| p.fill(with)).collect()),
+            other => other.clone(),
+        }
+    }
+
+    /// Calls `f` on this type and every type inside it (arguments, elements, closure and function
+    /// item arguments, trait arguments, hidden parts).
+    pub fn walk(&self, f: &mut dyn FnMut(&Ty)) {
+        f(self);
+        match self {
+            Ty::Adt(_, args) | Ty::Ext(_, args) | Ty::Tuple(args) | Ty::FnDef(_, args) => {
+                for a in args {
+                    a.walk(f);
                 }
-                Ty::Ext(_, args) | Ty::Tuple(args) => work.extend(args.iter()),
-                Ty::Ref(inner) | Ty::Slice(inner) | Ty::Array(inner) | Ty::Assoc(inner, _) => {
-                    work.push(inner);
+            }
+            Ty::Ref(inner) | Ty::Slice(inner) | Ty::Array(inner) | Ty::Assoc(inner, _) => {
+                inner.walk(f);
+            }
+            Ty::Closure(k) => {
+                for a in &k.subst {
+                    a.walk(f);
                 }
-                Ty::Param(g) => {
-                    out.generics.insert(*g);
-                }
-                Ty::Dyn(traits) => {
-                    for tr in traits {
-                        work.extend(tr.types());
+            }
+            Ty::Dyn(traits) | Ty::Opaque(traits) => {
+                for t in traits {
+                    for a in t.args() {
+                        a.walk(f);
+                    }
+                    if let TraitRef::Fn(_, _, out) = t {
+                        out.walk(f);
                     }
                 }
-                Ty::Closure(n) | Ty::FnDef(n) => {
-                    out.calls.insert(*n);
-                }
-                Ty::Prim(_) | Ty::FnPtr(_) | Ty::Never | Ty::Unknown => {}
             }
+            Ty::Hidden(parts) => {
+                for p in parts {
+                    p.walk(f);
+                }
+            }
+            Ty::Prim(_) | Ty::Param(_) | Ty::FnPtr(_) | Ty::ExtFn | Ty::Never | Ty::Infer => {}
         }
+    }
+
+    /// The parts a value of this type may hold that kernel code can be reached through: every
+    /// type inside it that is not a primitive, a reference, a tuple, a slice, an array, the never
+    /// type or a hidden type itself (whose parts are listed instead).
+    #[must_use]
+    pub fn parts(&self) -> BTreeSet<Ty> {
+        let mut out = BTreeSet::new();
+        self.walk(&mut |t| match t {
+            Ty::Prim(_)
+            | Ty::Ref(_)
+            | Ty::Slice(_)
+            | Ty::Array(_)
+            | Ty::Tuple(_)
+            | Ty::Never
+            | Ty::Infer
+            | Ty::Hidden(_) => {}
+            other => {
+                out.insert(other.clone());
+            }
+        });
         out
     }
 
@@ -271,154 +337,268 @@ impl Ty {
         if map.is_empty() {
             return self.clone();
         }
+        let all = |args: &[Ty]| args.iter().map(|a| a.subst(map)).collect::<Vec<_>>();
         match self {
             Ty::Param(g) => map.get(g).cloned().unwrap_or(Ty::Param(*g)),
-            Ty::Adt(id, args) => Ty::Adt(*id, args.iter().map(|a| a.subst(map)).collect()),
-            Ty::Ext(name, args) => Ty::Ext(name.clone(), args.iter().map(|a| a.subst(map)).collect()),
+            Ty::Adt(id, args) => Ty::Adt(*id, all(args)),
+            Ty::Ext(name, args) => Ty::Ext(name.clone(), all(args)),
             Ty::Ref(inner) => Ty::Ref(Box::new(inner.subst(map))),
             Ty::Slice(inner) => Ty::Slice(Box::new(inner.subst(map))),
             Ty::Array(inner) => Ty::Array(Box::new(inner.subst(map))),
-            Ty::Tuple(items) => Ty::Tuple(items.iter().map(|a| a.subst(map)).collect()),
+            Ty::Tuple(items) => Ty::Tuple(all(items)),
             Ty::Assoc(inner, name) => Ty::Assoc(Box::new(inner.subst(map)), name.clone()),
-            Ty::Dyn(traits) => Ty::Dyn(traits.iter().map(|tr| tr.subst(map)).collect()),
+            Ty::Dyn(traits) => Ty::Dyn(traits.iter().map(|t| t.subst(map)).collect()),
+            Ty::Opaque(traits) => Ty::Opaque(traits.iter().map(|t| t.subst(map)).collect()),
+            Ty::FnDef(n, args) => Ty::FnDef(*n, all(args)),
+            Ty::Closure(k) => Ty::Closure(Box::new(ClosureKey {
+                owner: k.owner,
+                subst: all(&k.subst),
+                index: k.index,
+            })),
+            Ty::Hidden(parts) => Ty::Hidden(parts.iter().map(|p| p.subst(map)).collect()),
+            Ty::Prim(_) | Ty::FnPtr(_) | Ty::ExtFn | Ty::Never | Ty::Infer => self.clone(),
+        }
+    }
+
+    /// How deep the type nests: 1 for a type with nothing inside it.
+    #[must_use]
+    pub fn depth(&self) -> usize {
+        let inner = match self {
+            Ty::Adt(_, args) | Ty::Ext(_, args) | Ty::Tuple(args) | Ty::FnDef(_, args) => {
+                args.iter().map(Ty::depth).max().unwrap_or(0)
+            }
+            Ty::Ref(inner) | Ty::Slice(inner) | Ty::Array(inner) | Ty::Assoc(inner, _) => {
+                inner.depth()
+            }
+            Ty::Closure(k) => k.subst.iter().map(Ty::depth).max().unwrap_or(0),
+            Ty::Dyn(traits) | Ty::Opaque(traits) => traits
+                .iter()
+                .flat_map(|t| t.args().iter())
+                .map(Ty::depth)
+                .max()
+                .unwrap_or(0),
+            Ty::Hidden(parts) => parts.iter().map(Ty::depth).max().unwrap_or(0),
+            Ty::Prim(_) | Ty::Param(_) | Ty::FnPtr(_) | Ty::ExtFn | Ty::Never | Ty::Infer => 0,
+        };
+        inner.saturating_add(1)
+    }
+
+    /// The type cut at [`MAX_DEPTH`]: every subtree that starts deeper is replaced by a
+    /// [`Ty::Hidden`] of the shallow forms of its parts (a kernel type, closure or function item
+    /// with its own arguments hidden), so no part is lost and the result is never deeper than
+    /// [`MAX_DEPTH`] plus two.
+    #[must_use]
+    pub fn cut(&self) -> Ty {
+        self.cut_at(0)
+    }
+
+    fn cut_at(&self, depth: usize) -> Ty {
+        if depth >= MAX_DEPTH {
+            return Ty::Hidden(self.parts().iter().map(Ty::shallow).collect());
+        }
+        let next = depth.saturating_add(1);
+        let all = |args: &[Ty]| args.iter().map(|a| a.cut_at(next)).collect::<Vec<_>>();
+        match self {
+            Ty::Adt(id, args) => Ty::Adt(*id, all(args)),
+            Ty::Ext(name, args) => Ty::Ext(name.clone(), all(args)),
+            Ty::Tuple(items) => Ty::Tuple(all(items)),
+            Ty::FnDef(n, args) => Ty::FnDef(*n, all(args)),
+            Ty::Ref(inner) => Ty::Ref(Box::new(inner.cut_at(next))),
+            Ty::Slice(inner) => Ty::Slice(Box::new(inner.cut_at(next))),
+            Ty::Array(inner) => Ty::Array(Box::new(inner.cut_at(next))),
+            Ty::Assoc(inner, name) => Ty::Assoc(Box::new(inner.cut_at(next)), name.clone()),
+            Ty::Closure(k) => Ty::Closure(Box::new(ClosureKey {
+                owner: k.owner,
+                subst: all(&k.subst),
+                index: k.index,
+            })),
+            Ty::Hidden(parts) => Ty::Hidden(parts.iter().map(|p| p.cut_at(next)).collect()),
+            Ty::Dyn(traits) => Ty::Dyn(traits.iter().map(|t| cut_trait(t, next)).collect()),
+            Ty::Opaque(traits) => Ty::Opaque(traits.iter().map(|t| cut_trait(t, next)).collect()),
+            Ty::Prim(_) | Ty::Param(_) | Ty::FnPtr(_) | Ty::ExtFn | Ty::Never | Ty::Infer => {
+                self.clone()
+            }
+        }
+    }
+
+    /// The type with its own arguments hidden: a kernel or outside type's arguments, a closure's
+    /// or function item's generic arguments, each replaced by a [`Ty::Hidden`] of its parts in
+    /// their shallow forms; a part with nothing inside it is itself.
+    #[must_use]
+    pub fn shallow(&self) -> Ty {
+        let hide = |args: &[Ty]| {
+            args.iter()
+                .map(|a| Ty::Hidden(a.parts().iter().map(Ty::atom).collect()))
+                .collect::<Vec<_>>()
+        };
+        match self {
+            Ty::Adt(id, args) => Ty::Adt(*id, hide(args)),
+            Ty::Ext(name, args) => Ty::Ext(name.clone(), hide(args)),
+            Ty::FnDef(n, args) => Ty::FnDef(*n, hide(args)),
+            Ty::Closure(k) => Ty::Closure(Box::new(ClosureKey {
+                owner: k.owner,
+                subst: hide(&k.subst),
+                index: k.index,
+            })),
+            Ty::Assoc(..) | Ty::Dyn(_) | Ty::Opaque(_) => Ty::atom(self),
             other => other.clone(),
         }
     }
 
-    /// Matches `self`, a pattern whose generic parameters in `params` are unknowns, against
-    /// `actual`, adding each parameter's value to `map`; references on either side are looked
-    /// through. A mismatch adds nothing; it is never an error, because the caller only uses what
-    /// was learned.
-    pub fn unify(&self, actual: &Ty, params: &BTreeSet<GenId>, map: &mut BTreeMap<GenId, Ty>) {
-        let mut work: Vec<(&Ty, &Ty)> = vec![(self, actual)];
-        while let Some((p, a)) = work.pop() {
-            match (p.peel(), a.peel()) {
-                (Ty::Param(g), actual) if params.contains(g) && actual.is_known() => {
-                    map.entry(*g).or_insert_with(|| actual.clone());
-                }
-                (Ty::Adt(x, xs), Ty::Adt(y, ys)) if x == y => work.extend(xs.iter().zip(ys)),
-                (Ty::Ext(x, xs), Ty::Ext(y, ys)) if x == y => work.extend(xs.iter().zip(ys)),
-                (Ty::Tuple(xs), Ty::Tuple(ys)) => work.extend(xs.iter().zip(ys)),
-                (Ty::Slice(x) | Ty::Array(x), Ty::Slice(y) | Ty::Array(y)) => work.push((x, y)),
-                // A `Vec<T>` given where `[T]` is declared, by deref coercion.
-                (Ty::Slice(x), Ty::Ext(v, ys)) if v == "Vec" => {
-                    if let Some(y) = ys.first() {
-                        work.push((x, y));
-                    }
-                }
-                _ => {}
-            }
+    /// The type with everything inside it hidden and nothing listed: the head alone.
+    fn atom(&self) -> Ty {
+        let none = |args: &[Ty]| args.iter().map(|_| Ty::unknown()).collect::<Vec<_>>();
+        match self {
+            Ty::Adt(id, args) => Ty::Adt(*id, none(args)),
+            Ty::Ext(name, args) => Ty::Ext(name.clone(), none(args)),
+            Ty::FnDef(n, args) => Ty::FnDef(*n, none(args)),
+            Ty::Closure(k) => Ty::Closure(Box::new(ClosureKey {
+                owner: k.owner,
+                subst: none(&k.subst),
+                index: k.index,
+            })),
+            Ty::Assoc(..) => Ty::unknown(),
+            Ty::Dyn(traits) => Ty::Dyn(traits.iter().map(atom_trait).collect()),
+            Ty::Opaque(traits) => Ty::Opaque(traits.iter().map(atom_trait).collect()),
+            other => other.clone(),
         }
     }
 }
 
-/// What a value may carry that kernel code can be called through.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Carries {
-    /// Kernel structs, enums and unions inside the value.
-    pub types: BTreeSet<ItemId>,
-    /// Closures, function items and carrier nodes the value may hold or lead to.
-    pub calls: BTreeSet<NodeId>,
-    /// Generic parameters whose values the value may hold.
-    pub generics: BTreeSet<GenId>,
-    /// The value may be anything at all.
-    pub top: bool,
-}
-
-impl Carries {
-    /// Everything: a value the analysis cannot follow.
-    #[must_use]
-    pub fn top() -> Carries {
-        Carries {
-            top: true,
-            ..Carries::default()
+fn cut_trait(t: &TraitRef, depth: usize) -> TraitRef {
+    let all = |args: &[Ty]| args.iter().map(|a| a.cut_at(depth)).collect::<Vec<_>>();
+    match t {
+        TraitRef::Kernel(id, args) => TraitRef::Kernel(*id, all(args)),
+        TraitRef::Ext(name, args) => TraitRef::Ext(name.clone(), all(args)),
+        TraitRef::Fn(name, args, out) => {
+            TraitRef::Fn(name.clone(), all(args), Box::new(out.cut_at(depth)))
         }
     }
+}
 
-    /// Adds everything `other` carries; returns whether anything was added.
-    pub fn join(&mut self, other: &Carries) -> bool {
-        let before = (
-            self.types.len(),
-            self.calls.len(),
-            self.generics.len(),
-            self.top,
-        );
-        self.types.extend(other.types.iter().copied());
-        self.calls.extend(other.calls.iter().copied());
-        self.generics.extend(other.generics.iter().copied());
-        self.top |= other.top;
-        before
-            != (
-                self.types.len(),
-                self.calls.len(),
-                self.generics.len(),
-                self.top,
-            )
-    }
-
-    /// Whether it carries nothing.
-    #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.types.is_empty() && self.calls.is_empty() && self.generics.is_empty() && !self.top
+fn atom_trait(t: &TraitRef) -> TraitRef {
+    let none = |args: &[Ty]| args.iter().map(|_| Ty::unknown()).collect::<Vec<_>>();
+    match t {
+        TraitRef::Kernel(id, args) => TraitRef::Kernel(*id, none(args)),
+        TraitRef::Ext(name, args) => TraitRef::Ext(name.clone(), none(args)),
+        TraitRef::Fn(name, args, _) => {
+            TraitRef::Fn(name.clone(), none(args), Box::new(Ty::unknown()))
+        }
     }
 }
 
-/// An abstract value: its static type, if known, and what it may carry.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Val {
-    /// The static type, or [`Ty::Unknown`].
-    pub ty: Ty,
-    /// What the value may carry, including everything its type states.
-    pub carries: Carries,
-}
+/// What an expression may be: the set of its alternatives. The empty set is a value no run
+/// reaches (an expression that diverges, or that the analysis has not yet seen reached).
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Val(pub BTreeSet<Ty>);
 
 impl Val {
-    /// A value of a known type, carrying what the type states.
+    /// No value: unreached.
+    #[must_use]
+    pub fn none() -> Val {
+        Val(BTreeSet::new())
+    }
+
+    /// A value of one type.
     #[must_use]
     pub fn of(ty: Ty) -> Val {
-        let carries = ty.carries();
-        Val { ty, carries }
+        let mut v = Val::none();
+        v.add(ty);
+        v
     }
 
-    /// A value of unknown type carrying `carries`.
-    #[must_use]
-    pub fn unknown(carries: Carries) -> Val {
-        Val {
-            ty: Ty::Unknown,
-            carries,
-        }
-    }
-
-    /// The unit value, which carries nothing.
+    /// The unit value.
     #[must_use]
     pub fn unit() -> Val {
         Val::of(Ty::unit())
     }
 
-    /// A value of type `ty` that also carries `extra`.
+    /// A value whose type is not known and holds nothing of the kernel.
     #[must_use]
-    pub fn with(ty: Ty, extra: &Carries) -> Val {
-        let mut v = Val::of(ty);
-        v.carries.join(extra);
+    pub fn unknown() -> Val {
+        Val::of(Ty::unknown())
+    }
+
+    /// A value of a primitive type.
+    #[must_use]
+    pub fn prim(name: &str) -> Val {
+        Val::of(Ty::prim(name))
+    }
+
+    /// Whether no run reaches it.
+    #[must_use]
+    pub fn is_none(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Adds one alternative, cut to [`MAX_DEPTH`]; returns whether the value grew.
+    pub fn add(&mut self, ty: Ty) -> bool {
+        let ty = if ty.has_infer() { ty.fill(&Ty::unknown()) } else { ty };
+        let ty = if ty.depth() > MAX_DEPTH { ty.cut() } else { ty };
+        if matches!(ty, Ty::Never) {
+            return false;
+        }
+        let grew = self.0.insert(ty);
+        if grew && self.0.len() > MAX_ALTERNATIVES {
+            let mut parts = BTreeSet::new();
+            for t in &self.0 {
+                parts.extend(t.parts().iter().map(Ty::shallow));
+            }
+            self.0 = BTreeSet::from([Ty::Hidden(parts)]);
+        }
+        grew
+    }
+
+    /// Adds every alternative of `other`; returns whether the value grew.
+    pub fn join(&mut self, other: &Val) -> bool {
+        let before = self.clone();
+        for t in &other.0 {
+            self.add(t.clone());
+        }
+        *self != before
+    }
+
+    /// The join of two values.
+    #[must_use]
+    pub fn or(&self, other: &Val) -> Val {
+        let mut v = self.clone();
+        v.join(other);
         v
     }
 
-    /// The join of two values: the type if both agree, else unknown, and the union of what both
-    /// carry.
+    /// The parts of every alternative ([`Ty::parts`]).
     #[must_use]
-    pub fn join(&self, other: &Val) -> Val {
-        let ty = if self.ty == other.ty {
-            self.ty.clone()
-        } else if matches!(self.ty, Ty::Never) {
-            other.ty.clone()
-        } else if matches!(other.ty, Ty::Never) {
-            self.ty.clone()
-        } else {
-            Ty::Unknown
-        };
-        let mut carries = self.carries.clone();
-        carries.join(&other.carries);
-        Val { ty, carries }
+    pub fn parts(&self) -> BTreeSet<Ty> {
+        let mut out = BTreeSet::new();
+        for t in &self.0 {
+            out.extend(t.parts());
+        }
+        out
+    }
+
+    /// A value of unknown type built from what this value holds: one [`Ty::Hidden`] of its parts.
+    #[must_use]
+    pub fn hidden(&self) -> Val {
+        Val::of(Ty::Hidden(self.parts()))
+    }
+
+    /// The value with every generic parameter in `map` replaced.
+    #[must_use]
+    pub fn subst(&self, map: &BTreeMap<GenId, Ty>) -> Val {
+        let mut v = Val::none();
+        for t in &self.0 {
+            v.add(t.subst(map));
+        }
+        v
+    }
+
+    /// Each alternative with references peeled.
+    #[must_use]
+    pub fn peeled(&self) -> Vec<Ty> {
+        let mut out: Vec<Ty> = self.0.iter().map(|t| t.peel().clone()).collect();
+        out.sort();
+        out.dedup();
+        out
     }
 }
 
@@ -433,59 +613,107 @@ impl Val {
 mod tests {
     use super::*;
 
+    fn adt(i: usize, args: Vec<Ty>) -> Ty {
+        Ty::Adt(ItemId(i), args)
+    }
+
     #[test]
-    fn carries_reach_through_every_type_form() {
+    fn parts_reach_through_every_type_form() {
+        let closure = Ty::Closure(Box::new(ClosureKey {
+            owner: NodeId(2),
+            subst: vec![adt(7, Vec::new())],
+            index: 0,
+        }));
         let t = Ty::Tuple(vec![
-            Ty::Ref(Box::new(Ty::Ext(
-                "Vec".to_owned(),
-                vec![Ty::Adt(ItemId(3), vec![Ty::Param(GenId(1))])],
-            ))),
-            Ty::Array(Box::new(Ty::Closure(NodeId(7)))),
-            Ty::Dyn(vec![TraitRef::Fn(
-                "Fn".to_owned(),
-                vec![Ty::Adt(ItemId(4), Vec::new())],
-                Box::new(Ty::Adt(ItemId(5), Vec::new())),
-            )]),
-            Ty::Prim("u64".to_owned()),
+            Ty::Ref(Box::new(Ty::ext("Vec", vec![adt(3, vec![Ty::Param(GenId(1))])]))),
+            Ty::Array(Box::new(closure.clone())),
+            Ty::Hidden(BTreeSet::from([adt(5, Vec::new())])),
+            Ty::prim("u64"),
         ]);
-        let c = t.carries();
-        assert_eq!(c.types, [ItemId(3), ItemId(4), ItemId(5)].into());
-        assert_eq!(c.calls, [NodeId(7)].into());
-        assert_eq!(c.generics, [GenId(1)].into());
-        assert!(!c.top);
-        assert!(Ty::Prim("f64".to_owned()).carries().is_empty());
+        let p = t.parts();
+        assert!(p.contains(&adt(3, vec![Ty::Param(GenId(1))])));
+        assert!(p.contains(&Ty::Param(GenId(1))));
+        assert!(p.contains(&closure));
+        assert!(p.contains(&adt(7, Vec::new())), "a closure's generic arguments are parts");
+        assert!(p.contains(&adt(5, Vec::new())), "hidden parts are parts");
+        assert!(!p.iter().any(|x| matches!(x, Ty::Prim(_) | Ty::Tuple(_) | Ty::Ref(_))));
+        assert!(Ty::prim("f64").parts().is_empty());
     }
 
     #[test]
-    fn joins_only_grow_and_top_absorbs() {
-        let mut a = Carries::default();
-        assert!(a.join(&Ty::Adt(ItemId(1), Vec::new()).carries()));
-        assert!(!a.join(&Ty::Adt(ItemId(1), Vec::new()).carries()));
-        assert!(a.join(&Carries::top()));
-        assert!(a.top);
-        let v = Val::of(Ty::Prim("u8".to_owned())).join(&Val::of(Ty::Prim("u16".to_owned())));
-        assert_eq!(v.ty, Ty::Unknown);
-        let w = Val::of(Ty::Never).join(&Val::of(Ty::Prim("u8".to_owned())));
-        assert_eq!(w.ty, Ty::Prim("u8".to_owned()));
+    fn cutting_keeps_every_part_and_bounds_depth() {
+        let mut t = adt(1, Vec::new());
+        for _ in 0..30 {
+            t = Ty::ext("Box", vec![adt(2, vec![t])]);
+        }
+        assert!(t.depth() > MAX_DEPTH);
+        let c = t.cut();
+        assert!(c.depth() <= MAX_DEPTH + 2, "{}", c.depth());
+        let heads = |x: &Ty| -> BTreeSet<ItemId> {
+            x.parts()
+                .iter()
+                .filter_map(|p| match p {
+                    Ty::Adt(id, _) => Some(*id),
+                    _ => None,
+                })
+                .collect()
+        };
+        assert_eq!(heads(&c), heads(&t));
+        let mut v = Val::none();
+        assert!(v.add(t));
+        assert!(v.0.iter().all(|x| x.depth() <= MAX_DEPTH + 2));
     }
 
     #[test]
-    fn unification_learns_parameters_through_references() {
-        let t = GenId(0);
-        let pattern = Ty::Ref(Box::new(Ty::Slice(Box::new(Ty::Param(t)))));
-        let actual = Ty::Ref(Box::new(Ty::Ext(
-            "Vec".to_owned(),
-            vec![Ty::Adt(ItemId(9), Vec::new())],
-        )));
-        let mut map = BTreeMap::new();
-        pattern.unify(&actual, &[t].into(), &mut map);
-        assert!(map.is_empty(), "a slice does not match a Vec");
-        let actual = Ty::Ref(Box::new(Ty::Array(Box::new(Ty::Adt(ItemId(9), Vec::new())))));
-        pattern.unify(&actual, &[t].into(), &mut map);
-        assert_eq!(map.get(&t), Some(&Ty::Adt(ItemId(9), Vec::new())));
-        assert_eq!(
-            Ty::Ext("Option".to_owned(), vec![Ty::Param(t)]).subst(&map),
-            Ty::Ext("Option".to_owned(), vec![Ty::Adt(ItemId(9), Vec::new())])
-        );
+    fn values_merge_past_the_limit_and_only_grow() {
+        let mut v = Val::none();
+        for i in 0..MAX_ALTERNATIVES {
+            assert!(v.add(adt(i, Vec::new())));
+        }
+        assert_eq!(v.0.len(), MAX_ALTERNATIVES);
+        assert!(v.add(adt(100, Vec::new())));
+        assert_eq!(v.0.len(), 1);
+        let p = v.parts();
+        assert_eq!(p.len(), MAX_ALTERNATIVES + 1);
+        assert!(!v.add(Ty::Never), "never adds nothing");
+        let w = v.clone();
+        assert!(!v.join(&w));
+    }
+
+    #[test]
+    fn substitution_reaches_closures_function_items_and_hidden_parts() {
+        let g = GenId(4);
+        let map = BTreeMap::from([(g, adt(9, Vec::new()))]);
+        let t = Ty::Tuple(vec![
+            Ty::FnDef(NodeId(1), vec![Ty::Param(g)]),
+            Ty::Closure(Box::new(ClosureKey {
+                owner: NodeId(1),
+                subst: vec![Ty::Param(g)],
+                index: 3,
+            })),
+            Ty::Hidden(BTreeSet::from([Ty::Param(g)])),
+        ]);
+        let s = t.subst(&map);
+        assert!(!s.has_param());
+        assert!(t.has_param());
+        assert!(s.parts().contains(&adt(9, Vec::new())));
+    }
+
+    #[test]
+    fn callables_are_recognised_through_references_and_boxes() {
+        let c = Ty::Closure(Box::new(ClosureKey {
+            owner: NodeId(0),
+            subst: Vec::new(),
+            index: 0,
+        }));
+        assert!(Ty::Ref(Box::new(c.clone())).is_callable());
+        assert!(Ty::ext("Box", vec![Ty::Dyn(vec![TraitRef::Fn(
+            "Fn".to_owned(),
+            Vec::new(),
+            Box::new(Ty::unit())
+        )])])
+        .is_callable());
+        assert!(!Ty::ext("Vec", vec![c]).is_callable());
+        assert!(!Ty::prim("u8").is_callable());
     }
 }

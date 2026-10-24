@@ -15,7 +15,7 @@ serde_json = "1.0.149"
 # Apache-2.0), with line numbers for every call site (proc-macro2's span-locations, MIT OR
 # Apache-2.0) and token printing for names (quote, MIT OR Apache-2.0); and petgraph (MIT OR
 # Apache-2.0) for the graph and its strongly connected components.
-syn = { version = "3.0.9", default-features = false, features = ["full", "parsing", "printing", "visit", "clone-impls", "extra-traits"] }
+syn = { version = "3.0.9", default-features = false, features = ["full", "parsing", "printing", "visit", "visit-mut", "clone-impls", "extra-traits"] }
 proc-macro2 = { version = "1.0.107", default-features = false, features = ["span-locations"] }
 quote = { version = "1.0.47", default-features = false }
 petgraph = { version = "0.8.3", default-features = false }
