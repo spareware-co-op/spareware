@@ -22,7 +22,9 @@
 //! configuration file sits on the way to a crate of the family (`posture`); no crate that ships
 //! lowers a denied lint in its source outside test code (`overrides`); the cargo-deny
 //! configurations hold chapter 29.2's allow-list, the advisories, the allowed sources and the
-//! dependency bans (`deny`); and the gate's own runs, which need tools a plain `cargo test` may
+//! dependency bans (`deny`), and `deny-no-std.toml` the vetted allow-list of the published crates
+//! a kernel crate may ship with, each pinned to the version `Cargo.lock` holds and with its record
+//! against the principles (`vetted`, piece G12a); and the gate's own runs, which need tools a plain `cargo test` may
 //! lack, are ignored tests the gate runs: cargo-deny over every crate of the family, with the
 //! gate's own rules on the same graphs (`--ignored gate_deny`), the builds of every kernel crate
 //! for `wasm32v1-none` and `wasm32-unknown-unknown` with every feature selection (`--ignored
@@ -61,6 +63,7 @@ mod seeded;
 mod source;
 mod table;
 mod toolchain;
+mod vetted;
 
 use check::Violation;
 
@@ -345,6 +348,40 @@ fn the_cargo_deny_configurations_hold_the_gate_rules() {
         }
     }
     assert!(problems.is_empty(), "{}", report(&problems));
+}
+
+#[cfg(not(target_family = "wasm"))]
+#[test]
+fn the_vetted_allow_list_pins_what_cargo_lock_holds() {
+    // The one allow-list of published crates that may ship in a kernel crate (29.1; the owner's
+    // direction of 2026-10-22), each entry vetted, pinned to the version Cargo.lock holds, from
+    // crates.io, and its audit committed where its record says so.
+    let root = repo::workspace_root();
+    let read = |file: &str| {
+        std::fs::read_to_string(root.join(file))
+            .unwrap_or_else(|e| panic!("cannot read {file}: {e}"))
+    };
+    let list = vetted::read_text(&read(deny::NO_STD_CONFIG))
+        .unwrap_or_else(|faults| panic!("{} is not vetted: {faults:#?}", deny::NO_STD_CONFIG));
+    assert!(
+        !list.is_empty(),
+        "geom-num builds with libm, so the list holds it"
+    );
+    let mut problems = vetted::against_lock(&list, &read("Cargo.lock"));
+    for v in &list {
+        if let vetted::Audit::File(path) = &v.audited
+            && !root.join(path).is_file()
+        {
+            problems.push(format!(
+                "{}@{}: its audit {path} is not in the repository",
+                v.name, v.version
+            ));
+        }
+    }
+    assert!(problems.is_empty(), "{problems:#?}");
+    for v in &list {
+        println!("vetted: {}@{}; audited: {:?}", v.name, v.version, v.audited);
+    }
 }
 
 /// Not a check: prints, from the table, the crates `kernel-build.yml` builds, one per line, so the

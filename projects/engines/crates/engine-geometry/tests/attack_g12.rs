@@ -94,6 +94,9 @@ mod source;
 #[allow(dead_code)]
 #[path = "scaffold/table.rs"]
 mod table;
+#[allow(dead_code)]
+#[path = "scaffold/vetted.rs"]
+mod vetted;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;

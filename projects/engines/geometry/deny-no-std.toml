@@ -1,6 +1,15 @@
-# cargo-deny's configuration for the no_std kernel crates alone: "Inside kernel crates, only
-# libm" (kernel architecture, chapter 29.1; 21; 29.20, rule 3). Every other crate a kernel crate
-# would use is a PORT, written into our own code (principle 11: nothing enters as it is).
+# cargo-deny's configuration for the no_std kernel crates alone, and the one vetted allow-list of
+# the published crates that may ship inside a kernel crate (kernel architecture, chapter 29.1 and
+# 29.20, rule 3, as the owner directed on 2026-10-22): a well-known permissive crate is used rather
+# than hand-rolled, but inside a kernel crate only once it is vetted against the principles. Each
+# entry pins one version (`name@version` is exact to cargo-deny) and its reason is its record, four
+# clauses in this order: deterministic (the same bits on every target, principle 2 and chapter 21),
+# no_std (every kernel crate is no_std, chapter 27), audited (the committed audit's path, or
+# "pending, piece <ID>" naming the piece that owes it) and pinned (the same version, and where it
+# is held). The scaffold test reads the list (tests/scaffold/vetted.rs) and refuses an entry that is
+# not pinned or whose record is not whole, and a pin Cargo.lock does not hold. Adding an entry, or
+# moving one to a new version, needs a new record and a kernel owner's yes in review (29.20). Every
+# crate a kernel crate would use and that is not on the list is a PORT, written into our own code.
 #
 # The merge gate (.github/workflows/kernel-gate.yml) runs `cargo deny ... check bans` with this
 # file once for each kernel crate of chapter 27's crate table (the rows of kind Kernel, the ones
@@ -18,10 +27,11 @@
 # Which published crates each may name beyond those is not settled by the chapters; the piece that
 # builds geom-pool (G04) and the facade's pieces settle it.
 #
-# cargo-deny's bans match crate names only, so `allow = ["libm"]` would pass any crate named libm,
-# a `[patch.crates-io] libm = { path = "..." }` included. The gate's own rules (tests/scaffold/
-# deny.rs, module `rules`) run on the same graph and refuse every crate outside the workspace that
-# is not libm from crates.io: the release Cargo.lock pins (29.4), not code patched in.
+# cargo-deny's bans match a crate by name and version only, so an entry would pass a crate of that
+# name and version from anywhere, a `[patch.crates-io] libm = { path = "..." }` included. The
+# gate's own rules (tests/scaffold/deny.rs, module `rules`) read this same list and run on the same
+# graph, refusing every crate outside the workspace that is not on it, at its version, from
+# crates.io: the vetted release Cargo.lock pins (29.4), not code patched in.
 
 [graph]
 # What ships: normal and build dependencies, with every feature on. Development dependencies
@@ -30,12 +40,24 @@ all-features = true
 exclude-dev = true
 
 [bans]
-# The only published crate allowed in the graph of a kernel crate. Our own crates are workspace
-# members and are allowed as such; which of them a kernel crate may name is the crate table's
-# rule (projects/engines/crates/engine-geometry/tests/scaffold), which also holds that only
-# geom-num names libm, the kernel's one door to maths functions (21). A path crate outside the
-# workspace is not allowed, and libm must come from crates.io (the gate's rules, above).
-allow = ["libm"]
+# The vetted allow-list: the only published crates allowed in the graph of a kernel crate, libm
+# alone today. Our own crates are workspace members and are allowed as such; which of them a kernel
+# crate may name is the crate table's rule (projects/engines/crates/engine-geometry/tests/
+# scaffold), which also holds that only geom-num names libm, the kernel's one door to maths
+# functions (21). A path crate outside the workspace is not allowed, and a vetted crate must come
+# from crates.io (the gate's rules, above).
+allow = [
+  { crate = "libm@0.2.16", reason = """\
+deterministic: pure Rust; its default arch feature takes the processor's square root on x86-64 \
+and aarch64 and, where present, its fused multiply-add, which IEEE 754 rounds correctly, so the \
+bits agree with its own routines on wasm32; the functions with no proven bound are kept apart in \
+geom_num::math::unproven (6.4, 21, 29.4); \
+no_std: yes, the crate is #![no_std] and builds for wasm32v1-none in the gate's build of geom-num; \
+audited: pending, piece G24 commits the written audit (notices, unsafe, panics, allocation) with \
+vendored libm (29.20, rule 3); \
+pinned: 0.2.16, by Cargo.lock and this entry: geom-num asks for ^0.2.16, so a lock that moves past \
+it fails the gate until a new record is written""" },
+]
 allow-workspace = true
 wildcards = "deny"
 allow-wildcard-paths = true

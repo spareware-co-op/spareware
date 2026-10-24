@@ -1,9 +1,9 @@
 //! The merge gate's dependency rules (piece G12): cargo-deny with chapter 29.2's licence
 //! allow-list, security advisories and allowed sources over every crate of the kernel's family;
-//! git dependencies refused; `libm` the only published crate in the `no_std` kernel crates, and
-//! the one from crates.io; rayon only through `geom-pool` in what ships; and the gate's own rules
-//! on the same graphs, where cargo-deny's leave a gap (chapter 28.8; 29.1, 29.2, 29.4; 29.20,
-//! rule 3).
+//! git dependencies refused; in the `no_std` kernel crates, only the crates of the vetted
+//! allow-list (`vetted`; `libm` alone today), each at its pinned version and from crates.io; rayon
+//! only through `geom-pool` in what ships; and the gate's own rules on the same graphs, where
+//! cargo-deny's leave a gap (chapter 28.8; 29.1, 29.2, 29.4; 29.20, rule 3).
 //!
 //! What it does:
 //!
@@ -12,12 +12,13 @@
 //!   every way they say something other than the gate requires: an allow-list that is not exactly
 //!   29.2's, an exception or clarification that widens it, development or build dependencies left
 //!   out, an advisory ignored or downgraded, a registry or git source allowed, a graph narrowed,
-//!   a `no_std` allow-list other than `libm`, or the rayon bans not exactly 29.4's. Fast and
-//!   hermetic.
+//!   a `no_std` allow-list whose entries are not vetted (`vetted::read`: each pinned to one
+//!   version, with its record against the principles), or the rayon bans not exactly 29.4's. Fast
+//!   and hermetic.
 //! - `run::cargo_deny` runs cargo-deny (`cargo deny`, with `--format json`, offline after
 //!   `run::fetch` has fetched the advisory database and the crates) and reads its diagnostics
-//!   (with `serde_json`) and exit code, whose bits say which check failed (`ADVISORIES`, `BANS`, `LICENSES`, `SOURCES`;
-//!   cargo-deny's documentation, "Exit Codes").
+//!   (with `serde_json`) and exit code, whose bits say which check failed (`ADVISORIES`, `BANS`,
+//!   `LICENSES`, `SOURCES`; cargo-deny's documentation, "Exit Codes").
 //! - `rules` holds the gate's own rules, run on the same graph as each cargo-deny run, its
 //!   refusals reported under the check they belong to. cargo-deny 0.20.2 leaves three gaps they
 //!   close. Its `private.ignore`, which `deny.toml` sets so our own unpublished crates (the
@@ -30,7 +31,8 @@
 //!   check never reads a path crate: the rules refuse every crate that is neither of this
 //!   workspace nor from crates.io (a `[patch]` to a local folder included), every crate outside
 //!   the workspace that takes the name of a crate of the family (`geom-pool`, through which rayon
-//!   may enter), and, in a `no_std` kernel crate, a `libm` that does not come from crates.io. And
+//!   may enter), and, in a `no_std` kernel crate, every crate that is not on the vetted allow-list
+//!   at its pinned version, from crates.io (a vetted crate patched in from a folder included). And
 //!   it accepts a licence that offers a choice without saying which was taken: the rules require
 //!   every such crate's choice in `licence::LICENCE_CHOICES` (29.20, rule 3: "record the choice
 //!   in the gate"), and `run::every_crate` refuses a row no graph needs.
@@ -87,6 +89,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::manifest::{Keys, Value, keys, strings};
+use crate::vetted;
 
 /// The configuration for every crate of the kernel's family, relative to the workspace root.
 pub const FAMILY_CONFIG: &str = "projects/engines/geometry/deny.toml";
@@ -122,9 +125,6 @@ pub const ALLOW_LIST_29_2: [&str; 15] = [
 
 /// crates.io's index, the one registry crates may come from.
 pub const CRATES_IO_INDEX: &str = "https://github.com/rust-lang/crates.io-index";
-
-/// The only published crate a `no_std` kernel crate may build with (29.1).
-pub const NO_STD_ALLOWED: &str = "libm";
 
 /// The rayon bans: each crate, and the only crates that may depend on it directly (29.4, 23.4).
 pub const RAYON_BANS: [(&str, &[&str]); 3] = [
@@ -466,13 +466,14 @@ pub fn no_std_config(text: &str) -> Vec<String> {
         &NARROWING_GRAPH_KEYS,
         "the graph must hold every platform's dependencies of the crate",
     );
-    exact_list(
-        &keys,
-        &mut wrong,
-        "bans.allow",
-        &[NO_STD_ALLOWED],
-        "inside kernel crates the only published crate is libm (29.1)",
-    );
+    if let Err(faults) = vetted::read(&keys) {
+        wrong.extend(faults.into_iter().map(|f| {
+            format!(
+                "bans.allow: {f} (29.1: a published crate ships in a kernel crate only from the \
+                 vetted allow-list)"
+            )
+        }));
+    }
     require(
         &keys,
         &mut wrong,
@@ -507,6 +508,7 @@ pub mod run {
     use crate::licence::LICENCE_CHOICES;
     use crate::repo;
     use crate::table::{Kind, TABLE, Table};
+    use crate::vetted;
 
     /// The bit of cargo-deny's exit code set when the advisories check fails.
     pub const ADVISORIES: i32 = 0x1;
@@ -737,7 +739,32 @@ pub mod run {
         let outcome = cargo_deny(root, manifest, config, metadata, checks);
         let krate = root_name(graph, manifest);
         let family: BTreeSet<&str> = TABLE.rows.iter().map(|r| r.name).collect();
-        let refusals = rules::graph(graph, &krate, config, checks, &family, choices);
+        // The vetted allow-list the rules hold a no_std graph to: the same file cargo-deny reads.
+        let (allowed, unreadable) = if config.ends_with(NO_STD_CONFIG) {
+            match fs::read_to_string(root.join(config))
+                .map_err(|e| vec![format!("cannot read {config}: {e}")])
+                .and_then(|text| vetted::read_text(&text))
+            {
+                Ok(list) => (list, Vec::new()),
+                Err(faults) => (
+                    Vec::new(),
+                    vec![Refusal {
+                        bit: BANS,
+                        krate: krate.clone(),
+                        code: "gate-allow-list",
+                        message: format!(
+                            "the vetted allow-list cannot be read, so nothing outside the \
+                             workspace may ship in this crate: {}",
+                            faults.join("; ")
+                        ),
+                    }],
+                ),
+            }
+        } else {
+            (Vec::new(), Vec::new())
+        };
+        let mut refusals = rules::graph(graph, &krate, config, checks, &family, choices, &allowed);
+        refusals.extend(unreadable);
         outcome.with(refusals)
     }
 
@@ -1217,8 +1244,9 @@ pub mod rules {
     use serde_json::Value;
 
     use super::run::{BANS, LICENSES, SOURCES};
-    use super::{NO_STD_ALLOWED, NO_STD_CONFIG, SHIPS_CONFIG};
+    use super::{NO_STD_CONFIG, SHIPS_CONFIG};
     use crate::licence::{Way, allowed, chosen_way, ways};
+    use crate::vetted::Vetted;
 
     /// The sources `cargo metadata` gives crates.io, by either protocol.
     pub const CRATES_IO_SOURCES: [&str; 2] = [
@@ -1324,8 +1352,8 @@ pub mod rules {
     }
 
     /// The gate's rules on `graph`, whose root is the workspace crate `root`, for a run of
-    /// `checks` with `config`; `family` names the crates of the kernel's family and `choices` is
-    /// the record of licence choices.
+    /// `checks` with `config`; `family` names the crates of the kernel's family, `choices` is the
+    /// record of licence choices and `vetted` the allow-list a `no_std` graph is held to.
     pub fn graph(
         graph: &Value,
         root: &str,
@@ -1333,6 +1361,7 @@ pub mod rules {
         checks: &[&str],
         family: &BTreeSet<&str>,
         choices: &[Choice],
+        vetted: &[Vetted],
     ) -> Vec<Refusal> {
         let exclude_dev = config.ends_with(NO_STD_CONFIG) || config.ends_with(SHIPS_CONFIG);
         let metadata = read(graph);
@@ -1352,7 +1381,7 @@ pub mod rules {
             sources(&view, family, &mut found);
         }
         if checks.contains(&"bans") && config.ends_with(NO_STD_CONFIG) {
-            only_libm(&view, &mut found);
+            only_vetted(&view, vetted, &mut found);
         }
         found
     }
@@ -1516,9 +1545,14 @@ pub mod rules {
         }
     }
 
-    /// The rule of a `no_std` kernel crate's graph: every crate outside the workspace is `libm`
-    /// from crates.io (29.1, 29.4: the audited release `Cargo.lock` pins, not code patched in).
-    fn only_libm(view: &View<'_>, found: &mut Vec<Refusal>) {
+    /// The rule of a `no_std` kernel crate's graph: every crate outside the workspace is on the
+    /// vetted allow-list, at exactly its pinned version, from crates.io (29.1, 29.4, 29.20 rule 3:
+    /// the vetted release `Cargo.lock` pins, not another version and not code patched in).
+    fn only_vetted(view: &View<'_>, vetted: &[Vetted], found: &mut Vec<Refusal>) {
+        let listed: Vec<String> = vetted
+            .iter()
+            .map(|v| format!("{}@{}", v.name, v.version))
+            .collect();
         for id in &view.reached {
             let Some(package) = view.packages.get(id) else {
                 continue;
@@ -1527,14 +1561,24 @@ pub mod rules {
                 continue;
             }
             let name = name(package);
-            if name != NO_STD_ALLOWED || !from_crates_io(package) {
+            let version = package.version.to_string();
+            let on_list = vetted
+                .iter()
+                .any(|v| v.name == name && v.version == version);
+            if !on_list || !from_crates_io(package) {
                 found.push(Refusal {
                     bit: BANS,
                     krate: name.to_owned(),
-                    code: "gate-not-libm",
+                    code: "gate-not-vetted",
                     message: format!(
-                        "inside kernel crates the only published crate is {NO_STD_ALLOWED}, from \
-                         crates.io (29.1, 29.4); this is {name} from {}",
+                        "inside kernel crates a published crate ships only from the vetted \
+                         allow-list ({}), at its pinned version, from crates.io (29.1, 29.20 rule \
+                         3); this is {name} {version} from {}",
+                        if listed.is_empty() {
+                            "empty".to_owned()
+                        } else {
+                            listed.join(", ")
+                        },
                         package
                             .source
                             .as_ref()
@@ -1671,7 +1715,16 @@ pub mod rules {
             family: &BTreeSet<&str>,
             choices: &[Choice],
         ) -> Vec<Refusal> {
-            super::graph(g, "geom-a", config, checks, family, choices)
+            super::graph(g, "geom-a", config, checks, family, choices, &libm_vetted())
+        }
+
+        /// The allow-list the test graphs are held to: libm at the version they give every crate.
+        fn libm_vetted() -> Vec<Vetted> {
+            crate::vetted::read_text(
+                "[bans]\nallow = [{ crate = \"libm@1.0.0\", reason = \"deterministic: x; \
+                 no_std: y; audited: pending, piece G24; pinned: 1.0.0\" }]\n",
+            )
+            .unwrap()
         }
 
         #[test]
@@ -1743,8 +1796,34 @@ pub mod rules {
                     .all(|r| r.krate != "dual")
             );
             let no_std = run(&g, NO_STD_CONFIG, &["bans"], &[]);
-            assert!(no_std.iter().all(|r| r.code == "gate-not-libm"));
+            assert!(no_std.iter().all(|r| r.code == "gate-not-vetted"));
             assert_eq!(no_std.len(), 5, "{no_std:#?}");
+        }
+
+        #[test]
+        fn a_no_std_graph_holds_only_the_vetted_crates_at_their_versions() {
+            let set_version = |g: &mut Value, name: &str, version: &str| {
+                let packages = g.get_mut("packages").and_then(Value::as_array_mut).unwrap();
+                let p = packages
+                    .iter_mut()
+                    .find(|p| p.get("name").and_then(Value::as_str) == Some(name))
+                    .unwrap();
+                *p.get_mut("version").unwrap() = Value::String(version.to_owned());
+            };
+            let g = graph(&[("libm", IO, "MIT", "null")], &[]);
+            assert_eq!(run(&g, NO_STD_CONFIG, &["bans"], &[]), Vec::new());
+            // Another version of a vetted crate is not vetted.
+            let mut other = g.clone();
+            set_version(&mut other, "libm", "1.0.1");
+            let found = run(&other, NO_STD_CONFIG, &["bans"], &[]);
+            assert_eq!(codes(&found), [("libm".to_owned(), "gate-not-vetted")]);
+            assert!(found[0].message.contains("libm 1.0.1"), "{found:#?}");
+            // With an empty list, nothing outside the workspace ships.
+            let family = BTreeSet::from(["geom-a"]);
+            let empty = super::graph(&g, "geom-a", NO_STD_CONFIG, &["bans"], &family, &[], &[]);
+            assert_eq!(codes(&empty), [("libm".to_owned(), "gate-not-vetted")]);
+            // The other configurations do not read the list.
+            assert_eq!(run(&other, "deny.toml", &["bans"], &[]), Vec::new());
         }
 
         #[test]
@@ -1797,8 +1876,16 @@ mod tests {
         allow-registry = [\"https://github.com/rust-lang/crates.io-index\"]\nallow-git = []\n\
         [bans]\nwildcards = \"deny\"\nallow-wildcard-paths = true\n";
 
+    /// A `no_std` configuration that holds every rule: one vetted entry, pinned, with its record.
     const NO_STD: &str = "[graph]\nall-features = true\nexclude-dev = true\n\
-        [bans]\nallow = [\"libm\"]\nallow-workspace = true\nwildcards = \"deny\"\n";
+        [bans]\nallow = [\n\
+        { crate = \"libm@0.2.16\", reason = \"deterministic: correctly rounded; no_std: yes; \
+        audited: pending, piece G24; pinned: 0.2.16\" },\n]\n\
+        allow-workspace = true\nwildcards = \"deny\"\n";
+
+    /// The vetted entry of `NO_STD`.
+    const NO_STD_ENTRY: &str = "{ crate = \"libm@0.2.16\", reason = \"deterministic: correctly \
+        rounded; no_std: yes; audited: pending, piece G24; pinned: 0.2.16\" },";
 
     /// A configuration of what ships that holds every rule, a ban written in each of
     /// cargo-deny's forms.
@@ -2035,14 +2122,24 @@ mod tests {
         };
         let cases: Vec<(&str, String, &str)> = vec![
             (
-                "another crate",
-                swap("[\"libm\"]", "[\"libm\", \"hashbrown\"]"),
-                "lists hashbrown",
+                "another crate, not vetted",
+                swap(NO_STD_ENTRY, &format!("{NO_STD_ENTRY}\n\"hashbrown\",")),
+                "\"hashbrown\" is not vetted",
+            ),
+            (
+                "the vetted crate unpinned",
+                swap("libm@0.2.16", "libm"),
+                "libm is not pinned",
+            ),
+            (
+                "its record cut short",
+                swap("; audited: pending, piece G24; pinned: 0.2.16", ""),
+                "audited: clause",
             ),
             (
                 "no allow-list",
-                swap("allow = [\"libm\"]\n", ""),
-                "bans.allow",
+                swap(&format!("allow = [\n{NO_STD_ENTRY}\n]\n"), ""),
+                "bans.allow is not set",
             ),
             (
                 "dev in",
@@ -2483,7 +2580,7 @@ mod gate {
 
     #[test]
     #[ignore = "runs cargo-deny, which the merge gate installs; run with --ignored"]
-    fn gate_deny_no_std_kernel_crates_name_only_libm() {
+    fn gate_deny_no_std_kernel_crates_name_only_vetted_crates() {
         super::run::fetch(&repo::workspace_root());
         // geom-num names libm, and its development dependencies (proptest, the oracles) are left
         // out: it passes.
@@ -2562,12 +2659,32 @@ mod gate {
         let family = patched.deny("family-libm-path", FAMILY_CONFIG, &["sources"]);
         assert!(
             no_std.failed(BANS)
-                && no_std.codes_for("libm").contains("gate-not-libm")
+                && no_std.codes_for("libm").contains("gate-not-vetted")
                 && family.failed(SOURCES)
                 && family.codes_for("libm").contains("gate-not-crates-io"),
             "a libm from a folder passed:\n{}\n\n{}",
             no_std.show(),
             family.show()
+        );
+        // libm at a version the vetted allow-list does not pin, as `cargo update -p libm` would
+        // lock a release nobody vetted: cargo-deny's `libm@<version>` is exact, so it refuses
+        // it, and so do the gate's rules.
+        let mut bumped = Graph::of("geom-num");
+        let (major_minor, patch) = version.rsplit_once('.').unwrap();
+        let next = format!("{major_minor}.{}", patch.parse::<u64>().unwrap() + 1);
+        let text = bumped.json.to_string().replace(
+            &old_id,
+            &old_id.replace(&format!("@{version}"), &format!("@{next}")),
+        );
+        bumped.json = serde_json::from_str(&text).unwrap();
+        bumped.set_field("libm", "version", Value::String(next.clone()));
+        let outcome = bumped.deny("no-std-libm-bumped", NO_STD_CONFIG, &["bans"]);
+        assert!(
+            outcome.failed(BANS)
+                && outcome.codes_for("libm").contains("not-allowed")
+                && outcome.codes_for("libm").contains("gate-not-vetted"),
+            "libm {next}, which the allow-list does not pin, passed:\n{}",
+            outcome.show()
         );
     }
 
