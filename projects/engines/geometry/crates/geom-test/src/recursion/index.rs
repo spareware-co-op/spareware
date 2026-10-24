@@ -7,10 +7,13 @@
 //! kind of their self type ([`Key`]) and by trait. [`Index::method`] answers which kernel
 //! functions `receiver.name(...)` may run, given what is known of the receiver;
 //! [`Index::dispatch`] which ones a call of one trait's method on a value may run (operators,
-//! formatting, derives, `?`); and [`Index::callbacks`] which kernel code outside code may run when
-//! it is handed a value: the outside-trait implementations of the kernel types the value carries,
+//! formatting, derives, `?`); [`Index::callbacks`] which kernel code outside code may run when it
+//! is handed a value: the outside-trait implementations of the kernel types the value carries,
 //! the closures and functions it carries, and the implementations of its generic parameters'
-//! bounds.
+//! bounds; and [`Index::drops`] which kernel `Drop` implementations dropping a value may run.
+//! Each answer also gives the receiver type each candidate was found for, when the source states
+//! it, so the call's size-change graph can relate the callee's type parameters to the caller's
+//! ([`crate::recursion::sizechange`]).
 //!
 //! Guarantees:
 //!
@@ -102,6 +105,21 @@ pub struct Lookup {
     pub nodes: BTreeSet<NodeId>,
     /// Whether the method may be one outside the kernel, whose callbacks the caller adds.
     pub outside: bool,
+    /// The receiver's type where the methods were found: after any `Deref` steps, or the generic
+    /// parameter whose bounds gave them; [`Ty::Unknown`] when they were found by name.
+    pub at: Ty,
+}
+
+/// How outside code reaches a kernel function it may call back.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Via {
+    /// A closure, function or carrier the values handed to it hold.
+    Value,
+    /// An outside-trait implementation of a kernel type the values carry.
+    Type,
+    /// An implementation of a bound of a generic parameter the values carry, called on a value of
+    /// that parameter's type.
+    Generic(GenId),
 }
 
 /// The program's implementations, filed for lookup, and its nodes' names.
@@ -327,6 +345,7 @@ impl<'p> Index<'p> {
                     let found = self.on_key(&Key::Adt(*id), name);
                     if !found.is_empty() {
                         out.nodes.extend(found);
+                        out.at = peeled.clone();
                         return out;
                     }
                     if let Some(target) = self.deref_target(&peeled) {
@@ -339,6 +358,7 @@ impl<'p> Index<'p> {
                 Ty::Param(g) => {
                     out.nodes.extend(self.bound_methods(*g, name));
                     out.outside = true;
+                    out.at = peeled.clone();
                     return out;
                 }
                 Ty::Dyn(traits) => {
@@ -356,6 +376,7 @@ impl<'p> Index<'p> {
                 other => {
                     out.nodes.extend(self.on_key(&key(other), name));
                     out.outside = true;
+                    out.at = other.clone();
                     return out;
                 }
             }
@@ -498,32 +519,45 @@ impl<'p> Index<'p> {
     /// the implementation for its type, or, for an outside type, the same trait's implementations
     /// for the kernel types it carries (as the standard library's implementations for containers
     /// call their elements'), or for a generic parameter or unknown value every implementation it
-    /// may reach.
+    /// may reach. Each comes with the receiver type it is called on, when the source states it:
+    /// the value's own type, the kernel type found inside an outside type, or the one generic
+    /// parameter an outside type of known shape holds.
     #[must_use]
-    pub fn dispatch(&self, value: &Val, trait_name: &str, method: &str) -> BTreeSet<NodeId> {
+    pub fn dispatch(&self, value: &Val, trait_name: &str, method: &str) -> BTreeMap<NodeId, Vec<Ty>> {
         let tr = TraitRef::Ext(trait_name.to_owned(), Vec::new());
-        let mut out = BTreeSet::new();
-        match value.ty.peel() {
-            Ty::Adt(id, _) => {
-                out.extend(self.trait_methods(&tr, method, Some(&Key::Adt(*id))));
-                if out.is_empty() && trait_name == "Deref" {
-                    return out;
+        let mut out: BTreeMap<NodeId, Vec<Ty>> = BTreeMap::new();
+        let mut add = |nodes: BTreeSet<NodeId>, at: &Ty| {
+            for n in nodes {
+                let list = out.entry(n).or_default();
+                if !list.contains(at) {
+                    list.push(at.clone());
                 }
             }
-            Ty::Param(_) | Ty::Dyn(_) | Ty::Unknown | Ty::Assoc(..) if value.carries.top => {
-                out.extend(self.trait_methods(&tr, method, None));
+        };
+        let ty = value.ty.peel().clone();
+        match &ty {
+            Ty::Adt(id, _) => {
+                add(self.trait_methods(&tr, method, Some(&Key::Adt(*id))), &ty);
             }
-            Ty::Param(_) | Ty::Dyn(_) => out.extend(self.trait_methods(&tr, method, None)),
+            Ty::Param(_) | Ty::Dyn(_) | Ty::Unknown | Ty::Assoc(..) if value.carries.top => {
+                add(self.trait_methods(&tr, method, None), &ty);
+            }
+            Ty::Param(_) | Ty::Dyn(_) => add(self.trait_methods(&tr, method, None), &ty),
             other => {
                 let k = key(other);
                 if k != Key::Blanket {
-                    out.extend(self.trait_methods(&tr, method, Some(&k)));
+                    add(self.trait_methods(&tr, method, Some(&k)), other);
                 }
                 for t in &value.carries.types {
-                    out.extend(self.trait_methods(&tr, method, Some(&Key::Adt(*t))));
+                    let at = adt_inside(other, *t).unwrap_or(Ty::Unknown);
+                    add(self.trait_methods(&tr, method, Some(&Key::Adt(*t))), &at);
                 }
                 if !value.carries.generics.is_empty() {
-                    out.extend(self.trait_methods(&tr, method, None));
+                    let at = match value.carries.generics.iter().collect::<Vec<_>>().as_slice() {
+                        [g] if other.is_known() && value.carries.types.is_empty() => Ty::Param(**g),
+                        _ => Ty::Unknown,
+                    };
+                    add(self.trait_methods(&tr, method, None), &at);
                 }
             }
         }
@@ -533,27 +567,127 @@ impl<'p> Index<'p> {
     /// The kernel code outside code may run when handed values carrying `carries`: every
     /// outside-trait implementation (and derived one) of the kernel types carried, the closures,
     /// functions and carriers carried, and every implementation of the carried generic
-    /// parameters' bounds. `top` is the caller's to handle (it reaches everything).
+    /// parameters' bounds, each with how it is reached. `top` is the caller's to handle (it
+    /// reaches everything).
     #[must_use]
-    pub fn callbacks(&self, carries: &Carries) -> BTreeSet<NodeId> {
-        let mut out: BTreeSet<NodeId> = carries.calls.clone();
+    pub fn callbacks(&self, carries: &Carries) -> BTreeMap<NodeId, BTreeSet<Via>> {
+        let mut out: BTreeMap<NodeId, BTreeSet<Via>> = BTreeMap::new();
+        for c in &carries.calls {
+            out.entry(*c).or_default().insert(Via::Value);
+        }
         for t in &carries.types {
-            out.extend(self.outside_trait_methods(*t));
+            for n in self.outside_trait_methods(*t) {
+                out.entry(n).or_default().insert(Via::Type);
+            }
         }
         for g in &carries.generics {
             for tr in self.resolver.bounds(*g) {
                 if tr.fn_arity().is_some() {
                     continue;
                 }
-                out.extend(self.all_trait_methods(&tr));
+                for n in self.all_trait_methods(&tr) {
+                    out.entry(n).or_default().insert(Via::Generic(*g));
+                }
             }
         }
         if carries.top {
             for t in 0..self.program.items.len() {
-                out.extend(self.outside_trait_methods(ItemId(t)));
+                for n in self.outside_trait_methods(ItemId(t)) {
+                    out.entry(n).or_default().insert(Via::Type);
+                }
             }
         }
         out
+    }
+
+    /// The kernel `Drop::drop` implementations that dropping values carrying `carries` may run:
+    /// those of the kernel types carried and of every kernel type their fields hold, as drop glue
+    /// drops each field; for a carried generic parameter or `top`, every one.
+    #[must_use]
+    pub fn drops(&self, carries: &Carries) -> BTreeSet<NodeId> {
+        let mut out = BTreeSet::new();
+        let Some(impls) = self.by_ext_trait.get("Drop") else {
+            return out;
+        };
+        let everything = carries.top || !carries.generics.is_empty();
+        let mut held: BTreeSet<ItemId> = BTreeSet::new();
+        let mut work: Vec<ItemId> = carries.types.iter().copied().collect();
+        while let Some(t) = work.pop() {
+            if held.insert(t) {
+                work.extend(self.field_types(t));
+            }
+        }
+        for imp in impls {
+            let applies = everything
+                || match self.impl_self.get(imp.0).map(key) {
+                    Some(Key::Adt(t)) => held.contains(&t),
+                    _ => true,
+                };
+            if applies {
+                out.extend(self.impl_methods(*imp, "drop"));
+            }
+        }
+        out
+    }
+
+    /// The kernel types a value of generic parameter `g` may be, seen from outside the function
+    /// that declares it: the self types of a kernel trait bound's implementations (all kernel
+    /// types if one of those is a blanket implementation), or, when no bound is a kernel trait,
+    /// every kernel struct, enum and union (an outside trait's implementations for kernel types
+    /// may come from the standard library's blanket implementations, which the kernel does not
+    /// list).
+    #[must_use]
+    pub fn types_for(&self, g: GenId) -> BTreeSet<ItemId> {
+        let all = || -> BTreeSet<ItemId> {
+            (0..self.program.items.len())
+                .map(ItemId)
+                .filter(|i| self.program.item(*i).is_adt())
+                .collect()
+        };
+        let bounds = self.resolver.with_supertraits(self.resolver.bounds(g));
+        let mut best: Option<BTreeSet<ItemId>> = None;
+        for tr in &bounds {
+            let TraitRef::Kernel(t, _) = tr else {
+                continue;
+            };
+            let mut set = BTreeSet::new();
+            let mut blanket = false;
+            for imp in self.by_kernel_trait.get(t).into_iter().flatten() {
+                match self.impl_self.get(imp.0).map(key) {
+                    Some(Key::Adt(id)) => {
+                        set.insert(id);
+                    }
+                    Some(Key::Blanket) | None => blanket = true,
+                    Some(_) => {}
+                }
+            }
+            if blanket {
+                continue;
+            }
+            if best.as_ref().is_none_or(|b| set.len() < b.len()) {
+                best = Some(set);
+            }
+        }
+        best.unwrap_or_else(all)
+    }
+
+    /// The kernel types the fields of kernel type `t` hold, written anywhere in their types.
+    fn field_types(&self, t: ItemId) -> BTreeSet<ItemId> {
+        let item = self.program.item(t);
+        let fields: Vec<&syn::Type> = match &item.kind {
+            ItemKind::Struct { fields, .. } | ItemKind::Union { fields, .. } => {
+                fields.all().into_iter().map(|(_, ty)| ty).collect()
+            }
+            ItemKind::Enum { variants, .. } => variants
+                .iter()
+                .flat_map(|v| v.fields.all().into_iter().map(|(_, ty)| ty))
+                .collect(),
+            _ => Vec::new(),
+        };
+        fields
+            .into_iter()
+            .flat_map(|f| self.resolver.ty(&item.scope, f).carries().types)
+            .collect()
     }
 
     /// Every method of every implementation of an outside trait for `t`, and its derived ones.
@@ -649,4 +783,23 @@ impl<'p> Index<'p> {
             _ => true,
         }
     }
+}
+
+/// The first kernel type `t` written inside `ty`, with its arguments, if any.
+fn adt_inside(ty: &Ty, t: ItemId) -> Option<Ty> {
+    let mut work: Vec<&Ty> = vec![ty];
+    while let Some(x) = work.pop() {
+        match x {
+            Ty::Adt(id, args) => {
+                if *id == t {
+                    return Some(x.clone());
+                }
+                work.extend(args.iter());
+            }
+            Ty::Ext(_, args) | Ty::Tuple(args) => work.extend(args.iter()),
+            Ty::Ref(inner) | Ty::Slice(inner) | Ty::Array(inner) => work.push(inner),
+            _ => {}
+        }
+    }
+    None
 }

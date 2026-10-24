@@ -6,16 +6,24 @@
 //! value, and one ([`Graph::any`]) for a call through a value the analysis cannot follow, which
 //! leads to every closure and every function whose address is taken. An edge `a -> b` says that
 //! running `a` may call `b` (or, from a carrier, that the callables it holds include `b`).
-//! [`Graph::cycles`] finds the strongly connected components that hold a call cycle and names
-//! each by its functions; [`type_cycles`] finds the kernel's structs, enums and unions that
-//! contain themselves, whose drop glue and derived implementations recurse over them.
+//! Each edge also carries the size-change graphs of its call sites ([`crate::recursion::sizechange`]):
+//! what the call states about the instantiation of the callee's type parameters relative to the
+//! caller's. [`Graph::cycles`] finds the strongly connected components that hold a call cycle,
+//! keeps the edges that lie on a closed walk some finite instantiation can run, and names each
+//! strongly connected component of those edges by its functions; [`type_cycles`] finds the
+//! kernel's structs, enums and unions that contain themselves, whose drop glue and derived
+//! implementations recurse over them.
 //!
 //! Guarantees:
 //!
-//! - **Every cycle.** A cycle of the graph lies inside one strongly connected component, and every
-//!   component with more than one node, or with an edge to itself, is reported, unless it holds no
-//!   function, derived implementation or closure (carriers alone run nothing) or lies wholly in a
-//!   crate's bound tests.
+//! - **Every cycle.** A cycle of running code is a closed walk of the graph whose instantiations
+//!   come back to where they started, so its edges are kept, it lies inside one strongly connected
+//!   component of the kept edges, and every such component with more than one node, or with an
+//!   edge to itself, is reported, unless it holds no function, derived implementation or closure
+//!   (carriers alone run nothing) or lies wholly in a crate's bound tests. Only closed walks whose
+//!   composed size-change graph forces a type parameter strictly below or above itself are left
+//!   out: generic recursion through ever smaller (or larger) types, which Rust's one copy per
+//!   instantiation cannot run as a cycle.
 //! - **Named as written.** A cycle's members are the names of its functions and derived
 //!   implementations, with each closure counted as the function it is written in, so a statement
 //!   in a module header can name it; a shortest path round the cycle, with the file and line of
@@ -27,9 +35,14 @@
 //! analysis", *Computers & Mathematics with Applications* 7 (1981),
 //! <https://doi.org/10.1016/0898-1221(81)90008-0>), from `petgraph`, whose implementation is
 //! iterative; shortest cycle paths by breadth-first search (Cormen, Leiserson, Rivest and Stein,
-//! *Introduction to Algorithms*, 3rd edition, section 22.2).
+//! *Introduction to Algorithms*, 3rd edition, section 22.2); the closure of a component's
+//! size-change graphs by a work list, as Lee, Jones and Ben-Amram compute it (POPL 2001,
+//! <https://doi.org/10.1145/360204.360210>).
 //!
-//! Cost: linear in nodes and edges for the components, plus one breadth-first search per cycle.
+//! Cost: linear in nodes and edges for the components, plus one breadth-first search per cycle;
+//! for a component whose edges state anything about type parameters, one work list per node over
+//! the distinct size-change graphs of walks inside it, which are few because nodes have a handful
+//! of type parameters.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
@@ -37,7 +50,8 @@ use petgraph::graph::{DiGraph, NodeIndex};
 
 use crate::recursion::index::Index;
 use crate::recursion::model::{ItemKind, NodeKind, Role};
-use crate::recursion::ty::{ItemId, NodeId, Ty};
+use crate::recursion::sizechange::{Labels, Scg};
+use crate::recursion::ty::{GenId, ItemId, NodeId, Ty};
 
 /// What a graph node is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -70,6 +84,12 @@ pub struct GNode {
     pub line: usize,
     /// The crate it belongs to.
     pub krate: usize,
+    /// Its type parameters, in the order size-change graphs number them: a function's own and its
+    /// implementation's or trait's (with the trait's `Self` last), a derived implementation's
+    /// type's, a closure's function's; none for a carrier.
+    pub vars: Vec<GenId>,
+    /// For a closure, how many parameters it takes.
+    pub arity: Option<usize>,
 }
 
 /// Where a call is written.
@@ -92,6 +112,8 @@ pub struct Graph {
     pub nodes: Vec<GNode>,
     /// The edges from each node, each with the first site seen.
     pub edges: BTreeMap<NodeId, BTreeMap<NodeId, Site>>,
+    /// The size-change graphs of each edge's call sites.
+    pub labels: BTreeMap<(NodeId, NodeId), Labels>,
     /// Functions used as values (their address taken).
     pub address_taken: BTreeSet<NodeId>,
     closures: BTreeMap<(NodeId, usize), NodeId>,
@@ -113,6 +135,8 @@ pub struct Cycle {
     pub member_nodes: BTreeSet<NodeId>,
     /// Every node of the component, carriers and closures included.
     pub nodes: BTreeSet<NodeId>,
+    /// The edges inside it that lie on a closed walk some instantiation can run.
+    pub edges: BTreeSet<(NodeId, NodeId)>,
     /// A shortest path round the cycle from its first member: each node's name and the site of
     /// its call to the next.
     pub path: Vec<(String, Site)>,
@@ -148,6 +172,8 @@ impl Graph {
                 file: n.file.clone(),
                 line: n.line,
                 krate: n.krate,
+                vars: vars_of(ix, NodeId(i)),
+                arity: None,
             })
             .collect();
         let test_crates = program
@@ -181,14 +207,15 @@ impl Graph {
         self.node(id).map_or(id, |n| n.owner)
     }
 
-    /// The `index`th closure written in node `parent`, made on first use.
-    pub fn closure(&mut self, parent: NodeId, index: usize, file: &str, line: usize) -> NodeId {
+    /// The `index`th closure written in node `parent`, taking `arity` parameters, made on first
+    /// use.
+    pub fn closure(&mut self, parent: NodeId, index: usize, arity: usize, file: &str, line: usize) -> NodeId {
         if let Some(id) = self.closures.get(&(parent, index)) {
             return *id;
         }
         let owner = self.owner_of(parent);
-        let (name, krate) = self.node(parent).map_or((String::new(), 0), |p| {
-            (format!("{}::{{closure#{index}}}", p.name), p.krate)
+        let (name, krate, vars) = self.node(parent).map_or((String::new(), 0, Vec::new()), |p| {
+            (format!("{}::{{closure#{index}}}", p.name), p.krate, p.vars.clone())
         });
         let id = self.push(GNode {
             name,
@@ -197,6 +224,8 @@ impl Graph {
             file: file.to_owned(),
             line,
             krate,
+            vars,
+            arity: Some(arity),
         });
         self.closures.insert((parent, index), id);
         id
@@ -213,6 +242,8 @@ impl Graph {
             file,
             line,
             krate,
+            vars: Vec::new(),
+            arity: None,
         })
     }
 
@@ -253,6 +284,8 @@ impl Graph {
             file,
             line: item.line,
             krate,
+            vars: Vec::new(),
+            arity: None,
         });
         self.fields.insert(key, id);
         id
@@ -285,6 +318,8 @@ impl Graph {
             file,
             line: it.line,
             krate,
+            vars: Vec::new(),
+            arity: None,
         });
         if let Some(n) = self.nodes.get_mut(id.0) {
             n.owner = id;
@@ -305,18 +340,43 @@ impl Graph {
             file: String::new(),
             line: 0,
             krate: usize::MAX,
+            vars: Vec::new(),
+            arity: None,
         });
         self.any = Some(id);
         id
     }
 
-    /// Adds the edge `from -> to`, keeping the first site.
+    /// Adds the edge `from -> to`, keeping the first site, with a call that states nothing about
+    /// type parameters.
     pub fn edge(&mut self, from: NodeId, to: NodeId, site: &Site) {
+        self.edge_rel(from, to, site, Scg::empty());
+    }
+
+    /// Adds the edge `from -> to`, keeping the first site, with the size-change graph `scg` of
+    /// this call site.
+    pub fn edge_rel(&mut self, from: NodeId, to: NodeId, site: &Site, scg: Scg) {
         self.edges
             .entry(from)
             .or_default()
             .entry(to)
             .or_insert_with(|| site.clone());
+        self.labels.entry((from, to)).or_default().insert(scg);
+    }
+
+    /// The type parameters of node `id`.
+    #[must_use]
+    pub fn vars(&self, id: NodeId) -> &[GenId] {
+        self.node(id).map_or(&[], |n| n.vars.as_slice())
+    }
+
+    /// The size-change graphs of the edge `from -> to`: none stated reads as one that states
+    /// nothing.
+    fn label(&self, from: NodeId, to: NodeId) -> Vec<Scg> {
+        match self.labels.get(&(from, to)) {
+            Some(l) => l.iter().cloned().collect(),
+            None => vec![Scg::empty()],
+        }
     }
 
     /// Joins the unknown-call node to every closure and every function whose address is taken.
@@ -344,64 +404,142 @@ impl Graph {
     /// Every recursive cycle, in order of its first member's name.
     #[must_use]
     pub fn cycles(&self) -> Vec<Cycle> {
-        let mut g: DiGraph<NodeId, ()> = DiGraph::new();
-        let idx: Vec<NodeIndex> = (0..self.nodes.len()).map(|i| g.add_node(NodeId(i))).collect();
-        for (from, tos) in &self.edges {
-            for to in tos.keys() {
-                if let (Some(a), Some(b)) = (idx.get(from.0), idx.get(to.0)) {
-                    g.add_edge(*a, *b, ());
-                }
-            }
-        }
+        let all: BTreeSet<(NodeId, NodeId)> = self
+            .edges
+            .iter()
+            .flat_map(|(from, tos)| tos.keys().map(move |to| (*from, *to)))
+            .collect();
         let mut out = Vec::new();
-        for scc in petgraph::algo::kosaraju_scc(&g) {
-            let nodes: BTreeSet<NodeId> = scc.iter().filter_map(|i| g.node_weight(*i).copied()).collect();
-            let looped = match nodes.iter().next() {
-                Some(only) if nodes.len() == 1 => {
-                    self.edges.get(only).is_some_and(|tos| tos.contains_key(only))
-                }
-                _ => nodes.len() > 1,
-            };
-            if !looped {
+        for scc in components(self.nodes.len(), &all) {
+            let inner = inside(&all, &scc);
+            if !looped(&scc, &inner) {
                 continue;
             }
-            let mut members = BTreeSet::new();
-            let mut member_nodes = BTreeSet::new();
-            let mut runs_code = false;
-            let mut outside_tests = false;
-            for n in &nodes {
-                let Some(node) = self.node(*n) else {
+            let kept = self.realisable_edges(&scc, &inner);
+            if kept.len() == inner.len() {
+                self.push_cycle(&mut out, scc, kept);
+                continue;
+            }
+            for sub in components(self.nodes.len(), &kept) {
+                if !sub.iter().all(|n| scc.contains(n)) {
                     continue;
-                };
-                if matches!(node.kind, GKind::Code | GKind::Derived | GKind::Closure) {
-                    runs_code = true;
-                    if !self.test_crates.contains(&node.krate) {
-                        outside_tests = true;
-                    }
-                    let owner = node.owner;
-                    if let Some(o) = self.node(owner) {
-                        members.insert(o.name.clone());
-                        member_nodes.insert(owner);
-                    }
+                }
+                let sub_edges = inside(&kept, &sub);
+                if looped(&sub, &sub_edges) {
+                    self.push_cycle(&mut out, sub, sub_edges);
                 }
             }
-            if !runs_code || !outside_tests {
-                continue;
-            }
-            let path = self.path_round(&nodes);
-            out.push(Cycle {
-                members,
-                member_nodes,
-                nodes,
-                path,
-            });
         }
         out.sort_by(|a, b| a.members.iter().next().cmp(&b.members.iter().next()));
         out
     }
 
-    /// A shortest path round the component from its first code node back to it.
-    fn path_round(&self, nodes: &BTreeSet<NodeId>) -> Vec<(String, Site)> {
+    /// Adds the cycle of component `nodes` with edges `edges` to `out`, unless it runs no code or
+    /// lies wholly in bound tests.
+    fn push_cycle(&self, out: &mut Vec<Cycle>, nodes: BTreeSet<NodeId>, edges: BTreeSet<(NodeId, NodeId)>) {
+        let mut members = BTreeSet::new();
+        let mut member_nodes = BTreeSet::new();
+        let mut runs_code = false;
+        let mut outside_tests = false;
+        for n in &nodes {
+            let Some(node) = self.node(*n) else {
+                continue;
+            };
+            if matches!(node.kind, GKind::Code | GKind::Derived | GKind::Closure) {
+                runs_code = true;
+                if !self.test_crates.contains(&node.krate) {
+                    outside_tests = true;
+                }
+                let owner = node.owner;
+                if let Some(o) = self.node(owner) {
+                    members.insert(o.name.clone());
+                    member_nodes.insert(owner);
+                }
+            }
+        }
+        if !runs_code || !outside_tests {
+            return;
+        }
+        let path = self.path_round(&nodes, &edges);
+        out.push(Cycle {
+            members,
+            member_nodes,
+            nodes,
+            edges,
+            path,
+        });
+    }
+
+    /// The edges of component `scc` (its edges `inner`) that lie on a closed walk inside it whose
+    /// composed size-change graph can come back to the instantiation it started from.
+    fn realisable_edges(
+        &self,
+        scc: &BTreeSet<NodeId>,
+        inner: &BTreeSet<(NodeId, NodeId)>,
+    ) -> BTreeSet<(NodeId, NodeId)> {
+        let stated = inner
+            .iter()
+            .any(|e| self.labels.get(e).is_some_and(|l| !l.states_nothing()));
+        if !stated {
+            return inner.clone();
+        }
+        let mut out_edges: BTreeMap<NodeId, Vec<NodeId>> = BTreeMap::new();
+        for (a, b) in inner {
+            out_edges.entry(*a).or_default().push(*b);
+        }
+        let walks: BTreeMap<NodeId, BTreeMap<NodeId, Labels>> = scc
+            .iter()
+            .map(|s| (*s, self.walks_from(*s, &out_edges)))
+            .collect();
+        let mut kept = BTreeSet::new();
+        for &(a, b) in inner {
+            let n = self.vars(a).len();
+            let mut back: Vec<Scg> = walks
+                .get(&b)
+                .and_then(|w| w.get(&a))
+                .map(|l| l.iter().cloned().collect())
+                .unwrap_or_default();
+            if a == b {
+                back.push(Scg::identity(n));
+            }
+            let realisable = self
+                .label(a, b)
+                .iter()
+                .any(|g| back.iter().any(|w| g.then(w).closes(n)));
+            if realisable {
+                kept.insert((a, b));
+            }
+        }
+        kept
+    }
+
+    /// The size-change graphs of every walk of one or more edges from `start` inside a
+    /// component, by the node the walk ends at.
+    fn walks_from(&self, start: NodeId, out_edges: &BTreeMap<NodeId, Vec<NodeId>>) -> BTreeMap<NodeId, Labels> {
+        let mut reached: BTreeMap<NodeId, Labels> = BTreeMap::new();
+        let mut work: Vec<(NodeId, Scg)> = Vec::new();
+        for b in out_edges.get(&start).into_iter().flatten() {
+            for g in self.label(start, *b) {
+                if reached.entry(*b).or_default().insert(g.clone()) {
+                    work.push((*b, g));
+                }
+            }
+        }
+        while let Some((m, g)) = work.pop() {
+            for c in out_edges.get(&m).into_iter().flatten() {
+                for h in self.label(m, *c) {
+                    let k = g.then(&h);
+                    if reached.entry(*c).or_default().insert(k.clone()) {
+                        work.push((*c, k));
+                    }
+                }
+            }
+        }
+        reached
+    }
+
+    /// A shortest path round the component from its first code node back to it, along `edges`.
+    fn path_round(&self, nodes: &BTreeSet<NodeId>, edges: &BTreeSet<(NodeId, NodeId)>) -> Vec<(String, Site)> {
         let start = nodes
             .iter()
             .filter(|n| self.node(**n).is_some_and(|x| x.kind != GKind::Carrier && x.kind != GKind::Any))
@@ -413,20 +551,20 @@ impl Graph {
         let Some(&start) = start else {
             return Vec::new();
         };
-        self.path_from(start, nodes)
+        self.path_from(start, edges)
     }
 
-    /// A shortest path from `start` round the cycle back to it, inside `nodes`: each node's name
+    /// A shortest path from `start` round the cycle back to it, along `edges`: each node's name
     /// and the site of its call to the next. Empty when there is none.
     #[must_use]
-    pub fn path_from(&self, start: NodeId, nodes: &BTreeSet<NodeId>) -> Vec<(String, Site)> {
+    pub fn path_from(&self, start: NodeId, edges: &BTreeSet<(NodeId, NodeId)>) -> Vec<(String, Site)> {
         let mut prev: BTreeMap<NodeId, NodeId> = BTreeMap::new();
         let mut queue: VecDeque<NodeId> = VecDeque::new();
         queue.push_back(start);
         let mut closed = false;
         while let Some(n) = queue.pop_front() {
             for to in self.edges.get(&n).into_iter().flat_map(BTreeMap::keys) {
-                if !nodes.contains(to) {
+                if !edges.contains(&(n, *to)) {
                     continue;
                 }
                 if *to == start {
@@ -451,7 +589,7 @@ impl Graph {
             }
             chain.push(*p);
             at = *p;
-            if chain.len() > nodes.len() {
+            if chain.len() > edges.len() {
                 break;
             }
         }
@@ -474,6 +612,57 @@ impl Graph {
             out.push((name, site));
         }
         out
+    }
+}
+
+/// The strongly connected components of the graph on `n` nodes with `edges`, each as its set of
+/// nodes.
+fn components(n: usize, edges: &BTreeSet<(NodeId, NodeId)>) -> Vec<BTreeSet<NodeId>> {
+    let mut g: DiGraph<NodeId, ()> = DiGraph::new();
+    let idx: Vec<NodeIndex> = (0..n).map(|i| g.add_node(NodeId(i))).collect();
+    for (from, to) in edges {
+        if let (Some(a), Some(b)) = (idx.get(from.0), idx.get(to.0)) {
+            g.add_edge(*a, *b, ());
+        }
+    }
+    petgraph::algo::kosaraju_scc(&g)
+        .into_iter()
+        .map(|scc| scc.iter().filter_map(|i| g.node_weight(*i).copied()).collect())
+        .collect()
+}
+
+/// The edges of `edges` with both ends in `nodes`.
+fn inside(edges: &BTreeSet<(NodeId, NodeId)>, nodes: &BTreeSet<NodeId>) -> BTreeSet<(NodeId, NodeId)> {
+    edges
+        .iter()
+        .filter(|(a, b)| nodes.contains(a) && nodes.contains(b))
+        .copied()
+        .collect()
+}
+
+/// Whether a component with these inner edges holds a cycle: two or more nodes, or an edge to
+/// itself.
+fn looped(nodes: &BTreeSet<NodeId>, inner: &BTreeSet<(NodeId, NodeId)>) -> bool {
+    nodes.len() > 1 || inner.iter().any(|(a, b)| a == b)
+}
+
+/// The type parameters of program node `id`, as [`GNode::vars`] lists them.
+fn vars_of(ix: &Index<'_>, id: NodeId) -> Vec<GenId> {
+    let Some(node) = ix.program.node(id) else {
+        return Vec::new();
+    };
+    match &node.kind {
+        NodeKind::Derived { item, .. } => ix.program.item(*item).scope.generics.clone(),
+        NodeKind::TraitDefault(t) => {
+            let mut v = node.scope.generics.clone();
+            if let ItemKind::Trait { self_gen, .. } = &ix.program.item(*t).kind
+                && !v.contains(self_gen)
+            {
+                v.push(*self_gen);
+            }
+            v
+        }
+        NodeKind::Fn | NodeKind::Method(_) => node.scope.generics.clone(),
     }
 }
 

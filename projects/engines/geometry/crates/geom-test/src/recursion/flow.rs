@@ -18,7 +18,11 @@
 //!   nodes ([`Graph::param`], [`Graph::field`], [`Graph::ret`], [`Graph::constant`]) through
 //!   which the callables that flow into them at one place reach the calls made through them at
 //!   another, and a value that is written to (`v.push(f)`, `*slot = f`, `&mut v` passed on) takes
-//!   in what is written.
+//!   in what is written. A carrier takes in callables only when its declared type can hold one
+//!   ([`Ty::admits_callables`]): an `f64` parameter carries nothing, whatever is passed to it.
+//!   A closure's parameters and result are the program's, not one body's: every call that may
+//!   reach it, here or through carriers anywhere, joins its arguments into its parameters, and
+//!   its result flows back to each.
 //! - **Callbacks from outside code**: a call that may leave the kernel runs, through what it is
 //!   handed, the outside-trait implementations of the kernel types, the closures and functions,
 //!   and the bounds' implementations of the generic parameters its receiver and arguments carry
@@ -28,16 +32,30 @@
 //!   `Default` implementations.
 //!
 //! A body is evaluated repeatedly until no binding's value and no closure parameter grows, so a
-//! value assigned late in a loop reaches its uses early in it.
+//! value assigned late in a loop reaches its uses early in it; and the whole program is evaluated
+//! again until no closure's parameters or result and no carrier's contents grow, so a closure
+//! called through a carrier in one body sees the arguments of that call in another. Everything
+//! starts empty and only grows, so no call is added on a guess that a later round would have
+//! withdrawn.
+//!
+//! Each edge to a kernel function carries the size-change graph of its call
+//! ([`crate::recursion::sizechange::relate`]): the callee's declared parameter and receiver types,
+//! and the implementation's self type a dispatch chose, matched against the types at the call
+//! site. A closure called where it was made, in the same running call of its function, keeps its
+//! function's type parameters as they are.
 //!
 //! Guarantees:
 //!
 //! - **Sound for the calls Rust can make, given the standard library.** Every call a body can
 //!   make into kernel code in some build that ships is an edge, by one of the routes above, or the
 //!   code is reported: a path that resolves nowhere, a macro that cannot be read, a syntax form
-//!   the analysis does not know ([`Problem`]). The one assumption is about the standard library:
+//!   the analysis does not know ([`Problem`]). The assumptions are about the standard library:
 //!   that it calls kernel code only through what it is handed (the module header of
-//!   [`crate::recursion::index`]).
+//!   [`crate::recursion::index`]), that it calls a closure it is handed with values built from
+//!   what it is handed, and that its prelude's variant constructors `Some`, `Ok` and `Err` call
+//!   nothing. Where a value's type is lost, its kernel types are kept as what it may carry, and a
+//!   type parameter of another function stands for every kernel type its bounds allow
+//!   ([`Index::types_for`]).
 //! - **Precise where the source is.** A receiver or operand of a stated type dispatches only to
 //!   what that type can run, so a method that delegates to a field's method of the same name is
 //!   not a cycle with itself.
@@ -55,7 +73,7 @@
 //! (<https://doc.rust-lang.org/reference/expressions/operator-expr.html>).
 //!
 //! Cost: each round is linear in the size of the body times the cost of the lookups it makes;
-//! at most [`MAX_ROUNDS`] rounds. The evaluator recurses over the syntax tree, so its depth is the
+//! at most [`MAX_ROUNDS`] rounds per body and [`MAX_PROGRAM_ROUNDS`] rounds of the program. The evaluator recurses over the syntax tree, so its depth is the
 //! nesting depth of the source's expressions; [`crate::recursion::analyse`] runs it on a thread
 //! with a large stack.
 
@@ -66,7 +84,8 @@ use syn::{BinOp, Expr, Pat, Stmt, UnOp};
 
 use crate::recursion::Problem;
 use crate::recursion::graph::{GKind, Graph, Site};
-use crate::recursion::index::{Index, Key, key};
+use crate::recursion::index::{Index, Key, Via, key};
+use crate::recursion::sizechange::{Scg, relate};
 use crate::recursion::macros::{self, FmtTrait, Formatted, MacroRead};
 use crate::recursion::model::{Fields, ItemKind, NodeKind, Scope, SelfRef};
 use crate::recursion::resolve::{Ns, Res, Resolver};
@@ -74,6 +93,31 @@ use crate::recursion::ty::{Carries, GenId, ItemId, NodeId, TraitRef, Ty, Val};
 
 /// The most rounds a body is evaluated.
 pub const MAX_ROUNDS: usize = 32;
+
+/// The most rounds the whole program is evaluated.
+pub const MAX_PROGRAM_ROUNDS: usize = 32;
+
+/// How an implicit trait call's edges are described.
+const IMPLICIT: &str = "an implicit trait call (operator, formatting, derive)";
+
+/// A kernel function a call may run, with the receiver type it is called on when the source
+/// states it.
+type Target = (NodeId, Option<Ty>);
+
+/// What the analysis of every body shares: each closure's parameters and result, and what each
+/// carrier may hold, all growing from empty.
+#[derive(Default)]
+struct Shared {
+    /// Each closure parameter's value, joined from every call that may reach the closure.
+    closure_params: BTreeMap<(NodeId, usize), Val>,
+    /// Each closure's result.
+    closure_rets: BTreeMap<NodeId, Val>,
+    /// The closures, functions and the unknown-call node each carrier may lead to, through
+    /// carriers only, as of the last program round.
+    reach: BTreeMap<NodeId, BTreeSet<NodeId>>,
+    /// Whether anything shared grew in this program round.
+    changed: bool,
+}
 
 /// The standard conversions that construct their result, with the trait and method of the kernel
 /// implementations they may call.
@@ -138,6 +182,8 @@ struct Flow<'a, 'p> {
     reported: &'a mut BTreeSet<(String, usize, String)>,
     /// Constants whose initialisers are waiting to be read.
     pending_consts: &'a mut Vec<(ItemId, NodeId)>,
+    /// What every body shares.
+    shared: &'a mut Shared,
     /// The node whose calls are being found: the body's own, or a closure's inside it.
     current: NodeId,
     scope: Scope,
@@ -146,8 +192,9 @@ struct Flow<'a, 'p> {
     next_binding: usize,
     scopes: Vec<BTreeMap<String, usize>>,
     next_closure: usize,
-    closure_params: BTreeMap<(NodeId, usize), Val>,
     changed: bool,
+    /// What the body's values carry, whose drop glue may run.
+    dropped: Carries,
     /// The declared return type of the current function or closure.
     ret_ty: Ty,
     /// The break values of the enclosing loops.
@@ -162,23 +209,108 @@ struct Flow<'a, 'p> {
 /// `problems`.
 pub fn analyse(ix: &Index<'_>, g: &mut Graph, problems: &mut Vec<Problem>) {
     let mut reported = BTreeSet::new();
-    let mut pending: Vec<(ItemId, NodeId)> = Vec::new();
-    for (i, node) in ix.program.nodes.iter().enumerate() {
-        let id = NodeId(i);
-        let mut flow = Flow::new(ix, g, problems, &mut reported, &mut pending, id, node.scope.clone(), &node.file);
-        match &node.kind {
-            NodeKind::Derived { item, trait_name } => flow.derived(*item, trait_name, node.line),
-            _ => flow.body(id),
+    let mut shared = Shared::default();
+    let mut consts: Vec<(ItemId, NodeId)> = Vec::new();
+    for round in 0..MAX_PROGRAM_ROUNDS {
+        shared.changed = false;
+        let mut pending: Vec<(ItemId, NodeId)> = Vec::new();
+        for (i, node) in ix.program.nodes.iter().enumerate() {
+            let id = NodeId(i);
+            let mut flow = Flow::new(
+                ix,
+                g,
+                problems,
+                &mut reported,
+                &mut pending,
+                &mut shared,
+                id,
+                node.scope.clone(),
+                &node.file,
+            );
+            match &node.kind {
+                NodeKind::Derived { item, trait_name } => flow.derived(*item, trait_name, node.line),
+                _ => flow.body(id),
+            }
+        }
+        // Constant initialisers, as their values are read; reading one may reach more. Every one
+        // read in an earlier round is read again, since what it reaches may have grown.
+        let mut queue: Vec<(ItemId, NodeId)> = consts.clone();
+        queue.append(&mut pending);
+        let mut done: BTreeSet<ItemId> = BTreeSet::new();
+        while let Some((item, node)) = queue.pop() {
+            if !done.insert(item) {
+                continue;
+            }
+            if !consts.contains(&(item, node)) {
+                consts.push((item, node));
+            }
+            let it = ix.program.item(item);
+            let file = ix.program.module(it.module).file.clone();
+            let mut flow = Flow::new(
+                ix,
+                g,
+                problems,
+                &mut reported,
+                &mut pending,
+                &mut shared,
+                node,
+                it.scope.clone(),
+                &file,
+            );
+            flow.constant(item, node);
+            queue.append(&mut pending);
+        }
+        let reach = carrier_reach(g);
+        if reach != shared.reach {
+            shared.reach = reach;
+            shared.changed = true;
+        }
+        if !shared.changed {
+            break;
+        }
+        if round.saturating_add(1) == MAX_PROGRAM_ROUNDS {
+            problems.push(Problem::unread(
+                "",
+                0,
+                "the program's closure values and carriers still grow after the round limit",
+            ));
         }
     }
-    // Constant initialisers, as their values are read; reading one may reach more.
-    while let Some((item, node)) = pending.pop() {
-        let it = ix.program.item(item);
-        let file = ix.program.module(it.module).file.clone();
-        let mut flow = Flow::new(ix, g, problems, &mut reported, &mut pending, node, it.scope.clone(), &file);
-        flow.constant(item, node);
-    }
     g.finish();
+}
+
+/// For each carrier, the closures, functions and the unknown-call node it may lead to through
+/// carriers only.
+fn carrier_reach(g: &Graph) -> BTreeMap<NodeId, BTreeSet<NodeId>> {
+    let mut out = BTreeMap::new();
+    for (i, n) in g.nodes.iter().enumerate() {
+        if n.kind != GKind::Carrier {
+            continue;
+        }
+        let start = NodeId(i);
+        let mut seen: BTreeSet<NodeId> = BTreeSet::from([start]);
+        let mut found: BTreeSet<NodeId> = BTreeSet::new();
+        let mut work = vec![start];
+        while let Some(c) = work.pop() {
+            for to in g.edges.get(&c).into_iter().flat_map(BTreeMap::keys) {
+                match g.node(*to).map(|x| x.kind) {
+                    Some(GKind::Carrier) => {
+                        if seen.insert(*to) {
+                            work.push(*to);
+                        }
+                    }
+                    Some(_) => {
+                        found.insert(*to);
+                    }
+                    None => {}
+                }
+            }
+        }
+        if !found.is_empty() {
+            out.insert(start, found);
+        }
+    }
+    out
 }
 
 impl<'a, 'p> Flow<'a, 'p> {
@@ -189,6 +321,7 @@ impl<'a, 'p> Flow<'a, 'p> {
         problems: &'a mut Vec<Problem>,
         reported: &'a mut BTreeSet<(String, usize, String)>,
         pending_consts: &'a mut Vec<(ItemId, NodeId)>,
+        shared: &'a mut Shared,
         current: NodeId,
         scope: Scope,
         file: &str,
@@ -199,6 +332,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             problems,
             reported,
             pending_consts,
+            shared,
             current,
             scope,
             file: file.to_owned(),
@@ -206,8 +340,8 @@ impl<'a, 'p> Flow<'a, 'p> {
             next_binding: 0,
             scopes: vec![BTreeMap::new()],
             next_closure: 0,
-            closure_params: BTreeMap::new(),
             changed: false,
+            dropped: Carries::default(),
             ret_ty: Ty::Unknown,
             loops: Vec::new(),
             depth: 0,
@@ -239,10 +373,240 @@ impl<'a, 'p> Flow<'a, 'p> {
         self.g.edge(self.current, to, &site);
     }
 
+    fn edge_rel(&mut self, to: NodeId, line: usize, scg: Scg) {
+        let site = self.site(line);
+        self.g.edge_rel(self.current, to, &site, scg);
+    }
+
     fn edges(&mut self, to: &BTreeSet<NodeId>, line: usize) {
         for t in to {
             self.edge(*t, line);
         }
+    }
+
+    /// The function a node belongs to: itself, or for a closure the function it is written in.
+    fn owner(&self, n: NodeId) -> NodeId {
+        self.g.node(n).map_or(n, |x| x.owner)
+    }
+
+    /// The size-change graph of calling kernel function `target` with `args` (the receiver
+    /// first for a method), the receiver's type `receiver` when a dispatch chose `target` for it.
+    fn rel(&self, target: NodeId, receiver: Option<&Ty>, args: &[Val]) -> Scg {
+        let caller = self.g.vars(self.current);
+        let callee = self.g.vars(target);
+        if caller.is_empty() || callee.is_empty() {
+            return Scg::empty();
+        }
+        let Some(node) = self.ix.program.node(target) else {
+            return Scg::empty();
+        };
+        let self_pattern: Option<Ty> = match &node.kind {
+            NodeKind::Method(imp) => self.ix.impl_self.get(imp.0).cloned(),
+            NodeKind::Derived { item, .. } => Some(Ty::Adt(
+                *item,
+                self.ix.program.item(*item).scope.generics.iter().map(|g| Ty::Param(*g)).collect(),
+            )),
+            NodeKind::TraitDefault(t) => match &self.ix.program.item(*t).kind {
+                ItemKind::Trait { self_gen, .. } => Some(Ty::Param(*self_gen)),
+                _ => None,
+            },
+            NodeKind::Fn => None,
+        };
+        let mut pairs: Vec<(Ty, Ty)> = Vec::new();
+        if let (Some(sp), Some(r)) = (&self_pattern, receiver) {
+            pairs.push((sp.clone(), r.clone()));
+        }
+        match &node.sig {
+            Some(sig) => {
+                for (input, a) in sig.inputs.iter().zip(args) {
+                    let pattern = match input {
+                        syn::FnArg::Receiver(r) => match &r.kind {
+                            syn::ReceiverKind::Typed(_, t) => self.ix.resolver.ty(&node.scope, t),
+                            _ => self_pattern.clone().unwrap_or(Ty::Unknown),
+                        },
+                        syn::FnArg::Typed(pt) => self.ix.resolver.ty(&node.scope, &pt.ty),
+                    };
+                    pairs.push((pattern, a.ty.clone()));
+                }
+            }
+            None => {
+                if let (Some(sp), Some(a)) = (&self_pattern, args.first()) {
+                    pairs.push((sp.clone(), a.ty.clone()));
+                }
+            }
+        }
+        relate(&pairs, caller, callee)
+    }
+
+    /// The size-change graph of a call through a value that holds `target` itself: a closure
+    /// made by the same function keeps its type parameters as they are; anything else states
+    /// nothing.
+    fn direct_rel(&self, target: NodeId) -> Scg {
+        let is_closure = self.g.node(target).is_some_and(|n| n.kind == GKind::Closure);
+        if is_closure && self.owner(target) == self.owner(self.current) {
+            Scg::identity(self.g.vars(self.current).len())
+        } else {
+            Scg::empty()
+        }
+    }
+
+    /// The declared type of parameter `index` of kernel function `f` (the receiver is 0), or
+    /// unknown.
+    fn param_ty(&self, f: NodeId, index: usize) -> Ty {
+        let Some(node) = self.ix.program.node(f) else {
+            return Ty::Unknown;
+        };
+        let Some(input) = node.sig.as_ref().and_then(|s| s.inputs.iter().nth(index)) else {
+            return Ty::Unknown;
+        };
+        match input {
+            syn::FnArg::Receiver(r) => match &r.kind {
+                syn::ReceiverKind::Typed(_, t) => self.ix.resolver.ty(&node.scope, t),
+                _ => self.ix.resolver.self_ty(&node.scope, 0),
+            },
+            syn::FnArg::Typed(pt) => self.ix.resolver.ty(&node.scope, &pt.ty),
+        }
+    }
+
+    /// The declared type of field `name` of kernel type `item` (of its variant `variant`), or
+    /// unknown.
+    fn field_ty(&self, item: ItemId, variant: Option<usize>, name: &str) -> Ty {
+        let it = self.ix.program.item(item);
+        let fields = match (&it.kind, variant) {
+            (ItemKind::Struct { fields, .. } | ItemKind::Union { fields, .. }, None) => Some(fields),
+            (ItemKind::Enum { variants, .. }, Some(v)) => variants.get(v).map(|x| &x.fields),
+            _ => None,
+        };
+        fields
+            .and_then(|f| f.get(name))
+            .map_or(Ty::Unknown, |t| self.ix.resolver.ty(&it.scope, t))
+    }
+
+    /// Callables in `carries` flow into carrier `into`, whose declared type is `declared`: only
+    /// when that type can hold a callable.
+    fn flow_typed(&mut self, into: NodeId, carries: &Carries, declared: &Ty, line: usize) {
+        if declared.admits_callables() {
+            self.flow_into(into, carries, line);
+        }
+    }
+
+    /// Joins `v` into closure `c`'s parameter `i`.
+    fn join_param(&mut self, c: NodeId, i: usize, v: &Val) {
+        let slot = self.shared.closure_params.entry((c, i)).or_insert_with(|| Val::of(Ty::Never));
+        let joined = slot.join(v);
+        if joined != *slot {
+            *slot = joined;
+            self.shared.changed = true;
+            self.changed = true;
+        }
+    }
+
+    /// A value as seen from a body of another function than the one its type was written in:
+    /// that function's type parameters, unknown here, stand for every kernel type their bounds
+    /// allow.
+    fn foreign(&self, v: &Val, own: NodeId) -> Val {
+        let mine: BTreeSet<GenId> = self.g.vars(self.owner(self.current)).iter().copied().collect();
+        if self.owner(own) == self.owner(self.current) {
+            return v.clone();
+        }
+        let theirs: BTreeSet<GenId> = v
+            .carries
+            .generics
+            .iter()
+            .chain(v.ty.carries().generics.iter())
+            .copied()
+            .filter(|g| !mine.contains(g))
+            .collect();
+        if theirs.is_empty() {
+            return v.clone();
+        }
+        let mut carries = v.carries.clone();
+        for g in &theirs {
+            carries.generics.remove(g);
+            carries.types.extend(self.ix.types_for(*g));
+        }
+        Val {
+            ty: strip_params(&v.ty, &theirs),
+            carries,
+        }
+    }
+
+    /// Calls closure `c` with `vals` from this body: its parameters take them (unless its arity
+    /// differs, which no real call can do); returns its result.
+    fn enter_closure(&mut self, c: NodeId, vals: &[Val]) -> Val {
+        let arity = self.g.node(c).and_then(|n| n.arity);
+        if arity == Some(vals.len()) {
+            for (i, v) in vals.iter().enumerate() {
+                let v = self.foreign_into(v, c);
+                self.join_param(c, i, &v);
+            }
+        }
+        let ret = self.shared.closure_rets.get(&c).cloned().unwrap_or_else(|| Val::of(Ty::Never));
+        self.foreign(&ret, c)
+    }
+
+    /// A value of this body's, as closure `c`'s parameter sees it: unchanged if `c` belongs to
+    /// this body's function, else with this function's type parameters made the kernel types
+    /// their bounds allow.
+    fn foreign_into(&self, v: &Val, c: NodeId) -> Val {
+        if self.owner(c) == self.owner(self.current) {
+            return v.clone();
+        }
+        let mine: BTreeSet<GenId> = self.g.vars(self.owner(self.current)).iter().copied().collect();
+        let used: BTreeSet<GenId> = v
+            .carries
+            .generics
+            .iter()
+            .chain(v.ty.carries().generics.iter())
+            .copied()
+            .filter(|g| mine.contains(g))
+            .collect();
+        if used.is_empty() {
+            return v.clone();
+        }
+        let mut carries = v.carries.clone();
+        for g in &used {
+            carries.generics.remove(g);
+            carries.types.extend(self.ix.types_for(*g));
+        }
+        Val {
+            ty: strip_params(&v.ty, &used),
+            carries,
+        }
+    }
+
+    /// Calls kernel function `f` through a value with `vals`: its parameters take the callables
+    /// their types admit; returns its declared result.
+    fn enter_fn(&mut self, f: NodeId, vals: &[Val], line: usize) -> Val {
+        if self.ix.program.node(f).is_none() {
+            return Val::unknown(Carries::default());
+        }
+        for (i, v) in vals.iter().enumerate() {
+            if !v.carries.calls.is_empty() || v.carries.top {
+                let p = self.g.param(f, i);
+                let declared = self.param_ty(f, i);
+                self.flow_typed(p, &v.carries, &declared, line);
+            }
+        }
+        self.returns(&BTreeSet::from([f]), vals, None)
+    }
+
+    /// The closures and kernel functions a value holding `carries` may hold: itself, and through
+    /// its carriers.
+    fn held(&self, carries: &Carries) -> BTreeSet<NodeId> {
+        let mut out = BTreeSet::new();
+        for c in &carries.calls {
+            match self.g.node(*c).map(|n| n.kind) {
+                Some(GKind::Carrier) => {
+                    out.extend(self.shared.reach.get(c).into_iter().flatten().copied());
+                }
+                Some(_) => {
+                    out.insert(*c);
+                }
+                None => {}
+            }
+        }
+        out
     }
 
     /// Callables in `carries` flow into carrier `into`.
@@ -333,7 +697,8 @@ impl<'a, 'p> Flow<'a, 'p> {
             }
             Place::Field(item, variant, field) => {
                 let node = self.g.field(self.ix, *item, *variant, field);
-                self.flow_into(node, carries, line);
+                let declared = self.field_ty(*item, *variant, field);
+                self.flow_typed(node, carries, &declared, line);
             }
             Place::Other => {}
         }
@@ -409,7 +774,9 @@ impl<'a, 'p> Flow<'a, 'p> {
             self.params(id, &sig);
             let v = self.block(&block);
             let ret = self.g.ret(id);
-            self.flow_into(ret, &v.carries, line);
+            let declared = self.ret_ty.clone();
+            self.flow_typed(ret, &v.carries, &declared, line);
+            self.drop_glue(line);
             if !self.changed {
                 return;
             }
@@ -422,23 +789,24 @@ impl<'a, 'p> Flow<'a, 'p> {
     /// Binds a function's parameters: each carries its carrier node.
     fn params(&mut self, id: NodeId, sig: &syn::Signature) {
         for (i, input) in sig.inputs.iter().enumerate() {
-            let carrier = self.g.param(id, i);
-            let mut extra = Carries::default();
-            extra.calls.insert(carrier);
-            match input {
+            let ty = match input {
                 syn::FnArg::Receiver(r) => {
                     let self_ty = self.resolver().self_ty(&self.scope, 0);
-                    let ty = match &r.kind {
+                    match &r.kind {
                         syn::ReceiverKind::Reference(..) => Ty::Ref(Box::new(self_ty)),
                         syn::ReceiverKind::Typed(_, t) => self.ty(t),
                         _ => self_ty,
-                    };
-                    self.bind("self", Val::with(ty, &extra));
+                    }
                 }
-                syn::FnArg::Typed(t) => {
-                    let ty = self.ty(&t.ty);
-                    self.pattern(&t.pat, &Val::with(ty, &extra));
-                }
+                syn::FnArg::Typed(t) => self.ty(&t.ty),
+            };
+            let mut extra = Carries::default();
+            if ty.admits_callables() {
+                extra.calls.insert(self.g.param(id, i));
+            }
+            match input {
+                syn::FnArg::Receiver(_) => self.bind("self", Val::with(ty, &extra)),
+                syn::FnArg::Typed(t) => self.pattern(&t.pat, &Val::with(ty, &extra)),
             }
         }
     }
@@ -464,11 +832,9 @@ impl<'a, 'p> Flow<'a, 'p> {
         for f in fields {
             let v = Val::of(self.ty(&f));
             if trait_name == "Default" {
-                let targets = self.ix.dispatch(&v, "Default", "default");
-                self.how = "an implicit trait call (operator, formatting, derive)";
-                self.edges(&targets, line);
+                self.trait_call(&v, "Default", "default", &[], line);
             } else {
-                self.trait_call(&v, trait_name, method, line);
+                self.trait_call(&v, trait_name, method, &[v.clone()], line);
             }
         }
     }
@@ -488,7 +854,14 @@ impl<'a, 'p> Flow<'a, 'p> {
             self.current = node;
             let v = self.expr(&init);
             let ret = self.g.ret(node);
-            self.flow_into(ret, &v.carries, line);
+            let declared = match &self.ix.program.item(item).kind {
+                ItemKind::Const { ty, .. } => {
+                    let scope = self.ix.program.item(item).scope.clone();
+                    self.ix.resolver.ty(&scope, ty)
+                }
+                _ => Ty::Unknown,
+            };
+            self.flow_typed(ret, &v.carries, &declared, line);
             if !self.changed {
                 break;
             }
@@ -797,7 +1170,17 @@ impl<'a, 'p> Flow<'a, 'p> {
         clippy::too_many_lines,
         reason = "one arm per expression form of the Rust grammar; each arm delegates"
     )]
+    /// The value of an expression, its calls added; its kernel types join what the current body
+    /// may drop.
     fn expr(&mut self, e: &Expr) -> Val {
+        let v = self.expr_inner(e);
+        self.dropped.types.extend(v.carries.types.iter().copied());
+        self.dropped.generics.extend(v.carries.generics.iter().copied());
+        self.dropped.top |= v.carries.top;
+        v
+    }
+
+    fn expr_inner(&mut self, e: &Expr) -> Val {
         let line = e.span().start().line;
         match e {
             Expr::Array(a) => {
@@ -926,7 +1309,11 @@ impl<'a, 'p> Flow<'a, 'p> {
                 if let Some(x) = &r.expr {
                     let v = self.expr(x);
                     let ret = self.g.ret(self.current);
-                    self.flow_into(ret, &v.carries, line);
+                    let declared = self.ret_ty.clone();
+                    self.flow_typed(ret, &v.carries, &declared, line);
+                    if self.g.node(self.current).is_some_and(|n| n.kind == GKind::Closure) {
+                        self.closure_result(&v);
+                    }
                 }
                 Val::of(Ty::Never)
             }
@@ -1065,28 +1452,40 @@ impl<'a, 'p> Flow<'a, 'p> {
         }
         let targets = self.ix.callbacks(&all);
         self.how = "a callback of outside code";
-        self.edges(&targets, line);
+        for (t, vias) in targets {
+            for via in vias {
+                let scg = match via {
+                    Via::Value => self.direct_rel(t),
+                    Via::Type => Scg::empty(),
+                    Via::Generic(g) => self.rel(t, Some(&Ty::Param(g)), &[]),
+                };
+                self.edge_rel(t, line, scg);
+            }
+        }
         if all.top {
             let any = self.g.any();
             self.edge(any, line);
         }
     }
 
-    /// Calls `targets` (kernel functions) with `args` (the receiver first for a method), the
-    /// argument places given: edges, callables into parameter carriers, and parameter carriers
-    /// into places passed by `&mut`.
-    fn call_kernel(&mut self, targets: &BTreeSet<NodeId>, args: &[Val], places: &[Place], line: usize, how: &'static str) {
-        for t in targets {
+    /// Calls `targets` (kernel functions, each with the receiver type a dispatch chose it for)
+    /// with `args` (the receiver first for a method), the argument places given: edges with their
+    /// size-change graphs, callables into the parameter carriers whose types admit them, and
+    /// parameter carriers into places passed by `&mut`.
+    fn call_kernel(&mut self, targets: &[Target], args: &[Val], places: &[Place], line: usize, how: &'static str) {
+        for (t, receiver) in targets {
             self.how = how;
-            self.edge(*t, line);
+            let scg = self.rel(*t, receiver.as_ref(), args);
+            self.edge_rel(*t, line, scg);
             for (i, a) in args.iter().enumerate() {
                 if !a.carries.calls.is_empty() || a.carries.top {
                     let p = self.g.param(*t, i);
-                    self.flow_into(p, &a.carries, line);
+                    let declared = self.param_ty(*t, i);
+                    self.flow_typed(p, &a.carries, &declared, line);
                 }
             }
             for (i, place) in places.iter().enumerate() {
-                if *place != Place::Other {
+                if *place != Place::Other && self.param_ty(*t, i).admits_callables() {
                     let p = self.g.param(*t, i);
                     let mut c = Carries::default();
                     c.calls.insert(p);
@@ -1097,14 +1496,19 @@ impl<'a, 'p> Flow<'a, 'p> {
     }
 
     /// The declared return value of calling `targets` with `args`, generic parameters learned
-    /// from the arguments; each target's return carrier included.
+    /// from the arguments; each target's return carrier included when its type admits a
+    /// callable, and the kernel types any type parameter of the callee left unknown may be.
     fn returns(&mut self, targets: &BTreeSet<NodeId>, args: &[Val], receiver: Option<&Ty>) -> Val {
         let mut out: Option<Val> = None;
         for t in targets {
-            let ret = self.g.ret(*t);
+            let (ty, unknown) = self.declared_return(*t, args, receiver);
             let mut extra = Carries::default();
-            extra.calls.insert(ret);
-            let ty = self.declared_return(*t, args, receiver);
+            if ty.admits_callables() {
+                extra.calls.insert(self.g.ret(*t));
+            }
+            for g in &unknown {
+                extra.types.extend(self.ix.types_for(*g));
+            }
             let v = Val::with(ty, &extra);
             out = Some(out.map_or(v.clone(), |o| o.join(&v)));
         }
@@ -1112,18 +1516,19 @@ impl<'a, 'p> Flow<'a, 'p> {
     }
 
     /// A kernel function's declared return type, with what can be learned of its generic
-    /// parameters from the arguments and the receiver substituted.
-    fn declared_return(&self, t: NodeId, args: &[Val], receiver: Option<&Ty>) -> Ty {
+    /// parameters from the arguments and the receiver substituted, and the parameters left
+    /// unknown.
+    fn declared_return(&self, t: NodeId, args: &[Val], receiver: Option<&Ty>) -> (Ty, BTreeSet<GenId>) {
         let Some(node) = self.ix.program.node(t) else {
-            return Ty::Unknown;
+            return (Ty::Unknown, BTreeSet::new());
         };
         let Some(sig) = &node.sig else {
-            return Ty::Unknown;
+            return (Ty::Unknown, BTreeSet::new());
         };
         let r = &self.ix.resolver;
         let ret = match &sig.output {
             syn::ReturnType::Type(_, ty) => r.ty(&node.scope, ty),
-            syn::ReturnType::Default => return Ty::unit(),
+            syn::ReturnType::Default => return (Ty::unit(), BTreeSet::new()),
         };
         let params: BTreeSet<GenId> = node.scope.generics.iter().copied().collect();
         let mut map = BTreeMap::new();
@@ -1140,16 +1545,24 @@ impl<'a, 'p> Flow<'a, 'p> {
         let out = ret.subst(&map);
         // A return type naming `Self` was read in the impl's scope already; any parameter left
         // is unknown to the caller.
-        if out.carries().generics.iter().any(|g| params.contains(g)) {
-            strip_params(&out, &params)
+        let left: BTreeSet<GenId> = out
+            .carries()
+            .generics
+            .iter()
+            .copied()
+            .filter(|g| params.contains(g))
+            .collect();
+        if left.is_empty() {
+            (out, left)
         } else {
-            out
+            (strip_params(&out, &params), left)
         }
     }
 
     /// The closure parameter types a callee's parameter `index` gives a closure argument, if the
-    /// parameter is a closure type with stated argument types.
-    fn closure_context(&self, targets: &BTreeSet<NodeId>, index: usize) -> Option<Vec<Ty>> {
+    /// parameter is a closure type with stated argument types, with the callee's type parameters
+    /// learned from the other arguments `known` substituted.
+    fn closure_context(&self, targets: &BTreeSet<NodeId>, index: usize, known: &[Option<Val>]) -> Option<Vec<Ty>> {
         for t in targets {
             let Some(node) = self.ix.program.node(*t) else {
                 continue;
@@ -1167,8 +1580,14 @@ impl<'a, 'p> Flow<'a, 'p> {
                 _ => Vec::new(),
             };
             let params: BTreeSet<GenId> = node.scope.generics.iter().copied().collect();
+            let mut map = BTreeMap::new();
+            for (input, a) in sig.inputs.iter().zip(known) {
+                if let (syn::FnArg::Typed(pt), Some(a)) = (input, a) {
+                    self.ix.resolver.ty(&node.scope, &pt.ty).unify(&a.ty, &params, &mut map);
+                }
+            }
             if let Some(args) = traits.iter().find_map(|tr| tr.fn_arity().map(|_| tr.args().to_vec())) {
-                return Some(args.iter().map(|a| strip_params(a, &params)).collect());
+                return Some(args.iter().map(|a| strip_params(&a.subst(&map), &params)).collect());
             }
         }
         None
@@ -1190,11 +1609,14 @@ impl<'a, 'p> Flow<'a, 'p> {
                 }
             }
         }
+        // The callee's parameters are numbered from its receiver: argument i is input i + offset.
+        let mut inputs: Vec<Option<Val>> = vec![None; offset];
+        inputs.extend(vals.iter().cloned());
         for (i, a) in args.iter().enumerate() {
             if let Expr::Closure(c) = a {
                 let line = c.span().start().line;
                 let ctx = self
-                    .closure_context(targets, i.saturating_add(offset))
+                    .closure_context(targets, i.saturating_add(offset), &inputs)
                     .map(|tys| tys.into_iter().map(Val::of).collect::<Vec<_>>())
                     .unwrap_or_else(|| vec![Val::unknown(known.clone()); c.inputs.len()]);
                 let v = self.closure(c, Some(ctx), line);
@@ -1204,30 +1626,26 @@ impl<'a, 'p> Flow<'a, 'p> {
             }
         }
         let vals: Vec<Val> = vals.into_iter().map(|v| v.unwrap_or_else(Val::unit)).collect();
-        // A closure passed by name takes the same context as one written in place.
+        // A closure passed by name, or held by what is passed, takes the same context as one
+        // written in place.
         for (i, (a, v)) in args.iter().zip(&vals).enumerate() {
             if matches!(a, Expr::Closure(_)) {
                 continue;
             }
-            let closures: Vec<NodeId> = v
-                .carries
-                .calls
-                .iter()
-                .copied()
+            let closures: Vec<NodeId> = self
+                .held(&v.carries)
+                .into_iter()
                 .filter(|c| self.g.node(*c).is_some_and(|n| n.kind == GKind::Closure))
                 .collect();
             for c in closures {
-                let ctx: Vec<Val> = match self.closure_context(targets, i.saturating_add(offset)) {
+                let arity = self.g.node(c).and_then(|n| n.arity).unwrap_or(0);
+                let ctx: Vec<Val> = match self.closure_context(targets, i.saturating_add(offset), &inputs) {
                     Some(tys) => tys.into_iter().map(Val::of).collect(),
-                    None => (0..8).map(|_| Val::unknown(known.clone())).collect(),
+                    None => (0..arity).map(|_| Val::unknown(known.clone())).collect(),
                 };
                 for (k, cv) in ctx.into_iter().enumerate() {
-                    let slot = self.closure_params.entry((c, k)).or_insert_with(|| Val::of(Ty::Never));
-                    let joined = slot.join(&cv);
-                    if joined != *slot {
-                        *slot = joined;
-                        self.changed = true;
-                    }
+                    let cv = self.foreign_into(&cv, c);
+                    self.join_param(c, k, &cv);
                 }
             }
         }
@@ -1272,54 +1690,72 @@ impl<'a, 'p> Flow<'a, 'p> {
         self.call_value(&callee, &vals, line)
     }
 
-    /// A call through a value: runs whatever it may carry.
+    /// A call through a value: runs whatever it may carry, directly or through its carriers.
     fn call_value(&mut self, callee: &Val, vals: &[Val], line: usize) -> Val {
-        let mut result = Carries::default();
+        let mut result = Val::of(Ty::Never);
+        let mut any = callee.carries.top;
         for target in callee.carries.calls.clone() {
             self.how = "a call through a value";
-            self.edge(target, line);
-            if let Some(node) = self.g.node(target)
-                && node.kind == GKind::Closure
-            {
-                for (i, v) in vals.iter().enumerate() {
-                    let slot = self
-                        .closure_params
-                        .entry((target, i))
-                        .or_insert_with(|| Val::of(Ty::Never));
-                    let joined = slot.join(v);
-                    if joined != *slot {
-                        *slot = joined;
-                        self.changed = true;
+            let kind = self.g.node(target).map(|n| n.kind);
+            let scg = match kind {
+                Some(GKind::Closure) => self.direct_rel(target),
+                Some(GKind::Code | GKind::Derived) => self.rel(target, None, vals),
+                _ => Scg::empty(),
+            };
+            self.edge_rel(target, line, scg);
+            match kind {
+                Some(GKind::Closure) => {
+                    let r = self.enter_closure(target, vals);
+                    result = result.join(&r);
+                }
+                Some(GKind::Carrier) => {
+                    for r in self.shared.reach.get(&target).cloned().unwrap_or_default() {
+                        match self.g.node(r).map(|n| n.kind) {
+                            Some(GKind::Closure) => {
+                                let v = self.enter_closure(r, vals);
+                                result = result.join(&v);
+                            }
+                            Some(GKind::Any) => any = true,
+                            Some(_) => {
+                                let v = self.enter_fn(r, vals, line);
+                                result = result.join(&v);
+                            }
+                            None => {}
+                        }
                     }
                 }
-            }
-            if self.g.node(target).is_some_and(|n| n.kind != GKind::Carrier) {
-                let ret = self.g.ret(target);
-                result.calls.insert(ret);
-            } else {
-                result.calls.insert(target);
-            }
-            if self.ix.program.node(target).is_some() {
-                // A function item: its parameters take the arguments.
-                for (i, v) in vals.iter().enumerate() {
-                    if !v.carries.calls.is_empty() {
-                        let p = self.g.param(target, i);
-                        self.flow_into(p, &v.carries, line);
-                    }
+                Some(GKind::Any) => any = true,
+                Some(GKind::Code | GKind::Derived) => {
+                    let v = self.enter_fn(target, vals, line);
+                    result = result.join(&v);
                 }
+                None => {}
             }
         }
-        if callee.carries.top {
-            let any = self.g.any();
+        if any {
+            let anyn = self.g.any();
             self.how = "a call through a value the analysis cannot follow";
-            self.edge(any, line);
-            result.top = true;
+            self.edge(anyn, line);
+            // Any closure may be the one called: each takes these arguments.
+            let closures: Vec<NodeId> = (0..self.g.nodes.len())
+                .map(NodeId)
+                .filter(|c| self.g.node(*c).is_some_and(|n| n.kind == GKind::Closure))
+                .collect();
+            for c in closures {
+                self.enter_closure(c, vals);
+            }
+            result.carries.top = true;
+            result.ty = Ty::Unknown;
+        }
+        if callee.carries.calls.is_empty() {
+            // Nothing the call may run is known (a callable from outside): its result is not.
+            result.ty = Ty::Unknown;
         }
         // Through a generic or trait-object callable, outside closures may run with the args.
         for v in vals {
-            result.join(&v.carries);
+            result.carries.join(&v.carries);
         }
-        Val::unknown(result)
+        result
     }
 
     /// A call to what a path resolved to.
@@ -1328,7 +1764,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             Res::Fn(n) => {
                 let targets: BTreeSet<NodeId> = [*n].into();
                 let (vals, places) = self.args(args, &targets, 0, &Carries::default());
-                self.call_kernel(&targets, &vals, &places, line, "a call by path");
+                self.call_kernel(&[(*n, None)], &vals, &places, line, "a call by path");
                 self.returns(&targets, &vals, None)
             }
             Res::Item(id) => match &self.ix.program.item(*id).kind {
@@ -1399,8 +1835,10 @@ impl<'a, 'p> Flow<'a, 'p> {
     fn construct(&mut self, id: ItemId, variant: Option<usize>, vals: &[Val], line: usize) -> Val {
         for (i, v) in vals.iter().enumerate() {
             if !v.carries.calls.is_empty() || v.carries.top {
-                let f = self.g.field(self.ix, id, variant, &i.to_string());
-                self.flow_into(f, &v.carries, line);
+                let name = i.to_string();
+                let f = self.g.field(self.ix, id, variant, &name);
+                let declared = self.field_ty(id, variant, &name);
+                self.flow_typed(f, &v.carries, &declared, line);
             }
         }
         let args = self.ix.program.item(id).scope.generics.iter().map(|_| Ty::Unknown).collect();
@@ -1481,7 +1919,17 @@ impl<'a, 'p> Flow<'a, 'p> {
         });
         let targets = self.assoc_nodes(base, name, first.as_ref());
         let (vals, places) = self.args(args, &targets, 0, &Carries::default());
-        self.call_kernel(&targets, &vals, &places, line, "a call by path");
+        let receiver: Option<Ty> = match base {
+            Res::Generic(g) => Some(Ty::Param(*g)),
+            Res::Qualified(t, _) if t.is_known() => Some((**t).clone()),
+            Res::SelfTy => Some(self.resolver().self_ty(&self.scope, 0)),
+            Res::Item(id) if !matches!(self.ix.program.item(*id).kind, ItemKind::Trait { .. }) => {
+                Some(self.resolver().item_ty(*id))
+            }
+            _ => None,
+        };
+        let with: Vec<Target> = targets.iter().map(|t| (*t, receiver.clone())).collect();
+        self.call_kernel(&with, &vals, &places, line, "a call by path");
         // Outside implementations may exist: of an outside trait, a trait object, a generic.
         let maybe_outside = match base {
             Res::Item(id) => matches!(self.ix.program.item(*id).kind, ItemKind::Trait { .. }) || targets.is_empty(),
@@ -1529,7 +1977,8 @@ impl<'a, 'p> Flow<'a, 'p> {
             let base = Res::Ext(p.iter().take(p.len().saturating_sub(1)).cloned().collect());
             let targets = self.assoc_nodes(&base, last, first.as_ref());
             let (vals, places) = self.args(args, &targets, 0, &Carries::default());
-            self.call_kernel(&targets, &vals, &places, line, "a call by path");
+            let with: Vec<Target> = targets.iter().map(|t| (*t, None)).collect();
+            self.call_kernel(&with, &vals, &places, line, "a call by path");
             self.outside_call(&vals, line);
             let conv = self.conversions(last, vals.first(), None, line);
             let mut result = self.returns(&targets, &vals, None);
@@ -1543,7 +1992,11 @@ impl<'a, 'p> Flow<'a, 'p> {
             return result;
         }
         let (vals, places) = self.args(args, &BTreeSet::new(), 0, &Carries::default());
-        self.outside_call(&vals, line);
+        // The prelude's variant constructors build a value and call nothing.
+        let constructor = p.len() == 1 && matches!(last, "Some" | "Ok" | "Err");
+        if !constructor {
+            self.outside_call(&vals, line);
+        }
         // Outside code may write into what it is handed by `&mut`.
         let mut all = Carries::default();
         for v in &vals {
@@ -1596,7 +2049,9 @@ impl<'a, 'p> Flow<'a, 'p> {
         let mut all = vec![receiver.clone()];
         all.extend(vals.iter().cloned());
         places.insert(0, Place::Other);
-        self.call_kernel(&lookup.nodes, &all, &places, line, how);
+        let at = if lookup.at.is_known() { Some(lookup.at.clone()) } else { None };
+        let with: Vec<Target> = lookup.nodes.iter().map(|t| (*t, at.clone())).collect();
+        self.call_kernel(&with, &all, &places, line, how);
         let mut result = self.returns(&lookup.nodes, &all, Some(&receiver.ty));
         if lookup.outside {
             let mut inputs = all.clone();
@@ -1628,10 +2083,13 @@ impl<'a, 'p> Flow<'a, 'p> {
                 c.join(&v.carries);
             }
             c.join(&conv);
+            // What the closures it is handed return may come back in its result.
             for v in &vals {
-                for call in &v.carries.calls {
-                    if self.g.node(*call).is_some_and(|n| n.kind == GKind::Closure) {
-                        c.calls.insert(self.g.ret(*call));
+                for call in self.held(&v.carries) {
+                    if self.g.node(call).is_some_and(|n| n.kind == GKind::Closure) {
+                        let r = self.shared.closure_rets.get(&call).cloned().unwrap_or_else(|| Val::of(Ty::Never));
+                        let r = self.foreign(&r, call);
+                        c.join(&r.carries);
                     }
                 }
             }
@@ -1647,29 +2105,44 @@ impl<'a, 'p> Flow<'a, 'p> {
 
     // ------------------------------------------------------------------ implicit calls
 
-    /// A call of an outside trait's method on `v` (operators, formatting, derives): the kernel
-    /// implementations it may dispatch to. `method` `*` takes every method of the trait.
-    fn trait_call(&mut self, v: &Val, trait_name: &str, method: &str, line: usize) -> BTreeSet<NodeId> {
-        let targets = if method == "*" {
-            let mut all = BTreeSet::new();
-            for m in crate::recursion::model::DERIVABLE
+    /// A call of an outside trait's method on `v` (operators, formatting, derives) with `args`
+    /// (`v` first, or empty when the method takes no receiver): edges to the kernel
+    /// implementations it may dispatch to, each with its size-change graph; returns them.
+    /// `method` `*` takes every method of the trait.
+    fn trait_call(&mut self, v: &Val, trait_name: &str, method: &str, args: &[Val], line: usize) -> BTreeSet<NodeId> {
+        let mut found: BTreeMap<NodeId, Vec<Ty>> = BTreeMap::new();
+        let methods: Vec<&str> = if method == "*" {
+            crate::recursion::model::DERIVABLE
                 .iter()
                 .find(|(t, _)| *t == trait_name)
-                .map_or(&[][..], |(_, ms)| ms)
-            {
-                all.extend(self.ix.dispatch(v, trait_name, m));
-            }
-            all
+                .map_or_else(Vec::new, |(_, ms)| ms.to_vec())
         } else {
-            self.ix.dispatch(v, trait_name, method)
+            vec![method]
         };
-        self.how = "an implicit trait call (operator, formatting, derive)";
-        self.edges(&targets, line);
+        for m in methods {
+            for (n, ats) in self.ix.dispatch(v, trait_name, m) {
+                let list = found.entry(n).or_default();
+                for a in ats {
+                    if !list.contains(&a) {
+                        list.push(a);
+                    }
+                }
+            }
+        }
+        let targets: Vec<Target> = found
+            .iter()
+            .flat_map(|(n, ats)| {
+                ats.iter()
+                    .map(move |a| (*n, if a.is_known() { Some(a.clone()) } else { None }))
+            })
+            .collect();
+        self.call_kernel(&targets, args, &[], line, IMPLICIT);
         if v.carries.top {
+            self.how = IMPLICIT;
             let any = self.g.any();
             self.edge(any, line);
         }
-        targets
+        found.into_keys().collect()
     }
 
     fn binary(&mut self, b: &syn::ExprBinary, line: usize) -> Val {
@@ -1678,9 +2151,8 @@ impl<'a, 'p> Flow<'a, 'p> {
         let Some((trait_name, method)) = binop_trait(&b.op) else {
             return Val::of(Ty::Prim("bool".to_owned()));
         };
-        let targets = self.trait_call(&l, trait_name, method, line);
         let args = [l.clone(), r.clone()];
-        self.call_kernel(&targets, &args, &[], line, "an implicit trait call (operator, formatting, derive)");
+        let targets = self.trait_call(&l, trait_name, method, &args, line);
         if trait_name.ends_with("Assign") {
             let place = self.place(&b.left);
             self.write(&place, &r.carries, line);
@@ -1708,16 +2180,14 @@ impl<'a, 'p> Flow<'a, 'p> {
                     return Val::with((**inner).clone(), &v.carries_of_calls());
                 }
                 if let Ty::Adt(..) = v.ty.peel() {
-                    let targets = self.trait_call(&v, "Deref", "deref", line);
-                    self.call_kernel(&targets, &[v.clone()], &[], line, "an implicit trait call (operator, formatting, derive)");
+                    self.trait_call(&v, "Deref", "deref", &[v.clone()], line);
                     if let Some(t) = self.deref_target(v.ty.peel()) {
                         return Val::with(t, &v.carries_of_calls());
                     }
                     return Val::unknown(v.carries);
                 }
                 if !v.ty.is_known() {
-                    let targets = self.trait_call(&v, "Deref", "deref", line);
-                    self.call_kernel(&targets, &[v.clone()], &[], line, "an implicit trait call (operator, formatting, derive)");
+                    self.trait_call(&v, "Deref", "deref", &[v.clone()], line);
                 }
                 Val::unknown(v.carries)
             }
@@ -1726,8 +2196,7 @@ impl<'a, 'p> Flow<'a, 'p> {
                 if v.ty.is_prim() {
                     return v;
                 }
-                let targets = self.trait_call(&v, t, m, line);
-                self.call_kernel(&targets, &[v.clone()], &[], line, "an implicit trait call (operator, formatting, derive)");
+                let targets = self.trait_call(&v, t, m, &[v.clone()], line);
                 if targets.is_empty() {
                     v
                 } else {
@@ -1745,10 +2214,9 @@ impl<'a, 'p> Flow<'a, 'p> {
         let base = self.expr(&i.expr);
         let idx = self.expr(&i.index);
         if matches!(base.ty.peel(), Ty::Adt(..)) || !base.ty.is_known() {
-            let mut targets = self.trait_call(&base, "Index", "index", line);
-            targets.extend(self.trait_call(&base, "IndexMut", "index_mut", line));
             let args = [base.clone(), idx.clone()];
-            self.call_kernel(&targets, &args, &[], line, "an implicit trait call (operator, formatting, derive)");
+            let mut targets = self.trait_call(&base, "Index", "index", &args, line);
+            targets.extend(self.trait_call(&base, "IndexMut", "index_mut", &args, line));
             if !targets.is_empty() {
                 let r = self.returns(&targets, &args, Some(&base.ty));
                 return Val {
@@ -1770,7 +2238,12 @@ impl<'a, 'p> Flow<'a, 'p> {
         let next = self.ix.method(&it, "next");
         let mut targets = into.nodes.clone();
         targets.extend(next.nodes.iter().copied());
-        self.call_kernel(&targets, &[it.clone()], &[], line, "a for loop");
+        let mut with: Vec<Target> = Vec::new();
+        for (l, ts) in [(&into, &into.nodes), (&next, &next.nodes)] {
+            let at = if l.at.is_known() { Some(l.at.clone()) } else { None };
+            with.extend(ts.iter().map(|t| (*t, at.clone())));
+        }
+        self.call_kernel(&with, &[it.clone()], &[], line, "a for loop");
         for t in &targets {
             item.carries.calls.insert(self.g.ret(*t));
         }
@@ -1852,8 +2325,10 @@ impl<'a, 'p> Flow<'a, 'p> {
             if let Some(id) = item
                 && (!v.carries.calls.is_empty() || v.carries.top)
             {
-                let node = self.g.field(self.ix, id, variant, &member_name(&f.member));
-                self.flow_into(node, &v.carries, line);
+                let name = member_name(&f.member);
+                let node = self.g.field(self.ix, id, variant, &name);
+                let declared = self.field_ty(id, variant, &name);
+                self.flow_typed(node, &v.carries, &declared, line);
             }
         }
         if let Some(rest) = &s.rest {
@@ -1874,43 +2349,73 @@ impl<'a, 'p> Flow<'a, 'p> {
         }
     }
 
-    /// A closure: its own node, its body read with its parameters bound to `ctx` (the values its
-    /// caller gives it, when known), joined with the values it was called with directly.
+    /// A closure: its own node, its body read with its parameters bound to the program's value of
+    /// them, which `ctx` (the values its caller gives it, when known) joins.
     fn closure(&mut self, c: &syn::ExprClosure, ctx: Option<Vec<Val>>, line: usize) -> Val {
         let parent = self.current;
         let index = self.next_closure;
         self.next_closure = self.next_closure.saturating_add(1);
-        let id = self.g.closure(parent, index, &self.file, line);
+        let id = self.g.closure(parent, index, c.inputs.len(), &self.file, line);
+        if let Some(ctx) = &ctx {
+            for (i, v) in ctx.iter().enumerate().take(c.inputs.len()) {
+                self.join_param(id, i, v);
+            }
+        }
         let declared = match &c.output {
             syn::ReturnType::Type(_, t) => self.resolver().ty(&self.scope, t),
             syn::ReturnType::Default => Ty::Unknown,
         };
-        let saved_ret = core::mem::replace(&mut self.ret_ty, declared);
+        let saved_ret = core::mem::replace(&mut self.ret_ty, declared.clone());
+        let saved_dropped = core::mem::take(&mut self.dropped);
         self.current = id;
         self.push_scope();
         for (i, p) in c.inputs.iter().enumerate() {
-            let mut v = ctx
-                .as_ref()
-                .and_then(|ctx| ctx.get(i).cloned())
-                .unwrap_or_else(|| Val::unknown(Carries::default()));
-            if let Some(direct) = self.closure_params.get(&(id, i)) {
-                v = v.join(direct);
-            }
-            if ctx.is_none() && !self.closure_params.contains_key(&(id, i)) {
-                // Called from nowhere the analysis has seen yet: anything.
-                v = Val::unknown(Carries::top());
-            }
+            let v = self
+                .shared
+                .closure_params
+                .get(&(id, i))
+                .cloned()
+                .unwrap_or_else(|| Val::of(Ty::Never));
             self.pattern(p, &v);
         }
         let body = self.expr(&c.body);
+        let result = if declared.is_known() {
+            Val::with(declared.clone(), &body.carries_of_calls())
+        } else {
+            body.clone()
+        };
+        self.closure_result(&result);
         let ret = self.g.ret(id);
-        self.flow_into(ret, &body.carries, line);
+        self.flow_typed(ret, &body.carries, &declared, line);
+        self.drop_glue(line);
         self.pop_scope();
         self.current = parent;
         self.ret_ty = saved_ret;
+        self.dropped = saved_dropped;
         let mut carries = Carries::default();
         carries.calls.insert(id);
         Val::with(Ty::Closure(id), &carries)
+    }
+
+    /// Joins `v` into the result of the closure being read.
+    fn closure_result(&mut self, v: &Val) {
+        let id = self.current;
+        let slot = self.shared.closure_rets.entry(id).or_insert_with(|| Val::of(Ty::Never));
+        let joined = slot.join(v);
+        if joined != *slot {
+            *slot = joined;
+            self.shared.changed = true;
+            self.changed = true;
+        }
+    }
+
+    /// Edges to the kernel `Drop` implementations the body's values may run when dropped.
+    fn drop_glue(&mut self, line: usize) {
+        let targets = self.ix.drops(&self.dropped);
+        if !targets.is_empty() {
+            self.how = "drop glue";
+            self.edges(&targets, line);
+        }
     }
 
     // ------------------------------------------------------------------ macros
@@ -1935,8 +2440,7 @@ impl<'a, 'p> Flow<'a, 'p> {
                 if let Some((a, b)) = &compared {
                     let av = self.expr(a);
                     let bv = self.expr(b);
-                    let targets = self.trait_call(&av, "PartialEq", "*", line);
-                    self.call_kernel(&targets, &[av, bv], &[], line, "an implicit trait call (operator, formatting, derive)");
+                    self.trait_call(&av, "PartialEq", "*", &[av.clone(), bv], line);
                 }
                 for f in &formatted {
                     let (v, t) = match f {
@@ -1954,7 +2458,7 @@ impl<'a, 'p> Flow<'a, 'p> {
                         }
                     };
                     if t != FmtTrait::Count {
-                        self.trait_call(&v, t.name(), "fmt", line);
+                        self.trait_call(&v, t.name(), "fmt", &[v.clone()], line);
                     }
                     values.push(v);
                 }
@@ -1963,10 +2467,10 @@ impl<'a, 'p> Flow<'a, 'p> {
                     // `write!` calls `write_fmt` on its destination: a kernel `fmt::Write`
                     // implementation's `write_str` runs.
                     let lookup = self.ix.method(&dv, "write_fmt");
-                    self.call_kernel(&lookup.nodes, &[dv.clone()], &[], line, "an implicit trait call (operator, formatting, derive)");
-                    let writes = self.ix.dispatch(&dv, "Write", "write_str");
-                    self.how = "an implicit trait call (operator, formatting, derive)";
-                    self.edges(&writes, line);
+                    let at = if lookup.at.is_known() { Some(lookup.at.clone()) } else { None };
+                    let with: Vec<Target> = lookup.nodes.iter().map(|t| (*t, at.clone())).collect();
+                    self.call_kernel(&with, &[dv.clone()], &[], line, IMPLICIT);
+                    self.trait_call(&dv, "Write", "write_str", &[dv.clone()], line);
                     if lookup.outside {
                         self.outside_call(&[dv], line);
                     }
@@ -1976,7 +2480,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             MacroRead::Repeat(x, n) => {
                 let v = self.expr(&x);
                 self.expr(&n);
-                self.trait_call(&v, "Clone", "clone", line);
+                self.trait_call(&v, "Clone", "clone", &[v.clone()], line);
                 Val::with(Ty::Ext("Vec".to_owned(), vec![v.ty.clone()]), &v.carries)
             }
             MacroRead::Expanded(stmts) => {

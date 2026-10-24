@@ -54,6 +54,7 @@ pub mod index;
 pub mod macros;
 pub mod model;
 pub mod resolve;
+pub mod sizechange;
 pub mod stack;
 pub mod statement;
 pub mod ty;

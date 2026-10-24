@@ -85,7 +85,7 @@ impl TraitRef {
 pub const FN_TRAITS: [&str; 3] = ["Fn", "FnMut", "FnOnce"];
 
 /// A static type, as far as the source states it.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Ty {
     /// A primitive type: `u64`, `f64`, `bool`, `char`, `str`, ...
     Prim(String),
@@ -116,6 +116,7 @@ pub enum Ty {
     /// The never type.
     Never,
     /// Not known.
+    #[default]
     Unknown,
 }
 
@@ -141,6 +142,51 @@ impl Ty {
             Ty::Tuple(items) => items.iter().all(Ty::is_prim),
             _ => false,
         }
+    }
+
+    /// Whether a value of this type may hold a closure or function: a generic parameter, trait
+    /// object, function pointer, closure or function item type, associated type or unknown part
+    /// written anywhere in it, outside a kernel type's own fields (whose callables travel through
+    /// their field carriers). A value of any other type holds no callable, whatever it was built
+    /// from.
+    #[must_use]
+    pub fn admits_callables(&self) -> bool {
+        let mut work: Vec<&Ty> = vec![self];
+        while let Some(t) = work.pop() {
+            match t {
+                Ty::Param(_)
+                | Ty::Dyn(_)
+                | Ty::FnPtr(_)
+                | Ty::Closure(_)
+                | Ty::FnDef(_)
+                | Ty::Assoc(..)
+                | Ty::Unknown => return true,
+                Ty::Adt(_, args) | Ty::Ext(_, args) | Ty::Tuple(args) => work.extend(args.iter()),
+                Ty::Ref(inner) | Ty::Slice(inner) | Ty::Array(inner) => work.push(inner),
+                Ty::Prim(_) | Ty::Never => {}
+            }
+        }
+        false
+    }
+
+    /// Whether the type is known whole: no unknown part.
+    #[must_use]
+    pub fn is_whole(&self) -> bool {
+        let mut work: Vec<&Ty> = vec![self];
+        while let Some(t) = work.pop() {
+            match t {
+                Ty::Unknown | Ty::Never => return false,
+                Ty::Adt(_, args) | Ty::Ext(_, args) | Ty::Tuple(args) => work.extend(args.iter()),
+                Ty::Ref(inner) | Ty::Slice(inner) | Ty::Array(inner) | Ty::Assoc(inner, _) => work.push(inner),
+                Ty::Dyn(traits) => {
+                    for tr in traits {
+                        work.extend(tr.args().iter());
+                    }
+                }
+                _ => {}
+            }
+        }
+        true
     }
 
     /// Whether the type is known at all.
@@ -238,6 +284,12 @@ impl Ty {
                 (Ty::Ext(x, xs), Ty::Ext(y, ys)) if x == y => work.extend(xs.iter().zip(ys)),
                 (Ty::Tuple(xs), Ty::Tuple(ys)) => work.extend(xs.iter().zip(ys)),
                 (Ty::Slice(x) | Ty::Array(x), Ty::Slice(y) | Ty::Array(y)) => work.push((x, y)),
+                // A `Vec<T>` given where `[T]` is declared, by deref coercion.
+                (Ty::Slice(x), Ty::Ext(v, ys)) if v == "Vec" => {
+                    if let Some(y) = ys.first() {
+                        work.push((x, y));
+                    }
+                }
                 _ => {}
             }
         }

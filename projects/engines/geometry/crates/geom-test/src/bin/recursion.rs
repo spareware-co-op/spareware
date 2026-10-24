@@ -139,7 +139,7 @@ fn path(report: &Report, name: &str) -> ExitCode {
         return ExitCode::SUCCESS;
     };
     println!("recursion path: a shortest cycle through `{name}`:");
-    for (n, site) in report.graph.path_from(start, &cycle.nodes) {
+    for (n, site) in report.graph.path_from(start, &cycle.edges) {
         println!("    {n}\n        calls on at {}:{}, {}", site.file, site.line, site.how);
     }
     ExitCode::SUCCESS
