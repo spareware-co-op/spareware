@@ -865,8 +865,14 @@ mod tests {
     #[test]
     fn only_the_stores_golden_module_counts() {
         // geom-bench's own `golden` module is not the store's.
-        assert!(ids("use crate::golden;\nfn f() { golden::check(name, d); }").is_empty());
-        assert!(ids("use geom_bench::golden;\nfn f() { golden::check(\"x/y\", d); }").is_empty());
+        assert_eq!(
+            ids("use crate::golden;\nfn f() { golden::check(name, d); }"),
+            Vec::<Option<String>>::new()
+        );
+        assert_eq!(
+            ids("use geom_bench::golden;\nfn f() { golden::check(\"x/y\", d); }"),
+            Vec::<Option<String>>::new()
+        );
         // In full, renamed, and inside geom-test.
         assert_eq!(
             ids("fn f() { geom_test::golden::check(\"x/y\", d); }").len(),
@@ -884,7 +890,10 @@ mod tests {
         .unwrap();
         assert_eq!(inside.checks.len(), 1);
         // `crate::golden` outside geom-test is that crate's own module.
-        assert!(ids("fn f() { crate::golden::check(\"x/y\", d); }").is_empty());
+        assert_eq!(
+            ids("fn f() { crate::golden::check(\"x/y\", d); }"),
+            Vec::<Option<String>>::new()
+        );
     }
 
     #[test]
@@ -910,14 +919,14 @@ mod tests {
         )
         .unwrap();
         assert_eq!(via_super.hidden.len(), 1);
-        assert!(via_super.checks.is_empty());
+        assert_eq!(via_super.checks, Vec::<CheckCall>::new());
         let fine = scan(
             "use geom_test::golden::{self, Sha256, check_in};",
             "tests/t.rs",
             false,
         )
         .unwrap();
-        assert!(fine.hidden.is_empty());
+        assert_eq!(fine.hidden, Vec::<(String, usize)>::new());
     }
 
     #[test]

@@ -486,10 +486,12 @@ fn lookups_are_keyed_by_the_current_edition_and_operation_versions() {
     ));
 }
 
-/// Every edit to the real store that the rule refuses is refused, whatever approval it has; the
-/// ones that need an owner say so; adding goldens needs neither.
+/// An edit to the store as JSON.
+type Edit = Box<dyn Fn(&mut Value)>;
+
+/// Every edit to the real store that the rule refuses is refused, whatever approval it has.
 #[test]
-fn the_approval_rule_holds_on_the_real_store() {
+fn the_refusals_hold_on_the_real_store() {
     let base_v = store_json();
     let base = parse(&base_v);
     let classify = |f: &dyn Fn(&mut Value)| {
@@ -499,7 +501,7 @@ fn the_approval_rule_holds_on_the_real_store() {
         head.map(|h| diff(Some(&base), &h))
     };
     // Refused outright (or not even a store).
-    let refused: Vec<(&str, Box<dyn Fn(&mut Value)>)> = vec![
+    let refused: Vec<(&str, Edit)> = vec![
         (
             "digest changed without a record",
             Box::new(|v| goldens(v)[1]["sha256"] = Value::from(fake('b'))),
@@ -542,13 +544,25 @@ fn the_approval_rule_holds_on_the_real_store() {
         ),
     ];
     for (name, f) in &refused {
-        match classify(f.as_ref()) {
-            Ok(d) => assert!(!d.is_acceptable(), "{name} was acceptable:\n{d}"),
-            Err(_) => {} // not even a valid store
+        // An edit that is not even a valid store is refused before any approval.
+        if let Ok(d) = classify(f.as_ref()) {
+            assert!(!d.is_acceptable(), "{name} was acceptable:\n{d}");
         }
     }
-    // Needs a kernel owner's approval.
-    let owner: Vec<(&str, Box<dyn Fn(&mut Value)>)> = vec![
+}
+
+/// The edits to the real store that a kernel owner must approve say so and are not refused; a
+/// golden added needs ordinary review only; and once an edition is released, nothing in it changes.
+#[test]
+fn the_owner_rule_holds_on_the_real_store() {
+    let base_v = store_json();
+    let base = parse(&base_v);
+    let classify = |f: &dyn Fn(&mut Value)| -> Result<_, StoreError> {
+        let mut v = base_v.clone();
+        f(&mut v);
+        Ok(diff(Some(&base), &Store::parse(&v.to_string())?))
+    };
+    let owner: Vec<(&str, Edit)> = vec![
         (
             "digest changed with its record",
             Box::new(|v| {
@@ -798,8 +812,8 @@ fn the_perturbation_is_seeded_and_bounded() {
 /// written (the embedded text is unchanged by a failing check).
 #[test]
 fn the_repeat_catches_hidden_state_and_never_writes_the_store() {
-    let store = Store::embedded().unwrap();
     const ID: &str = "geom-test/shuffle-permutations";
+    let store = Store::embedded().unwrap();
     let id = ID;
     let want = store.expected(id).unwrap();
     // A hidden cache: the second run sees the first run's state.
