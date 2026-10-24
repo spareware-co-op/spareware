@@ -25,6 +25,16 @@
 //! ([`missing_foundation_module`]): if the module is built under another path, the gate fails until
 //! [`FOUNDATION_MODULES`] names it, rather than silently treating it as ordinary code.
 //!
+//! Guarantees:
+//!
+//! - **One classification for both gates.** The mutation gate and the coverage gate place every
+//!   path with [`place`], so they cannot disagree about which code is in the foundation set.
+//! - **Nothing leaves the foundation bar silently.** A crate of [`FOUNDATION_MODULES`] with code
+//!   but no file of its module is reported ([`missing_foundation_module`]), and the bars are the
+//!   integers of 28.8, compared exactly by the gates.
+//! - **Development crates are never judged as kernel code**, and a path outside the kernel's
+//!   crates folder is [`Place::Outside`].
+//!
 //! Method: chapter 27's rule "one folder per crate, folder name = crate name"
 //! (`projects/engines/geometry/architecture/27-crates-folders.md`) makes a crate's name its
 //! folder's name, so a path classifies by its components alone; the set and the bars are 28.8's

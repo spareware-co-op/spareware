@@ -41,15 +41,36 @@
 //! a passing baseline, have an end time (written only when the run finished), give every listed
 //! mutant exactly one outcome and no other mutant any, and its counts must agree with its outcomes.
 //!
-//! Method: the files cargo-mutants 27.1 writes, as its book documents them
-//! (<https://github.com/sourcefrog/cargo-mutants/blob/v27.1.0/book/src/mutants-out.md>) and its
-//! source serialises them (`src/outcome.rs`, `src/mutant.rs`, `src/output.rs` at v27.1.0): an
-//! outcome's `summary` is one of `Success`, `CaughtMutant`, `MissedMutant`, `Unviable`,
-//! `Failure` and `Timeout`; a scenario is `"Baseline"` or `{"Mutant": {...}}`; a mutant's `name` is
+//! Guarantees:
+//!
+//! - **A gate that cannot see everything fails.** A run that did not finish, a failed or missing
+//!   baseline, a mutant with no outcome or two, totals that disagree with the outcomes, a shard
+//!   missing from the full run or two shards that overlap are each a failure or a [`RunError`],
+//!   never a smaller set of mutants judged.
+//! - **Untested is never caught.** An unviable mutant counts only when its log shows a compiler
+//!   error at a source location; any other failed build fails the gate.
+//! - **28.8's rules, exactly.** In the foundation set a missed mutant passes only as `equivalent`;
+//!   elsewhere also as `harmless`, or as `known` when the base branch's ledger already kept it; a
+//!   timeout only as `hangs`. A ledger entry that matches more mutants than it counts, or a caught
+//!   or unviable one, or (in the full run) fewer, fails as stale.
+//! - **Reasons follow the code.** Entries are keyed by the mutated line's text, so editing that
+//!   line puts the mutant before the gate again.
+//!
+//! Method: the files cargo-mutants 27.1 writes, as its book documents them (`book/src/mutants-out.md`)
+//! and its source serialises them (`src/outcome.rs`, `src/mutant.rs`, `src/output.rs`), read at the
+//! commit of its v27.1.0 tag (record below), with its manual's sharding and diff options
+//! (<https://mutants.rs/shards.html>, <https://mutants.rs/in-diff.html>): an outcome's `summary` is
+//! one of `Success`, `CaughtMutant`, `MissedMutant`, `Unviable`, `Failure` and `Timeout`; a
+//! scenario is `"Baseline"` or `{"Mutant": {...}}`; a mutant's `name` is
 //! `<file>:<line>:<column>: <description>`.
 //!
 //! Cost: linear in the size of the output files, plus one read of each mutated source file and of
 //! each unviable mutant's log.
+//!
+//! Consulted: cargo-mutants, MIT,
+//!   <https://github.com/sourcefrog/cargo-mutants/tree/8ab1dc786a1f61a4e370416cc6c68b81a704e917>,
+//!   for the format of the output files this module reads (`book/src/mutants-out.md`,
+//!   `src/outcome.rs`, `src/mutant.rs` and `src/output.rs` at its v27.1.0 tag). No code copied.
 
 use core::fmt;
 use core::time::Duration;

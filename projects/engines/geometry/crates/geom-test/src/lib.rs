@@ -82,7 +82,16 @@
 //! - `geom-num` (MPL-2.0, ours), the numbers layer under test.
 //! - `proptest` 1.12, without its default `fork` and `timeout` features, as in `geom-num`. [`prop`]
 //!   always runs it from a fixed seed, so its operating-system random path is never taken.
-//! - `serde_json` 1.0, to read `cargo metadata`.
+//! - `serde_json` 1.0, to read `cargo metadata`, cargo-mutants' output and the quality ledger.
+//! - `syn` 3 and `proc-macro2` 1 (G21), the quality gates' Rust reader ([`rust_source`]): `syn`
+//!   parses each kernel source file and `proc-macro2`'s span locations give every token's line.
+//! - `clap` 4.6 (G21), the command line of the `kernel-quality` binary, without colour or terminal
+//!   detection.
+//! - `lcov` 0.8 (G21), to read the LCOV tracefiles cargo-llvm-cov writes ([`coverage`]).
+//!
+//! Development dependencies, for its own tests only: `yaml-rust2` 0.13, which reads
+//! `.github/workflows/kernel-quality.yml` as YAML, and `toml` 0.9, which reads `.cargo/mutants.toml`,
+//! `.config/nextest.toml` and `rust-toolchain.toml` (G21).
 //!
 //! Licences of every outside package this crate brings into a build, its own and its dependencies'
 //! on every target (`cargo tree --target all`), each record checked by `tests/licences.rs`. Where a
@@ -91,11 +100,15 @@
 //! - MIT OR Apache-2.0: `proptest`, `bit-set`, `bit-vec`, `bitflags`, `chacha20`, `cfg-if`,
 //!   `cpufeatures`, `libc`, `rand`, `rand_core`, `rand_xorshift`, `getrandom`, `core_detect`,
 //!   `num-traits`, `autocfg`, `regex-syntax`, `unarray`, `serde_json`, `serde`, `serde_core`,
-//!   `serde_derive`, `itoa`, `proc-macro2`, `quote` and `syn`.
+//!   `serde_derive`, `itoa`, `proc-macro2`, `quote`, `syn`, `clap`, `clap_builder`, `clap_derive`,
+//!   `clap_lex`, `anstyle`, `heck`, `thiserror`, `thiserror-impl`, `yaml-rust2`, `hashlink`,
+//!   `hashbrown`, `toml`, `toml_datetime`, `toml_parser` and `serde_spanned`.
+//! - MIT/Apache-2.0: `lcov` and `arraydeque` (the older spelling of MIT OR Apache-2.0).
 //! - MIT OR Apache-2.0 OR LGPL-2.1-or-later: `r-efi` (UEFI targets only).
 //! - (MIT OR Apache-2.0) AND Unicode-3.0: `unicode-ident`.
 //! - Unlicense OR MIT: `memchr`.
-//! - MIT: `zmij`.
+//! - MIT: `zmij` and `winnow`.
+//! - Zlib: `foldhash`.
 #![forbid(unsafe_code)]
 
 pub mod coverage;
