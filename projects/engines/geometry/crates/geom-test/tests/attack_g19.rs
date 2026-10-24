@@ -869,7 +869,7 @@ mod native {
     use std::path::{Path, PathBuf};
     use std::process::Command;
 
-    use geom_test::golden::repo::{self, Source, kernel_sources, problems};
+    use geom_test::golden::repo::{Scanned, Source, kernel_sources, problems_of, scan_source};
     use geom_test::golden::store::{STORE_PATH, Store};
     use geom_test::map::repo::workspace_root;
 
@@ -884,12 +884,17 @@ mod native {
         }
     }
 
-    /// The real tree agrees with the store.
+    /// The real tree agrees with the store, as the `golden check` command CI runs reports it.
     #[test]
     fn the_real_tree_agrees_with_the_store() {
-        let store = Store::embedded().unwrap();
-        let found = repo::check(&root(), &store).unwrap();
-        assert!(found.is_empty(), "{found:#?}");
+        let out = golden_bin().arg("check").output().unwrap();
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let text = String::from_utf8(out.stdout).unwrap();
+        assert!(text.contains("each checked where the store says"), "{text}");
     }
 
     /// Seeded violations of the real tree, each made in memory on the real sources, are found:
@@ -901,19 +906,29 @@ mod native {
         let root = root();
         let store = Store::embedded().unwrap();
         let sources = kernel_sources(&root).unwrap();
+        // Every source is scanned once; each mutation rescans only the file it changes.
+        let scanned: Vec<Scanned> = sources.iter().map(scan_source).collect();
         let read = read_under(&root);
-        assert!(problems(&store, &sources, &read).is_empty());
+        let baseline = problems_of(&store, &scanned, &read);
+        assert!(baseline.is_empty(), "{baseline:#?}");
         let det = "projects/engines/geometry/crates/geom-num/tests/determinism.rs";
-        let mutate = |path: &str, f: &dyn Fn(&str) -> String| -> Vec<Source> {
-            let mut out = sources.clone();
-            let s = out.iter_mut().find(|s| s.path == path).unwrap();
-            let changed = f(&s.text);
-            assert_ne!(changed, s.text, "the mutation of {path} changed nothing");
-            s.text = changed;
+        let mutate = |path: &str, f: &dyn Fn(&str) -> String| -> Vec<Scanned> {
+            let original = sources.iter().find(|s| s.path == path).unwrap();
+            let changed = f(&original.text);
+            assert_ne!(
+                changed, original.text,
+                "the mutation of {path} changed nothing"
+            );
+            let mut out = scanned.clone();
+            let at = out.iter().position(|s| s.path == path).unwrap();
+            out[at] = scan_source(&Source {
+                path: path.to_owned(),
+                text: changed,
+            });
             out
         };
         let call = "let checked = golden::check(GOLDEN, || {";
-        let cases: Vec<(&str, Vec<Source>)> = vec![
+        let cases: Vec<(&str, Vec<Scanned>)> = vec![
             (
                 "check commented out",
                 mutate(det, &|t| {
@@ -966,12 +981,12 @@ mod native {
             ),
         ];
         for (name, mutated) in cases {
-            let found = problems(&store, &mutated, &read);
+            let found = problems_of(&store, &mutated, &read);
             assert!(!found.is_empty(), "{name}: no problem found");
         }
         // A pinned golden file edited without the store.
         let edited = |rel: &str| read(rel).map(|t| t.replacen('a', "b", 1));
-        let found = problems(&store, &sources, &edited);
+        let found = problems_of(&store, &scanned, &edited);
         assert!(
             found
                 .iter()
@@ -1017,12 +1032,6 @@ mod native {
         assert!(out.status.success());
         let text = String::from_utf8(out.stdout).unwrap();
         assert!(text.contains("geom-num/determinism"));
-        let out = golden_bin().arg("check").output().unwrap();
-        assert!(
-            out.status.success(),
-            "{}",
-            String::from_utf8_lossy(&out.stderr)
-        );
         for bad in [
             vec!["nonsense"],
             vec![],

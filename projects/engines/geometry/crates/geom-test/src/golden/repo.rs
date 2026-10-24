@@ -544,15 +544,37 @@ fn crate_and_rest(path: &str) -> Option<(&str, &str)> {
     path.strip_prefix(&base)?.split_once('/')
 }
 
-/// Every source scanned, with its crate; parse failures as problems.
-fn scan_all(sources: &[Source], add: &mut impl FnMut(&str, String)) -> Vec<(String, Facts)> {
+/// One source, scanned: its path, and what [`scan`] found in it or why it could not be read.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Scanned {
+    /// The source's path, relative to the workspace root with `/`.
+    pub path: String,
+    /// What the scan found, or `syn`'s message for a file that is not valid Rust.
+    pub facts: Result<Facts, String>,
+}
+
+/// Scans one kernel source, telling `geom-test`'s own files (whose library is `crate` to them) from
+/// the other crates' by the source's path.
+#[must_use]
+pub fn scan_source(src: &Source) -> Scanned {
+    let (krate, in_crate) = crate_and_rest(&src.path).unwrap_or(("", src.path.as_str()));
+    Scanned {
+        path: src.path.clone(),
+        facts: scan(&src.text, in_crate, krate == "geom-test"),
+    }
+}
+
+/// The sources that scanned, with their facts; each that did not is a problem.
+fn readable<'s>(
+    scanned: &'s [Scanned],
+    add: &mut impl FnMut(&str, String),
+) -> Vec<(&'s str, &'s Facts)> {
     let mut out = Vec::new();
-    for src in sources {
-        let (krate, in_crate) = crate_and_rest(&src.path).unwrap_or(("", src.path.as_str()));
-        match scan(&src.text, in_crate, krate == "geom-test") {
-            Ok(facts) => out.push((src.path.clone(), facts)),
+    for s in scanned {
+        match &s.facts {
+            Ok(facts) => out.push((s.path.as_str(), facts)),
             Err(e) => add(
-                &src.path,
+                &s.path,
                 format!("is not Rust this check can parse ({e}), so its goldens cannot be checked"),
             ),
         }
@@ -564,13 +586,13 @@ fn scan_all(sources: &[Source], add: &mut impl FnMut(&str, String)) -> Vec<(Stri
 /// `tests/<test>/main.rs` with the whole function path; or, for `lib`, the deepest module file
 /// whose remaining path is a function the file defines.
 fn check_target<'f>(
-    scanned: &'f [(String, Facts)],
+    scanned: &[(&'f str, &'f Facts)],
     krate: &str,
     test: &str,
     function: &str,
 ) -> Result<(&'f str, &'f Facts, String), String> {
     let base = format!("{}/{krate}", KERNEL_CRATES_DIR.join("/"));
-    let find = |path: &str| scanned.iter().find(|(p, _)| p == path);
+    let find = |path: &str| scanned.iter().find(|(p, _)| *p == path).copied();
     if test == "lib" {
         let parts: Vec<&str> = function.split("::").collect();
         let mut any_file = false;
@@ -587,7 +609,7 @@ fn check_target<'f>(
                 if let Some((path, facts)) = find(candidate) {
                     any_file = true;
                     if facts.functions.contains(&inside) {
-                        return Ok((path.as_str(), facts, inside));
+                        return Ok((path, facts, inside));
                     }
                 }
             }
@@ -606,7 +628,7 @@ fn check_target<'f>(
             return Err(format!("{krate} has no test target {test:?}"));
         };
         if facts.functions.contains(function) {
-            Ok((path.as_str(), facts, function.to_owned()))
+            Ok((path, facts, function.to_owned()))
         } else {
             Err(format!(
                 "{path} does not define the test function {function}"
@@ -621,6 +643,18 @@ fn check_target<'f>(
 pub fn problems(
     store: &Store,
     sources: &[Source],
+    file_text: &dyn Fn(&str) -> Result<String, String>,
+) -> Vec<Problem> {
+    let scanned: Vec<Scanned> = sources.iter().map(scan_source).collect();
+    problems_of(store, &scanned, file_text)
+}
+
+/// [`problems`] over sources already scanned ([`scan_source`]), so a caller that changes one file
+/// rescans only that one.
+#[must_use]
+pub fn problems_of(
+    store: &Store,
+    scanned: &[Scanned],
     file_text: &dyn Fn(&str) -> Result<String, String>,
 ) -> Vec<Problem> {
     let mut found = BTreeSet::new();
@@ -638,16 +672,16 @@ pub fn problems(
     if edition.goldens.is_empty() {
         add(&store_file, "the current edition has no golden".to_owned());
     }
-    let scanned = scan_all(sources, &mut add);
-    store_side(edition, &scanned, file_text, &mut add);
-    source_side(edition, &scanned, &mut add);
+    let readable = readable(scanned, &mut add);
+    store_side(edition, &readable, file_text, &mut add);
+    source_side(edition, &readable, &mut add);
     found.into_iter().collect()
 }
 
 /// The goldens' side: each is checked where the store says, and each pinned file keeps its digest.
 fn store_side(
     edition: &Edition,
-    scanned: &[(String, Facts)],
+    scanned: &[(&str, &Facts)],
     file_text: &dyn Fn(&str) -> Result<String, String>,
     add: &mut impl FnMut(&str, String),
 ) {
@@ -702,7 +736,7 @@ fn store_side(
 
 /// The sources' side: every golden check names a golden of the store, no check hides behind an
 /// import, and no digest hides outside the store.
-fn source_side(edition: &Edition, scanned: &[(String, Facts)], add: &mut impl FnMut(&str, String)) {
+fn source_side(edition: &Edition, scanned: &[(&str, &Facts)], add: &mut impl FnMut(&str, String)) {
     let store_file = STORE_PATH.join("/");
     let known: BTreeSet<&str> = edition.goldens.iter().map(|g| g.id.as_str()).collect();
     for (path, facts) in scanned {
@@ -1020,19 +1054,18 @@ mod tests {
 
     #[test]
     fn lib_checks_find_their_module_file_and_inline_module() {
+        let lib = scan("mod tests { fn pinned() {} }", "src/lib.rs", false).unwrap();
+        let shuffle = scan(
+            "mod tests { fn pinned() {} }",
+            "src/golden/shuffle.rs",
+            false,
+        )
+        .unwrap();
         let scanned = vec![
+            ("projects/engines/geometry/crates/geom-x/src/lib.rs", &lib),
             (
-                "projects/engines/geometry/crates/geom-x/src/lib.rs".to_owned(),
-                scan("mod tests { fn pinned() {} }", "src/lib.rs", false).unwrap(),
-            ),
-            (
-                "projects/engines/geometry/crates/geom-x/src/golden/shuffle.rs".to_owned(),
-                scan(
-                    "mod tests { fn pinned() {} }",
-                    "src/golden/shuffle.rs",
-                    false,
-                )
-                .unwrap(),
+                "projects/engines/geometry/crates/geom-x/src/golden/shuffle.rs",
+                &shuffle,
             ),
         ];
         let (path, _, inside) =
