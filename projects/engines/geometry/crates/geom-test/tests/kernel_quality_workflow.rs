@@ -524,6 +524,12 @@ fn the_tools_are_configured_as_the_gates_need() {
             "{dev} is mutated"
         );
     }
+    // No name filter narrows CI's runs: the globs alone say what is mutated, and a local run
+    // narrows itself with --re, which the file must leave free (command-line lists are added to
+    // the file's).
+    for key in ["examine_re", "exclude_re"] {
+        assert!(m.get(key).is_none(), "{key} narrows every run");
+    }
     assert_eq!(strings("additional_cargo_test_args"), ["--test", "*"]);
     assert_eq!(strings("additional_cargo_args"), ["--locked"]);
     assert_eq!(m["profile"].as_str(), Some("release"));
