@@ -1044,6 +1044,7 @@ dependencies = [
  "num-traits",
  "proptest",
  "sha2",
+ "toml",
 ]
 
 [[package]]
