@@ -1577,13 +1577,14 @@ fn adv_exact_sum_specials_are_order_free_across_merges() {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Determinism: a digest of the bits of many results, fixed here from a native release run. The
-// same test must pass in debug, in release, and on wasm32 (`cargo test --target wasm32-wasip1`).
-// The digest is SHA-256, as chapters 21 and 28.13 require of goldens; the copy in
-// `tests/common/sha256.rs` brings its own checks against FIPS 180-4, which run with this file.
+// Determinism: a digest of the bits of many results, fixed from a native release run and kept in
+// the golden store (`geom-test/golden/store.json`, id `geom-num/dd-exact-sum`). The same test must
+// pass in debug, in release, and on wasm32 (`cargo test --target wasm32-wasip1`): `kernel.yml` runs
+// it in every one of its configurations (`golden run`), each time twice in the process on two
+// differently perturbed heaps (`geom_test::golden::check`). The digest is SHA-256, as chapters 21
+// and 28.13 require of goldens, from `geom_test::golden`, the one implementation every golden uses.
 
-#[path = "common/sha256.rs"]
-mod sha256;
+use geom_test::golden;
 
 /// The bytes the digest is taken over: the bits of each result as 64-bit words, little-endian,
 /// in the order the test makes them, and a code for each error. The encoding is part of the
@@ -1619,12 +1620,12 @@ fn fnv1a_64(bytes: &[u8]) -> u64 {
     h
 }
 
-/// The golden digest: SHA-256 of the recorded bytes, in hexadecimal (native x86-64 release run,
-/// 2026-10-22; the same 903,792 bytes, written out once, give this digest in three other
+/// The golden in the golden store: the SHA-256 of the recorded bytes (native x86-64 release run,
+/// 2026-10-22; the same 903,792 bytes, written out once, give that digest in three other
 /// implementations: GNU coreutils' `sha256sum`, Windows' `certutil` and Python's `hashlib`).
 /// Before this test followed chapter 28.13 and moved to SHA-256, its digest was 64-bit FNV-1a of
 /// the same bytes, `FNV_BEFORE_SHA256`.
-const GOLDEN: &str = "ce0e1901d8d11ff1b2d490e929b51fae2adfd7479c63126f8359ac917d0cb0fd";
+const GOLDEN: &str = "geom-num/dd-exact-sum";
 
 /// The digest before SHA-256 replaced it: 64-bit FNV-1a of the same recorded bytes (native x86-64
 /// release run, 2026-10-22). The test still checks it, so it shows that the recorded bytes are the
@@ -1635,8 +1636,8 @@ const GOLDEN: &str = "ce0e1901d8d11ff1b2d490e929b51fae2adfd7479c63126f8359ac917d
 /// the old value is reproduced exactly.
 const FNV_BEFORE_SHA256: u64 = 0x01fe_5679_df2b_0ede;
 
-#[test]
-fn adv_bits_are_the_same_on_every_target_and_profile() {
+/// The recorded bytes of the determinism corpus.
+fn adv_bytes() -> Vec<u8> {
     let mut rng = Mix(0x676f_6c64_656e);
     let mut rec = Recorder(Vec::new());
     for i in 0..6000 {
@@ -1672,20 +1673,29 @@ fn adv_bits_are_the_same_on_every_target_and_profile() {
         }
         rec.word(t.round_ieee().to_bits());
     }
-    let bytes = rec.0;
-    let mut sha = sha256::Sha256::new();
-    sha.write(&bytes);
-    let digest = sha256::hex(sha.finish());
-    let fnv = fnv1a_64(&bytes);
+    rec.0
+}
+
+#[test]
+fn adv_bits_are_the_same_on_every_target_and_profile() {
+    let checked = golden::check(GOLDEN, || {
+        let bytes = adv_bytes();
+        (golden::sha256(&bytes), bytes)
+    });
+    let bytes = &checked.value;
+    let fnv = fnv1a_64(bytes);
     println!(
-        "{} bytes: SHA-256 {digest}, FNV-1a {fnv:#018x}",
-        bytes.len()
+        "{} bytes: SHA-256 {}, FNV-1a {fnv:#018x}",
+        bytes.len(),
+        checked.digest
     );
-    assert_eq!(digest, GOLDEN, "bits differ from the native release run");
     assert_eq!(
         fnv, FNV_BEFORE_SHA256,
         "the recorded bytes differ from those the FNV-1a digest was fixed on"
     );
+    checked
+        .verdict()
+        .unwrap_or_else(|e| panic!("bits differ from the native release run: {e}"));
 }
 
 // ---------------------------------------------------------------------------------------------

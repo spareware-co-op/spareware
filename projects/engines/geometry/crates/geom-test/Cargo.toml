@@ -11,6 +11,18 @@ description = "Spare Kit geometry kernel, development only: shared test support,
 geom-num = { path = "../geom-num" }
 proptest = { version = "1.12.0", default-features = false, features = ["std", "bit-set"] }
 serde_json = "1.0.149"
+# The golden store (`golden::store`), read into typed records with unknown fields refused.
+# MIT OR Apache-2.0.
+serde = { version = "1.0.229", features = ["derive"] }
+# SHA-256 (FIPS 180-4), the hash of every golden digest (chapters 21 and 28.13): RustCrypto's sha2,
+# the one implementation every kernel test hashes with, through `golden::sha256`. MIT OR
+# Apache-2.0. 0.11.0, not 0.11.1: 0.11.1 needs Rust 1.88 and this crate declares 1.86. Without its
+# default `alloc` and `oid` features, which nothing here uses.
+sha2 = { version = "0.11.0", default-features = false }
+# The Fisher-Yates shuffle of the input-shuffle hook (`golden::shuffle`), driven by `SplitMix64`.
+# MIT OR Apache-2.0. Without its default features, so it has no generator of its own and never
+# reaches the operating system's random source.
+rand = { version = "0.10.3", default-features = false }
 
 [lints.rust]
 unsafe_code = "forbid"

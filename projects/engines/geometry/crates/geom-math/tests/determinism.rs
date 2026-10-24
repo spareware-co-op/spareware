@@ -40,23 +40,26 @@
 //!
 //! Every result, success or error, is written in a canonical little-endian byte encoding, in a
 //! fixed field order (see `Recorder`), and hashed with SHA-256 (FIPS 180-4), the hash chapters 21
-//! and 28.13 specify: `common/sha256.rs`, a copy of `geom-num`'s, checked against the standard's
-//! own test vectors and constants. Doubles go in as their bits, so a difference of one unit in the
-//! last place shows. No result of this crate is ever NaN; a NaN would be written as one canonical
+//! and 28.13 specify, from `geom_test::golden`, the one implementation every golden uses (piece
+//! G19), checked there against the standard's test vectors. Doubles go in as their bits, so a
+//! difference of one unit in the last place shows. No result of this crate is ever NaN; a NaN would be written as one canonical
 //! pattern, because Rust does not fix a NaN's sign or payload (RFC 3514), and the test fails on
 //! any.
 //!
 //! **The same digest must hold on every target**: Linux, Windows and macOS on x86-64 and arm64,
-//! and wasm32-wasip1 under wasmtime, in debug and release, with overflow checks on or off and with
-//! `-C target-cpu=native`; and the corpus must give the same digest on 1, 2, 3 and 8 threads at
-//! once (chapter 21's thread-count test), which also runs every case more than once in one process
-//! (section 28.13), so a hidden cache or global state would show. A changed digest is one of two
+//! and wasm32-wasip1 under wasmtime and Node, in debug and release, with overflow checks on or off
+//! and with `-C target-cpu=native` (`kernel.yml` runs it in each, through `golden run`); and the
+//! corpus must give the same digest on 1, 2, 3 and 8 threads at once (chapter 21's thread-count
+//! test). The digest lives in the golden store (`geom-test/golden/store.json`, id
+//! `geom-math/determinism`); `geom_test::golden::check` runs the corpus twice in one process on two
+//! differently perturbed heaps before comparing it with the store's (section 28.13), so a hidden
+//! cache, global state or an ordering by address would show. A changed digest is one of two
 //! things. Either it is a bug: some target or thread count computes different bits, so the same
 //! model would give different geometry on different machines. Or the crate's results were changed
 //! on purpose, which is a deliberate kernel edition change (chapter 21, section 28.13): its pull
-//! request updates `GOLDEN`, says which results changed and why, and a kernel owner approves it.
-//! A change to this corpus changes the digest too and is reviewed the same way. Never update the
-//! constant to make one target pass.
+//! request records the change in the store, says which results changed and why, and a kernel owner
+//! approves it. A change to this corpus changes the digest too and is recorded the same way. Never
+//! update the store to make one target pass.
 //!
 //! To help find the cause when one target disagrees, the test prints a digest per section: compare
 //! the logs of two targets to see which part of the crate differs. It also checks that the corpus
@@ -87,9 +90,6 @@
     reason = "the corpus generator; the rules are for kernel code"
 )]
 
-#[path = "common/sha256.rs"]
-mod sha256;
-
 use std::collections::BTreeSet;
 
 use geom_math::frame::{CELL_HALF, ORIGIN_MAX, steps_per_metre};
@@ -102,21 +102,21 @@ use geom_math::{
 };
 use geom_num::NumError;
 use geom_num::grid::{COORD_MAX, GridStep, P2, P3};
-use sha256::{Sha256, hex};
+use geom_test::golden::{self, Sha256, hex};
 
-/// The golden digest of the corpus: SHA-256, in hexadecimal.
+/// The corpus's golden in the golden store: its SHA-256 digest.
 ///
-/// The same constant must hold on every target and thread count: see the module documentation. A
-/// change is either a bug or a deliberate kernel edition change, made in a pull request that
-/// updates this constant, says which, and is approved by a kernel owner.
+/// The same digest must hold on every target and thread count: see the module documentation. A
+/// change is either a bug or a deliberate kernel edition change, recorded in the store in a pull
+/// request that says which and is approved by a kernel owner.
 ///
-/// It replaced the corpus's 64-bit FNV-1a golden, `0x8643_5a99_5463_851e`, when the hash moved to
+/// Its digest replaced the corpus's 64-bit FNV-1a golden, `0x8643_5a99_5463_851e`, when the hash moved to
 /// SHA-256 (chapter 28.13): both are hashes of the same bytes, so no result changed. It replaced
 /// `d79932a1…72f126` when piece G05 made `geom_num::math::sinpi` and `cospi` correctly rounded
 /// (ports of CORE-MATH in place of an msun-method approximation): only the two sections that build
 /// rotations from them changed, `transform` (`6773dadd…852b18` before) and `boxes`
 /// (`2e8f3297…bc7e3e` before); every other section's digest is the same.
-const GOLDEN: &str = "dd9daf8861292fda5cd2de1d789a6f9739a4672145c9756cdc5299a6fe772ab6";
+const GOLDEN: &str = "geom-math/determinism";
 
 /// The corpus makes at least this many calls into the crate.
 const MIN_CALLS: u64 = 30_000;
@@ -213,7 +213,7 @@ fn pow2(k: i32) -> f64 {
 }
 
 // ---------------------------------------------------------------------------------------------
-// The canonical encoding. The hash, SHA-256, is in `common/sha256.rs`.
+// The canonical encoding. The hash, SHA-256, is `geom_test::golden`'s.
 // ---------------------------------------------------------------------------------------------
 
 /// The crate's operations the corpus calls. A call writes its discriminant first, so the byte
@@ -1883,7 +1883,11 @@ fn corpus() -> Recorder {
 /// deliberate kernel edition change (see the module documentation and `GOLDEN`).
 #[test]
 fn golden_hash_is_the_same_on_every_target() {
-    let r = corpus();
+    let checked = golden::check(GOLDEN, || {
+        let r = corpus();
+        (r.total.clone().finish(), r)
+    });
+    let r = &checked.value;
     let hash = hex(r.total.clone().finish());
     println!("geom-math determinism corpus: {} calls", r.calls);
     for (name, calls, digest) in &r.report {
@@ -1908,13 +1912,9 @@ fn golden_hash_is_the_same_on_every_target() {
         .filter(|(_, class)| *class == "BudgetExceeded")
         .collect();
     assert!(defects.is_empty(), "defects reported: {defects:?}");
-    assert_eq!(
-        hash, GOLDEN,
-        "geom-math's golden digest is {hash} here but {GOLDEN} is expected. Either this target \
-         computes different bits (a bug: compare the section digests above with another target's \
-         log) or the crate's results changed (a deliberate kernel edition change must update \
-         GOLDEN and say so)"
-    );
+    checked.verdict().unwrap_or_else(|e| {
+        panic!("{e}. Compare the section digests above with another target's log to find the part of the crate that differs")
+    });
 }
 
 /// Principle 5 and chapter 21's thread-count test: the corpus gives the same digest on 1, 2, 3
