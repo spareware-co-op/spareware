@@ -2,17 +2,24 @@
 //! the real tools (piece G21).
 //!
 //! `quality_gates.rs` tests the judges on output written the way the tools write it; this file
-//! runs the tools themselves on a seeded repository in a temporary folder: a foundation crate
-//! named `geom-num` (so the gates hold it to the foundation bar), the repository's own
-//! `.cargo/mutants.toml`, `rust-toolchain.toml` and an empty quality ledger. Then
-//! `kernel-quality`, the binary CI runs, judges what the tools wrote:
+//! runs the tools themselves on a seeded repository in a temporary folder: one kernel crate, named
+//! `geom-num` (so the gates hold it to the foundation bar) or `geom-bool` (held to the bar
+//! elsewhere), the repository's own `.cargo/mutants.toml`, `rust-toolchain.toml` and an empty
+//! quality ledger. Then `kernel-quality`, the binary CI runs, judges what the tools wrote:
 //!
 //! - **A seeded survivor** (`replace > with >= in is_positive`, which no test at zero catches)
 //!   fails the mutation gate, in the full run and in the diff run; kept as `known` it still fails,
 //!   because the foundation set keeps only equivalent mutants; a test at zero then catches it and
 //!   the gate passes.
+//! - **Elsewhere, no new survivor.** The same survivor in `geom-bool`, added by a pull request,
+//!   fails the diff gate unexplained, and fails again when the pull request's own ledger keeps it
+//!   as `known`; it passes once the base branch's ledger already held that `known` entry, or when
+//!   it is explained as `harmless`.
 //! - **A seeded uncovered line and an untaken branch** fail the coverage gate; tests that run the
 //!   line and take the branch both ways make it pass.
+//! - **Elsewhere, 90% of lines.** In `geom-bool` the uncovered lines (three of nine) fail the
+//!   coverage gate; with every line run it passes even with the branch taken one way only, which
+//!   the foundation bar refuses.
 //! - **A `coverage(off)` mark** fails while it cites no proof, and passes once it cites a Kani
 //!   harness its ledger entry names.
 //!
@@ -43,8 +50,11 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-/// The kernel crate the fixture holds: named as a foundation crate.
+/// The fixture's foundation crate: named as one, so the gates hold it to the foundation bar.
 const CRATE: &str = "projects/engines/geometry/crates/geom-num";
+
+/// The fixture's crate outside the foundation set: `geom-bool`, held to the bar elsewhere.
+const ELSEWHERE: &str = "projects/engines/geometry/crates/geom-bool";
 
 /// The fixture's code: `is_positive` is the seeded survivor's home, `above` the seeded untaken
 /// branch (line 11), `unused` the seeded uncovered lines (15 to 17). No mutant of it is
@@ -81,6 +91,28 @@ fn signs() {
 #[test]
 fn below_the_top() {
     assert_eq!(above(1, 3), 1);
+}
+";
+
+/// Tests that run every line but take `above`'s branch one way only: enough for the bar elsewhere
+/// (lines only), never for the foundation bar (every branch both ways).
+const LINES_ONLY_TESTS: &str = "use geom_num::{above, is_positive, unused};
+
+#[test]
+fn signs() {
+    assert!(is_positive(5));
+    assert!(!is_positive(-5));
+    assert!(!is_positive(0));
+}
+
+#[test]
+fn below_the_top() {
+    assert_eq!(above(1, 3), 1);
+}
+
+#[test]
+fn doubles() {
+    assert_eq!(unused(4), 8);
 }
 ";
 
@@ -122,6 +154,13 @@ struct Fixture {
 
 impl Fixture {
     fn new(label: &str) -> Fixture {
+        Fixture::with_crate(label, CRATE)
+    }
+
+    /// A fixture whose one kernel crate is `krate` (a folder under the kernel's crates folder),
+    /// with the seeded code and the weak tests. Its package is named after its folder, as chapter
+    /// 27 requires, and the tests name it `geom_num` through a renamed library target.
+    fn with_crate(label: &str, krate: &str) -> Fixture {
         let dir =
             std::env::temp_dir().join(format!("geom-test-seeded-{label}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -137,13 +176,17 @@ impl Fixture {
             "Cargo.toml",
             "[workspace]\nresolver = \"3\"\nmembers = [\"projects/engines/geometry/crates/*\"]\n",
         );
+        let package = krate.rsplit('/').next().unwrap();
         f.write(
-            &format!("{CRATE}/Cargo.toml"),
-            "[package]\nname = \"geom-num\"\nversion = \"0.0.0\"\nedition = \"2024\"\npublish = false\n\n\
-             [lints.rust]\nunexpected_cfgs = { level = \"warn\", check-cfg = [\"cfg(coverage_nightly)\", \"cfg(kani)\"] }\n",
+            &format!("{krate}/Cargo.toml"),
+            &format!(
+                "[package]\nname = \"{package}\"\nversion = \"0.0.0\"\nedition = \"2024\"\npublish = false\n\n\
+                 [lib]\nname = \"geom_num\"\n\n\
+                 [lints.rust]\nunexpected_cfgs = {{ level = \"warn\", check-cfg = [\"cfg(coverage_nightly)\", \"cfg(kani)\"] }}\n"
+            ),
         );
-        f.write(&format!("{CRATE}/src/lib.rs"), LIB);
-        f.write(&format!("{CRATE}/tests/api.rs"), WEAK_TESTS);
+        f.write(&format!("{krate}/src/lib.rs"), LIB);
+        f.write(&format!("{krate}/tests/api.rs"), WEAK_TESTS);
         f.write(
             "projects/engines/geometry/quality-ledger.json",
             &ledger("[]", "[]"),
@@ -228,9 +271,15 @@ impl Fixture {
         (out.join("mutants.out"), list)
     }
 
-    /// Measures the fixture's crate with cargo-llvm-cov on the coverage toolchain, as the coverage
-    /// job does, into `DIR/geom-num.lcov` and `DIR/geom-num.log`; returns `DIR`.
+    /// Measures the fixture's foundation crate with cargo-llvm-cov on the coverage toolchain, as
+    /// the coverage job does, into `DIR/geom-num.lcov` and `DIR/geom-num.log`; returns `DIR`.
     fn measure(&self, label: &str) -> PathBuf {
+        self.measure_package(label, "geom-num")
+    }
+
+    /// Measures `package` as [`Fixture::measure`] does, into `DIR/<package>.lcov` and
+    /// `DIR/<package>.log`; returns `DIR`.
+    fn measure_package(&self, label: &str, package: &str) -> PathBuf {
         let toolchain = std::env::var("SPAREKIT_COVERAGE_TOOLCHAIN").expect(
             "SPAREKIT_COVERAGE_TOOLCHAIN must name the nightly toolchain with llvm-tools that \
              cargo-llvm-cov's branch coverage needs",
@@ -245,12 +294,12 @@ impl Fixture {
                     "llvm-cov",
                     "--locked",
                     "-p",
-                    "geom-num",
+                    package,
                     "--release",
                     "--branch",
                 ])
                 .args(["--lcov", "--output-path"])
-                .arg(dir.join("geom-num.lcov")),
+                .arg(dir.join(format!("{package}.lcov"))),
             "cargo llvm-cov",
         );
         let log = format!(
@@ -258,7 +307,7 @@ impl Fixture {
             String::from_utf8_lossy(&out.stdout),
             String::from_utf8_lossy(&out.stderr)
         );
-        std::fs::write(dir.join("geom-num.log"), log).unwrap();
+        std::fs::write(dir.join(format!("{package}.log")), log).unwrap();
         dir
     }
 }
@@ -285,15 +334,27 @@ fn ledger(survivors: &str, coverage_off: &str) -> String {
     )
 }
 
-/// The seeded survivor, kept as `kind` in the ledger.
+/// The seeded survivor in the foundation crate, kept as `kind` in the ledger.
 fn kept_as(kind: &str) -> String {
+    kept_in(CRATE, kind)
+}
+
+/// The seeded survivor in the crate at `krate`, kept as `kind` in the ledger.
+fn kept_in(krate: &str, kind: &str) -> String {
     ledger(
         &format!(
-            "[{{\"file\": \"{CRATE}/src/lib.rs\", \"mutant\": \"replace > with >= in is_positive\", \
+            "[{{\"file\": \"{krate}/src/lib.rs\", \"mutant\": \"replace > with >= in is_positive\", \
              \"line_text\": \"x > 0\", \"occurrences\": 1, \"kind\": \"{kind}\", \"reason\": \
-             \"Kept to show what the gate makes of this kind in the foundation set.\"}}]"
+             \"Kept to show what the gate makes of this kind where this crate is.\"}}]"
         ),
         "[]",
+    )
+}
+
+/// The diff of a pull request that adds `is_positive`'s body to the crate at `krate`.
+fn adds_is_positive(krate: &str) -> String {
+    format!(
+        "--- a/{krate}/src/lib.rs\n+++ b/{krate}/src/lib.rs\n@@ -5,3 +5,3 @@\n pub fn is_positive(x: i32) -> bool {{\n-    false\n+    x > 0\n }}\n"
     )
 }
 
@@ -348,17 +409,24 @@ fn a_seeded_survivor_fails_the_mutation_gate_until_a_test_catches_it() {
 fn a_pull_request_that_adds_a_survivor_fails_the_diff_gate() {
     let f = Fixture::new("diff");
     // The pull request adds is_positive's body; the diff holds exactly that change.
-    let diff = format!(
-        "--- a/{CRATE}/src/lib.rs\n+++ b/{CRATE}/src/lib.rs\n@@ -5,3 +5,3 @@\n pub fn is_positive(x: i32) -> bool {{\n-    false\n+    x > 0\n }}\n"
-    );
-    f.write("pr.diff", &diff);
+    f.write("pr.diff", &adds_is_positive(CRATE));
     let (out, list) = f.mutate("diff", Some(&f.path("pr.diff")));
     let (out, list) = (out.to_str().unwrap(), list.to_str().unwrap());
     let args = ["mutants", "--mode", "diff", "--expected", list, out];
-    assert_fails_with(&f.judge(&args), &["replace > with >= in is_positive"]);
-    // A pull request cannot excuse its own survivor as known, even outside the foundation set's
-    // rules: the base branch's ledger must already hold the entry.
-    f.write("base-ledger.json", &ledger("[]", "[]"));
+    assert_fails_with(
+        &f.judge(&args),
+        &[
+            "replace > with >= in is_positive",
+            "no ledger entry explains it",
+        ],
+    );
+    // In the foundation set even an old `known` entry, which the base branch's ledger holds too,
+    // does not excuse a survivor: only an equivalent mutant may survive there (28.8).
+    f.write(
+        "projects/engines/geometry/quality-ledger.json",
+        &kept_as("known"),
+    );
+    f.write("base-ledger.json", &kept_as("known"));
     let base = f.path("base-ledger.json");
     let with_base = [
         "mutants",
@@ -370,7 +438,54 @@ fn a_pull_request_that_adds_a_survivor_fails_the_diff_gate() {
         base.to_str().unwrap(),
         out,
     ];
-    assert_fails_with(&f.judge(&with_base), &["replace > with >= in is_positive"]);
+    assert_fails_with(
+        &f.judge(&with_base),
+        &["the foundation set keeps only equivalent mutants"],
+    );
+}
+
+#[test]
+#[ignore = "runs cargo-mutants; CI's gates-seeded job runs it with --ignored"]
+fn elsewhere_a_pull_request_may_not_add_a_survivor_of_its_own() {
+    let f = Fixture::with_crate("elsewhere-diff", ELSEWHERE);
+    f.write("pr.diff", &adds_is_positive(ELSEWHERE));
+    let (out, list) = f.mutate("diff", Some(&f.path("pr.diff")));
+    let (out, list) = (out.to_str().unwrap(), list.to_str().unwrap());
+    let base = f.path("base-ledger.json");
+    let args = [
+        "mutants",
+        "--mode",
+        "diff",
+        "--expected",
+        list,
+        "--base-ledger",
+        base.to_str().unwrap(),
+        out,
+    ];
+    let led = "projects/engines/geometry/quality-ledger.json";
+    // Unexplained, it fails (the set is named, so the elsewhere bar is the one applied).
+    f.write("base-ledger.json", &ledger("[]", "[]"));
+    assert_fails_with(
+        &f.judge(&args),
+        &[
+            "replace > with >= in is_positive",
+            "survived (elsewhere set",
+            "no ledger entry explains it",
+        ],
+    );
+    // The pull request keeps its own survivor as known: still a new unexplained survivor.
+    f.write(led, &kept_in(ELSEWHERE, "known"));
+    assert_fails_with(
+        &f.judge(&args),
+        &["the base branch's ledger does not, so it is a new unexplained survivor"],
+    );
+    // An old gap the base branch's ledger already keeps as known passes.
+    f.write("base-ledger.json", &kept_in(ELSEWHERE, "known"));
+    assert_passes(&f.judge(&args));
+    // So does a survivor the pull request explains, as harmless, with its reason.
+    f.write("base-ledger.json", &ledger("[]", "[]"));
+    f.write(led, &kept_in(ELSEWHERE, "harmless"));
+    assert_passes(&f.judge(&args));
 }
 
 #[test]
@@ -401,6 +516,45 @@ fn seeded_uncovered_code_fails_the_coverage_gate_until_tests_reach_it() {
         dir.to_str().unwrap(),
     ];
     assert_passes(&f.judge(&args));
+}
+
+#[test]
+#[ignore = "runs cargo-llvm-cov on a nightly toolchain; CI's gates-seeded job runs it with --ignored"]
+fn elsewhere_ninety_percent_of_lines_pass_without_every_branch() {
+    let f = Fixture::with_crate("elsewhere-coverage", ELSEWHERE);
+    let judge = |dir: &Path| {
+        f.judge(&[
+            "coverage",
+            "--crates",
+            "geom-bool",
+            "--lcov-dir",
+            dir.to_str().unwrap(),
+        ])
+    };
+    // `unused` never runs: three of the nine lines, below 90%.
+    let weak = judge(&f.measure_package("weak", "geom-bool"));
+    assert_fails_with(
+        &weak,
+        &["geom-bool: lines", "outside the foundation set, below 90%"],
+    );
+    // Every line runs, and `above`'s branch is taken one way only: the bar elsewhere is lines.
+    f.write(&format!("{ELSEWHERE}/tests/api.rs"), LINES_ONLY_TESTS);
+    assert_passes(&judge(&f.measure_package("lines", "geom-bool")));
+    // The same tests on the foundation crate fail its branch bar.
+    let g = Fixture::new("foundation-lines");
+    g.write(&format!("{CRATE}/tests/api.rs"), LINES_ONLY_TESTS);
+    let dir = g.measure("lines");
+    let foundation = g.judge(&[
+        "coverage",
+        "--crates",
+        "geom-num",
+        "--lcov-dir",
+        dir.to_str().unwrap(),
+    ]);
+    assert_fails_with(
+        &foundation,
+        &["src/lib.rs: branches", "both ways on lines: 11"],
+    );
 }
 
 #[test]

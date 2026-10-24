@@ -2,11 +2,13 @@
 # section 28.8; .github/workflows/kernel-quality.yml runs it, and geom-test's `kernel-quality`
 # binary judges what survives against projects/engines/geometry/quality-ledger.json).
 #
-# cargo-mutants 27.1.0 reads this file from the workspace root whenever it runs here
-# (https://github.com/sourcefrog/cargo-mutants/blob/v27.1.0/book/src/config-file.md). List options
-# given on the command line are added to these; scalar ones replace them, except the file filters,
-# where a command-line --file or --exclude replaces the list below. The CI jobs give none, so a
-# local run with -f to narrow the files must keep within the kernel's crates.
+# cargo-mutants 27.1.0 reads this file from the workspace root whenever it runs here (its book,
+# book/src/config-file.md, and src/options.rs at the v27.1.0 tag, commit
+# 8ab1dc786a1f61a4e370416cc6c68b81a704e917). Scalar options given on the command line replace the
+# ones below; list options, the file globs included, are added to them, so a command-line --file
+# widens the run rather than narrowing it. The CI jobs give none. To narrow a local run, match the
+# mutants' names with --re (for example --re 'geom-num/src/grid\.rs:'), which this file leaves
+# empty.
 
 # Mutate only the kernel crates' own source, never their tests (cargo-mutants skips #[test]
 # functions and #[cfg(test)] modules by itself) and never the development crates, which do not ship
