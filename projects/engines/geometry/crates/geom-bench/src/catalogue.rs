@@ -263,10 +263,21 @@ pub static OPS: &[Op] = &[
     Op { group: "exact_sum", name: "merge", measures: "ExactSum::merge", classes: TE, prepare: |c| bind(inputs::exact_sum::merge(c), kernels::exact_sum::merge) },
     Op { group: "exact_sum", name: "round", measures: "ExactSum::round", classes: TE, prepare: |c| bind(inputs::exact_sum::round(c), kernels::exact_sum::round) },
     Op { group: "exact_sum", name: "round_ieee", measures: "ExactSum::round_ieee", classes: TE, prepare: |c| bind(inputs::exact_sum::round_ieee(c), kernels::exact_sum::round_ieee) },
+    // The generated filters and exact values.
+    Op { group: "generated", name: "orient2d_filter", measures: "generated::orient2d::filter", classes: TDNE, prepare: |c| bind(inputs::generated::orient2d_filter(c), kernels::generated::orient2d_filter) },
+    Op { group: "generated", name: "orient2d_value", measures: "generated::orient2d::value", classes: TDNE, prepare: |c| bind(inputs::generated::orient2d_value(c), kernels::generated::orient2d_value) },
+    Op { group: "generated", name: "orient3d_filter", measures: "generated::orient3d::filter", classes: TDNE, prepare: |c| bind(inputs::generated::orient3d_filter(c), kernels::generated::orient3d_filter) },
+    Op { group: "generated", name: "orient3d_value", measures: "generated::orient3d::value", classes: TDNE, prepare: |c| bind(inputs::generated::orient3d_value(c), kernels::generated::orient3d_value) },
+    Op { group: "generated", name: "incircle_filter", measures: "generated::incircle::filter", classes: TDNE, prepare: |c| bind(inputs::generated::incircle_filter(c), kernels::generated::incircle_filter) },
+    Op { group: "generated", name: "incircle_value", measures: "generated::incircle::value", classes: TDNE, prepare: |c| bind(inputs::generated::incircle_value(c), kernels::generated::incircle_value) },
+    Op { group: "generated", name: "insphere_filter", measures: "generated::insphere::filter", classes: TDNE, prepare: |c| bind(inputs::generated::insphere_filter(c), kernels::generated::insphere_filter) },
+    Op { group: "generated", name: "insphere_value", measures: "generated::insphere::value", classes: TDNE, prepare: |c| bind(inputs::generated::insphere_value(c), kernels::generated::insphere_value) },
+    Op { group: "generated", name: "plane_side_filter", measures: "generated::plane_side::filter", classes: TDNE, prepare: |c| bind(inputs::generated::plane_side_filter(c), kernels::generated::plane_side_filter) },
+    Op { group: "generated", name: "plane_side_value", measures: "generated::plane_side::value", classes: TDNE, prepare: |c| bind(inputs::generated::plane_side_value(c), kernels::generated::plane_side_value) },
 ];
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 14] = [
+pub const GROUPS: [&str; 15] = [
     "predicate",
     "sign",
     "wide",
@@ -281,6 +292,7 @@ pub const GROUPS: [&str; 14] = [
     "rng",
     "dd",
     "exact_sum",
+    "generated",
 ];
 
 /// The group of the growth checks.
@@ -489,6 +501,11 @@ pub static UNMEASURED: &[(&str, &str)] = &[
     ("DD::sub", "one call to DD::add, which is measured, on the exact negation DD::negate gives"),
     ("DD::sub_f64", "one call to DD::add_f64, which is measured, on the negated double"),
     ("ExactSum::new", "a constant: every chunk zero"),
+    ("generated::orient2d::exact", "one call to generated::orient2d::value, which is measured, and the sign of the value"),
+    ("generated::orient3d::exact", "one call to generated::orient3d::value, which is measured, and the sign of the value"),
+    ("generated::incircle::exact", "one call to generated::incircle::value, which is measured, and the sign of the value"),
+    ("generated::insphere::exact", "one call to generated::insphere::value, which is measured, and the sign of the value"),
+    ("generated::plane_side::exact", "one call to generated::plane_side::value, which is measured, and the sign of the value"),
 ];
 
 #[cfg(test)]

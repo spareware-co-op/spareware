@@ -108,7 +108,13 @@ const QUADRUPLES: [(i64, i64, i64, i64); 10] = [
 /// Batches of three 2D points for [`predicate::orient2d`].
 #[must_use]
 pub fn orient2d(class: Class) -> Vec<[P2; 3]> {
-    let mut g = rng("predicate::orient2d", class);
+    orient2d_from("predicate::orient2d", class)
+}
+
+/// [`orient2d`]'s classes drawn from the seed of `op`: the batch another benchmark of the same
+/// predicate measures (the generated filter and exact value, [`super::generated`]), on inputs of its own.
+pub(crate) fn orient2d_from(op: &str, class: Class) -> Vec<[P2; 3]> {
+    let mut g = rng(op, class);
     match class {
         Class::Typical => batch_of(|_| {
             let t @ [a, b, c] = [(); 3].map(|()| typical2(&mut g));
@@ -149,7 +155,13 @@ pub fn orient2d(class: Class) -> Vec<[P2; 3]> {
 /// Batches of four 3D points for [`predicate::orient3d`].
 #[must_use]
 pub fn orient3d(class: Class) -> Vec<[P3; 4]> {
-    let mut g = rng("predicate::orient3d", class);
+    orient3d_from("predicate::orient3d", class)
+}
+
+/// [`orient3d`]'s classes drawn from the seed of `op`: the batch another benchmark of the same
+/// predicate measures (the generated filter and exact value, [`super::generated`]), on inputs of its own.
+pub(crate) fn orient3d_from(op: &str, class: Class) -> Vec<[P3; 4]> {
+    let mut g = rng(op, class);
     match class {
         Class::Typical => batch_of(|_| {
             let t @ [a, b, c, d] = [(); 4].map(|()| typical3(&mut g));
@@ -197,7 +209,13 @@ pub fn orient3d(class: Class) -> Vec<[P3; 4]> {
 /// Batches of four 2D points for [`predicate::incircle`].
 #[must_use]
 pub fn incircle(class: Class) -> Vec<[P2; 4]> {
-    let mut g = rng("predicate::incircle", class);
+    incircle_from("predicate::incircle", class)
+}
+
+/// [`incircle`]'s classes drawn from the seed of `op`: the batch another benchmark of the same
+/// predicate measures (the generated filter and exact value, [`super::generated`]), on inputs of its own.
+pub(crate) fn incircle_from(op: &str, class: Class) -> Vec<[P2; 4]> {
+    let mut g = rng(op, class);
     match class {
         Class::Typical => batch_of(|_| {
             let t @ [a, b, c, d] = [(); 4].map(|()| typical2(&mut g));
@@ -239,7 +257,13 @@ pub fn incircle(class: Class) -> Vec<[P2; 4]> {
 /// Batches of five 3D points for [`predicate::insphere`].
 #[must_use]
 pub fn insphere(class: Class) -> Vec<[P3; 5]> {
-    let mut g = rng("predicate::insphere", class);
+    insphere_from("predicate::insphere", class)
+}
+
+/// [`insphere`]'s classes drawn from the seed of `op`: the batch another benchmark of the same
+/// predicate measures (the generated filter and exact value, [`super::generated`]), on inputs of its own.
+pub(crate) fn insphere_from(op: &str, class: Class) -> Vec<[P3; 5]> {
+    let mut g = rng(op, class);
     match class {
         Class::Typical => batch_of(|_| {
             let t @ [a, b, c, d, e] = [(); 5].map(|()| typical3(&mut g));

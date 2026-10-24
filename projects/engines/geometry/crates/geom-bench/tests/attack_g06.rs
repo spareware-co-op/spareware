@@ -1053,6 +1053,7 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
         ("rng", _) => rng_digest(name, class)?,
         ("dd", _) => dd_digest(name, class)?,
         ("exact_sum", _) => exact_sum_digest(name, class)?,
+        ("generated", _) => generated_digest(name, class)?,
         _ => return None,
     })
 }
@@ -1141,6 +1142,66 @@ fn exact_sum_digest(name: &str, class: Class) -> Option<Digest> {
         })),
         "round" => fold(i::round(class).iter().map(ExactSum::round)),
         "round_ieee" => fold(i::round_ieee(class).iter().map(ExactSum::round_ieee)),
+        _ => return None,
+    })
+}
+
+/// The digest of the generated-predicate benchmark `name` on `class`, from direct calls on its
+/// inputs.
+fn generated_digest(name: &str, class: Class) -> Option<Digest> {
+    use geom_num::generated as gp;
+    use inputs::generated as i;
+    Some(match name {
+        "orient2d_filter" => fold(
+            i::orient2d_filter(class)
+                .into_iter()
+                .map(|[a, b, c]| gp::orient2d::filter(a, b, c)),
+        ),
+        "orient2d_value" => fold(
+            i::orient2d_value(class)
+                .into_iter()
+                .map(|[a, b, c]| gp::orient2d::value(a, b, c)),
+        ),
+        "orient3d_filter" => fold(
+            i::orient3d_filter(class)
+                .into_iter()
+                .map(|[a, b, c, d]| gp::orient3d::filter(a, b, c, d)),
+        ),
+        "orient3d_value" => fold(
+            i::orient3d_value(class)
+                .into_iter()
+                .map(|[a, b, c, d]| gp::orient3d::value(a, b, c, d)),
+        ),
+        "incircle_filter" => fold(
+            i::incircle_filter(class)
+                .into_iter()
+                .map(|[a, b, c, d]| gp::incircle::filter(a, b, c, d)),
+        ),
+        "incircle_value" => fold(
+            i::incircle_value(class)
+                .into_iter()
+                .map(|[a, b, c, d]| gp::incircle::value(a, b, c, d)),
+        ),
+        "insphere_filter" => fold(
+            i::insphere_filter(class)
+                .into_iter()
+                .map(|[a, b, c, d, e]| gp::insphere::filter(a, b, c, d, e)),
+        ),
+        "insphere_value" => fold(
+            i::insphere_value(class)
+                .into_iter()
+                .map(|[a, b, c, d, e]| gp::insphere::value(a, b, c, d, e)),
+        ),
+        "plane_side_filter" => fold(
+            i::plane_side_filter(class)
+                .into_iter()
+                .map(|([x, y, z], d, p)| gp::plane_side::filter(x, y, z, d, p)),
+        ),
+        "plane_side_value" => fold(
+            i::plane_side_value(class)
+                .into_iter()
+                .map(|([x, y, z], d, p)| gp::plane_side::value(x, y, z, d, p)),
+        ),
         _ => return None,
     })
 }
@@ -3011,6 +3072,115 @@ fn every_enclosure_finds_its_peaks_exactly_and_holds_its_ends() {
         iv(2f64.powi(53), 2f64.powi(53) + 2.0),
         0.5
     ));
+}
+
+// ------------------------------------------------------------------------------------------------
+// The generated predicate modules (G27): exact values and filters against Laplace determinants.
+// ------------------------------------------------------------------------------------------------
+
+/// Checks one generated predicate on one input: its value, when it gives one, is the exact
+/// determinant (in `geom-num`'s sign convention, as the oracles above are calibrated); its exact
+/// sign is that value's sign; and its filter, when it decides, gives the exact sign.
+fn check_generated(
+    what: &str,
+    value: Option<Big>,
+    exact: Option<Sign>,
+    filter: Option<Sign>,
+    truth: &Big,
+) {
+    if let Some(v) = &value {
+        assert_eq!(
+            v.cmp(truth),
+            Ordering::Equal,
+            "{what}: value {v:?}, exact {truth:?}"
+        );
+    }
+    assert_eq!(
+        exact,
+        value.as_ref().map(Big::sign),
+        "{what}: exact is not the value's sign"
+    );
+    if let Some(s) = filter {
+        assert_eq!(s, truth.sign(), "{what}: the filter decided wrongly");
+    }
+}
+
+#[test]
+fn every_generated_value_is_the_exact_determinant() {
+    use geom_num::generated as gp;
+    use inputs::generated as i;
+    for class in Class::ALL {
+        for batch in [i::orient2d_filter(class), i::orient2d_value(class)] {
+            for [a, b, c] in batch {
+                let truth = orient2d_exact([a, b, c]);
+                let value = gp::orient2d::value(a, b, c).map(Big::from_i128);
+                check_generated(
+                    "orient2d",
+                    value,
+                    gp::orient2d::exact(a, b, c),
+                    gp::orient2d::filter(a, b, c),
+                    &truth,
+                );
+            }
+        }
+        for batch in [i::orient3d_filter(class), i::orient3d_value(class)] {
+            for [a, b, c, d] in batch {
+                let truth = orient3d_exact([a, b, c, d]);
+                let value = gp::orient3d::value(a, b, c, d).map(Big::from_i128);
+                check_generated(
+                    "orient3d",
+                    value,
+                    gp::orient3d::exact(a, b, c, d),
+                    gp::orient3d::filter(a, b, c, d),
+                    &truth,
+                );
+            }
+        }
+        for batch in [i::incircle_filter(class), i::incircle_value(class)] {
+            for [a, b, c, d] in batch {
+                let truth = incircle_exact([a, b, c, d]);
+                let value = gp::incircle::value(a, b, c, d).map(|v| big_of_wide(&v));
+                check_generated(
+                    "incircle",
+                    value,
+                    gp::incircle::exact(a, b, c, d),
+                    gp::incircle::filter(a, b, c, d),
+                    &truth,
+                );
+            }
+        }
+        for batch in [i::insphere_filter(class), i::insphere_value(class)] {
+            for [a, b, c, d, e] in batch {
+                let truth = insphere_exact([a, b, c, d, e]);
+                let value = gp::insphere::value(a, b, c, d, e).map(|v| big_of_wide(&v));
+                check_generated(
+                    "insphere",
+                    value,
+                    gp::insphere::exact(a, b, c, d, e),
+                    gp::insphere::filter(a, b, c, d, e),
+                    &truth,
+                );
+            }
+        }
+        for batch in [i::plane_side_filter(class), i::plane_side_value(class)] {
+            for ([x, y, z], d, p) in batch {
+                // n · p + d, exactly.
+                let truth = Big::from_i128(x)
+                    .times(&big(p.x))
+                    .plus(&Big::from_i128(y).times(&big(p.y)))
+                    .plus(&Big::from_i128(z).times(&big(p.z)))
+                    .plus(&Big::from_i128(d));
+                let value = gp::plane_side::value(x, y, z, d, p).map(Big::from_i128);
+                check_generated(
+                    "plane_side",
+                    value,
+                    gp::plane_side::exact(x, y, z, d, p),
+                    gp::plane_side::filter(x, y, z, d, p),
+                    &truth,
+                );
+            }
+        }
+    }
 }
 
 // ------------------------------------------------------------------------------------------------
