@@ -15,13 +15,14 @@
 //! hash within an edition"):
 //!
 //! - **Refused outright:** any change to a frozen edition (its goldens, digests, histories, checks
-//!   or state); removing or renaming an edition, or reordering editions; removing a golden;
-//!   changing a golden's digest without appending exactly one history record whose digest is the
-//!   base's value; rewriting or removing history; and two open editions.
+//!   or state); removing or renaming an edition, or reordering editions; removing a golden, which
+//!   includes changing its key (its id or its operation versions: a new operation version is a new
+//!   golden beside the old, 28.13); changing a golden's digest without appending exactly one
+//!   history record whose digest is the base's value; a history record added without a changed
+//!   digest; rewriting or removing history; and two open editions.
 //! - **Needs a kernel owner's approval:** a changed digest (with its record); any other change to an
-//!   existing golden (where it is checked, the file it pins, what it covers, its operation
-//!   versions, its history); and releasing an edition (the open edition frozen, a new open edition
-//!   after it).
+//!   existing golden (where it is checked, the file it pins, what it covers); and releasing an
+//!   edition (the open edition frozen, a new open edition after it).
 //! - **Ordinary review only:** adding goldens, which only adds checks.
 //!
 //! Who counts as a kernel owner: chapter 32.5 proposes a named group, not yet named, and

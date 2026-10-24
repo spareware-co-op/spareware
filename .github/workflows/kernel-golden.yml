@@ -81,15 +81,29 @@ jobs:
           # The base commit's store is read with `git show`, so the history is fetched.
           fetch-depth: 0
       # A review of a pull request that does not touch the store has nothing to approve here.
+      # The base compared with is the one the merge would land on: for a pull request (and a
+      # review of one) the checkout is GitHub's test merge commit, refs/pull/<n>/merge, whose
+      # first parent is the base branch's tip it was made on, so the diff is exactly what merging
+      # does to the store. The event's base.sha can be older than that tip, and a diff from it
+      # would count the base branch's own later edits as this pull request's. A checkout with one
+      # parent falls back to base.sha.
       - name: Does this pull request edit the golden store?
         id: edits
         env:
-          BASE: ${{ github.event.pull_request.base.sha }}
+          EVENT_BASE: ${{ github.event.pull_request.base.sha }}
         run: |
           store=projects/engines/geometry/crates/geom-test/golden/store.json
           if [ "$GITHUB_EVENT_NAME" = "push" ]; then
             echo "store=unknown" >> "$GITHUB_OUTPUT"
-          elif git diff --quiet "$BASE" HEAD -- "$store"; then
+            exit 0
+          fi
+          if git rev-parse --verify --quiet HEAD^2 > /dev/null; then
+            BASE=$(git rev-parse HEAD^1)
+          else
+            BASE=$EVENT_BASE
+          fi
+          echo "base=$BASE" >> "$GITHUB_OUTPUT"
+          if git diff --quiet "$BASE" HEAD -- "$store"; then
             echo "The store is the same as at the base, $BASE."
             echo "store=same" >> "$GITHUB_OUTPUT"
           else
@@ -123,7 +137,7 @@ jobs:
       - name: Edits to the store, and a kernel owner's approval where one is needed
         if: github.event_name != 'push' && steps.edits.outputs.store == 'edited'
         env:
-          BASE: ${{ github.event.pull_request.base.sha }}
+          BASE: ${{ steps.edits.outputs.base }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           AUTHOR: ${{ github.event.pull_request.user.login }}
         run: >-

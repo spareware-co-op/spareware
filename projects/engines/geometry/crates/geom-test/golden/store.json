@@ -82,7 +82,15 @@
             "test": "determinism",
             "function": "golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "dd9daf8861292fda5cd2de1d789a6f9739a4672145c9756cdc5299a6fe772ab6"
+          "sha256": "dd9daf8861292fda5cd2de1d789a6f9739a4672145c9756cdc5299a6fe772ab6",
+          "history": [
+            {
+              "sha256": "d79932a18468bf79d55bdb204597c001ad9b512c5000fae5e87d7db01a72f126",
+              "kind": "improvement",
+              "piece": "G05",
+              "why": "The correctly rounded sinpi and cospi of piece G05 (CORE-MATH ports in place of an msun-method approximation), which geom-math's rotations call: only the two sections that build rotations from them changed, transform (6773dadd...852b18 before) and boxes (2e8f3297...bc7e3e before); every other section's digest is the same. Recorded on main in G03's pull request (commit bbbc379), before the store existed."
+            }
+          ]
         },
         {
           "id": "geom-math/workload",
@@ -92,7 +100,15 @@
             "test": "attack_g03",
             "function": "results_identical_across_targets"
           },
-          "sha256": "977828731c890a725eae9d2f6eb79b9d04a69f927ffcf20525228c93f2cfda25"
+          "sha256": "977828731c890a725eae9d2f6eb79b9d04a69f927ffcf20525228c93f2cfda25",
+          "history": [
+            {
+              "sha256": "c1c5d1b624f95d7ce6b6640acef43dda0a90ae2c4beb6c30483fa87a234747c9",
+              "kind": "improvement",
+              "piece": "G05",
+              "why": "The correctly rounded sinpi and cospi of piece G05 (CORE-MATH ports in place of an msun-method approximation), which the workload's rotations call; sqrt, abs, floor, ceil and round_ties_even, the only other maths functions geom-math calls, are unchanged. Recorded on main in G03's pull request (commit c19cca4), before the store existed."
+            }
+          ]
         },
         {
           "id": "geom-run/helpers",

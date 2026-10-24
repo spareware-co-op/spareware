@@ -38,7 +38,7 @@ use geom_test::golden::diff::{ApprovalError, approved, diff};
 use geom_test::golden::matrix::{RunError, plan, verify};
 use geom_test::golden::perturb::{Heap, MAX_BYTES, address_order_digest};
 use geom_test::golden::shuffle::{Orders, order_free};
-use geom_test::golden::store::{EMBEDDED, State, Store, StoreError};
+use geom_test::golden::store::{ChangeKind, EMBEDDED, State, Store, StoreError};
 use geom_test::golden::{self, Digest, GoldenError, Sha256, check_in, hex, sha256};
 use serde_json::Value;
 
@@ -112,7 +112,10 @@ fn every_golden_is_sha256_and_geom_num_has_all_its_corpora() {
 
 /// The digests every golden had before this piece moved them into the store, byte for byte: the
 /// SHA-256 goldens G02, G03, G04, G25 and G32 pinned as constants, which the store must hold
-/// unchanged and with no history record (no change was made to them).
+/// unchanged. Their histories hold exactly the changes made to them on main before the store
+/// existed, each with the digest the constant had before: G05 moved geom-num's corpus and both
+/// of geom-math's goldens (its correctly rounded maths); nothing else moved, so no other golden has
+/// a record.
 #[test]
 fn the_goldens_the_crates_pinned_are_byte_identical_in_the_store() {
     let before: [(&str, &str); 7] = [
@@ -151,15 +154,35 @@ fn the_goldens_the_crates_pinned_are_byte_identical_in_the_store() {
         let g = edition.golden(id, &BTreeMap::new()).unwrap();
         assert_eq!(g.sha256, digest, "{id} moved");
     }
-    // geom-num/determinism changed once before this piece (G05); that record is kept as it was.
-    let det = edition
-        .golden("geom-num/determinism", &BTreeMap::new())
-        .unwrap();
-    assert_eq!(det.history.len(), 1);
-    assert_eq!(
-        det.history[0].sha256,
-        "c9c61875e6da8cff4ffa79f147d8f32187fa2929564100ce834849bb43a211f8"
-    );
+    // The changes main made before the store, each the constant's earlier value (G02's and G03's
+    // SHA-256 goldens, moved by G05), and no other record anywhere.
+    let changed: BTreeMap<&str, &str> = [
+        (
+            "geom-num/determinism",
+            "c9c61875e6da8cff4ffa79f147d8f32187fa2929564100ce834849bb43a211f8",
+        ),
+        (
+            "geom-math/determinism",
+            "d79932a18468bf79d55bdb204597c001ad9b512c5000fae5e87d7db01a72f126",
+        ),
+        (
+            "geom-math/workload",
+            "c1c5d1b624f95d7ce6b6640acef43dda0a90ae2c4beb6c30483fa87a234747c9",
+        ),
+    ]
+    .into_iter()
+    .collect();
+    for g in &edition.goldens {
+        match changed.get(g.id.as_str()) {
+            Some(old) => {
+                assert_eq!(g.history.len(), 1, "{}", g.id);
+                assert_eq!(g.history[0].sha256, *old, "{}", g.id);
+                assert_eq!(g.history[0].kind, ChangeKind::Improvement, "{}", g.id);
+                assert_eq!(g.history[0].piece, "G05", "{}", g.id);
+            }
+            None => assert!(g.history.is_empty(), "{} has a history record", g.id),
+        }
+    }
 }
 
 /// The steps of kernel.yml's native job that run every golden, in each build mode the done-when
@@ -739,6 +762,8 @@ fn kernel_golden_yml_runs_the_check_and_the_approval_rule() {
         "run: cargo run --locked -p geom-test --bin golden -- check\n",
         "cargo run --locked -p geom-test --bin golden -- diff\n",
         "--base \"$BASE\"\n",
+        "BASE: ${{ steps.edits.outputs.base }}\n",
+        "BASE=$(git rev-parse HEAD^1)\n",
         "--reviews \"$RUNNER_TEMP/reviews.json\"\n",
         "--permissions \"$RUNNER_TEMP/permissions.json\"\n",
         "--head \"$HEAD_SHA\"\n",

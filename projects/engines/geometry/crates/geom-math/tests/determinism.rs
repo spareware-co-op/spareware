@@ -42,9 +42,9 @@
 //! fixed field order (see `Recorder`), and hashed with SHA-256 (FIPS 180-4), the hash chapters 21
 //! and 28.13 specify, from `geom_test::golden`, the one implementation every golden uses (piece
 //! G19), checked there against the standard's test vectors. Doubles go in as their bits, so a
-//! difference of one unit in the last place shows. No result of this crate is ever NaN; a NaN would be written as one canonical
-//! pattern, because Rust does not fix a NaN's sign or payload (RFC 3514), and the test fails on
-//! any.
+//! difference of one unit in the last place shows. No result of this crate is ever NaN; a NaN
+//! would be written as one canonical pattern, because Rust does not fix a NaN's sign or payload
+//! (RFC 3514), and the test fails on any.
 //!
 //! **The same digest must hold on every target**: Linux, Windows and macOS on x86-64 and arm64,
 //! and wasm32-wasip1 under wasmtime and Node, in debug and release, with overflow checks on or off
@@ -110,9 +110,9 @@ use geom_test::golden::{self, Sha256, hex};
 /// change is either a bug or a deliberate kernel edition change, recorded in the store in a pull
 /// request that says which and is approved by a kernel owner.
 ///
-/// Its digest replaced the corpus's 64-bit FNV-1a golden, `0x8643_5a99_5463_851e`, when the hash moved to
-/// SHA-256 (chapter 28.13): both are hashes of the same bytes, so no result changed. It replaced
-/// `d79932a1…72f126` when piece G05 made `geom_num::math::sinpi` and `cospi` correctly rounded
+/// Its digest replaced the corpus's 64-bit FNV-1a golden, `0x8643_5a99_5463_851e`, when the hash
+/// moved to SHA-256 (chapter 28.13): both are hashes of the same bytes, so no result changed. It
+/// replaced `d79932a1…72f126` (the store's history keeps the whole digest) when piece G05 made `geom_num::math::sinpi` and `cospi` correctly rounded
 /// (ports of CORE-MATH in place of an msun-method approximation): only the two sections that build
 /// rotations from them changed, `transform` (`6773dadd…852b18` before) and `boxes`
 /// (`2e8f3297…bc7e3e` before); every other section's digest is the same.

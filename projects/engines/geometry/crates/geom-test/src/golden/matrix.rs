@@ -146,7 +146,8 @@ impl fmt::Display for RunError {
             ),
             RunError::NotOk(summary) => write!(
                 f,
-                "libtest's summary is \"test result: {summary}\", not ok: the golden tests did                  not all pass"
+                "libtest's summary is \"test result: {summary}\", not ok: the golden tests did \
+                 not all pass"
             ),
             RunError::Silent(id) => write!(
                 f,
