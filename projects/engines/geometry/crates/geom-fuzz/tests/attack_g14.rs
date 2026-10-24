@@ -376,6 +376,43 @@ fn checks_outside_tests(text: &str) -> Vec<String> {
     out
 }
 
+/// The `#[should_panic]` test functions of a test file's `text` that call bolero's `check!`.
+/// cargo-bolero's `build-clusterfuzz` builds each test binary by running one of its bolero tests,
+/// the first it listed (in no fixed order), with `CARGO_BOLERO_SELECT` set, where `check!` returns
+/// without running its body (`bolero-engine`'s `TargetLocation::should_run`). A `#[should_panic]`
+/// test fails there, and `ClusterFuzzLite`'s build fails with it, on some runs and not others.
+/// Comment lines are skipped.
+fn should_panic_checks(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut should_panic = false;
+    let mut current: Option<(String, bool)> = None;
+    for line in text.lines() {
+        let t = line.trim();
+        if t.starts_with("//") {
+            continue;
+        }
+        if t.starts_with("#[should_panic") {
+            should_panic = true;
+            continue;
+        }
+        if let Some(rest) = t.strip_prefix("fn ").or_else(|| t.strip_prefix("pub fn ")) {
+            let name = rest.split(['(', '<']).next().unwrap_or_default().to_owned();
+            current = Some((name, should_panic));
+            should_panic = false;
+            continue;
+        }
+        // Assembled, so this function is not a call itself.
+        if t.contains(concat!("check", "!(")) {
+            if let Some((name, true)) = &current {
+                if !out.contains(name) {
+                    out.push(name.clone());
+                }
+            }
+        }
+    }
+    out
+}
+
 /// What the layout gets wrong: each target's test file and its tests, and the CI matrices.
 fn layout_violations(
     targets: &BTreeSet<String>,
@@ -404,6 +441,13 @@ fn layout_violations(
             found.push(format!(
                 "tests/{file}.rs calls bolero's check! in {function}, which is not a #[test] \
                  function, so cargo-bolero cannot select that target by its test's name"
+            ));
+        }
+        for function in should_panic_checks(text) {
+            found.push(format!(
+                "tests/{file}.rs calls bolero's check! in {function}, a #[should_panic] test, \
+                 which fails when cargo-bolero selects targets, and ClusterFuzzLite's build \
+                 with it"
             ));
         }
     }
@@ -537,6 +581,45 @@ fn attack_every_target_has_its_tests_and_is_in_both_ci_matrices() {
         layout_violations(&missing, &tests, &workflow)
             .iter()
             .any(|v| v.contains("tests/newtarget.rs"))
+    );
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which WASI cannot without a preopened folder"
+)]
+#[test]
+fn attack_a_should_panic_bolero_test_is_refused() {
+    let workflow = read(".github/workflows/kernel-fuzz.yml");
+    let targets = target_modules();
+    let tests = test_files();
+    // The call is assembled, so this file's own text, which the layout check reads, has none.
+    let call = ["check", "!()"].concat();
+    // A #[should_panic] bolero test, as G11's bolero_fails_on_a_finding was: ClusterFuzzLite's
+    // build failed whenever cargo-bolero happened to list it first in its binary.
+    let mut panicking = tests.clone();
+    panicking.insert(
+        "panicking".to_owned(),
+        format!(
+            "#[test]\n#[should_panic(expected = \"test failed\")]\nfn fails() {{\n    \
+             {call}.for_each(|_: &[u8]| Err(()));\n}}\n"
+        ),
+    );
+    let v = layout_violations(&targets, &panicking, &workflow);
+    assert!(
+        v.iter()
+            .any(|v| v.contains("tests/panicking.rs") && v.contains("#[should_panic]")),
+        "{v:?}"
+    );
+    // A #[should_panic] test without check!, and a bolero test that catches the panic itself,
+    // pass.
+    assert_eq!(
+        should_panic_checks(&format!(
+            "#[test]\n#[should_panic]\nfn plain() {{\n    panic!();\n}}\n\
+             #[test]\nfn caught() {{\n    let _ = std::panic::catch_unwind(|| {{\n        \
+             {call}.for_each(|_: &[u8]| ());\n    }});\n}}\n"
+        )),
+        Vec::<String>::new()
     );
 }
 

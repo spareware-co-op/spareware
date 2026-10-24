@@ -84,6 +84,13 @@ Rules:
   cargo-bolero builds a target by running the test of that name, so a target in a helper cannot
   be built for libFuzzer or ClusterFuzzLite ("no targets matched"). `tests/attack_g14.rs` refuses
   one.
+- No bolero test is `#[should_panic]`. cargo-bolero's `build-clusterfuzz` builds each test
+  binary by running one of its bolero tests, the first it listed (in no fixed order), with
+  `CARGO_BOLERO_SELECT` set, and there `check!` returns without running its body
+  (`bolero-engine`'s `TargetLocation::should_run`). A `#[should_panic]` test fails in that mode,
+  so ClusterFuzzLite's build fails on the runs that happen to pick it. A test that shows bolero
+  fails catches the panic itself and accepts a body that never ran only in that mode
+  (`tests/predicates.rs`, `bolero_fails_on_a_finding`). `tests/attack_g14.rs` refuses one.
 - The proof test drives `check` itself, with a typed bolero generator of the proof's domain.
   Under Kani every generated value is symbolic, so the proof covers the whole domain; under
   `cargo test` the same test is a property test over that domain, on every operating system.
