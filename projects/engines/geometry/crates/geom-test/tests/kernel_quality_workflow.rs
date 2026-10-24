@@ -1,29 +1,36 @@
-//! `.github/workflows/kernel-quality.yml` keeps the promises its header makes (piece G21).
+//! `.github/workflows/kernel-quality.yml`, `.cargo/mutants.toml` and `.config/nextest.toml` keep
+//! the promises their headers make (piece G21).
 //!
-//! The gates themselves are tested in `quality_gates.rs`; this file checks the workflow that runs
-//! them, line by line, for what a reader would otherwise have to check by eye:
+//! The gates themselves are tested in `quality_gates.rs` and, with the real tools, in
+//! `seeded_gates.rs`; this file checks the configuration that runs them, for what a reader would
+//! otherwise have to check by eye. The workflow is read as YAML (yaml-rust2) and the two
+//! configuration files as TOML (toml), so a check sees the structure GitHub and the tools see, not
+//! a line that looks right:
 //!
-//! - **Triggers.** The diff mutation run and coverage on pull requests that touch the kernel, the
-//!   full sharded mutation run, coverage and Miri weekly and on demand; and the path filters cover
-//!   everything the gates read (the kernel's folder with the ledger, `.cargo/` with
-//!   `mutants.toml`, the workspace manifests, the toolchain file and the workflow itself).
+//! - **Triggers.** Pull requests that touch the kernel, the schedule (weekly) and on demand, never
+//!   a push; and the path filters cover everything the gates read.
+//! - **Jobs and when they run.** The mutation plan, shards and judge on every event (the plan picks
+//!   the diff or the full run), the shards only when the plan has mutants, the judge even when a
+//!   shard failed; coverage and the seeded gates on every event; Miri weekly and on demand, and on
+//!   a pull request only when it changes how Miri runs.
 //! - **Least privilege.** One permission, `contents: read`, and no credentials kept by checkout.
 //! - **Pins.** Every action pinned to a full commit, the same commit as `kernel.yml` where both use
 //!   an action; one `RUST_TOOLCHAIN`, equal to `rust-toolchain.toml`; the nightly pinned by its
-//!   date; cargo-mutants and cargo-llvm-cov installed at exact versions with `--locked`.
-//! - **Shards.** Each sharded job's matrix lists exactly shards 0 to n − 1 for its `SHARDS: n`, so no
-//!   shard is lost or run twice.
-//! - **Every gate is judged.** The judges run in their own steps, the diff and full runs with the
-//!   list of every expected mutant, and cargo-mutants' exit status is passed on unless it is one the
-//!   judge decides (2, survivors; 3, timeouts).
-//!
-//! Method: a line scan of the workflow, as the scaffold check reads the kernel workflows'
-//! toolchain pins (`projects/engines/crates/engine-geometry/tests/scaffold/toolchain.rs`).
+//!   date; cargo-mutants, cargo-llvm-cov and cargo-nextest installed at exact versions with
+//!   `--locked`, and nothing installed another way.
+//! - **Shards and partitions.** The mutation shards come from the plan, and each shard runs
+//!   `--shard k/n` with the plan's count; Miri's partitions are 1 to n for its `PARTITIONS: n`.
+//! - **Every gate is judged.** The judge reads the plan's list; cargo-mutants' exit status is passed
+//!   on unless it is one the judge decides (2, survivors; 3, timeouts); coverage keeps each run's
+//!   log for the judge.
+//! - **The tools' configuration.** cargo-mutants mutates only kernel crates' sources and judges
+//!   them by integration tests, with `--locked`; nextest's Miri profiles stop a test at its budget
+//!   as a pass and never fail fast, and the profile the workflow names exists.
 
 // The crate denies native arithmetic in kernel code (Cargo.toml); tests may use it.
 #![allow(
     clippy::arithmetic_side_effects,
-    reason = "indentation counts; the rules are for kernel code"
+    reason = "counts and indices; the rules are for kernel code"
 )]
 #![allow(
     clippy::unwrap_used,
@@ -35,6 +42,8 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use yaml_rust2::{Yaml, YamlLoader};
+
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .ancestors()
@@ -43,73 +52,71 @@ fn root() -> PathBuf {
         .to_path_buf()
 }
 
-/// A repository file's text, with Windows line ends (a checkout with `core.autocrlf`) read as
-/// plain newlines, so the line scans below see the file as Git stores it.
 fn read(rel: &str) -> String {
-    std::fs::read_to_string(root().join(rel))
+    std::fs::read_to_string(root().join(rel)).unwrap()
+}
+
+fn yaml(rel: &str) -> Yaml {
+    let mut docs = YamlLoader::load_from_str(&read(rel)).unwrap();
+    assert_eq!(docs.len(), 1, "{rel} holds one document");
+    docs.remove(0)
+}
+
+fn workflow() -> Yaml {
+    yaml(".github/workflows/kernel-quality.yml")
+}
+
+fn toml_file(rel: &str) -> toml::Table {
+    read(rel).parse::<toml::Table>().unwrap()
+}
+
+/// A mapping's string keys, in file order.
+fn keys(y: &Yaml) -> Vec<String> {
+    y.as_hash()
         .unwrap()
-        .replace("\r\n", "\n")
+        .keys()
+        .map(|k| k.as_str().unwrap().to_owned())
+        .collect()
 }
 
-fn workflow() -> String {
-    read(".github/workflows/kernel-quality.yml")
+fn text(y: &Yaml) -> &str {
+    y.as_str().unwrap_or_else(|| panic!("not a string: {y:?}"))
 }
 
-/// Every `uses:` line's action and the commit it is pinned to.
-fn action_pins(yml: &str) -> BTreeMap<String, Vec<String>> {
+/// Every step of every job, as (job, step).
+fn steps(w: &Yaml) -> Vec<(String, Yaml)> {
+    let mut out = Vec::new();
+    for job in keys(&w["jobs"]) {
+        for step in w["jobs"][job.as_str()]["steps"].as_vec().unwrap() {
+            out.push((job.clone(), step.clone()));
+        }
+    }
+    out
+}
+
+/// Every `uses:` of a workflow, as action and pinned revision.
+fn action_pins(w: &Yaml) -> BTreeMap<String, Vec<String>> {
     let mut pins: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    for line in yml.lines().map(str::trim) {
-        let Some(rest) = line
-            .strip_prefix("- uses:")
-            .or_else(|| line.strip_prefix("uses:"))
-        else {
-            continue;
-        };
-        let spec = rest.split('#').next().unwrap().trim();
-        let (action, commit) = spec.split_once('@').expect("an action without a pin");
-        pins.entry(action.to_owned())
-            .or_default()
-            .push(commit.to_owned());
+    for (_, step) in steps(w) {
+        if let Some(uses) = step["uses"].as_str() {
+            let (action, rev) = uses.split_once('@').expect("an action without a pin");
+            pins.entry(action.to_owned())
+                .or_default()
+                .push(rev.to_owned());
+        }
     }
     pins
 }
 
-/// The value of the first `key:` line in `text`, unquoted.
-fn value(text: &str, key: &str) -> Option<String> {
-    text.lines()
-        .map(str::trim)
-        .find_map(|l| l.strip_prefix(&format!("{key}:")))
-        .map(|v| {
-            v.split('#')
-                .next()
-                .unwrap()
-                .trim()
-                .trim_matches('"')
-                .to_owned()
-        })
-}
-
-/// The workflow's jobs, as (name, text of the job).
-fn jobs(yml: &str) -> Vec<(String, String)> {
-    let mut out: Vec<(String, String)> = Vec::new();
-    let mut in_jobs = false;
-    for line in yml.lines() {
-        if line == "jobs:" {
-            in_jobs = true;
-            continue;
-        }
-        if !in_jobs {
-            continue;
-        }
-        let indent = line.len() - line.trim_start().len();
-        if indent == 2 && line.trim_end().ends_with(':') && !line.trim().starts_with('#') {
-            out.push((line.trim().trim_end_matches(':').to_owned(), String::new()));
-        } else if let Some((_, text)) = out.last_mut() {
-            text.push_str(line);
-            text.push('\n');
-        }
-    }
-    out
+/// The `run:` scripts of a job, joined.
+fn runs(w: &Yaml, job: &str) -> String {
+    w["jobs"][job]["steps"]
+        .as_vec()
+        .unwrap()
+        .iter()
+        .filter_map(|s| s["run"].as_str())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 #[cfg_attr(
@@ -118,34 +125,36 @@ fn jobs(yml: &str) -> Vec<(String, String)> {
 )]
 #[test]
 fn it_runs_on_kernel_pull_requests_weekly_and_on_demand() {
-    let yml = workflow();
-    let on = yml.split("\npermissions:").next().unwrap();
-    assert!(on.contains("\n  pull_request:\n    paths:\n"), "{on}");
-    assert!(on.contains("\n  schedule:\n"), "{on}");
-    assert!(on.contains("\n  workflow_dispatch:"), "{on}");
-    assert!(
-        !on.contains("\n  push:"),
+    let w = workflow();
+    let on = &w["on"];
+    assert_eq!(
+        keys(on),
+        ["pull_request", "schedule", "workflow_dispatch"],
         "pushes run kernel.yml, not the quality gates"
     );
-    let cron = value(on, "- cron").unwrap();
+    let cron = text(&on["schedule"][0]["cron"]);
     let fields: Vec<&str> = cron.split_whitespace().collect();
     assert_eq!(fields.len(), 5, "{cron}");
     assert!(
         fields[2] == "*" && fields[3] == "*" && fields[4] != "*",
         "weekly: {cron}"
     );
+    let paths: Vec<&str> = on["pull_request"]["paths"]
+        .as_vec()
+        .unwrap()
+        .iter()
+        .map(text)
+        .collect();
     for path in [
-        "\"projects/engines/geometry/**\"",
-        "\".cargo/**\"",
-        "\"Cargo.toml\"",
-        "\"Cargo.lock\"",
-        "\"rust-toolchain.toml\"",
-        "\".github/workflows/kernel-quality.yml\"",
+        "projects/engines/geometry/**",
+        ".cargo/**",
+        ".config/nextest.toml",
+        "Cargo.toml",
+        "Cargo.lock",
+        "rust-toolchain.toml",
+        ".github/workflows/kernel-quality.yml",
     ] {
-        assert!(
-            on.contains(&format!("      - {path}\n")),
-            "no path filter {path}"
-        );
+        assert!(paths.contains(&path), "no path filter {path}");
     }
     assert!(geom_test::ledger::LEDGER_PATH.starts_with("projects/engines/geometry/"));
 }
@@ -156,56 +165,56 @@ fn it_runs_on_kernel_pull_requests_weekly_and_on_demand() {
 )]
 #[test]
 fn each_job_runs_on_the_events_its_gate_names() {
-    let jobs = jobs(&workflow());
-    let names: Vec<&str> = jobs.iter().map(|(n, _)| n.as_str()).collect();
+    let w = workflow();
+    let jobs = &w["jobs"];
     assert_eq!(
-        names,
+        keys(jobs),
         [
-            "mutants-diff",
-            "mutants-diff-judge",
-            "mutants-full",
-            "mutants-full-judge",
+            "mutants-plan",
+            "mutants",
+            "mutants-judge",
             "coverage",
-            "miri-plan",
+            "gates-seeded",
             "miri",
         ]
     );
-    let condition = |job: &str| {
-        let text = &jobs.iter().find(|(n, _)| n == job).unwrap().1;
-        // The job's own condition, at the job's indentation, not a step's.
-        text.lines()
-            .find_map(|l| l.strip_prefix("    if: "))
-            .map(str::to_owned)
-    };
-    assert_eq!(
-        condition("mutants-diff").unwrap(),
-        "github.event_name == 'pull_request'"
-    );
-    assert!(
-        condition("mutants-diff-judge")
-            .unwrap()
-            .contains("github.event_name == 'pull_request'")
-    );
-    for job in ["mutants-full", "miri-plan", "miri"] {
-        assert_eq!(
-            condition(job).unwrap(),
-            "github.event_name != 'pull_request'",
-            "{job}"
-        );
+    // Every job runs on every event, but the shards only when the plan found mutants, and the
+    // judge even when a shard failed, so a lost shard is reported, not skipped.
+    for job in ["mutants-plan", "coverage", "gates-seeded", "miri"] {
+        assert!(jobs[job]["if"].is_badvalue(), "{job} has a condition");
     }
-    assert!(
-        condition("mutants-full-judge")
-            .unwrap()
-            .contains("github.event_name != 'pull_request'")
+    assert_eq!(
+        text(&jobs["mutants"]["if"]),
+        "needs.mutants-plan.outputs.count != '0'"
     );
-    // Coverage runs on every event: pull requests, the schedule and on demand.
-    assert_eq!(condition("coverage"), None);
-    // The judges run even when a shard failed, so a lost shard is reported, not skipped.
-    for judge in ["mutants-diff-judge", "mutants-full-judge"] {
-        assert!(
-            condition(judge).unwrap().starts_with("${{ !cancelled() &&"),
-            "{judge}"
-        );
+    assert_eq!(text(&jobs["mutants-judge"]["if"]), "${{ !cancelled() }}");
+    let needs: Vec<&str> = jobs["mutants-judge"]["needs"]
+        .as_vec()
+        .unwrap()
+        .iter()
+        .map(text)
+        .collect();
+    assert_eq!(needs, ["mutants-plan", "mutants"]);
+    // The judge checks the jobs it reads before it judges.
+    let first = text(&jobs["mutants-judge"]["steps"][0]["run"]);
+    assert!(first.contains("needs.mutants-plan.result"), "{first}");
+    assert!(first.contains("needs.mutants.result"), "{first}");
+    // The plan decides between the diff and the full run by the event.
+    let plan = runs(&w, "mutants-plan");
+    assert!(plan.contains("if [ \"$GITHUB_EVENT_NAME\" = pull_request ]; then"));
+    // Miri: every partition weekly and on demand; one partition on a pull request, and only when
+    // it changes the Miri run.
+    let miri = runs(&w, "miri");
+    for watched in [
+        ".github/workflows/kernel-quality",
+        ".config/nextest",
+        "geom-test/src/miri",
+    ] {
+        assert!(miri.contains(watched), "{watched}");
+    }
+    for step in jobs["miri"]["steps"].as_vec().unwrap().iter().skip(2) {
+        let condition = text(&step["if"]);
+        assert!(condition.contains("env.NEEDED == 'true'"), "{condition}");
     }
 }
 
@@ -215,19 +224,30 @@ fn each_job_runs_on_the_events_its_gate_names() {
 )]
 #[test]
 fn permissions_are_read_only_and_credentials_are_not_kept() {
-    let yml = workflow();
-    let block: Vec<&str> = yml
-        .split("\npermissions:\n")
-        .nth(1)
-        .unwrap()
-        .lines()
-        .take_while(|l| l.starts_with("  "))
-        .collect();
-    assert_eq!(block, ["  contents: read"]);
-    assert_eq!(yml.matches("permissions:").count(), 1);
-    assert!(!yml.contains(": write"), "no job may write");
-    let checkouts = yml.matches("uses: actions/checkout@").count();
-    assert_eq!(yml.matches("persist-credentials: false").count(), checkouts);
+    let w = workflow();
+    assert_eq!(keys(&w["permissions"]), ["contents"]);
+    assert_eq!(text(&w["permissions"]["contents"]), "read");
+    for job in keys(&w["jobs"]) {
+        assert!(
+            w["jobs"][job.as_str()]["permissions"].is_badvalue(),
+            "{job} sets its own permissions"
+        );
+    }
+    let mut checkouts = 0;
+    for (job, step) in steps(&w) {
+        if step["uses"]
+            .as_str()
+            .is_some_and(|u| u.starts_with("actions/checkout@"))
+        {
+            checkouts += 1;
+            assert_eq!(
+                step["with"]["persist-credentials"].as_bool(),
+                Some(false),
+                "{job}"
+            );
+        }
+    }
+    assert_eq!(checkouts, keys(&w["jobs"]).len(), "one checkout per job");
 }
 
 #[cfg_attr(
@@ -237,30 +257,33 @@ fn permissions_are_read_only_and_credentials_are_not_kept() {
 #[test]
 fn actions_are_pinned_to_the_commits_kernel_yml_uses() {
     let pins = action_pins(&workflow());
-    let kernel = action_pins(&read(".github/workflows/kernel.yml"));
+    let kernel = action_pins(&yaml(".github/workflows/kernel.yml"));
     assert!(pins.len() >= 5, "{pins:?}");
-    for (action, commits) in &pins {
-        for c in commits {
+    for (action, revs) in &pins {
+        for r in revs {
             assert!(
-                c.len() == 40 && c.chars().all(|ch| ch.is_ascii_hexdigit()),
-                "{action}@{c} is not a full commit"
+                r.len() == 40 && r.chars().all(|ch| ch.is_ascii_hexdigit()),
+                "{action}@{r} is not a full commit"
             );
         }
         if let Some(theirs) = kernel.get(action) {
             assert!(
-                commits.iter().all(|c| theirs.contains(c)),
-                "{action}: {commits:?} vs {theirs:?}"
+                revs.iter().all(|r| theirs.contains(r)),
+                "{action}: {revs:?} vs {theirs:?}"
             );
         }
     }
-    // The artifact actions kernel.yml does not use, pinned to the commits of the tags beside them.
-    assert_eq!(
-        pins["actions/upload-artifact"][0],
-        "cf430e030ddbb5b0abf93d22962f4752f3646cd9"
+    // The artifact actions kernel.yml does not use, pinned to the commits of their tags: v7.0.2
+    // and v8.0.2.
+    assert!(
+        pins["actions/upload-artifact"]
+            .iter()
+            .all(|r| r == "cf430e030ddbb5b0abf93d22962f4752f3646cd9")
     );
-    assert_eq!(
-        pins["actions/download-artifact"][0],
-        "9000827ccba6bdab643e8b6fd33ac0654aef8333"
+    assert!(
+        pins["actions/download-artifact"]
+            .iter()
+            .all(|r| r == "9000827ccba6bdab643e8b6fd33ac0654aef8333")
     );
 }
 
@@ -270,78 +293,83 @@ fn actions_are_pinned_to_the_commits_kernel_yml_uses() {
 )]
 #[test]
 fn toolchains_and_tools_are_pinned() {
-    let yml = workflow();
-    let toolchain_file = read("rust-toolchain.toml");
-    let channel = toolchain_file
-        .lines()
-        .find_map(|l| l.trim().strip_prefix("channel = "))
+    let w = workflow();
+    let channel = toml_file("rust-toolchain.toml")["toolchain"]["channel"]
+        .as_str()
         .unwrap()
-        .trim_matches('"')
         .to_owned();
-    let pins: Vec<&str> = yml
-        .lines()
-        .filter(|l| l.trim_start().starts_with("RUST_TOOLCHAIN:"))
-        .collect();
-    assert_eq!(pins.len(), 1, "{pins:?}");
-    assert_eq!(value(&yml, "RUST_TOOLCHAIN").unwrap(), channel);
-    for line in yml
-        .lines()
-        .map(str::trim)
-        .filter(|l| l.starts_with("toolchain:"))
-    {
-        assert_eq!(line, "toolchain: ${{ env.RUST_TOOLCHAIN }}");
+    assert_eq!(text(&w["env"]["RUST_TOOLCHAIN"]), channel);
+    for (job, step) in steps(&w) {
+        if let Some(t) = step["with"]["toolchain"].as_str() {
+            assert_eq!(t, "${{ env.RUST_TOOLCHAIN }}", "{job}");
+        }
+        // Steps use the nightly only through RUSTUP_TOOLCHAIN, and only that nightly.
+        if let Some(t) = step["env"]["RUSTUP_TOOLCHAIN"].as_str() {
+            assert_eq!(t, "${{ env.RUST_NIGHTLY }}", "{job}");
+        }
+        for env in keys_or_empty(&w["jobs"][job.as_str()]["env"]) {
+            assert_ne!(env, "RUSTUP_TOOLCHAIN", "{job} sets the toolchain for every step");
+        }
     }
     // The nightly, by date, at least two weeks before the day it was pinned (2026-10-22).
-    let nightly = value(&yml, "RUST_NIGHTLY").unwrap();
-    let date = nightly.strip_prefix("nightly-").expect(&nightly);
+    let nightly = text(&w["env"]["RUST_NIGHTLY"]);
+    let date = nightly.strip_prefix("nightly-").expect(nightly);
     let parts: Vec<u32> = date.split('-').map(|p| p.parse().unwrap()).collect();
     assert_eq!(parts.len(), 3, "{nightly}");
     assert!(
         (parts[0], parts[1], parts[2]) <= (2026, 10, 8),
         "{nightly} is too recent"
     );
-    // Steps use the nightly only through RUSTUP_TOOLCHAIN, and only that nightly or the pin.
-    for line in yml
-        .lines()
-        .map(str::trim)
-        .filter(|l| l.contains("RUSTUP_TOOLCHAIN") && !l.starts_with('#'))
-    {
-        assert!(
-            line == "RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}"
-                || line.starts_with("RUSTUP_TOOLCHAIN=\"$RUST_TOOLCHAIN\" "),
-            "{line}"
-        );
-    }
+    let all_runs: String = keys(&w["jobs"])
+        .iter()
+        .map(|j| runs(&w, j))
+        .collect::<Vec<_>>()
+        .join("\n");
     for (tool, key) in [
         ("cargo-mutants", "CARGO_MUTANTS_VERSION"),
         ("cargo-llvm-cov", "CARGO_LLVM_COV_VERSION"),
+        ("cargo-nextest", "CARGO_NEXTEST_VERSION"),
     ] {
-        let version = value(&yml, key).unwrap();
+        let version = text(&w["env"][key]);
         let parts: Vec<&str> = version.split('.').collect();
         assert!(
             parts.len() == 3 && parts.iter().all(|p| p.parse::<u32>().is_ok()),
             "{key} = {version}"
         );
         let install = format!("cargo install --locked {tool} --version \"${key}\"");
-        let installs: Vec<&str> = yml
+        let lines: Vec<&str> = all_runs
             .lines()
             .map(str::trim)
-            .filter(|l| {
-                l.contains(&format!("cargo install --locked {tool}"))
-                    || l.contains(&format!("install {tool}"))
-            })
+            .filter(|l| l.contains(tool) && l.contains("install"))
             .collect();
-        assert!(!installs.is_empty(), "{tool} is never installed");
-        for l in installs {
-            assert_eq!(l, format!("run: {install}"), "{tool}");
+        assert!(!lines.is_empty(), "{tool} is never installed");
+        for l in lines {
+            assert_eq!(l, install, "{tool}");
         }
     }
+    // The workflow's nextest is new enough for the configuration it reads.
+    let nextest: Vec<u32> = text(&w["env"]["CARGO_NEXTEST_VERSION"])
+        .split('.')
+        .map(|p| p.parse().unwrap())
+        .collect();
+    let config = toml_file(".config/nextest.toml");
+    let required: Vec<u32> = config["nextest-version"]["required"]
+        .as_str()
+        .unwrap()
+        .split('.')
+        .map(|p| p.parse().unwrap())
+        .collect();
+    assert!(nextest >= required, "{nextest:?} < {required:?}");
     // Nothing installs a tool another way.
     assert_eq!(
-        yml.matches("cargo install").count(),
-        yml.matches("cargo install --locked").count()
+        all_runs.matches("cargo install").count(),
+        all_runs.matches("cargo install --locked").count()
     );
-    assert!(!yml.contains("curl ") && !yml.contains("wget "));
+    assert!(!all_runs.contains("curl ") && !all_runs.contains("wget "));
+}
+
+fn keys_or_empty(y: &Yaml) -> Vec<String> {
+    if y.is_badvalue() { Vec::new() } else { keys(y) }
 }
 
 #[cfg_attr(
@@ -349,26 +377,42 @@ fn toolchains_and_tools_are_pinned() {
     ignore = "reads the repository's files, which a WebAssembly test run cannot"
 )]
 #[test]
-fn every_shard_runs_once() {
-    for (name, text) in jobs(&workflow()) {
-        let Some(shards) = value(&text, "SHARDS") else {
-            continue;
-        };
-        let n: usize = shards.parse().unwrap();
-        let matrix = value(&text, "shard").unwrap();
-        let listed: Vec<usize> = matrix
-            .trim_start_matches('[')
-            .trim_end_matches(']')
-            .split(',')
-            .map(|s| s.trim().parse().unwrap())
-            .collect();
-        assert_eq!(listed, (0..n).collect::<Vec<_>>(), "{name}");
-        assert!(
-            text.contains("--shard \"${{ matrix.shard }}/$SHARDS\""),
-            "{name}"
-        );
-        assert!(text.contains("--no-shuffle"), "{name}");
-    }
+fn every_shard_and_partition_runs_once() {
+    let w = workflow();
+    let shards = &w["jobs"]["mutants"];
+    assert_eq!(
+        text(&shards["strategy"]["matrix"]["shard"]),
+        "${{ fromJSON(needs.mutants-plan.outputs.shards) }}"
+    );
+    assert_eq!(
+        text(&shards["env"]["SHARDS"]),
+        "${{ needs.mutants-plan.outputs.count }}"
+    );
+    assert_eq!(shards["strategy"]["fail-fast"].as_bool(), Some(false));
+    let run = runs(&w, "mutants");
+    assert!(run.contains("--shard \"${{ matrix.shard }}/$SHARDS\""), "{run}");
+    assert!(run.contains("--no-shuffle"), "{run}");
+    let plan = &w["jobs"]["mutants-plan"]["outputs"];
+    assert_eq!(text(&plan["count"]), "${{ steps.plan.outputs.count }}");
+    assert_eq!(text(&plan["shards"]), "${{ steps.plan.outputs.shards }}");
+    // Miri: the weekly matrix lists partitions 1 to PARTITIONS, and each runs its own.
+    let miri = &w["jobs"]["miri"];
+    let n = miri["env"]["PARTITIONS"].as_i64().unwrap();
+    let matrix = text(&miri["strategy"]["matrix"]["partition"]);
+    let weekly = matrix
+        .split("|| '")
+        .nth(1)
+        .and_then(|rest| rest.split('\'').next())
+        .unwrap();
+    let listed: Vec<i64> = serde_json::from_str(weekly).unwrap();
+    assert_eq!(listed, (1..=n).collect::<Vec<_>>());
+    assert!(matrix.contains("github.event_name == 'pull_request' && '[1]'"), "{matrix}");
+    assert_eq!(miri["strategy"]["fail-fast"].as_bool(), Some(false));
+    let run = runs(&w, "miri");
+    assert!(
+        run.contains("--partition \"hash:${{ matrix.partition }}/$PARTITIONS\""),
+        "{run}"
+    );
 }
 
 #[cfg_attr(
@@ -377,31 +421,113 @@ fn every_shard_runs_once() {
 )]
 #[test]
 fn every_gate_is_judged_and_tool_failures_are_not_swallowed() {
-    let yml = workflow();
+    let w = workflow();
+    let plan = runs(&w, "mutants-plan");
     for needle in [
-        "kernel-quality -- mutants --mode diff \\\n            --expected \"$RUNNER_TEMP/expected.json\"",
-        "kernel-quality -- mutants --mode full \\\n            --expected \"$RUNNER_TEMP/expected.json\"",
-        "cargo mutants --in-diff \"$RUNNER_TEMP/pr.diff\" --list --json > \"$RUNNER_TEMP/expected.json\"",
-        "cargo mutants --list --json > \"$RUNNER_TEMP/expected.json\"",
-        "kernel-quality -- coverage $SCOPE",
-        "kernel-quality -- affected $SCOPE",
-        "kernel-quality -- miri-plan",
-        "--branch",
-        "-Z cross-crate-inline-threshold=never",
-        "cargo miri test --locked",
+        "cargo mutants --in-diff \"$RUNNER_TEMP/plan/pr.diff\" --list --json > \"$RUNNER_TEMP/plan/list.json\"",
+        "cargo mutants --list --json > \"$RUNNER_TEMP/plan/list.json\"",
+        "kernel-quality -- mutants-plan",
+        "git show \"HEAD^1:projects/engines/geometry/quality-ledger.json\"",
     ] {
-        assert!(yml.contains(needle), "the workflow does not run {needle:?}");
+        assert!(plan.contains(needle), "the plan does not run {needle:?}");
+    }
+    let judge = runs(&w, "mutants-judge");
+    for needle in [
+        "args=(--expected \"$RUNNER_TEMP/plan/list.json\")",
+        "args+=(--mode diff)",
+        "args+=(--mode full)",
+        "args+=(--base-ledger \"$RUNNER_TEMP/plan/base-ledger.json\")",
+        "kernel-quality -- mutants \"${args[@]}\" \"${outs[@]}\"",
+    ] {
+        assert!(judge.contains(needle), "the judge does not run {needle:?}");
     }
     // cargo-mutants' own verdict goes to the judge only for survivors and timeouts.
-    let runs = yml.matches("cargo mutants --").count();
-    let tolerated = yml
-        .matches("case \"$code\" in 0|2|3) ;; *) exit \"$code\" ;; esac")
-        .count();
-    assert_eq!(runs, 4, "two mutation runs and two lists");
+    let shard = runs(&w, "mutants");
+    assert_eq!(shard.matches("cargo mutants ").count(), 1);
+    assert!(shard.contains("case \"$code\" in 0|2|3) ;; *) exit \"$code\" ;; esac"));
+    assert!(shard.contains("test -f \"$RUNNER_TEMP/out/mutants.out/mutants.json\""));
+    // Coverage: measured on the nightly with branches, each run's log kept, then judged.
+    let coverage = runs(&w, "coverage");
+    for needle in [
+        "kernel-quality -- affected $SCOPE",
+        "kernel-quality -- coverage $SCOPE",
+        "--branch",
+        "| tee \"$RUNNER_TEMP/cov/$crate.log\"",
+    ] {
+        assert!(coverage.contains(needle), "coverage does not run {needle:?}");
+    }
+    let measure = w["jobs"]["coverage"]["steps"]
+        .as_vec()
+        .unwrap()
+        .iter()
+        .find(|s| s["name"].as_str() == Some("Measure each crate with its own tests"))
+        .unwrap();
     assert_eq!(
-        tolerated, 2,
-        "each mutation run passes on any other exit status"
+        text(&measure["env"]["RUSTFLAGS"]),
+        "-Z cross-crate-inline-threshold=never"
     );
-    // The coverage of each crate is written with the log the judge checks.
-    assert!(yml.contains("| tee \"$RUNNER_TEMP/cov/$crate.log\""));
+    // The seeded gates run with --ignored, on the coverage nightly.
+    let seeded = runs(&w, "gates-seeded");
+    assert!(seeded.contains("--test seeded_gates -- --ignored"), "{seeded}");
+    // Miri: every kernel crate's tests under nextest, and its doctests.
+    let miri = runs(&w, "miri");
+    for needle in [
+        "kernel-quality -- miri-packages",
+        "cargo miri nextest run --locked $PACKAGES",
+        "cargo miri test --locked $PACKAGES --doc",
+        "profile=(--profile miri-smoke)",
+    ] {
+        assert!(miri.contains(needle), "Miri does not run {needle:?}");
+    }
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn the_tools_are_configured_as_the_gates_need() {
+    // cargo-mutants: only the kernel crates' sources, judged by integration tests (28.8: through
+    // the public interface), locked, on the release profile, the mutated crate's tests only.
+    let m = toml_file(".cargo/mutants.toml");
+    let strings = |key: &str| -> Vec<String> {
+        m[key]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap().to_owned())
+            .collect()
+    };
+    assert_eq!(
+        strings("examine_globs"),
+        ["projects/engines/geometry/crates/*/src/**/*.rs"]
+    );
+    let excluded = strings("exclude_globs");
+    for dev in geom_test::deps::DEVELOPMENT_CRATES {
+        assert!(
+            excluded.contains(&format!("projects/engines/geometry/crates/{dev}/**")),
+            "{dev} is mutated"
+        );
+    }
+    assert_eq!(strings("additional_cargo_test_args"), ["--test", "*"]);
+    assert_eq!(strings("additional_cargo_args"), ["--locked"]);
+    assert_eq!(m["profile"].as_str(), Some("release"));
+    assert_eq!(m["test_workspace"].as_bool(), Some(false));
+    // nextest: the Miri profiles stop a test at its budget as a pass, never fail fast, and write
+    // JUnit; the one the workflow names on a pull request exists.
+    let n = toml_file(".config/nextest.toml");
+    for profile in ["default-miri", "miri-smoke"] {
+        let p = &n["profile"][profile];
+        let slow = &p["slow-timeout"];
+        assert_eq!(slow["on-timeout"].as_str(), Some("pass"), "{profile}");
+        assert!(slow["terminate-after"].as_integer().unwrap() >= 1, "{profile}");
+        assert!(slow["period"].as_str().unwrap().ends_with('s'), "{profile}");
+        assert_eq!(p["fail-fast"].as_bool(), Some(false), "{profile}");
+        assert_eq!(p["junit"]["path"].as_str(), Some("junit.xml"), "{profile}");
+    }
+    // The weekly budget: two periods of five minutes, so a partition's worst case fits the job.
+    let weekly = &n["profile"]["default-miri"]["slow-timeout"];
+    assert_eq!(weekly["period"].as_str(), Some("300s"));
+    assert_eq!(weekly["terminate-after"].as_integer(), Some(2));
+    assert!(n["profile"].as_table().unwrap().get("default").is_none());
 }

@@ -26,10 +26,13 @@
 //!   entry with no mark is stale and fails.
 //! - **Exact arithmetic.** Percentages are compared as integers: hit × 100 ≥ found × bar.
 //!
-//! Method: the LCOV tracefile format of the Linux Test Project's `geninfo(1)` (`SF`, `DA`,
-//! `BRDA`, `end_of_record`), which `llvm-cov export -format=lcov` writes; cargo-llvm-cov 0.9.1
-//! (<https://github.com/taiki-e/cargo-llvm-cov/tree/v0.9.1>) runs it. Branch coverage is rustc's
-//! `-Z coverage-options=branch`, nightly only, which cargo-llvm-cov's `--branch` turns on.
+//! Method: the LCOV tracefile records (`SF`, `DA`, `BRDA`, `BRF`, `end_of_record`) that
+//! `llvm-cov export -format=lcov` writes (<https://llvm.org/docs/CommandGuide/llvm-cov.html#llvm-cov-export>),
+//! each read by the `lcov` crate 0.8 (MIT OR Apache-2.0, <https://docs.rs/lcov/0.8.2/lcov/>);
+//! cargo-llvm-cov 0.9.1 (<https://docs.rs/crate/cargo-llvm-cov/0.9.1>) runs it. Branch coverage is
+//! rustc's `-Z coverage-options=branch`, nightly only
+//! (<https://doc.rust-lang.org/rustc/instrument-coverage.html>), which cargo-llvm-cov's `--branch`
+//! turns on.
 //!
 //! Cost: linear in the size of the LCOV files and the crates' sources.
 
@@ -45,7 +48,7 @@ use crate::foundation::{
     missing_foundation_module, place,
 };
 use crate::ledger::{Ledger, Tool};
-use crate::rust_source::{Scan, TokenKind, lex, scan};
+use crate::rust_source::{ProofTool, Scan, defines_proof, scan};
 
 /// Why coverage data could not be used.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -82,88 +85,84 @@ pub struct FileData {
     pub found: Option<u64>,
 }
 
-fn number<T: core::str::FromStr>(text: &str, what: &str, line: &str) -> Result<T, CoverageError> {
-    text.trim()
-        .parse()
-        .map_err(|_| cov_err(format!("LCOV: {what} {text:?} is not a number in {line:?}")))
-}
-
-/// Reads an LCOV tracefile: the data per source file, keyed by the path its `SF` line gives.
+/// Reads an LCOV tracefile: the data per source file, keyed by the path its `SF` line gives. The
+/// `lcov` crate reads each record; this function checks how they nest.
 ///
 /// # Errors
 ///
-/// [`CoverageError`] for a record outside `SF` ... `end_of_record`, two records for one file
-/// (llvm-cov writes one), a malformed `DA`, `BRDA` or `BRF` line, a line or branch listed twice in
-/// a record, or a file that ends inside a record.
+/// [`CoverageError`] for a line that is not an LCOV record (the `lcov` crate's
+/// [`lcov::reader::Error`]), a record outside `SF` ... `end_of_record`, two records for one file
+/// (llvm-cov writes one), a line or branch listed twice in a record, two `BRF` lines in a record,
+/// or a file that ends inside a record.
 pub fn parse_lcov(text: &str) -> Result<BTreeMap<String, FileData>, CoverageError> {
     let mut out: BTreeMap<String, FileData> = BTreeMap::new();
     let mut current: Option<String> = None;
-    for raw in text.lines() {
-        let line = raw.trim();
-        if line.is_empty() {
-            continue;
-        }
-        if let Some(path) = line.strip_prefix("SF:") {
-            if current.is_some() {
-                return Err(cov_err(format!("LCOV: {line:?} inside another record")));
-            }
-            if out.insert(path.to_owned(), FileData::default()).is_some() {
-                return Err(cov_err(format!("LCOV: two records for {path}")));
-            }
-            current = Some(path.to_owned());
-            continue;
-        }
-        if line == "end_of_record" {
-            if current.take().is_none() {
-                return Err(cov_err("LCOV: end_of_record outside a record"));
-            }
-            continue;
-        }
-        let Some(file) = current.as_ref() else {
-            if line.starts_with("TN:") {
+    for record in lcov::Reader::new(text.as_bytes()) {
+        let record = record.map_err(|e| cov_err(format!("LCOV: {e}")))?;
+        let file = match (&record, current.as_ref()) {
+            (lcov::Record::SourceFile { path }, None) => {
+                let path = path.to_string_lossy().into_owned();
+                if out.insert(path.clone(), FileData::default()).is_some() {
+                    return Err(cov_err(format!("LCOV: two records for {path}")));
+                }
+                current = Some(path);
                 continue;
             }
-            return Err(cov_err(format!("LCOV: {line:?} outside a record")));
-        };
-        let data = out.entry(file.clone()).or_default();
-        if let Some(rest) = line.strip_prefix("DA:") {
-            let mut parts = rest.split(',');
-            let (Some(n), Some(c)) = (parts.next(), parts.next()) else {
-                return Err(cov_err(format!("LCOV: malformed {line:?}")));
-            };
-            let n: usize = number(n, "line", line)?;
-            let c: u64 = number(c, "count", line)?;
-            if data.lines.insert(n, c).is_some() {
-                return Err(cov_err(format!("LCOV: line {n} listed twice in {file}")));
-            }
-        } else if let Some(rest) = line.strip_prefix("BRDA:") {
-            let parts: Vec<&str> = rest.split(',').collect();
-            let [n, block, branch, taken] = parts.as_slice() else {
-                return Err(cov_err(format!("LCOV: malformed {line:?}")));
-            };
-            let n: usize = number(n, "line", line)?;
-            let taken = if *taken == "-" {
-                None
-            } else {
-                Some(number::<u64>(taken, "count", line)?)
-            };
-            let id = (n, (*block).to_owned(), (*branch).to_owned());
-            if data.branches.insert(id, taken).is_some() {
+            (lcov::Record::SourceFile { path }, Some(_)) => {
                 return Err(cov_err(format!(
-                    "LCOV: branch {line:?} listed twice in {file}"
+                    "LCOV: a record for {} inside another record",
+                    path.display()
                 )));
             }
-        } else if let Some(rest) = line.strip_prefix("BRF:") {
-            if data.found.replace(number(rest, "BRF", line)?).is_some() {
-                return Err(cov_err(format!("LCOV: two BRF lines for {file}")));
+            (lcov::Record::TestName { .. }, None) => continue,
+            (_, None) => {
+                return Err(cov_err(format!("LCOV: {record:?} outside a record")));
             }
+            (lcov::Record::EndOfRecord, Some(_)) => {
+                current = None;
+                continue;
+            }
+            (_, Some(file)) => file.clone(),
+        };
+        let data = out.entry(file.clone()).or_default();
+        match record {
+            lcov::Record::LineData { line, count, .. } => {
+                let n = to_usize(line);
+                if data.lines.insert(n, count).is_some() {
+                    return Err(cov_err(format!("LCOV: line {n} listed twice in {file}")));
+                }
+            }
+            lcov::Record::BranchData {
+                line,
+                block,
+                branch,
+                taken,
+            } => {
+                let id = (to_usize(line), block.to_string(), branch.to_string());
+                if data.branches.insert(id, taken).is_some() {
+                    return Err(cov_err(format!(
+                        "LCOV: branch {line},{block},{branch} listed twice in {file}"
+                    )));
+                }
+            }
+            lcov::Record::BranchesFound { found } => {
+                if data.found.replace(u64::from(found)).is_some() {
+                    return Err(cov_err(format!("LCOV: two BRF lines for {file}")));
+                }
+            }
+            // FN, FNDA, FNF, FNH, BRH, LF and LH are summaries this gate recomputes itself; a test
+            // name inside a record names the run.
+            _ => {}
         }
-        // FN, FNDA, FNF, FNH, BRH, LF and LH are summaries this gate recomputes itself.
     }
     if current.is_some() {
         return Err(cov_err("LCOV: the file ends inside a record"));
     }
     Ok(out)
+}
+
+fn to_usize(n: u32) -> usize {
+    usize::try_from(n).unwrap_or(usize::MAX)
 }
 
 /// Lines and branches found and run.
@@ -620,44 +619,18 @@ pub fn table(reports: &[CrateReport]) -> String {
     out
 }
 
-/// Whether the file at `repo`/`path` defines `name` as a proof of `tool`: a Kani harness (an
-/// attribute holding `kani::proof` between the previous item and `fn name`) or a Verus
-/// `proof fn name`.
+/// Whether the file at `repo`/`path` defines `name` as a proof of `tool`
+/// ([`crate::rust_source::defines_proof`]): a Kani harness or a Verus `proof fn`. A file that
+/// cannot be read or parsed defines none.
 fn proof_exists(repo: &Path, path: &str, name: &str, tool: Tool) -> bool {
     let Ok(text) = std::fs::read_to_string(repo.join(path)) else {
         return false;
     };
-    let Ok((tokens, _)) = lex(&text) else {
-        return false;
+    let tool = match tool {
+        Tool::Kani => ProofTool::Kani,
+        Tool::Verus => ProofTool::Verus,
     };
-    let ident = |i: usize, w: &str| matches!(tokens.get(i), Some(t) if t.kind == TokenKind::Ident(w.to_owned()));
-    let punct =
-        |i: usize, c: char| matches!(tokens.get(i), Some(t) if t.kind == TokenKind::Punct(c));
-    (0..tokens.len()).any(|i| {
-        if !(ident(i, "fn") && ident(i.saturating_add(1), name)) {
-            return false;
-        }
-        match tool {
-            Tool::Verus => i.checked_sub(1).is_some_and(|p| ident(p, "proof")),
-            Tool::Kani => {
-                let mut j = i;
-                while let Some(p) = j.checked_sub(1) {
-                    if punct(p, ';') || punct(p, '}') || punct(p, '{') {
-                        break;
-                    }
-                    if ident(p, "kani")
-                        && punct(p.saturating_add(1), ':')
-                        && punct(p.saturating_add(2), ':')
-                        && ident(p.saturating_add(3), "proof")
-                    {
-                        return true;
-                    }
-                    j = p;
-                }
-                false
-            }
-        }
-    })
+    defines_proof(&text, name, tool).unwrap_or(false)
 }
 
 /// Checks every `coverage(off)` mark in the kernel crates under `repo` against the ledger (see the

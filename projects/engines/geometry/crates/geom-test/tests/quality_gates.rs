@@ -118,9 +118,12 @@ impl Drop for Repo {
     }
 }
 
-/// Source text whose line `i` (from 1) is `let x{i} = {i};`, so every line's text is unique.
+/// Rust source whose line `i` (from 1) is `pub const X{i}: u32 = {i};`, so every line's text is
+/// unique and the file parses.
 fn numbered_source(lines: usize) -> String {
-    (1..=lines).map(|i| format!("let x{i} = {i};\n")).collect()
+    (1..=lines)
+        .map(|i| format!("pub const X{i}: u32 = {i};\n"))
+        .collect()
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -224,7 +227,7 @@ fn entry(file: &str, line: usize, description: &str, occurrences: u64, kind: &st
     json!({
         "file": file,
         "mutant": description,
-        "line_text": format!("let x{line} = {line};"),
+        "line_text": format!("pub const X{line}: u32 = {line};"),
         "occurrences": occurrences,
         "kind": kind,
         "reason": REASON,
@@ -244,7 +247,9 @@ fn mutation_repo(label: &str) -> Repo {
     repo
 }
 
-/// Judges one written run against `survivors`.
+/// Judges one written run against `survivors`, with a base branch whose ledger is the same (so
+/// every `known` entry is an old one; `known_entries_must_come_from_the_base_branch` tests the
+/// other case).
 fn verdict(
     repo: &Repo,
     dirs: &[PathBuf],
@@ -252,19 +257,26 @@ fn verdict(
     mode: Mode,
     expected: Option<&[Value]>,
 ) -> mutants::Verdict {
+    let l = ledger(survivors);
+    verdict_with_base(repo, dirs, &l, mode, expected, Some(&l))
+}
+
+/// Judges one written run against `ledger`, with `base` as the base branch's ledger.
+fn verdict_with_base(
+    repo: &Repo,
+    dirs: &[PathBuf],
+    ledger: &Ledger,
+    mode: Mode,
+    expected: Option<&[Value]>,
+    base: Option<&Ledger>,
+) -> mutants::Verdict {
     let runs: Vec<_> = dirs.iter().map(|d| read_run(d).unwrap()).collect();
     let expected: Option<Vec<mutants::Mutant>> = expected.map(|e| {
         e.iter()
             .map(|m| mutants::mutant_from_json(m).unwrap())
             .collect()
     });
-    judge(
-        &runs,
-        &ledger(survivors),
-        &repo.root,
-        mode,
-        expected.as_deref(),
-    )
+    judge(&runs, ledger, &repo.root, mode, expected.as_deref(), base)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -556,6 +568,67 @@ fn the_foundation_set_keeps_only_equivalent_mutants() {
             "{kind}"
         );
     }
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads and writes files in a temporary folder, which a WebAssembly test run cannot"
+)]
+#[test]
+fn known_entries_must_come_from_the_base_branch() {
+    let repo = mutation_repo("base-known");
+    let dir = write_run(&repo, "a", &[missed(BOOL, 3)]);
+    let known = ledger(vec![entry(BOOL, 3, "replace < with <= in f", 1, "known")]);
+    let empty = ledger(vec![]);
+    // A pull request that adds the known entry for its own survivor merges a new unexplained one.
+    for base in [None, Some(&empty)] {
+        let v = verdict_with_base(&repo, &[dir.clone()], &known, Mode::Diff, None, base);
+        fails_with(&v, "the base branch's ledger does not");
+    }
+    // The base holds the same mutant under another kind: still not an old known survivor.
+    let harmless = ledger(vec![entry(BOOL, 3, "replace < with <= in f", 1, "harmless")]);
+    let v = verdict_with_base(&repo, &[dir.clone()], &known, Mode::Diff, None, Some(&harmless));
+    fails_with(&v, "the base branch's ledger does not");
+    // An old known survivor passes; so does one the pull request explains as harmless.
+    let v = verdict_with_base(&repo, &[dir.clone()], &known, Mode::Diff, None, Some(&known));
+    assert!(v.passes(), "{}", mutants::report(&v));
+    let v = verdict_with_base(&repo, &[dir.clone()], &harmless, Mode::Diff, None, None);
+    assert!(v.passes(), "{}", mutants::report(&v));
+    // A ledger-only pull request may add known entries no mutant of its diff matches.
+    let other = write_run(&repo, "b", &[caught(BOOL, 9)]);
+    let v = verdict_with_base(&repo, &[other], &known, Mode::Diff, None, None);
+    assert!(v.passes(), "{}", mutants::report(&v));
+    // The weekly run judges the ledger as it is: the base plays no part.
+    let list = [mutant(BOOL, 3, 5, "replace < with <= in f")];
+    let v = verdict_with_base(&repo, &[dir], &known, Mode::Full, Some(&list), None);
+    assert!(v.passes(), "{}", mutants::report(&v));
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads and writes files in a temporary folder, which a WebAssembly test run cannot"
+)]
+#[test]
+fn shard_plans_fit_the_budget_and_a_matrix() {
+    use geom_test::mutants::{MAX_SHARDS, MINUTES_PER_MUTANT, SHARD_MINUTES, shard_count, shard_matrix};
+    assert_eq!(shard_count(0), Ok(0));
+    assert_eq!(shard_count(1), Ok(1));
+    let per_shard = usize::try_from(SHARD_MINUTES / MINUTES_PER_MUTANT).unwrap();
+    assert_eq!(shard_count(per_shard), Ok(1));
+    assert_eq!(shard_count(per_shard + 1), Ok(2));
+    for n in [1, 7, 60, 61, 6190, 15_000] {
+        let shards = shard_count(n).unwrap();
+        // Every shard plans for at most SHARD_MINUTES, and one fewer shard would not do.
+        assert!(n as u64 * MINUTES_PER_MUTANT <= shards * SHARD_MINUTES, "{n}");
+        assert!(n as u64 * MINUTES_PER_MUTANT > (shards - 1) * SHARD_MINUTES, "{n}");
+    }
+    let too_many = usize::try_from(MAX_SHARDS * SHARD_MINUTES / MINUTES_PER_MUTANT).unwrap() + 1;
+    assert!(shard_count(too_many).is_err());
+    let plan: Value = serde_json::from_str(&shard_matrix(3)).unwrap();
+    assert_eq!(plan, json!({"count": 3, "shards": [0, 1, 2]}));
+    // A matrix may not be empty: a plan of no shard still lists shard 0, and count 0 skips it.
+    let none: Value = serde_json::from_str(&shard_matrix(0)).unwrap();
+    assert_eq!(none, json!({"count": 0, "shards": [0]}));
 }
 
 #[cfg_attr(
@@ -1327,12 +1400,13 @@ fn a_change_reaches_its_crate_and_every_dependent() {
 // ---------------------------------------------------------------------------------------------
 
 fn kernel_quality(repo: &Repo, args: &[&str]) -> (i32, String) {
-    let out = Command::new(env!("CARGO_BIN_EXE_kernel-quality"))
-        .args(args)
-        .arg("--repo")
-        .arg(&repo.root)
-        .output()
-        .unwrap();
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_kernel-quality"));
+    cmd.args(args);
+    // mutants-plan reads only its list; every other command reads the repository.
+    if args.first() != Some(&"mutants-plan") {
+        cmd.arg("--repo").arg(&repo.root);
+    }
+    let out = cmd.output().unwrap();
     let text = format!(
         "{}{}",
         String::from_utf8_lossy(&out.stdout),
@@ -1358,31 +1432,59 @@ fn the_binary_exits_0_to_pass_1_to_fail_and_2_for_bad_input() {
     let pass = write_run(&repo, "pass", &[caught(NUM, 3)]);
     let fail = write_run(&repo, "fail", &[missed(NUM, 3)]);
     let run = |dir: &Path| dir.to_str().unwrap().to_owned();
+    let list = |dir: &Path| dir.join("mutants.json").to_str().unwrap().to_owned();
     let (code, text) = kernel_quality(
         &repo,
-        &["mutants", "--mode", "diff", "--ledger", l, &run(&pass)],
+        &["mutants", "--mode", "diff", "--expected", &list(&pass), "--ledger", l, &run(&pass)],
     );
     assert_eq!(code, 0, "{text}");
     let (code, text) = kernel_quality(
         &repo,
-        &["mutants", "--mode", "diff", "--ledger", l, &run(&fail)],
+        &["mutants", "--mode", "diff", "--expected", &list(&fail), "--ledger", l, &run(&fail)],
     );
     assert_eq!(code, 1, "{text}");
     assert!(text.contains("no ledger entry explains it"), "{text}");
+    // The full run with a list that holds one mutant more than the shards tested.
+    let longer = repo.path("longer.json");
+    std::fs::write(
+        &longer,
+        json!([mutant(NUM, 3, 5, "replace < with <= in f"), mutant(NUM, 7, 5, "replace < with <= in f")])
+            .to_string(),
+    )
+    .unwrap();
     let (code, text) = kernel_quality(
         &repo,
-        &["mutants", "--mode", "full", "--ledger", l, &run(&pass)],
+        &["mutants", "--mode", "full", "--expected", longer.to_str().unwrap(), "--ledger", l, &run(&pass)],
     );
     assert_eq!(code, 1, "{text}");
+    assert!(text.contains("listed, but no run tested it"), "{text}");
+    // No mutant in the diff: an empty list (cargo-mutants prints none) and no shard pass.
+    let empty = repo.path("empty.json");
+    std::fs::write(&empty, "").unwrap();
+    let (code, text) = kernel_quality(
+        &repo,
+        &["mutants", "--mode", "diff", "--expected", empty.to_str().unwrap(), "--ledger", l],
+    );
+    assert_eq!(code, 0, "{text}");
+    assert!(text.contains("(no mutants)"), "{text}");
+    let (code, text) = kernel_quality(&repo, &["mutants-plan", "--list", empty.to_str().unwrap()]);
+    assert_eq!(code, 0, "{text}");
+    assert_eq!(text.trim(), r#"{"count":0,"shards":[0]}"#);
+    let (code, text) = kernel_quality(&repo, &["mutants-plan", "--list", longer.to_str().unwrap()]);
+    assert_eq!(code, 0, "{text}");
+    assert_eq!(text.trim(), r#"{"count":1,"shards":[0]}"#);
+    // Bad input: an unknown mode, a missing list, a run that is not whole.
     let (code, _) = kernel_quality(
         &repo,
-        &["mutants", "--mode", "sometimes", "--ledger", l, &run(&pass)],
+        &["mutants", "--mode", "sometimes", "--expected", &list(&pass), "--ledger", l, &run(&pass)],
     );
+    assert_eq!(code, 2);
+    let (code, _) = kernel_quality(&repo, &["mutants", "--mode", "diff", "--ledger", l, &run(&pass)]);
     assert_eq!(code, 2);
     std::fs::remove_file(pass.join("outcomes.json")).unwrap();
     let (code, _) = kernel_quality(
         &repo,
-        &["mutants", "--mode", "diff", "--ledger", l, &run(&pass)],
+        &["mutants", "--mode", "diff", "--expected", &list(&pass), "--ledger", l, &run(&pass)],
     );
     assert_eq!(code, 2);
 

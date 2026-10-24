@@ -21,7 +21,12 @@
 //!
 //! - [`Mode::Diff`], on a pull request (`cargo mutants --in-diff`): only the mutants in the diff
 //!   ran. A ledger entry those mutants match must not match more of them than it counts, and must
-//!   not match a mutant that is now caught (the entry is stale: remove it).
+//!   not match a mutant that is now caught (the entry is stale: remove it). A survivor may be kept
+//!   as `known` only by an entry the base branch's ledger already holds (`base`): a `known` entry
+//!   is an old gap the weekly run found, so a pull request that adds one for a survivor it made
+//!   would merge a new unexplained survivor, which 28.8 forbids. A ledger-only pull request may
+//!   still add `known` entries for the weekly run's survivors, because no mutant of its diff
+//!   matches them, and the weekly run then holds each entry to its count.
 //! - [`Mode::Full`], weekly, over shards (`cargo mutants --shard k/n`): `expected`, the list of
 //!   every mutant (`cargo mutants --list --json` with the same filters), must equal the union of
 //!   the shards' mutants exactly, with no mutant in two shards, so a lost or truncated shard
@@ -47,6 +52,7 @@
 //! each unviable mutant's log.
 
 use core::fmt;
+use core::time::Duration;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
@@ -108,6 +114,8 @@ pub struct Run {
     pub mutants: Vec<Mutant>,
     /// What happened to each, in the same order.
     pub outcomes: Vec<Outcome>,
+    /// How long each took, build and test, in the same order.
+    pub durations: Vec<Duration>,
 }
 
 /// Why an output directory or a list could not be used.
@@ -186,13 +194,20 @@ pub fn mutant_from_json(value: &Value) -> Result<Mutant, String> {
     })
 }
 
-/// A list of mutants: `mutants.json`, or the output of `cargo mutants --list --json`.
+/// A list of mutants: `mutants.json`, or the output of `cargo mutants --list --json`. A file that
+/// holds nothing but white space is the empty list: `cargo mutants --in-diff` prints nothing, and
+/// exits 0, when the diff is empty, changes no Rust file or touches no mutant.
 ///
 /// # Errors
 ///
-/// [`RunError`] if the file is not a JSON list of mutants, or two have one name.
+/// [`RunError`] if the file cannot be read, is not a JSON list of mutants, or two have one name.
 pub fn read_mutant_list(file: &Path) -> Result<Vec<Mutant>, RunError> {
-    let value = read_json(file)?;
+    let text = std::fs::read_to_string(file).map_err(|e| run_err(file, e.to_string()))?;
+    if text.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    let value: Value =
+        serde_json::from_str(&text).map_err(|e| run_err(file, format!("is not JSON: {e}")))?;
     let list = value
         .as_array()
         .ok_or_else(|| run_err(file, "is not a list of mutants"))?;
@@ -224,10 +239,36 @@ fn has_compiler_error(log: &str) -> bool {
     })
 }
 
-/// What `outcomes.json` lists, by mutant name: the outcome and the log path.
+/// One listed outcome: what happened, the log's path and how long the phases took.
+struct Entry {
+    outcome: Outcome,
+    log: Option<String>,
+    duration: Duration,
+}
+
+/// What `outcomes.json` lists, by mutant name.
 struct Listed {
     baseline: Vec<String>,
-    by_name: BTreeMap<String, (Outcome, Option<String>)>,
+    by_name: BTreeMap<String, Entry>,
+}
+
+/// The total of an outcome's `phase_results[].duration` (seconds, as cargo-mutants writes them).
+fn phase_time(f: &Path, entry: &Value) -> Result<Duration, RunError> {
+    let mut total = Duration::ZERO;
+    for phase in entry
+        .get("phase_results")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let secs = phase
+            .get("duration")
+            .and_then(Value::as_f64)
+            .and_then(|s| Duration::try_from_secs_f64(s).ok())
+            .ok_or_else(|| run_err(f, "a phase without a duration in seconds"))?;
+        total = total.saturating_add(secs);
+    }
+    Ok(total)
 }
 
 /// Reads the outcome list of `outcomes.json` (`f`, already parsed as `value`).
@@ -262,9 +303,17 @@ fn listed_outcomes(f: &Path, value: &Value) -> Result<Listed, RunError> {
             .get("log_path")
             .and_then(Value::as_str)
             .map(str::to_owned);
+        let duration = phase_time(f, entry)?;
         if listed
             .by_name
-            .insert(m.name.clone(), (outcome, log))
+            .insert(
+                m.name.clone(),
+                Entry {
+                    outcome,
+                    log,
+                    duration,
+                },
+            )
             .is_some()
         {
             return Err(run_err(f, format!("two outcomes for {}", m.name)));
@@ -300,7 +349,7 @@ fn check_totals(f: &Path, value: &Value, listed: &Listed) -> Result<(), RunError
         ("timeout", Outcome::Timeout),
         ("unviable", Outcome::Unviable),
     ] {
-        let count = listed.by_name.values().filter(|(o, _)| *o == want).count();
+        let count = listed.by_name.values().filter(|e| e.outcome == want).count();
         let said = value.get(key).and_then(Value::as_u64);
         if said != u64::try_from(count).ok() {
             return Err(run_err(
@@ -358,17 +407,19 @@ pub fn read_run(dir: &Path) -> Result<Run, RunError> {
     let mut listed = listed_outcomes(&f, &value)?;
     check_totals(&f, &value, &listed)?;
     let mut outcomes = Vec::new();
+    let mut durations = Vec::new();
     for m in &mutants {
-        let (outcome, log) = listed.by_name.remove(&m.name).ok_or_else(|| {
+        let e = listed.by_name.remove(&m.name).ok_or_else(|| {
             run_err(
                 &f,
                 format!("no outcome for {}: the run is incomplete", m.name),
             )
         })?;
-        if outcome == Outcome::Unviable {
-            check_unviable(dir, &m.name, log.as_ref())?;
+        if e.outcome == Outcome::Unviable {
+            check_unviable(dir, &m.name, e.log.as_ref())?;
         }
-        outcomes.push(outcome);
+        outcomes.push(e.outcome);
+        durations.push(e.duration);
     }
     if let Some(extra) = listed.by_name.keys().next() {
         return Err(run_err(
@@ -380,6 +431,7 @@ pub fn read_run(dir: &Path) -> Result<Run, RunError> {
         dir: dir.to_path_buf(),
         mutants,
         outcomes,
+        durations,
     })
 }
 
@@ -424,6 +476,9 @@ pub struct Tally {
 pub struct Verdict {
     /// Totals by (crate, set name).
     pub tallies: BTreeMap<(String, &'static str), Tally>,
+    /// How many mutants the runs tested, and how long they took in all, build and test: what
+    /// [`MINUTES_PER_MUTANT`] is measured from.
+    pub time: (u64, Duration),
     /// Every reason the gate fails, one line each. Empty means it passes.
     pub failures: Vec<String>,
 }
@@ -557,10 +612,18 @@ fn check_expected(
     }
 }
 
+/// What every mutant is judged against: the ledger's entries by key, and in [`Mode::Diff`] the
+/// keys the base branch's ledger keeps as `known`.
+struct Rules<'l> {
+    mode: Mode,
+    entries: BTreeMap<Key, &'l Survivor>,
+    base_known: BTreeSet<Key>,
+}
+
 /// Judges one mutant: updates its tally, records a failure, and counts the ledger entry it uses.
 fn judge_one(
     j: &Judged,
-    entries: &BTreeMap<Key, &Survivor>,
+    rules: &Rules<'_>,
     matched: &mut BTreeMap<Key, u64>,
     verdict: &mut Verdict,
 ) {
@@ -576,7 +639,7 @@ fn judge_one(
         .tallies
         .entry((krate.clone(), set.name()))
         .or_default();
-    let entry = entries.get(&j.key);
+    let entry = rules.entries.get(&j.key).copied();
     let failure = match (j.outcome, entry) {
         (Outcome::Caught, _) => {
             bump(&mut tally.caught);
@@ -585,6 +648,22 @@ fn judge_one(
         (Outcome::Unviable, _) => {
             bump(&mut tally.unviable);
             entry.map(|s| (s, "unviable"))
+        }
+        (Outcome::Missed, Some(s))
+            if s.kind == Kind::Known
+                && rules.mode == Mode::Diff
+                && !rules.base_known.contains(&j.key) =>
+        {
+            bump(&mut tally.unexplained);
+            verdict.failures.push(format!(
+                "{} survived ({} set; line text {:?}): the ledger keeps it as known, but the base \
+                 branch's ledger does not, so it is a new unexplained survivor (28.8): catch it, \
+                 or explain it as equivalent or harmless",
+                j.mutant.name,
+                set.name(),
+                j.key.2
+            ));
+            None
         }
         (Outcome::Missed | Outcome::Timeout, Some(s)) if allowed(s.kind, j.outcome, set) => {
             if j.outcome == Outcome::Missed {
@@ -640,7 +719,9 @@ fn judge_one(
 }
 
 /// Judges the runs of one gate against the ledger. `repo` is the repository root the runs mutated;
-/// `expected` is required in [`Mode::Full`] and is the full list of mutants.
+/// `expected` is required in [`Mode::Full`] and is the full list of mutants; `base` is the base
+/// branch's ledger, which [`Mode::Diff`] reads for the `known` entries it may use (none when it is
+/// `None`), and [`Mode::Full`] ignores.
 #[must_use]
 pub fn judge(
     runs: &[Run],
@@ -648,15 +729,34 @@ pub fn judge(
     repo: &Path,
     mode: Mode,
     expected: Option<&[Mutant]>,
+    base: Option<&Ledger>,
 ) -> Verdict {
     let mut verdict = Verdict::default();
     check_entries(ledger, repo, &mut verdict.failures);
     let (judged, seen) = collect(runs, repo, &mut verdict.failures);
+    for run in runs {
+        for d in &run.durations {
+            verdict.time.0 = verdict.time.0.saturating_add(1);
+            verdict.time.1 = verdict.time.1.saturating_add(*d);
+        }
+    }
     check_expected(mode, expected, &seen, &mut verdict.failures);
-    let entries: BTreeMap<Key, &Survivor> = ledger.survivors.iter().map(|s| (s.key(), s)).collect();
+    let rules = Rules {
+        mode,
+        entries: ledger.survivors.iter().map(|s| (s.key(), s)).collect(),
+        base_known: base
+            .map(|b| {
+                b.survivors
+                    .iter()
+                    .filter(|s| s.kind == Kind::Known)
+                    .map(Survivor::key)
+                    .collect()
+            })
+            .unwrap_or_default(),
+    };
     let mut matched: BTreeMap<Key, u64> = BTreeMap::new();
     for j in &judged {
-        judge_one(j, &entries, &mut matched, &mut verdict);
+        judge_one(j, &rules, &mut matched, &mut verdict);
     }
     for s in &ledger.survivors {
         let n = matched.get(&s.key()).copied().unwrap_or(0);
@@ -700,6 +800,15 @@ pub fn report(verdict: &Verdict) -> String {
     if verdict.tallies.is_empty() {
         lines.push("(no mutants)".to_owned());
     }
+    let (n, total) = verdict.time;
+    if let Some(mean) = total.checked_div(u32::try_from(n).unwrap_or(u32::MAX)) {
+        lines.push(format!(
+            "time: {n} mutant(s), {} min in all, {} s each on average (MINUTES_PER_MUTANT is {})",
+            total.as_secs().checked_div(60).unwrap_or(0),
+            mean.as_secs(),
+            MINUTES_PER_MUTANT
+        ));
+    }
     if verdict.passes() {
         lines.push("PASS: no unexplained survivor".to_owned());
     } else {
@@ -709,6 +818,50 @@ pub fn report(verdict: &Verdict) -> String {
     let mut out = lines.join("\n");
     out.push('\n');
     out
+}
+
+/// The minutes one mutant takes in CI, building and testing, on average over the weekly run: the
+/// report of every run prints the measured mean beside it, so it can be kept true. A GitHub-hosted
+/// `ubuntu-latest` runner rebuilds geom-num incrementally, links its integration-test binaries
+/// and runs them until one fails (all of them for a survivor).
+pub const MINUTES_PER_MUTANT: u64 = 4;
+
+/// The minutes of mutation one shard may plan for: the shard job's timeout (345 minutes, under
+/// GitHub's six-hour limit for a job) less its setup and a margin for runs slower than the mean.
+pub const SHARD_MINUTES: u64 = 240;
+
+/// The most jobs one GitHub Actions matrix may hold.
+pub const MAX_SHARDS: u64 = 256;
+
+/// How many shards a run of `mutants` mutants needs so each shard plans for at most
+/// [`SHARD_MINUTES`] at [`MINUTES_PER_MUTANT`], and no fewer: none for no mutant (a diff that
+/// touches none), whose judge then has nothing to wait for.
+///
+/// # Errors
+///
+/// A description, when the run would need more than [`MAX_SHARDS`] shards: raise the shard budget
+/// or split the run before the gate silently loses mutants.
+pub fn shard_count(mutants: usize) -> Result<u64, String> {
+    let work = u64::try_from(mutants)
+        .unwrap_or(u64::MAX)
+        .saturating_mul(MINUTES_PER_MUTANT);
+    let shards = work.div_ceil(SHARD_MINUTES);
+    if shards > MAX_SHARDS {
+        return Err(format!(
+            "{mutants} mutants at {MINUTES_PER_MUTANT} min each need {shards} shards of \
+             {SHARD_MINUTES} min, more than the {MAX_SHARDS} jobs a matrix may hold"
+        ));
+    }
+    Ok(shards)
+}
+
+/// The shard plan as JSON for the workflow: `{"count": n, "shards": [0, ..., n - 1]}`. A GitHub
+/// Actions matrix may not be empty, so a plan of no shard lists shard 0 all the same; the workflow
+/// runs the shard job only when the count is not 0.
+#[must_use]
+pub fn shard_matrix(count: u64) -> String {
+    let shards: Vec<u64> = (0..count.max(1)).collect();
+    serde_json::json!({"count": count, "shards": shards}).to_string()
 }
 
 #[cfg(test)]

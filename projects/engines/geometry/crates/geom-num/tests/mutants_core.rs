@@ -69,7 +69,7 @@ fn every_error_has_its_message() {
         ),
         (
             NumError::UnprovenMaths,
-            "an enclosure needs a maths function whose error is not yet proven",
+            "an enclosure needs a maths function that has no certified enclosure yet",
         ),
     ];
     for (error, text) in cases {
