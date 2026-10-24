@@ -15,8 +15,9 @@
 //! a `usize` is written as 8 bytes, so 32-bit and 64-bit targets write the same bytes. The bytes
 //! are hashed with SHA-256 (FIPS 180-4), the hash chapters 21 and 28.13 specify for goldens, as
 //! geom-num's golden test does, with the `sha2` crate (piece G12a), which geom-num's golden test
-//! holds to the standard's test vectors. The corpus comes from `SplitMix64` with a fixed seed, so the inputs
-//! are the same on every target by construction and only the helper's answers can differ.
+//! holds to the standard's test vectors. The corpus comes from `SplitMix64` with a fixed seed, so
+//! the inputs are the same on every target by construction and only the helper's answers can
+//! differ.
 //!
 //! **The hash function changed once, and nothing else with it.** G04 first hashed these bytes with
 //! 64-bit FNV-1a, to the golden `0x798d_bcf0_804b_82e3` (`FORMER_FNV_GOLDEN`); chapters 21 and

@@ -24,13 +24,13 @@
 //! configurations hold chapter 29.2's allow-list, the advisories, the allowed sources and the
 //! dependency bans (`deny`), and `deny-no-std.toml` the vetted allow-list of the published crates
 //! a kernel crate may ship with, each pinned to the version `Cargo.lock` holds and with its record
-//! against the principles (`vetted`, piece G12a); and the gate's own runs, which need tools a plain `cargo test` may
-//! lack, are ignored tests the gate runs: cargo-deny over every crate of the family, with the
-//! gate's own rules on the same graphs (`--ignored gate_deny`), the builds of every kernel crate
-//! for `wasm32v1-none` and `wasm32-unknown-unknown` with every feature selection (`--ignored
-//! gate_build`) and clippy over every crate that ships, likewise (`--ignored gate_clippy`), both
-//! of which also hold every file the compiler read to the source rules, each with its seeded
-//! violations (`deny`, `gate`).
+//! against the principles (`vetted`, piece G12a); and the gate's own runs, which need tools a
+//! plain `cargo test` may lack, are ignored tests the gate runs: cargo-deny over every crate of
+//! the family, with the gate's own rules on the same graphs (`--ignored gate_deny`), the builds of
+//! every kernel crate for `wasm32v1-none` and `wasm32-unknown-unknown` with every feature
+//! selection (`--ignored gate_build`) and clippy over every crate that ships, likewise (`--ignored
+//! gate_clippy`), both of which also hold every file the compiler read to the source rules, each
+//! with its seeded violations (`deny`, `gate`).
 //!
 //! The repository tests run natively only: they start cargo and read files. The table check and
 //! the seeded tests of each rule run on every target.
