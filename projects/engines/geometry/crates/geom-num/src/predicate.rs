@@ -120,6 +120,9 @@
 //! Analysis Yields Efficient Exact Integer Arithmetic for Computational Geometry*, ACM
 //! Transactions on Graphics 15(3) (1996), carried in Rust's type system so that the compiler
 //! checks them.
+//! Consulted: Shewchuk's `predicates.c`, public domain,
+//!   <https://www.cs.cmu.edu/afs/cs/project/quake/public/code/predicates.c>,
+//!   for the determinant forms and their sign conventions. No code copied.
 //!
 //! Conventions: [`orient2d`] and [`incircle`] have the signs of `predicates.c`. [`orient3d`] and
 //! [`insphere`] have the **opposite** signs to `predicates.c`, whose `orient3d` is positive when
@@ -130,6 +133,11 @@
 //! Notation in the bit budgets: M = `COORD_MAX` = 2^40 − 1 and δ = 2M = 2^41 − 2 < 2^41, the
 //! largest magnitude of a difference of two coordinates. Every bound is on absolute values, and a
 //! sum's bound also bounds each of its partial sums, so the order of evaluation never matters.
+//!
+//! Cost: per call, the generated filter's few dozen `f64` operations where the routing runs
+//! it, and the exact path only when the filter cannot decide (or first, where the filter does
+//! not pay): a fixed number of checked integer operations, each module's header gives the
+//! counts. No allocation and no recursion.
 
 use crate::error::NumError;
 use crate::generated;

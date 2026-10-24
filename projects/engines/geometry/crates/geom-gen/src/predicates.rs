@@ -32,6 +32,9 @@
 //! <https://doi.org/10.1007/PL00009321>), relative to the last point for in-circle and
 //! in-sphere, with `geom-num`'s sign conventions (orient3d and insphere have the opposite sign to
 //! `predicates.c`).
+//! Consulted: Geogram PCK, BSD-3-Clause,
+//!   <https://github.com/BrunoLevy/geogram/blob/16843b4804de35f14ef54667950ab4c8acdd0062/src/lib/geogram/numerics/predicates/orient3d.pck>,
+//!   for its one description per predicate. No code copied.
 //!
 //! Cost: each generator derives one predicate, or all five for the parent module: a few hundred
 //! exact operations each.

@@ -44,6 +44,9 @@
 //! BSD-3-Clause, read for method), with the exact path in fixed-width integers chosen per step as
 //! chapter 23.3 of the kernel architecture asks
 //! (`projects/engines/geometry/architecture/23-performance.md`).
+//! Consulted: Geogram PCK, BSD-3-Clause,
+//!   <https://github.com/BrunoLevy/geogram/blob/16843b4804de35f14ef54667950ab4c8acdd0062/src/lib/geogram/numerics/predicates/pck.sh>,
+//!   for how PCK runs FPG over one description per predicate. No code copied.
 //!
 //! Cost: linear in the number of steps.
 
@@ -550,9 +553,25 @@ fn header(
     doc_para(
         out,
         &format!(
-            "The `f64` filter and the exact path of {serves}. The method, the proof and the \
-             guarantees common to every generated predicate are in [`super`]."
+            "The `f64` filter and the exact path of {serves}. The proof and the guarantees common \
+             to every generated predicate are in [`super`]."
         ),
+    );
+    doc(out, "");
+    doc_para(
+        out,
+        "Guarantees: when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for \
+         every input in the domain below, and it returns `None` when it cannot tell, never a guess; \
+         `value` returns the exact value for every input in the domain, each step in the type the \
+         certificate below shows holds it and every step a checked method, so a step that did not \
+         fit would give `None`, never a wrapped value; and `exact` is that value's sign.",
+    );
+    doc(out, "");
+    doc_para(
+        out,
+        "Method: Meyer and Pion's semi-static filters (FPG, \
+         <https://inria.hal.science/inria-00344297>), with the error analysis derived exactly, as \
+         [`super`] sets out, and the exact path in integers.",
     );
     doc(out, "");
     doc(out, "The description:");

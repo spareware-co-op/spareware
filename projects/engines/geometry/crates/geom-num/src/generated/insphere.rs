@@ -4,8 +4,17 @@
 //! runs `cargo run -p geom-gen -- check` and fails on any difference.
 //!
 //! The `f64` filter and the exact path of [`crate::predicate::insphere`], which calls it, and whose
-//! documentation states the predicate, its sign convention and its degenerate cases. The method,
-//! the proof and the guarantees common to every generated predicate are in [`super`].
+//! documentation states the predicate, its sign convention and its degenerate cases. The proof and
+//! the guarantees common to every generated predicate are in [`super`].
+//!
+//! Guarantees: when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every
+//! input in the domain below, and it returns `None` when it cannot tell, never a guess; `value`
+//! returns the exact value for every input in the domain, each step in the type the certificate
+//! below shows holds it and every step a checked method, so a step that did not fit would give
+//! `None`, never a wrapped value; and `exact` is that value's sign.
+//!
+//! Method: Meyer and Pion's semi-static filters (FPG, <https://inria.hal.science/inria-00344297>),
+//! with the error analysis derived exactly, as [`super`] sets out, and the exact path in integers.
 //!
 //! The description:
 //!

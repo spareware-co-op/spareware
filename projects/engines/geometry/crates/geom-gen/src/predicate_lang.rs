@@ -66,6 +66,9 @@
 //! cut down to what the kernel's predicates need: one expression per line, no preprocessor, no
 //! symbolic perturbation. The parser is recursive descent over a token list (Aho, Lam, Sethi and
 //! Ullman, *Compilers: Principles, Techniques, and Tools*, second edition, section 4.4).
+//! Consulted: Geogram PCK, BSD-3-Clause,
+//!   <https://github.com/BrunoLevy/geogram/blob/16843b4804de35f14ef54667950ab4c8acdd0062/src/lib/geogram/numerics/predicates/orient2d.pck>,
+//!   for the form of its predicate descriptions. No code copied.
 //!
 //! Cost: linear in the description's length; recursion as deep as an expression's nesting.
 

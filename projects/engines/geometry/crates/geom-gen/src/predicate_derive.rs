@@ -9,22 +9,22 @@
 //!
 //! Guarantees, each by the proof below:
 //!
-//! 1. **The certificate.** For every input in the domain (grid coordinates |v| ≤ 2^40 − 1 =
-//!    `geom_num::grid::COORD_MAX`; rounded inputs |v| ≤ 2^bits − 1), every step's exact value v
-//!    has |v| ≤ `bound` < 2^`bits`, and its exact-path type holds every value of that magnitude.
-//! 2. **The filter.** With M(g) the largest |x̃| over the computed scale variables x of group g,
-//!    S the largest product Π M(g)^e(g) over the monomials e of the result's scale, and ṽ the
-//!    result computed in `f64` in the steps' order: |ṽ − v| ≤ E · S, where E is the result's
-//!    unit error. The generated filter computes S in `f64`, at least S · (1 − u)^r with r =
-//!    [`ScaleExpr::roundings`] (every product's rounding and its operands', since relative
-//!    errors multiply), and multiplies it by the constant, one more rounding: k =
-//!    [`Derivation::roundings`] = r + 1. The constant is at least E · (1 + 2u)^k, so the computed
-//!    bound is at least E · S, and a computed value beyond it in magnitude has the exact value's
-//!    sign. If S is zero the exact value is zero.
-//! 3. **No overflow, no underflow, no NaN.** Every value the filter computes is a whole number
-//!    (inputs are whole numbers or `f64` copies of them, and the correctly rounded sum or product
-//!    of whole numbers is whole), so none is subnormal; and every computed magnitude, and the
-//!    bound, is checked here to stay below 2^1000, far from `f64::MAX`.
+//! - **The certificate.** For every input in the domain (grid coordinates |v| ≤ 2^40 − 1 =
+//!   `geom_num::grid::COORD_MAX`; rounded inputs |v| ≤ 2^bits − 1), every step's exact value v
+//!   has |v| ≤ `bound` < 2^`bits`, and its exact-path type holds every value of that magnitude.
+//! - **The filter.** With M(g) the largest |x̃| over the computed scale variables x of group g,
+//!   S the largest product Π M(g)^e(g) over the monomials e of the result's scale, and ṽ the
+//!   result computed in `f64` in the steps' order: |ṽ − v| ≤ E · S, where E is the result's
+//!   unit error. The generated filter computes S in `f64`, at least S · (1 − u)^r with r =
+//!   [`ScaleExpr::roundings`] (every product's rounding and its operands', since relative
+//!   errors multiply), and multiplies it by the constant, one more rounding: k =
+//!   [`Derivation::roundings`] = r + 1. The constant is at least E · (1 + 2u)^k, so the computed
+//!   bound is at least E · S, and a computed value beyond it in magnitude has the exact value's
+//!   sign. If S is zero the exact value is zero.
+//! - **No overflow, no underflow, no NaN.** Every value the filter computes is a whole number
+//!   (inputs are whole numbers or `f64` copies of them, and the correctly rounded sum or product
+//!   of whole numbers is whole), so none is subnormal; and every computed magnitude, and the
+//!   bound, is checked here to stay below 2^1000, far from `f64::MAX`.
 //!
 //! Proof. Binary64 arithmetic with rounding to nearest, ties to even, is exact to the standard
 //! on every target Rust supports, and Rust never fuses a multiply and an add (RFC 3514). For a
@@ -85,6 +85,10 @@
 //! limit 2^(width − 1) − 1 is at least the bound. `GeometricTools`' `BSPrecision` derives widths from an
 //! expression in the same spirit (Boost licence;
 //! <https://github.com/davideberly/GeometricTools/blob/e09f5b39a33da6b4bfd0ff8dbb64ddcb7fdfc763/GTE/Mathematics/BSPrecision.h>).
+//! Consulted: `GeometricTools`' `BSPrecision.h`, BSL-1.0,
+//!   <https://github.com/davideberly/GeometricTools/blob/e09f5b39a33da6b4bfd0ff8dbb64ddcb7fdfc763/GTE/Mathematics/BSPrecision.h>,
+//!   for its compile-time bit counting, a cross-check of the certificate here. No code
+//!   copied.
 //!
 //! Method: Meyer and Pion, *FPG: A code generator for fast and certified geometric predicates*,
 //! Real Numbers and Computers 2008 (<https://inria.hal.science/inria-00344297>), as Geogram's PCK
@@ -95,6 +99,13 @@
 //! BSD-3-Clause, read for method; no code is ported). Shewchuk's stage-A bounds
 //! (<https://www.cs.cmu.edu/afs/cs/project/quake/public/code/predicates.c>, `exactinit`) are the
 //! comparison in the generated headers.
+//! Consulted: Shewchuk's `predicates.c`, public domain,
+//!   <https://www.cs.cmu.edu/afs/cs/project/quake/public/code/predicates.c>,
+//!   for its error constants (`exactinit`), a cross-check of the analysis here. No code
+//!   copied.
+//! Consulted: Geogram PCK, BSD-3-Clause,
+//!   <https://github.com/BrunoLevy/geogram/blob/16843b4804de35f14ef54667950ab4c8acdd0062/src/lib/geogram/numerics/predicates/orient3d.h>,
+//!   for its generated filters, a cross-check of the constants here. No code copied.
 //!
 //! Cost: linear in the number of steps, times the size of the numbers (a few limbs, a few dozen
 //! coefficients) and of the scale sets (a few monomials).

@@ -8,8 +8,17 @@
 //! d for the normal n and offset d of a [`crate::plane::Plane`], integers wider than an `f64`
 //! holds, so their `f64` copies are rounded (chapter 23.2). [`crate::plane::Plane::side`] computes
 //! the same sign in `i128` and does not call this module yet; it is generated and tested so that
-//! rounded inputs are carried into an emitted bound. The method, the proof and the guarantees
-//! common to every generated predicate are in [`super`].
+//! rounded inputs are carried into an emitted bound. The proof and the guarantees common to every
+//! generated predicate are in [`super`].
+//!
+//! Guarantees: when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every
+//! input in the domain below, and it returns `None` when it cannot tell, never a guess; `value`
+//! returns the exact value for every input in the domain, each step in the type the certificate
+//! below shows holds it and every step a checked method, so a step that did not fit would give
+//! `None`, never a wrapped value; and `exact` is that value's sign.
+//!
+//! Method: Meyer and Pion's semi-static filters (FPG, <https://inria.hal.science/inria-00344297>),
+//! with the error analysis derived exactly, as [`super`] sets out, and the exact path in integers.
 //!
 //! The description:
 //!
