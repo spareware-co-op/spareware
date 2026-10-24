@@ -59,6 +59,24 @@ if [ "$kept" -eq 0 ]; then
   exit 1
 fi
 
+# Each target starts from the corpus committed beside its tests, the corpus every other engine
+# replays: tests/__fuzz__/<target>/corpus, which bolero names after the test without `_fuzz`.
+# ClusterFuzzLite unpacks `<fuzzer>_seed_corpus.zip` beside a fuzzer into its corpus.
+corpora="$SRC/spareware/projects/engines/geometry/crates/geom-fuzz/tests/__fuzz__"
+for script in "$OUT"/*/*_fuzz_fuzzer; do
+  fuzzer="$(basename "$script")"
+  corpus="$corpora/${fuzzer%_fuzz_fuzzer}/corpus"
+  if [ -d "$corpus" ]; then
+    python3 - "$corpus" "${script}_seed_corpus.zip" <<'PY'
+import pathlib, sys, zipfile
+corpus, archive = pathlib.Path(sys.argv[1]), sys.argv[2]
+with zipfile.ZipFile(archive, "w") as z:
+    for f in sorted(p for p in corpus.iterdir() if p.is_file()):
+        z.write(f, f.name)
+PY
+  fi
+done
+
 # OSS-Fuzz's build check for a libFuzzer target built with the address sanitizer, on each binary a
 # kept script starts: an x86-64 ELF executable; at least 1000 calls into the address sanitizer;
 # coverage instrumentation of at least 100 edges; and a clean start that runs 64 inputs.
