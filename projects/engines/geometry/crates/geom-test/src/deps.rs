@@ -42,10 +42,10 @@
 //!
 //! Guarantees:
 //!
-//! - **It never passes by accident.** Metadata it cannot read (a missing field, an unknown
-//!   dependency kind, or no resolved graph, which is what `cargo metadata --no-deps` gives) is an
-//!   error, not a pass, and so is a workspace with no kernel crate, because a check that checked
-//!   nothing must not pass.
+//! - **It never passes by accident.** Metadata it cannot read (a missing field, a field of the
+//!   wrong type, an unknown dependency kind, a resolved edge without its kinds, or no resolved
+//!   graph, which is what `cargo metadata --no-deps` gives) is an error, not a pass, and so is a
+//!   workspace with no kernel crate, because a check that checked nothing must not pass.
 //! - **Deterministic.** Kernel crates are visited in name order, declared dependencies in manifest
 //!   order and resolved ones in name order; the report lists violations in that order.
 //! - **Every chain is shown** from the kernel crate to the development crate, with the kind of each
@@ -57,7 +57,11 @@
 //! 3rd edition, section 22.2) over the union of the declared and resolved graphs from each kernel
 //! crate, on the JSON format documented at
 //! <https://doc.rust-lang.org/cargo/commands/cargo-metadata.html>. Breadth-first search finds a
-//! shortest chain to each development crate.
+//! shortest chain to each development crate. The metadata is read into the typed model of the
+//! `cargo_metadata` crate (MIT, <https://docs.rs/cargo_metadata/0.23.1/>), which also builds the
+//! `cargo metadata` command: piece G12a put it in place of the field-by-field reading of the JSON
+//! that was written here (chapter 29.1). [`check`] takes the JSON itself, not the model, so the
+//! tests can seed a violation into real metadata as a manifest would and hand it over.
 //!
 //! Cost: O(K × (P + D)) for K kernel crates, P packages in the graph and D dependency entries,
 //! declared and resolved, with a logarithmic factor for the ordered maps; plus one `cargo metadata`
@@ -67,8 +71,8 @@ use core::fmt;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::ffi::OsStr;
 use std::path::{Component, Path, PathBuf};
-use std::process::Command;
 
+use ::cargo_metadata::{CargoOpt, DependencyKind, Metadata, MetadataCommand};
 use serde_json::Value;
 
 /// The development crates: no kernel crate may depend on one, except as a dev-dependency.
@@ -156,13 +160,18 @@ pub enum DepsError {
     Cargo(String),
     /// Its output was not JSON.
     Json(String),
-    /// A field the check needs is missing or has the wrong type.
+    /// The JSON does not fit `cargo metadata`'s format as the `cargo_metadata` crate models it: a
+    /// field missing or of the wrong type. The crate's message, which names the field.
+    Format(String),
+    /// Something the check needs that the format leaves optional is not there: the resolved graph,
+    /// or the kinds of a resolved edge.
     Field(String),
     /// A dependency kind other than normal, build or dev.
     UnknownKind {
         /// The package.
         package: String,
-        /// The kind found.
+        /// The kind found, as the `cargo_metadata` crate names it: it reads every kind it does not
+        /// know as `Unknown`, so the text cargo wrote is not kept.
         kind: String,
     },
     /// The workspace has no kernel crate, so the check would check nothing.
@@ -174,6 +183,7 @@ impl fmt::Display for DepsError {
         match self {
             DepsError::Cargo(e) => write!(f, "cargo metadata failed: {e}"),
             DepsError::Json(e) => write!(f, "cargo metadata did not give JSON: {e}"),
+            DepsError::Format(e) => write!(f, "cargo metadata does not fit its format: {e}"),
             DepsError::Field(e) => write!(f, "cargo metadata has no usable {e}"),
             DepsError::UnknownKind { package, kind } => {
                 write!(f, "{package} has a dependency of unknown kind {kind:?}")
@@ -189,24 +199,23 @@ impl fmt::Display for DepsError {
 
 impl std::error::Error for DepsError {}
 
-/// Runs `<cargo> metadata --format-version 1 --all-features --locked --manifest-path <manifest>`
-/// and parses its output: the whole resolved graph, every platform's dependencies included.
+/// Runs `<cargo> metadata --format-version 1 --all-features --manifest-path <manifest> --locked`,
+/// the command the `cargo_metadata` crate builds, and parses its output as JSON: the whole resolved
+/// graph, every platform's dependencies included.
 ///
 /// # Errors
 ///
 /// [`DepsError::Cargo`] if cargo cannot start or exits unsuccessfully (for example because
 /// `Cargo.lock` is missing or out of date), [`DepsError::Json`] if its output is not JSON.
 pub fn cargo_metadata(cargo: &OsStr, manifest: &Path) -> Result<Value, DepsError> {
-    let out = Command::new(cargo)
-        .args([
-            "metadata",
-            "--format-version",
-            "1",
-            "--all-features",
-            "--locked",
-        ])
-        .arg("--manifest-path")
-        .arg(manifest)
+    let mut command = MetadataCommand::new();
+    command
+        .cargo_path(cargo)
+        .manifest_path(manifest)
+        .features(CargoOpt::AllFeatures)
+        .other_options(["--locked".to_owned()]);
+    let out = command
+        .cargo_command()
         .output()
         .map_err(|e| DepsError::Cargo(e.to_string()))?;
     if !out.status.success() {
@@ -435,57 +444,54 @@ fn search<'g>(
     (violations, local)
 }
 
-/// A dependency kind as `cargo metadata` writes it: `null`, `"build"` or `"dev"`.
-fn kind(value: Option<&Value>, package: &str) -> Result<Kind, DepsError> {
-    match value {
-        Some(Value::Null) => Ok(Kind::Normal),
-        Some(Value::String(k)) if k == "build" => Ok(Kind::Build),
-        Some(Value::String(k)) if k == "dev" => Ok(Kind::Dev),
-        Some(Value::String(k)) => Err(DepsError::UnknownKind {
+/// A dependency kind as the `cargo_metadata` crate reads it: cargo writes `null` (normal),
+/// `"build"` or `"dev"`, and the crate reads any other text as `Unknown`, which is refused.
+fn kind(kind: DependencyKind, package: &str) -> Result<Kind, DepsError> {
+    match kind {
+        DependencyKind::Normal => Ok(Kind::Normal),
+        DependencyKind::Build => Ok(Kind::Build),
+        DependencyKind::Development => Ok(Kind::Dev),
+        DependencyKind::Unknown => Err(DepsError::UnknownKind {
             package: package.to_owned(),
-            kind: k.clone(),
+            kind: kind.to_string(),
         }),
-        _ => Err(field("kind")),
     }
 }
 
 /// The graph: every package with its declarations, and the resolved graph's normal and build edges.
 fn read_graph(metadata: &Value) -> Result<Graph, DepsError> {
-    let root = PathBuf::from(str_field(metadata, "workspace_root")?);
-    let members: BTreeSet<String> = array_field(metadata, "workspace_members")?
+    let metadata: Metadata = serde_json::from_value(metadata.clone())
+        .map_err(|e| DepsError::Format(e.to_string()))?;
+    let root = metadata.workspace_root.as_std_path();
+    let members: BTreeSet<String> = metadata
+        .workspace_members
         .iter()
-        .map(|m| {
-            m.as_str()
-                .map(str::to_owned)
-                .ok_or_else(|| field("workspace_members[]"))
-        })
-        .collect::<Result<_, _>>()?;
+        .map(|id| id.repr.clone())
+        .collect();
 
     let mut packages = BTreeMap::new();
     let mut by_folder = BTreeMap::new();
-    for p in array_field(metadata, "packages")? {
-        let id = str_field(p, "id")?.to_owned();
-        let name = str_field(p, "name")?.to_owned();
-        let manifest = PathBuf::from(str_field(p, "manifest_path")?);
-        let local = p.get("source").is_none_or(Value::is_null);
+    for p in &metadata.packages {
+        let id = p.id.repr.clone();
+        let manifest = p.manifest_path.clone().into_std_path_buf();
         let mut declared = Vec::new();
-        for d in array_field(p, "dependencies")? {
+        for d in &p.dependencies {
             declared.push(Declared {
-                name: str_field(d, "name")?.to_owned(),
-                kind: kind(d.get("kind"), &name)?,
-                path: d.get("path").and_then(Value::as_str).map(PathBuf::from),
+                name: d.name.clone(),
+                kind: kind(d.kind, &p.name)?,
+                path: d.path.clone().map(::cargo_metadata::camino::Utf8PathBuf::into_std_path_buf),
             });
         }
         if let Some(folder) = manifest.parent() {
             by_folder.insert(folder.to_path_buf(), id.clone());
         }
-        let relative = relative_components(&manifest, &root);
+        let relative = relative_components(&manifest, root);
         packages.insert(
             id,
             Package {
-                name,
-                version: str_field(p, "version")?.to_owned(),
-                local,
+                name: p.name.to_string(),
+                version: p.version.to_string(),
+                local: p.source.is_none(),
                 manifest,
                 relative,
                 declared,
@@ -495,21 +501,39 @@ fn read_graph(metadata: &Value) -> Result<Graph, DepsError> {
 
     // `cargo metadata --no-deps` gives `"resolve": null`: without the resolved graph the check
     // would miss every chain through a crate that is not a workspace member, so it refuses.
-    let nodes = metadata
-        .get("resolve")
-        .and_then(|r| r.get("nodes"))
-        .and_then(Value::as_array)
-        .ok_or_else(|| field("resolve.nodes (run cargo metadata without --no-deps)"))?;
+    let nodes = &metadata
+        .resolve
+        .as_ref()
+        .ok_or_else(|| field("resolve.nodes (run cargo metadata without --no-deps)"))?
+        .nodes;
     let mut resolved = BTreeMap::new();
     for n in nodes {
-        let id = str_field(n, "id")?.to_owned();
+        let id = n.id.repr.clone();
         let from = packages.get(&id).map_or(id.as_str(), |p| p.name.as_str());
+        // The model reads a missing `deps` or `dep_kinds` as empty, which would drop an edge
+        // unseen: every dependency the node lists must be among its `deps`, each with a kind.
+        let with_kinds: BTreeSet<&str> = n
+            .deps
+            .iter()
+            .filter(|d| !d.dep_kinds.is_empty())
+            .map(|d| d.pkg.repr.as_str())
+            .collect();
+        if n.deps.iter().any(|d| d.dep_kinds.is_empty())
+            || n
+                .dependencies
+                .iter()
+                .any(|d| !with_kinds.contains(d.repr.as_str()))
+        {
+            return Err(field(&format!(
+                "resolve.nodes[].deps[].dep_kinds of {from} (every resolved edge with its kinds)"
+            )));
+        }
         let mut out: Vec<(&str, &str, String, Kind)> = Vec::new();
-        for d in array_field(n, "deps")? {
-            let to = str_field(d, "pkg")?.to_owned();
+        for d in &n.deps {
+            let to = d.pkg.repr.clone();
             let mut best: Option<Kind> = None;
-            for k in array_field(d, "dep_kinds")? {
-                let k = kind(k.get("kind"), from)?;
+            for k in &d.dep_kinds {
+                let k = kind(k.kind, from)?;
                 if k != Kind::Dev {
                     best = Some(best.map_or(k, |b| b.min(k)));
                 }
@@ -547,16 +571,4 @@ fn relative_components(path: &Path, root: &Path) -> Option<Vec<String>> {
 
 fn field(name: &str) -> DepsError {
     DepsError::Field(name.to_owned())
-}
-
-fn str_field<'a>(v: &'a Value, name: &str) -> Result<&'a str, DepsError> {
-    v.get(name)
-        .and_then(Value::as_str)
-        .ok_or_else(|| field(name))
-}
-
-fn array_field<'a>(v: &'a Value, name: &str) -> Result<&'a Vec<Value>, DepsError> {
-    v.get(name)
-        .and_then(Value::as_array)
-        .ok_or_else(|| field(name))
 }

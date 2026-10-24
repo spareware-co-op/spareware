@@ -85,9 +85,11 @@ fn add_package(m: &mut Value, name: &str, source: &Value, manifest: &Path, membe
             .unwrap()
             .push(json!(id));
     }
+    // The fields `cargo metadata` always writes and the `cargo_metadata` crate's model requires.
     m["packages"].as_array_mut().unwrap().push(json!({
         "name": name, "version": "0.0.0", "id": id, "source": source,
-        "manifest_path": manifest.to_str().unwrap(), "dependencies": [],
+        "manifest_path": manifest.to_str().unwrap(), "dependencies": [], "targets": [],
+        "features": {},
     }));
     m["resolve"]["nodes"]
         .as_array_mut()
@@ -479,13 +481,41 @@ fn development_edges_are_allowed() {
 fn unreadable_metadata_is_an_error_not_a_pass() {
     let base = metadata();
 
+    // A field the format requires, missing or of the wrong type: the `cargo_metadata` crate's model
+    // refuses it and names it.
+    for (what, key, value) in [
+        ("missing packages", "packages", None),
+        ("packages not a list", "packages", Some(json!({}))),
+        ("missing workspace members", "workspace_members", None),
+        ("workspace root not a path", "workspace_root", Some(json!(7))),
+    ] {
+        let mut m = base.clone();
+        // serde names a missing field; a field of the wrong type it reports by the types alone.
+        let names_it = value.is_none();
+        match value {
+            None => {
+                m.as_object_mut().unwrap().remove(key);
+            }
+            Some(v) => m[key] = v,
+        }
+        let got = check(&m);
+        assert!(
+            matches!(&got, Err(DepsError::Format(e)) if e.contains(key) || !names_it),
+            "{what}: {got:?}"
+        );
+    }
+    // A package without its name, and a declaration without its kind: refused, not skipped.
     let mut m = base.clone();
-    m.as_object_mut().unwrap().remove("packages");
-    assert_eq!(
-        check(&m),
-        Err(DepsError::Field("packages".into())),
-        "missing packages"
-    );
+    package(&mut m, "geom-num")
+        .as_object_mut()
+        .unwrap()
+        .remove("name");
+    assert!(matches!(check(&m), Err(DepsError::Format(e)) if e.contains("name")));
+    let mut m = base.clone();
+    let mut d = dev_crate_dep("geom-test", &Value::Null);
+    d.as_object_mut().unwrap().remove("kind");
+    declare(&mut m, "geom-num", d);
+    assert!(matches!(check(&m), Err(DepsError::Format(e)) if e.contains("kind")));
 
     let mut m = base.clone();
     let d = dev_crate_dep("geom-test", &json!("peer"));
@@ -494,7 +524,7 @@ fn unreadable_metadata_is_an_error_not_a_pass() {
         check(&m),
         Err(DepsError::UnknownKind {
             package: "geom-num".into(),
-            kind: "peer".into()
+            kind: "Unknown".into()
         })
     );
 
@@ -503,6 +533,31 @@ fn unreadable_metadata_is_an_error_not_a_pass() {
     let (num, test) = (id_of(&mut m, "geom-num"), id_of(&mut m, "geom-test"));
     resolve_edge(&mut m, &num, &test, &[json!("peer")]);
     assert!(matches!(check(&m), Err(DepsError::UnknownKind { .. })));
+
+    // A resolved edge whose kinds are missing, or a dependency the node lists with no edge in
+    // `deps`: the model reads a missing list as empty, which would drop the edge, so it is refused.
+    let node = |m: &mut Value, id: &str| -> usize {
+        m["resolve"]["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .position(|n| n["id"] == id)
+            .unwrap()
+    };
+    let mut m = base.clone();
+    let num = id_of(&mut m, "geom-num");
+    let at = node(&mut m, &num);
+    let deps = m["resolve"]["nodes"][at]["deps"].as_array_mut().unwrap();
+    assert!(!deps.is_empty(), "geom-num has resolved dependencies");
+    deps[0].as_object_mut().unwrap().remove("dep_kinds");
+    assert!(matches!(check(&m), Err(DepsError::Field(f)) if f.contains("dep_kinds")));
+    let mut m = base.clone();
+    let at = node(&mut m, &num);
+    m["resolve"]["nodes"][at]
+        .as_object_mut()
+        .unwrap()
+        .remove("deps");
+    assert!(matches!(check(&m), Err(DepsError::Field(f)) if f.contains("dep_kinds")));
 
     // Without the resolved graph (what `cargo metadata --no-deps` gives) the check would miss
     // every chain through a crate that is not a workspace member, so it refuses.
@@ -515,7 +570,8 @@ fn unreadable_metadata_is_an_error_not_a_pass() {
     m["workspace_root"] = json!("/not/this/workspace");
     assert_eq!(check(&m), Err(DepsError::NoKernelCrates));
 
-    assert!(matches!(check(&json!({})), Err(DepsError::Field(_))));
+    assert!(matches!(check(&json!({})), Err(DepsError::Format(_))));
+    assert!(matches!(check(&json!([])), Err(DepsError::Format(_))));
 }
 
 // ---------------------------------------------------------------------------------------------

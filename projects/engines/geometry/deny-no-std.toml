@@ -3,7 +3,7 @@
 # 29.20, rule 3, as the owner directed on 2026-10-22): a well-known permissive crate is used rather
 # than hand-rolled, but inside a kernel crate only once it is vetted against the principles. Each
 # entry pins one version (`name@version` is exact to cargo-deny) and its reason is its record, four
-# clauses in this order: deterministic (the same bits on every target, principle 2 and chapter 21),
+# clauses in this order: deterministic (the same bits on every target, principle 5 and chapter 21),
 # no_std (every kernel crate is no_std, chapter 27), audited (the committed audit's path, or
 # "pending, piece <ID>" naming the piece that owes it) and pinned (the same version, and where it
 # is held). The scaffold test reads the list (tests/scaffold/vetted.rs) and refuses an entry that is

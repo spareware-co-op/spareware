@@ -8,7 +8,7 @@
 //! requirement). The record is four clauses, in this order, each saying how the crate meets one
 //! principle:
 //!
-//! - `deterministic:` why it gives the same bits on every target (principle 2, chapter 21);
+//! - `deterministic:` why it gives the same bits on every target (principle 5, chapter 21);
 //! - `no_std:` that it builds without `std`, as every kernel crate must (chapter 27);
 //! - `audited:` either the committed audit, by its path from the repository root, or `pending,
 //!   piece <ID>` naming the board piece that owes it (29.20, rule 3: "gets a written audit
@@ -21,17 +21,20 @@
 //! refuses the same with the same file.
 //!
 //! What it guarantees: an entry is vetted only when every clause is there and says something, its
-//! version is exact (`major.minor.patch`, digits only) and its `pinned:` clause names the same
-//! version; anything else is refused with what is missing, never read in part. A crate is named
-//! once. A list that is missing or empty is refused, because cargo-deny checks an allow-list only
-//! when it holds an entry, and would then allow every crate. The list says nothing about which kernel crate may name the crate: that is the crate
-//! table's rule (`table`, `check`), which holds that only `geom-num` names `libm`.
+//! version is exact (a `major.minor.patch` release, no pre-release or build part) and its
+//! `pinned:` clause names the same version; anything else is refused with what is missing, never
+//! read in part. A crate is named once. A list that is missing or empty is refused, because
+//! cargo-deny checks an allow-list only when it holds an entry, and would then allow every crate.
+//! The list says nothing about which kernel crate may name the crate: that is the crate table's
+//! rule (`table`, `check`), which holds that only `geom-num` names `libm`.
 //!
 //! Method: cargo-deny 0.20.2's `bans.allow` with its `crate` and `reason` keys
 //! (<https://github.com/EmbarkStudios/cargo-deny/tree/bca0dde53651ee946720e4540b5ce2610bec8f06>,
 //! `docs/src/checks/bans/cfg.md` and `src/cfg/package_spec.rs`, read for behaviour only), so the
 //! one file is both cargo-deny's list and the record; TOML read by the `toml` crate through
-//! `manifest`; `Cargo.lock`'s `[[package]]` tables (name, version, source), as cargo writes them
+//! `manifest`; versions read by the `semver` crate (<https://docs.rs/semver/1.0.28/semver/>,
+//! Semantic Versioning 2.0.0, the reader cargo uses), through `cargo_metadata`'s re-export;
+//! `Cargo.lock`'s `[[package]]` tables (name, version, source), as cargo writes them
 //! (<https://doc.rust-lang.org/cargo/guide/cargo-toml-vs-cargo-lock.html>).
 //!
 //! Cost: linear in the list and in `Cargo.lock`'s packages.
@@ -89,15 +92,12 @@ pub struct Vetted {
     pub pinned: String,
 }
 
-/// Whether `version` is exact: three dot-separated runs of digits, with no leading zero but `0`.
+/// Whether `version` is exact: a release `major.minor.patch` as Semantic Versioning 2.0.0 reads it
+/// (the `semver` crate cargo itself uses, through `cargo_metadata`'s re-export), with no
+/// pre-release or build part, so it names one published crate file.
 fn exact_version(version: &str) -> bool {
-    let parts: Vec<&str> = version.split('.').collect();
-    parts.len() == 3
-        && parts.iter().all(|p| {
-            !p.is_empty()
-                && p.chars().all(|c| c.is_ascii_digit())
-                && (*p == "0" || !p.starts_with('0'))
-        })
+    cargo_metadata::semver::Version::parse(version)
+        .is_ok_and(|v| v.pre.is_empty() && v.build.is_empty())
 }
 
 /// Whether `name` is a crate name crates.io accepts: ASCII letters, digits, `-` and `_`,
@@ -549,8 +549,12 @@ mod tests {
             "0.2",
             "0.2.16.1",
             "01.2.3",
+            "0.01.3",
             "0.2.x",
             "0.2.16-rc1",
+            "0.2.16+build.1",
+            " 0.2.16",
+            "v0.2.16",
             "",
             "0..1",
         ] {

@@ -1274,6 +1274,7 @@ dependencies = [
 name = "geom-test"
 version = "0.0.0"
 dependencies = [
+ "cargo_metadata",
  "geom-num",
  "proc-macro2",
  "proptest",
