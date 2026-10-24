@@ -23,9 +23,9 @@
 //!
 //! Every result is written in a canonical little-endian byte encoding behind a one-byte tag naming
 //! the draw, with the stream's position after each draw. The recorded bytes are hashed with
-//! SHA-256 (FIPS 180-4), the hash chapters 21 and 28.13 specify for golden hashes, from
-//! `common/sha256.rs`: a copy of `determinism.rs`'s, checked against the standard's test vectors
-//! and constants. Doubles go in as their bits. An error is written as its own tag and fields, so a
+//! SHA-256 (FIPS 180-4), the hash chapters 21 and 28.13 specify for golden hashes, from the
+//! `sha2` crate (piece G12a), which `determinism.rs` holds to the standard's test vectors.
+//! Doubles go in as their bits. An error is written as its own tag and fields, so a
 //! target that fails a draw another target makes shows.
 //!
 //! **From FNV-1a to SHA-256.** These goldens were first 64-bit FNV-1a values; chapter 28.13 asks
@@ -71,13 +71,11 @@
     clippy::indexing_slicing
 )]
 
-mod common;
-
 use std::collections::BTreeSet;
 
-use common::sha256::{Sha256, hex};
 use geom_num::Real;
 use geom_num::rng::{Philox, RngError, Seed, Stream, StreamId, StreamRange, philox4x32_10};
+use sha2::{Digest as _, Sha256};
 
 /// The golden digest of the draw corpus: SHA-256, in hexadecimal.
 ///
@@ -372,9 +370,7 @@ impl Recorder {
 
 /// The SHA-256 digest of `bytes`.
 fn sha256(bytes: &[u8]) -> [u8; 32] {
-    let mut h = Sha256::new();
-    h.write(bytes);
-    h.finish()
+    Sha256::digest(bytes).into()
 }
 
 /// The FNV-1a 64 hash of `bytes`.
@@ -599,7 +595,7 @@ fn range_corpus() -> Recorder {
 fn rng_golden_hash_is_the_same_on_every_target() {
     let r = draw_corpus();
 
-    let hash = hex(sha256(&r.recorded));
+    let hash = hex::encode(sha256(&r.recorded));
     println!(
         "geom-num rng corpus: {} calls, {} bytes",
         r.calls,
@@ -608,7 +604,7 @@ fn rng_golden_hash_is_the_same_on_every_target() {
     for (name, calls, bytes, digest) in &r.report {
         println!(
             "  {name:<8} {calls:>6} calls {bytes:>7} bytes  {}",
-            hex(*digest)
+            hex::encode(digest)
         );
     }
     println!("geom-num rng golden hash: {hash}");
@@ -634,7 +630,7 @@ fn rng_golden_hash_is_the_same_on_every_target() {
 fn rng_stream_range_golden_hash_is_the_same_on_every_target() {
     let r = range_corpus();
 
-    let hash = hex(sha256(&r.recorded));
+    let hash = hex::encode(sha256(&r.recorded));
     println!(
         "geom-num rng stream-range corpus: {} calls, {} bytes",
         r.calls,
@@ -671,7 +667,7 @@ fn rng_goldens_moved_to_sha256_over_the_same_bytes() {
         ),
     ] {
         let fnv = fnv1a_64(&r.recorded);
-        let digest = hex(sha256(&r.recorded));
+        let digest = hex::encode(sha256(&r.recorded));
         println!(
             "geom-num rng {name} corpus: {} bytes, FNV-1a 64 {fnv:#018x}, SHA-256 {digest}",
             r.recorded.len()

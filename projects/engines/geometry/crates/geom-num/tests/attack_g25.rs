@@ -1579,11 +1579,8 @@ fn adv_exact_sum_specials_are_order_free_across_merges() {
 // ---------------------------------------------------------------------------------------------
 // Determinism: a digest of the bits of many results, fixed here from a native release run. The
 // same test must pass in debug, in release, and on wasm32 (`cargo test --target wasm32-wasip1`).
-// The digest is SHA-256, as chapters 21 and 28.13 require of goldens; the copy in
-// `tests/common/sha256.rs` brings its own checks against FIPS 180-4, which run with this file.
-
-#[path = "common/sha256.rs"]
-mod sha256;
+// The digest is SHA-256, as chapters 21 and 28.13 require of goldens, from the `sha2` crate
+// (piece G12a), which `determinism.rs` holds to FIPS 180-4's test vectors.
 
 /// The bytes the digest is taken over: the bits of each result as 64-bit words, little-endian,
 /// in the order the test makes them, and a code for each error. The encoding is part of the
@@ -1673,9 +1670,7 @@ fn adv_bits_are_the_same_on_every_target_and_profile() {
         rec.word(t.round_ieee().to_bits());
     }
     let bytes = rec.0;
-    let mut sha = sha256::Sha256::new();
-    sha.write(&bytes);
-    let digest = sha256::hex(sha.finish());
+    let digest = hex::encode(<sha2::Sha256 as sha2::Digest>::digest(&bytes));
     let fnv = fnv1a_64(&bytes);
     println!(
         "{} bytes: SHA-256 {digest}, FNV-1a {fnv:#018x}",

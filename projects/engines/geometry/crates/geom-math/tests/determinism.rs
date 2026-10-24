@@ -40,8 +40,8 @@
 //!
 //! Every result, success or error, is written in a canonical little-endian byte encoding, in a
 //! fixed field order (see `Recorder`), and hashed with SHA-256 (FIPS 180-4), the hash chapters 21
-//! and 28.13 specify: `common/sha256.rs`, a copy of `geom-num`'s, checked against the standard's
-//! own test vectors and constants. Doubles go in as their bits, so a difference of one unit in the
+//! and 28.13 specify, from the `sha2` crate (piece G12a), which `geom-num`'s golden test holds to
+//! the standard's own test vectors. Doubles go in as their bits, so a difference of one unit in the
 //! last place shows. No result of this crate is ever NaN; a NaN would be written as one canonical
 //! pattern, because Rust does not fix a NaN's sign or payload (RFC 3514), and the test fails on
 //! any.
@@ -87,9 +87,6 @@
     reason = "the corpus generator; the rules are for kernel code"
 )]
 
-#[path = "common/sha256.rs"]
-mod sha256;
-
 use std::collections::BTreeSet;
 
 use geom_math::frame::{CELL_HALF, ORIGIN_MAX, steps_per_metre};
@@ -102,7 +99,7 @@ use geom_math::{
 };
 use geom_num::NumError;
 use geom_num::grid::{COORD_MAX, GridStep, P2, P3};
-use sha256::{Sha256, hex};
+use sha2::{Digest as _, Sha256};
 
 /// The golden digest of the corpus: SHA-256, in hexadecimal.
 ///
@@ -213,7 +210,7 @@ fn pow2(k: i32) -> f64 {
 }
 
 // ---------------------------------------------------------------------------------------------
-// The canonical encoding. The hash, SHA-256, is in `common/sha256.rs`.
+// The canonical encoding. The hash, SHA-256, is the `sha2` crate's (piece G12a).
 // ---------------------------------------------------------------------------------------------
 
 /// The crate's operations the corpus calls. A call writes its discriminant first, so the byte
@@ -366,7 +363,7 @@ impl Recorder {
     fn end_section(&mut self, name: &'static str) {
         let section = std::mem::replace(&mut self.section, Sha256::new());
         self.report
-            .push((name, self.section_calls, section.finish()));
+            .push((name, self.section_calls, section.finalize().into()));
         self.section_calls = 0;
     }
 
@@ -384,8 +381,8 @@ impl Recorder {
     }
 
     fn bytes(&mut self, bytes: &[u8]) {
-        self.total.write(bytes);
-        self.section.write(bytes);
+        self.total.update(bytes);
+        self.section.update(bytes);
     }
 
     fn put_u8(&mut self, v: u8) {
@@ -1884,10 +1881,10 @@ fn corpus() -> Recorder {
 #[test]
 fn golden_hash_is_the_same_on_every_target() {
     let r = corpus();
-    let hash = hex(r.total.clone().finish());
+    let hash = hex::encode(r.total.clone().finalize());
     println!("geom-math determinism corpus: {} calls", r.calls);
     for (name, calls, digest) in &r.report {
-        println!("  {name:<10} {calls:>6} calls  {}", hex(*digest));
+        println!("  {name:<10} {calls:>6} calls  {}", hex::encode(digest));
     }
     println!("geom-math golden hash: {hash}");
 
@@ -1926,11 +1923,11 @@ fn golden_hash_is_the_same_on_every_target() {
               std::thread::scope cannot spawn"
 )]
 fn golden_hash_is_the_same_on_every_thread_count() {
-    let one = hex(corpus().total.finish());
+    let one = hex::encode(corpus().total.finalize());
     for threads in [1usize, 2, 3, 8] {
         let hashes: Vec<String> = std::thread::scope(|sc| {
             let handles: Vec<_> = (0..threads)
-                .map(|_| sc.spawn(|| hex(corpus().total.finish())))
+                .map(|_| sc.spawn(|| hex::encode(corpus().total.finalize())))
                 .collect();
             handles.into_iter().map(|h| h.join().unwrap()).collect()
         });

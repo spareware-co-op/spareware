@@ -14,10 +14,10 @@
 //! Every value is written in a canonical little-endian encoding, with a tag before every variant;
 //! a `usize` is written as 8 bytes, so 32-bit and 64-bit targets write the same bytes. The bytes
 //! are hashed with SHA-256 (FIPS 180-4), the hash chapters 21 and 28.13 specify for goldens, as
-//! geom-num's golden test does: `common/sha256.rs` is a copy of geom-num's implementation, with its
-//! checks against the standard's test vectors and constants, until the golden store (piece G19)
-//! holds the one shared copy. The corpus comes from `SplitMix64` with a fixed seed, so the inputs
-//! are the same on every target by construction and only the helper's answers can differ.
+//! geom-num's golden test does, with the `sha2` crate (piece G12a), which geom-num's golden test
+//! holds to the standard's test vectors. The corpus comes from `SplitMix64` with a fixed seed, so
+//! the inputs are the same on every target by construction and only the helper's answers can
+//! differ.
 //!
 //! **The hash function changed once, and nothing else with it.** G04 first hashed these bytes with
 //! 64-bit FNV-1a, to the golden `0x798d_bcf0_804b_82e3` (`FORMER_FNV_GOLDEN`); chapters 21 and
@@ -54,9 +54,6 @@
 )]
 
 mod common;
-// Included here alone, not through `common`, so its tests of SHA-256 run once.
-#[path = "common/sha256.rs"]
-mod sha256;
 
 use std::collections::BTreeSet;
 
@@ -68,7 +65,7 @@ use geom_run::{
     BatchBudget, Budget, BudgetKind, Exceeded, Exec, Interrupted, ItemError, ItemResult, Phase,
     RunError, Stop, Stopped, Usage, WorkMeter,
 };
-use sha256::{Sha256, hex};
+use sha2::{Digest as _, Sha256};
 
 /// The golden digest of the corpus: SHA-256, in hexadecimal. See the module documentation before
 /// changing it.
@@ -138,7 +135,7 @@ impl Recorder {
 
     /// The canonical bytes of one value: into the hash, and into the record if one is kept.
     fn write(&mut self, bytes: &[u8]) {
-        self.hash.write(bytes);
+        self.hash.update(bytes);
         if let Some(kept) = &mut self.kept {
             kept.extend_from_slice(bytes);
         }
@@ -146,7 +143,7 @@ impl Recorder {
 
     /// The SHA-256 of everything written so far, in hexadecimal.
     fn digest(&self) -> String {
-        hex(self.hash.clone().finish())
+        hex::encode(self.hash.clone().finalize())
     }
 
     /// Start one helper call's record: its operation tag.
@@ -685,9 +682,7 @@ fn the_sha256_golden_hashes_the_bytes_the_fnv_golden_hashed() {
         "the corpus's bytes are not the ones G04's first golden hashed"
     );
 
-    let mut sha = Sha256::new();
-    sha.write(bytes);
-    let digest = hex(sha.finish());
+    let digest = hex::encode(Sha256::digest(bytes));
     println!("SHA-256 of the recorded bytes:   {digest}");
     assert_eq!(
         digest, GOLDEN,

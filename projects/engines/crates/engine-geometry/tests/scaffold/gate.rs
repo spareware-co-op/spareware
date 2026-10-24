@@ -22,7 +22,9 @@
 //!   library it built of the crates asked for: every file rustc read to compile that library, a
 //!   module taken from another folder by `#[path]`, a file pasted in by `include!` and code a build
 //!   script wrote included. The gate holds all of them to the source rules (`globals`,
-//!   `overrides`), so code the folder scan does not see is still read.
+//!   `overrides`), so code the folder scan does not see is still read; all but the configuration
+//!   clippy lists there for itself (`clippy.toml` and `Cargo.toml`, `rust_inputs`), which is TOML
+//!   and which the lint posture check reads.
 //! - Seeded probes show each fails when what it checks is wrong: a crate that links `std`, one that
 //!   assumes a 64-bit `usize` (plainly, and behind a feature), and one with a warning, for the
 //!   builds; and for clippy, a crate built with `geom-num`'s own lint settings (`Cargo.toml` and
@@ -49,7 +51,9 @@
 //! (`SCRUBBED_ENV`), with the gate's own `RUSTFLAGS`.
 //!
 //! Method: cargo's `--target`, `--message-format json` and `RUSTFLAGS`
-//! (<https://doc.rust-lang.org/cargo/reference/external-tools.html#json-messages>); rustc's
+//! (<https://doc.rust-lang.org/cargo/reference/external-tools.html#json-messages>), its messages
+//! and `cargo metadata` read through the `cargo_metadata` crate
+//! (<https://docs.rs/cargo_metadata/0.23.1/>; piece G12a, chapter 29.1); rustc's
 //! dep-info, the Makefile rules `--emit=dep-info` writes, each file it read also given a rule of
 //! its own (<https://doc.rust-lang.org/rustc/command-line-arguments.html#--emit-specifies-the-types-of-output-files-to-generate>);
 //! cargo-hack's `--each-feature` (taiki-e/cargo-hack README at commit
@@ -83,7 +87,9 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Output};
 
-use crate::json::{self, Json};
+use cargo_metadata::diagnostic::DiagnosticLevel;
+use cargo_metadata::{Message as CargoMessage, MetadataCommand, TargetKind};
+
 use crate::lints::carries_the_posture;
 use crate::posture::{
     ALGEBRAIC, CLOCKS_AND_IDENTITY, PLATFORM_MATHS, REDUCTIONS, REQUIRED_TYPES, required_methods,
@@ -155,50 +161,21 @@ pub type Features = BTreeMap<String, Vec<String>>;
 /// Every crate's features in the workspace of `manifest`, by crate name, as `cargo metadata` lists
 /// them, and the name of the manifest's own crate, if it has one.
 fn workspace_features(manifest: &Path) -> (BTreeMap<String, Features>, Option<String>) {
-    let output = Command::new(repo::cargo())
-        .args(["metadata", "--format-version", "1", "--no-deps"])
-        .arg("--manifest-path")
-        .arg(manifest)
-        .output()
-        .unwrap_or_else(|e| panic!("cannot start cargo metadata: {e}"));
-    assert!(
-        output.status.success(),
-        "cargo metadata failed:\n{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let metadata = json::parse(&String::from_utf8_lossy(&output.stdout)).unwrap();
+    let metadata = MetadataCommand::new()
+        .cargo_path(repo::cargo())
+        .manifest_path(manifest)
+        .no_deps()
+        .exec()
+        .unwrap_or_else(|e| panic!("cargo metadata failed for {}: {e}", manifest.display()));
     let canonical = |p: &Path| fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
     let mut all = BTreeMap::new();
     let mut own = None;
-    for package in metadata.get("packages").and_then(Json::as_array).unwrap() {
-        let name = package
-            .get("name")
-            .and_then(Json::as_str)
-            .unwrap()
-            .to_owned();
-        let is_own = package
-            .get("manifest_path")
-            .and_then(Json::as_str)
-            .is_some_and(|m| canonical(Path::new(m)) == canonical(manifest));
-        if is_own {
+    for package in metadata.packages {
+        let name = package.name.to_string();
+        if canonical(package.manifest_path.as_std_path()) == canonical(manifest) {
             own = Some(name.clone());
         }
-        let features = package
-            .get("features")
-            .and_then(Json::as_object)
-            .unwrap()
-            .iter()
-            .map(|(feature, on)| {
-                let on = on
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|f| f.as_str().unwrap().to_owned())
-                    .collect();
-                (feature.clone(), on)
-            })
-            .collect();
-        all.insert(name, features);
+        all.insert(name, package.features);
     }
     (all, own)
 }
@@ -359,13 +336,28 @@ fn shown(output: &Output) -> String {
     )
 }
 
-/// The JSON objects of a run's standard output.
-fn json_lines(output: &Output) -> Vec<Json> {
-    String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .filter(|l| l.starts_with('{'))
-        .map(|line| json::parse(line).unwrap_or_else(|e| panic!("cargo wrote {line}: {e:?}")))
+/// The messages of a run's standard output, read by `cargo_metadata`; a line that is a JSON object
+/// the crate's model does not read stops the test, so no message is skipped unseen. The crate reads
+/// each line without `serde_json`'s nesting limit, on purpose: rustc nests the spans of macro
+/// expansions deeper than 128 levels, and the input is the pinned compiler's own output.
+fn cargo_messages(output: &Output) -> Vec<CargoMessage> {
+    CargoMessage::parse_stream(output.stdout.as_slice())
+        .map(|message| match message {
+            Ok(CargoMessage::TextLine(line)) if line.trim_start().starts_with('{') => {
+                panic!("cargo wrote a message cargo_metadata cannot read: {line}")
+            }
+            Ok(message) => message,
+            Err(e) => panic!("cannot read cargo's messages: {e}"),
+        })
         .collect()
+}
+
+/// A diagnostic level as rustc writes it (`error`, `warning`, ...).
+fn level_name(level: DiagnosticLevel) -> String {
+    serde_json::to_value(level)
+        .ok()
+        .and_then(|v| v.as_str().map(str::to_owned))
+        .unwrap_or_default()
 }
 
 /// One diagnostic of a clippy run on a probe: its lint code (or `None`), level, file and line.
@@ -384,46 +376,19 @@ pub struct Message {
 /// Every diagnostic with a span that a run with `--message-format json` gave.
 pub fn messages(output: &Output) -> Vec<Message> {
     let mut found = Vec::new();
-    for value in json_lines(output) {
-        if value.get("reason").and_then(Json::as_str) != Some("compiler-message") {
-            continue;
-        }
-        let Some(message) = value.get("message") else {
+    for message in cargo_messages(output) {
+        let CargoMessage::CompilerMessage(message) = message else {
             continue;
         };
-        let spans = message
-            .get("spans")
-            .and_then(Json::as_array)
-            .unwrap_or_default();
-        let Some(span) = spans
-            .iter()
-            .find(|s| s.get("is_primary").and_then(Json::as_bool) == Some(true))
-        else {
+        let diagnostic = message.message;
+        let Some(span) = diagnostic.spans.iter().find(|s| s.is_primary) else {
             continue;
         };
         found.push(Message {
-            code: message
-                .get("code")
-                .and_then(|c| c.get("code"))
-                .and_then(Json::as_str)
-                .map(str::to_owned),
-            level: message
-                .get("level")
-                .and_then(Json::as_str)
-                .unwrap_or_default()
-                .to_owned(),
-            file: span
-                .get("file_name")
-                .and_then(Json::as_str)
-                .unwrap_or_default()
-                .replace('\\', "/"),
-            line: span
-                .get("line_start")
-                .and_then(|n| match n {
-                    Json::Number(text) => text.parse().ok(),
-                    _ => None,
-                })
-                .unwrap_or_default(),
+            code: diagnostic.code.as_ref().map(|c| c.code.clone()),
+            level: level_name(diagnostic.level),
+            file: span.file_name.replace('\\', "/"),
+            line: span.line_start,
         });
     }
     found.sort();
@@ -438,14 +403,12 @@ pub const LAPSED: &str = "does not refer to a reachable";
 /// with or without a span, and from its other output, sorted and once each.
 pub fn lapsed_bans(output: &Output) -> Vec<String> {
     let mut found = BTreeSet::new();
-    for value in json_lines(output) {
-        let text = value
-            .get("message")
-            .and_then(|m| m.get("message"))
-            .and_then(Json::as_str)
-            .unwrap_or_default();
-        if text.contains(LAPSED) {
-            found.insert(text.to_owned());
+    for message in cargo_messages(output) {
+        let CargoMessage::CompilerMessage(message) = message else {
+            continue;
+        };
+        if message.message.message.contains(LAPSED) {
+            found.insert(message.message.message);
         }
     }
     for line in String::from_utf8_lossy(&output.stderr).lines() {
@@ -468,43 +431,26 @@ pub fn compiled_sources(
 ) -> (BTreeMap<String, BTreeSet<PathBuf>>, Vec<String>) {
     let mut found: BTreeMap<String, BTreeSet<PathBuf>> = BTreeMap::new();
     let mut problems = Vec::new();
-    for value in json_lines(output) {
-        if value.get("reason").and_then(Json::as_str) != Some("compiler-artifact") {
-            continue;
-        }
-        let Some(package) = value
-            .get("package_id")
-            .and_then(Json::as_str)
-            .map(package_name)
-        else {
+    for message in cargo_messages(output) {
+        let CargoMessage::CompilerArtifact(artifact) = message else {
             continue;
         };
+        let package = package_name(&artifact.package_id.repr);
         if !crates.contains(package.as_str()) {
             continue;
         }
-        let target = value.get("target");
-        let is_lib = target
-            .and_then(|t| t.get("kind"))
-            .and_then(Json::as_array)
-            .is_some_and(|kinds| kinds.iter().any(|k| k.as_str() == Some("lib")));
-        if !is_lib {
+        if !artifact.target.kind.contains(&TargetKind::Lib) {
             continue;
         }
-        let name = target
-            .and_then(|t| t.get("name"))
-            .and_then(Json::as_str)
-            .unwrap_or_default();
-        let filenames = value
-            .get("filenames")
-            .and_then(Json::as_array)
-            .unwrap_or_default();
-        match dep_info_of(filenames, name) {
+        let name = artifact.target.name.as_str();
+        let filenames: Vec<&Path> = artifact.filenames.iter().map(|f| f.as_std_path()).collect();
+        match dep_info_of(&filenames, name) {
             Some(dep_info) => match fs::read_to_string(&dep_info) {
                 Ok(text) => {
                     found
                         .entry(package.clone())
                         .or_default()
-                        .extend(dep_info_files(&text, root));
+                        .extend(rust_inputs(dep_info_files(&text, root)));
                 }
                 Err(e) => problems.push(format!(
                     "{package}: cannot read the compiler's dep-info {}: {e}",
@@ -528,6 +474,28 @@ pub fn compiled_sources(
     (found, problems)
 }
 
+/// The files clippy-driver adds to a library's dep-info for its own configuration, so that cargo
+/// reruns clippy when one changes: the `clippy.toml` (or `.clippy.toml`) it loads, and the
+/// `Cargo.toml` in the folder it runs in, which it reads for the `clippy::cargo` lints and the MSRV
+/// (seen in the dep-info clippy 1.99.0 writes: `clippy.toml` by its full path, `Cargo.toml` bare).
+/// They are TOML, not Rust, and the lint posture check reads them as TOML (`posture`, `lints`).
+pub const CLIPPY_CONFIGURATION: [&str; 3] = ["clippy.toml", ".clippy.toml", "Cargo.toml"];
+
+/// The files of a dep-info list the source rules read: every one but clippy's configuration
+/// (`CLIPPY_CONFIGURATION`). A file pasted in by `include!`, whatever its name, stays, and so does
+/// any other file the compiler read, so one that is not Rust shows as a file that does not lex.
+pub fn rust_inputs(files: BTreeSet<PathBuf>) -> BTreeSet<PathBuf> {
+    files
+        .into_iter()
+        .filter(|file| {
+            !file
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| CLIPPY_CONFIGURATION.contains(&name))
+        })
+        .collect()
+}
+
 /// A crate's name from cargo's package id (`path+file:///.../geom-num#0.0.0`, or
 /// `...#name@version` when the name differs from the folder's).
 fn package_name(id: &str) -> String {
@@ -540,9 +508,8 @@ fn package_name(id: &str) -> String {
 
 /// rustc's dep-info file for a library unit: beside its artifact in `deps`, named `<name>-<hash>.d`
 /// where the artifact is `lib<name>-<hash>.rlib` or `.rmeta`.
-fn dep_info_of(filenames: &[Json], name: &str) -> Option<PathBuf> {
-    filenames.iter().filter_map(Json::as_str).find_map(|file| {
-        let path = Path::new(file);
+fn dep_info_of(filenames: &[&Path], name: &str) -> Option<PathBuf> {
+    filenames.iter().find_map(|path| {
         let folder = path.parent()?;
         if folder.file_name()? != "deps" {
             return None;
@@ -1565,6 +1532,21 @@ mod tests {
                 PathBuf::from("/w/src/lib.rs"),
                 PathBuf::from("/w/src/my file.in"),
                 PathBuf::from("/w/tests/state.rs"),
+            ]
+        );
+        // A clippy run's dep-info also lists clippy's configuration, which is TOML: the source
+        // rules read every file but those.
+        let clippy = "/w/target/deps/x-1.d: /w/c/clippy.toml src/lib.rs Cargo.toml\n\n\
+                      /w/c/clippy.toml:\nsrc/lib.rs:\nCargo.toml:\nsrc/.clippy.toml:\n\
+                      src/clippy.toml.in:\n";
+        let read: Vec<PathBuf> = rust_inputs(dep_info_files(clippy, root))
+            .into_iter()
+            .collect();
+        assert_eq!(
+            read,
+            [
+                PathBuf::from("/w/src/clippy.toml.in"),
+                PathBuf::from("/w/src/lib.rs")
             ]
         );
         assert_eq!(package_name("path+file:///c/p/geom-num#0.0.0"), "geom-num");
