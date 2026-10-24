@@ -229,8 +229,8 @@ pub fn value(a: P2, b: P2, c: P2, d: P2, p: P2, q: P2) -> Option<I256> {
     let ob2_1 = i128::from(qp_x).checked_mul(i128::from(bp_y))?;
     let ob2_2 = i128::from(qp_y).checked_mul(i128::from(bp_x))?;
     let ob2 = ob2_1.checked_sub(ob2_2)?;
-    let s_1 = I256::from_i128(oa).checked_mul(&I256::from_i128(ob2))?;
-    let s_2 = I256::from_i128(ob).checked_mul(&I256::from_i128(oa2))?;
+    let s_1 = I256::product_i128(oa, ob2)?;
+    let s_2 = I256::product_i128(ob, oa2)?;
     let s = s_1.checked_sub(&s_2)?;
     Some(s)
 }

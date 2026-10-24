@@ -16,7 +16,10 @@
 //!   narrowest of `i64`, `i128`, `I256`, `I320`, `I384` and `I512` that holds its bound), with
 //!   operands widened to that type and checked arithmetic (`checked_add`, `checked_sub`,
 //!   `checked_mul`, and `resize` between `Wide`s), so a certificate that was wrong would show as
-//!   `None`, never as a wrapped value. The certificate's rows name the same steps.
+//!   `None`, never as a wrapped value. A product in a `Wide` whose operands fit `i128` is
+//!   `product_i128`, and one with one such operand `checked_mul_i128` (piece G29): the same exact
+//!   product or `None`, without widening the narrow operand to every limb. The certificate's rows
+//!   name the same steps.
 //! - **Width-aware, as chapter 23.3 asks.** A step that fits 63 bits is computed in `i64`, so a
 //!   product of two such steps is `i128::from(a).checked_mul(i128::from(b))`: two sign-extended
 //!   64-bit operands, whose product the compiler proves cannot overflow `i128` and emits as one
@@ -458,6 +461,15 @@ fn exact_statement(step: &Step, cert: &StepCert, d: &Derivation) -> Result<Strin
                 _ => return fail("a rounded input wider than i128"),
             }
         }
+        StepKind::Op {
+            op: Op::Mul,
+            left,
+            right,
+        } if w > Width::I128 => {
+            let (l, lw) = operand(*left)?;
+            let (r, rw) = operand(*right)?;
+            wide_product(l, lw, r, rw, w)?
+        }
         StepKind::Op { op, left, right } => {
             let (l, lw) = operand(*left)?;
             let (r, rw) = operand(*right)?;
@@ -465,6 +477,43 @@ fn exact_statement(step: &Step, cert: &StepCert, d: &Derivation) -> Result<Strin
         }
     };
     Ok(format!("    let {} = {body};", step.name))
+}
+
+/// `name`, of type `from` (`i64` or `i128`), as an `i128`.
+fn as_i128(name: &str, from: Width) -> Result<String, EmitError> {
+    match from {
+        Width::I64 => Ok(format!("i128::from({name})")),
+        Width::I128 => Ok(name.to_owned()),
+        _ => fail(format!("`{name}` is wider than an `i128`")),
+    }
+}
+
+/// A product in a wide type `w`, width-aware (chapter 23.3): two operands that fit `i128` as
+/// `W::product_i128(l, r)`, four 64 × 64 → 128-bit limb products; one operand that fits `i128`
+/// times the other, widened to `w`, as `x.checked_mul_i128(n)`, two limb products per limb; two
+/// wide operands as `checked_mul`. Each gives the exact product or `None`, as `checked_mul` of the
+/// widened operands does, so the value is the same and only the cost differs.
+fn wide_product(l: &str, lw: Width, r: &str, rw: Width, w: Width) -> Result<String, EmitError> {
+    let narrow = |width: Width| width <= Width::I128;
+    Ok(match (narrow(lw), narrow(rw)) {
+        (true, true) => format!(
+            "{}::product_i128({}, {})?",
+            w.rust(),
+            as_i128(l, lw)?,
+            as_i128(r, rw)?
+        ),
+        (true, false) => format!(
+            "{}.checked_mul_i128({})?",
+            widened(r, rw, w)?,
+            as_i128(l, lw)?
+        ),
+        (false, true) => format!(
+            "{}.checked_mul_i128({})?",
+            widened(l, lw, w)?,
+            as_i128(r, rw)?
+        ),
+        (false, false) => checked(&widened(l, lw, w)?, Op::Mul, &widened(r, rw, w)?, w),
+    })
 }
 
 /// The filter's statement for one step.

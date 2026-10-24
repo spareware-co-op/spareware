@@ -687,15 +687,35 @@ impl Walker<'_> {
                 };
                 let bits = bound.bits();
                 let w = width(bits);
-                let row = Row {
-                    computes: format!("{} {op} {}", a.name, b.name),
-                    filter: format!("{} {op} {}", a.name, b.name),
-                    exact: checked(
+                // A product in a wide type is width-aware: `product_i128` when both operands fit
+                // an `i128`, `checked_mul_i128` on the wide one when one does.
+                let fits = |x: &str| !is_wide(x);
+                let as_i128 = |name: &str, from: &str| conv(name, from, "i128");
+                let exact = if *op == '*' && is_wide(w) && fits(a.width) && fits(b.width) {
+                    format!(
+                        "{w}::product_i128({}, {})?",
+                        as_i128(&a.name, a.width),
+                        as_i128(&b.name, b.width)
+                    )
+                } else if *op == '*' && is_wide(w) && (fits(a.width) || fits(b.width)) {
+                    let (narrow, wide) = if fits(a.width) { (&a, &b) } else { (&b, &a) };
+                    format!(
+                        "{}.checked_mul_i128({})?",
+                        conv(&wide.name, wide.width, w),
+                        as_i128(&narrow.name, narrow.width)
+                    )
+                } else {
+                    checked(
                         &conv(&a.name, a.width, w),
                         *op,
                         &conv(&b.name, b.width, w),
                         w,
-                    ),
+                    )
+                };
+                let row = Row {
+                    computes: format!("{} {op} {}", a.name, b.name),
+                    filter: format!("{} {op} {}", a.name, b.name),
+                    exact,
                     bound,
                     bits,
                     width: w,

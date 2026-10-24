@@ -209,26 +209,26 @@ pub fn value(
 ) -> Option<I256> {
     let n2y = within(n2y, 83)?;
     let n3z = within(n3z, 83)?;
-    let c23_x_1 = I256::from_i128(n2y).checked_mul(&I256::from_i128(n3z))?;
+    let c23_x_1 = I256::product_i128(n2y, n3z)?;
     let n2z = within(n2z, 83)?;
     let n3y = within(n3y, 83)?;
-    let c23_x_2 = I256::from_i128(n2z).checked_mul(&I256::from_i128(n3y))?;
+    let c23_x_2 = I256::product_i128(n2z, n3y)?;
     let c23_x = c23_x_1.checked_sub(&c23_x_2)?;
     let n3x = within(n3x, 83)?;
-    let c23_y_1 = I256::from_i128(n2z).checked_mul(&I256::from_i128(n3x))?;
+    let c23_y_1 = I256::product_i128(n2z, n3x)?;
     let n2x = within(n2x, 83)?;
-    let c23_y_2 = I256::from_i128(n2x).checked_mul(&I256::from_i128(n3z))?;
+    let c23_y_2 = I256::product_i128(n2x, n3z)?;
     let c23_y = c23_y_1.checked_sub(&c23_y_2)?;
-    let c23_z_1 = I256::from_i128(n2x).checked_mul(&I256::from_i128(n3y))?;
-    let c23_z_2 = I256::from_i128(n2y).checked_mul(&I256::from_i128(n3x))?;
+    let c23_z_1 = I256::product_i128(n2x, n3y)?;
+    let c23_z_2 = I256::product_i128(n2y, n3x)?;
     let c23_z = c23_z_1.checked_sub(&c23_z_2)?;
     let n1x = within(n1x, 83)?;
-    let w_1 = I256::from_i128(n1x).checked_mul(&c23_x)?;
+    let w_1 = c23_x.checked_mul_i128(n1x)?;
     let n1y = within(n1y, 83)?;
-    let w_2 = I256::from_i128(n1y).checked_mul(&c23_y)?;
+    let w_2 = c23_y.checked_mul_i128(n1y)?;
     let w_3 = w_1.checked_add(&w_2)?;
     let n1z = within(n1z, 83)?;
-    let w_4 = I256::from_i128(n1z).checked_mul(&c23_z)?;
+    let w_4 = c23_z.checked_mul_i128(n1z)?;
     let w = w_3.checked_add(&w_4)?;
     Some(w)
 }

@@ -316,8 +316,8 @@ pub fn value(
     let s2p_5 = s2p_3.checked_add(s2p_4)?;
     let d2 = within(d2, 125)?;
     let s2p = s2p_5.checked_add(d2)?;
-    let s_1 = I256::from_i128(w1).checked_mul(&I256::from_i128(s2p))?;
-    let s_2 = I256::from_i128(w2).checked_mul(&I256::from_i128(s1p))?;
+    let s_1 = I256::product_i128(w1, s2p)?;
+    let s_2 = I256::product_i128(w2, s1p)?;
     let s = s_1.checked_sub(&s_2)?;
     Some(s)
 }
