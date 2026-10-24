@@ -775,20 +775,24 @@
           "target": "lib"
         },
         {
-          "cost": "one compression (64 rounds of 32-bit operations) per 64-byte block, so linear in the message; the state is the eight hash words, one block and two counters, and nothing is allocated.",
+          "cost": "one compression of 64 rounds per 64-byte block, so linear in the message; the state is `sha2`'s fixed block buffer, and nothing is allocated except the string `Display` writes.",
           "does": null,
           "family": [],
           "file": "projects/engines/geometry/crates/geom-bench/src/sha256.rs",
           "guarantees": [
-            "the digest of every message below 2^61 bytes (2^64 bits, the standard's limit) is the one FIPS 180-4 defines, whatever pieces the message is fed in (the tests check the standard's examples, a million bytes in uneven pieces, and every padding length); and no method panics."
+            "**The digest FIPS 180-4 defines**, whatever pieces the message is fed in: `sha2`'s, which the tests check against the standard's own examples, a million bytes in uneven pieces and every padding length.",
+            "**The same digest on every target**: SHA-256 is fully specified integer arithmetic, and `sha2`'s portable and processor-specific back ends compute the same function (the tests run on every target the gates run on, wasm32 included).",
+            "**A hexadecimal digest reads back as itself**: [`Digest::from_hex`] takes exactly 64 digits, either case, and refuses anything else; [`Digest`]'s `Display` writes 64 lowercase digits.",
+            "No method panics."
           ],
-          "job": "SHA-256, the hash of every benchmark's golden digests.",
+          "job": "SHA-256, the hash of every benchmark's golden digests: the `sha2` crate's, with the golden digest type the gates compare and the hexadecimal form `golden.txt` stores.",
           "method": {
             "links": [
               "https://csrc.nist.gov/pubs/fips/180-4/upd1/final",
+              "https://docs.rs/sha2/0.11.0/sha2/",
               "https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values"
             ],
-            "text": "the Secure Hash Standard, NIST FIPS 180-4, sections 4.1.2 (functions), 4.2.2 (constants), 5.1.1 (padding), 5.3.3 (initial value) and 6.2.2 (the compression function): <https://csrc.nist.gov/pubs/fips/180-4/upd1/final>. The message schedule is kept as a sliding window of sixteen words, which computes the same W_t as the standard's 64-word array. The tests check the standard's own examples (<https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values>)."
+            "text": "the Secure Hash Standard, NIST FIPS 180-4 (<https://csrc.nist.gov/pubs/fips/180-4/upd1/final>), as the `sha2` crate implements it (<https://docs.rs/sha2/0.11.0/sha2/>), checked against the standard's example values (<https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values>)."
           },
           "path": "geom_bench::sha256",
           "provenance": [],

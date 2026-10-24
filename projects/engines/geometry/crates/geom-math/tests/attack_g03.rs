@@ -26,9 +26,6 @@
     reason = "oracles and generators; the rules are for kernel code"
 )]
 
-#[path = "common/sha256.rs"]
-mod sha256;
-
 use std::cmp::Ordering;
 
 use num_bigint::BigInt;
@@ -46,7 +43,7 @@ use geom_math::{
 use geom_num::grid::{COORD_MAX, GridStep, P2, P3};
 use geom_num::ladder::ANGULAR;
 use geom_num::{NumError, math};
-use sha256::{Sha256, hex};
+use sha2::{Digest as _, Sha256};
 
 // ---------------------------------------------------------------------------------------------
 // A deterministic generator (SplitMix64), so every run sees the same cases.
@@ -2221,7 +2218,7 @@ struct Digest(Sha256);
 
 impl Digest {
     fn eat(&mut self, v: u64) {
-        self.0.write(&v.to_le_bytes());
+        self.0.update(v.to_le_bytes());
     }
 }
 
@@ -2297,7 +2294,7 @@ fn workload(seed: u64) -> String {
             }
         }
     }
-    hex(h.0.finish())
+    hex::encode(h.0.finalize())
 }
 
 /// The workload's SHA-256 digest on one thread, in hexadecimal. Every target the kernel builds for

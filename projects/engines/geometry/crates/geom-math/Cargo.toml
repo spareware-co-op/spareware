@@ -23,6 +23,13 @@ num-integer = "0.1"
 # Without its default fork and timeout features, which pull in code that has no WebAssembly
 # (WASI) build, so the tests also run on wasm32-wasip1.
 proptest = { version = "1.12.0", default-features = false, features = ["std", "bit-set"] }
+# SHA-256 (FIPS 180-4), the hash of the golden digests (chapters 21 and 28.13), and its digests
+# in hexadecimal: tests only, never linked into the kernel (chapter 29.1, a development
+# dependency; piece G12a put these standard crates in place of the copies the tests held).
+# sha2 0.11.0: MIT OR Apache-2.0, RustCrypto, without its default alloc and oid features, which
+# the digests do not use. hex 0.4.3: MIT OR Apache-2.0.
+sha2 = { version = "=0.11.0", default-features = false }
+hex = "=0.4.3"
 
 # The 1M-point transform benchmark (piece G45), with the standard library's clock only; it moves
 # to geom-bench (piece G06) when that harness merges.
