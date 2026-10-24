@@ -1747,3 +1747,86 @@ fn enclosure_classes_take_every_path() {
     assert!(ln.iter().any(|x| x.lo().is_subnormal()));
     assert!(ln.iter().any(|x| x.hi() > pow2(1020)));
 }
+
+#[test]
+fn generated_classes_take_their_paths() {
+    use geom_num::generated as gp;
+    use inputs::generated as i;
+    // Typical inputs: the filter decides. Nearly degenerate ones: it cannot, and the exact value is
+    // not zero. Degenerate ones: the exact value is zero.
+    let typical: Vec<bool> = i::orient2d_filter(Typical)
+        .iter()
+        .map(|&[a, b, c]| gp::orient2d::filter(a, b, c).is_some())
+        .collect();
+    assert!(typical.iter().all(|&d| d));
+    assert!(
+        i::orient2d_filter(NearlyDegenerate)
+            .iter()
+            .all(|&[a, b, c]| gp::orient2d::filter(a, b, c).is_none())
+    );
+    assert!(
+        i::orient2d_value(Degenerate)
+            .iter()
+            .all(|&[a, b, c]| gp::orient2d::value(a, b, c) == Some(0))
+    );
+    assert!(
+        i::orient3d_filter(Typical)
+            .iter()
+            .all(|&[a, b, c, d]| gp::orient3d::filter(a, b, c, d).is_some())
+    );
+    assert!(
+        i::orient3d_filter(NearlyDegenerate)
+            .iter()
+            .all(|&[a, b, c, d]| gp::orient3d::filter(a, b, c, d).is_none())
+    );
+    assert!(
+        i::orient3d_value(Degenerate)
+            .iter()
+            .all(|&[a, b, c, d]| gp::orient3d::value(a, b, c, d) == Some(0))
+    );
+    assert!(
+        i::incircle_filter(Typical)
+            .iter()
+            .all(|&[a, b, c, d]| gp::incircle::filter(a, b, c, d).is_some())
+    );
+    assert!(
+        i::incircle_filter(NearlyDegenerate)
+            .iter()
+            .all(|&[a, b, c, d]| gp::incircle::filter(a, b, c, d).is_none())
+    );
+    assert!(
+        i::incircle_value(Degenerate)
+            .iter()
+            .all(|&[a, b, c, d]| gp::incircle::exact(a, b, c, d) == Some(Sign::Zero))
+    );
+    assert!(
+        i::insphere_filter(Typical)
+            .iter()
+            .all(|&[a, b, c, d, e]| gp::insphere::filter(a, b, c, d, e).is_some())
+    );
+    assert!(
+        i::insphere_filter(NearlyDegenerate)
+            .iter()
+            .all(|&[a, b, c, d, e]| gp::insphere::filter(a, b, c, d, e).is_none())
+    );
+    assert!(
+        i::insphere_value(Degenerate)
+            .iter()
+            .all(|&[a, b, c, d, e]| gp::insphere::exact(a, b, c, d, e) == Some(Sign::Zero))
+    );
+    assert!(
+        i::plane_side_filter(Typical)
+            .iter()
+            .all(|&([x, y, z], d, p)| gp::plane_side::filter(x, y, z, d, p).is_some())
+    );
+    assert!(
+        i::plane_side_filter(NearlyDegenerate)
+            .iter()
+            .all(|&([x, y, z], d, p)| gp::plane_side::filter(x, y, z, d, p).is_none())
+    );
+    assert!(
+        i::plane_side_value(Degenerate)
+            .iter()
+            .all(|&([x, y, z], d, p)| gp::plane_side::value(x, y, z, d, p) == Some(0))
+    );
+}

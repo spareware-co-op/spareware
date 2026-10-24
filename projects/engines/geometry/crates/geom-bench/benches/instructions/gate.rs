@@ -1370,6 +1370,116 @@ pub mod exact_sum {
     );
 }
 
+/// The generated filters and exact values.
+pub mod generated {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/orient2d_filter/typical"))]
+    #[bench::degenerate(leak("generated/orient2d_filter/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/orient2d_filter/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/orient2d_filter/extreme"))]
+    fn orient2d_filter(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/orient2d_value/typical"))]
+    #[bench::degenerate(leak("generated/orient2d_value/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/orient2d_value/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/orient2d_value/extreme"))]
+    fn orient2d_value(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/orient3d_filter/typical"))]
+    #[bench::degenerate(leak("generated/orient3d_filter/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/orient3d_filter/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/orient3d_filter/extreme"))]
+    fn orient3d_filter(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/orient3d_value/typical"))]
+    #[bench::degenerate(leak("generated/orient3d_value/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/orient3d_value/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/orient3d_value/extreme"))]
+    fn orient3d_value(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/incircle_filter/typical"))]
+    #[bench::degenerate(leak("generated/incircle_filter/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/incircle_filter/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/incircle_filter/extreme"))]
+    fn incircle_filter(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/incircle_value/typical"))]
+    #[bench::degenerate(leak("generated/incircle_value/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/incircle_value/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/incircle_value/extreme"))]
+    fn incircle_value(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/insphere_filter/typical"))]
+    #[bench::degenerate(leak("generated/insphere_filter/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/insphere_filter/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/insphere_filter/extreme"))]
+    fn insphere_filter(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/insphere_value/typical"))]
+    #[bench::degenerate(leak("generated/insphere_value/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/insphere_value/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/insphere_value/extreme"))]
+    fn insphere_value(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/plane_side_filter/typical"))]
+    #[bench::degenerate(leak("generated/plane_side_filter/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/plane_side_filter/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/plane_side_filter/extreme"))]
+    fn plane_side_filter(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/plane_side_value/typical"))]
+    #[bench::degenerate(leak("generated/plane_side_value/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/plane_side_value/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/plane_side_value/extreme"))]
+    fn plane_side_value(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = generated;
+        benchmarks = orient2d_filter, orient2d_value, orient3d_filter, orient3d_value, incircle_filter, incircle_value, insphere_filter, insphere_value, plane_side_filter, plane_side_value
+    );
+}
+
 /// The growth checks: each scale benchmark at n, 2n and 4n limbs.
 pub mod growth {
     use super::*;

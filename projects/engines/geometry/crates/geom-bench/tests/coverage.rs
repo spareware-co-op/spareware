@@ -46,11 +46,15 @@ const LOCK: &str = include_str!("../../../../../../Cargo.lock");
 const KERNEL_WORKFLOW: &str = include_str!("../../../../../../.github/workflows/kernel.yml");
 
 /// The source of every module of `geom-num`, by module name.
-const GEOM_NUM: [(&str, &str); 16] = [
+const GEOM_NUM: [(&str, &str); 17] = [
     ("dd", include_str!("../../geom-num/src/dd.rs")),
     ("eft", include_str!("../../geom-num/src/eft.rs")),
     ("error", include_str!("../../geom-num/src/error.rs")),
     ("exact_sum", include_str!("../../geom-num/src/exact_sum.rs")),
+    (
+        "generated",
+        include_str!("../../geom-num/src/generated/mod.rs"),
+    ),
     ("exactness", include_str!("../../geom-num/src/exactness.rs")),
     ("grid", include_str!("../../geom-num/src/grid.rs")),
     ("interval", include_str!("../../geom-num/src/interval.rs")),
@@ -83,6 +87,31 @@ const MATH_PARTS: [(&str, &str); 2] = [
 /// functions' ports and their support. Their `pub` items are not reachable from outside the crate,
 /// so they are not read; a new module of `math` fails here until it is listed in one of the two.
 const MATH_PRIVATE: [&str; 6] = ["atan2", "exp", "hexf", "log", "sincospi", "support"];
+
+/// The modules of `geom-num`'s `generated`, one per predicate (piece G27), by path; their free
+/// functions are `generated::<predicate>::<function>`.
+const GENERATED_PARTS: [(&str, &str); 5] = [
+    (
+        "generated::orient2d",
+        include_str!("../../geom-num/src/generated/orient2d.rs"),
+    ),
+    (
+        "generated::orient3d",
+        include_str!("../../geom-num/src/generated/orient3d.rs"),
+    ),
+    (
+        "generated::incircle",
+        include_str!("../../geom-num/src/generated/incircle.rs"),
+    ),
+    (
+        "generated::insphere",
+        include_str!("../../geom-num/src/generated/insphere.rs"),
+    ),
+    (
+        "generated::plane_side",
+        include_str!("../../geom-num/src/generated/plane_side.rs"),
+    ),
+];
 
 /// The identifier at the start of `s`.
 fn ident(s: &str) -> String {
@@ -377,9 +406,25 @@ fn every_public_function_of_geom_num_is_measured_or_says_why_not() {
         math_modules, classified,
         "a module of geom-num's math this test does not know"
     );
+    // Every module of `generated` is read.
+    let (_, generated) = GEOM_NUM.iter().find(|(m, _)| *m == "generated").unwrap();
+    let generated_modules: BTreeSet<String> = generated
+        .lines()
+        .filter_map(|l| l.strip_prefix("pub mod "))
+        .map(|m| format!("generated::{}", ident(m)))
+        .collect();
+    let generated_read: BTreeSet<String> = GENERATED_PARTS
+        .iter()
+        .map(|(m, _)| (*m).to_owned())
+        .collect();
+    assert_eq!(
+        generated_modules, generated_read,
+        "a module of geom-num's generated this test does not read"
+    );
     let public: BTreeSet<String> = GEOM_NUM
         .iter()
         .chain(MATH_PARTS.iter())
+        .chain(GENERATED_PARTS.iter())
         .flat_map(|(m, src)| public_functions(m, src))
         .collect();
     assert!(public.len() > 60, "the parser found only {public:?}");

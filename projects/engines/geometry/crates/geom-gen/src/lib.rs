@@ -33,9 +33,19 @@
 //!   Each prints every generator's seed first, `seed: <hex>`, or `seed: none` for a generator that
 //!   uses no randomness. `--root <dir>` points it at another copy of the workspace.
 //!
-//! Generators today: [`grid_steps`], the exact table of the grid steps, common units on each step
-//! and the tolerance ladder, from `geom-num`'s own constants, written to
-//! `projects/engines/geometry/crates/geom-gen/generated/grid-steps.md`.
+//! Generators today:
+//!
+//! - [`grid_steps`], the exact table of the grid steps, common units on each step and the
+//!   tolerance ladder, from `geom-num`'s own constants, written to
+//!   `projects/engines/geometry/crates/geom-gen/generated/grid-steps.md`;
+//! - [`predicates`], the predicate generator of chapter 6.2: from a description of each predicate
+//!   on grid points and on rounded inputs, `f64` copies of wider integers ([`predicate_lang`]),
+//!   it derives, exactly, the bit-range certificate of every intermediate, the exact path's
+//!   integer widths and the `f64` filter's error constant, input rounding included
+//!   ([`predicate_derive`], Meyer and Pion's method), and writes the filter, the width-aware
+//!   exact path and the certificate into `geom-num`'s `src/generated/` ([`predicate_emit`]). An
+//!   independent checker in `tests/predicate_checker.rs` re-derives the certificate and the
+//!   constant and reads every line of the committed code.
 //!
 //! Invariants this crate keeps:
 //!
@@ -45,10 +55,11 @@
 //!   committed file on every target CI runs, wasm32 included. A generator's seed is fixed in the
 //!   registry; `SPAREKIT_SEED` never applies to generators, whose outputs are committed and must
 //!   reproduce.
-//! - **Exact.** Generators compute with integers and exact fractions ([`exact`]), never with
-//!   rounded floating point, unless an output is defined as rounded.
-//! - **Bytes, exactly.** Outputs use `\n` line ends, and `generated/.gitattributes` turns off line-
-//!   ending conversion for them, so a Windows checkout compares the committed bytes.
+//! - **Exact.** Generators compute with integers and exact fractions ([`exact`], and
+//!   [`bignum`]'s naturals and polynomials in the unit roundoff), never with rounded floating
+//!   point, unless an output is defined as rounded (the filter constant, rounded up once).
+//! - **Bytes, exactly.** Outputs use `\n` line ends, and each generated folder's `.gitattributes`
+//!   turns off line-ending conversion for them, so a Windows checkout compares the committed bytes.
 //! - **Development only**, so it may use `std` (chapter 27); `#![forbid(unsafe_code)]`; no
 //!   `unwrap`, `expect`, `panic!` or indexing outside tests.
 //!
@@ -66,10 +77,15 @@
 //! `geom-num` or `geom-test`.
 #![forbid(unsafe_code)]
 
+pub mod bignum;
 pub mod exact;
 pub mod files;
 pub mod generator;
 pub mod grid_steps;
+pub mod predicate_derive;
+pub mod predicate_emit;
+pub mod predicate_lang;
+pub mod predicates;
 pub mod registry;
 
 pub use files::{Folder, Registry};

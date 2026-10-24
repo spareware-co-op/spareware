@@ -87,6 +87,7 @@ pub mod eft;
 pub mod error;
 pub mod exact_sum;
 pub mod exactness;
+pub mod generated;
 pub mod grid;
 pub mod interval;
 pub mod ladder;
