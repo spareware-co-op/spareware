@@ -12,6 +12,14 @@
 //! Gungraun's own serializer writes for the same data, so the seeded cases are summaries the gate
 //! can meet.
 
+// Helpers outside `#[test]` functions are not covered by clippy.toml's allow-*-in-tests settings;
+// clippy.toml says tests may use these, and a broken seeded summary must stop the test loudly.
+#![allow(
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    reason = "test code, including its seeding helpers: a failure should stop loudly"
+)]
+
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -255,7 +263,12 @@ fn a_rise_over_5_percent_on_a_count_of_200_fails() {
     // 5% of 200 is 10 events: 210 is at the limit and passes, 211 is over it and fails, on every
     // miss kind, while estimated cycles hold.
     for (kind, &(_, name)) in MISSES.iter().enumerate() {
-        let j = judge_5(&[("wide", "add", "w4", Counts::steady(200).miss(kind, 200, 211))]);
+        let j = judge_5(&[(
+            "wide",
+            "add",
+            "w4",
+            Counts::steady(200).miss(kind, 200, 211),
+        )]);
         assert!(!j.passed(), "{name}");
         assert_eq!(j.regressions.len(), 1);
         assert_eq!(j.regressions[0].metric, name);
@@ -263,16 +276,29 @@ fn a_rise_over_5_percent_on_a_count_of_200_fails() {
             (j.regressions[0].change.base, j.regressions[0].change.head),
             (200, 211)
         );
-        let j = judge_5(&[("wide", "add", "w4", Counts::steady(200).miss(kind, 200, 210))]);
+        let j = judge_5(&[(
+            "wide",
+            "add",
+            "w4",
+            Counts::steady(200).miss(kind, 200, 210),
+        )]);
         assert!(j.passed(), "{name}: {}", j.report("t"));
-        assert!(j.unresolved.is_empty(), "a resolved count is not listed as unresolved");
+        assert!(
+            j.unresolved.is_empty(),
+            "a resolved count is not listed as unresolved"
+        );
     }
 }
 
 #[test]
 fn instructions_are_gated_at_every_size() {
     // Instructions and estimated cycles are what every miss is judged through: no floor.
-    let j = judge_5(&[("sign", "sign", "typical", Counts::steady(0).ir(10_000, 10_501))]);
+    let j = judge_5(&[(
+        "sign",
+        "sign",
+        "typical",
+        Counts::steady(0).ir(10_000, 10_501),
+    )]);
     assert_eq!(
         j.regressions.iter().map(|m| m.metric).collect::<Vec<_>>(),
         ["Ir"]
@@ -480,7 +506,10 @@ fn every_malformed_summary_is_an_error() {
         (
             "no estimated cycles",
             parse_edited(|v| {
-                callgrind(v).as_object_mut().unwrap().remove("EstimatedCycles");
+                callgrind(v)
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("EstimatedCycles");
             }),
         ),
         (
@@ -545,10 +574,11 @@ fn every_benchmark_is_judged_or_there_is_no_verdict() {
     let s = |g: &str, counts: &Counts| parse_summary(&summary(g, "o", "c", counts).to_string());
     let a = s("a", &Counts::steady(2)).unwrap();
     let b = s("b", &Counts::steady(2)).unwrap();
-    let names = |list: &[&str]| -> BTreeSet<String> { list.iter().map(|n| (*n).to_owned()).collect() };
+    let names =
+        |list: &[&str]| -> BTreeSet<String> { list.iter().map(|n| (*n).to_owned()).collect() };
     // A listed benchmark without a summary, a summary of a benchmark not listed, two summaries of
     // one benchmark, and no summaries at all for a listed run: each an error, never a pass.
-    assert!(judge(&[a.clone()], &names(&["a/o/c", "b/o/c"]), 5).is_err());
+    assert!(judge(std::slice::from_ref(&a), &names(&["a/o/c", "b/o/c"]), 5).is_err());
     assert!(judge(&[a.clone(), b.clone()], &names(&["a/o/c"]), 5).is_err());
     assert!(judge(&[a.clone(), a.clone()], &names(&["a/o/c"]), 5).is_err());
     assert!(judge(&[], &names(&["a/o/c"]), 5).is_err());
@@ -567,7 +597,12 @@ fn every_benchmark_is_judged_or_there_is_no_verdict() {
 #[test]
 fn reports_are_in_name_order_and_measure_order() {
     let j = judge_5(&[
-        ("z", "o", "c", Counts::steady(100).miss(5, 100, 200).ir(10_000, 11_000)),
+        (
+            "z",
+            "o",
+            "c",
+            Counts::steady(100).miss(5, 100, 200).ir(10_000, 11_000),
+        ),
         ("a", "o", "c", Counts::steady(3).miss(2, 3, 4).miss(0, 3, 5)),
     ]);
     let rises: Vec<(&str, &str)> = j
@@ -583,9 +618,15 @@ fn reports_are_in_name_order_and_measure_order() {
         .collect();
     assert_eq!(listed, [("a/o/c", "I1mr"), ("a/o/c", "D1mw")]);
     let report = j.report("t");
-    assert!(report.contains("**Failed:** 2 rise(s) over 5%."), "{report}");
+    assert!(
+        report.contains("**Failed:** 2 rise(s) over 5%."),
+        "{report}"
+    );
     assert!(report.contains("| z/o/c | DLmw | 100 | 200 | +100.00% | +0.00% |"));
-    assert!(report.contains("its merge-base count is 20 or more"), "{report}");
+    assert!(
+        report.contains("its merge-base count is 20 or more"),
+        "{report}"
+    );
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -594,7 +635,9 @@ fn reports_are_in_name_order_and_measure_order() {
 
 /// A fresh folder for one test, under Cargo's temporary folder for integration tests.
 fn folder(name: &str) -> PathBuf {
-    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("attack_g18a").join(name);
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
+        .join("attack_g18a")
+        .join(name);
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     dir
@@ -646,18 +689,31 @@ fn the_command_line_passes_fails_and_refuses_as_the_rule_says() {
     let (out, names) = lay_out(
         "pass",
         &[
-            ("exact_sum", "sum", "typical", Counts::steady(2).miss(0, 2, 3).miss(3, 2, 3)),
+            (
+                "exact_sum",
+                "sum",
+                "typical",
+                Counts::steady(2).miss(0, 2, 3).miss(3, 2, 3),
+            ),
             ("predicate", "orient2d", "typical", Counts::steady(0)),
         ],
     );
     let (status, report) = run_counts(&out, &names);
     assert_eq!(status, Some(0), "{report}");
-    assert!(report.contains("**Passed.** 2 benchmark(s) compared"), "{report}");
+    assert!(
+        report.contains("**Passed.** 2 benchmark(s) compared"),
+        "{report}"
+    );
     assert!(report.contains("| exact_sum/sum/typical | ILmr | 2 | 3 | +50.00% |"));
 
     let (out, names) = lay_out(
         "cycles",
-        &[("predicate", "orient2d", "typical", Counts::steady(2).cycles(14_000, 15_000))],
+        &[(
+            "predicate",
+            "orient2d",
+            "typical",
+            Counts::steady(2).cycles(14_000, 15_000),
+        )],
     );
     assert_eq!(run_counts(&out, &names).0, Some(1));
 
@@ -667,7 +723,10 @@ fn the_command_line_passes_fails_and_refuses_as_the_rule_says() {
     );
     let (status, report) = run_counts(&out, &names);
     assert_eq!(status, Some(1));
-    assert!(report.contains("| wide/add/w4 | D1mr | 200 | 211 | +5.50% |"), "{report}");
+    assert!(
+        report.contains("| wide/add/w4 | D1mr | 200 | 211 | +5.50% |"),
+        "{report}"
+    );
 
     // A summary missing for a listed benchmark, an unreadable folder, a malformed summary, and a
     // percentage that is not a whole number: 2, never a pass.
@@ -720,11 +779,11 @@ fn workflow_step(name: &str) -> &'static str {
 fn both_legs_judge_the_summaries_by_the_same_rule() {
     // One job measures both processors (its matrix), and the judgement is a step of that job with
     // no condition on the leg, so both legs run it, with the workflow's own percentage.
-    let job = &WORKFLOW[WORKFLOW.find("\n  instructions:\n").unwrap()..WORKFLOW
-        .find("\n  fuel:\n")
-        .unwrap()];
+    let job = &WORKFLOW
+        [WORKFLOW.find("\n  instructions:\n").unwrap()..WORKFLOW.find("\n  fuel:\n").unwrap()];
     assert!(job.contains("- target: x86-64") && job.contains("- target: aarch64"));
-    let judge_step = workflow_step("Judge instructions, cycles and cache misses from the summaries");
+    let judge_step =
+        workflow_step("Judge instructions, cycles and cache misses from the summaries");
     assert!(job.contains(judge_step));
     assert!(!judge_step.contains("matrix."), "{judge_step}");
     assert!(judge_step.contains(
@@ -762,17 +821,28 @@ fn both_legs_judge_the_summaries_by_the_same_rule() {
 #[test]
 fn the_rule_is_written_in_chapter_23_13_and_the_gate_header() {
     let at = CHAPTER.find("## 23.13").unwrap();
-    let section = &CHAPTER[at..CHAPTER[at..].find("## 23.14").map_or(CHAPTER.len(), |e| at + e)];
+    let section = &CHAPTER[at..CHAPTER[at..]
+        .find("## 23.14")
+        .map_or(CHAPTER.len(), |e| at + e)];
     assert!(
         section.contains("**Miss counts too small to resolve 5%.**"),
         "chapter 23.13 does not derive the rule"
     );
-    for needle in ["below 20", "100 / p", "estimated cycles", "every leg", "40136795440"] {
+    for needle in [
+        "below 20",
+        "100 / p",
+        "estimated cycles",
+        "every leg",
+        "40136795440",
+    ] {
         assert!(section.contains(needle), "23.13 lacks {needle:?}");
     }
     let header = include_str!("../src/callgrind.rs");
     for needle in ["⌈100 / p⌉", "20 for the gate's 5%", "35 · RAM hits", "#212"] {
-        assert!(header.contains(needle), "the gate's header lacks {needle:?}");
+        assert!(
+            header.contains(needle),
+            "the gate's header lacks {needle:?}"
+        );
     }
     assert!(GATE.contains("a count below 20"));
 }

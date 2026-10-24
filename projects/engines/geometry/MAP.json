@@ -166,12 +166,12 @@
       "layer": "Development",
       "modules": [
         {
-          "cost": "reading the files, then O(n log n) for n benchmarks.",
+          "cost": "reading and parsing the files, then O(n log n) for n benchmarks.",
           "does": null,
           "family": [],
           "file": "projects/engines/geometry/crates/geom-bench/src/bin/geom-bench-counts.rs",
           "guarantees": [
-            "the exit status is the check's verdict, and every check is exact for any count and any whole-number percentage the arguments can hold (`geom_bench::counts`); a missing, unreadable or malformed file, or an argument that is not a whole number, exits with 2, never with a pass."
+            "the exit status is the check's verdict, and every check is exact for any count and any whole-number percentage the arguments can hold (`geom_bench::counts`, `geom_bench::callgrind`); a missing, unreadable or malformed file, a benchmark without exactly one summary, or an argument that is not a whole number, exits with 2, never with a pass."
           ],
           "job": "`geom-bench-counts`: the checks the gates run on count files, from the command line. The checks themselves are in `geom_bench::counts`.",
           "method": {
@@ -225,6 +225,42 @@
           ],
           "spdx": null,
           "target": "bin"
+        },
+        {
+          "cost": "reading and parsing every summary, linear in their size; then O(n log n) for n benchmarks, which are kept in an ordered map.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/callgrind.rs",
+          "guarantees": [
+            "**Exact, for every count.** Every limit is tested in integers ([`Change::rose_over`]): 100 · head > (100 + p) · base, and a count resolves p% exactly when it is at least ⌈100 / p⌉. Percentages are computed, as floating point, for display only.",
+            "**Every benchmark judged, or no verdict.** Every benchmark the run lists has exactly one summary, every summary is a benchmark the run lists and of the schema version the gate's Gungraun writes, and every summary carries a whole count for each of the eight judged measures, from the pull request and, for a benchmark the merge base has, from the merge base; anything else is an error, never a pass.",
+            "**Deterministic reports.** Benchmarks are judged and reported in name order, and measures in the order of [`JUDGED`], the same on every run and every platform.",
+            "**Totality.** No input makes [`parse_summary`], [`judge`] or [`read_summaries`] panic."
+          ],
+          "job": "The instruction-and-cache gate's verdict, read from Gungraun's machine-readable summaries: instructions and estimated cycles are gated at the gate's percentage on every benchmark, and each L1 and last-level miss count is gated at that percentage only where its merge-base count can resolve it; a smaller miss count is listed and judged through estimated cycles.",
+          "method": {
+            "links": [
+              "https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/crates/gungraun-runner/src/runner/args.rs#L1325-L1358",
+              "https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/crates/gungraun-runner/src/summary/model.rs#L29",
+              "https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/crates/gungraun-runner/src/runner/callgrind/mod.rs#L110-L126",
+              "https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md"
+            ],
+            "text": "the summary files Gungraun writes with `--save-summary`, one per benchmark in its output folder (<https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/crates/gungraun-runner/src/runner/args.rs#L1325-L1358>), read through Gungraun's own typed summary model (`gungraun_runner::summary::model`, schema version 7, <https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/crates/gungraun-runner/src/summary/model.rs#L29>; the `summary` feature of the `gungraun-runner` crate at exactly the version the gate runs) and `serde_json`; estimated cycles as Gungraun computes them (<https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/crates/gungraun-runner/src/runner/callgrind/mod.rs#L110-L126>); the percentage limit of Gungraun's soft limits (<https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md>), applied exactly; the resolution floor is ours, derived above, because no source sets a floor for a percentage limit on small counts."
+          },
+          "path": "geom_bench::callgrind",
+          "provenance": [
+            {
+              "licence": "Apache-2.0 OR MIT",
+              "link": "https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md",
+              "method_note": null,
+              "name": "Gungraun",
+              "pinned": true,
+              "purpose": "for its summary files, its default output layout and its estimated-cycles formula. No code copied; its summary model is used as a dependency.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
         },
         {
           "cost": "linear in the bytes encoded, from one byte (a sign) to a few hundred (three planes) per value, each fed to SHA-256 once; nothing is allocated.",
@@ -4862,6 +4898,7 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-bench/src/bin/geom-bench-counts.rs",
+        "projects/engines/geometry/crates/geom-bench/src/callgrind.rs",
         "projects/engines/geometry/crates/geom-bench/src/counts.rs",
         "projects/engines/geometry/crates/geom-bench/src/lib.rs"
       ]

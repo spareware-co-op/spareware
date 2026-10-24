@@ -32,10 +32,14 @@
 //!   the order of [`JUDGED`], the same on every run and every platform.
 //! - **Totality.** No input makes [`parse_summary`], [`judge`] or [`read_summaries`] panic.
 //!
-//! Method: the summary files Gungraun writes with `--save-summary`, read through Gungraun's own
-//! typed summary model (`gungraun_runner::summary::model`, schema version 7, the `summary` feature
-//! of the `gungraun-runner` crate at exactly the version the gate runs) and `serde_json`; the
-//! percentage limit of Gungraun's soft limits
+//! Method: the summary files Gungraun writes with `--save-summary`, one per benchmark in its output
+//! folder (<https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/crates/gungraun-runner/src/runner/args.rs#L1325-L1358>),
+//! read through Gungraun's own typed summary model (`gungraun_runner::summary::model`, schema
+//! version 7, <https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/crates/gungraun-runner/src/summary/model.rs#L29>;
+//! the `summary` feature of the `gungraun-runner` crate at exactly the version the gate runs) and
+//! `serde_json`; estimated cycles as Gungraun computes them
+//! (<https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/crates/gungraun-runner/src/runner/callgrind/mod.rs#L110-L126>);
+//! the percentage limit of Gungraun's soft limits
 //! (<https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md>),
 //! applied exactly; the resolution floor is ours, derived above, because no source sets a floor
 //! for a percentage limit on small counts.
@@ -169,9 +173,15 @@ pub fn parse_summary(text: &str) -> Result<Summary, String> {
         ));
     }
     let name = parts.join("/");
-    let mut runs = summary.profiles.0.iter().filter(|p| p.tool == Tool::Callgrind);
+    let mut runs = summary
+        .profiles
+        .0
+        .iter()
+        .filter(|p| p.tool == Tool::Callgrind);
     let (Some(run), None) = (runs.next(), runs.next()) else {
-        return Err(format!("{name}: not exactly one Callgrind run in its summary"));
+        return Err(format!(
+            "{name}: not exactly one Callgrind run in its summary"
+        ));
     };
     let ToolMetricResults::Callgrind(results) = &run.data.total.metrics else {
         return Err(format!("{name}: its Callgrind run has no Callgrind counts"));
