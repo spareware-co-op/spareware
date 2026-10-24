@@ -245,12 +245,13 @@ fn foreign_item_attrs(item: &syn::ForeignItem) -> &[syn::Attribute] {
 /// Whether a token stream defines a function: `fn` followed by a name, at any depth.
 fn defines_fn(tokens: &TokenStream) -> bool {
     let trees: Vec<TokenTree> = tokens.clone().into_iter().collect();
-    trees.windows(2).any(|w| {
-        matches!(w, [TokenTree::Ident(f), TokenTree::Ident(_)] if f == "fn")
-    }) || trees.iter().any(|t| match t {
-        TokenTree::Group(g) => defines_fn(&g.stream()),
-        _ => false,
-    })
+    trees
+        .windows(2)
+        .any(|w| matches!(w, [TokenTree::Ident(f), TokenTree::Ident(_)] if f == "fn"))
+        || trees.iter().any(|t| match t {
+            TokenTree::Group(g) => defines_fn(&g.stream()),
+            _ => false,
+        })
 }
 
 /// The walk over the syntax tree: test code, out-of-line test modules and functions.
@@ -441,8 +442,10 @@ impl Tokens {
                     } else if word == "while" {
                         self.branch_sites.push((word.span().start().line, "while"));
                     } else if word == "proof"
-                        && let (Some(TokenTree::Ident(f)), Some(TokenTree::Ident(name))) =
-                            (trees.get(i.saturating_add(1)), trees.get(i.saturating_add(2)))
+                        && let (Some(TokenTree::Ident(f)), Some(TokenTree::Ident(name))) = (
+                            trees.get(i.saturating_add(1)),
+                            trees.get(i.saturating_add(2)),
+                        )
                         && f == "fn"
                     {
                         self.proof_fns.push(name.to_string());
@@ -451,7 +454,8 @@ impl Tokens {
                 TokenTree::Literal(l) => {
                     let (first, last) = lines(l.span());
                     if last > first {
-                        self.literal_inner_lines.push((first.saturating_add(1), last));
+                        self.literal_inner_lines
+                            .push((first.saturating_add(1), last));
                     }
                 }
                 TokenTree::Punct(_) => {}
@@ -614,7 +618,7 @@ mod tests {
         let s = scan(src).unwrap();
         assert!(s.has_functions);
         assert_eq!(s.branch_sites, Vec::<usize>::new());
-        assert!(s.test_lines.is_empty());
+        assert_eq!(s.test_lines, Vec::<(usize, usize)>::new());
     }
 
     #[test]
@@ -644,12 +648,13 @@ mod tests {
         let s = scan(src).unwrap();
         assert_eq!(s.test_lines, vec![(2, 6), (7, 8)]);
         assert_eq!(s.test_modules, vec!["more".to_owned()]);
-        assert!(s.branch_sites.is_empty());
+        assert_eq!(s.branch_sites, Vec::<usize>::new());
     }
 
     #[test]
     fn only_the_exact_attribute_is_test_code() {
-        let src = "#[cfg(all(test, unix))]\nmod t {\n    fn f() {}\n}\n#[cfg(not(test))]\nfn g() {}\n";
+        let src =
+            "#[cfg(all(test, unix))]\nmod t {\n    fn f() {}\n}\n#[cfg(not(test))]\nfn g() {}\n";
         let s = scan(src).unwrap();
         assert_eq!(s.test_lines, Vec::<(usize, usize)>::new());
         assert!(s.has_functions);
@@ -665,7 +670,7 @@ mod tests {
         let whole = scan("#![cfg(test)]\nfn f() { if true {} }\n").unwrap();
         assert_eq!(whole.test_lines, vec![(1, 2)]);
         assert!(!whole.has_functions);
-        assert!(whole.branch_sites.is_empty());
+        assert_eq!(whole.branch_sites, Vec::<usize>::new());
     }
 
     #[test]

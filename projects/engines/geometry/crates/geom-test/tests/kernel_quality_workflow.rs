@@ -308,7 +308,10 @@ fn toolchains_and_tools_are_pinned() {
             assert_eq!(t, "${{ env.RUST_NIGHTLY }}", "{job}");
         }
         for env in keys_or_empty(&w["jobs"][job.as_str()]["env"]) {
-            assert_ne!(env, "RUSTUP_TOOLCHAIN", "{job} sets the toolchain for every step");
+            assert_ne!(
+                env, "RUSTUP_TOOLCHAIN",
+                "{job} sets the toolchain for every step"
+            );
         }
     }
     // The nightly, by date, at least two weeks before the day it was pinned (2026-10-22).
@@ -390,7 +393,10 @@ fn every_shard_and_partition_runs_once() {
     );
     assert_eq!(shards["strategy"]["fail-fast"].as_bool(), Some(false));
     let run = runs(&w, "mutants");
-    assert!(run.contains("--shard \"${{ matrix.shard }}/$SHARDS\""), "{run}");
+    assert!(
+        run.contains("--shard \"${{ matrix.shard }}/$SHARDS\""),
+        "{run}"
+    );
     assert!(run.contains("--no-shuffle"), "{run}");
     let plan = &w["jobs"]["mutants-plan"]["outputs"];
     assert_eq!(text(&plan["count"]), "${{ steps.plan.outputs.count }}");
@@ -406,7 +412,10 @@ fn every_shard_and_partition_runs_once() {
         .unwrap();
     let listed: Vec<i64> = serde_json::from_str(weekly).unwrap();
     assert_eq!(listed, (1..=n).collect::<Vec<_>>());
-    assert!(matrix.contains("github.event_name == 'pull_request' && '[1]'"), "{matrix}");
+    assert!(
+        matrix.contains("github.event_name == 'pull_request' && '[1]'"),
+        "{matrix}"
+    );
     assert_eq!(miri["strategy"]["fail-fast"].as_bool(), Some(false));
     let run = runs(&w, "miri");
     assert!(
@@ -454,7 +463,10 @@ fn every_gate_is_judged_and_tool_failures_are_not_swallowed() {
         "--branch",
         "| tee \"$RUNNER_TEMP/cov/$crate.log\"",
     ] {
-        assert!(coverage.contains(needle), "coverage does not run {needle:?}");
+        assert!(
+            coverage.contains(needle),
+            "coverage does not run {needle:?}"
+        );
     }
     let measure = w["jobs"]["coverage"]["steps"]
         .as_vec()
@@ -468,7 +480,10 @@ fn every_gate_is_judged_and_tool_failures_are_not_swallowed() {
     );
     // The seeded gates run with --ignored, on the coverage nightly.
     let seeded = runs(&w, "gates-seeded");
-    assert!(seeded.contains("--test seeded_gates -- --ignored"), "{seeded}");
+    assert!(
+        seeded.contains("--test seeded_gates -- --ignored"),
+        "{seeded}"
+    );
     // Miri: every kernel crate's tests under nextest, and its doctests.
     let miri = runs(&w, "miri");
     for needle in [
@@ -520,7 +535,10 @@ fn the_tools_are_configured_as_the_gates_need() {
         let p = &n["profile"][profile];
         let slow = &p["slow-timeout"];
         assert_eq!(slow["on-timeout"].as_str(), Some("pass"), "{profile}");
-        assert!(slow["terminate-after"].as_integer().unwrap() >= 1, "{profile}");
+        assert!(
+            slow["terminate-after"].as_integer().unwrap() >= 1,
+            "{profile}"
+        );
         assert!(slow["period"].as_str().unwrap().ends_with('s'), "{profile}");
         assert_eq!(p["fail-fast"].as_bool(), Some(false), "{profile}");
         assert_eq!(p["junit"]["path"].as_str(), Some("junit.xml"), "{profile}");

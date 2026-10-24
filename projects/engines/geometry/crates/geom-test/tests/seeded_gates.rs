@@ -33,6 +33,12 @@
     clippy::panic,
     clippy::indexing_slicing
 )]
+// The process id names each fixture's temporary folder, so two test runs at once never share
+// one; it decides no result.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "the process id only names a temporary folder"
+)]
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -116,10 +122,8 @@ struct Fixture {
 
 impl Fixture {
     fn new(label: &str) -> Fixture {
-        let dir = std::env::temp_dir().join(format!(
-            "geom-test-seeded-{label}-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("geom-test-seeded-{label}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let f = Fixture {
@@ -237,7 +241,14 @@ impl Fixture {
             cargo()
                 .env("RUSTUP_TOOLCHAIN", &toolchain)
                 .env("RUSTFLAGS", "-Z cross-crate-inline-threshold=never")
-                .args(["llvm-cov", "--locked", "-p", "geom-num", "--release", "--branch"])
+                .args([
+                    "llvm-cov",
+                    "--locked",
+                    "-p",
+                    "geom-num",
+                    "--release",
+                    "--branch",
+                ])
                 .args(["--lcov", "--output-path"])
                 .arg(dir.join("geom-num.lcov")),
             "cargo llvm-cov",

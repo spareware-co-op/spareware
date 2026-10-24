@@ -586,11 +586,31 @@ fn known_entries_must_come_from_the_base_branch() {
         fails_with(&v, "the base branch's ledger does not");
     }
     // The base holds the same mutant under another kind: still not an old known survivor.
-    let harmless = ledger(vec![entry(BOOL, 3, "replace < with <= in f", 1, "harmless")]);
-    let v = verdict_with_base(&repo, &[dir.clone()], &known, Mode::Diff, None, Some(&harmless));
+    let harmless = ledger(vec![entry(
+        BOOL,
+        3,
+        "replace < with <= in f",
+        1,
+        "harmless",
+    )]);
+    let v = verdict_with_base(
+        &repo,
+        &[dir.clone()],
+        &known,
+        Mode::Diff,
+        None,
+        Some(&harmless),
+    );
     fails_with(&v, "the base branch's ledger does not");
     // An old known survivor passes; so does one the pull request explains as harmless.
-    let v = verdict_with_base(&repo, &[dir.clone()], &known, Mode::Diff, None, Some(&known));
+    let v = verdict_with_base(
+        &repo,
+        &[dir.clone()],
+        &known,
+        Mode::Diff,
+        None,
+        Some(&known),
+    );
     assert!(v.passes(), "{}", mutants::report(&v));
     let v = verdict_with_base(&repo, &[dir.clone()], &harmless, Mode::Diff, None, None);
     assert!(v.passes(), "{}", mutants::report(&v));
@@ -610,7 +630,9 @@ fn known_entries_must_come_from_the_base_branch() {
 )]
 #[test]
 fn shard_plans_fit_the_budget_and_a_matrix() {
-    use geom_test::mutants::{MAX_SHARDS, MINUTES_PER_MUTANT, SHARD_MINUTES, shard_count, shard_matrix};
+    use geom_test::mutants::{
+        MAX_SHARDS, MINUTES_PER_MUTANT, SHARD_MINUTES, shard_count, shard_matrix,
+    };
     assert_eq!(shard_count(0), Ok(0));
     assert_eq!(shard_count(1), Ok(1));
     let per_shard = usize::try_from(SHARD_MINUTES / MINUTES_PER_MUTANT).unwrap();
@@ -619,8 +641,14 @@ fn shard_plans_fit_the_budget_and_a_matrix() {
     for n in [1, 7, 60, 61, 6190, 15_000] {
         let shards = shard_count(n).unwrap();
         // Every shard plans for at most SHARD_MINUTES, and one fewer shard would not do.
-        assert!(n as u64 * MINUTES_PER_MUTANT <= shards * SHARD_MINUTES, "{n}");
-        assert!(n as u64 * MINUTES_PER_MUTANT > (shards - 1) * SHARD_MINUTES, "{n}");
+        assert!(
+            n as u64 * MINUTES_PER_MUTANT <= shards * SHARD_MINUTES,
+            "{n}"
+        );
+        assert!(
+            n as u64 * MINUTES_PER_MUTANT > (shards - 1) * SHARD_MINUTES,
+            "{n}"
+        );
     }
     let too_many = usize::try_from(MAX_SHARDS * SHARD_MINUTES / MINUTES_PER_MUTANT).unwrap() + 1;
     assert!(shard_count(too_many).is_err());
@@ -1435,12 +1463,30 @@ fn the_binary_exits_0_to_pass_1_to_fail_and_2_for_bad_input() {
     let list = |dir: &Path| dir.join("mutants.json").to_str().unwrap().to_owned();
     let (code, text) = kernel_quality(
         &repo,
-        &["mutants", "--mode", "diff", "--expected", &list(&pass), "--ledger", l, &run(&pass)],
+        &[
+            "mutants",
+            "--mode",
+            "diff",
+            "--expected",
+            &list(&pass),
+            "--ledger",
+            l,
+            &run(&pass),
+        ],
     );
     assert_eq!(code, 0, "{text}");
     let (code, text) = kernel_quality(
         &repo,
-        &["mutants", "--mode", "diff", "--expected", &list(&fail), "--ledger", l, &run(&fail)],
+        &[
+            "mutants",
+            "--mode",
+            "diff",
+            "--expected",
+            &list(&fail),
+            "--ledger",
+            l,
+            &run(&fail),
+        ],
     );
     assert_eq!(code, 1, "{text}");
     assert!(text.contains("no ledger entry explains it"), "{text}");
@@ -1448,13 +1494,25 @@ fn the_binary_exits_0_to_pass_1_to_fail_and_2_for_bad_input() {
     let longer = repo.path("longer.json");
     std::fs::write(
         &longer,
-        json!([mutant(NUM, 3, 5, "replace < with <= in f"), mutant(NUM, 7, 5, "replace < with <= in f")])
-            .to_string(),
+        json!([
+            mutant(NUM, 3, 5, "replace < with <= in f"),
+            mutant(NUM, 7, 5, "replace < with <= in f")
+        ])
+        .to_string(),
     )
     .unwrap();
     let (code, text) = kernel_quality(
         &repo,
-        &["mutants", "--mode", "full", "--expected", longer.to_str().unwrap(), "--ledger", l, &run(&pass)],
+        &[
+            "mutants",
+            "--mode",
+            "full",
+            "--expected",
+            longer.to_str().unwrap(),
+            "--ledger",
+            l,
+            &run(&pass),
+        ],
     );
     assert_eq!(code, 1, "{text}");
     assert!(text.contains("listed, but no run tested it"), "{text}");
@@ -1463,7 +1521,15 @@ fn the_binary_exits_0_to_pass_1_to_fail_and_2_for_bad_input() {
     std::fs::write(&empty, "").unwrap();
     let (code, text) = kernel_quality(
         &repo,
-        &["mutants", "--mode", "diff", "--expected", empty.to_str().unwrap(), "--ledger", l],
+        &[
+            "mutants",
+            "--mode",
+            "diff",
+            "--expected",
+            empty.to_str().unwrap(),
+            "--ledger",
+            l,
+        ],
     );
     assert_eq!(code, 0, "{text}");
     assert!(text.contains("(no mutants)"), "{text}");
@@ -1476,15 +1542,36 @@ fn the_binary_exits_0_to_pass_1_to_fail_and_2_for_bad_input() {
     // Bad input: an unknown mode, a missing list, a run that is not whole.
     let (code, _) = kernel_quality(
         &repo,
-        &["mutants", "--mode", "sometimes", "--expected", &list(&pass), "--ledger", l, &run(&pass)],
+        &[
+            "mutants",
+            "--mode",
+            "sometimes",
+            "--expected",
+            &list(&pass),
+            "--ledger",
+            l,
+            &run(&pass),
+        ],
     );
     assert_eq!(code, 2);
-    let (code, _) = kernel_quality(&repo, &["mutants", "--mode", "diff", "--ledger", l, &run(&pass)]);
+    let (code, _) = kernel_quality(
+        &repo,
+        &["mutants", "--mode", "diff", "--ledger", l, &run(&pass)],
+    );
     assert_eq!(code, 2);
     std::fs::remove_file(pass.join("outcomes.json")).unwrap();
     let (code, _) = kernel_quality(
         &repo,
-        &["mutants", "--mode", "diff", "--expected", &list(&pass), "--ledger", l, &run(&pass)],
+        &[
+            "mutants",
+            "--mode",
+            "diff",
+            "--expected",
+            &list(&pass),
+            "--ledger",
+            l,
+            &run(&pass),
+        ],
     );
     assert_eq!(code, 2);
 

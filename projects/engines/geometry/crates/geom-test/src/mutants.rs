@@ -370,7 +370,11 @@ fn check_totals(f: &Path, value: &Value, listed: &Listed) -> Result<(), RunError
         ("timeout", Outcome::Timeout),
         ("unviable", Outcome::Unviable),
     ] {
-        let count = listed.by_name.values().filter(|e| e.outcome == want).count();
+        let count = listed
+            .by_name
+            .values()
+            .filter(|e| e.outcome == want)
+            .count();
         let said = value.get(key).and_then(Value::as_u64);
         if said != u64::try_from(count).ok() {
             return Err(run_err(

@@ -146,7 +146,8 @@ pub fn parse_lcov(text: &str) -> Result<BTreeMap<String, FileData>, CoverageErro
                 }
             }
             lcov::Record::BranchesFound { found } => {
-                if data.found.replace(u64::from(found)).is_some() {
+                let earlier = data.found.replace(u64::from(found));
+                if earlier.is_some() {
                     return Err(cov_err(format!("LCOV: two BRF lines for {file}")));
                 }
             }

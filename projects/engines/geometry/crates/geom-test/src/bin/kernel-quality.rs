@@ -161,8 +161,7 @@ fn affected(scope: &Scope, repo: &Path) -> Result<Vec<String>, String> {
         return Ok(all);
     }
     if let Some(file) = &scope.changed {
-        let text =
-            std::fs::read_to_string(file).map_err(|e| format!("{}: {e}", file.display()))?;
+        let text = std::fs::read_to_string(file).map_err(|e| format!("{}: {e}", file.display()))?;
         let changed: Vec<String> = text.lines().map(str::to_owned).collect();
         return coverage::affected_crates(repo, &changed, &metadata(repo)?)
             .map_err(|e| e.to_string());
