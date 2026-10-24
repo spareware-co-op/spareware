@@ -78,9 +78,10 @@ fn proof_draws(bound: u64) -> impl ValueGenerator<Output = ProofDraw> {
 
 /// The proof's body for one draw: the case it names, checked.
 fn prove(bound: u64, draw: &ProofDraw) -> Result<(), Finding> {
-    let case = proof_case(bound, draw).ok_or_else(|| Finding {
-        law: "every draw of the proof's domain names a grid case".to_owned(),
-        detail: format!("{draw:?}"),
+    let case = proof_case(bound, draw).ok_or_else(|| {
+        Finding::new("every draw of the proof's domain names a grid case", || {
+            format!("{draw:?}")
+        })
     })?;
     orient2d::check(&case)
 }

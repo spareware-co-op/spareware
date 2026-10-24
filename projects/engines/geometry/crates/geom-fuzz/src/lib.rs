@@ -89,11 +89,14 @@
 //! proof of 28.7, on bolero's harness unchanged; the seeded leg 28.2 asks for; the replay of every
 //! stored crash, 28.16; and the short fuzz and fixed seeds of 28.17.
 //!
-//! Method: none; this root defines only the [`Finding`] type, its `Display` and `Error`
-//! implementations and the [`Harness`] alias, whose shape 28.5 gives. Each harness module names
-//! the method it follows.
+//! Method: none; this root defines only the [`Finding`] type, its constructor, its `Display` and
+//! `Error` implementations and the [`Harness`] alias, whose shape 28.5 gives. Each harness module
+//! names the method it follows. Under Kani a finding's detail is never written
+//! ([`Finding::new`]): Kani reports a failed proof with a trace of every value, and formatting
+//! symbolic values would only enlarge the problem it solves.
 //!
-//! Cost: none at run time for the alias; displaying a [`Finding`] writes its two strings.
+//! Cost: none at run time for the alias; [`Finding::new`] runs its detail closure once, except
+//! under Kani; displaying a [`Finding`] writes its two strings.
 //!
 //! Dependencies, every one permissive (29.1):
 //!
@@ -149,9 +152,39 @@ pub struct Finding {
     pub detail: String,
 }
 
+impl Finding {
+    /// A finding that `law` is broken, with the detail `detail` writes: the input and the values
+    /// that broke it.
+    ///
+    /// Under Kani (`cfg(kani)`) the detail is left empty and `detail` is never called. Kani
+    /// reports a failed proof with a trace of every value, so the detail adds nothing there, and
+    /// its formatting, on symbolic values, would only enlarge the problem Kani solves: its digit
+    /// loops would have to be unwound or cut. Everywhere else the detail is written in full.
+    #[must_use]
+    pub fn new(law: &str, detail: impl FnOnce() -> String) -> Self {
+        #[cfg(kani)]
+        let detail = {
+            let _ = detail;
+            String::new()
+        };
+        #[cfg(not(kani))]
+        let detail = detail();
+        Self {
+            law: law.to_owned(),
+            detail,
+        }
+    }
+}
+
 impl fmt::Display for Finding {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "broken law: {}\n{}", self.law, self.detail)
+        // Written piece by piece rather than through `write!`, so that no formatting
+        // specification is interpreted: the cheapest form for Kani, which runs this when a proof
+        // fails (bolero's Kani engine turns the error into a string).
+        f.write_str("broken law: ")?;
+        f.write_str(&self.law)?;
+        f.write_str("\n")?;
+        f.write_str(&self.detail)
     }
 }
 

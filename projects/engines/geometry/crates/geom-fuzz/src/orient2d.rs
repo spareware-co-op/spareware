@@ -137,15 +137,16 @@ pub fn check_with(
     exact_value: impl Fn(P2, P2, P2) -> Option<i128>,
 ) -> Result<(), Finding> {
     let Case { a, b, c } = *case;
-    let finding = |law: &str, detail: String| Finding {
-        law: law.to_owned(),
-        detail: format!("points: {a:?}, {b:?}, {c:?}\n{detail}"),
+    // The detail is written only when a finding is reported, and never under Kani
+    // (`Finding::new`).
+    let finding = |law: &str, detail: &dyn Fn() -> String| {
+        Finding::new(law, || format!("points: {a:?}, {b:?}, {c:?}\n{}", detail()))
     };
     let Some(det) = reference(a, b, c) else {
         return Err(finding(
             "the reference determinant fits i128 for grid points (|det| ≤ 6M² < 2^83), so a \
              failed step is a defect in this harness",
-            String::new(),
+            &String::new,
         ));
     };
     let sign = Sign::of_i128(det);
@@ -153,7 +154,7 @@ pub fn check_with(
     if got != Some(det) {
         return Err(finding(
             "orient2d's exact path returns the determinant of its definition, every bit of it",
-            format!("reference: {det}\nexact path: {got:?}"),
+            &|| format!("reference: {det}\nexact path: {got:?}"),
         ));
     }
     match predicate(a, b, c) {
@@ -163,7 +164,7 @@ pub fn check_with(
                 "orient2d answers every grid input with the sign of the determinant of its \
                  definition (an error is a defect in geom-num, which proves every grid input \
                  answers)",
-                format!("reference: {det} ({sign:?})\norient2d: {other:?}"),
+                &|| format!("reference: {det} ({sign:?})\norient2d: {other:?}"),
             ));
         }
     }
@@ -173,7 +174,7 @@ pub fn check_with(
         Some(s) => Err(finding(
             "orient2d's f64 filter declines or gives the sign of the exact determinant: its \
              error bound is never exceeded",
-            format!("reference: {det} ({sign:?})\nfilter: {s:?}"),
+            &|| format!("reference: {det} ({sign:?})\nfilter: {s:?}"),
         )),
     }
 }
