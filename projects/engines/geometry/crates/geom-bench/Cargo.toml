@@ -38,6 +38,12 @@ hex = "=0.4.3"
 [dev-dependencies]
 # Wall-clock timings for people, on every platform. MIT OR Apache-2.0.
 divan = "0.1.21"
+# The coverage test's readers, in place of a line scanner and text searches (piece G12a; chapter
+# 29.1), the versions engine-geometry's scaffold check pins. syn 3.0.9 (MIT OR Apache-2.0) parses
+# geom-num's source, without its default features: it needs no compiler proc_macro and prints
+# nothing. toml 0.9.6 (MIT OR Apache-2.0) reads the manifests and Cargo.lock.
+syn = { version = "=3.0.9", default-features = false, features = ["full", "parsing"] }
+toml = "=0.9.6"
 
 # The merge gate: instruction counts, cache misses and heap use under Valgrind, through Gungraun.
 # Valgrind runs on Linux here, so the gate is Linux only and other platforms never build it.
