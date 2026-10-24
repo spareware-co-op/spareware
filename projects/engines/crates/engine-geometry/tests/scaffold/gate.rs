@@ -22,7 +22,9 @@
 //!   library it built of the crates asked for: every file rustc read to compile that library, a
 //!   module taken from another folder by `#[path]`, a file pasted in by `include!` and code a build
 //!   script wrote included. The gate holds all of them to the source rules (`globals`,
-//!   `overrides`), so code the folder scan does not see is still read.
+//!   `overrides`), so code the folder scan does not see is still read; all but the configuration
+//!   clippy lists there for itself (`clippy.toml` and `Cargo.toml`, `rust_inputs`), which is TOML
+//!   and which the lint posture check reads.
 //! - Seeded probes show each fails when what it checks is wrong: a crate that links `std`, one that
 //!   assumes a 64-bit `usize` (plainly, and behind a feature), and one with a warning, for the
 //!   builds; and for clippy, a crate built with `geom-num`'s own lint settings (`Cargo.toml` and
@@ -448,7 +450,7 @@ pub fn compiled_sources(
                     found
                         .entry(package.clone())
                         .or_default()
-                        .extend(dep_info_files(&text, root));
+                        .extend(rust_inputs(dep_info_files(&text, root)));
                 }
                 Err(e) => problems.push(format!(
                     "{package}: cannot read the compiler's dep-info {}: {e}",
@@ -470,6 +472,28 @@ pub fn compiled_sources(
         }
     }
     (found, problems)
+}
+
+/// The files clippy-driver adds to a library's dep-info for its own configuration, so that cargo
+/// reruns clippy when one changes: the `clippy.toml` (or `.clippy.toml`) it loads, and the
+/// `Cargo.toml` in the folder it runs in, which it reads for the `clippy::cargo` lints and the MSRV
+/// (seen in the dep-info clippy 1.99.0 writes: `clippy.toml` by its full path, `Cargo.toml` bare).
+/// They are TOML, not Rust, and the lint posture check reads them as TOML (`posture`, `lints`).
+pub const CLIPPY_CONFIGURATION: [&str; 3] = ["clippy.toml", ".clippy.toml", "Cargo.toml"];
+
+/// The files of a dep-info list the source rules read: every one but clippy's configuration
+/// (`CLIPPY_CONFIGURATION`). A file pasted in by `include!`, whatever its name, stays, and so does
+/// any other file the compiler read, so one that is not Rust shows as a file that does not lex.
+pub fn rust_inputs(files: BTreeSet<PathBuf>) -> BTreeSet<PathBuf> {
+    files
+        .into_iter()
+        .filter(|file| {
+            !file
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| CLIPPY_CONFIGURATION.contains(&name))
+        })
+        .collect()
 }
 
 /// A crate's name from cargo's package id (`path+file:///.../geom-num#0.0.0`, or
@@ -1508,6 +1532,21 @@ mod tests {
                 PathBuf::from("/w/src/lib.rs"),
                 PathBuf::from("/w/src/my file.in"),
                 PathBuf::from("/w/tests/state.rs"),
+            ]
+        );
+        // A clippy run's dep-info also lists clippy's configuration, which is TOML: the source
+        // rules read every file but those.
+        let clippy = "/w/target/deps/x-1.d: /w/c/clippy.toml src/lib.rs Cargo.toml\n\n\
+                      /w/c/clippy.toml:\nsrc/lib.rs:\nCargo.toml:\nsrc/.clippy.toml:\n\
+                      src/clippy.toml.in:\n";
+        let read: Vec<PathBuf> = rust_inputs(dep_info_files(clippy, root))
+            .into_iter()
+            .collect();
+        assert_eq!(
+            read,
+            [
+                PathBuf::from("/w/src/clippy.toml.in"),
+                PathBuf::from("/w/src/lib.rs")
             ]
         );
         assert_eq!(package_name("path+file:///c/p/geom-num#0.0.0"), "geom-num");
