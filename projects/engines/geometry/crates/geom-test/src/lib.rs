@@ -71,8 +71,9 @@
 //! - `proptest` 1.12, without its default `fork` and `timeout` features, as in `geom-num`. [`prop`]
 //!   always runs it from a fixed seed, so its operating-system random path is never taken.
 //! - `serde_json` 1.0, to read `cargo metadata`.
-//! - `toml` 0.9.6, so the map reads each crate's `Cargo.toml` as cargo does (piece G12a put it in
-//!   place of a line reader; 29.1).
+//! - `toml` 0.9.6, so the map reads each crate's `Cargo.toml` as cargo does, and `proc-macro2`
+//!   1.0.107, Rust's lexer, so it reads source as rustc does (piece G12a put both in place of
+//!   readers written here; 29.1).
 //!
 //! Licences of every outside package this crate brings into a build, its own and its dependencies'
 //! on every target (`cargo tree --target all`), each record checked by `tests/licences.rs`. Where a

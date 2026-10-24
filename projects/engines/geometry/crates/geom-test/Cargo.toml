@@ -15,6 +15,11 @@ serde_json = "1.0.149"
 # in place of a line reader; chapter 29.1). toml 0.9.6: MIT OR Apache-2.0, the version
 # engine-geometry's scaffold check pins.
 toml = "=0.9.6"
+# Rust's lexer, the one syn parses with, so the map reads source as rustc does (src/map/rust.rs;
+# piece G12a put it in place of a lexer written there; chapter 29.1). proc-macro2 1.0.107: MIT OR
+# Apache-2.0, without its default proc-macro feature (the map runs outside a macro) and with
+# span-locations for byte offsets; the version engine-geometry's scaffold check pins.
+proc-macro2 = { version = "=1.0.107", default-features = false, features = ["span-locations"] }
 
 [lints.rust]
 unsafe_code = "forbid"

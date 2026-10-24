@@ -4461,35 +4461,26 @@
           "target": "lib"
         },
         {
-          "cost": "linear in the length of the source, plus one `char` and its offset held per character.",
-          "does": "[`tokens`] splits a source file into [`Token`]s: identifiers, punctuation, literals, lifetimes and outer doc comments (`///` and `/** */`), each with its text and byte offset. Plain comments, inner doc comments (`//!`, `/*! */`) and whitespace are dropped. The item scanner in [`crate::map::errors`] reads the tokens.",
+          "cost": "linear in the length of the source, for the lexer and for the walk over its tokens.",
+          "does": "[`tokens`] splits a source file into [`Token`]s: identifiers, punctuation (each delimiter included), literals, lifetimes and outer doc comments (`///` and `/** */`), each with its text and byte offset. Plain comments, inner doc comments (`//!`, `/*! */`) and whitespace are dropped. The item scanner in [`crate::map::errors`] reads the tokens.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/map/rust.rs",
           "guarantees": [
-            "**Comments and literals never look like code.** Text inside a comment, a string, a raw string (any number of `#`), a byte or C string or a character literal is never an identifier or punctuation token, and block comments nest as Rust nests them.",
-            "**An error, never a guess.** A block comment, string, raw string or character literal that does not end is a [`LexError`] naming its byte offset, so a file the lexer cannot read is reported, not mapped from a wrong reading.",
-            "**No recursion and no panics.** One pass over the characters, with an explicit counter for nested block comments; every position step is a checked or saturating method."
+            "**Comments and literals never look like code.** Text inside a comment, a string, a raw string (any number of `#`), a byte or C string or a character literal is never an identifier or punctuation token, and block comments nest as Rust nests them: the lexer is the one `syn` parses with, which follows rustc's.",
+            "**An error, never a guess.** A comment or literal that does not end, and a delimiter that does not close, is a [`LexError`] naming the byte offset where the lexer stopped, so a file the lexer cannot read is reported, not mapped from a wrong reading.",
+            "**No recursion and no panics** here: groups are opened with an explicit stack, and every offset is the lexer's own."
           ],
-          "job": "Rust source as tokens, for the map: enough of the language's lexical grammar to find items without being misled by comments, strings or character literals.",
+          "job": "Rust source as tokens, for the map: the language's lexical grammar, from the standard lexer, so that items are found without being misled by comments, strings or character literals.",
           "method": {
             "links": [
-              "https://doc.rust-lang.org/reference/comments.html",
-              "https://doc.rust-lang.org/reference/tokens.html"
+              "https://docs.rs/proc-macro2/1.0.107/proc_macro2/",
+              "https://doc.rust-lang.org/reference/tokens.html",
+              "https://doc.rust-lang.org/reference/comments.html"
             ],
-            "text": "the lexical grammar of The Rust Reference: comments, nested block comments and which comments are doc comments (<https://doc.rust-lang.org/reference/comments.html>); string, raw string, byte, C string and character literals, raw identifiers and lifetimes (<https://doc.rust-lang.org/reference/tokens.html>). A `'` opens a character literal when the character after the next one is a `'`, or when the next one cannot start an identifier, and a lifetime otherwise, which is the rule of `rustc_lexer`'s `lifetime_or_char`. Numbers are read loosely (digits, letters, `_`, and a `.` or exponent sign inside a decimal literal): the map needs only to step over them."
+            "text": "the `proc-macro2` crate's lexer (MIT OR Apache-2.0, <https://docs.rs/proc-macro2/1.0.107/proc_macro2/>), with its `span-locations` feature for byte offsets: the lexical grammar of The Rust Reference (<https://doc.rust-lang.org/reference/tokens.html>, <https://doc.rust-lang.org/reference/comments.html>) as `syn` reads it. It gives a doc comment as the attribute it means, `#[doc = \"...\"]`, with the comment's span on every token, so a `#` whose span covers a comment in the source is that comment, read from the source text with its markers dropped. Piece G12a put the crate in place of a lexer written here (chapter 29.1, the owner's direction of 2026-10-22: use well-known permissive crates rather than hand-rolling)."
           },
           "path": "geom_test::map::rust",
-          "provenance": [
-            {
-              "licence": "MIT OR Apache-2.0",
-              "link": "https://github.com/rust-lang/rust/blob/1731faea0da5b4ebf881d8e53f98066c17a74711/compiler/rustc_lexer/src/lib.rs",
-              "method_note": null,
-              "name": "`rustc_lexer`",
-              "pinned": true,
-              "purpose": "for its rule telling a character literal from a lifetime and for which block comments are doc comments. No code copied.",
-              "take": "port-method"
-            }
-          ],
+          "provenance": [],
           "spdx": null,
           "target": "lib"
         },
@@ -4917,17 +4908,6 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-test/src/map/errors.rs"
-      ]
-    },
-    {
-      "licence": "MIT OR Apache-2.0",
-      "link": "https://github.com/rust-lang/rust/blob/1731faea0da5b4ebf881d8e53f98066c17a74711/compiler/rustc_lexer/src/lib.rs",
-      "method_note": null,
-      "name": "`rustc_lexer`",
-      "pinned": true,
-      "take": "port-method",
-      "used_by": [
-        "projects/engines/geometry/crates/geom-test/src/map/rust.rs"
       ]
     },
     {
