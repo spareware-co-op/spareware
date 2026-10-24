@@ -165,7 +165,9 @@ impl<'p> Index<'p> {
                 .and_then(|p| resolver.trait_ref(&imp.scope, p));
             by_key.entry(key(&self_ty)).or_default().push(id);
             match &tr {
-                Some(TraitRef::Ext(name, _)) => by_ext_trait.entry(name.clone()).or_default().push(id),
+                Some(TraitRef::Ext(name, _) | TraitRef::Fn(name, ..)) => {
+                    by_ext_trait.entry(name.clone()).or_default().push(id);
+                }
                 Some(TraitRef::Kernel(t, _)) => by_kernel_trait.entry(*t).or_default().push(id),
                 None => {}
             }
@@ -228,7 +230,7 @@ impl<'p> Index<'p> {
     pub fn trait_name(&self, tr: &TraitRef) -> String {
         match tr {
             TraitRef::Kernel(id, _) => self.program.item(*id).name.clone(),
-            TraitRef::Ext(name, _) => name.clone(),
+            TraitRef::Ext(name, _) | TraitRef::Fn(name, ..) => name.clone(),
         }
     }
 
@@ -312,7 +314,7 @@ impl<'p> Index<'p> {
                 ItemKind::Trait { defaults, .. } => defaults.get(name).copied(),
                 _ => None,
             },
-            TraitRef::Ext(..) => None,
+            TraitRef::Ext(..) | TraitRef::Fn(..) => None,
         })
     }
 
@@ -420,7 +422,7 @@ impl<'p> Index<'p> {
         for tr in &bounds {
             out.extend(self.trait_methods(tr, name, None));
         }
-        if out.is_empty() && bounds.iter().all(|t| matches!(t, TraitRef::Ext(..))) {
+        if out.is_empty() && bounds.iter().all(|t| matches!(t, TraitRef::Ext(..) | TraitRef::Fn(..))) {
             // A method the bounds do not show (a supertrait the resolver cannot see): every
             // method of that name.
             out.extend(self.by_name_on(&Carries::top(), name));
@@ -441,7 +443,7 @@ impl<'p> Index<'p> {
                 }
                 self.by_kernel_trait.get(t).cloned().unwrap_or_default()
             }
-            TraitRef::Ext(n, _) => {
+            TraitRef::Ext(n, _) | TraitRef::Fn(n, ..) => {
                 for (item, list) in &self.derived {
                     if only.is_some_and(|k| *k != Key::Adt(*item) && *k != Key::Blanket) {
                         continue;
@@ -719,7 +721,7 @@ impl<'p> Index<'p> {
                     out.extend(self.program.imp(*imp).methods.values().flatten().copied());
                 }
             }
-            TraitRef::Ext(n, _) => {
+            TraitRef::Ext(n, _) | TraitRef::Fn(n, ..) => {
                 for imp in self.by_ext_trait.get(n).into_iter().flatten() {
                     out.extend(self.program.imp(*imp).methods.values().flatten().copied());
                 }

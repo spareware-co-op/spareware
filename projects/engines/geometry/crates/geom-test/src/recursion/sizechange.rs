@@ -50,7 +50,7 @@
 
 use std::collections::BTreeSet;
 
-use crate::recursion::ty::{GenId, TraitRef, Ty};
+use crate::recursion::ty::{GenId, Ty};
 
 /// How a callee's type parameter relates to a caller's.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -270,9 +270,7 @@ fn params_in(ty: &Ty, out: &mut BTreeSet<GenId>) {
             Ty::Ref(inner) | Ty::Slice(inner) | Ty::Array(inner) => work.push(inner),
             Ty::Dyn(traits) => {
                 for tr in traits {
-                    match tr {
-                        TraitRef::Kernel(_, args) | TraitRef::Ext(_, args) => work.extend(args.iter()),
-                    }
+                    work.extend(tr.types());
                 }
             }
             Ty::Assoc(..)

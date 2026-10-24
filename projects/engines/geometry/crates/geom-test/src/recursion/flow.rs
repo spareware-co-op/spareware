@@ -104,19 +104,41 @@ const IMPLICIT: &str = "an implicit trait call (operator, formatting, derive)";
 /// states it.
 type Target = (NodeId, Option<Ty>);
 
+/// A body the analysis reads: a program node, or a constant's initialiser (its item and node).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum Body {
+    /// A function, method, trait default body or derived implementation.
+    Node(NodeId),
+    /// A constant's initialiser.
+    Const(ItemId, NodeId),
+}
+
 /// What the analysis of every body shares: each closure's parameters and result, and what each
-/// carrier may hold, all growing from empty.
+/// carrier may hold, all growing from empty; and which bodies read each, so a body is read again
+/// only when something it read grew.
 #[derive(Default)]
 struct Shared {
     /// Each closure parameter's value, joined from every call that may reach the closure.
     closure_params: BTreeMap<(NodeId, usize), Val>,
+    /// Each closure parameter's value as its context fixes it, where a kernel callee's closure
+    /// bound does: its type there, with the callee's type parameters learned from the other
+    /// arguments, and what those parameters' instantiations may hold. Rust gives the closure that
+    /// type at the call that makes it, so values that reach it from elsewhere (the callee's own
+    /// calls of it, in the callee's types) add only the callables they hold.
+    typed: BTreeMap<(NodeId, usize), Val>,
     /// Each closure's result.
     closure_rets: BTreeMap<NodeId, Val>,
     /// The closures, functions and the unknown-call node each carrier may lead to, through
     /// carriers only, as of the last program round.
     reach: BTreeMap<NodeId, BTreeSet<NodeId>>,
-    /// Whether anything shared grew in this program round.
-    changed: bool,
+    /// The body each closure is written in.
+    made_in: BTreeMap<NodeId, Body>,
+    /// The bodies that read each closure's result.
+    ret_readers: BTreeMap<NodeId, BTreeSet<Body>>,
+    /// The bodies that read each carrier's contents.
+    reach_readers: BTreeMap<NodeId, BTreeSet<Body>>,
+    /// The bodies to read again in the next program round.
+    dirty: BTreeSet<Body>,
 }
 
 /// The standard conversions that construct their result, with the trait and method of the kernel
@@ -166,8 +188,9 @@ fn binop_trait(op: &BinOp) -> Option<(&'static str, &'static str)> {
 /// Where a value can be written to.
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Place {
-    /// A local binding.
-    Local(usize),
+    /// A local binding: written as a whole (`x = v`, false), or through it (`*x = v`, `x[i] = v`,
+    /// `x.push(v)`, `&mut x` passed on, true), which for a reference reaches what it refers to.
+    Local(usize, bool),
     /// A field of a kernel type.
     Field(ItemId, Option<usize>, String),
     /// Nowhere the analysis follows.
@@ -184,6 +207,8 @@ struct Flow<'a, 'p> {
     pending_consts: &'a mut Vec<(ItemId, NodeId)>,
     /// What every body shares.
     shared: &'a mut Shared,
+    /// The body being read.
+    body_id: Body,
     /// The node whose calls are being found: the body's own, or a closure's inside it.
     current: NodeId,
     scope: Scope,
@@ -211,11 +236,14 @@ pub fn analyse(ix: &Index<'_>, g: &mut Graph, problems: &mut Vec<Problem>) {
     let mut reported = BTreeSet::new();
     let mut shared = Shared::default();
     let mut consts: Vec<(ItemId, NodeId)> = Vec::new();
+    let mut todo: BTreeSet<Body> = (0..ix.program.nodes.len()).map(|i| Body::Node(NodeId(i))).collect();
     for round in 0..MAX_PROGRAM_ROUNDS {
-        shared.changed = false;
         let mut pending: Vec<(ItemId, NodeId)> = Vec::new();
         for (i, node) in ix.program.nodes.iter().enumerate() {
             let id = NodeId(i);
+            if !todo.contains(&Body::Node(id)) {
+                continue;
+            }
             let mut flow = Flow::new(
                 ix,
                 g,
@@ -223,7 +251,7 @@ pub fn analyse(ix: &Index<'_>, g: &mut Graph, problems: &mut Vec<Problem>) {
                 &mut reported,
                 &mut pending,
                 &mut shared,
-                id,
+                Body::Node(id),
                 node.scope.clone(),
                 &node.file,
             );
@@ -232,9 +260,13 @@ pub fn analyse(ix: &Index<'_>, g: &mut Graph, problems: &mut Vec<Problem>) {
                 _ => flow.body(id),
             }
         }
-        // Constant initialisers, as their values are read; reading one may reach more. Every one
-        // read in an earlier round is read again, since what it reaches may have grown.
-        let mut queue: Vec<(ItemId, NodeId)> = consts.clone();
+        // Constant initialisers: each newly read value's, and each earlier one whose inputs grew;
+        // reading one may reach more.
+        let mut queue: Vec<(ItemId, NodeId)> = consts
+            .iter()
+            .filter(|(item, node)| todo.contains(&Body::Const(*item, *node)))
+            .copied()
+            .collect();
         queue.append(&mut pending);
         let mut done: BTreeSet<ItemId> = BTreeSet::new();
         while let Some((item, node)) = queue.pop() {
@@ -253,7 +285,7 @@ pub fn analyse(ix: &Index<'_>, g: &mut Graph, problems: &mut Vec<Problem>) {
                 &mut reported,
                 &mut pending,
                 &mut shared,
-                node,
+                Body::Const(item, node),
                 it.scope.clone(),
                 &file,
             );
@@ -261,11 +293,27 @@ pub fn analyse(ix: &Index<'_>, g: &mut Graph, problems: &mut Vec<Problem>) {
             queue.append(&mut pending);
         }
         let reach = carrier_reach(g);
-        if reach != shared.reach {
-            shared.reach = reach;
-            shared.changed = true;
+        let keys: BTreeSet<NodeId> = reach.keys().chain(shared.reach.keys()).copied().collect();
+        for k in keys {
+            if reach.get(&k) != shared.reach.get(&k)
+                && let Some(readers) = shared.reach_readers.get(&k)
+            {
+                shared.dirty.extend(readers.iter().copied());
+            }
         }
-        if !shared.changed {
+        shared.reach = reach;
+        todo = core::mem::take(&mut shared.dirty);
+        eprintln!("DEBUG round {round} next {} edges {}", todo.len(), g.edges.values().map(|m| m.len()).sum::<usize>());
+        {
+            let mut hist: BTreeMap<&str, usize> = BTreeMap::new();
+            let mut per: BTreeMap<String, usize> = BTreeMap::new();
+            for (from, m) in &g.edges { for site in m.values() { *hist.entry(site.how).or_default() += 1; } *per.entry(g.node(*from).map_or(String::new(), |n| n.name.clone())).or_default() += m.len(); }
+            eprintln!("DEBUG hist {hist:?}");
+            let mut v: Vec<_> = per.into_iter().collect(); v.sort_by_key(|x| std::cmp::Reverse(x.1));
+            for (n, c) in v.iter().take(12) { eprintln!("DEBUG from {c} {n}"); }
+            if round == 1 { let mut cs: Vec<_> = g.edges.iter().filter(|(f, m)| g.node(**f).is_some_and(|n| n.kind == GKind::Carrier) && m.len() > 40).collect(); cs.sort_by_key(|(_, m)| std::cmp::Reverse(m.len())); for (from, m) in cs.iter().take(8) { eprintln!("DEBUG carrier {} {}", m.len(), g.node(**from).map_or("", |n| n.name.as_str())); for (to, site) in m.iter().take(6) { eprintln!("DEBUG    {}:{} -> {}", site.file, site.line, g.node(*to).map_or("", |n| n.name.as_str())); } } }
+        }
+        if todo.is_empty() {
             break;
         }
         if round.saturating_add(1) == MAX_PROGRAM_ROUNDS {
@@ -322,10 +370,13 @@ impl<'a, 'p> Flow<'a, 'p> {
         reported: &'a mut BTreeSet<(String, usize, String)>,
         pending_consts: &'a mut Vec<(ItemId, NodeId)>,
         shared: &'a mut Shared,
-        current: NodeId,
+        body_id: Body,
         scope: Scope,
         file: &str,
     ) -> Flow<'a, 'p> {
+        let current = match body_id {
+            Body::Node(n) | Body::Const(_, n) => n,
+        };
         Flow {
             ix,
             g,
@@ -333,6 +384,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             reported,
             pending_consts,
             shared,
+            body_id,
             current,
             scope,
             file: file.to_owned(),
@@ -456,6 +508,19 @@ impl<'a, 'p> Flow<'a, 'p> {
         let Some(node) = self.ix.program.node(f) else {
             return Ty::Unknown;
         };
+        if let NodeKind::Derived { item, trait_name } = &node.kind {
+            // A derived method takes `&self` and, for the comparisons, `&Self`; `fmt` a
+            // `Formatter`; `hash` a generic hasher.
+            let own = Ty::Adt(
+                *item,
+                self.ix.program.item(*item).scope.generics.iter().map(|g| Ty::Param(*g)).collect(),
+            );
+            return match (index, trait_name.as_str()) {
+                (0, _) | (1, "PartialEq" | "PartialOrd" | "Ord") => Ty::Ref(Box::new(own)),
+                (1, "Debug") => Ty::Ref(Box::new(Ty::Ext("Formatter".to_owned(), Vec::new()))),
+                _ => Ty::Unknown,
+            };
+        }
         let Some(input) = node.sig.as_ref().and_then(|s| s.inputs.iter().nth(index)) else {
             return Ty::Unknown;
         };
@@ -492,12 +557,52 @@ impl<'a, 'p> Flow<'a, 'p> {
 
     /// Joins `v` into closure `c`'s parameter `i`.
     fn join_param(&mut self, c: NodeId, i: usize, v: &Val) {
+        let v = match self.shared.typed.get(&(c, i)) {
+            Some(t) => {
+                let mut fixed = t.clone();
+                fixed.carries.join(&v.carries_of_calls());
+                fixed
+            }
+            None => v.clone(),
+        };
         let slot = self.shared.closure_params.entry((c, i)).or_insert_with(|| Val::of(Ty::Never));
-        let joined = slot.join(v);
+        let joined = slot.join(&v);
         if joined != *slot {
             *slot = joined;
-            self.shared.changed = true;
             self.changed = true;
+            if let Some(b) = self.shared.made_in.get(&c).copied()
+                && b != self.body_id
+            {
+                self.shared.dirty.insert(b);
+            }
+        }
+    }
+
+    /// Records closure `c`'s parameter `i` as its context fixes it, `t`; a second context joins
+    /// the first.
+    fn fix_param(&mut self, c: NodeId, i: usize, t: &Val) {
+        let joined = match self.shared.typed.get(&(c, i)) {
+            Some(old) => {
+                let j = old.join(t);
+                if j == *old {
+                    return;
+                }
+                j
+            }
+            None => t.clone(),
+        };
+        self.shared.typed.insert((c, i), joined.clone());
+        // What reached it before keeps only its callables.
+        let mut narrowed = joined;
+        if let Some(v) = self.shared.closure_params.get(&(c, i)) {
+            narrowed.carries.join(&v.carries_of_calls());
+        }
+        self.shared.closure_params.insert((c, i), narrowed);
+        self.changed = true;
+        if let Some(b) = self.shared.made_in.get(&c).copied()
+            && b != self.body_id
+        {
+            self.shared.dirty.insert(b);
         }
     }
 
@@ -541,8 +646,20 @@ impl<'a, 'p> Flow<'a, 'p> {
                 self.join_param(c, i, &v);
             }
         }
+        self.closure_ret(c)
+    }
+
+    /// Closure `c`'s result as this body sees it, recorded as read.
+    fn closure_ret(&mut self, c: NodeId) -> Val {
+        self.shared.ret_readers.entry(c).or_default().insert(self.body_id);
         let ret = self.shared.closure_rets.get(&c).cloned().unwrap_or_else(|| Val::of(Ty::Never));
         self.foreign(&ret, c)
+    }
+
+    /// Carrier `x`'s contents, recorded as read.
+    fn reach_of(&mut self, x: NodeId) -> BTreeSet<NodeId> {
+        self.shared.reach_readers.entry(x).or_default().insert(self.body_id);
+        self.shared.reach.get(&x).cloned().unwrap_or_default()
     }
 
     /// A value of this body's, as closure `c`'s parameter sees it: unchanged if `c` belongs to
@@ -593,12 +710,13 @@ impl<'a, 'p> Flow<'a, 'p> {
 
     /// The closures and kernel functions a value holding `carries` may hold: itself, and through
     /// its carriers.
-    fn held(&self, carries: &Carries) -> BTreeSet<NodeId> {
+    fn held(&mut self, carries: &Carries) -> BTreeSet<NodeId> {
         let mut out = BTreeSet::new();
         for c in &carries.calls {
             match self.g.node(*c).map(|n| n.kind) {
                 Some(GKind::Carrier) => {
-                    out.extend(self.shared.reach.get(c).into_iter().flatten().copied());
+                    let r = self.reach_of(*c);
+                    out.extend(r);
                 }
                 Some(_) => {
                     out.insert(*c);
@@ -673,10 +791,13 @@ impl<'a, 'p> Flow<'a, 'p> {
     /// Writes `carries` into a place.
     fn write(&mut self, place: &Place, carries: &Carries, line: usize) {
         match place {
-            Place::Local(id) => {
+            Place::Local(id, through) => {
+                // Only a write through a reference reaches what it refers to, which its carriers
+                // stand for; a write to an owned value or to the binding itself stays in it.
                 let carriers: Vec<NodeId> = self
                     .bindings
                     .get(*id)
+                    .filter(|v| *through && matches!(v.ty, Ty::Ref(_) | Ty::Unknown | Ty::Param(_) | Ty::Assoc(..)))
                     .map(|v| {
                         v.carries
                             .calls
@@ -704,27 +825,36 @@ impl<'a, 'p> Flow<'a, 'p> {
         }
     }
 
-    /// The place an expression denotes, if it is one the analysis follows.
+    /// The place an expression denotes, if it is one the analysis follows: a binding named
+    /// alone is written as a whole, any other way through it.
     fn place(&mut self, e: &Expr) -> Place {
+        match self.place_inner(e) {
+            Place::Local(id, _) if !matches!(e, Expr::Path(_)) => Place::Local(id, true),
+            other => other,
+        }
+    }
+
+    /// The place `e` names, a binding named alone read as written whole.
+    fn place_inner(&mut self, e: &Expr) -> Place {
         match e {
             Expr::Path(p) if p.qself.is_none() => match p.path.get_ident() {
                 Some(id) => self
                     .lookup_local(&id.to_string())
-                    .map_or(Place::Other, Place::Local),
+                    .map_or(Place::Other, |b| Place::Local(b, false)),
                 None => Place::Other,
             },
             Expr::Field(f) => {
                 let base = self.peek(&f.base);
                 match base.ty.peel() {
                     Ty::Adt(id, _) => Place::Field(*id, None, member_name(&f.member)),
-                    _ => self.place(&f.base),
+                    _ => self.place_inner(&f.base),
                 }
             }
-            Expr::Index(i) => self.place(&i.expr),
-            Expr::Paren(p) => self.place(&p.expr),
-            Expr::Group(g) => self.place(&g.expr),
-            Expr::Reference(r) => self.place(&r.expr),
-            Expr::Unary(u) if matches!(u.op, UnOp::Deref(_)) => self.place(&u.expr),
+            Expr::Index(i) => self.place_inner(&i.expr),
+            Expr::Paren(p) => self.place_inner(&p.expr),
+            Expr::Group(g) => self.place_inner(&g.expr),
+            Expr::Reference(r) => self.place_inner(&r.expr),
+            Expr::Unary(u) if matches!(u.op, UnOp::Deref(_)) => self.place_inner(&u.expr),
             _ => Place::Other,
         }
     }
@@ -1428,11 +1558,27 @@ impl<'a, 'p> Flow<'a, 'p> {
                     self.g.address_taken.insert(*n);
                     c.calls.insert(*n);
                 }
-                Val::unknown(c)
+                // Unless it names a kernel type's own function, it may be an outside one (an
+                // implementation in the standard library, `i128::from`).
+                let kernel_only = !nodes.is_empty()
+                    && (matches!(&**base, Res::SelfTy)
+                        || matches!(&**base, Res::Item(id) if self.ix.program.item(*id).is_adt()));
+                if !kernel_only {
+                    c.calls.insert(self.g.outside());
+                }
+                match nodes.iter().next() {
+                    Some(first) => Val::with(Ty::FnDef(*first), &c),
+                    None => Val::with(Ty::FnPtr(0), &c),
+                }
             }
             Res::Ext(p) => match p.last().map(String::as_str) {
                 Some("None") => Val::of(Ty::Ext("Option".to_owned(), vec![Ty::Unknown])),
-                _ => Val::unknown(Carries::default()),
+                _ => {
+                    // An outside function or constructor used as a value.
+                    let mut c = Carries::default();
+                    c.calls.insert(self.g.outside());
+                    Val::with(Ty::FnPtr(0), &c)
+                }
             },
             Res::ConstParam(_) => Val::of(Ty::Prim("usize".to_owned())),
             Res::SelfTy => Val::of(self.resolver().self_ty(&self.scope, 0)),
@@ -1477,15 +1623,18 @@ impl<'a, 'p> Flow<'a, 'p> {
             self.how = how;
             let scg = self.rel(*t, receiver.as_ref(), args);
             self.edge_rel(*t, line, scg);
+            // A parameter takes callables only if its type, with the callee's type parameters
+            // this call instantiates, can hold one.
+            let map = self.learned(*t, args, receiver.as_ref());
             for (i, a) in args.iter().enumerate() {
                 if !a.carries.calls.is_empty() || a.carries.top {
                     let p = self.g.param(*t, i);
-                    let declared = self.param_ty(*t, i);
+                    let declared = self.param_ty(*t, i).subst(&map);
                     self.flow_typed(p, &a.carries, &declared, line);
                 }
             }
             for (i, place) in places.iter().enumerate() {
-                if *place != Place::Other && self.param_ty(*t, i).admits_callables() {
+                if *place != Place::Other && self.param_ty(*t, i).subst(&map).admits_callables() {
                     let p = self.g.param(*t, i);
                     let mut c = Carries::default();
                     c.calls.insert(p);
@@ -1507,12 +1656,44 @@ impl<'a, 'p> Flow<'a, 'p> {
                 extra.calls.insert(self.g.ret(*t));
             }
             for g in &unknown {
-                extra.types.extend(self.ix.types_for(*g));
+                let held = self.unlearned(*t, *g, args);
+                extra.join(&held);
             }
             let v = Val::with(ty, &extra);
             out = Some(out.map_or(v.clone(), |o| o.join(&v)));
         }
         out.unwrap_or_else(|| Val::unknown(Carries::default()))
+    }
+
+    /// What a value of callee `t`'s type parameter `g`, which the call site did not show, may
+    /// hold: what the arguments whose declared types mention `g` hold, since `g` is instantiated
+    /// with a part of their types (a value of a type parameter holds only what its instantiation
+    /// does); or, when no parameter's type mentions it (it is fixed by the expected result or a
+    /// turbofish), every kernel type its bounds allow.
+    fn unlearned(&self, t: NodeId, g: GenId, args: &[Val]) -> Carries {
+        let mut out = Carries::default();
+        let Some(node) = self.ix.program.node(t) else {
+            return out;
+        };
+        let mut mentioned = false;
+        if let Some(sig) = &node.sig {
+            for (i, input) in sig.inputs.iter().enumerate() {
+                let declared = match input {
+                    syn::FnArg::Receiver(_) => self.param_ty(t, i),
+                    syn::FnArg::Typed(pt) => self.ix.resolver.ty(&node.scope, &pt.ty),
+                };
+                if declared.carries().generics.contains(&g) {
+                    mentioned = true;
+                    if let Some(a) = args.get(i) {
+                        out.join(&a.carries);
+                    }
+                }
+            }
+        }
+        if !mentioned {
+            out.types.extend(self.ix.types_for(g));
+        }
+        out
     }
 
     /// A kernel function's declared return type, with what can be learned of its generic
@@ -1531,17 +1712,7 @@ impl<'a, 'p> Flow<'a, 'p> {
             syn::ReturnType::Default => return (Ty::unit(), BTreeSet::new()),
         };
         let params: BTreeSet<GenId> = node.scope.generics.iter().copied().collect();
-        let mut map = BTreeMap::new();
-        if let (Some(recv), SelfRef::Impl(imp)) = (receiver, node.scope.self_ref)
-            && let Some(self_ty) = self.ix.impl_self.get(imp.0)
-        {
-            self_ty.unify(recv, &params, &mut map);
-        }
-        for (input, a) in sig.inputs.iter().zip(args) {
-            if let syn::FnArg::Typed(pt) = input {
-                r.ty(&node.scope, &pt.ty).unify(&a.ty, &params, &mut map);
-            }
-        }
+        let map = self.learned(t, args, receiver);
         let out = ret.subst(&map);
         // A return type naming `Self` was read in the impl's scope already; any parameter left
         // is unknown to the caller.
@@ -1559,10 +1730,35 @@ impl<'a, 'p> Flow<'a, 'p> {
         }
     }
 
-    /// The closure parameter types a callee's parameter `index` gives a closure argument, if the
-    /// parameter is a closure type with stated argument types, with the callee's type parameters
-    /// learned from the other arguments `known` substituted.
-    fn closure_context(&self, targets: &BTreeSet<NodeId>, index: usize, known: &[Option<Val>]) -> Option<Vec<Ty>> {
+    /// What callee `t`'s type parameters are, as far as the receiver's type and the arguments'
+    /// types show them.
+    fn learned(&self, t: NodeId, args: &[Val], receiver: Option<&Ty>) -> BTreeMap<GenId, Ty> {
+        let mut map = BTreeMap::new();
+        let Some(node) = self.ix.program.node(t) else {
+            return map;
+        };
+        let Some(sig) = &node.sig else {
+            return map;
+        };
+        let params: BTreeSet<GenId> = node.scope.generics.iter().copied().collect();
+        if let (Some(recv), SelfRef::Impl(imp)) = (receiver, node.scope.self_ref)
+            && let Some(self_ty) = self.ix.impl_self.get(imp.0)
+        {
+            self_ty.unify(recv, &params, &mut map);
+        }
+        for (input, a) in sig.inputs.iter().zip(args) {
+            if let syn::FnArg::Typed(pt) = input {
+                self.ix.resolver.ty(&node.scope, &pt.ty).unify(&a.ty, &params, &mut map);
+            }
+        }
+        map
+    }
+
+    /// The closure parameter values a callee's parameter `index` gives a closure argument, if the
+    /// parameter is a closure type with stated argument types: those types, with the callee's
+    /// type parameters learned from the other arguments `known` substituted, and what the ones
+    /// not learned may hold ([`Flow::unlearned`]).
+    fn closure_context(&self, targets: &BTreeSet<NodeId>, index: usize, known: &[Option<Val>]) -> Option<Vec<Val>> {
         for t in targets {
             let Some(node) = self.ix.program.node(*t) else {
                 continue;
@@ -1587,7 +1783,26 @@ impl<'a, 'p> Flow<'a, 'p> {
                 }
             }
             if let Some(args) = traits.iter().find_map(|tr| tr.fn_arity().map(|_| tr.args().to_vec())) {
-                return Some(args.iter().map(|a| strip_params(&a.subst(&map), &params)).collect());
+                let given: Vec<Val> = known.iter().map(|a| a.clone().unwrap_or_else(|| Val::unknown(Carries::default()))).collect();
+                return Some(
+                    args.iter()
+                        .map(|a| {
+                            let learned = a.subst(&map);
+                            let left: BTreeSet<GenId> = learned
+                                .carries()
+                                .generics
+                                .into_iter()
+                                .filter(|g| params.contains(g))
+                                .collect();
+                            let mut v = Val::of(strip_params(&learned, &params));
+                            for g in left {
+                                let held = self.unlearned(*t, g, &given);
+                                v.carries.join(&held);
+                            }
+                            v
+                        })
+                        .collect(),
+                );
             }
         }
         None
@@ -1615,11 +1830,11 @@ impl<'a, 'p> Flow<'a, 'p> {
         for (i, a) in args.iter().enumerate() {
             if let Expr::Closure(c) = a {
                 let line = c.span().start().line;
-                let ctx = self
-                    .closure_context(targets, i.saturating_add(offset), &inputs)
-                    .map(|tys| tys.into_iter().map(Val::of).collect::<Vec<_>>())
+                let fixed = self.closure_context(targets, i.saturating_add(offset), &inputs);
+                let ctx = fixed
+                    .clone()
                     .unwrap_or_else(|| vec![Val::unknown(known.clone()); c.inputs.len()]);
-                let v = self.closure(c, Some(ctx), line);
+                let v = self.closure_fixed(c, Some(ctx), fixed.as_deref(), line);
                 if let Some(slot) = vals.get_mut(i) {
                     *slot = Some(v);
                 }
@@ -1640,7 +1855,12 @@ impl<'a, 'p> Flow<'a, 'p> {
             for c in closures {
                 let arity = self.g.node(c).and_then(|n| n.arity).unwrap_or(0);
                 let ctx: Vec<Val> = match self.closure_context(targets, i.saturating_add(offset), &inputs) {
-                    Some(tys) => tys.into_iter().map(Val::of).collect(),
+                    Some(vals) => {
+                        for (k, t) in vals.iter().enumerate() {
+                            self.fix_param(c, k, t);
+                        }
+                        vals
+                    }
                     None => (0..arity).map(|_| Val::unknown(known.clone())).collect(),
                 };
                 for (k, cv) in ctx.into_iter().enumerate() {
@@ -1655,7 +1875,10 @@ impl<'a, 'p> Flow<'a, 'p> {
     /// The place an argument passed by `&mut` writes to.
     fn arg_place(&mut self, a: &Expr) -> Place {
         match a {
-            Expr::Reference(r) if r.mutability.is_some() => self.place(&r.expr),
+            Expr::Reference(r) if r.mutability.is_some() => match self.place(&r.expr) {
+                Place::Local(id, _) => Place::Local(id, true),
+                other => other,
+            },
             _ => Place::Other,
         }
     }
@@ -1709,13 +1932,17 @@ impl<'a, 'p> Flow<'a, 'p> {
                     result = result.join(&r);
                 }
                 Some(GKind::Carrier) => {
-                    for r in self.shared.reach.get(&target).cloned().unwrap_or_default() {
+                    for r in self.reach_of(target) {
                         match self.g.node(r).map(|n| n.kind) {
                             Some(GKind::Closure) => {
                                 let v = self.enter_closure(r, vals);
                                 result = result.join(&v);
                             }
                             Some(GKind::Any) => any = true,
+                            Some(GKind::Outside) => {
+                                let v = self.call_outside_fn(vals, line);
+                                result = result.join(&v);
+                            }
                             Some(_) => {
                                 let v = self.enter_fn(r, vals, line);
                                 result = result.join(&v);
@@ -1725,6 +1952,10 @@ impl<'a, 'p> Flow<'a, 'p> {
                     }
                 }
                 Some(GKind::Any) => any = true,
+                Some(GKind::Outside) => {
+                    let v = self.call_outside_fn(vals, line);
+                    result = result.join(&v);
+                }
                 Some(GKind::Code | GKind::Derived) => {
                     let v = self.enter_fn(target, vals, line);
                     result = result.join(&v);
@@ -1751,11 +1982,31 @@ impl<'a, 'p> Flow<'a, 'p> {
             // Nothing the call may run is known (a callable from outside): its result is not.
             result.ty = Ty::Unknown;
         }
-        // Through a generic or trait-object callable, outside closures may run with the args.
-        for v in vals {
-            result.carries.join(&v.carries);
+        // A callable of a generic or trait-object type returns its closure bound's output, in
+        // this body's own types; what the closures it may be return adds only what they carry.
+        if let Some(out) = self.fn_output(&callee.ty)
+            && out.is_known()
+        {
+            result = Val::with(out, &result.carries_of_calls());
+        }
+        if any {
+            // A callable the analysis cannot follow may hand back what it is given.
+            for v in vals {
+                result.carries.join(&v.carries);
+            }
         }
         result
+    }
+
+    /// A call of a function from outside the kernel through a value: outside code handed `vals`,
+    /// whose result may hold what they hold.
+    fn call_outside_fn(&mut self, vals: &[Val], line: usize) -> Val {
+        self.outside_call(vals, line);
+        let mut c = Carries::default();
+        for v in vals {
+            c.join(&v.carries);
+        }
+        Val::unknown(c)
     }
 
     /// A call to what a path resolved to.
@@ -2028,7 +2279,11 @@ impl<'a, 'p> Flow<'a, 'p> {
             for t in &targets {
                 self.how = "a standard conversion";
                 self.edge(*t, line);
-                out.calls.insert(self.g.ret(*t));
+                let (ty, _) = self.declared_return(*t, &[], None);
+                if ty.admits_callables() {
+                    out.calls.insert(self.g.ret(*t));
+                }
+                out.join(&ty.carries());
             }
         }
         out
@@ -2037,7 +2292,10 @@ impl<'a, 'p> Flow<'a, 'p> {
     fn method_call(&mut self, m: &syn::ExprMethodCall, line: usize) -> Val {
         let name = m.method.to_string();
         let receiver = self.expr(&m.receiver);
-        let recv_place = self.place(&m.receiver);
+        let recv_place = match self.place(&m.receiver) {
+            Place::Local(id, _) => Place::Local(id, true),
+            other => other,
+        };
         let lookup = self.ix.method(&receiver, &name);
         let how = match receiver.ty.peel() {
             Ty::Param(_) | Ty::Dyn(_) => "a method call through a bound",
@@ -2070,16 +2328,21 @@ impl<'a, 'p> Flow<'a, 'p> {
                 })
             });
             let conv = self.conversions(&name, Some(&receiver), target.as_ref(), line);
+            // On a receiver whose methods call the callables they are handed but never keep them
+            // (`Option`, `Result`, the numbers, `bool`), a callable argument stays out of the
+            // result and the receiver; only what it returns may come back.
+            let keeps = !calls_and_drops_callables(&receiver.ty);
+            let kept = |v: &Val| keeps || !is_callable(&v.ty);
             // An outside method on a place may store its arguments in it.
             let mut written = Carries::default();
-            for v in &vals {
+            for v in vals.iter().filter(|v| kept(v)) {
                 written.join(&v.carries);
             }
             if !written.is_empty() {
                 self.write(&recv_place, &written, line);
             }
-            let mut c = Carries::default();
-            for v in &inputs {
+            let mut c = receiver.carries.clone();
+            for v in inputs.iter().skip(1).filter(|v| kept(v)) {
                 c.join(&v.carries);
             }
             c.join(&conv);
@@ -2087,13 +2350,12 @@ impl<'a, 'p> Flow<'a, 'p> {
             for v in &vals {
                 for call in self.held(&v.carries) {
                     if self.g.node(call).is_some_and(|n| n.kind == GKind::Closure) {
-                        let r = self.shared.closure_rets.get(&call).cloned().unwrap_or_else(|| Val::of(Ty::Never));
-                        let r = self.foreign(&r, call);
+                        let r = self.closure_ret(call);
                         c.join(&r.carries);
                     }
                 }
             }
-            let ty = outside_method_ty(&name, &receiver);
+            let ty = outside_method_ty(&name, &receiver, &vals);
             if lookup.nodes.is_empty() {
                 result = Val::with(ty, &c);
             } else {
@@ -2352,10 +2614,21 @@ impl<'a, 'p> Flow<'a, 'p> {
     /// A closure: its own node, its body read with its parameters bound to the program's value of
     /// them, which `ctx` (the values its caller gives it, when known) joins.
     fn closure(&mut self, c: &syn::ExprClosure, ctx: Option<Vec<Val>>, line: usize) -> Val {
+        self.closure_fixed(c, ctx, None, line)
+    }
+
+    /// [`Flow::closure`], with the parameter types its context fixes, when it does.
+    fn closure_fixed(&mut self, c: &syn::ExprClosure, ctx: Option<Vec<Val>>, fixed: Option<&[Val]>, line: usize) -> Val {
         let parent = self.current;
         let index = self.next_closure;
         self.next_closure = self.next_closure.saturating_add(1);
         let id = self.g.closure(parent, index, c.inputs.len(), &self.file, line);
+        self.shared.made_in.insert(id, self.body_id);
+        if let Some(tys) = fixed {
+            for (i, t) in tys.iter().enumerate().take(c.inputs.len()) {
+                self.fix_param(id, i, t);
+            }
+        }
         if let Some(ctx) = &ctx {
             for (i, v) in ctx.iter().enumerate().take(c.inputs.len()) {
                 self.join_param(id, i, v);
@@ -2397,6 +2670,17 @@ impl<'a, 'p> Flow<'a, 'p> {
         Val::with(Ty::Closure(id), &carries)
     }
 
+    /// The output type of calling a value of type `ty`: its closure bound's, for a generic
+    /// parameter or trait object.
+    fn fn_output(&self, ty: &Ty) -> Option<Ty> {
+        let traits = match ty.peel() {
+            Ty::Param(g) => self.ix.resolver.bounds(*g),
+            Ty::Dyn(traits) => traits.clone(),
+            _ => return None,
+        };
+        traits.iter().find_map(|tr| tr.fn_output().cloned())
+    }
+
     /// Joins `v` into the result of the closure being read.
     fn closure_result(&mut self, v: &Val) {
         let id = self.current;
@@ -2404,8 +2688,17 @@ impl<'a, 'p> Flow<'a, 'p> {
         let joined = slot.join(v);
         if joined != *slot {
             *slot = joined;
-            self.shared.changed = true;
             self.changed = true;
+            let readers: Vec<Body> = self
+                .shared
+                .ret_readers
+                .get(&id)
+                .into_iter()
+                .flatten()
+                .copied()
+                .filter(|b| *b != self.body_id)
+                .collect();
+            self.shared.dirty.extend(readers);
         }
     }
 
@@ -2581,21 +2874,107 @@ fn for_item(ix: &Index<'_>, it: &Val) -> Val {
     }
 }
 
-/// The type an outside method returns, where the standard library states it plainly.
-fn outside_method_ty(name: &str, receiver: &Val) -> Ty {
-    let recv = receiver.ty.peel();
-    match name {
-        "clone" | "to_owned" if recv.is_known() => recv.clone(),
-        "unwrap" | "expect" | "unwrap_or" | "unwrap_or_else" | "unwrap_or_default" | "unwrap_unchecked" => match recv {
-            Ty::Ext(n, args) if n == "Option" || n == "Result" => args.first().cloned().unwrap_or(Ty::Unknown),
-            _ => Ty::Unknown,
-        },
-        "len" | "count" | "count_ones" | "leading_zeros" | "trailing_zeros" => Ty::Prim("usize".to_owned()),
-        "is_empty" | "is_some" | "is_none" | "is_ok" | "is_err" | "contains" | "starts_with" | "ends_with" => {
-            Ty::Prim("bool".to_owned())
-        }
-        _ => Ty::Unknown,
+/// Whether a value of type `ty` is itself a callable: a closure, a function item or pointer.
+fn is_callable(ty: &Ty) -> bool {
+    matches!(ty.peel(), Ty::Closure(_) | Ty::FnDef(_) | Ty::FnPtr(_))
+}
+
+/// Whether the standard library's methods on a receiver of type `ty` call the callables they are
+/// handed without keeping them: on `Option` and `Result`, the integers, the floats and `bool`, no
+/// method's result type or receiver holds a type parameter of a closure argument, as their
+/// documented signatures state (<https://doc.rust-lang.org/std/option/enum.Option.html>,
+/// <https://doc.rust-lang.org/std/result/enum.Result.html>,
+/// <https://doc.rust-lang.org/std/primitive.bool.html>). A `str` or slice method may keep one in
+/// the iterator it returns (`split` with a closure pattern), so those are not listed.
+fn calls_and_drops_callables(ty: &Ty) -> bool {
+    match ty.peel() {
+        Ty::Ext(n, _) => matches!(n.as_str(), "Option" | "Result"),
+        Ty::Prim(p) => p != "str" && p != "char",
+        _ => false,
     }
+}
+
+/// `Option`'s methods whose result is an `Option` of the same element (by value, by reference, or
+/// copied).
+const OPTION_SAME: [&str; 10] = ["filter", "inspect", "or", "or_else", "replace", "take", "take_if", "xor", "cloned", "copied"];
+
+/// `Option`'s and `Result`'s methods whose result is an `Option` or `Result` of another element.
+const SAME_FAMILY: [&str; 7] = ["and", "and_then", "map", "flatten", "as_deref", "as_deref_mut", "map_err"];
+
+/// The type an outside method returns, where the standard library states it plainly: the clone
+/// and unwrapping families, counts and tests; on `Option` and `Result`, the methods that keep the
+/// family (`zip`, `map`, `ok`, ...); on the numbers, the checked and overflowing families and the
+/// rest, which return their own type. Anything else is unknown.
+fn outside_method_ty(name: &str, receiver: &Val, args: &[Val]) -> Ty {
+    let recv = receiver.ty.peel();
+    let ext = |n: &str, args: Vec<Ty>| Ty::Ext(n.to_owned(), args);
+    let first = |t: &Ty| match t {
+        Ty::Ext(_, a) => a.first().cloned().unwrap_or(Ty::Unknown),
+        _ => Ty::Unknown,
+    };
+    match (recv, name) {
+        (_, "clone" | "to_owned") if recv.is_known() => return recv.clone(),
+        (Ty::Ext(n, a), "unwrap" | "expect" | "unwrap_or" | "unwrap_or_else" | "unwrap_or_default" | "unwrap_unchecked")
+            if n == "Option" || n == "Result" =>
+        {
+            return a.first().cloned().unwrap_or(Ty::Unknown);
+        }
+        (_, "len" | "count") => return Ty::Prim("usize".to_owned()),
+        (_, "is_empty" | "is_some" | "is_none" | "is_ok" | "is_err" | "contains" | "starts_with" | "ends_with") => {
+            return Ty::Prim("bool".to_owned());
+        }
+        _ => {}
+    }
+    match recv {
+        Ty::Ext(n, a) if n == "Option" => {
+            let elem = a.first().cloned().unwrap_or(Ty::Unknown);
+            if OPTION_SAME.contains(&name) {
+                let elem = if matches!(name, "cloned" | "copied") { elem.peel().clone() } else { elem };
+                return ext("Option", vec![elem]);
+            }
+            match name {
+                "as_ref" | "as_mut" => return ext("Option", vec![Ty::Ref(Box::new(elem))]),
+                "zip" => {
+                    let other = args.first().map_or(Ty::Unknown, |v| first(v.ty.peel()));
+                    return ext("Option", vec![Ty::Tuple(vec![elem, other])]);
+                }
+                "ok_or" | "ok_or_else" => return ext("Result", vec![elem, Ty::Unknown]),
+                _ if SAME_FAMILY.contains(&name) => return ext("Option", vec![Ty::Unknown]),
+                _ => {}
+            }
+        }
+        Ty::Ext(n, a) if n == "Result" => {
+            let ok = a.first().cloned().unwrap_or(Ty::Unknown);
+            let err = a.get(1).cloned().unwrap_or(Ty::Unknown);
+            match name {
+                "ok" => return ext("Option", vec![ok]),
+                "err" => return ext("Option", vec![err]),
+                "as_ref" | "as_mut" => return ext("Result", vec![Ty::Ref(Box::new(ok)), Ty::Ref(Box::new(err))]),
+                "map_err" | "or" | "or_else" | "inspect_err" => return ext("Result", vec![ok, Ty::Unknown]),
+                "map" | "and" | "and_then" => return ext("Result", vec![Ty::Unknown, err]),
+                "inspect" | "cloned" | "copied" => return ext("Result", vec![ok.peel().clone(), err]),
+                _ if SAME_FAMILY.contains(&name) => return ext("Result", vec![Ty::Unknown, Ty::Unknown]),
+                _ => {}
+            }
+        }
+        Ty::Prim(p) if p != "str" && p != "char" && p != "bool" => {
+            let own = Ty::Prim(p.clone());
+            if name.starts_with("checked_") {
+                return ext("Option", vec![own]);
+            }
+            if name.starts_with("overflowing_") {
+                return Ty::Tuple(vec![own, Ty::Prim("bool".to_owned())]);
+            }
+            if name.starts_with("wrapping_")
+                || name.starts_with("saturating_")
+                || matches!(name, "abs" | "pow" | "min" | "max" | "clamp" | "signum" | "rem_euclid" | "div_euclid")
+            {
+                return own;
+            }
+        }
+        _ => {}
+    }
+    Ty::Unknown
 }
 
 /// `ty` with the generic parameters in `params` (the callee's) made unknown, so they do not leak

@@ -550,6 +550,19 @@ impl<'p> Resolver<'p> {
             .last()
             .map(|s| self.args(scope, s, 0))
             .unwrap_or_default();
+        // A closure trait written with its parentheses: `Fn(A, B) -> R`.
+        if let Some(last) = path.segments.last()
+            && let syn::PathArguments::Parenthesized(p) = &last.arguments
+        {
+            let name = last.ident.to_string();
+            if crate::recursion::ty::FN_TRAITS.contains(&name.as_str()) {
+                let output = match &p.output {
+                    syn::ReturnType::Type(_, t) => self.ty_at(scope, t, 0),
+                    syn::ReturnType::Default => Ty::unit(),
+                };
+                return Some(TraitRef::Fn(name, args, Box::new(output)));
+            }
+        }
         let res = self
             .resolve(scope, &segs, path.leading_colon.is_some(), Ns::Type)
             .into_iter()

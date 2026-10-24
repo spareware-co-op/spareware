@@ -525,12 +525,14 @@ pub fn read(resolver: &Resolver<'_>, scope: &Scope, mac: &syn::Macro, depth: usi
     }
 }
 
-/// `matches!(expr, pattern)` and `matches!(expr, pattern if guard)`: the expression and the guard.
+/// `matches!(expr, pattern)` and `matches!(expr, pattern if guard)`: what the standard library
+/// expands them to, `match expr { pattern if guard => true, _ => false }`, so the guard sees the
+/// names the pattern binds.
 fn read_matches(tokens: &TokenStream) -> MacroRead {
     let parsed = (|s: ParseStream| {
         let e: Expr = s.parse()?;
         let _: Token![,] = s.parse()?;
-        let _pat = syn::Pat::parse_multi_with_leading_vert(s)?;
+        let pat = syn::Pat::parse_multi_with_leading_vert(s)?;
         let guard = if s.peek(Token![if]) {
             let _: Token![if] = s.parse()?;
             Some(s.parse::<Expr>()?)
@@ -538,11 +540,21 @@ fn read_matches(tokens: &TokenStream) -> MacroRead {
             None
         };
         let _: Option<Token![,]> = s.parse()?;
-        Ok((e, guard))
+        Ok((e, pat, guard))
     })
     .parse2(tokens.clone());
-    match parsed {
-        Ok((e, guard)) => MacroRead::Exprs(core::iter::once(e).chain(guard).collect()),
+    let Ok((e, pat, guard)) = parsed else {
+        return MacroRead::Unread(format!("`matches!` arguments that do not parse: {}", excerpt(tokens)));
+    };
+    let guard = guard.map(|g| quote::quote! { if #g });
+    let expanded = quote::quote! {
+        match #e {
+            #pat #guard => true,
+            _ => false,
+        }
+    };
+    match syn::parse2::<Expr>(expanded) {
+        Ok(m) => MacroRead::Exprs(vec![m]),
         Err(_) => MacroRead::Unread(format!("`matches!` arguments that do not parse: {}", excerpt(tokens))),
     }
 }

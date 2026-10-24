@@ -1,0 +1,112 @@
+DEBUG round 0 next 64 edges 6011
+DEBUG hist {"`?` converting an error": 339, "a call by path": 971, "a call through a value": 91, "a callable flowing into a carrier": 923, "a callback of outside code": 1628, "a for loop": 1, "a method call by name (receiver type unknown)": 31, "a method call by the receiver's type": 482, "a method call through a bound": 37, "a standard conversion": 12, "an implicit trait call (operator, formatting, derive)": 1496}
+DEBUG from 97 geom_run::sort::key_order::{closure#0}
+DEBUG from 75 <geom_math::rounded::Rounded as Clone>::clone
+DEBUG from 75 <geom_num::grid::Rounded as Clone>::clone
+DEBUG from 75 <geom_run::error::ItemError as Clone>::clone
+DEBUG from 75 <geom_run::error::RunError as Clone>::clone
+DEBUG from 72 geom_run::scan::count_then_fill
+DEBUG from 71 geom_run::batch::in_item_order
+DEBUG from 71 geom_run::batch::run_batch
+DEBUG from 69 <geom_math::rounded::Rounded as Debug>::fmt
+DEBUG from 69 <geom_num::grid::Rounded as Debug>::fmt
+DEBUG from 69 <geom_run::error::ItemError as Debug>::fmt
+DEBUG from 69 <geom_run::error::RunError as Debug>::fmt
+DEBUG round 1 next 83 edges 14523
+DEBUG hist {"`?` converting an error": 339, "a call by path": 971, "a call through a value": 91, "a callable flowing into a carrier": 4299, "a callback of outside code": 6744, "a for loop": 1, "a method call by name (receiver type unknown)": 48, "a method call by the receiver's type": 482, "a method call through a bound": 37, "a standard conversion": 12, "an implicit trait call (operator, formatting, derive)": 1499}
+DEBUG from 379 geom_run::batch::map_each::{closure#0}::{closure#1}
+DEBUG from 360 geom_run::pool::drive
+DEBUG from 360 geom_run::scan::fill_chunk
+DEBUG from 357 geom_run::scan::count_then_fill
+DEBUG from 348 geom_run::batch::run_chunk
+DEBUG from 344 geom_run::batch::Walk::absorb
+DEBUG from 343 geom_run::batch::in_item_order
+DEBUG from 342 geom_run::batch::run_batch
+DEBUG from 125 geom_math::frame::FrameRecord::home_of
+DEBUG from 116 geom_math::frame::FrameRecord::home_of::{closure#1}
+DEBUG from 115 geom_math::frame::FrameRecord::shift_to::{closure#0}
+DEBUG from 115 geom_math::frame::FrameRecord::shift_to::{closure#3}
+DEBUG carrier 76 <geom_math::rounded::Rounded as PartialEq>::eq (parameter 0)
+DEBUG    projects/engines/geometry/crates/geom-run/src/sort.rs:187 -> geom_run::sort::merge (parameter 0)
+DEBUG    projects/engines/geometry/crates/geom-run/src/sort.rs:187 -> geom_run::sort::merge_round (parameter 0)
+DEBUG    projects/engines/geometry/crates/geom-run/src/sort.rs:187 -> geom_run::sort::merge_round (parameter 1)
+DEBUG    projects/engines/geometry/crates/geom-run/src/sort.rs:187 -> <geom_run::budget::BudgetKind as Ord>::cmp (return)
+DEBUG    projects/engines/geometry/crates/geom-run/src/sort.rs:187 -> <geom_run::budget::Phase as Ord>::cmp (return)
+DEBUG    projects/engines/geometry/crates/geom-run/src/sort.rs:187 -> <geom_num::sign::Sign as Ord>::cmp (return)
+DEBUG carrier 72 geom_num::wide::Wide::checked_mul (parameter 0)
+DEBUG    projects/engines/geometry/crates/geom-math/src/frame.rs:1153 -> geom_math::dd::DD::from_i128
+DEBUG    projects/engines/geometry/crates/geom-math/src/frame.rs:1349 -> <geom_num::grid::Coord as Ord>::cmp (return)
+DEBUG    projects/engines/geometry/crates/geom-math/src/frame.rs:1349 -> <geom_num::grid::P3 as Ord>::cmp (return)
+DEBUG    projects/engines/geometry/crates/geom-math/src/frame.rs:1349 -> <geom_math::grid_transform::Axis as Ord>::cmp (return)
+DEBUG    projects/engines/geometry/crates/geom-math/src/frame.rs:653 -> (a function from outside the kernel, used as a value)
+DEBUG    projects/engines/geometry/crates/geom-num/src/predicate.rs:343 -> geom_num::wide::Wide::from_i128 (return)
+DEBUG carrier 68 geom_num::wide::Wide::checked_sub (parameter 0)
+DEBUG    projects/engines/geometry/crates/geom-math/src/frame.rs:1349 -> geom_math::dd::DD::from_i128
+DEBUG    projects/engines/geometry/crates/geom-math/src/frame.rs:1349 -> <geom_num::grid::Coord as Ord>::cmp (return)
+DEBUG    projects/engines/geometry/crates/geom-math/src/frame.rs:1349 -> <geom_num::grid::P3 as Ord>::cmp (return)
+DEBUG    projects/engines/geometry/crates/geom-math/src/frame.rs:1349 -> <geom_math::grid_transform::Axis as Ord>::cmp (return)
+DEBUG    projects/engines/geometry/crates/geom-math/src/frame.rs:652 -> (a function from outside the kernel, used as a value)
+DEBUG    projects/engines/geometry/crates/geom-math/src/frame.rs:652 -> geom_num::wide::Wide::from_i128 (return)
+DEBUG carrier 67 geom_num::wide::Wide::checked_add (parameter 0)
+DEBUG    projects/engines/geometry/crates/geom-math/src/frame.rs:1137 -> geom_math::dd::DD::from_i128
+DEBUG    projects/engines/geometry/crates/geom-math/src/frame.rs:1323 -> <geom_num::grid::Coord as Ord>::cmp (return)
+DEBUG    projects/engines/geometry/crates/geom-math/src/frame.rs:1323 -> <geom_num::grid::P3 as Ord>::cmp (return)
+DEBUG    projects/engines/geometry/crates/geom-math/src/frame.rs:1323 -> <geom_math::grid_transform::Axis as Ord>::cmp (return)
+DEBUG    projects/engines/geometry/crates/geom-num/src/predicate.rs:344 -> (a function from outside the kernel, used as a value)
+DEBUG    projects/engines/geometry/crates/geom-num/src/plane.rs:679 -> geom_num::wide::Wide::from_i128 (return)
+DEBUG carrier 67 geom_num::wide::Wide::checked_add (parameter 1)
+DEBUG    projects/engines/geometry/crates/geom-math/src/frame.rs:1137 -> geom_math::dd::DD::from_i128
+DEBUG    projects/engines/geometry/crates/geom-math/src/frame.rs:1323 -> <geom_num::grid::Coord as Ord>::cmp (return)
+DEBUG    projects/engines/geometry/crates/geom-math/src/frame.rs:1323 -> <geom_num::grid::P3 as Ord>::cmp (return)
+DEBUG    projects/engines/geometry/crates/geom-math/src/frame.rs:1323 -> <geom_math::grid_transform::Axis as Ord>::cmp (return)
+DEBUG    projects/engines/geometry/crates/geom-math/src/frame.rs:647 -> (a function from outside the kernel, used as a value)
+DEBUG    projects/engines/geometry/crates/geom-num/src/plane.rs:679 -> geom_num::wide::Wide::from_i128 (return)
+DEBUG carrier 64 geom_num::wide::Wide::checked_sub (parameter 1)
+DEBUG    projects/engines/geometry/crates/geom-math/src/frame.rs:1349 -> geom_math::dd::DD::from_i128
+DEBUG    projects/engines/geometry/crates/geom-math/src/frame.rs:1349 -> <geom_num::grid::Coord as Ord>::cmp (return)
+DEBUG    projects/engines/geometry/crates/geom-math/src/frame.rs:1349 -> <geom_num::grid::P3 as Ord>::cmp (return)
+DEBUG    projects/engines/geometry/crates/geom-math/src/frame.rs:1349 -> <geom_math::grid_transform::Axis as Ord>::cmp (return)
+DEBUG    projects/engines/geometry/crates/geom-math/src/rational.rs:441 -> (a function from outside the kernel, used as a value)
+DEBUG    projects/engines/geometry/crates/geom-math/src/frame.rs:652 -> geom_num::wide::Wide::from_i128 (return)
+DEBUG carrier 64 geom_num::wide::Wide::checked_mul (return)
+DEBUG    projects/engines/geometry/crates/geom-math/src/frame.rs:1137 -> geom_math::dd::DD::from_i128
+DEBUG    projects/engines/geometry/crates/geom-math/src/frame.rs:1323 -> <geom_num::grid::Coord as Ord>::cmp (return)
+DEBUG    projects/engines/geometry/crates/geom-math/src/frame.rs:1323 -> <geom_num::grid::P3 as Ord>::cmp (return)
+DEBUG    projects/engines/geometry/crates/geom-math/src/frame.rs:1323 -> <geom_math::grid_transform::Axis as Ord>::cmp (return)
+DEBUG    projects/engines/geometry/crates/geom-math/src/rational.rs:428 -> (a function from outside the kernel, used as a value)
+DEBUG    projects/engines/geometry/crates/geom-math/src/frame.rs:652 -> geom_num::wide::Wide::from_i128 (return)
+DEBUG carrier 64 <geom_num::wide::Wide as PartialOrd>::partial_cmp (parameter 0)
+DEBUG    projects/engines/geometry/crates/geom-math/src/frame.rs:1350 -> geom_math::dd::DD::from_i128
+DEBUG    projects/engines/geometry/crates/geom-math/src/frame.rs:1350 -> <geom_num::grid::Coord as Ord>::cmp (return)
+DEBUG    projects/engines/geometry/crates/geom-math/src/frame.rs:1350 -> <geom_num::grid::P3 as Ord>::cmp (return)
+DEBUG    projects/engines/geometry/crates/geom-math/src/frame.rs:1350 -> <geom_math::grid_transform::Axis as Ord>::cmp (return)
+DEBUG    projects/engines/geometry/crates/geom-math/src/frame.rs:1350 -> (a function from outside the kernel, used as a value)
+DEBUG    projects/engines/geometry/crates/geom-math/src/frame.rs:1350 -> geom_num::wide::Wide::from_i128 (return)
+DEBUG round 2 next 95 edges 70225
+DEBUG hist {"`?` converting an error": 339, "a call by path": 971, "a call through a value": 91, "a callable flowing into a carrier": 35859, "a callback of outside code": 30664, "a for loop": 5, "a method call by name (receiver type unknown)": 78, "a method call by the receiver's type": 482, "a method call through a bound": 37, "a standard conversion": 12, "an implicit trait call (operator, formatting, derive)": 1687}
+DEBUG from 533 geom_math::frame::FrameRecord::home_of
+DEBUG from 529 geom_math::exact::round_scaled
+DEBUG from 523 geom_math::frame::ExactInputs::parts
+DEBUG from 523 geom_math::frame::FrameRecord::ground_to_frame
+DEBUG from 523 geom_math::frame::FrameRecord::home_of::{closure#1}
+DEBUG from 522 geom_math::frame::FrameRecord::shift_to::{closure#0}
+DEBUG from 522 geom_math::frame::FrameRecord::shift_to::{closure#3}
+DEBUG from 522 geom_math::frame::FrameRecord::shift_to::{closure#3}::{closure#4}
+DEBUG from 522 geom_math::frame::FrameRecord::to_map::{closure#0}
+DEBUG from 522 geom_math::frame::FrameRecord::to_map::{closure#0}::{closure#1}
+DEBUG from 521 geom_math::frame::FrameRecord::home_of::{closure#6}
+DEBUG from 521 geom_math::frame::FrameRecord::shift_to::{closure#0}::{closure#1}
+DEBUG round 3 next 95 edges 105454
+DEBUG hist {"`?` converting an error": 339, "a call by path": 971, "a call through a value": 91, "a callable flowing into a carrier": 63033, "a callback of outside code": 38702, "a for loop": 7, "a method call by name (receiver type unknown)": 93, "a method call by the receiver's type": 482, "a method call through a bound": 37, "a standard conversion": 12, "an implicit trait call (operator, formatting, derive)": 1687}
+DEBUG from 580 geom_math::frame::FrameRecord::ground_to_frame
+DEBUG from 578 geom_math::exact::round_scaled
+DEBUG from 578 geom_math::frame::FrameRecord::home_of
+DEBUG from 573 geom_math::transform::exact_row
+DEBUG from 572 geom_math::rational::RationalTransform::inverse
+DEBUG from 570 geom_math::frame::ExactInputs::parts
+DEBUG from 569 geom_math::exact::round_scaled::{closure#1}
+DEBUG from 569 geom_math::rational::RationalTransform::compose
+DEBUG from 568 geom_math::frame::FrameRecord::home_of::{closure#1}
+DEBUG from 568 geom_math::frame::Rotation::direction
+DEBUG from 568 geom_math::rational::RationalTransform::det
+DEBUG from 568 geom_math::transform::Transform::row_unscalings

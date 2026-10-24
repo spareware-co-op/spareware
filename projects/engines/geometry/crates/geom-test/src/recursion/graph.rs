@@ -66,6 +66,9 @@ pub enum GKind {
     Carrier,
     /// The node a call through an unknown value leads to.
     Any,
+    /// A function from outside the kernel used as a value (`i128::from` passed to `map`): calling
+    /// it is a call of outside code with the arguments.
+    Outside,
 }
 
 /// A node of the graph.
@@ -122,6 +125,7 @@ pub struct Graph {
     returns: BTreeMap<NodeId, NodeId>,
     consts: BTreeMap<ItemId, NodeId>,
     any: Option<NodeId>,
+    outside: Option<NodeId>,
     /// The crates that are bound tests, whose cycles are not listed.
     test_crates: BTreeSet<usize>,
 }
@@ -326,6 +330,25 @@ impl Graph {
         }
         self.consts.insert(item, id);
         (id, true)
+    }
+
+    /// The node that stands for every function from outside the kernel used as a value.
+    pub fn outside(&mut self) -> NodeId {
+        if let Some(id) = self.outside {
+            return id;
+        }
+        let id = self.push(GNode {
+            name: "(a function from outside the kernel, used as a value)".to_owned(),
+            kind: GKind::Outside,
+            owner: NodeId(usize::MAX),
+            file: String::new(),
+            line: 0,
+            krate: usize::MAX,
+            vars: Vec::new(),
+            arity: None,
+        });
+        self.outside = Some(id);
+        id
     }
 
     /// The node a call through an unknown value leads to.
@@ -542,7 +565,7 @@ impl Graph {
     fn path_round(&self, nodes: &BTreeSet<NodeId>, edges: &BTreeSet<(NodeId, NodeId)>) -> Vec<(String, Site)> {
         let start = nodes
             .iter()
-            .filter(|n| self.node(**n).is_some_and(|x| x.kind != GKind::Carrier && x.kind != GKind::Any))
+            .filter(|n| self.node(**n).is_some_and(|x| matches!(x.kind, GKind::Code | GKind::Derived | GKind::Closure)))
             .min_by(|a, b| {
                 let na = self.node(**a).map(|x| x.name.as_str());
                 let nb = self.node(**b).map(|x| x.name.as_str());

@@ -205,7 +205,9 @@ pub fn analyse_here(sources: &[CrateSource], read: &(dyn Fn(&str) -> Result<Stri
     let mut graph = Graph::new(&ix);
     let mut problems = program.problems.clone();
     flow::analyse(&ix, &mut graph, &mut problems);
+    eprintln!("DEBUG flow done");
     let cycles = graph.cycles();
+    eprintln!("DEBUG cycles done");
     let types = graph::type_cycles(&ix);
     let mut statements = Vec::new();
     for c in program.crates.iter().filter(|c| c.source.role == Role::Ships) {

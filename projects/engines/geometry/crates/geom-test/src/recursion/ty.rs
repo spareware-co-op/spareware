@@ -47,9 +47,12 @@ pub struct GenId(pub usize);
 pub enum TraitRef {
     /// One of the kernel's own traits, with its generic arguments.
     Kernel(ItemId, Vec<Ty>),
-    /// A trait from outside the kernel, by its last path segment (`Add`, `Iterator`, `Fn`), with
-    /// its generic arguments (for `Fn(A, B) -> R`, the inputs `A` and `B`).
+    /// A trait from outside the kernel, by its last path segment (`Add`, `Iterator`), with its
+    /// generic arguments.
     Ext(String, Vec<Ty>),
+    /// A closure trait (`Fn`, `FnMut`, `FnOnce`) written `Fn(A, B) -> R`: its name, its inputs `A`
+    /// and `B`, and its output `R` (the unit type when none is written).
+    Fn(String, Vec<Ty>, Box<Ty>),
 }
 
 impl TraitRef {
@@ -58,7 +61,7 @@ impl TraitRef {
     #[must_use]
     pub fn ext_name(&self) -> Option<&str> {
         match self {
-            TraitRef::Ext(name, _) => Some(name),
+            TraitRef::Ext(name, _) | TraitRef::Fn(name, ..) => Some(name),
             TraitRef::Kernel(..) => None,
         }
     }
@@ -67,16 +70,41 @@ impl TraitRef {
     #[must_use]
     pub fn fn_arity(&self) -> Option<usize> {
         match self {
-            TraitRef::Ext(name, args) if FN_TRAITS.contains(&name.as_str()) => Some(args.len()),
+            TraitRef::Fn(_, args, _) => Some(args.len()),
             _ => None,
         }
     }
 
-    /// The trait's generic arguments.
+    /// The output of a closure trait, if this is one.
+    #[must_use]
+    pub fn fn_output(&self) -> Option<&Ty> {
+        match self {
+            TraitRef::Fn(_, _, output) => Some(output),
+            _ => None,
+        }
+    }
+
+    /// The trait's generic arguments: for a closure trait, its inputs.
     #[must_use]
     pub fn args(&self) -> &[Ty] {
         match self {
-            TraitRef::Kernel(_, args) | TraitRef::Ext(_, args) => args,
+            TraitRef::Kernel(_, args) | TraitRef::Ext(_, args) | TraitRef::Fn(_, args, _) => args,
+        }
+    }
+
+    /// Every type written in the trait: its arguments, and a closure trait's output.
+    pub fn types(&self) -> impl Iterator<Item = &Ty> {
+        self.args().iter().chain(self.fn_output())
+    }
+
+    /// The trait with every generic parameter in `map` replaced by its value.
+    #[must_use]
+    pub fn subst(&self, map: &BTreeMap<GenId, Ty>) -> TraitRef {
+        let all = |args: &[Ty]| args.iter().map(|a| a.subst(map)).collect();
+        match self {
+            TraitRef::Kernel(id, args) => TraitRef::Kernel(*id, all(args)),
+            TraitRef::Ext(name, args) => TraitRef::Ext(name.clone(), all(args)),
+            TraitRef::Fn(name, args, output) => TraitRef::Fn(name.clone(), all(args), Box::new(output.subst(map))),
         }
     }
 }
@@ -180,7 +208,7 @@ impl Ty {
                 Ty::Ref(inner) | Ty::Slice(inner) | Ty::Array(inner) | Ty::Assoc(inner, _) => work.push(inner),
                 Ty::Dyn(traits) => {
                     for tr in traits {
-                        work.extend(tr.args().iter());
+                        work.extend(tr.types());
                     }
                 }
                 _ => {}
@@ -225,7 +253,7 @@ impl Ty {
                 }
                 Ty::Dyn(traits) => {
                     for tr in traits {
-                        work.extend(tr.args().iter());
+                        work.extend(tr.types());
                     }
                 }
                 Ty::Closure(n) | Ty::FnDef(n) => {
@@ -252,19 +280,7 @@ impl Ty {
             Ty::Array(inner) => Ty::Array(Box::new(inner.subst(map))),
             Ty::Tuple(items) => Ty::Tuple(items.iter().map(|a| a.subst(map)).collect()),
             Ty::Assoc(inner, name) => Ty::Assoc(Box::new(inner.subst(map)), name.clone()),
-            Ty::Dyn(traits) => Ty::Dyn(
-                traits
-                    .iter()
-                    .map(|tr| match tr {
-                        TraitRef::Kernel(id, args) => {
-                            TraitRef::Kernel(*id, args.iter().map(|a| a.subst(map)).collect())
-                        }
-                        TraitRef::Ext(name, args) => {
-                            TraitRef::Ext(name.clone(), args.iter().map(|a| a.subst(map)).collect())
-                        }
-                    })
-                    .collect(),
-            ),
+            Ty::Dyn(traits) => Ty::Dyn(traits.iter().map(|tr| tr.subst(map)).collect()),
             other => other.clone(),
         }
     }
@@ -425,14 +441,15 @@ mod tests {
                 vec![Ty::Adt(ItemId(3), vec![Ty::Param(GenId(1))])],
             ))),
             Ty::Array(Box::new(Ty::Closure(NodeId(7)))),
-            Ty::Dyn(vec![TraitRef::Ext(
+            Ty::Dyn(vec![TraitRef::Fn(
                 "Fn".to_owned(),
                 vec![Ty::Adt(ItemId(4), Vec::new())],
+                Box::new(Ty::Adt(ItemId(5), Vec::new())),
             )]),
             Ty::Prim("u64".to_owned()),
         ]);
         let c = t.carries();
-        assert_eq!(c.types, [ItemId(3), ItemId(4)].into());
+        assert_eq!(c.types, [ItemId(3), ItemId(4), ItemId(5)].into());
         assert_eq!(c.calls, [NodeId(7)].into());
         assert_eq!(c.generics, [GenId(1)].into());
         assert!(!c.top);
