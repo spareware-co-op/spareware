@@ -358,11 +358,12 @@ fn a_licence_text_no_port_uses_fails() {
     s.notices
         .push(file(NOTICES, "ample.txt", &notice("Ample", "ex/ample", SHA2, "MIT")));
     let r = rules(&s.ledger());
+    // Problems sort by file: the crate's folder comes before the licence texts' folder.
     assert_eq!(
         r,
         [
-            (format!("{NOTICES}/ample.txt"), Rule::Notice),
             (format!("{KERNEL}/src/ported.rs"), Rule::Notice),
+            (format!("{NOTICES}/ample.txt"), Rule::Notice),
         ]
     );
 }
@@ -525,7 +526,7 @@ fn a_record_must_credit_the_source_its_note_describes() {
 fn the_template_is_held_to_the_same_fields() {
     let mut s = Seeded::good();
     s.notes.retain(|f| !f.path.ends_with("TEMPLATE.md"));
-    one_problem(&s.ledger(), METHODS, Rule::Note, "no TEMPLATE.md");
+    one_problem(&s.ledger(), &format!("{METHODS}/"), Rule::Note, "no TEMPLATE.md");
     let mut s = Seeded::good();
     s.notes.retain(|f| !f.path.ends_with("TEMPLATE.md"));
     s.notes.push(file(

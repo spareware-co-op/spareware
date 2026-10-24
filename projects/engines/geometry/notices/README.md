@@ -20,6 +20,8 @@ Licence text:
 <the licence file's text, copied exactly>
 ```
 
+`Credit:` holds any further credit the origin asks for. For an origin under Apache-2.0 whose repository has a `NOTICE` file, such as NVIDIA's USD BRep release that decision 32.8 ([chapter 32](../architecture/32-decisions.md)) lets the kernel port, the attribution notices of that file are copied here exactly, as the Apache License's section 4(d) requires of a derivative work.
+
 `cargo run -p geom-test --bin provenance -- check` (CI runs it) fails when a key is missing, repeated, unknown or empty, a link is not pinned to a full commit, the licence file is in another repository or at another commit, the licence is not on the allow-list, or the licence text is missing; when the ports of one repository at one commit (every `Source:` record whose link is in it) have no licence text here, or more than one; when a file's licence differs from its ports'; and when no port uses a file. So a new port cannot ship without its licence text, and a licence text cannot outlive its port.
 
 ## The files

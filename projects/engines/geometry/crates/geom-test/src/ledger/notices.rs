@@ -23,7 +23,9 @@
 //! - **One licence text per ported source, used.** Every group of `port` records with one
 //!   repository and commit has exactly one licence-text file with that repository and commit, the
 //!   same licence as every record of the group, and every licence-text file belongs to a group;
-//!   anything else is a [`Rule::Notice`] problem.
+//!   every origin file a port names has at least one copyright line in its record, a run of links
+//!   sharing the lines after it ([`crate::ledger::origins`]); anything else is a
+//!   [`Rule::Notice`] problem.
 //! - **Exactly as written.** The credit and the licence text are kept byte for byte, apart from
 //!   `\r\n` read as `\n` and blank lines at the end of the file.
 //!
@@ -283,7 +285,19 @@ pub fn match_ports<'a, 'n>(
     let mut groups: BTreeMap<(String, String), Vec<Use<'a>>> = BTreeMap::new();
     for source in sources.iter().filter(|s| s.take() == "port") {
         for used in &source.uses {
-            for (link, _) in origins(used.record) {
+            for (link, lines) in origins(used.record) {
+                if lines.is_empty() {
+                    problems.push(Problem {
+                        file: used.file.to_owned(),
+                        rule: Rule::Notice,
+                        message: format!(
+                            "the Source record of this port copies no copyright line for the \
+                             origin file {link}: write the origin's copyright lines, copied \
+                             exactly, after its link (29.20, rule 4), or, where the origin file \
+                             has none, a line saying so"
+                        ),
+                    });
+                }
                 let key = repository_and_commit(&link).filter(|(_, c)| links::is_full_commit(c));
                 let Some(key) = key else {
                     // The record's own link is the map's Source rule; a further one is ours.

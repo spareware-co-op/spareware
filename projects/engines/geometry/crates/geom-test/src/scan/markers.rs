@@ -34,7 +34,10 @@
 /// `smos_Pythag`, `polint`, `trapzd`, `qromb`, `qsimp`, `rkck`, `ludcmp`, `tred2` and `dbrent`
 /// behind SMLib's and solidcore's routines. The others are the same book's names for the routines
 /// chapter 29.4 rewrites from primary sources (LU, QR, SVD, eigenproblems, Brent, tridiagonal
-/// solves, quadrature, ODE steps).
+/// solves, quadrature, ODE steps). Decision 32.8 lets the kernel port NVIDIA's SMLib release, but
+/// keeps its Numerical Recipes-derived routines and fixtures out
+/// (`projects/engines/geometry/architecture/32-decisions.md`); these names, the macros and the
+/// constant below are what flag one ported with the rest.
 pub const NR_ROUTINES: [&str; 47] = [
     "svdcmp", "svbksb", "tqli", "tred2", "rkqs", "rkck", "rkdumb", "odeint", "bsstep", "stifbs",
     "mmid", "pzextr", "rzextr", "ludcmp", "lubksb", "pythag", "polint", "ratint", "trapzd",

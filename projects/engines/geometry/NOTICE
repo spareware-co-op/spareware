@@ -64,6 +64,7 @@ copies them:
   projects/engines/geometry/crates/geom-num/src/math/sincospi.rs
     SPDX-License-Identifier: MPL-2.0 AND MIT
     https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/sinpi/sinpi.c
+      Copyright (c) 2023-2026 Alexei Sibidanov <sibid@uvic.ca>.
     https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/cospi/cospi.c
       Copyright (c) 2023-2026 Alexei Sibidanov <sibid@uvic.ca>.
 

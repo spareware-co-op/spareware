@@ -29,7 +29,8 @@
 //!   record ports, grouped by repository and commit, has exactly one licence text under
 //!   `notices/`, for the same repository, commit and licence, and `NOTICE` reproduces it in full
 //!   with the copyright lines each ported file's header copies; a port without one, a licence
-//!   text no port uses, and a licence that differs are problems ([`Rule::Notice`]).
+//!   text no port uses, a licence that differs, and an origin file whose `Source:` record copies
+//!   no copyright line for it are problems ([`Rule::Notice`]).
 //! - **Every source consulted is credited.** Every `Consulted:` record's source is in `NOTICE`'s
 //!   credits, with its licence, link, method note and what each file consulted it for (rule 4: a
 //!   PORT METHOD module "credits every source it consulted").
@@ -250,9 +251,28 @@ pub fn repository_and_commit(link: &str) -> Option<(String, String)> {
 
 /// The origin files of one port record, each with the lines its notice copies: the record's link
 /// first, then every further link the notice names on a line of its own, each followed by the
-/// lines after it (the origin's copyright lines). Links are written without their fragment.
+/// lines after it (the origin's copyright lines). A run of links with no line between them shares
+/// the lines after the last link of the run, as a header writes two files of one author ("`a.c`
+/// link, `b.c` link, then their one copyright line"). Links are written without their fragment.
 #[must_use]
 pub fn origins(record: &Value) -> Vec<(String, Vec<String>)> {
+    let mut out = origin_runs(record);
+    let mut shared: Option<Vec<String>> = None;
+    for (_, lines) in out.iter_mut().rev() {
+        if lines.is_empty() {
+            if let Some(next) = &shared {
+                lines.clone_from(next);
+            }
+        } else {
+            shared = Some(lines.clone());
+        }
+    }
+    out
+}
+
+/// The origin files of one port record, each with only the lines written directly after its own
+/// link ([`origins`] shares a run's lines).
+fn origin_runs(record: &Value) -> Vec<(String, Vec<String>)> {
     let mut out: Vec<(String, Vec<String>)> =
         vec![(links::source_key(record.text("link")), Vec::new())];
     for line in record.list("notice").iter().filter_map(Value::as_str) {
@@ -401,6 +421,40 @@ mod tests {
                     "https://h.org/b.h".to_owned(),
                     vec!["Copyright (c) 2 B".to_owned()]
                 ),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_run_of_links_shares_the_lines_after_it() {
+        let record = object([
+            ("link", Value::from("https://h.org/a.c")),
+            (
+                "notice",
+                Value::from(vec![
+                    "https://h.org/b.c".to_owned(),
+                    "Copyright (c) 1 A".to_owned(),
+                    "https://h.org/c.c".to_owned(),
+                    "https://h.org/d.c".to_owned(),
+                    "Copyright (c) 2 B".to_owned(),
+                    "https://h.org/e.c".to_owned(),
+                ]),
+            ),
+        ]);
+        let found = origins(&record);
+        let lines: Vec<(&str, Vec<&str>)> = found
+            .iter()
+            .map(|(l, v)| (l.as_str(), v.iter().map(String::as_str).collect()))
+            .collect();
+        assert_eq!(
+            lines,
+            [
+                ("https://h.org/a.c", vec!["Copyright (c) 1 A"]),
+                ("https://h.org/b.c", vec!["Copyright (c) 1 A"]),
+                ("https://h.org/c.c", vec!["Copyright (c) 2 B"]),
+                ("https://h.org/d.c", vec!["Copyright (c) 2 B"]),
+                // The last link has no line after it, and no run to share one with.
+                ("https://h.org/e.c", vec![]),
             ]
         );
     }

@@ -40,10 +40,12 @@
 //!   sources (`projects/engines/geometry/notices/`) and the method notes of the method-only
 //!   procedure (`projects/engines/geometry/methods/`), each note held to its template. The binary
 //!   `provenance` writes both files (`-- write`) and checks them in CI (`-- check`).
-//! - [`scan`]: the banned-source scanner (29.20, rules 2 and 7): Numerical Recipes markers,
-//!   copyleft notices, statements that code was taken from a copyleft source, and Autodesk hatch
-//!   pattern and linetype names, in every file of the kernel's crates and the facade's. The binary
-//!   `source-scan` runs it in CI (`-- check`).
+//! - [`scan`]: the banned-source scanner (29.20, rules 2 and 7): the routine names, macros and
+//!   constants of the numerical book chapter 29.4 bans, copyleft licence notices, statements of
+//!   origin that name a copyleft project, and Autodesk hatch pattern and linetype names, in every
+//!   file of the kernel's crates and the facade's. The binary `source-scan` runs it in CI
+//!   (`-- check`). This crate's own description must pass it too, so it names the markers only
+//!   by kind; [`scan::markers`] lists them.
 //!
 //! Fixtures, reference implementations, oracle clients and the CI tools arrive with the pieces that
 //! need them. The sister development crates are `geom-fuzz` (fuzz harnesses), `geom-gen` (every
