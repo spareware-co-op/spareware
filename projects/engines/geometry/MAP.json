@@ -147,6 +147,654 @@
     },
     {
       "chapters": [
+        23,
+        28
+      ],
+      "depends": [],
+      "errors": [],
+      "family": [],
+      "file": "projects/engines/geometry/crates/geom-bench/src/lib.rs",
+      "folder": "projects/engines/geometry/crates/geom-bench",
+      "invariants": [
+        "Every benchmark runs the operation it is named after (`tests/attack_g06.rs`), on inputs that are what their class claims (`tests/inputs.rs`).",
+        "Inputs and results are pinned by golden digests that must match in every build profile and on wasm32 (`tests/golden.rs`, and the fuel gate).",
+        "The gate, the catalogue and `geom-num`'s public functions agree (`tests/coverage.rs`).",
+        "The library has no `unsafe` code, no panicking calls or indexing outside tests, no recursion, no hash maps, no randomness (inputs come from fixed seeds) and no platform maths."
+      ],
+      "job": "the kernel's benchmarks, and the count gates that block a regression over 5%.",
+      "kind": "development",
+      "layer": "Development",
+      "modules": [
+        {
+          "cost": "reading the files, then O(n log n) for n benchmarks.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/bin/geom-bench-counts.rs",
+          "guarantees": [
+            "the exit status is the check's verdict, and every check is exact for any count and any whole-number percentage the arguments can hold (`geom_bench::counts`); a missing, unreadable or malformed file, or an argument that is not a whole number, exits with 2, never with a pass."
+          ],
+          "job": "`geom-bench-counts`: the checks the gates run on count files, from the command line. The checks themselves are in `geom_bench::counts`.",
+          "method": {
+            "links": [
+              "https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md",
+              "https://algs4.cs.princeton.edu/14analysis/"
+            ],
+            "text": "`geom_bench::counts`: Gungraun's soft limits (<https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md>) and the doubling test (<https://algs4.cs.princeton.edu/14analysis/>)."
+          },
+          "path": "geom-bench-counts",
+          "provenance": [
+            {
+              "licence": "Apache-2.0 OR MIT",
+              "link": "https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md",
+              "method_note": null,
+              "name": "Gungraun",
+              "pinned": true,
+              "purpose": "for its library-benchmark API and its Callgrind and DHAT settings. No code copied.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "bin"
+        },
+        {
+          "cost": "that of the command it runs (`geom_bench::guest`).",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/bin/geom-bench-guest.rs",
+          "guarantees": [
+            "those of `geom_bench::guest`, unchanged: the exit status and output are exactly the ones it returns."
+          ],
+          "job": "`geom-bench-guest`: the program the WebAssembly fuel gate runs inside Wasmtime, built for `wasm32-wasip1`. It also runs natively. Everything it does is in `geom_bench::guest`, whose documentation gives its commands, its exit status and how the fuel gate uses them; this program only passes on its arguments, output and status.",
+          "method": {
+            "links": [
+              "https://github.com/bytecodealliance/wasmtime/blob/5afd63588b1f5520391c6a37fc38dfd3ccd607c2/crates/wasmtime/src/config.rs#L627-L646"
+            ],
+            "text": "fuel metering (`Config::consume_fuel`, <https://github.com/bytecodealliance/wasmtime/blob/5afd63588b1f5520391c6a37fc38dfd3ccd607c2/crates/wasmtime/src/config.rs#L627-L646>) by differencing two runs (see `geom_bench::guest`)."
+          },
+          "path": "geom-bench-guest",
+          "provenance": [
+            {
+              "licence": "Apache-2.0 WITH LLVM-exception",
+              "link": "https://github.com/bytecodealliance/wasmtime/blob/5afd63588b1f5520391c6a37fc38dfd3ccd607c2/crates/wasmtime/src/config.rs#L627-L646",
+              "method_note": null,
+              "name": "Wasmtime",
+              "pinned": true,
+              "purpose": "for what fuel counts and how `Config::consume_fuel` meters it. No code copied.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "bin"
+        },
+        {
+          "cost": "linear in the bytes encoded, from one byte (a sign) to a few hundred (three planes) per value, each fed to SHA-256 once; nothing is allocated.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/canonical.rs",
+          "guarantees": [
+            "two values of one type have the same bytes only if they are equal field for field (bit for bit, for doubles); a sequence's bytes split back into its values one way only; and the bytes are the same on every target and in every build profile, since every width and byte order is fixed and nothing depends on memory layout, padding or addresses (the tests check the documented layout)."
+          ],
+          "job": "The canonical byte encoding of every benchmark input and result, and its SHA-256 digest.",
+          "method": {
+            "links": [
+              "https://csrc.nist.gov/pubs/fips/180-4/upd1/final"
+            ],
+            "text": "the canonical-encoding rule of chapter 28.13 (hash a fixed, documented byte form of each result, never a lossy summary), with SHA-256 as chapters 21 and 28.13 use it (NIST FIPS 180-4, <https://csrc.nist.gov/pubs/fips/180-4/upd1/final>)."
+          },
+          "path": "geom_bench::canonical",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the tables are static. Finding a name scans them once (a few hundred entries), and preparing a benchmark builds its batch, O([`inputs::BATCH`]).",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/catalogue.rs",
+          "guarantees": [
+            "every name is unique and prepares exactly one benchmark, and no other string prepares one ([`prepare_named`] returns `None`); the tests check both."
+          ],
+          "job": "The list of every benchmark: each operation, the `geom-num` function it measures, its group and the input classes it is measured on; the growth checks; and the functions deliberately left unmeasured, with the reason for each.",
+          "method": {
+            "links": [
+              "https://docs.rs/divan/0.1.21/divan/attr.bench.html"
+            ],
+            "text": "one table drives every harness, so a benchmark cannot be timed but not gated, or gated but not checked; each harness's own registry (divan's `args`, <https://docs.rs/divan/0.1.21/divan/attr.bench.html>, and Gungraun's benchmark groups) is filled from it."
+          },
+          "path": "geom_bench::catalogue",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(n log n) for n benchmarks: counts and names are kept in ordered maps and sets, so every report lists them in name order, the same on every run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/counts.rs",
+          "guarantees": [
+            "every check is exact for every count, percentage and exponent its types hold (a product too large for 128 bits is decided by the bound it exceeds, never wrapped or truncated), so no input makes a check panic or answer wrongly, with overflow checks on or off; and every report lists benchmarks in name order, the same on every run and every platform."
+          ],
+          "job": "Count files and the checks the gates make with them: comparing the merge base with a pull request, the benchmarks a pull request removed, and the growth checks.",
+          "method": {
+            "links": [
+              "https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md",
+              "https://algs4.cs.princeton.edu/14analysis/"
+            ],
+            "text": "the soft-limit regression check Gungraun applies to instruction counts (a percentage of the baseline; <https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md>), and the doubling test for empirical growth (Sedgewick and Wayne, *Algorithms*, 4th edition, section 1.4, <https://algs4.cs.princeton.edu/14analysis/>)."
+          },
+          "path": "geom_bench::counts",
+          "provenance": [
+            {
+              "licence": "Apache-2.0 OR MIT",
+              "link": "https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md",
+              "method_note": null,
+              "name": "Gungraun",
+              "pinned": true,
+              "purpose": "for its library-benchmark API and its Callgrind and DHAT settings. No code copied.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "[`parse`] is O(n log n) for a file of n lines (each name is checked against those before it in an ordered set); [`check`] parses it and scans its entries, once per benchmark, always outside the measured region.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/golden.rs",
+          "guarantees": [
+            "[`check`] passes only when a benchmark has an entry and both of its digests equal the recorded ones, and otherwise says which differs; a malformed line, or a second entry for a name, fails [`parse`] and names the line, so no benchmark can have two recorded values."
+          ],
+          "job": "The golden digests: for every benchmark, the SHA-256 of its inputs and of its results, recorded in `golden.txt` beside this file.",
+          "method": {
+            "links": [
+              "https://csrc.nist.gov/pubs/fips/180-4/upd1/final"
+            ],
+            "text": "golden hashes of canonical outputs, as chapters 21 and 28.13 of the kernel architecture specify them, with SHA-256 (NIST FIPS 180-4, <https://csrc.nist.gov/pubs/fips/180-4/upd1/final>)."
+          },
+          "path": "geom_bench::golden",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "each command builds one batch, O([`crate::inputs::BATCH`]), then runs the passes asked for, or one pass and its digests.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/guest.rs",
+          "guarantees": [
+            "the only difference between `run <name> 1` and `run <name> 2` is one pass and one step of the loop in [`run_passes`], and `check` fails unless both digests match `golden.txt`."
+          ],
+          "job": "The program the WebAssembly fuel gate runs inside Wasmtime: it builds a benchmark and runs its kernel a given number of times, or checks its golden digests on wasm32.",
+          "method": {
+            "links": [
+              "https://github.com/bytecodealliance/wasmtime/blob/5afd63588b1f5520391c6a37fc38dfd3ccd607c2/crates/wasmtime/src/config.rs#L627-L646"
+            ],
+            "text": "fuel metering as Wasmtime documents it (`Config::consume_fuel`, <https://github.com/bytecodealliance/wasmtime/blob/5afd63588b1f5520391c6a37fc38dfd3ccd607c2/crates/wasmtime/src/config.rs#L627-L646>), with the measured work isolated by differencing two runs that differ only in it."
+          },
+          "path": "geom_bench::guest",
+          "provenance": [
+            {
+              "licence": "Apache-2.0 WITH LLVM-exception",
+              "link": "https://github.com/bytecodealliance/wasmtime/blob/5afd63588b1f5520391c6a37fc38dfd3ccd607c2/crates/wasmtime/src/config.rs#L627-L646",
+              "method_note": null,
+              "name": "Wasmtime",
+              "pinned": true,
+              "purpose": "for what fuel counts and how `Config::consume_fuel` meters it. No code copied.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a pass is one kernel call over the batch and allocates nothing; [`Bench::measure`] is two passes; [`Bench::digests`] hashes the batch and the results, linear in their size.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/harness.rs",
+          "guarantees": [
+            "a pass allocates and frees nothing (the result buffer already holds one result per input; the tests check its capacity never changes), every pass over a batch stores the same results, and the digests always describe the batch and the results of the last pass."
+          ],
+          "job": "One benchmark ready to run: its batch, a result buffer and its kernel, run the same way by the instruction-count gate, the WebAssembly fuel gate, the wall-clock harness and the golden tests.",
+          "method": {
+            "links": [
+              "https://valgrind.org/docs/manual/cl-manual.html"
+            ],
+            "text": "the warm-cache, steady-state measurement of Callgrind's cache simulation, whose simulator keeps running while costs are not collected (Valgrind's Callgrind manual, <https://valgrind.org/docs/manual/cl-manual.html>, and its source, `callgrind/sim.c`), with the warm-up inside the measured function so it covers that function too."
+          },
+          "path": "geom_bench::harness",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few draws of [`SplitMix64`] per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/dd.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and takes the paths listed (`tests/inputs.rs` checks each claim); every result is checked against exact rationals by `tests/attack_g06.rs`."
+          ],
+          "job": "Inputs for double-double arithmetic, `geom_num::dd`: the product by a fused multiply-add ([`two_prod_fma`]), the exact constructors ([`from_sum`], [`exact_product`], [`from_i64`], [`from_i128`]), the sign, negation and magnitude, the seven arithmetic operations, rounding to a whole number ([`round_shifted`]) and the order ([`cmp`]).",
+          "method": {
+            "links": [
+              "https://en.wikipedia.org/wiki/Boundary-value_analysis"
+            ],
+            "text": "boundary-value analysis (<https://en.wikipedia.org/wiki/Boundary-value_analysis>) on the paths `geom_num::dd` documents: the fused multiply-add threshold of `two_prod_fma`, the scaling of the multiplicative operations, the overflow limit `(1 − 2^−52)·2^1024`, gradual underflow, and the halves of the rounding to a whole number."
+          },
+          "path": "geom_bench::inputs::dd",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few draws of [`SplitMix64`] per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/eft.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and takes the paths listed (`tests/inputs.rs` checks it); every result is checked against exact rationals by `tests/attack_g06.rs`."
+          ],
+          "job": "Inputs for the error-free transformations: [`two_sum`], [`fast_two_sum`], [`split`] and [`two_prod`].",
+          "method": {
+            "links": [
+              "https://en.wikipedia.org/wiki/Boundary-value_analysis",
+              "https://doi.org/10.1007/BF01397083",
+              "https://doi.org/10.1007/PL00009321"
+            ],
+            "text": "boundary-value analysis (<https://en.wikipedia.org/wiki/Boundary-value_analysis>) on the paths of the error-free transformations of Dekker (1971, <https://doi.org/10.1007/BF01397083>) and Knuth (volume 2, section 4.2.2), as Shewchuk states them (1997, <https://doi.org/10.1007/PL00009321>) and `geom_num::eft` extends them to every double."
+          },
+          "path": "geom_bench::inputs::eft",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few draws of [`SplitMix64`] per term, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/exact_sum.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and takes the paths listed (`tests/inputs.rs` checks each claim); every result is checked against the exact sum by `tests/attack_g06.rs`."
+          ],
+          "job": "Inputs for the exact sum of doubles, `geom_num::exact_sum::ExactSum`: adding terms one at a time ([`add`]), from a slice ([`add_slice`]) and from an iterator ([`add_iter`]), merging two sums ([`merge`]) and rounding the exact sum once ([`round`], [`round_ieee`]).",
+          "method": {
+            "links": [
+              "https://en.wikipedia.org/wiki/Boundary-value_analysis",
+              "https://arxiv.org/abs/1505.05571"
+            ],
+            "text": "boundary-value analysis (<https://en.wikipedia.org/wiki/Boundary-value_analysis>) on the paths `geom_num::exact_sum` documents: the small and large superaccumulators of Neal (2015, <https://arxiv.org/abs/1505.05571>), the switch between them, the special values and the rounding to nearest with ties to even."
+          },
+          "path": "geom_bench::inputs::exact_sum",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few draws of [`crate::rng::SplitMix64`] per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/exactness.rs",
+          "guarantees": [
+            "every batch is full, the same on every target, and takes the paths listed (`tests/inputs.rs`), and every result agrees with chapters 9 and 6.5, computed exactly in 128 bits (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for exactness classes: [`combine`] (`Exactness::combine`), [`within`] (`Exactness::within`) and [`combine_within`] (`Exactness::combine_within`).",
+          "method": {
+            "links": [
+              "https://en.wikipedia.org/wiki/Boundary-value_analysis"
+            ],
+            "text": "one input per arm of each match (chapter 9 of the kernel architecture: the less exact class wins and bounds add, in the finer step; chapter 6.5: a bound over its ceiling is an error), with boundary values at the ceiling and at the end of `u64` (boundary-value analysis, <https://en.wikipedia.org/wiki/Boundary-value_analysis>)."
+          },
+          "path": "geom_bench::inputs::exactness",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few draws of [`crate::rng::SplitMix64`] per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/grid.rs",
+          "guarantees": [
+            "every batch is full, the same on every target, and its classes are what they claim (`tests/inputs.rs`); every result is checked against exact integer arithmetic by `tests/attack_g06.rs`."
+          ],
+          "job": "Inputs for grid coordinates: [`coord_new`] (`Coord::new`), [`coord_from_i128`] (`Coord::from_i128`), [`p2_new`] (`P2::new`) and [`p3_new`] (`P3::new`); for moving coordinates between grid steps: [`refine`] (coarse to fine, exact) and [`coarsen`] (fine to coarse, rounded); and for counts of steps and units: [`steps_refine`] (`Steps::refine`) and [`steps_per`] (`GridStep::steps_per`).",
+          "method": {
+            "links": [
+              "https://en.wikipedia.org/wiki/Boundary-value_analysis"
+            ],
+            "text": "the frame's range and its two errors as chapter 6.1 of the kernel architecture sets them, tested at 2^40 − 1 and at 2^40 steps as chapter 28.2 requires (\"The range holds\"), with refinement and coarsening between the three steps of the grid ladder (`geom_num::grid`): the values on and just past each boundary (boundary-value analysis, <https://en.wikipedia.org/wiki/Boundary-value_analysis>)."
+          },
+          "path": "geom_bench::inputs::grid",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few draws of [`crate::rng::SplitMix64`] per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/growth.rs",
+          "guarantees": [
+            "at every size, every operand of a sum, difference, negation or comparison uses the top limb, every product reaches it, and no result overflows (`tests/inputs.rs`); every result is checked against exact integers by `tests/attack_g06.rs`."
+          ],
+          "job": "Inputs for the growth checks: the fixed-width integer operations at 2, 4 and 8 limbs (n, 2n and 4n), on operands that fill the width, so each operation runs its full schoolbook loop.",
+          "method": {
+            "links": [
+              "https://algs4.cs.princeton.edu/14analysis/"
+            ],
+            "text": "the doubling test for empirical growth (run at n, 2n and 4n and compare the ratios with the stated cost; Sedgewick and Wayne, *Algorithms*, 4th edition, section 1.4, <https://algs4.cs.princeton.edu/14analysis/>), on the operand classes of Knuth's schoolbook arithmetic (volume 2, section 4.3.1)."
+          },
+          "path": "geom_bench::inputs::growth",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few draws of [`SplitMix64`] per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/interval.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and its classes are what they claim (`tests/inputs.rs` checks every branch and error named here); every result is checked against exact rationals by `tests/attack_g06.rs`."
+          ],
+          "job": "Inputs for interval arithmetic: [`new`], [`contains`], [`add`], [`sub`], [`mul`], [`div`], [`mul_add`], [`square`], [`sqrt`], [`norm`], [`neg`] and [`certain_sign`]; and for the certified enclosures of the proven maths functions, [`sinpi`], [`cospi`], [`exp`] and [`ln`].",
+          "method": {
+            "links": [
+              "https://accu.org/journals/overload/19/103/harris_1974/"
+            ],
+            "text": "the operand classes of round-to-nearest interval arithmetic with outward widening (Harris, \"Why interval arithmetic won't cure your floating point blues\", 2011, <https://accu.org/journals/overload/19/103/harris_1974/>): narrow and straddling intervals, overflow, underflow and the zero cases each operation documents."
+          },
+          "path": "geom_bench::inputs::interval",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few draws of [`crate::rng::SplitMix64`] per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/math.rs",
+          "guarantees": [
+            "every batch is full and the same on every target; every input is finite and no result is NaN, and the extreme sines need the longest argument reduction (`tests/inputs.rs`)."
+          ],
+          "job": "Inputs for the deterministic maths functions of `geom_num::math`, one builder per function: the proven ones here, and those without a proven bound in [`unproven`].",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/1057600.1057602"
+            ],
+            "text": "the hard cases of elementary-function implementations, each a separate path through libm (which `geom_num::math` wraps): arguments that need the longest trigonometric argument reduction (Payne and Hanek 1983, <https://doi.org/10.1145/1057600.1057602>), results near overflow and underflow, subnormals, and arguments next to the ends of each domain."
+          },
+          "path": "geom_bench::inputs::math",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "building a batch takes O([`BATCH`]) generator draws (at most `ATTEMPTS` = 64 · [`BATCH`] candidates, so it always ends), once per benchmark, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/mod.rs",
+          "guarantees": [
+            "every batch is a pure function of its operation and class, the same on every target and in every build profile; every catalogued batch is full ([`BATCH`] inputs; the tests check it) and is what its class claims; a class an operation lacks gives an empty batch; and no builder panics."
+          ],
+          "job": "The inputs every benchmark runs on: fixed batches, built the same way on every target.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/PL00009321",
+              "https://en.wikipedia.org/wiki/Pythagorean_triple",
+              "https://en.wikipedia.org/wiki/Pythagorean_quadruple",
+              "https://en.wikipedia.org/wiki/Unimodular_matrix"
+            ],
+            "text": "the input categories robust-geometry work tests and times separately, because each takes a different path through the code: general position, nearly degenerate, exactly degenerate (all three are Shewchuk's, 1997, section 6: <https://doi.org/10.1007/PL00009321>), and the extremes of the number range. Exactly degenerate points on circles and spheres come from Pythagorean triples and quadruples (<https://en.wikipedia.org/wiki/Pythagorean_triple>, <https://en.wikipedia.org/wiki/Pythagorean_quadruple>): integer points at one exact distance from a centre. Nearly degenerate triangles and tetrahedra with huge coordinates are unimodular lattice bases (<https://en.wikipedia.org/wiki/Unimodular_matrix>), built with the extended Euclidean algorithm (Knuth, *The Art of Computer Programming*, volume 2, section 4.5.2): their area or volume is the smallest nonzero one the grid allows."
+          },
+          "path": "geom_bench::inputs",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few draws of [`crate::rng::SplitMix64`] per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/plane.rs",
+          "guarantees": [
+            "every batch is full, the same on every target, and its classes are what they claim (`tests/inputs.rs`); every result is checked against exact cross products, Cramer's rule and exact rounding by `tests/attack_g06.rs`."
+          ],
+          "job": "Inputs for plane-based geometry: [`through`] (`Plane::through`), [`side`] (`Plane::side`), [`tpi_new`] (`Tpi::new`), [`tpi_homogeneous`] (`Tpi::homogeneous`), [`side_of_tpi`] (`Plane::side_of_tpi`) and [`to_grid`] (`Tpi::to_grid`).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1111/j.1467-8659.2009.01609.x",
+              "https://doi.org/10.1007/PL00009321"
+            ],
+            "text": "the degenerate cases of plane-based geometry as `Tpi::new` documents them (after Campen and Kobbelt 2010, <https://doi.org/10.1111/j.1467-8659.2009.01609.x>), with Shewchuk's input classes (<https://doi.org/10.1007/PL00009321>, section 6) and unimodular bases (Knuth, volume 2, section 4.5.2) for the nearly degenerate ones."
+          },
+          "path": "geom_bench::inputs::plane",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few draws of [`crate::rng::SplitMix64`] per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/predicate.rs",
+          "guarantees": [
+            "every batch is full, the same on every target, and its classes are what they claim (`tests/inputs.rs`, against exact determinants and Shewchuk's filter bounds); every sign is checked against an exact determinant by `tests/attack_g06.rs`."
+          ],
+          "job": "Inputs for the exact predicates: [`orient2d`], [`orient3d`], [`incircle`] and [`insphere`].",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/PL00009321",
+              "https://en.wikipedia.org/wiki/Pythagorean_quadruple"
+            ],
+            "text": "Shewchuk's three input classes (random, nearly degenerate, exactly degenerate; 1997, section 6, <https://doi.org/10.1007/PL00009321>) and the extremes of the frame; unimodular bases from the extended Euclidean algorithm (Knuth, volume 2, section 4.5.2); Pythagorean triples and quadruples for integer circles and spheres (<https://en.wikipedia.org/wiki/Pythagorean_quadruple>)."
+          },
+          "path": "geom_bench::inputs::predicate",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few draws of [`crate::rng::SplitMix64`] per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/real.rs",
+          "guarantees": [
+            "the batch is full, the same on every target, and holds both zeros in both orders and every ordering (`tests/inputs.rs`); every result is checked against `f64::total_cmp` by `tests/attack_g06.rs`."
+          ],
+          "job": "Inputs for finite doubles in total order: [`total_max`], [`total_min`] and [`cmp`] on `Real`.",
+          "method": {
+            "links": [
+              "https://doc.rust-lang.org/std/primitive.f64.html#method.total_cmp"
+            ],
+            "text": "IEEE 754-2019 totalOrder (section 5.10) as Rust's `f64::total_cmp` implements it (<https://doc.rust-lang.org/std/primitive.f64.html#method.total_cmp>); one input per case of the ordering, including the signed zeros."
+          },
+          "path": "geom_bench::inputs::real",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few draws of [`SplitMix64`] per input, and at most four `next_u32` draws to place a stream, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/rng.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and takes the paths listed (`tests/inputs.rs` checks each claim); every result is checked against an independent Philox4x32-10 and independent draw definitions by `tests/attack_g06.rs`."
+          ],
+          "job": "Inputs for the counter-based random numbers of `geom_num::rng`: the Philox4x32-10 block function ([`philox4x32_10`]), a stream started at a block ([`stream_from`]), the five draws ([`next_u32`], [`next_u64`], [`next_f64`], [`below`], [`range_inclusive`]) and the two ways a stream range hands out streams ([`range_philox`], [`chunk`]).",
+          "method": {
+            "links": [
+              "https://en.wikipedia.org/wiki/Boundary-value_analysis",
+              "https://doi.org/10.1145/3230636"
+            ],
+            "text": "boundary-value analysis (<https://en.wikipedia.org/wiki/Boundary-value_analysis>) on the paths `geom_num::rng` documents: the block refill of `next_u32`, the end of a stream's 2^66 words, the rejection in Lemire's method (2019, <https://doi.org/10.1145/3230636>), whose probability is (2^64 mod n) / 2^64, and the checked steps of a stream range."
+          },
+          "path": "geom_bench::inputs::rng",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few draws of [`crate::rng::SplitMix64`] per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/sign.rs",
+          "guarantees": [
+            "the batch is full, the same on every target, and takes all three branches and both ends of `i128` (`tests/inputs.rs`); every result is checked against an exact sign by `tests/attack_g06.rs`."
+          ],
+          "job": "Inputs for the sign of an exact integer: [`of_i128`] (`Sign::of_i128`).",
+          "method": {
+            "links": [
+              "https://en.wikipedia.org/wiki/Boundary-value_analysis"
+            ],
+            "text": "one input per branch of a three-way comparison, at both ends of the type (boundary-value analysis, <https://en.wikipedia.org/wiki/Boundary-value_analysis>)."
+          },
+          "path": "geom_bench::inputs::sign",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few draws of [`crate::rng::SplitMix64`] per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/wide.rs",
+          "guarantees": [
+            "every batch is full, the same on every target, and its classes are what they claim (`tests/inputs.rs`); every result is checked against exact integers by `tests/attack_g06.rs`."
+          ],
+          "job": "Inputs for fixed-width integers, `Wide<L>`: [`add`], [`sub`], [`mul`], [`neg`], [`cmp`], [`signum`], [`to_i128`], [`from_i128`] and [`resize`], for any width `Wide` allows (two limbs or more; the catalogue uses I256, I320, I384 and I512, and 2, 4 and 8 limbs for the growth checks). Where a class cannot exist at a width its batch is empty, as for any class an operation lacks: typical products need four limbs (two typical operands make up to 252 bits), and at two limbs every value fits an `i128`, so nothing overflows `to_i128`.",
+          "method": {
+            "links": [
+              "https://www-cs-faculty.stanford.edu/~knuth/taocp.html"
+            ],
+            "text": "the operand classes that take each path of schoolbook multiple-precision arithmetic (Knuth, *The Art of Computer Programming*, volume 2, section 4.3.1, <https://www-cs-faculty.stanford.edu/~knuth/taocp.html>): short operands, full-width operands, carries out of the top limb."
+          },
+          "path": "geom_bench::inputs::wide",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one call of the operation per input, plus the loop above; no allocation, because the buffer already holds one result per input.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/kernels.rs",
+          "guarantees": [
+            "each kernel calls exactly the `geom-num` function it is named after, once per input and in order, and stores every result (`tests/attack_g06.rs` recomputes each benchmark's results by calling `geom-num` directly); it allocates nothing when the buffer has room for the batch, as every harness gives it."
+          ],
+          "job": "The measured code: one function per operation, which runs the operation on every input of a batch and stores each result.",
+          "method": {
+            "links": [
+              "https://docs.rs/divan/0.1.21/divan/fn.black_box.html"
+            ],
+            "text": "the batch-of-independent-calls microbenchmark with an optimisation barrier per input, as divan documents it (<https://docs.rs/divan/0.1.21/divan/fn.black_box.html>), with the results written to memory instead of folded into a checksum."
+          },
+          "path": "geom_bench::kernels",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a benchmark is one pass of its operation over [`inputs::BATCH`] inputs (two passes under the instruction-count gate, whose first pass warms the caches; one and two runs under the fuel gate, whose difference is one pass). Building a batch takes O([`inputs::BATCH`]) generator draws and hashing it O([`inputs::BATCH`]) SHA-256 blocks, once per benchmark, outside every measured region.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/lib.rs",
+          "guarantees": [
+            "Every benchmark runs the operation it is named after (`tests/attack_g06.rs`), on inputs that are what their class claims (`tests/inputs.rs`).",
+            "Inputs and results are pinned by golden digests that must match in every build profile and on wasm32 (`tests/golden.rs`, and the fuel gate).",
+            "The gate, the catalogue and `geom-num`'s public functions agree (`tests/coverage.rs`).",
+            "The library has no `unsafe` code, no panicking calls or indexing outside tests, no recursion, no hash maps, no randomness (inputs come from fixed seeds) and no platform maths."
+          ],
+          "job": "Spare Kit geometry kernel, development only: benchmarks, and the count gates that block a regression over 5%.",
+          "method": {
+            "links": [
+              "https://github.com/gungraun/gungraun",
+              "https://docs.wasmtime.dev/api/wasmtime/struct.Config.html#method.consume_fuel",
+              "https://algs4.cs.princeton.edu/14analysis/",
+              "https://csrc.nist.gov/pubs/fips/180-4/upd1/final"
+            ],
+            "text": "deterministic count gates in place of timing, as chapter 23.13 sets them out: Valgrind's Callgrind and DHAT through Gungraun (<https://github.com/gungraun/gungraun>), Wasmtime's fuel (<https://docs.wasmtime.dev/api/wasmtime/struct.Config.html#method.consume_fuel>), the doubling test for growth (<https://algs4.cs.princeton.edu/14analysis/>), and SHA-256 golden digests of canonical outputs (NIST FIPS 180-4, <https://csrc.nist.gov/pubs/fips/180-4/upd1/final>)."
+          },
+          "path": "geom_bench",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few wrapping integer operations per draw, and one per byte of a seed's name.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/rng.rs",
+          "guarantees": [
+            "every draw is a pure function of the seed and the number of draws before it, in wrapping 64-bit integer arithmetic only, so the sequence is the same on every target, in every build profile and with overflow checks on or off; [`SplitMix64::range`] stays inside its range for every pair of `i64` bounds, and no method panics."
+          ],
+          "job": "A fixed-seed generator for benchmark inputs: the same numbers on every target, every run.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/2660193.2660195",
+              "https://prng.di.unimi.it/splitmix64.c",
+              "http://www.isthe.com/chongo/tech/comp/fnv/"
+            ],
+            "text": "SplitMix64, from G. L. Steele, D. Lea and C. H. Flood, \"Fast splittable pseudorandom number generators\", OOPSLA 2014 (<https://doi.org/10.1145/2660193.2660195>), with the constants of Vigna's reference code (<https://prng.di.unimi.it/splitmix64.c>, public domain). Seeds are derived with 64-bit FNV-1a (<http://www.isthe.com/chongo/tech/comp/fnv/>). The tests check both against their published values."
+          },
+          "path": "geom_bench::rng",
+          "provenance": [
+            {
+              "licence": "public domain",
+              "link": "https://prng.di.unimi.it/splitmix64.c",
+              "method_note": null,
+              "name": "Vigna's SplitMix64 reference code",
+              "pinned": false,
+              "purpose": "for the constants and steps of SplitMix64, which the tests check against its published outputs. No code copied.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one compression (64 rounds of 32-bit operations) per 64-byte block, so linear in the message; the state is the eight hash words, one block and two counters, and nothing is allocated.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/sha256.rs",
+          "guarantees": [
+            "the digest of every message below 2^61 bytes (2^64 bits, the standard's limit) is the one FIPS 180-4 defines, whatever pieces the message is fed in (the tests check the standard's examples, a million bytes in uneven pieces, and every padding length); and no method panics."
+          ],
+          "job": "SHA-256, the hash of every benchmark's golden digests.",
+          "method": {
+            "links": [
+              "https://csrc.nist.gov/pubs/fips/180-4/upd1/final",
+              "https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values"
+            ],
+            "text": "the Secure Hash Standard, NIST FIPS 180-4, sections 4.1.2 (functions), 4.2.2 (constants), 5.1.1 (padding), 5.3.3 (initial value) and 6.2.2 (the compression function): <https://csrc.nist.gov/pubs/fips/180-4/upd1/final>. The message schedule is kept as a sliding window of sixteen words, which computes the same W_t as the standard's 64-word array. The tests check the standard's own examples (<https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values>)."
+          },
+          "path": "geom_bench::sha256",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
+      "name": "geom-bench",
+      "provenance": [
+        {
+          "licence": "Apache-2.0 OR MIT",
+          "link": "https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md",
+          "method_note": null,
+          "name": "Gungraun",
+          "pinned": true,
+          "purpose": "for its library-benchmark API and its Callgrind and DHAT settings. No code copied.",
+          "take": "port-method"
+        }
+      ],
+      "sections": "chapter 23.13 (benchmarks and regression gates) and 28.14 (benchmarks in the test suite) of the kernel architecture, `projects/engines/geometry/architecture/`; board entry G18, which this piece (G06) covers.",
+      "spdx": null,
+      "status": null,
+      "summary": "Spare Kit geometry kernel, development only: benchmarks, and the count gates that block a regression over 5%."
+    },
+    {
+      "chapters": [
         13
       ],
       "depends": [],
@@ -3762,6 +4410,18 @@
       ]
     },
     {
+      "licence": "Apache-2.0 WITH LLVM-exception",
+      "link": "https://github.com/bytecodealliance/wasmtime/blob/5afd63588b1f5520391c6a37fc38dfd3ccd607c2/crates/wasmtime/src/config.rs",
+      "method_note": null,
+      "name": "Wasmtime",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-bench/src/bin/geom-bench-guest.rs",
+        "projects/engines/geometry/crates/geom-bench/src/guest.rs"
+      ]
+    },
+    {
       "licence": "MIT",
       "link": "https://github.com/camshaft/bolero/blob/7642943b6c1f8a9b5e824dd1cd29b7c8e56068b8/bin/cargo-bolero/src/project.rs",
       "method_note": null,
@@ -3814,6 +4474,19 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-test/src/map/links.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0 OR MIT",
+      "link": "https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md",
+      "method_note": null,
+      "name": "Gungraun",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-bench/src/bin/geom-bench-counts.rs",
+        "projects/engines/geometry/crates/geom-bench/src/counts.rs",
+        "projects/engines/geometry/crates/geom-bench/src/lib.rs"
       ]
     },
     {
@@ -3917,6 +4590,17 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-test/src/rng.rs"
+      ]
+    },
+    {
+      "licence": "public domain",
+      "link": "https://prng.di.unimi.it/splitmix64.c",
+      "method_note": null,
+      "name": "Vigna's SplitMix64 reference code",
+      "pinned": false,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-bench/src/rng.rs"
       ]
     },
     {

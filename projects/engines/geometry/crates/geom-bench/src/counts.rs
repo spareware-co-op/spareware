@@ -39,6 +39,9 @@
 //! the baseline; <https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md>),
 //! and the doubling test for empirical growth (Sedgewick and Wayne, *Algorithms*, 4th edition,
 //! section 1.4, <https://algs4.cs.princeton.edu/14analysis/>).
+//! Consulted: Gungraun, Apache-2.0 OR MIT,
+//!   <https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md>,
+//!   for its library-benchmark API and its Callgrind and DHAT settings. No code copied.
 //!
 //! Cost: O(n log n) for n benchmarks: counts and names are kept in ordered maps and sets, so every
 //! report lists them in name order, the same on every run.
