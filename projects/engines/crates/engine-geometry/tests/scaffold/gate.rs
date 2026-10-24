@@ -806,23 +806,30 @@ const CALLS: [(&str, &str, &[&str]); 12] = [
     ),
 ];
 
-/// The probe's lines that name each disallowed type: (source, path).
-const TYPES: [(&str, &str); 4] = [
+/// The probe's lines that name each disallowed type: (source, path, lints). Constructing a
+/// `HashMap` or a `HashSet` with `new` breaks two bans at once, since geom-num's configuration
+/// bans both the types and their constructors that seed from entropy (G32), so those two lines
+/// expect both lints.
+const TYPES: [(&str, &str, &[&str]); 4] = [
     (
         "fn t1() -> usize { std::collections::HashMap::<u8, u8>::new().len() }",
         REQUIRED_TYPES[0],
+        &["clippy::disallowed_methods", "clippy::disallowed_types"],
     ),
     (
         "fn t2() -> usize { std::collections::HashSet::<u8>::new().len() }",
         REQUIRED_TYPES[1],
+        &["clippy::disallowed_methods", "clippy::disallowed_types"],
     ),
     (
         "fn t3() -> usize { core::mem::size_of::<std::hash::RandomState>() }",
         REQUIRED_TYPES[2],
+        TYPE,
     ),
     (
         "fn t4() -> usize { core::mem::size_of::<std::thread::ThreadId>() }",
         REQUIRED_TYPES[3],
+        TYPE,
     ),
 ];
 
@@ -877,10 +884,10 @@ pub fn probe_lines() -> Vec<ProbeLine> {
             covers: Some(path.to_owned()),
         });
     }
-    for (source, path) in TYPES {
+    for (source, path, lints) in TYPES {
         lines.push(ProbeLine {
             source: source.to_owned(),
-            lints: TYPE,
+            lints,
             covers: Some(path.to_owned()),
         });
     }

@@ -1240,7 +1240,7 @@ mod tests {
             hf!("-0x1.32d2cc12a51f4p-1"),
             hf!("0x1.5060540058476p-4"),
         ];
-        let mut tsin = taylor(pi(), 15, true);
+        let mut tsin = taylor(&pi(), 15, true);
         tsin[1] = Iv::int(0);
         let q = error_poly(
             &tsin,
@@ -1312,7 +1312,7 @@ mod tests {
             hf!("-0x1.55d3c6fc9af15p+0"),
             hf!("0x1.e1d3ff2ae3f9ap-3"),
         ];
-        let tcos = taylor(pi(), 16, false);
+        let tcos = taylor(&pi(), 16, false);
         let q = error_poly(
             &tcos,
             &[(2, cc[0]), (4, cc[1]), (6, cc[2]), (8, cc[3])],
@@ -1537,7 +1537,7 @@ mod tests {
             Dy::from_f64(hf!("0x1.e8f4344534da6p-12")),
             Dy::from_f64(hf!("-0x1.6f9cd7b8cb9dbp-16")),
         ];
-        let tsin = taylor(pi(), 23, true);
+        let tsin = taylor(&pi(), 23, true);
         let q: Vec<Iv> = (0..11)
             .map(|k| {
                 let t = tsin[2 * k + 3].clone();
@@ -1593,7 +1593,7 @@ mod tests {
             Dy::from_f64(hf!("-0x1.55d3c7e3cbff9p+0")),
             Dy::from_f64(hf!("0x1.e1f50604fa0ffp-3")),
         ];
-        let tcos = taylor(pi(), 20, false);
+        let tcos = taylor(&pi(), 20, false);
         let q: Vec<Iv> = (0..10)
             .map(|k| {
                 let t = tcos[2 * k + 2].clone();
