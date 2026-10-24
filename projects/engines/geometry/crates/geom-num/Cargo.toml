@@ -42,6 +42,11 @@ hex = "=0.4.3"
 # reads it: tests only (chapter 29.1; piece G12a put it in place of a line reader). toml 0.9.6:
 # MIT OR Apache-2.0, the version engine-geometry's scaffold check pins.
 toml = "=0.9.6"
+# The second method of chapter 28.6 (piece G28): Shewchuk's adaptive orient2d, orient3d, incircle
+# and insphere, ported by georust, which tests/attack_g28.rs compares with every explicit-point
+# predicate (its orient3d and insphere negated, chapter 6.2). MIT OR Apache-2.0 (robust 1.2.0's
+# manifest); a development dependency only, never linked into the kernel.
+robust = "1.2.0"
 
 [lints.rust]
 unsafe_code = "forbid"
