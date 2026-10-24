@@ -4229,7 +4229,7 @@
           "file": "projects/engines/geometry/crates/geom-test/src/golden/matrix.rs",
           "guarantees": [
             "**Exactly the store's goldens.** One group per crate and test target, in store order, each naming its functions exactly; a golden checked by a file has no test and is checked by `golden check` instead.",
-            "**Nothing passes unrun.** [`verify`] fails unless the run has exactly one libtest summary, its verdict is `ok.`, it says exactly the group's number of tests passed, none failed and none was ignored, and every planned id printed its agreeing line."
+            "**Nothing passes unrun.** [`verify`] fails unless the run has exactly one libtest summary, its verdict is `ok.`, it says exactly the group's number of tests passed, none failed and none was ignored, and every planned id printed its agreeing line: `golden <id> (edition <label>): <64 hexadecimal digits> agrees with the store`, read wherever it starts in an output line. libtest runs tests on one thread on wasm32-wasip1 (no threads) and whenever `RUST_TEST_THREADS=1`, and then prints `test <name> ... ` before the test runs, so the test's own first line follows it on the same output line; with several threads it starts its own."
           ],
           "job": "The determinism matrix's runner: every golden of the current edition, run by cargo in whatever configuration a CI leg sets, with proof that each one really ran and agreed.",
           "method": {
