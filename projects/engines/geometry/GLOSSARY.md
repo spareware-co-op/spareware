@@ -151,6 +151,8 @@ How to read an entry:
 
 **Certified** (also: Certified(ε)): An exactness class: within a proven bound ε of the true shape, with ε at most ε_fit unless the caller asked for more (9). The bound comes from interval or Bernstein arithmetic, never from sampling.
 
+**CGAL**: The Computational Geometry Algorithms Library. It is GPL, so its source is never read: its methods are studied through papers and public documentation only, and its tools may run only out of process, as CI oracles, once an owner confirms it (14.14; 28.10; owner action G75).
+
 **Chain of title**: The record of who owns a work's copyright; a licence is only as good as the licensor's ownership (29; 29.20, rule 2).
 
 **Charge schedule**: What an operation charges in work units and when, fixed by the operation's version, so a count never changes without a new version (23.10; piece G83).
@@ -184,6 +186,8 @@ How to read an entry:
 **ClusterFuzzLite**: A service that runs fuzz targets in CI on pull requests (piece G14; piece G116).
 
 **Coarsening**: Converting coordinates to a coarser grid step: it divides by a power of 25, rounds, never ties, and reports that it rounded (6.1; 6.3; piece G22). Compare refinement.
+
+**Codec**: The code that writes a record as bytes and reads it back. In the native format every kind has a tag, a CDDL description and a codec, and a body read back equals the one written (24.2; piece G94).
 
 **Collapsed-edge division**: Dividing out the factor that makes a surface's derivative vanish along a collapsed edge (control points that coincide, a sphere's pole, a cone's apex), so the normals can still be bounded there (12.3; piece G59).
 
@@ -309,6 +313,8 @@ How to read an entry:
 
 **Entry key**: The stable key of an entry in the box tree (a persistent name, or an arena index inside one operation), by which ties are broken and answers sorted (27; piece G54).
 
+**Epoch** (also: coordinate epoch): The date survey coordinates refer to. In a dynamic or semi-dynamic datum such as NZGD2000 the ground moves, so coordinates are fixed at a reference date and a deformation model carries observations made on other dates to it; two frames at different epochs are never the same frame (17.1; piece G48).
+
 **Equivalent mutant**: A change to the code that cannot alter its behaviour, so no test could catch it; marked with a written reason (28.8).
 
 **Error catalogue**: The list of every error the kernel can return, with an example of each, generated from the code into `MAP.json` (26.3; piece G82).
@@ -337,7 +343,7 @@ How to read an entry:
 
 **`ExactnessNotAccepted`**: A base error kind: the result would be less exact than the caller accepted, such as a certified bound over ε_fit (22).
 
-**`ExactSum`** (also: `add_slice`, `add_iter`): An exact sum of doubles in a wide fixed-point accumulator, rounded once at the end, so its bits never depend on the order of the terms or how they were split (piece G25; 23.4). `add_slice`, `add_iter` and `collect` are its entry points for whole collections.
+**`ExactSum`** (also: superaccumulator, `add_slice`, `add_iter`): An exact sum of doubles in a wide fixed-point accumulator, rounded once at the end, so its bits never depend on the order of the terms or how they were split (piece G25; 23.4). `add_slice`, `add_iter` and `collect` are its entry points for whole collections.
 
 **`Exec`**: The parallel helper's executor: a pool, or none for serial running with the same answer (23.4).
 
@@ -345,7 +351,7 @@ How to read an entry:
 
 **Explicit-point predicates**: `orient2d`, `orient3d`, `incircle` and `insphere`: predicates on grid points (6.2; piece G28).
 
-**Extreme-value tests**: Tests with every coordinate at ±(2^40 − 1), every sign combination for explicit-point predicates, and the configurations that maximise each term for implicit ones (28.6).
+**Extreme-value tests** (also: maximal-term corners): Tests with every coordinate at ±(2^40 − 1), every sign combination for explicit-point predicates, and the configurations that maximise each term for implicit ones (28.6).
 
 ## F
 
@@ -358,6 +364,8 @@ How to read an entry:
 **Family** (also: catalogue family): One of chapter 10.2's groups of operations: Make, 2D, Sketch, Sweep, Combine, Blend, Offset, Transform, Repair, Query, Draw, Mesh, Manufacture, Free-form and Ground. A crate header states its family.
 
 **Fat line**: The thinnest strip containing a curve, found from the Bernstein coefficients of its distance to a line; Bézier clipping cuts curves with it. The surface form is a fat-plane slab (12; piece G59).
+
+**Fault injection**: Breaking valid bodies on purpose, one fault at a time (a flipped fin, an open loop, a vertex moved just off its surface), to show that the validity checker catches every fault with the right error kind while still passing every valid body (28.4; pieces G110 and G135). The contract laws inject cancellation and budget exhaustion into operations in the same spirit.
 
 **Filter** (also: semi-static filter): The fast first step of a predicate: the formula in `f64` with an error bound derived ahead of time, which gives the sign when the computed value is larger than the bound, and otherwise leaves the decision to the exact path (6.2).
 
@@ -581,6 +589,8 @@ How to read an entry:
 
 **Loop**: A closed boundary of a face: one outer loop and any number of holes (8.1).
 
+**Lossy cast**: A conversion between number types that can lose part of a value: a truncation, a wrap to the other sign, or a lost sign. Clippy denies them in kernel code, so a cast that cannot lose a value has its bound written beside it (23.3; piece G12).
+
 **LU decomposition**: The factorisation of a matrix into lower and upper triangular factors, with partial pivoting for stability (piece G49).
 
 ## M
@@ -606,6 +616,8 @@ How to read an entry:
 **Method note**: A note in the kernel's `methods/` folder, which piece G16 creates, recording what was learnt from a source read under the method-only procedure, such as an LGPL library (29.20, rule 6; piece G16).
 
 **Method-only procedure**: How an LGPL source may be read: for its method only, with nothing copied, recorded in a method note (29.20, rule 6).
+
+**Minimiser** (also: shrinking): A tool that reduces a failing input to a smaller one that still fails, before it becomes a fixture: a fuzzer's minimiser, a property tool's shrinking, or, for operation logs, `geom-test` removing operations and inputs one at a time while the failure persists (28.16; piece G97).
 
 **Miri**: The Rust interpreter that detects undefined behaviour; it runs the test suites weekly (28.8).
 
@@ -847,6 +859,8 @@ How to read an entry:
 
 **`robust`**: A crate of Shewchuk's adaptive predicates (MIT or Apache-2.0), used as a second method to check the kernel's (28.6).
 
+**Robustness scoreboard**: The share of a fixed, seeded set of generated designs in each operation family that succeed. A new operation version may not lower it, except where an old success is shown to be wrong; that case becomes an honest error and a fixture (28.5; piece G116).
+
 **Rocq**: The proof assistant (formerly Coq) that checks Gappa's proofs (28.6).
 
 **Role**: The name an operation gives each entity it makes, such as `cap.start` or `exterior`, part of the operation's contract (20.2).
@@ -871,6 +885,8 @@ How to read an entry:
 
 **Segment crossing**: The 2D predicate deciding whether and how two segments cross, on grid points (6.2; piece G29).
 
+**Sequence fuzzing**: Fuzzing with whole generated operation logs rather than single calls, with the checker, the laws and replay as oracles (28.5; piece G116).
+
 **Serial executor**: The parallel helper's executor with no pool, which gives the same answer as any pool (23.4).
 
 **Session attestation**: A statement in the pull-request template that the session made the change within the legal rules, beside the table of outside sources; its wording is piece G16's.
@@ -886,6 +902,8 @@ How to read an entry:
 **Short-edge warning**: A rung of the tolerance ladder: an edge shorter than 3,200 grid steps gives a warning, never an error (6.5).
 
 **Sign** (also: `Sign`): A predicate's answer: `Negative`, `Zero` or `Positive`, never a number (6.2).
+
+**Signature**: In a reference, the stored description of what it pointed at, used only to suggest a repair in the interface, never to resolve the reference (20.4). In differential testing, the key a difference from an oracle is grouped by: operation, oracle, kind of difference and input family; the nightly run fails only on a new signature (28.10).
 
 **Simulation of Simplicity**: Edelsbrunner and Mücke's symbolic perturbation, which breaks ties as if inputs were moved by infinitesimals in a fixed order; the kernel orders by persistent keys, never addresses (6.2; piece G30).
 
@@ -933,7 +951,7 @@ How to read an entry:
 
 **Tier**: The stability promise of an interface: Stable (semantic versioning, read forever), Preview (may change, graduate or drop within 12 months) or Internal (every `geom-*` crate) (25).
 
-**Ties to even**: Rounding a value exactly halfway between two candidates to the even one; the kernel's rule for commits and conversions (6.3).
+**Ties to even** (also: round half to even, half-even rounding): Rounding a value exactly halfway between two candidates to the even one; the kernel's rule for commits and conversions, and for parsing decimal survey text (6.1; 6.3; piece G48).
 
 **Time budget**: A deadline, which the caller's cancellation enforces; never a replayable outcome (23.10; owner action G71).
 
@@ -961,7 +979,11 @@ How to read an entry:
 
 **Trimmed curve**: A curve kind: part of another curve between two parameters (7).
 
+**Tripwire** (also: debug tripwire): A check in debug builds that stops at once on a value that must never occur, such as NaN. The board asks for them on the NaN-free scalar; where to aim them is open, since behind that scalar's one constructor a tripwire could never fire (21; 31.7; piece G24).
+
 **Trust on open**: The program states whether what it opens is Known or Unknown; unknown bodies are checked in full, lazily, before use (24.7; piece G108).
+
+**Twice-area vector** (also: six-times volume): For a flat face whose vertices are grid points, the sum of the cross products of consecutive vertices: twice the face's area along its normal, an exact integer vector. Six times a flat solid's volume is likewise a sum of integer determinants. Both fit 256 bits, so neither is ever rounded (19.2; 23.4; piece G102).
 
 **`TwoSum`** (also: `TwoProduct`): Error-free transformations: the rounded sum or product of two doubles and its exact error (piece G25).
 
