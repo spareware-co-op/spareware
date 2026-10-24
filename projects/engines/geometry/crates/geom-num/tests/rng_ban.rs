@@ -1,5 +1,5 @@
-//! The shape of the randomness ban in `clippy.toml` (rule 1 of the randomised-method rule in
-//! `src/rng.rs`), read from the file itself.
+//! The shape of the randomness ban in `clippy.toml` (rule 1 of the randomised-method rule in the
+//! kernel's `AGENTS.md`, `projects/engines/geometry/AGENTS.md`), read from the file itself.
 //!
 //! Clippy checks that each banned path is not called; it cannot check the list. These tests keep
 //! the list honest where a mistake would be silent:
@@ -46,8 +46,10 @@ use std::collections::BTreeSet;
 /// The crate's `clippy.toml`.
 const CLIPPY_TOML: &str = include_str!("../clippy.toml");
 
-/// The generator's module, whose header holds rule 1.
-const RNG_RS: &str = include_str!("../src/rng.rs");
+/// The kernel's `AGENTS.md`, which holds the randomised-method rule (section 8), rule 1 among
+/// them. Piece G32 wrote the rule in `src/rng.rs`'s header; piece G17 lifted it there, and this
+/// test reads it there.
+const AGENTS_MD: &str = include_str!("../../../AGENTS.md");
 
 /// One entry of a disallowed list.
 #[derive(Debug)]
@@ -165,6 +167,52 @@ const RULE_1_CRATES: [&str; 7] = [
     "rayon",
 ];
 
+/// The text of rule 1 of the randomised-method rule in `doc`: from the line that opens it,
+/// `1. **One generator.**`, to the line that opens rule 2, `2. **The seed is an input.**`, each at
+/// the start of a line of the rule's section, `## 8. The randomised-method rule`. `None` if the
+/// section, either line or the order of the two is missing, so a rule that moved or lost its
+/// number fails the test instead of passing on an empty text. Line ends are read as `\n`, so a
+/// checkout that turned them into `\r\n` reads the same.
+fn rule_1(doc: &str) -> Option<String> {
+    let doc = doc.replace("\r\n", "\n");
+    let section = doc.split("\n## 8. The randomised-method rule\n").nth(1)?;
+    let section = section.split("\n## ").next()?;
+    let start = section.find("\n1. **One generator.**")?;
+    let rest = &section[start..];
+    let end = rest.find("\n2. **The seed is an input.**")?;
+    Some(rest[..end].to_owned())
+}
+
+/// The reader finds rule 1 only where it belongs: in section 8, numbered, before rule 2, with
+/// either line end; a missing, renumbered or moved rule is `None`, never an empty pass.
+#[test]
+fn rule_1_is_read_only_from_its_section() {
+    let good = "# Kernel\n\n## 8. The randomised-method rule\n\nIntro.\n\n1. **One generator.** \
+                Names `rand`.\n2. **The seed is an input.** More.\n\n## 9. Next\n";
+    assert_eq!(
+        rule_1(good).as_deref(),
+        Some("\n1. **One generator.** Names `rand`.")
+    );
+    assert_eq!(
+        rule_1(&good.replace('\n', "\r\n")).as_deref(),
+        Some("\n1. **One generator.** Names `rand`.")
+    );
+    // Rule 1 outside section 8, in the section after it.
+    let moved = "# Kernel\n\n## 8. The randomised-method rule\n\nIntro.\n\n## 9. Next\n\n1. **One \
+                 generator.** `rand`.\n2. **The seed is an input.**\n";
+    assert!(moved.contains("\n## 8. The randomised-method rule\n"));
+    assert_eq!(rule_1(moved), None);
+    // No section 8, or rule 1 renumbered, or rule 2 gone, or the two in the wrong order.
+    assert_eq!(rule_1(&good.replace("## 8.", "## 7.")), None);
+    assert_eq!(rule_1(&good.replace("1. **One", "- **One")), None);
+    assert_eq!(rule_1(&good.replace("2. **The seed", "Then **The seed")), None);
+    let swapped = "# Kernel\n\n## 8. The randomised-method rule\n\n2. **The seed is an input.**\n1. \
+                   **One generator.** `rand`.\n";
+    assert_eq!(rule_1(swapped), None);
+    // The repository's own AGENTS.md has the rule where the reader looks.
+    assert!(rule_1(AGENTS_MD).is_some());
+}
+
 /// Rule 1 names the crates whose entry points are banned; the file bans exactly those, besides std
 /// and core.
 #[test]
@@ -179,11 +227,7 @@ fn rule_1_names_exactly_the_crates_the_ban_lists() {
         banned, named,
         "clippy.toml bans these crates; rule 1 names those"
     );
-    let rule_1 = RNG_RS
-        .split("//! 1. **One generator.**")
-        .nth(1)
-        .and_then(|rest| rest.split("//! 2. ").next())
-        .expect("rng.rs has rule 1");
+    let rule_1 = rule_1(AGENTS_MD).expect("AGENTS.md has rule 1 of the randomised-method rule");
     // Each name in backticks, as rule 1 writes it: a bare substring would always find `rand`,
     // inside "random" and "rand_core", whether or not the rule names the crate.
     for k in RULE_1_CRATES {

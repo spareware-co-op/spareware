@@ -1,5 +1,5 @@
-//! Counter-based random numbers from explicit seeds (Philox4x32-10), and the rule every randomised
-//! kernel method follows.
+//! Counter-based random numbers from explicit seeds (Philox4x32-10): the one generator every
+//! randomised kernel method draws from.
 //!
 //! A few methods the kernel uses are randomised by design: RANSAC fitting of planes, cylinders and
 //! other primitives to point clouds (chapters 16.3 and 17.10), the random sampling inside quad
@@ -11,68 +11,14 @@
 //!
 //! # The randomised-method rule
 //!
-//! This section is written to be lifted verbatim into the kernel's `AGENTS.md` by piece G17, as the
-//! board asks; until then it is the rule's home.
-//!
-//! A kernel method may use random numbers (RANSAC fitting, random sampling, randomised layout or
-//! grouping, the seeds of a stochastic lattice) only as a pure, deterministic function of its
-//! inputs. It follows every one of these:
-//!
-//! 1. **One generator.** Every random number comes from `geom_num::rng`: Philox4x32-10 with the
-//!    layout and draw definitions written there. No other generator, no entropy, no clock, no
-//!    memory address, no process or thread id, and no hash-map order. Each kernel crate's
-//!    `clippy.toml`, a copy of `geom-num`'s, bans by path every such source in std and core
-//!    (including the x86 hardware random-number and cycle-counter instructions), and the entry
-//!    points of `rand`, `rand_core`, `getrandom`, `hashbrown`, `foldhash`, `fastrand` and `rayon`'s
-//!    thread index. The merge gate's dependency allow-list (piece G12) keeps every other crate out
-//!    of kernel crates. What no path can name, such as a memory address turned into an integer, is
-//!    a review rule (chapter 21).
-//! 2. **The seed is an input.** The seed is an explicit input of the operation, stored with its
-//!    other inputs in the operation log. A default seed is a written constant, recorded in the log
-//!    like any other default. `OpContext` holds no randomness (chapter 10.1), and no seed is ever
-//!    derived from the time, the machine or the run.
-//! 3. **One stream per consumer, numbered by position.** Each independent consumer (one RANSAC
-//!    trial, one item of a parallel loop, one call of a randomised sub-method) draws from streams
-//!    no other consumer uses. A stream id is fixed by the consumer's position in the input or by a
-//!    numbering written in the method, never by a thread, arrival order or timing, and never by
-//!    which batch of a parallel loop runs it: batch sizes (the parallel helper's `ChunkPlan`) may be
-//!    retuned without a new edition (chapter 23.4), so a stream numbered by batch would change
-//!    results. A method takes its streams as a [`StreamRange`]: an
-//!    operation starts from [`StreamRange::all`] of its seed, and a method cuts its range with
-//!    [`StreamRange::chunk`], one chunk size per range ([`StreamRange::philox`] counts as chunks of
-//!    one), giving chunk i to consumer i. A consumer that needs both a stream of its own and a
-//!    sub-method's streams takes a chunk and cuts that. A sub-method numbers its consumers inside the
-//!    range it is given, so nested methods never reuse a stream, and a range too small for what is
-//!    asked is an error, never a wrap. Parallel loops use the one shared parallel helper (chapters
-//!    21 and 23.4), so the result is the same on any number of threads, and the method joins the
-//!    thread-count replay test.
-//! 4. **The draws are part of the version, and nothing here changes in place.** The generator,
-//!    its layout and each draw function's definition, and which streams a method uses, which draw
-//!    functions it calls and in what order, all belong to the operation's version (chapters 26.2
-//!    and 17.10: "the generator is part of the operation's version"). Changing any of them makes a
-//!    new operation version, and the old version keeps its behaviour forever: an operation version
-//!    keeps the numeric code it shipped with, new goldens go beside the old, and the format museum
-//!    replays old logs (chapter 28.13). So a new generator, layout or draw definition is added
-//!    beside the old one, under its own name, with its own golden hash and a decision note (the
-//!    numbers layer is core, chapter 26.1), and every operation version that used the old one keeps
-//!    it. The golden hashes in `tests/rng_determinism.rs` pin every definition here, so an edit in
-//!    place fails CI on every target.
-//! 5. **Honest results.** A result chosen by random sampling is never claimed to be more than its
-//!    deterministic checks prove: a fit is Approximate, with its deviation certified (chapter
-//!    17.10), and a randomised search that finds nothing returns an error, never a guess. A stream
-//!    that runs out is an error (`RngError::Exhausted`), never a wrap.
-//! 6. **Tests are separate.** Test and fuzz generators may use other generators. Their seeds are
-//!    fixed or printed (chapter 28.17), and no kernel code can reach them.
-//!
-//! **Open question for the owner.** Chapter 28.17 says "The kernel has no randomness. Seeds belong
-//! to test generators only", and 28.19 says the test suite never lets "a seed" decide a replayable
-//! result. Chapters 16.3, 16.4, 17.10 and 29 instead make a seed an explicit input of RANSAC fitting
-//! and the other randomised methods, which rule 2 follows. Read literally the two cannot both hold:
-//! a seeded fit's result is decided by its seed. This rule reads 28.17 and 28.19 as forbidding
-//! hidden seeds (any seed that is not a recorded input), under which "the kernel has no randomness"
-//! still holds, because what a randomised method draws is a fixed function of its recorded inputs.
-//! That reading is this piece's, not an owner's decision. It is raised for chapter 31.7's open
-//! questions, and the rule stands provisionally until it is decided.
+//! Every randomised kernel method follows the randomised-method rule: one generator, this one; the
+//! seed an explicit input, recorded in the operation log; one stream per consumer, numbered by its
+//! position; the generator, its layout and the draws part of the operation's version; honest
+//! results; and test generators kept apart. Piece G32 wrote the rule here, and piece G17 lifted it,
+//! word for word, into the kernel's `AGENTS.md` (`projects/engines/geometry/AGENTS.md`, section 8),
+//! which is now its one home; `tests/rng_ban.rs` reads rule 1 there. This module is rule 1's one
+//! generator: its layout, its draw definitions and its stream ranges, below, are what rules 3 and 4
+//! refer to.
 //!
 //! What this module guarantees:
 //!
@@ -120,7 +66,7 @@
 //! # Layout
 //!
 //! This is part of the specification: changing any of it changes every stream, so none of it is
-//! ever changed in place (rule 4).
+//! ever changed in place (rule 4 of the randomised-method rule).
 //!
 //! - **Key.** The two key words are the seed's low and high 32 bits: `k0 = seed & 0xffff_ffff`,
 //!   `k1 = seed >> 32`.
@@ -221,14 +167,14 @@ const TWO_POW_32: f64 = 4_294_967_296.0;
 
 /// A seed: the 64-bit Philox key, written by the caller and stored in the operation's input.
 ///
-/// There is no `Default` and no constructor from entropy, on purpose (rule 2 of the module
-/// documentation).
+/// There is no `Default` and no constructor from entropy, on purpose (rule 2 of the
+/// randomised-method rule, in the kernel's `AGENTS.md`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Seed(pub u64);
 
 /// A stream id: which of a seed's 2^64 independent streams to draw from. Numbered by the consumer's
 /// stable position, never by thread or timing, and usually handed out by a [`StreamRange`] (rule 3
-/// of the module documentation).
+/// of the randomised-method rule, in the kernel's `AGENTS.md`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct StreamId(pub u64);
 
@@ -461,7 +407,7 @@ impl Philox {
 }
 
 /// A run of consecutive stream ids of one seed, owned by one randomised method (rule 3 of the
-/// module documentation).
+/// randomised-method rule, in the kernel's `AGENTS.md`).
 ///
 /// An operation starts from [`StreamRange::all`] of its seed. A method gives consumer `i` either
 /// stream `i` ([`StreamRange::philox`]) or chunk `i` of one fixed size ([`StreamRange::chunk`]), so

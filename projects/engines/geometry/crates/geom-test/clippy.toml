@@ -11,10 +11,10 @@ allow-indexing-slicing-in-tests = true
 # Chapter 21's determinism hazards, enforced by clippy as chapter 21's "Enforced by" column and
 # section 28's merge gate require. Each reason names what the kernel uses instead.
 #
-# No randomness but geom_num::rng (the randomised-method rule, rule 1, in src/rng.rs). A kernel
-# crate's random numbers come only from Philox4x32-10 keyed by an explicit seed, so the other sources
-# of randomness or entropy a kernel crate could reach are banned here by path. Every kernel crate
-# copies this file.
+# No randomness but geom_num::rng (rule 1 of the randomised-method rule, in
+# projects/engines/geometry/AGENTS.md). A kernel crate's random numbers come only from
+# Philox4x32-10 keyed by an explicit seed, so the other sources of randomness or entropy a kernel
+# crate could reach are banned here by path. Every kernel crate copies this file.
 #
 # - std and core: std's randomly seeded hasher, and the HashMap and HashSet types whose every
 #   default construction seeds it (new, with_capacity, default, from, collect: the trait methods
