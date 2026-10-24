@@ -14,11 +14,11 @@
 //!
 //! - **Every cycle.** A function that can be re-entered while it runs lies on a closed walk of
 //!   the instance graph, which lies inside one strongly connected component, and every component
-//!   holding a closed walk is reported, unless it lies wholly in a crate's bound tests (which
-//!   exercise cycles; they are not part of the crates that ship).
+//!   holding a closed walk is reported, unless none of its instances belongs to a crate that
+//!   ships (the bound tests exercise cycles; the standard library's model is not checked).
 //! - **Every recursive type.** A type that contains itself through its fields' types, at any
-//!   depth and through any outside type's arguments (`Box<T>`, `Vec<T>`, `Option<T>`), lies on a
-//!   cycle of the field graph and is reported.
+//!   depth and through the arguments of the standard library's types (`Box<T>`, `Vec<T>`,
+//!   `Option<T>`), lies on a cycle of the field graph and is reported.
 //! - **Deterministic.** Cycles come in the order of their first member's name, members and paths
 //!   in a fixed order.
 //!
@@ -97,12 +97,14 @@ pub fn cycles(ix: &Index<'_>, m: &Mono) -> Vec<Cycle> {
             }
         }
     }
-    let test_crates: BTreeSet<usize> = ix
+    // Only the crates that ship are listed: the bound tests exercise cycles, and the standard
+    // library's model is read for what it calls back, not checked.
+    let shipping: BTreeSet<usize> = ix
         .program
         .crates
         .iter()
         .enumerate()
-        .filter(|(_, c)| c.source.role == Role::BoundTests)
+        .filter(|(_, c)| c.source.role == Role::Ships)
         .map(|(i, _)| i)
         .collect();
     let mut comps: Vec<BTreeSet<InstId>> = Vec::new();
@@ -116,7 +118,7 @@ pub fn cycles(ix: &Index<'_>, m: &Mono) -> Vec<Cycle> {
         let ships = set.iter().any(|i| {
             m.inst(*i)
                 .and_then(|x| ix.program.node(x.node))
-                .is_some_and(|node| !test_crates.contains(&node.krate))
+                .is_some_and(|node| shipping.contains(&node.krate))
         });
         if ships {
             comps.push(set);
@@ -173,7 +175,7 @@ pub fn cycles(ix: &Index<'_>, m: &Mono) -> Vec<Cycle> {
         let member_nodes: BTreeSet<NodeId> = insts
             .iter()
             .filter_map(|i| m.inst(*i).map(|x| x.node))
-            .filter(|node| ix.program.node(*node).is_some_and(|nd| !test_crates.contains(&nd.krate)))
+            .filter(|node| ix.program.node(*node).is_some_and(|nd| shipping.contains(&nd.krate)))
             .collect();
         let names: BTreeSet<String> = member_nodes.iter().map(|n| ix.name(*n).to_owned()).collect();
         let first = members.first().and_then(|ci| comps.get(*ci)).cloned().unwrap_or_default();
@@ -258,10 +260,14 @@ pub fn type_cycles(ix: &Index<'_>) -> Vec<TypeCycle> {
     let mut self_loops = BTreeSet::new();
     for a in &adts {
         for t in ix.all_field_types(*a) {
-            for p in t.parts() {
-                if let Ty::Adt(b, _) = p
-                    && let (Some(x), Some(y)) = (idx.get(a), idx.get(&b))
-                {
+            let mut inside: Vec<ItemId> = Vec::new();
+            t.walk(&mut |p| {
+                if let Ty::Adt(b, _) = p {
+                    inside.push(*b);
+                }
+            });
+            for b in inside {
+                if let (Some(x), Some(y)) = (idx.get(a), idx.get(&b)) {
                     g.update_edge(*x, *y, ());
                     if *a == b {
                         self_loops.insert(*a);

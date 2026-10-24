@@ -59,6 +59,9 @@ pub enum Role {
     /// A crate's bound tests (`tests/recursion.rs`), read to check that each test reaches its
     /// cycle; its own cycles are not listed.
     BoundTests,
+    /// The model of the standard library ([`crate::recursion::stdlib`]): read for what it calls
+    /// back; its own cycles are not listed.
+    Model,
 }
 
 /// One crate to read.
@@ -237,6 +240,10 @@ pub enum ItemKind {
         supertraits: Vec<syn::TypeParamBound>,
         /// Its methods with default bodies.
         defaults: BTreeMap<String, NodeId>,
+        /// Its associated types, with their bounds.
+        assoc_types: BTreeMap<String, Vec<syn::TypeParamBound>>,
+        /// Its associated constants, with their types.
+        consts: BTreeMap<String, syn::Type>,
         /// Every method it declares.
         methods: BTreeSet<String>,
         /// Every method's signature, with the scope its types are read in (the trait's, with the
@@ -309,6 +316,8 @@ pub struct Impl {
     pub methods: BTreeMap<String, Vec<NodeId>>,
     /// Its associated types.
     pub assoc: BTreeMap<String, syn::Type>,
+    /// Its associated constants, with their types.
+    pub consts: BTreeMap<String, syn::Type>,
     /// The file and line it starts on.
     pub file: String,
     /// The line.
@@ -348,6 +357,8 @@ pub struct Generic {
     pub name: String,
     /// Its bounds, inline and from `where` clauses.
     pub bounds: Vec<syn::TypeParamBound>,
+    /// Its default, `Rhs = Self`.
+    pub default: Option<syn::Type>,
     /// The scope its bounds are read in.
     pub scope: Scope,
 }
@@ -702,6 +713,7 @@ impl Loader<'_> {
                     self.program.generics.push(Generic {
                         name: t.ident.to_string(),
                         bounds: t.bounds.iter().cloned().collect(),
+                        default: t.default.as_ref().map(|(_, d)| d.clone()),
                         scope: scope.clone(),
                     });
                     scope.generics.push(id);
@@ -848,6 +860,7 @@ impl Loader<'_> {
                 self.program.generics.push(Generic {
                     name: "Self".to_owned(),
                     bounds: Vec::new(),
+                    default: None,
                     scope: scope.clone(),
                 });
                 self.declare_generics(&mut scope, &t.generics);
@@ -859,6 +872,8 @@ impl Loader<'_> {
                         self_gen,
                         supertraits: t.bounds.iter().cloned().collect(),
                         defaults: BTreeMap::new(),
+                        assoc_types: BTreeMap::new(),
+                        consts: BTreeMap::new(),
                         methods: BTreeSet::new(),
                         sigs: BTreeMap::new(),
                     },
@@ -1044,6 +1059,7 @@ impl Loader<'_> {
         self.program.generics.push(Generic {
             name: "Self".to_owned(),
             bounds: Vec::new(),
+            default: None,
             scope: scope.clone(),
         });
         self.declare_generics(&mut scope, &t.generics);
@@ -1055,6 +1071,8 @@ impl Loader<'_> {
                 self_gen,
                 supertraits: t.supertraits.iter().cloned().collect(),
                 defaults: BTreeMap::new(),
+                assoc_types: BTreeMap::new(),
+                consts: BTreeMap::new(),
                 methods: BTreeSet::new(),
                 sigs: BTreeMap::new(),
             },
@@ -1077,7 +1095,18 @@ impl Loader<'_> {
         let mut defaults = BTreeMap::new();
         let mut methods = BTreeSet::new();
         let mut sigs = BTreeMap::new();
+        let mut assoc_types = BTreeMap::new();
+        let mut consts = BTreeMap::new();
         for ti in &t.items {
+            match ti {
+                syn::TraitItem::Type(ty) if cfg::ships(&ty.attrs) => {
+                    assoc_types.insert(ty.ident.to_string(), ty.bounds.iter().cloned().collect());
+                }
+                syn::TraitItem::Const(c) if cfg::ships(&c.attrs) => {
+                    consts.insert(c.ident.to_string(), c.ty.clone());
+                }
+                _ => {}
+            }
             let syn::TraitItem::Fn(f) = ti else {
                 continue;
             };
@@ -1114,6 +1143,8 @@ impl Loader<'_> {
                     defaults: d,
                     methods: m,
                     sigs: s,
+                    assoc_types: a,
+                    consts: c,
                     ..
                 },
             ..
@@ -1122,6 +1153,8 @@ impl Loader<'_> {
             *d = defaults;
             *m = methods;
             *s = sigs;
+            *a = assoc_types;
+            *c = consts;
         }
     }
 
@@ -1137,11 +1170,16 @@ impl Loader<'_> {
             }
         }
         let mut assoc = BTreeMap::new();
+        let mut consts = BTreeMap::new();
         for ii in &i.items {
-            if let syn::ImplItem::Type(t) = ii
-                && cfg::ships(&t.attrs)
-            {
-                assoc.insert(t.ident.to_string(), t.ty.clone());
+            match ii {
+                syn::ImplItem::Type(t) if cfg::ships(&t.attrs) => {
+                    assoc.insert(t.ident.to_string(), t.ty.clone());
+                }
+                syn::ImplItem::Const(c) if cfg::ships(&c.attrs) => {
+                    consts.insert(c.ident.to_string(), c.ty.clone());
+                }
+                _ => {}
             }
         }
         self.program.impls.push(Impl {
@@ -1150,6 +1188,7 @@ impl Loader<'_> {
             trait_path: i.trait_.as_ref().map(|(p, _)| p.clone()),
             methods: BTreeMap::new(),
             assoc,
+            consts,
             file: file.to_owned(),
             line,
         });

@@ -1,0 +1,5014 @@
+// The recursion check's model of the standard library (`core`, `alloc` and `std`), read by
+// `geom-test`'s recursion check in place of their source (src/recursion/stdlib.rs). It is never
+// compiled: it is Rust the check's type checker reads, written from the standard library's
+// documented signatures (https://doc.rust-lang.org/std/), with a body for every function that
+// calls back into what it is handed (a closure, or a trait method of a type parameter), calling
+// exactly that. A function that calls nothing back has the body `loop {}`, whose type `!` fits
+// any result. Iterator adapters keep their closures in their structs and call them in `next`,
+// as the library does; adapters whose item type a closure gives carry it as a type parameter of
+// their own (`Map<I, F, B>`). Where the library takes `&dyn Debug` and calls it at once
+// (`DebugStruct::field`), the model takes `&V` with `V: Debug`, which runs the same method of the
+// same value.
+
+pub fn any<T>() -> T {
+    loop {}
+}
+
+pub mod prelude {
+    pub use crate::borrow::ToOwned;
+    pub use crate::boxed::Box;
+    pub use crate::clone::Clone;
+    pub use crate::cmp::{Eq, Ord, PartialEq, PartialOrd};
+    pub use crate::convert::{AsMut, AsRef, From, Into, TryFrom, TryInto};
+    pub use crate::default::Default;
+    pub use crate::iter::{DoubleEndedIterator, ExactSizeIterator, Extend, FromIterator, IntoIterator, Iterator};
+    pub use crate::marker::{Copy, Send, Sized, Sync, Unpin};
+    pub use crate::mem::{align_of, align_of_val, drop, size_of, size_of_val};
+    pub use crate::ops::{Drop, Fn, FnMut, FnOnce};
+    pub use crate::option::Option::{self, None, Some};
+    pub use crate::result::Result::{self, Err, Ok};
+    pub use crate::string::{String, ToString};
+    pub use crate::vec::Vec;
+}
+
+pub mod marker {
+    pub trait Sized {}
+    pub trait Send {}
+    pub trait Sync {}
+    pub trait Unpin {}
+    pub trait Copy: Clone {}
+    pub struct PhantomData<T>;
+    impl<T> Clone for PhantomData<T> {
+        fn clone(&self) -> Self {
+            loop {}
+        }
+    }
+    impl<T> Copy for PhantomData<T> {}
+    impl<T> Default for PhantomData<T> {
+        fn default() -> Self {
+            loop {}
+        }
+    }
+    impl<T> PartialEq for PhantomData<T> {
+        fn eq(&self, other: &Self) -> bool {
+            loop {}
+        }
+    }
+    impl<T> Eq for PhantomData<T> {}
+    impl<T> crate::fmt::Debug for PhantomData<T> {
+        fn fmt(&self, f: &mut crate::fmt::Formatter) -> crate::fmt::Result {
+            loop {}
+        }
+    }
+    impl<T> crate::hash::Hash for PhantomData<T> {
+        fn hash<H: crate::hash::Hasher>(&self, state: &mut H) {}
+    }
+}
+
+pub mod clone {
+    pub trait Clone: Sized {
+        fn clone(&self) -> Self;
+        fn clone_from(&mut self, source: &Self) {
+            source.clone();
+        }
+    }
+    impl<T: ?Sized> Clone for &T {
+        fn clone(&self) -> Self {
+            loop {}
+        }
+    }
+}
+
+pub mod default {
+    pub trait Default: Sized {
+        fn default() -> Self;
+    }
+}
+
+pub mod convert {
+    pub trait From<T>: Sized {
+        fn from(value: T) -> Self;
+    }
+    pub trait Into<T>: Sized {
+        fn into(self) -> T;
+    }
+    impl<T, U: From<T>> Into<U> for T {
+        fn into(self) -> U {
+            U::from(self)
+        }
+    }
+    impl<T> From<T> for T {
+        fn from(t: T) -> T {
+            t
+        }
+    }
+    pub trait TryFrom<T>: Sized {
+        type Error;
+        fn try_from(value: T) -> Result<Self, Self::Error>;
+    }
+    pub trait TryInto<T>: Sized {
+        type Error;
+        fn try_into(self) -> Result<T, Self::Error>;
+    }
+    impl<T, U: TryFrom<T>> TryInto<U> for T {
+        type Error = U::Error;
+        fn try_into(self) -> Result<U, U::Error> {
+            U::try_from(self)
+        }
+    }
+    pub trait AsRef<T: ?Sized> {
+        fn as_ref(&self) -> &T;
+    }
+    pub trait AsMut<T: ?Sized> {
+        fn as_mut(&mut self) -> &mut T;
+    }
+    pub enum Infallible {}
+    pub fn identity<T>(x: T) -> T {
+        x
+    }
+}
+
+pub mod borrow {
+    pub trait Borrow<Borrowed: ?Sized> {
+        fn borrow(&self) -> &Borrowed;
+    }
+    pub trait BorrowMut<Borrowed: ?Sized>: Borrow<Borrowed> {
+        fn borrow_mut(&mut self) -> &mut Borrowed;
+    }
+    impl<T: ?Sized> Borrow<T> for T {
+        fn borrow(&self) -> &T {
+            self
+        }
+    }
+    pub trait ToOwned {
+        type Owned;
+        fn to_owned(&self) -> Self::Owned;
+    }
+    impl<T: Clone> ToOwned for T {
+        type Owned = T;
+        fn to_owned(&self) -> T {
+            self.clone()
+        }
+    }
+}
+
+pub mod ops {
+    pub trait FnOnce<Args> {
+        type Output;
+        fn call_once(self, args: Args) -> Self::Output;
+    }
+    pub trait FnMut<Args>: FnOnce<Args> {
+        fn call_mut(&mut self, args: Args) -> Self::Output;
+    }
+    pub trait Fn<Args>: FnMut<Args> {
+        fn call(&self, args: Args) -> Self::Output;
+    }
+    pub trait Add<Rhs = Self> {
+        type Output;
+        fn add(self, rhs: Rhs) -> Self::Output;
+    }
+    pub trait Sub<Rhs = Self> {
+        type Output;
+        fn sub(self, rhs: Rhs) -> Self::Output;
+    }
+    pub trait Mul<Rhs = Self> {
+        type Output;
+        fn mul(self, rhs: Rhs) -> Self::Output;
+    }
+    pub trait Div<Rhs = Self> {
+        type Output;
+        fn div(self, rhs: Rhs) -> Self::Output;
+    }
+    pub trait Rem<Rhs = Self> {
+        type Output;
+        fn rem(self, rhs: Rhs) -> Self::Output;
+    }
+    pub trait BitAnd<Rhs = Self> {
+        type Output;
+        fn bitand(self, rhs: Rhs) -> Self::Output;
+    }
+    pub trait BitOr<Rhs = Self> {
+        type Output;
+        fn bitor(self, rhs: Rhs) -> Self::Output;
+    }
+    pub trait BitXor<Rhs = Self> {
+        type Output;
+        fn bitxor(self, rhs: Rhs) -> Self::Output;
+    }
+    pub trait Shl<Rhs = Self> {
+        type Output;
+        fn shl(self, rhs: Rhs) -> Self::Output;
+    }
+    pub trait Shr<Rhs = Self> {
+        type Output;
+        fn shr(self, rhs: Rhs) -> Self::Output;
+    }
+    pub trait Neg {
+        type Output;
+        fn neg(self) -> Self::Output;
+    }
+    pub trait Not {
+        type Output;
+        fn not(self) -> Self::Output;
+    }
+    pub trait AddAssign<Rhs = Self> {
+        fn add_assign(&mut self, rhs: Rhs);
+    }
+    pub trait SubAssign<Rhs = Self> {
+        fn sub_assign(&mut self, rhs: Rhs);
+    }
+    pub trait MulAssign<Rhs = Self> {
+        fn mul_assign(&mut self, rhs: Rhs);
+    }
+    pub trait DivAssign<Rhs = Self> {
+        fn div_assign(&mut self, rhs: Rhs);
+    }
+    pub trait RemAssign<Rhs = Self> {
+        fn rem_assign(&mut self, rhs: Rhs);
+    }
+    pub trait BitAndAssign<Rhs = Self> {
+        fn bitand_assign(&mut self, rhs: Rhs);
+    }
+    pub trait BitOrAssign<Rhs = Self> {
+        fn bitor_assign(&mut self, rhs: Rhs);
+    }
+    pub trait BitXorAssign<Rhs = Self> {
+        fn bitxor_assign(&mut self, rhs: Rhs);
+    }
+    pub trait ShlAssign<Rhs = Self> {
+        fn shl_assign(&mut self, rhs: Rhs);
+    }
+    pub trait ShrAssign<Rhs = Self> {
+        fn shr_assign(&mut self, rhs: Rhs);
+    }
+    pub trait Index<Idx: ?Sized> {
+        type Output: ?Sized;
+        fn index(&self, index: Idx) -> &Self::Output;
+    }
+    pub trait IndexMut<Idx: ?Sized>: Index<Idx> {
+        fn index_mut(&mut self, index: Idx) -> &mut Self::Output;
+    }
+    pub trait Deref {
+        type Target: ?Sized;
+        fn deref(&self) -> &Self::Target;
+    }
+    pub trait DerefMut: Deref {
+        fn deref_mut(&mut self) -> &mut Self::Target;
+    }
+    impl<T: ?Sized> Deref for &T {
+        type Target = T;
+        fn deref(&self) -> &T {
+            loop {}
+        }
+    }
+    pub trait Drop {
+        fn drop(&mut self);
+    }
+    pub trait RangeBounds<T: ?Sized> {
+        fn start_bound(&self) -> Bound<&T> {
+            loop {}
+        }
+        fn end_bound(&self) -> Bound<&T> {
+            loop {}
+        }
+        fn contains<U>(&self, item: &U) -> bool
+        where
+            T: PartialOrd<U>,
+            U: ?Sized + PartialOrd<T>,
+        {
+            loop {}
+        }
+    }
+    pub enum Bound<T> {
+        Included(T),
+        Excluded(T),
+        Unbounded,
+    }
+    #[derive(Clone, Default, PartialEq, Eq, Hash, Debug)]
+    pub struct Range<Idx> {
+        pub start: Idx,
+        pub end: Idx,
+    }
+    #[derive(Clone, PartialEq, Eq, Hash, Debug)]
+    pub struct RangeFrom<Idx> {
+        pub start: Idx,
+    }
+    #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+    pub struct RangeTo<Idx> {
+        pub end: Idx,
+    }
+    #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+    pub struct RangeToInclusive<Idx> {
+        pub end: Idx,
+    }
+    #[derive(Clone, Copy, Default, PartialEq, Eq, Hash, Debug)]
+    pub struct RangeFull;
+    #[derive(Clone, PartialEq, Eq, Hash, Debug)]
+    pub struct RangeInclusive<Idx> {
+        start: Idx,
+        end: Idx,
+    }
+    impl<Idx> RangeInclusive<Idx> {
+        pub const fn new(start: Idx, end: Idx) -> Self {
+            loop {}
+        }
+        pub const fn start(&self) -> &Idx {
+            loop {}
+        }
+        pub const fn end(&self) -> &Idx {
+            loop {}
+        }
+        pub fn into_inner(self) -> (Idx, Idx) {
+            loop {}
+        }
+    }
+    impl<Idx: PartialOrd<Idx>> RangeInclusive<Idx> {
+        pub fn contains<U>(&self, item: &U) -> bool
+        where
+            Idx: PartialOrd<U>,
+            U: ?Sized + PartialOrd<Idx>,
+        {
+            self.start.partial_cmp(item);
+            item.partial_cmp(&self.end);
+            loop {}
+        }
+        pub fn is_empty(&self) -> bool {
+            self.start.partial_cmp(&self.end);
+            loop {}
+        }
+    }
+    impl<Idx: PartialOrd<Idx>> Range<Idx> {
+        pub fn contains<U>(&self, item: &U) -> bool
+        where
+            Idx: PartialOrd<U>,
+            U: ?Sized + PartialOrd<Idx>,
+        {
+            self.start.partial_cmp(item);
+            item.partial_cmp(&self.end);
+            loop {}
+        }
+        pub fn is_empty(&self) -> bool {
+            self.start.partial_cmp(&self.end);
+            loop {}
+        }
+    }
+    impl<T> RangeBounds<T> for Range<T> {}
+    impl<T> RangeBounds<T> for RangeInclusive<T> {}
+    impl<T> RangeBounds<T> for RangeFrom<T> {}
+    impl<T> RangeBounds<T> for RangeTo<T> {}
+    impl<T> RangeBounds<T> for RangeToInclusive<T> {}
+    impl<T> RangeBounds<T> for RangeFull {}
+    #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+    pub enum ControlFlow<B, C = ()> {
+        Continue(C),
+        Break(B),
+    }
+    impl<B, C> ControlFlow<B, C> {
+        pub fn is_break(&self) -> bool {
+            loop {}
+        }
+        pub fn is_continue(&self) -> bool {
+            loop {}
+        }
+        pub fn break_value(self) -> Option<B> {
+            loop {}
+        }
+        pub fn continue_value(self) -> Option<C> {
+            loop {}
+        }
+        pub fn map_break<T, F: FnOnce(B) -> T>(self, f: F) -> ControlFlow<T, C> {
+            match self {
+                ControlFlow::Continue(c) => ControlFlow::Continue(c),
+                ControlFlow::Break(b) => ControlFlow::Break(f(b)),
+            }
+        }
+        pub fn map_continue<T, F: FnOnce(C) -> T>(self, f: F) -> ControlFlow<B, T> {
+            match self {
+                ControlFlow::Continue(c) => ControlFlow::Continue(f(c)),
+                ControlFlow::Break(b) => ControlFlow::Break(b),
+            }
+        }
+    }
+    pub trait Try {
+        type Output;
+        type Residual;
+        fn from_output(output: Self::Output) -> Self;
+        fn branch(self) -> ControlFlow<Self::Residual, Self::Output>;
+    }
+    impl<T> Try for Option<T> {
+        type Output = T;
+        type Residual = Option<crate::convert::Infallible>;
+        fn from_output(output: T) -> Self {
+            loop {}
+        }
+        fn branch(self) -> ControlFlow<Option<crate::convert::Infallible>, T> {
+            loop {}
+        }
+    }
+    impl<T, E> Try for Result<T, E> {
+        type Output = T;
+        type Residual = Result<crate::convert::Infallible, E>;
+        fn from_output(output: T) -> Self {
+            loop {}
+        }
+        fn branch(self) -> ControlFlow<Result<crate::convert::Infallible, E>, T> {
+            loop {}
+        }
+    }
+    impl<B, C> Try for ControlFlow<B, C> {
+        type Output = C;
+        type Residual = ControlFlow<B, crate::convert::Infallible>;
+        fn from_output(output: C) -> Self {
+            loop {}
+        }
+        fn branch(self) -> ControlFlow<ControlFlow<B, crate::convert::Infallible>, C> {
+            loop {}
+        }
+    }
+}
+
+pub mod cmp {
+    pub trait PartialEq<Rhs: ?Sized = Self> {
+        fn eq(&self, other: &Rhs) -> bool;
+        fn ne(&self, other: &Rhs) -> bool {
+            self.eq(other)
+        }
+    }
+    pub trait Eq: PartialEq<Self> {}
+    #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
+    pub enum Ordering {
+        Less,
+        Equal,
+        Greater,
+    }
+    impl Ordering {
+        pub const fn is_eq(self) -> bool {
+            loop {}
+        }
+        pub const fn is_ne(self) -> bool {
+            loop {}
+        }
+        pub const fn is_lt(self) -> bool {
+            loop {}
+        }
+        pub const fn is_gt(self) -> bool {
+            loop {}
+        }
+        pub const fn is_le(self) -> bool {
+            loop {}
+        }
+        pub const fn is_ge(self) -> bool {
+            loop {}
+        }
+        pub const fn reverse(self) -> Ordering {
+            loop {}
+        }
+        pub const fn then(self, other: Ordering) -> Ordering {
+            loop {}
+        }
+        pub fn then_with<F: FnOnce() -> Ordering>(self, f: F) -> Ordering {
+            f()
+        }
+    }
+    pub trait PartialOrd<Rhs: ?Sized = Self>: PartialEq<Rhs> {
+        fn partial_cmp(&self, other: &Rhs) -> Option<Ordering>;
+        fn lt(&self, other: &Rhs) -> bool {
+            self.partial_cmp(other);
+            loop {}
+        }
+        fn le(&self, other: &Rhs) -> bool {
+            self.partial_cmp(other);
+            loop {}
+        }
+        fn gt(&self, other: &Rhs) -> bool {
+            self.partial_cmp(other);
+            loop {}
+        }
+        fn ge(&self, other: &Rhs) -> bool {
+            self.partial_cmp(other);
+            loop {}
+        }
+    }
+    pub trait Ord: Eq + PartialOrd<Self> {
+        fn cmp(&self, other: &Self) -> Ordering;
+        fn max(self, other: Self) -> Self
+        where
+            Self: Sized,
+        {
+            self.cmp(&other);
+            loop {}
+        }
+        fn min(self, other: Self) -> Self
+        where
+            Self: Sized,
+        {
+            self.cmp(&other);
+            loop {}
+        }
+        fn clamp(self, min: Self, max: Self) -> Self
+        where
+            Self: Sized,
+        {
+            self.cmp(&min);
+            loop {}
+        }
+    }
+    pub fn max<T: Ord>(v1: T, v2: T) -> T {
+        v1.cmp(&v2);
+        loop {}
+    }
+    pub fn min<T: Ord>(v1: T, v2: T) -> T {
+        v1.cmp(&v2);
+        loop {}
+    }
+    pub fn max_by<T, F: FnOnce(&T, &T) -> Ordering>(v1: T, v2: T, compare: F) -> T {
+        compare(&v1, &v2);
+        loop {}
+    }
+    pub fn min_by<T, F: FnOnce(&T, &T) -> Ordering>(v1: T, v2: T, compare: F) -> T {
+        compare(&v1, &v2);
+        loop {}
+    }
+    pub fn max_by_key<T, F: FnMut(&T) -> K, K: Ord>(v1: T, v2: T, f: F) -> T {
+        let mut f = f;
+        let a = f(&v1);
+        let b = f(&v2);
+        a.cmp(&b);
+        loop {}
+    }
+    pub fn min_by_key<T, F: FnMut(&T) -> K, K: Ord>(v1: T, v2: T, f: F) -> T {
+        let mut f = f;
+        let a = f(&v1);
+        let b = f(&v2);
+        a.cmp(&b);
+        loop {}
+    }
+    #[derive(Clone, Copy, Default, PartialEq, Eq, Hash, Debug)]
+    pub struct Reverse<T>(pub T);
+    impl<T: PartialOrd> PartialOrd for Reverse<T> {
+        fn partial_cmp(&self, other: &Reverse<T>) -> Option<Ordering> {
+            other.0.partial_cmp(&self.0)
+        }
+    }
+    impl<T: Ord> Ord for Reverse<T> {
+        fn cmp(&self, other: &Reverse<T>) -> Ordering {
+            other.0.cmp(&self.0)
+        }
+    }
+    impl<A: ?Sized + PartialEq<B>, B: ?Sized> PartialEq<&B> for &A {
+        fn eq(&self, other: &&B) -> bool {
+            PartialEq::eq(*self, *other)
+        }
+    }
+    impl<A: ?Sized + PartialOrd<B>, B: ?Sized> PartialOrd<&B> for &A {
+        fn partial_cmp(&self, other: &&B) -> Option<Ordering> {
+            PartialOrd::partial_cmp(*self, *other)
+        }
+    }
+    impl<A: ?Sized + Eq> Eq for &A {}
+    impl<A: ?Sized + Ord> Ord for &A {
+        fn cmp(&self, other: &Self) -> Ordering {
+            Ord::cmp(*self, *other)
+        }
+    }
+}
+
+pub mod option {
+    #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
+    pub enum Option<T> {
+        None,
+        Some(T),
+    }
+    pub use Option::{None, Some};
+    impl<T> Default for Option<T> {
+        fn default() -> Self {
+            None
+        }
+    }
+    impl<T> From<T> for Option<T> {
+        fn from(val: T) -> Option<T> {
+            Some(val)
+        }
+    }
+    impl<T> Option<T> {
+        pub const fn is_some(&self) -> bool {
+            loop {}
+        }
+        pub fn is_some_and<F: FnOnce(T) -> bool>(self, f: F) -> bool {
+            match self {
+                Some(x) => f(x),
+                None => false,
+            }
+        }
+        pub const fn is_none(&self) -> bool {
+            loop {}
+        }
+        pub fn is_none_or<F: FnOnce(T) -> bool>(self, f: F) -> bool {
+            match self {
+                Some(x) => f(x),
+                None => true,
+            }
+        }
+        pub const fn as_ref(&self) -> Option<&T> {
+            loop {}
+        }
+        pub fn as_mut(&mut self) -> Option<&mut T> {
+            loop {}
+        }
+        pub fn as_slice(&self) -> &[T] {
+            loop {}
+        }
+        pub fn expect(self, msg: &str) -> T {
+            loop {}
+        }
+        pub fn unwrap(self) -> T {
+            loop {}
+        }
+        pub fn unwrap_or(self, default: T) -> T {
+            loop {}
+        }
+        pub fn unwrap_or_else<F: FnOnce() -> T>(self, f: F) -> T {
+            match self {
+                Some(x) => x,
+                None => f(),
+            }
+        }
+        pub fn unwrap_or_default(self) -> T
+        where
+            T: Default,
+        {
+            match self {
+                Some(x) => x,
+                None => T::default(),
+            }
+        }
+        pub unsafe fn unwrap_unchecked(self) -> T {
+            loop {}
+        }
+        pub fn map<U, F: FnOnce(T) -> U>(self, f: F) -> Option<U> {
+            match self {
+                Some(x) => Some(f(x)),
+                None => None,
+            }
+        }
+        pub fn inspect<F: FnOnce(&T)>(self, f: F) -> Self {
+            if let Some(ref x) = self {
+                f(x);
+            }
+            self
+        }
+        pub fn map_or<U, F: FnOnce(T) -> U>(self, default: U, f: F) -> U {
+            match self {
+                Some(t) => f(t),
+                None => default,
+            }
+        }
+        pub fn map_or_else<U, D: FnOnce() -> U, F: FnOnce(T) -> U>(self, default: D, f: F) -> U {
+            match self {
+                Some(t) => f(t),
+                None => default(),
+            }
+        }
+        pub fn ok_or<E>(self, err: E) -> Result<T, E> {
+            loop {}
+        }
+        pub fn ok_or_else<E, F: FnOnce() -> E>(self, err: F) -> Result<T, E> {
+            match self {
+                Some(v) => Ok(v),
+                None => Err(err()),
+            }
+        }
+        pub fn as_deref(&self) -> Option<&T::Target>
+        where
+            T: crate::ops::Deref,
+        {
+            loop {}
+        }
+        pub fn iter(&self) -> Iter<T> {
+            loop {}
+        }
+        pub fn iter_mut(&mut self) -> IterMut<T> {
+            loop {}
+        }
+        pub fn and<U>(self, optb: Option<U>) -> Option<U> {
+            loop {}
+        }
+        pub fn and_then<U, F: FnOnce(T) -> Option<U>>(self, f: F) -> Option<U> {
+            match self {
+                Some(x) => f(x),
+                None => None,
+            }
+        }
+        pub fn filter<P: FnOnce(&T) -> bool>(self, predicate: P) -> Self {
+            if let Some(ref x) = self {
+                predicate(x);
+            }
+            loop {}
+        }
+        pub fn or(self, optb: Option<T>) -> Option<T> {
+            loop {}
+        }
+        pub fn or_else<F: FnOnce() -> Option<T>>(self, f: F) -> Option<T> {
+            match self {
+                Some(x) => Some(x),
+                None => f(),
+            }
+        }
+        pub fn xor(self, optb: Option<T>) -> Option<T> {
+            loop {}
+        }
+        pub fn insert(&mut self, value: T) -> &mut T {
+            loop {}
+        }
+        pub fn get_or_insert(&mut self, value: T) -> &mut T {
+            loop {}
+        }
+        pub fn get_or_insert_with<F: FnOnce() -> T>(&mut self, f: F) -> &mut T {
+            f();
+            loop {}
+        }
+        pub fn take(&mut self) -> Option<T> {
+            loop {}
+        }
+        pub fn take_if<P: FnOnce(&mut T) -> bool>(&mut self, predicate: P) -> Option<T> {
+            let x: &mut T = crate::any();
+            predicate(x);
+            loop {}
+        }
+        pub fn replace(&mut self, value: T) -> Option<T> {
+            loop {}
+        }
+        pub fn zip<U>(self, other: Option<U>) -> Option<(T, U)> {
+            loop {}
+        }
+    }
+    impl<T: Copy> Option<&T> {
+        pub fn copied(self) -> Option<T> {
+            loop {}
+        }
+    }
+    impl<T: Clone> Option<&T> {
+        pub fn cloned(self) -> Option<T> {
+            match self {
+                Some(t) => Some(t.clone()),
+                None => None,
+            }
+        }
+    }
+    impl<T: Copy> Option<&mut T> {
+        pub fn copied(self) -> Option<T> {
+            loop {}
+        }
+    }
+    impl<T> Option<Option<T>> {
+        pub fn flatten(self) -> Option<T> {
+            loop {}
+        }
+    }
+    impl<T, E> Option<Result<T, E>> {
+        pub fn transpose(self) -> Result<Option<T>, E> {
+            loop {}
+        }
+    }
+    impl<T, U> Option<(T, U)> {
+        pub fn unzip(self) -> (Option<T>, Option<U>) {
+            loop {}
+        }
+    }
+    pub struct Iter<T> {
+        inner: Option<&T>,
+    }
+    impl<T> Iterator for Iter<T> {
+        type Item = &T;
+        fn next(&mut self) -> Option<&T> {
+            loop {}
+        }
+    }
+    impl<T> DoubleEndedIterator for Iter<T> {
+        fn next_back(&mut self) -> Option<&T> {
+            loop {}
+        }
+    }
+    impl<T> ExactSizeIterator for Iter<T> {}
+    pub struct IterMut<T> {
+        inner: Option<&mut T>,
+    }
+    impl<T> Iterator for IterMut<T> {
+        type Item = &mut T;
+        fn next(&mut self) -> Option<&mut T> {
+            loop {}
+        }
+    }
+    pub struct IntoIter<T> {
+        inner: Option<T>,
+    }
+    impl<T> Iterator for IntoIter<T> {
+        type Item = T;
+        fn next(&mut self) -> Option<T> {
+            loop {}
+        }
+    }
+    impl<T> DoubleEndedIterator for IntoIter<T> {
+        fn next_back(&mut self) -> Option<T> {
+            loop {}
+        }
+    }
+    impl<T> IntoIterator for Option<T> {
+        type Item = T;
+        type IntoIter = IntoIter<T>;
+        fn into_iter(self) -> IntoIter<T> {
+            loop {}
+        }
+    }
+    impl<T> IntoIterator for &Option<T> {
+        type Item = &T;
+        type IntoIter = Iter<T>;
+        fn into_iter(self) -> Iter<T> {
+            loop {}
+        }
+    }
+    impl<A, V: FromIterator<A>> FromIterator<Option<A>> for Option<V> {
+        fn from_iter<I: IntoIterator<Item = Option<A>>>(iter: I) -> Option<V> {
+            let mut it = iter.into_iter();
+            it.next();
+            V::from_iter(crate::iter::empty::<A>());
+            loop {}
+        }
+    }
+}
+
+pub mod result {
+    #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
+    pub enum Result<T, E> {
+        Ok(T),
+        Err(E),
+    }
+    pub use Result::{Err, Ok};
+    impl<T, E> Result<T, E> {
+        pub const fn is_ok(&self) -> bool {
+            loop {}
+        }
+        pub fn is_ok_and<F: FnOnce(T) -> bool>(self, f: F) -> bool {
+            match self {
+                Ok(x) => f(x),
+                Err(_) => false,
+            }
+        }
+        pub const fn is_err(&self) -> bool {
+            loop {}
+        }
+        pub fn is_err_and<F: FnOnce(E) -> bool>(self, f: F) -> bool {
+            match self {
+                Ok(_) => false,
+                Err(e) => f(e),
+            }
+        }
+        pub fn ok(self) -> Option<T> {
+            loop {}
+        }
+        pub fn err(self) -> Option<E> {
+            loop {}
+        }
+        pub const fn as_ref(&self) -> Result<&T, &E> {
+            loop {}
+        }
+        pub fn as_mut(&mut self) -> Result<&mut T, &mut E> {
+            loop {}
+        }
+        pub fn map<U, F: FnOnce(T) -> U>(self, op: F) -> Result<U, E> {
+            match self {
+                Ok(t) => Ok(op(t)),
+                Err(e) => Err(e),
+            }
+        }
+        pub fn map_or<U, F: FnOnce(T) -> U>(self, default: U, f: F) -> U {
+            match self {
+                Ok(t) => f(t),
+                Err(_) => default,
+            }
+        }
+        pub fn map_or_else<U, D: FnOnce(E) -> U, F: FnOnce(T) -> U>(self, default: D, f: F) -> U {
+            match self {
+                Ok(t) => f(t),
+                Err(e) => default(e),
+            }
+        }
+        pub fn map_err<F, O: FnOnce(E) -> F>(self, op: O) -> Result<T, F> {
+            match self {
+                Ok(t) => Ok(t),
+                Err(e) => Err(op(e)),
+            }
+        }
+        pub fn inspect<F: FnOnce(&T)>(self, f: F) -> Self {
+            if let Ok(ref t) = self {
+                f(t);
+            }
+            self
+        }
+        pub fn inspect_err<F: FnOnce(&E)>(self, f: F) -> Self {
+            if let Err(ref e) = self {
+                f(e);
+            }
+            self
+        }
+        pub fn iter(&self) -> crate::option::Iter<T> {
+            loop {}
+        }
+        pub fn expect(self, msg: &str) -> T
+        where
+            E: crate::fmt::Debug,
+        {
+            let e: E = crate::any();
+            crate::fmt::Debug::fmt(&e, crate::any());
+            loop {}
+        }
+        pub fn unwrap(self) -> T
+        where
+            E: crate::fmt::Debug,
+        {
+            let e: E = crate::any();
+            crate::fmt::Debug::fmt(&e, crate::any());
+            loop {}
+        }
+        pub fn unwrap_or_default(self) -> T
+        where
+            T: Default,
+        {
+            match self {
+                Ok(x) => x,
+                Err(_) => T::default(),
+            }
+        }
+        pub fn expect_err(self, msg: &str) -> E
+        where
+            T: crate::fmt::Debug,
+        {
+            let t: T = crate::any();
+            crate::fmt::Debug::fmt(&t, crate::any());
+            loop {}
+        }
+        pub fn unwrap_err(self) -> E
+        where
+            T: crate::fmt::Debug,
+        {
+            let t: T = crate::any();
+            crate::fmt::Debug::fmt(&t, crate::any());
+            loop {}
+        }
+        pub fn and<U>(self, res: Result<U, E>) -> Result<U, E> {
+            loop {}
+        }
+        pub fn and_then<U, F: FnOnce(T) -> Result<U, E>>(self, op: F) -> Result<U, E> {
+            match self {
+                Ok(t) => op(t),
+                Err(e) => Err(e),
+            }
+        }
+        pub fn or<F>(self, res: Result<T, F>) -> Result<T, F> {
+            loop {}
+        }
+        pub fn or_else<F, O: FnOnce(E) -> Result<T, F>>(self, op: O) -> Result<T, F> {
+            match self {
+                Ok(t) => Ok(t),
+                Err(e) => op(e),
+            }
+        }
+        pub fn unwrap_or(self, default: T) -> T {
+            loop {}
+        }
+        pub fn unwrap_or_else<F: FnOnce(E) -> T>(self, op: F) -> T {
+            match self {
+                Ok(t) => t,
+                Err(e) => op(e),
+            }
+        }
+        pub unsafe fn unwrap_unchecked(self) -> T {
+            loop {}
+        }
+    }
+    impl<T: Copy, E> Result<&T, E> {
+        pub fn copied(self) -> Result<T, E> {
+            loop {}
+        }
+    }
+    impl<T: Clone, E> Result<&T, E> {
+        pub fn cloned(self) -> Result<T, E> {
+            match self {
+                Ok(t) => Ok(t.clone()),
+                Err(e) => Err(e),
+            }
+        }
+    }
+    impl<T, E> Result<Option<T>, E> {
+        pub fn transpose(self) -> Option<Result<T, E>> {
+            loop {}
+        }
+    }
+    impl<T, E> IntoIterator for Result<T, E> {
+        type Item = T;
+        type IntoIter = crate::option::IntoIter<T>;
+        fn into_iter(self) -> crate::option::IntoIter<T> {
+            loop {}
+        }
+    }
+    impl<A, E, V: FromIterator<A>> FromIterator<Result<A, E>> for Result<V, E> {
+        fn from_iter<I: IntoIterator<Item = Result<A, E>>>(iter: I) -> Result<V, E> {
+            let mut it = iter.into_iter();
+            it.next();
+            V::from_iter(crate::iter::empty::<A>());
+            loop {}
+        }
+    }
+}
+
+pub mod iter {
+    use crate::cmp::Ordering;
+    use crate::marker::PhantomData;
+    use crate::ops::{ControlFlow, Try};
+
+    pub trait Iterator {
+        type Item;
+        fn next(&mut self) -> Option<Self::Item>;
+        fn size_hint(&self) -> (usize, Option<usize>) {
+            loop {}
+        }
+        fn count(self) -> usize
+        where
+            Self: Sized,
+        {
+            let mut it = self;
+            while let Some(_x) = it.next() {}
+            loop {}
+        }
+        fn last(self) -> Option<Self::Item>
+        where
+            Self: Sized,
+        {
+            let mut it = self;
+            it.next()
+        }
+        fn nth(&mut self, n: usize) -> Option<Self::Item> {
+            self.next()
+        }
+        fn step_by(self, step: usize) -> StepBy<Self>
+        where
+            Self: Sized,
+        {
+            StepBy { iter: self }
+        }
+        fn chain<U: IntoIterator<Item = Self::Item>>(self, other: U) -> Chain<Self, U::IntoIter>
+        where
+            Self: Sized,
+        {
+            Chain { a: self, b: other.into_iter() }
+        }
+        fn zip<U: IntoIterator>(self, other: U) -> Zip<Self, U::IntoIter>
+        where
+            Self: Sized,
+        {
+            Zip { a: self, b: other.into_iter() }
+        }
+        fn map<B, F: FnMut(Self::Item) -> B>(self, f: F) -> Map<Self, F, B>
+        where
+            Self: Sized,
+        {
+            Map { iter: self, f, b: PhantomData }
+        }
+        fn for_each<F: FnMut(Self::Item)>(self, f: F)
+        where
+            Self: Sized,
+        {
+            let mut it = self;
+            let mut f = f;
+            while let Some(x) = it.next() {
+                f(x);
+            }
+        }
+        fn filter<P: FnMut(&Self::Item) -> bool>(self, predicate: P) -> Filter<Self, P>
+        where
+            Self: Sized,
+        {
+            Filter { iter: self, predicate }
+        }
+        fn filter_map<B, F: FnMut(Self::Item) -> Option<B>>(self, f: F) -> FilterMap<Self, F, B>
+        where
+            Self: Sized,
+        {
+            FilterMap { iter: self, f, b: PhantomData }
+        }
+        fn enumerate(self) -> Enumerate<Self>
+        where
+            Self: Sized,
+        {
+            Enumerate { iter: self }
+        }
+        fn peekable(self) -> Peekable<Self>
+        where
+            Self: Sized,
+        {
+            Peekable { iter: self }
+        }
+        fn skip_while<P: FnMut(&Self::Item) -> bool>(self, predicate: P) -> SkipWhile<Self, P>
+        where
+            Self: Sized,
+        {
+            SkipWhile { iter: self, predicate }
+        }
+        fn take_while<P: FnMut(&Self::Item) -> bool>(self, predicate: P) -> TakeWhile<Self, P>
+        where
+            Self: Sized,
+        {
+            TakeWhile { iter: self, predicate }
+        }
+        fn map_while<B, P: FnMut(Self::Item) -> Option<B>>(self, predicate: P) -> MapWhile<Self, P, B>
+        where
+            Self: Sized,
+        {
+            MapWhile { iter: self, predicate, b: PhantomData }
+        }
+        fn skip(self, n: usize) -> Skip<Self>
+        where
+            Self: Sized,
+        {
+            Skip { iter: self }
+        }
+        fn take(self, n: usize) -> Take<Self>
+        where
+            Self: Sized,
+        {
+            Take { iter: self }
+        }
+        fn scan<St, B, F: FnMut(&mut St, Self::Item) -> Option<B>>(self, initial_state: St, f: F) -> Scan<Self, St, F, B>
+        where
+            Self: Sized,
+        {
+            Scan { iter: self, state: initial_state, f, b: PhantomData }
+        }
+        fn flat_map<U: IntoIterator, F: FnMut(Self::Item) -> U>(self, f: F) -> FlatMap<Self, U, F>
+        where
+            Self: Sized,
+        {
+            FlatMap { iter: self, f, u: PhantomData }
+        }
+        fn flatten(self) -> Flatten<Self>
+        where
+            Self: Sized,
+        {
+            Flatten { iter: self }
+        }
+        fn fuse(self) -> Fuse<Self>
+        where
+            Self: Sized,
+        {
+            Fuse { iter: self }
+        }
+        fn inspect<F: FnMut(&Self::Item)>(self, f: F) -> Inspect<Self, F>
+        where
+            Self: Sized,
+        {
+            Inspect { iter: self, f }
+        }
+        fn by_ref(&mut self) -> &mut Self
+        where
+            Self: Sized,
+        {
+            self
+        }
+        fn collect<B: FromIterator<Self::Item>>(self) -> B
+        where
+            Self: Sized,
+        {
+            B::from_iter(self)
+        }
+        fn partition<B, F>(self, f: F) -> (B, B)
+        where
+            Self: Sized,
+            B: Default + Extend<Self::Item>,
+            F: FnMut(&Self::Item) -> bool,
+        {
+            let mut it = self;
+            let mut f = f;
+            let mut left: B = B::default();
+            while let Some(x) = it.next() {
+                f(&x);
+                left.extend(Some(x));
+            }
+            loop {}
+        }
+        fn try_fold<B, F, R>(&mut self, init: B, f: F) -> R
+        where
+            Self: Sized,
+            F: FnMut(B, Self::Item) -> R,
+            R: Try<Output = B>,
+        {
+            let mut f = f;
+            let mut acc = init;
+            while let Some(x) = self.next() {
+                match f(acc, x).branch() {
+                    ControlFlow::Continue(c) => acc = c,
+                    ControlFlow::Break(_r) => return crate::any(),
+                }
+            }
+            R::from_output(acc)
+        }
+        fn try_for_each<F, R>(&mut self, f: F) -> R
+        where
+            Self: Sized,
+            F: FnMut(Self::Item) -> R,
+            R: Try<Output = ()>,
+        {
+            let mut f = f;
+            while let Some(x) = self.next() {
+                match f(x).branch() {
+                    ControlFlow::Continue(_c) => {}
+                    ControlFlow::Break(_r) => return crate::any(),
+                }
+            }
+            R::from_output(())
+        }
+        fn fold<B, F: FnMut(B, Self::Item) -> B>(self, init: B, f: F) -> B
+        where
+            Self: Sized,
+        {
+            let mut it = self;
+            let mut f = f;
+            let mut acc = init;
+            while let Some(x) = it.next() {
+                acc = f(acc, x);
+            }
+            acc
+        }
+        fn reduce<F: FnMut(Self::Item, Self::Item) -> Self::Item>(self, f: F) -> Option<Self::Item>
+        where
+            Self: Sized,
+        {
+            let mut it = self;
+            let mut f = f;
+            let first = it.next()?;
+            let second = it.next()?;
+            Some(f(first, second))
+        }
+        fn all<F: FnMut(Self::Item) -> bool>(&mut self, f: F) -> bool
+        where
+            Self: Sized,
+        {
+            let mut f = f;
+            while let Some(x) = self.next() {
+                f(x);
+            }
+            loop {}
+        }
+        fn any<F: FnMut(Self::Item) -> bool>(&mut self, f: F) -> bool
+        where
+            Self: Sized,
+        {
+            let mut f = f;
+            while let Some(x) = self.next() {
+                f(x);
+            }
+            loop {}
+        }
+        fn find<P: FnMut(&Self::Item) -> bool>(&mut self, predicate: P) -> Option<Self::Item>
+        where
+            Self: Sized,
+        {
+            let mut predicate = predicate;
+            while let Some(x) = self.next() {
+                predicate(&x);
+            }
+            loop {}
+        }
+        fn find_map<B, F: FnMut(Self::Item) -> Option<B>>(&mut self, f: F) -> Option<B>
+        where
+            Self: Sized,
+        {
+            let mut f = f;
+            while let Some(x) = self.next() {
+                f(x);
+            }
+            loop {}
+        }
+        fn position<P: FnMut(Self::Item) -> bool>(&mut self, predicate: P) -> Option<usize>
+        where
+            Self: Sized,
+        {
+            let mut predicate = predicate;
+            while let Some(x) = self.next() {
+                predicate(x);
+            }
+            loop {}
+        }
+        fn rposition<P: FnMut(Self::Item) -> bool>(&mut self, predicate: P) -> Option<usize>
+        where
+            Self: Sized + ExactSizeIterator + DoubleEndedIterator,
+        {
+            let mut predicate = predicate;
+            while let Some(x) = self.next_back() {
+                predicate(x);
+            }
+            loop {}
+        }
+        fn max(self) -> Option<Self::Item>
+        where
+            Self: Sized,
+            Self::Item: Ord,
+        {
+            let mut it = self;
+            let a = it.next()?;
+            let b = it.next()?;
+            a.cmp(&b);
+            loop {}
+        }
+        fn min(self) -> Option<Self::Item>
+        where
+            Self: Sized,
+            Self::Item: Ord,
+        {
+            let mut it = self;
+            let a = it.next()?;
+            let b = it.next()?;
+            a.cmp(&b);
+            loop {}
+        }
+        fn max_by_key<B: Ord, F: FnMut(&Self::Item) -> B>(self, f: F) -> Option<Self::Item>
+        where
+            Self: Sized,
+        {
+            let mut it = self;
+            let mut f = f;
+            let a = it.next()?;
+            let k = f(&a);
+            k.cmp(&k);
+            loop {}
+        }
+        fn max_by<F: FnMut(&Self::Item, &Self::Item) -> Ordering>(self, compare: F) -> Option<Self::Item>
+        where
+            Self: Sized,
+        {
+            let mut it = self;
+            let mut compare = compare;
+            let a = it.next()?;
+            compare(&a, &a);
+            loop {}
+        }
+        fn min_by_key<B: Ord, F: FnMut(&Self::Item) -> B>(self, f: F) -> Option<Self::Item>
+        where
+            Self: Sized,
+        {
+            let mut it = self;
+            let mut f = f;
+            let a = it.next()?;
+            let k = f(&a);
+            k.cmp(&k);
+            loop {}
+        }
+        fn min_by<F: FnMut(&Self::Item, &Self::Item) -> Ordering>(self, compare: F) -> Option<Self::Item>
+        where
+            Self: Sized,
+        {
+            let mut it = self;
+            let mut compare = compare;
+            let a = it.next()?;
+            compare(&a, &a);
+            loop {}
+        }
+        fn rev(self) -> Rev<Self>
+        where
+            Self: Sized + DoubleEndedIterator,
+        {
+            Rev { iter: self }
+        }
+        fn copied(self) -> Copied<Self>
+        where
+            Self: Sized,
+        {
+            Copied { iter: self }
+        }
+        fn cloned(self) -> Cloned<Self>
+        where
+            Self: Sized,
+        {
+            Cloned { iter: self }
+        }
+        fn cycle(self) -> Cycle<Self>
+        where
+            Self: Sized + Clone,
+        {
+            let c = self.clone();
+            Cycle { orig: c, iter: self }
+        }
+        fn sum<S: Sum<Self::Item>>(self) -> S
+        where
+            Self: Sized,
+        {
+            S::sum(self)
+        }
+        fn product<P: Product<Self::Item>>(self) -> P
+        where
+            Self: Sized,
+        {
+            P::product(self)
+        }
+        fn cmp<I>(self, other: I) -> Ordering
+        where
+            I: IntoIterator<Item = Self::Item>,
+            Self::Item: Ord,
+            Self: Sized,
+        {
+            let mut a = self;
+            let mut b = other.into_iter();
+            let x = a.next()?;
+            let y = b.next()?;
+            x.cmp(&y)
+        }
+        fn eq<I>(self, other: I) -> bool
+        where
+            I: IntoIterator,
+            Self::Item: PartialEq<I::Item>,
+            Self: Sized,
+        {
+            let mut a = self;
+            let mut b = other.into_iter();
+            let x = a.next()?;
+            let y = b.next()?;
+            x.eq(&y)
+        }
+        fn is_sorted(self) -> bool
+        where
+            Self: Sized,
+            Self::Item: PartialOrd,
+        {
+            let mut it = self;
+            let a = it.next()?;
+            a.partial_cmp(&a);
+            loop {}
+        }
+    }
+
+    pub trait DoubleEndedIterator: Iterator {
+        fn next_back(&mut self) -> Option<Self::Item>;
+        fn nth_back(&mut self, n: usize) -> Option<Self::Item> {
+            self.next_back()
+        }
+        fn rfold<B, F: FnMut(B, Self::Item) -> B>(self, init: B, f: F) -> B
+        where
+            Self: Sized,
+        {
+            let mut it = self;
+            let mut f = f;
+            let mut acc = init;
+            while let Some(x) = it.next_back() {
+                acc = f(acc, x);
+            }
+            acc
+        }
+        fn rfind<P: FnMut(&Self::Item) -> bool>(&mut self, predicate: P) -> Option<Self::Item>
+        where
+            Self: Sized,
+        {
+            let mut predicate = predicate;
+            while let Some(x) = self.next_back() {
+                predicate(&x);
+            }
+            loop {}
+        }
+    }
+    pub trait ExactSizeIterator: Iterator {
+        fn len(&self) -> usize {
+            loop {}
+        }
+        fn is_empty(&self) -> bool {
+            loop {}
+        }
+    }
+    pub trait FusedIterator: Iterator {}
+    pub trait TrustedLen: Iterator {}
+    pub trait Step: Clone + PartialOrd + Sized {}
+
+    pub trait IntoIterator {
+        type Item;
+        type IntoIter: Iterator<Item = Self::Item>;
+        fn into_iter(self) -> Self::IntoIter;
+    }
+    impl<I: Iterator> IntoIterator for I {
+        type Item = I::Item;
+        type IntoIter = I;
+        fn into_iter(self) -> I {
+            self
+        }
+    }
+    pub trait FromIterator<A>: Sized {
+        fn from_iter<T: IntoIterator<Item = A>>(iter: T) -> Self;
+    }
+    pub trait Extend<A> {
+        fn extend<T: IntoIterator<Item = A>>(&mut self, iter: T);
+    }
+    pub trait Sum<A = Self>: Sized {
+        fn sum<I: Iterator<Item = A>>(iter: I) -> Self;
+    }
+    pub trait Product<A = Self>: Sized {
+        fn product<I: Iterator<Item = A>>(iter: I) -> Self;
+    }
+    impl<I: Iterator + ?Sized> Iterator for &mut I {
+        type Item = I::Item;
+        fn next(&mut self) -> Option<I::Item> {
+            (**self).next()
+        }
+    }
+    impl<I: DoubleEndedIterator + ?Sized> DoubleEndedIterator for &mut I {
+        fn next_back(&mut self) -> Option<I::Item> {
+            (**self).next_back()
+        }
+    }
+    impl<I: ExactSizeIterator + ?Sized> ExactSizeIterator for &mut I {}
+    impl<T> Extend<T> for () {
+        fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
+            let mut it = iter.into_iter();
+            while let Some(_x) = it.next() {}
+        }
+    }
+    impl<T> FromIterator<T> for () {
+        fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> () {
+            let mut it = iter.into_iter();
+            while let Some(_x) = it.next() {}
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct StepBy<I> {
+        iter: I,
+    }
+    impl<I: Iterator> Iterator for StepBy<I> {
+        type Item = I::Item;
+        fn next(&mut self) -> Option<I::Item> {
+            self.iter.next()
+        }
+    }
+    impl<I: DoubleEndedIterator + ExactSizeIterator> DoubleEndedIterator for StepBy<I> {
+        fn next_back(&mut self) -> Option<I::Item> {
+            self.iter.next_back()
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct Chain<A, B> {
+        a: A,
+        b: B,
+    }
+    impl<A: Iterator, B: Iterator<Item = A::Item>> Iterator for Chain<A, B> {
+        type Item = A::Item;
+        fn next(&mut self) -> Option<A::Item> {
+            self.b.next();
+            self.a.next()
+        }
+    }
+    impl<A: DoubleEndedIterator, B: DoubleEndedIterator<Item = A::Item>> DoubleEndedIterator for Chain<A, B> {
+        fn next_back(&mut self) -> Option<A::Item> {
+            self.a.next_back();
+            self.b.next_back()
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct Zip<A, B> {
+        a: A,
+        b: B,
+    }
+    impl<A: Iterator, B: Iterator> Iterator for Zip<A, B> {
+        type Item = (A::Item, B::Item);
+        fn next(&mut self) -> Option<(A::Item, B::Item)> {
+            let x = self.a.next()?;
+            let y = self.b.next()?;
+            Some((x, y))
+        }
+    }
+    impl<A: DoubleEndedIterator + ExactSizeIterator, B: DoubleEndedIterator + ExactSizeIterator> DoubleEndedIterator for Zip<A, B> {
+        fn next_back(&mut self) -> Option<(A::Item, B::Item)> {
+            let x = self.a.next_back()?;
+            let y = self.b.next_back()?;
+            Some((x, y))
+        }
+    }
+    impl<A: ExactSizeIterator, B: ExactSizeIterator> ExactSizeIterator for Zip<A, B> {}
+    #[derive(Clone)]
+    pub struct Map<I, F, B> {
+        iter: I,
+        f: F,
+        b: PhantomData<B>,
+    }
+    impl<B, I: Iterator, F: FnMut(I::Item) -> B> Iterator for Map<I, F, B> {
+        type Item = B;
+        fn next(&mut self) -> Option<B> {
+            match self.iter.next() {
+                Some(x) => Some((self.f)(x)),
+                None => None,
+            }
+        }
+    }
+    impl<B, I: DoubleEndedIterator, F: FnMut(I::Item) -> B> DoubleEndedIterator for Map<I, F, B> {
+        fn next_back(&mut self) -> Option<B> {
+            match self.iter.next_back() {
+                Some(x) => Some((self.f)(x)),
+                None => None,
+            }
+        }
+    }
+    impl<B, I: ExactSizeIterator, F: FnMut(I::Item) -> B> ExactSizeIterator for Map<I, F, B> {}
+    #[derive(Clone)]
+    pub struct Filter<I, P> {
+        iter: I,
+        predicate: P,
+    }
+    impl<I: Iterator, P: FnMut(&I::Item) -> bool> Iterator for Filter<I, P> {
+        type Item = I::Item;
+        fn next(&mut self) -> Option<I::Item> {
+            let x = self.iter.next()?;
+            (self.predicate)(&x);
+            Some(x)
+        }
+    }
+    impl<I: DoubleEndedIterator, P: FnMut(&I::Item) -> bool> DoubleEndedIterator for Filter<I, P> {
+        fn next_back(&mut self) -> Option<I::Item> {
+            let x = self.iter.next_back()?;
+            (self.predicate)(&x);
+            Some(x)
+        }
+    }
+    #[derive(Clone)]
+    pub struct FilterMap<I, F, B> {
+        iter: I,
+        f: F,
+        b: PhantomData<B>,
+    }
+    impl<B, I: Iterator, F: FnMut(I::Item) -> Option<B>> Iterator for FilterMap<I, F, B> {
+        type Item = B;
+        fn next(&mut self) -> Option<B> {
+            let x = self.iter.next()?;
+            (self.f)(x)
+        }
+    }
+    impl<B, I: DoubleEndedIterator, F: FnMut(I::Item) -> Option<B>> DoubleEndedIterator for FilterMap<I, F, B> {
+        fn next_back(&mut self) -> Option<B> {
+            let x = self.iter.next_back()?;
+            (self.f)(x)
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct Enumerate<I> {
+        iter: I,
+    }
+    impl<I: Iterator> Iterator for Enumerate<I> {
+        type Item = (usize, I::Item);
+        fn next(&mut self) -> Option<(usize, I::Item)> {
+            let x = self.iter.next()?;
+            Some((0, x))
+        }
+    }
+    impl<I: DoubleEndedIterator + ExactSizeIterator> DoubleEndedIterator for Enumerate<I> {
+        fn next_back(&mut self) -> Option<(usize, I::Item)> {
+            let x = self.iter.next_back()?;
+            Some((0, x))
+        }
+    }
+    impl<I: ExactSizeIterator> ExactSizeIterator for Enumerate<I> {}
+    #[derive(Clone, Debug)]
+    pub struct Peekable<I> {
+        iter: I,
+    }
+    impl<I: Iterator> Iterator for Peekable<I> {
+        type Item = I::Item;
+        fn next(&mut self) -> Option<I::Item> {
+            self.iter.next()
+        }
+    }
+    impl<I: Iterator> Peekable<I> {
+        pub fn peek(&mut self) -> Option<&I::Item> {
+            self.iter.next();
+            loop {}
+        }
+        pub fn peek_mut(&mut self) -> Option<&mut I::Item> {
+            self.iter.next();
+            loop {}
+        }
+        pub fn next_if<F: FnOnce(&I::Item) -> bool>(&mut self, func: F) -> Option<I::Item> {
+            let x = self.iter.next()?;
+            func(&x);
+            Some(x)
+        }
+        pub fn next_if_eq<T: ?Sized>(&mut self, expected: &T) -> Option<I::Item>
+        where
+            I::Item: PartialEq<T>,
+        {
+            let x = self.iter.next()?;
+            x.eq(expected);
+            Some(x)
+        }
+    }
+    #[derive(Clone)]
+    pub struct SkipWhile<I, P> {
+        iter: I,
+        predicate: P,
+    }
+    impl<I: Iterator, P: FnMut(&I::Item) -> bool> Iterator for SkipWhile<I, P> {
+        type Item = I::Item;
+        fn next(&mut self) -> Option<I::Item> {
+            let x = self.iter.next()?;
+            (self.predicate)(&x);
+            Some(x)
+        }
+    }
+    #[derive(Clone)]
+    pub struct TakeWhile<I, P> {
+        iter: I,
+        predicate: P,
+    }
+    impl<I: Iterator, P: FnMut(&I::Item) -> bool> Iterator for TakeWhile<I, P> {
+        type Item = I::Item;
+        fn next(&mut self) -> Option<I::Item> {
+            let x = self.iter.next()?;
+            (self.predicate)(&x);
+            Some(x)
+        }
+    }
+    #[derive(Clone)]
+    pub struct MapWhile<I, P, B> {
+        iter: I,
+        predicate: P,
+        b: PhantomData<B>,
+    }
+    impl<B, I: Iterator, P: FnMut(I::Item) -> Option<B>> Iterator for MapWhile<I, P, B> {
+        type Item = B;
+        fn next(&mut self) -> Option<B> {
+            let x = self.iter.next()?;
+            (self.predicate)(x)
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct Skip<I> {
+        iter: I,
+    }
+    impl<I: Iterator> Iterator for Skip<I> {
+        type Item = I::Item;
+        fn next(&mut self) -> Option<I::Item> {
+            self.iter.next()
+        }
+    }
+    impl<I: DoubleEndedIterator + ExactSizeIterator> DoubleEndedIterator for Skip<I> {
+        fn next_back(&mut self) -> Option<I::Item> {
+            self.iter.next_back()
+        }
+    }
+    impl<I: ExactSizeIterator> ExactSizeIterator for Skip<I> {}
+    #[derive(Clone, Debug)]
+    pub struct Take<I> {
+        iter: I,
+    }
+    impl<I: Iterator> Iterator for Take<I> {
+        type Item = I::Item;
+        fn next(&mut self) -> Option<I::Item> {
+            self.iter.next()
+        }
+    }
+    impl<I: DoubleEndedIterator + ExactSizeIterator> DoubleEndedIterator for Take<I> {
+        fn next_back(&mut self) -> Option<I::Item> {
+            self.iter.next_back()
+        }
+    }
+    impl<I: ExactSizeIterator> ExactSizeIterator for Take<I> {}
+    #[derive(Clone)]
+    pub struct Scan<I, St, F, B> {
+        iter: I,
+        state: St,
+        f: F,
+        b: PhantomData<B>,
+    }
+    impl<B, I: Iterator, St, F: FnMut(&mut St, I::Item) -> Option<B>> Iterator for Scan<I, St, F, B> {
+        type Item = B;
+        fn next(&mut self) -> Option<B> {
+            let x = self.iter.next()?;
+            (self.f)(&mut self.state, x)
+        }
+    }
+    pub struct FlatMap<I, U, F> {
+        iter: I,
+        f: F,
+        u: PhantomData<U>,
+    }
+    impl<I: Iterator, U: IntoIterator, F: FnMut(I::Item) -> U> Iterator for FlatMap<I, U, F> {
+        type Item = U::Item;
+        fn next(&mut self) -> Option<U::Item> {
+            let x = self.iter.next()?;
+            let mut inner = (self.f)(x).into_iter();
+            inner.next()
+        }
+    }
+    impl<I: DoubleEndedIterator, U: IntoIterator, F: FnMut(I::Item) -> U> DoubleEndedIterator for FlatMap<I, U, F>
+    where
+        U::IntoIter: DoubleEndedIterator,
+    {
+        fn next_back(&mut self) -> Option<U::Item> {
+            let x = self.iter.next_back()?;
+            let mut inner = (self.f)(x).into_iter();
+            inner.next_back()
+        }
+    }
+    pub struct Flatten<I> {
+        iter: I,
+    }
+    impl<I: Iterator> Iterator for Flatten<I>
+    where
+        I::Item: IntoIterator,
+    {
+        type Item = <I::Item as IntoIterator>::Item;
+        fn next(&mut self) -> Option<<I::Item as IntoIterator>::Item> {
+            let x = self.iter.next()?;
+            let mut inner = x.into_iter();
+            inner.next()
+        }
+    }
+    impl<I: DoubleEndedIterator> DoubleEndedIterator for Flatten<I>
+    where
+        I::Item: IntoIterator,
+    {
+        fn next_back(&mut self) -> Option<<I::Item as IntoIterator>::Item> {
+            let x = self.iter.next_back()?;
+            let mut inner = x.into_iter();
+            inner.next_back()
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct Fuse<I> {
+        iter: I,
+    }
+    impl<I: Iterator> Iterator for Fuse<I> {
+        type Item = I::Item;
+        fn next(&mut self) -> Option<I::Item> {
+            self.iter.next()
+        }
+    }
+    impl<I: DoubleEndedIterator> DoubleEndedIterator for Fuse<I> {
+        fn next_back(&mut self) -> Option<I::Item> {
+            self.iter.next_back()
+        }
+    }
+    impl<I: ExactSizeIterator> ExactSizeIterator for Fuse<I> {}
+    impl<I: Iterator> FusedIterator for Fuse<I> {}
+    #[derive(Clone)]
+    pub struct Inspect<I, F> {
+        iter: I,
+        f: F,
+    }
+    impl<I: Iterator, F: FnMut(&I::Item)> Iterator for Inspect<I, F> {
+        type Item = I::Item;
+        fn next(&mut self) -> Option<I::Item> {
+            let x = self.iter.next()?;
+            (self.f)(&x);
+            Some(x)
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct Rev<I> {
+        iter: I,
+    }
+    impl<I: DoubleEndedIterator> Iterator for Rev<I> {
+        type Item = I::Item;
+        fn next(&mut self) -> Option<I::Item> {
+            self.iter.next_back()
+        }
+    }
+    impl<I: DoubleEndedIterator> DoubleEndedIterator for Rev<I> {
+        fn next_back(&mut self) -> Option<I::Item> {
+            self.iter.next()
+        }
+    }
+    impl<I: DoubleEndedIterator + ExactSizeIterator> ExactSizeIterator for Rev<I> {}
+    #[derive(Clone, Debug)]
+    pub struct Copied<I> {
+        iter: I,
+    }
+    impl<I: Iterator> Iterator for Copied<I> {
+        type Item = <I::Item as crate::ops::Deref>::Target;
+        fn next(&mut self) -> Option<<I::Item as crate::ops::Deref>::Target> {
+            let x = self.iter.next()?;
+            Some(*x)
+        }
+    }
+    impl<I: DoubleEndedIterator> DoubleEndedIterator for Copied<I> {
+        fn next_back(&mut self) -> Option<<I::Item as crate::ops::Deref>::Target> {
+            let x = self.iter.next_back()?;
+            Some(*x)
+        }
+    }
+    impl<I: ExactSizeIterator> ExactSizeIterator for Copied<I> {}
+    #[derive(Clone, Debug)]
+    pub struct Cloned<I> {
+        iter: I,
+    }
+    impl<I: Iterator> Iterator for Cloned<I> {
+        type Item = <I::Item as crate::ops::Deref>::Target;
+        fn next(&mut self) -> Option<<I::Item as crate::ops::Deref>::Target> {
+            let x = self.iter.next()?;
+            Some((*x).clone())
+        }
+    }
+    impl<I: DoubleEndedIterator> DoubleEndedIterator for Cloned<I> {
+        fn next_back(&mut self) -> Option<<I::Item as crate::ops::Deref>::Target> {
+            let x = self.iter.next_back()?;
+            Some((*x).clone())
+        }
+    }
+    impl<I: ExactSizeIterator> ExactSizeIterator for Cloned<I> {}
+    #[derive(Clone, Debug)]
+    pub struct Cycle<I> {
+        orig: I,
+        iter: I,
+    }
+    impl<I: Clone + Iterator> Iterator for Cycle<I> {
+        type Item = I::Item;
+        fn next(&mut self) -> Option<I::Item> {
+            self.orig.clone();
+            self.iter.next()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct Once<T> {
+        inner: Option<T>,
+    }
+    impl<T> Iterator for Once<T> {
+        type Item = T;
+        fn next(&mut self) -> Option<T> {
+            loop {}
+        }
+    }
+    impl<T> DoubleEndedIterator for Once<T> {
+        fn next_back(&mut self) -> Option<T> {
+            loop {}
+        }
+    }
+    impl<T> ExactSizeIterator for Once<T> {}
+    pub fn once<T>(value: T) -> Once<T> {
+        loop {}
+    }
+    #[derive(Clone, Debug)]
+    pub struct Empty<T> {
+        p: PhantomData<T>,
+    }
+    impl<T> Iterator for Empty<T> {
+        type Item = T;
+        fn next(&mut self) -> Option<T> {
+            loop {}
+        }
+    }
+    impl<T> DoubleEndedIterator for Empty<T> {
+        fn next_back(&mut self) -> Option<T> {
+            loop {}
+        }
+    }
+    impl<T> ExactSizeIterator for Empty<T> {}
+    pub const fn empty<T>() -> Empty<T> {
+        loop {}
+    }
+    #[derive(Clone, Debug)]
+    pub struct Repeat<A> {
+        element: A,
+    }
+    impl<A: Clone> Iterator for Repeat<A> {
+        type Item = A;
+        fn next(&mut self) -> Option<A> {
+            Some(self.element.clone())
+        }
+    }
+    impl<A: Clone> DoubleEndedIterator for Repeat<A> {
+        fn next_back(&mut self) -> Option<A> {
+            Some(self.element.clone())
+        }
+    }
+    pub fn repeat<T: Clone>(elt: T) -> Repeat<T> {
+        Repeat { element: elt }
+    }
+    pub fn repeat_n<T: Clone>(element: T, count: usize) -> Take<Repeat<T>> {
+        Take { iter: Repeat { element } }
+    }
+    #[derive(Clone)]
+    pub struct FromFn<F, T> {
+        f: F,
+        t: PhantomData<T>,
+    }
+    impl<T, F: FnMut() -> Option<T>> Iterator for FromFn<F, T> {
+        type Item = T;
+        fn next(&mut self) -> Option<T> {
+            (self.f)()
+        }
+    }
+    pub fn from_fn<T, F: FnMut() -> Option<T>>(f: F) -> FromFn<F, T> {
+        FromFn { f, t: PhantomData }
+    }
+    #[derive(Clone)]
+    pub struct Successors<T, F> {
+        next: Option<T>,
+        succ: F,
+    }
+    impl<T, F: FnMut(&T) -> Option<T>> Iterator for Successors<T, F> {
+        type Item = T;
+        fn next(&mut self) -> Option<T> {
+            let x: T = crate::any();
+            (self.succ)(&x);
+            Some(x)
+        }
+    }
+    pub fn successors<T, F: FnMut(&T) -> Option<T>>(first: Option<T>, succ: F) -> Successors<T, F> {
+        Successors { next: first, succ }
+    }
+    pub fn zip<A: IntoIterator, B: IntoIterator>(a: A, b: B) -> Zip<A::IntoIter, B::IntoIter> {
+        Zip { a: a.into_iter(), b: b.into_iter() }
+    }
+}
+
+pub mod slice {
+    use crate::cmp::Ordering;
+    use crate::marker::PhantomData;
+    use crate::ops::{Index, IndexMut, Range, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive};
+
+    pub trait SliceIndex<T: ?Sized> {
+        type Output: ?Sized;
+    }
+    impl<T> SliceIndex<[T]> for usize {
+        type Output = T;
+    }
+    impl<T> SliceIndex<[T]> for Range<usize> {
+        type Output = [T];
+    }
+    impl<T> SliceIndex<[T]> for RangeFrom<usize> {
+        type Output = [T];
+    }
+    impl<T> SliceIndex<[T]> for RangeTo<usize> {
+        type Output = [T];
+    }
+    impl<T> SliceIndex<[T]> for RangeInclusive<usize> {
+        type Output = [T];
+    }
+    impl<T> SliceIndex<[T]> for RangeToInclusive<usize> {
+        type Output = [T];
+    }
+    impl<T> SliceIndex<[T]> for RangeFull {
+        type Output = [T];
+    }
+    impl SliceIndex<str> for Range<usize> {
+        type Output = str;
+    }
+    impl SliceIndex<str> for RangeFrom<usize> {
+        type Output = str;
+    }
+    impl SliceIndex<str> for RangeTo<usize> {
+        type Output = str;
+    }
+    impl SliceIndex<str> for RangeFull {
+        type Output = str;
+    }
+    impl<T, I: SliceIndex<[T]>> Index<I> for [T] {
+        type Output = I::Output;
+        fn index(&self, index: I) -> &I::Output {
+            loop {}
+        }
+    }
+    impl<T, I: SliceIndex<[T]>> IndexMut<I> for [T] {
+        fn index_mut(&mut self, index: I) -> &mut I::Output {
+            loop {}
+        }
+    }
+    impl<T, I: SliceIndex<[T]>, const N: usize> Index<I> for [T; N] {
+        type Output = I::Output;
+        fn index(&self, index: I) -> &I::Output {
+            loop {}
+        }
+    }
+    impl<T, I: SliceIndex<[T]>, const N: usize> IndexMut<I> for [T; N] {
+        fn index_mut(&mut self, index: I) -> &mut I::Output {
+            loop {}
+        }
+    }
+    impl<I: SliceIndex<str>> Index<I> for str {
+        type Output = I::Output;
+        fn index(&self, index: I) -> &I::Output {
+            loop {}
+        }
+    }
+
+    impl<T> [T] {
+        pub const fn len(&self) -> usize {
+            loop {}
+        }
+        pub const fn is_empty(&self) -> bool {
+            loop {}
+        }
+        pub const fn first(&self) -> Option<&T> {
+            loop {}
+        }
+        pub fn first_mut(&mut self) -> Option<&mut T> {
+            loop {}
+        }
+        pub const fn last(&self) -> Option<&T> {
+            loop {}
+        }
+        pub fn last_mut(&mut self) -> Option<&mut T> {
+            loop {}
+        }
+        pub const fn split_first(&self) -> Option<(&T, &[T])> {
+            loop {}
+        }
+        pub fn split_first_mut(&mut self) -> Option<(&mut T, &mut [T])> {
+            loop {}
+        }
+        pub const fn split_last(&self) -> Option<(&T, &[T])> {
+            loop {}
+        }
+        pub fn split_last_mut(&mut self) -> Option<(&mut T, &mut [T])> {
+            loop {}
+        }
+        pub fn get<I: SliceIndex<[T]>>(&self, index: I) -> Option<&I::Output> {
+            loop {}
+        }
+        pub fn get_mut<I: SliceIndex<[T]>>(&mut self, index: I) -> Option<&mut I::Output> {
+            loop {}
+        }
+        pub unsafe fn get_unchecked<I: SliceIndex<[T]>>(&self, index: I) -> &I::Output {
+            loop {}
+        }
+        pub fn iter(&self) -> Iter<T> {
+            loop {}
+        }
+        pub fn iter_mut(&mut self) -> IterMut<T> {
+            loop {}
+        }
+        pub fn windows(&self, size: usize) -> Windows<T> {
+            loop {}
+        }
+        pub fn chunks(&self, chunk_size: usize) -> Chunks<T> {
+            loop {}
+        }
+        pub fn chunks_mut(&mut self, chunk_size: usize) -> ChunksMut<T> {
+            loop {}
+        }
+        pub fn chunks_exact(&self, chunk_size: usize) -> Chunks<T> {
+            loop {}
+        }
+        pub fn chunks_exact_mut(&mut self, chunk_size: usize) -> ChunksMut<T> {
+            loop {}
+        }
+        pub fn rchunks(&self, chunk_size: usize) -> Chunks<T> {
+            loop {}
+        }
+        pub const fn split_at(&self, mid: usize) -> (&[T], &[T]) {
+            loop {}
+        }
+        pub fn split_at_mut(&mut self, mid: usize) -> (&mut [T], &mut [T]) {
+            loop {}
+        }
+        pub const fn split_at_checked(&self, mid: usize) -> Option<(&[T], &[T])> {
+            loop {}
+        }
+        pub fn split_at_mut_checked(&mut self, mid: usize) -> Option<(&mut [T], &mut [T])> {
+            loop {}
+        }
+        pub fn swap(&mut self, a: usize, b: usize) {}
+        pub fn reverse(&mut self) {}
+        pub fn rotate_left(&mut self, mid: usize) {}
+        pub fn rotate_right(&mut self, k: usize) {}
+        pub fn contains(&self, x: &T) -> bool
+        where
+            T: PartialEq,
+        {
+            x.eq(x);
+            loop {}
+        }
+        pub fn starts_with(&self, needle: &[T]) -> bool
+        where
+            T: PartialEq,
+        {
+            let a: &T = crate::any();
+            a.eq(a);
+            loop {}
+        }
+        pub fn ends_with(&self, needle: &[T]) -> bool
+        where
+            T: PartialEq,
+        {
+            let a: &T = crate::any();
+            a.eq(a);
+            loop {}
+        }
+        pub fn sort(&mut self)
+        where
+            T: Ord,
+        {
+            let a: &T = crate::any();
+            a.cmp(a);
+        }
+        pub fn sort_unstable(&mut self)
+        where
+            T: Ord,
+        {
+            let a: &T = crate::any();
+            a.cmp(a);
+        }
+        pub fn sort_by<F: FnMut(&T, &T) -> Ordering>(&mut self, compare: F) {
+            let mut compare = compare;
+            let a: &T = crate::any();
+            compare(a, a);
+        }
+        pub fn sort_unstable_by<F: FnMut(&T, &T) -> Ordering>(&mut self, compare: F) {
+            let mut compare = compare;
+            let a: &T = crate::any();
+            compare(a, a);
+        }
+        pub fn sort_by_key<K: Ord, F: FnMut(&T) -> K>(&mut self, f: F) {
+            let mut f = f;
+            let a: &T = crate::any();
+            let k = f(a);
+            k.cmp(&k);
+        }
+        pub fn sort_unstable_by_key<K: Ord, F: FnMut(&T) -> K>(&mut self, f: F) {
+            let mut f = f;
+            let a: &T = crate::any();
+            let k = f(a);
+            k.cmp(&k);
+        }
+        pub fn sort_by_cached_key<K: Ord, F: FnMut(&T) -> K>(&mut self, f: F) {
+            let mut f = f;
+            let a: &T = crate::any();
+            let k = f(a);
+            k.cmp(&k);
+        }
+        pub fn is_sorted(&self) -> bool
+        where
+            T: PartialOrd,
+        {
+            let a: &T = crate::any();
+            a.partial_cmp(a);
+            loop {}
+        }
+        pub fn binary_search(&self, x: &T) -> Result<usize, usize>
+        where
+            T: Ord,
+        {
+            x.cmp(x);
+            loop {}
+        }
+        pub fn binary_search_by<F: FnMut(&T) -> Ordering>(&self, f: F) -> Result<usize, usize> {
+            let mut f = f;
+            let a: &T = crate::any();
+            f(a);
+            loop {}
+        }
+        pub fn binary_search_by_key<B: Ord, F: FnMut(&T) -> B>(&self, b: &B, f: F) -> Result<usize, usize> {
+            let mut f = f;
+            let a: &T = crate::any();
+            let k = f(a);
+            k.cmp(b);
+            loop {}
+        }
+        pub fn partition_point<P: FnMut(&T) -> bool>(&self, pred: P) -> usize {
+            let mut pred = pred;
+            let a: &T = crate::any();
+            pred(a);
+            loop {}
+        }
+        pub fn to_vec(&self) -> Vec<T>
+        where
+            T: Clone,
+        {
+            let a: &T = crate::any();
+            a.clone();
+            loop {}
+        }
+        pub fn fill(&mut self, value: T)
+        where
+            T: Clone,
+        {
+            value.clone();
+        }
+        pub fn fill_with<F: FnMut() -> T>(&mut self, f: F) {
+            let mut f = f;
+            f();
+        }
+        pub fn copy_from_slice(&mut self, src: &[T])
+        where
+            T: Copy,
+        {
+        }
+        pub fn clone_from_slice(&mut self, src: &[T])
+        where
+            T: Clone,
+        {
+            let a: &T = crate::any();
+            a.clone();
+        }
+        pub fn copy_within<R: crate::ops::RangeBounds<usize>>(&mut self, src: R, dest: usize)
+        where
+            T: Copy,
+        {
+        }
+        pub fn select_nth_unstable_by<F: FnMut(&T, &T) -> Ordering>(&mut self, index: usize, compare: F) -> (&mut [T], &mut T, &mut [T]) {
+            let mut compare = compare;
+            let a: &T = crate::any();
+            compare(a, a);
+            loop {}
+        }
+        pub fn iter_rev_placeholder(&self) {}
+    }
+    impl<T: Clone> crate::borrow::ToOwned for [T] {
+        type Owned = Vec<T>;
+        fn to_owned(&self) -> Vec<T> {
+            self.to_vec()
+        }
+    }
+    impl<A: PartialEq<B>, B> PartialEq<[B]> for [A] {
+        fn eq(&self, other: &[B]) -> bool {
+            let a: &A = crate::any();
+            let b: &B = crate::any();
+            a.eq(b);
+            loop {}
+        }
+    }
+    impl<T: Eq> Eq for [T] {}
+    impl<T: PartialOrd> PartialOrd for [T] {
+        fn partial_cmp(&self, other: &[T]) -> Option<Ordering> {
+            let a: &T = crate::any();
+            a.partial_cmp(a);
+            loop {}
+        }
+    }
+    impl<T: Ord> Ord for [T] {
+        fn cmp(&self, other: &[T]) -> Ordering {
+            let a: &T = crate::any();
+            a.cmp(a)
+        }
+    }
+    impl<T: crate::fmt::Debug> crate::fmt::Debug for [T] {
+        fn fmt(&self, f: &mut crate::fmt::Formatter) -> crate::fmt::Result {
+            let a: &T = crate::any();
+            crate::fmt::Debug::fmt(a, f)
+        }
+    }
+    impl<T: crate::hash::Hash> crate::hash::Hash for [T] {
+        fn hash<H: crate::hash::Hasher>(&self, state: &mut H) {
+            let a: &T = crate::any();
+            a.hash(state);
+        }
+    }
+    impl<T> Default for &[T] {
+        fn default() -> Self {
+            loop {}
+        }
+    }
+    impl<T> AsRef<[T]> for [T] {
+        fn as_ref(&self) -> &[T] {
+            self
+        }
+    }
+    impl<'a, T> IntoIterator for &'a [T] {
+        type Item = &T;
+        type IntoIter = Iter<T>;
+        fn into_iter(self) -> Iter<T> {
+            loop {}
+        }
+    }
+    impl<'a, T> IntoIterator for &'a mut [T] {
+        type Item = &mut T;
+        type IntoIter = IterMut<T>;
+        fn into_iter(self) -> IterMut<T> {
+            loop {}
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct Iter<T> {
+        p: PhantomData<T>,
+    }
+    impl<T> Clone for Iter<T> {
+        fn clone(&self) -> Self {
+            loop {}
+        }
+    }
+    impl<T> Iterator for Iter<T> {
+        type Item = &T;
+        fn next(&mut self) -> Option<&T> {
+            loop {}
+        }
+    }
+    impl<T> DoubleEndedIterator for Iter<T> {
+        fn next_back(&mut self) -> Option<&T> {
+            loop {}
+        }
+    }
+    impl<T> ExactSizeIterator for Iter<T> {}
+    impl<T> crate::iter::FusedIterator for Iter<T> {}
+    impl<T> Iter<T> {
+        pub fn as_slice(&self) -> &[T] {
+            loop {}
+        }
+    }
+    #[derive(Debug)]
+    pub struct IterMut<T> {
+        p: PhantomData<T>,
+    }
+    impl<T> Iterator for IterMut<T> {
+        type Item = &mut T;
+        fn next(&mut self) -> Option<&mut T> {
+            loop {}
+        }
+    }
+    impl<T> DoubleEndedIterator for IterMut<T> {
+        fn next_back(&mut self) -> Option<&mut T> {
+            loop {}
+        }
+    }
+    impl<T> ExactSizeIterator for IterMut<T> {}
+    impl<T> crate::iter::FusedIterator for IterMut<T> {}
+    #[derive(Debug)]
+    pub struct Windows<T> {
+        p: PhantomData<T>,
+    }
+    impl<T> Clone for Windows<T> {
+        fn clone(&self) -> Self {
+            loop {}
+        }
+    }
+    impl<T> Iterator for Windows<T> {
+        type Item = &[T];
+        fn next(&mut self) -> Option<&[T]> {
+            loop {}
+        }
+    }
+    impl<T> DoubleEndedIterator for Windows<T> {
+        fn next_back(&mut self) -> Option<&[T]> {
+            loop {}
+        }
+    }
+    impl<T> ExactSizeIterator for Windows<T> {}
+    #[derive(Debug)]
+    pub struct Chunks<T> {
+        p: PhantomData<T>,
+    }
+    impl<T> Clone for Chunks<T> {
+        fn clone(&self) -> Self {
+            loop {}
+        }
+    }
+    impl<T> Iterator for Chunks<T> {
+        type Item = &[T];
+        fn next(&mut self) -> Option<&[T]> {
+            loop {}
+        }
+    }
+    impl<T> DoubleEndedIterator for Chunks<T> {
+        fn next_back(&mut self) -> Option<&[T]> {
+            loop {}
+        }
+    }
+    impl<T> ExactSizeIterator for Chunks<T> {}
+    #[derive(Debug)]
+    pub struct ChunksMut<T> {
+        p: PhantomData<T>,
+    }
+    impl<T> Iterator for ChunksMut<T> {
+        type Item = &mut [T];
+        fn next(&mut self) -> Option<&mut [T]> {
+            loop {}
+        }
+    }
+    impl<T> DoubleEndedIterator for ChunksMut<T> {
+        fn next_back(&mut self) -> Option<&mut [T]> {
+            loop {}
+        }
+    }
+    impl<T> ExactSizeIterator for ChunksMut<T> {}
+    pub fn from_ref<T>(s: &T) -> &[T] {
+        loop {}
+    }
+    pub fn from_mut<T>(s: &mut T) -> &mut [T] {
+        loop {}
+    }
+}
+
+pub mod array {
+    use crate::marker::PhantomData;
+    impl<T, const N: usize> [T; N] {
+        pub fn map<F: FnMut(T) -> U, U>(self, f: F) -> [U; N] {
+            let mut f = f;
+            f(crate::any());
+            loop {}
+        }
+        pub const fn as_slice(&self) -> &[T] {
+            loop {}
+        }
+        pub fn as_mut_slice(&mut self) -> &mut [T] {
+            loop {}
+        }
+        pub fn each_ref(&self) -> [&T; N] {
+            loop {}
+        }
+    }
+    pub fn from_fn<T, const N: usize, F: FnMut(usize) -> T>(cb: F) -> [T; N] {
+        let mut cb = cb;
+        cb(0);
+        loop {}
+    }
+    #[derive(Debug)]
+    pub struct IntoIter<T> {
+        p: PhantomData<T>,
+    }
+    impl<T: Clone> Clone for IntoIter<T> {
+        fn clone(&self) -> Self {
+            let a: &T = crate::any();
+            a.clone();
+            loop {}
+        }
+    }
+    impl<T> Iterator for IntoIter<T> {
+        type Item = T;
+        fn next(&mut self) -> Option<T> {
+            loop {}
+        }
+    }
+    impl<T> DoubleEndedIterator for IntoIter<T> {
+        fn next_back(&mut self) -> Option<T> {
+            loop {}
+        }
+    }
+    impl<T> ExactSizeIterator for IntoIter<T> {}
+    impl<T, const N: usize> IntoIterator for [T; N] {
+        type Item = T;
+        type IntoIter = IntoIter<T>;
+        fn into_iter(self) -> IntoIter<T> {
+            loop {}
+        }
+    }
+    impl<'a, T, const N: usize> IntoIterator for &'a [T; N] {
+        type Item = &T;
+        type IntoIter = crate::slice::Iter<T>;
+        fn into_iter(self) -> crate::slice::Iter<T> {
+            loop {}
+        }
+    }
+    impl<'a, T, const N: usize> IntoIterator for &'a mut [T; N] {
+        type Item = &mut T;
+        type IntoIter = crate::slice::IterMut<T>;
+        fn into_iter(self) -> crate::slice::IterMut<T> {
+            loop {}
+        }
+    }
+    impl<T: Clone, const N: usize> Clone for [T; N] {
+        fn clone(&self) -> Self {
+            let a: &T = crate::any();
+            a.clone();
+            loop {}
+        }
+    }
+    impl<T: Copy, const N: usize> Copy for [T; N] {}
+    impl<T: Default, const N: usize> Default for [T; N] {
+        fn default() -> Self {
+            T::default();
+            loop {}
+        }
+    }
+    impl<A: PartialEq<B>, B, const N: usize> PartialEq<[B; N]> for [A; N] {
+        fn eq(&self, other: &[B; N]) -> bool {
+            let a: &A = crate::any();
+            let b: &B = crate::any();
+            a.eq(b);
+            loop {}
+        }
+    }
+    impl<A: PartialEq<B>, B, const N: usize> PartialEq<[B]> for [A; N] {
+        fn eq(&self, other: &[B]) -> bool {
+            let a: &A = crate::any();
+            let b: &B = crate::any();
+            a.eq(b);
+            loop {}
+        }
+    }
+    impl<T: Eq, const N: usize> Eq for [T; N] {}
+    impl<T: PartialOrd, const N: usize> PartialOrd for [T; N] {
+        fn partial_cmp(&self, other: &[T; N]) -> Option<crate::cmp::Ordering> {
+            let a: &T = crate::any();
+            a.partial_cmp(a);
+            loop {}
+        }
+    }
+    impl<T: Ord, const N: usize> Ord for [T; N] {
+        fn cmp(&self, other: &[T; N]) -> crate::cmp::Ordering {
+            let a: &T = crate::any();
+            a.cmp(a)
+        }
+    }
+    impl<T: crate::fmt::Debug, const N: usize> crate::fmt::Debug for [T; N] {
+        fn fmt(&self, f: &mut crate::fmt::Formatter) -> crate::fmt::Result {
+            let a: &T = crate::any();
+            crate::fmt::Debug::fmt(a, f)
+        }
+    }
+    impl<T: crate::hash::Hash, const N: usize> crate::hash::Hash for [T; N] {
+        fn hash<H: crate::hash::Hasher>(&self, state: &mut H) {
+            let a: &T = crate::any();
+            a.hash(state);
+        }
+    }
+    impl<T, const N: usize> AsRef<[T]> for [T; N] {
+        fn as_ref(&self) -> &[T] {
+            loop {}
+        }
+    }
+    impl<T, const N: usize> AsMut<[T]> for [T; N] {
+        fn as_mut(&mut self) -> &mut [T] {
+            loop {}
+        }
+    }
+    impl<T: Copy, const N: usize> TryFrom<&[T]> for [T; N] {
+        type Error = TryFromSliceError;
+        fn try_from(slice: &[T]) -> Result<[T; N], TryFromSliceError> {
+            loop {}
+        }
+    }
+    impl<'a, T, const N: usize> TryFrom<&'a [T]> for &'a [T; N] {
+        type Error = TryFromSliceError;
+        fn try_from(slice: &[T]) -> Result<&[T; N], TryFromSliceError> {
+            loop {}
+        }
+    }
+    #[derive(Clone, Copy, Debug)]
+    pub struct TryFromSliceError(());
+}
+
+pub mod vec {
+    use crate::marker::PhantomData;
+    use crate::slice::SliceIndex;
+    use crate::ops::{Deref, DerefMut, Index, IndexMut, RangeBounds};
+
+    pub struct Vec<T> {
+        buf: crate::boxed::Box<[T]>,
+        len: usize,
+    }
+    impl<T> Vec<T> {
+        pub const fn new() -> Vec<T> {
+            loop {}
+        }
+        pub fn with_capacity(capacity: usize) -> Vec<T> {
+            loop {}
+        }
+        pub fn capacity(&self) -> usize {
+            loop {}
+        }
+        pub fn reserve(&mut self, additional: usize) {}
+        pub fn reserve_exact(&mut self, additional: usize) {}
+        pub fn try_reserve(&mut self, additional: usize) -> Result<(), crate::collections::TryReserveError> {
+            loop {}
+        }
+        pub fn try_reserve_exact(&mut self, additional: usize) -> Result<(), crate::collections::TryReserveError> {
+            loop {}
+        }
+        pub fn shrink_to_fit(&mut self) {}
+        pub fn shrink_to(&mut self, min_capacity: usize) {}
+        pub fn into_boxed_slice(self) -> crate::boxed::Box<[T]> {
+            loop {}
+        }
+        pub fn truncate(&mut self, len: usize) {}
+        pub const fn as_slice(&self) -> &[T] {
+            loop {}
+        }
+        pub fn as_mut_slice(&mut self) -> &mut [T] {
+            loop {}
+        }
+        pub fn push(&mut self, value: T) {}
+        pub fn pop(&mut self) -> Option<T> {
+            loop {}
+        }
+        pub fn pop_if<F: FnOnce(&mut T) -> bool>(&mut self, predicate: F) -> Option<T> {
+            let x: &mut T = crate::any();
+            predicate(x);
+            loop {}
+        }
+        pub fn append(&mut self, other: &mut Vec<T>) {}
+        pub fn clear(&mut self) {}
+        pub const fn len(&self) -> usize {
+            loop {}
+        }
+        pub const fn is_empty(&self) -> bool {
+            loop {}
+        }
+        pub fn insert(&mut self, index: usize, element: T) {}
+        pub fn remove(&mut self, index: usize) -> T {
+            loop {}
+        }
+        pub fn swap_remove(&mut self, index: usize) -> T {
+            loop {}
+        }
+        pub fn split_off(&mut self, at: usize) -> Vec<T> {
+            loop {}
+        }
+        pub fn retain<F: FnMut(&T) -> bool>(&mut self, f: F) {
+            let mut f = f;
+            let a: &T = crate::any();
+            f(a);
+        }
+        pub fn retain_mut<F: FnMut(&mut T) -> bool>(&mut self, f: F) {
+            let mut f = f;
+            let a: &mut T = crate::any();
+            f(a);
+        }
+        pub fn dedup_by_key<K: PartialEq, F: FnMut(&mut T) -> K>(&mut self, key: F) {
+            let mut key = key;
+            let a: &mut T = crate::any();
+            let k = key(a);
+            k.eq(&k);
+        }
+        pub fn dedup_by<F: FnMut(&mut T, &mut T) -> bool>(&mut self, same_bucket: F) {
+            let mut same_bucket = same_bucket;
+            let a: &mut T = crate::any();
+            let b: &mut T = crate::any();
+            same_bucket(a, b);
+        }
+        pub fn resize_with<F: FnMut() -> T>(&mut self, new_len: usize, f: F) {
+            let mut f = f;
+            f();
+        }
+        pub fn drain<R: RangeBounds<usize>>(&mut self, range: R) -> Drain<T> {
+            loop {}
+        }
+        pub fn leak(self) -> &mut [T] {
+            loop {}
+        }
+    }
+    impl<T: Clone> Vec<T> {
+        pub fn resize(&mut self, new_len: usize, value: T) {
+            value.clone();
+        }
+        pub fn extend_from_slice(&mut self, other: &[T]) {
+            let a: &T = crate::any();
+            a.clone();
+        }
+        pub fn extend_from_within<R: RangeBounds<usize>>(&mut self, src: R) {
+            let a: &T = crate::any();
+            a.clone();
+        }
+    }
+    impl<T: PartialEq> Vec<T> {
+        pub fn dedup(&mut self) {
+            let a: &T = crate::any();
+            a.eq(a);
+        }
+    }
+    impl<T> Deref for Vec<T> {
+        type Target = [T];
+        fn deref(&self) -> &[T] {
+            loop {}
+        }
+    }
+    impl<T> DerefMut for Vec<T> {
+        fn deref_mut(&mut self) -> &mut [T] {
+            loop {}
+        }
+    }
+    impl<T, I: SliceIndex<[T]>> Index<I> for Vec<T> {
+        type Output = I::Output;
+        fn index(&self, index: I) -> &I::Output {
+            loop {}
+        }
+    }
+    impl<T, I: SliceIndex<[T]>> IndexMut<I> for Vec<T> {
+        fn index_mut(&mut self, index: I) -> &mut I::Output {
+            loop {}
+        }
+    }
+    impl<T: Clone> Clone for Vec<T> {
+        fn clone(&self) -> Vec<T> {
+            let a: &T = crate::any();
+            a.clone();
+            loop {}
+        }
+    }
+    impl<T: crate::fmt::Debug> crate::fmt::Debug for Vec<T> {
+        fn fmt(&self, f: &mut crate::fmt::Formatter) -> crate::fmt::Result {
+            let a: &T = crate::any();
+            crate::fmt::Debug::fmt(a, f)
+        }
+    }
+    impl<T> Default for Vec<T> {
+        fn default() -> Vec<T> {
+            loop {}
+        }
+    }
+    impl<T: PartialEq<U>, U> PartialEq<Vec<U>> for Vec<T> {
+        fn eq(&self, other: &Vec<U>) -> bool {
+            let a: &T = crate::any();
+            let b: &U = crate::any();
+            a.eq(b);
+            loop {}
+        }
+    }
+    impl<T: PartialEq<U>, U> PartialEq<[U]> for Vec<T> {
+        fn eq(&self, other: &[U]) -> bool {
+            let a: &T = crate::any();
+            let b: &U = crate::any();
+            a.eq(b);
+            loop {}
+        }
+    }
+    impl<T: PartialEq<U>, U> PartialEq<&[U]> for Vec<T> {
+        fn eq(&self, other: &&[U]) -> bool {
+            let a: &T = crate::any();
+            let b: &U = crate::any();
+            a.eq(b);
+            loop {}
+        }
+    }
+    impl<T: PartialEq<U>, U, const N: usize> PartialEq<[U; N]> for Vec<T> {
+        fn eq(&self, other: &[U; N]) -> bool {
+            let a: &T = crate::any();
+            let b: &U = crate::any();
+            a.eq(b);
+            loop {}
+        }
+    }
+    impl<T: Eq> Eq for Vec<T> {}
+    impl<T: PartialOrd> PartialOrd for Vec<T> {
+        fn partial_cmp(&self, other: &Vec<T>) -> Option<crate::cmp::Ordering> {
+            let a: &T = crate::any();
+            a.partial_cmp(a);
+            loop {}
+        }
+    }
+    impl<T: Ord> Ord for Vec<T> {
+        fn cmp(&self, other: &Vec<T>) -> crate::cmp::Ordering {
+            let a: &T = crate::any();
+            a.cmp(a)
+        }
+    }
+    impl<T: crate::hash::Hash> crate::hash::Hash for Vec<T> {
+        fn hash<H: crate::hash::Hasher>(&self, state: &mut H) {
+            let a: &T = crate::any();
+            a.hash(state);
+        }
+    }
+    impl<T> IntoIterator for Vec<T> {
+        type Item = T;
+        type IntoIter = IntoIter<T>;
+        fn into_iter(self) -> IntoIter<T> {
+            loop {}
+        }
+    }
+    impl<'a, T> IntoIterator for &'a Vec<T> {
+        type Item = &T;
+        type IntoIter = crate::slice::Iter<T>;
+        fn into_iter(self) -> crate::slice::Iter<T> {
+            loop {}
+        }
+    }
+    impl<'a, T> IntoIterator for &'a mut Vec<T> {
+        type Item = &mut T;
+        type IntoIter = crate::slice::IterMut<T>;
+        fn into_iter(self) -> crate::slice::IterMut<T> {
+            loop {}
+        }
+    }
+    impl<T> FromIterator<T> for Vec<T> {
+        fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Vec<T> {
+            let mut it = iter.into_iter();
+            while let Some(_x) = it.next() {}
+            loop {}
+        }
+    }
+    impl<T> Extend<T> for Vec<T> {
+        fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
+            let mut it = iter.into_iter();
+            while let Some(_x) = it.next() {}
+        }
+    }
+    impl<'a, T: Copy> Extend<&'a T> for Vec<T> {
+        fn extend<I: IntoIterator<Item = &'a T>>(&mut self, iter: I) {
+            let mut it = iter.into_iter();
+            while let Some(_x) = it.next() {}
+        }
+    }
+    impl<T> AsRef<[T]> for Vec<T> {
+        fn as_ref(&self) -> &[T] {
+            loop {}
+        }
+    }
+    impl<T> AsMut<[T]> for Vec<T> {
+        fn as_mut(&mut self) -> &mut [T] {
+            loop {}
+        }
+    }
+    impl<T> crate::borrow::Borrow<[T]> for Vec<T> {
+        fn borrow(&self) -> &[T] {
+            loop {}
+        }
+    }
+    impl<T: Clone> From<&[T]> for Vec<T> {
+        fn from(s: &[T]) -> Vec<T> {
+            s.to_vec()
+        }
+    }
+    impl<T, const N: usize> From<[T; N]> for Vec<T> {
+        fn from(s: [T; N]) -> Vec<T> {
+            loop {}
+        }
+    }
+    impl<T> From<crate::boxed::Box<[T]>> for Vec<T> {
+        fn from(s: crate::boxed::Box<[T]>) -> Vec<T> {
+            loop {}
+        }
+    }
+    #[derive(Debug)]
+    pub struct IntoIter<T> {
+        p: PhantomData<T>,
+    }
+    impl<T: Clone> Clone for IntoIter<T> {
+        fn clone(&self) -> Self {
+            let a: &T = crate::any();
+            a.clone();
+            loop {}
+        }
+    }
+    impl<T> Iterator for IntoIter<T> {
+        type Item = T;
+        fn next(&mut self) -> Option<T> {
+            loop {}
+        }
+    }
+    impl<T> DoubleEndedIterator for IntoIter<T> {
+        fn next_back(&mut self) -> Option<T> {
+            loop {}
+        }
+    }
+    impl<T> ExactSizeIterator for IntoIter<T> {}
+    impl<T> IntoIter<T> {
+        pub fn as_slice(&self) -> &[T] {
+            loop {}
+        }
+    }
+    #[derive(Debug)]
+    pub struct Drain<T> {
+        p: PhantomData<T>,
+    }
+    impl<T> Iterator for Drain<T> {
+        type Item = T;
+        fn next(&mut self) -> Option<T> {
+            loop {}
+        }
+    }
+    impl<T> DoubleEndedIterator for Drain<T> {
+        fn next_back(&mut self) -> Option<T> {
+            loop {}
+        }
+    }
+    impl<T> ExactSizeIterator for Drain<T> {}
+}
+
+pub mod boxed {
+    use crate::ops::{Deref, DerefMut};
+    pub struct Box<T: ?Sized>(T);
+    impl<T> Box<T> {
+        pub fn new(x: T) -> Box<T> {
+            loop {}
+        }
+        pub fn into_inner(boxed: Box<T>) -> T {
+            loop {}
+        }
+    }
+    impl<T: ?Sized> Deref for Box<T> {
+        type Target = T;
+        fn deref(&self) -> &T {
+            loop {}
+        }
+    }
+    impl<T: ?Sized> DerefMut for Box<T> {
+        fn deref_mut(&mut self) -> &mut T {
+            loop {}
+        }
+    }
+    impl<T: Clone> Clone for Box<T> {
+        fn clone(&self) -> Self {
+            let a: &T = crate::any();
+            a.clone();
+            loop {}
+        }
+    }
+    impl<T: ?Sized + crate::fmt::Debug> crate::fmt::Debug for Box<T> {
+        fn fmt(&self, f: &mut crate::fmt::Formatter) -> crate::fmt::Result {
+            crate::fmt::Debug::fmt(&**self, f)
+        }
+    }
+    impl<T: ?Sized + crate::fmt::Display> crate::fmt::Display for Box<T> {
+        fn fmt(&self, f: &mut crate::fmt::Formatter) -> crate::fmt::Result {
+            crate::fmt::Display::fmt(&**self, f)
+        }
+    }
+    impl<T: ?Sized + PartialEq> PartialEq for Box<T> {
+        fn eq(&self, other: &Box<T>) -> bool {
+            PartialEq::eq(&**self, &**other)
+        }
+    }
+    impl<T: Default> Default for Box<T> {
+        fn default() -> Self {
+            T::default();
+            loop {}
+        }
+    }
+    impl<T> From<T> for Box<T> {
+        fn from(t: T) -> Box<T> {
+            loop {}
+        }
+    }
+    impl<T> [T] {
+        pub fn into_vec(self: Box<Self>) -> Vec<T> {
+            loop {}
+        }
+    }
+    impl<T: Clone> Clone for Box<[T]> {
+        fn clone(&self) -> Self {
+            let a: &T = crate::any();
+            a.clone();
+            loop {}
+        }
+    }
+    impl<I: Iterator + ?Sized> Iterator for Box<I> {
+        type Item = I::Item;
+        fn next(&mut self) -> Option<I::Item> {
+            (**self).next()
+        }
+    }
+    impl<T: ?Sized + crate::error::Error> crate::error::Error for Box<T> {}
+}
+
+pub mod string {
+    use crate::fmt;
+    use crate::ops::Deref;
+    #[derive(Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct String {
+        vec: Vec<u8>,
+    }
+    impl String {
+        pub const fn new() -> String {
+            loop {}
+        }
+        pub fn with_capacity(capacity: usize) -> String {
+            loop {}
+        }
+        pub fn push_str(&mut self, string: &str) {}
+        pub fn push(&mut self, ch: char) {}
+        pub fn as_str(&self) -> &str {
+            loop {}
+        }
+        pub fn as_mut_str(&mut self) -> &mut str {
+            loop {}
+        }
+        pub fn len(&self) -> usize {
+            loop {}
+        }
+        pub fn is_empty(&self) -> bool {
+            loop {}
+        }
+        pub fn clear(&mut self) {}
+        pub fn capacity(&self) -> usize {
+            loop {}
+        }
+        pub fn reserve(&mut self, additional: usize) {}
+        pub fn try_reserve(&mut self, additional: usize) -> Result<(), crate::collections::TryReserveError> {
+            loop {}
+        }
+        pub fn truncate(&mut self, new_len: usize) {}
+        pub fn pop(&mut self) -> Option<char> {
+            loop {}
+        }
+        pub fn insert(&mut self, idx: usize, ch: char) {}
+        pub fn insert_str(&mut self, idx: usize, string: &str) {}
+        pub fn remove(&mut self, idx: usize) -> char {
+            loop {}
+        }
+        pub fn into_bytes(self) -> Vec<u8> {
+            loop {}
+        }
+        pub fn from_utf8(vec: Vec<u8>) -> Result<String, FromUtf8Error> {
+            loop {}
+        }
+    }
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    pub struct FromUtf8Error {
+        bytes: Vec<u8>,
+    }
+    impl Deref for String {
+        type Target = str;
+        fn deref(&self) -> &str {
+            loop {}
+        }
+    }
+    impl fmt::Debug for String {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            loop {}
+        }
+    }
+    impl fmt::Display for String {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            loop {}
+        }
+    }
+    impl fmt::Write for String {
+        fn write_str(&mut self, s: &str) -> fmt::Result {
+            loop {}
+        }
+    }
+    impl From<&str> for String {
+        fn from(s: &str) -> String {
+            loop {}
+        }
+    }
+    impl From<char> for String {
+        fn from(c: char) -> String {
+            loop {}
+        }
+    }
+    impl FromIterator<char> for String {
+        fn from_iter<I: IntoIterator<Item = char>>(iter: I) -> String {
+            let mut it = iter.into_iter();
+            while let Some(_x) = it.next() {}
+            loop {}
+        }
+    }
+    impl<'a> FromIterator<&'a str> for String {
+        fn from_iter<I: IntoIterator<Item = &'a str>>(iter: I) -> String {
+            let mut it = iter.into_iter();
+            while let Some(_x) = it.next() {}
+            loop {}
+        }
+    }
+    impl Extend<char> for String {
+        fn extend<I: IntoIterator<Item = char>>(&mut self, iter: I) {
+            let mut it = iter.into_iter();
+            while let Some(_x) = it.next() {}
+        }
+    }
+    impl crate::ops::Add<&str> for String {
+        type Output = String;
+        fn add(self, other: &str) -> String {
+            loop {}
+        }
+    }
+    impl crate::ops::AddAssign<&str> for String {
+        fn add_assign(&mut self, other: &str) {}
+    }
+    impl PartialEq<str> for String {
+        fn eq(&self, other: &str) -> bool {
+            loop {}
+        }
+    }
+    impl PartialEq<&str> for String {
+        fn eq(&self, other: &&str) -> bool {
+            loop {}
+        }
+    }
+    impl AsRef<str> for String {
+        fn as_ref(&self) -> &str {
+            loop {}
+        }
+    }
+    impl crate::borrow::Borrow<str> for String {
+        fn borrow(&self) -> &str {
+            loop {}
+        }
+    }
+    pub trait ToString {
+        fn to_string(&self) -> String;
+    }
+    impl<T: fmt::Display + ?Sized> ToString for T {
+        fn to_string(&self) -> String {
+            fmt::Display::fmt(self, crate::any());
+            loop {}
+        }
+    }
+}
+
+pub mod str {
+    use crate::marker::PhantomData;
+    impl str {
+        pub const fn len(&self) -> usize {
+            loop {}
+        }
+        pub const fn is_empty(&self) -> bool {
+            loop {}
+        }
+        pub const fn as_bytes(&self) -> &[u8] {
+            loop {}
+        }
+        pub fn chars(&self) -> Chars {
+            loop {}
+        }
+        pub fn bytes(&self) -> Bytes {
+            loop {}
+        }
+        pub fn trim(&self) -> &str {
+            loop {}
+        }
+        pub fn starts_with(&self, pat: &str) -> bool {
+            loop {}
+        }
+        pub fn ends_with(&self, pat: &str) -> bool {
+            loop {}
+        }
+        pub fn contains(&self, pat: &str) -> bool {
+            loop {}
+        }
+        pub fn parse<F: FromStr>(&self) -> Result<F, F::Err> {
+            F::from_str(self)
+        }
+        pub fn get<I: crate::slice::SliceIndex<str>>(&self, i: I) -> Option<&I::Output> {
+            loop {}
+        }
+        pub fn split_at(&self, mid: usize) -> (&str, &str) {
+            loop {}
+        }
+        pub fn is_char_boundary(&self, index: usize) -> bool {
+            loop {}
+        }
+        pub fn to_lowercase(&self) -> String {
+            loop {}
+        }
+        pub fn to_uppercase(&self) -> String {
+            loop {}
+        }
+        pub fn eq_ignore_ascii_case(&self, other: &str) -> bool {
+            loop {}
+        }
+    }
+    pub trait FromStr: Sized {
+        type Err;
+        fn from_str(s: &str) -> Result<Self, Self::Err>;
+    }
+    pub struct Chars {
+        p: PhantomData<char>,
+    }
+    impl Iterator for Chars {
+        type Item = char;
+        fn next(&mut self) -> Option<char> {
+            loop {}
+        }
+    }
+    impl DoubleEndedIterator for Chars {
+        fn next_back(&mut self) -> Option<char> {
+            loop {}
+        }
+    }
+    pub struct Bytes {
+        p: PhantomData<u8>,
+    }
+    impl Iterator for Bytes {
+        type Item = u8;
+        fn next(&mut self) -> Option<u8> {
+            loop {}
+        }
+    }
+    impl DoubleEndedIterator for Bytes {
+        fn next_back(&mut self) -> Option<u8> {
+            loop {}
+        }
+    }
+    impl ExactSizeIterator for Bytes {}
+    impl PartialEq for str {
+        fn eq(&self, other: &str) -> bool {
+            loop {}
+        }
+    }
+    impl Eq for str {}
+    impl PartialOrd for str {
+        fn partial_cmp(&self, other: &str) -> Option<crate::cmp::Ordering> {
+            loop {}
+        }
+    }
+    impl Ord for str {
+        fn cmp(&self, other: &str) -> crate::cmp::Ordering {
+            loop {}
+        }
+    }
+    impl crate::hash::Hash for str {
+        fn hash<H: crate::hash::Hasher>(&self, state: &mut H) {
+            state.write(&[]);
+        }
+    }
+    impl crate::fmt::Debug for str {
+        fn fmt(&self, f: &mut crate::fmt::Formatter) -> crate::fmt::Result {
+            loop {}
+        }
+    }
+    impl crate::fmt::Display for str {
+        fn fmt(&self, f: &mut crate::fmt::Formatter) -> crate::fmt::Result {
+            loop {}
+        }
+    }
+    impl crate::borrow::ToOwned for str {
+        type Owned = String;
+        fn to_owned(&self) -> String {
+            loop {}
+        }
+    }
+    impl AsRef<str> for str {
+        fn as_ref(&self) -> &str {
+            self
+        }
+    }
+    impl AsRef<[u8]> for str {
+        fn as_ref(&self) -> &[u8] {
+            loop {}
+        }
+    }
+    impl Default for &str {
+        fn default() -> Self {
+            loop {}
+        }
+    }
+    pub fn from_utf8(v: &[u8]) -> Result<&str, Utf8Error> {
+        loop {}
+    }
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub struct Utf8Error {
+        valid_up_to: usize,
+    }
+}
+
+pub mod fmt {
+    pub type Result = crate::result::Result<(), Error>;
+    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct Error;
+    impl Display for Error {
+        fn fmt(&self, f: &mut Formatter) -> Result {
+            loop {}
+        }
+    }
+    pub struct Formatter {
+        out: &mut dyn Write,
+    }
+    impl Formatter {
+        pub fn write_str(&mut self, data: &str) -> Result {
+            self.out.write_str(data)
+        }
+        pub fn write_fmt(&mut self, args: Arguments) -> Result {
+            self.out.write_str("")
+        }
+        pub fn write_char(&mut self, c: char) -> Result {
+            self.out.write_str("")
+        }
+        pub fn pad(&mut self, s: &str) -> Result {
+            self.out.write_str(s)
+        }
+        pub fn pad_integral(&mut self, is_nonnegative: bool, prefix: &str, buf: &str) -> Result {
+            self.out.write_str(buf)
+        }
+        pub fn alternate(&self) -> bool {
+            loop {}
+        }
+        pub fn width(&self) -> Option<usize> {
+            loop {}
+        }
+        pub fn precision(&self) -> Option<usize> {
+            loop {}
+        }
+        pub fn sign_plus(&self) -> bool {
+            loop {}
+        }
+        pub fn sign_minus(&self) -> bool {
+            loop {}
+        }
+        pub fn sign_aware_zero_pad(&self) -> bool {
+            loop {}
+        }
+        pub fn fill(&self) -> char {
+            loop {}
+        }
+        pub fn align(&self) -> Option<Alignment> {
+            loop {}
+        }
+        pub fn debug_struct(&mut self, name: &str) -> DebugStruct {
+            loop {}
+        }
+        pub fn debug_tuple(&mut self, name: &str) -> DebugTuple {
+            loop {}
+        }
+        pub fn debug_list(&mut self) -> DebugList {
+            loop {}
+        }
+        pub fn debug_set(&mut self) -> DebugList {
+            loop {}
+        }
+        pub fn debug_map(&mut self) -> DebugMap {
+            loop {}
+        }
+    }
+    impl Write for Formatter {
+        fn write_str(&mut self, s: &str) -> Result {
+            self.out.write_str(s)
+        }
+    }
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum Alignment {
+        Left,
+        Right,
+        Center,
+    }
+    pub struct DebugStruct {
+        fmt: &mut Formatter,
+    }
+    impl DebugStruct {
+        pub fn field<V: Debug + ?Sized>(&mut self, name: &str, value: &V) -> &mut DebugStruct {
+            Debug::fmt(value, crate::any());
+            self
+        }
+        pub fn finish(&mut self) -> Result {
+            self.fmt.write_str("")
+        }
+        pub fn finish_non_exhaustive(&mut self) -> Result {
+            self.fmt.write_str("")
+        }
+    }
+    pub struct DebugTuple {
+        fmt: &mut Formatter,
+    }
+    impl DebugTuple {
+        pub fn field<V: Debug + ?Sized>(&mut self, value: &V) -> &mut DebugTuple {
+            Debug::fmt(value, crate::any());
+            self
+        }
+        pub fn finish(&mut self) -> Result {
+            self.fmt.write_str("")
+        }
+        pub fn finish_non_exhaustive(&mut self) -> Result {
+            self.fmt.write_str("")
+        }
+    }
+    pub struct DebugList {
+        fmt: &mut Formatter,
+    }
+    impl DebugList {
+        pub fn entry<V: Debug + ?Sized>(&mut self, entry: &V) -> &mut DebugList {
+            Debug::fmt(entry, crate::any());
+            self
+        }
+        pub fn entries<D: Debug, I: IntoIterator<Item = D>>(&mut self, entries: I) -> &mut DebugList {
+            let mut it = entries.into_iter();
+            if let Some(d) = it.next() {
+                Debug::fmt(&d, crate::any());
+            }
+            self
+        }
+        pub fn finish(&mut self) -> Result {
+            self.fmt.write_str("")
+        }
+        pub fn finish_non_exhaustive(&mut self) -> Result {
+            self.fmt.write_str("")
+        }
+    }
+    pub struct DebugMap {
+        fmt: &mut Formatter,
+    }
+    impl DebugMap {
+        pub fn entry<K: Debug + ?Sized, V: Debug + ?Sized>(&mut self, key: &K, value: &V) -> &mut DebugMap {
+            Debug::fmt(key, crate::any());
+            Debug::fmt(value, crate::any());
+            self
+        }
+        pub fn finish(&mut self) -> Result {
+            self.fmt.write_str("")
+        }
+    }
+    #[derive(Clone, Copy)]
+    pub struct Arguments {
+        pieces: &[&str],
+    }
+    impl Display for Arguments {
+        fn fmt(&self, f: &mut Formatter) -> Result {
+            f.write_str("")
+        }
+    }
+    impl Debug for Arguments {
+        fn fmt(&self, f: &mut Formatter) -> Result {
+            f.write_str("")
+        }
+    }
+    impl Arguments {
+        pub fn as_str(&self) -> Option<&str> {
+            loop {}
+        }
+    }
+    pub trait Debug {
+        fn fmt(&self, f: &mut Formatter) -> Result;
+    }
+    pub trait Display {
+        fn fmt(&self, f: &mut Formatter) -> Result;
+    }
+    pub trait LowerHex {
+        fn fmt(&self, f: &mut Formatter) -> Result;
+    }
+    pub trait UpperHex {
+        fn fmt(&self, f: &mut Formatter) -> Result;
+    }
+    pub trait Octal {
+        fn fmt(&self, f: &mut Formatter) -> Result;
+    }
+    pub trait Binary {
+        fn fmt(&self, f: &mut Formatter) -> Result;
+    }
+    pub trait LowerExp {
+        fn fmt(&self, f: &mut Formatter) -> Result;
+    }
+    pub trait UpperExp {
+        fn fmt(&self, f: &mut Formatter) -> Result;
+    }
+    pub trait Pointer {
+        fn fmt(&self, f: &mut Formatter) -> Result;
+    }
+    pub trait Write {
+        fn write_str(&mut self, s: &str) -> Result;
+        fn write_char(&mut self, c: char) -> Result {
+            self.write_str("")
+        }
+        fn write_fmt(&mut self, args: Arguments) -> Result {
+            self.write_str("")
+        }
+    }
+    impl<W: Write + ?Sized> Write for &mut W {
+        fn write_str(&mut self, s: &str) -> Result {
+            (**self).write_str(s)
+        }
+    }
+    impl<T: Debug + ?Sized> Debug for &T {
+        fn fmt(&self, f: &mut Formatter) -> Result {
+            Debug::fmt(*self, f)
+        }
+    }
+    impl<T: Debug + ?Sized> Debug for &mut T {
+        fn fmt(&self, f: &mut Formatter) -> Result {
+            Debug::fmt(&**self, f)
+        }
+    }
+    impl<T: Display + ?Sized> Display for &T {
+        fn fmt(&self, f: &mut Formatter) -> Result {
+            Display::fmt(*self, f)
+        }
+    }
+    impl<T: Display + ?Sized> Display for &mut T {
+        fn fmt(&self, f: &mut Formatter) -> Result {
+            Display::fmt(&**self, f)
+        }
+    }
+    impl<T: LowerHex + ?Sized> LowerHex for &T {
+        fn fmt(&self, f: &mut Formatter) -> Result {
+            LowerHex::fmt(*self, f)
+        }
+    }
+    impl<T: UpperHex + ?Sized> UpperHex for &T {
+        fn fmt(&self, f: &mut Formatter) -> Result {
+            UpperHex::fmt(*self, f)
+        }
+    }
+    impl<T: LowerExp + ?Sized> LowerExp for &T {
+        fn fmt(&self, f: &mut Formatter) -> Result {
+            LowerExp::fmt(*self, f)
+        }
+    }
+    impl<T: ?Sized> Pointer for &T {
+        fn fmt(&self, f: &mut Formatter) -> Result {
+            loop {}
+        }
+    }
+    impl Debug for () {
+        fn fmt(&self, f: &mut Formatter) -> Result {
+            loop {}
+        }
+    }
+    impl Debug for crate::convert::Infallible {
+        fn fmt(&self, f: &mut Formatter) -> Result {
+            loop {}
+        }
+    }
+}
+
+pub mod error {
+    pub trait Error: crate::fmt::Debug + crate::fmt::Display {
+        fn source(&self) -> Option<&(dyn Error + 'static)> {
+            None
+        }
+        fn description(&self) -> &str {
+            loop {}
+        }
+        fn cause(&self) -> Option<&dyn Error> {
+            self.source()
+        }
+    }
+    impl Error for crate::fmt::Error {}
+}
+
+pub mod hash {
+    pub trait Hash {
+        fn hash<H: Hasher>(&self, state: &mut H);
+        fn hash_slice<H: Hasher>(data: &[Self], state: &mut H)
+        where
+            Self: Sized,
+        {
+            let a: &Self = crate::any();
+            a.hash(state);
+        }
+    }
+    pub trait Hasher {
+        fn finish(&self) -> u64;
+        fn write(&mut self, bytes: &[u8]);
+        fn write_u8(&mut self, i: u8) {
+            self.write(&[]);
+        }
+        fn write_u16(&mut self, i: u16) {
+            self.write(&[]);
+        }
+        fn write_u32(&mut self, i: u32) {
+            self.write(&[]);
+        }
+        fn write_u64(&mut self, i: u64) {
+            self.write(&[]);
+        }
+        fn write_u128(&mut self, i: u128) {
+            self.write(&[]);
+        }
+        fn write_usize(&mut self, i: usize) {
+            self.write(&[]);
+        }
+        fn write_i8(&mut self, i: i8) {
+            self.write(&[]);
+        }
+        fn write_i16(&mut self, i: i16) {
+            self.write(&[]);
+        }
+        fn write_i32(&mut self, i: i32) {
+            self.write(&[]);
+        }
+        fn write_i64(&mut self, i: i64) {
+            self.write(&[]);
+        }
+        fn write_i128(&mut self, i: i128) {
+            self.write(&[]);
+        }
+        fn write_isize(&mut self, i: isize) {
+            self.write(&[]);
+        }
+    }
+    impl<H: Hasher + ?Sized> Hasher for &mut H {
+        fn finish(&self) -> u64 {
+            (**self).finish()
+        }
+        fn write(&mut self, bytes: &[u8]) {
+            (**self).write(bytes)
+        }
+    }
+    pub trait BuildHasher {
+        type Hasher: Hasher;
+        fn build_hasher(&self) -> Self::Hasher;
+    }
+    impl<T: ?Sized + Hash> Hash for &T {
+        fn hash<H: Hasher>(&self, state: &mut H) {
+            (**self).hash(state);
+        }
+    }
+    impl<T: ?Sized + Hash> Hash for &mut T {
+        fn hash<H: Hasher>(&self, state: &mut H) {
+            (**self).hash(state);
+        }
+    }
+    impl Hash for () {
+        fn hash<H: Hasher>(&self, state: &mut H) {}
+    }
+}
+
+pub mod mem {
+    pub fn swap<T>(x: &mut T, y: &mut T) {}
+    pub fn replace<T>(dest: &mut T, src: T) -> T {
+        loop {}
+    }
+    pub fn take<T: Default>(dest: &mut T) -> T {
+        T::default()
+    }
+    pub fn drop<T>(_x: T) {}
+    pub fn forget<T>(t: T) {}
+    pub const fn size_of<T>() -> usize {
+        loop {}
+    }
+    pub fn size_of_val<T: ?Sized>(val: &T) -> usize {
+        loop {}
+    }
+    pub const fn align_of<T>() -> usize {
+        loop {}
+    }
+    pub fn align_of_val<T: ?Sized>(val: &T) -> usize {
+        loop {}
+    }
+    pub const fn needs_drop<T: ?Sized>() -> bool {
+        loop {}
+    }
+    pub fn discriminant<T>(v: &T) -> Discriminant<T> {
+        loop {}
+    }
+    #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+    pub struct Discriminant<T>(crate::marker::PhantomData<T>);
+}
+
+pub mod hint {
+    pub fn black_box<T>(dummy: T) -> T {
+        dummy
+    }
+    pub unsafe fn unreachable_unchecked() -> ! {
+        loop {}
+    }
+    pub fn spin_loop() {}
+    pub unsafe fn assert_unchecked(cond: bool) {}
+}
+
+pub mod collections {
+    #[derive(Clone, PartialEq, Eq, Debug)]
+    pub struct TryReserveError {
+        kind: TryReserveErrorKind,
+    }
+    #[derive(Clone, PartialEq, Eq, Debug)]
+    pub enum TryReserveErrorKind {
+        CapacityOverflow,
+        AllocError,
+    }
+    impl TryReserveError {
+        pub fn kind(&self) -> TryReserveErrorKind {
+            loop {}
+        }
+    }
+    impl crate::fmt::Display for TryReserveError {
+        fn fmt(&self, f: &mut crate::fmt::Formatter) -> crate::fmt::Result {
+            loop {}
+        }
+    }
+    impl crate::error::Error for TryReserveError {}
+}
+
+pub mod sync {
+    pub mod atomic {
+        #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+        pub enum Ordering {
+            Relaxed,
+            Release,
+            Acquire,
+            AcqRel,
+            SeqCst,
+        }
+        pub fn fence(order: Ordering) {}
+        pub fn compiler_fence(order: Ordering) {}
+        #[derive(Default, Debug)]
+        pub struct AtomicBool {
+            v: bool,
+        }
+        impl AtomicBool {
+            pub const fn new(v: bool) -> AtomicBool {
+                loop {}
+            }
+            pub fn load(&self, order: Ordering) -> bool {
+                loop {}
+            }
+            pub fn store(&self, val: bool, order: Ordering) {}
+            pub fn swap(&self, val: bool, order: Ordering) -> bool {
+                loop {}
+            }
+            pub fn compare_exchange(&self, current: bool, new: bool, success: Ordering, failure: Ordering) -> Result<bool, bool> {
+                loop {}
+            }
+            pub fn compare_exchange_weak(&self, current: bool, new: bool, success: Ordering, failure: Ordering) -> Result<bool, bool> {
+                loop {}
+            }
+            pub fn fetch_and(&self, val: bool, order: Ordering) -> bool {
+                loop {}
+            }
+            pub fn fetch_or(&self, val: bool, order: Ordering) -> bool {
+                loop {}
+            }
+            pub fn fetch_xor(&self, val: bool, order: Ordering) -> bool {
+                loop {}
+            }
+            pub fn into_inner(self) -> bool {
+                loop {}
+            }
+            pub fn get_mut(&mut self) -> &mut bool {
+                loop {}
+            }
+        }
+        macro_rules! atomic_int {
+            ($($a:ident $t:ident)*) => {
+                $(
+                    #[derive(Default, Debug)]
+                    pub struct $a {
+                        v: $t,
+                    }
+                    impl $a {
+                        pub const fn new(v: $t) -> $a {
+                            loop {}
+                        }
+                        pub fn load(&self, order: Ordering) -> $t {
+                            loop {}
+                        }
+                        pub fn store(&self, val: $t, order: Ordering) {}
+                        pub fn swap(&self, val: $t, order: Ordering) -> $t {
+                            loop {}
+                        }
+                        pub fn compare_exchange(&self, current: $t, new: $t, success: Ordering, failure: Ordering) -> Result<$t, $t> {
+                            loop {}
+                        }
+                        pub fn compare_exchange_weak(&self, current: $t, new: $t, success: Ordering, failure: Ordering) -> Result<$t, $t> {
+                            loop {}
+                        }
+                        pub fn fetch_add(&self, val: $t, order: Ordering) -> $t {
+                            loop {}
+                        }
+                        pub fn fetch_sub(&self, val: $t, order: Ordering) -> $t {
+                            loop {}
+                        }
+                        pub fn fetch_max(&self, val: $t, order: Ordering) -> $t {
+                            loop {}
+                        }
+                        pub fn fetch_min(&self, val: $t, order: Ordering) -> $t {
+                            loop {}
+                        }
+                        pub fn fetch_and(&self, val: $t, order: Ordering) -> $t {
+                            loop {}
+                        }
+                        pub fn fetch_or(&self, val: $t, order: Ordering) -> $t {
+                            loop {}
+                        }
+                        pub fn fetch_update<F: FnMut($t) -> Option<$t>>(&self, set_order: Ordering, fetch_order: Ordering, f: F) -> Result<$t, $t> {
+                            let mut f = f;
+                            f(crate::any());
+                            loop {}
+                        }
+                        pub fn into_inner(self) -> $t {
+                            loop {}
+                        }
+                        pub fn get_mut(&mut self) -> &mut $t {
+                            loop {}
+                        }
+                    }
+                )*
+            };
+        }
+        atomic_int! {
+            AtomicU8 u8 AtomicU16 u16 AtomicU32 u32 AtomicU64 u64 AtomicUsize usize
+            AtomicI8 i8 AtomicI16 i16 AtomicI32 i32 AtomicI64 i64 AtomicIsize isize
+        }
+    }
+}
+
+pub mod num {
+    #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+    pub struct TryFromIntError(());
+    impl crate::fmt::Display for TryFromIntError {
+        fn fmt(&self, f: &mut crate::fmt::Formatter) -> crate::fmt::Result {
+            loop {}
+        }
+    }
+    impl crate::error::Error for TryFromIntError {}
+    #[derive(Clone, PartialEq, Eq, Debug)]
+    pub struct ParseIntError {
+        kind: IntErrorKind,
+    }
+    #[derive(Clone, PartialEq, Eq, Debug)]
+    pub struct ParseFloatError {
+        kind: IntErrorKind,
+    }
+    #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+    pub enum IntErrorKind {
+        Empty,
+        InvalidDigit,
+        PosOverflow,
+        NegOverflow,
+        Zero,
+    }
+    #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+    pub enum FpCategory {
+        Nan,
+        Infinite,
+        Zero,
+        Subnormal,
+        Normal,
+    }
+    #[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+    pub struct Wrapping<T>(pub T);
+    macro_rules! nonzero {
+        ($($n:ident $t:ident)*) => {
+            $(
+                #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+                pub struct $n($t);
+                impl $n {
+                    pub const MIN: $n = $n(1);
+                    pub const MAX: $n = $n(1);
+                    pub const fn new(n: $t) -> Option<$n> {
+                        loop {}
+                    }
+                    pub const unsafe fn new_unchecked(n: $t) -> $n {
+                        loop {}
+                    }
+                    pub const fn get(self) -> $t {
+                        loop {}
+                    }
+                    pub fn checked_add(self, other: $t) -> Option<$n> {
+                        loop {}
+                    }
+                    pub fn checked_mul(self, other: $n) -> Option<$n> {
+                        loop {}
+                    }
+                    pub fn saturating_add(self, other: $t) -> $n {
+                        loop {}
+                    }
+                    pub fn saturating_mul(self, other: $n) -> $n {
+                        loop {}
+                    }
+                    pub fn leading_zeros(self) -> u32 {
+                        loop {}
+                    }
+                    pub fn trailing_zeros(self) -> u32 {
+                        loop {}
+                    }
+                }
+                impl From<$n> for $t {
+                    fn from(n: $n) -> $t {
+                        loop {}
+                    }
+                }
+                impl crate::fmt::Display for $n {
+                    fn fmt(&self, f: &mut crate::fmt::Formatter) -> crate::fmt::Result {
+                        loop {}
+                    }
+                }
+            )*
+        };
+    }
+    nonzero! {
+        NonZeroU8 u8 NonZeroU16 u16 NonZeroU32 u32 NonZeroU64 u64 NonZeroU128 u128 NonZeroUsize usize
+        NonZeroI8 i8 NonZeroI16 i16 NonZeroI32 i32 NonZeroI64 i64 NonZeroI128 i128 NonZeroIsize isize
+    }
+}
+
+pub mod f64 {
+    pub const EPSILON: f64 = 0.0;
+    pub const MAX: f64 = 0.0;
+    pub const MIN: f64 = 0.0;
+    pub const MIN_POSITIVE: f64 = 0.0;
+    pub const INFINITY: f64 = 0.0;
+    pub const NEG_INFINITY: f64 = 0.0;
+    pub const NAN: f64 = 0.0;
+    pub const MANTISSA_DIGITS: u32 = 0;
+    pub const DIGITS: u32 = 0;
+    pub const RADIX: u32 = 0;
+    pub const MAX_EXP: i32 = 0;
+    pub const MIN_EXP: i32 = 0;
+    pub mod consts {
+        pub const PI: f64 = 0.0;
+        pub const TAU: f64 = 0.0;
+        pub const E: f64 = 0.0;
+        pub const FRAC_PI_2: f64 = 0.0;
+        pub const FRAC_PI_3: f64 = 0.0;
+        pub const FRAC_PI_4: f64 = 0.0;
+        pub const FRAC_PI_6: f64 = 0.0;
+        pub const FRAC_PI_8: f64 = 0.0;
+        pub const FRAC_1_PI: f64 = 0.0;
+        pub const FRAC_2_PI: f64 = 0.0;
+        pub const FRAC_2_SQRT_PI: f64 = 0.0;
+        pub const SQRT_2: f64 = 0.0;
+        pub const FRAC_1_SQRT_2: f64 = 0.0;
+        pub const LN_2: f64 = 0.0;
+        pub const LN_10: f64 = 0.0;
+        pub const LOG2_E: f64 = 0.0;
+        pub const LOG10_E: f64 = 0.0;
+        pub const LOG2_10: f64 = 0.0;
+        pub const LOG10_2: f64 = 0.0;
+    }
+}
+
+pub mod f32 {
+    pub const EPSILON: f32 = 0.0;
+    pub const MAX: f32 = 0.0;
+    pub const MIN: f32 = 0.0;
+    pub const MIN_POSITIVE: f32 = 0.0;
+    pub const INFINITY: f32 = 0.0;
+    pub const NEG_INFINITY: f32 = 0.0;
+    pub const NAN: f32 = 0.0;
+    pub const MANTISSA_DIGITS: u32 = 0;
+    pub mod consts {
+        pub const PI: f32 = 0.0;
+        pub const TAU: f32 = 0.0;
+        pub const E: f32 = 0.0;
+        pub const FRAC_PI_2: f32 = 0.0;
+        pub const FRAC_PI_4: f32 = 0.0;
+        pub const SQRT_2: f32 = 0.0;
+        pub const LN_2: f32 = 0.0;
+    }
+}
+
+pub mod primitives {
+    use crate::cmp::Ordering;
+    use crate::fmt;
+    use crate::hash::{Hash, Hasher};
+    use crate::iter::{Product, Step, Sum};
+    use crate::num::{FpCategory, ParseFloatError, ParseIntError, TryFromIntError};
+    use crate::ops::{Add, AddAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Div, DivAssign, Mul, MulAssign, Neg, Not, Rem, RemAssign, Shl, ShlAssign, Shr, ShrAssign, Sub, SubAssign};
+    use crate::str::FromStr;
+
+    // Every primitive's traits that call nothing back.
+    macro_rules! common {
+        ($($t:ident)*) => {
+            $(
+                impl Clone for $t {
+                    fn clone(&self) -> $t {
+                        loop {}
+                    }
+                }
+                impl Copy for $t {}
+                impl Default for $t {
+                    fn default() -> $t {
+                        loop {}
+                    }
+                }
+                impl PartialEq for $t {
+                    fn eq(&self, other: &$t) -> bool {
+                        loop {}
+                    }
+                }
+                impl PartialOrd for $t {
+                    fn partial_cmp(&self, other: &$t) -> Option<Ordering> {
+                        loop {}
+                    }
+                }
+                impl fmt::Debug for $t {
+                    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                        loop {}
+                    }
+                }
+                impl fmt::Display for $t {
+                    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                        loop {}
+                    }
+                }
+                impl<T> From<T> for $t {
+                    fn from(v: T) -> $t {
+                        loop {}
+                    }
+                }
+            )*
+        };
+    }
+    common! { bool char u8 u16 u32 u64 u128 usize i8 i16 i32 i64 i128 isize f32 f64 }
+
+    // The traits of the totally ordered and hashable primitives.
+    macro_rules! ordered {
+        ($($t:ident)*) => {
+            $(
+                impl Eq for $t {}
+                impl Ord for $t {
+                    fn cmp(&self, other: &$t) -> Ordering {
+                        loop {}
+                    }
+                }
+                impl Hash for $t {
+                    fn hash<H: Hasher>(&self, state: &mut H) {
+                        state.write(&[]);
+                    }
+                }
+            )*
+        };
+    }
+    ordered! { bool char u8 u16 u32 u64 u128 usize i8 i16 i32 i64 i128 isize }
+
+    // The arithmetic operators of the numeric primitives, and their `Sum`, `Product`, `FromStr`
+    // and `TryFrom`.
+    macro_rules! arith {
+        ($($t:ident)*) => {
+            $(
+                impl Add for $t {
+                    type Output = $t;
+                    fn add(self, rhs: $t) -> $t {
+                        loop {}
+                    }
+                }
+                impl Sub for $t {
+                    type Output = $t;
+                    fn sub(self, rhs: $t) -> $t {
+                        loop {}
+                    }
+                }
+                impl Mul for $t {
+                    type Output = $t;
+                    fn mul(self, rhs: $t) -> $t {
+                        loop {}
+                    }
+                }
+                impl Div for $t {
+                    type Output = $t;
+                    fn div(self, rhs: $t) -> $t {
+                        loop {}
+                    }
+                }
+                impl Rem for $t {
+                    type Output = $t;
+                    fn rem(self, rhs: $t) -> $t {
+                        loop {}
+                    }
+                }
+                impl Add<&$t> for $t {
+                    type Output = $t;
+                    fn add(self, rhs: &$t) -> $t {
+                        loop {}
+                    }
+                }
+                impl Sub<&$t> for $t {
+                    type Output = $t;
+                    fn sub(self, rhs: &$t) -> $t {
+                        loop {}
+                    }
+                }
+                impl Mul<&$t> for $t {
+                    type Output = $t;
+                    fn mul(self, rhs: &$t) -> $t {
+                        loop {}
+                    }
+                }
+                impl Div<&$t> for $t {
+                    type Output = $t;
+                    fn div(self, rhs: &$t) -> $t {
+                        loop {}
+                    }
+                }
+                impl Add<$t> for &$t {
+                    type Output = $t;
+                    fn add(self, rhs: $t) -> $t {
+                        loop {}
+                    }
+                }
+                impl Sub<$t> for &$t {
+                    type Output = $t;
+                    fn sub(self, rhs: $t) -> $t {
+                        loop {}
+                    }
+                }
+                impl Mul<$t> for &$t {
+                    type Output = $t;
+                    fn mul(self, rhs: $t) -> $t {
+                        loop {}
+                    }
+                }
+                impl Add<&$t> for &$t {
+                    type Output = $t;
+                    fn add(self, rhs: &$t) -> $t {
+                        loop {}
+                    }
+                }
+                impl Sub<&$t> for &$t {
+                    type Output = $t;
+                    fn sub(self, rhs: &$t) -> $t {
+                        loop {}
+                    }
+                }
+                impl Mul<&$t> for &$t {
+                    type Output = $t;
+                    fn mul(self, rhs: &$t) -> $t {
+                        loop {}
+                    }
+                }
+                impl AddAssign for $t {
+                    fn add_assign(&mut self, rhs: $t) {}
+                }
+                impl SubAssign for $t {
+                    fn sub_assign(&mut self, rhs: $t) {}
+                }
+                impl MulAssign for $t {
+                    fn mul_assign(&mut self, rhs: $t) {}
+                }
+                impl DivAssign for $t {
+                    fn div_assign(&mut self, rhs: $t) {}
+                }
+                impl RemAssign for $t {
+                    fn rem_assign(&mut self, rhs: $t) {}
+                }
+                impl Sum for $t {
+                    fn sum<I: Iterator<Item = $t>>(iter: I) -> $t {
+                        let mut it = iter;
+                        it.next();
+                        loop {}
+                    }
+                }
+                impl<'a> Sum<&'a $t> for $t {
+                    fn sum<I: Iterator<Item = &'a $t>>(iter: I) -> $t {
+                        let mut it = iter;
+                        it.next();
+                        loop {}
+                    }
+                }
+                impl Product for $t {
+                    fn product<I: Iterator<Item = $t>>(iter: I) -> $t {
+                        let mut it = iter;
+                        it.next();
+                        loop {}
+                    }
+                }
+                impl<'a> Product<&'a $t> for $t {
+                    fn product<I: Iterator<Item = &'a $t>>(iter: I) -> $t {
+                        let mut it = iter;
+                        it.next();
+                        loop {}
+                    }
+                }
+                impl<T> TryFrom<T> for $t {
+                    type Error = TryFromIntError;
+                    fn try_from(v: T) -> Result<$t, TryFromIntError> {
+                        loop {}
+                    }
+                }
+            )*
+        };
+    }
+    arith! { u8 u16 u32 u64 u128 usize i8 i16 i32 i64 i128 isize f32 f64 }
+
+    // The bitwise operators of the integers and `bool`.
+    macro_rules! bits {
+        ($($t:ident)*) => {
+            $(
+                impl Not for $t {
+                    type Output = $t;
+                    fn not(self) -> $t {
+                        loop {}
+                    }
+                }
+                impl BitAnd for $t {
+                    type Output = $t;
+                    fn bitand(self, rhs: $t) -> $t {
+                        loop {}
+                    }
+                }
+                impl BitOr for $t {
+                    type Output = $t;
+                    fn bitor(self, rhs: $t) -> $t {
+                        loop {}
+                    }
+                }
+                impl BitXor for $t {
+                    type Output = $t;
+                    fn bitxor(self, rhs: $t) -> $t {
+                        loop {}
+                    }
+                }
+                impl BitAndAssign for $t {
+                    fn bitand_assign(&mut self, rhs: $t) {}
+                }
+                impl BitOrAssign for $t {
+                    fn bitor_assign(&mut self, rhs: $t) {}
+                }
+                impl BitXorAssign for $t {
+                    fn bitxor_assign(&mut self, rhs: $t) {}
+                }
+            )*
+        };
+    }
+    bits! { bool u8 u16 u32 u64 u128 usize i8 i16 i32 i64 i128 isize }
+
+    // The shifts, by any integer, and the formatting traits of the integers.
+    macro_rules! int_traits {
+        ($($t:ident)*) => {
+            $(
+                impl<R> Shl<R> for $t {
+                    type Output = $t;
+                    fn shl(self, rhs: R) -> $t {
+                        loop {}
+                    }
+                }
+                impl<R> Shr<R> for $t {
+                    type Output = $t;
+                    fn shr(self, rhs: R) -> $t {
+                        loop {}
+                    }
+                }
+                impl<R> ShlAssign<R> for $t {
+                    fn shl_assign(&mut self, rhs: R) {}
+                }
+                impl<R> ShrAssign<R> for $t {
+                    fn shr_assign(&mut self, rhs: R) {}
+                }
+                impl fmt::LowerHex for $t {
+                    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                        loop {}
+                    }
+                }
+                impl fmt::UpperHex for $t {
+                    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                        loop {}
+                    }
+                }
+                impl fmt::Octal for $t {
+                    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                        loop {}
+                    }
+                }
+                impl fmt::Binary for $t {
+                    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                        loop {}
+                    }
+                }
+                impl fmt::LowerExp for $t {
+                    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                        loop {}
+                    }
+                }
+                impl fmt::UpperExp for $t {
+                    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                        loop {}
+                    }
+                }
+                impl FromStr for $t {
+                    type Err = ParseIntError;
+                    fn from_str(src: &str) -> Result<$t, ParseIntError> {
+                        loop {}
+                    }
+                }
+                impl Step for $t {}
+            )*
+        };
+    }
+    int_traits! { u8 u16 u32 u64 u128 usize i8 i16 i32 i64 i128 isize }
+
+    // Negation of the signed numbers.
+    macro_rules! negate {
+        ($($t:ident)*) => {
+            $(
+                impl Neg for $t {
+                    type Output = $t;
+                    fn neg(self) -> $t {
+                        loop {}
+                    }
+                }
+                impl Neg for &$t {
+                    type Output = $t;
+                    fn neg(self) -> $t {
+                        loop {}
+                    }
+                }
+            )*
+        };
+    }
+    negate! { i8 i16 i32 i64 i128 isize f32 f64 }
+
+    // The inherent methods of the integers: `$t` the type, `$u` its unsigned and `$s` its signed
+    // counterpart.
+    macro_rules! int_methods {
+        ($($t:ident $u:ident $s:ident)*) => {
+            $(
+                impl $t {
+                    pub const MIN: $t = 0;
+                    pub const MAX: $t = 0;
+                    pub const BITS: u32 = 0;
+                    pub const fn min_value() -> $t {
+                        loop {}
+                    }
+                    pub const fn max_value() -> $t {
+                        loop {}
+                    }
+                    pub const fn checked_add(self, rhs: $t) -> Option<$t> {
+                        loop {}
+                    }
+                    pub const fn checked_sub(self, rhs: $t) -> Option<$t> {
+                        loop {}
+                    }
+                    pub const fn checked_mul(self, rhs: $t) -> Option<$t> {
+                        loop {}
+                    }
+                    pub const fn checked_div(self, rhs: $t) -> Option<$t> {
+                        loop {}
+                    }
+                    pub const fn checked_rem(self, rhs: $t) -> Option<$t> {
+                        loop {}
+                    }
+                    pub const fn checked_div_euclid(self, rhs: $t) -> Option<$t> {
+                        loop {}
+                    }
+                    pub const fn checked_rem_euclid(self, rhs: $t) -> Option<$t> {
+                        loop {}
+                    }
+                    pub const fn checked_neg(self) -> Option<$t> {
+                        loop {}
+                    }
+                    pub const fn checked_shl(self, rhs: u32) -> Option<$t> {
+                        loop {}
+                    }
+                    pub const fn checked_shr(self, rhs: u32) -> Option<$t> {
+                        loop {}
+                    }
+                    pub const fn checked_pow(self, exp: u32) -> Option<$t> {
+                        loop {}
+                    }
+                    pub const fn checked_abs(self) -> Option<$t> {
+                        loop {}
+                    }
+                    pub const fn checked_ilog2(self) -> Option<u32> {
+                        loop {}
+                    }
+                    pub const fn checked_ilog10(self) -> Option<u32> {
+                        loop {}
+                    }
+                    pub const fn checked_add_signed(self, rhs: $s) -> Option<$t> {
+                        loop {}
+                    }
+                    pub const fn checked_add_unsigned(self, rhs: $u) -> Option<$t> {
+                        loop {}
+                    }
+                    pub const fn checked_sub_unsigned(self, rhs: $u) -> Option<$t> {
+                        loop {}
+                    }
+                    pub const fn checked_next_power_of_two(self) -> Option<$t> {
+                        loop {}
+                    }
+                    pub const fn checked_next_multiple_of(self, rhs: $t) -> Option<$t> {
+                        loop {}
+                    }
+                    pub const fn checked_isqrt(self) -> Option<$t> {
+                        loop {}
+                    }
+                    pub const fn saturating_add(self, rhs: $t) -> $t {
+                        loop {}
+                    }
+                    pub const fn saturating_sub(self, rhs: $t) -> $t {
+                        loop {}
+                    }
+                    pub const fn saturating_mul(self, rhs: $t) -> $t {
+                        loop {}
+                    }
+                    pub const fn saturating_div(self, rhs: $t) -> $t {
+                        loop {}
+                    }
+                    pub const fn saturating_pow(self, exp: u32) -> $t {
+                        loop {}
+                    }
+                    pub const fn saturating_neg(self) -> $t {
+                        loop {}
+                    }
+                    pub const fn saturating_abs(self) -> $t {
+                        loop {}
+                    }
+                    pub const fn saturating_add_signed(self, rhs: $s) -> $t {
+                        loop {}
+                    }
+                    pub const fn saturating_sub_unsigned(self, rhs: $u) -> $t {
+                        loop {}
+                    }
+                    pub const fn wrapping_add(self, rhs: $t) -> $t {
+                        loop {}
+                    }
+                    pub const fn wrapping_sub(self, rhs: $t) -> $t {
+                        loop {}
+                    }
+                    pub const fn wrapping_mul(self, rhs: $t) -> $t {
+                        loop {}
+                    }
+                    pub const fn wrapping_div(self, rhs: $t) -> $t {
+                        loop {}
+                    }
+                    pub const fn wrapping_rem(self, rhs: $t) -> $t {
+                        loop {}
+                    }
+                    pub const fn wrapping_neg(self) -> $t {
+                        loop {}
+                    }
+                    pub const fn wrapping_shl(self, rhs: u32) -> $t {
+                        loop {}
+                    }
+                    pub const fn wrapping_shr(self, rhs: u32) -> $t {
+                        loop {}
+                    }
+                    pub const fn wrapping_pow(self, exp: u32) -> $t {
+                        loop {}
+                    }
+                    pub const fn wrapping_abs(self) -> $t {
+                        loop {}
+                    }
+                    pub const fn wrapping_add_signed(self, rhs: $s) -> $t {
+                        loop {}
+                    }
+                    pub const fn overflowing_add(self, rhs: $t) -> ($t, bool) {
+                        loop {}
+                    }
+                    pub const fn overflowing_sub(self, rhs: $t) -> ($t, bool) {
+                        loop {}
+                    }
+                    pub const fn overflowing_mul(self, rhs: $t) -> ($t, bool) {
+                        loop {}
+                    }
+                    pub const fn overflowing_neg(self) -> ($t, bool) {
+                        loop {}
+                    }
+                    pub const fn overflowing_shl(self, rhs: u32) -> ($t, bool) {
+                        loop {}
+                    }
+                    pub const fn overflowing_shr(self, rhs: u32) -> ($t, bool) {
+                        loop {}
+                    }
+                    pub const fn overflowing_pow(self, exp: u32) -> ($t, bool) {
+                        loop {}
+                    }
+                    pub const fn carrying_add(self, rhs: $t, carry: bool) -> ($t, bool) {
+                        loop {}
+                    }
+                    pub const fn borrowing_sub(self, rhs: $t, borrow: bool) -> ($t, bool) {
+                        loop {}
+                    }
+                    pub const fn widening_mul(self, rhs: $t) -> ($t, $t) {
+                        loop {}
+                    }
+                    pub const fn abs(self) -> $t {
+                        loop {}
+                    }
+                    pub const fn signum(self) -> $t {
+                        loop {}
+                    }
+                    pub const fn is_negative(self) -> bool {
+                        loop {}
+                    }
+                    pub const fn is_positive(self) -> bool {
+                        loop {}
+                    }
+                    pub const fn unsigned_abs(self) -> $u {
+                        loop {}
+                    }
+                    pub const fn abs_diff(self, other: $t) -> $u {
+                        loop {}
+                    }
+                    pub const fn cast_signed(self) -> $s {
+                        loop {}
+                    }
+                    pub const fn cast_unsigned(self) -> $u {
+                        loop {}
+                    }
+                    pub const fn count_ones(self) -> u32 {
+                        loop {}
+                    }
+                    pub const fn count_zeros(self) -> u32 {
+                        loop {}
+                    }
+                    pub const fn leading_zeros(self) -> u32 {
+                        loop {}
+                    }
+                    pub const fn trailing_zeros(self) -> u32 {
+                        loop {}
+                    }
+                    pub const fn leading_ones(self) -> u32 {
+                        loop {}
+                    }
+                    pub const fn trailing_ones(self) -> u32 {
+                        loop {}
+                    }
+                    pub const fn ilog(self, base: $t) -> u32 {
+                        loop {}
+                    }
+                    pub const fn ilog2(self) -> u32 {
+                        loop {}
+                    }
+                    pub const fn ilog10(self) -> u32 {
+                        loop {}
+                    }
+                    pub const fn isqrt(self) -> $t {
+                        loop {}
+                    }
+                    pub const fn pow(self, exp: u32) -> $t {
+                        loop {}
+                    }
+                    pub const fn div_euclid(self, rhs: $t) -> $t {
+                        loop {}
+                    }
+                    pub const fn rem_euclid(self, rhs: $t) -> $t {
+                        loop {}
+                    }
+                    pub const fn div_ceil(self, rhs: $t) -> $t {
+                        loop {}
+                    }
+                    pub const fn div_floor(self, rhs: $t) -> $t {
+                        loop {}
+                    }
+                    pub const fn next_multiple_of(self, rhs: $t) -> $t {
+                        loop {}
+                    }
+                    pub const fn is_multiple_of(self, rhs: $t) -> bool {
+                        loop {}
+                    }
+                    pub const fn midpoint(self, rhs: $t) -> $t {
+                        loop {}
+                    }
+                    pub const fn is_power_of_two(self) -> bool {
+                        loop {}
+                    }
+                    pub const fn next_power_of_two(self) -> $t {
+                        loop {}
+                    }
+                    pub const fn rotate_left(self, n: u32) -> $t {
+                        loop {}
+                    }
+                    pub const fn rotate_right(self, n: u32) -> $t {
+                        loop {}
+                    }
+                    pub const fn swap_bytes(self) -> $t {
+                        loop {}
+                    }
+                    pub const fn reverse_bits(self) -> $t {
+                        loop {}
+                    }
+                    pub const fn to_le(self) -> $t {
+                        loop {}
+                    }
+                    pub const fn to_be(self) -> $t {
+                        loop {}
+                    }
+                    pub const fn from_le(x: $t) -> $t {
+                        loop {}
+                    }
+                    pub const fn from_be(x: $t) -> $t {
+                        loop {}
+                    }
+                    pub const fn to_le_bytes(self) -> [u8; 8] {
+                        loop {}
+                    }
+                    pub const fn to_be_bytes(self) -> [u8; 8] {
+                        loop {}
+                    }
+                    pub const fn to_ne_bytes(self) -> [u8; 8] {
+                        loop {}
+                    }
+                    pub const fn from_le_bytes(bytes: [u8; 8]) -> $t {
+                        loop {}
+                    }
+                    pub const fn from_be_bytes(bytes: [u8; 8]) -> $t {
+                        loop {}
+                    }
+                    pub const fn from_ne_bytes(bytes: [u8; 8]) -> $t {
+                        loop {}
+                    }
+                    pub fn from_str_radix(src: &str, radix: u32) -> Result<$t, ParseIntError> {
+                        loop {}
+                    }
+                }
+            )*
+        };
+    }
+    int_methods! {
+        u8 u8 i8 u16 u16 i16 u32 u32 i32 u64 u64 i64 u128 u128 i128 usize usize isize
+        i8 u8 i8 i16 u16 i16 i32 u32 i32 i64 u64 i64 i128 u128 i128 isize usize isize
+    }
+
+    // The inherent methods and traits of the floats: `$f` the type and `$b` its bits' type.
+    macro_rules! float_methods {
+        ($($f:ident $b:ident)*) => {
+            $(
+                impl $f {
+                    pub const INFINITY: $f = 0.0;
+                    pub const NEG_INFINITY: $f = 0.0;
+                    pub const NAN: $f = 0.0;
+                    pub const MAX: $f = 0.0;
+                    pub const MIN: $f = 0.0;
+                    pub const MIN_POSITIVE: $f = 0.0;
+                    pub const EPSILON: $f = 0.0;
+                    pub const MANTISSA_DIGITS: u32 = 0;
+                    pub const DIGITS: u32 = 0;
+                    pub const RADIX: u32 = 0;
+                    pub const MAX_EXP: i32 = 0;
+                    pub const MIN_EXP: i32 = 0;
+                    pub const MAX_10_EXP: i32 = 0;
+                    pub const MIN_10_EXP: i32 = 0;
+                    pub const fn to_bits(self) -> $b {
+                        loop {}
+                    }
+                    pub const fn from_bits(v: $b) -> $f {
+                        loop {}
+                    }
+                    pub const fn is_finite(self) -> bool {
+                        loop {}
+                    }
+                    pub const fn is_infinite(self) -> bool {
+                        loop {}
+                    }
+                    pub const fn is_nan(self) -> bool {
+                        loop {}
+                    }
+                    pub const fn is_normal(self) -> bool {
+                        loop {}
+                    }
+                    pub const fn is_subnormal(self) -> bool {
+                        loop {}
+                    }
+                    pub const fn is_sign_negative(self) -> bool {
+                        loop {}
+                    }
+                    pub const fn is_sign_positive(self) -> bool {
+                        loop {}
+                    }
+                    pub const fn classify(self) -> FpCategory {
+                        loop {}
+                    }
+                    pub const fn abs(self) -> $f {
+                        loop {}
+                    }
+                    pub const fn signum(self) -> $f {
+                        loop {}
+                    }
+                    pub const fn copysign(self, sign: $f) -> $f {
+                        loop {}
+                    }
+                    pub fn mul_add(self, a: $f, b: $f) -> $f {
+                        loop {}
+                    }
+                    pub const fn next_up(self) -> $f {
+                        loop {}
+                    }
+                    pub const fn next_down(self) -> $f {
+                        loop {}
+                    }
+                    pub const fn recip(self) -> $f {
+                        loop {}
+                    }
+                    pub const fn to_degrees(self) -> $f {
+                        loop {}
+                    }
+                    pub const fn to_radians(self) -> $f {
+                        loop {}
+                    }
+                    pub const fn max(self, other: $f) -> $f {
+                        loop {}
+                    }
+                    pub const fn min(self, other: $f) -> $f {
+                        loop {}
+                    }
+                    pub const fn maximum(self, other: $f) -> $f {
+                        loop {}
+                    }
+                    pub const fn minimum(self, other: $f) -> $f {
+                        loop {}
+                    }
+                    pub const fn midpoint(self, other: $f) -> $f {
+                        loop {}
+                    }
+                    pub const fn clamp(self, min: $f, max: $f) -> $f {
+                        loop {}
+                    }
+                    pub fn total_cmp(&self, other: &$f) -> Ordering {
+                        loop {}
+                    }
+                    pub fn floor(self) -> $f {
+                        loop {}
+                    }
+                    pub fn ceil(self) -> $f {
+                        loop {}
+                    }
+                    pub fn round(self) -> $f {
+                        loop {}
+                    }
+                    pub fn round_ties_even(self) -> $f {
+                        loop {}
+                    }
+                    pub fn trunc(self) -> $f {
+                        loop {}
+                    }
+                    pub fn fract(self) -> $f {
+                        loop {}
+                    }
+                    pub fn sqrt(self) -> $f {
+                        loop {}
+                    }
+                    pub fn powi(self, n: i32) -> $f {
+                        loop {}
+                    }
+                    pub fn powf(self, n: $f) -> $f {
+                        loop {}
+                    }
+                    pub fn div_euclid(self, rhs: $f) -> $f {
+                        loop {}
+                    }
+                    pub fn rem_euclid(self, rhs: $f) -> $f {
+                        loop {}
+                    }
+                    pub const fn to_le_bytes(self) -> [u8; 8] {
+                        loop {}
+                    }
+                    pub const fn to_be_bytes(self) -> [u8; 8] {
+                        loop {}
+                    }
+                    pub const fn from_le_bytes(bytes: [u8; 8]) -> $f {
+                        loop {}
+                    }
+                    pub const fn from_be_bytes(bytes: [u8; 8]) -> $f {
+                        loop {}
+                    }
+                }
+                impl fmt::LowerExp for $f {
+                    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                        loop {}
+                    }
+                }
+                impl fmt::UpperExp for $f {
+                    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                        loop {}
+                    }
+                }
+                impl FromStr for $f {
+                    type Err = ParseFloatError;
+                    fn from_str(src: &str) -> Result<$f, ParseFloatError> {
+                        loop {}
+                    }
+                }
+            )*
+        };
+    }
+    float_methods! { f32 u32 f64 u64 }
+
+    impl bool {
+        pub fn then<T, F: FnOnce() -> T>(self, f: F) -> Option<T> {
+            if self {
+                Some(f())
+            } else {
+                None
+            }
+        }
+        pub fn then_some<T>(self, t: T) -> Option<T> {
+            loop {}
+        }
+    }
+    impl char {
+        pub const MAX: char = 'a';
+        pub const fn from_u32(i: u32) -> Option<char> {
+            loop {}
+        }
+        pub const fn from_digit(num: u32, radix: u32) -> Option<char> {
+            loop {}
+        }
+        pub const fn to_digit(self, radix: u32) -> Option<u32> {
+            loop {}
+        }
+        pub const fn is_ascii_digit(&self) -> bool {
+            loop {}
+        }
+        pub const fn is_ascii(&self) -> bool {
+            loop {}
+        }
+        pub const fn len_utf8(self) -> usize {
+            loop {}
+        }
+        pub fn is_whitespace(self) -> bool {
+            loop {}
+        }
+        pub fn is_alphanumeric(self) -> bool {
+            loop {}
+        }
+    }
+}
+
+pub mod tuples {
+    use crate::cmp::Ordering;
+    use crate::fmt;
+    use crate::hash::{Hash, Hasher};
+
+    macro_rules! tuple {
+        ($($name:ident)+) => {
+            impl<$($name: Clone),+> Clone for ($($name,)+) {
+                fn clone(&self) -> Self {
+                    $( let _x: $name = crate::any::<&$name>().clone(); )+
+                    loop {}
+                }
+            }
+            impl<$($name: Copy),+> Copy for ($($name,)+) {}
+            impl<$($name: PartialEq),+> PartialEq for ($($name,)+) {
+                fn eq(&self, other: &Self) -> bool {
+                    $( crate::any::<&$name>().eq(crate::any::<&$name>()); )+
+                    loop {}
+                }
+            }
+            impl<$($name: Eq),+> Eq for ($($name,)+) {}
+            impl<$($name: PartialOrd),+> PartialOrd for ($($name,)+) {
+                fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+                    $( crate::any::<&$name>().partial_cmp(crate::any::<&$name>()); )+
+                    loop {}
+                }
+            }
+            impl<$($name: Ord),+> Ord for ($($name,)+) {
+                fn cmp(&self, other: &Self) -> Ordering {
+                    $( crate::any::<&$name>().cmp(crate::any::<&$name>()); )+
+                    loop {}
+                }
+            }
+            impl<$($name: Default),+> Default for ($($name,)+) {
+                fn default() -> Self {
+                    $( let _x: $name = $name::default(); )+
+                    loop {}
+                }
+            }
+            impl<$($name: Hash),+> Hash for ($($name,)+) {
+                fn hash<H: Hasher>(&self, state: &mut H) {
+                    $( crate::any::<&$name>().hash(state); )+
+                }
+            }
+            impl<$($name: fmt::Debug),+> fmt::Debug for ($($name,)+) {
+                fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                    $( fmt::Debug::fmt(crate::any::<&$name>(), f); )+
+                    loop {}
+                }
+            }
+        };
+    }
+    tuple! { A }
+    tuple! { A B }
+    tuple! { A B C }
+    tuple! { A B C D }
+    tuple! { A B C D E }
+    tuple! { A B C D E F }
+    tuple! { A B C D E F G }
+    tuple! { A B C D E F G H }
+    impl Clone for () {
+        fn clone(&self) -> () {}
+    }
+    impl Copy for () {}
+    impl Default for () {
+        fn default() -> () {}
+    }
+    impl PartialEq for () {
+        fn eq(&self, other: &()) -> bool {
+            loop {}
+        }
+    }
+    impl Eq for () {}
+    impl PartialOrd for () {
+        fn partial_cmp(&self, other: &()) -> Option<Ordering> {
+            loop {}
+        }
+    }
+    impl Ord for () {
+        fn cmp(&self, other: &()) -> Ordering {
+            loop {}
+        }
+    }
+}
+
+pub mod time {
+    #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
+    pub struct Duration {
+        secs: u64,
+        nanos: u32,
+    }
+    impl Duration {
+        pub const ZERO: Duration = Duration { secs: 0, nanos: 0 };
+        pub const fn from_secs(secs: u64) -> Duration {
+            loop {}
+        }
+        pub const fn from_millis(millis: u64) -> Duration {
+            loop {}
+        }
+        pub const fn from_micros(micros: u64) -> Duration {
+            loop {}
+        }
+        pub const fn from_nanos(nanos: u64) -> Duration {
+            loop {}
+        }
+        pub const fn as_secs(&self) -> u64 {
+            loop {}
+        }
+        pub const fn as_millis(&self) -> u128 {
+            loop {}
+        }
+        pub const fn as_nanos(&self) -> u128 {
+            loop {}
+        }
+        pub fn as_secs_f64(&self) -> f64 {
+            loop {}
+        }
+        pub const fn checked_add(self, rhs: Duration) -> Option<Duration> {
+            loop {}
+        }
+        pub const fn checked_sub(self, rhs: Duration) -> Option<Duration> {
+            loop {}
+        }
+        pub const fn saturating_sub(self, rhs: Duration) -> Duration {
+            loop {}
+        }
+    }
+    #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+    pub struct Instant {
+        t: u64,
+    }
+    impl Instant {
+        pub fn now() -> Instant {
+            loop {}
+        }
+        pub fn elapsed(&self) -> Duration {
+            loop {}
+        }
+        pub fn duration_since(&self, earlier: Instant) -> Duration {
+            loop {}
+        }
+        pub fn checked_duration_since(&self, earlier: Instant) -> Option<Duration> {
+            loop {}
+        }
+    }
+}

@@ -1,59 +1,54 @@
-//! What a call may reach: the recursion check's tables of implementations, its type matching, and
-//! its method and trait dispatch.
+//! What a call may reach: the recursion check's tables of implementations and signatures, and
+//! its method lookup, trait selection and projection normalisation.
 //!
-//! What it does: [`Index::new`] resolves every implementation's self type and trait, every
-//! function's signature in types ([`Sig`]), and every node's name ([`Index::name`]:
-//! `geom_num::wide::I256::mul`, `<geom_num::wide::I256 as Mul>::mul`,
-//! `<geom_num::sign::Sign as Clone>::clone` for a derived one). [`Index::impl_for`] says whether an
-//! implementation applies to a type and with which generic arguments; [`Index::method`] which
-//! kernel functions `receiver.name(...)` may run on a receiver of a given type, following
-//! auto-dereference as the compiler does, and whether the method may instead be one from outside
-//! the kernel; [`Index::assoc`] the same for `Type::name(...)`; [`Index::bound_impls`] every
-//! implementation a call through a generic parameter's or trait object's bound may run;
-//! [`Index::outside_impls`] every implementation of an outside trait that outside code handed a
-//! value may call back; [`Index::normalize`] resolves associated types.
+//! What it does: [`Index::new`] resolves every implementation's self type and trait and files it
+//! by the head of its self type ([`Head`]); every function's signature in types ([`Sig`]); every
+//! node's name (`geom_num::wide::I256::mul`, `<geom_num::wide::I256 as Mul>::mul`). Given an
+//! inference table ([`Infer`]), [`Index::probe`] finds what `receiver.name(...)` calls as rustc's
+//! method lookup does; [`Index::select`] which implementation of a trait a type uses (operators,
+//! `?`, `for`, conversions); [`Index::normalize`] resolves associated types; [`Index::assoc_fns`]
+//! finds what `Type::name` names.
 //!
 //! Guarantees:
 //!
-//! - **Over-approximate, never under.** For a receiver of a known type, the candidates are the
-//!   inherent methods, trait implementations (blanket ones included, when their bounds may hold),
-//!   trait default bodies and derived implementations that can apply to it, at each step of
-//!   auto-dereference until one is found; traits need not be in scope, so a method of any trait
-//!   implemented for the type is a candidate. For an open generic parameter or a trait object,
-//!   every implementation of its bounds' traits. For a [`Ty::Hidden`] value, every candidate of
-//!   every type it may be built from, and every kernel implementation for an outside type. A
-//!   method that may come from outside the kernel is reported as such, so the caller adds what
-//!   outside code may call back.
-//! - **Matching is the compiler's, loosened.** A type matches an implementation's self type unless
-//!   their heads differ (another struct, another outside type, another primitive); a part the
-//!   analysis does not know matches anything.
-//! - **Deterministic.** Every table is ordered.
+//! - **The compiler's lookup.** Method lookup tries the receiver's auto-dereference steps in
+//!   order (references, `Deref` implementations, an array unsized to a slice), at each step the
+//!   receiver by value and then by reference, and at each of those inherent methods before trait
+//!   methods; the first that has a candidate whose receiver unifies wins. Traits need not be in
+//!   scope (code that compiles names only methods it may call, so this only adds candidates when
+//!   two traits offer one name, and then both are kept).
+//! - **Over-approximate where types are open.** Where unresolved variables let several
+//!   implementations apply, every one of them is a candidate and none is committed to; a blanket
+//!   implementation applies when its bounds may hold (a bound on a type not known yet may).
+//! - **Generic receivers.** On a receiver whose type is a generic parameter, an `impl Trait` or a
+//!   projection, a method of one of its bounds is a [`Pick::Bound`]: the trait's default body for
+//!   it, and the blanket implementations, are what it may run from here (other implementations
+//!   are checked from their own instances, [`crate::recursion::mono`]). On a trait object, a
+//!   [`Pick::Dyn`]: every implementation of the trait may run.
+//! - **Deterministic.** Every table is ordered and candidates come in implementation order.
 //!
-//! Method: Rust's method-call resolution (receiver auto-dereference, inherent before trait
-//! methods, which this keeps both of) and trait dispatch, from The Rust Reference
-//! (<https://doc.rust-lang.org/reference/expressions/method-call-expr.html>,
-//! <https://doc.rust-lang.org/reference/items/implementations.html>,
-//! <https://doc.rust-lang.org/reference/attributes/derive.html>); class hierarchy analysis for
-//! dynamic dispatch (J. Dean, D. Grove and C. Chambers, "Optimization of object-oriented programs
-//! using static class hierarchy analysis", ECOOP 1995, <https://doi.org/10.1007/3-540-49538-X_5>),
-//! with a trait's implementations as the hierarchy; first-order syntactic unification of type
-//! terms (J. A. Robinson, "A machine-oriented logic based on the resolution principle", J. ACM 12
-//! (1965), <https://doi.org/10.1145/321250.321253>).
+//! Method: Rust's method-call resolution (The Rust Reference,
+//! <https://doc.rust-lang.org/reference/expressions/method-call-expr.html>; the rustc dev guide,
+//! <https://rustc-dev-guide.rust-lang.org/method-lookup.html>); trait selection by unification of
+//! implementation headers with their bounds checked (<https://rustc-dev-guide.rust-lang.org/traits/resolution.html>);
+//! projection normalisation (<https://rustc-dev-guide.rust-lang.org/traits/goals-and-clauses.html#normalization>);
+//! class hierarchy analysis for trait objects (J. Dean, D. Grove and C. Chambers, ECOOP 1995,
+//! <https://doi.org/10.1007/3-540-49538-X_5>).
 //!
-//! Cost: building is linear in the implementations and nodes; a lookup is linear in the
-//! implementations, times at most [`DEREF_DEPTH`] auto-dereference steps; a blanket
-//! implementation's bounds are checked to depth [`BOUND_DEPTH`]. Recursion follows the nesting of
-//! the types matched.
+//! Cost: building is linear in implementations and nodes; a lookup tries the implementations
+//! filed under the heads of the receiver's auto-dereference steps (at most [`DEREF_DEPTH`]), each
+//! by one unification; bounds of blanket implementations are checked to depth [`BOUND_DEPTH`].
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use quote::ToTokens;
 
+use crate::recursion::infer::Infer;
 use crate::recursion::model::{DERIVABLE, ImplId, ItemKind, NodeKind, Program, Scope, SelfRef};
-use crate::recursion::resolve::Resolver;
-use crate::recursion::ty::{GenId, ItemId, NodeId, TraitRef, Ty, Val};
+use crate::recursion::resolve::{Ns, Res, Resolver};
+use crate::recursion::ty::{ClosureKey, GenId, ItemId, NodeId, Prim, TraitRef, Ty};
 
-/// How many `Deref` steps a method lookup follows.
+/// How many auto-dereference steps a method lookup follows.
 pub const DEREF_DEPTH: usize = 8;
 
 /// How deep the bounds of blanket implementations are checked.
@@ -62,13 +57,16 @@ pub const BOUND_DEPTH: usize = 4;
 /// Generic arguments, by parameter.
 pub type Map = BTreeMap<GenId, Ty>;
 
+/// What a closure's signature is, when the checker knows it: its parameter types and result.
+pub type ClosureSigs<'a> = &'a dyn Fn(&ClosureKey) -> Option<(Vec<Ty>, Ty)>;
+
 /// A function's signature in types: its parameters (the receiver first, for a method that has
-/// one) and its result, in the scope of the function, with its generic parameters open.
+/// one) and its result, with its generic parameters open.
 #[derive(Clone, Debug, Default)]
 pub struct Sig {
     /// The parameter types, the receiver first when there is one.
     pub inputs: Vec<Ty>,
-    /// Whether the first input is a receiver (`self`, `&self`, `self: T`).
+    /// Whether the first input is a receiver (`self`, `&self`, `self: Box<Self>`).
     pub receiver: bool,
     /// The result type.
     pub output: Ty,
@@ -80,10 +78,10 @@ pub mod how {
     pub const PATH: &str = "a call by path";
     /// A method found on the receiver's type.
     pub const RECEIVER: &str = "a method call on the receiver's type";
-    /// An implementation of a generic parameter's or trait object's bound.
-    pub const BOUND: &str = "a call through a bound (every implementation of the trait)";
-    /// A kernel implementation for an outside type, on a value whose type is not known.
-    pub const OUTSIDE_TYPE: &str = "a kernel implementation for an outside type, on a value of unknown type";
+    /// A trait's default body or blanket implementation, on a generic receiver.
+    pub const BOUND: &str = "a call through a generic parameter's bound (the trait's default body or a blanket implementation)";
+    /// Every implementation of a trait, on a trait object.
+    pub const DYN: &str = "a call on a trait object (every implementation of the trait)";
     /// An implicit trait call: an operator, `?`, `for`, indexing, a dereference, formatting.
     pub const IMPLICIT: &str = "an implicit trait call (operator, ?, for, index, deref, formatting)";
     /// A derived implementation's call of its fields' implementations.
@@ -91,37 +89,176 @@ pub mod how {
     /// A call through a value holding a closure or function item.
     pub const VALUE: &str = "a call through a value (closure or function item)";
     /// A call through a trait object or function pointer: every callable coerced to one.
-    pub const ERASED: &str = "a call through a trait object or function pointer (every callable coerced to one)";
-    /// Outside code calling back a closure or function it was handed.
-    pub const CALLBACK: &str = "a callback of outside code (a closure or function it was handed)";
-    /// Outside code calling back a trait implementation of a kernel type it was handed.
-    pub const CALLBACK_IMPL: &str = "a callback of outside code (a trait implementation of a type it was handed)";
-    /// A standard conversion's call of the kernel implementation that builds its result.
-    pub const CONVERSION: &str = "a standard conversion (into, collect, sum, default, ...)";
+    pub const ERASED: &str = "a call through a closure trait object or function pointer (every callable coerced to one)";
     /// Drop glue.
     pub const DROP: &str = "drop glue (a Drop implementation)";
 }
 
-/// A kernel function a call may run, with the generic arguments the dispatch fixed (an
-/// implementation's, and `Self` of a trait default body), and how it was found.
+/// The head of a type, by which implementations are filed.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Target {
-    /// The function.
-    pub node: NodeId,
-    /// The generic arguments fixed so far.
-    pub map: Map,
-    /// How it was found.
-    pub how: &'static str,
+pub enum Head {
+    /// A primitive.
+    Prim(Prim),
+    /// A struct, enum or union.
+    Adt(ItemId),
+    /// A reference or raw pointer.
+    Ref,
+    /// A slice.
+    Slice,
+    /// An array.
+    Array,
+    /// A tuple of this many elements.
+    Tuple(usize),
+    /// A function pointer.
+    FnPtr,
+    /// A trait object.
+    Dyn,
+    /// The never type.
+    Never,
 }
 
-/// What a method lookup found.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Found {
-    /// The kernel functions.
-    pub targets: BTreeSet<Target>,
-    /// The receiver types at which the method may be one from outside the kernel.
-    pub outside: BTreeSet<Ty>,
+/// The head of `t`, when it has one a lookup can use.
+#[must_use]
+pub fn head(t: &Ty) -> Option<Head> {
+    Some(match t {
+        Ty::Prim(p) => Head::Prim(*p),
+        Ty::Adt(id, _) => Head::Adt(*id),
+        Ty::Ref(_) => Head::Ref,
+        Ty::Slice(_) => Head::Slice,
+        Ty::Array(_) => Head::Array,
+        Ty::Tuple(items) => Head::Tuple(items.len()),
+        Ty::FnPtr(..) => Head::FnPtr,
+        Ty::Dyn(_) => Head::Dyn,
+        Ty::Never => Head::Never,
+        _ => return None,
+    })
 }
+
+/// One implementation, resolved.
+#[derive(Clone, Debug)]
+pub struct ImplInfo {
+    /// Its self type, its generic parameters open.
+    pub self_ty: Ty,
+    /// Its trait, for a trait implementation.
+    pub trait_ref: Option<TraitRef>,
+}
+
+/// What a method lookup chose.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Pick {
+    /// A function of the program with its generic arguments (the caller's variables where not
+    /// fixed yet).
+    Node {
+        /// The function.
+        node: NodeId,
+        /// Its generic arguments ([`Index::node_generics`]).
+        args: Vec<Ty>,
+    },
+    /// A trait method on a receiver of generic type.
+    Bound {
+        /// The trait, with its arguments.
+        trait_ref: TraitRef,
+        /// The receiver's type at the step the method was found (the `Self` type).
+        self_ty: Ty,
+    },
+    /// A trait method on a trait object.
+    Dyn {
+        /// The trait.
+        trait_ref: TraitRef,
+        /// The trait object type.
+        self_ty: Ty,
+    },
+}
+
+/// The standard library items the checker needs by name, found in the model.
+#[derive(Clone, Debug, Default)]
+pub struct Lang {
+    /// `core::option::Option`.
+    pub option: Option<ItemId>,
+    /// `core::result::Result`.
+    pub result: Option<ItemId>,
+    /// `alloc::vec::Vec`.
+    pub vec: Option<ItemId>,
+    /// `alloc::string::String`.
+    pub string: Option<ItemId>,
+    /// `alloc::boxed::Box`.
+    pub boxed: Option<ItemId>,
+    /// `core::ops::Range` and its kin, by name.
+    pub ranges: BTreeMap<String, ItemId>,
+    /// Traits by name: `Fn`, `FnMut`, `FnOnce`, `Deref`, `Index`, `Iterator`, `IntoIterator`,
+    /// `Add`, ..., `PartialEq`, `PartialOrd`, `From`, `Drop`, `Debug`, `Display`, ...
+    pub traits: BTreeMap<String, ItemId>,
+}
+
+impl Lang {
+    /// The model trait named `name`.
+    #[must_use]
+    pub fn trait_named(&self, name: &str) -> Option<ItemId> {
+        self.traits.get(name).copied()
+    }
+}
+
+/// The traits [`Lang`] looks up, with their paths in the model.
+pub const LANG_TRAITS: [(&str, &str); 45] = [
+    ("Fn", "ops::Fn"),
+    ("FnMut", "ops::FnMut"),
+    ("FnOnce", "ops::FnOnce"),
+    ("Deref", "ops::Deref"),
+    ("DerefMut", "ops::DerefMut"),
+    ("Index", "ops::Index"),
+    ("IndexMut", "ops::IndexMut"),
+    ("Drop", "ops::Drop"),
+    ("Add", "ops::Add"),
+    ("Sub", "ops::Sub"),
+    ("Mul", "ops::Mul"),
+    ("Div", "ops::Div"),
+    ("Rem", "ops::Rem"),
+    ("BitAnd", "ops::BitAnd"),
+    ("BitOr", "ops::BitOr"),
+    ("BitXor", "ops::BitXor"),
+    ("Shl", "ops::Shl"),
+    ("Shr", "ops::Shr"),
+    ("Neg", "ops::Neg"),
+    ("Not", "ops::Not"),
+    ("AddAssign", "ops::AddAssign"),
+    ("SubAssign", "ops::SubAssign"),
+    ("MulAssign", "ops::MulAssign"),
+    ("DivAssign", "ops::DivAssign"),
+    ("RemAssign", "ops::RemAssign"),
+    ("BitAndAssign", "ops::BitAndAssign"),
+    ("BitOrAssign", "ops::BitOrAssign"),
+    ("BitXorAssign", "ops::BitXorAssign"),
+    ("ShlAssign", "ops::ShlAssign"),
+    ("ShrAssign", "ops::ShrAssign"),
+    ("Try", "ops::Try"),
+    ("PartialEq", "cmp::PartialEq"),
+    ("PartialOrd", "cmp::PartialOrd"),
+    ("Ord", "cmp::Ord"),
+    ("Clone", "clone::Clone"),
+    ("Default", "default::Default"),
+    ("From", "convert::From"),
+    ("Iterator", "iter::Iterator"),
+    ("IntoIterator", "iter::IntoIterator"),
+    ("FromIterator", "iter::FromIterator"),
+    ("Debug", "fmt::Debug"),
+    ("Display", "fmt::Display"),
+    ("Hash", "hash::Hash"),
+    ("Sized", "marker::Sized"),
+    ("Copy", "marker::Copy"),
+];
+
+/// The formatting traits a placeholder may name, with their paths in the model.
+pub const FMT_TRAITS: [(&str, &str); 9] = [
+    ("Display", "fmt::Display"),
+    ("Debug", "fmt::Debug"),
+    ("LowerHex", "fmt::LowerHex"),
+    ("UpperHex", "fmt::UpperHex"),
+    ("Octal", "fmt::Octal"),
+    ("Binary", "fmt::Binary"),
+    ("LowerExp", "fmt::LowerExp"),
+    ("UpperExp", "fmt::UpperExp"),
+    ("Pointer", "fmt::Pointer"),
+];
 
 /// The program's implementations, filed for lookup, its signatures and its nodes' names.
 pub struct Index<'p> {
@@ -129,14 +266,15 @@ pub struct Index<'p> {
     pub resolver: Resolver<'p>,
     /// The program.
     pub program: &'p Program,
-    /// Each implementation's self type, its generic parameters open.
-    pub impl_self: Vec<Ty>,
-    /// Each implementation's trait, for a trait implementation.
-    pub impl_trait: Vec<Option<TraitRef>>,
-    /// Implementations of each kernel trait.
-    pub by_kernel_trait: BTreeMap<ItemId, Vec<ImplId>>,
-    /// Implementations of each outside trait, by its name.
-    pub by_ext_trait: BTreeMap<String, Vec<ImplId>>,
+    /// Every implementation, resolved.
+    pub impls: Vec<ImplInfo>,
+    /// Implementations by the head of their self type.
+    by_head: BTreeMap<Head, Vec<ImplId>>,
+    /// Implementations whose self type is a generic parameter or has no head: they may apply to
+    /// any type.
+    blanket: Vec<ImplId>,
+    /// Implementations of each trait.
+    pub by_trait: BTreeMap<ItemId, Vec<ImplId>>,
     /// The derived implementations of each item: trait name and node.
     pub derived: BTreeMap<ItemId, Vec<(String, NodeId)>>,
     /// Every node's generic parameters, as instances list their arguments.
@@ -145,6 +283,10 @@ pub struct Index<'p> {
     pub sigs: Vec<Sig>,
     /// Every node's name.
     pub names: Vec<String>,
+    /// The standard library items the checker needs.
+    pub lang: Lang,
+    /// The formatting traits by placeholder trait name.
+    pub fmt_traits: BTreeMap<String, ItemId>,
 }
 
 impl<'p> Index<'p> {
@@ -152,98 +294,199 @@ impl<'p> Index<'p> {
     #[must_use]
     pub fn new(program: &'p Program) -> Index<'p> {
         let resolver = Resolver::new(program);
-        let mut impl_self = Vec::new();
-        let mut impl_trait = Vec::new();
-        let mut by_kernel_trait: BTreeMap<ItemId, Vec<ImplId>> = BTreeMap::new();
-        let mut by_ext_trait: BTreeMap<String, Vec<ImplId>> = BTreeMap::new();
+        let mut impls = Vec::new();
+        let mut by_head: BTreeMap<Head, Vec<ImplId>> = BTreeMap::new();
+        let mut blanket = Vec::new();
+        let mut by_trait: BTreeMap<ItemId, Vec<ImplId>> = BTreeMap::new();
         for (i, imp) in program.impls.iter().enumerate() {
             let id = ImplId(i);
             let mut scope = imp.scope.clone();
             scope.self_ref = SelfRef::None;
             let self_ty = resolver.ty(&scope, &imp.self_ty);
-            let tr = imp
-                .trait_path
-                .as_ref()
-                .and_then(|p| resolver.trait_ref(&imp.scope, p));
-            match &tr {
-                Some(TraitRef::Ext(name, _) | TraitRef::Fn(name, ..)) => {
-                    by_ext_trait.entry(name.clone()).or_default().push(id);
-                }
-                Some(TraitRef::Kernel(t, _)) => by_kernel_trait.entry(*t).or_default().push(id),
-                None => {}
+            let trait_ref = imp.trait_path.as_ref().and_then(|p| resolver.trait_ref(&imp.scope, p));
+            match head(&self_ty) {
+                Some(h) => by_head.entry(h).or_default().push(id),
+                None => blanket.push(id),
             }
-            impl_self.push(self_ty);
-            impl_trait.push(tr);
+            if let Some(tr) = &trait_ref {
+                by_trait.entry(tr.id).or_default().push(id);
+            }
+            impls.push(ImplInfo { self_ty, trait_ref });
         }
         let mut derived: BTreeMap<ItemId, Vec<(String, NodeId)>> = BTreeMap::new();
         for (n, node) in program.nodes.iter().enumerate() {
             if let NodeKind::Derived { item, trait_name } = &node.kind {
-                derived
-                    .entry(*item)
-                    .or_default()
-                    .push((trait_name.clone(), NodeId(n)));
+                derived.entry(*item).or_default().push((trait_name.clone(), NodeId(n)));
             }
         }
         let mut index = Index {
             resolver,
             program,
-            impl_self,
-            impl_trait,
-            by_kernel_trait,
-            by_ext_trait,
+            impls,
+            by_head,
+            blanket,
+            by_trait,
             derived,
             generics: Vec::new(),
             sigs: Vec::new(),
             names: Vec::new(),
+            lang: Lang::default(),
+            fmt_traits: BTreeMap::new(),
         };
-        index.generics = (0..program.nodes.len())
-            .map(|n| index.generics_of(NodeId(n)))
+        index.lang = index.find_lang();
+        index.fmt_traits = FMT_TRAITS
+            .iter()
+            .filter_map(|(n, p)| index.model_item(p).map(|id| ((*n).to_owned(), id)))
             .collect();
+        index.complete_impl_traits();
+        index.generics = (0..program.nodes.len()).map(|n| index.generics_of(NodeId(n))).collect();
         index.sigs = (0..program.nodes.len()).map(|n| index.sig_of(NodeId(n))).collect();
         index.names = (0..program.nodes.len()).map(|n| index.name_of(NodeId(n))).collect();
         index
     }
 
-    // ---------------------------------------------------------------- names
-
-    /// A type as names show it: a kernel type by its path, others as written.
+    /// The item at `path` (`option::Option`) in the standard library's model.
     #[must_use]
-    pub fn show(&self, ty: &Ty) -> String {
-        match ty {
-            Ty::Adt(id, _) => self.program.item(*id).path.clone(),
-            Ty::Ext(name, _) | Ty::Prim(name) => name.clone(),
-            Ty::Ref(inner) => format!("&{}", self.show(inner)),
-            Ty::Slice(inner) => format!("[{}]", self.show(inner)),
-            Ty::Array(inner) => format!("[{}; _]", self.show(inner)),
-            Ty::Tuple(items) => format!(
-                "({})",
-                items.iter().map(|t| self.show(t)).collect::<Vec<_>>().join(", ")
-            ),
-            Ty::Param(g) => self.program.generic(*g).name.clone(),
-            Ty::Dyn(traits) => format!(
-                "dyn {}",
-                traits.iter().map(|t| self.trait_name(t)).collect::<Vec<_>>().join(" + ")
-            ),
-            Ty::Opaque(traits) => format!(
-                "impl {}",
-                traits.iter().map(|t| self.trait_name(t)).collect::<Vec<_>>().join(" + ")
-            ),
-            Ty::Assoc(base, name) => format!("{}::{name}", self.show(base)),
-            Ty::FnPtr(n) => format!("fn/{n}"),
-            Ty::Closure(k) => format!("{}::{{closure#{}}}", self.name(k.owner), k.index),
-            Ty::FnDef(n, _) => self.name(*n).to_owned(),
-            Ty::ExtFn => "an outside function".to_owned(),
-            Ty::Never => "!".to_owned(),
-            Ty::Infer | Ty::Hidden(_) => "_".to_owned(),
+    pub fn model_item(&self, path: &str) -> Option<ItemId> {
+        let root = self
+            .program
+            .crates
+            .iter()
+            .find(|c| c.source.role == crate::recursion::model::Role::Model && c.source.lib == "core")?
+            .root;
+        let scope = Scope {
+            module: root,
+            generics: Vec::new(),
+            consts: Vec::new(),
+            self_ref: SelfRef::None,
+        };
+        let segs: Vec<String> = path.split("::").map(str::to_owned).collect();
+        self.resolver
+            .resolve(&scope, &segs, false, Ns::Type)
+            .into_iter()
+            .find_map(|r| match r {
+                Res::Item(id) => Some(id),
+                _ => None,
+            })
+    }
+
+    fn find_lang(&self) -> Lang {
+        let mut lang = Lang {
+            option: self.model_item("option::Option"),
+            result: self.model_item("result::Result"),
+            vec: self.model_item("vec::Vec"),
+            string: self.model_item("string::String"),
+            boxed: self.model_item("boxed::Box"),
+            ..Lang::default()
+        };
+        for r in ["Range", "RangeInclusive", "RangeFrom", "RangeTo", "RangeToInclusive", "RangeFull"] {
+            if let Some(id) = self.model_item(&format!("ops::{r}")) {
+                lang.ranges.insert(r.to_owned(), id);
+            }
+        }
+        for (name, path) in LANG_TRAITS {
+            if let Some(id) = self.model_item(path) {
+                lang.traits.insert(name.to_owned(), id);
+            }
+        }
+        lang
+    }
+
+    /// Fills each implementation's trait arguments left out by their defaults (`impl Add for T`
+    /// is `impl Add<T> for T`).
+    fn complete_impl_traits(&mut self) {
+        let done: Vec<Option<TraitRef>> = self
+            .impls
+            .iter()
+            .map(|i| i.trait_ref.as_ref().map(|t| self.complete(t, &i.self_ty)))
+            .collect();
+        for (info, t) in self.impls.iter_mut().zip(done) {
+            info.trait_ref = t;
         }
     }
 
-    /// A trait's name: its last path segment.
+    /// `tr` with the trait arguments it leaves out filled by their defaults, `Self` being
+    /// `self_ty`.
     #[must_use]
-    pub fn trait_name(&self, tr: &TraitRef) -> String {
-        match tr {
-            TraitRef::Kernel(id, _) => self.program.item(*id).name.clone(),
-            TraitRef::Ext(name, _) | TraitRef::Fn(name, ..) => name.clone(),
+    pub fn complete(&self, tr: &TraitRef, self_ty: &Ty) -> TraitRef {
+        let item = self.program.item(tr.id);
+        let ItemKind::Trait { self_gen, .. } = &item.kind else {
+            return tr.clone();
+        };
+        let generics = &item.scope.generics;
+        let mut args = tr.args.clone();
+        while args.len() < generics.len() {
+            let Some(g) = generics.get(args.len()) else {
+                break;
+            };
+            let generic = self.program.generic(*g);
+            let filled = match &generic.default {
+                Some(d) => {
+                    let mut map: Map = generics.iter().copied().zip(args.iter().cloned()).collect();
+                    map.insert(*self_gen, self_ty.clone());
+                    self.resolver.ty(&generic.scope, d).subst(&map)
+                }
+                None => Ty::Infer,
+            };
+            args.push(filled);
+        }
+        TraitRef {
+            id: tr.id,
+            args,
+            bindings: tr.bindings.clone(),
+        }
+    }
+
+    // ---------------------------------------------------------------- names
+
+    /// A type as names show it.
+    #[must_use]
+    pub fn show(&self, ty: &Ty) -> String {
+        let list = |items: &[Ty]| items.iter().map(|t| self.show(t)).collect::<Vec<_>>().join(", ");
+        match ty {
+            Ty::Adt(id, args) => {
+                let item = self.program.item(*id);
+                let model = self
+                    .program
+                    .crates
+                    .get(self.program.module(item.module).krate)
+                    .is_some_and(|c| c.source.role == crate::recursion::model::Role::Model);
+                let base = if model { item.name.clone() } else { item.path.clone() };
+                if args.is_empty() {
+                    base
+                } else {
+                    format!("{base}<{}>", list(args))
+                }
+            }
+            Ty::Prim(p) => p.name().to_owned(),
+            Ty::Ref(inner) => format!("&{}", self.show(inner)),
+            Ty::Slice(inner) => format!("[{}]", self.show(inner)),
+            Ty::Array(inner) => format!("[{}; _]", self.show(inner)),
+            Ty::Tuple(items) => format!("({})", list(items)),
+            Ty::Param(g) => self.program.generic(*g).name.clone(),
+            Ty::Dyn(traits) => format!(
+                "dyn {}",
+                traits.iter().map(|t| self.program.item(t.id).name.clone()).collect::<Vec<_>>().join(" + ")
+            ),
+            Ty::Opaque(traits) => format!(
+                "impl {}",
+                traits.iter().map(|t| self.program.item(t.id).name.clone()).collect::<Vec<_>>().join(" + ")
+            ),
+            Ty::Assoc(base, _, name) => format!("{}::{name}", self.show(base)),
+            Ty::FnPtr(params, ret) => format!("fn({}) -> {}", list(params), self.show(ret)),
+            Ty::Closure(k) => format!("{}::{{closure#{}}}", self.name(k.owner), k.index),
+            Ty::FnDef(n, _) => self.name(*n).to_owned(),
+            Ty::Never => "!".to_owned(),
+            Ty::Var(_) | Ty::Infer => "_".to_owned(),
+            Ty::Unknown => "{unknown}".to_owned(),
+        }
+    }
+
+    /// The head of a type as names show it: a type's path, without its arguments.
+    fn show_head(&self, ty: &Ty) -> String {
+        match ty {
+            Ty::Adt(id, _) => self.program.item(*id).path.clone(),
+            other => self.show(other),
         }
     }
 
@@ -255,23 +498,19 @@ impl<'p> Index<'p> {
             NodeKind::Fn | NodeKind::TraitDefault(_) => node.name.clone(),
             NodeKind::Method(imp) => {
                 let self_ty = self
-                    .impl_self
+                    .impls
                     .get(imp.0)
-                    .map(|t| self.show(t))
-                    .filter(|s| s != "_")
-                    .unwrap_or_else(|| {
-                        self.program.imp(*imp).self_ty.to_token_stream().to_string()
-                    });
-                match self.impl_trait.get(imp.0).and_then(Option::as_ref) {
-                    Some(tr) => format!("<{self_ty} as {}>::{}", self.trait_name(tr), node.ident),
+                    .map(|i| self.show_head(&i.self_ty))
+                    .filter(|s| s != "{unknown}")
+                    .unwrap_or_else(|| self.program.imp(*imp).self_ty.to_token_stream().to_string());
+                match self.impls.get(imp.0).and_then(|i| i.trait_ref.as_ref()) {
+                    Some(tr) => format!("<{self_ty} as {}>::{}", self.program.item(tr.id).name, node.ident),
                     None => format!("{self_ty}::{}", node.ident),
                 }
             }
-            NodeKind::Derived { item, trait_name } => format!(
-                "<{} as {trait_name}>::{}",
-                self.program.item(*item).path,
-                node.ident
-            ),
+            NodeKind::Derived { item, trait_name } => {
+                format!("<{} as {trait_name}>::{}", self.program.item(*item).path, node.ident)
+            }
         }
     }
 
@@ -279,6 +518,15 @@ impl<'p> Index<'p> {
     #[must_use]
     pub fn name(&self, id: NodeId) -> &str {
         self.names.get(id.0).map_or("", String::as_str)
+    }
+
+    /// Whether node `id` belongs to the standard library's model.
+    #[must_use]
+    pub fn is_model(&self, id: NodeId) -> bool {
+        self.program
+            .node(id)
+            .and_then(|n| self.program.crates.get(n.krate))
+            .is_some_and(|c| c.source.role == crate::recursion::model::Role::Model)
     }
 
     // ---------------------------------------------------------------- signatures
@@ -298,7 +546,17 @@ impl<'p> Index<'p> {
                 out.extend(node.scope.generics.iter().copied());
                 out
             }
-            NodeKind::Derived { item, .. } => self.program.item(*item).scope.generics.clone(),
+            NodeKind::Derived { item, trait_name } => {
+                // The type's parameters, then the trait method's own (`Hash::hash`'s `H`).
+                let mut out = self.program.item(*item).scope.generics.clone();
+                if let Some(t) = self.lang.trait_named(trait_name)
+                    && let Some((_, generics)) = self.trait_method(t, &node.ident)
+                {
+                    let skip = self.program.item(t).scope.generics.len().saturating_add(1);
+                    out.extend(generics.into_iter().skip(skip));
+                }
+                out
+            }
             NodeKind::Fn | NodeKind::Method(_) => node.scope.generics.clone(),
         }
     }
@@ -312,20 +570,15 @@ impl<'p> Index<'p> {
     /// The map from node `id`'s generic parameters to `args`.
     #[must_use]
     pub fn map_of(&self, id: NodeId, args: &[Ty]) -> Map {
-        self.node_generics(id)
-            .iter()
-            .copied()
-            .zip(args.iter().cloned())
-            .collect()
+        self.node_generics(id).iter().copied().zip(args.iter().cloned()).collect()
     }
 
-    /// The `Self` type of node `id`, its generic parameters open: an implementation's self type,
-    /// a trait's `Self` parameter, a derived implementation's type.
+    /// The `Self` type of node `id`, its generic parameters open.
     #[must_use]
     pub fn self_ty(&self, id: NodeId) -> Option<Ty> {
         let node = self.program.node(id)?;
         match &node.kind {
-            NodeKind::Method(imp) => self.impl_self.get(imp.0).cloned(),
+            NodeKind::Method(imp) => self.impls.get(imp.0).map(|i| i.self_ty.clone()),
             NodeKind::TraitDefault(t) => match &self.program.item(*t).kind {
                 ItemKind::Trait { self_gen, .. } => Some(Ty::Param(*self_gen)),
                 _ => None,
@@ -335,19 +588,10 @@ impl<'p> Index<'p> {
         }
     }
 
-    /// Kernel type `item` with its generic parameters open.
+    /// Item `item` with its generic parameters open.
     #[must_use]
     pub fn adt_open(&self, item: ItemId) -> Ty {
-        Ty::Adt(
-            item,
-            self.program
-                .item(item)
-                .scope
-                .generics
-                .iter()
-                .map(|g| Ty::Param(*g))
-                .collect(),
-        )
+        Ty::Adt(item, self.program.item(item).scope.generics.iter().map(|g| Ty::Param(*g)).collect())
     }
 
     fn sig_of(&self, id: NodeId) -> Sig {
@@ -355,29 +599,32 @@ impl<'p> Index<'p> {
             return Sig::default();
         };
         if let NodeKind::Derived { trait_name, .. } = &node.kind {
-            let own = self.self_ty(id).unwrap_or_else(Ty::unknown);
-            let r = Ty::Ref(Box::new(own.clone()));
-            let (inputs, output) = match trait_name.as_str() {
-                "Clone" => (vec![r], own),
-                "PartialEq" => (vec![r.clone(), r], Ty::prim("bool")),
-                "PartialOrd" => (
-                    vec![r.clone(), r],
-                    Ty::ext("Option", vec![Ty::ext("Ordering", Vec::new())]),
-                ),
-                "Ord" => (vec![r.clone(), r], Ty::ext("Ordering", Vec::new())),
-                "Hash" => (vec![r, Ty::unknown()], Ty::unit()),
-                "Debug" => (
-                    vec![r, Ty::Ref(Box::new(Ty::ext("Formatter", Vec::new())))],
-                    Ty::ext("Result", vec![Ty::unit(), Ty::ext("Error", Vec::new())]),
-                ),
-                "Default" => (Vec::new(), own),
-                _ => (vec![r], Ty::unknown()),
-            };
-            let receiver = !inputs.is_empty();
-            return Sig {
-                inputs,
-                receiver,
-                output,
+            let own = self.self_ty(id).unwrap_or(Ty::Unknown);
+            let found = self
+                .lang
+                .trait_named(trait_name)
+                .and_then(|t| self.trait_method(t, &node.ident).map(|(s, g)| (t, s, g)));
+            return match found {
+                Some((t, sig, generics)) => {
+                    let mut map = Map::new();
+                    if let Some(self_gen) = generics.first() {
+                        map.insert(*self_gen, own.clone());
+                    }
+                    // A derived trait's own parameters (`PartialEq<Rhs = Self>`) are `Self`.
+                    for g in &self.program.item(t).scope.generics {
+                        map.insert(*g, own.clone());
+                    }
+                    Sig {
+                        inputs: sig.inputs.iter().map(|x| x.subst(&map)).collect(),
+                        receiver: sig.receiver,
+                        output: sig.output.subst(&map),
+                    }
+                }
+                None => Sig {
+                    inputs: vec![Ty::reference(own)],
+                    receiver: true,
+                    output: Ty::Unknown,
+                },
             };
         }
         let Some(sig) = &node.sig else {
@@ -395,10 +642,10 @@ impl<'p> Index<'p> {
             match input {
                 syn::FnArg::Receiver(r) => {
                     receiver = true;
-                    let own = self_ty.cloned().unwrap_or_else(Ty::unknown);
+                    let own = self_ty.cloned().unwrap_or(Ty::Unknown);
                     let t = match &r.kind {
                         syn::ReceiverKind::Typed(_, t) => self.resolver.ty(scope, t),
-                        syn::ReceiverKind::Reference(..) => Ty::Ref(Box::new(own)),
+                        syn::ReceiverKind::Reference(..) => Ty::reference(own),
                         _ => own,
                     };
                     inputs.push(t);
@@ -410,11 +657,7 @@ impl<'p> Index<'p> {
             syn::ReturnType::Default => Ty::unit(),
             syn::ReturnType::Type(_, t) => self.resolver.ty(scope, t),
         };
-        Sig {
-            inputs,
-            receiver,
-            output,
-        }
+        Sig { inputs, receiver, output }
     }
 
     /// Node `id`'s signature.
@@ -423,18 +666,12 @@ impl<'p> Index<'p> {
         self.sigs.get(id.0)
     }
 
-    /// The signature of kernel trait `t`'s method `name`, with `Self` as the trait's parameter,
-    /// and its scope's generic parameters; from the trait or one of its supertraits.
+    /// The signature of trait `t`'s method `name` as the trait declares it, with its generic
+    /// parameters in instance order (`Self`, the trait's, the method's); from `t` or a supertrait.
     #[must_use]
-    pub fn trait_method_sig(&self, t: ItemId, name: &str) -> Option<(Sig, Vec<GenId>)> {
-        for tr in self
-            .resolver
-            .with_supertraits(vec![TraitRef::Kernel(t, Vec::new())])
-        {
-            let TraitRef::Kernel(id, _) = tr else {
-                continue;
-            };
-            if let ItemKind::Trait { sigs, self_gen, .. } = &self.program.item(id).kind
+    pub fn trait_method(&self, t: ItemId, name: &str) -> Option<(Sig, Vec<GenId>)> {
+        for tid in self.trait_closure(t) {
+            if let ItemKind::Trait { sigs, self_gen, .. } = &self.program.item(tid).kind
                 && let Some((sig, scope)) = sigs.get(name)
             {
                 let own = Ty::Param(*self_gen);
@@ -446,10 +683,130 @@ impl<'p> Index<'p> {
         None
     }
 
+    /// The trait among `t` and its supertraits that declares method `name`.
+    #[must_use]
+    pub fn trait_declaring_method(&self, t: ItemId, name: &str) -> Option<ItemId> {
+        self.trait_closure(t).into_iter().find(|tid| {
+            matches!(&self.program.item(*tid).kind, ItemKind::Trait { methods, .. } if methods.contains(name))
+        })
+    }
+
+    /// Trait `t` and every supertrait it leads to, each once, `t` first.
+    #[must_use]
+    pub fn trait_closure(&self, t: ItemId) -> Vec<ItemId> {
+        let mut out = Vec::new();
+        let mut work = vec![t];
+        let mut seen = BTreeSet::new();
+        while let Some(x) = work.pop() {
+            if !seen.insert(x) {
+                continue;
+            }
+            out.push(x);
+            let item = self.program.item(x);
+            if let ItemKind::Trait { supertraits, .. } = &item.kind {
+                let mut supers: Vec<ItemId> =
+                    self.resolver.trait_refs(&item.scope, supertraits.iter()).into_iter().map(|r| r.id).collect();
+                supers.reverse();
+                work.extend(supers);
+            }
+        }
+        out
+    }
+
+    /// `tr` and its supertraits with their arguments put in, `Self` being `self_ty`, each once.
+    #[must_use]
+    pub fn supertraits(&self, tr: &TraitRef, self_ty: &Ty) -> Vec<TraitRef> {
+        let mut out: Vec<TraitRef> = Vec::new();
+        let mut work = vec![self.complete(tr, self_ty)];
+        while let Some(t) = work.pop() {
+            if out.iter().any(|o| o.id == t.id && o.args == t.args) {
+                continue;
+            }
+            let item = self.program.item(t.id);
+            if let ItemKind::Trait {
+                supertraits, self_gen, ..
+            } = &item.kind
+            {
+                let mut map: Map = item.scope.generics.iter().copied().zip(t.args.iter().cloned()).collect();
+                map.insert(*self_gen, self_ty.clone());
+                for s in self.resolver.trait_refs(&item.scope, supertraits.iter()) {
+                    let s = self.complete(&s, &Ty::Param(*self_gen));
+                    let mut sub = s.map(&mut |x| x.subst(&map));
+                    // A binding written on the subtrait (`Fn(A) -> R` fixes `FnOnce::Output`)
+                    // belongs to whichever trait declares it.
+                    for (n, b) in &t.bindings {
+                        if self.resolver.declaring_trait(std::slice::from_ref(&sub), n).is_some()
+                            && sub.binding(n).is_none()
+                        {
+                            sub.bindings.push((n.clone(), b.clone()));
+                        }
+                    }
+                    work.push(sub);
+                }
+            }
+            out.push(t);
+        }
+        out
+    }
+
+    /// The bounds of generic parameter `g` with their supertraits.
+    #[must_use]
+    pub fn bounds(&self, g: GenId) -> Vec<TraitRef> {
+        let own = Ty::Param(g);
+        let mut out: Vec<TraitRef> = Vec::new();
+        for b in self.resolver.bounds(g) {
+            for s in self.supertraits(&b, &own) {
+                if !out.contains(&s) {
+                    out.push(s);
+                }
+            }
+        }
+        out
+    }
+
+    /// The bounds a generic receiver of type `t` is known by: a parameter's, an `impl Trait`'s, a
+    /// projection's declared bounds; with supertraits.
+    #[must_use]
+    pub fn bounds_of_ty(&self, t: &Ty) -> Vec<TraitRef> {
+        match t {
+            Ty::Param(g) => self.bounds(*g),
+            Ty::Opaque(traits) | Ty::Dyn(traits) => {
+                let mut out = Vec::new();
+                for tr in traits {
+                    for s in self.supertraits(tr, t) {
+                        if !out.contains(&s) {
+                            out.push(s);
+                        }
+                    }
+                }
+                out
+            }
+            Ty::Assoc(_, Some(tr), name) => {
+                let item = self.program.item(*tr);
+                let ItemKind::Trait { assoc_types, .. } = &item.kind else {
+                    return Vec::new();
+                };
+                let Some(bounds) = assoc_types.get(name) else {
+                    return Vec::new();
+                };
+                let mut out = Vec::new();
+                for b in self.resolver.trait_refs(&item.scope, bounds.iter()) {
+                    for s in self.supertraits(&b, t) {
+                        if !out.contains(&s) {
+                            out.push(s);
+                        }
+                    }
+                }
+                out
+            }
+            _ => Vec::new(),
+        }
+    }
+
     // ---------------------------------------------------------------- fields
 
-    /// The fields of kernel type `item` (of variant `variant` for an enum), each with its type in
-    /// terms of the item's generic parameters.
+    /// The fields of item `item` (of variant `variant` for an enum), each with its type in terms
+    /// of the item's generic parameters.
     #[must_use]
     pub fn fields(&self, item: ItemId, variant: Option<usize>) -> Vec<(String, Ty)> {
         let it = self.program.item(item);
@@ -461,14 +818,10 @@ impl<'p> Index<'p> {
             },
             _ => return Vec::new(),
         };
-        fields
-            .all()
-            .into_iter()
-            .map(|(n, t)| (n, self.resolver.ty(&it.scope, t)))
-            .collect()
+        fields.all().into_iter().map(|(n, t)| (n, self.resolver.ty(&it.scope, t))).collect()
     }
 
-    /// Every field type of every variant of kernel type `item`, in terms of its parameters.
+    /// Every field type of every variant of item `item`, in terms of its parameters.
     #[must_use]
     pub fn all_field_types(&self, item: ItemId) -> Vec<Ty> {
         match &self.program.item(item).kind {
@@ -480,772 +833,636 @@ impl<'p> Index<'p> {
         }
     }
 
-    /// The type of field `name` of a value of type `ty`: through references, boxes and kernel
-    /// `Deref` implementations; a tuple's element; for a [`Ty::Hidden`], the field of every kernel
-    /// type it may be built from, and the hidden value itself.
+    /// The type of field `name` of a value of type `base`, after auto-dereference; `None` when no
+    /// step has it.
     #[must_use]
-    pub fn field(&self, ty: &Ty, name: &str) -> Vec<Ty> {
-        let mut out = Vec::new();
-        for step in self.deref_steps(ty) {
+    pub fn field_ty(&self, base: &Ty, name: &str, infer: &mut Infer, sigs: ClosureSigs<'_>) -> Option<Ty> {
+        for step in self.autoderef(base, infer, sigs) {
             match &step {
-                Ty::Adt(id, args) => {
-                    let map: Map = self
-                        .program
-                        .item(*id)
-                        .scope
-                        .generics
-                        .iter()
-                        .copied()
-                        .zip(args.iter().cloned())
-                        .collect();
-                    if let Some((_, t)) = self.fields(*id, None).iter().find(|(n, _)| n == name) {
-                        out.push(t.subst(&map));
-                        return out;
+                Ty::Adt(id, args) if matches!(self.program.item(*id).kind, ItemKind::Struct { .. } | ItemKind::Union { .. }) => {
+                    let map: Map = self.program.item(*id).scope.generics.iter().copied().zip(args.iter().cloned()).collect();
+                    if let Some((_, t)) = self.fields(*id, None).into_iter().find(|(n, _)| n == name) {
+                        return Some(t.subst(&map));
                     }
                 }
                 Ty::Tuple(items) => {
                     if let Some(t) = name.parse::<usize>().ok().and_then(|i| items.get(i)) {
-                        out.push(t.clone());
-                        return out;
+                        return Some(t.clone());
                     }
-                }
-                Ty::Hidden(parts) => {
-                    for p in parts {
-                        if let Ty::Adt(..) = p {
-                            out.extend(self.field(p, name));
-                        }
-                    }
-                    out.push(step.clone());
-                    return out;
-                }
-                Ty::Param(_) | Ty::Assoc(..) => {
-                    out.push(Ty::Hidden(step.parts()));
-                    return out;
                 }
                 _ => {}
             }
         }
-        out.push(Ty::Hidden(ty.parts()));
+        None
+    }
+
+    // ---------------------------------------------------------------- dereference
+
+    /// The type `*t` gives through `Deref`: a reference's referent, or a `Deref` implementation's
+    /// target; `None` when there is none.
+    #[must_use]
+    pub fn deref_once(&self, t: &Ty, infer: &mut Infer, sigs: ClosureSigs<'_>) -> Option<Ty> {
+        let t = infer.shallow(t);
+        match &t {
+            Ty::Ref(inner) => Some((**inner).clone()),
+            Ty::Adt(..) | Ty::Param(_) | Ty::Opaque(_) | Ty::Assoc(..) => {
+                let deref = self.lang.trait_named("Deref")?;
+                let target = self.normalize(&Ty::Assoc(Box::new(t.clone()), Some(deref), "Target".to_owned()), infer, sigs);
+                match infer.shallow(&target) {
+                    Ty::Assoc(..) | Ty::Unknown => None,
+                    other => Some(other),
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// The types a receiver of type `t` is tried at, in auto-dereference order, ending with an
+    /// array's slice.
+    #[must_use]
+    pub fn autoderef(&self, t: &Ty, infer: &mut Infer, sigs: ClosureSigs<'_>) -> Vec<Ty> {
+        let mut out = vec![infer.shallow(t)];
+        let mut cur = infer.shallow(t);
+        for _ in 0..DEREF_DEPTH {
+            let Some(next) = self.deref_once(&cur, infer, sigs) else {
+                break;
+            };
+            let next = infer.shallow(&next);
+            if out.contains(&next) {
+                break;
+            }
+            out.push(next.clone());
+            cur = next;
+        }
+        if let Some(Ty::Array(inner)) = out.last().cloned() {
+            out.push(Ty::Slice(inner));
+        }
         out
     }
 
     // ---------------------------------------------------------------- matching
 
-    /// Matches `pattern` (whose parameters in `vars` are unknowns) against `actual`, adding each
-    /// unknown's values to `out`. Heads that differ add nothing; references on one side only are
-    /// looked through; a [`Ty::Hidden`] actual gives every unknown in its pattern the hidden
-    /// value, besides what its parts match.
-    pub fn unify(&self, pattern: &Ty, actual: &Ty, vars: &BTreeSet<GenId>, out: &mut BTreeMap<GenId, Val>) {
-        self.unify_at(pattern, actual, vars, out, 0);
+    /// Fresh variables for implementation `imp`'s generic parameters.
+    fn fresh_impl(&self, imp: ImplId, infer: &mut Infer) -> Map {
+        self.program.imp(imp).scope.generics.iter().map(|g| (*g, infer.fresh())).collect()
     }
 
-    fn unify_at(
+    /// Whether implementation `imp` may apply to `ty` (and, for a trait implementation, with
+    /// trait arguments `trait_args` when given): its header unifies and its bounds may hold. On
+    /// success the unification is kept and the implementation's arguments are returned; on
+    /// failure nothing changes.
+    pub fn match_impl(
         &self,
-        pattern: &Ty,
-        actual: &Ty,
-        vars: &BTreeSet<GenId>,
-        out: &mut BTreeMap<GenId, Val>,
+        imp: ImplId,
+        ty: &Ty,
+        trait_args: Option<&[Ty]>,
+        infer: &mut Infer,
+        sigs: ClosureSigs<'_>,
         depth: usize,
-    ) {
-        if depth > crate::recursion::ty::MAX_DEPTH.saturating_mul(2) {
-            return;
+    ) -> Option<Map> {
+        let info = self.impls.get(imp.0)?;
+        let snap = infer.snapshot();
+        let map = self.fresh_impl(imp, infer);
+        let pattern = info.self_ty.subst(&map);
+        let mut ok = infer.unify(&pattern, ty);
+        if ok
+            && let (Some(args), Some(tr)) = (trait_args, &info.trait_ref)
+        {
+            for (a, b) in tr.args.iter().zip(args) {
+                if !infer.unify(&a.subst(&map), b) {
+                    ok = false;
+                    break;
+                }
+            }
         }
-        let d = depth.saturating_add(1);
-        match (pattern, actual) {
-            (Ty::Param(g), a) if vars.contains(g) => {
-                if !matches!(a, Ty::Infer | Ty::Never) {
-                    out.entry(*g).or_default().add(a.clone());
-                }
-            }
-            (_, Ty::Hidden(parts)) => {
-                let mut free = BTreeSet::new();
-                pattern.walk(&mut |t| {
-                    if let Ty::Param(g) = t
-                        && vars.contains(g)
-                    {
-                        free.insert(*g);
-                    }
-                });
-                for g in free {
-                    out.entry(g).or_default().add(actual.clone());
-                }
-                for p in parts {
-                    self.unify_at(pattern, p, vars, out, d);
-                }
-            }
-            (Ty::Ref(p), Ty::Ref(a)) => self.unify_at(p, a, vars, out, d),
-            (Ty::Ref(p), a) => self.unify_at(p, a, vars, out, d),
-            (p, Ty::Ref(a)) => self.unify_at(p, a, vars, out, d),
-            (Ty::Adt(x, xs), Ty::Adt(y, ys)) if x == y => {
-                for (p, a) in xs.iter().zip(ys) {
-                    self.unify_at(p, a, vars, out, d);
-                }
-            }
-            (Ty::Ext(x, xs), Ty::Ext(y, ys)) if x == y => {
-                for (p, a) in xs.iter().zip(ys) {
-                    self.unify_at(p, a, vars, out, d);
-                }
-            }
-            (Ty::Tuple(xs), Ty::Tuple(ys)) if xs.len() == ys.len() => {
-                for (p, a) in xs.iter().zip(ys) {
-                    self.unify_at(p, a, vars, out, d);
-                }
-            }
-            (Ty::Slice(p) | Ty::Array(p), Ty::Slice(a) | Ty::Array(a)) => {
-                self.unify_at(p, a, vars, out, d);
-            }
-            // A `Vec<T>` given where `[T]` is declared, by deref coercion.
-            (Ty::Slice(p), Ty::Ext(v, ys)) if v == "Vec" => {
-                if let Some(a) = ys.first() {
-                    self.unify_at(p, a, vars, out, d);
-                }
-            }
-            (Ty::Assoc(..), a) => {
-                // A projection's parameters are not fixed by its value; nothing to learn.
-                let _ = a;
-            }
-            _ => {}
+        if ok && !self.bounds_may_hold(imp, &map, infer, sigs, depth) {
+            ok = false;
+        }
+        if ok {
+            Some(map)
+        } else {
+            infer.rollback_to(snap);
+            None
         }
     }
 
-    /// Whether `actual` may be of the form `pattern` (whose parameters in `vars` are unknowns):
-    /// false only when a head differs. Each unknown's values are added to `out`.
-    #[must_use]
-    pub fn may_match(&self, pattern: &Ty, actual: &Ty, vars: &BTreeSet<GenId>, out: &mut BTreeMap<GenId, Val>) -> bool {
-        if !self.heads_agree(pattern, actual, vars, 0) {
-            return false;
+    /// Whether implementation `imp`'s generic parameters, as `map` gives them, may meet their
+    /// bounds.
+    fn bounds_may_hold(&self, imp: ImplId, map: &Map, infer: &mut Infer, sigs: ClosureSigs<'_>, depth: usize) -> bool {
+        if depth >= BOUND_DEPTH {
+            return true;
         }
-        self.unify(pattern, actual, vars, out);
+        for g in &self.program.imp(imp).scope.generics {
+            let Some(value) = map.get(g) else {
+                continue;
+            };
+            for b in self.resolver.bounds(*g) {
+                let b = self.complete(&b, value).map(&mut |x| x.subst(map));
+                if !self.may_implement(value, &b, infer, sigs, depth.saturating_add(1)) {
+                    return false;
+                }
+            }
+        }
         true
     }
 
-    /// Whether `actual` may be of the form `pattern` as far as their heads go (no unknown bound).
-    #[must_use]
-    pub fn heads_agree(&self, pattern: &Ty, actual: &Ty, vars: &BTreeSet<GenId>, depth: usize) -> bool {
-        if depth > crate::recursion::ty::MAX_DEPTH.saturating_mul(2) {
+    /// Whether type `t` may implement `tr`: it is not known well enough to say, or an
+    /// implementation (or a built-in one, for closures and markers) may apply.
+    pub fn may_implement(&self, t: &Ty, tr: &TraitRef, infer: &mut Infer, sigs: ClosureSigs<'_>, depth: usize) -> bool {
+        let t = infer.shallow(t);
+        if matches!(t, Ty::Var(_) | Ty::Unknown | Ty::Never | Ty::Param(_) | Ty::Assoc(..) | Ty::Opaque(_) | Ty::Infer) {
             return true;
         }
-        let d = depth.saturating_add(1);
-        // The analysis does not track references exactly, so their presence never decides.
-        match (pattern.peel(), actual.peel()) {
-            (Ty::Param(g), _) if vars.contains(g) => true,
-            (_, Ty::Hidden(_) | Ty::Param(_) | Ty::Assoc(..) | Ty::Infer | Ty::Never) => true,
-            (Ty::Assoc(..) | Ty::Infer | Ty::Hidden(_), _) => true,
-            (Ty::Ref(p), Ty::Ref(a)) | (Ty::Slice(p), Ty::Slice(a)) | (Ty::Array(p), Ty::Array(a)) => {
-                self.heads_agree(p, a, vars, d)
-            }
-            (Ty::Adt(x, xs), Ty::Adt(y, ys)) => {
-                x == y && xs.iter().zip(ys).all(|(p, a)| self.heads_agree(p, a, vars, d))
-            }
-            (Ty::Ext(x, xs), Ty::Ext(y, ys)) => {
-                x == y && xs.iter().zip(ys).all(|(p, a)| self.heads_agree(p, a, vars, d))
-            }
-            (Ty::Tuple(xs), Ty::Tuple(ys)) => {
-                xs.len() == ys.len() && xs.iter().zip(ys).all(|(p, a)| self.heads_agree(p, a, vars, d))
-            }
-            (Ty::Prim(x), Ty::Prim(y)) => x == y,
-            (Ty::FnPtr(x), Ty::FnPtr(y)) => x == y,
-            (Ty::Dyn(_), Ty::Dyn(_)) => true,
-            _ => false,
+        if self.is_marker(tr.id) {
+            return true;
         }
-    }
-
-    /// The generic parameters of implementation `imp`.
-    #[must_use]
-    pub fn impl_generics(&self, imp: ImplId) -> &[GenId] {
-        &self.program.imp(imp).scope.generics
-    }
-
-    /// Whether implementation `imp` applies to a value of type `ty`, and with which generic
-    /// arguments (one value per parameter; an argument with several values is their hidden
-    /// join, an unfixed one is left open). A blanket implementation applies when its parameter's
-    /// kernel-trait bounds may hold.
-    #[must_use]
-    pub fn impl_for(&self, imp: ImplId, ty: &Ty) -> Option<Map> {
-        self.impl_for_at(imp, ty, 0)
-    }
-
-    fn impl_for_at(&self, imp: ImplId, ty: &Ty, depth: usize) -> Option<Map> {
-        let pattern = self.impl_self.get(imp.0)?;
-        let vars: BTreeSet<GenId> = self.impl_generics(imp).iter().copied().collect();
-        let mut found = BTreeMap::new();
-        // References are not tracked exactly: an implementation for `&T` is taken to apply to
-        // `T` too, which only adds candidates.
-        let applies = self.may_match(pattern, ty, &vars, &mut found);
-        if !applies {
-            return None;
+        if self.is_fn_trait(tr.id) {
+            return matches!(t, Ty::Closure(_) | Ty::FnDef(..) | Ty::FnPtr(..) | Ty::Ref(_))
+                || matches!(&t, Ty::Dyn(ts) if ts.iter().any(|x| self.is_fn_trait(x.id)))
+                || matches!(&t, Ty::Adt(id, _) if Some(*id) == self.lang.boxed);
         }
-        let map = single(&found, &vars);
-        // A blanket implementation's parameter must meet its kernel-trait bounds.
-        if let Ty::Param(g) = pattern.peel()
-            && vars.contains(g)
-            && !self.bounds_may_hold(*g, ty.peel(), depth)
+        if let Ty::Dyn(traits) = &t
+            && traits.iter().any(|x| self.trait_closure(x.id).contains(&tr.id))
         {
-            return None;
-        }
-        Some(map)
-    }
-
-    /// Whether `ty` may meet generic parameter `g`'s kernel-trait bounds: it has an
-    /// implementation of each (to depth [`BOUND_DEPTH`]), or is not known well enough to say.
-    fn bounds_may_hold(&self, g: GenId, ty: &Ty, depth: usize) -> bool {
-        if depth >= BOUND_DEPTH || matches!(ty, Ty::Hidden(_) | Ty::Param(_) | Ty::Assoc(..) | Ty::Infer) {
             return true;
         }
-        let generic = self.program.generic(g);
-        let traits = self.resolver.trait_refs(&generic.scope, generic.bounds.iter());
-        traits.iter().all(|tr| match tr {
-            TraitRef::Kernel(t, _) => self.by_kernel_trait.get(t).is_some_and(|impls| {
-                impls
-                    .iter()
-                    .any(|i| self.impl_for_at(*i, ty, depth.saturating_add(1)).is_some())
-            }),
-            TraitRef::Ext(..) | TraitRef::Fn(..) => true,
+        let snap = infer.snapshot();
+        let found = self
+            .candidates_for(&t, Some(tr.id))
+            .into_iter()
+            .any(|imp| self.match_impl(imp, &t, Some(&tr.args), infer, sigs, depth).is_some());
+        infer.rollback_to(snap);
+        found
+    }
+
+    /// Whether trait `t` has no methods and no associated types: a marker such as `Copy`, `Send`
+    /// or `Eq`, which the check takes to hold wherever it is asked.
+    #[must_use]
+    pub fn is_marker(&self, t: ItemId) -> bool {
+        matches!(&self.program.item(t).kind, ItemKind::Trait { methods, assoc_types, .. }
+            if methods.is_empty() && assoc_types.is_empty())
+    }
+
+    /// Whether trait `t` is `Fn`, `FnMut` or `FnOnce`.
+    #[must_use]
+    pub fn is_fn_trait(&self, t: ItemId) -> bool {
+        ["Fn", "FnMut", "FnOnce"].iter().any(|n| self.lang.trait_named(n) == Some(t))
+    }
+
+    /// The implementations (of trait `tr`, when given) that may apply to a type with `t`'s head:
+    /// those filed under its head, and the blanket ones.
+    fn candidates_for(&self, t: &Ty, tr: Option<ItemId>) -> Vec<ImplId> {
+        let mut out: Vec<ImplId> = Vec::new();
+        if let Some(h) = head(t)
+            && let Some(list) = self.by_head.get(&h)
+        {
+            out.extend(list.iter().copied());
+        }
+        out.extend(self.blanket.iter().copied());
+        if let Some(tr) = tr {
+            out.retain(|i| self.impls.get(i.0).and_then(|x| x.trait_ref.as_ref()).is_some_and(|x| x.id == tr));
+        }
+        out.sort();
+        out.dedup();
+        out
+    }
+
+    // ---------------------------------------------------------------- selection
+
+    /// The implementations of trait `tr` that type `t` may use, each with its arguments, kept in
+    /// `infer` when exactly one applies; a generic `t` gives none (see [`Index::probe`]).
+    pub fn select(&self, t: &Ty, tr: &TraitRef, infer: &mut Infer, sigs: ClosureSigs<'_>) -> Vec<(ImplId, Map)> {
+        let t = infer.shallow(t);
+        if matches!(t, Ty::Var(_) | Ty::Unknown | Ty::Param(_) | Ty::Assoc(..) | Ty::Opaque(_) | Ty::Dyn(_)) {
+            return Vec::new();
+        }
+        let tr = self.complete(tr, &t);
+        let mut found = Vec::new();
+        for imp in self.candidates_for(&t, Some(tr.id)) {
+            let snap = infer.snapshot();
+            if let Some(map) = self.match_impl(imp, &t, Some(&tr.args), infer, sigs, 0) {
+                found.push((imp, map));
+            }
+            infer.rollback_to(snap);
+        }
+        if let [(imp, _)] = found.as_slice() {
+            let imp = *imp;
+            if let Some(map) = self.match_impl(imp, &t, Some(&tr.args), infer, sigs, 0) {
+                return vec![(imp, map)];
+            }
+        }
+        found
+    }
+
+    /// The function implementation `imp` runs for trait method `name`: its own, or the trait's
+    /// default body; with generic arguments from `map` (the implementation's), `Self` being
+    /// `self_ty`, and `method_args` for the method's own parameters.
+    #[must_use]
+    pub fn impl_fn(&self, imp: ImplId, name: &str, map: &Map, self_ty: &Ty, method_args: &[Ty]) -> Option<(NodeId, Vec<Ty>)> {
+        let it = self.program.imp(imp);
+        if let Some(node) = it.methods.get(name).and_then(|v| v.first()) {
+            let generics = self.node_generics(*node);
+            let own = self.program.imp(imp).scope.generics.len();
+            let mut args: Vec<Ty> = generics.iter().take(own).map(|g| map.get(g).cloned().unwrap_or(Ty::Param(*g))).collect();
+            args.extend(method_args.iter().cloned());
+            while args.len() < generics.len() {
+                args.push(Ty::Infer);
+            }
+            return Some((*node, args));
+        }
+        let tr = self.impls.get(imp.0)?.trait_ref.as_ref()?;
+        let tr = tr.map(&mut |x| x.subst(map));
+        self.default_fn(&tr, name, self_ty, method_args)
+    }
+
+    /// Trait `tr`'s default body for method `name` (from `tr` or a supertrait) with `Self` as
+    /// `self_ty`: the node and its instance arguments.
+    #[must_use]
+    pub fn default_fn(&self, tr: &TraitRef, name: &str, self_ty: &Ty, method_args: &[Ty]) -> Option<(NodeId, Vec<Ty>)> {
+        for sup in self.supertraits(tr, self_ty) {
+            let item = self.program.item(sup.id);
+            let ItemKind::Trait { defaults, .. } = &item.kind else {
+                continue;
+            };
+            let Some(node) = defaults.get(name) else {
+                continue;
+            };
+            let generics = self.node_generics(*node);
+            let mut args = vec![self_ty.clone()];
+            args.extend(sup.args.iter().cloned());
+            args.truncate(item.scope.generics.len().saturating_add(1));
+            while args.len() < item.scope.generics.len().saturating_add(1) {
+                args.push(Ty::Infer);
+            }
+            args.extend(method_args.iter().cloned());
+            while args.len() < generics.len() {
+                args.push(Ty::Infer);
+            }
+            args.truncate(generics.len());
+            return Some((*node, args));
+        }
+        None
+    }
+
+    /// The derived implementation of trait `trait_name` for item `item`, if it derives one that
+    /// provides method `name`.
+    #[must_use]
+    pub fn derived_fn(&self, item: ItemId, trait_name: &str, name: &str) -> Option<NodeId> {
+        self.derived.get(&item)?.iter().find_map(|(t, node)| {
+            (t == trait_name && DERIVABLE.iter().any(|(d, m)| d == t && m.contains(&name))).then_some(*node)
         })
     }
 
-    /// The implementations of kernel trait `t` and of outside traits named `ext` whose self type
-    /// may be `ty`, each with its generic arguments.
-    #[must_use]
-    pub fn impls_of_for(&self, kernel: Option<ItemId>, ext: Option<&str>, ty: &Ty) -> Vec<(ImplId, Map)> {
-        let mut out = Vec::new();
-        let ids: Vec<ImplId> = kernel
-            .and_then(|t| self.by_kernel_trait.get(&t))
-            .into_iter()
-            .chain(ext.and_then(|n| self.by_ext_trait.get(n)))
-            .flatten()
-            .copied()
-            .collect();
-        for imp in ids {
-            if let Some(map) = self.impl_for(imp, ty) {
-                out.push((imp, map));
+    // ---------------------------------------------------------------- method lookup
+
+    /// What `receiver.name(...)` calls, the receiver being of type `recv`: the candidates of the
+    /// first auto-dereference step (by value, then by reference; inherent before trait) at which
+    /// any receiver unifies, with the receiver's type there. Variables are bound only when one
+    /// candidate is found.
+    pub fn probe(&self, recv: &Ty, name: &str, infer: &mut Infer, sigs: ClosureSigs<'_>) -> (Vec<Pick>, Option<Ty>) {
+        let steps = self.autoderef(recv, infer, sigs);
+        let mut heads: Vec<ImplId> = Vec::new();
+        for s in &steps {
+            heads.extend(self.candidates_for(s, None));
+            if let Ty::Ref(inner) = s {
+                heads.extend(self.candidates_for(inner, None));
             }
         }
-        out
-    }
-
-    // ---------------------------------------------------------------- associated types
-
-    /// The type with its associated types resolved where the kernel's implementations say what
-    /// they are; a projection of an outside or unknown type becomes a hidden value of its base's
-    /// parts (an outside type's associated types are built from its arguments); one of an open
-    /// parameter stays.
-    #[must_use]
-    pub fn normalize(&self, ty: &Ty) -> Ty {
-        self.normalize_at(ty, 0)
-    }
-
-    fn normalize_at(&self, ty: &Ty, depth: usize) -> Ty {
-        if depth > crate::recursion::ty::MAX_DEPTH.saturating_mul(2) {
-            return Ty::Hidden(ty.parts());
-        }
-        let d = depth.saturating_add(1);
-        let all = |args: &[Ty]| args.iter().map(|a| self.normalize_at(a, d)).collect::<Vec<_>>();
-        match ty {
-            Ty::Assoc(base, name) => {
-                let base = self.normalize_at(base, d);
-                if let Some(t) = self.assoc_of(&base, name, d) {
-                    return t;
-                }
-                match base.peel() {
-                    Ty::Param(_) | Ty::Assoc(..) => Ty::Assoc(Box::new(base), name.clone()),
-                    _ => Ty::Hidden(base.parts()),
-                }
-            }
-            Ty::Adt(id, args) => Ty::Adt(*id, all(args)),
-            Ty::Ext(n, args) => Ty::Ext(n.clone(), all(args)),
-            Ty::Ref(inner) => Ty::Ref(Box::new(self.normalize_at(inner, d))),
-            Ty::Slice(inner) => Ty::Slice(Box::new(self.normalize_at(inner, d))),
-            Ty::Array(inner) => Ty::Array(Box::new(self.normalize_at(inner, d))),
-            Ty::Tuple(items) => Ty::Tuple(all(items)),
-            Ty::Hidden(parts) => {
-                let mut out = BTreeSet::new();
-                for p in parts {
-                    match self.normalize_at(p, d) {
-                        Ty::Hidden(inner) => out.extend(inner),
-                        other => {
-                            out.insert(other);
-                        }
+        heads.sort();
+        heads.dedup();
+        for step in &steps {
+            for autoref in [false, true] {
+                let adjusted = if autoref { Ty::reference(step.clone()) } else { step.clone() };
+                for inherent in [true, false] {
+                    let picks = self.picks_at(step, &adjusted, name, inherent, &heads, infer, sigs);
+                    if !picks.is_empty() {
+                        return (picks, Some(adjusted));
                     }
                 }
-                Ty::Hidden(out)
             }
-            other => other.clone(),
         }
+        (Vec::new(), None)
     }
 
-    /// Associated type `name` of `base` from a kernel implementation that applies to it.
-    fn assoc_of(&self, base: &Ty, name: &str, depth: usize) -> Option<Ty> {
-        let mut found: Vec<Ty> = Vec::new();
-        for (i, imp) in self.program.impls.iter().enumerate() {
-            let Some(t) = imp.assoc.get(name) else {
+    /// The candidates at one step: implementation methods (inherent ones, or trait ones and
+    /// derived ones) whose receiver unifies with `adjusted`; for a generic or trait-object step,
+    /// the methods of its bounds.
+    #[allow(clippy::too_many_arguments, reason = "the lookup's state at one step")]
+    fn picks_at(
+        &self,
+        step: &Ty,
+        adjusted: &Ty,
+        name: &str,
+        inherent: bool,
+        heads: &[ImplId],
+        infer: &mut Infer,
+        sigs: ClosureSigs<'_>,
+    ) -> Vec<Pick> {
+        let mut found: Vec<(Pick, Ty)> = Vec::new();
+        for &imp in heads {
+            let Some(info) = self.impls.get(imp.0) else {
                 continue;
             };
-            let id = ImplId(i);
-            let Some(map) = self.impl_for(id, base) else {
+            if info.trait_ref.is_some() == inherent {
                 continue;
-            };
-            let written = self.resolver.ty(&imp.scope, t).subst(&map);
-            found.push(self.normalize_at(&written, depth));
-        }
-        match found.len() {
-            0 => None,
-            1 => found.pop(),
-            _ => {
-                let mut parts = BTreeSet::new();
-                for f in &found {
-                    parts.insert(f.clone());
-                }
-                Some(Ty::Hidden(parts))
             }
-        }
-    }
-
-    // ---------------------------------------------------------------- dispatch
-
-    /// The types a receiver of type `ty` is tried at, in auto-dereference order: itself, then
-    /// through references, `Box`, `Rc`, `Arc`, kernel `Deref` implementations, `Vec` to slice,
-    /// `String` to `str` and array to slice, at most [`DEREF_DEPTH`] steps.
-    #[must_use]
-    pub fn deref_steps(&self, ty: &Ty) -> Vec<Ty> {
-        let mut out = vec![ty.clone()];
-        let mut cur = ty.clone();
-        for _ in 0..DEREF_DEPTH {
-            let next = match &cur {
-                Ty::Ref(inner) => Some((**inner).clone()),
-                Ty::Ext(name, args) if matches!(name.as_str(), "Box" | "Rc" | "Arc" | "Cow") => {
-                    args.first().cloned()
-                }
-                Ty::Ext(name, args) if name == "Vec" => {
-                    args.first().map(|a| Ty::Slice(Box::new(a.clone())))
-                }
-                Ty::Ext(name, _) if name == "String" => Some(Ty::prim("str")),
-                Ty::Array(inner) => Some(Ty::Slice(inner.clone())),
-                Ty::Adt(..) => self
-                    .impls_of_for(None, Some("Deref"), &cur)
-                    .first()
-                    .and_then(|(imp, map)| {
-                        let it = self.program.imp(*imp);
-                        it.assoc
-                            .get("Target")
-                            .map(|t| self.normalize(&self.resolver.ty(&it.scope, t).subst(map)))
-                    }),
-                _ => None,
-            };
-            match next {
-                Some(n) if !out.contains(&n) => {
-                    out.push(n.clone());
-                    cur = n;
-                }
-                _ => break,
-            }
-        }
-        out
-    }
-
-    /// The kernel functions `receiver.name(...)` may run on a receiver of type `ty`, with
-    /// auto-dereference, and the steps at which the method may be one from outside the kernel.
-    #[must_use]
-    pub fn method(&self, ty: &Ty, name: &str) -> Found {
-        let mut found = Found::default();
-        for step in self.deref_steps(ty) {
-            let here = self.on(&step, name, how::RECEIVER);
-            let kernel_type = matches!(step, Ty::Adt(..));
-            let hit = !here.targets.is_empty();
-            found.targets.extend(here.targets);
-            found.outside.extend(here.outside);
-            if hit && kernel_type {
-                break;
-            }
-        }
-        found
-    }
-
-    /// The kernel functions `Type::name(...)` may run, `Type` being `ty`: no auto-dereference.
-    #[must_use]
-    pub fn assoc(&self, ty: &Ty, name: &str) -> Found {
-        self.on(ty, name, how::PATH)
-    }
-
-    /// The candidates for method `name` on a value of type `ty` exactly.
-    fn on(&self, ty: &Ty, name: &str, how_found: &'static str) -> Found {
-        let mut found = Found::default();
-        match ty {
-            Ty::Param(g) => {
-                let traits = self.resolver.bounds(*g);
-                found.targets.extend(self.bound_impls(&traits, name, ty));
-                found.outside.insert(ty.clone());
-            }
-            Ty::Dyn(traits) | Ty::Opaque(traits) => {
-                let all = self.resolver.with_supertraits(traits.clone());
-                found.targets.extend(self.bound_impls(&all, name, ty));
-                if all.iter().any(|t| t.ext_name().is_some()) {
-                    found.outside.insert(ty.clone());
-                }
-            }
-            Ty::Assoc(..) => {
-                found.targets.extend(self.by_name(name));
-                found.outside.insert(ty.clone());
-            }
-            Ty::Hidden(parts) => {
-                for p in parts {
-                    let sub = self.method(p, name);
-                    found.targets.extend(sub.targets);
-                    found.outside.extend(sub.outside);
-                }
-                found.targets.extend(self.outside_type_impls(name));
-                found.outside.insert(ty.clone());
-            }
-            Ty::Never | Ty::Infer => {}
-            _ => {
-                found.targets.extend(self.concrete(ty, name, how_found));
-                let kernel_type = matches!(ty, Ty::Adt(..));
-                if !kernel_type || found.targets.is_empty() {
-                    found.outside.insert(ty.clone());
-                }
-            }
-        }
-        found
-    }
-
-    /// The candidates for `name` on a known type: inherent methods, trait implementations and
-    /// their unoverridden default bodies, derived implementations.
-    fn concrete(&self, ty: &Ty, name: &str, how_found: &'static str) -> Vec<Target> {
-        let mut out = Vec::new();
-        for (i, imp) in self.program.impls.iter().enumerate() {
-            let id = ImplId(i);
-            let provides = imp.methods.contains_key(name)
-                || self.default_of_impl(id, name).is_some();
+            let provides = self.program.imp(imp).methods.contains_key(name)
+                || info.trait_ref.as_ref().is_some_and(|tr| self.trait_default_exists(tr.id, name));
             if !provides {
                 continue;
             }
-            let Some(map) = self.impl_for(id, ty) else {
-                continue;
+            let snap = infer.snapshot();
+            let map = self.fresh_impl(imp, infer);
+            let self_ty = info.self_ty.subst(&map);
+            let ok = match self.impl_fn(imp, name, &map, &self_ty, &[]) {
+                Some((node, args)) => {
+                    let args = self.fill_infer(args, infer);
+                    let recv_ty = self.receiver_of(node, &args);
+                    match recv_ty {
+                        Some(r) if infer.unify(&r, adjusted) && self.bounds_may_hold(imp, &map, infer, sigs, 0) => {
+                            Some((Pick::Node { node, args }, self_ty))
+                        }
+                        _ => None,
+                    }
+                }
+                None => None,
             };
-            out.extend(self.impl_targets(id, name, &map, ty, how_found));
-        }
-        if let Ty::Adt(item, args) = ty {
-            out.extend(self.derived_targets(*item, args, name));
-        }
-        out
-    }
-
-    /// The functions implementation `imp` runs for method `name`: its own, or its trait's default
-    /// body (with `Self` as `self_ty`).
-    fn impl_targets(&self, imp: ImplId, name: &str, map: &Map, self_ty: &Ty, how_found: &'static str) -> Vec<Target> {
-        let it = self.program.imp(imp);
-        if let Some(nodes) = it.methods.get(name) {
-            return nodes
-                .iter()
-                .map(|n| Target {
-                    node: *n,
-                    map: map.clone(),
-                    how: how_found,
-                })
-                .collect();
-        }
-        let Some((node, self_gen, trait_args)) = self.default_of_impl(imp, name) else {
-            return Vec::new();
-        };
-        let mut m = Map::new();
-        m.insert(self_gen, self_ty.clone());
-        // The trait's own parameters, as the implementation's trait reference fixes them.
-        if let Some(Some(TraitRef::Kernel(t, _))) = self.impl_trait.get(imp.0) {
-            let trait_generics = &self.program.item(*t).scope.generics;
-            for (g, a) in trait_generics.iter().zip(trait_args) {
-                m.insert(*g, a.subst(map));
+            infer.rollback_to(snap);
+            if let Some(p) = ok {
+                found.push(p);
             }
         }
-        vec![Target {
-            node,
-            map: m,
-            how: how_found,
-        }]
+        if !inherent {
+            // Derived implementations of the step's type.
+            let target = match adjusted {
+                Ty::Ref(inner) => (**inner).clone(),
+                other => other.clone(),
+            };
+            if let Ty::Adt(item, args) = infer.shallow(&target)
+                && matches!(adjusted, Ty::Ref(_))
+            {
+                for (t, node) in self.derived.get(&item).into_iter().flatten() {
+                    if DERIVABLE.iter().any(|(d, m)| d == t && m.contains(&name)) && self.program.node(*node).is_some_and(|n| n.ident == name) {
+                        found.push((Pick::Node { node: *node, args: args.clone() }, target.clone()));
+                    }
+                }
+            }
+            // Methods of the bounds of a generic receiver, and of a trait object's traits.
+            let referent = match adjusted {
+                Ty::Ref(inner) => infer.shallow(inner),
+                other => infer.shallow(other),
+            };
+            let _ = step;
+            if matches!(referent, Ty::Param(_) | Ty::Opaque(_) | Ty::Assoc(..) | Ty::Dyn(_)) {
+                for tr in self.bounds_of_ty(&referent) {
+                    let Some(decl) = self.trait_declaring_method(tr.id, name) else {
+                        continue;
+                    };
+                    if decl != tr.id {
+                        continue;
+                    }
+                    let Some((sig, generics)) = self.trait_method(tr.id, name) else {
+                        continue;
+                    };
+                    if !sig.receiver {
+                        continue;
+                    }
+                    let mut map = Map::new();
+                    if let Some(sg) = generics.first() {
+                        map.insert(*sg, referent.clone());
+                    }
+                    for (g, a) in self.program.item(tr.id).scope.generics.iter().zip(&tr.args) {
+                        map.insert(*g, a.clone());
+                    }
+                    let snap = infer.snapshot();
+                    let recv = sig.inputs.first().map(|r| self.fill_infer_ty(&r.subst(&map), infer));
+                    let ok = recv.is_some_and(|r| infer.unify(&r, adjusted));
+                    infer.rollback_to(snap);
+                    if ok {
+                        let pick = if matches!(referent, Ty::Dyn(_)) {
+                            Pick::Dyn { trait_ref: tr.clone(), self_ty: referent.clone() }
+                        } else {
+                            Pick::Bound { trait_ref: tr.clone(), self_ty: referent.clone() }
+                        };
+                        if !found.iter().any(|(p, _)| *p == pick) {
+                            found.push((pick, referent.clone()));
+                        }
+                    }
+                }
+            }
+        }
+        if let [(Pick::Node { node, args }, _)] = found.as_slice() {
+            // One candidate: keep what it fixes.
+            if let Some(r) = self.receiver_of(*node, args) {
+                let _ = infer.unify(&r, adjusted);
+            }
+        }
+        found.into_iter().map(|(p, _)| p).collect()
     }
 
-    /// The default body implementation `imp` takes for method `name`, if it does not define it:
-    /// the node, its trait's `Self` parameter and the implementation's trait arguments.
-    fn default_of_impl(&self, imp: ImplId, name: &str) -> Option<(NodeId, GenId, Vec<Ty>)> {
-        let Some(Some(TraitRef::Kernel(t, args))) = self.impl_trait.get(imp.0) else {
-            return None;
-        };
-        if self.program.imp(imp).methods.contains_key(name) {
+    /// Whether trait `t` or a supertrait has a default body for method `name`.
+    fn trait_default_exists(&self, t: ItemId, name: &str) -> bool {
+        self.trait_closure(t)
+            .iter()
+            .any(|x| matches!(&self.program.item(*x).kind, ItemKind::Trait { defaults, .. } if defaults.contains_key(name)))
+    }
+
+    /// The receiver type of node `node`'s instance with arguments `args`, if it has a receiver.
+    #[must_use]
+    pub fn receiver_of(&self, node: NodeId, args: &[Ty]) -> Option<Ty> {
+        let sig = self.sig(node)?;
+        if !sig.receiver {
             return None;
         }
-        let (node, self_gen) = self.trait_default(*t, name)?;
-        Some((node, self_gen, args.clone()))
+        let map = self.map_of(node, args);
+        sig.inputs.first().map(|t| t.subst(&map))
     }
 
-    /// The default body of kernel trait `t`'s method `name`, or of a supertrait's, with that
-    /// trait's `Self` parameter.
-    #[must_use]
-    pub fn trait_default(&self, t: ItemId, name: &str) -> Option<(NodeId, GenId)> {
-        let traits = self
-            .resolver
-            .with_supertraits(vec![TraitRef::Kernel(t, Vec::new())]);
-        traits.iter().find_map(|tr| match tr {
-            TraitRef::Kernel(id, _) => match &self.program.item(*id).kind {
-                ItemKind::Trait {
-                    defaults, self_gen, ..
-                } => defaults.get(name).map(|n| (*n, *self_gen)),
-                _ => None,
-            },
-            TraitRef::Ext(..) | TraitRef::Fn(..) => None,
+    /// `args` with every `_` a fresh variable.
+    pub fn fill_infer(&self, args: Vec<Ty>, infer: &mut Infer) -> Vec<Ty> {
+        args.into_iter().map(|a| self.fill_infer_ty(&a, infer)).collect()
+    }
+
+    /// `t` with every `_` a fresh variable.
+    pub fn fill_infer_ty(&self, t: &Ty, infer: &mut Infer) -> Ty {
+        t.fold(&mut |x| match x {
+            Ty::Infer => Some(infer.fresh()),
+            _ => None,
         })
     }
 
-    /// The derived implementations of `item` that provide method `name`.
-    fn derived_targets(&self, item: ItemId, args: &[Ty], name: &str) -> Vec<Target> {
-        let map: Map = self
-            .program
-            .item(item)
-            .scope
-            .generics
-            .iter()
-            .copied()
-            .zip(args.iter().cloned())
-            .collect();
-        self.derived
-            .get(&item)
-            .into_iter()
-            .flatten()
-            .filter(|(t, _)| {
-                DERIVABLE
-                    .iter()
-                    .any(|(d, methods)| d == t && methods.contains(&name))
-            })
-            .map(|(_, n)| Target {
-                node: *n,
-                map: map.clone(),
-                how: how::DERIVED,
-            })
-            .collect()
-    }
+    // ---------------------------------------------------------------- paths
 
-    /// Every implementation of `traits` (kernel ones, and outside ones by name, derived
-    /// implementations included) that provides method `name`, for a call on a value of type `on`
-    /// whose instantiation is not known: class hierarchy analysis.
-    #[must_use]
-    pub fn bound_impls(&self, traits: &[TraitRef], name: &str, on: &Ty) -> Vec<Target> {
+    /// The functions `Type::name` may name, `Type` being `base`: inherent associated functions,
+    /// then trait implementations' functions (and default bodies), each with its arguments (the
+    /// implementation's fixed by matching `base`). For a generic `base`, the bounds' methods.
+    pub fn assoc_fns(&self, base: &Ty, name: &str, infer: &mut Infer, sigs: ClosureSigs<'_>) -> Vec<Pick> {
+        let base = infer.shallow(base);
         let mut out = Vec::new();
-        for tr in traits {
-            let ids: Vec<ImplId> = match tr {
-                TraitRef::Kernel(t, _) => self.by_kernel_trait.get(t).cloned().unwrap_or_default(),
-                TraitRef::Ext(n, _) | TraitRef::Fn(n, ..) => {
-                    self.by_ext_trait.get(n).cloned().unwrap_or_default()
-                }
-            };
-            for imp in ids {
-                let open: Map = self
-                    .impl_generics(imp)
-                    .iter()
-                    .map(|g| (*g, Ty::Param(*g)))
-                    .collect();
-                let self_ty = self.impl_self.get(imp.0).cloned().unwrap_or_else(Ty::unknown);
-                for mut t in self.impl_targets(imp, name, &open, &self_ty, how::BOUND) {
-                    t.map.retain(|_, v| !matches!(v, Ty::Param(_)));
-                    out.push(t);
+        if matches!(base, Ty::Param(_) | Ty::Opaque(_) | Ty::Assoc(..) | Ty::Dyn(_)) {
+            for tr in self.bounds_of_ty(&base) {
+                if self.trait_declaring_method(tr.id, name) == Some(tr.id) {
+                    let pick = if matches!(base, Ty::Dyn(_)) {
+                        Pick::Dyn { trait_ref: tr, self_ty: base.clone() }
+                    } else {
+                        Pick::Bound { trait_ref: tr, self_ty: base.clone() }
+                    };
+                    out.push(pick);
                 }
             }
-            if let TraitRef::Kernel(t, _) = tr
-                && let Some((node, self_gen)) = self.trait_default(*t, name)
-            {
-                out.push(Target {
-                    node,
-                    map: BTreeMap::from([(self_gen, on.clone())]),
-                    how: how::BOUND,
+            return out;
+        }
+        for inherent in [true, false] {
+            for imp in self.candidates_for(&base, None) {
+                let Some(info) = self.impls.get(imp.0) else {
+                    continue;
+                };
+                if info.trait_ref.is_some() == inherent {
+                    continue;
+                }
+                let provides = self.program.imp(imp).methods.contains_key(name)
+                    || info.trait_ref.as_ref().is_some_and(|tr| self.trait_default_exists(tr.id, name));
+                if !provides {
+                    continue;
+                }
+                let snap = infer.snapshot();
+                let picked = self.match_impl(imp, &base, None, infer, sigs, 0).and_then(|map| {
+                    let self_ty = info.self_ty.subst(&map);
+                    self.impl_fn(imp, name, &map, &self_ty, &[])
                 });
+                infer.rollback_to(snap);
+                if let Some((node, args)) = picked {
+                    out.push(Pick::Node { node, args });
+                }
             }
-            if let TraitRef::Ext(n, _) = tr
-                && DERIVABLE.iter().any(|(d, m)| d == n && m.contains(&name))
-            {
-                for list in self.derived.values() {
-                    for (t, node) in list {
-                        if t == n {
-                            out.push(Target {
-                                node: *node,
-                                map: Map::new(),
-                                how: how::BOUND,
-                            });
-                        }
-                    }
+            if inherent && !out.is_empty() {
+                return out;
+            }
+        }
+        if let Ty::Adt(item, args) = &base {
+            for (t, node) in self.derived.get(item).into_iter().flatten() {
+                if DERIVABLE.iter().any(|(d, m)| d == t && m.contains(&name)) {
+                    out.push(Pick::Node { node: *node, args: args.clone() });
                 }
             }
         }
         out
     }
 
-    /// Every method named `name` of every implementation and trait default body: what a call on a
-    /// projection of an open parameter may run.
-    fn by_name(&self, name: &str) -> Vec<Target> {
-        let mut out = Vec::new();
-        for imp in &self.program.impls {
-            for n in imp.methods.get(name).into_iter().flatten() {
-                out.push(Target {
-                    node: *n,
-                    map: Map::new(),
-                    how: how::BOUND,
-                });
+    /// The type of associated constant `name` of `base`: from an implementation for it, or a
+    /// trait among a generic `base`'s bounds.
+    pub fn assoc_const(&self, base: &Ty, name: &str, infer: &mut Infer, sigs: ClosureSigs<'_>) -> Option<Ty> {
+        let base = infer.shallow(base);
+        if matches!(base, Ty::Param(_) | Ty::Opaque(_) | Ty::Assoc(..)) {
+            for tr in self.bounds_of_ty(&base) {
+                let item = self.program.item(tr.id);
+                if let ItemKind::Trait { consts, self_gen, .. } = &item.kind
+                    && let Some(t) = consts.get(name)
+                {
+                    let mut map: Map = item.scope.generics.iter().copied().zip(tr.args.iter().cloned()).collect();
+                    map.insert(*self_gen, base.clone());
+                    return Some(self.resolver.ty(&item.scope, t).subst(&map));
+                }
             }
+            return None;
         }
-        for item in &self.program.items {
-            if let ItemKind::Trait { defaults, .. } = &item.kind
-                && let Some(n) = defaults.get(name)
-            {
-                out.push(Target {
-                    node: *n,
-                    map: Map::new(),
-                    how: how::BOUND,
-                });
-            }
-        }
-        out
-    }
-
-    /// The kernel implementations for outside types (primitives, outside types, slices, arrays,
-    /// tuples, references) and blanket ones that provide method `name`: what a value of unknown
-    /// type may run besides its listed parts' methods.
-    fn outside_type_impls(&self, name: &str) -> Vec<Target> {
-        let mut out = Vec::new();
-        for (i, imp) in self.program.impls.iter().enumerate() {
-            let id = ImplId(i);
-            let Some(self_ty) = self.impl_self.get(i) else {
+        for imp in self.candidates_for(&base, None) {
+            let it = self.program.imp(imp);
+            let Some(t) = it.consts.get(name) else {
                 continue;
             };
-            if matches!(self_ty.peel(), Ty::Adt(..)) {
-                continue;
-            }
-            if !imp.methods.contains_key(name) && self.default_of_impl(id, name).is_none() {
-                continue;
-            }
-            let open: Map = self
-                .impl_generics(id)
-                .iter()
-                .map(|g| (*g, Ty::Param(*g)))
-                .collect();
-            for mut t in self.impl_targets(id, name, &open, self_ty, how::OUTSIDE_TYPE) {
-                t.map.retain(|_, v| !matches!(v, Ty::Param(_)));
-                out.push(t);
+            let snap = infer.snapshot();
+            let found = self.match_impl(imp, &base, None, infer, sigs, 0).map(|map| {
+                let mut scope = it.scope.clone();
+                scope.self_ref = SelfRef::Impl(imp);
+                self.resolver.ty(&scope, t).subst(&map)
+            });
+            infer.rollback_to(snap);
+            if found.is_some() {
+                return found;
             }
         }
-        out
+        None
     }
 
-    /// Every implementation of an outside trait that outside code handed values built from
-    /// `parts` may call back: each trait implementation (written or derived) of an outside trait
-    /// whose self type may be one of the parts, or whose trait arguments name a kernel type among
-    /// them; with `traits`, only those traits.
-    #[must_use]
-    pub fn outside_impls(&self, parts: &BTreeSet<Ty>, traits: Option<&[&str]>) -> Vec<Target> {
-        let mut out = Vec::new();
-        let kernel_items: BTreeSet<ItemId> = parts
-            .iter()
-            .filter_map(|p| match p {
-                Ty::Adt(id, _) => Some(*id),
-                _ => None,
-            })
-            .collect();
-        let wanted = |name: &str| traits.is_none_or(|ts| ts.contains(&name));
-        for (tname, ids) in &self.by_ext_trait {
-            if !wanted(tname) {
-                continue;
+    // ---------------------------------------------------------------- normalisation
+
+    /// `t` with its projections resolved where the implementations, bounds or closure signatures
+    /// say what they are; a projection whose base is not known yet stays.
+    pub fn normalize(&self, t: &Ty, infer: &mut Infer, sigs: ClosureSigs<'_>) -> Ty {
+        self.normalize_at(t, infer, sigs, 0)
+    }
+
+    fn normalize_at(&self, t: &Ty, infer: &mut Infer, sigs: ClosureSigs<'_>, depth: usize) -> Ty {
+        if depth > crate::recursion::ty::MAX_DEPTH.saturating_mul(2) {
+            return Ty::Unknown;
+        }
+        let t = infer.resolve(t);
+        if !t.any(&|x| matches!(x, Ty::Assoc(..))) {
+            return t;
+        }
+        t.fold(&mut |x| match x {
+            Ty::Assoc(base, tr, name) => Some(self.project(base, *tr, name, infer, sigs, depth)),
+            _ => None,
+        })
+    }
+
+    /// `<base as tr>::name`.
+    fn project(&self, base: &Ty, tr: Option<ItemId>, name: &str, infer: &mut Infer, sigs: ClosureSigs<'_>, depth: usize) -> Ty {
+        let keep = || Ty::Assoc(Box::new(base.clone()), tr, name.to_owned());
+        let base = infer.shallow(base);
+        match &base {
+            Ty::Var(_) | Ty::Unknown | Ty::Infer => keep(),
+            Ty::Param(_) | Ty::Opaque(_) | Ty::Dyn(_) | Ty::Assoc(..) => {
+                for b in self.bounds_of_ty(&base) {
+                    if let Some(t) = b.binding(name) {
+                        return self.normalize_at(t, infer, sigs, depth.saturating_add(1));
+                    }
+                }
+                keep()
             }
-            for imp in ids {
-                let it = self.program.imp(*imp);
-                let mut maps: Vec<Map> = Vec::new();
-                for p in parts {
-                    if matches!(p, Ty::Adt(..) | Ty::Ext(..) | Ty::Prim(_) | Ty::Param(_))
-                        && let Some(map) = self.impl_for(*imp, p)
-                    {
-                        maps.push(map);
+            Ty::Closure(k) if name == "Output" => sigs(k).map_or_else(keep, |(_, out)| out),
+            Ty::FnDef(n, args) if name == "Output" => {
+                let map = self.map_of(*n, args);
+                self.sig(*n).map_or_else(keep, |s| s.output.subst(&map))
+            }
+            Ty::FnPtr(_, out) if name == "Output" => (**out).clone(),
+            Ty::Ref(inner) if name == "Output" && matches!(infer.shallow(inner), Ty::Closure(_) | Ty::FnDef(..) | Ty::FnPtr(..)) => {
+                self.project(inner, tr, name, infer, sigs, depth)
+            }
+            _ => {
+                let traits: Vec<ItemId> = match tr {
+                    Some(t) => vec![t],
+                    None => self
+                        .candidates_for(&base, None)
+                        .into_iter()
+                        .filter(|i| self.program.imp(*i).assoc.contains_key(name))
+                        .filter_map(|i| self.impls.get(i.0).and_then(|x| x.trait_ref.as_ref()).map(|x| x.id))
+                        .collect(),
+                };
+                for t in traits {
+                    for imp in self.candidates_for(&base, Some(t)) {
+                        let it = self.program.imp(imp);
+                        let Some(written) = it.assoc.get(name) else {
+                            continue;
+                        };
+                        let snap = infer.snapshot();
+                        let Some(map) = self.match_impl(imp, &base, None, infer, sigs, 0) else {
+                            continue;
+                        };
+                        let mut scope = it.scope.clone();
+                        scope.self_ref = SelfRef::Impl(imp);
+                        let resolved = self.resolver.ty(&scope, written).subst(&map);
+                        let out = self.normalize_at(&resolved, infer, sigs, depth.saturating_add(1));
+                        let out = infer.resolve(&out);
+                        infer.rollback_to(snap);
+                        return out;
                     }
                 }
-                let names_part = self.impl_trait.get(imp.0).and_then(Option::as_ref).is_some_and(|tr| {
-                    let mut hit = false;
-                    for a in tr.args() {
-                        a.walk(&mut |t| {
-                            if let Ty::Adt(id, _) = t
-                                && kernel_items.contains(id)
-                            {
-                                hit = true;
-                            }
-                        });
-                    }
-                    hit
-                });
-                if maps.is_empty() && names_part {
-                    maps.push(Map::new());
-                }
-                for map in maps {
-                    for nodes in it.methods.values() {
-                        for n in nodes {
-                            out.push(Target {
-                                node: *n,
-                                map: map.clone(),
-                                how: how::CALLBACK_IMPL,
-                            });
-                        }
-                    }
-                }
+                keep()
             }
         }
-        for p in parts {
-            if let Ty::Adt(item, args) = p {
-                let map: Map = self
-                    .program
-                    .item(*item)
-                    .scope
-                    .generics
-                    .iter()
-                    .copied()
-                    .zip(args.iter().cloned())
-                    .collect();
-                for (t, node) in self.derived.get(item).into_iter().flatten() {
-                    if wanted(t) {
-                        out.push(Target {
-                            node: *node,
-                            map: map.clone(),
-                            how: how::CALLBACK_IMPL,
-                        });
-                    }
-                }
-            }
-        }
-        out
     }
-
-    /// Whether kernel trait `t` (or a supertrait) declares method `name` with a receiver.
-    #[must_use]
-    pub fn trait_method_has_receiver(&self, t: ItemId, name: &str) -> Option<bool> {
-        self.trait_method_sig(t, name).map(|(s, _)| s.receiver)
-    }
-}
-
-/// One value per unknown: the single type it was bound to, the hidden join of several, or the
-/// unknown left open.
-#[must_use]
-pub fn single(found: &BTreeMap<GenId, Val>, vars: &BTreeSet<GenId>) -> Map {
-    let mut map = Map::new();
-    for g in vars {
-        let t = match found.get(g) {
-            Some(v) if v.0.len() == 1 => v.0.iter().next().cloned().unwrap_or(Ty::Param(*g)),
-            Some(v) if !v.is_none() => {
-                let mut parts = BTreeSet::new();
-                for t in &v.0 {
-                    match t {
-                        Ty::Hidden(inner) => parts.extend(inner.iter().cloned()),
-                        other => {
-                            parts.insert(other.clone());
-                        }
-                    }
-                }
-                Ty::Hidden(parts)
-            }
-            _ => Ty::Param(*g),
-        };
-        map.insert(*g, t);
-    }
-    map
 }
 
 #[cfg(test)]
@@ -1268,29 +1485,38 @@ mod tests {
             if p == "c/a/src/lib.rs" {
                 Ok(text.clone())
             } else {
-                Err("no such file".to_owned())
+                crate::recursion::stdlib::read_model(p).ok_or_else(|| "no such file".to_owned())
             }
         };
-        load(
-            &[CrateSource {
-                package: "a".to_owned(),
-                lib: "a".to_owned(),
-                folder: "c/a".to_owned(),
-                root: "c/a/src/lib.rs".to_owned(),
-                role: Role::Ships,
-            }],
-            &read,
-        )
+        let mut sources = crate::recursion::stdlib::sources();
+        sources.push(CrateSource {
+            package: "a".to_owned(),
+            lib: "a".to_owned(),
+            folder: "c/a".to_owned(),
+            root: "c/a/src/lib.rs".to_owned(),
+            role: Role::Ships,
+        });
+        load(&sources, &read)
     }
 
     fn item(p: &Program, name: &str) -> ItemId {
-        ItemId(p.items.iter().position(|i| i.name == name).unwrap())
+        ItemId(p.items.iter().position(|i| i.path == format!("a::{name}")).unwrap())
     }
 
-    fn names(ix: &Index<'_>, found: &Found) -> Vec<String> {
-        let mut v: Vec<String> = found.targets.iter().map(|t| ix.name(t.node).to_owned()).collect();
+    fn none(_: &ClosureKey) -> Option<(Vec<Ty>, Ty)> {
+        None
+    }
+
+    fn names(ix: &Index<'_>, picks: &[Pick]) -> Vec<String> {
+        let mut v: Vec<String> = picks
+            .iter()
+            .map(|p| match p {
+                Pick::Node { node, .. } => ix.name(*node).to_owned(),
+                Pick::Bound { trait_ref, .. } => format!("bound {}", ix.program.item(trait_ref.id).name),
+                Pick::Dyn { trait_ref, .. } => format!("dyn {}", ix.program.item(trait_ref.id).name),
+            })
+            .collect();
         v.sort();
-        v.dedup();
         v
     }
 
@@ -1298,24 +1524,25 @@ mod tests {
     fn methods_follow_the_receivers_type_and_auto_dereference() {
         let p = program(
             "pub struct A; pub struct B { a: A }\n\
-             impl A { pub fn m(&self) {} }\n\
-             impl B { pub fn m(&self) { self.a.m() } pub fn only_b(&self) {} }\n\
+             impl A { pub fn m(&self) {} pub fn own(self) {} }\n\
+             impl B { pub fn m(&self) { self.a.m() } }\n\
              impl core::ops::Deref for B { type Target = A; fn deref(&self) -> &A { &self.a } }\n\
              pub trait T { fn t(&self) {} fn r(&self); }\n\
              impl T for A { fn r(&self) {} }\n\
              #[derive(Clone, Debug)] pub struct C;",
         );
+        assert!(p.problems.is_empty(), "{:?}", p.problems);
         let ix = Index::new(&p);
+        let mut infer = Infer::new();
         let a = Ty::Adt(item(&p, "A"), Vec::new());
         let b = Ty::Adt(item(&p, "B"), Vec::new());
-        assert_eq!(names(&ix, &ix.method(&a, "m")), ["a::A::m"]);
-        assert_eq!(names(&ix, &ix.method(&b, "m")), ["a::B::m"], "inherent first, no deref");
-        assert_eq!(names(&ix, &ix.method(&Ty::Ref(Box::new(b.clone())), "r")), ["<a::A as T>::r"]);
-        assert_eq!(names(&ix, &ix.method(&a, "t")), ["a::T::t"], "the default body");
+        assert_eq!(names(&ix, &ix.probe(&a, "m", &mut infer, &none).0), ["a::A::m"]);
+        assert_eq!(names(&ix, &ix.probe(&b, "m", &mut infer, &none).0), ["a::B::m"], "inherent first, no deref");
+        assert_eq!(names(&ix, &ix.probe(&Ty::reference(b.clone()), "r", &mut infer, &none).0), ["<a::A as T>::r"]);
+        assert_eq!(names(&ix, &ix.probe(&a, "t", &mut infer, &none).0), ["a::T::t"], "the default body");
+        assert_eq!(names(&ix, &ix.probe(&b, "own", &mut infer, &none).0), Vec::<String>::new(), "a by-value method behind Deref is not reachable");
         let c = Ty::Adt(item(&p, "C"), Vec::new());
-        assert_eq!(names(&ix, &ix.method(&c, "clone")), ["<a::C as Clone>::clone"]);
-        assert!(ix.method(&c, "to_owned").outside.contains(&c), "a std method on a kernel type");
-        assert!(ix.method(&a, "m").outside.is_empty());
+        assert_eq!(names(&ix, &ix.probe(&c, "clone", &mut infer, &none).0), ["<a::C as Clone>::clone"]);
     }
 
     #[test]
@@ -1326,54 +1553,68 @@ mod tests {
              impl W<f64> { pub fn only_f(&self) {} }",
         );
         let ix = Index::new(&p);
+        let mut infer = Infer::new();
         let w = item(&p, "W");
         let x = Ty::Adt(item(&p, "X"), Vec::new());
         let wx = Ty::Adt(w, vec![x.clone()]);
-        let found = ix.method(&wx, "get");
-        let t = found.targets.iter().next().unwrap();
-        assert_eq!(t.map.values().next(), Some(&x));
-        assert!(ix.method(&wx, "only_f").targets.is_empty(), "W<f64> only");
-        let wf = Ty::Adt(w, vec![Ty::prim("f64")]);
-        assert_eq!(ix.method(&wf, "only_f").targets.len(), 1);
+        let (picks, _) = ix.probe(&wx, "get", &mut infer, &none);
+        match picks.as_slice() {
+            [Pick::Node { args, .. }] => assert_eq!(infer.resolve(&args[0]), x),
+            other => panic!("{other:?}"),
+        }
+        assert!(ix.probe(&wx, "only_f", &mut infer, &none).0.is_empty(), "W<f64> only");
+        let wf = Ty::Adt(w, vec![Ty::Prim(Prim::F64)]);
+        assert_eq!(ix.probe(&wf, "only_f", &mut infer, &none).0.len(), 1);
     }
 
     #[test]
-    fn bounds_and_hidden_values_dispatch_to_every_implementation() {
+    fn generic_receivers_pick_their_bounds() {
         let p = program(
-            "pub trait S { fn s(&self); }\n\
-             pub struct A; pub struct B;\n\
+            "pub trait S { fn s(&self); fn d(&self) {} }\n\
+             pub struct A;\n\
              impl S for A { fn s(&self) {} }\n\
-             impl S for B { fn s(&self) {} }\n\
-             impl S for f64 { fn s(&self) {} }\n\
              pub fn g<T: S>(t: T) { t.s() }",
         );
         let ix = Index::new(&p);
+        let mut infer = Infer::new();
         let g = p.nodes.iter().position(|n| n.ident == "g").unwrap();
         let tg = ix.node_generics(NodeId(g))[0];
-        assert_eq!(
-            names(&ix, &ix.method(&Ty::Param(tg), "s")),
-            ["<a::A as S>::s", "<a::B as S>::s", "<f64 as S>::s"]
-        );
-        let a = Ty::Adt(item(&p, "A"), Vec::new());
-        let hidden = Ty::Hidden(BTreeSet::from([a]));
-        assert_eq!(
-            names(&ix, &ix.method(&hidden, "s")),
-            ["<a::A as S>::s", "<f64 as S>::s"],
-            "a hidden value's parts, and kernel implementations for outside types"
-        );
+        assert_eq!(names(&ix, &ix.probe(&Ty::Param(tg), "s", &mut infer, &none).0), ["bound S"]);
+        assert_eq!(names(&ix, &ix.probe(&Ty::Param(tg), "d", &mut infer, &none).0), ["bound S"]);
     }
 
     #[test]
-    fn associated_types_resolve_through_implementations() {
+    fn associated_types_resolve_through_implementations_and_bounds() {
         let p = program(
             "pub struct It; pub struct Item;\n\
-             impl Iterator for It { type Item = Item; fn next(&mut self) -> Option<Item> { None } }",
+             impl Iterator for It { type Item = Item; fn next(&mut self) -> Option<Item> { None } }\n\
+             pub fn g<I: Iterator<Item = u8>>(i: I) {}",
         );
         let ix = Index::new(&p);
+        let mut infer = Infer::new();
         let it = Ty::Adt(item(&p, "It"), Vec::new());
-        let n = ix.normalize(&Ty::Assoc(Box::new(it), "Item".to_owned()));
+        let iter = ix.lang.trait_named("Iterator").unwrap();
+        let n = ix.normalize(&Ty::Assoc(Box::new(it), Some(iter), "Item".to_owned()), &mut infer, &none);
         assert_eq!(n, Ty::Adt(item(&p, "Item"), Vec::new()));
-        let v = ix.normalize(&Ty::Assoc(Box::new(Ty::ext("Vec", vec![Ty::prim("u8")])), "Item".to_owned()));
-        assert!(matches!(v, Ty::Hidden(_)));
+        let g = p.nodes.iter().position(|n| n.ident == "g").unwrap();
+        let ig = ix.node_generics(NodeId(g))[0];
+        let b = ix.normalize(&Ty::Assoc(Box::new(Ty::Param(ig)), Some(iter), "Item".to_owned()), &mut infer, &none);
+        assert_eq!(b, Ty::Prim(Prim::U8));
+    }
+
+    #[test]
+    fn operator_impls_are_selected_by_both_operands() {
+        let p = program(
+            "pub struct V;\n\
+             impl core::ops::Mul<f64> for V { type Output = V; fn mul(self, k: f64) -> V { V } }\n\
+             impl core::ops::Mul for V { type Output = f64; fn mul(self, k: V) -> f64 { 0.0 } }",
+        );
+        let ix = Index::new(&p);
+        let mut infer = Infer::new();
+        let v = Ty::Adt(item(&p, "V"), Vec::new());
+        let mul = TraitRef { id: ix.lang.trait_named("Mul").unwrap(), args: vec![Ty::Prim(Prim::F64)], bindings: Vec::new() };
+        assert_eq!(ix.select(&v, &mul, &mut infer, &none).len(), 1);
+        let any = TraitRef { id: mul.id, args: vec![infer.fresh()], bindings: Vec::new() };
+        assert_eq!(ix.select(&v, &any, &mut infer, &none).len(), 2, "an open right-hand side keeps both");
     }
 }

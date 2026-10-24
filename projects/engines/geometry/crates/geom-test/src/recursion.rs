@@ -3,10 +3,12 @@
 //!
 //! What it does: [`analyse`] reads every crate that ships (the kernel crates under
 //! `projects/engines/geometry/crates` and the facade `engine-geometry` and its binding crates,
-//! [`sources`]) with `syn` ([`model`], [`resolve`], [`macros`], [`cfg`]), and builds the call graph
-//! of the program as the compiler copies it: one instance for each instantiation of each generic
-//! function, closures as types of their own ([`mono`], [`flow`], over [`index`], [`ty`] and the
-//! standard library's model [`stdlib`]). It finds the graph's recursive cycles, named by the
+//! [`sources`]) with `syn` ([`model`], [`resolve`], [`macros`], [`cfg`]), together with a model of
+//! the standard library and `libm` written as Rust ([`stdlib`]), and builds the call graph of the
+//! program as the compiler copies it: one instance for each instantiation of each generic
+//! function, closures as types of their own ([`mono`]), each body type-checked as rustc does it,
+//! with inference variables ([`typeck`], over [`index`], [`ty`] and [`infer`]), so every call
+//! reaches what the compiler would call. It finds the graph's recursive cycles, named by the
 //! functions they run, and the kernel's recursive types ([`graph`]); reads every `Recursion:`
 //! statement of the module headers ([`statement`]); and checks each cycle against them
 //! ([`check`]): a cycle without a stated bound, a statement that names no cycle or not exactly
@@ -23,12 +25,12 @@
 //!
 //! Guarantees:
 //!
-//! - **Every cycle is listed.** The call graph over-approximates every call Rust can make in a
-//!   build that ships ([`flow`] states the routes and the assumptions: the standard library calls
-//!   kernel code only as [`stdlib`] models it, the naming lints hold, and callables an open
-//!   generic parameter stands for come from outside the crates that ship); a strongly connected
-//!   component of it with a cycle is a recursive cycle ([`graph`]). Code the analysis cannot read
-//!   is a problem, never skipped, so the check cannot pass over code it did not see.
+//! - **Every cycle is listed.** The call graph holds every call Rust can make in a build that
+//!   ships ([`typeck`] states the routes, [`mono`] the treatment of generic parameters left open,
+//!   and [`stdlib`] what the standard library may call back); a strongly connected component of it
+//!   with a cycle is a recursive cycle ([`graph`]). Code the analysis cannot read, or whose types
+//!   it cannot infer where a call depends on them, is a problem, never skipped, so the check cannot
+//!   pass over code it did not see.
 //! - **A cycle without a stated bound fails**, and so does a statement that is not true to the
 //!   code ([`check`]); CI runs the check in the merge gate (`.github/workflows/kernel-gate.yml`).
 //! - **Each stated bound is run** by its test on the small stack, in debug and in release, and the
@@ -37,23 +39,22 @@
 //!
 //! Method: a whole-program call graph from source by monomorphisation, as rustc's collector builds
 //! it from MIR (<https://rustc-dev-guide.rust-lang.org/backend/monomorph.html>), here from `syn`'s
-//! syntax trees with name resolution and local type inference (method dispatch by class hierarchy
-//! analysis where an instantiation is open, J. Dean, D. Grove and C. Chambers, ECOOP 1995,
-//! <https://doi.org/10.1007/3-540-49538-X_5>); cycles as strongly connected components (Tarjan,
-//! "Depth-first search and linear graph algorithms", SIAM J. Computing 1 (1972),
-//! <https://doi.org/10.1137/0201010>). The rule that input-driven recursion carries a stated bound
-//! because wasm32 has no guard page follows solidcore's (G01 evidence 13,
+//! syntax trees with name resolution and type inference as rustc's type checker performs them
+//! (<https://rustc-dev-guide.rust-lang.org/type-inference.html>); cycles as strongly connected
+//! components (Tarjan, "Depth-first search and linear graph algorithms", SIAM J. Computing 1
+//! (1972), <https://doi.org/10.1137/0201010>). The rule that input-driven recursion carries a
+//! stated bound because wasm32 has no guard page follows solidcore's (G01 evidence 13,
 //! `projects/kit/notes/G01-evidence/13-vetting-smlib.md`).
 //!
-//! Cost: one parse of every file of the crates that ship, and a fixed point over the instances
-//! (see [`mono`]); the analysis runs on a thread with [`ANALYSIS_STACK`] bytes of stack, because
-//! the body reader recurses over syntax trees.
+//! Cost: one parse of every file of the crates that ship and of the model, and one type check of
+//! each instance's body, again when what it read changes (see [`mono`]); the analysis runs on a
+//! thread with [`ANALYSIS_STACK`] bytes of stack, because the checker recurses over syntax trees.
 
 pub mod cfg;
 pub mod check;
-pub mod flow;
 pub mod graph;
 pub mod index;
+pub mod infer;
 pub mod macros;
 pub mod model;
 pub mod mono;
@@ -62,6 +63,7 @@ pub mod stack;
 pub mod statement;
 pub mod stdlib;
 pub mod ty;
+pub mod typeck;
 
 use core::fmt;
 use std::collections::BTreeMap;
@@ -182,8 +184,9 @@ pub struct Report {
 /// The file reader [`analyse`] uses: owned, so the analysis can run on its own thread.
 pub type OwnedReader = Box<dyn Fn(&str) -> Result<String, String> + Send + Sync>;
 
-/// Analyses `sources` read by `read`: on a thread with [`ANALYSIS_STACK`] bytes of stack where
-/// threads exist, else on this one.
+/// Analyses `sources` read by `read` (with the standard library's model, which [`stdlib`]
+/// serves): on a thread with [`ANALYSIS_STACK`] bytes of stack where threads exist, else on this
+/// one.
 #[must_use]
 pub fn analyse(sources: Vec<CrateSource>, read: OwnedReader) -> Report {
     let shared = std::sync::Arc::new((sources, read));
@@ -204,10 +207,13 @@ pub fn analyse(sources: Vec<CrateSource>, read: OwnedReader) -> Report {
 /// Analyses on the calling thread.
 #[must_use]
 pub fn analyse_here(sources: &[CrateSource], read: &(dyn Fn(&str) -> Result<String, String> + Send + Sync)) -> Report {
-    let program = model::load(sources, &|p| read(p));
+    let mut all = stdlib::sources();
+    all.extend(sources.iter().cloned());
+    let program = model::load(&all, &|p| stdlib::read_model(p).map_or_else(|| read(p), Ok));
     let ix = Index::new(&program);
     let mut problems = program.problems.clone();
-    let mono = mono::analyse(&ix, &mut problems);
+    let mono = mono::analyse(&ix);
+    problems.extend(mono.all_problems());
     let cycles = graph::cycles(&ix, &mono);
     let types = graph::type_cycles(&ix);
     let mut statements = Vec::new();

@@ -2,54 +2,61 @@
 //! per instantiation of their generic parameters, and the work list that builds it.
 //!
 //! What it does: Rust compiles one copy of a generic function for each instantiation of its type
-//! parameters, and a closure is a type of its own whose body is part of the copy of the function
-//! that writes it. [`analyse`] builds the call graph over those copies ([`Inst`]): it starts from
-//! every function, method, trait default body and derived implementation with its generic
-//! parameters left open ([`Ty::Param`], the copy every instantiation shares), reads each body
-//! ([`crate::recursion::flow`]), and adds the copy each call reaches, with the generic arguments
-//! the call fixes, to the work list. What one body learns that another needs grows here, and the
-//! bodies that read it are read again: each closure's parameters (from every call that may reach
-//! it) and result, each instance's result (for `impl Trait` returns), and the closures and
-//! functions coerced to trait objects (`dyn Fn`) and function pointers, which a call through one
-//! may run.
+//! parameters, and a closure is a type of its own whose body belongs to the copy of the function
+//! that writes it. [`analyse`] builds the call graph over those copies ([`Inst`]): its roots are
+//! every function, method, trait default body and derived implementation of the crates that ship
+//! and of the bound tests, a generic one with its parameters left open ([`Ty::Param`]: the copy
+//! that stands for every instantiation from outside the crates read). It checks each body
+//! ([`crate::recursion::typeck`]) and adds, for every call, the copy the call reaches with the
+//! generic arguments the checker inferred, queueing new copies. A body is checked again when
+//! something it read grows: the hidden type a callee's `impl Trait` result turned out to be, or
+//! the callables coerced to closure trait objects and function pointers anywhere, which a call
+//! through one may run. Each check of a body replaces that body's edges and problems.
 //!
 //! Guarantees:
 //!
-//! - **Every copy a call can reach is an instance.** A call's generic arguments are those its
-//!   argument types fix; one it leaves unfixed stays open, and an open parameter dispatches to
-//!   every implementation of its bounds ([`crate::recursion::index`]). A node with more than
-//!   [`MAX_COPIES`] instances gets one more whose arguments are hidden values of every argument
-//!   seen, which reaches all their implementations.
-//! - **A fixed point.** Every value only grows, in a lattice of finite height
-//!   ([`crate::recursion::ty`]), and a body is read again only when something it read grew, so
-//!   the work list empties; a body read more than [`MAX_RUNS`] times is reported rather than
-//!   followed further.
+//! - **Every copy a call can reach is an instance**, with the generic arguments the call fixes; a
+//!   type nested deeper than [`crate::recursion::ty::MAX_DEPTH`] is cut to an unknown part, and a
+//!   function with more than [`MAX_COPIES`] copies is reported, so the graph is finite.
+//! - **Generic parameters left open.** Dispatch on a receiver of a bare generic parameter reaches
+//!   the trait's default body and blanket implementations, never the other implementations
+//!   ([`crate::recursion::index::Pick::Bound`]), and a call through a bare generic callable reaches
+//!   nothing. This loses no cycle: a cycle runs concrete copies, and every implementation and
+//!   closure is a root of its own (a non-generic one is checked with its exact types, a generic
+//!   one through its own open copy), from which the checker follows the cycle with types whose
+//!   heads are known, dispatching exactly; and a cycle whose every copy is generic and that passes
+//!   through a bare parameter's implementation would need a type that contains itself. What it
+//!   avoids is the false cycle a generic implementation would form with its own copy at a nested
+//!   type (`Vec<Vec<T>>`'s `clone` calling `Vec<T>`'s). Callables an open parameter stands for come
+//!   from outside the crates read, and recursion through them is their caller's.
+//! - **A fixed point.** Hidden result types only become known and the callable sets only grow,
+//!   and a body is checked again only when something it read changed; a body checked more than
+//!   [`MAX_RUNS`] times is reported.
 //! - **Deterministic.** Instances are numbered in the order they are found, the work list is
 //!   first in, first out, and every table is ordered.
 //!
 //! Method: monomorphisation as rustc's collector performs it
-//! (<https://rustc-dev-guide.rust-lang.org/backend/monomorph.html>), here over the source with
-//! the analysis's types, with closures as types (The Rust Reference,
-//! <https://doc.rust-lang.org/reference/types/closure.html>); chaotic iteration to the least
-//! fixed point with a work list (P. Cousot and R. Cousot, POPL 1977,
-//! <https://doi.org/10.1145/512950.512973>; F. Nielson, H. R. Nielson and C. Hankin,
-//! *Principles of Program Analysis*, Springer 1999, section 1.6).
+//! (<https://rustc-dev-guide.rust-lang.org/backend/monomorph.html>), here over the source with the
+//! checker's types, closures as types (The Rust Reference,
+//! <https://doc.rust-lang.org/reference/types/closure.html>); chaotic iteration to the least fixed
+//! point with a work list (P. Cousot and R. Cousot, POPL 1977,
+//! <https://doi.org/10.1145/512950.512973>; F. Nielson, H. R. Nielson and C. Hankin, *Principles
+//! of Program Analysis*, Springer 1999, section 1.6).
 //!
-//! Cost: one reading of each instance's body per round in which something it read grew;
-//! instances at most [`MAX_COPIES`] plus the widened ones per node.
+//! Cost: one check of each instance's body, plus one more each time something it read changed.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use crate::recursion::Problem;
 use crate::recursion::index::Index;
-use crate::recursion::model::NodeKind;
-use crate::recursion::ty::{ClosureKey, NodeId, Ty, Val};
+use crate::recursion::model::{NodeKind, Role};
+use crate::recursion::ty::{ClosureKey, NodeId, Ty};
 
-/// How many instances a node gets before calls reach a widened one.
-pub const MAX_COPIES: usize = 64;
+/// How many copies of one function the graph holds before it is reported.
+pub const MAX_COPIES: usize = 512;
 
-/// How many times one instance's body is read before it is reported.
-pub const MAX_RUNS: usize = 400;
+/// How many times one instance's body is checked before it is reported.
+pub const MAX_RUNS: usize = 64;
 
 /// An instance of the call graph.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -58,8 +65,8 @@ pub struct InstId(pub usize);
 /// What an instance is.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum InstKind {
-    /// A function, method, trait default body or derived implementation, with generic arguments
-    /// for [`Index::node_generics`].
+    /// A function, method, trait default body or derived implementation, with its generic
+    /// arguments ([`Index::node_generics`]).
     Node(NodeId, Vec<Ty>),
     /// A closure.
     Closure(ClosureKey),
@@ -87,10 +94,10 @@ pub struct Site {
     pub how: &'static str,
 }
 
-/// What a body read that another may grow.
+/// What a body read that another may change.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Dep {
-    /// An instance's result.
+    /// An instance's hidden result type.
     Ret(InstId),
     /// The callables coerced to closure trait objects.
     Dyn,
@@ -98,7 +105,7 @@ pub enum Dep {
     FnPtr,
 }
 
-/// The call graph over instances, and everything the bodies share.
+/// The call graph over instances, and what the bodies share.
 #[derive(Default)]
 pub struct Mono {
     /// Every instance.
@@ -106,23 +113,25 @@ pub struct Mono {
     by_kind: BTreeMap<InstKind, InstId>,
     /// The edges from each instance, each with the first site seen.
     pub edges: BTreeMap<InstId, BTreeMap<InstId, Site>>,
-    /// Each instance's result: its body's returns and tail, for a function; for a closure, what
-    /// its body returns.
-    pub rets: BTreeMap<InstId, Val>,
-    /// Each closure's parameters, from every call that may reach it.
-    pub params: BTreeMap<InstId, Vec<Val>>,
-    /// Each closure's number of parameters, once its body was read.
-    pub arity: BTreeMap<InstId, usize>,
+    /// Each instance's result type, resolved, once its body was checked: the hidden types of its
+    /// `impl Trait` result.
+    pub rets: BTreeMap<InstId, Ty>,
+    /// Each closure's parameter types and result, once its function's body was checked.
+    pub closure_sigs: BTreeMap<ClosureKey, (Vec<Ty>, Ty)>,
     /// Closures and function items coerced to a closure trait object.
     pub dyn_callables: BTreeSet<Ty>,
     /// Closures and function items coerced to a function pointer.
     pub fnptr_callables: BTreeSet<Ty>,
+    /// What each instance's last check could not read.
+    pub problems: BTreeMap<InstId, Vec<Problem>>,
     readers: BTreeMap<Dep, BTreeSet<InstId>>,
     queue: VecDeque<InstId>,
     queued: BTreeSet<InstId>,
     runs: BTreeMap<InstId, usize>,
-    /// For each node, every generic argument list its instances were asked for.
-    copies: BTreeMap<NodeId, Vec<Vec<Ty>>>,
+    copies: BTreeMap<NodeId, usize>,
+    owned: BTreeMap<InstId, BTreeSet<InstId>>,
+    /// Problems not tied to one instance's check.
+    pub global_problems: Vec<Problem>,
 }
 
 impl Mono {
@@ -138,94 +147,51 @@ impl Mono {
         self.by_kind.get(kind).copied()
     }
 
-    /// The instance of node `node` with generic arguments `args`, made and queued on first use;
-    /// past [`MAX_COPIES`] copies of the node, the widened instance.
+    /// The instance of node `node` with generic arguments `args`, made and queued on first use.
     pub fn node_inst(&mut self, ix: &Index<'_>, node: NodeId, args: Vec<Ty>) -> InstId {
-        let args: Vec<Ty> = args
-            .into_iter()
-            .map(|a| {
-                let n = ix.normalize(&a);
-                if n.depth() > crate::recursion::ty::MAX_DEPTH {
-                    n.cut()
-                } else {
-                    n
-                }
-            })
-            .collect();
-        let orig = InstKind::Node(node, args.clone());
-        if let Some(id) = self.by_kind.get(&orig) {
+        let args: Vec<Ty> = args.into_iter().map(|a| a.cut()).collect();
+        let kind = InstKind::Node(node, args);
+        if let Some(id) = self.by_kind.get(&kind) {
             return *id;
         }
-        let seen = self.copies.entry(node).or_default();
-        let kind = if seen.len() >= MAX_COPIES {
-            seen.push(args.clone());
-            let mut widened: Vec<BTreeSet<Ty>> = vec![BTreeSet::new(); args.len()];
-            for list in seen.iter() {
-                for (w, a) in widened.iter_mut().zip(list) {
-                    w.extend(a.parts().iter().map(Ty::shallow));
-                    if !matches!(a, Ty::Hidden(_)) {
-                        w.insert(a.shallow());
-                    }
-                }
-            }
-            InstKind::Node(node, widened.into_iter().map(Ty::Hidden).collect())
-        } else {
-            seen.push(args);
-            orig.clone()
-        };
-        let id = if let Some(id) = self.by_kind.get(&kind) {
-            *id
-        } else {
-            let id = InstId(self.insts.len());
-            self.insts.push(Inst {
-                kind: kind.clone(),
-                node,
-                owner: id,
-            });
-            self.by_kind.insert(kind.clone(), id);
-            self.enqueue(id);
-            id
-        };
-        if kind != orig {
-            self.by_kind.insert(orig, id);
+        let count = self.copies.entry(node).or_default();
+        *count = count.saturating_add(1);
+        if *count == MAX_COPIES.saturating_add(1)
+            && let Some(n) = ix.program.node(node)
+        {
+            self.global_problems.push(Problem::unread(
+                &n.file,
+                n.line,
+                &format!("`{}` has more than {MAX_COPIES} instantiations", ix.name(node)),
+            ));
         }
+        let id = InstId(self.insts.len());
+        self.insts.push(Inst { kind: kind.clone(), node, owner: id });
+        self.by_kind.insert(kind, id);
+        self.enqueue(id);
         id
     }
 
-    /// The instance of closure `key`, made on first use; its function's instance is made (and
-    /// queued) too.
+    /// The instance of closure `key`, made on first use (with its function's instance).
     pub fn closure_inst(&mut self, ix: &Index<'_>, key: &ClosureKey) -> InstId {
+        let key = ClosureKey {
+            owner: key.owner,
+            subst: key.subst.iter().map(Ty::cut).collect(),
+            index: key.index,
+        };
         let kind = InstKind::Closure(key.clone());
         if let Some(id) = self.by_kind.get(&kind) {
             return *id;
         }
         let owner = self.node_inst(ix, key.owner, key.subst.clone());
-        // The owner may have been widened; the closure is the widened owner's.
-        let key = match self.inst(owner).map(|i| &i.kind) {
-            Some(InstKind::Node(_, args)) if *args != key.subst => ClosureKey {
-                owner: key.owner,
-                subst: args.clone(),
-                index: key.index,
-            },
-            _ => key.clone(),
-        };
-        let kind2 = InstKind::Closure(key);
-        if let Some(&id) = self.by_kind.get(&kind2) {
-            self.by_kind.insert(kind, id);
-            return id;
-        }
         let id = InstId(self.insts.len());
-        self.insts.push(Inst {
-            kind: kind2.clone(),
-            node: key_owner(&kind2),
-            owner,
-        });
-        self.by_kind.insert(kind2, id);
+        self.insts.push(Inst { kind: kind.clone(), node: key.owner, owner });
         self.by_kind.insert(kind, id);
+        self.owned.entry(owner).or_default().insert(id);
         id
     }
 
-    /// Queues instance `id`'s body (its owner's, for a closure) to be read.
+    /// Queues instance `id`'s body (its owner's, for a closure) to be checked.
     pub fn enqueue(&mut self, id: InstId) {
         let owner = self.inst(id).map_or(id, |i| i.owner);
         if self.queued.insert(owner) {
@@ -233,79 +199,52 @@ impl Mono {
         }
     }
 
-    /// Adds the edge `from -> to`, keeping the first site.
-    pub fn edge(&mut self, from: InstId, to: InstId, site: &Site) {
-        self.edges
-            .entry(from)
-            .or_default()
-            .entry(to)
-            .or_insert_with(|| site.clone());
+    /// Clears what the last check of `owner`'s body found: its edges and its closures', and its
+    /// problems.
+    pub fn begin_check(&mut self, owner: InstId) {
+        self.edges.remove(&owner);
+        for c in self.owned.get(&owner).cloned().unwrap_or_default() {
+            self.edges.remove(&c);
+        }
+        self.problems.remove(&owner);
     }
 
-    /// Records that instance `reader` read `dep`, so it is read again when `dep` grows.
+    /// Adds the edge `from -> to`, keeping the first site.
+    pub fn edge(&mut self, from: InstId, to: InstId, site: &Site) {
+        self.edges.entry(from).or_default().entry(to).or_insert_with(|| site.clone());
+    }
+
+    /// Records that instance `reader` read `dep`, so it is checked again when `dep` changes.
     pub fn read(&mut self, dep: Dep, reader: InstId) {
         let owner = self.inst(reader).map_or(reader, |i| i.owner);
         self.readers.entry(dep).or_default().insert(owner);
     }
 
-    /// Queues every reader of `dep`.
-    pub fn grew(&mut self, dep: Dep) {
-        let readers: Vec<InstId> = self
-            .readers
-            .get(&dep)
-            .map(|r| r.iter().copied().collect())
-            .unwrap_or_default();
+    fn changed(&mut self, dep: Dep) {
+        let readers: Vec<InstId> = self.readers.get(&dep).map(|r| r.iter().copied().collect()).unwrap_or_default();
         for r in readers {
             self.enqueue(r);
         }
     }
 
-    /// Joins `v` into instance `id`'s result; queues its readers if it grew.
-    pub fn add_ret(&mut self, id: InstId, v: &Val) {
-        if self.rets.entry(id).or_default().join(v) {
-            self.grew(Dep::Ret(id));
+    /// Sets instance `id`'s resolved result type; its readers are checked again if it changed.
+    pub fn set_ret(&mut self, id: InstId, ty: Ty) {
+        if self.rets.get(&id) != Some(&ty) {
+            self.rets.insert(id, ty);
+            self.changed(Dep::Ret(id));
         }
-    }
-
-    /// Instance `id`'s result as known so far, recording `reader` as reading it.
-    pub fn ret_of(&mut self, id: InstId, reader: InstId) -> Val {
-        self.read(Dep::Ret(id), reader);
-        self.rets.get(&id).cloned().unwrap_or_default()
-    }
-
-    /// Joins `args` into closure `id`'s parameters; queues its body if they grew, and says
-    /// whether they did.
-    pub fn add_params(&mut self, id: InstId, args: &[Val]) -> bool {
-        let params = self.params.entry(id).or_default();
-        let mut grew = false;
-        for (i, a) in args.iter().enumerate() {
-            while params.len() <= i {
-                params.push(Val::none());
-            }
-            if let Some(p) = params.get_mut(i) {
-                grew |= p.join(a);
-            }
-        }
-        if grew {
-            self.enqueue(id);
-        }
-        grew
     }
 
     /// Adds callables to the closure-trait-object set (`dynamic`) or the function-pointer set;
-    /// queues the readers if it grew.
+    /// their readers are checked again if it grew.
     pub fn coerce(&mut self, callables: impl IntoIterator<Item = Ty>, dynamic: bool) {
         let mut grew = false;
         for c in callables {
-            let set = if dynamic {
-                &mut self.dyn_callables
-            } else {
-                &mut self.fnptr_callables
-            };
+            let set = if dynamic { &mut self.dyn_callables } else { &mut self.fnptr_callables };
             grew |= set.insert(c);
         }
         if grew {
-            self.grew(if dynamic { Dep::Dyn } else { Dep::FnPtr });
+            self.changed(if dynamic { Dep::Dyn } else { Dep::FnPtr });
         }
     }
 
@@ -314,44 +253,46 @@ impl Mono {
         self.queued.remove(&id);
         Some(id)
     }
-}
 
-fn key_owner(kind: &InstKind) -> NodeId {
-    match kind {
-        InstKind::Node(n, _) | InstKind::Closure(ClosureKey { owner: n, .. }) => *n,
+    /// Every problem the checks found, sorted.
+    #[must_use]
+    pub fn all_problems(&self) -> Vec<Problem> {
+        let mut out: Vec<Problem> = self.global_problems.clone();
+        for p in self.problems.values() {
+            out.extend(p.iter().cloned());
+        }
+        out.sort();
+        out.dedup();
+        out
     }
 }
 
-/// Builds the call graph of every instance reachable from every node of the program; what cannot
-/// be read goes to `problems`.
+/// Builds the call graph of every instance reachable from the roots: every node of the crates
+/// that ship and of the bound tests, generic ones with their parameters open.
 #[must_use]
-pub fn analyse(ix: &Index<'_>, problems: &mut Vec<Problem>) -> Mono {
+pub fn analyse(ix: &Index<'_>) -> Mono {
     let mut m = Mono::default();
-    let mut reported = BTreeSet::new();
-    for (i, _) in ix.program.nodes.iter().enumerate() {
+    for (i, node) in ix.program.nodes.iter().enumerate() {
+        let role = ix.program.crates.get(node.krate).map(|c| c.source.role);
+        if !matches!(role, Some(Role::Ships | Role::BoundTests)) {
+            continue;
+        }
         let id = NodeId(i);
         let open: Vec<Ty> = ix.node_generics(id).iter().map(|g| Ty::Param(*g)).collect();
         m.node_inst(ix, id, open);
     }
-    crate::recursion::flow::constants(ix, &mut m, problems, &mut reported);
-    let mut pops = 0_usize;
+    crate::recursion::typeck::constants(ix, &mut m);
     while let Some(id) = m.pop() {
-        pops += 1;
-        if pops % 1 == 0 { eprintln!("DEBUG pops {pops} insts {} queue {} node {}", m.insts.len(), m.queue.len(), m.inst(id).map_or(String::new(), |i| ix.name(i.node).to_owned())); }
         let runs = m.runs.entry(id).or_default();
         *runs = runs.saturating_add(1);
         if *runs > MAX_RUNS {
-            if *runs == MAX_RUNS.saturating_add(1) {
-                let (file, line, name) = ix
-                    .program
-                    .node(m.inst(id).map_or(NodeId(0), |i| i.node))
-                    .map_or((String::new(), 0, String::new()), |n| {
-                        (n.file.clone(), n.line, n.name.clone())
-                    });
-                problems.push(Problem::unread(
-                    &file,
-                    line,
-                    &format!("the analysis of `{name}` still grows after {MAX_RUNS} readings"),
+            if *runs == MAX_RUNS.saturating_add(1)
+                && let Some(n) = m.inst(id).and_then(|i| ix.program.node(i.node))
+            {
+                m.global_problems.push(Problem::unread(
+                    &n.file,
+                    n.line,
+                    &format!("the check of `{}` still changes after {MAX_RUNS} readings", n.name),
                 ));
             }
             continue;
@@ -359,19 +300,14 @@ pub fn analyse(ix: &Index<'_>, problems: &mut Vec<Problem>) -> Mono {
         let Some(inst) = m.inst(id).cloned() else {
             continue;
         };
-        match inst.kind {
-            InstKind::Node(node, args) => {
-                let derived = ix
-                    .program
-                    .node(node)
-                    .is_some_and(|n| matches!(n.kind, NodeKind::Derived { .. }));
-                if derived {
-                    crate::recursion::flow::derived(ix, &mut m, problems, &mut reported, id, node, &args);
-                } else {
-                    crate::recursion::flow::body(ix, &mut m, problems, &mut reported, id, node, &args);
-                }
+        if let InstKind::Node(node, args) = inst.kind {
+            m.begin_check(id);
+            let derived = ix.program.node(node).is_some_and(|n| matches!(n.kind, NodeKind::Derived { .. }));
+            if derived {
+                crate::recursion::typeck::derived(ix, &mut m, id, node, &args);
+            } else {
+                crate::recursion::typeck::body(ix, &mut m, id, node, &args);
             }
-            InstKind::Closure(_) => {}
         }
     }
     m
@@ -389,7 +325,7 @@ pub fn analyse(ix: &Index<'_>, problems: &mut Vec<Problem>) -> Mono {
 )]
 mod tests {
     use super::*;
-    use crate::recursion::model::{CrateSource, Program, Role, load};
+    use crate::recursion::model::{CrateSource, Program, load};
 
     fn program(text: &str) -> Program {
         let text = text.to_owned();
@@ -397,51 +333,45 @@ mod tests {
             if p == "c/a/src/lib.rs" {
                 Ok(text.clone())
             } else {
-                Err("no such file".to_owned())
+                crate::recursion::stdlib::read_model(p).ok_or_else(|| "no such file".to_owned())
             }
         };
-        load(
-            &[CrateSource {
-                package: "a".to_owned(),
-                lib: "a".to_owned(),
-                folder: "c/a".to_owned(),
-                root: "c/a/src/lib.rs".to_owned(),
-                role: Role::Ships,
-            }],
-            &read,
-        )
+        let mut sources = crate::recursion::stdlib::sources();
+        sources.push(CrateSource {
+            package: "a".to_owned(),
+            lib: "a".to_owned(),
+            folder: "c/a".to_owned(),
+            root: "c/a/src/lib.rs".to_owned(),
+            role: Role::Ships,
+        });
+        load(&sources, &read)
     }
 
     #[test]
-    fn copies_past_the_limit_reach_one_widened_instance() {
-        let p = program("pub fn g<T>(t: T) {}");
+    fn instances_are_made_once_and_queued() {
+        let p = program("pub fn g<T>(t: T) {} pub fn f() {}");
         let ix = Index::new(&p);
         let mut m = Mono::default();
-        let g = NodeId(0);
-        let mut ids = BTreeSet::new();
-        for i in 0..MAX_COPIES + 5 {
-            ids.insert(m.node_inst(&ix, g, vec![Ty::Adt(crate::recursion::ty::ItemId(i), Vec::new())]));
-        }
-        assert!(ids.len() <= MAX_COPIES + 5);
-        let last = m.inst(*ids.iter().max().unwrap()).unwrap();
-        match &last.kind {
-            InstKind::Node(_, args) => assert!(matches!(&args[0], Ty::Hidden(p) if p.len() > MAX_COPIES)),
-            InstKind::Closure(_) => panic!("a node"),
-        }
+        let g = NodeId(p.nodes.iter().position(|n| n.ident == "g").unwrap());
+        let a = m.node_inst(&ix, g, vec![Ty::unit()]);
+        let b = m.node_inst(&ix, g, vec![Ty::unit()]);
+        assert_eq!(a, b);
+        assert_eq!(m.pop(), Some(a));
+        assert_eq!(m.pop(), None);
     }
 
     #[test]
-    fn growing_values_queue_their_readers() {
+    fn changed_results_queue_their_readers() {
         let p = program("pub fn f() {} pub fn g() {}");
         let ix = Index::new(&p);
         let mut m = Mono::default();
-        let f = m.node_inst(&ix, NodeId(0), Vec::new());
-        let g = m.node_inst(&ix, NodeId(1), Vec::new());
+        let f = m.node_inst(&ix, NodeId(p.nodes.iter().position(|n| n.ident == "f").unwrap()), Vec::new());
+        let g = m.node_inst(&ix, NodeId(p.nodes.iter().position(|n| n.ident == "g").unwrap()), Vec::new());
         while m.pop().is_some() {}
-        assert!(m.ret_of(f, g).is_none());
-        m.add_ret(f, &Val::unit());
+        m.read(Dep::Ret(f), g);
+        m.set_ret(f, Ty::unit());
         assert_eq!(m.pop(), Some(g));
-        m.add_ret(f, &Val::unit());
-        assert_eq!(m.pop(), None, "no growth, no reading");
+        m.set_ret(f, Ty::unit());
+        assert_eq!(m.pop(), None, "no change, no check");
     }
 }

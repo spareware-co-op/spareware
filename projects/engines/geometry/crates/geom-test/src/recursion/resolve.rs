@@ -4,11 +4,12 @@
 //! What it does: [`Resolver::resolve`] follows a path as the compiler's name resolution does:
 //! `crate`, `self`, `super` and `Self`; generic and const parameters; the items of a function
 //! body's scope, then of its module; `use` declarations, renamed, grouped, `self` and glob, and
-//! the re-exports they lead through; the other crates read by name; and the outside crates
-//! (`core`, `alloc`, `std`, `libm`) and the standard prelude, which resolve to outside paths.
-//! Later segments step into modules, enum variants and associated items. [`Resolver::ty`] turns a
-//! written type into a [`Ty`], expanding type aliases and `Self`, and [`Resolver::trait_ref`] a
-//! bound into a [`TraitRef`].
+//! the re-exports they lead through; the other crates read by name, the standard library's model
+//! among them under its names `core`, `alloc` and `std` ([`crate::recursion::stdlib`]); and the
+//! standard prelude, from the model's `prelude` module. Later segments step into modules, enum
+//! variants and associated items. [`Resolver::ty`] turns a written type into a [`Ty`], expanding
+//! type aliases and `Self`, and [`Resolver::trait_ref`] a bound into a [`TraitRef`] with its
+//! associated-type bindings (`Fn(A) -> R` as `Fn<(A,)>` with `Output = R`).
 //!
 //! Guarantees:
 //!
@@ -17,9 +18,9 @@
 //!   may name in some build.
 //! - **Terminates on any input.** `use` cycles and glob cycles are cut by a visited set; alias
 //!   expansion stops at a fixed depth ([`ALIAS_DEPTH`]).
-//! - **Outside is outside.** A path is an outside path only when it starts at an outside crate,
-//!   the standard prelude, or an outside glob import; a path that resolves nowhere resolves to
-//!   nothing, and the body analysis reports it.
+//! - **Outside is outside.** A path is an outside path only when it starts at a crate that is
+//!   neither read nor modelled (or, without a model, at the standard library or its prelude); a
+//!   path that resolves nowhere resolves to nothing, and the type checker reports it.
 //!
 //! Method: The Rust Reference on paths, namespaces, `use` declarations and the preludes
 //! (<https://doc.rust-lang.org/reference/paths.html>,
@@ -35,7 +36,7 @@ use core::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::recursion::model::{Def, ItemKind, ModId, Program, Scope, SelfRef};
-use crate::recursion::ty::{GenId, ItemId, NodeId, PRIMITIVES, TraitRef, Ty};
+use crate::recursion::ty::{GenId, ItemId, NodeId, Prim, TraitRef, Ty};
 
 /// What a path names.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -80,6 +81,10 @@ pub enum Ns {
 /// The crates outside the kernel that kernel code may name.
 pub const OUTSIDE_CRATES: [&str; 6] = ["core", "alloc", "std", "libm", "proc_macro", "test"];
 
+/// The names the standard library's model answers to: the crate read as `core` is also `alloc`
+/// and `std`.
+pub const MODEL_ALIASES: [&str; 2] = ["alloc", "std"];
+
 /// The names of the standard prelude (Rust 2024): every one is outside the kernel.
 pub const PRELUDE: [&str; 46] = [
     "Copy", "Send", "Sized", "Sync", "Unpin", "Drop", "Fn", "FnMut", "FnOnce", "AsyncFn",
@@ -100,22 +105,52 @@ pub struct Resolver<'p> {
     cache: RefCell<BTreeMap<(ModId, String, Ns), Vec<Res>>>,
     /// The crate root of each crate read, by the name its code is referred to by.
     crates: BTreeMap<String, ModId>,
+    /// The standard library model's `prelude` module, when the model is read.
+    prelude: Option<ModId>,
 }
 
 impl<'p> Resolver<'p> {
     /// A resolver for `program`.
     #[must_use]
     pub fn new(program: &'p Program) -> Resolver<'p> {
-        let crates = program
+        let mut crates: BTreeMap<String, ModId> = program
             .crates
             .iter()
             .map(|c| (c.source.lib.clone(), c.root))
             .collect();
+        let model_core = program
+            .crates
+            .iter()
+            .find(|c| c.source.role == crate::recursion::model::Role::Model && c.source.lib == "core")
+            .map(|c| c.root);
+        let mut prelude = None;
+        if let Some(root) = model_core {
+            for alias in MODEL_ALIASES {
+                crates.entry(alias.to_owned()).or_insert(root);
+            }
+            prelude = program
+                .module(root)
+                .types
+                .get("prelude")
+                .into_iter()
+                .flatten()
+                .find_map(|d| match d {
+                    Def::Mod(m) => Some(*m),
+                    _ => None,
+                });
+        }
         Resolver {
             program,
             cache: RefCell::new(BTreeMap::new()),
             crates,
+            prelude,
         }
+    }
+
+    /// Whether the standard library's model is read.
+    #[must_use]
+    pub fn has_model(&self) -> bool {
+        self.prelude.is_some()
     }
 
     /// The root module of the crate `module` belongs to.
@@ -316,8 +351,11 @@ impl<'p> Resolver<'p> {
         if !found.is_empty() {
             return found;
         }
-        if ns == Ns::Type && PRIMITIVES.contains(&name) {
+        if ns == Ns::Type && Prim::from_name(name).is_some() {
             return vec![Res::Prim(name.to_owned())];
+        }
+        if let Some(prelude) = self.prelude {
+            return self.lookup_in(prelude, name, ns, visited);
         }
         if PRELUDE.contains(&name) {
             return vec![Res::Ext(vec![name.to_owned()])];
@@ -361,11 +399,18 @@ impl<'p> Resolver<'p> {
         path.segments.iter().map(|s| s.ident.to_string()).collect()
     }
 
-    /// The type arguments of a path segment (`Vec<T>`: `T`; `Fn(A, B) -> C`: `A`, `B`).
-    /// The type arguments written on one path segment, in `scope`.
+    /// The type arguments written on one path segment, in `scope` (`Vec<T>`: `T`; `Fn(A, B)`:
+    /// `A`, `B`); lifetimes and const arguments are left out.
     #[must_use]
     pub fn segment_args(&self, scope: &Scope, seg: &syn::PathSegment) -> Vec<Ty> {
         self.args(scope, seg, 0)
+    }
+
+    /// Whether a written type is a const generic parameter in `scope` (which `syn` reads as a
+    /// type path when it is a generic argument).
+    fn is_const_param(scope: &Scope, ty: &syn::Type) -> bool {
+        matches!(ty, syn::Type::Path(tp) if tp.qself.is_none()
+            && tp.path.get_ident().is_some_and(|i| scope.consts.iter().any(|c| i == c)))
     }
 
     fn args(&self, scope: &Scope, seg: &syn::PathSegment, depth: usize) -> Vec<Ty> {
@@ -374,7 +419,9 @@ impl<'p> Resolver<'p> {
                 .args
                 .iter()
                 .filter_map(|arg| match arg {
-                    syn::GenericArgument::Type(t) => Some(self.ty_at(scope, t, depth)),
+                    syn::GenericArgument::Type(t) if !Self::is_const_param(scope, t) => {
+                        Some(self.ty_at(scope, t, depth))
+                    }
                     _ => None,
                 })
                 .collect(),
@@ -385,19 +432,32 @@ impl<'p> Resolver<'p> {
         }
     }
 
+    /// The associated-type bindings written on one path segment (`Iterator<Item = T>`).
+    fn bindings(&self, scope: &Scope, seg: &syn::PathSegment, depth: usize) -> Vec<(String, Ty)> {
+        match &seg.arguments {
+            syn::PathArguments::AngleBracketed(a) => a
+                .args
+                .iter()
+                .filter_map(|arg| match arg {
+                    syn::GenericArgument::AssocType(b) => {
+                        Some((b.ident.to_string(), self.ty_at(scope, &b.ty, depth)))
+                    }
+                    _ => None,
+                })
+                .collect(),
+            _ => Vec::new(),
+        }
+    }
+
     /// The type a written type denotes in `scope`.
     #[must_use]
     pub fn ty(&self, scope: &Scope, ty: &syn::Type) -> Ty {
         self.ty_at(scope, ty, 0)
     }
 
-    #[allow(
-        clippy::too_many_lines,
-        reason = "one arm per form of the type grammar; splitting would scatter it"
-    )]
     fn ty_at(&self, scope: &Scope, ty: &syn::Type, depth: usize) -> Ty {
         if depth > ALIAS_DEPTH {
-            return Ty::unknown();
+            return Ty::Unknown;
         }
         match ty {
             syn::Type::Reference(r) => Ty::Ref(Box::new(self.ty_at(scope, &r.elem, depth))),
@@ -409,30 +469,57 @@ impl<'p> Resolver<'p> {
             syn::Type::Group(g) => self.ty_at(scope, &g.elem, depth),
             syn::Type::Never(_) => Ty::Never,
             syn::Type::Infer(_) => Ty::Infer,
-            syn::Type::FnPtr(f) => Ty::FnPtr(f.inputs.len()),
+            syn::Type::FnPtr(f) => {
+                let params = f.inputs.iter().map(|a| self.ty_at(scope, &a.ty, depth)).collect();
+                let ret = match &f.output {
+                    syn::ReturnType::Default => Ty::unit(),
+                    syn::ReturnType::Type(_, t) => self.ty_at(scope, t, depth),
+                };
+                Ty::FnPtr(params, Box::new(ret))
+            }
             syn::Type::TraitObject(o) => Ty::Dyn(self.trait_refs(scope, o.bounds.iter())),
             syn::Type::ImplTrait(i) => Ty::Opaque(self.trait_refs(scope, i.bounds.iter())),
             syn::Type::Path(tp) => {
                 if let Some(q) = &tp.qself {
                     let base = self.ty_at(scope, &q.ty, depth);
-                    let name = tp
-                        .path
-                        .segments
-                        .last()
-                        .map(|s| s.ident.to_string())
-                        .unwrap_or_default();
-                    return self.assoc_ty(base, &name, depth);
+                    let name = tp.path.segments.last().map(|s| s.ident.to_string()).unwrap_or_default();
+                    let trait_id = if q.position > 0 {
+                        let trait_path: Vec<String> = tp
+                            .path
+                            .segments
+                            .iter()
+                            .take(q.position)
+                            .map(|s| s.ident.to_string())
+                            .collect();
+                        self.resolve(scope, &trait_path, tp.path.leading_colon.is_some(), Ns::Type)
+                            .into_iter()
+                            .find_map(|r| match r {
+                                Res::Item(id) if matches!(self.program.item(id).kind, ItemKind::Trait { .. }) => {
+                                    Some(id)
+                                }
+                                _ => None,
+                            })
+                    } else {
+                        None
+                    };
+                    return Ty::Assoc(Box::new(base), trait_id, name);
                 }
                 let segs = Self::segments(&tp.path);
                 let resolved = self.resolve(scope, &segs, tp.path.leading_colon.is_some(), Ns::Type);
                 let last = tp.path.segments.last();
                 let args = last.map(|s| self.args(scope, s, depth)).unwrap_or_default();
                 let Some(res) = resolved.into_iter().next() else {
-                    return Ty::unknown();
+                    return Ty::Unknown;
                 };
+                if let (Res::Item(id), Some(seg)) = (&res, last)
+                    && matches!(self.program.item(*id).kind, ItemKind::Trait { .. })
+                {
+                    // A trait named as a type: a trait object (edition 2015 syntax).
+                    return Ty::Dyn(self.trait_ref_of(scope, *id, seg, depth).into_iter().collect());
+                }
                 self.ty_of_res(scope, &res, args, depth)
             }
-            _ => Ty::unknown(),
+            _ => Ty::Unknown,
         }
     }
 
@@ -444,57 +531,71 @@ impl<'p> Resolver<'p> {
 
     fn ty_of_res(&self, scope: &Scope, res: &Res, args: Vec<Ty>, depth: usize) -> Ty {
         match res {
-            Res::Prim(p) => Ty::Prim(p.clone()),
+            Res::Prim(p) => Prim::from_name(p).map_or(Ty::Unknown, Ty::Prim),
             Res::Generic(g) => Ty::Param(*g),
             Res::SelfTy => self.self_ty(scope, depth),
-            Res::Ext(path) => Ty::Ext(path.last().cloned().unwrap_or_default(), args),
             Res::Item(id) => {
                 let item = self.program.item(*id);
                 match &item.kind {
                     ItemKind::Struct { .. } | ItemKind::Union { .. } | ItemKind::Enum { .. } => {
-                        let mut args = args;
-                        // Missing arguments are left to inference.
-                        while args.len() < item.scope.generics.len() {
-                            args.push(Ty::Infer);
-                        }
-                        Ty::Adt(*id, args)
+                        Ty::Adt(*id, self.fill_defaults(&item.scope, args, depth))
                     }
                     ItemKind::Alias { ty } => {
+                        let args = self.fill_defaults(&item.scope, args, depth);
                         let inner = self.ty_at(&item.scope, ty, depth.saturating_add(1));
-                        let map: BTreeMap<GenId, Ty> =
-                            item.scope.generics.iter().copied().zip(args).collect();
+                        let map: BTreeMap<GenId, Ty> = item.scope.generics.iter().copied().zip(args).collect();
                         inner.subst(&map)
                     }
-                    ItemKind::Trait { .. } => Ty::Dyn(vec![TraitRef::Kernel(*id, args)]),
-                    ItemKind::Const { .. } => Ty::unknown(),
+                    ItemKind::Trait { .. } | ItemKind::Const { .. } => Ty::Unknown,
                 }
             }
             Res::Assoc(base, name) => {
                 let base_ty = self.ty_of_res(scope, base, Vec::new(), depth);
-                self.assoc_ty(base_ty, name, depth)
+                self.assoc_ty(scope, base, base_ty, name, depth)
             }
             Res::Qualified(t, _) => (**t).clone(),
-            Res::Mod(_)
-            | Res::Variant(..)
-            | Res::Fn(_)
-            | Res::ConstParam(_)
-            | Res::Macro(_) => Ty::unknown(),
+            Res::Ext(_) | Res::Mod(_) | Res::Variant(..) | Res::Fn(_) | Res::ConstParam(_) | Res::Macro(_) => {
+                Ty::Unknown
+            }
         }
     }
 
-    /// The type item `id` names when written alone: a struct, enum or union with unknown
-    /// arguments, or what an alias expands to.
+    /// `args` for the generic parameters of an item whose scope is `item_scope`, with each one left
+    /// out filled by its default (earlier arguments put in) or left to inference.
+    fn fill_defaults(&self, item_scope: &Scope, mut args: Vec<Ty>, depth: usize) -> Vec<Ty> {
+        let generics = &item_scope.generics;
+        while args.len() < generics.len() {
+            let Some(g) = generics.get(args.len()) else {
+                break;
+            };
+            let generic = self.program.generic(*g);
+            let filled = match &generic.default {
+                Some(d) => {
+                    let map: BTreeMap<GenId, Ty> = generics.iter().copied().zip(args.iter().cloned()).collect();
+                    self.ty_at(&generic.scope, d, depth.saturating_add(1)).subst(&map)
+                }
+                None => Ty::Infer,
+            };
+            args.push(filled);
+        }
+        args.truncate(generics.len());
+        args
+    }
+
+    /// The type item `id` names when written alone: a struct, enum or union with its arguments
+    /// left to inference, or what an alias expands to.
     #[must_use]
     pub fn item_ty(&self, id: ItemId) -> Ty {
         let item = self.program.item(id);
         self.ty_of_res(&item.scope, &Res::Item(id), Vec::new(), 0)
     }
 
-    /// What `Self` is in `scope`.
+    /// What `Self` is in `scope`: an implementation's self type, a trait's `Self` parameter, or
+    /// a type in its own definition.
     #[must_use]
     pub fn self_ty(&self, scope: &Scope, depth: usize) -> Ty {
         match scope.self_ref {
-            SelfRef::None => Ty::unknown(),
+            SelfRef::None => Ty::Unknown,
             SelfRef::Impl(id) => {
                 let imp = self.program.imp(id);
                 let mut inner = imp.scope.clone();
@@ -515,114 +616,126 @@ impl<'p> Resolver<'p> {
         }
     }
 
-    /// The associated type `name` of `base`: from the kernel's implementations for a kernel type,
-    /// else left as a projection.
-    #[must_use]
-    pub fn assoc_ty(&self, base: Ty, name: &str, depth: usize) -> Ty {
-        if let Ty::Adt(id, _) = base.peel() {
-            for (i, imp) in self.program.impls.iter().enumerate() {
-                let Some(t) = imp.assoc.get(name) else {
-                    continue;
-                };
-                let mut inner = imp.scope.clone();
-                inner.self_ref = SelfRef::Impl(crate::recursion::model::ImplId(i));
-                let self_ty = {
-                    let mut s = imp.scope.clone();
-                    s.self_ref = SelfRef::None;
-                    self.ty_at(&s, &imp.self_ty, depth.saturating_add(1))
-                };
-                if matches!(self_ty.peel(), Ty::Adt(x, _) if x == id) {
+    /// The associated type `name` of `base_ty` (which `base` resolved to): an implementation's
+    /// own definition for `Self::Name` inside it; else a projection, with the trait that declares
+    /// `name` among the bounds of a generic parameter or `Self` when there is one.
+    fn assoc_ty(&self, scope: &Scope, base: &Res, base_ty: Ty, name: &str, depth: usize) -> Ty {
+        match (base, scope.self_ref) {
+            (Res::SelfTy, SelfRef::Impl(imp)) => {
+                let it = self.program.imp(imp);
+                if let Some(t) = it.assoc.get(name) {
+                    let mut inner = it.scope.clone();
+                    inner.self_ref = SelfRef::Impl(imp);
                     return self.ty_at(&inner, t, depth.saturating_add(1));
+                }
+                let declaring = it
+                    .trait_path
+                    .as_ref()
+                    .and_then(|p| self.trait_ref(&it.scope, p))
+                    .and_then(|tr| self.declaring_trait(&[tr], name));
+                Ty::Assoc(Box::new(base_ty), declaring, name.to_owned())
+            }
+            (Res::SelfTy, SelfRef::Trait(t, _)) => {
+                let own = TraitRef {
+                    id: t,
+                    args: Vec::new(),
+                    bindings: Vec::new(),
+                };
+                let declaring = self.declaring_trait(&[own], name);
+                Ty::Assoc(Box::new(base_ty), declaring, name.to_owned())
+            }
+            (Res::Generic(g), _) => {
+                let declaring = self.declaring_trait(&self.bounds(*g), name);
+                Ty::Assoc(Box::new(base_ty), declaring, name.to_owned())
+            }
+            _ => Ty::Assoc(Box::new(base_ty), None, name.to_owned()),
+        }
+    }
+
+    /// The trait among `traits` and their supertraits that declares associated type `name`.
+    #[must_use]
+    pub fn declaring_trait(&self, traits: &[TraitRef], name: &str) -> Option<ItemId> {
+        let mut work: Vec<ItemId> = traits.iter().map(|t| t.id).collect();
+        let mut seen = BTreeSet::new();
+        while let Some(t) = work.pop() {
+            if !seen.insert(t) {
+                continue;
+            }
+            let item = self.program.item(t);
+            if let ItemKind::Trait {
+                assoc_types,
+                supertraits,
+                ..
+            } = &item.kind
+            {
+                if assoc_types.contains_key(name) {
+                    return Some(t);
+                }
+                for s in self.trait_refs(&item.scope, supertraits.iter()) {
+                    work.push(s.id);
                 }
             }
         }
-        Ty::Assoc(Box::new(base), name.to_owned())
+        None
     }
 
-    /// The traits of a list of bounds; lifetimes and unreadable bounds are left out.
+    /// The traits of a list of bounds; lifetimes, `?Sized` and bounds that name no trait read are
+    /// left out.
     #[must_use]
-    pub fn trait_refs<'b>(
-        &self,
-        scope: &Scope,
-        bounds: impl Iterator<Item = &'b syn::TypeParamBound>,
-    ) -> Vec<TraitRef> {
+    pub fn trait_refs<'b>(&self, scope: &Scope, bounds: impl Iterator<Item = &'b syn::TypeParamBound>) -> Vec<TraitRef> {
         bounds
             .filter_map(|b| match b {
-                syn::TypeParamBound::Trait(t) => self.trait_ref(scope, &t.path),
+                syn::TypeParamBound::Trait(t) if t.maybe.is_none() => {
+                    self.trait_ref(scope, &t.path)
+                }
                 _ => None,
             })
             .collect()
     }
 
-    /// The trait a path names, with its arguments.
+    /// The trait a path names, with its arguments and bindings; a closure trait written
+    /// `Fn(A, B) -> R` is `Fn<(A, B)>` with `Output = R`. `None` when the path names no trait the
+    /// check reads.
     #[must_use]
     pub fn trait_ref(&self, scope: &Scope, path: &syn::Path) -> Option<TraitRef> {
         let segs = Self::segments(path);
-        let args = path
-            .segments
-            .last()
-            .map(|s| self.args(scope, s, 0))
-            .unwrap_or_default();
-        // A closure trait written with its parentheses: `Fn(A, B) -> R`.
-        if let Some(last) = path.segments.last()
-            && let syn::PathArguments::Parenthesized(p) = &last.arguments
-        {
-            let name = last.ident.to_string();
-            if crate::recursion::ty::FN_TRAITS.contains(&name.as_str()) {
-                let output = match &p.output {
-                    syn::ReturnType::Type(_, t) => self.ty_at(scope, t, 0),
-                    syn::ReturnType::Default => Ty::unit(),
-                };
-                return Some(TraitRef::Fn(name, args, Box::new(output)));
-            }
-        }
-        let res = self
+        let id = self
             .resolve(scope, &segs, path.leading_colon.is_some(), Ns::Type)
             .into_iter()
-            .next();
-        match res {
-            Some(Res::Item(id))
-                if matches!(self.program.item(id).kind, ItemKind::Trait { .. }) =>
-            {
-                Some(TraitRef::Kernel(id, args))
-            }
-            Some(Res::Ext(p)) => Some(TraitRef::Ext(p.last().cloned().unwrap_or_default(), args)),
-            // A trait the resolver cannot find is named by its last segment, as an outside one.
-            None => segs.last().map(|s| TraitRef::Ext(s.clone(), args)),
-            _ => None,
-        }
+            .find_map(|r| match r {
+                Res::Item(id) if matches!(self.program.item(id).kind, ItemKind::Trait { .. }) => Some(id),
+                _ => None,
+            })?;
+        let seg = path.segments.last()?;
+        self.trait_ref_of(scope, id, seg, 0)
     }
 
-    /// The traits a generic parameter is bounded by, with their supertraits, each once.
+    fn trait_ref_of(&self, scope: &Scope, id: ItemId, seg: &syn::PathSegment, depth: usize) -> Option<TraitRef> {
+        if let syn::PathArguments::Parenthesized(p) = &seg.arguments {
+            let inputs: Vec<Ty> = p.inputs.iter().map(|t| self.ty_at(scope, &t.ty, depth)).collect();
+            let output = match &p.output {
+                syn::ReturnType::Type(_, t) => self.ty_at(scope, t, depth),
+                syn::ReturnType::Default => Ty::unit(),
+            };
+            return Some(TraitRef {
+                id,
+                args: vec![Ty::Tuple(inputs)],
+                bindings: vec![("Output".to_owned(), output)],
+            });
+        }
+        Some(TraitRef {
+            id,
+            args: self.args(scope, seg, depth),
+            bindings: self.bindings(scope, seg, depth),
+        })
+    }
+
+    /// The traits a generic parameter is bounded by, as written (supertraits are the index's,
+    /// [`crate::recursion::index::Index::supertraits`]).
     #[must_use]
     pub fn bounds(&self, g: GenId) -> Vec<TraitRef> {
         let generic = self.program.generic(g);
-        let direct = self.trait_refs(&generic.scope, generic.bounds.iter());
-        self.with_supertraits(direct)
-    }
-
-    /// `traits` and every kernel supertrait they lead to, each once, in a fixed order.
-    #[must_use]
-    pub fn with_supertraits(&self, traits: Vec<TraitRef>) -> Vec<TraitRef> {
-        let mut out: Vec<TraitRef> = Vec::new();
-        let mut work = traits;
-        work.reverse();
-        let mut seen: BTreeSet<TraitRef> = BTreeSet::new();
-        while let Some(t) = work.pop() {
-            if !seen.insert(t.clone()) {
-                continue;
-            }
-            if let TraitRef::Kernel(id, _) = &t
-                && let ItemKind::Trait { supertraits, .. } = &self.program.item(*id).kind
-            {
-                let item_scope = self.program.item(*id).scope.clone();
-                let mut supers = self.trait_refs(&item_scope, supertraits.iter());
-                supers.reverse();
-                work.extend(supers);
-            }
-            out.push(t);
-        }
-        out
+        self.trait_refs(&generic.scope, generic.bounds.iter())
     }
 }
 
@@ -710,7 +823,8 @@ mod tests {
         ));
         assert_eq!(
             r.resolve(&caller.scope, &segs("core::cmp::max"), false, Ns::Value),
-            [Res::Ext(segs("core::cmp::max"))]
+            [Res::Ext(segs("core::cmp::max"))],
+            "without the model, the standard library is outside"
         );
         assert_eq!(
             r.resolve(&caller.scope, &segs("Some"), false, Ns::Value),
@@ -725,7 +839,7 @@ mod tests {
             "c/a/src/lib.rs",
             "pub struct W<T> { t: T } pub type Wu = W<u64>;\n\
              impl<T: Clone> W<T> { fn get(&self) -> &T { &self.t } }\n\
-             fn f(x: Wu, y: &[W<bool>], z: impl Fn(u8) -> u8) {}",
+             fn f(x: Wu, y: &[W<bool>], z: &dyn core::fmt::Debug) {}",
         )]);
         let r = Resolver::new(&p);
         let (_, f) = fn_named(&p, "a::f");
@@ -735,16 +849,16 @@ mod tests {
             .iter()
             .map(|i| match i {
                 syn::FnArg::Typed(t) => r.ty(&f.scope, &t.ty),
-                syn::FnArg::Receiver(_) => Ty::unknown(),
+                syn::FnArg::Receiver(_) => Ty::Unknown,
             })
             .collect();
         let w = ItemId(0);
-        assert_eq!(tys[0], Ty::Adt(w, vec![Ty::Prim("u64".to_owned())]));
+        assert_eq!(tys[0], Ty::Adt(w, vec![Ty::Prim(Prim::U64)]));
         assert_eq!(
             tys[1],
-            Ty::Ref(Box::new(Ty::Slice(Box::new(Ty::Adt(w, vec![Ty::Prim("bool".to_owned())])))))
+            Ty::Ref(Box::new(Ty::Slice(Box::new(Ty::Adt(w, vec![Ty::Prim(Prim::Bool)])))))
         );
-        assert!(matches!(&tys[2], Ty::Dyn(t) if t[0].fn_arity() == Some(1)));
+        assert_eq!(tys[2], Ty::Ref(Box::new(Ty::Dyn(Vec::new()))), "an outside trait is no bound");
         let get = p.nodes.iter().find(|n| n.ident == "get").unwrap();
         assert!(matches!(r.self_ty(&get.scope, 0), Ty::Adt(id, ref a) if id == w && matches!(a[0], Ty::Param(_))));
     }
