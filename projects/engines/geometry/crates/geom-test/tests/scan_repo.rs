@@ -35,7 +35,10 @@ fn no_banned_source_marker_in_the_kernel() {
         .iter()
         .filter_map(|(path, _)| path.split('/').nth(4))
         .collect();
-    assert!(crates.len() > 40, "the scan found too few crates: {crates:?}");
+    assert!(
+        crates.len() > 40,
+        "the scan found too few crates: {crates:?}"
+    );
     for wanted in [
         "projects/engines/geometry/crates/geom-num/src/math/exp.rs",
         "projects/engines/geometry/crates/geom-num/Cargo.toml",
@@ -59,7 +62,7 @@ fn the_exemptions_are_the_scanner_s_own_files() {
             "{} is not one of the scanner's own files",
             e.file
         );
-        assert!(!e.reason.is_empty());
+        assert_ne!(e.reason, "");
     }
     let unique: BTreeSet<&str> = EXEMPT.iter().map(|e| e.file).collect();
     assert_eq!(unique.len(), EXEMPT.len(), "an exemption is listed twice");
@@ -81,7 +84,7 @@ fn the_marker_tables_hold_no_duplicates_and_no_blank() {
         .chain(&markers::TAKING)
         .chain(&markers::COPYLEFT_SOURCES)
     {
-        assert!(!phrase.is_empty());
+        assert_ne!(phrase.len(), 0);
         for word in *phrase {
             assert_eq!(
                 *word,

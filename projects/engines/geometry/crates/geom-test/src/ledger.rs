@@ -503,7 +503,10 @@ mod tests {
 
     #[test]
     fn canonical_licences() {
-        assert_eq!(canonical("Apache-2.0 OR MIT"), canonical("MIT OR Apache-2.0"));
+        assert_eq!(
+            canonical("Apache-2.0 OR MIT"),
+            canonical("MIT OR Apache-2.0")
+        );
         assert_eq!(canonical("public domain"), "public domain");
     }
 }

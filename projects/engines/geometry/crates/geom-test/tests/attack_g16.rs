@@ -152,7 +152,11 @@ fn every_taking_phrase_with_every_banned_source_is_found() {
             let source = source.join(" ");
             texts.push((format!("// {} {source}", taking.join(" ")), 1));
             texts.push((
-                format!("//! {} the\n//! {}'s code", capitalised(&taking.join(" ")), source.to_uppercase()),
+                format!(
+                    "//! {} the\n//! {}'s code",
+                    capitalised(&taking.join(" ")),
+                    source.to_uppercase()
+                ),
                 1,
             ));
             if let [head, tail] = taking {
@@ -191,16 +195,36 @@ fn the_gap_window_and_reach_have_their_stated_sizes() {
     let taken = Category::TakenFromCopyleft;
     let gap = markers::TAKING_GAP;
     // The second word of a phrase at most TAKING_GAP words after the first.
-    assert!(found(&format!("taken {} from CGAL", fill(gap - 1)), 1, taken));
+    assert!(found(
+        &format!("taken {} from CGAL", fill(gap - 1)),
+        1,
+        taken
+    ));
     assert!(!found(&format!("taken {} from CGAL", fill(gap)), 1, taken));
     // The source within WINDOW words after the phrase.
     let window = markers::WINDOW;
-    assert!(found(&format!("taken from {} CGAL", fill(window - 1)), 1, taken));
-    assert!(!found(&format!("taken from {} CGAL", fill(window)), 1, taken));
+    assert!(found(
+        &format!("taken from {} CGAL", fill(window - 1)),
+        1,
+        taken
+    ));
+    assert!(!found(
+        &format!("taken from {} CGAL", fill(window)),
+        1,
+        taken
+    ));
     // A negation within NEGATION_REACH words before it.
     let reach = markers::NEGATION_REACH;
-    assert!(!found(&format!("no {} taken from CGAL", fill(reach - 1)), 1, taken));
-    assert!(found(&format!("no {} taken from CGAL", fill(reach)), 1, taken));
+    assert!(!found(
+        &format!("no {} taken from CGAL", fill(reach - 1)),
+        1,
+        taken
+    ));
+    assert!(found(
+        &format!("no {} taken from CGAL", fill(reach)),
+        1,
+        taken
+    ));
 }
 
 #[test]
@@ -209,7 +233,10 @@ fn every_autodesk_name_and_description_is_found() {
     for name in markers::ACAD_PATTERNS {
         texts.push((format!("*{name}, a pattern"), 1));
         texts.push((format!("Pattern::named(\"{}\")", name.to_lowercase()), 1));
-        texts.push((format!("const P: &str = \"{}\";", name.replace('-', "_")), 1));
+        texts.push((
+            format!("const P: &str = \"{}\";", name.replace('-', "_")),
+            1,
+        ));
         texts.push((format!("\n// {name}"), 2));
     }
     for n in 2..=15 {
@@ -223,7 +250,10 @@ fn every_autodesk_name_and_description_is_found() {
         texts.push((format!("*X, {description}"), 1));
         texts.push((format!("(\"X\", \"{}\")", description.to_uppercase()), 1));
         // A Rust string literal escapes every backslash.
-        texts.push((format!("(\"X\", \"{}\")", description.replace('\\', "\\\\")), 1));
+        texts.push((
+            format!("(\"X\", \"{}\")", description.replace('\\', "\\\\")),
+            1,
+        ));
         // Split at its last space, across two comment lines and across two plain lines.
         let (head, tail) = description.rsplit_once(' ').unwrap();
         texts.push((format!("//! {head}\n//! {tail}"), 1));
@@ -237,8 +267,21 @@ fn every_autodesk_name_and_description_is_found() {
 fn the_constant_is_found_however_its_decimal_literal_is_written() {
     let mut texts = Vec::new();
     for literal in [
-        "1.89e-4", "1.89E-4", "1.89e-04", "1.890e-4", "18.9e-5", "189e-6", "0.189e-3", "0.000189",
-        "0.000_189", "1_89e-6", ".000189", "1.89e-4_f64", "1.89e-4f", "1.89e-4L", "1.89_e-4",
+        "1.89e-4",
+        "1.89E-4",
+        "1.89e-04",
+        "1.890e-4",
+        "18.9e-5",
+        "189e-6",
+        "0.189e-3",
+        "0.000189",
+        "0.000_189",
+        "1_89e-6",
+        ".000189",
+        "1.89e-4_f64",
+        "1.89e-4f",
+        "1.89e-4L",
+        "1.89_e-4",
     ] {
         texts.push((format!("#define LIMIT {literal}"), 1));
         texts.push((format!("\nlet limit = -{literal};"), 2));
@@ -292,7 +335,11 @@ fn a_file_is_read_in_every_encoding() {
             out.extend(if big { [0xfe, 0xff] } else { [0xff, 0xfe] });
         }
         for unit in text.encode_utf16() {
-            out.extend(if big { unit.to_be_bytes() } else { unit.to_le_bytes() });
+            out.extend(if big {
+                unit.to_be_bytes()
+            } else {
+                unit.to_le_bytes()
+            });
         }
         out
     };
@@ -302,7 +349,10 @@ fn a_file_is_read_in_every_encoding() {
         ("utf-16le with its mark", utf16(text, false, true)),
         ("utf-16be with its mark", utf16(text, true, true)),
         ("utf-16le without a mark", utf16(text, false, false)),
-        ("invalid bytes around it", b"\xff\xfe\x00// one\nfn svdcmp() {}\n\xc3".to_vec()),
+        (
+            "invalid bytes around it",
+            b"\xff\xfe\x00// one\nfn svdcmp() {}\n\xc3".to_vec(),
+        ),
     ];
     for (what, bytes) in cases {
         let files = vec![("a/b.rs".to_owned(), Ok(scan_repo::readings(&bytes)))];
@@ -315,7 +365,10 @@ fn a_file_is_read_in_every_encoding() {
         );
     }
     // A zero byte that separates two words does not join them out of sight: every reading counts.
-    let files = vec![("a/b.rs".to_owned(), Ok(scan_repo::readings(b"abc\x00svdcmp")))];
+    let files = vec![(
+        "a/b.rs".to_owned(),
+        Ok(scan_repo::readings(b"abc\x00svdcmp")),
+    )];
     assert_eq!(scan_repo::scan_files(&files, &[]).len(), 1);
 }
 
@@ -323,7 +376,7 @@ fn a_file_is_read_in_every_encoding() {
 fn every_exemption_holds_a_marker_and_this_file_is_one() {
     let this = "projects/engines/geometry/crates/geom-test/tests/attack_g16.rs";
     assert!(EXEMPT.iter().any(|e| e.file == this));
-    assert!(!scan_text(include_str!("attack_g16.rs")).is_empty());
+    assert_ne!(scan_text(include_str!("attack_g16.rs")), []);
     // An exemption names one file exactly, never a folder or a prefix.
     let exempt = [Exempt {
         file: "projects/engines/geometry/crates/geom-x/src/a.rs",
@@ -341,7 +394,10 @@ fn every_exemption_holds_a_marker_and_this_file_is_one() {
     ];
     let findings = scan_repo::scan_files(&files, &exempt);
     assert_eq!(findings.len(), 1, "{findings:#?}");
-    assert!(findings[0].file.ends_with(".bak"));
+    assert_eq!(
+        findings[0].file,
+        "projects/engines/geometry/crates/geom-x/src/a.rs.bak"
+    );
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -389,7 +445,10 @@ fn the_cited_fixture_passes_and_cites_its_method_and_every_constant() {
             "the constant {name} = {value} is not derived in the header"
         );
     }
-    assert_eq!(constants, 4, "LOWER_ORDER, SAFETY_FACTOR, LARGEST_GROWTH and SMALLEST_SHRINK");
+    assert_eq!(
+        constants, 4,
+        "LOWER_ORDER, SAFETY_FACTOR, LARGEST_GROWTH and SMALLEST_SHRINK"
+    );
 }
 
 #[test]
@@ -662,7 +721,12 @@ fn an_origin_without_a_copyright_line_fails_and_a_run_of_links_shares_one() {
     s.ported = ported(&format!(
         "//!   Copyright (c) 2020 A. Author\n//!   <https://github.com/ex/ample/blob/{SHA}/src/b.c>\n"
     ));
-    has_problem(&s.ledger(), "ported.rs", Rule::Notice, "no copyright line for the origin file");
+    has_problem(
+        &s.ledger(),
+        "ported.rs",
+        Rule::Notice,
+        "no copyright line for the origin file",
+    );
     // Two links, then the one copyright line both files carry: shared, and NOTICE says so twice.
     let mut s = Seeded::good();
     s.ported = ported(&format!(
@@ -685,7 +749,12 @@ fn a_note_must_record_every_module_that_names_it() {
         "lesser-method.md",
         &note("`geom-x`'s module, by session B, without the source"),
     );
-    has_problem(&s.ledger(), "lesser-method.md", Rule::Note, "geom-x/src/noted.rs names this note");
+    has_problem(
+        &s.ledger(),
+        "lesser-method.md",
+        Rule::Note,
+        "geom-x/src/noted.rs names this note",
+    );
 }
 
 #[test]
@@ -720,7 +789,9 @@ fn a_map_whose_sources_and_records_disagree_fails() {
     let Some(Value::Array(sources)) = fewer.get_mut("sources") else {
         panic!("the map has sources");
     };
-    sources.retain(|v| !matches!(v, Value::Object(o) if o.get("name") == Some(&Value::from("Plain Lib"))));
+    sources.retain(
+        |v| !matches!(v, Value::Object(o) if o.get("name") == Some(&Value::from("Plain Lib"))),
+    );
     let ledger = s.ledger_of(&Value::Object(fewer), 0);
     has_problem(&ledger, "noted.rs", Rule::Map, "Plain Lib");
 }
@@ -739,9 +810,17 @@ fn a_crate_header_s_record_is_in_both_files() {
     assert_eq!(generated.problems, [], "the seeded headers are complete");
     let ledger = s.ledger_of(&generated.map, 0);
     assert_eq!(ledger.problems, []);
-    assert!(ledger.notice.contains("Crate Lib\n  Licence:      BSD-3-Clause"), "{}", ledger.notice);
     assert!(
-        ledger.provenance.contains("`projects/engines/geometry/crates/geom-x/src/lib.rs`: for its layout."),
+        ledger
+            .notice
+            .contains("Crate Lib\n  Licence:      BSD-3-Clause"),
+        "{}",
+        ledger.notice
+    );
+    assert!(
+        ledger
+            .provenance
+            .contains("`projects/engines/geometry/crates/geom-x/src/lib.rs`: for its layout."),
         "{}",
         ledger.provenance
     );
@@ -868,21 +947,29 @@ mod tree {
             .lines()
             .find(|l| l.starts_with("| Source |"))
             .expect("an outside-sources table");
-        let columns: Vec<&str> = header
-            .trim_matches('|')
-            .split('|')
-            .map(str::trim)
-            .collect();
+        let columns: Vec<&str> = header.trim_matches('|').split('|').map(str::trim).collect();
         assert_eq!(
             columns,
-            ["Source", "Pinned link", "Licence", "Class (29.1)", "Files affected", "What was taken"]
+            [
+                "Source",
+                "Pinned link",
+                "Licence",
+                "Class (29.1)",
+                "Files affected",
+                "What was taken"
+            ]
         );
         for class in ["DEPEND", "PORT", "PORT METHOD", "ORACLE", "STUDY"] {
-            assert!(template.contains(class), "the template does not name the class {class}");
+            assert!(
+                template.contains(class),
+                "the template does not name the class {class}"
+            );
         }
         // Rule 6: the session that read, the session that wrote and that the source was not in
         // its context (step 5), and the second reviewer's check for copied expression (step 4).
-        assert!(chapter.contains("The pull request names that session and states that the source was not in its context"));
+        assert!(chapter.contains(
+            "The pull request names that session and states that the source was not in its context"
+        ));
         let attestation = &template[template.find("## Session attestation").unwrap()..];
         for words in [
             "the session that read each source",
@@ -891,7 +978,10 @@ mod tree {
             "second reviewer",
             "copied expression",
         ] {
-            assert!(attestation.contains(words), "the attestation does not ask for {words:?}");
+            assert!(
+                attestation.contains(words),
+                "the attestation does not ask for {words:?}"
+            );
         }
     }
 
@@ -905,7 +995,9 @@ mod tree {
             "run: cargo run --locked -p geom-test --bin source-scan -- check",
             "run: cargo run --locked -p geom-test --bin map -- check",
         ] {
-            let at = workflow.find(step).unwrap_or_else(|| panic!("no step {step}"));
+            let at = workflow
+                .find(step)
+                .unwrap_or_else(|| panic!("no step {step}"));
             assert!(native < at && at < wasm, "{step} is not in the native job");
         }
         let job = &workflow[native..wasm];
@@ -917,8 +1009,18 @@ mod tree {
             "macos-latest",
             "macos-15-intel",
         ] {
-            assert!(job.contains(&format!("os: {os}")), "the native job does not run on {os}");
+            assert!(
+                job.contains(&format!("os: {os}")),
+                "the native job does not run on {os}"
+            );
         }
+    }
+
+    /// Whether a file name is a Markdown file's.
+    fn is_markdown(name: &str) -> bool {
+        std::path::Path::new(name)
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("md"))
     }
 
     /// Every note under `methods/`, apart from the template and the README, with its text.
@@ -927,7 +1029,7 @@ mod tree {
         let mut out: Vec<(String, String)> = fs::read_dir(&dir)
             .unwrap()
             .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
-            .filter(|n| n.ends_with(".md") && n != "TEMPLATE.md" && n != "README.md")
+            .filter(|n| is_markdown(n) && n != "TEMPLATE.md" && n != "README.md")
             .map(|n| {
                 let text = read(&format!("projects/engines/geometry/methods/{n}"));
                 (n, text)
@@ -954,16 +1056,29 @@ mod tree {
         }
         let chapter = chapter_29();
         for (row, note) in [
-            ("| OCCT `TNaming` and `BRepTools_History` | LGPL-2.1 with the OCCT exception |", "occt-history-contract.md"),
-            ("| FreeCAD element map | LGPL-2.1-or-later |", "freecad-naming-lessons.md"),
+            (
+                "| OCCT `TNaming` and `BRepTools_History` | LGPL-2.1 with the OCCT exception |",
+                "occt-history-contract.md",
+            ),
+            (
+                "| FreeCAD element map | LGPL-2.1-or-later |",
+                "freecad-naming-lessons.md",
+            ),
         ] {
             assert!(chapter.contains(row), "chapter 29 has no row {row}");
             let text = &notes.iter().find(|(n, _)| n == note).unwrap().1;
             let licence = field(text, "Licence");
-            assert_eq!(classes::of(licence), Ok(Class::MethodOnly), "{note}: {licence}");
+            assert_eq!(
+                classes::of(licence),
+                Ok(Class::MethodOnly),
+                "{note}: {licence}"
+            );
             let ledger_row = field(text, "Ledger row");
             let row_name = row.trim_start_matches("| ").split(" |").next().unwrap();
-            assert!(ledger_row.contains(row_name), "{note} does not name its row {row_name}");
+            assert!(
+                ledger_row.contains(row_name),
+                "{note} does not name its row {row_name}"
+            );
         }
     }
 
@@ -984,21 +1099,30 @@ mod tree {
                 .nth(1)
                 .filter(|c| c.len() == 40)
                 .unwrap_or_else(|| panic!("{name}: Files read opens with the pinned commit"));
-            assert!(field(&note, "Pinned link").contains(commit), "{name}: the pinned link's commit");
+            assert!(
+                field(&note, "Pinned link").contains(commit),
+                "{name}: the pinned link's commit"
+            );
             let read_by = field(&note, "Read by");
             let reports: String = read_by
                 .split('`')
-                .filter(|p| p.starts_with("projects/kit/notes/G01-evidence/") && p.ends_with(".md"))
+                .filter(|p| p.starts_with("projects/kit/notes/G01-evidence/") && is_markdown(p))
                 .map(read)
                 .collect();
-            assert!(!reports.is_empty(), "{name}: Read by names no evidence report");
+            assert!(
+                !reports.is_empty(),
+                "{name}: Read by names no evidence report"
+            );
             let pieces: Vec<&str> = files_read.split('`').collect();
             let mut checked = 0;
             for k in (3..pieces.len()).step_by(2) {
                 let path = pieces[k];
                 let after = pieces.get(k + 1).copied().unwrap_or_default();
                 let prefix = format!("{commit}/{path}");
-                assert!(reports.contains(&prefix), "{name}: {path} is not cited at {commit}");
+                assert!(
+                    reports.contains(&prefix),
+                    "{name}: {path} is not cited at {commit}"
+                );
                 // Every line number the reports cite for this file.
                 let mut cited: Vec<String> = Vec::new();
                 for (at, _) in reports.match_indices(&prefix) {
@@ -1035,12 +1159,12 @@ mod tree {
 
     #[test]
     fn the_gap_g15_left_is_closed_by_a_note_true_to_its_record() {
-        assert!(geom_test::map::GAPS.is_empty());
+        assert_eq!(geom_test::map::GAPS, &[]);
         let interval = read("projects/engines/geometry/crates/geom-num/src/interval.rs");
         assert!(interval.contains("Number_types/include/CGAL/FPU.h#L347-L358"));
-        assert!(
-            interval.contains("Method note: `projects/engines/geometry/methods/cgal-nextafter-widening.md`")
-        );
+        assert!(interval.contains(
+            "Method note: `projects/engines/geometry/methods/cgal-nextafter-widening.md`"
+        ));
         let note = read("projects/engines/geometry/methods/cgal-nextafter-widening.md");
         assert!(field(&note, "Files read").contains("lines 347 to 358"));
         assert!(
@@ -1055,7 +1179,8 @@ mod tree {
     fn every_source_of_the_committed_map_is_in_both_committed_files() {
         // Read MAP.json with serde_json, not the crate's own reader, and look for each source in
         // the committed PROVENANCE.md and NOTICE as text.
-        let map: serde_json::Value = serde_json::from_str(&read("projects/engines/geometry/MAP.json")).unwrap();
+        let map: serde_json::Value =
+            serde_json::from_str(&read("projects/engines/geometry/MAP.json")).unwrap();
         let provenance = read("projects/engines/geometry/PROVENANCE.md");
         let notice = read("projects/engines/geometry/NOTICE");
         let sources = map["sources"].as_array().unwrap();
@@ -1066,10 +1191,16 @@ mod tree {
             let link = source["link"].as_str().unwrap();
             let name = source["name"].as_str().unwrap();
             let link_cell = format!("<{link}>");
-            assert!(provenance.contains(&link_cell), "PROVENANCE.md lacks {link}");
+            assert!(
+                provenance.contains(&link_cell),
+                "PROVENANCE.md lacks {link}"
+            );
             for file in source["used_by"].as_array().unwrap() {
                 let file = file.as_str().unwrap();
-                assert!(provenance.contains(&format!("`{file}`")), "PROVENANCE.md lacks {file}");
+                assert!(
+                    provenance.contains(&format!("`{file}`")),
+                    "PROVENANCE.md lacks {file}"
+                );
                 assert!(
                     take == "depend" || notice.contains(file),
                     "NOTICE lacks {file}, which takes {name}"
@@ -1078,19 +1209,27 @@ mod tree {
             match take {
                 "port" => {
                     counts[0] += 1;
-                    assert!(notice.contains(&format!("    {link}\n")), "NOTICE lacks {link}");
+                    assert!(
+                        notice.contains(&format!("    {link}\n")),
+                        "NOTICE lacks {link}"
+                    );
                 }
                 "port-method" => {
                     counts[1] += 1;
                     assert!(
-                        notice.contains(&format!("{name}\n  Licence:      {}\n  Link:         {link}\n",
-                            source["licence"].as_str().unwrap())),
+                        notice.contains(&format!(
+                            "{name}\n  Licence:      {}\n  Link:         {link}\n",
+                            source["licence"].as_str().unwrap()
+                        )),
                         "NOTICE does not credit {name}"
                     );
                 }
                 "depend" => {
                     counts[2] += 1;
-                    assert!(notice.contains(&format!("  {name} ")), "NOTICE lacks the crate {name}");
+                    assert!(
+                        notice.contains(&format!("  {name} ")),
+                        "NOTICE lacks the crate {name}"
+                    );
                 }
                 other => panic!("a source taken as {other}"),
             }

@@ -83,8 +83,17 @@ fn the_readmes_name_what_the_checks_read() {
             "TEMPLATE.md lacks the section {section}"
         );
     }
-    for words in ["method only", "owner only", "full commit", "code block", "Method note:"] {
-        assert!(methods.contains(words), "methods/README.md does not say {words:?}");
+    for words in [
+        "method only",
+        "owner only",
+        "full commit",
+        "code block",
+        "Method note:",
+    ] {
+        assert!(
+            methods.contains(words),
+            "methods/README.md does not say {words:?}"
+        );
     }
     let notices = read(&format!("{NOTICES_DIR}README.md"));
     for key in KEYS {
@@ -107,7 +116,10 @@ fn ci_regenerates_and_compares_the_ledger() {
         "\"projects/engines/geometry/**\"",
         "\"projects/engines/crates/**\"",
     ] {
-        assert!(workflow.contains(path), "kernel-dev.yml does not run on {path}");
+        assert!(
+            workflow.contains(path),
+            "kernel-dev.yml does not run on {path}"
+        );
     }
     let grammar = read("projects/engines/geometry/HEADERS.md");
     assert!(
@@ -134,6 +146,9 @@ fn the_pull_request_template_asks_for_outside_sources_and_sessions() {
         "source-scan -- check",
         "provenance -- check",
     ] {
-        assert!(template.contains(words), "the template does not say {words:?}");
+        assert!(
+            template.contains(words),
+            "the template does not say {words:?}"
+        );
     }
 }

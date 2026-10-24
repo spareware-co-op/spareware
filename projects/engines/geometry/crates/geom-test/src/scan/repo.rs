@@ -128,9 +128,12 @@ pub type Scanned = (String, Result<Vec<String>, String>);
 pub fn readings(bytes: &[u8]) -> Vec<String> {
     let mut out = vec![String::from_utf8_lossy(bytes).into_owned()];
     let utf16 = |rest: &[u8], unit: fn([u8; 2]) -> u16| -> String {
-        let units = rest
-            .chunks_exact(2)
-            .map(|pair| unit([pair.first().copied().unwrap_or(0), pair.get(1).copied().unwrap_or(0)]));
+        let units = rest.chunks_exact(2).map(|pair| {
+            unit([
+                pair.first().copied().unwrap_or(0),
+                pair.get(1).copied().unwrap_or(0),
+            ])
+        });
         char::decode_utf16(units)
             .map(|c| c.unwrap_or(char::REPLACEMENT_CHARACTER))
             .collect()
@@ -155,7 +158,11 @@ fn walk(root: &Path, folder: &str, out: &mut Vec<Scanned>) -> Result<(), MapErro
         for entry in listing {
             let entry = entry.map_err(|e| error(&dir, &e))?;
             let kind = entry.file_type().map_err(|e| error(&entry.path(), &e))?;
-            entries.push((entry.file_name().to_string_lossy().into_owned(), entry.path(), kind));
+            entries.push((
+                entry.file_name().to_string_lossy().into_owned(),
+                entry.path(),
+                kind,
+            ));
         }
         entries.sort_by(|a, b| a.0.cmp(&b.0));
         for (name, path, kind) in entries {
@@ -163,16 +170,21 @@ fn walk(root: &Path, folder: &str, out: &mut Vec<Scanned>) -> Result<(), MapErro
             if kind.is_symlink() {
                 out.push((
                     child,
-                    Err("a symbolic link or junction; the scan reads files and folders only, so \
+                    Err(
+                        "a symbolic link or junction; the scan reads files and folders only, so \
                          keep what it points to here"
-                        .to_owned()),
+                            .to_owned(),
+                    ),
                 ));
             } else if kind.is_dir() {
                 if name == BUILD_OUTPUT {
                     continue;
                 }
                 if depth >= MAX_DEPTH {
-                    out.push((child, Err(format!("a folder deeper than {MAX_DEPTH} levels"))));
+                    out.push((
+                        child,
+                        Err(format!("a folder deeper than {MAX_DEPTH} levels")),
+                    ));
                 } else {
                     stack.push((path, child, depth.saturating_add(1)));
                 }
@@ -202,14 +214,20 @@ pub fn files(root: &Path) -> Result<Vec<Scanned>, MapError> {
             let entry = entry.map_err(|e| error(&facades, &e))?;
             let name = entry.file_name().to_string_lossy().into_owned();
             if is_facade(&name) {
-                names.push((name, entry.file_type().map_err(|e| error(&entry.path(), &e))?));
+                names.push((
+                    name,
+                    entry.file_type().map_err(|e| error(&entry.path(), &e))?,
+                ));
             }
         }
         names.sort_by(|a, b| a.0.cmp(&b.0));
         for (name, kind) in names {
             let folder = format!("{FACADE_DIR}/{name}");
             if kind.is_symlink() {
-                out.push((folder, Err("a crate folder that is a symbolic link or junction".to_owned())));
+                out.push((
+                    folder,
+                    Err("a crate folder that is a symbolic link or junction".to_owned()),
+                ));
             } else if kind.is_dir() {
                 walk(root, &folder, &mut out)?;
             }

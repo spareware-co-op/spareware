@@ -34,7 +34,8 @@ const SHA2: &str = "89abcdef0123456789abcdef0123456789abcdef";
 const NOTICES: &str = "projects/engines/geometry/notices";
 const METHODS: &str = "projects/engines/geometry/methods";
 
-const MANIFEST: &str = "[package]\nname = \"geom-x\"\nversion = \"0.0.0\"\nlicense = \"MPL-2.0 AND MIT\"\n";
+const MANIFEST: &str =
+    "[package]\nname = \"geom-x\"\nversion = \"0.0.0\"\nlicense = \"MPL-2.0 AND MIT\"\n";
 
 const LIB: &str = "//! Spare Kit geometry kernel: an example.
 //!
@@ -200,8 +201,16 @@ impl Seeded {
             ],
             notices: vec![
                 file(NOTICES, "README.md", "# Licence texts\n"),
-                file(NOTICES, "ample.txt", &notice("Ample", "ex/ample", SHA, "MIT")),
-                file(NOTICES, "other.txt", &notice("Other", "other/lib", SHA2, "MIT")),
+                file(
+                    NOTICES,
+                    "ample.txt",
+                    &notice("Ample", "ex/ample", SHA, "MIT"),
+                ),
+                file(
+                    NOTICES,
+                    "other.txt",
+                    &notice("Other", "other/lib", SHA2, "MIT"),
+                ),
             ],
             notes: vec![
                 file(METHODS, "README.md", "# Method notes\n"),
@@ -283,7 +292,9 @@ fn a_good_workspace_writes_every_record() {
             "    https://github.com/ex/ample/blob/{SHA}/src/a.c\n      Copyright (c) 2020 A. \
              Author\n      Authors: A. Author and C. Author.\n"
         ),
-        &format!("    https://github.com/other/lib/blob/{SHA2}/b.h\n      Copyright (c) 2021 B. Author\n"),
+        &format!(
+            "    https://github.com/other/lib/blob/{SHA2}/b.h\n      Copyright (c) 2021 B. Author\n"
+        ),
     ] {
         assert!(n.contains(wanted), "NOTICE lacks {wanted:?}:\n{n}");
     }
@@ -348,15 +359,20 @@ fn a_port_without_its_licence_text_fails() {
 #[test]
 fn a_licence_text_no_port_uses_fails() {
     let mut s = Seeded::good();
-    s.notices
-        .push(file(NOTICES, "unused.txt", &notice("Unused", "un/used", SHA, "MIT")));
+    s.notices.push(file(
+        NOTICES,
+        "unused.txt",
+        &notice("Unused", "un/used", SHA, "MIT"),
+    ));
     one_problem(&s.ledger(), "unused.txt", Rule::Notice, "not owed");
     // A licence text at another commit of a ported repository is not the port's either.
     let mut s = Seeded::good();
-    s.notices
-        .retain(|f| !f.path.ends_with("ample.txt"));
-    s.notices
-        .push(file(NOTICES, "ample.txt", &notice("Ample", "ex/ample", SHA2, "MIT")));
+    s.notices.retain(|f| !f.path.ends_with("ample.txt"));
+    s.notices.push(file(
+        NOTICES,
+        "ample.txt",
+        &notice("Ample", "ex/ample", SHA2, "MIT"),
+    ));
     let r = rules(&s.ledger());
     // Problems sort by file: the crate's folder comes before the licence texts' folder.
     assert_eq!(
@@ -371,8 +387,11 @@ fn a_licence_text_no_port_uses_fails() {
 #[test]
 fn two_licence_texts_for_one_source_fail() {
     let mut s = Seeded::good();
-    s.notices
-        .push(file(NOTICES, "ample2.txt", &notice("Ample", "ex/ample", SHA, "MIT")));
+    s.notices.push(file(
+        NOTICES,
+        "ample2.txt",
+        &notice("Ample", "ex/ample", SHA, "MIT"),
+    ));
     let r = rules(&s.ledger());
     assert_eq!(
         r,
@@ -387,9 +406,17 @@ fn two_licence_texts_for_one_source_fail() {
 fn a_licence_text_under_another_licence_fails() {
     let mut s = Seeded::good();
     s.notices.retain(|f| !f.path.ends_with("other.txt"));
-    s.notices
-        .push(file(NOTICES, "other.txt", &notice("Other", "other/lib", SHA2, "BSD-3-Clause")));
-    one_problem(&s.ledger(), "other.txt", Rule::Notice, "stop and ask an owner");
+    s.notices.push(file(
+        NOTICES,
+        "other.txt",
+        &notice("Other", "other/lib", SHA2, "BSD-3-Clause"),
+    ));
+    one_problem(
+        &s.ledger(),
+        "other.txt",
+        Rule::Notice,
+        "stop and ask an owner",
+    );
 }
 
 #[test]
@@ -436,18 +463,25 @@ fn an_unpinned_further_origin_fails() {
 // Method notes.
 // ---------------------------------------------------------------------------------------------
 
+/// A change to a note's text.
+type Change = Box<dyn Fn(String) -> String>;
+
 /// The good workspace with its note's text changed by `change`.
 fn with_note(change: impl Fn(String) -> String) -> Ledger {
     let mut s = Seeded::good();
     s.notes.retain(|f| !f.path.ends_with("lesser-method.md"));
-    s.notes.push(file(METHODS, "lesser-method.md", &change(note())));
+    s.notes
+        .push(file(METHODS, "lesser-method.md", &change(note())));
     s.ledger()
 }
 
 #[test]
 fn a_note_must_keep_the_template() {
-    let cases: [(&str, Box<dyn Fn(String) -> String>); 12] = [
-        ("does not open", Box::new(|n| n.replacen("# Method note: ", "# Note: ", 1))),
+    let cases: [(&str, Change); 12] = [
+        (
+            "does not open",
+            Box::new(|n| n.replacen("# Method note: ", "# Note: ", 1)),
+        ),
         (
             "\"Read by\" is missing",
             Box::new(|n| n.replace("| Read by | Session A, 2026-10-24 |\n", "")),
@@ -469,7 +503,10 @@ fn a_note_must_keep_the_template() {
             "\"Files read\" is missing",
             Box::new(|n| n.replace("`c.cpp` lines 1 to 9", "TBD")),
         ),
-        ("class \"allowed\"", Box::new(|n| n.replace("| LGPL-2.1-or-later |", "| MIT |"))),
+        (
+            "class \"allowed\"",
+            Box::new(|n| n.replace("| LGPL-2.1-or-later |", "| MIT |")),
+        ),
         (
             "does not name a full commit",
             Box::new(|n| n.replace(&format!("blob/{SHA}/c.cpp"), "blob/main/c.cpp")),
@@ -517,16 +554,31 @@ fn a_note_must_keep_the_template() {
 #[test]
 fn a_record_must_credit_the_source_its_note_describes() {
     let ledger = with_note(|n| n.replace("| LGPL-2.1-or-later |", "| LGPL-3.0-or-later |"));
-    one_problem(&ledger, "lesser-method.md", Rule::Note, "credits \"LGPL-2.1-or-later\"");
+    one_problem(
+        &ledger,
+        "lesser-method.md",
+        Rule::Note,
+        "credits \"LGPL-2.1-or-later\"",
+    );
     let ledger = with_note(|n| n.replace("github.com/lesser/lib/", "github.com/other/repo/"));
-    one_problem(&ledger, "lesser-method.md", Rule::Note, "not the repository");
+    one_problem(
+        &ledger,
+        "lesser-method.md",
+        Rule::Note,
+        "not the repository",
+    );
 }
 
 #[test]
 fn the_template_is_held_to_the_same_fields() {
     let mut s = Seeded::good();
     s.notes.retain(|f| !f.path.ends_with("TEMPLATE.md"));
-    one_problem(&s.ledger(), &format!("{METHODS}/"), Rule::Note, "no TEMPLATE.md");
+    one_problem(
+        &s.ledger(),
+        &format!("{METHODS}/"),
+        Rule::Note,
+        "no TEMPLATE.md",
+    );
     let mut s = Seeded::good();
     s.notes.retain(|f| !f.path.ends_with("TEMPLATE.md"));
     s.notes.push(file(
@@ -534,7 +586,12 @@ fn the_template_is_held_to_the_same_fields() {
         "TEMPLATE.md",
         &TEMPLATE.replace("| <the source> |", "| A real source |"),
     ));
-    one_problem(&s.ledger(), "TEMPLATE.md", Rule::Note, "\"Source\" must hold a <placeholder>");
+    one_problem(
+        &s.ledger(),
+        "TEMPLATE.md",
+        Rule::Note,
+        "\"Source\" must hold a <placeholder>",
+    );
     let mut s = Seeded::good();
     s.notes.retain(|f| !f.path.ends_with("TEMPLATE.md"));
     s.notes.push(file(
@@ -565,7 +622,7 @@ fn an_incomplete_map_fails_the_ledger() {
         ..Input::default()
     };
     let generated = build(&input, GAPS);
-    assert!(!generated.problems.is_empty());
+    assert_ne!(generated.problems, []);
     let ledger = ledger::build(&ledger::Input {
         map: &generated.map,
         map_problems: generated.problems.len(),
@@ -590,7 +647,7 @@ fn every_rule_has_a_seeded_case() {
         [Rule::Notice, Rule::Note, Rule::Map, Rule::Stale]
     );
     for rule in Rule::ALL {
-        assert!(!rule.label().is_empty());
+        assert_ne!(rule.label(), "");
     }
 }
 
@@ -602,7 +659,9 @@ mod files {
 
     use geom_test::ledger::{NOTICE_FILE, PROVENANCE_FILE, Rule, repo};
 
-    use super::{KERNEL, LIB, MANIFEST, METHODS, NOTICES, SHA, SHA2, TEMPLATE, note, noted, notice, ported};
+    use super::{
+        KERNEL, LIB, MANIFEST, METHODS, NOTICES, SHA, SHA2, TEMPLATE, note, noted, notice, ported,
+    };
 
     /// A scratch workspace under `CARGO_TARGET_TMPDIR`, emptied first and removed on drop.
     struct Scratch(PathBuf);
@@ -616,8 +675,14 @@ mod files {
                 (format!("{KERNEL}/src/lib.rs"), LIB.to_owned()),
                 (format!("{KERNEL}/src/ported.rs"), ported()),
                 (format!("{KERNEL}/src/noted.rs"), noted()),
-                (format!("{NOTICES}/ample.txt"), notice("Ample", "ex/ample", SHA, "MIT")),
-                (format!("{NOTICES}/other.txt"), notice("Other", "other/lib", SHA2, "MIT")),
+                (
+                    format!("{NOTICES}/ample.txt"),
+                    notice("Ample", "ex/ample", SHA, "MIT"),
+                ),
+                (
+                    format!("{NOTICES}/other.txt"),
+                    notice("Other", "other/lib", SHA2, "MIT"),
+                ),
                 (format!("{METHODS}/README.md"), "# Notes\n".to_owned()),
                 (format!("{METHODS}/TEMPLATE.md"), TEMPLATE.to_owned()),
                 (format!("{METHODS}/lesser-method.md"), note()),
@@ -658,7 +723,9 @@ mod files {
         assert_eq!(repo::check(&s.0).unwrap(), []);
         // A Windows checkout's line ends do not make the files stale.
         let notice_path = s.0.join(NOTICE_FILE);
-        let crlf = fs::read_to_string(&notice_path).unwrap().replace('\n', "\r\n");
+        let crlf = fs::read_to_string(&notice_path)
+            .unwrap()
+            .replace('\n', "\r\n");
         fs::write(&notice_path, crlf).unwrap();
         assert_eq!(repo::check(&s.0).unwrap(), []);
         // A changed licence text makes NOTICE stale.
@@ -669,7 +736,10 @@ mod files {
         .unwrap();
         let found = repo::check(&s.0).unwrap();
         assert_eq!(found.len(), 1, "{found:#?}");
-        assert_eq!((found[0].file.as_str(), found[0].rule), (NOTICE_FILE, Rule::Stale));
+        assert_eq!(
+            (found[0].file.as_str(), found[0].rule),
+            (NOTICE_FILE, Rule::Stale)
+        );
     }
 
     fn run(args: &[&str]) -> (i32, String) {
@@ -694,7 +764,10 @@ mod files {
         assert!(text.contains("Stale ledger: the file is missing"), "{text}");
         let (code, text) = run(&["write", "--root", root]);
         assert_eq!(code, 0, "{text}");
-        assert!(text.contains("wrote projects/engines/geometry/NOTICE"), "{text}");
+        assert!(
+            text.contains("wrote projects/engines/geometry/NOTICE"),
+            "{text}"
+        );
         let (code, text) = run(&["check", "--root", root]);
         assert_eq!(code, 0, "{text}");
         fs::remove_file(s.0.join(NOTICES).join("other.txt")).unwrap();
@@ -710,6 +783,9 @@ mod files {
         let empty = s.0.join("no-workspace-here");
         fs::create_dir_all(&empty).unwrap();
         let (code, text) = run(&["check", "--root", empty.to_str().unwrap()]);
-        assert_eq!(code, 2, "a root without the crates folder is an error, not a pass: {text}");
+        assert_eq!(
+            code, 2,
+            "a root without the crates folder is an error, not a pass: {text}"
+        );
     }
 }

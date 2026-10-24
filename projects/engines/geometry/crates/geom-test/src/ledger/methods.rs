@@ -37,7 +37,7 @@
 //!
 //! Method: chapter 29.20, rule 6, the method-only procedure
 //! (`projects/engines/geometry/architecture/29-sources-licences.md`); headings, fences and
-//! indented code blocks as CommonMark 0.31.2 defines them, sections 4.2, 4.4 and 4.5
+//! indented code blocks as `CommonMark` 0.31.2 defines them, sections 4.2, 4.4 and 4.5
 //! (<https://spec.commonmark.org/0.31.2/>), and tables as GitHub Flavored Markdown's table
 //! extension (<https://github.github.com/gfm/#tables-extension->).
 //!
@@ -46,11 +46,11 @@
 use std::collections::BTreeMap;
 
 use crate::ledger::{Problem, Rule, Source, canonical};
+use crate::map::SourceFile;
 use crate::map::classes::{self, Class};
 use crate::map::header::states;
 use crate::map::links::{self, LinkKind};
 use crate::map::provenance::METHODS_FOLDER;
-use crate::map::SourceFile;
 
 /// A note's title line opens with this.
 pub const TITLE: &str = "# Method note: ";
@@ -287,9 +287,9 @@ pub fn read(files: &[SourceFile], problems: &mut Vec<Problem>) -> Vec<Note> {
         if name == README {
             continue;
         }
-        if !std::path::Path::new(name)
+        if std::path::Path::new(name)
             .extension()
-            .is_some_and(|e| e == "md")
+            .is_none_or(|e| e != "md")
         {
             problem(format!(
                 "{METHODS_FOLDER} holds only method notes (`<note>.md`), its {TEMPLATE} and its \

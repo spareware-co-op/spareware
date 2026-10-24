@@ -17,12 +17,12 @@
 //!
 //! Method: chapter 29.20, rules 2 and 7, and chapter 29.4 and 29.6 on Numerical Recipes
 //! (`projects/engines/geometry/architecture/29-sources-licences.md`); the Numerical Recipes markers
-//! evidence report 13 found in SMLib, NLib and solidcore (routine names, macros, the step-control
+//! evidence report 13 found in `SMLib`, `NLib` and solidcore (routine names, macros, the step-control
 //! constants and the variable names of the Cash-Karp step), and the Autodesk pattern and linetype
-//! names and descriptions evidence report 12 found reproduced in CADCraft
+//! names and descriptions evidence report 12 found reproduced in `CADCraft`
 //! (`projects/kit/notes/G01-evidence/13-vetting-smlib.md`,
 //! `projects/kit/notes/G01-evidence/12-vetting-cadcraft.md`); the hatch pattern names Autodesk's
-//! own customization guide shows, ANSI31 among them
+//! own customization guide shows, `ANSI31` among them
 //! (<https://help.autodesk.com/cloudhelp/2025/ENU/AutoCAD-Customization/files/GUID-A6F2E6FF-1717-44B6-A476-0CA817ADD77E.htm>)
 //! and AR-B816 (<https://help.autodesk.com/cloudhelp/2017/ENU/AutoCAD-LT/files/GUID-79B99823-7600-4CAB-BD12-04D5103D90CB.htm>).
 //!
@@ -32,9 +32,9 @@
 /// `_` and at a lower-case letter or digit followed by a capital), ignoring case: rule 7 bans
 /// "`svdcmp`, `tqli`, `rkqs` or `pythag` naming", and report 13 found `pythag` as `ST_pythag` and
 /// `smos_Pythag`, `polint`, `trapzd`, `qromb`, `qsimp`, `rkck`, `ludcmp`, `tred2` and `dbrent`
-/// behind SMLib's and solidcore's routines. The others are the same book's names for the routines
+/// behind `SMLib`'s and solidcore's routines. The others are the same book's names for the routines
 /// chapter 29.4 rewrites from primary sources (LU, QR, SVD, eigenproblems, Brent, tridiagonal
-/// solves, quadrature, ODE steps). Decision 32.8 lets the kernel port NVIDIA's SMLib release, but
+/// solves, quadrature, ODE steps). Decision 32.8 lets the kernel port NVIDIA's `SMLib` release, but
 /// keeps its Numerical Recipes-derived routines and fixtures out
 /// (`projects/engines/geometry/architecture/32-decisions.md`); these names, the macros and the
 /// constant below are what flag one ported with the rest.
@@ -62,14 +62,14 @@ pub const NR_MACROS: [&str; 15] = [
 pub const NR_MACROS_EXACT: [&str; 3] = ["SIGN", "NR_END", "FREE_ARG"];
 
 /// Variable names of Numerical Recipes' Cash-Karp step and its driver, matched as whole words,
-/// ignoring case: report 13 found `ak2` to `ak6` of its Cash-Karp step in SMLib's integrator;
+/// ignoring case: report 13 found `ak2` to `ak6` of its Cash-Karp step in `SMLib`'s integrator;
 /// `htry`, `hdid`, `hnext` and `yscal` are the step driver's arguments in the same code.
 pub const NR_VARIABLES: [&str; 9] = [
     "ak2", "ak3", "ak4", "ak5", "ak6", "htry", "hdid", "hnext", "yscal",
 ];
 
 /// Phrases naming Numerical Recipes or its authors, as runs of words, ignoring case: report 13
-/// found SMLib's integrator "taken from Numerical Recipies in C", misspelt; Teukolsky and
+/// found `SMLib`'s integrator "taken from Numerical Recipies in C", misspelt; Teukolsky and
 /// Vetterling are two of the book's authors, whose names no other source of the kernel shares.
 pub const NR_PHRASES: [&[&str]; 4] = [
     &["numerical", "recipes"],
@@ -134,16 +134,18 @@ pub const NEGATIONS: [&str; 7] = ["no", "not", "never", "nothing", "none", "nor"
 
 /// The words that, right after a negation, keep it from cancelling ("not only taken from", "not
 /// entirely taken from" still say something was taken).
-pub const NEGATION_LIMITS: [&str; 7] = ["only", "just", "merely", "simply", "entirely", "all", "wholly"];
+pub const NEGATION_LIMITS: [&str; 7] = [
+    "only", "just", "merely", "simply", "entirely", "all", "wholly",
+];
 
 /// Names of copyleft licences and of the copyleft or otherwise banned sources chapter 29 lists, as
 /// runs of words, ignoring case: the licences 29.2 never lets us take (GPL, LGPL, AGPL, EUPL,
 /// CDDL, Numerical Recipes), and the projects chapter 29 classes as LGPL or GPL (method only or
-/// papers only) or rejects for their licence or provenance: OpenCascade, CGAL, FreeCAD and its
-/// planegcs, LibreCAD, LibreDWG and acadrust, SolveSpace, SISL and GoTools, TetGen, GEOS,
-/// IfcOpenShell, Topologic, BRL-CAD, Blender, KiCad, OpenSCAD, val3dity, LNLib, Attene's
-/// Indirect_Predicates, GMP, MPFR and malachite, chili3d, brepkit, Aetheris, CuraEngine,
-/// PrusaSlicer, OpenCAMLib, Creusot, HLBFGS and IRIT.
+/// papers only) or rejects for their licence or provenance: `OpenCascade`, CGAL, `FreeCAD` and its
+/// planegcs, `LibreCAD`, `LibreDWG` and acadrust, `SolveSpace`, SISL and `GoTools`, `TetGen`, GEOS,
+/// `IfcOpenShell`, Topologic, BRL-CAD, Blender, `KiCad`, `OpenSCAD`, val3dity, `LNLib`, Attene's
+/// `Indirect_Predicates`, GMP, MPFR and malachite, chili3d, brepkit, Aetheris, `CuraEngine`,
+/// `PrusaSlicer`, `OpenCAMLib`, Creusot, `HLBFGS` and IRIT.
 pub const COPYLEFT_SOURCES: [&[&str]; 52] = [
     &["gpl"],
     &["lgpl"],
@@ -201,7 +203,7 @@ pub const COPYLEFT_SOURCES: [&[&str]; 52] = [
 
 /// Names of Autodesk's standard hatch patterns, matched as terms (letters, digits, `_` and `-`),
 /// ignoring case and reading `_` as `-`: the ANSI and AR families of the standard pattern file, which evidence report 12
-/// found reproduced, with Autodesk's descriptions, in CADCraft's "our own" library; ANSI31 and
+/// found reproduced, with Autodesk's descriptions, in `CADCraft`'s "our own" library; `ANSI31` and
 /// AR-B816 are shown on Autodesk's own help pages (module header), and the other names of the two
 /// families come from widely published lists of the same file (not checked against an Autodesk
 /// page). Rule 7: no hatch patterns or linetypes from memory.
@@ -216,7 +218,7 @@ pub const ACAD_PATTERNS: [&str; 19] = [
 pub const ACAD_ISO: (&str, &str) = ("acad_iso", "w100");
 
 /// Descriptions from Autodesk's standard pattern and linetype files that evidence report 12 quotes
-/// as found in CADCraft, matched as text, ignoring case, with every run of white space (a line
+/// as found in `CADCraft`, matched as text, ignoring case, with every run of white space (a line
 /// break and a comment marker's indentation included) read as one space.
 pub const ACAD_DESCRIPTIONS: [&str; 6] = [
     "Iron, brick, stone masonry",

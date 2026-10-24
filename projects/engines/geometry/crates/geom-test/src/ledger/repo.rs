@@ -29,7 +29,9 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
-use crate::ledger::{Input, Ledger, NOTICE_FILE, NOTICES_DIR, PROVENANCE_FILE, Problem, build, compare};
+use crate::ledger::{
+    Input, Ledger, NOTICE_FILE, NOTICES_DIR, PROVENANCE_FILE, Problem, build, compare,
+};
 use crate::map::provenance::METHODS_FOLDER;
 use crate::map::repo::MapError;
 use crate::map::{GAPS, Generated, SourceFile};

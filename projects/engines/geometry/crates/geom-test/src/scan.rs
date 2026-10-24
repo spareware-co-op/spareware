@@ -44,7 +44,7 @@
 //!   doubles Rust parses them to, which is exact and the same everywhere.
 //!
 //! Method: matching words and short phrases of a written marker list, the method of license
-//! scanners such as ScanCode (Apache-2.0), whose rules are lists of words matched against a
+//! scanners such as `ScanCode` (Apache-2.0), whose rules are lists of words matched against a
 //! file's word sequence (<https://scancode-toolkit.readthedocs.io/en/stable/explanations/license-detection-reference.html>);
 //! the markers and their sources are chapter 29.20, rules 2 and 7
 //! (`projects/engines/geometry/architecture/29-sources-licences.md`), and [`markers`]; number
@@ -257,8 +257,10 @@ fn numbers(text: &str) -> Vec<(f64, &str, usize)> {
         if b == b'\n' {
             line = line.saturating_add(1);
         }
-        let opens_with_point =
-            b == b'.' && bytes.get(at.saturating_add(1)).is_some_and(u8::is_ascii_digit);
+        let opens_with_point = b == b'.'
+            && bytes
+                .get(at.saturating_add(1))
+                .is_some_and(u8::is_ascii_digit);
         let starts = (b.is_ascii_digit() || opens_with_point)
             && at
                 .checked_sub(1)
@@ -278,7 +280,11 @@ fn numbers(text: &str) -> Vec<(f64, &str, usize)> {
             k
         };
         let mut end = digits(at);
-        if bytes.get(end) == Some(&b'.') && bytes.get(end.saturating_add(1)).is_some_and(u8::is_ascii_digit) {
+        if bytes.get(end) == Some(&b'.')
+            && bytes
+                .get(end.saturating_add(1))
+                .is_some_and(u8::is_ascii_digit)
+        {
             end = digits(end.saturating_add(1));
         }
         if bytes.get(end).is_some_and(|c| *c == b'e' || *c == b'E') {
@@ -597,7 +603,7 @@ mod tests {
             found,
             [
                 (1.89e-4, "1.89e-4", 1),
-                (0.000189, "0.000_189", 2),
+                (0.000_189, "0.000_189", 2),
                 (2000.0, "2E+3", 2)
             ]
         );

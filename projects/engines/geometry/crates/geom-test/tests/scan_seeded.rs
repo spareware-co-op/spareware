@@ -43,7 +43,13 @@ use num_rational::Ratio;
 fn hits(text: &str) -> Vec<(usize, Category, String)> {
     scan_text(text)
         .into_iter()
-        .map(|Hit { line, category, marker }| (line, category, marker))
+        .map(
+            |Hit {
+                 line,
+                 category,
+                 marker,
+             }| (line, category, marker),
+        )
         .collect()
 }
 
@@ -75,7 +81,12 @@ fn numerical_recipes_routine_names_are_found_in_any_identifier() {
     finds("fn tqli(d: &mut [f64])", 1, nr, "tqli");
     finds("\n\nlet r = rkqs(y, dydx);", 3, nr, "rkqs");
     finds("#define ST_pythag(a, b) hypot(a, b)", 1, nr, "ST_pythag");
-    finds("double smos_Pythag(double a, double b);", 1, nr, "smos_Pythag");
+    finds(
+        "double smos_Pythag(double a, double b);",
+        1,
+        nr,
+        "smos_Pythag",
+    );
     finds("fn smosPythag(a: f64, b: f64) -> f64", 1, nr, "smosPythag");
     finds("PolynomialInterpolation = polint;", 1, nr, "polint");
     finds("// trapzd, qromb and qsimp", 1, nr, "trapzd");
@@ -96,16 +107,46 @@ fn numerical_recipes_macros_variables_authors_and_constant_are_found() {
     finds("MOV3(a, b, c, d, e, f)", 1, nr, "MOV3");
     finds("#define ERRCON 1.89e-4", 1, nr, "ERRCON");
     finds("#define ERRCON 1.89e-4", 1, nr, "1.89e-4");
-    finds("const PGROW: f64 = -0.2;\nconst PSHRNK: f64 = -0.25;", 2, nr, "PSHRNK");
+    finds(
+        "const PGROW: f64 = -0.2;\nconst PSHRNK: f64 = -0.25;",
+        2,
+        nr,
+        "PSHRNK",
+    );
     finds("let limit = 0.000_189;", 1, nr, "0.000_189");
     finds("let limit = 1.89E-04_f64;", 1, nr, "1.89E-04");
     finds("let ak2 = vec![0.0; n];", 1, nr, "ak2");
-    finds("fn step(htry: f64, hdid: &mut f64, hnext: &mut f64)", 1, nr, "htry");
+    finds(
+        "fn step(htry: f64, hdid: &mut f64, hnext: &mut f64)",
+        1,
+        nr,
+        "htry",
+    );
     finds("let yscal = y.abs() + (dydx * h).abs();", 1, nr, "yscal");
-    finds("//! Taken from Numerical Recipes in C.", 1, nr, "Numerical Recipes");
-    finds("* algorithms are taken from Numerical Recipies in C", 1, nr, "Numerical Recipies");
-    finds("// Press, Teukolsky, Vetterling and Flannery", 1, nr, "Teukolsky");
-    finds("//! numerical\n//! RECIPES, chapter 16", 1, nr, "numerical RECIPES");
+    finds(
+        "//! Taken from Numerical Recipes in C.",
+        1,
+        nr,
+        "Numerical Recipes",
+    );
+    finds(
+        "* algorithms are taken from Numerical Recipies in C",
+        1,
+        nr,
+        "Numerical Recipies",
+    );
+    finds(
+        "// Press, Teukolsky, Vetterling and Flannery",
+        1,
+        nr,
+        "Teukolsky",
+    );
+    finds(
+        "//! numerical\n//! RECIPES, chapter 16",
+        1,
+        nr,
+        "numerical RECIPES",
+    );
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -137,7 +178,12 @@ fn copyleft_notices_are_found() {
 #[test]
 fn taken_from_copyleft_statements_are_found() {
     let taken = Category::TakenFromCopyleft;
-    finds("// Ported from OCCT's BRepAlgoAPI_Fuse.", 1, taken, "Ported from OCCT");
+    finds(
+        "// Ported from OCCT's BRepAlgoAPI_Fuse.",
+        1,
+        taken,
+        "Ported from OCCT",
+    );
     finds("//! Adapted from CGAL", 1, taken, "Adapted from CGAL");
     finds(
         "//! This follows the approach, based on the FreeCAD element map,",
@@ -145,14 +191,19 @@ fn taken_from_copyleft_statements_are_found() {
         taken,
         "based on the FreeCAD",
     );
-    finds("// taken from LibreDWG's decoder", 1, taken, "taken from LibreDWG");
-    finds("/* mirrors SolveSpace's solver */", 1, taken, "mirrors SolveSpace");
     finds(
-        "// derived from GPL-3.0 code",
+        "// taken from LibreDWG's decoder",
         1,
         taken,
-        "derived from GPL",
+        "taken from LibreDWG",
     );
+    finds(
+        "/* mirrors SolveSpace's solver */",
+        1,
+        taken,
+        "mirrors SolveSpace",
+    );
+    finds("// derived from GPL-3.0 code", 1, taken, "derived from GPL");
     finds(
         "//! The arrangement is copied from\n//! OpenCascade.",
         1,
@@ -165,8 +216,18 @@ fn taken_from_copyleft_statements_are_found() {
         taken,
         "translated with changes from the LGPL",
     );
-    finds("// a port of Open CASCADE's mesher", 1, taken, "port of Open CASCADE");
-    finds("// based on BRL-CAD's raytracer", 1, taken, "based on BRL CAD");
+    finds(
+        "// a port of Open CASCADE's mesher",
+        1,
+        taken,
+        "port of Open CASCADE",
+    );
+    finds(
+        "// based on BRL-CAD's raytracer",
+        1,
+        taken,
+        "based on BRL CAD",
+    );
 }
 
 #[test]
@@ -195,7 +256,12 @@ fn honest_statements_and_permissive_sources_pass() {
 #[test]
 fn autodesk_pattern_names_and_descriptions_are_found() {
     let acad = Category::AcadPattern;
-    finds("*ANSI31, ANSI Iron, Brick, Stone masonry", 1, acad, "ANSI31");
+    finds(
+        "*ANSI31, ANSI Iron, Brick, Stone masonry",
+        1,
+        acad,
+        "ANSI31",
+    );
     finds("let pattern = \"ansi37\";", 1, acad, "ansi37");
     finds("Pattern::new(\"AR-CONC\")", 1, acad, "AR-CONC");
     finds("// AR-B816C and AR-HBONE", 1, acad, "AR-B816C");
@@ -208,7 +274,12 @@ fn autodesk_pattern_names_and_descriptions_are_found() {
         "Iron, brick, stone masonry",
     );
     finds("ZIGZAG, Zig zag /\\/\\/\\/\\/", 1, acad, "Zig zag /\\/\\/");
-    finds("\n\"Fenceline circle ----0-----0----\"", 2, acad, "Fenceline circle");
+    finds(
+        "\n\"Fenceline circle ----0-----0----\"",
+        2,
+        acad,
+        "Fenceline circle",
+    );
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -251,7 +322,9 @@ fn the_same_method_with_the_books_names_and_constants_fails() {
         assert!(markers.contains(&wanted), "{wanted} not found: {found:#?}");
     }
     assert!(
-        found.iter().all(|(_, c, _)| *c == Category::NumericalRecipes),
+        found
+            .iter()
+            .all(|(_, c, _)| *c == Category::NumericalRecipes),
         "{found:#?}"
     );
 }
@@ -299,6 +372,10 @@ fn times(u: &[Ratio<i128>], v: &[Ratio<i128>]) -> Vec<Ratio<i128>> {
 /// The conditions a Runge-Kutta method of order 5 meets, one per rooted tree up to five nodes
 /// (Hairer, Nørsett and Wanner, section II.2), each as (left side, the value 1/γ(t)), for the
 /// weights `b`.
+#[allow(
+    clippy::similar_names,
+    reason = "each name spells the product it holds, as the rooted trees of the order conditions do"
+)]
 fn order_conditions(b: &[Ratio<i128>]) -> Vec<(&'static str, Ratio<i128>, Ratio<i128>)> {
     let a = coupling();
     let c: Vec<Ratio<i128>> = cash_karp::NODES.iter().map(|n| exact(*n)).collect();
@@ -328,7 +405,11 @@ fn order_conditions(b: &[Ratio<i128>]) -> Vec<(&'static str, Ratio<i128>, Ratio<
         ("order 5, c (a a c)", weigh(b, &times(&c, &aac)), r(1, 30)),
         ("order 5, (a c)^2", weigh(b, &times(&ac, &ac)), r(1, 20)),
         ("order 5, a c^3", weigh(b, &ac3), r(1, 20)),
-        ("order 5, a (c (a c))", weigh(b, &apply(&a, &times(&c, &ac))), r(1, 40)),
+        (
+            "order 5, a (c (a c))",
+            weigh(b, &apply(&a, &times(&c, &ac))),
+            r(1, 40),
+        ),
         ("order 5, a a c^2", weigh(b, &aac2), r(1, 60)),
         ("order 5, a a a c", weigh(b, &aaac), r(1, 120)),
     ]
@@ -344,7 +425,11 @@ fn the_tableau_meets_every_order_condition_exactly() {
     let fifth: Vec<Ratio<i128>> = cash_karp::FIFTH_ORDER.iter().map(|w| exact(*w)).collect();
     let fourth: Vec<Ratio<i128>> = cash_karp::FOURTH_ORDER.iter().map(|w| exact(*w)).collect();
     let conditions = order_conditions(&fifth);
-    assert_eq!(conditions.len(), 17, "one condition per rooted tree up to order 5");
+    assert_eq!(
+        conditions.len(),
+        17,
+        "one condition per rooted tree up to order 5"
+    );
     for (name, left, right) in &conditions {
         assert_eq!(left, right, "the fifth-order weights fail {name}");
     }
@@ -383,7 +468,10 @@ fn the_integrator_reaches_exact_solutions() {
     let cos2 = geom_num::math::unproven::cos(2.0).unwrap().get();
     let sin2 = geom_num::math::unproven::sin(2.0).unwrap().get();
     let y = cash_karp::integrate(&swing, 0.0, &[1.0, 0.0], 2.0, 0.5, TIGHT, 10_000).unwrap();
-    assert!((y[0] - cos2).abs() < 1e-9 && (y[1] + sin2).abs() < 1e-9, "{y:?}");
+    assert!(
+        (y[0] - cos2).abs() < 1e-9 && (y[1] + sin2).abs() < 1e-9,
+        "{y:?}"
+    );
 }
 
 #[test]
@@ -395,8 +483,12 @@ fn the_error_estimate_shrinks_as_the_fifth_power_of_the_step() {
         absolute: 1.0,
         relative: 0.0,
     };
-    let coarse = cash_karp::attempt(&grow, 0.0, &[1.0], 0.1, unit).unwrap().error;
-    let fine = cash_karp::attempt(&grow, 0.0, &[1.0], 0.05, unit).unwrap().error;
+    let coarse = cash_karp::attempt(&grow, 0.0, &[1.0], 0.1, unit)
+        .unwrap()
+        .error;
+    let fine = cash_karp::attempt(&grow, 0.0, &[1.0], 0.05, unit)
+        .unwrap()
+        .error;
     let ratio = coarse / fine;
     assert!((28.0..36.0).contains(&ratio), "ratio {ratio}");
 }
@@ -484,14 +576,20 @@ mod workspace {
             b"//! Singular values.\n\nfn svdcmp() {}\n",
         );
         // Data files, manifests and binary files are scanned too.
-        s.write(&format!("{CRATE}/tests/data/patterns.txt"), b"*AR-SAND, sand\n");
+        s.write(
+            &format!("{CRATE}/tests/data/patterns.txt"),
+            b"*AR-SAND, sand\n",
+        );
         s.write(&format!("{CRATE}/fixture.bin"), b"\x00\xff\xfeZEPS\x00");
         // The facade's files are scanned; another engine's are not.
         s.write(
             "projects/engines/crates/engine-geometry/src/lib.rs",
             b"// Ported from FreeCAD.\n",
         );
-        s.write("projects/engines/crates/engine-other/src/lib.rs", b"fn tqli() {}\n");
+        s.write(
+            "projects/engines/crates/engine-other/src/lib.rs",
+            b"fn tqli() {}\n",
+        );
         // Build output is skipped.
         s.write(&format!("{CRATE}/target/debug/build.rs"), b"fn rkqs() {}\n");
         let found = repo::check(&s.0, &[]).unwrap();
@@ -523,7 +621,11 @@ mod workspace {
                 ),
             ]
         );
-        assert!(found[2].to_string().starts_with(&format!("{CRATE}/src/svd.rs:3: ")));
+        assert!(
+            found[2]
+                .to_string()
+                .starts_with(&format!("{CRATE}/src/svd.rs:3: "))
+        );
     }
 
     #[test]
@@ -539,10 +641,16 @@ mod workspace {
         // Once the file holds no marker, or is gone, the exemption itself fails.
         s.write(file, b"const NAMES: [&str; 0] = [];\n");
         let found = repo::check(&s.0, &exempt).unwrap();
-        assert!(matches!(found[0].kind, Kind::StaleExemption(_)), "{found:?}");
+        assert!(
+            matches!(found[0].kind, Kind::StaleExemption(_)),
+            "{found:?}"
+        );
         fs::remove_file(s.0.join(file)).unwrap();
         let found = repo::check(&s.0, &exempt).unwrap();
-        assert!(matches!(found[0].kind, Kind::StaleExemption(_)), "{found:?}");
+        assert!(
+            matches!(found[0].kind, Kind::StaleExemption(_)),
+            "{found:?}"
+        );
         // An exemption names one file: a marker in another is still found.
         s.write(&format!("{CRATE}/src/other.rs"), b"fn svdcmp() {}\n");
         s.write(file, b"const NAMES: [&str; 1] = [\"svdcmp\"];\n");
@@ -591,7 +699,10 @@ mod workspace {
         s.write(&format!("{CRATE}/src/a.rs"), b"// Numerical Recipes in C\n");
         let (code, text) = run(&["check", "--root", root]);
         assert_eq!(code, 1, "{text}");
-        assert!(text.contains("geom-x/src/a.rs:1: Numerical Recipes"), "{text}");
+        assert!(
+            text.contains("geom-x/src/a.rs:1: Numerical Recipes"),
+            "{text}"
+        );
         let (code, text) = run(&["frobnicate"]);
         assert_eq!(code, 2, "{text}");
         let (code, text) = run(&["check", "--root"]);
@@ -599,6 +710,9 @@ mod workspace {
         let empty = s.0.join("no-workspace-here");
         fs::create_dir_all(&empty).unwrap();
         let (code, text) = run(&["check", "--root", empty.to_str().unwrap()]);
-        assert_eq!(code, 2, "a root without the crates folder is an error, not a pass: {text}");
+        assert_eq!(
+            code, 2,
+            "a root without the crates folder is an error, not a pass: {text}"
+        );
     }
 }

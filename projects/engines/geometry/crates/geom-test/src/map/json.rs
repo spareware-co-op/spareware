@@ -244,8 +244,8 @@ mod tests {
         assert_eq!(v.text("missing"), "");
         assert_eq!(v.list("list").len(), 2);
         assert_eq!(v.list("list")[1].as_str(), Some("b"));
-        assert!(v.list("name").is_empty());
+        assert_eq!(v.list("name"), &[]);
         assert!(Value::from("x").get("name").is_none());
-        assert!(Value::Null.items().is_empty());
+        assert_eq!(Value::Null.items(), &[]);
     }
 }

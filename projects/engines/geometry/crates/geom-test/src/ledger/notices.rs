@@ -97,7 +97,45 @@ pub fn parse(path: &str, text: &str) -> Result<Notice, Vec<String>> {
         .replace("\r\n", "\n");
     let mut problems = Vec::new();
     let mut lines = text.lines();
-    let mut keys: BTreeMap<&str, String> = BTreeMap::new();
+    let keys = read_keys(&mut lines, &mut problems);
+    let mut field = |key: &str| -> String {
+        let value = keys.get(key).cloned().unwrap_or_default();
+        if !states(&value) {
+            problems.push(format!("the key {key:?} is missing or states nothing"));
+        }
+        value
+    };
+    let name = field("Name");
+    let link = field("Link");
+    let licence = field("Licence");
+    let licence_file = field("Licence file");
+    let project = keys.get("Project").cloned();
+    let rest: Vec<&str> = lines.collect();
+    let (credit, licence_text) = read_sections(&rest, &mut problems);
+    let (repository, commit) = check_values(&link, &licence, &licence_file, &mut problems);
+    if !problems.is_empty() {
+        return Err(problems);
+    }
+    Ok(Notice {
+        path: path.to_owned(),
+        name,
+        project,
+        link,
+        repository,
+        commit,
+        licence,
+        licence_file,
+        credit,
+        text: licence_text,
+    })
+}
+
+/// The `Key: value` lines up to the first blank line, each key once and known.
+fn read_keys<'t>(
+    lines: &mut impl Iterator<Item = &'t str>,
+    problems: &mut Vec<String>,
+) -> BTreeMap<&'static str, String> {
+    let mut keys: BTreeMap<&'static str, String> = BTreeMap::new();
     for line in lines.by_ref() {
         if line.trim().is_empty() {
             break;
@@ -120,26 +158,27 @@ pub fn parse(path: &str, text: &str) -> Result<Notice, Vec<String>> {
             problems.push(format!("the key {known:?} is written twice"));
         }
     }
-    let mut field = |key: &str| -> String {
-        let value = keys.get(key).cloned().unwrap_or_default();
-        if !states(&value) {
-            problems.push(format!("the key {key:?} is missing or states nothing"));
-        }
-        value
-    };
-    let name = field("Name");
-    let link = field("Link");
-    let licence = field("Licence");
-    let licence_file = field("Licence file");
-    let project = keys.get("Project").cloned();
+    keys
+}
 
-    let rest: Vec<&str> = lines.collect();
+/// The optional credit section and the required licence text, from the lines after the keys.
+fn read_sections(rest: &[&str], problems: &mut Vec<String>) -> (Vec<String>, String) {
     let text_at = rest.iter().position(|l| l.trim_end() == LICENCE_TEXT);
-    let credit_lines = rest.get(..text_at.unwrap_or(rest.len())).unwrap_or_default();
+    let credit_lines = rest
+        .get(..text_at.unwrap_or(rest.len()))
+        .unwrap_or_default();
     let credit = match credit_lines.iter().position(|l| !l.trim().is_empty()) {
         None => Vec::new(),
-        Some(first) if credit_lines.get(first).is_some_and(|l| l.trim_end() == CREDIT) => {
-            trim_blank(credit_lines.get(first.saturating_add(1)..).unwrap_or_default())
+        Some(first)
+            if credit_lines
+                .get(first)
+                .is_some_and(|l| l.trim_end() == CREDIT) =>
+        {
+            trim_blank(
+                credit_lines
+                    .get(first.saturating_add(1)..)
+                    .unwrap_or_default(),
+            )
         }
         Some(first) => {
             problems.push(format!(
@@ -167,14 +206,24 @@ pub fn parse(path: &str, text: &str) -> Result<Notice, Vec<String>> {
             joined
         }
     };
+    (credit, licence_text)
+}
 
-    if !licence.is_empty() && classes::of(&licence) != Ok(Class::Allowed) {
+/// Checks the licence is allowed, the link pinned and the licence file beside it; returns the
+/// repository and commit the link names (empty when it names none).
+fn check_values(
+    link: &str,
+    licence: &str,
+    licence_file: &str,
+    problems: &mut Vec<String>,
+) -> (String, String) {
+    if !licence.is_empty() && classes::of(licence) != Ok(Class::Allowed) {
         problems.push(format!(
             "the licence {licence:?} is not an SPDX expression on chapter 29.2's allow-list, and \
              only allowed code is ported"
         ));
     }
-    let pinned = repository_and_commit(&link).filter(|(_, c)| links::is_full_commit(c));
+    let pinned = repository_and_commit(link).filter(|(_, c)| links::is_full_commit(c));
     if !link.is_empty() && pinned.is_none() {
         problems.push(format!(
             "the link {link:?} does not name a repository pinned to a full commit"
@@ -182,27 +231,13 @@ pub fn parse(path: &str, text: &str) -> Result<Notice, Vec<String>> {
     }
     let (repository, commit) = pinned.unwrap_or_default();
     if !licence_file.is_empty()
-        && repository_and_commit(&licence_file) != Some((repository.clone(), commit.clone()))
+        && repository_and_commit(licence_file) != Some((repository.clone(), commit.clone()))
     {
         problems.push(format!(
             "the licence file {licence_file:?} is not in the linked repository at the linked commit"
         ));
     }
-    if !problems.is_empty() {
-        return Err(problems);
-    }
-    Ok(Notice {
-        path: path.to_owned(),
-        name,
-        project,
-        link,
-        repository,
-        commit,
-        licence,
-        licence_file,
-        credit,
-        text: licence_text,
-    })
+    (repository, commit)
 }
 
 /// `lines` without blank lines at the start and the end, as owned strings.
@@ -238,9 +273,9 @@ pub fn read(files: &[SourceFile], problems: &mut Vec<Problem>) -> Vec<Notice> {
         if name == README {
             continue;
         }
-        if !std::path::Path::new(name)
+        if std::path::Path::new(name)
             .extension()
-            .is_some_and(|e| e == "txt")
+            .is_none_or(|e| e != "txt")
         {
             problems.push(problem(format!(
                 "{NOTICES_DIR} holds only licence texts (`<source>.txt`) and its {README}"
@@ -274,15 +309,69 @@ pub struct Port<'a, 'n> {
 
 /// Groups the files' `port` records by the repository and commit of each origin file they name
 /// (the record's link and every further link its notice copies), pairs each group with its
-/// licence text, and reports every origin link that is not pinned, every group without exactly
-/// one licence text, every licence that differs, and every licence text no group uses.
+/// licence text, and reports every origin link that is not pinned or has no copyright line, every
+/// group without exactly one licence text, every licence that differs, and every licence text no
+/// group uses.
 #[must_use]
 pub fn match_ports<'a, 'n>(
     sources: &[Source<'a>],
     notices: &'n [Notice],
     problems: &mut Vec<Problem>,
 ) -> Vec<Port<'a, 'n>> {
-    let mut groups: BTreeMap<(String, String), Vec<Use<'a>>> = BTreeMap::new();
+    let mut used_notice = vec![false; notices.len()];
+    let mut ports = Vec::new();
+    for ((repository, commit), mut group) in group_ports(sources, problems) {
+        group.sort_by(|a, b| a.file.cmp(b.file));
+        let matching: Vec<usize> = notices
+            .iter()
+            .enumerate()
+            .filter(|(_, n)| n.repository == repository && n.commit == commit)
+            .map(|(k, _)| k)
+            .collect();
+        for k in &matching {
+            if let Some(flag) = used_notice.get_mut(*k) {
+                *flag = true;
+            }
+        }
+        let notice = pair(&repository, &commit, &group, notices, &matching, problems);
+        ports.push(Port {
+            repository,
+            commit,
+            uses: group,
+            notice,
+        });
+    }
+    for (notice, was_used) in notices.iter().zip(&used_notice) {
+        if !was_used {
+            problems.push(Problem {
+                file: notice.path.clone(),
+                rule: Rule::Notice,
+                message: format!(
+                    "no Source: record ports {} at commit {}, so this licence text is not owed: \
+                     delete it",
+                    notice.repository, notice.commit
+                ),
+            });
+        }
+    }
+    ports.sort_by(|a, b| {
+        let name = |p: &Port<'_, '_>| p.notice.map(|n| n.name.to_lowercase());
+        name(a)
+            .cmp(&name(b))
+            .then_with(|| a.repository.cmp(&b.repository))
+            .then_with(|| a.commit.cmp(&b.commit))
+    });
+    ports
+}
+
+/// Ported records grouped by origin repository and commit.
+type Groups<'a> = BTreeMap<(String, String), Vec<Use<'a>>>;
+
+/// The files' `port` records, grouped by the repository and commit of each origin file they name,
+/// with a problem for each origin file that has no copyright line or whose further link is not
+/// pinned.
+fn group_ports<'a>(sources: &[Source<'a>], problems: &mut Vec<Problem>) -> Groups<'a> {
+    let mut groups = Groups::new();
     for source in sources.iter().filter(|s| s.take() == "port") {
         for used in &source.uses {
             for (link, lines) in origins(used.record) {
@@ -324,98 +413,69 @@ pub fn match_ports<'a, 'n>(
             }
         }
     }
-    let mut used_notice = vec![false; notices.len()];
-    let mut ports = Vec::new();
-    for ((repository, commit), mut group) in groups {
-        group.sort_by(|a, b| a.file.cmp(b.file));
-        let matching: Vec<usize> = notices
-            .iter()
-            .enumerate()
-            .filter(|(_, n)| n.repository == repository && n.commit == commit)
-            .map(|(k, _)| k)
-            .collect();
-        for k in &matching {
-            if let Some(flag) = used_notice.get_mut(*k) {
-                *flag = true;
-            }
+    groups
+}
+
+/// The one licence text of a group, from the indices of the `matching` notices: a problem when
+/// there is none or more than one, and one for each record whose licence differs from it.
+fn pair<'n>(
+    repository: &str,
+    commit: &str,
+    group: &[Use<'_>],
+    notices: &'n [Notice],
+    matching: &[usize],
+    problems: &mut Vec<Problem>,
+) -> Option<&'n Notice> {
+    let files: Vec<&str> = group.iter().map(|u| u.file).collect();
+    let notice = match matching {
+        [] => {
+            problems.push(Problem {
+                file: files.first().copied().unwrap_or(NOTICES_DIR).to_owned(),
+                rule: Rule::Notice,
+                message: format!(
+                    "the port of {repository} at commit {commit} ({}) has no licence text: add \
+                     {NOTICES_DIR}<source>.txt with its Name, Link, Licence, Licence file and the \
+                     licence text copied exactly from the origin's licence file \
+                     ({NOTICES_DIR}{README})",
+                    files.join(", ")
+                ),
+            });
+            None
         }
-        let files: Vec<&str> = group.iter().map(|u| u.file).collect();
-        let notice = match matching.as_slice() {
-            [] => {
-                problems.push(Problem {
-                    file: files.first().copied().unwrap_or(NOTICES_DIR).to_owned(),
-                    rule: Rule::Notice,
-                    message: format!(
-                        "the port of {repository} at commit {commit} ({}) has no licence text: add \
-                         {NOTICES_DIR}<source>.txt with its Name, Link, Licence, Licence file and \
-                         the licence text copied exactly from the origin's licence file \
-                         ({NOTICES_DIR}{README})",
-                        files.join(", ")
-                    ),
-                });
-                None
-            }
-            [one] => notices.get(*one),
-            more => {
-                for k in more {
-                    if let Some(n) = notices.get(*k) {
-                        problems.push(Problem {
-                            file: n.path.clone(),
-                            rule: Rule::Notice,
-                            message: format!(
-                                "{} licence texts name {repository} at commit {commit}; keep one",
-                                more.len()
-                            ),
-                        });
-                    }
-                }
-                None
-            }
-        };
-        if let Some(n) = notice {
-            for used in &group {
-                let licence = used.record.text("licence");
-                if canonical(licence) != canonical(&n.licence) {
+        [one] => notices.get(*one),
+        more => {
+            for k in more {
+                if let Some(n) = notices.get(*k) {
                     problems.push(Problem {
                         file: n.path.clone(),
                         rule: Rule::Notice,
                         message: format!(
-                            "its licence is {:?}, but the port in {} states {licence:?}; 29.20 \
-                             rule 1: where they disagree, stop and ask an owner",
-                            n.licence, used.file
+                            "{} licence texts name {repository} at commit {commit}; keep one",
+                            more.len()
                         ),
                     });
                 }
             }
+            None
         }
-        ports.push(Port {
-            repository,
-            commit,
-            uses: group,
-            notice,
-        });
-    }
-    for (notice, was_used) in notices.iter().zip(&used_notice) {
-        if !was_used {
-            problems.push(Problem {
-                file: notice.path.clone(),
-                rule: Rule::Notice,
-                message: format!(
-                    "no Source: record ports {} at commit {}, so this licence text is not owed: \
-                     delete it",
-                    notice.repository, notice.commit
-                ),
-            });
+    };
+    if let Some(n) = notice {
+        for used in group {
+            let licence = used.record.text("licence");
+            if canonical(licence) != canonical(&n.licence) {
+                problems.push(Problem {
+                    file: n.path.clone(),
+                    rule: Rule::Notice,
+                    message: format!(
+                        "its licence is {:?}, but the port in {} states {licence:?}; 29.20 rule 1: \
+                         where they disagree, stop and ask an owner",
+                        n.licence, used.file
+                    ),
+                });
+            }
         }
     }
-    ports.sort_by(|a, b| {
-        let name = |p: &Port<'_, '_>| p.notice.map(|n| n.name.to_lowercase());
-        name(a)
-            .cmp(&name(b))
-            .then_with(|| a.repository.cmp(&b.repository))
-            .then_with(|| a.commit.cmp(&b.commit))
-    });
-    ports
+    notice
 }
 
 #[cfg(test)]
@@ -463,17 +523,38 @@ mod tests {
             );
         };
         fails(good().replace("Name: Example\n", ""), "\"Name\" is missing");
-        fails(good().replace("Name: Example\n", "Name: TBD\n"), "\"Name\" is missing");
-        fails(good().replace("Name: Example\n", "Name: A\nName: B\n"), "twice");
-        fails(good().replace("Name: Example\n", "Name: A\nAuthor: B\n"), "not a key");
-        fails(good().replace("Name: Example\n", "Name Example\n"), "not a \"Key: value\"");
-        fails(good().replace("Licence: MIT", "Licence: GPL-3.0-only"), "allow-list");
-        fails(good().replace(&format!("tree/{SHA}"), "tree/main"), "pinned");
+        fails(
+            good().replace("Name: Example\n", "Name: TBD\n"),
+            "\"Name\" is missing",
+        );
+        fails(
+            good().replace("Name: Example\n", "Name: A\nName: B\n"),
+            "twice",
+        );
+        fails(
+            good().replace("Name: Example\n", "Name: A\nAuthor: B\n"),
+            "not a key",
+        );
+        fails(
+            good().replace("Name: Example\n", "Name Example\n"),
+            "not a \"Key: value\"",
+        );
+        fails(
+            good().replace("Licence: MIT", "Licence: GPL-3.0-only"),
+            "allow-list",
+        );
+        fails(
+            good().replace(&format!("tree/{SHA}"), "tree/main"),
+            "pinned",
+        );
         fails(
             good().replace(&format!("blob/{SHA}/LICENSE"), "blob/main/LICENSE"),
             "licence file",
         );
-        fails(good().replace("Licence text:", "Text:"), "no \"Licence text:\"");
+        fails(
+            good().replace("Licence text:", "Text:"),
+            "no \"Licence text:\"",
+        );
         fails(
             good().replace("Permission is granted.\r\n\n  Indented.", ""),
             "is empty",

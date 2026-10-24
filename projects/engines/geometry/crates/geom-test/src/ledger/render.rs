@@ -25,6 +25,7 @@
 //!
 //! Cost: linear in the size of the output.
 
+use core::fmt::Write as _;
 use std::collections::BTreeMap;
 
 use crate::ledger::methods::{self, Note};
@@ -137,26 +138,63 @@ pub fn provenance(sources: &[Source<'_>], notes: &[Note]) -> String {
     let ports = taken(sources, "port");
     let consulted = taken(sources, "port-method");
     let depends = taken(sources, "depend");
-    let named = methods::named_by(sources);
     let mut out = String::from(PROVENANCE_INTRO);
+    summary(&mut out, &ports, &consulted, &depends, notes.len());
+    port_table(&mut out, &ports);
+    consulted_table(&mut out, &consulted);
+    depend_table(&mut out, &depends);
+    note_table(&mut out, notes, &methods::named_by(sources));
+    out
+}
 
-    out.push_str("\n## Summary\n\n| Class (29.1) | Sources | Files that take them |\n| --- | --- | --- |\n");
+/// The summary: how many sources each class takes, and from how many files.
+fn summary(
+    out: &mut String,
+    ports: &[&Source<'_>],
+    consulted: &[&Source<'_>],
+    depends: &[&Source<'_>],
+    notes: usize,
+) {
+    out.push_str(
+        "\n## Summary\n\n| Class (29.1) | Sources | Files that take them |\n| --- | --- | --- |\n",
+    );
     for (class, list) in [
-        ("PORT", &ports),
-        ("PORT METHOD", &consulted),
-        ("DEPEND", &depends),
+        ("PORT", ports),
+        ("PORT METHOD", consulted),
+        ("DEPEND", depends),
     ] {
-        out.push_str(&format!(
-            "| {class} | {} | {} |\n",
-            list.len(),
-            file_count(list)
-        ));
+        let _ = writeln!(out, "| {class} | {} | {} |", list.len(), file_count(list));
     }
-    out.push_str(&format!(
-        "\n{} method note(s) under the method-only procedure (29.20, rule 6).\n",
-        notes.len()
-    ));
+    let _ = writeln!(
+        out,
+        "\n{notes} method note(s) under the method-only procedure (29.20, rule 6)."
+    );
+}
 
+/// One table row per file's record of each source: name, licence, class, link, file, and the
+/// record's purpose (what changed, or the version requirement).
+fn record_rows(out: &mut String, sources: &[&Source<'_>]) {
+    if sources.is_empty() {
+        out.push_str("| (none) | | | | | |\n");
+    }
+    for source in sources {
+        for used in &source.uses {
+            let _ = writeln!(
+                out,
+                "| {} | {} | {} | {} | {} | {} |",
+                cell(used.record.text("name")),
+                cell(used.record.text("licence")),
+                class_name(used.record.text("licence")),
+                link_cell(used.record.text("link")),
+                path_cell(used.file),
+                cell(used.record.text("purpose")),
+            );
+        }
+    }
+}
+
+/// The PORT table.
+fn port_table(out: &mut String, ports: &[&Source<'_>]) {
     out.push_str(
         "\n## PORT: code ported, notice kept\n\nEach row is one origin file at one commit, \
          translated into a kernel file that keeps the origin's licence, copyright lines and notice \
@@ -164,23 +202,11 @@ pub fn provenance(sources: &[Source<'_>], notes: &[Note]) -> String {
          | Source | Licence | Class (29.2) | Pinned link | Kernel file | Changed for Spare Kit |\n\
          | --- | --- | --- | --- | --- | --- |\n",
     );
-    if ports.is_empty() {
-        out.push_str("| (none) | | | | | |\n");
-    }
-    for source in &ports {
-        for used in &source.uses {
-            out.push_str(&format!(
-                "| {} | {} | {} | {} | {} | {} |\n",
-                cell(used.record.text("name")),
-                cell(used.record.text("licence")),
-                class_name(used.record.text("licence")),
-                link_cell(used.record.text("link")),
-                path_cell(used.file),
-                cell(used.record.text("purpose")),
-            ));
-        }
-    }
+    record_rows(out, ports);
+}
 
+/// The PORT METHOD table: one row per source, with every file that consulted it.
+fn consulted_table(out: &mut String, consulted: &[&Source<'_>]) {
     out.push_str(
         "\n## PORT METHOD: sources consulted for a method\n\nEach kernel file implements a \
          published method in its own code and copied nothing (29.1); it credits each source it \
@@ -192,7 +218,7 @@ pub fn provenance(sources: &[Source<'_>], notes: &[Note]) -> String {
     if consulted.is_empty() {
         out.push_str("| (none) | | | | | |\n");
     }
-    for source in &consulted {
+    for source in consulted {
         let uses: Vec<String> = source
             .uses
             .iter()
@@ -203,16 +229,20 @@ pub fn provenance(sources: &[Source<'_>], notes: &[Note]) -> String {
             .get("method_note")
             .and_then(Value::as_str)
             .map_or_else(|| "none".to_owned(), path_cell);
-        out.push_str(&format!(
-            "| {} | {} | {} | {} | {note} | {} |\n",
+        let _ = writeln!(
+            out,
+            "| {} | {} | {} | {} | {note} | {} |",
             cell(source.summary.text("name")),
             cell(source.summary.text("licence")),
             class_name(source.summary.text("licence")),
             link_cell(source.summary.text("link")),
             uses.join("<br>"),
-        ));
+        );
     }
+}
 
+/// The DEPEND table.
+fn depend_table(out: &mut String, depends: &[&Source<'_>]) {
     out.push_str(
         "\n## DEPEND: published crates used as they are\n\nA kernel crate may depend only on \
          `libm` (29.1); the development crates' own dependencies are recorded in their headers \
@@ -220,23 +250,11 @@ pub fn provenance(sources: &[Source<'_>], notes: &[Note]) -> String {
          | Crate | Licence | Class (29.2) | Link | Manifest | Version requirement |\n\
          | --- | --- | --- | --- | --- | --- |\n",
     );
-    if depends.is_empty() {
-        out.push_str("| (none) | | | | | |\n");
-    }
-    for source in &depends {
-        for used in &source.uses {
-            out.push_str(&format!(
-                "| {} | {} | {} | {} | {} | {} |\n",
-                cell(used.record.text("name")),
-                cell(used.record.text("licence")),
-                class_name(used.record.text("licence")),
-                link_cell(used.record.text("link")),
-                path_cell(used.file),
-                cell(used.record.text("purpose")),
-            ));
-        }
-    }
+    record_rows(out, depends);
+}
 
+/// The method notes' table, each with the files whose records name it.
+fn note_table(out: &mut String, notes: &[Note], named: &BTreeMap<&str, Vec<&str>>) {
     out.push_str(
         "\n## Method notes\n\nThe method-only procedure's records (29.20, rule 6), in \
          [methods/](methods/README.md): who read which source, who reviewed the note, and what \
@@ -261,8 +279,9 @@ pub fn provenance(sources: &[Source<'_>], notes: &[Note]) -> String {
                     .join("<br>")
             },
         );
-        out.push_str(&format!(
-            "| [{}](methods/{}) | {} | {} | {} | {} | {} | {by} |\n",
+        let _ = writeln!(
+            out,
+            "| [{}](methods/{}) | {} | {} | {} | {} | {} | {by} |",
             cell(&note.title),
             file,
             cell(note.field("Source")),
@@ -270,9 +289,8 @@ pub fn provenance(sources: &[Source<'_>], notes: &[Note]) -> String {
             cell(note.field("Read by")),
             cell(note.field("Second review")),
             cell(note.field("Code written from it")),
-        ));
+        );
     }
-    out
 }
 
 /// A heading underlined with `=` or `-`.
@@ -295,90 +313,101 @@ pub fn notice(sources: &[Source<'_>], ports: &[Port<'_, '_>]) -> String {
         out.push_str("The kernel ports no outside code.\n\n");
     }
     for port in ports {
-        let title = port.notice.map_or_else(
-            || format!("{} at {}", port.repository, port.commit),
-            |n| n.name.clone(),
-        );
-        heading(&mut out, &title, '-');
-        let mut licences: Vec<&str> = port
-            .uses
-            .iter()
-            .map(|u| u.record.text("licence"))
-            .collect();
-        licences.sort_unstable();
-        licences.dedup();
-        out.push_str(&format!("Name:      {title}\n"));
-        if let Some(project) = port.notice.and_then(|n| n.project.as_deref()) {
-            out.push_str(&format!("Project:   {project}\n"));
+        ported_source(&mut out, port);
+    }
+    credits(&mut out, &taken(sources, "port-method"));
+    published_crates(&mut out, &taken(sources, "depend"));
+    out
+}
+
+/// One ported source's entry: its name, link and licence, each ported file with the origin files
+/// it ports and their copyright lines, any credit, and the licence text in full.
+fn ported_source(out: &mut String, port: &Port<'_, '_>) {
+    let title = port.notice.map_or_else(
+        || format!("{} at {}", port.repository, port.commit),
+        |n| n.name.clone(),
+    );
+    heading(out, &title, '-');
+    let mut licences: Vec<&str> = port.uses.iter().map(|u| u.record.text("licence")).collect();
+    licences.sort_unstable();
+    licences.dedup();
+    let _ = writeln!(out, "Name:      {title}");
+    if let Some(project) = port.notice.and_then(|n| n.project.as_deref()) {
+        let _ = writeln!(out, "Project:   {project}");
+    }
+    out.push_str("Taken as:  PORT (section 29.1)\n");
+    let link = port
+        .notice
+        .map_or_else(|| port.repository.clone(), |n| n.link.clone());
+    let _ = writeln!(out, "Link:      {link}");
+    let _ = writeln!(out, "Commit:    {}", port.commit);
+    let _ = writeln!(out, "Licence:   {}", licences.join(", "));
+    if let Some(n) = port.notice {
+        let _ = writeln!(out, "           as stated in {}", n.licence_file);
+    }
+    out.push_str(
+        "\nPorted files, each with the origin files it ports and the origin's copyright lines \
+         as its header\ncopies them:\n\n",
+    );
+    for used in &port.uses {
+        let _ = writeln!(out, "  {}", used.file);
+        if !used.spdx.is_empty() {
+            let _ = writeln!(out, "    SPDX-License-Identifier: {}", used.spdx);
         }
-        out.push_str("Taken as:  PORT (section 29.1)\n");
-        let link = port
-            .notice
-            .map_or_else(|| port.repository.clone(), |n| n.link.clone());
-        out.push_str(&format!("Link:      {link}\n"));
-        out.push_str(&format!("Commit:    {}\n", port.commit));
-        out.push_str(&format!("Licence:   {}\n", licences.join(", ")));
-        if let Some(n) = port.notice {
-            out.push_str(&format!("           as stated in {}\n", n.licence_file));
-        }
-        out.push_str(
-            "\nPorted files, each with the origin files it ports and the origin's copyright lines \
-             as its header\ncopies them:\n\n",
-        );
-        for used in &port.uses {
-            out.push_str(&format!("  {}\n", used.file));
-            if !used.spdx.is_empty() {
-                out.push_str(&format!("    SPDX-License-Identifier: {}\n", used.spdx));
+        let in_repository = origins(used.record).into_iter().filter(|(link, _)| {
+            repository_and_commit(link)
+                .is_some_and(|(r, c)| r == port.repository && c == port.commit)
+        });
+        for (origin, lines) in in_repository {
+            let _ = writeln!(out, "    {origin}");
+            for line in lines {
+                let _ = writeln!(out, "      {line}");
             }
-            let in_repository = origins(used.record).into_iter().filter(|(link, _)| {
-                repository_and_commit(link)
-                    .is_some_and(|(r, c)| r == port.repository && c == port.commit)
-            });
-            for (origin, lines) in in_repository {
-                out.push_str(&format!("    {origin}\n"));
-                for line in lines {
-                    out.push_str(&format!("      {line}\n"));
-                }
-            }
-            out.push('\n');
         }
-        match port.notice {
-            Some(n) => {
-                if !n.credit.is_empty() {
-                    out.push_str("Credit:\n\n");
-                    for line in &n.credit {
-                        out.push_str(line);
-                        out.push('\n');
-                    }
+        out.push('\n');
+    }
+    match port.notice {
+        Some(n) => {
+            if !n.credit.is_empty() {
+                out.push_str("Credit:\n\n");
+                for line in &n.credit {
+                    out.push_str(line);
                     out.push('\n');
                 }
-                out.push_str(&format!("Licence text ({}):\n\n", n.licence_file));
-                out.push_str(&n.text);
+                out.push('\n');
             }
-            None => out.push_str(&format!(
-                "Licence text: MISSING. Add it under {NOTICES_DIR} and run `{WRITE_COMMAND}`.\n"
-            )),
+            let _ = write!(out, "Licence text ({}):\n\n", n.licence_file);
+            out.push_str(&n.text);
         }
-        out.push_str("\n\n");
+        None => {
+            let _ = writeln!(
+                out,
+                "Licence text: MISSING. Add it under {NOTICES_DIR} and run `{WRITE_COMMAND}`."
+            );
+        }
     }
+    out.push_str("\n\n");
+}
 
-    heading(&mut out, "CREDITS: SOURCES CONSULTED FOR A METHOD", '=');
+/// The credits: every source consulted, with its licence, link, method note and each file that
+/// consulted it and what for.
+fn credits(out: &mut String, consulted: &[&Source<'_>]) {
+    heading(out, "CREDITS: SOURCES CONSULTED FOR A METHOD", '=');
     out.push_str(
         "Each kernel module below implements a published method in its own code and copied \
          nothing from\nthese sources (PORT METHOD, section 29.1); rule 4 asks that it credit \
          every source it consulted.\nA source read under the method-only procedure (rule 6) \
          names its method note in\nprojects/engines/geometry/methods/.\n\n",
     );
-    let consulted = taken(sources, "port-method");
     if consulted.is_empty() {
         out.push_str("No source is credited.\n\n");
     }
     for source in consulted {
-        out.push_str(&format!("{}\n", source.summary.text("name")));
-        out.push_str(&format!("  Licence:      {}\n", source.summary.text("licence")));
-        out.push_str(&format!("  Link:         {}\n", source.summary.text("link")));
+        let _ = writeln!(out, "{}", source.summary.text("name"));
+        let _ = writeln!(out, "  Licence:      {}", source.summary.text("licence"));
+        let _ = writeln!(out, "  Link:         {}", source.summary.text("link"));
         if let Some(note) = source.summary.get("method_note").and_then(Value::as_str) {
-            out.push_str(&format!("  Method note:  {note}\n"));
+            let _ = writeln!(out, "  Method note:  {note}");
         }
         out.push_str("  Consulted by:\n");
         let mut purposes: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
@@ -389,38 +418,40 @@ pub fn notice(sources: &[Source<'_>], ports: &[Port<'_, '_>]) -> String {
                 .push(used.record.text("purpose"));
         }
         for (file, list) in purposes {
-            out.push_str(&format!("    {file}\n"));
+            let _ = writeln!(out, "    {file}");
             for purpose in list {
-                out.push_str(&format!("      {purpose}\n"));
+                let _ = writeln!(out, "      {purpose}");
             }
         }
         out.push('\n');
     }
+}
 
+/// The published crates the kernel crates depend on.
+fn published_crates(out: &mut String, depends: &[&Source<'_>]) {
     out.push('\n');
-    heading(&mut out, "PUBLISHED CRATES", '=');
+    heading(out, "PUBLISHED CRATES", '=');
     out.push_str(
         "The published crates the kernel crates depend on (DEPEND, section 29.1). Their notices, \
          and those of\nevery other crate compiled into a shipped binary, go in the generated \
          third-party notices file.\n\n",
     );
-    let depends = taken(sources, "depend");
     if depends.is_empty() {
         out.push_str("None.\n");
     }
     for source in depends {
         for used in &source.uses {
-            out.push_str(&format!(
-                "  {} {} ({}), {}, named by {}\n",
+            let _ = writeln!(
+                out,
+                "  {} {} ({}), {}, named by {}",
                 used.record.text("name"),
                 used.record.text("purpose"),
                 used.record.text("licence"),
                 used.record.text("link"),
                 used.file
-            ));
+            );
         }
     }
-    out
 }
 
 #[cfg(test)]
