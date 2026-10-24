@@ -134,13 +134,18 @@ pub fn head(t: &Ty) -> Option<Head> {
     })
 }
 
-/// One implementation, resolved.
+/// One implementation, resolved: an `impl` block of the program, or one a `#[derive]` writes
+/// (numbered after the program's blocks, [`Index::impl_block`] gives the block of the former).
 #[derive(Clone, Debug)]
 pub struct ImplInfo {
     /// Its self type, its generic parameters open.
     pub self_ty: Ty,
     /// Its trait, for a trait implementation.
     pub trait_ref: Option<TraitRef>,
+    /// Its generic parameters.
+    pub generics: Vec<GenId>,
+    /// Its methods by name.
+    pub methods: BTreeMap<String, Vec<NodeId>>,
 }
 
 /// What a method lookup chose.
@@ -311,7 +316,12 @@ impl<'p> Index<'p> {
             if let Some(tr) = &trait_ref {
                 by_trait.entry(tr.id).or_default().push(id);
             }
-            impls.push(ImplInfo { self_ty, trait_ref });
+            impls.push(ImplInfo {
+                self_ty,
+                trait_ref,
+                generics: imp.scope.generics.clone(),
+                methods: imp.methods.clone(),
+            });
         }
         let mut derived: BTreeMap<ItemId, Vec<(String, NodeId)>> = BTreeMap::new();
         for (n, node) in program.nodes.iter().enumerate() {
@@ -334,6 +344,7 @@ impl<'p> Index<'p> {
             fmt_traits: BTreeMap::new(),
         };
         index.lang = index.find_lang();
+        index.add_derived_impls();
         index.fmt_traits = FMT_TRAITS
             .iter()
             .filter_map(|(n, p)| index.model_item(p).map(|id| ((*n).to_owned(), id)))
@@ -368,6 +379,55 @@ impl<'p> Index<'p> {
                 Res::Item(id) => Some(id),
                 _ => None,
             })
+    }
+
+    /// Files each `#[derive]`d implementation as an implementation of its trait for its type,
+    /// whose method is the derived node.
+    fn add_derived_impls(&mut self) {
+        let mut add = Vec::new();
+        for (item, list) in &self.derived {
+            for (trait_name, node) in list {
+                let Some(t) = self.lang.trait_named(trait_name) else {
+                    continue;
+                };
+                let ident = self.program.node(*node).map(|n| n.ident.clone()).unwrap_or_default();
+                add.push(ImplInfo {
+                    self_ty: self.adt_open(*item),
+                    trait_ref: Some(TraitRef { id: t, args: Vec::new(), bindings: Vec::new() }),
+                    generics: self.program.item(*item).scope.generics.clone(),
+                    methods: BTreeMap::from([(ident, vec![*node])]),
+                });
+            }
+        }
+        for info in add {
+            let id = ImplId(self.impls.len());
+            match head(&info.self_ty) {
+                Some(h) => self.by_head.entry(h).or_default().push(id),
+                None => self.blanket.push(id),
+            }
+            if let Some(tr) = &info.trait_ref {
+                self.by_trait.entry(tr.id).or_default().push(id);
+            }
+            self.impls.push(info);
+        }
+    }
+
+    /// The `impl` block of implementation `imp`, `None` for a derived one.
+    #[must_use]
+    pub fn impl_block(&self, imp: ImplId) -> Option<&crate::recursion::model::Impl> {
+        self.program.impls.get(imp.0)
+    }
+
+    /// The generic parameters of implementation `imp`.
+    #[must_use]
+    pub fn impl_generics(&self, imp: ImplId) -> &[GenId] {
+        self.impls.get(imp.0).map_or(&[], |i| i.generics.as_slice())
+    }
+
+    /// Whether implementation `imp` defines method `name` itself.
+    #[must_use]
+    pub fn impl_defines(&self, imp: ImplId, name: &str) -> bool {
+        self.impls.get(imp.0).is_some_and(|i| i.methods.contains_key(name))
     }
 
     fn find_lang(&self) -> Lang {
@@ -502,7 +562,7 @@ impl<'p> Index<'p> {
                     .get(imp.0)
                     .map(|i| self.show_head(&i.self_ty))
                     .filter(|s| s != "{unknown}")
-                    .unwrap_or_else(|| self.program.imp(*imp).self_ty.to_token_stream().to_string());
+                    .unwrap_or_else(|| self.impl_block(*imp).map(|b| b.self_ty.to_token_stream().to_string()).unwrap_or_default());
                 match self.impls.get(imp.0).and_then(|i| i.trait_ref.as_ref()) {
                     Some(tr) => format!("<{self_ty} as {}>::{}", self.program.item(tr.id).name, node.ident),
                     None => format!("{self_ty}::{}", node.ident),
@@ -782,7 +842,7 @@ impl<'p> Index<'p> {
                 out
             }
             Ty::Assoc(_, Some(tr), name) => {
-                let item = self.program.item(*tr);
+                let item = self.program.item(tr.id);
                 let ItemKind::Trait { assoc_types, .. } = &item.kind else {
                     return Vec::new();
                 };
@@ -867,7 +927,8 @@ impl<'p> Index<'p> {
             Ty::Ref(inner) => Some((**inner).clone()),
             Ty::Adt(..) | Ty::Param(_) | Ty::Opaque(_) | Ty::Assoc(..) => {
                 let deref = self.lang.trait_named("Deref")?;
-                let target = self.normalize(&Ty::Assoc(Box::new(t.clone()), Some(deref), "Target".to_owned()), infer, sigs);
+                let tr = TraitRef { id: deref, args: Vec::new(), bindings: Vec::new() };
+                let target = self.normalize(&Ty::Assoc(Box::new(t.clone()), Some(Box::new(tr)), "Target".to_owned()), infer, sigs);
                 match infer.shallow(&target) {
                     Ty::Assoc(..) | Ty::Unknown => None,
                     other => Some(other),
@@ -904,7 +965,7 @@ impl<'p> Index<'p> {
 
     /// Fresh variables for implementation `imp`'s generic parameters.
     fn fresh_impl(&self, imp: ImplId, infer: &mut Infer) -> Map {
-        self.program.imp(imp).scope.generics.iter().map(|g| (*g, infer.fresh())).collect()
+        self.impl_generics(imp).iter().map(|g| (*g, infer.fresh())).collect()
     }
 
     /// Whether implementation `imp`, its generic parameters as `map` gives them (variables), may
@@ -987,7 +1048,7 @@ impl<'p> Index<'p> {
         if depth >= BOUND_DEPTH {
             return true;
         }
-        for g in &self.program.imp(imp).scope.generics {
+        for g in self.impl_generics(imp) {
             let Some(value) = map.get(g) else {
                 continue;
             };
@@ -1086,10 +1147,10 @@ impl<'p> Index<'p> {
     /// `self_ty`, and `method_args` for the method's own parameters.
     #[must_use]
     pub fn impl_fn(&self, imp: ImplId, name: &str, map: &Map, self_ty: &Ty, method_args: &[Ty]) -> Option<(NodeId, Vec<Ty>)> {
-        let it = self.program.imp(imp);
-        if let Some(node) = it.methods.get(name).and_then(|v| v.first()) {
+        let info = self.impls.get(imp.0)?;
+        if let Some(node) = info.methods.get(name).and_then(|v| v.first()) {
             let generics = self.node_generics(*node);
-            let own = self.program.imp(imp).scope.generics.len();
+            let own = info.generics.len();
             let mut args: Vec<Ty> = generics.iter().take(own).map(|g| map.get(g).cloned().unwrap_or(Ty::Param(*g))).collect();
             args.extend(method_args.iter().cloned());
             while args.len() < generics.len() {
@@ -1193,7 +1254,7 @@ impl<'p> Index<'p> {
             if info.trait_ref.is_some() == inherent {
                 continue;
             }
-            let provides = self.program.imp(imp).methods.contains_key(name)
+            let provides = info.methods.contains_key(name)
                 || info.trait_ref.as_ref().is_some_and(|tr| self.trait_default_exists(tr.id, name));
             if !provides {
                 continue;
@@ -1217,20 +1278,6 @@ impl<'p> Index<'p> {
             }
         }
         if !inherent {
-            // Derived implementations of the step's type.
-            let target = match adjusted {
-                Ty::Ref(inner) => (**inner).clone(),
-                other => other.clone(),
-            };
-            if let Ty::Adt(item, args) = infer.shallow(&target)
-                && matches!(adjusted, Ty::Ref(_))
-            {
-                for (t, node) in self.derived.get(&item).into_iter().flatten() {
-                    if DERIVABLE.iter().any(|(d, m)| d == t && m.contains(&name)) && self.program.node(*node).is_some_and(|n| n.ident == name) {
-                        found.push((Pick::Node { node: *node, args: args.clone() }, target.clone()));
-                    }
-                }
-            }
             // Methods of the bounds of a generic receiver, and of a trait object's traits.
             let referent = match adjusted {
                 Ty::Ref(inner) => infer.shallow(inner),
@@ -1284,11 +1331,11 @@ impl<'p> Index<'p> {
         found.into_iter().map(|(p, _)| p).collect()
     }
 
-    /// Whether trait `t` or a supertrait has a default body for method `name`.
+    /// Whether trait `t` itself has a default body for method `name`.
     fn trait_default_exists(&self, t: ItemId, name: &str) -> bool {
-        self.trait_closure(t)
-            .iter()
-            .any(|x| matches!(&self.program.item(*x).kind, ItemKind::Trait { defaults, .. } if defaults.contains_key(name)))
+        // An implementation of `t` provides `t`'s own methods; a supertrait's come from the
+        // supertrait's implementation.
+        matches!(&self.program.item(t).kind, ItemKind::Trait { defaults, .. } if defaults.contains_key(name))
     }
 
     /// The receiver type of node `node`'s instance with arguments `args`, if it has a receiver.
@@ -1343,7 +1390,7 @@ impl<'p> Index<'p> {
                 .filter(|imp| {
                     self.impls.get(imp.0).is_some_and(|info| {
                         info.trait_ref.is_some() != inherent
-                            && (self.program.imp(*imp).methods.contains_key(name)
+                            && (info.methods.contains_key(name)
                                 || info.trait_ref.as_ref().is_some_and(|tr| self.trait_default_exists(tr.id, name)))
                     })
                 })
@@ -1359,13 +1406,6 @@ impl<'p> Index<'p> {
             }
             if inherent && !out.is_empty() {
                 return out;
-            }
-        }
-        if let Ty::Adt(item, args) = &base {
-            for (t, node) in self.derived.get(item).into_iter().flatten() {
-                if DERIVABLE.iter().any(|(d, m)| d == t && m.contains(&name)) {
-                    out.push(Pick::Node { node: *node, args: args.clone() });
-                }
             }
         }
         out
@@ -1391,10 +1431,10 @@ impl<'p> Index<'p> {
         let candidates: Vec<ImplId> = self
             .candidates_for(&base, None)
             .into_iter()
-            .filter(|imp| self.program.imp(*imp).consts.contains_key(name))
+            .filter(|imp| self.impl_block(*imp).is_some_and(|b| b.consts.contains_key(name)))
             .collect();
         let (imp, map) = self.applicable(candidates, &base, None, infer, sigs).into_iter().next()?;
-        let it = self.program.imp(imp);
+        let it = self.impl_block(imp)?;
         let t = it.consts.get(name)?;
         let mut scope = it.scope.clone();
         scope.self_ref = SelfRef::Impl(imp);
@@ -1418,14 +1458,14 @@ impl<'p> Index<'p> {
             return t;
         }
         t.fold(&mut |x| match x {
-            Ty::Assoc(base, tr, name) => Some(self.project(base, *tr, name, infer, sigs, depth)),
+            Ty::Assoc(base, tr, name) => Some(self.project(base, tr.as_deref(), name, infer, sigs, depth)),
             _ => None,
         })
     }
 
     /// `<base as tr>::name`.
-    fn project(&self, base: &Ty, tr: Option<ItemId>, name: &str, infer: &mut Infer, sigs: ClosureSigs<'_>, depth: usize) -> Ty {
-        let keep = || Ty::Assoc(Box::new(base.clone()), tr, name.to_owned());
+    fn project(&self, base: &Ty, tr: Option<&TraitRef>, name: &str, infer: &mut Infer, sigs: ClosureSigs<'_>, depth: usize) -> Ty {
+        let keep = || Ty::Assoc(Box::new(base.clone()), tr.map(|t| Box::new(t.clone())), name.to_owned());
         let base = infer.shallow(base);
         match &base {
             Ty::Var(_) | Ty::Unknown | Ty::Infer => keep(),
@@ -1448,11 +1488,11 @@ impl<'p> Index<'p> {
             }
             _ => {
                 let traits: Vec<ItemId> = match tr {
-                    Some(t) => vec![t],
+                    Some(t) => vec![t.id],
                     None => self
                         .candidates_for(&base, None)
                         .into_iter()
-                        .filter(|i| self.program.imp(*i).assoc.contains_key(name))
+                        .filter(|i| self.impl_block(*i).is_some_and(|b| b.assoc.contains_key(name)))
                         .filter_map(|i| self.impls.get(i.0).and_then(|x| x.trait_ref.as_ref()).map(|x| x.id))
                         .collect(),
                 };
@@ -1460,13 +1500,17 @@ impl<'p> Index<'p> {
                     let candidates: Vec<ImplId> = self
                         .candidates_for(&base, Some(t))
                         .into_iter()
-                        .filter(|imp| self.program.imp(*imp).assoc.contains_key(name))
+                        .filter(|imp| self.impl_block(*imp).is_some_and(|b| b.assoc.contains_key(name)))
                         .collect();
                     // One implementation applies: its definition, with what matching it fixed
-                    // kept. Several (open variables): the projection waits.
-                    let found = self.applicable(candidates, &base, None, infer, sigs);
+                    // kept. Several (open variables): the projection waits. The trait's arguments
+                    // take part when the projection names them (`<usize as SliceIndex<[T]>>`).
+                    let args: Option<Vec<Ty>> = tr.filter(|r| r.id == t && !r.args.is_empty()).map(|r| self.complete(r, &base).args);
+                    let found = self.applicable(candidates, &base, args.as_deref(), infer, sigs);
                     if let [(imp, map)] = found.as_slice() {
-                        let it = self.program.imp(*imp);
+                        let Some(it) = self.impl_block(*imp) else {
+                            continue;
+                        };
                         let Some(written) = it.assoc.get(name) else {
                             continue;
                         };
@@ -1616,11 +1660,12 @@ mod tests {
         let mut infer = Infer::new();
         let it = Ty::Adt(item(&p, "It"), Vec::new());
         let iter = ix.lang.trait_named("Iterator").unwrap();
-        let n = ix.normalize(&Ty::Assoc(Box::new(it), Some(iter), "Item".to_owned()), &mut infer, &none);
+        let itr = Some(Box::new(TraitRef { id: iter, args: Vec::new(), bindings: Vec::new() }));
+        let n = ix.normalize(&Ty::Assoc(Box::new(it), itr.clone(), "Item".to_owned()), &mut infer, &none);
         assert_eq!(n, Ty::Adt(item(&p, "Item"), Vec::new()));
         let g = p.nodes.iter().position(|n| n.ident == "g").unwrap();
         let ig = ix.node_generics(NodeId(g))[0];
-        let b = ix.normalize(&Ty::Assoc(Box::new(Ty::Param(ig)), Some(iter), "Item".to_owned()), &mut infer, &none);
+        let b = ix.normalize(&Ty::Assoc(Box::new(Ty::Param(ig)), itr, "Item".to_owned()), &mut infer, &none);
         assert_eq!(b, Ty::Prim(Prim::U8));
     }
 

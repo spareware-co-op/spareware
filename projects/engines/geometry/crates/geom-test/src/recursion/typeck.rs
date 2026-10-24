@@ -1091,7 +1091,7 @@ impl<'a, 'p> Checker<'a, 'p> {
                     let Some(info) = ix.impls.get(imp.0) else {
                         continue;
                     };
-                    let open: Map = ix.program.imp(imp).scope.generics.iter().map(|g| (*g, Ty::Param(*g))).collect();
+                    let open: Map = ix.impl_generics(imp).iter().map(|g| (*g, Ty::Param(*g))).collect();
                     if let Some((n, args)) = ix.impl_fn(imp, name, &open, &info.self_ty, &[]) {
                         let args: Vec<Ty> = args.iter().map(|a| self.resolve_final(a)).collect();
                         out.push(self.m.node_inst(ix, n, args));
@@ -1178,12 +1178,13 @@ impl<'a, 'p> Checker<'a, 'p> {
         };
         let any_kernel_drop = self.ix.by_trait.get(&drop).is_some_and(|impls| {
             impls.iter().any(|i| {
-                let module = self.ix.program.imp(*i).scope.module;
-                self.ix
-                    .program
-                    .crates
-                    .get(self.ix.program.module(module).krate)
-                    .is_some_and(|c| c.source.role != crate::recursion::model::Role::Model)
+                self.ix.impl_block(*i).is_some_and(|b| {
+                    self.ix
+                        .program
+                        .crates
+                        .get(self.ix.program.module(b.scope.module).krate)
+                        .is_some_and(|c| c.source.role != crate::recursion::model::Role::Model)
+                })
             })
         });
         if !any_kernel_drop || self.compile_time {
@@ -2805,7 +2806,7 @@ impl<'a, 'p> Checker<'a, 'p> {
             Ty::Param(_) | Ty::Opaque(_) | Ty::Assoc(..) | Ty::Dyn(_) => {
                 let trf = TraitRef { id: tid, args: args.clone(), bindings: Vec::new() };
                 self.dispatch_trait_fn(self.origin, &trf, m, &l, &[], line, how::IMPLICIT, false);
-                let out = Ty::Assoc(Box::new(l.clone()), Some(tid), "Output".to_owned());
+                let out = Ty::Assoc(Box::new(l.clone()), Some(Box::new(trf.clone())), "Output".to_owned());
                 self.norm(&out)
             }
             _ => {
@@ -2847,7 +2848,7 @@ impl<'a, 'p> Checker<'a, 'p> {
 
     /// Associated type `name` of implementation `imp` with arguments `map`.
     fn impl_assoc(&mut self, imp: ImplId, map: &Map, name: &str) -> Option<Ty> {
-        let it = self.ix.program.imp(imp);
+        let it = self.ix.impl_block(imp)?;
         let written = it.assoc.get(name)?;
         let mut scope = it.scope.clone();
         scope.self_ref = SelfRef::Impl(imp);
@@ -2864,7 +2865,7 @@ impl<'a, 'p> Checker<'a, 'p> {
                 };
                 let tr = TraitRef { id: deref, args: Vec::new(), bindings: Vec::new() };
                 self.dispatch_trait_fn(self.origin, &tr, "deref", o, &[], line, how::IMPLICIT, false);
-                let target = Ty::Assoc(Box::new(o.clone()), Some(deref), "Target".to_owned());
+                let target = Ty::Assoc(Box::new(o.clone()), Some(Box::new(tr.clone())), "Target".to_owned());
                 self.norm(&target)
             }
             Ty::Unknown => Ty::Unknown,
@@ -3210,3 +3211,52 @@ impl<'a, 'p> Checker<'a, 'p> {
     }
 }
 
+
+#[cfg(test)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    reason = "tests may use native arithmetic, casts, unwrap and indexing"
+)]
+mod tests {
+    use crate::recursion::model::{CrateSource, Role};
+    use crate::recursion::{Report, analyse_here};
+
+    /// Analyses one crate `a` whose `lib.rs` is `text`.
+    fn run(text: &str) -> Report {
+        let text = text.to_owned();
+        let read = move |p: &str| {
+            if p == "c/a/src/lib.rs" {
+                Ok(text.clone())
+            } else {
+                Err(format!("no such file {p}"))
+            }
+        };
+        let sources = vec![CrateSource {
+            package: "a".to_owned(),
+            lib: "a".to_owned(),
+            folder: "c/a".to_owned(),
+            root: "c/a/src/lib.rs".to_owned(),
+            role: Role::Ships,
+        }];
+        analyse_here(&sources, &read)
+    }
+
+    fn problems(r: &Report) -> Vec<String> {
+        r.problems.iter().map(ToString::to_string).collect()
+    }
+
+    #[test]
+    fn debug_snippet() {
+        let r = run(
+            "fn any_low_bits(a: &[u64; 4], full: usize) -> bool {\n\
+             let below = a.iter().take(full).any(|&limb| limb != 0);\n\
+             below }",
+        );
+        assert!(r.problems.is_empty(), "{:#?}", problems(&r));
+    }
+}

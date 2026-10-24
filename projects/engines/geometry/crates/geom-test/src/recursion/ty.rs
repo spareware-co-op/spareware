@@ -197,9 +197,9 @@ pub enum Ty {
     Dyn(Vec<TraitRef>),
     /// A return-position `impl ...` as a signature writes it.
     Opaque(Vec<TraitRef>),
-    /// A projection `<base as Trait>::Name` not resolved: on an open parameter, or before its base
-    /// is known.
-    Assoc(Box<Ty>, Option<ItemId>, String),
+    /// A projection `<base as Trait<..>>::Name` not resolved: on an open parameter, or before its
+    /// base is known; with the trait and its arguments when known.
+    Assoc(Box<Ty>, Option<Box<TraitRef>>, String),
     /// A function pointer type: its parameters and result.
     FnPtr(Vec<Ty>, Box<Ty>),
     /// One closure.
@@ -255,8 +255,16 @@ impl Ty {
                     a.walk(f);
                 }
             }
-            Ty::Ref(inner) | Ty::Slice(inner) | Ty::Array(inner) | Ty::Assoc(inner, ..) => {
+            Ty::Ref(inner) | Ty::Slice(inner) | Ty::Array(inner) => {
                 inner.walk(f);
+            }
+            Ty::Assoc(inner, tr, _) => {
+                inner.walk(f);
+                if let Some(tr) = tr {
+                    for a in &tr.args {
+                        a.walk(f);
+                    }
+                }
             }
             Ty::FnPtr(params, ret) => {
                 for p in params {
@@ -324,7 +332,11 @@ impl Ty {
             Ty::Ref(inner) => Ty::Ref(Box::new(inner.fold(f))),
             Ty::Slice(inner) => Ty::Slice(Box::new(inner.fold(f))),
             Ty::Array(inner) => Ty::Array(Box::new(inner.fold(f))),
-            Ty::Assoc(inner, tr, name) => Ty::Assoc(Box::new(inner.fold(f)), *tr, name.clone()),
+            Ty::Assoc(inner, tr, name) => Ty::Assoc(
+                Box::new(inner.fold(f)),
+                tr.as_ref().map(|t| Box::new(t.map(&mut |x| x.fold(f)))),
+                name.clone(),
+            ),
             Ty::FnPtr(params, ret) => Ty::FnPtr(params.iter().map(|p| p.fold(f)).collect(), Box::new(ret.fold(f))),
             Ty::Closure(k) => Ty::Closure(Box::new(ClosureKey {
                 owner: k.owner,
@@ -391,7 +403,11 @@ impl Ty {
             Ty::Ref(inner) => Ty::Ref(Box::new(inner.cut_at(d))),
             Ty::Slice(inner) => Ty::Slice(Box::new(inner.cut_at(d))),
             Ty::Array(inner) => Ty::Array(Box::new(inner.cut_at(d))),
-            Ty::Assoc(inner, tr, name) => Ty::Assoc(Box::new(inner.cut_at(d)), *tr, name.clone()),
+            Ty::Assoc(inner, tr, name) => Ty::Assoc(
+                Box::new(inner.cut_at(d)),
+                tr.as_ref().map(|t| Box::new(t.map(&mut |x| x.cut_at(d)))),
+                name.clone(),
+            ),
             Ty::FnPtr(params, ret) => Ty::FnPtr(all(params), Box::new(ret.cut_at(d))),
             Ty::Closure(k) => Ty::Closure(Box::new(ClosureKey {
                 owner: k.owner,

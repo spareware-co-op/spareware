@@ -483,7 +483,7 @@ impl<'p> Resolver<'p> {
                 if let Some(q) = &tp.qself {
                     let base = self.ty_at(scope, &q.ty, depth);
                     let name = tp.path.segments.last().map(|s| s.ident.to_string()).unwrap_or_default();
-                    let trait_id = if q.position > 0 {
+                    let trait_ref = if q.position > 0 {
                         let trait_path: Vec<String> = tp
                             .path
                             .segments
@@ -491,18 +491,21 @@ impl<'p> Resolver<'p> {
                             .take(q.position)
                             .map(|s| s.ident.to_string())
                             .collect();
-                        self.resolve(scope, &trait_path, tp.path.leading_colon.is_some(), Ns::Type)
+                        let id = self
+                            .resolve(scope, &trait_path, tp.path.leading_colon.is_some(), Ns::Type)
                             .into_iter()
                             .find_map(|r| match r {
                                 Res::Item(id) if matches!(self.program.item(id).kind, ItemKind::Trait { .. }) => {
                                     Some(id)
                                 }
                                 _ => None,
-                            })
+                            });
+                        let seg = tp.path.segments.iter().nth(q.position.saturating_sub(1));
+                        id.zip(seg).and_then(|(id, seg)| self.trait_ref_of(scope, id, seg, depth))
                     } else {
                         None
                     };
-                    return Ty::Assoc(Box::new(base), trait_id, name);
+                    return Ty::Assoc(Box::new(base), trait_ref.map(Box::new), name);
                 }
                 let segs = Self::segments(&tp.path);
                 let resolved = self.resolve(scope, &segs, tp.path.leading_colon.is_some(), Ns::Type);
@@ -632,24 +635,36 @@ impl<'p> Resolver<'p> {
                     .trait_path
                     .as_ref()
                     .and_then(|p| self.trait_ref(&it.scope, p))
-                    .and_then(|tr| self.declaring_trait(&[tr], name));
-                Ty::Assoc(Box::new(base_ty), declaring, name.to_owned())
+                    .and_then(|tr| self.declaring_ref(&[tr], name));
+                Ty::Assoc(Box::new(base_ty), declaring.map(Box::new), name.to_owned())
             }
             (Res::SelfTy, SelfRef::Trait(t, _)) => {
                 let own = TraitRef {
                     id: t,
-                    args: Vec::new(),
+                    args: self.program.item(t).scope.generics.iter().map(|g| Ty::Param(*g)).collect(),
                     bindings: Vec::new(),
                 };
-                let declaring = self.declaring_trait(&[own], name);
-                Ty::Assoc(Box::new(base_ty), declaring, name.to_owned())
+                let declaring = self.declaring_ref(&[own], name);
+                Ty::Assoc(Box::new(base_ty), declaring.map(Box::new), name.to_owned())
             }
             (Res::Generic(g), _) => {
-                let declaring = self.declaring_trait(&self.bounds(*g), name);
-                Ty::Assoc(Box::new(base_ty), declaring, name.to_owned())
+                let declaring = self.declaring_ref(&self.bounds(*g), name);
+                Ty::Assoc(Box::new(base_ty), declaring.map(Box::new), name.to_owned())
             }
             _ => Ty::Assoc(Box::new(base_ty), None, name.to_owned()),
         }
+    }
+
+    /// The bound among `traits` that declares associated type `name`, with its arguments; or the
+    /// supertrait that does, its arguments not known here.
+    #[must_use]
+    pub fn declaring_ref(&self, traits: &[TraitRef], name: &str) -> Option<TraitRef> {
+        let id = self.declaring_trait(traits, name)?;
+        Some(traits.iter().find(|t| t.id == id).cloned().unwrap_or(TraitRef {
+            id,
+            args: Vec::new(),
+            bindings: Vec::new(),
+        }))
     }
 
     /// The trait among `traits` and their supertraits that declares associated type `name`.
