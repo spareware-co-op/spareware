@@ -165,7 +165,13 @@ pub fn through(class: Class) -> Vec<[P3; 3]> {
 /// (plane, grid point) pairs for [`Plane::side`].
 #[must_use]
 pub fn side(class: Class) -> Vec<(Plane, P3)> {
-    let mut g = rng("plane::side", class);
+    side_from("plane::side", class)
+}
+
+/// [`side`]'s classes drawn from the seed of `op`: the batch another benchmark of the same
+/// plane test measures (the generated filter and exact value, [`super::generated`]), on inputs of its own.
+pub(crate) fn side_from(op: &str, class: Class) -> Vec<(Plane, P3)> {
+    let mut g = rng(op, class);
     match class {
         Class::Typical => batch_of(|_| {
             let (p, q) = (typical_plane(&mut g)?, typical3(&mut g));

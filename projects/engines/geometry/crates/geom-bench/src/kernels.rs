@@ -808,3 +808,83 @@ pub mod exact_sum {
         run(batch, out, ExactSum::round_ieee);
     }
 }
+
+/// The generated filters and exact values of `geom_num::generated`, one module per predicate. A
+/// filter returns the certified sign or `None`; a value, the exact determinant or `None` outside
+/// its domain; the kernel stores whichever it returns.
+pub mod generated {
+    use geom_num::Sign;
+    use geom_num::generated::{incircle, insphere, orient2d, orient3d, plane_side};
+    use geom_num::grid::{P2, P3};
+    use geom_num::wide::I256;
+
+    use super::run;
+
+    /// `generated::orient2d::filter` on each triple.
+    #[inline(never)]
+    pub fn orient2d_filter(batch: &[[P2; 3]], out: &mut Vec<Option<Sign>>) {
+        run(batch, out, |&[a, b, c]| orient2d::filter(a, b, c));
+    }
+
+    /// `generated::orient2d::value` on each triple.
+    #[inline(never)]
+    pub fn orient2d_value(batch: &[[P2; 3]], out: &mut Vec<Option<i128>>) {
+        run(batch, out, |&[a, b, c]| orient2d::value(a, b, c));
+    }
+
+    /// `generated::orient3d::filter` on each quadruple.
+    #[inline(never)]
+    pub fn orient3d_filter(batch: &[[P3; 4]], out: &mut Vec<Option<Sign>>) {
+        run(batch, out, |&[a, b, c, d]| orient3d::filter(a, b, c, d));
+    }
+
+    /// `generated::orient3d::value` on each quadruple.
+    #[inline(never)]
+    pub fn orient3d_value(batch: &[[P3; 4]], out: &mut Vec<Option<i128>>) {
+        run(batch, out, |&[a, b, c, d]| orient3d::value(a, b, c, d));
+    }
+
+    /// `generated::incircle::filter` on each quadruple.
+    #[inline(never)]
+    pub fn incircle_filter(batch: &[[P2; 4]], out: &mut Vec<Option<Sign>>) {
+        run(batch, out, |&[a, b, c, d]| incircle::filter(a, b, c, d));
+    }
+
+    /// `generated::incircle::value` on each quadruple.
+    #[inline(never)]
+    pub fn incircle_value(batch: &[[P2; 4]], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&[a, b, c, d]| incircle::value(a, b, c, d));
+    }
+
+    /// `generated::insphere::filter` on each quintuple.
+    #[inline(never)]
+    pub fn insphere_filter(batch: &[[P3; 5]], out: &mut Vec<Option<Sign>>) {
+        run(batch, out, |&[a, b, c, d, e]| {
+            insphere::filter(a, b, c, d, e)
+        });
+    }
+
+    /// `generated::insphere::value` on each quintuple.
+    #[inline(never)]
+    pub fn insphere_value(batch: &[[P3; 5]], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&[a, b, c, d, e]| {
+            insphere::value(a, b, c, d, e)
+        });
+    }
+
+    /// `generated::plane_side::filter` on each (normal, offset, point).
+    #[inline(never)]
+    pub fn plane_side_filter(batch: &[([i128; 3], i128, P3)], out: &mut Vec<Option<Sign>>) {
+        run(batch, out, |&([nx, ny, nz], d, p)| {
+            plane_side::filter(nx, ny, nz, d, p)
+        });
+    }
+
+    /// `generated::plane_side::value` on each (normal, offset, point).
+    #[inline(never)]
+    pub fn plane_side_value(batch: &[([i128; 3], i128, P3)], out: &mut Vec<Option<i128>>) {
+        run(batch, out, |&([nx, ny, nz], d, p)| {
+            plane_side::value(nx, ny, nz, d, p)
+        });
+    }
+}
