@@ -31,7 +31,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use geom_test::map::{MAP_FILE, Rule, repo};
+use geom_test::map::{MAP_FILE, Pending, Rule, repo};
 
 const LIB: &str = "//! Spare Kit geometry kernel: a scratch crate.
 //!
@@ -88,6 +88,10 @@ impl Scratch {
         fs::write(src.join("lib.rs"), LIB).unwrap();
         fs::write(src.join("a.rs"), MODULE).unwrap();
         fs::write(src.join("inner/deep.rs"), MODULE).unwrap();
+        // The chapter the module's method links to.
+        let architecture = root.join("projects/engines/geometry/architecture");
+        fs::create_dir_all(&architecture).unwrap();
+        fs::write(architecture.join("26-how-it-grows.md"), "# 26\n").unwrap();
         // Not a crate: a file in the crates folder, and a file in src that is not Rust.
         fs::write(
             root.join("projects/engines/geometry/crates/README.md"),
@@ -106,17 +110,19 @@ impl Scratch {
         self.path("projects/engines/geometry/crates/geom-x/src/a.rs")
     }
 
-    /// Adds a `geom-num` whose header has no Layer line and whose interval module consulted LGPL
-    /// code with no method note, as the real ones do, so the binary's known gaps (`map::GAPS`)
-    /// occur here too.
+    /// Adds a `geom-num` whose interval module consulted LGPL code with no method note, as the real
+    /// one does, so the binary's known gap (`map::GAPS`) occurs here too.
     fn with_the_known_gaps(self) -> Scratch {
         let num = self.path("projects/engines/geometry/crates/geom-num");
         fs::create_dir_all(num.join("src")).unwrap();
         fs::write(num.join("Cargo.toml"), "[package]\nname = \"geom-num\"\n").unwrap();
         fs::write(
             num.join("src/lib.rs"),
-            LIB.replace("//! Layer: 2, Geometry.\n//!\n", "")
-                .replace("pub mod a;\n", "pub mod interval;\n"),
+            LIB.replace(
+                "//! Layer: 2, Geometry.",
+                "//! Layer: 1, Numbers and the contract.",
+            )
+            .replace("pub mod a;\n", "pub mod interval;\n"),
         )
         .unwrap();
         fs::write(num.join("src/interval.rs"), INTERVAL).unwrap();
@@ -214,13 +220,19 @@ fn check_names_the_file_and_field_a_header_on_disk_lost() {
 
 #[test]
 fn a_pending_folder_is_checked_once_it_exists() {
-    // The scratch's module links into the architecture folder, which it does not hold: pending.
+    // `map::PENDING` is empty today, so the rule runs here with a list of its own. The scratch's
+    // module links into the architecture folder, which it does not hold yet: pending.
+    const PENDING: &[Pending] = &[Pending {
+        folder: "projects/engines/geometry/architecture/",
+        reason: "arrives with its piece",
+    }];
     let s = Scratch::new("pending");
-    repo::write(&s.0, &[]).unwrap();
-    assert_eq!(repo::check(&s.0, &[]).unwrap(), []);
+    fs::remove_dir_all(s.path("projects/engines/geometry/architecture")).unwrap();
+    repo::write_with(&s.0, &[], PENDING).unwrap();
+    assert_eq!(repo::check_with(&s.0, &[], PENDING).unwrap(), []);
     // Once the folder exists, links into it must resolve, and the pending entry is stale.
     fs::create_dir_all(s.path("projects/engines/geometry/architecture")).unwrap();
-    let found = repo::check(&s.0, &[]).unwrap();
+    let found = repo::check_with(&s.0, &[], PENDING).unwrap();
     let found: Vec<(Rule, &str)> = found.iter().map(|p| (p.rule, p.file.as_str())).collect();
     assert!(
         found.contains(&(Rule::GapStale, "projects/engines/geometry/architecture/")),
@@ -239,7 +251,7 @@ fn a_pending_folder_is_checked_once_it_exists() {
 ",
     )
     .unwrap();
-    let found = repo::check(&s.0, &[]).unwrap();
+    let found = repo::check_with(&s.0, &[], PENDING).unwrap();
     assert!(found.iter().all(|p| p.rule != Rule::Method), "{found:#?}");
 }
 

@@ -1,6 +1,7 @@
 //! Correctly rounded `sinpi(x) = sin(πx)` and `cospi(x) = cos(πx)`: a port of CORE-MATH.
 //!
-//! Method: Ziv's strategy, as in CORE-MATH; the method and the proof of its bound are below.
+//! Method: Ziv's strategy, as in CORE-MATH (<https://core-math.gitlabpages.inria.fr/>); the
+//! algorithm and the proof of its bound are below.
 //! Source: PORT from CORE-MATH `src/binary64/sinpi/sinpi.c` and `src/binary64/cospi/cospi.c` at
 //!   commit `0ce0cbc15935e24c656280e5a46c34e89f301b7a`, by Alexei Sibidanov, MIT,
 //!   <https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/sinpi/sinpi.c>
@@ -42,7 +43,7 @@
 //! SOFTWARE.
 //! ```
 //!
-//! **Error bound: correctly rounded**, resting on CORE-MATH's worst-case searches as step A of the
+//! Guarantees: correctly rounded, resting on CORE-MATH's worst-case searches as step A of the
 //! proof states. For every binary64 input the result is the binary64 number nearest the exact
 //! `sin(πx)` or `cos(πx)` (ties to even), so the error is at most half an ulp and the result is
 //! fixed bit for bit by the specification (IEEE 754-2019 §9.2 recommends correctly rounded `sinPi`
@@ -58,7 +59,12 @@
 //! `sinpi(±0) = ±0`, `sinpi(n) = +0` for a positive integer `n` and `−0` for a negative one, and
 //! `cospi(n + ½) = +0` for every integer `n`.
 //!
-//! Method (Ziv's strategy, as CORE-MATH): `x` is split exactly into `iq/2^11` half-turns plus a
+//! Cost: constant time, no allocation and no recursion. Almost every argument takes the fast
+//! path, a fixed sequence of floating-point operations and table reads; only when its rounding
+//! test cannot decide does the accurate path run, also of fixed length, and a scan of a fixed list of hard cases when the rounding is in doubt. No loop's
+//! length depends on the argument.
+//!
+//! The algorithm (Ziv's strategy, as CORE-MATH): `x` is split exactly into `iq/2^11` half-turns plus a
 //! remainder `z·2^−75` half-turns, `|z| ≤ 2^63`. A fast path evaluates `sin` and `cos` of the
 //! remainder by short polynomials and combines them with double-double values of `sin` and `cos`
 //! at `π·iq/2^11` ([`sincosn`]), giving the result as `sh + r` with a bound `er` on the error. If

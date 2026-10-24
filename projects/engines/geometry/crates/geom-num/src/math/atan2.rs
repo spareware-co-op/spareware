@@ -1,6 +1,7 @@
 //! Correctly rounded `atan2(y, x)`: a port of CORE-MATH.
 //!
-//! Method: Ziv's strategy, as in CORE-MATH; the method and the proof of its bound are below.
+//! Method: Ziv's strategy, as in CORE-MATH (<https://core-math.gitlabpages.inria.fr/>); the
+//! algorithm and the proof of its bound are below.
 //! Source: PORT from CORE-MATH `src/binary64/atan2/atan2.c` and `src/binary64/atan2/tint.h` at
 //!   commit `0ce0cbc15935e24c656280e5a46c34e89f301b7a`, by Paul Zimmermann and Alexei Sibidanov,
 //!   with the help of Silviu-Ioan Filip, who designed the code that generates its rational
@@ -50,7 +51,7 @@
 //! SOFTWARE.
 //! ```
 //!
-//! **Error bound: correctly rounded**, with one qualification below. The result is the binary64
+//! Guarantees: correctly rounded, with one qualification below. The result is the binary64
 //! number nearest the exact angle of the point `(x, y)` from the positive x-axis, in `[−π, π]`
 //! (ties to even), so the error is at most half an ulp. Domain: every pair of doubles, with C99
 //! Annex F's special values (`atan2(±0, +0) = ±0`, `atan2(±0, −0) = ±π`, `atan2(±∞, ±∞) =
@@ -66,7 +67,12 @@
 //! proven for every input. Either way the result is within one ulp, so an enclosure widened by one
 //! ulp on each side (`next_down`, `next_up`) is certified.
 //!
-//! Method (Ziv's strategy, as CORE-MATH). With `x ≥ y > 0` after taking absolute values and
+//! Cost: constant time, no allocation and no recursion. Almost every argument takes the fast
+//! path, a fixed sequence of floating-point operations and table reads; only when its rounding
+//! test cannot decide does the accurate path run, also of fixed length, in 192-bit integer arithmetic. No loop's
+//! length depends on the argument.
+//!
+//! The algorithm (Ziv's strategy, as CORE-MATH). With `x ≥ y > 0` after taking absolute values and
 //! swapping, `atan(y/x) = atan(t₀) + atan((y − t₀x)/(x + t₀y))` for the nearest `t₀ = j/64`, with
 //! `atan(t₀)` from a double-double table and the second term from an odd polynomial; the octant
 //! adds `0`, `±π/2` or `±π`. A first fast path evaluates the reduced quotient in double

@@ -1,15 +1,13 @@
 //! Deterministic maths functions **without** a proven error bound.
 //!
-//! Every function here comes from the pure-Rust `libm` crate 0.2.16 (MIT OR Apache-2.0,
-//! <https://github.com/rust-lang/compiler-builtins/tree/master/libm>), mostly ports of FreeBSD's
-//! msun (<https://github.com/freebsd/freebsd-src/tree/main/lib/msun>), the methods of Sun's fdlibm.
+//! Every function here comes from the pure-Rust `libm` crate 0.2.16 (MIT,
+//! <https://docs.rs/libm/0.2.16>), mostly ports of FreeBSD's msun, the methods of Sun's fdlibm.
 //! They are deterministic: the same code gives the same bits on every target and thread count
 //! (chapter 21), unlike the standard library's, whose precision the Rust documentation calls
 //! non-deterministic. But their error bounds are documented, not proven (evidence note 05, section
 //! 7; chapter 16.2), so they must never feed a certified result.
 //!
-//! They keep the guarantees of [`super`]: each returns a [`Real`] or an error, never NaN or an
-//! infinity. [`NumError::NotFinite`] for a NaN or infinite argument (checked first) or an infinite
+//! Guarantees, as in [`super`]: each returns a [`Real`] or an error, never NaN or an infinity. [`NumError::NotFinite`] for a NaN or infinite argument (checked first) or an infinite
 //! result (an overflow, or a pole such as `log2(0)`); [`NumError::OutsideDomain`] where the function
 //! has no real value, checked before `libm` is called, so `libm`'s NaN never appears.
 //!
@@ -22,6 +20,12 @@
 //! Names match the proven functions where both exist (`atan2`, `exp`, `ln`, `sinpi`, `cospi`), so a
 //! call site's path, `math::unproven::…` or `math::…`, says which kind it uses. There is no proven
 //! radian `sin` or `cos` yet: give angles in half-turns and use the proven `sinpi` and `cospi`.
+//!
+//! Method: the functions of `libm` 0.2.16 (<https://docs.rs/libm/0.2.16>), behind the argument
+//! and domain checks above.
+//!
+//! Cost: constant per call and no allocation: the argument checks and one `libm` call, a bounded
+//! computation.
 
 use super::{finite, log_argument};
 use crate::error::NumError;

@@ -247,28 +247,16 @@ const CGAL_NOTE: &str = "the record for CGAL `FPU.h` reads code under LGPL-3.0-o
                          `projects/engines/geometry/methods/<note>.md`\" line naming its note";
 
 /// The known gaps of this workspace. Each is listed in the map; each must still occur.
-pub const GAPS: &[Gap] = &[
-    Gap {
-        file: "projects/engines/geometry/crates/geom-num/src/interval.rs",
-        rule: Rule::Consulted,
-        problem: CGAL_NOTE,
-        reason: "G02 read CGAL's FPU.h, under LGPL-3.0-or-later, before the method-only \
+pub const GAPS: &[Gap] = &[Gap {
+    file: "projects/engines/geometry/crates/geom-num/src/interval.rs",
+    rule: Rule::Consulted,
+    problem: CGAL_NOTE,
+    reason: "G02 read CGAL's FPU.h, under LGPL-3.0-or-later, before the method-only \
                  procedure's notes had a home. Build piece G16 (provenance, notices and method \
                  notes) creates projects/engines/geometry/methods/, takes this record through \
                  29.20 rule 6 (a note in plain words and a second reviewer) or replaces the \
                  source with the permissive Geogram record beside it, and deletes this entry.",
-    },
-    Gap {
-        file: "projects/engines/geometry/crates/geom-num/src/lib.rs",
-        rule: Rule::Layer,
-        problem: header::NO_LAYER,
-        reason: "geom-num's header predates chapter 27's layer table. The scaffold check in \
-                 engine-geometry (tests/scaffold/table.rs, HEADER_GAPS) records the same gap and \
-                 fails when it closes, so the Layer line can only be added together with deleting \
-                 that entry; the next piece allowed to edit both adds \"Layer: 1, Numbers and the \
-                 contract\" to geom-num's lib.rs and deletes this entry and that one.",
-    },
-];
+}];
 
 /// A folder that headers link into but that this tree does not hold yet, with the piece that
 /// brings it. While it is absent, links into it are not checked for existence; once it exists,
@@ -282,19 +270,7 @@ pub struct Pending {
 }
 
 /// The folders this workspace's headers link into before they arrive.
-pub const PENDING: &[Pending] = &[
-    Pending {
-        folder: "projects/engines/geometry/architecture/",
-        reason: "The kernel architecture's chapters, which the modules' methods cite, are written \
-                 by piece G01 on its own branch (piece/G01) and are not yet merged into the \
-                 kernel's base branch; they arrive when G01 merges.",
-    },
-    Pending {
-        folder: "projects/kit/notes/G01-evidence/",
-        reason: "G01's evidence reports, which test generators cite, are on piece G01's branch with \
-                 the chapters and arrive when G01 merges.",
-    },
-];
+pub const PENDING: &[Pending] = &[];
 
 /// One source file, relative to the workspace root.
 #[derive(Clone, Debug, PartialEq, Eq)]

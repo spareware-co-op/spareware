@@ -7,7 +7,7 @@
 //! order) through it: two accumulators merge by integer addition ([`ExactSum::merge`]), so a sum
 //! split across chunks or threads gives the same bits however it is split.
 //!
-//! **Guarantees.**
+//! Guarantees:
 //!
 //! - **Exact, then correctly rounded.** [`ExactSum::round`] returns the exact sum of every finite
 //!   term added (directly, by [`ExactSum::add_slice`] or [`ExactSum::add_iter`], or through
@@ -32,7 +32,7 @@
 //!   reaches through merges); should an internal step ever fail, the sum is marked lost and
 //!   [`ExactSum::round_ieee`] gives Neal's report for it, a NaN with every payload bit set.
 //!
-//! **Method:** R. M. Neal, "Fast exact summation using small and large superaccumulators", arXiv
+//! Method: R. M. Neal, "Fast exact summation using small and large superaccumulators", arXiv
 //! 1505.05571 (2015), <https://arxiv.org/abs/1505.05571>, and his C code `xsum` (MIT licence,
 //! copyright 2015–2024 Radford M. Neal), <https://github.com/radfordneal/xsum>, read at commit
 //! `b766b3e104cdbd6769c8df033fb430700fce32dd` (2024-11-13, `stable-version-3`). Both of Neal's
@@ -75,7 +75,7 @@
 //! - Every integer step that is not Neal's modulo-2^64 chunk sum is a checked method, with the
 //!   sticky "lost" flag as the report a failure would make (it cannot happen, as above).
 //!
-//! **Cost.** [`ExactSum::add`]: about twenty integer operations, two of them checked additions
+//! Cost: [`ExactSum::add`]: about twenty integer operations, two of them checked additions
 //! into chunks, plus a propagation (about 67 steps) every 2047 terms. [`ExactSum::add_slice`] from
 //! [`LARGE_SLICE`] terms up: about eight per term (a shift, two loads, a checked decrement, the
 //! unmasked addition and two stores), plus zeroing 41 KB once per call, one transfer (about twenty

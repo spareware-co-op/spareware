@@ -93,8 +93,20 @@
 //! reported as [`NumError::BudgetExceeded`], never answered: no exact sign that fails is replaced
 //! by a guess, and no conversion returns a value it could not certify.
 //!
+//! Guarantees:
+//!
+//! - Map to frame rounds once, to the nearest step, ties to even, and says whether it was exact,
+//!   for every frame; coordinates beyond ±(2^40 − 1) steps are refused with
+//!   [`NumError::OutOfRange`].
+//! - Frame to map gives the nearest doubles to the exact map coordinates, ties to even, with
+//!   whether they are exact, for every frame.
+//! - Frames are never mixed without an exact shift: anything else is refused with
+//!   [`FrameMismatch`].
+//! - No conversion returns a value it could not certify, and no exact sign that fails is
+//!   replaced by a guess: a defect is reported as [`NumError::BudgetExceeded`].
+//!
 //! Method: the frame record and conversion rules of chapter 17.1
-//! (<https://github.com/spareware-co-op/spareware/blob/piece/G01/projects/engines/geometry/architecture/17-survey-terrain-civil.md>),
+//! (`projects/engines/geometry/architecture/17-survey-terrain-civil.md`),
 //! with EPSG:2193 as given in PROJ's copy of the EPSG data
 //! (<https://github.com/OSGeo/PROJ/blob/5fa31c29f0a806568ed7bc76c1a557604db4a804/data/sql/projected_crs.sql#L375>);
 //! double-double arithmetic as in [`crate::dd`]; the exact settling as the filter-then-exact
@@ -103,6 +115,9 @@
 //! dyadic rationals (IEEE 754-2019, <https://doi.org/10.1109/IEEESTD.2019.8766229>) and numbers
 //! a + b√n compared exactly by their squares (C. K. Yap, *Computational Geometry* 7 (1997),
 //! <https://doi.org/10.1016/0925-7721(95)00040-2>).
+//! Consulted: PROJ (its copy of the EPSG dataset, whose own terms of use cover the data), MIT,
+//!   <https://github.com/OSGeo/PROJ/blob/5fa31c29f0a806568ed7bc76c1a557604db4a804/data/sql/projected_crs.sql#L375>,
+//!   for the defining parameters of EPSG:2193, NZTM2000. No code copied.
 //!
 //! Cost: no allocation, and constant time for every operation except
 //! [`FrameRecord::home_of`], which is linear in the number of operands.

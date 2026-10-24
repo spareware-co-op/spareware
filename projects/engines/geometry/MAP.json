@@ -1013,6 +1013,358 @@
     },
     {
       "chapters": [
+        6,
+        7,
+        17,
+        21
+      ],
+      "depends": [],
+      "errors": [
+        {
+          "doc": "Why an operation of this crate could not produce a result.",
+          "file": "projects/engines/geometry/crates/geom-math/src/error.rs",
+          "kinds": [
+            {
+              "doc": "A numeric error from the numbers layer: a value out of range, not finite, degenerate, a step conversion in the wrong direction, or a step that a bit budget rules out ([`NumError::BudgetExceeded`], a defect).",
+              "name": "Num",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The transform's linear part is singular, or so close to singular that its orientation cannot be certified, so it has no inverse.",
+              "name": "Singular",
+              "shape": "unit"
+            },
+            {
+              "doc": "Two frames cannot be related by an exact integer shift.",
+              "name": "FrameMismatch",
+              "shape": "tuple"
+            },
+            {
+              "doc": "Geometry does not fit the frame it belongs to: a coordinate would lie beyond ±(2^40 − 1) steps of that frame's origin (chapters 17.1 and 22).",
+              "name": "FrameRangeExceeded",
+              "shape": "struct"
+            }
+          ],
+          "module": "geom_math::error",
+          "name": "MathError",
+          "non_exhaustive": false
+        }
+      ],
+      "family": [],
+      "file": "projects/engines/geometry/crates/geom-math/src/lib.rs",
+      "folder": "projects/engines/geometry/crates/geom-math",
+      "invariants": [
+        "**Exact where it decides.** Grid vectors, grid and rational transforms and grid boxes use integers only, and every product's bit budget is derived in its doc comment. Arithmetic that could leave its range is checked and returns [`NumError::OutOfRange`](geom_num::NumError) instead of wrapping.",
+        "**The same result in every build profile; defects reported, never answered.** As in the numbers layer, every integer addition, subtraction, multiplication, division and negation in this crate's code is a checked method, never a native operator, and no cast loses a value silently (each cast's bound is written beside it), so nothing depends on overflow checks being on. A step that its bit budget proves fits can fail only through a defect, and is then reported as [`NumError::BudgetExceeded`](geom_num::NumError), never replaced by a guessed value: that is why exact products and classifications return a `Result`. For valid inputs every such result is `Ok`. Clippy enforces this (`arithmetic_side_effects` and the lossy-cast lints are denied); tests and the benchmark may use native arithmetic.",
+        "**Certified elsewhere.** Floating-point boxes round outward; transform classifications and orientations are decided with interval arithmetic, never with a guessed tolerance (the only tolerance used is the ladder's angular bound); conversions to the grid round exactly once and say whether they were exact.",
+        "**Never NaN, never infinite.** Every floating-point value this crate makes is finite; an operation whose result would not be returns an error.",
+        "**Deterministic.** Only IEEE 754 basic operations (which Rust never fuses into a fused multiply-add), integer arithmetic and the maths of `geom_num::math`. No hash maps, no randomness, no platform maths, no recursion; every loop is bounded, by a fixed or proven count or by the length of the caller's own input (`from_points`, [`FrameRecord::home_of`]).",
+        "**Safe.** No `unsafe`, no panics, no unchecked indexing."
+      ],
+      "job": "points, vectors, exact and general transforms, boxes and frames, the small vocabulary every geometry crate above the numbers layer shares.",
+      "kind": "kernel",
+      "layer": "2",
+      "modules": [
+        {
+          "cost": "constant time and no allocation for every operation except `from_points`, which is one union per point. Grid boxes compare integers (at most six comparisons for a union, an intersection or a containment test); moving one by a [`GridTransform`] moves its two corners. [`FBox3::transformed`] is 18 interval operations, a product and a sum for each entry of the linear part (an interval sum is two IEEE additions, a product four multiplications and six comparisons, each followed by a one-step widening of both bounds); [`FBox3::to_grid_outward`] is six roundings and six range checks.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-math/src/bbox.rs",
+          "guarantees": [
+            "**Never empty, always ordered.** Every box has `min ≤ max` (`lo ≤ hi`) on every axis; constructors refuse anything else with [`NumError::EmptyInterval`], and an intersection that would be empty is `None`.",
+            "**Closed.** Boxes contain their boundary: two boxes that share only a face, an edge or a corner overlap.",
+            "**Finite.** `FBox3` bounds are finite, with zero stored as +0; operations that would overflow return [`NumError::NotFinite`]."
+          ],
+          "job": "Axis-aligned boxes: exact boxes on the grid, and floating-point boxes that round outward.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/1.9780898717716"
+            ],
+            "text": "closed intervals per axis, so a box is the product of three intervals and every operation is per-axis interval logic; outward-rounded interval arithmetic as in R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), <https://doi.org/10.1137/1.9780898717716>."
+          },
+          "path": "geom_math::bbox",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant time, no loops, no allocation; each operation is a fixed sequence of IEEE operations on `two_sum` and `two_prod`. [`DD::add`] is four `two_sum`s and two additions; [`DD::add_f64`] two `two_sum`s and one addition; [`DD::mul_f64`] one `two_prod`, two `two_sum`s and two more operations; [`DD::mul`] one `two_prod`, one `two_sum` and four more operations; [`DD::div`] three divisions, two [`DD::mul_f64`]s, two [`DD::sub`]s, one `two_sum` and one [`DD::add_f64`]; [`DD::sqrt`] one correctly rounded `geom_num::math::sqrt`, one `two_prod`, one [`DD::sub`], one division and one `two_sum`. Operands outside `two_prod`'s range, and every division and square root, add a power-of-two scaling of each part going in and of the result coming out (`scale_b`: a bit decomposition and one or two multiplications). [`DD::round_shifted`] is two roundings to integers, one `two_sum` and a few `i128` additions and comparisons.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-math/src/dd.rs",
+          "guarantees": [
+            "relative error bounds on the exact result of the operation applied to the exact values of the operands (u = 2^−53). The middle column is proven on each method below, in full, with every higher-order term kept; it is the bound the kernel relies on. The last column is the tighter bound Joldes, Muller and Popescu prove for the same algorithm, as the authors state it (see the sources; their journal text was not available to us)."
+          ],
+          "job": "Double-double arithmetic: a real number held as the unevaluated sum of two doubles.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/BF01397083",
+              "https://doi.org/10.1109/ARITH.2001.930115",
+              "https://doi.org/10.1145/3121432",
+              "https://jncf2017.lip6.fr/files/slides/popescu.pdf",
+              "https://webusers.imj-prg.fr/~jean-claude.bajard/NAC2024/Supports/NAC2024_JMM.pdf",
+              "https://doi.org/10.1145/3484514"
+            ],
+            "text": "the papers below, whose algorithms each operation follows. T. J. Dekker, \"A floating-point technique for extending the available precision\", *Numerische Mathematik* 18 (1971), 224–242, <https://doi.org/10.1007/BF01397083>: the double-length representation and the addition and multiplication. Y. Hida, X. S. Li and D. H. Bailey, \"Algorithms for quad-double precision floating point arithmetic\", *15th IEEE Symposium on Computer Arithmetic* (2001), 155–162, <https://doi.org/10.1109/ARITH.2001.930115>: the QD library's forms, including its accurate division and its square root. M. Joldes, J.-M. Muller and V. Popescu, \"Tight and rigorous error bounds for basic building blocks of double-word arithmetic\", *ACM Transactions on Mathematical Software* 44(2) (2017), <https://doi.org/10.1145/3121432>: the algorithm names, and the tighter bounds in the table as the authors state them in their JNCF 2017 slides, <https://jncf2017.lip6.fr/files/slides/popescu.pdf>, slide 17 (read 2026-10-21), with the `AccurateDWPlusDW` bound as 3u²/(1 − 4u) in J.-M. Muller's NAC 2024 talk, <https://webusers.imj-prg.fr/~jean-claude.bajard/NAC2024/Supports/NAC2024_JMM.pdf> (read 2026-10-21). That talk also reports the Coq formalisation of these proofs by Muller and Rideau, *ACM TOMS* 48(1) (2022), <https://doi.org/10.1145/3484514>, which found and repaired flaws in some published proofs; the kernel therefore relies only on the bounds proven here."
+          },
+          "path": "geom_math::dd",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constructing, copying and comparing an error is constant time; `Display` writes one short sentence and allocates nothing.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-math/src/error.rs",
+          "guarantees": [
+            "**Plain values.** Every error is `Copy`, compares with `==` and holds only enums and integers, so it can be returned from `no_std` code, matched exhaustively and compared in tests.",
+            "**Says what went wrong.** `Display` writes one fixed sentence per variant, with the offending coordinate for `FrameRangeExceeded` and the numbers layer's own sentence for `Num`. (The numbers layer's sentence for `BudgetExceeded` names `geom-num`; reported by this crate, the defect is in `geom-math`.)"
+          ],
+          "job": "Errors from this crate that the numbers layer has no word for.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/22-errors-queries-ai.md"
+            ],
+            "text": "the kernel's error model, chapter 22 of the architecture: each variant says what was wrong in plain words and carries the value that caused it (`projects/engines/geometry/architecture/22-errors-queries-ai.md`)."
+          },
+          "path": "geom_math::error",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "no allocation. [`pow2`], [`exponent`], [`dyadic`] and [`scale_b`] are a few bit operations and at most two floating-point multiplications. [`pow2_big`], [`shl_into`] and [`round_scaled`] are linear in the number of 64-bit limbs (20 for [`Big`], at most 40 anywhere in the crate). [`sign_minus_sqrt`] is three schoolbook multiplications of L-limb integers (at most L² limb products each) and one subtraction. [`rational_to_f64`] is one 128-bit division and at most 181 shift-and-subtract steps. [`gcd_u128`] takes at most 257 remainder steps (the remainder at least halves every two steps). [`divrem_u128`] takes exactly 64·L shift-and-subtract steps.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-math/src/exact.rs",
+          "guarantees": [
+            "**Exact, or it says so.** Every integer result is exact, and one that does not fit its type is `None`, never a wrapped value. Every rounded result is rounded once, to nearest, ties to even: [`round_scaled`] and [`rational_to_f64`] also say whether they were exact, and [`scale_b`], like IEEE 754's scaleB, returns ±∞ when the exact result overflows.",
+            "**The same result in every build profile.** Every integer addition, subtraction, multiplication, division by a variable and negation is a checked method that returns `None` instead of wrapping, or `abs_diff`, which is exact for every input; the only native integer operations are shifts by amounts below the width and division and remainder by the constant 64, none of which can overflow. So nothing depends on overflow checks being on. A `None` that the bounds written here rule out is passed on, and the caller reports it as [`NumError::BudgetExceeded`](geom_num::NumError), never as an answer.",
+            "**No panics.** Every shift amount is below the width it shifts (each says why), every limb access is checked, and every loop has a fixed or proven bound (below). The only casts are of values whose bound is written beside them."
+          ],
+          "job": "Exact helpers shared by the crate: doubles as exact dyadic numbers, exact scaling of doubles by powers of two, wide integers built from shifted products, exact rounding of a wide integer divided by a power of two, the exact sign of a − b·√n, the correctly rounded double nearest a quotient of integers, and long division of a wide integer by a 128-bit one.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1109/IEEESTD.2019.8766229",
+              "https://doi.org/10.1016/0925-7721(95",
+              "https://www-cs-faculty.stanford.edu/~knuth/taocp.html"
+            ],
+            "text": "A double is exactly m·2^k with integer m (IEEE 754-2019, section 3.3); scaling by a power of two is IEEE's scaleB (section 5.3.3), rounded once. The quotient of two integers is rounded to the nearest double, ties to even (roundTiesToEven, section 4.3.1), by binary long division that produces the 53 bits of the significand, one more bit, and a sticky bit for whether anything nonzero remains (D. E. Knuth, *The Art of Computer Programming*, vol. 2, section 4.3.1); IEEE 754-2019, <https://doi.org/10.1109/IEEESTD.2019.8766229>. The sign of a − b·√n is decided by comparing a² with b²·n when a and b have the same sign: exact geometric computation with algebraic numbers of degree two, evaluated in exact integers instead of rounded square roots (C. K. Yap, \"Towards exact geometric computation\", *Computational Geometry* 7 (1997), 3–23, <https://doi.org/10.1016/0925-7721(95)00040-2>). Greatest common divisors by Euclid's algorithm, and long division of a wide integer one bit at a time (Knuth, *The Art of Computer Programming*, vol. 2, sections 4.5.2 and 4.3.1, <https://www-cs-faculty.stanford.edu/~knuth/taocp.html>)."
+          },
+          "path": "geom_math::exact",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant time, no loops beyond the two or three components, no allocation. Arithmetic, dot and cross products are at most nine IEEE operations plus a finiteness check per result; `length` and `normalized` add a pass over the components for the largest, one exact power-of-two scaling per component (`scale_b`), the squared sum and one correctly rounded square root, then one more scaling (`length`) or one division per component (`normalized`).",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-math/src/float.rs",
+          "guarantees": [
+            "**Finite.** Every component is finite: made only by constructors that check, and by operations that check their results and return [`NumError::NotFinite`] when a result would overflow. No value here is ever NaN or infinite (chapter 21: NaN's bits are not deterministic).",
+            "**Deterministic.** Only IEEE 754 addition, subtraction, multiplication and division, each correctly rounded to nearest on every target, evaluated in the fixed order written in each function. Rust never contracts `a * b + c` into a fused multiply-add on its own, and nothing here asks for one. Square roots come from [`geom_num::math::sqrt`], correctly rounded. No `f64::max`, `f64::min` or platform maths.",
+            "**Exact conversions from the grid.** A grid point or grid vector has components below 2^42 in magnitude, so it converts to `f64` with no rounding.",
+            "**Lengths without spurious overflow or underflow.** `length` and `normalized` first scale the vector by the power of two that brings its largest component into [1, 2) (exact, except that a component more than 2^1022 times smaller than the largest may round, which changes nothing visible), so the squares neither overflow nor underflow. Where the plain formula would not overflow or underflow, the result has the same bits as the plain formula, because scaling by a power of two commutes with every rounding in the normal range. With u = 2^−53, the squared length has a relative error below 2u + u² for [`F2`] (two squares, one sum) and 3u + 3u² for [`F3`]; the square root halves it and adds its own rounding, so the length is within a relative 2.01u ([`F2`]) or 2.51u ([`F3`]) of the exact length, plus 2^−1070 relative for components that round when scaled. Only the zero vector cannot be normalized.",
+            "**Defects reported, never answered.** The one integer step of the scaling (an exponent's negation) is checked, and the maths functions' errors are passed on. None of them can occur for finite components; one that did would be [`NumError::BudgetExceeded`] or the maths function's own error, never a guessed length."
+          ],
+          "job": "Floating-point points and vectors, finite by construction, with deterministic arithmetic.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1109/IEEESTD.2019.8766229",
+              "https://rust-lang.github.io/rfcs/3514-float-semantics.html",
+              "https://doi.org/10.1145/355769.355771"
+            ],
+            "text": "IEEE 754-2019 binary64 basic operations, round to nearest, ties to even, and its scaleB (<https://doi.org/10.1109/IEEESTD.2019.8766229>), under Rust's floating-point semantics, which guarantee those results on every supported target and forbid implicit contraction (Rust RFC 3514, <https://rust-lang.github.io/rfcs/3514-float-semantics.html>); the scaling before squaring is the classic remedy for overflow and underflow in Euclidean norms (J. L. Blue, \"A portable Fortran program to find the Euclidean norm of a vector\", *ACM Transactions on Mathematical Software* 4(1) (1978), 15–23, <https://doi.org/10.1145/355769.355771>), here with an exact power-of-two scale."
+          },
+          "path": "geom_math::float",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "no allocation, and constant time for every operation except [`FrameRecord::home_of`], which is linear in the number of operands.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
+          "guarantees": [
+            "Map to frame rounds once, to the nearest step, ties to even, and says whether it was exact, for every frame; coordinates beyond ±(2^40 − 1) steps are refused with [`NumError::OutOfRange`].",
+            "Frame to map gives the nearest doubles to the exact map coordinates, ties to even, with whether they are exact, for every frame.",
+            "Frames are never mixed without an exact shift: anything else is refused with [`FrameMismatch`].",
+            "No conversion returns a value it could not certify, and no exact sign that fails is replaced by a guess: a defect is reported as [`NumError::BudgetExceeded`]."
+          ],
+          "job": "Frames: the record that ties a model's flat grid to a map projection, conversion between map coordinates and the grid, exact shifts between frames on a shared lattice, and the regional lattice of frames for long networks.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/17-survey-terrain-civil.md",
+              "https://github.com/OSGeo/PROJ/blob/5fa31c29f0a806568ed7bc76c1a557604db4a804/data/sql/projected_crs.sql#L375",
+              "https://doi.org/10.1007/PL00009321",
+              "https://doi.org/10.1109/IEEESTD.2019.8766229",
+              "https://doi.org/10.1016/0925-7721(95"
+            ],
+            "text": "the frame record and conversion rules of chapter 17.1 (`projects/engines/geometry/architecture/17-survey-terrain-civil.md`), with EPSG:2193 as given in PROJ's copy of the EPSG data (<https://github.com/OSGeo/PROJ/blob/5fa31c29f0a806568ed7bc76c1a557604db4a804/data/sql/projected_crs.sql#L375>); double-double arithmetic as in [`crate::dd`]; the exact settling as the filter-then-exact pattern of the kernel's predicates (chapter 6.2; J. R. Shewchuk, *Discrete & Computational Geometry* 18 (1997), <https://doi.org/10.1007/PL00009321>), with exact values of doubles read as dyadic rationals (IEEE 754-2019, <https://doi.org/10.1109/IEEESTD.2019.8766229>) and numbers a + b√n compared exactly by their squares (C. K. Yap, *Computational Geometry* 7 (1997), <https://doi.org/10.1016/0925-7721(95)00040-2>)."
+          },
+          "path": "geom_math::frame",
+          "provenance": [
+            {
+              "licence": "MIT",
+              "link": "https://github.com/OSGeo/PROJ/blob/5fa31c29f0a806568ed7bc76c1a557604db4a804/data/sql/projected_crs.sql#L375",
+              "method_note": null,
+              "name": "PROJ (its copy of the EPSG dataset, whose own terms of use cover the data)",
+              "pinned": true,
+              "purpose": "for the defining parameters of EPSG:2193, NZTM2000. No code copied.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant time, no allocation. Applying is, per axis, one pick, an optional negation, one addition and one range check; composing and inverting rebuild three rows (composing checks three translations); the determinant counts at most three inversions and three negations.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-math/src/grid_transform.rs",
+          "guarantees": [
+            "**Exact.** Applying, composing and inverting use integer arithmetic only. Composition and inversion of signed permutations are again signed permutations, so nothing ever rounds.",
+            "**Range-checked.** Applying to a point checks that the result stays within the frame's ±(2^40 − 1) steps and returns [`NumError::OutOfRange`] otherwise. Translations are kept within [`TRANSLATION_MAX`] = 2(2^40 − 1) steps per axis, the largest that can map some grid point to another; a composition whose translation would exceed it returns `OutOfRange` too.",
+            "**Orientation known exactly.** The determinant is ±1, computed from the permutation's parity and the signs; [`GridTransform::reverses_orientation`] says whether a mirror is involved, which reverses arcs, face normals and winding numbers.",
+            "**The same result in every build profile.** Every integer step (a negation, a sum) is a checked method, never a native operator, so nothing depends on overflow checks being on. The bit budget below proves each fits; one that did not would be reported as [`NumError::BudgetExceeded`], never answered."
+          ],
+          "job": "Exact transforms of the grid: whole-step translations, quarter turns about the axes, mirrors.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/3-540-27596-7",
+              "projects/engines/geometry/architecture/07-geometry-types.md"
+            ],
+            "text": "the hyperoctahedral group B₃ (the symmetry group of the cube) represented as signed permutations, composed by composing the permutations and multiplying the signs, with the inverse given by the transpose, as in A. Björner and F. Brenti, *Combinatorics of Coxeter Groups*, Graduate Texts in Mathematics 231, Springer (2005), section 8.1 (the group `B_n` of signed permutations), <https://doi.org/10.1007/3-540-27596-7>; chapter 7 of the architecture names which transforms stay exact (`projects/engines/geometry/architecture/07-geometry-types.md`)."
+          },
+          "path": "geom_math::grid_transform",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant time, no allocation. [`RationalTransform::apply`] is nine `i128` products and three Euclidean divisions. [`RationalTransform::compose`] is 40 `i128` products and a reduction. [`RationalTransform::inverse`] is 36 `i128` products (determinant, adjugate and scaling), nine 256-bit products, twelve greatest common divisors and six long divisions of a 256-bit integer by their result (256 shift-and-subtract steps each), and a reduction. [`RationalTransform::classify`] is at most 28 `i128` products. A reduction folds 13 values into their greatest common divisor, then divides each by it. Every greatest common divisor is Euclid's algorithm on `u128`, at most 257 remainder steps.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-math/src/rational.rs",
+          "guarantees": [
+            "a [`RationalTransform`] is exact. Its image of a grid point is computed in exact integer arithmetic and rounded once, half to even, with whether it was already on the grid; it composes and inverts exactly; its classification is decided exactly, with no tolerance; equal transforms have equal fields; and a step its budget proves fits that fails all the same is reported as [`NumError::BudgetExceeded`], never answered."
+          ],
+          "job": "Rational affine transforms: `p ↦ (M·p + t)/d` with an integer matrix M, an integer vector t and a positive integer d.",
+          "method": {
+            "links": [
+              "https://www-cs-faculty.stanford.edu/~knuth/taocp.html",
+              "https://doi.org/10.1017/CBO9780511811685"
+            ],
+            "text": "exact rational arithmetic on a common denominator, reduced by Euclid's algorithm (D. E. Knuth, *The Art of Computer Programming*, vol. 2, section 4.5.2, <https://www-cs-faculty.stanford.edu/~knuth/taocp.html>), the inverse by the adjugate (Cramer's rule), and the classification by the Gram matrix as in [`crate::transform`] (R. Hartley and A. Zisserman, *Multiple View Geometry in Computer Vision*, 2nd ed. (2004), section 2.4, <https://doi.org/10.1017/CBO9780511811685>), here exactly."
+          },
+          "path": "geom_math::rational",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a value and one flag; reading either is a copy.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-math/src/rounded.rs",
+          "guarantees": [
+            "**The report is the truth.** A `Rounded` is made only inside this crate, by the function that did the rounding, so `is_exact` says whether the value equals what was converted. A caller can read a `Rounded`, never build one that claims exactness for a rounded value.",
+            "**Plain value.** `Copy`, compared with `==`, hashed; no allocation."
+          ],
+          "job": "A value that may have been rounded, with whether it was: the report chapter 7 asks of every transform and conversion that rounds to the grid (\"other rotations round to the grid and the result says so\"), and chapter 6.1 of every conversion from fine to coarse.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/07-geometry-types.md"
+            ],
+            "text": "the rounding report of chapters 6.1 and 7 of the kernel architecture (`projects/engines/geometry/architecture/07-geometry-types.md`), with the same shape as the numbers layer's."
+          },
+          "path": "geom_math::rounded",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant time, no allocation. [`Transform::apply_point`] is 18 IEEE operations and [`Transform::compose`] 63. [`Transform::classify`] is fewer than 100 interval operations (the determinant enclosure, then one or two Gram matrices and their row sums), each a few IEEE operations with a one-step widening. [`Transform::inverse`] is a classification, 60 IEEE operations and 18 power-of-two scalings. [`Transform::apply_grid`] decides each coordinate by the cheapest stage that can: about twenty IEEE operations in plain doubles; if those cannot decide, three exact products and three double-double additions; only then the exact sum of four shifted terms in an integer of 128 bits up to 2176 bits (34 limbs, chosen by how far apart the exponents are) and one exact rounding, each linear in the limbs. A coordinate outside the frame always takes that exact stage, which finds the rounded coordinate its error reports.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-math/src/transform.rs",
+          "guarantees": [
+            "**Finite.** Every entry is finite; operations whose results would overflow return [`NumError::NotFinite`]. Zero entries are stored as +0, so equal transforms have equal bits.",
+            "**Deterministic.** Each entry of a product is evaluated as `(a₀b₀ + a₁b₁) + a₂b₂`, in that order, with IEEE 754 operations only; no fused multiply-add, no platform maths.",
+            "**Never a wrong orientation.** [`Classification::mirror`] comes from a certified determinant sign. When the sign is not certain the transform is `Degenerate`, and [`Transform::inverse`] refuses it with [`MathError::Singular`].",
+            "**Grid points round once.** [`Transform::apply_grid`] gives the exact image of a grid point under the exact entries, rounded to the nearest grid point, ties to even, with whether it was already on the grid. An image outside the frame is refused with its exact rounded coordinate (saturated at the ends of `i128`, as [`NumError::OutOfRange`] documents), never an estimate.",
+            "**Defects reported, never answered.** The integer steps (the exponents of the row scalings and of the exact rounding) are checked methods, and the maths functions' errors are passed on. For finite entries none can fail; one that did is reported as [`NumError::BudgetExceeded`] (or the maths function's own error), never turned into a classification or a coordinate. Where a stage of [`Transform::apply_grid`] can decline (the two filters), such a failure only makes it decline, and the exact stage decides."
+          ],
+          "job": "General affine transforms in `f64`, classified so callers know when a kind changes.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1017/CBO9780511811685",
+              "https://doi.org/10.1017/CBO9781139020411",
+              "https://doi.org/10.1137/1.9780898717716",
+              "https://doi.org/10.1007/PL00009321"
+            ],
+            "text": "the hierarchy of planar and spatial transformations (isometry, similarity, affinity) of R. Hartley and A. Zisserman, *Multiple View Geometry in Computer Vision*, 2nd ed., Cambridge University Press (2004), section 2.4, <https://doi.org/10.1017/CBO9780511811685>, with each level recognised from the Gram matrix `LᵀL`; Gershgorin's theorem for the eigenvalue bound (R. A. Horn and C. R. Johnson, *Matrix Analysis*, 2nd ed., Cambridge University Press (2012), section 6.1, <https://doi.org/10.1017/CBO9781139020411>); the inverse by the adjugate (Cramer's rule) on the row-scaled matrix; the certified tests by interval arithmetic (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), <https://doi.org/10.1137/1.9780898717716>); exact rounding of grid images by the filter-then-exact pattern of the kernel's predicates (J. R. Shewchuk, *Discrete & Computational Geometry* 18 (1997), <https://doi.org/10.1007/PL00009321>)."
+          },
+          "path": "geom_math::transform",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant time, no allocation: that of the variant's own operation (see [`crate::grid_transform`], [`crate::rational`] and [`crate::transform`]), plus, when a result is simplified, a comparison of each of the twelve entries (with 0 and ±1, and the translations with their range), and for a certified transform three roundings to integers and a reduction to canonical form. [`TypedTransform::rotation`] for an irrational direction adds one double-double square root and two double-double divisions.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-math/src/typed.rs",
+          "guarantees": [
+            "every [`TypedTransform::apply`] returns a [`Rounded`] point, the exact image rounded once to the nearest step, ties to even, with whether it was already exact; composition keeps the most exact variant both operands allow and records a change of variant; classification is exact for the exact and rational variants and certified for the certified one."
+          ],
+          "job": "The typed transform: one enum for every transform the kernel applies to geometry, so that whether a transform is exact is part of its type (chapter 7: \"Transforms are typed so that this is explicit\").",
+          "method": {
+            "links": [
+              "https://doi.org/10.1017/CBO9780511811685"
+            ],
+            "text": "the hierarchy of transformation groups (isometries, similarities, affinities) of R. Hartley and A. Zisserman, *Multiple View Geometry in Computer Vision*, 2nd ed., Cambridge University Press (2004), section 2.4, <https://doi.org/10.1017/CBO9780511811685>, with each group represented in the most exact number type that holds it."
+          },
+          "path": "geom_math::typed",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant time, no allocation. A dot product is two or three checked `i128` multiplications, a 3D cross product six and a triple product nine; sums, differences and moved points are one checked `i128` addition and one range check per component.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-math/src/vector.rs",
+          "guarantees": [
+            "**Exact.** Integer arithmetic only. A dot or cross product is the exact integer, never a rounded one; its sign is an exact predicate.",
+            "**No overflow, no panic, the same result in every build profile.** Every integer step is a checked method (`checked_add`, `checked_sub`, `checked_mul`, `checked_neg`), never a native operator, so nothing depends on overflow checks being on. Products are proved to fit `i128` (|v| < 2^127) with room to spare, and a step the bit budget proves fits can only fail through a defect in this crate: it is then reported as [`NumError::BudgetExceeded`], never answered, so a defect can never pass for an exact result. For grid vectors every such result is `Ok`. Sums and differences of vectors, which can leave the vector range, return [`NumError::OutOfRange`].",
+            "**Deterministic.** The same integers on every target."
+          ],
+          "job": "Exact grid vectors: differences of grid points, with exact dot, cross and triple products.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/PL00009321"
+            ],
+            "text": "these products are the building blocks of Shewchuk's determinant forms of the orientation predicates, evaluated exactly in fixed-width integers because the inputs are grid integers below 2^41, as `geom_num::predicate` does: J. R. Shewchuk, \"Adaptive precision floating-point arithmetic and fast robust geometric predicates\", *Discrete & Computational Geometry* 18 (1997), 305–363, <https://doi.org/10.1007/PL00009321>."
+          },
+          "path": "geom_math::vector",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
+      "name": "geom-math",
+      "provenance": [],
+      "sections": "chapter 6.1 (frames), chapter 7 (transforms that change kinds), chapter 17.1 (frames and map projections) and chapter 21 (determinism) of the kernel architecture (`projects/engines/geometry/architecture/`).",
+      "spdx": null,
+      "status": null,
+      "summary": "Spare Kit geometry kernel: points, vectors, transforms, boxes and frames."
+    },
+    {
+      "chapters": [
         16,
         17,
         19,
@@ -1107,6 +1459,8 @@
       "chapters": [
         6,
         9,
+        16,
+        17,
         21,
         28
       ],
@@ -1178,7 +1532,7 @@
               "shape": "unit"
             },
             {
-              "doc": "An enclosure needs a maths function (sine, cosine, arctangent, exponential, logarithm) whose error is not yet proven. `libm` does not prove its error bounds, so an interval built from its results would not be a certificate. Proven versions are build piece G47.",
+              "doc": "An enclosure needs a maths function whose error is not proven, or whose interval version is not built yet: the sine and cosine of radians, which only `libm` supplies, without a proven bound, and the arctangent of a box. An interval built without that proof would not be a certificate. The certified interval functions are `sinpi`, `cospi`, `exp` and `ln`.",
               "name": "UnprovenMaths",
               "shape": "unit"
             }
@@ -1186,6 +1540,45 @@
           "module": "geom_num::error",
           "name": "NumError",
           "non_exhaustive": false
+        },
+        {
+          "doc": "Why a draw or a stream range could not be made. A failed draw leaves its stream exactly as it was.",
+          "file": "projects/engines/geometry/crates/geom-num/src/rng.rs",
+          "kinds": [
+            {
+              "doc": "The stream has given every one of its 2^66 words (or has fewer left than the draw needs). A stream never wraps around to repeat itself and never runs into another stream.",
+              "name": "Exhausted",
+              "shape": "struct"
+            },
+            {
+              "doc": "[`Stream::below`] was given the bound 0: no whole number is below it, so the range is empty.",
+              "name": "ZeroBound",
+              "shape": "unit"
+            },
+            {
+              "doc": "[`Stream::range_inclusive`] was given a lower end above its upper end: the range is empty.",
+              "name": "LowAboveHigh",
+              "shape": "struct"
+            },
+            {
+              "doc": "[`StreamRange::chunk`] was asked for chunks of no streams.",
+              "name": "EmptyChunk",
+              "shape": "unit"
+            },
+            {
+              "doc": "A [`StreamRange`] was asked for a stream or a chunk that reaches past its last stream id. Ranges never wrap and never reach into a neighbour's streams.",
+              "name": "TooFewStreams",
+              "shape": "struct"
+            },
+            {
+              "doc": "A step this module proves cannot fail did fail: Lemire's 128-bit product or its threshold ([`Stream::below`] and [`Stream::range_inclusive`]), the sum that places a value in its range ([`Stream::range_inclusive`]), or [`Real::new`] on the double [`Stream::next_f64`] made. Each step's proof is written beside it, so no input can cause this, only a defect in geom-num. It is reported rather than answered, because any answer would be a guess, as [`NumError::BudgetExceeded`](crate::NumError::BudgetExceeded) is.",
+              "name": "Defect",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_num::rng",
+          "name": "RngError",
+          "non_exhaustive": true
         }
       ],
       "family": [],
@@ -1196,16 +1589,38 @@
         "Every predicate returns a [`sign::Sign`], never a number, and is exact: no rounding decides a sign. A computation that cannot complete is reported as [`NumError::BudgetExceeded`], never answered; no input can cause one, only a defect in this crate.",
         "A [`plane::Plane`] and a [`plane::Tpi`] check their bit budgets when they are made, so every computation on them fits its type.",
         "Committing a three-plane point to the grid ([`plane::Tpi::to_grid`]) rounds each coordinate to the nearest step, ties to even, moving it by at most half a step ([`ladder::COMMIT_PER_AXIS`]), and says whether it moved.",
-        "Integer arithmetic on fixed-width values in kernel code is a checked method (`checked_*`, or in [`wide`] the `overflowing_*` limb steps, whose carry or borrow is kept), so nothing depends on overflow checks being on: a result that does not fit is `None` or an error, never a silently wrapped value. Only the compiler's evaluation of constants uses native operators, where an overflow stops the build. Counts of steps never saturate: a saturated bound would understate the truth.",
-        "No floating-point value produced here from finite inputs is NaN. [`math`] returns a [`real::Real`] or an error; an [`interval::Interval`] has finite bounds or is refused as `NotFinite`; [`eft`] reports a pair that is not exact with an infinite second part.",
+        "Integer arithmetic on fixed-width values in kernel code is a checked method (`checked_*`, or in [`wide`] the `overflowing_*` limb steps, whose carry or borrow is kept), so nothing depends on overflow checks being on: a result that does not fit is `None` or an error, never a silently wrapped value. Three kinds of step compute modulo a power of two on purpose, and each cites what defines it so. In [`rng`], Philox's multiplications and key schedule, modulo 2^32 (its 32 × 32-bit product is formed modulo 2^64, as its reference does, and never reaches 2^64), and Lemire's threshold, a negation modulo 2^64. In the large accumulator inside [`exact_sum::ExactSum::add_slice`] and [`exact_sum::ExactSum::add_iter`], the sum of a double's whole bit pattern modulo 2^64, as Neal's method specifies, from which the exact sum of the significands is recovered. In those two a `wrapping_*` method is the specified operation, not a result that failed to fit. And in the CORE-MATH ports of [`math`], a `wrapping_*` method where the C source computes modulo 2^64 or 2^128 on purpose, each with a comment saying why the C does it (a two's complement negation, a sum of which only the low bits are read, or a limb sum whose carry is kept by comparison as [`wide`] keeps its own), so a wrap there is the computation the proof describes, never a lost value. Every other integer step in the ports is checked too: its `None`, which each step proves cannot come, ends the computation with the canonical NaN, which the public functions report as `NotFinite`. Only the compiler's evaluation of constants uses native operators, where an overflow stops the build. Counts of steps never saturate: a saturated bound would understate the truth.",
+        "No floating-point value produced here from finite inputs is NaN. [`math`] returns a [`real::Real`] or an error; an [`interval::Interval`] has finite bounds or is refused as `NotFinite`; [`eft`] reports a pair that is not exact with an infinite second part; a [`dd::DD`] is finite by construction; [`exact_sum::ExactSum`] gives a `Real` or `NotFinite`; [`rng`] draws its doubles as `Real`s in [0, 1). Inside [`math`], where the ports compute on raw doubles, any NaN is the canonical `0x7ff8_0000_0000_0000`, and no public function returns one.",
         "Every interval operation encloses the exact result of its operation on any reals in its operands, and an enclosure that needs a maths function without a proven error is refused ([`NumError::UnprovenMaths`]).",
         "A bound carries its grid step, and bounds add exactly in the finer step ([`exactness::Exactness`]).",
-        "No `unsafe`, no panics outside tests, no platform maths: every maths function comes from [`math`], which uses the pure-Rust `libm` crate; where `libm` uses a processor instruction instead (the square root, and the fused multiply-add where the processor has one), it is one IEEE 754 defines exactly, so results are identical on every target."
+        "Every double-double operation ([`dd::DD`]) is within its stated error bound of the exact result: the published, machine-checked bound of its algorithm (the theorem is named on each operation), plus, from the range of binary64, 2^−398 relative for products, quotients and roots and 2^−1074 absolute for products and quotients. A `DD` is never NaN or infinite: an overflow is [`NumError::NotFinite`].",
+        "A sum of doubles taken with [`exact_sum::ExactSum`] is exact until it is rounded once, to nearest with ties to even, so its bits depend only on the terms, never on their order, on how they were split into chunks, or on the order of merges.",
+        "No `unsafe`, no panics outside tests, no platform maths: every maths function comes from [`math`]. `sinpi`, `cospi`, `exp`, `ln` and `atan2` are correctly rounded CORE-MATH ports with proven error bounds, so their bits are fixed by their specification. Everything else comes from the pure-Rust `libm` crate, the same code on every target; where `libm` uses a processor instruction instead (the square root, and the fused multiply-add where the processor has one), it is one IEEE 754 defines exactly, so results are identical on every target. The `libm` functions without a proven bound are kept apart in [`math::unproven`], and nothing in this crate uses them."
       ],
-      "job": "numbers: where coordinates live, how \"which side is this on\" is answered exactly, how curved computations carry proven bounds, where maths functions come from, and the tolerance ladder.",
+      "job": "numbers: where coordinates live, how \"which side is this on\" is answered exactly, how curved computations carry proven bounds, where maths functions come from, where a randomised method's random numbers come from (a counter-based generator keyed by explicit seeds), and the tolerance ladder.",
       "kind": "kernel",
-      "layer": null,
+      "layer": "1",
       "modules": [
+        {
+          "cost": "constant time, no allocation, and no loops other than at most three power-of-two steps per scaling. Counting `two_sum` as 6 floating-point operations, a fused multiply-add as one call to [`crate::math::fma`] (one instruction where the processor has one, through `libm`'s runtime dispatch on x86-64; a correctly rounded integer routine on WebAssembly), and the final `two_sum` that restores the invariant: [`DD::add`] is 26 operations and [`DD::add_f64`] 13; [`DD::mul_f64`] 2 fused multiply-adds and 13 operations, [`DD::mul`] 3 and 15, [`DD::div_f64`] 1 and 18, [`DD::div`] 6 and 44, [`DD::sqrt`] one square root, one fused multiply-add and 15. The multiplicative ones add the scaling: for each operand a read of its exponent bits and two power-of-two scalings (one to three multiplications each), and two scalings of the result; [`DD::mul`] also compares its two scaled operands to order them.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/dd.rs",
+          "guarantees": [
+            "with u = 2^−53 (the unit roundoff of binary64), each operation returns the exact result of the operation on the exact values of its operands, `r`, within `|result − r| ≤ B·|r| + A`:"
+          ],
+          "job": "Double-double arithmetic: a real number held as the unevaluated sum of two doubles, with a proven error bound on every operation.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/3121432"
+            ],
+            "text": "the algorithms are those whose bounds are proven and machine-checked (Joldes, Muller and Popescu 2017, <https://doi.org/10.1145/3121432>, and the other references below): addition, `AccurateDWPlusDW` (JMP Algorithm 6, the QD library's \"IEEE addition\" of Li et al.) and `DWPlusFP` (JMP Algorithm 4, QD's); multiplication by a double, `DWTimesFP3` (JMP Algorithm 9), and of two `DD`s, `DWTimesDW3` (JMP Algorithm 12), the ones JMP recommend when a fused multiply-add is available; division by a double, `DWDivFP3` (JMP Algorithm 15), and of two `DD`s, `DWDivDW3` (JMP Algorithm 18, the more accurate of their two divisions); the square root, `SQRTDWtoDW` (LLMPR Algorithm 8); `TwoProduct` as Kahan's `Fast2Mult` with a fused multiply-add ([`two_prod_fma`], JMP Algorithm 3), and `TwoSum` as Knuth's ([`crate::eft::two_sum`])."
+          },
+          "path": "geom_num::dd",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
         {
           "cost": "constant time and no allocation. Each function is a fixed sequence of floating-point operations, comparisons and bit reads; outside Dekker's direct range `split` also scales by 2^64 and back, and `two_prod` scales by powers of two (`scale`), each scaling at most two steps.",
           "does": null,
@@ -1247,6 +1662,30 @@
             "none": "a closed enum of the numbers layer's failures, each defined once, for chapter 22's error model (`projects/engines/geometry/architecture/22-errors-queries-ai.md`) to wrap."
           },
           "path": "geom_num::error",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "[`ExactSum::add`]: about twenty integer operations, two of them checked additions into chunks, plus a propagation (about 67 steps) every 2047 terms. [`ExactSum::add_slice`] from [`LARGE_SLICE`] terms up: about eight per term (a shift, two loads, a checked decrement, the unmasked addition and two stores), plus zeroing 41 KB once per call, one transfer (about twenty steps) per 4096 terms with the same sign and exponent, and a final transfer of each chunk used. [`ExactSum::add_iter`]: the same per term, after at most [`LARGE_SLICE`] terms one by one when the stream's length is not known. Neal measures exact summation of large arrays this way in under twice the time of plain ordered summation; `tests/exact_sum_bench.rs` holds `add_slice` and `add_iter` to that on 10^6 terms, including the inputs hardest for the large accumulator (a few chunks hit in random order). Measured there in release on an Intel i7-10750H with the machine otherwise quiet (2026-10-22), against a plain ordered sum of the same terms: `add_slice` and `add_iter` 0.9 to 1.4 times on uniform, spread, coordinate and one-binade terms, 1.7 times on the hardest case (subnormals of random signs); [`ExactSum::add`] one term at a time 3 to 6 times. So the board's bar is met by the large accumulator's paths, which kernel code with many terms uses; [`ExactSum::add`] is for a few terms at a time. (Under load from other processes the large accumulator's loop, bound by loads and stores, slows more than the plain sum, bound by the latency of one addition, so the ratio is only meaningful on a quiet machine.) [`ExactSum::merge`]: two propagations and 67 checked additions. [`ExactSum::round`]: a copy of the 67 chunks, at most two propagations and a scan.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+          "guarantees": [
+            "**Exact, then correctly rounded.** [`ExactSum::round`] returns the exact sum of every finite term added (directly, by [`ExactSum::add_slice`] or [`ExactSum::add_iter`], or through merges) rounded to the nearest double, ties to even, as a [`Real`]. An exact zero is +0, whatever the signs of the zero terms (as in Neal's code). The tests hold it bit for bit to an exact oracle (`dashu`).",
+            "**Order-free.** The result depends on the multiset of terms only: not on their order, on how they were split into slices or accumulators, on the order or shape of the merges, or on which of the two internal paths (below) took them. The state's value is the exact sum, the special flags are an OR and a maximum, and the rounding is a function of the value.",
+            "**Special values as Neal specifies.** A NaN or an infinity among the terms does not disturb the finite sum; [`ExactSum::round_ieee`] then returns, in this order of precedence: a NaN, the one with the largest payload (its 52 fraction bits read as an integer) with its sign cleared, if any term was a NaN; a NaN if both +∞ and −∞ were added; the infinity if only one sign was; otherwise the rounded finite sum, which is ±∞ when its magnitude is at least 2^1024 − 2^970 (an overflow, possible even when every term is finite). [`ExactSum::round`] reports all of these as [`NumError::NotFinite`], so the kernel never sees a NaN or an infinity from it.",
+            "**No silent overflow.** Integer arithmetic is checked, except the one addition Neal's method defines modulo 2^64 (the large accumulator's chunks, below), where wrapping is the specification. The accumulator holds magnitudes below 2^1100, so it cannot overflow before 2^64 terms have been added (a term at most Ω < 2^1024, counted once for every accumulator it reaches through merges); should an internal step ever fail, the sum is marked lost and [`ExactSum::round_ieee`] gives Neal's report for it, a NaN with every payload bit set."
+          ],
+          "job": "`ExactSum`: the exact sum of any number of doubles, rounded once, to nearest, at the end.",
+          "method": {
+            "links": [
+              "https://arxiv.org/abs/1505.05571",
+              "https://github.com/radfordneal/xsum"
+            ],
+            "text": "R. M. Neal, \"Fast exact summation using small and large superaccumulators\", arXiv 1505.05571 (2015), <https://arxiv.org/abs/1505.05571>, and his C code `xsum` (MIT licence, copyright 2015–2024 Radford M. Neal), <https://github.com/radfordneal/xsum>, read at commit `b766b3e104cdbd6769c8df033fb430700fce32dd` (2024-11-13, `stable-version-3`). Both of Neal's superaccumulators are used, rebuilt to this crate's rules: **The small superaccumulator**, the value an [`ExactSum`] holds: 67 signed 64-bit chunks, chunk i weighing 2^(32i − 1075), so consecutive chunks overlap by 32 bits and carries can wait. A double with exponent field E (1 for subnormals) and 53-bit significand M (52 bits for subnormals) is `M·2^(E − 1075)`; with `E = 32j + k`, it adds or subtracts `M·2^k mod 2^32` to chunk j and `⌊M·2^k / 2^32⌋ < 2^52` to chunk j + 1. A carry propagation (each chunk keeps its low 32 bits, the rest goes to the next) puts every chunk but the top one in [0, 2^32); 2047 additions can follow before the next, since 2^32 + 2047·2^52 < 2^63. Neal, section 3. **The large superaccumulator**, used by [`ExactSum::add_slice`] for long slices and by [`ExactSum::add_iter`] (with [`Extend`] and [`FromIterator`]) for long streams: 4096 unsigned 64-bit chunks, one for each sign-and-exponent pattern, each with a count. A term is added to its chunk as a whole 64-bit pattern, with no masking; after n additions the chunk holds `n·(index·2^52) + Σ fractions` modulo 2^64, so at most 4096 additions per chunk keep `Σ fractions < 2^64` recoverable exactly: `chunk − n·index·2^52`, modulo 2^64. That chunk is then moved into the small accumulator (fractions plus `n·2^52` implicit bits, as three 32-bit parts), when its count runs out and at the end. Neal, section 4."
+          },
+          "path": "geom_num::exact_sum",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -1298,10 +1737,10 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/interval.rs",
           "guarantees": [
-            "**Inclusion**, as above, for `add`, `sub`, `mul`, `div`, `mul_add`, `square`, `sqrt`, `norm` and `neg`. These are built from the operations IEEE 754 rounds correctly, so one step outward is a proven enclosure. An enclosure that needs a function whose error `libm` does not prove (`sin`, `cos`, `atan2`, `exp`, `ln`) is refused with [`NumError::UnprovenMaths`] until proven versions exist (build piece G47).",
+            "**Inclusion**, as above, for `add`, `sub`, `mul`, `div`, `mul_add`, `square`, `sqrt`, `norm` and `neg`. These are built from the operations IEEE 754 rounds correctly, so one step outward is a proven enclosure. The same holds for `sinpi`, `cospi`, `exp` and `ln`, built from the correctly rounded functions of [`crate::math`] in `math/enclose.rs`, which carries their proofs. An enclosure that needs a function whose error is not proven (the radian `sin` and `cos`, which only `libm` supplies) or whose interval version is not built yet (`atan2`) is refused with [`NumError::UnprovenMaths`].",
             "**Finite, ordered, never NaN.** Both bounds are finite and `lo ≤ hi`. An operation whose widened bound would leave the finite doubles (a rounded bound that reaches ±(2 − 2^−52) · 2^1023 or overflows) returns [`NumError::NotFinite`] instead.",
-            "**Tight.** Each computed bound is the first or second double beyond the exact bound of the operation over its operands, never farther: the rounding lands on the exact bound or on one of the two doubles either side of it, and the widening moves one double outward. So the lower bound is at least the double below the largest double at or below the exact lower bound, and the upper bound at most the double above the smallest double at or above the exact upper bound. A bound that is exact by construction is not widened, so it is the exact bound itself: both bounds of `neg`, the lower bound 0 of `square` over an interval holding zero, and a zero bound of `sqrt`. `norm` chains several operations, so each of its steps is tight in this sense but the whole is not. Counted in steps, where the step at a value is the spacing of the doubles in its binade, a computed bound is at most 2.5 steps of the exact bound outside it, at most 2 steps of the computed bound, less than 2 steps of the larger of the two, and at most 1.5 steps when the two steps are equal. The first two maxima are reached at ties next to a power of two, where the spacing halves: 1 + (−2^−54) = 1 − 2^−54 is a tie that rounds to the even 1 and is widened to 1 + 2^−52, which is 2.5 steps of 2^−53 (the spacing just below 1) above the exact value; and 1 + 2^−53 is a tie that also rounds to 1 and is widened to 1 − 2^−53, exactly 2 steps of 2^−53 (the spacing at that bound) below the exact value.",
-            "**Deterministic.** Only IEEE 754 basic operations and comparisons, which Rust computes to IEEE 754 binary64 on every target the kernel builds for (RFC 3514, whose own exception, 32-bit x86 without SSE2, is not one of them); `next_up` and `next_down`, which are integer operations on the bits; and the square root and fused multiply-add of [`crate::math`]. The fused multiply-add is `libm` 0.2.16's `fma`, correctly rounded as IEEE 754 requires whether `libm` uses the processor's instruction or its own routine. That root is not Rust's but `libm` 0.2.16's `sqrt`, which is the processor's IEEE 754 square root on x86-64 (`sqrtsd`, with SSE2) and on aarch64 (`fsqrt`, with NEON), and on wasm32 libm's portable integer routine (`src/math/generic/sqrt.rs`: Goldschmidt iterations, then musl's decision of the last bit), because libm uses WebAssembly's square root instruction only with its `unstable-intrinsics` feature, which is off. IEEE 754 requires the square root to be correctly rounded, and the portable routine is written to the same result, so every route gives the same bits. Inclusion for the roots needs only a faithful root; equality across targets needs the correctly rounded one, which on wasm32 rests on libm's routine rather than on hardware, and libm's own comments rest that routine's last bit on testing, not on a proof. So `tests/attack2_interval.rs` holds `math::sqrt` bit for bit to an exact oracle (roots within a tiny fraction of a unit of a midpoint, subnormal operands, exact roots), and CI runs it on wasm32-wasip1 too (`.github/workflows/kernel.yml`). Minimum and maximum are written as comparisons, not with `f64::min` and `f64::max`, which may return either zero when given −0 and +0. A zero bound is always stored as +0, so equal intervals have equal bits whatever their history."
+            "**Tight.** Each computed bound is the first or second double beyond the exact bound of the operation over its operands, never farther: the rounding lands on the exact bound or on one of the two doubles either side of it, and the widening moves one double outward. So the lower bound is at least the double below the largest double at or below the exact lower bound, and the upper bound at most the double above the smallest double at or above the exact upper bound. A bound that is exact by construction is not widened, so it is the exact bound itself: both bounds of `neg`, the lower bound 0 of `square` over an interval holding zero, a zero bound of `sqrt`, and the exact values and peaks of `sinpi`, `cospi`, `exp` and `ln` (`math/enclose.rs`). `norm` chains several operations, so each of its steps is tight in this sense but the whole is not. Counted in steps, where the step at a value is the spacing of the doubles in its binade, a computed bound is at most 2.5 steps of the exact bound outside it, at most 2 steps of the computed bound, less than 2 steps of the larger of the two, and at most 1.5 steps when the two steps are equal. The first two maxima are reached at ties next to a power of two, where the spacing halves: 1 + (−2^−54) = 1 − 2^−54 is a tie that rounds to the even 1 and is widened to 1 + 2^−52, which is 2.5 steps of 2^−53 (the spacing just below 1) above the exact value; and 1 + 2^−53 is a tie that also rounds to 1 and is widened to 1 − 2^−53, exactly 2 steps of 2^−53 (the spacing at that bound) below the exact value.",
+            "**Deterministic.** Only IEEE 754 basic operations and comparisons, which Rust computes to IEEE 754 binary64 on every target the kernel builds for (RFC 3514, whose own exception, 32-bit x86 without SSE2, is not one of them); `next_up` and `next_down`, which are integer operations on the bits; the correctly rounded `sinpi`, `cospi`, `exp` and `ln` of [`crate::math`], fixed bit for bit by their specification; and the square root and fused multiply-add of [`crate::math`]. The fused multiply-add is `libm` 0.2.16's `fma`, correctly rounded as IEEE 754 requires whether `libm` uses the processor's instruction or its own routine. That root is not Rust's but `libm` 0.2.16's `sqrt`, which is the processor's IEEE 754 square root on x86-64 (`sqrtsd`, with SSE2) and on aarch64 (`fsqrt`, with NEON), and on wasm32 libm's portable integer routine (`src/math/generic/sqrt.rs`: Goldschmidt iterations, then musl's decision of the last bit), because libm uses WebAssembly's square root instruction only with its `unstable-intrinsics` feature, which is off. IEEE 754 requires the square root to be correctly rounded, and the portable routine is written to the same result, so every route gives the same bits. Inclusion for the roots needs only a faithful root; equality across targets needs the correctly rounded one, which on wasm32 rests on libm's routine rather than on hardware, and libm's own comments rest that routine's last bit on testing, not on a proof. So `tests/attack2_interval.rs` holds `math::sqrt` bit for bit to an exact oracle (roots within a tiny fraction of a unit of a midpoint, subnormal operands, exact roots), and CI runs it on wasm32-wasip1 too (`.github/workflows/kernel.yml`). Minimum and maximum are written as comparisons, not with `f64::min` and `f64::max`, which may return either zero when given −0 and +0. A zero bound is always stored as +0, so equal intervals have equal bits whatever their history."
           ],
           "job": "Intervals of doubles that certainly contain an exact real result, in round-to-nearest arithmetic.",
           "method": {
@@ -1367,43 +1806,235 @@
           "target": "lib"
         },
         {
-          "cost": "constant per call and no allocation: the argument checks and a few `libm` calls, each a bounded computation.",
+          "cost": "constant per call and no allocation: each function checks its argument, then runs its port's fast path, and the accurate path only when the fast path's rounding test cannot decide; each module states its own cost. Speed against `libm` is measured as above.",
           "does": null,
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/math.rs",
           "guarantees": [
-            "**A finite result or an error, never NaN or an infinity.** Each function returns a [`Real`], or: - [`NumError::NotFinite`] when an argument is NaN or infinite (checked first), or the result would be infinite: an overflow, such as `exp(1000)`, or a pole, such as `ln(0)`; - [`NumError::OutsideDomain`] when the function has no real value there: the square root or a logarithm of a negative number, the arcsine or arccosine of a number beyond ±1, or a negative number to a power that is not a whole number. The domain is checked before `libm` is called, so `libm`'s NaN never appears.",
-            "**Accuracy.** The square root and the fused multiply-add are correctly rounded (IEEE 754); `abs`, `floor`, `ceil` and `round_ties_even` are exact. The others are `libm`'s, which are accurate to about one unit in the last place but not proven to be; they move to correctly rounded CORE-MATH ports with proven bounds (build piece G47), and callers will not change. An enclosure that needs one of them is refused with [`NumError::UnprovenMaths`] until then ([`crate::interval`])."
+            "**A finite result or an error, never NaN or an infinity.** Each function returns a [`Real`], or: - [`NumError::NotFinite`] when an argument is NaN or infinite (checked first), or the result would be infinite: an overflow, such as `exp(1000)`, or a pole, such as `ln(0)`; - [`NumError::OutsideDomain`] when the function has no real value there: the square root or a logarithm of a negative number, the arcsine or arccosine of a number beyond ±1, or a negative number to a power that is not a whole number. The domain is checked before the function is evaluated, so no function is evaluated where its value would be NaN.",
+            "**Accuracy**, as the table below says: proven for the functions here, documented but not proven for those in [`unproven`].",
+            "**Deterministic.** The same bits on every target, thread count and build: the correctly rounded results by their specification, the others because they are the same pure-Rust code everywhere."
           ],
-          "job": "The only place maths functions come from.",
+          "job": "The only place maths functions come from, with proven error bounds.",
           "method": {
             "links": [
-              "https://docs.rs/libm/0.2.16",
-              "https://doi.org/10.1109/IEEESTD.2019.8766229"
+              "https://core-math.gitlabpages.inria.fr/",
+              "https://doi.org/10.1109/IEEESTD.2019.8766229",
+              "https://docs.rs/libm/0.2.16"
             ],
-            "text": "`libm` 0.2.16 (MIT, a pure-Rust implementation of the C maths library, <https://docs.rs/libm/0.2.16>), behind the argument and domain checks above; `sinpi` and `cospi` follow IEEE 754-2019's `sinPi` and `cosPi` (section 9.2, <https://doi.org/10.1109/IEEESTD.2019.8766229>) with the reduction each function's documentation derives."
+            "text": "the five transcendental functions are ports of CORE-MATH (<https://core-math.gitlabpages.inria.fr/>), each following Ziv's strategy with its proof in its own module; the square root and the fused multiply-add are IEEE 754-2019's correctly rounded operations (<https://doi.org/10.1109/IEEESTD.2019.8766229>), through `libm` 0.2.16 (<https://docs.rs/libm/0.2.16>); `abs` and the roundings are exact operations on the bits."
           },
           "path": "geom_num::math",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant time, no allocation and no recursion. Almost every argument takes the fast path, a fixed sequence of floating-point operations and table reads; only when its rounding test cannot decide does the accurate path run, also of fixed length, in 192-bit integer arithmetic. No loop's length depends on the argument.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+          "guarantees": [
+            "correctly rounded, with one qualification below. The result is the binary64 number nearest the exact angle of the point `(x, y)` from the positive x-axis, in `[−π, π]` (ties to even), so the error is at most half an ulp. Domain: every pair of doubles, with C99 Annex F's special values (`atan2(±0, +0) = ±0`, `atan2(±0, −0) = ±π`, `atan2(±∞, ±∞) = ±π/4` or `±3π/4`, and so on); a NaN in either argument gives the canonical NaN (`0x7ff8_0000_0000_0000`). The proof is at the end of this documentation."
+          ],
+          "job": "Correctly rounded `atan2(y, x)`: a port of CORE-MATH.",
+          "method": {
+            "links": [
+              "https://core-math.gitlabpages.inria.fr/"
+            ],
+            "text": "Ziv's strategy, as in CORE-MATH (<https://core-math.gitlabpages.inria.fr/>); the algorithm and the proof of its bound are below."
+          },
+          "path": "geom_num::math::atan2",
           "provenance": [
             {
-              "licence": "BSD-2-Clause",
-              "link": "https://github.com/freebsd/freebsd-src/blob/c6d7a2478c9eeb38ed1284e4ee1ff64c75ca8b09/lib/msun/src/s_sinpi.c",
+              "licence": "MIT",
+              "link": "https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/atan2/atan2.c",
               "method_note": null,
-              "name": "FreeBSD `msun` `s_sinpi.c`",
+              "name": "CORE-MATH `src/binary64/atan2/atan2.c` and `src/binary64/atan2/tint.h` at commit `0ce0cbc15935e24c656280e5a46c34e89f301b7a`, by Paul Zimmermann and Alexei Sibidanov, with the help of Silviu-Ioan Filip, who designed the code that generates its rational approximation of `atan`",
               "pinned": true,
-              "purpose": "for its reduction of the angle to a remainder in half-turns and a sign before its kernel, which [`sinpi`] follows. Method only; no code copied.",
-              "take": "port-method"
-            },
-            {
-              "licence": "BSD-2-Clause",
-              "link": "https://github.com/freebsd/freebsd-src/blob/c6d7a2478c9eeb38ed1284e4ee1ff64c75ca8b09/lib/msun/src/s_cospi.c",
-              "method_note": null,
-              "name": "FreeBSD `msun` `s_cospi.c`",
-              "pinned": true,
-              "purpose": "for the same reduction in [`cospi`]. Method only; no code copied.",
-              "take": "port-method"
+              "purpose": "translated to safe `no_std` Rust, with the 192-bit arithmetic in `u128` and `u64` steps under the crate's rule (`lib.rs`) and total shifts; round-to-nearest only, without the exception flags, `fenv` or `errno`; the canonical NaN for a NaN; the double nearest the 192-bit value where the C stops the program; tiny quotients decided exactly by integer arithmetic; written proofs of the fast-path and accurate-path bounds. Every change is listed under \"Changes from the C source\" below; none changes a correctly rounded result.",
+              "take": "port"
             }
           ],
+          "spdx": "MPL-2.0 AND MIT",
+          "target": "lib"
+        },
+        {
+          "cost": "constant time and no allocation: the point function at each of the two ends (one or two calls of the correctly rounded `sinpi`, `cospi`, `exp` or `ln`), two widening steps, and for the periodic two a fixed number of exact integer comparisons for the peak tests.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/math/enclose.rs",
+          "guarantees": [
+            "**Inclusion.** The result contains `f(t)` for every real `t` in the interval, not only for the doubles in it. *Proof.* `exp` and `ln` are increasing, so their image is `[f(lo), f(hi)]`. `sin(πt)` is monotone between consecutive half-integers, where its derivative `π·cos(πt)` vanishes; its maxima (value 1) are at `t ≡ ½` and its minima (−1) at `t ≡ −½ (mod 2)`. So its image is the hull of the two ends' values and of ±1 for every maximum or minimum inside; `cos(πt) = sin(π(t + ½))` likewise, with maxima at even and minima at odd integers. A correctly rounded result `r` of an exact value `v` satisfies `next_down(r) ≤ v ≤ next_up(r)` (round to nearest is faithful), so the widened ends enclose the exact ends. Where an end is exact (a multiple of ½ for `sinpi` and `cospi`, whose value is then exactly 0 or ±1; `exp(0)`; `ln(1)`), it is used without widening. Values of `sinpi` and `cospi` are clamped to `[−1, 1]`, and the lower bound of `exp` to `+0`, which the exact functions never leave.",
+            "**Exact peak tests.** Whether the interval contains a maximum or a minimum is decided exactly, with no rounding, by [`Arc`]: the peaks of periodic fields fall at exact half-integers of their phase (chapter 16.2), and the test never misses one or invents one.",
+            "**Tight.** Each bound is at most two floating-point steps outside the exact bound: the correctly rounded value plus one widening step.",
+            "**Never NaN.** The results are [`Interval`]s, finite and ordered, with a zero bound stored as +0 ([`Interval::new`]); a function outside its domain returns an error, never a NaN (chapter 21), with the errors of the point functions: `exp` fails with [`NumError::NotFinite`] when its upper bound overflows; `ln` fails with [`NumError::OutsideDomain`] when the interval holds a negative number, where the logarithm is not a real number, and with [`NumError::NotFinite`] when its lower bound is zero, where the logarithm is `−∞`.",
+            "**Deterministic.** Only the correctly rounded functions of [`crate::math`] (their ports, on the finite bounds of an interval, which the public functions would accept unchanged), IEEE 754 basic operations, comparisons, `rint` (exact), `next_up` and `next_down`."
+          ],
+          "job": "Interval versions of the proven maths functions: [`Interval::sinpi`], [`Interval::cospi`], [`Interval::exp`] and [`Interval::ln`], certified enclosures for curved computations (chapters 12.3 and 16.2; piece G47's \"interval versions with exact peak tests\").",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/1.9780898717716"
+            ],
+            "text": "the interval extension of a standard function by monotonicity and its critical points, as in Moore, Kearfott and Cloud, *Introduction to Interval Analysis*, SIAM 2009, §5.1 (<https://doi.org/10.1137/1.9780898717716>): on a stretch where a function is monotone its extremes are at the ends, so only the ends are evaluated, and every critical point inside is added exactly. Each end is evaluated with the correctly rounded point function of [`crate::math`] and widened by one step outward with `next_down` and `next_up`, as [`crate::interval`] does after every operation."
+          },
+          "path": "geom_num::math::enclose",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant time, no allocation and no recursion. Almost every argument takes the fast path, a fixed sequence of floating-point operations and table reads; only when its rounding test cannot decide does the accurate path run, also of fixed length. No loop's length depends on the argument.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/math/exp.rs",
+          "guarantees": [
+            "correctly rounded, resting on CORE-MATH's worst-case searches, whose completeness its list does not claim (step A of the proof). For every binary64 input checked the result is the binary64 number nearest the exact `e^x` (ties to even), so the error is at most half an ulp, including in the subnormal range. Proven outright: every input whose result has fewer than 48 identical bits after its round bit (fewer than 33 for results below 2^−1059), and every input in CORE-MATH's exp.wc (1 129 427, all checked), is correctly rounded; an input outside the list with more identical bits, which no proof here excludes, would still have an error below `½ + 2^−49.2` ulp (`½ + 2^−34` ulp below 2^−1059). Domain: every `x`. `exp(x)` is `+∞` for `x ≥ 0x1.62e42fefa39fp+9` (overflow) and `+0` for `x ≤ −0x1.74910d52d3052p+9` (underflow), as the correctly rounded results; `exp(−∞) = +0`, `exp(+∞) = +∞`, and NaN gives the canonical NaN (`0x7ff8_0000_0000_0000`). The proof is at the end of this documentation."
+          ],
+          "job": "Correctly rounded `exp(x) = e^x`: a port of CORE-MATH.",
+          "method": {
+            "links": [
+              "https://core-math.gitlabpages.inria.fr/"
+            ],
+            "text": "Ziv's strategy, as in CORE-MATH (<https://core-math.gitlabpages.inria.fr/>); the algorithm and the proof of its bound are below."
+          },
+          "path": "geom_num::math::exp",
+          "provenance": [
+            {
+              "licence": "MIT",
+              "link": "https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/exp/exp.c",
+              "method_note": null,
+              "name": "CORE-MATH `src/binary64/exp/exp.c` at commit `0ce0cbc15935e24c656280e5a46c34e89f301b7a`, by Alexei Sibidanov",
+              "pinned": true,
+              "purpose": "translated to safe `no_std` Rust, with total table reads and the integer steps under the crate's rule (`lib.rs`); round-to-nearest only, without the exception flags or `errno`; the overflow and underflow results returned directly; the canonical NaN for a NaN; a written proof of the error bound. Every change is listed under \"Changes from the C source\" below; none changes a result.",
+              "take": "port"
+            }
+          ],
+          "spdx": "MPL-2.0 AND MIT",
+          "target": "lib"
+        },
+        {
+          "cost": "none at run time, since every literal is read by the compiler; reading one is linear in its length.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
+          "guarantees": [
+            "**Evaluated by the compiler, always.** `hf!(\"…\")` expands to an inline `const` block, `const { parse(\"…\") }`, so every literal is read during compilation, whatever the context: a `const` item, a table, or an expression in a function body. No string is ever parsed at run time, and the kernel's machine code holds only the resulting constants.",
+            "**Exact or it does not compile.** The literal's value must be a binary64 number exactly: a significand that needs more than 53 bits (or more than the subnormal range allows), or a value outside the finite range, fails an assertion in [`parse`] or a function it calls. Because [`parse`] runs inside a `const` block, that assertion is evaluated by the compiler: a bad literal is a build error, never a run-time panic. Kernel code reaches [`parse`] only through the macro; only the unit tests below call it directly.",
+            "**No rounding at all.** The significand is accumulated as an integer, then placed in the bit pattern; no floating-point operation is involved.",
+            "**Checked arithmetic.** Every integer step is a checked method, as in the rest of the crate (`lib.rs`); the assertions before each step keep it in range, and a step that failed anyway would fail the assertion in [`step`], again a build error. Signed and unsigned values meet only through `abs_diff`, `unsigned_abs` and lossless widening, so no conversion loses a value."
+          ],
+          "job": "Hexadecimal floating-point literals, read at compile time.",
+          "method": {
+            "links": [
+              "https://www.open-std.org/jtc1/sc22/wg14/www/docs/n1256.pdf",
+              "https://doi.org/10.1109/IEEESTD.2019.8766229"
+            ],
+            "text": "the grammar is C99's *hexadecimal-floating-constant*, ISO/IEC 9899:1999 §6.4.4.2 (WG14 working draft N1256, <https://www.open-std.org/jtc1/sc22/wg14/www/docs/n1256.pdf>), without a suffix. Its value is the significand times two to the binary exponent, as IEEE 754-2019 §5.12.3 specifies for hexadecimal significands (<https://doi.org/10.1109/IEEESTD.2019.8766229>); here it must be a binary64 number exactly."
+          },
+          "path": "geom_num::math::hexf",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant time, no allocation and no recursion. Almost every argument takes the fast path, a fixed sequence of floating-point operations and table reads; only when its rounding test cannot decide does the accurate path run, also of fixed length, with a fixed-degree polynomial in double-double. No loop's length depends on the argument.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+          "guarantees": [
+            "correctly rounded, resting on the completeness of the published worst-case lists, which their own statement hedges (step A of the proof). For every binary64 input checked the result is the binary64 number nearest the exact `ln x` (ties to even), so the error is at most half an ulp. Proven outright: every input whose value has fewer than 55 identical bits after its round bit, and every input in CORE-MATH's log.wc (134 951, all checked), is correctly rounded; an unlisted input with more, which no proof here excludes, would still have an error below `½ + 2^−56.6` ulp. Domain: every `x ≥ 0`, subnormals included. `ln(1) = +0`, `ln(±0) = −∞`, `ln(+∞) = +∞`, and a negative input or NaN gives the canonical NaN (`0x7ff8_0000_0000_0000`). The proof is at the end of this documentation."
+          ],
+          "job": "Correctly rounded natural logarithm `ln(x)`: a port of CORE-MATH.",
+          "method": {
+            "links": [
+              "https://core-math.gitlabpages.inria.fr/"
+            ],
+            "text": "Ziv's strategy, as in CORE-MATH (<https://core-math.gitlabpages.inria.fr/>); the algorithm and the proof of its bound are below."
+          },
+          "path": "geom_num::math::log",
+          "provenance": [
+            {
+              "licence": "MIT",
+              "link": "https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/log/log.c",
+              "method_note": null,
+              "name": "CORE-MATH `src/binary64/log/log.c` and `src/binary64/log/dint.h` at commit `0ce0cbc15935e24c656280e5a46c34e89f301b7a`, by Paul Zimmermann and Tom Hubrecht (log.c) and Tom Hubrecht (dint.h, from his correctly rounded `pow`)",
+              "pinned": true,
+              "purpose": "translated to safe `no_std` Rust, with the 128-bit arithmetic in `u128` and `u64` steps under the crate's rule (`lib.rs`) and total shifts; round-to-nearest only, without the exception flags or `errno`; the canonical NaN for a NaN or a negative input; the fast path's seven `fma`s replaced by plain operations, with its bound re-derived; a Taylor series in the accurate path just below 1; the accurate path's tables trimmed to the entries its index reaches; a written proof of the error bound. Every change is listed under \"Changes from the C source\" below; none changes a correctly rounded result.",
+              "take": "port"
+            }
+          ],
+          "spdx": "MPL-2.0 AND MIT",
+          "target": "lib"
+        },
+        {
+          "cost": "constant time, no allocation and no recursion. Almost every argument takes the fast path, a fixed sequence of floating-point operations and table reads; only when its rounding test cannot decide does the accurate path run, also of fixed length, and a scan of a fixed list of hard cases when the rounding is in doubt. No loop's length depends on the argument.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+          "guarantees": [
+            "correctly rounded, resting on CORE-MATH's worst-case searches as step A of the proof states. For every binary64 input the result is the binary64 number nearest the exact `sin(πx)` or `cos(πx)` (ties to even), so the error is at most half an ulp and the result is fixed bit for bit by the specification (IEEE 754-2019 §9.2 recommends correctly rounded `sinPi` and `cosPi`). Proven outright: every input whose value has fewer than 44 identical bits after its round bit, and every input in CORE-MATH's lists (which state that they hold every input with 43 or more), is correctly rounded; had the lists' searches missed an input, its error would still be below `½ + 2^−45.6` ulp. Domain: every finite `x`, with no limit on its size, because the reduction modulo 2 is exact. `±∞` and NaN give the canonical NaN (`0x7ff8_0000_0000_0000`). The proof is at the end of this documentation."
+          ],
+          "job": "Correctly rounded `sinpi(x) = sin(πx)` and `cospi(x) = cos(πx)`: a port of CORE-MATH.",
+          "method": {
+            "links": [
+              "https://core-math.gitlabpages.inria.fr/"
+            ],
+            "text": "Ziv's strategy, as in CORE-MATH (<https://core-math.gitlabpages.inria.fr/>); the algorithm and the proof of its bound are below."
+          },
+          "path": "geom_num::math::sincospi",
+          "provenance": [
+            {
+              "licence": "MIT",
+              "link": "https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/sinpi/sinpi.c",
+              "method_note": null,
+              "name": "CORE-MATH `src/binary64/sinpi/sinpi.c` and `src/binary64/cospi/cospi.c` at commit `0ce0cbc15935e24c656280e5a46c34e89f301b7a`, by Alexei Sibidanov",
+              "pinned": true,
+              "purpose": "translated to safe `no_std` Rust, with total shifts and table reads and the integer steps under the crate's rule (`lib.rs`); round-to-nearest only, without the exception flags or `errno`; the canonical NaN for NaN and infinite inputs; the main fast path's error constant raised from 2^−78 to `ER0 = 0x1.1p−78`, which the proof covers; a written proof of the error bound. Every change is listed under \"Changes from the C source\" below; none changes a correctly rounded result.",
+              "take": "port"
+            }
+          ],
+          "spdx": "MPL-2.0 AND MIT",
+          "target": "lib"
+        },
+        {
+          "cost": "constant time and no allocation: each helper is a few integer or floating-point operations.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/math/support.rs",
+          "guarantees": [
+            "every helper is total and deterministic, so the ports contain no `unsafe`, no indexing, no cast that could lose a value and no shift that could overflow; a table read out of range gives the canonical NaN, never a panic or a plausible wrong number."
+          ],
+          "job": "Small total helpers shared by the correctly rounded ports: the fused multiply-add, shifts that cannot overflow, the halves and the two's complement reading of an integer without a cast, table reads that cannot panic, and the C sources' fast two-sum.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1109/IEEESTD.2019.8766229",
+              "https://doi.org/10.1007/BF01397083"
+            ],
+            "text": "the fused multiply-add is IEEE 754-2019's fusedMultiplyAdd (§5.4.1, <https://doi.org/10.1109/IEEESTD.2019.8766229>); the fast two-sum is Dekker's (T. J. Dekker, \"A floating-point technique for extending the available precision\", *Numerische Mathematik* 18 (1971), <https://doi.org/10.1007/BF01397083>), in the three operations the C sources write."
+          },
+          "path": "geom_num::math::support",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant per call and no allocation: the argument checks and one `libm` call, a bounded computation.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/math/unproven.rs",
+          "guarantees": [
+            "each returns a [`Real`] or an error, never NaN or an infinity. [`NumError::NotFinite`] for a NaN or infinite argument (checked first) or an infinite result (an overflow, or a pole such as `log2(0)`); [`NumError::OutsideDomain`] where the function has no real value, checked before `libm` is called, so `libm`'s NaN never appears."
+          ],
+          "job": "Deterministic maths functions **without** a proven error bound.",
+          "method": {
+            "links": [
+              "https://docs.rs/libm/0.2.16"
+            ],
+            "text": "the functions of `libm` 0.2.16 (<https://docs.rs/libm/0.2.16>), behind the argument and domain checks above."
+          },
+          "path": "geom_num::math::unproven",
+          "provenance": [],
           "spdx": null,
           "target": "lib"
         },
@@ -1492,6 +2123,46 @@
           "target": "lib"
         },
         {
+          "cost": "a block is ten rounds, each two 32 × 32 → 64-bit multiplies and four exclusive ors, with nine two-word key additions between them, and gives four 32-bit words. [`Stream::next_u32`] computes a block on every fourth call, and [`Stream::next_u64`] and [`Stream::next_f64`] on every second call. [`Stream::below`] draws on average 2^64 / (2^64 − (2^64 mod n)) words of 64 bits, fewer than two for every n and fewer than 1 + 2^−32 for n below 2^32. It computes the 64-bit remainder 2^64 mod n at most once per call, the first time a word's low half is below n, which happens for each word with probability exactly n / 2^64 (for odd n the low half is uniform; for even n = 2^k · m it is a multiple of 2^k, each from 2^k words). A [`StreamRange`] operation is a few integer operations. A [`Stream`] is a few dozen bytes and allocates nothing. Speed is measured once the benchmark harness exists (piece G18); no figure is claimed here.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/rng.rs",
+          "guarantees": [
+            "**Specified, and checked against the reference.** [`philox4x32_10`] is Philox4x32-10 as its authors specify it (Method, below). The tests reproduce Random123's published known answers (`tests/rng_kat.rs`), and golden hashes pin every draw function's output on every CI target, WebAssembly included (`tests/rng_determinism.rs`).",
+            "**Explicit inputs only.** A [`Seed`] and a [`StreamId`] are plain integers the caller writes. There is deliberately no `Default`, no constructor from entropy and no global or thread-local generator.",
+            "**Integers, and no step that wraps or drops a bit unseen.** Every operation is on integers. Wrapping happens only where the method is defined modulo a power of two: the specification's 32 × 32-bit product, formed modulo 2^64 as its reference forms it (it never reaches 2^64), and its key schedule, modulo 2^32; and Lemire's threshold, a negation modulo 2^64. Every other step is a checked method, or exact by construction (words split and joined through their bytes, widening casts, bit masks and shifts by constants with their ranges written beside them, and `abs_diff` where the invariants make it the difference), and each place says why. A checked step's failure either has a meaning, which is then the answer (a stream id past 2^64 − 1 lies past every range's end), or is ruled out by a proof written beside it and reported as [`RngError::Defect`] should it happen all the same, never answered. The floating-point steps, in [`Stream::next_f64`], are exact. So results are the same bits on every target, in debug and release, with overflow checks on or off, and no lint on arithmetic or casts is allowed outside the tests.",
+            "**Exactly uniform, given uniform words.** [`Stream::below`] and [`Stream::range_inclusive`] give every value of the range from exactly the same number of 64-bit words (Lemire's rejection method, so there is no modulo bias), and [`Stream::next_f64`] gives each of the 2^53 values k · 2^−53 in [0, 1) from exactly 2^11 words. That Philox's words are themselves indistinguishable from uniform and independent is the authors' claim, from the `TestU01` library's Crush batteries: seven rounds of Philox4x32 pass, and ten keep three rounds as a safety margin. This module relies on that claim; it does not prove it.",
+            "**Streams never overlap and never wrap.** For one key, Philox is a bijection on counters (each round can be undone; `tests/rng_properties.rs` inverts it), so no two (stream, block) pairs share a block. A stream is 2^64 blocks of four words; moving to the next block carries from counter word 0 into word 1, never into the stream's words. Drawing past the end returns [`RngError::Exhausted`].",
+            "**Ranges handed out never overlap.** Chunks of one size cut from one [`StreamRange`] are disjoint and lie inside it, with checked integer arithmetic; a range too small for a request returns [`RngError::TooFewStreams`] (`tests/rng_ranges.rs` checks both against a model in arbitrary-precision integers).",
+            "**All or nothing.** A draw that fails leaves its stream exactly as it was.",
+            "**No panics, no `unsafe`, no allocation, no `std`.** The block function, every draw and every range operation are `const fn`s, so a table of random numbers can be computed at compile time, with the same bits."
+          ],
+          "job": "Counter-based random numbers from explicit seeds (Philox4x32-10), and the rule every randomised kernel method follows.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/2063384.2063405",
+              "https://github.com/DEShawResearch/random123/blob/9545ff6413f258be2f04c1d319d99aaef7521150/include/Random123/philox.h",
+              "https://doi.org/10.1145/3230636",
+              "https://prng.di.unimi.it/"
+            ],
+            "text": "the published methods below. **Philox4x32-10**: J. K. Salmon, M. A. Moraes, R. O. Dror and D. E. Shaw, \"Parallel random numbers: as easy as 1, 2, 3\", SC '11, section 4.3, <https://doi.org/10.1145/2063384.2063405>. Each round is the paper's generalised Feistel S-box on two pairs of words, with the two multipliers its search found for Philox-4x32; the key steps through a Weyl sequence between rounds. The word order, the multiplier for each word and the order of key steps and rounds follow the authors' reference implementation, Random123's `philox.h` (BSD-3-Clause, D. E. Shaw Research), at <https://github.com/DEShawResearch/random123/blob/9545ff6413f258be2f04c1d319d99aaef7521150/include/Random123/philox.h>. The code here is written from the specification; none of Random123's code is copied. The tests quote its known-answer vectors, which are facts. **Integers in a range**: D. Lemire, \"Fast random integer generation in an interval\", *ACM Transactions on Modeling and Computer Simulation* 29(1), 2019, <https://doi.org/10.1145/3230636> (arXiv:1805.10941). Multiply the word by the bound, keep the high half, and reject the few words whose low half is below 2^64 mod n. As in the paper's nearly divisionless method, that remainder is computed at most once per call, and only once a word's low half is below n. **Doubles**: the top 53 bits of a 64-bit word times 2^−53, as S. Vigna recommends in \"Generating uniform doubles in the unit interval\", <https://prng.di.unimi.it/>. **Stream ranges**: consecutive, equal, disjoint blocks of stream ids, cut with checked 64-bit arithmetic, in which a step past 2^64 − 1 is past the range's last id. A counter-based generator reaches any stream directly from its id (Salmon and others, above), so handing each consumer its own ids is all that independent streams need."
+          },
+          "path": "geom_num::rng",
+          "provenance": [
+            {
+              "licence": "BSD-3-Clause",
+              "link": "https://github.com/DEShawResearch/random123/blob/9545ff6413f258be2f04c1d319d99aaef7521150/include/Random123/philox.h",
+              "method_note": null,
+              "name": "Random123",
+              "pinned": true,
+              "purpose": "for the word order, the multiplier for each word and the order of key steps and rounds of Philox4x32-10, as the authors' reference implementation fixes them. No code copied.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "constant: every function is one comparison or one `match`.",
           "does": null,
           "family": [],
@@ -1534,7 +2205,7 @@
       ],
       "name": "geom-num",
       "provenance": [],
-      "sections": "chapter 6 of the kernel architecture (`projects/engines/geometry/architecture/06-numbers.md`), with the numeric parts of chapters 9 (exactness), 21 (determinism) and 28 (testing).",
+      "sections": "chapter 6 of the kernel architecture (`projects/engines/geometry/architecture/06-numbers.md`), with the numeric parts of chapters 9 (exactness), 21 (determinism) and 28 (testing), and the random generator chapters 16 (free-form) and 17 (survey, terrain and civil) ask of this crate ([`rng`], which also holds the randomised-method rule).",
       "spdx": null,
       "status": null,
       "summary": "Spare Kit geometry kernel: the numbers layer."
@@ -1781,6 +2452,414 @@
       "spdx": null,
       "status": "scaffold only; built by pieces G229, G230.",
       "summary": "Spare Kit geometry kernel: profiles between sketches and the model."
+    },
+    {
+      "chapters": [
+        21,
+        22,
+        23
+      ],
+      "depends": [],
+      "errors": [
+        {
+          "doc": "Why a phase or an operation returned no result. `E` is the error type of the function run; for functions with no errors of their own it is [`Stopped`], the error of a meter's `?`.",
+          "file": "projects/engines/geometry/crates/geom-run/src/error.rs",
+          "kinds": [
+            {
+              "doc": "The function failed on an item: the lowest-numbered failure of any kind, so no item below it failed or went over its cap, whatever the threads and chunks. The one a serial loop meets first.",
+              "name": "Failed",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A deterministic budget ran out (chapter 23.10's phase rule).",
+              "name": "BudgetExceeded",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The caller's cancellation stopped the operation. Not deterministic; never stored.",
+              "name": "Cancelled",
+              "shape": "unit"
+            },
+            {
+              "doc": "The machine refused a large allocation, or a result would not fit in this target's memory at all (a count past `usize::MAX`). Not deterministic across machines; never stored.",
+              "name": "OutOfMemory",
+              "shape": "unit"
+            },
+            {
+              "doc": "An invariant of this crate broke: a bug. Never a panic and never a wrong answer instead.",
+              "name": "Internal",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_run::error",
+          "name": "RunError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why a whole batch call returned no results: a stop that is not deterministic, or a broken invariant of this crate. None of them belongs to one item, and none is ever stored.",
+          "file": "projects/engines/geometry/crates/geom-run/src/error.rs",
+          "kinds": [
+            {
+              "doc": "The caller's cancellation stopped the batch.",
+              "name": "Cancelled",
+              "shape": "unit"
+            },
+            {
+              "doc": "The machine refused a large allocation.",
+              "name": "OutOfMemory",
+              "shape": "unit"
+            },
+            {
+              "doc": "An invariant of this crate broke: a bug. Never a panic and never a wrong answer instead.",
+              "name": "Internal",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_run::error",
+          "name": "Interrupted",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why one item of a batch call has no result (chapter 23.10, \"Batch calls\").",
+          "file": "projects/engines/geometry/crates/geom-run/src/error.rs",
+          "kinds": [
+            {
+              "doc": "The item's own function failed. Belongs to the item.",
+              "name": "Failed",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The item went over its own `per_item` budget. Belongs to the item, so it may be cached as the item's result.",
+              "name": "BudgetExceeded",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The batch's total ran out at or before this item, in key order. Belongs to the batch, not to the item, so it is never cached as the item's result. Every item from the one at which the running sum passed the total, in key order, carries the same failure.",
+              "name": "BatchTotal",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_run::error",
+          "name": "ItemError",
+          "non_exhaustive": false
+        }
+      ],
+      "family": [],
+      "file": "projects/engines/geometry/crates/geom-run/src/lib.rs",
+      "folder": "projects/engines/geometry/crates/geom-run",
+      "invariants": [
+        "Results, failures and budget failures are identical for every pool, thread count and chunk size. The tests check the serial executor against pools of 1 to 512 threads, pools that run tasks backwards, shuffled, twice or not at all, and chunk sizes 1, 7, 64 and 4,096, and a golden hash of a fixed corpus that must be the same on every target (`tests/golden.rs`).",
+        "No thread is started here; no lock, atomic counter, hash map, clock or random source is used.",
+        "No `unsafe`, no panics, no recursion; every allocation that grows with the input is fallible."
+      ],
+      "job": "the one way kernel code spreads work over threads, the budgets every operation runs inside, and the caller's cancellation.",
+      "kind": "kernel",
+      "layer": "1",
+      "modules": [
+        {
+          "cost": "for n items, at most n calls of the function, each with a fresh meter, and one read of the cancellation every [`POLL_EVERY`](crate::POLL_EVERY) items of each chunk. Room for a chunk's results is reserved when the chunk starts, since every item has a result, and the n results are gathered in the order the items run; the items past the crossing that never ran get copies of the one failure. On a pool, at most one wave of chunks past the crossing is run. With a total, add the key sort (`crate::sort`: O(n log n) comparisons, each calling `key` twice, and two buffers of n index–reference pairs, the first kept while the items run), and n slots and the n results again to put the results back in item order.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-run/src/batch.rs",
+          "guarantees": [
+            "An item's own result is computed from the item alone, under a fresh meter capped at `per_item`; only the batch-total rule looks at other items, and only at the ones before it in key order.",
+            "The result has exactly one entry per item, in item order. A broken count is [`Interrupted::Internal`], never a short or misplaced result."
+          ],
+          "job": "Batch calls with one result per item: `map_each` under the batch rule.",
+          "method": {
+            "links": [
+              "https://github.com/rayon-rs/rayon/blob/ee0a00bdb1ab039e178a215ad5712fb7fa58e58f/src/iter/mod.rs#L1675-L1680"
+            ],
+            "text": "the batch rule of chapter 23.10, decided by a serial walk over results in key order, as for phases (`crate::phase`): the first crossing in key order, however the work was split, as rayon's `find_first` returns the first match in input order (<https://github.com/rayon-rs/rayon/blob/ee0a00bdb1ab039e178a215ad5712fb7fa58e58f/src/iter/mod.rs#L1675-L1680>)."
+          },
+          "path": "geom_run::batch",
+          "provenance": [
+            {
+              "licence": "MIT OR Apache-2.0",
+              "link": "https://github.com/rayon-rs/rayon/blob/ee0a00bdb1ab039e178a215ad5712fb7fa58e58f/src/iter/mod.rs#L1675-L1680",
+              "method_note": null,
+              "name": "rayon",
+              "pinned": true,
+              "purpose": "for the lowest-index rule of `find_first`, which this crate applies to failures. No code copied.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "every value here is a few machine words, and every operation a fixed number of integer additions and comparisons; nothing allocates.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-run/src/budget.rs",
+          "guarantees": [
+            "Every limit is a whole number, and every comparison with a limit is exact: totals are `u128` and saturate rather than wrap. A saturated total is below the true sum but still above every `u64` limit, so each comparison with a limit gives the verdict the true sum would.",
+            "Work is checked before logical bytes wherever both pass a limit, so the kind reported is fixed."
+          ],
+          "job": "Budgets: limits in work units and logical bytes, what was used, and where it is checked.",
+          "method": {
+            "links": [
+              "https://docs.rs/wasmtime/50.0.0/wasmtime/struct.Config.html#method.consume_fuel"
+            ],
+            "text": "deterministic work accounting as chapter 23.10 defines it. It is the split Wasmtime makes between fuel, which stops runaway code deterministically, and epoch interruption, which does not (<https://docs.rs/wasmtime/50.0.0/wasmtime/struct.Config.html#method.consume_fuel>): here the budget is the fuel and the caller's [`Cancel`](crate::Cancel) the interruption."
+          },
+          "path": "geom_run::budget",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a [`CancelToken`] is one atomic flag; [`CancelToken::cancel`] is one relaxed store, and each read one relaxed load. Nothing allocates. What another [`Cancel`] costs is the caller's.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-run/src/cancel.rs",
+          "guarantees": [
+            "A [`CancelToken`] is a latch: once cancelled it stays cancelled.",
+            "Reading it is one atomic load, cheap enough to do before every chunk."
+          ],
+          "job": "Cooperative cancellation: the caller's way to stop an operation.",
+          "method": {
+            "links": [
+              "https://learn.microsoft.com/en-us/dotnet/standard/threading/cancellation-in-managed-threads"
+            ],
+            "text": "cooperative cancellation by a shared flag polled at fixed points, as in chapter 23.10 (\"Polling\") and in the cancellation-token pattern of .NET's `CancellationToken` (<https://learn.microsoft.com/en-us/dotnet/standard/threading/cancellation-in-managed-threads>). It never unwinds: WebAssembly builds cannot catch an unwinding panic."
+          },
+          "path": "geom_run::cancel",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the errors are plain values of a few machine words, plus the function's own error; making one never allocates, and `Display` writes straight to the formatter.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-run/src/error.rs",
+          "guarantees": [
+            "[`RunError::Failed`] and [`RunError::BudgetExceeded`] are the same, field for field, on every machine, thread count and chunk size; [`RunError::Cancelled`] and [`RunError::OutOfMemory`] are never stored, logged or cached; and [`RunError::Internal`] reports a broken invariant instead of a panic or a wrong answer."
+          ],
+          "job": "Why a phase, an operation or a batch item returned no result.",
+          "method": {
+            "links": [
+              "https://github.com/rayon-rs/rayon/blob/ee0a00bdb1ab039e178a215ad5712fb7fa58e58f/src/iter/mod.rs#L1675-L1680"
+            ],
+            "text": "the lowest-index rule of rayon's `find_first`, which returns the first match in input order however the work was split (<https://github.com/rayon-rs/rayon/blob/ee0a00bdb1ab039e178a215ad5712fb7fa58e58f/src/iter/mod.rs#L1675-L1680>), applied to failures, and chapter 22's error kinds and remedies."
+          },
+          "path": "geom_run::error",
+          "provenance": [
+            {
+              "licence": "MIT OR Apache-2.0",
+              "link": "https://github.com/rayon-rs/rayon/blob/ee0a00bdb1ab039e178a215ad5712fb7fa58e58f/src/iter/mod.rs#L1675-L1680",
+              "method_note": null,
+              "name": "rayon",
+              "pinned": true,
+              "purpose": "for the lowest-index rule of `find_first`, which this crate applies to failures. No code copied.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "for n items in c chunks, [`map`](Exec::map), [`try_map`](Exec::try_map), [`find_first`](Exec::find_first) and [`filter_ordered`](Exec::filter_ordered) make at most n calls of the function, each with a fresh meter of a few words, and read the cancellation once per [`POLL_EVERY`](crate::POLL_EVERY) items of each chunk; they allocate their result as items run and, on a pool, the bookkeeping of one wave (`crate::pool`). [`map_each`](Exec::map_each) costs the same, with one result per item, plus a sort by key when the batch has a total (`crate::batch`). [`scan_exclusive`](Exec::scan_exclusive) makes 2n + c additions; [`count_then_fill`](Exec::count_then_fill) is two phases and a scan (`crate::scan`); [`sort_stable`](Exec::sort_stable) makes O(n log n) comparisons and holds 2n index–reference pairs (`crate::sort`). A call made inside an item costs what it costs at its own level, and is charged to the item's meter.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-run/src/exec.rs",
+          "guarantees": [
+            "Every answer is decided by a serial walk over chunk results in index order (`crate::phase`; for a batch's total, in key order, `crate::batch`), so it cannot depend on the pool, the thread count or the order chunks finished in.",
+            "Every allocation the helper makes that grows with the input is fallible, so a refused one is [`RunError::OutOfMemory`], never an abort; and a phase whose items may stop early reserves room only as its items run (amortised doubling, so at most about twice what they need), never for the whole input up front.",
+            "No `unsafe`, no panics, no recursion, no lock, no atomic counter."
+          ],
+          "job": "The helper: the one way kernel code spreads work over threads (architecture chapter 23.4).",
+          "method": {
+            "links": [
+              "https://github.com/rayon-rs/rayon/blob/ee0a00bdb1ab039e178a215ad5712fb7fa58e58f/src/iter/mod.rs#L1675-L1680",
+              "https://www.openmp.org/spec-html/5.2/openmp.html",
+              "https://github.com/dimforge/rapier/blob/475caa3ff4646fd9a796b67d14116256f4962bc7/crates/rapier3d/tests/thread_count_determinism.rs#L274-L295"
+            ],
+            "text": "the deterministic parallel helper of chapter 23.4, after rayon's indexed parallel iterators, which keep input order when collecting and report the first match in input order (<https://github.com/rayon-rs/rayon/blob/ee0a00bdb1ab039e178a215ad5712fb7fa58e58f/src/iter/mod.rs#L1675-L1680>), but without rayon's unordered `sum`, `reduce` and `fold`, whose grouping is unspecified (evidence note 05, section 7); fixed-size chunks as in the chunk-size form of OpenMP's worksharing-loop `schedule` clause (OpenMP API 5.2, section 11.5.3, <https://www.openmp.org/spec-html/5.2/openmp.html>); and thread-count determinism tested as Rapier tests it (<https://github.com/dimforge/rapier/blob/475caa3ff4646fd9a796b67d14116256f4962bc7/crates/rapier3d/tests/thread_count_determinism.rs#L274-L295>)."
+          },
+          "path": "geom_run::exec",
+          "provenance": [
+            {
+              "licence": "MIT OR Apache-2.0",
+              "link": "https://github.com/rayon-rs/rayon/blob/ee0a00bdb1ab039e178a215ad5712fb7fa58e58f/src/iter/mod.rs#L1675-L1680",
+              "method_note": null,
+              "name": "rayon",
+              "pinned": true,
+              "purpose": "for the lowest-index rule of `find_first`, and its indexed iterators' input order. No code copied.",
+              "take": "port-method"
+            },
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/dimforge/rapier/blob/475caa3ff4646fd9a796b67d14116256f4962bc7/crates/rapier3d/tests/thread_count_determinism.rs#L274-L295",
+              "method_note": null,
+              "name": "Rapier",
+              "pinned": true,
+              "purpose": "for how it tests that results do not depend on the thread count. No code copied.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a meter is a few machine words and never allocates. Each charge or reservation is one `u128` addition and comparison, plus one call of the caller's [`Cancel::requested`] every [`POLL_EVERY`] charges; [`WorkMeter::poll`] makes that call at once.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-run/src/meter.rs",
+          "guarantees": [
+            "A meter that has not stopped has used no more than its cap of either kind.",
+            "A stop is never undone, and the first stop is the one kept.",
+            "Cancellation is read every [`POLL_EVERY`] charges, counted from the meter's creation, and whenever [`WorkMeter::poll`] is called: fixed points, whatever the timing."
+          ],
+          "job": "The work meter: counts work units and logical bytes against a cap, and polls the caller's cancellation at fixed intervals (architecture chapter 23.10).",
+          "method": {
+            "links": [
+              "https://docs.rs/wasmtime/50.0.0/wasmtime/struct.Config.html#method.consume_fuel",
+              "https://learn.microsoft.com/en-us/dotnet/standard/threading/cancellation-in-managed-threads"
+            ],
+            "text": "fuel metering with periodic interruption checks, as Wasmtime separates fuel (counted, deterministic) from epoch interruption (polled at fixed points, not deterministic) (<https://docs.rs/wasmtime/50.0.0/wasmtime/struct.Config.html#method.consume_fuel>), and cooperative cancellation polled at fixed points as in .NET's `CancellationToken` (<https://learn.microsoft.com/en-us/dotnet/standard/threading/cancellation-in-managed-threads>)."
+          },
+          "path": "geom_run::meter",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "per item, one fresh meter (a few words, no allocation), one call of the function and, for a value kept, an amortised push onto its chunk's list; per chunk, one task and one read of the cancellation every [`POLL_EVERY`] items. The walk appends each chunk's list to the result in index order, so a kept value is moved twice. Nothing else is allocated but the pool's wave bookkeeping (`crate::pool`).",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-run/src/phase.rs",
+          "guarantees": [
+            "Every item runs under a fresh meter capped at R, so an item's verdict never depends on the other items or on how they were chunked.",
+            "The meter, not the item's return value, says whether an item stopped.",
+            "Results are gathered in index order; a chunk result missing from a wave is computed on the calling thread, so the walk never skips one."
+          ],
+          "job": "The engine under every helper call: run a phase's items chunk by chunk, then decide the answer as a serial loop would.",
+          "method": {
+            "links": [
+              "https://github.com/rayon-rs/rayon/blob/ee0a00bdb1ab039e178a215ad5712fb7fa58e58f/src/iter/mod.rs#L1675-L1680"
+            ],
+            "text": "the serial-equivalence rule of chapter 23.4 (\"Ordered results\", \"Ordered errors\": the error reported is the lowest-numbered failure, as in rayon's `find_first`, <https://github.com/rayon-rs/rayon/blob/ee0a00bdb1ab039e178a215ad5712fb7fa58e58f/src/iter/mod.rs#L1675-L1680>) and the phase rule of chapter 23.10."
+          },
+          "path": "geom_run::phase",
+          "provenance": [
+            {
+              "licence": "MIT OR Apache-2.0",
+              "link": "https://github.com/rayon-rs/rayon/blob/ee0a00bdb1ab039e178a215ad5712fb7fa58e58f/src/iter/mod.rs#L1675-L1680",
+              "method_note": null,
+              "name": "rayon",
+              "pinned": true,
+              "purpose": "for the lowest-index rule of `find_first`, which this crate applies to failures. No code copied.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a plan is one machine word. [`ChunkPlan::count`], [`ChunkPlan::chunk`] and each step of [`Chunks`] are a fixed number of integer operations; nothing allocates.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-run/src/plan.rs",
+          "guarantees": [
+            "Every chunk holds at least one item; only the last chunk of a problem may hold fewer than the chunk size.",
+            "Chunks are contiguous, in index order, and together cover every item exactly once.",
+            "No arithmetic here can overflow, whatever the length and size, including `usize::MAX`."
+          ],
+          "job": "Chunk plans: where a problem of a given size is cut into chunks.",
+          "method": {
+            "links": [
+              "https://doc.rust-lang.org/core/primitive.slice.html#method.chunks",
+              "https://www.openmp.org/spec-html/5.2/openmp.html"
+            ],
+            "text": "fixed-size static chunking, the boundaries of Rust's own [`slice::chunks`] (<https://doc.rust-lang.org/core/primitive.slice.html#method.chunks>) and of the chunk-size form of OpenMP's worksharing-loop `schedule` clause (OpenMP API 5.2, section 11.5.3, <https://www.openmp.org/spec-html/5.2/openmp.html>). The tests check the boundaries against `slice::chunks` for every size and length they try."
+          },
+          "path": "geom_run::plan",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a phase of c chunks runs in at most 7 + ⌈c / `WAVE_MAX`⌉ waves (six doublings from `WAVE_FIRST` reach `WAVE_MAX`). Each wave of w chunks costs two lists of w entries (the tasks and the handles passed to the pool) and one barrier; the slots of the current wave, each a chunk's payload and output, are the only other storage. With no pool there is no list and no barrier: each chunk runs just before it is read.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-run/src/pool.rs",
+          "guarantees": [
+            "Whatever a pool does, the answer is right. A task run twice writes its slot once (a filled slot is skipped); a task never run is run on the calling thread when its result is read. Only a panic inside the pool escapes, and pools must not panic.",
+            "Results are read in index order, never in the order tasks finished."
+          ],
+          "job": "Threads come from the caller: the [`Pool`] trait, and how the helper hands a pool its work.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/79173.79181"
+            ],
+            "text": "the superstep of Valiant's bulk-synchronous parallel model (\"A bridging model for parallel computation\", Communications of the ACM 33(8), 1990, <https://doi.org/10.1145/79173.79181>): independent work, a barrier, then a serial step that reads the results. No atomic counter, lock or shared mutable state is used; each task writes only its own slot."
+          },
+          "path": "geom_run::pool",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "for n counts in c chunks, `scan_exclusive` makes n checked additions to sum the chunks, c to turn the sums into bases and n to write the offsets; it reads the cancellation once per chunk in each pass and allocates the n offsets and the c bases. `count_then_fill` adds a count phase and a fill phase (n calls each, as in `crate::phase`) and room for the n counts. Each item's outputs are made in a buffer of exactly its count, with one `U::default()` per output, then moved onto its chunk's outputs and those onto the result.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-run/src/scan.rs",
+          "guarantees": [
+            "Offsets are exact. A total past `usize::MAX` is [`RunError::OutOfMemory`]: no result of that size can exist on this target, and the limit differs between 32-bit and 64-bit targets, so the failure is never stored.",
+            "`count_then_fill` gives each item a slice of exactly the length it counted, so no item can write outside its own range."
+          ],
+          "job": "Exclusive prefix sums of counts, and `count_then_fill`: how new entities get their indices.",
+          "method": {
+            "links": [
+              "https://www.cs.cmu.edu/~guyb/papers/Ble93.pdf"
+            ],
+            "text": "the parallel scan in its blocked form, for fewer processors than elements (sum each block, scan the block sums, then scan within each block from its base), and its use to give each element its output positions, as in Blelloch, \"Prefix Sums and Their Applications\" (Technical Report CMU-CS-90-190, Carnegie Mellon University, 1990; the 1993 book-chapter version is at <https://www.cs.cmu.edu/~guyb/papers/Ble93.pdf>)."
+          },
+          "path": "geom_run::scan",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "for n items in chunks of s, at most n · (⌈log₂ s⌉ + ⌈log₂ ⌈n / s⌉⌉) comparisons, so O(n log n), each calling `key` twice; two buffers of n (index, reference) pairs and the result of n indices; one read of the cancellation per chunk and per merge.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-run/src/sort.rs",
+          "guarantees": [
+            "Every merge writes each element of its two runs exactly once into a destination of exactly their combined length, so the result is always a permutation of the indices.",
+            "No recursion: every loop is bounded by the number of items."
+          ],
+          "job": "`sort_stable`: the stable sorted order of items by a total key, the same whatever the chunks.",
+          "method": {
+            "links": [
+              "https://www-cs-faculty.stanford.edu/~knuth/taocp.html"
+            ],
+            "text": "bottom-up two-way merge sort (Knuth, The Art of Computer Programming, volume 3, 2nd edition, 1998, section 5.2.4, \"Sorting by merging\", straight two-way merging; the book's page is <https://www-cs-faculty.stanford.edu/~knuth/taocp.html>), first within chunks, then across them. Written here rather than taken from `core`'s sorts so that nothing allocates infallibly and no comparison, even of an `Ord` that breaks its contract, can make the helper panic."
+          },
+          "path": "geom_run::sort",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
+      "name": "geom-run",
+      "provenance": [
+        {
+          "licence": "MIT OR Apache-2.0",
+          "link": "https://github.com/rayon-rs/rayon/blob/ee0a00bdb1ab039e178a215ad5712fb7fa58e58f/src/iter/mod.rs#L1675-L1680",
+          "method_note": null,
+          "name": "rayon",
+          "pinned": true,
+          "purpose": "for the lowest-index rule of `find_first`, which this crate applies to failures. No code copied.",
+          "take": "port-method"
+        }
+      ],
+      "sections": "chapters 23.4 (deterministic parallelism: one helper) and 23.10 (budgets and cancellation), with the determinism rules of chapter 21 and the error kinds of chapter 22 (`projects/engines/geometry/architecture/`).",
+      "spdx": null,
+      "status": null,
+      "summary": "Spare Kit geometry kernel: the parallel helper, budgets and cancellation."
     },
     {
       "chapters": [
@@ -2577,26 +3656,11 @@
       "problem": "the record for CGAL `FPU.h` reads code under LGPL-3.0-or-later OR LicenseRef-Commercial, which chapter 29.2 allows only under the method-only procedure (29.20, rule 6): add a \"Method note: `projects/engines/geometry/methods/<note>.md`\" line naming its note",
       "reason": "G02 read CGAL's FPU.h, under LGPL-3.0-or-later, before the method-only procedure's notes had a home. Build piece G16 (provenance, notices and method notes) creates projects/engines/geometry/methods/, takes this record through 29.20 rule 6 (a note in plain words and a second reviewer) or replaces the source with the permissive Geogram record beside it, and deletes this entry.",
       "rule": "Consulted"
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/lib.rs",
-      "problem": "no sentence opens with \"Layer: \" and the crate's layer: a number from 1 to 13 of chapter 27's layer table, or Development",
-      "reason": "geom-num's header predates chapter 27's layer table. The scaffold check in engine-geometry (tests/scaffold/table.rs, HEADER_GAPS) records the same gap and fails when it closes, so the Layer line can only be added together with deleting that entry; the next piece allowed to edit both adds \"Layer: 1, Numbers and the contract\" to geom-num's lib.rs and deletes this entry and that one.",
-      "rule": "Layer"
     }
   ],
   "generated_by": "cargo run -p geom-test --bin map -- write",
   "grammar": "projects/engines/geometry/HEADERS.md",
-  "pending": [
-    {
-      "folder": "projects/engines/geometry/architecture/",
-      "reason": "The kernel architecture's chapters, which the modules' methods cite, are written by piece G01 on its own branch (piece/G01) and are not yet merged into the kernel's base branch; they arrive when G01 merges."
-    },
-    {
-      "folder": "projects/kit/notes/G01-evidence/",
-      "reason": "G01's evidence reports, which test generators cite, are on piece G01's branch with the chapters and arrive when G01 merges."
-    }
-  ],
+  "pending": [],
   "sources": [
     {
       "licence": "MIT",
@@ -2607,6 +3671,50 @@
       "take": "depend",
       "used_by": [
         "projects/engines/geometry/crates/geom-num/Cargo.toml"
+      ]
+    },
+    {
+      "licence": "MIT",
+      "link": "https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/atan2/atan2.c",
+      "method_note": null,
+      "name": "CORE-MATH `src/binary64/atan2/atan2.c` and `src/binary64/atan2/tint.h` at commit `0ce0cbc15935e24c656280e5a46c34e89f301b7a`, by Paul Zimmermann and Alexei Sibidanov, with the help of Silviu-Ioan Filip, who designed the code that generates its rational approximation of `atan`",
+      "pinned": true,
+      "take": "port",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-num/src/math/atan2.rs"
+      ]
+    },
+    {
+      "licence": "MIT",
+      "link": "https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/exp/exp.c",
+      "method_note": null,
+      "name": "CORE-MATH `src/binary64/exp/exp.c` at commit `0ce0cbc15935e24c656280e5a46c34e89f301b7a`, by Alexei Sibidanov",
+      "pinned": true,
+      "take": "port",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-num/src/math/exp.rs"
+      ]
+    },
+    {
+      "licence": "MIT",
+      "link": "https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/log/log.c",
+      "method_note": null,
+      "name": "CORE-MATH `src/binary64/log/log.c` and `src/binary64/log/dint.h` at commit `0ce0cbc15935e24c656280e5a46c34e89f301b7a`, by Paul Zimmermann and Tom Hubrecht (log.c) and Tom Hubrecht (dint.h, from his correctly rounded `pow`)",
+      "pinned": true,
+      "take": "port",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-num/src/math/log.rs"
+      ]
+    },
+    {
+      "licence": "MIT",
+      "link": "https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/sinpi/sinpi.c",
+      "method_note": null,
+      "name": "CORE-MATH `src/binary64/sinpi/sinpi.c` and `src/binary64/cospi/cospi.c` at commit `0ce0cbc15935e24c656280e5a46c34e89f301b7a`, by Alexei Sibidanov",
+      "pinned": true,
+      "take": "port",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs"
       ]
     },
     {
@@ -2629,6 +3737,28 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-num/src/interval.rs"
+      ]
+    },
+    {
+      "licence": "BSD-3-Clause",
+      "link": "https://github.com/DEShawResearch/random123/blob/9545ff6413f258be2f04c1d319d99aaef7521150/include/Random123/philox.h",
+      "method_note": null,
+      "name": "Random123",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-num/src/rng.rs"
+      ]
+    },
+    {
+      "licence": "MIT",
+      "link": "https://github.com/OSGeo/PROJ/blob/5fa31c29f0a806568ed7bc76c1a557604db4a804/data/sql/projected_crs.sql",
+      "method_note": null,
+      "name": "PROJ (its copy of the EPSG dataset, whose own terms of use cover the data)",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-math/src/frame.rs"
       ]
     },
     {
@@ -2665,25 +3795,14 @@
       ]
     },
     {
-      "licence": "BSD-2-Clause",
-      "link": "https://github.com/freebsd/freebsd-src/blob/c6d7a2478c9eeb38ed1284e4ee1ff64c75ca8b09/lib/msun/src/s_cospi.c",
+      "licence": "Apache-2.0",
+      "link": "https://github.com/dimforge/rapier/blob/475caa3ff4646fd9a796b67d14116256f4962bc7/crates/rapier3d/tests/thread_count_determinism.rs",
       "method_note": null,
-      "name": "FreeBSD `msun` `s_cospi.c`",
+      "name": "Rapier",
       "pinned": true,
       "take": "port-method",
       "used_by": [
-        "projects/engines/geometry/crates/geom-num/src/math.rs"
-      ]
-    },
-    {
-      "licence": "BSD-2-Clause",
-      "link": "https://github.com/freebsd/freebsd-src/blob/c6d7a2478c9eeb38ed1284e4ee1ff64c75ca8b09/lib/msun/src/s_sinpi.c",
-      "method_note": null,
-      "name": "FreeBSD `msun` `s_sinpi.c`",
-      "pinned": true,
-      "take": "port-method",
-      "used_by": [
-        "projects/engines/geometry/crates/geom-num/src/math.rs"
+        "projects/engines/geometry/crates/geom-run/src/exec.rs"
       ]
     },
     {
@@ -2706,6 +3825,21 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-test/src/map/links.rs"
+      ]
+    },
+    {
+      "licence": "MIT OR Apache-2.0",
+      "link": "https://github.com/rayon-rs/rayon/blob/ee0a00bdb1ab039e178a215ad5712fb7fa58e58f/src/iter/mod.rs",
+      "method_note": null,
+      "name": "rayon",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-run/src/batch.rs",
+        "projects/engines/geometry/crates/geom-run/src/error.rs",
+        "projects/engines/geometry/crates/geom-run/src/exec.rs",
+        "projects/engines/geometry/crates/geom-run/src/lib.rs",
+        "projects/engines/geometry/crates/geom-run/src/phase.rs"
       ]
     },
     {

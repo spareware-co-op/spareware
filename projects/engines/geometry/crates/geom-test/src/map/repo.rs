@@ -42,8 +42,8 @@ use std::path::{Path, PathBuf};
 use crate::map::header::Header;
 use crate::map::links::{self, LinkKind};
 use crate::map::{
-    CRATES_DIR, CrateInput, FACADE_DIR, Gap, Generated, Input, MAP_FILE, PENDING, Problem, Rule,
-    SourceFile, build, compare, is_facade,
+    CRATES_DIR, CrateInput, FACADE_DIR, Gap, Generated, Input, MAP_FILE, PENDING, Pending, Problem,
+    Rule, SourceFile, build, compare, is_facade,
 };
 
 /// The deepest folder under `src/` that is read.
@@ -236,12 +236,22 @@ fn crates_in(
 }
 
 /// Reads every crate folder of the workspace at `root`: the kernel's, and the facade's when the
-/// workspace has the shared engines' folder.
+/// workspace has the shared engines' folder. The pending folders are [`PENDING`].
 ///
 /// # Errors
 ///
 /// [`MapError`] if a folder cannot be listed or a file cannot be read.
 pub fn read(root: &Path) -> Result<Input, MapError> {
+    read_with(root, PENDING)
+}
+
+/// [`read`] with `pending` as the folders still to arrive, so a test can exercise the rule with a
+/// list of its own while [`PENDING`] is empty.
+///
+/// # Errors
+///
+/// [`MapError`] if a folder cannot be listed or a file cannot be read.
+pub fn read_with(root: &Path, pending: &[Pending]) -> Result<Input, MapError> {
     let mut unreadable = Vec::new();
     let mut crates = crates_in(root, CRATES_DIR, |_| true, &mut unreadable)?;
     if root.join(FACADE_DIR).is_dir() {
@@ -266,7 +276,7 @@ pub fn read(root: &Path) -> Result<Input, MapError> {
         .into_iter()
         .filter(|path| exists_exactly(root, path))
         .collect();
-    let pending = PENDING
+    let pending = pending
         .iter()
         .filter(|p| !exists_exactly(root, p.folder))
         .copied()
@@ -279,9 +289,9 @@ pub fn read(root: &Path) -> Result<Input, MapError> {
     })
 }
 
-/// A problem for every entry of [`PENDING`] whose folder the workspace at `root` now holds.
-fn stale_pending(root: &Path) -> Vec<Problem> {
-    PENDING
+/// A problem for every entry of `pending` whose folder the workspace at `root` now holds.
+fn stale_pending(root: &Path, pending: &[Pending]) -> Vec<Problem> {
+    pending
         .iter()
         .filter(|p| exists_exactly(root, p.folder))
         .map(|p| Problem {
@@ -313,9 +323,22 @@ fn committed(root: &Path) -> Result<Option<String>, MapError> {
 ///
 /// [`MapError`] if a folder or file cannot be read.
 pub fn check(root: &Path, gaps: &[Gap]) -> Result<Vec<Problem>, MapError> {
-    let Generated { text, mut problems } = build(&read(root)?, gaps);
+    check_with(root, gaps, PENDING)
+}
+
+/// [`check`] with `pending` as the folders still to arrive (see [`read_with`]).
+///
+/// # Errors
+///
+/// [`MapError`] if a folder or file cannot be read.
+pub fn check_with(
+    root: &Path,
+    gaps: &[Gap],
+    pending: &[Pending],
+) -> Result<Vec<Problem>, MapError> {
+    let Generated { text, mut problems } = build(&read_with(root, pending)?, gaps);
     problems.extend(compare(committed(root)?.as_deref(), &text));
-    problems.extend(stale_pending(root));
+    problems.extend(stale_pending(root, pending));
     problems.sort();
     Ok(problems)
 }
@@ -327,8 +350,21 @@ pub fn check(root: &Path, gaps: &[Gap]) -> Result<Vec<Problem>, MapError> {
 ///
 /// [`MapError`] if a folder or file cannot be read, or the map cannot be written.
 pub fn write(root: &Path, gaps: &[Gap]) -> Result<(Vec<Problem>, bool), MapError> {
-    let Generated { text, mut problems } = build(&read(root)?, gaps);
-    problems.extend(stale_pending(root));
+    write_with(root, gaps, PENDING)
+}
+
+/// [`write`] with `pending` as the folders still to arrive (see [`read_with`]).
+///
+/// # Errors
+///
+/// [`MapError`] if a folder or file cannot be read, or the map cannot be written.
+pub fn write_with(
+    root: &Path,
+    gaps: &[Gap],
+    pending: &[Pending],
+) -> Result<(Vec<Problem>, bool), MapError> {
+    let Generated { text, mut problems } = build(&read_with(root, pending)?, gaps);
+    problems.extend(stale_pending(root, pending));
     problems.sort();
     let path = root.join(MAP_FILE);
     let current = fs::read(&path).ok();

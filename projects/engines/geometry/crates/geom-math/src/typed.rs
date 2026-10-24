@@ -19,6 +19,11 @@
 //! records. Classification is exact for the exact and rational variants and certified for the
 //! certified one (see [`crate::transform`]).
 //!
+//! Guarantees: every [`TypedTransform::apply`] returns a [`Rounded`] point, the exact image rounded
+//! once to the nearest step, ties to even, with whether it was already exact; composition keeps
+//! the most exact variant both operands allow and records a change of variant; classification is
+//! exact for the exact and rational variants and certified for the certified one.
+//!
 //! Method: the hierarchy of transformation groups (isometries, similarities, affinities) of
 //! R. Hartley and A. Zisserman, *Multiple View Geometry in Computer Vision*, 2nd ed., Cambridge
 //! University Press (2004), section 2.4, <https://doi.org/10.1017/CBO9780511811685>, with each

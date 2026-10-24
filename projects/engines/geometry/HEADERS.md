@@ -245,12 +245,11 @@ Operations and geometry kinds, which chapter 26.3 also asks the map to list, joi
 
 ## Known gaps and pending folders
 
-A problem that cannot be fixed in the piece that finds it is listed in `geom_test::map::GAPS` with its file, its rule, its exact message and its reason, and the piece that closes it, the way the scaffold check lists its header gaps. A listed gap hides that one problem and no other (a different problem in the same file and rule is still reported), `MAP.json` shows it, and a gap that no longer occurs fails the check, so the list cannot outlive its reason. Today there are two:
+A problem that cannot be fixed in the piece that finds it is listed in `geom_test::map::GAPS` with its file, its rule, its exact message and its reason, and the piece that closes it, the way the scaffold check lists its header gaps. A listed gap hides that one problem and no other (a different problem in the same file and rule is still reported), `MAP.json` shows it, and a gap that no longer occurs fails the check, so the list cannot outlive its reason. Today there is one (geom-num's missing `Layer` line, the other gap first listed here, closed when piece G09 added the line and deleted the scaffold check's matching record):
 
-- `projects/engines/geometry/crates/geom-num/src/lib.rs` has no `Layer` line, because the scaffold check records the same gap and fails if the line appears before that record is deleted.
 - `projects/engines/geometry/crates/geom-num/src/interval.rs` credits CGAL's `FPU.h`, under `LGPL-3.0-or-later OR LicenseRef-Commercial`, without a method note: G02 read it before the method-only procedure's notes had a home. Build piece G16, which creates `projects/engines/geometry/methods/`, takes the record through rule 6 or replaces the source with the permissive Geogram record beside it.
 
-A folder the headers link into that this tree does not hold yet is listed in `geom_test::map::PENDING` with the piece that brings it. While the folder is absent, links into it are not checked for existence; once it exists, every link into it must resolve and the entry fails the check until it is deleted. Today: `projects/engines/geometry/architecture/` and `projects/kit/notes/G01-evidence/`, the kernel architecture's chapters and G01's evidence, which piece G01 wrote on its own branch and which arrive when it merges.
+A folder the headers link into that this tree does not hold yet is listed in `geom_test::map::PENDING` with the piece that brings it. While the folder is absent, links into it are not checked for existence; once it exists, every link into it must resolve and the entry fails the check until it is deleted. Today there are none: the two first listed, `projects/engines/geometry/architecture/` and `projects/kit/notes/G01-evidence/` (the kernel architecture's chapters and G01's evidence, written on piece G01's branch), arrived when G01 merged, and every link into them is now checked.
 
 ## Sources
 

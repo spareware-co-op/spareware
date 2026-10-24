@@ -54,8 +54,15 @@
 //! <https://www.openmp.org/spec-html/5.2/openmp.html>); and thread-count determinism tested as
 //! Rapier tests it
 //! (<https://github.com/dimforge/rapier/blob/475caa3ff4646fd9a796b67d14116256f4962bc7/crates/rapier3d/tests/thread_count_determinism.rs#L274-L295>).
+//! Consulted: rayon, MIT OR Apache-2.0,
+//!   <https://github.com/rayon-rs/rayon/blob/ee0a00bdb1ab039e178a215ad5712fb7fa58e58f/src/iter/mod.rs#L1675-L1680>,
+//!   for the lowest-index rule of `find_first`, and its indexed iterators' input order. No code
+//!   copied.
+//! Consulted: Rapier, Apache-2.0,
+//!   <https://github.com/dimforge/rapier/blob/475caa3ff4646fd9a796b67d14116256f4962bc7/crates/rapier3d/tests/thread_count_determinism.rs#L274-L295>,
+//!   for how it tests that results do not depend on the thread count. No code copied.
 //!
-//! Cost, for n items in c chunks: [`map`](Exec::map), [`try_map`](Exec::try_map),
+//! Cost: for n items in c chunks, [`map`](Exec::map), [`try_map`](Exec::try_map),
 //! [`find_first`](Exec::find_first) and [`filter_ordered`](Exec::filter_ordered) make at most n
 //! calls of the function, each with a fresh meter of a few words, and read the cancellation once
 //! per [`POLL_EVERY`](crate::POLL_EVERY) items of each chunk; they allocate their result as items

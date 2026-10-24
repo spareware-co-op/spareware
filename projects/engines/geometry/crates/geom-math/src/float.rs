@@ -35,7 +35,7 @@
 //! Method: IEEE 754-2019 binary64 basic operations, round to nearest, ties to even, and its
 //! scaleB (<https://doi.org/10.1109/IEEESTD.2019.8766229>), under Rust's floating-point semantics,
 //! which guarantee those results on every supported target and forbid implicit contraction (Rust
-//! RFC 3514, <https://github.com/rust-lang/rfcs/blob/master/text/3514-float-semantics.md>); the
+//! RFC 3514, <https://rust-lang.github.io/rfcs/3514-float-semantics.html>); the
 //! scaling before squaring is the classic remedy for overflow and underflow in Euclidean norms
 //! (J. L. Blue, "A portable Fortran program to find the Euclidean norm of a vector", *ACM
 //! Transactions on Mathematical Software* 4(1) (1978), 15–23,
