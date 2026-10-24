@@ -265,6 +265,12 @@ fn rules(ledger: &Ledger) -> Vec<(String, Rule)> {
 fn one_problem(ledger: &Ledger, file: &str, rule: Rule, needle: &str) {
     assert_eq!(ledger.problems.len(), 1, "{:#?}", ledger.problems);
     let p = &ledger.problems[0];
+    // A message is one line of prose: a string broken over source lines without its `\`
+    // continuation would carry the next line's indentation into it.
+    assert!(
+        !p.message.contains("  ") && !p.message.contains('\n'),
+        "a malformed message: {p:#?}"
+    );
     assert!(
         p.file.ends_with(file) && p.rule == rule && p.message.contains(needle),
         "expected {rule:?} in {file} saying {needle:?}: {p:#?}"

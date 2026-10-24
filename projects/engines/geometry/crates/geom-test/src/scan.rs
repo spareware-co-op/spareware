@@ -31,8 +31,9 @@
 //!   phrase ([`markers::TAKING`], its two words at most [`markers::TAKING_GAP`] words apart)
 //!   followed within [`markers::WINDOW`] words by a copyleft source's
 //!   name ([`markers::COPYLEFT_SOURCES`]), with no negation in the [`markers::NEGATION_REACH`]
-//!   words before the phrase and in the same sentence, so "no code is taken from OCCT" is not a
-//!   hit, and "based on CGAL's widening" and "No tests. Taken from CGAL." are.
+//!   words before the phrase and in the same clause (a clause ends at `.`, `!`, `?`, `;`, `:` or
+//!   `,`), so "no code is taken from OCCT" is not a hit, and "based on CGAL's widening", "No
+//!   tests. Taken from CGAL." and "Not tested: adapted from CGAL" are.
 //! - **Each hit names its line, category and marker**, in the order they occur; one marker on one
 //!   line is reported once.
 //! - **Words, not meaning.** A marker spelt with look-alike characters, split by punctuation
@@ -144,30 +145,31 @@ impl fmt::Display for Hit {
     }
 }
 
-/// A run of word characters in a text, with the line it is on and the sentence it is in.
+/// A run of word characters in a text, with the line it is on and the clause it is in.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Word<'t> {
     text: &'t str,
     line: usize,
-    /// How many sentence marks ([`SENTENCE_MARKS`]) come before it in the text, so two words
-    /// with the same count are in one sentence.
-    sentence: usize,
+    /// How many clause marks ([`CLAUSE_MARKS`]) come before it in the text, so two words with
+    /// the same count are in one clause.
+    clause: usize,
 }
 
 /// The characters that end a sentence or a clause, for the reach of a negation: a negation in an
-/// earlier sentence never cancels a taking phrase. A mark that ends no sentence (`e.g.`, a path's
-/// `.rs`) only shortens a negation's reach, so the scan errs towards a hit.
-const SENTENCE_MARKS: [char; 4] = ['.', '!', '?', ';'];
+/// earlier clause never cancels a taking phrase ("Not tested: adapted from", "No changes,
+/// ported from"). A mark that ends no clause (`e.g.`, a path's `.rs`, a list's comma) only
+/// shortens a negation's reach, so the scan errs towards a hit.
+const CLAUSE_MARKS: [char; 6] = ['.', '!', '?', ';', ':', ','];
 
-/// The runs of characters in `text` that `inside` accepts, each with its line and sentence.
+/// The runs of characters in `text` that `inside` accepts, each with its line and clause.
 fn runs(text: &str, inside: impl Fn(char) -> bool) -> Vec<Word<'_>> {
     let mut out = Vec::new();
     let mut line = 1_usize;
-    let mut sentence = 0_usize;
+    let mut clause = 0_usize;
     let mut start: Option<(usize, usize, usize)> = None;
     for (at, c) in text.char_indices() {
         if inside(c) {
-            start.get_or_insert((at, line, sentence));
+            start.get_or_insert((at, line, clause));
         } else {
             if let Some((from, on, within)) = start.take()
                 && let Some(word) = text.get(from..at)
@@ -175,14 +177,14 @@ fn runs(text: &str, inside: impl Fn(char) -> bool) -> Vec<Word<'_>> {
                 out.push(Word {
                     text: word,
                     line: on,
-                    sentence: within,
+                    clause: within,
                 });
             }
             if c == '\n' {
                 line = line.saturating_add(1);
             }
-            if SENTENCE_MARKS.contains(&c) {
-                sentence = sentence.saturating_add(1);
+            if CLAUSE_MARKS.contains(&c) {
+                clause = clause.saturating_add(1);
             }
         }
     }
@@ -192,14 +194,14 @@ fn runs(text: &str, inside: impl Fn(char) -> bool) -> Vec<Word<'_>> {
         out.push(Word {
             text: word,
             line: on,
-            sentence: within,
+            clause: within,
         });
     }
     out
 }
 
 /// Every word of `words` split into its identifier parts ([`identifier_parts`]), each keeping
-/// its word's line and sentence, so `numerical_recipes` and `takenFromCgal` read as phrases.
+/// its word's line and clause, so `numerical_recipes` and `takenFromCgal` read as phrases.
 fn parts_of<'t>(words: &[Word<'t>]) -> Vec<Word<'t>> {
     words
         .iter()
@@ -207,7 +209,7 @@ fn parts_of<'t>(words: &[Word<'t>]) -> Vec<Word<'t>> {
             identifier_parts(w.text).into_iter().map(move |part| Word {
                 text: part,
                 line: w.line,
-                sentence: w.sentence,
+                clause: w.clause,
             })
         })
         .collect()
@@ -482,14 +484,14 @@ fn is_nr_name(part: &str) -> bool {
 }
 
 /// Whether the taking phrase at word `at` is cancelled by a negation in the
-/// [`markers::NEGATION_REACH`] words before it, in the same sentence ([`SENTENCE_MARKS`]), one not
+/// [`markers::NEGATION_REACH`] words before it, in the same clause ([`CLAUSE_MARKS`]), one not
 /// followed by a limiting word such as "only" ("no code is taken from" is cancelled; "not only
-/// taken from" is not, and neither is "No tests. Taken from").
+/// taken from" is not, and neither are "No tests. Taken from" and "Not tested: taken from").
 fn negates(words: &[Word<'_>], lower: &[String], at: usize) -> bool {
-    let sentence = words.get(at).map(|w| w.sentence);
+    let clause = words.get(at).map(|w| w.clause);
     let start = at.saturating_sub(markers::NEGATION_REACH);
     (start..at).any(|k| {
-        words.get(k).map(|w| w.sentence) == sentence
+        words.get(k).map(|w| w.clause) == clause
             && lower
                 .get(k)
                 .is_some_and(|w| markers::NEGATIONS.contains(&w.as_str()))

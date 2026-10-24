@@ -169,14 +169,18 @@ fn every_taking_phrase_with_every_banned_source_is_found() {
 }
 
 #[test]
-fn a_negation_cancels_a_taking_phrase_only_in_its_own_sentence() {
+fn a_negation_cancels_a_taking_phrase_only_in_its_own_clause() {
     let mut cancelled = Vec::new();
     let mut kept = Vec::new();
     for negation in markers::NEGATIONS {
         cancelled.push(format!("// {negation} code taken from CGAL"));
+        cancelled.push(format!("// {negation} code is\n// taken from CGAL"));
         kept.push((format!("// {negation} code. Taken from CGAL."), 1));
         kept.push((format!("// {negation} tests; taken from CGAL"), 1));
         kept.push((format!("// {negation} tests!\n// Taken from CGAL"), 2));
+        // A colon or a comma ends the negation's clause too.
+        kept.push((format!("// {negation} tested: adapted from CGAL"), 1));
+        kept.push((format!("// {negation} changes, ported from CGAL"), 1));
         for limit in markers::NEGATION_LIMITS {
             kept.push((format!("// {negation} {limit} taken from CGAL"), 1));
         }
@@ -684,6 +688,14 @@ impl Seeded {
 
 /// Asserts that `ledger` has a problem of `rule` in a file ending in `file` saying `needle`.
 fn has_problem(ledger: &Ledger, file: &str, rule: Rule, needle: &str) {
+    // Every message is one line of prose: a string broken over source lines without its `\`
+    // continuation would carry the next line's indentation into it.
+    for p in &ledger.problems {
+        assert!(
+            !p.message.contains("  ") && !p.message.contains('\n'),
+            "a malformed message: {p:#?}"
+        );
+    }
     assert!(
         ledger
             .problems
@@ -918,6 +930,7 @@ mod tree {
     use geom_test::ledger::methods::{self, FIELDS};
     use geom_test::map::classes::{self, Class};
     use geom_test::map::repo::workspace_root;
+    use geom_test::scan::{Category, scan_text};
 
     fn root() -> PathBuf {
         workspace_root().unwrap()
@@ -932,6 +945,77 @@ mod tree {
     /// The text of chapter 29.
     fn chapter_29() -> String {
         read("projects/engines/geometry/architecture/29-sources-licences.md")
+    }
+
+    /// A Markdown cell as plain words: link targets and parenthesised asides dropped, link texts
+    /// and code spans kept as their text.
+    fn plain(cell: &str) -> String {
+        let mut out = String::new();
+        let mut depth = 0_usize;
+        for c in cell.chars() {
+            match c {
+                '(' => depth += 1,
+                ')' => depth = depth.saturating_sub(1),
+                '[' | ']' | '`' => {}
+                _ if depth == 0 => out.push(c),
+                _ => {}
+            }
+        }
+        out
+    }
+
+    /// Names in chapter 29's banned rows that the scan leaves out on purpose, because each is an
+    /// ordinary word or phrase in a kernel's prose (`scan::markers`' header): the constraint
+    /// solver Frontier, the repository offsets-and-remeshing, and Valgrind and git, which run only
+    /// as separate development tools (29.16).
+    const LEFT_OUT: [&str; 4] = ["Frontier", "offsets-and-remeshing", "Valgrind", "git"];
+
+    #[test]
+    fn every_copyleft_non_commercial_or_unlicensed_row_of_chapter_29_is_known_to_the_scan() {
+        // The licences whose code chapter 29.2 never lets the kernel take, as a row's Licence
+        // column opens with them.
+        let banned = [
+            "GPL",
+            "LGPL",
+            "AGPL",
+            "CDDL",
+            "EUPL",
+            "PolyForm",
+            "Free for non-commercial",
+            "Adobe Research",
+            "No licence",
+        ];
+        let mut checked = 0;
+        for line in chapter_29().lines() {
+            if !line.starts_with("| ") || line.starts_with("| ---") {
+                continue;
+            }
+            let cells: Vec<&str> = line
+                .trim()
+                .trim_matches('|')
+                .split(" | ")
+                .map(str::trim)
+                .collect();
+            if cells.len() < 4 || !banned.iter().any(|b| cells[1].starts_with(b)) {
+                continue;
+            }
+            for segment in plain(cells[0]).split(';').map(str::trim) {
+                if LEFT_OUT.contains(&segment) {
+                    continue;
+                }
+                let text = format!("// Taken from {segment}.");
+                assert!(
+                    scan_text(&text)
+                        .iter()
+                        .any(|h| h.category == Category::TakenFromCopyleft),
+                    "chapter 29 bans the code of {segment:?} ({}), but the scan does not know its \
+                     name: add it to scan::markers::COPYLEFT_SOURCES",
+                    cells[1]
+                );
+                checked += 1;
+            }
+        }
+        assert!(checked >= 60, "only {checked} names read from chapter 29");
     }
 
     #[test]

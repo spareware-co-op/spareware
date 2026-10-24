@@ -10,8 +10,10 @@
 //! - **Every marker has a written source.** Each table below says which rule of chapter 29.20, or
 //!   which evidence report, names it; a marker found only by memory is not here.
 //! - **Distinctive markers only.** Common words that a routine, pattern or licence shares with
-//!   ordinary text (Brent, Jacobi, golden, spline; CENTER, HIDDEN, BRICK; a bare "Triangle") are
-//!   left out, so a hit is a reason to look, not noise. The phrases of taken-from statements need
+//!   ordinary text (Brent, Jacobi, golden, spline; CENTER, HIDDEN, BRICK; a bare "Triangle", the
+//!   GPL constraint solver Frontier, the GPL repository offsets-and-remeshing and the proof tool
+//!   Gappa, which runs only as a separate program) are left out, so a hit is a reason to look, not
+//!   noise. The phrases of taken-from statements need
 //!   both a taking phrase and a copyleft source's name within [`WINDOW`] words, with no negation
 //!   just before.
 //!
@@ -126,7 +128,8 @@ pub const TAKING_GAP: usize = 4;
 /// How many words after a taking phrase a copyleft source's name may come.
 pub const WINDOW: usize = 12;
 
-/// How many words before a taking phrase a negation cancels it ("no code is taken from").
+/// How many words before a taking phrase, in its clause, a negation cancels it ("no code is taken
+/// from").
 pub const NEGATION_REACH: usize = 4;
 
 /// The words that cancel a taking phrase just after them.
@@ -140,13 +143,22 @@ pub const NEGATION_LIMITS: [&str; 7] = [
 
 /// Names of copyleft licences and of the copyleft or otherwise banned sources chapter 29 lists, as
 /// runs of words, ignoring case: the licences 29.2 never lets us take (GPL, LGPL, AGPL, EUPL,
-/// CDDL, Numerical Recipes), and the projects chapter 29 classes as LGPL or GPL (method only or
-/// papers only) or rejects for their licence or provenance: `OpenCascade`, CGAL, `FreeCAD` and its
-/// planegcs, `LibreCAD`, `LibreDWG` and acadrust, `SolveSpace`, SISL and `GoTools`, `TetGen`, GEOS,
-/// `IfcOpenShell`, Topologic, BRL-CAD, Blender, `KiCad`, `OpenSCAD`, val3dity, `LNLib`, Attene's
-/// `Indirect_Predicates`, GMP, MPFR and malachite, chili3d, brepkit, Aetheris, `CuraEngine`,
-/// `PrusaSlicer`, `OpenCAMLib`, Creusot, `HLBFGS` and IRIT.
-pub const COPYLEFT_SOURCES: [&[&str]; 52] = [
+/// CDDL, `PolyForm`, Numerical Recipes), and the projects chapter 29 classes as LGPL or GPL
+/// (method only or papers only) or rejects for their licence or provenance: `OpenCascade`, CGAL,
+/// `FreeCAD` and its planegcs, `LibreCAD`, `LibreDWG`, acadrust, `ACadSharp`, the ODA (Open Design
+/// Alliance) specification and `OpenSKP`, `SolveSpace` with `libslvs` and `rust_slvs`, SISL and
+/// `GoTools`, `TetGen`, `TetWild` and `fTetWild`, GEOS, `IfcOpenShell`, Topologic, Xbim, BRL-CAD,
+/// Blender, `KiCad`, `OpenSCAD`, val3dity, `LNLib`, Attene's `Indirect_Predicates` and nfg, GMP,
+/// MPFR and malachite, mcut, Cork, `MeshFix`, vcglib and `MeshLab`, Gmsh, Netgen and Mmg,
+/// `VolumeRemesher`, `ImplicitCAD`, Sverchok, polyskel, surfer2, `CloudCompare`, chili3d, brepkit,
+/// Aetheris, `CuraEngine`, `PrusaSlicer`, `OpenCAMLib`, Creusot, `HLBFGS`, IRIT, trueform and
+/// `MeshLib`, the Adobe Research repositories (mtetcol, mtet), `contour_tracing`, openbimrs,
+/// `JSketcher`, `CADmium`, cadcore, PCO and Dune 3D, and the unlicensed `NoteCAD`, `GeoSolver`,
+/// `OffsetCrust`, clothoid-rs and raybevel. Chapter 29 is the list to keep this in step with: a
+/// new row that bans a source's code adds its name here, unless the name is an ordinary word
+/// (module header); piece G16's attack tests read the chapter's copyleft, non-commercial and
+/// unlicensed rows and fail on a name the scan does not know.
+pub const COPYLEFT_SOURCES: [&[&str]; 94] = [
     &["gpl"],
     &["lgpl"],
     &["agpl"],
@@ -199,6 +211,48 @@ pub const COPYLEFT_SOURCES: [&[&str]; 52] = [
     &["hlbfgs"],
     &["irit"],
     &["dune", "3d"],
+    &["polyform"],
+    &["acadsharp"],
+    &["oda"],
+    &["open", "design", "alliance"],
+    &["openskp"],
+    &["rust_slvs"],
+    &["tetwild"],
+    &["ftetwild"],
+    &["xbim"],
+    &["xbimessentials"],
+    &["xbimgeometry"],
+    &["nfg"],
+    &["mcut"],
+    &["cork"],
+    &["meshfix"],
+    &["vcglib"],
+    &["meshlab"],
+    &["gmsh"],
+    &["netgen"],
+    &["mmg"],
+    &["volumeremesher"],
+    &["implicitcad"],
+    &["sverchok"],
+    &["polyskel"],
+    &["surfer2"],
+    &["cloudcompare"],
+    &["trueform"],
+    &["meshlib"],
+    &["mtetcol"],
+    &["adobe", "research"],
+    &["contour_tracing"],
+    &["openbimrs"],
+    &["jsketcher"],
+    &["cadmium"],
+    &["cadcore"],
+    &["mtet"],
+    &["pco"],
+    &["notecad"],
+    &["geosolver"],
+    &["offsetcrust"],
+    &["clothoid", "rs"],
+    &["raybevel"],
 ];
 
 /// Names of Autodesk's standard hatch patterns, matched as terms (letters, digits, `_` and `-`),
