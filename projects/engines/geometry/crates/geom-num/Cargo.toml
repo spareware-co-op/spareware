@@ -31,6 +31,11 @@ proptest = { version = "1.12.0", default-features = false, features = ["std", "b
 # use.
 dashu-int = { version = "0.6.2", default-features = false, features = ["std"] }
 dashu-ratio = { version = "0.6.1", default-features = false, features = ["std"] }
+# The second method of chapter 28.6 (piece G28): Shewchuk's adaptive orient2d, orient3d, incircle
+# and insphere, ported by georust, which tests/attack_g28.rs compares with every explicit-point
+# predicate (its orient3d and insphere negated, chapter 6.2). MIT OR Apache-2.0 (robust 1.2.0's
+# manifest); a development dependency only, never linked into the kernel.
+robust = "1.2.0"
 
 [lints.rust]
 unsafe_code = "forbid"

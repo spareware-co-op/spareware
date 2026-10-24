@@ -42,11 +42,11 @@
 //! 3. **The hand-written fast path**, the same determinants as written here before the generator
 //!    existed, now a second line of defence: it would answer only if the generated exact path
 //!    returned `None`, which its certificate rules out. Orientation runs in `i128`; in-circle and
-//!    in-sphere compute their factors in `i128` and sum the products in [`I256`]. Each
-//!    predicate's doc comment carries this path's bit-budget derivation proving that none of its
-//!    checked operations returns `None` for any grid input, and the derivations' arithmetic is
-//!    checked when the crate compiles (the budget exponents below, from `FAST_DIFF_BITS` on), so a
-//!    wrong one is a build error. The generated certificate derives the same budgets.
+//!    in-sphere compute their factors in `i128` and sum the products in [`I256`]. The section
+//!    [Bit budgets](#bit-budgets) below derives this path's budgets, proving that none of its
+//!    checked operations returns `None` for any grid input; their arithmetic is checked when the
+//!    crate compiles (the budget exponents from `FAST_DIFF_BITS` on), so a wrong one is a build
+//!    error. The generated certificate derives the same budgets.
 //! 4. **The total path**, defence in depth, which no public call reaches. It would answer only if
 //!    both fast-path budgets were wrong, so such a mistake would cost time, never a wrong sign. It
 //!    evaluates the same determinant from the raw `i64` coordinates in
@@ -102,10 +102,6 @@
 //! never pass for an exact degeneracy. That is why each predicate returns a `Result`; for grid
 //! points it is always `Ok`.
 //!
-//! The fast-path budgets are derived for [`COORD_BITS`] bits, as
-//! exponents computed from it and asserted when the crate compiles: raising it to 41 makes
-//! orient3d's exponent 129, over `i128`'s 127, and the build stops.
-//!
 //! Method: the determinant forms of Shewchuk, *Adaptive Precision Floating-Point Arithmetic and
 //! Fast Robust Geometric Predicates*, Discrete & Computational Geometry 18 (1997)
 //! (<https://doi.org/10.1007/PL00009321>; reference code
@@ -127,10 +123,6 @@
 //! the right-hand normal (b − a) × (c − a) points to. Code ported from Shewchuk-based libraries
 //! must account for this.
 //!
-//! Notation in the bit budgets: M = `COORD_MAX` = 2^40 − 1 and δ = 2M = 2^41 − 2 < 2^41, the
-//! largest magnitude of a difference of two coordinates. Every bound is on absolute values, and a
-//! sum's bound also bounds each of its partial sums, so the order of evaluation never matters.
-//!
 //! Cost: per call, the generated filter's few dozen `f64` operations where the routing runs
 //! it, and the exact path only when the filter cannot decide (or first, where the filter does
 //! not pay): a fixed number of checked integer operations, each module's header gives the
@@ -140,6 +132,73 @@
 //!   <https://www.cs.cmu.edu/afs/cs/project/quake/public/code/predicates.c>, for the determinant
 //!   forms and the sign conventions of `orient2d` and `incircle` that the Method and Conventions
 //!   above follow; chapter 29.3 asks for this credit line.
+//!
+//! # Bit budgets
+//!
+//! Chapter 6.2 asks each predicate's module for the written derivation of its bit budget: why
+//! orient2d and orient3d fit `i128`, and in-circle and in-sphere fit 256 bits ([`I256`]), for every
+//! grid input. This is that derivation, for the exact paths in front of the total path (the
+//! generated one and the hand-written one evaluate the same determinants, step for step).
+//!
+//! Notation: M = `COORD_MAX` = 2^40 − 1, and δ = 2M = 2^41 − 2 < 2^41, the largest magnitude of a
+//! difference of two grid coordinates. Every bound is on absolute values, by two rules: a product
+//! of values at most X and Y is at most X·Y, and a sum or difference of k values each at most X is
+//! at most k·X. A sum's bound also bounds each of its partial sums, so the order of evaluation
+//! never matters. A type holds every magnitude below 2^127 (`i128`) or 2^255 ([`I256`]).
+//!
+//! | Predicate | Difference | Lift | Minor | Term | Result | Type | Headroom |
+//! | --- | --- | --- | --- | --- | --- | --- | --- |
+//! | orient2d | δ < 2^41 | — | — | δ² < 2^82 | 2δ² < 2^83 | `i128` | 44 bits |
+//! | orient3d | δ < 2^41 | — | 2δ² < 2^83 | 2δ³ < 2^124 | 6δ³ < 2^126 | `i128` | 1 bit |
+//! | incircle | δ < 2^41 | 2δ² < 2^83 | 2δ² < 2^83 | 4δ⁴ < 2^166 | 12δ⁴ < 2^168 | `I256` | 87 bits |
+//! | insphere | δ < 2^41 | 3δ² < 2^84 | 6δ³ < 2^126 | 18δ⁵ < 2^210 | 72δ⁵ < 2^212 | `I256` | 43 bits |
+//!
+//! The columns: each coordinate difference; each squared length |p′|² of the lifted tests; each
+//! minor (a component of orient3d's cross product, a 2 × 2 determinant p′ × q′ of in-circle, a
+//! 3 × 3 determinant of in-sphere); each term the result sums; the result; the type the result and
+//! its terms are computed in; and the bits between the result's bound and that type's limit.
+//!
+//! - **orient2d**, det[b − a; c − a] = (b.x − a.x)(c.y − a.y) − (b.y − a.y)(c.x − a.x): each
+//!   difference at most δ, each of the two products at most δ², their difference at most 2δ², far
+//!   below 2^127. The largest value over the whole grid is δ² = 4M², reached by a triangle that is
+//!   half the bounding square, such as (−M, −M), (M, −M), (M, M): no triangle in a square has more
+//!   than half its area.
+//! - **orient3d**, the triple product (b − a) · ((c − a) × (d − a)): each component of the cross
+//!   product a difference of two products of differences, at most 2δ²; each of the three products
+//!   in the dot product at most δ · 2δ² = 2δ³ < 2^124; the sum at most 6δ³ < 2^126 (6 < 2^3,
+//!   δ³ < 2^123), below 2^127, so negating it cannot overflow either. The largest value over the
+//!   whole grid is 2δ³ = 16M³: the regular tetrahedron on alternate corners of the bounding cube,
+//!   the largest tetrahedron in a cube (a third of its volume).
+//! - **incircle**, relative to d with p′ = p − d: each lift |p′|² at most 2δ², each 2 × 2
+//!   determinant p′ × q′ at most 2δ², both below 2^83 and computed in `i128`. Each of the three
+//!   products of a lift and a determinant is at most 4δ⁴ < 2^166 (δ⁴ < 2^164), and the sum at most
+//!   12δ⁴ < 2^168 (12 < 2^4), in [`I256`]: every product of two `i128` values fits it
+//!   (|x · y| < 2^254), and the sum stays 87 bits below its limit. Over all points with
+//!   coordinates in {−M, 0, M} the largest value is 8M⁴ = δ⁴ / 2, reached by three corners of the
+//!   bounding square and its centre. That is not claimed to be the largest over the whole grid,
+//!   which is not derived here; nothing depends on it, since the proof uses only the bound 12δ⁴.
+//! - **insphere**, relative to e with p′ = p − e: each lift |p′|² at most 3δ² < 2^84; each 3 × 3
+//!   determinant at most 6δ³ < 2^126 (orient3d's derivation), both computed in `i128`, so negating
+//!   a determinant cannot overflow. Each of the four products is at most 18δ⁵ < 2^210 (18 < 2^5,
+//!   δ⁵ < 2^205), and the sum at most 72δ⁵ < 2^212 (72 < 2^7), in [`I256`], 43 bits below its
+//!   limit. Over all points with coordinates in {−M, 0, M} the largest value is 48M⁵ = 3δ⁵ / 2,
+//!   reached by a regular tetrahedron on alternate corners of the bounding cube and its centre.
+//!   That is not claimed to be the largest over the whole grid, which is not derived here; nothing
+//!   depends on it, since the proof uses only the bound 72δ⁵.
+//!
+//! Three checks hold this table to the code. The hand-written path's exponents (`FAST_DIFF_BITS`
+//! to `FAST_INSPHERE_BITS` below) are computed from [`COORD_BITS`] and asserted when the crate
+//! compiles, against these figures and against each type: raising [`COORD_BITS`] to 41 makes
+//! orient3d's exponent 129, over `i128`'s 127, and the build stops. The generated exact path's
+//! bit-range certificates, in each module of [`crate::generated`], derive the same bounds step by
+//! step from M, and geom-gen's tests re-derive them with an independent checker and compare them
+//! with these. And `tests/attack_g28.rs` reads this table, re-derives every cell in big integers
+//! from the rules above, and checks every grid configuration with every coordinate at ±M (4,096
+//! for orient3d) against it, the two largest values above included; it also takes every set of
+//! distinct points with coordinates in {−M, 0, M} through the public in-circle and in-sphere and
+//! their generated exact values, and finds the largest values there to be the 8M⁴ and 48M⁵ above
+//! (this module's unit tests find them on the hand-written and total paths). The total path's own
+//! budget, for any `i64` coordinates in [`I384`], is written where that path begins.
 
 use crate::error::NumError;
 use crate::generated;
@@ -728,10 +787,8 @@ fn xyz(p: P3) -> [i64; 3] {
 /// when they are collinear, which includes any two coinciding. Swapping any two points flips the
 /// sign. Same sign as `orient2d` in Shewchuk's `predicates.c`.
 ///
-/// Bit budget, all in `i128`: each difference is at most δ < 2^41; each of the two products at most
-/// δ² < 2^82; their difference at most 2δ² < 2^83, far below 2^127. The largest value over the
-/// whole grid is δ² = 4M², reached by a triangle that is half the bounding square, such as
-/// (−M, −M), (M, −M), (M, M): no triangle in a square has more than half its area.
+/// Bit budget: the determinant is at most 2δ² < 2^83, in `i128` (δ = 2^41 − 2; the derivation is
+/// in the [module documentation](crate::predicate#bit-budgets)).
 ///
 /// # Errors
 ///
@@ -784,11 +841,8 @@ fn orient2d_exact(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
 /// collinear. Swapping any two points flips the sign. This is the opposite sign to `orient3d` in
 /// Shewchuk's `predicates.c` (see the module documentation).
 ///
-/// Bit budget, all in `i128`: each difference is at most δ < 2^41; each component of
-/// (c − a) × (d − a) at most 2δ² < 2^83; each of the three products in the dot product with b − a
-/// at most 2δ³ < 2^124; the sum at most 6δ³ < 2^126 (6 < 2^3, δ³ < 2^123), below 2^127. The largest
-/// value over the whole grid is 2δ³ = 16M³: the regular tetrahedron on alternate corners of the
-/// bounding cube, the largest tetrahedron in a cube (a third of its volume).
+/// Bit budget: the determinant is at most 6δ³ < 2^126, in `i128` (δ = 2^41 − 2; the derivation is
+/// in the [module documentation](crate::predicate#bit-budgets)).
 ///
 /// # Errors
 ///
@@ -837,13 +891,9 @@ fn orient3d_unfiltered(a: P3, b: P3, c: P3, d: P3) -> Result<Sign, NumError> {
 /// sign; apply the identity above to the circle through a, b, d; and a point c on the line through
 /// a and b has power (c − a) · (c − b) with respect to every circle through a and b.)
 ///
-/// Bit budget: each difference is at most δ < 2^41. In `i128`: each lift |p′|² is at most
-/// 2δ² < 2^83, each 2 × 2 determinant p′ × q′ at most 2δ² < 2^83. In [`I256`] (the wide step): each
-/// of the three products at most 4δ⁴ < 2^166 (δ⁴ < 2^164); the sum at most 12δ⁴ < 2^168
-/// (12 < 2^4), 87 bits below the I256 limit of 2^255. Over all points with coordinates in
-/// {−M, 0, M} the largest value is 8M⁴ = δ⁴ / 2, reached by three corners of the bounding square
-/// and its centre. That is not claimed to be the largest over the whole grid, which is not derived
-/// here; nothing depends on it, since the proof uses only the bound 12δ⁴.
+/// Bit budget: lifts and 2 × 2 determinants at most 2δ² < 2^83, in `i128`, and the determinant at
+/// most 12δ⁴ < 2^168, in [`I256`] (δ = 2^41 − 2; the derivation is in the
+/// [module documentation](crate::predicate#bit-budgets)).
 ///
 /// # Errors
 ///
@@ -905,14 +955,9 @@ fn incircle_unfiltered(a: P2, b: P2, c: P2, d: P2) -> Result<Sign, NumError> {
 /// with respect to the circle where the sphere meets the plane. For collinear a, b, c swap c and d
 /// first, and use the power (c − a) · (c − b) as for [`incircle`].)
 ///
-/// Bit budget: each difference is at most δ < 2^41. In `i128`: each lift |p′|² is at most
-/// 3δ² < 2^84; each 3 × 3 determinant at most 6δ³ < 2^126 (the same derivation as [`orient3d`]),
-/// so negating one cannot overflow. In [`I256`] (the wide step): each of the four products at most
-/// 18δ⁵ < 2^210 (18 < 2^5, δ⁵ < 2^205); the sum at most 72δ⁵ < 2^212 (72 < 2^7), 43 bits below the
-/// I256 limit of 2^255. Over all points with coordinates in {−M, 0, M} the largest value is
-/// 48M⁵ = 3δ⁵ / 2, reached by a regular tetrahedron on alternate corners of the bounding cube and
-/// its centre. That is not claimed to be the largest over the whole grid, which is not derived
-/// here; nothing depends on it, since the proof uses only the bound 72δ⁵.
+/// Bit budget: lifts at most 3δ² < 2^84 and 3 × 3 determinants at most 6δ³ < 2^126, in `i128`, and
+/// the determinant at most 72δ⁵ < 2^212, in [`I256`] (δ = 2^41 − 2; the derivation is in the
+/// [module documentation](crate::predicate#bit-budgets)).
 ///
 /// # Errors
 ///
