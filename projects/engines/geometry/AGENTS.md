@@ -196,7 +196,7 @@ A module is one file with one job. These steps take a module from nothing to a p
 
 ## 6. How to add a predicate
 
-A predicate in this kernel is generated, never hand-written (chapter 6.2): its `f64` filter, its error constant, its exact integer path and the bit-range certificate of every intermediate all come from a short description, so no constant is ever typed by hand. The generator is `geom-gen`; its output lands in `crates/geom-num/src/generated/`. The language is in `crates/geom-gen/src/predicate_lang.rs`'s header: `predicate`, `input ...: point2`, `point3` or `rounded <bits> in <group>`, `let <name> = <expression>` with `+`, `-` and `*`, and `sign <name>`.
+A predicate in this kernel is generated, never hand-written (chapter 6.2): its `f64` filter, its error constant, its exact integer path and the bit-range certificate of every intermediate all come from a short description, so no constant is ever typed by hand. The generator is `geom-gen`; its output lands in `crates/geom-num/src/generated/`. The language is in `crates/geom-gen/src/predicate_lang.rs`'s header: `predicate`, `input ...: point2`, `point3` or `rounded <bits> in <group>`, `let <name> = <expression>` with `+`, `-` and `*`, and `sign <name>`. Read its rules on names before you choose yours: the language reserves the names the emitted code uses, and a `let` may not take a coordinate's loaded name (`a_x` for `a.x`).
 
 1. **Describe it.** In `crates/geom-gen/src/predicates.rs`, add the description as a `pub const` beside `ORIENT2D` and the others: a comment line saying what it decides and its sign convention, then the description. Write the expression in the form the generator should evaluate; every operation is evaluated exactly as written, left to right.
 2. **Register it.** In the same file:
@@ -226,7 +226,7 @@ Crates come from chapter 27's crate table, which an owner settles (owner action 
 
 ## 8. The randomised-method rule
 
-This is the rule piece G32 wrote in `geom_num::rng`'s module header and piece G17 lifted here, as the board asked: word for word, except that its links to `geom_num::rng`'s items are written as full paths and "here" names the module. `crates/geom-num/tests/rng_ban.rs` reads rule 1 from this file and fails unless it names every crate the kernel's `clippy.toml` bans.
+This is the rule piece G32 wrote in `geom_num::rng`'s module header and piece G17 lifted here, as the board asked: word for word, except that its links to `geom_num::rng`'s items are written as full paths, "here" names the module, the golden test's path is written from this folder, and "this piece's" reading is named as piece G32's. `crates/geom-num/tests/rng_ban.rs` reads rule 1 from this file and fails unless it names every crate the kernel's `clippy.toml` bans.
 
 A kernel method may use random numbers (RANSAC fitting, random sampling, randomised layout or grouping, the seeds of a stochastic lattice) only as a pure, deterministic function of its inputs. It follows every one of these:
 

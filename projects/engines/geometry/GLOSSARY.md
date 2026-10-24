@@ -4,7 +4,7 @@ Every term used in phases 1 to 3 of the kernel's work board, defined once, in pl
 
 How to read an entry:
 
-- Entries are in alphabetical order, ignoring case and punctuation. Code names are in `code`. Other names an entry goes by follow its headword as "(also: ...)", so searching for any of them finds it.
+- Entries are in alphabetical order word by word, ignoring case, accents and punctuation: a space, hyphen or underscore ends a word, so "Batch runner" comes before "`BatchBudget`", and "Bézier" sorts as "Bezier". Code names are in `code`. Other names an entry goes by follow its headword as "(also: ...)", so searching for any of them finds it; a word in brackets after a headword, as in **Class** (exactness), says which sense the entry defines. Each name belongs to one entry.
 - A number in parentheses is a section of the kernel architecture: (6.2) is section 2 of [chapter 6](architecture/06-numbers.md). An ID such as G27 is a piece on the work board. "Proposed" marks what waits for an owner's decision (chapter 32).
 - Crate names (`geom-num`, `geom-topo` and the rest) are not repeated here: each crate's job is in [MAP.json](MAP.json) and chapter 27.
 - A path in backticks is written from the repository root when it starts with `projects/` or `.github/`, and from this folder, `projects/engines/geometry/`, otherwise.
@@ -51,8 +51,6 @@ How to read an entry:
 
 **B-rep** (also: boundary representation): A shape stored as its boundary: faces bounded by loops of edges meeting at vertices, with the surfaces and curves they lie on (8; 9). The kernel's editable, drawable representation.
 
-**Bézier extraction**: Splitting a B-spline into its polynomial (Bézier) pieces by knot insertion (The NURBS Book, algorithm A5.6; 12.3).
-
 **Banned-source scanner** (also: acad pattern names): A CI tool that searches the repository for signs of code that may not be used: Numerical Recipes markers, statements that code was taken from a copyleft project, and the names of a proprietary program's hatch patterns (piece G16; 29.20).
 
 **Base kind** (also: `ErrorKind`): The shared, closed set of error kinds every kernel error belongs to: `InvalidInput`, `Degenerate`, `NoSolution`, `Ambiguous`, `Undecided`, `ExactnessNotAccepted`, `ToleranceExceeded`, `FrameRangeExceeded`, `BudgetExceeded`, `Cancelled`, `OutOfMemory`, `Unsupported` and `Internal` (22). Generic code handles any error by its base kind alone.
@@ -68,6 +66,8 @@ How to read an entry:
 **Benchmark**: A measured run of an operation on fixed inputs. In this kernel benchmarks are gated on counts (instructions, cache misses, heap, WebAssembly fuel), never on time, on every pull request (23.13; 28.14). See count gate.
 
 **Bernstein bounds** (also: Bernstein arithmetic): Bounds on a polynomial piece from its coefficients in the Bernstein (Bézier) basis: the piece lies in the convex hull of its control points, which bounds it with no sampling (12.3; piece G59).
+
+**Bézier extraction**: Splitting a B-spline into its polynomial (Bézier) pieces by knot insertion (The NURBS Book, algorithm A5.6; 12.3).
 
 **Big-endian**: A byte order with the most significant byte first; native format round trips run on a big-endian target under emulation, so the format never depends on byte order (28.13; piece G99).
 
@@ -633,7 +633,7 @@ How to read an entry:
 
 **NaN-free scalar** (also: `Real`): `geom_num::real::Real`, a double that refuses NaN and the infinities at construction (21; piece G24).
 
-**Native format** (also: SKG): The kernel's own file format: deterministic CBOR records with checksums, content IDs, chunks and versions, readable forever (24).
+**Native format** (also: SKG): The kernel's own file format: deterministic CBOR records with checksums, content IDs, chunks and versions, readable forever (24). SKG, Spare Kit Geometry, is its proposed name, with the extension `.skg` (24.1; owner action G77).
 
 **`next_up`** (also: `next_down`): The next representable double above or below a value; outward rounding uses them (6.4).
 
@@ -890,8 +890,6 @@ How to read an entry:
 **Simulation of Simplicity**: Edelsbrunner and Mücke's symbolic perturbation, which breaks ties as if inputs were moved by infinitesimals in a fixed order; the kernel orders by persistent keys, never addresses (6.2; piece G30).
 
 **`sinpi`** (also: `cospi`): sin(πx) and cos(πx), with angles in half-turns, correctly rounded; the kernel's proven angle functions (6.4).
-
-**SKG**: Spare Kit Geometry, the native format's proposed name, with the extension `.skg` (24.1; owner action G77).
 
 **`sort_stable`**: A parallel-helper sort by a total key, one answer whatever the chunks (23.4).
 
