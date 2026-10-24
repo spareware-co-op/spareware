@@ -26,9 +26,14 @@
 //!   AGENTS.md; this file checks that AGENTS.md's section 8 holds all six rules and that
 //!   `geom_num::rng`'s header points there and no longer states them.
 //!
-//! The files are read as GitHub renders them, CommonMark with GitHub's tables, by pulldown-cmark.
+//! The files are read as GitHub renders them, `CommonMark` with GitHub's tables, by `pulldown-cmark`.
 //! The tests read the repository's files, so they run natively only, as `tests/map_repo.rs` does.
 
+// The crate denies native arithmetic in kernel code (Cargo.toml); the reader's counters may use it.
+#![allow(
+    clippy::arithmetic_side_effects,
+    reason = "the reader's counters; the rules are for kernel code"
+)]
 // Helpers outside `#[test]` functions are not covered by clippy.toml's allow-*-in-tests settings;
 // clippy.toml says tests may use these, and a broken claim must stop the test loudly.
 #![allow(
@@ -367,7 +372,7 @@ struct Markdown {
     blocks: Vec<Block>,
 }
 
-/// Reads Markdown as GitHub renders it: CommonMark, with GitHub's tables.
+/// Reads Markdown as GitHub renders it: `CommonMark`, with GitHub's tables.
 fn markdown(text: &str) -> Markdown {
     let mut out = Markdown::default();
     let mut section = String::new();
@@ -495,6 +500,13 @@ fn resolve_code_path(root: &Path, span: &str) -> PathBuf {
     } else {
         root.join(KERNEL).join(span)
     }
+}
+
+/// Whether a file name is a workflow's: GitHub reads workflows from `.yml` and `.yaml` files.
+fn is_workflow(name: &str) -> bool {
+    Path::new(name)
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("yml") || e.eq_ignore_ascii_case("yaml"))
 }
 
 /// English number words, for the counts the files write out.
@@ -754,14 +766,14 @@ fn the_workflows_are_all_named_and_counted() {
     let workflows: BTreeSet<String> = fs::read_dir(&folder)
         .unwrap()
         .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
-        .filter(|n| n.starts_with("kernel") && n.ends_with(".yml"))
+        .filter(|n| n.starts_with("kernel") && is_workflow(n))
         .collect();
     assert!(workflows.len() >= 5, "{workflows:?}");
     for doc in ["README.md", "AGENTS.md"] {
         let named: BTreeSet<String> = markdown(&kernel_file(doc))
             .code
             .into_iter()
-            .filter(|c| c.ends_with(".yml"))
+            .filter(|c| is_workflow(c))
             .map(|c| c.trim_start_matches(".github/workflows/").to_owned())
             .collect();
         assert_eq!(named, workflows, "{doc} names these workflows");
@@ -776,7 +788,7 @@ fn the_workflows_are_all_named_and_counted() {
 
 /// A glossary headword's sorting key, by the order GLOSSARY.md states: word by word, ignoring
 /// case, accents and punctuation. Any character that is not a letter or a digit ends a word, so
-/// "Batch runner" (the words `batch`, `runner`) comes before "BatchBudget" (`batchbudget`), and
+/// "Batch runner" (the words `batch`, `runner`) comes before "`BatchBudget`" (`batchbudget`), and
 /// an accent is set aside by Unicode's canonical decomposition, so "Bézier" sorts as "Bezier".
 fn sort_key(term: &str) -> Vec<String> {
     let bare: String = term.nfd().filter(|c| !is_combining_mark(*c)).collect();
