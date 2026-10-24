@@ -187,9 +187,10 @@ pub fn chosen_way(chosen: &str) -> Option<Way> {
 /// The gate's record of licence choices (29.20, rule 3): every crate in the kernel family's graph
 /// whose licence offers a choice, its expression exactly as its manifest gives it, and the licence
 /// (or licences, joined by `AND`) taken: the first of 29.2's identifiers, in its order, offered.
-pub const LICENCE_CHOICES: [(&str, &str, &str); 81] = [
+pub const LICENCE_CHOICES: [(&str, &str, &str); 92] = [
     ("anstyle", "MIT OR Apache-2.0", "MIT"),
     ("anyhow", "MIT OR Apache-2.0", "MIT"),
+    ("arraydeque", "MIT/Apache-2.0", "MIT"),
     ("autocfg", "Apache-2.0 OR MIT", "MIT"),
     ("bit-set", "Apache-2.0 OR MIT", "MIT"),
     ("bit-vec", "Apache-2.0 OR MIT", "MIT"),
@@ -200,6 +201,7 @@ pub const LICENCE_CHOICES: [(&str, &str, &str); 81] = [
     ("chacha20", "MIT OR Apache-2.0", "MIT"),
     ("clap", "MIT OR Apache-2.0", "MIT"),
     ("clap_builder", "MIT OR Apache-2.0", "MIT"),
+    ("clap_derive", "MIT OR Apache-2.0", "MIT"),
     ("clap_lex", "MIT OR Apache-2.0", "MIT"),
     ("condtype", "MIT OR Apache-2.0", "MIT"),
     ("core_detect", "MIT/Apache-2.0", "MIT"),
@@ -220,9 +222,12 @@ pub const LICENCE_CHOICES: [(&str, &str, &str); 81] = [
     ("gungraun-macros", "Apache-2.0 OR MIT", "MIT"),
     ("gungraun-runner", "Apache-2.0 OR MIT", "MIT"),
     ("hashbrown", "MIT OR Apache-2.0", "MIT"),
+    ("hashlink", "MIT OR Apache-2.0", "MIT"),
+    ("heck", "MIT OR Apache-2.0", "MIT"),
     ("indexmap", "Apache-2.0 OR MIT", "MIT"),
     ("itoa", "MIT OR Apache-2.0", "MIT"),
     ("lazy_static", "MIT OR Apache-2.0", "MIT"),
+    ("lcov", "MIT/Apache-2.0", "MIT"),
     ("libc", "MIT OR Apache-2.0", "MIT"),
     (
         "linux-raw-sys",
@@ -261,13 +266,18 @@ pub const LICENCE_CHOICES: [(&str, &str, &str); 81] = [
     ("serde_core", "MIT OR Apache-2.0", "MIT"),
     ("serde_derive", "MIT OR Apache-2.0", "MIT"),
     ("serde_json", "MIT OR Apache-2.0", "MIT"),
+    ("serde_spanned", "MIT OR Apache-2.0", "MIT"),
     ("shlex", "MIT OR Apache-2.0", "MIT"),
     ("static_assertions", "MIT OR Apache-2.0", "MIT"),
     ("syn", "MIT OR Apache-2.0", "MIT"),
     ("terminal_size", "MIT OR Apache-2.0", "MIT"),
+    ("thiserror", "MIT OR Apache-2.0", "MIT"),
+    ("thiserror-impl", "MIT OR Apache-2.0", "MIT"),
+    ("toml", "MIT OR Apache-2.0", "MIT"),
     ("toml_datetime", "MIT OR Apache-2.0", "MIT"),
     ("toml_edit", "MIT OR Apache-2.0", "MIT"),
     ("toml_parser", "MIT OR Apache-2.0", "MIT"),
+    ("toml_writer", "MIT OR Apache-2.0", "MIT"),
     ("unarray", "MIT OR Apache-2.0", "MIT"),
     (
         "unicode-ident",
@@ -287,6 +297,7 @@ pub const LICENCE_CHOICES: [(&str, &str, &str); 81] = [
         "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
         "MIT",
     ),
+    ("yaml-rust2", "MIT OR Apache-2.0", "MIT"),
     ("zerocopy", "BSD-2-Clause OR Apache-2.0 OR MIT", "MIT"),
     (
         "zerocopy-derive",
