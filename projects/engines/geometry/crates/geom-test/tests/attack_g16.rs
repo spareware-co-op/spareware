@@ -986,6 +986,7 @@ mod tree {
             "No licence",
         ];
         let mut checked = 0;
+        let mut left_out_seen: Vec<&str> = Vec::new();
         for line in chapter_29().lines() {
             if !line.starts_with("| ") || line.starts_with("| ---") {
                 continue;
@@ -1000,7 +1001,8 @@ mod tree {
                 continue;
             }
             for segment in plain(cells[0]).split(';').map(str::trim) {
-                if LEFT_OUT.contains(&segment) {
+                if let Some(name) = LEFT_OUT.iter().find(|n| **n == segment) {
+                    left_out_seen.push(name);
                     continue;
                 }
                 let text = format!("// Taken from {segment}.");
@@ -1016,6 +1018,11 @@ mod tree {
             }
         }
         assert!(checked >= 60, "only {checked} names read from chapter 29");
+        // Each name left out is still a banned row's name, so the list cannot outlive its rows.
+        left_out_seen.sort_unstable();
+        let mut left_out = LEFT_OUT.to_vec();
+        left_out.sort_unstable();
+        assert_eq!(left_out_seen, left_out);
     }
 
     #[test]
