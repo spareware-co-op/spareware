@@ -460,8 +460,8 @@ fn kind(kind: DependencyKind, package: &str) -> Result<Kind, DepsError> {
 
 /// The graph: every package with its declarations, and the resolved graph's normal and build edges.
 fn read_graph(metadata: &Value) -> Result<Graph, DepsError> {
-    let metadata: Metadata = serde_json::from_value(metadata.clone())
-        .map_err(|e| DepsError::Format(e.to_string()))?;
+    let metadata: Metadata =
+        serde_json::from_value(metadata.clone()).map_err(|e| DepsError::Format(e.to_string()))?;
     let root = metadata.workspace_root.as_std_path();
     let members: BTreeSet<String> = metadata
         .workspace_members
@@ -479,7 +479,10 @@ fn read_graph(metadata: &Value) -> Result<Graph, DepsError> {
             declared.push(Declared {
                 name: d.name.clone(),
                 kind: kind(d.kind, &p.name)?,
-                path: d.path.clone().map(::cargo_metadata::camino::Utf8PathBuf::into_std_path_buf),
+                path: d
+                    .path
+                    .clone()
+                    .map(::cargo_metadata::camino::Utf8PathBuf::into_std_path_buf),
             });
         }
         if let Some(folder) = manifest.parent() {
@@ -519,8 +522,7 @@ fn read_graph(metadata: &Value) -> Result<Graph, DepsError> {
             .map(|d| d.pkg.repr.as_str())
             .collect();
         if n.deps.iter().any(|d| d.dep_kinds.is_empty())
-            || n
-                .dependencies
+            || n.dependencies
                 .iter()
                 .any(|d| !with_kinds.contains(d.repr.as_str()))
         {

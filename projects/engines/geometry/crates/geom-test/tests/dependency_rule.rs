@@ -487,7 +487,11 @@ fn unreadable_metadata_is_an_error_not_a_pass() {
         ("missing packages", "packages", None),
         ("packages not a list", "packages", Some(json!({}))),
         ("missing workspace members", "workspace_members", None),
-        ("workspace root not a path", "workspace_root", Some(json!(7))),
+        (
+            "workspace root not a path",
+            "workspace_root",
+            Some(json!(7)),
+        ),
     ] {
         let mut m = base.clone();
         // serde names a missing field; a field of the wrong type it reports by the types alone.
