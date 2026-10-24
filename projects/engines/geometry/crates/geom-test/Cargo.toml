@@ -28,7 +28,7 @@ yaml-rust2 = { version = "0.13.0", default-features = false }
 # And reads `.cargo/mutants.toml`, `.config/nextest.toml` and `rust-toolchain.toml` as TOML (G21).
 # MIT OR Apache-2.0. The 0.9 line, because toml 1 asks for indexmap 2.13 or later and bolero's
 # derive crate pins indexmap to exactly 2.11.2.
-toml = { version = "0.9.6", default-features = false, features = ["std", "parse"] }
+toml = { version = "0.9.6", default-features = false, features = ["std", "parse", "serde"] }
 
 [lints.rust]
 unsafe_code = "forbid"
