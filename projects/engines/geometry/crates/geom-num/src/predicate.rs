@@ -173,10 +173,10 @@
 //!   determinant p′ × q′ at most 2δ², both below 2^83 and computed in `i128`. Each of the three
 //!   products of a lift and a determinant is at most 4δ⁴ < 2^166 (δ⁴ < 2^164), and the sum at most
 //!   12δ⁴ < 2^168 (12 < 2^4), in [`I256`]: every product of two `i128` values fits it
-//!   (|x · y| < 2^254), and the sum stays 87 bits below its limit. Over all points with coordinates
-//!   in {−M, 0, M} the largest value is 8M⁴ = δ⁴ / 2, reached by three corners of the bounding square
-//!   and its centre. That is not claimed to be the largest over the whole grid, which is not derived
-//!   here; nothing depends on it, since the proof uses only the bound 12δ⁴.
+//!   (|x · y| < 2^254), and the sum stays 87 bits below its limit. Over all points with
+//!   coordinates in {−M, 0, M} the largest value is 8M⁴ = δ⁴ / 2, reached by three corners of the
+//!   bounding square and its centre. That is not claimed to be the largest over the whole grid,
+//!   which is not derived here; nothing depends on it, since the proof uses only the bound 12δ⁴.
 //! - **insphere**, relative to e with p′ = p − e: each lift |p′|² at most 3δ² < 2^84; each 3 × 3
 //!   determinant at most 6δ³ < 2^126 (orient3d's derivation), both computed in `i128`, so negating
 //!   a determinant cannot overflow. Each of the four products is at most 18δ⁵ < 2^210 (18 < 2^5,
