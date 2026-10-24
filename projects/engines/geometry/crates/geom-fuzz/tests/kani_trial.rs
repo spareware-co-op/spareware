@@ -51,6 +51,7 @@ fn prove(bound: u64, draw: &ProofDraw) -> Result<(), Finding> {
 #[test]
 #[cfg_attr(kani, kani::proof)]
 #[cfg_attr(kani, kani::solver(cadical))]
+#[cfg_attr(kani, kani::unwind(10))]
 fn orient2d_trial_b0() {
     check!()
         .with_generator(proof_draws(0))
@@ -62,6 +63,7 @@ fn orient2d_trial_b0() {
 #[test]
 #[cfg_attr(kani, kani::proof)]
 #[cfg_attr(kani, kani::solver(cadical))]
+#[cfg_attr(kani, kani::unwind(10))]
 fn orient2d_trial_b1() {
     check!()
         .with_generator(proof_draws(1))
@@ -73,6 +75,7 @@ fn orient2d_trial_b1() {
 #[test]
 #[cfg_attr(kani, kani::proof)]
 #[cfg_attr(kani, kani::solver(cadical))]
+#[cfg_attr(kani, kani::unwind(10))]
 fn orient2d_trial_b7() {
     check!()
         .with_generator(proof_draws(7))
@@ -84,6 +87,7 @@ fn orient2d_trial_b7() {
 #[test]
 #[cfg_attr(kani, kani::proof)]
 #[cfg_attr(kani, kani::solver(cadical))]
+#[cfg_attr(kani, kani::unwind(10))]
 fn orient2d_trial_b15() {
     check!()
         .with_generator(proof_draws(15))

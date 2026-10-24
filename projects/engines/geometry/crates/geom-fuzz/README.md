@@ -59,6 +59,7 @@ fn <target>_fuzz() {
 #[test]
 #[cfg_attr(kani, kani::proof)]
 #[cfg_attr(kani, kani::solver(cadical))]
+#[cfg_attr(kani, kani::unwind(10))]
 fn <target>_proof() {
     bolero::check!()
         .with_generator(proof_draws(PROOF_BOUND))
@@ -78,10 +79,19 @@ Rules:
   shows a failure is reported.
 - The fuzz test takes raw bytes and hands them to `harness`, never a typed generator, so every
   engine's corpus and crash files are the harness's own input.
+- `check!` is written in the `#[test]` function itself, never in a helper it calls. bolero names
+  a target after the function `check!` is written in (`bolero-engine`'s `TargetLocation`), and
+  cargo-bolero builds a target by running the test of that name, so a target in a helper cannot
+  be built for libFuzzer or ClusterFuzzLite ("no targets matched"). `tests/attack_g14.rs` refuses
+  one.
 - The proof test drives `check` itself, with a typed bolero generator of the proof's domain.
   Under Kani every generated value is symbolic, so the proof covers the whole domain; under
   `cargo test` the same test is a property test over that domain, on every operating system.
   Aiming at hard cases is pointless there: Kani covers every case.
+- The proof test sets Kani's unwind bound above the longest loop a passing case runs (10 for
+  orient2d: six coordinates). Without one, Kani unwinds the digit loops that format a `Finding`
+  on symbolic values forever; with one, those loops are cut, and Kani's unwinding assertions,
+  on by default, fail the proof if a cut loop can be reached, so the bound hides nothing.
 - Corpus and crash files live in `tests/__fuzz__/<target>/corpus` and `tests/__fuzz__/<target>/crashes`
   (bolero names the folder after the test, without `_fuzz`). `cargo test` replays both on every
   run, so a crash found by any engine and saved there stays a test forever (28.16). Corpora only
@@ -127,6 +137,21 @@ cargo kani --tests -p geom-fuzz --harness orient2d_proof --exact
 `cargo bolero test orient2d_proof --engine kani`, from `projects/engines/geometry/crates/geom-fuzz`
 with cargo-bolero's `kani` feature, runs `cargo kani --tests --harness orient2d_proof`, the same
 proof.
+
+`cfg(kani)`, which marks the proof tests, is declared to the compiler by `build.rs`
+(`cargo::rustc-check-cfg`), not in the manifest's `[lints]` table, which repeats `geom-num`'s
+exactly.
+
+One trap, found by the first proof. Kani 0.68.0 cannot compile a read of an enum's niche when the
+niche starts above 2^64: `codegen_get_discriminant` in
+`kani-compiler/src/codegen_cprover_gotoc/codegen/rvalue.rs` unwraps `u64::try_from(niche_start)`,
+unchanged on Kani's main branch on 2026-10-25. rustc makes such a niche when it widens an enum's
+tag to 128 bits, which it does for an enum whose data starts with an `i128` or `u128`; an `Option`
+or `Result` around that enum then marks its other variant with the tag value 2^128 − 1.
+`geom_num::NumError` was such an enum, so the proof failed to compile in `P2::new`; its tag is now
+one byte (`#[repr(u8)]`, explained on the type). Any other kernel enum that carries an `i128` or
+`u128` and is wrapped in an `Option` or `Result` needs the same until Kani is fixed; the Kani job
+fails to compile, never passes, when one is missed.
 
 **ClusterFuzzLite**, with Docker, through OSS-Fuzz's helper (as ClusterFuzzLite's build
 integration guide describes):
@@ -217,5 +242,11 @@ Read for this layout, every one under a licence chapter 29.2 lets us read; no co
 - cargo-fuzz 0.13.2 (MIT OR Apache-2.0), `src/templates.rs` and `src/project.rs`, for the layout
   and flags of the wrappers not built; `libfuzzer-sys` 0.4.13's licence from crates.io.
 - Kani 0.68.0 (MIT OR Apache-2.0), `kani-driver/src/call_cargo.rs`, for how `cargo kani --tests`
-  builds a test target, and the kani-github-action's `src/install-kani.sh` at commit
-  `f838096619a707b0f6b2118cf435eaccfa33e51f`, for how CI installs it.
+  builds a test target, `kani-compiler/src/codegen_cprover_gotoc/codegen/rvalue.rs` and
+  `statement.rs` at tag `kani-0.68.0`, for the niche trap above, and the kani-github-action's
+  `src/install-kani.sh` at commit `f838096619a707b0f6b2118cf435eaccfa33e51f`, for how CI installs
+  it.
+- cargo-bolero 0.13.5's `build_clusterfuzz.rs`, `list.rs`, `selection.rs` and `test_target.rs`
+  from the published crate, and `bolero-engine` 0.13.6's `target_location.rs`, for how a target is
+  named and selected (the rule that `check!` sits in the test itself).
+- The Cargo book's "Build Scripts" chapter, `cargo::rustc-check-cfg`, for `build.rs`.

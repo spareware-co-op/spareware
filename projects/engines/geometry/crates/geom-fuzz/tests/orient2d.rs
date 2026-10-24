@@ -98,6 +98,11 @@ fn orient2d_fuzz() {
         .for_each(|data: &[u8]| harness(data));
 }
 
+/// Under Kani, loops are unwound at most 10 times. Every loop a passing case runs is shorter:
+/// the six coordinates, drawn, mapped and checked one by one. The loops the bound cuts are in the
+/// formatting of a [`Finding`], whose digit loops run on symbolic values and would otherwise
+/// unwind forever; only a broken claim reaches them, and Kani's unwinding assertions fail the
+/// proof if any cut loop can be reached, so the bound never hides a failure.
 #[cfg_attr(
     target_family = "wasm",
     ignore = "bolero's test mode catches panics, which WASI cannot; the seeded leg runs the \
@@ -106,6 +111,7 @@ fn orient2d_fuzz() {
 #[test]
 #[cfg_attr(kani, kani::proof)]
 #[cfg_attr(kani, kani::solver(cadical))]
+#[cfg_attr(kani, kani::unwind(10))]
 fn orient2d_proof() {
     check!()
         .with_generator(proof_draws(PROOF_BOUND))
