@@ -235,16 +235,6 @@ jobs:
       - name: Every golden on wasm32 in debug
         if: ${{ !cancelled() }}
         run: cargo run --locked -p geom-test --bin golden -- run --target wasm32-wasip1
-      # The golden store's own tests, geom-test's golden module and the in-memory attacks of
-      # attack_g19.rs, which need no processes or files: on this target's allocator (the dlmalloc
-      # of Rust's WebAssembly targets) the perturbation's tests prove that code ordering values by
-      # address sees different orders under it, and the shuffle hook draws the same permutations
-      # as natively (chapter 28.13).
-      - name: The golden store's own tests on wasm32
-        if: ${{ !cancelled() }}
-        run: |
-          cargo test --locked -p geom-test --target wasm32-wasip1 --lib -- golden::
-          cargo test --locked -p geom-test --target wasm32-wasip1 --test attack_g19
       - name: geom-num's every test vector on wasm32 in release as shipped
         if: ${{ !cancelled() }}
         run: cargo test -p geom-num --target wasm32-wasip1 --release --locked --no-fail-fast

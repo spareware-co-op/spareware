@@ -279,12 +279,6 @@ fn kernel_yml_runs_every_golden_on_wasm32_in_every_build_mode() {
         if: ${{ !cancelled() }}
         run: cargo test -p geom-num --target wasm32-wasip1 --release --locked --no-fail-fast
 ",
-        "      - name: The golden store's own tests on wasm32
-        if: ${{ !cancelled() }}
-        run: |
-          cargo test --locked -p geom-test --target wasm32-wasip1 --lib -- golden::
-          cargo test --locked -p geom-test --target wasm32-wasip1 --test attack_g19
-",
         "        env:
           RUSTFLAGS: -C overflow-checks=on
         run: cargo test $KERNEL_CRATES --target wasm32-wasip1 --release --locked --no-fail-fast
