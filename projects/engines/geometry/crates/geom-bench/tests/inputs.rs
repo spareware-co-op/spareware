@@ -1748,6 +1748,46 @@ fn enclosure_classes_take_every_path() {
     assert!(ln.iter().any(|x| x.hi() > pow2(1020)));
 }
 
+/// The public predicates' batches take the routes their benchmarks are read as (piece G28): on
+/// typical inputs the generated filter decides every call, so `predicate/<op>/typical` is the
+/// filtered cost; on nearly degenerate inputs it decides none, so every call also runs the exact
+/// path (whose signs, never zero, `predicate_classes` checks), and
+/// `predicate/<op>/nearly_degenerate` is the cost of the filter followed by the exact path. The
+/// exception is orient2d on 64-bit targets other than WebAssembly, whose route skips the filter
+/// (`predicate.rs`, routing), so there every class of `predicate/orient2d` is the exact path's
+/// cost; the WebAssembly fuel gate measures its filtered route.
+#[test]
+fn predicate_classes_take_the_filtered_and_the_exact_route() {
+    use geom_num::generated as gp;
+    use inputs::predicate as i;
+    for (class, decides) in [(Typical, true), (NearlyDegenerate, false)] {
+        assert!(
+            i::orient2d(class)
+                .iter()
+                .all(|&[a, b, c]| gp::orient2d::filter(a, b, c).is_some() == decides),
+            "orient2d, {class}"
+        );
+        assert!(
+            i::orient3d(class)
+                .iter()
+                .all(|&[a, b, c, d]| gp::orient3d::filter(a, b, c, d).is_some() == decides),
+            "orient3d, {class}"
+        );
+        assert!(
+            i::incircle(class)
+                .iter()
+                .all(|&[a, b, c, d]| gp::incircle::filter(a, b, c, d).is_some() == decides),
+            "incircle, {class}"
+        );
+        assert!(
+            i::insphere(class)
+                .iter()
+                .all(|&[a, b, c, d, e]| gp::insphere::filter(a, b, c, d, e).is_some() == decides),
+            "insphere, {class}"
+        );
+    }
+}
+
 #[test]
 fn generated_classes_take_their_paths() {
     use geom_num::generated as gp;

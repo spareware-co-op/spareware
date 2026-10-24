@@ -17,9 +17,9 @@
 //! Invariants this crate keeps:
 //!
 //! - Every grid coordinate is a whole number of grid steps with magnitude at most
-//!   [`grid::COORD_MAX`] (2^40 − 1). Every exact predicate's bit budget assumes this, and each
-//!   predicate's doc comment carries its derivation, whose arithmetic is asserted when the crate
-//!   compiles.
+//!   [`grid::COORD_MAX`] (2^40 − 1). Every exact predicate's bit budget assumes this, and its
+//!   module carries the written derivation (for the explicit-point predicates, in [`predicate`]'s
+//!   header), whose arithmetic is asserted when the crate compiles.
 //! - Every predicate returns a [`sign::Sign`], never a number, and is exact: no rounding decides a
 //!   sign. A computation that cannot complete is reported as [`NumError::BudgetExceeded`], never
 //!   answered; no input can cause one, only a defect in this crate.
