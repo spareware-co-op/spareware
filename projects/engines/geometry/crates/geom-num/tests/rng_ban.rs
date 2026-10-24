@@ -205,7 +205,10 @@ fn rule_1_is_read_only_from_its_section() {
     // No section 8, or rule 1 renumbered, or rule 2 gone, or the two in the wrong order.
     assert_eq!(rule_1(&good.replace("## 8.", "## 7.")), None);
     assert_eq!(rule_1(&good.replace("1. **One", "- **One")), None);
-    assert_eq!(rule_1(&good.replace("2. **The seed", "Then **The seed")), None);
+    assert_eq!(
+        rule_1(&good.replace("2. **The seed", "Then **The seed")),
+        None
+    );
     let swapped = "# Kernel\n\n## 8. The randomised-method rule\n\n2. **The seed is an input.**\n1. \
                    **One generator.** `rand`.\n";
     assert_eq!(rule_1(swapped), None);
