@@ -1123,6 +1123,57 @@ fn unit_cube<const D: usize>() -> Vec<[i64; D]> {
         .collect()
 }
 
+/// The points scaled by M.
+fn scaled<const D: usize, const N: usize>(p: [[i64; D]; N]) -> [[i64; D]; N] {
+    p.map(|q| times(M, q))
+}
+
+/// Checks every set of N distinct points of the unit cube scaled by M (the public predicate,
+/// `robust`, the filter and the generated value, which is M^power times the unit one), and returns
+/// the largest magnitude at unit scale and the sets that reach it.
+fn sweep_scaled<const D: usize, const N: usize>(
+    oracle: &Oracle,
+    pred: &Predicate<D, N>,
+    power: usize,
+    tally: &mut Tally,
+) -> (IBig, Vec<[[i64; D]; N]>) {
+    let points = unit_cube::<D>();
+    let scale = IBig::from(M).pow(power);
+    let (mut largest, mut at) = (IBig::ZERO, Vec::new());
+    for set in subsets(points.len(), N) {
+        let small: [[i64; D]; N] = array::from_fn(|i| points[set[i]]);
+        let value = oracle.exact(pred, small);
+        let sign = sign_of(&value);
+        let p = scaled(small);
+        let name = pred.name;
+        assert_eq!((pred.public)(p), Ok(sign), "{name}{p:?}");
+        let shewchuk = sign_of_f64((pred.robust)(p));
+        let robust = if pred.negate {
+            shewchuk.negate()
+        } else {
+            shewchuk
+        };
+        assert_eq!(robust, sign, "{name}{p:?}: robust");
+        let filtered = (pred.filter)(p);
+        if let Some(filtered) = filtered {
+            assert_eq!(filtered, sign, "{name}{p:?}: the filter");
+        }
+        assert_eq!(
+            (pred.value)(p),
+            Some(&value * &scale),
+            "{name}{p:?}: the generated value is M^{power} times the unit one"
+        );
+        tally.note(sign, filtered);
+        let size = magnitude(&value);
+        if size > largest {
+            (largest, at) = (size, vec![small]);
+        } else if size == largest {
+            at.push(small);
+        }
+    }
+    (largest, at)
+}
+
 /// The lifted predicates' values over the points with coordinates in {−M, 0, M}, against the
 /// largest the module header states there: 8M⁴ for incircle, at three corners of the bounding
 /// square and its centre, and 48M⁵ for insphere, at a regular tetrahedron on alternate corners of
@@ -1138,54 +1189,6 @@ fn the_largest_lifted_values_over_minus_m_zero_m_are_the_ones_the_header_states(
     let oracle = Oracle::new();
     let m = IBig::from(M);
     let mut tally = Tally::default();
-
-    fn scaled<const D: usize, const N: usize>(p: [[i64; D]; N]) -> [[i64; D]; N] {
-        p.map(|q| times(M, q))
-    }
-    /// Checks every set of N distinct points of the unit cube scaled by M, and returns the
-    /// largest magnitude at unit scale and the sets that reach it.
-    fn sweep_scaled<const D: usize, const N: usize>(
-        oracle: &Oracle,
-        pred: &Predicate<D, N>,
-        power: usize,
-        tally: &mut Tally,
-    ) -> (IBig, Vec<[[i64; D]; N]>) {
-        let points = unit_cube::<D>();
-        let scale = IBig::from(M).pow(power);
-        let (mut largest, mut at) = (IBig::ZERO, Vec::new());
-        for set in subsets(points.len(), N) {
-            let small: [[i64; D]; N] = array::from_fn(|i| points[set[i]]);
-            let value = oracle.exact(pred, small);
-            let sign = sign_of(&value);
-            let p = scaled(small);
-            let name = pred.name;
-            assert_eq!((pred.public)(p), Ok(sign), "{name}{p:?}");
-            let shewchuk = sign_of_f64((pred.robust)(p));
-            let robust = if pred.negate {
-                shewchuk.negate()
-            } else {
-                shewchuk
-            };
-            assert_eq!(robust, sign, "{name}{p:?}: robust");
-            let filtered = (pred.filter)(p);
-            if let Some(filtered) = filtered {
-                assert_eq!(filtered, sign, "{name}{p:?}: the filter");
-            }
-            assert_eq!(
-                (pred.value)(p),
-                Some(&value * &scale),
-                "{name}{p:?}: the generated value is M^{power} times the unit one"
-            );
-            tally.note(sign, filtered);
-            let size = magnitude(&value);
-            if size > largest {
-                (largest, at) = (size, vec![small]);
-            } else if size == largest {
-                at.push(small);
-            }
-        }
-        (largest, at)
-    }
 
     let (largest, at) = sweep_scaled(&oracle, &INCIRCLE, 4, &mut tally);
     assert_eq!(
