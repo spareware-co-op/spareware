@@ -293,7 +293,8 @@ impl Scanner {
             return;
         };
         let name = ident.to_string();
-        if (name.contains("GOLDEN") || name.contains("DIGEST")) && Digest::from_hex(&value).is_some()
+        if (name.contains("GOLDEN") || name.contains("DIGEST"))
+            && Digest::from_hex(&value).is_some()
         {
             self.facts.stray.push((name.clone(), line_of(ident)));
         }
@@ -394,11 +395,7 @@ impl<'ast> Visit<'ast> for Scanner {
                 },
                 None => Arg::Other,
             };
-            let line = func
-                .path
-                .segments
-                .first()
-                .map_or(0, |s| line_of(&s.ident));
+            let line = func.path.segments.first().map_or(0, |s| line_of(&s.ident));
             self.calls.push(RawCall {
                 function: self.functions.last().cloned().unwrap_or_default(),
                 arg,
@@ -411,7 +408,8 @@ impl<'ast> Visit<'ast> for Scanner {
     /// A macro whose arguments are expressions (`assert!(a, "..")`, `vec![..]`, `println!(..)`) is
     /// walked as those expressions; any other macro's tokens are not code this check can read.
     fn visit_macro(&mut self, mac: &'ast syn::Macro) {
-        if let Ok(args) = mac.parse_body_with(Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated)
+        if let Ok(args) =
+            mac.parse_body_with(Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated)
         {
             for arg in &args {
                 self.visit_expr(arg);
@@ -431,7 +429,11 @@ impl<'ast> Visit<'ast> for Scanner {
 pub fn scan(text: &str, in_crate: &str, in_geom_test: bool) -> Result<Facts, String> {
     let file = syn::parse_file(text).map_err(|e| {
         let at = e.span().start();
-        format!("line {}, column {}: {e}", at.line, at.column.saturating_add(1))
+        format!(
+            "line {}, column {}: {e}",
+            at.line,
+            at.column.saturating_add(1)
+        )
     })?;
     let mut scanner = Scanner::new(in_crate, in_geom_test);
     scanner.visit_file(&file);
@@ -832,7 +834,10 @@ mod tests {
         assert!(ids("use crate::golden;\nfn f() { golden::check(name, d); }").is_empty());
         assert!(ids("use geom_bench::golden;\nfn f() { golden::check(\"x/y\", d); }").is_empty());
         // In full, renamed, and inside geom-test.
-        assert_eq!(ids("fn f() { geom_test::golden::check(\"x/y\", d); }").len(), 1);
+        assert_eq!(
+            ids("fn f() { geom_test::golden::check(\"x/y\", d); }").len(),
+            1
+        );
         assert_eq!(
             ids("use geom_test::golden as g;\nfn f() { g::check(\"x/y\", d); }").len(),
             1
@@ -1022,7 +1027,12 @@ mod tests {
             ),
             (
                 "projects/engines/geometry/crates/geom-x/src/golden/shuffle.rs".to_owned(),
-                scan("mod tests { fn pinned() {} }", "src/golden/shuffle.rs", false).unwrap(),
+                scan(
+                    "mod tests { fn pinned() {} }",
+                    "src/golden/shuffle.rs",
+                    false,
+                )
+                .unwrap(),
             ),
         ];
         let (path, _, inside) =
@@ -1044,7 +1054,10 @@ mod tests {
         let m = |p: &str| library_module(p).map(|v| v.join("::"));
         assert_eq!(m("src/lib.rs"), Some(String::new()));
         assert_eq!(m("src/golden.rs"), Some("golden".to_owned()));
-        assert_eq!(m("src/golden/shuffle.rs"), Some("golden::shuffle".to_owned()));
+        assert_eq!(
+            m("src/golden/shuffle.rs"),
+            Some("golden::shuffle".to_owned())
+        );
         assert_eq!(m("src/map/mod.rs"), Some("map".to_owned()));
         assert_eq!(m("src/bin/golden.rs"), None);
         assert_eq!(m("tests/t.rs"), None);

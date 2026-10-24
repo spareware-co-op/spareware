@@ -22,9 +22,9 @@
 //! - **Exactly the store's goldens.** One group per crate and test target, in store order, each
 //!   naming its functions exactly; a golden checked by a file has no test and is checked by
 //!   `golden check` instead.
-//! - **Nothing passes unrun.** [`verify`] fails unless the run's libtest summary says exactly the
-//!   group's number of tests passed, none failed and none was ignored, and every planned id printed
-//!   its agreeing line.
+//! - **Nothing passes unrun.** [`verify`] fails unless the run has exactly one libtest summary,
+//!   its verdict is `ok.`, it says exactly the group's number of tests passed, none failed and none
+//!   was ignored, and every planned id printed its agreeing line.
 //!
 //! Method: libtest's documented output (`test result: ok. N passed; M failed; I ignored; ...`) and
 //! command-line filters (<https://doc.rust-lang.org/rustc/tests/index.html>), the golden matrix of
@@ -124,6 +124,8 @@ pub enum RunError {
         /// Tests the group runs.
         planned: usize,
     },
+    /// libtest's verdict is not `ok.` (the summary line, as printed).
+    NotOk(String),
     /// A planned golden printed no agreeing line.
     Silent(String),
 }
@@ -141,6 +143,10 @@ impl fmt::Display for RunError {
                 f,
                 "libtest ran {passed} passed, {failed} failed, {ignored} ignored, but the group \
                  has {planned} golden test(s): each must run and pass"
+            ),
+            RunError::NotOk(summary) => write!(
+                f,
+                "libtest's summary is \"test result: {summary}\", not ok: the golden tests did                  not all pass"
             ),
             RunError::Silent(id) => write!(
                 f,
@@ -179,7 +185,10 @@ pub fn verify(group: &Group, output: &str) -> Result<(), RunError> {
     let [summary] = summaries.as_slice() else {
         return Err(RunError::NoSummary);
     };
-    let summary = summary.strip_prefix("ok.").unwrap_or(summary);
+    // libtest's verdict comes first: `ok.` or `FAILED.`; anything but `ok.` is no proof.
+    let Some(summary) = summary.strip_prefix("ok.") else {
+        return Err(RunError::NotOk((*summary).to_owned()));
+    };
     let (Some(passed), Some(failed), Some(ignored)) = (
         count_before(summary, "passed"),
         count_before(summary, "failed"),
