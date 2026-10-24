@@ -598,6 +598,8 @@ dependencies = [
  "divan",
  "geom-num",
  "gungraun",
+ "gungraun-runner",
+ "serde_json",
 ]
 
 [[package]]
@@ -1282,7 +1284,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e1460377fe936c3efbe8e27c422b745fa54ebaea81ffe4a53a6f17c7a478683"
 dependencies = [
  "either-or-both",
+ "indexmap",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -1300,6 +1304,7 @@ dependencies = [
  "equivalent",
  "hashbrown",
  "serde",
+ "serde_core",
 ]
 
 [[package]]

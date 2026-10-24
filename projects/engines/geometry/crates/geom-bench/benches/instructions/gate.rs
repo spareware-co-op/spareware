@@ -11,8 +11,12 @@
 //! measured function, checks the benchmark's inputs and results against `golden.txt` and ends the
 //! run with a failure if they differ.
 //!
-//! Guarantees: a rise over [`GATE_PERCENT`] in any gated measure, or a golden digest that differs,
-//! fails the run; `tests/coverage.rs` and `tests/attack_g06.rs` check this file's wiring.
+//! Guarantees: a rise over [`GATE_PERCENT`] in instructions, estimated cycles or any heap measure,
+//! or a golden digest that differs, fails the run; the miss counts are judged after the run from
+//! its summaries (`geom_bench::callgrind`: gated at [`GATE_PERCENT`] from a merge-base count of 20
+//! up, below that listed and judged through estimated cycles, because a count below 20 cannot show
+//! a 5% change smaller than one event, while code layout alone moves it by one or two);
+//! `tests/coverage.rs`, `tests/attack_g06.rs` and `tests/attack_g18a.rs` check this file's wiring.
 //!
 //! Identifiers are `instructions::<group>::<op> <class>`, for example
 //! `instructions::predicate::orient2d nearly_degenerate`; a baseline matches benchmarks by
@@ -57,23 +61,19 @@ fn verify(run: &'static mut Named) {
 }
 
 /// The gate's tools and limits. Callgrind, with its cache simulation, counts instructions, cache
-/// misses and estimated cycles; DHAT counts the heap use of the measured function. Each gated
-/// measure has a soft limit of [`GATE_PERCENT`]: a rise beyond it against the baseline is a
-/// regression, and the run exits with code 3 after reporting every benchmark. The workflow passes
-/// the same limits on the command line (`geom_bench::CALLGRIND_LIMITS` and `DHAT_LIMITS`), which
-/// take precedence, so the gate does not depend on this file.
+/// misses and estimated cycles; DHAT counts the heap use of the measured function. Instructions,
+/// estimated cycles and every heap measure have a soft limit of [`GATE_PERCENT`]: a rise beyond it
+/// against the baseline is a regression, and the run exits with code 3 after reporting every
+/// benchmark. The miss counts have none here: a percentage limit would fail on one event on the
+/// counts too small to resolve it, so `geom_bench::callgrind` judges them from the run's summaries.
+/// The workflow passes the same limits on the command line (`geom_bench::CALLGRIND_LIMITS` and
+/// `DHAT_LIMITS`), which take precedence, so the gate does not depend on this file.
 pub fn config() -> LibraryBenchmarkConfig {
     let mut callgrind = Callgrind::default();
     callgrind.args([ZERO_BEFORE]);
     callgrind.soft_limits([
         (EventKind::Ir, GATE_PERCENT),
         (EventKind::EstimatedCycles, GATE_PERCENT),
-        (EventKind::I1mr, GATE_PERCENT),
-        (EventKind::D1mr, GATE_PERCENT),
-        (EventKind::D1mw, GATE_PERCENT),
-        (EventKind::ILmr, GATE_PERCENT),
-        (EventKind::DLmr, GATE_PERCENT),
-        (EventKind::DLmw, GATE_PERCENT),
     ]);
     let mut dhat = Dhat::default();
     dhat.soft_limits([

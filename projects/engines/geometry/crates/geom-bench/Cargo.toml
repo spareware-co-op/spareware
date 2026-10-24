@@ -28,6 +28,13 @@ bench = false
 
 [dependencies]
 geom-num = { path = "../geom-num" }
+# Gungraun's summary model, the typed schema of the `summary.json` files the gate's runs write, which
+# `geom-bench-counts callgrind` reads (`geom_bench::callgrind`). Only the model: no runner, no
+# Valgrind, so it builds on every platform. Apache-2.0 OR MIT. Exactly the version of `gungraun`
+# below, so the schema read is the one the runner writes (a test checks they agree).
+gungraun-runner = { version = "=0.20.0", default-features = false, features = ["summary"] }
+# The JSON parser for those summaries. MIT OR Apache-2.0.
+serde_json = "1.0.154"
 
 [dev-dependencies]
 # Wall-clock timings for people, on every platform. MIT OR Apache-2.0.

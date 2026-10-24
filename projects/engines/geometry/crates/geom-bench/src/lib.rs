@@ -63,10 +63,15 @@
 //!   <https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md>),
 //!   runs every benchmark under Valgrind's Callgrind
 //!   (<https://valgrind.org/docs/manual/cl-manual.html>), which executes the program on a
-//!   simulated processor and counts what it does. The gate fails if any benchmark's instructions,
-//!   estimated cycles, or L1 or last-level cache misses (instruction reads, data reads, data
-//!   writes: [`GATED_METRICS`]) rise by more than [`GATE_PERCENT`] on either processor. The two
-//!   run different instructions, so each compares only its own two runs. With the fuel gate below,
+//!   simulated processor and counts what it does. The gate fails if any benchmark's instructions
+//!   or estimated cycles rise by more than [`GATE_PERCENT`] on either processor, or one of its L1
+//!   or last-level cache misses (instruction reads, data reads, data writes: [`GATED_METRICS`])
+//!   does on a miss count large enough to show it: from 20 up, where one event is within 5%. A
+//!   smaller miss count cannot show a 5% change smaller than one event, and code layout alone
+//!   moves it by an event or two, so its changes are listed and judged through estimated cycles,
+//!   which weight every miss ([`callgrind`] derives the rule and applies it to Gungraun's
+//!   machine-readable summaries). The two processors run different instructions, so each compares
+//!   only its own two runs, under the same rule. With the fuel gate below,
 //!   every benchmark is measured on the three targets chapter 23.3 names, x86-64 and aarch64
 //!   natively and wasm32, so each predicate's filtered and exact cost is known on all three
 //!   (piece G28; [`inputs::predicate`] says which benchmarks give which).
@@ -112,8 +117,10 @@
 //!    pass, which runs code and touches data the first pass already brought into the simulated
 //!    caches ([`harness`] has the details). No count then depends on where the linker placed code
 //!    or the allocator placed data: every line the counted pass touches was touched by the first
-//!    pass, so a benchmark whose work fits the L1 caches counts no misses, and a miss is a real
-//!    change in how much memory the kernel touches.
+//!    pass, so a benchmark whose work fits the L1 caches counts almost no misses. The few left, one
+//!    to three on some benchmarks, still depend on which cache lines the code falls on, and move by
+//!    an event or two when a change elsewhere shifts the layout; counts that small are judged
+//!    through estimated cycles, not on their own ([`callgrind`]).
 //!    The gate's build aligns every function to a 64-byte cache line
 //!    (`-C llvm-args=-align-all-functions=6`), so the little code run only once, the returns at the
 //!    end, sits on lines already fetched.
@@ -187,17 +194,26 @@
 //! ```
 //!
 //! To compare a change with `main` as CI does, save a baseline on `main` and compare the branch
-//! with it, passing the gate's limits. A rise over 5% ends the run with `Gungraun result:
-//! Regressed`, the list of rises, and a failed bench (the harness exits with code 3):
+//! with it, passing the gate's limits and saving Gungraun's summaries. A rise over 5% in
+//! instructions, estimated cycles or heap ends the run with `Gungraun result: Regressed`, the list
+//! of rises, and a failed bench (the harness exits with code 3); the miss counts are then judged
+//! from the summaries, and `geom-bench-counts` exits with 1 on a rise over 5% on a miss count of 20
+//! or more:
 //!
 //! ```text
 //! export RUSTFLAGS="-C llvm-args=-align-all-functions=6"
 //! git switch main
+//! rm -rf target/gungraun
 //! cargo bench -p geom-bench --bench instructions -- --save-baseline=main
 //! git switch my-branch
-//! cargo bench -p geom-bench --bench instructions -- --baseline=main \
-//!     --callgrind-limits='ir=5%,estimatedcycles=5%,i1mr=5%,d1mr=5%,d1mw=5%,ilmr=5%,dlmr=5%,dlmw=5%' \
+//! cargo bench -p geom-bench --bench instructions -- --baseline=main --save-summary=json \
+//!     --callgrind-limits='ir=5%,estimatedcycles=5%' \
 //!     --dhat-limits='totalbytes=5%,totalblocks=5%,attgmaxbytes=5%,maximumbytes=5%'
+//! cargo bench -p geom-bench --bench instructions -- --list \
+//!     | sed -nE 's/^instructions::([a-z0-9_]+)::([a-z0-9_]+)::([a-z0-9_]+): benchmark$/\1\/\2\/\3/p' \
+//!     > names.txt
+//! cargo run --release -p geom-bench --bin geom-bench-counts -- callgrind \
+//!     target/gungraun/geom-bench/instructions names.txt 5 "Instructions, cycles and misses"
 //! ```
 //!
 //! Pass `--bench instructions` or `--bench wall_clock`: the two harnesses take different options.
@@ -241,6 +257,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod callgrind;
 pub mod canonical;
 pub mod catalogue;
 pub mod counts;
@@ -260,9 +277,11 @@ pub const GATE_PERCENT: f64 = 5.0;
 /// 23.13: "Every change over 1% in the deterministic gates is listed on the pull request").
 pub const LIST_PERCENT: f64 = 1.0;
 
-/// The Callgrind measures the gate applies [`GATE_PERCENT`] to, by their Gungraun names:
-/// instructions executed, estimated cycles, and the L1 and last-level misses of instruction reads,
-/// data reads and data writes (chapter 23.13, "Instructions and cache").
+/// The Callgrind measures the gate judges, by their Gungraun names: instructions executed and
+/// estimated cycles, gated at [`GATE_PERCENT`] on every benchmark, and the L1 and last-level misses
+/// of instruction reads, data reads and data writes, gated at [`GATE_PERCENT`] where the merge
+/// base's count resolves it and otherwise judged through estimated cycles (chapter 23.13,
+/// "Instructions and cache"; [`callgrind::JUDGED`] holds the same names).
 pub const GATED_METRICS: [&str; 8] = [
     "Ir",
     "EstimatedCycles",
@@ -280,10 +299,12 @@ pub const GATED_METRICS: [&str; 8] = [
 pub const GATED_HEAP_METRICS: [&str; 4] =
     ["TotalBytes", "TotalBlocks", "AtTGmaxBytes", "MaximumBytes"];
 
-/// [`GATED_METRICS`] at [`GATE_PERCENT`], as the workflow passes them to Gungraun
-/// (`--callgrind-limits`); a test checks the two agree.
-pub const CALLGRIND_LIMITS: &str =
-    "ir=5%,estimatedcycles=5%,i1mr=5%,d1mr=5%,d1mw=5%,ilmr=5%,dlmr=5%,dlmw=5%";
+/// The measures of [`GATED_METRICS`] that Gungraun gates itself, instructions and estimated cycles,
+/// at [`GATE_PERCENT`], as the workflow passes them to Gungraun (`--callgrind-limits`, which
+/// replaces the limits `benches/instructions/gate.rs` sets); a test checks the two agree. The miss
+/// counts are left out: a percentage limit cannot leave alone the counts too small to resolve it,
+/// so [`callgrind::judge`] gates them from Gungraun's summaries.
+pub const CALLGRIND_LIMITS: &str = "ir=5%,estimatedcycles=5%";
 
 /// [`GATED_HEAP_METRICS`] at [`GATE_PERCENT`], as the workflow passes them to Gungraun
 /// (`--dhat-limits`); a test checks the two agree.

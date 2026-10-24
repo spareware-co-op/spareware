@@ -510,12 +510,27 @@ fn the_gate_is_five_percent_on_every_measure() {
         GATED_HEAP_METRICS,
         ["TotalBytes", "TotalBlocks", "AtTGmaxBytes", "MaximumBytes"]
     );
-    for metric in GATED_METRICS {
+    // Gungraun gates instructions and estimated cycles itself; the miss counts are judged from its
+    // summaries (geom_bench::callgrind, G18a), so the tree's configuration must not gate them at a
+    // plain 5%, which fails on one event on the counts too small to resolve it.
+    for metric in &GATED_METRICS[..2] {
         assert!(
             GATE.contains(&format!("(EventKind::{metric}, GATE_PERCENT)")),
             "{metric}"
         );
     }
+    for metric in misses {
+        assert!(
+            !GATE.contains(&format!("EventKind::{metric}")),
+            "gate.rs sets a percentage limit on {metric}"
+        );
+    }
+    let judged: Vec<&str> = geom_bench::callgrind::JUDGED
+        .iter()
+        .map(|&(_, name)| name)
+        .collect();
+    assert_eq!(judged, GATED_METRICS);
+    assert_eq!(geom_bench::callgrind::floor(5), Some(20));
     for metric in GATED_HEAP_METRICS {
         assert!(
             GATE.contains(&format!("(DhatMetric::{metric}, GATE_PERCENT)")),
@@ -530,7 +545,7 @@ fn the_gate_is_five_percent_on_every_measure() {
     };
     let as_written = |s: &str| s.replace(".0%", "%");
     assert_eq!(
-        as_written(&limits(&GATED_METRICS).join(",")),
+        as_written(&limits(&GATED_METRICS[..2]).join(",")),
         CALLGRIND_LIMITS
     );
     assert_eq!(
@@ -567,6 +582,9 @@ fn the_workflow_passes_the_documented_limits_and_build() {
         "\"$COUNTS\" compare",
         "\"$COUNTS\" growth",
         "geom-bench-counts\" removed",
+        "--save-summary=json",
+        "\"$CARGO_TARGET_DIR/release/geom-bench-counts\" callgrind",
+        "\"$CARGO_TARGET_DIR/gungraun/geom-bench/instructions\"",
         "retired.txt",
         "test --locked --release -p geom-bench",
         "fmt --check -p geom-bench",
@@ -620,6 +638,12 @@ fn the_pins_are_exact_and_agree() {
     // Gungraun: the runner binary must match the library exactly; the manifest pins it, the
     // documentation and the lock file must agree.
     assert!(MANIFEST.contains(&format!("gungraun = \"={GUNGRAUN_VERSION}\"")));
+    // The summary model the miss-count judge reads (geom_bench::callgrind) is the runner's own, at
+    // exactly the runner's version, so the schema read is the one written.
+    assert!(MANIFEST.contains(&format!(
+        "gungraun-runner = {{ version = \"={GUNGRAUN_VERSION}\", default-features = false, \
+         features = [\"summary\"] }}"
+    )));
     // Each `[[package]]` entry's lines; the gungraun entry's `version`.
     let locked = LOCK
         .split("[[package]]")

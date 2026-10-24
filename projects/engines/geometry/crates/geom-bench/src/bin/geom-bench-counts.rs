@@ -5,16 +5,22 @@
 //! geom-bench-counts compare <base counts> <head counts> <gate %> <list %> <retired.txt> <title>
 //! geom-bench-counts growth <head counts>
 //! geom-bench-counts removed <base names> <head names> <retired.txt>
+//! geom-bench-counts callgrind <summary folder> <head names> <gate %> <title>
 //! ```
+//!
+//! `callgrind` judges the instruction-and-cache gate's Callgrind counts from the `summary.json`
+//! files Gungraun saved under the folder (`geom_bench::callgrind`): instructions and estimated
+//! cycles at the gate's percentage, and each miss count at it where the merge base's count
+//! resolves it, from 20 up for 5%.
 //!
 //! Each prints a Markdown report on standard output (`removed` prints one name per line) and exits
 //! with 0 when the check passes, 1 when it fails, 2 when an argument or file is wrong, so a
 //! workflow step fails exactly when the check does.
 //!
 //! Guarantees: the exit status is the check's verdict, and every check is exact for any count and
-//! any whole-number percentage the arguments can hold (`geom_bench::counts`); a missing,
-//! unreadable or malformed file, or an argument that is not a whole number, exits with 2, never
-//! with a pass.
+//! any whole-number percentage the arguments can hold (`geom_bench::counts`,
+//! `geom_bench::callgrind`); a missing, unreadable or malformed file, a benchmark without exactly
+//! one summary, or an argument that is not a whole number, exits with 2, never with a pass.
 //!
 //! Method: `geom_bench::counts`: Gungraun's soft limits
 //! (<https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md>)
@@ -23,11 +29,12 @@
 //!   <https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md>,
 //!   for its library-benchmark API and its Callgrind and DHAT settings. No code copied.
 //!
-//! Cost: reading the files, then O(n log n) for n benchmarks.
+//! Cost: reading and parsing the files, then O(n log n) for n benchmarks.
 
 use std::io::Write as _;
 use std::process::ExitCode;
 
+use geom_bench::callgrind::{judge, read_summaries};
 use geom_bench::counts::{Counts, compare, growth, growth_report, parse_names, unretired_removals};
 
 /// A file's text, or a message naming it.
@@ -73,9 +80,17 @@ fn run(args: &[&str], out: &mut String) -> Result<bool, String> {
             }
             Ok(removed.is_empty())
         }
+        ["callgrind", folder, names, gate, title] => {
+            let gate = percent(gate)?;
+            let names = parse_names(&read(names)?);
+            let judgement = judge(&read_summaries(std::path::Path::new(folder))?, &names, gate)?;
+            out.push_str(&judgement.report(title));
+            Ok(judgement.passed())
+        }
         _ => Err(
             "usage: geom-bench-counts compare <base> <head> <gate %> <list %> <retired> \
-                  <title> | growth <counts> | removed <base names> <head names> <retired>"
+                  <title> | growth <counts> | removed <base names> <head names> <retired> | \
+                  callgrind <summary folder> <head names> <gate %> <title>"
                 .to_owned(),
         ),
     }
