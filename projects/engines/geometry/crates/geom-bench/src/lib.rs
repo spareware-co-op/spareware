@@ -58,14 +58,19 @@
 //! change, with the toolchain each pins in `toolchain.txt` (the same one unless the change bumps
 //! it, and the one `kernel.yml` pins; a test checks), and compare them (chapter 28.14):
 //!
-//! - **Instructions and cache** (Linux x86-64). Gungraun, formerly iai-callgrind (Apache-2.0 OR
-//!   MIT, <https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md>),
+//! - **Instructions and cache** (Linux x86-64 and Linux aarch64, each a gate of its own). Gungraun,
+//!   formerly iai-callgrind (Apache-2.0 OR MIT,
+//!   <https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md>),
 //!   runs every benchmark under Valgrind's Callgrind
 //!   (<https://valgrind.org/docs/manual/cl-manual.html>), which executes the program on a
 //!   simulated processor and counts what it does. The gate fails if any benchmark's instructions,
 //!   estimated cycles, or L1 or last-level cache misses (instruction reads, data reads, data
-//!   writes: [`GATED_METRICS`]) rise by more than [`GATE_PERCENT`].
-//! - **Heap** (Linux x86-64). The same benchmarks under Valgrind's DHAT
+//!   writes: [`GATED_METRICS`]) rise by more than [`GATE_PERCENT`] on either processor. The two
+//!   run different instructions, so each compares only its own two runs. With the fuel gate below,
+//!   every benchmark is measured on the three targets chapter 23.3 names, x86-64 and aarch64
+//!   natively and wasm32, so each predicate's filtered and exact cost is known on all three
+//!   (piece G28; [`inputs::predicate`] says which benchmarks give which).
+//! - **Heap** (Linux x86-64 and Linux aarch64). The same benchmarks under Valgrind's DHAT
 //!   (<https://valgrind.org/docs/manual/dh-manual.html>), counting only allocations made inside the
 //!   measured function: bytes and blocks allocated, bytes live at the heap's peak, and the
 //!   largest bytes live at once ([`GATED_HEAP_METRICS`]); a rise over 5% fails. The numbers layer
@@ -170,9 +175,10 @@
 //! cargo run --release -p geom-bench --bin geom-bench-counts -- growth fuel.txt
 //! ```
 //!
-//! Instruction counts, cache misses and heap, on Linux (on Windows use WSL 2; recent macOS has no
-//! Valgrind). Install Valgrind and the Gungraun runner, whose version must equal the `gungraun`
-//! version in `Cargo.lock` ([`GUNGRAUN_VERSION`]), and build with the gate's flags:
+//! Instruction counts, cache misses and heap, on Linux, x86-64 or aarch64 (on Windows use WSL 2;
+//! recent macOS has no Valgrind). Install Valgrind and the Gungraun runner, whose version must
+//! equal the `gungraun` version in `Cargo.lock` ([`GUNGRAUN_VERSION`]), and build with the gate's
+//! flags:
 //!
 //! ```text
 //! sudo apt-get install valgrind

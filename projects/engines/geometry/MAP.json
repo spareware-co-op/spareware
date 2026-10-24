@@ -2429,7 +2429,7 @@
       "file": "projects/engines/geometry/crates/geom-num/src/lib.rs",
       "folder": "projects/engines/geometry/crates/geom-num",
       "invariants": [
-        "Every grid coordinate is a whole number of grid steps with magnitude at most [`grid::COORD_MAX`] (2^40 − 1). Every exact predicate's bit budget assumes this, and each predicate's doc comment carries its derivation, whose arithmetic is asserted when the crate compiles.",
+        "Every grid coordinate is a whole number of grid steps with magnitude at most [`grid::COORD_MAX`] (2^40 − 1). Every exact predicate's bit budget assumes this, and its module carries the written derivation (for the explicit-point predicates, in [`predicate`]'s header), whose arithmetic is asserted when the crate compiles.",
         "Every predicate returns a [`sign::Sign`], never a number, and is exact: no rounding decides a sign. A computation that cannot complete is reported as [`NumError::BudgetExceeded`], never answered; no input can cause one, only a defect in this crate.",
         "A [`plane::Plane`] and a [`plane::Tpi`] check their bit budgets when they are made, so every computation on them fits its type.",
         "Committing a three-plane point to the grid ([`plane::Tpi::to_grid`]) rounds each coordinate to the nearest step, ties to even, moving it by at most half a step ([`ladder::COMMIT_PER_AXIS`]), and says whether it moved.",

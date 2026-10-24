@@ -19,7 +19,9 @@ name: Kernel benchmarks
 # them:
 #  - instructions: every benchmark under Valgrind, through Gungraun. Callgrind counts instructions,
 #    L1 and last-level cache misses and estimated cycles; DHAT counts the heap the measured function
-#    uses. A rise over 5% in any of them fails.
+#    uses. A rise over 5% in any of them fails. It runs twice, on Linux x86-64 and on Linux aarch64,
+#    each leg a gate of its own, so with the fuel job every benchmark is measured on the three
+#    targets chapter 23.3 names: x86-64 and aarch64 natively, and wasm32 (piece G28).
 #  - fuel: every benchmark built for wasm32-wasip1 and run in Wasmtime with fuel metering, which
 #    counts WebAssembly operators. A rise over 5% fails, and each scale benchmark, run at n, 2n and
 #    4n, must grow no faster than its stated cost.
@@ -252,13 +254,26 @@ jobs:
         run: cargo "+$HEAD_TOOLCHAIN" test --locked -p geom-bench
 
   instructions:
-    name: Instructions, cache and heap (5% gate)
+    name: Instructions, cache and heap on ${{ matrix.target }} (5% gate)
     needs: scope
     if: needs.scope.outputs.measure == 'true'
-    # A pinned image, so Valgrind's version only changes when this line does.
-    runs-on: ubuntu-24.04
+    strategy:
+      # Each target is a gate of its own: a rise on one fails its leg, and does not cancel the
+      # other's measurement and report.
+      fail-fast: false
+      matrix:
+        # Pinned images, so Valgrind's version only changes when these lines do. The two processors
+        # run different instructions, so each leg compares only its own two runs.
+        include:
+          - target: x86-64
+            runner: ubuntu-24.04
+          - target: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 150
     env:
+      # The target this leg measures, for its summary and annotations.
+      TARGET: ${{ matrix.target }}
       # One target directory for both trees: shared dependencies build once, and Gungraun keeps its
       # saved runs in target/gungraun, where the second run finds the first.
       CARGO_TARGET_DIR: ${{ github.workspace }}/target
@@ -297,7 +312,7 @@ jobs:
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: head -> ../target
-          key: ${{ needs.scope.outputs.base_toolchain }}-${{ needs.scope.outputs.head_toolchain }}
+          key: ${{ matrix.target }}-${{ needs.scope.outputs.base_toolchain }}-${{ needs.scope.outputs.head_toolchain }}
           cache-directories: ~/.gungraun-runner
 
       - name: Install Valgrind
@@ -428,7 +443,7 @@ jobs:
           listed=$(cat "$RUNNER_TEMP/rises.log" "$RUNNER_TEMP/falls.log" 2>/dev/null \
             | grep -c '^Regressions:' || true)
           if [ "${listed:-0}" -gt 0 ]; then
-            echo "::notice::Instruction, cache or heap counts changed by more than 1%: the job summary lists every change."
+            echo "::notice::Instruction, cache or heap counts on $TARGET changed by more than 1%: the job summary lists every change."
           fi
           case "$removed_status" in
             0) ;;
@@ -458,7 +473,7 @@ jobs:
           regressions() { sed -n '/^Regressions:/,/^Gungraun result/p' "$1" 2>/dev/null; }
           listed() { grep -q '^Regressions:' "$1" 2>/dev/null; }
           {
-            echo "## Kernel benchmarks: instructions, cache and heap"
+            echo "## Kernel benchmarks: instructions, cache and heap on Linux $TARGET"
             echo
             echo "Merge base \`${MERGE_BASE:0:12}\` (Rust $BASE_TOOLCHAIN) against" \
               "\`${HEAD_SHA:0:12}\` (Rust $HEAD_TOOLCHAIN), measured in one job with" \
