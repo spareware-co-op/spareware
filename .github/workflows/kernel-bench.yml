@@ -1,0 +1,696 @@
+name: Kernel benchmarks
+
+# The geometry kernel's count gates: a pull request that makes any benchmark of the numbers layer
+# more than 5% more expensive cannot merge (principle 12; architecture chapters 23.13 and 28.14;
+# board entry G18). projects/engines/geometry/crates/geom-bench documents everything in full.
+#
+# It runs on every pull request and every push to main that touches anything that can change a
+# count (the path filters below). A pull request is compared with its merge base; a push to main
+# with the main it replaced, so two pull requests that each pass cannot together slip a rise past
+# the gate unseen.
+#
+# One job checks geom-bench itself: formatting, Clippy with geom-bench's lints, and the tests in
+# release with overflow checks and in debug, with warnings as errors. geom-bench is a development
+# crate (chapter 27): its lints deny unwrap, expect, panic! and unchecked indexing outside tests,
+# as geom-num's do (.github/workflows/kernel.yml), but not the native arithmetic, lossy casts and
+# disallowed methods geom-num also denies in kernel code.
+#
+# Two jobs measure the base and the change, each in one job with pinned toolchains, and compare
+# them:
+#  - instructions: every benchmark under Valgrind, through Gungraun. Callgrind counts instructions,
+#    L1 and last-level cache misses and estimated cycles; DHAT counts the heap the measured function
+#    uses. A rise over 5% in any of them fails.
+#  - fuel: every benchmark built for wasm32-wasip1 and run in Wasmtime with fuel metering, which
+#    counts WebAssembly operators. A rise over 5% fails, and each scale benchmark, run at n, 2n and
+#    4n, must grow no faster than its stated cost.
+# Both check every benchmark's golden digests (inputs and results, SHA-256), the fuel job on wasm32,
+# both list every change over 1% in the job summary and as an annotation, and both fail if a
+# benchmark of the merge base disappears without being named in geom-bench/retired.txt.
+#
+# How noise is handled:
+#  - Nothing is timed. Callgrind simulates a fixed processor and cache (Gungraun pins 32 KiB L1s and
+#    an 8 MiB last level) and Wasmtime's fuel counts operators, so a given binary gives the same
+#    counts on every run, and one run per benchmark is enough.
+#  - The measured function runs its kernel twice and Callgrind's costs are zeroed at the start of
+#    each pass, so the counts are those of a warm second pass; every function is aligned to a cache
+#    line (RUSTFLAGS below), so no count depends on where code or data happened to be placed.
+#  - Base and change are built with the toolchains pinned in their own geom-bench/toolchain.txt
+#    (the same one unless the change bumps it; a test keeps it equal to kernel.yml's), installed
+#    with dtolnay/rust-toolchain, on one runner, in one job, and only those two runs are compared.
+#    Gungraun turns address-space randomisation off and clears the environment; no benchmark
+#    starts a thread.
+#
+# The limits are set here, not read from the tree under test, so a pull request cannot loosen its
+# own gate by editing geom-bench; this file and the kernel are reviewed by the owners
+# (.github/CODEOWNERS).
+#
+# Read-only: the jobs report in their summaries and annotations, and never write to the repository
+# or the pull request (pull requests from forks get no write token).
+#
+# Every action is pinned to a full commit, the same commit kernel.yml pins for it (a test checks
+# they agree), and every checkout keeps no credentials; update a pin in both workflows, and only
+# after reviewing the new commit.
+#
+# Every `run:` step runs in GitHub's default shell, `bash -e`, so a failing command ends its step
+# even after `set -uo pipefail`. A step that reports a check's verdict therefore catches the
+# check's exit status itself (`|| status=$?`) before reporting it, and the summaries, which only
+# report, never fail the job: the steps before them are the gates.
+
+on:
+  # Anything that can change a count: the kernel, Cargo.lock (a dependency bump), the workspace
+  # manifest, the toolchain files, Cargo's configuration and this workflow; the first job checks the
+  # same list again. Like kernel.yml's, these checks run only for such changes, so branch protection
+  # must not require them of every pull request: a required check that never runs never passes.
+  pull_request:
+    paths:
+      - "projects/engines/geometry/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain"
+      - "rust-toolchain.toml"
+      - ".cargo/**"
+      - ".github/workflows/kernel-bench.yml"
+  push:
+    branches: [main]
+    paths:
+      - "projects/engines/geometry/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain"
+      - "rust-toolchain.toml"
+      - ".cargo/**"
+      - ".github/workflows/kernel-bench.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  # A newer push to a pull request replaces its run; every push to main is measured.
+  group: kernel-bench-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_INCREMENTAL: "0"
+  CARGO_TERM_COLOR: never
+  NO_COLOR: "1"
+  # One collation for sort and comm in every step.
+  LC_ALL: C
+  BENCH: projects/engines/geometry/crates/geom-bench
+  # The gate (principle 12) and the listing threshold (chapter 23.13), in percent.
+  GATE_PERCENT: "5"
+  LIST_PERCENT: "1"
+  # Gungraun's soft limits for every gated measure (geom_bench::CALLGRIND_LIMITS and DHAT_LIMITS;
+  # a test checks they agree).
+  CALLGRIND_LIMITS: "ir=5%,estimatedcycles=5%,i1mr=5%,d1mr=5%,d1mw=5%,ilmr=5%,dlmr=5%,dlmw=5%"
+  DHAT_LIMITS: "totalbytes=5%,totalblocks=5%,attgmaxbytes=5%,maximumbytes=5%"
+  # What is compared: a pull request's base branch and head, or the main a push replaced and the
+  # main it made.
+  BASE_SHA: ${{ github.event_name == 'push' && github.event.before || github.event.pull_request.base.sha }}
+  HEAD_SHA: ${{ github.event_name == 'push' && github.sha || github.event.pull_request.head.sha }}
+
+jobs:
+  scope:
+    name: What the count gates measure
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      measure: ${{ steps.scope.outputs.measure }}
+      merge_base: ${{ steps.scope.outputs.merge_base }}
+      base_gate: ${{ steps.scope.outputs.base_gate }}
+      base_fuel: ${{ steps.scope.outputs.base_fuel }}
+      base_toolchain: ${{ steps.scope.outputs.base_toolchain }}
+      head_toolchain: ${{ steps.scope.outputs.head_toolchain }}
+    steps:
+      - name: Check out the change
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.HEAD_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Decide what to measure
+        id: scope
+        run: |
+          set -euo pipefail
+          base=$BASE_SHA
+          if ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            # A push whose previous tip is not in the history (main's first push, or a force push):
+            # compare with the first parent instead.
+            if ! base=$(git rev-parse --verify --quiet "$HEAD_SHA^"); then
+              echo "::error::$HEAD_SHA has no parent and the previous tip $BASE_SHA is unknown: there is nothing to compare with."
+              exit 1
+            fi
+            echo "::notice::The previous tip $BASE_SHA is not in the history; comparing with the first parent $base."
+          fi
+          merge_base=$(git merge-base "$base" "$HEAD_SHA")
+          echo "merge_base=$merge_base" >> "$GITHUB_OUTPUT"
+          changed=$(git diff --name-only "$merge_base" "$HEAD_SHA")
+          # Anything that can change a count.
+          relevant=$(printf '%s\n' "$changed" \
+            | grep -E '^(projects/engines/geometry/|Cargo\.lock$|Cargo\.toml$|rust-toolchain(\.toml)?$|\.cargo/|\.github/workflows/kernel-bench\.yml$)' \
+            || true)
+          if [ -z "$relevant" ]; then
+            echo "measure=false" >> "$GITHUB_OUTPUT"
+            echo "Nothing that can change a count changed, so the count gates have nothing to measure."
+            exit 0
+          fi
+          echo "measure=true" >> "$GITHUB_OUTPUT"
+          # The pinned toolchains: each tree's own, the pull request's when the merge base has none.
+          head_toolchain=$(tr -d '[:space:]' < "$BENCH/toolchain.txt")
+          if git cat-file -e "$merge_base:$BENCH/toolchain.txt" 2>/dev/null; then
+            base_toolchain=$(git show "$merge_base:$BENCH/toolchain.txt" | tr -d '[:space:]')
+          else
+            base_toolchain=$head_toolchain
+          fi
+          for toolchain in "$base_toolchain" "$head_toolchain"; do
+            if ! printf '%s' "$toolchain" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "::error::geom-bench/toolchain.txt must name an exact release such as 1.99.0, not '$toolchain'."
+              exit 1
+            fi
+          done
+          # A toolchain bump is a pull request of its own, so its effect is all the comparison shows
+          # (chapter 23.13, "Toolchain bumps"; the geom-bench documentation has the procedure).
+          if [ "$base_toolchain" != "$head_toolchain" ]; then
+            others=$(printf '%s\n' "$changed" | grep -E '^projects/engines/geometry/' \
+              | grep -vxF "$BENCH/toolchain.txt" || true)
+            if [ -n "$others" ]; then
+              echo "::error::This pull request changes the pinned toolchain ($base_toolchain to $head_toolchain) and kernel files too. Bump the toolchain in a pull request of its own."
+              exit 1
+            fi
+            echo "::notice::Toolchain bump: the merge base is built with $base_toolchain, the pull request with $head_toolchain. Every change listed is the toolchain's."
+          fi
+          echo "base_toolchain=$base_toolchain" >> "$GITHUB_OUTPUT"
+          echo "head_toolchain=$head_toolchain" >> "$GITHUB_OUTPUT"
+          # What the merge base can measure (none of it, before geom-bench existed).
+          if git cat-file -e "$merge_base:$BENCH/benches/instructions/main.rs" 2>/dev/null; then
+            echo "base_gate=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "base_gate=false" >> "$GITHUB_OUTPUT"
+          fi
+          if git cat-file -e "$merge_base:$BENCH/fuel/Cargo.toml" 2>/dev/null \
+            && { git cat-file -e "$merge_base:$BENCH/src/bin/geom-bench-guest.rs" 2>/dev/null \n              || git cat-file -e "$merge_base:$BENCH/src/bin/guest.rs" 2>/dev/null; }; then
+            echo "base_fuel=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "base_fuel=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # geom-bench's own checks, as kernel.yml makes them for geom-num, with the pinned toolchain. The
+  # fuel host (geom-bench/fuel) is a workspace of its own, so it is formatted and linted by its
+  # manifest.
+  checks:
+    name: Format, lints and tests (geom-bench)
+    needs: scope
+    if: needs.scope.outputs.measure == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      HEAD_TOOLCHAIN: ${{ needs.scope.outputs.head_toolchain }}
+    steps:
+      - name: Check out the change
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.HEAD_SHA }}
+          persist-credentials: false
+
+      - name: Install the pinned toolchain (geom-bench/toolchain.txt)
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.HEAD_TOOLCHAIN }}
+          components: rustfmt, clippy
+
+      - name: Cache the Rust build
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: |
+            . -> target
+            projects/engines/geometry/crates/geom-bench/fuel -> target
+          key: checks-${{ needs.scope.outputs.head_toolchain }}
+
+      - name: Formatting
+        run: |
+          set -euo pipefail
+          cargo "+$HEAD_TOOLCHAIN" fmt --check -p geom-bench
+          cargo "+$HEAD_TOOLCHAIN" fmt --check --manifest-path "$BENCH/fuel/Cargo.toml"
+
+      # On Linux this also builds the Valgrind gate (benches/instructions/gate.rs), which no other
+      # platform compiles.
+      - name: Clippy with geom-bench's lints
+        run: |
+          set -euo pipefail
+          cargo "+$HEAD_TOOLCHAIN" clippy --locked -p geom-bench --all-targets -- -D warnings
+          cargo "+$HEAD_TOOLCHAIN" clippy --locked --manifest-path "$BENCH/fuel/Cargo.toml" \
+            --all-targets -- -D warnings
+
+      - name: Test in release, with overflow checks on
+        env:
+          RUSTFLAGS: -C overflow-checks=on -D warnings
+        run: cargo "+$HEAD_TOOLCHAIN" test --locked --release -p geom-bench
+
+      - name: Test in debug
+        env:
+          RUSTFLAGS: -D warnings
+        run: cargo "+$HEAD_TOOLCHAIN" test --locked -p geom-bench
+
+  instructions:
+    name: Instructions, cache and heap (5% gate)
+    needs: scope
+    if: needs.scope.outputs.measure == 'true'
+    # A pinned image, so Valgrind's version only changes when this line does.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    env:
+      # One target directory for both trees: shared dependencies build once, and Gungraun keeps its
+      # saved runs in target/gungraun, where the second run finds the first.
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
+      # Every function on its own cache line, so the code the measured pass runs only once sits on
+      # lines it already fetched (geom_bench::harness).
+      RUSTFLAGS: "-C llvm-args=-align-all-functions=6"
+      MERGE_BASE: ${{ needs.scope.outputs.merge_base }}
+      HAS_BASE: ${{ needs.scope.outputs.base_gate }}
+      BASE_TOOLCHAIN: ${{ needs.scope.outputs.base_toolchain }}
+      HEAD_TOOLCHAIN: ${{ needs.scope.outputs.head_toolchain }}
+    steps:
+      - name: Check out the change
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.HEAD_SHA }}
+          path: head
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check out the merge base beside it
+        run: git -C head worktree add --detach "$GITHUB_WORKSPACE/base" "$MERGE_BASE"
+
+      # Each tree's own geom-bench/toolchain.txt; the change's last, so it is also the default.
+      - name: Install the merge base's pinned toolchain
+        if: env.BASE_TOOLCHAIN != env.HEAD_TOOLCHAIN
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.BASE_TOOLCHAIN }}
+
+      - name: Install the pinned toolchain (geom-bench/toolchain.txt)
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.HEAD_TOOLCHAIN }}
+
+      - name: Cache the Rust build
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: head -> ../target
+          key: ${{ needs.scope.outputs.base_toolchain }}-${{ needs.scope.outputs.head_toolchain }}
+          cache-directories: ~/.gungraun-runner
+
+      - name: Install Valgrind
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends valgrind
+          valgrind --version
+
+      # The golden digests (no benchmark may get faster by computing something else, and the
+      # results recorded on one platform must come out the same here), the input classes, and the
+      # wiring of the gates.
+      - name: Check the benchmarks' inputs, results and wiring
+        working-directory: head
+        run: cargo "+$HEAD_TOOLCHAIN" test --locked --release -p geom-bench
+
+      - name: Install the Gungraun runner each tree needs
+        run: |
+          set -euo pipefail
+          shopt -s inherit_errexit
+          # gungraun-runner must have exactly the version of the gungraun library the tree locks.
+          runner_for() {
+            local version
+            version=$(cargo "+$HEAD_TOOLCHAIN" metadata --locked --format-version 1 \
+                --manifest-path "$1/Cargo.toml" \
+              | jq -r '[.packages[] | select(.name == "gungraun") | .version] | unique | join(" ")')
+            case "$version" in
+              "" | *" "*)
+                echo "::error::$1 must lock exactly one gungraun version (found '$version')" >&2
+                return 1
+                ;;
+            esac
+            cargo "+$HEAD_TOOLCHAIN" install --locked gungraun-runner --version "$version" \
+              --root "$HOME/.gungraun-runner/$version" >&2 || return 1
+            echo "$HOME/.gungraun-runner/$version/bin/gungraun-runner"
+          }
+          head_runner=$(runner_for head)
+          echo "HEAD_RUNNER=$head_runner" >> "$GITHUB_ENV"
+          if [ "$HAS_BASE" = true ]; then
+            base_runner=$(runner_for base)
+            echo "BASE_RUNNER=$base_runner" >> "$GITHUB_ENV"
+          fi
+
+      - name: Benchmark the merge base
+        if: needs.scope.outputs.base_gate == 'true'
+        working-directory: base
+        env:
+          # Read when the benchmark is compiled (gungraun::main! uses option_env!).
+          GUNGRAUN_RUNNER: ${{ env.BASE_RUNNER }}
+        run: |
+          set -euo pipefail
+          rm -rf "${CARGO_TARGET_DIR:?}/gungraun"
+          cargo "+$BASE_TOOLCHAIN" bench --locked -p geom-bench --bench instructions -- \
+            --save-baseline=base 2>&1 | tee "$RUNNER_TEMP/base.log"
+          cargo "+$BASE_TOOLCHAIN" bench --locked -p geom-bench --bench instructions -- --list \
+            | sed -nE 's/^instructions::([a-z0-9_]+)::([a-z0-9_]+)::([a-z0-9_]+): benchmark$/\1\/\2\/\3/p' \
+            | sort > "$RUNNER_TEMP/base.names"
+
+      # The gate. Gungraun compares every benchmark with the merge base's saved run and, after
+      # reporting all of them, fails (exit code 3, reported by cargo as a failed bench) if any gated
+      # measure rose by more than 5%. The limits are this workflow's, passed on the command line,
+      # which takes precedence over the configuration in the tree. Each benchmark's teardown also
+      # checks its golden digests and fails the run if they differ. A benchmark with no saved run
+      # is recorded, not compared.
+      - name: Benchmark the pull request against the merge base
+        id: gate
+        working-directory: head
+        env:
+          GUNGRAUN_RUNNER: ${{ env.HEAD_RUNNER }}
+        run: |
+          set -euo pipefail
+          if [ "$HAS_BASE" = true ]; then
+            compare=(--baseline=base)
+          else
+            rm -rf "${CARGO_TARGET_DIR:?}/gungraun"
+            compare=()
+          fi
+          cargo "+$HEAD_TOOLCHAIN" bench --locked -p geom-bench --bench instructions -- \
+            "${compare[@]}" --save-baseline=head \
+            --callgrind-limits="$CALLGRIND_LIMITS" --dhat-limits="$DHAT_LIMITS" \
+            2>&1 | tee "$RUNNER_TEMP/head.log"
+
+      # Chapter 23.13 lists every change over 1%. The two saved runs are compared again with 1%
+      # limits each way; these runs read the saved results and measure nothing. Their failing exit
+      # status only means "something was listed"; a listing that does not complete fails the step.
+      # A benchmark of the merge base that this pull request no longer has fails the gate unless
+      # retired.txt names it: a rename must not hide a regression.
+      - name: List changes over 1% and benchmarks not compared
+        id: listing
+        if: always() && needs.scope.outputs.base_gate == 'true' && steps.gate.outcome != 'skipped'
+        working-directory: head
+        env:
+          GUNGRAUN_RUNNER: ${{ env.HEAD_RUNNER }}
+        run: |
+          set -euo pipefail
+          cargo "+$HEAD_TOOLCHAIN" bench --locked -p geom-bench --bench instructions -- --list \
+            | sed -nE 's/^instructions::([a-z0-9_]+)::([a-z0-9_]+)::([a-z0-9_]+): benchmark$/\1\/\2\/\3/p' \
+            | sort > "$RUNNER_TEMP/head.names"
+          comm -13 "$RUNNER_TEMP/base.names" "$RUNNER_TEMP/head.names" > "$RUNNER_TEMP/added.names"
+          cargo "+$HEAD_TOOLCHAIN" build --locked --release -p geom-bench --bin geom-bench-counts
+          # Exit status 1: a benchmark was removed without being retired; 2: the check could not
+          # run. Either fails the step, after the listing below.
+          removed_status=0
+          "$CARGO_TARGET_DIR/release/geom-bench-counts" removed "$RUNNER_TEMP/base.names" \
+            "$RUNNER_TEMP/head.names" "$BENCH/retired.txt" > "$RUNNER_TEMP/removed.names" \
+            || removed_status=$?
+          while read -r name; do
+            echo "::error::$name is at the merge base but not in this pull request. Name it in geom-bench/retired.txt if that is intended."
+          done < "$RUNNER_TEMP/removed.names"
+          # A listing that does not complete could leave a change over 1% unlisted, so it fails the
+          # step too, after the rest is reported.
+          incomplete=0
+          for way in rises:1 falls:-1; do
+            limit=${way#*:}
+            log="$RUNNER_TEMP/${way%%:*}.log"
+            # Its failing exit status only means something was listed; whether the run completed
+            # is checked next.
+            cargo "+$HEAD_TOOLCHAIN" bench --locked -p geom-bench --bench instructions -- \
+              --load-baseline=head --baseline=base \
+              --callgrind-limits="ir=${limit}%,estimatedcycles=${limit}%,i1mr=${limit}%,d1mr=${limit}%,d1mw=${limit}%,ilmr=${limit}%,dlmr=${limit}%,dlmw=${limit}%" \
+              --dhat-limits="totalbytes=${limit}%,totalblocks=${limit}%,attgmaxbytes=${limit}%,maximumbytes=${limit}%" \
+              > "$log" 2>&1 || true
+            if ! grep -q '^Gungraun result:' "$log"; then
+              echo "::error::Listing the ${way%%:*} over 1% did not complete, so the job summary may miss changes; see its output below."
+              cat "$log"
+              incomplete=1
+            fi
+          done
+          listed=$(cat "$RUNNER_TEMP/rises.log" "$RUNNER_TEMP/falls.log" 2>/dev/null \
+            | grep -c '^Regressions:' || true)
+          if [ "${listed:-0}" -gt 0 ]; then
+            echo "::notice::Instruction, cache or heap counts changed by more than 1%: the job summary lists every change."
+          fi
+          case "$removed_status" in
+            0) ;;
+            1)
+              echo "::error::Benchmarks were removed without being retired; see the job summary."
+              exit 1
+              ;;
+            *)
+              echo "::error::geom-bench-counts could not check for removed benchmarks (exit status $removed_status); see the job log."
+              exit 1
+              ;;
+          esac
+          if [ "$incomplete" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Write the summary
+        if: always()
+        env:
+          GATE_OUTCOME: ${{ steps.gate.outcome }}
+        run: |
+          # Only reports: the steps before it decide whether the job passes, so nothing here may
+          # fail it, and a file an earlier step did not write is left out.
+          set +e
+          set -uo pipefail
+          t=$RUNNER_TEMP
+          regressions() { sed -n '/^Regressions:/,/^Gungraun result/p' "$1" 2>/dev/null; }
+          listed() { grep -q '^Regressions:' "$1" 2>/dev/null; }
+          {
+            echo "## Kernel benchmarks: instructions, cache and heap"
+            echo
+            echo "Merge base \`${MERGE_BASE:0:12}\` (Rust $BASE_TOOLCHAIN) against" \
+              "\`${HEAD_SHA:0:12}\` (Rust $HEAD_TOOLCHAIN), measured in one job with" \
+              "$(valgrind --version 2>/dev/null). The gate: no benchmark's instructions, estimated" \
+              "cycles, cache misses or heap use may rise by more than $GATE_PERCENT%, and every" \
+              "benchmark's inputs and results must match golden.txt."
+            echo
+            case "$GATE_OUTCOME/$HAS_BASE" in
+              success/true) echo "**Passed.**" ;;
+              success/false) echo "**Recorded.** The merge base has no count benchmarks, so nothing was compared; this run checks that they build, run and match their golden digests." ;;
+              failure/*)
+                if listed "$t/head.log"; then
+                  echo "**Failed: rises over $GATE_PERCENT%.** They block the merge."
+                elif grep -q 'golden digests differ' "$t/head.log" 2>/dev/null; then
+                  echo "**Failed: golden digests differ.** A benchmark computes something else. See the job log."
+                else
+                  echo "**Failed:** the benchmarks did not build or run. See the job log."
+                fi
+                ;;
+              *) echo "**Not run** (${GATE_OUTCOME:-an earlier step failed}). See the job log." ;;
+            esac
+            if listed "$t/head.log"; then
+              echo
+              echo "### Rises over $GATE_PERCENT%"
+              echo
+              echo '```text'
+              regressions "$t/head.log"
+              echo '```'
+            fi
+            if [ "$HAS_BASE" = true ] && [ -f "$t/rises.log" ]; then
+              for way in rises falls; do
+                echo
+                echo "### ${way^} over $LIST_PERCENT%"
+                echo
+                if listed "$t/$way.log"; then
+                  echo '```text'
+                  regressions "$t/$way.log"
+                  echo '```'
+                elif grep -q '^Gungraun result:' "$t/$way.log" 2>/dev/null; then
+                  echo "None."
+                else
+                  echo "**Not listed:** the listing did not complete, which blocks the merge. See the job log."
+                fi
+              done
+              echo
+              echo "### Benchmarks not compared"
+              echo
+              if [ -s "$t/removed.names" ] || [ -s "$t/added.names" ]; then
+                if [ -f "$t/removed.names" ]; then
+                  sed 's/^/- Removed without being retired (blocks the merge): /' "$t/removed.names"
+                fi
+                if [ -f "$t/added.names" ]; then
+                  sed 's/^/- New: /' "$t/added.names"
+                fi
+              else
+                echo "None: every benchmark exists in both, or was retired."
+              fi
+            fi
+            if [ -s "$t/head.log" ]; then
+              echo
+              echo "<details><summary>Full Gungraun output</summary>"
+              echo
+              echo '```text'
+              head -c 700000 "$t/head.log"
+              echo
+              echo '```'
+              echo "</details>"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+
+  fuel:
+    name: WebAssembly fuel and growth (5% gate)
+    needs: scope
+    if: needs.scope.outputs.measure == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
+      MERGE_BASE: ${{ needs.scope.outputs.merge_base }}
+      HAS_BASE: ${{ needs.scope.outputs.base_fuel }}
+      BASE_TOOLCHAIN: ${{ needs.scope.outputs.base_toolchain }}
+      HEAD_TOOLCHAIN: ${{ needs.scope.outputs.head_toolchain }}
+    steps:
+      - name: Check out the change
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.HEAD_SHA }}
+          path: head
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check out the merge base beside it
+        run: git -C head worktree add --detach "$GITHUB_WORKSPACE/base" "$MERGE_BASE"
+
+      # Each tree's own geom-bench/toolchain.txt; the change's last, so it is also the default.
+      - name: Install the merge base's pinned toolchain with the wasm32-wasip1 target
+        if: env.BASE_TOOLCHAIN != env.HEAD_TOOLCHAIN
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.BASE_TOOLCHAIN }}
+          targets: wasm32-wasip1
+
+      - name: Install the pinned toolchain with the wasm32-wasip1 target
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.HEAD_TOOLCHAIN }}
+          targets: wasm32-wasip1
+
+      - name: Cache the Rust build
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: |
+            head -> ../target
+            head/projects/engines/geometry/crates/geom-bench/fuel -> ../../../../../../../target/fuel-host
+          key: fuel-${{ needs.scope.outputs.base_toolchain }}-${{ needs.scope.outputs.head_toolchain }}
+
+      # The host and the comparison come from the pull request; both trees' guests run in the same
+      # host, so their fuel is counted by one Wasmtime.
+      - name: Build the fuel host and the count checks
+        run: |
+          set -euo pipefail
+          cargo "+$HEAD_TOOLCHAIN" build --locked --release \
+            --manifest-path "head/$BENCH/fuel/Cargo.toml" --target-dir "$CARGO_TARGET_DIR/fuel-host"
+          (cd head && cargo "+$HEAD_TOOLCHAIN" build --locked --release -p geom-bench \
+            --bin geom-bench-counts)
+          echo "FUEL_HOST=$CARGO_TARGET_DIR/fuel-host/release/geom-bench-fuel" >> "$GITHUB_ENV"
+          echo "COUNTS=$CARGO_TARGET_DIR/release/geom-bench-counts" >> "$GITHUB_ENV"
+
+      - name: Build each tree's guest for wasm32-wasip1
+        run: |
+          set -euo pipefail
+          guest() {
+            (cd "$1" && cargo "+$2" build --locked --release -p geom-bench \
+              --bin geom-bench-guest --target wasm32-wasip1)
+            cp "$CARGO_TARGET_DIR/wasm32-wasip1/release/geom-bench-guest.wasm" "$RUNNER_TEMP/$1.wasm"
+          }
+          if [ "$HAS_BASE" = true ]; then
+            guest base "$BASE_TOOLCHAIN"
+          fi
+          guest head "$HEAD_TOOLCHAIN"
+
+      # Measures every benchmark of each tree, and has each guest check its golden digests on
+      # wasm32: the results must be the bits recorded natively.
+      - name: Measure the fuel of the merge base and the pull request
+        id: measure
+        run: |
+          set -euo pipefail
+          if [ "$HAS_BASE" = true ]; then
+            "$FUEL_HOST" "$RUNNER_TEMP/base.wasm" > "$RUNNER_TEMP/base-fuel.txt"
+          fi
+          "$FUEL_HOST" "$RUNNER_TEMP/head.wasm" > "$RUNNER_TEMP/head-fuel.txt"
+
+      # The gate: a rise over 5% on any benchmark, or a benchmark removed without being named in
+      # retired.txt, fails; every change over 1% is listed.
+      - name: Compare the fuel with the merge base
+        id: compare
+        if: needs.scope.outputs.base_fuel == 'true'
+        run: |
+          set -euo pipefail
+          # Exit status 1: the gate failed; 2: the check could not run (its message is in the log).
+          status=0
+          "$COUNTS" compare "$RUNNER_TEMP/base-fuel.txt" "$RUNNER_TEMP/head-fuel.txt" \
+            "$GATE_PERCENT" "$LIST_PERCENT" "head/$BENCH/retired.txt" "WebAssembly fuel" \
+            > "$RUNNER_TEMP/fuel-report.md" || status=$?
+          if grep -q '^| ' "$RUNNER_TEMP/fuel-report.md"; then
+            echo "::notice::WebAssembly fuel changed by more than $LIST_PERCENT% on some benchmarks: the job summary lists every change."
+          fi
+          case "$status" in
+            0) ;;
+            1) echo "::error::WebAssembly fuel: a rise over $GATE_PERCENT% or a benchmark removed without being retired. See the job summary." ;;
+            *) echo "::error::geom-bench-counts could not compare the fuel (exit status $status); see the job log." ;;
+          esac
+          exit "$status"
+
+      # Chapter 28.14: each scale benchmark runs at n, 2n and 4n, and its work must grow no faster
+      # than its stated cost.
+      - name: Check growth at n, 2n and 4n
+        id: growth
+        run: |
+          set -euo pipefail
+          # Exit status 1: the check failed; 2: it could not run (its message is in the log).
+          status=0
+          "$COUNTS" growth "$RUNNER_TEMP/head-fuel.txt" > "$RUNNER_TEMP/growth-report.md" \
+            || status=$?
+          case "$status" in
+            0) ;;
+            1) echo "::error::A scale benchmark grows faster than its stated cost. See the job summary." ;;
+            *) echo "::error::geom-bench-counts could not check growth (exit status $status); see the job log." ;;
+          esac
+          exit "$status"
+
+      - name: Write the summary
+        if: always()
+        env:
+          MEASURE_OUTCOME: ${{ steps.measure.outcome }}
+        run: |
+          # Only reports: the steps before it decide whether the job passes, so nothing here may
+          # fail it, and a report an earlier step did not write (no comparison when the merge base
+          # has no fuel benchmarks) is left out.
+          set +e
+          set -uo pipefail
+          t=$RUNNER_TEMP
+          {
+            echo "## Kernel benchmarks: WebAssembly fuel and growth"
+            echo
+            echo "Merge base \`${MERGE_BASE:0:12}\` (Rust $BASE_TOOLCHAIN) against" \
+              "\`${HEAD_SHA:0:12}\` (Rust $HEAD_TOOLCHAIN), both run in one Wasmtime" \
+              "(geom-bench/fuel). The gate: no benchmark's fuel may rise by more than" \
+              "$GATE_PERCENT%, every benchmark's results on wasm32 must match golden.txt, and" \
+              "every scale benchmark must grow no faster than its stated cost."
+            echo
+            if [ "$MEASURE_OUTCOME" != success ]; then
+              echo "**Failed:** the guests did not build or run, or a golden check failed on wasm32. See the job log."
+              echo
+            fi
+            if [ "$HAS_BASE" != true ]; then
+              echo "**Recorded.** The merge base has no fuel benchmarks, so nothing was compared."
+              echo
+            fi
+            for report in fuel-report growth-report; do
+              if [ -f "$t/$report.md" ]; then
+                cat "$t/$report.md"
+              fi
+            done
+            if [ -s "$t/head-fuel.txt" ]; then
+              echo "<details><summary>Fuel of every benchmark</summary>"
+              echo
+              echo '```text'
+              cat "$t/head-fuel.txt"
+              echo '```'
+              echo "</details>"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 0

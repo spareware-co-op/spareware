@@ -7,7 +7,10 @@
 //! and their sources, and its features. A library counts as `no_std` only if no Rust file in its
 //! source folder declares `extern crate std`. It also lists the folders under
 //! `projects/engines/geometry/crates`, so a folder cargo does not see is still reported, and reads
-//! the toolchain file and the workflows for the toolchain check.
+//! the toolchain file and the workflows for the toolchain check. For the merge gate (G12) it reads
+//! every Rust source file of the crates that ship (`crate_sources`), for the ban on global state
+//! and the rule on lint attributes, and finds every cargo configuration file on the way to a crate
+//! of the family (`cargo_config_files`).
 //!
 //! What it guarantees: every path is taken relative to the workspace root that cargo reports, so
 //! short and long Windows path forms never disagree; folders are walked in sorted order without
@@ -36,15 +39,17 @@ use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 
 use crate::check::{Dep, DepKind, GEOMETRY_CRATES, Observed, Package};
+use crate::globals::{NOT_CRATE_CODE, SourceFile, Sources};
 use crate::header::Header;
 use crate::json::{self, Json};
 use crate::lints::{CLIPPY_FILES, ClippyConfig, Lints};
 use crate::manifest::{lint_settings, manifest_forbids_unsafe, settings};
+use crate::posture::CARGO_CONFIG_FILES;
 use crate::source::{Attributes, attributes, names_extern_crate_std};
 
 /// The cargo that runs this test: the `CARGO` variable cargo sets for the test process, or, if a
 /// runner dropped it, the one cargo set when it compiled the test.
-fn cargo() -> OsString {
+pub fn cargo() -> OsString {
     std::env::var_os("CARGO")
         .or_else(|| option_env!("CARGO").map(OsString::from))
         .expect("CARGO is not set: run this test through cargo")
@@ -280,8 +285,103 @@ pub fn observe() -> Observed {
     }
 }
 
+/// Every Rust source file of each crate in `crates` that `observed` holds, outside the folders
+/// directly in its folder that `globals::NOT_CRATE_CODE` names, read for global state, in sorted
+/// order (the merge gate's ban on global state, G12).
+pub fn crate_sources(observed: &Observed, crates: &BTreeSet<&str>) -> Sources {
+    let root = workspace_root();
+    let mut sources = Sources::new();
+    for (name, package) in observed
+        .packages
+        .iter()
+        .filter(|(name, _)| crates.contains(name.as_str()))
+    {
+        let dir = package
+            .dir
+            .iter()
+            .fold(root.clone(), |p, part| p.join(part));
+        let mut files = Vec::new();
+        for (path, is_dir) in entries(&dir) {
+            let skipped = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| NOT_CRATE_CODE.contains(&n));
+            if is_dir && !skipped {
+                files.extend(rust_files(&path));
+            } else if !is_dir && path.extension().is_some_and(|e| e == "rs") {
+                files.push(path);
+            }
+        }
+        files.sort();
+        let of_crate: Vec<SourceFile> = files
+            .iter()
+            .map(|file| SourceFile::read(relative(file, &root), &read(file)))
+            .collect();
+        sources.insert(name.clone(), of_crate);
+    }
+    sources
+}
+
+/// The files the compiler read for each crate (absolute paths, as `gate::compiled_sources` lists
+/// them), read for the source rules: each path relative to the workspace root when it is under it,
+/// else whole. A file that is not UTF-8 text (data a crate pastes in with `include_bytes!`) cannot
+/// be read as Rust, so it counts as not lexing, which the rules report.
+pub fn compiled_sources(compiled: &BTreeMap<String, BTreeSet<PathBuf>>) -> Sources {
+    let canonical = |p: &Path| fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+    let root = canonical(&workspace_root());
+    let mut sources = Sources::new();
+    for (krate, files) in compiled {
+        let of_crate = files
+            .iter()
+            .map(|file| {
+                let full = canonical(file);
+                let path: Vec<String> = match full.strip_prefix(&root) {
+                    Ok(rest) => rest
+                        .components()
+                        .map(|c| c.as_os_str().to_string_lossy().into_owned())
+                        .collect(),
+                    Err(_) => vec![file.display().to_string()],
+                };
+                match fs::read_to_string(&full) {
+                    Ok(text) => SourceFile::read(path, &text),
+                    Err(_) => SourceFile {
+                        path,
+                        uses: None,
+                        lints: None,
+                    },
+                }
+            })
+            .collect();
+        sources.insert(krate.clone(), of_crate);
+    }
+    sources
+}
+
+/// Every cargo configuration file, `.cargo/config.toml` or the older `.cargo/config`, in `root` or
+/// in a folder on the way from it to one of `dirs` (each relative to `root`, one component per
+/// entry), that folder included: the files cargo reads when it runs there
+/// (<https://doc.rust-lang.org/cargo/reference/config.html#hierarchical-structure>). Each is
+/// returned relative to `root`.
+pub fn cargo_config_files(root: &Path, dirs: &[Vec<String>]) -> BTreeSet<Vec<String>> {
+    let mut found = BTreeSet::new();
+    for dir in dirs {
+        for depth in 0..=dir.len() {
+            for name in CARGO_CONFIG_FILES {
+                let mut file: Vec<String> = dir[..depth].to_vec();
+                file.push(".cargo".to_owned());
+                file.push(name.to_owned());
+                let path = file.iter().fold(root.to_path_buf(), |p, part| p.join(part));
+                if path.is_file() {
+                    found.insert(file);
+                }
+            }
+        }
+    }
+    found
+}
+
 /// The workspace root, as cargo finds it from this crate.
-fn workspace_root() -> PathBuf {
+pub fn workspace_root() -> PathBuf {
     let output = Command::new(cargo())
         .args(["locate-project", "--workspace", "--message-format", "plain"])
         .current_dir(env!("CARGO_MANIFEST_DIR"))

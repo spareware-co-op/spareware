@@ -20,10 +20,10 @@
 //! Sections: 18 and 23.8; open question OQ-18.2, in the kernel architecture
 //! (`projects/engines/geometry/architecture/`).
 //!
+//! Family: Draw.
+//!
 //! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
-//! Direct dependencies still to add when geom-run merges (G04): geom-run.
-//! Direct dependencies still to add when geom-math merges (G03): geom-math.
 //!
 //! Status: scaffold only; built by pieces G387, G389, G390, G391, G394, G395, G396, G397, G398,
 //! G399, G400, G401, G402, G403, G404, G405.

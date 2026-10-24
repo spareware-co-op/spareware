@@ -1,0 +1,110 @@
+# cargo-deny's configuration for the geometry kernel: the licence, advisory, source and ban rules
+# of the merge gate (kernel architecture, chapter 28.8), for every crate of the kernel's family.
+#
+# Scope: the kernel's crates only, never the rest of the Spareware workspace. The merge gate
+# (.github/workflows/kernel-gate.yml) runs cargo-deny once for each crate of chapter 27's crate
+# table that is in the workspace (the kernel crates, geom-pool, the facade and its binding crates,
+# and the development crates), with that crate's own Cargo.toml as --manifest-path, so the crate
+# is the only root of the graph and the graph holds exactly what that crate builds and tests with:
+# its dependencies of every kind on every platform, with every feature on. Other programs' crates
+# are in no such graph unless a kernel crate depends on them. The list of crates comes from the
+# crate table, projects/engines/crates/engine-geometry/tests/scaffold/table.rs, and the runs are
+# the scaffold test's `gate_deny_*` tests (tests/scaffold/deny.rs). For one crate by hand:
+#
+#   cargo deny --manifest-path projects/engines/geometry/crates/<crate>/Cargo.toml \
+#     --config projects/engines/geometry/deny.toml check
+#
+# cargo-deny also finds this file by itself for any crate in this folder; by hand it runs
+# cargo-deny's checks only, not the gate's own rules below.
+#
+# Beside this file: deny-no-std.toml holds the rule for the no_std kernel crates alone (inside
+# them the only published crate is libm, chapter 29.1), and deny-ships.toml the rayon bans on what
+# the crates that ship build with (29.4).
+#
+# The gate's own rules (tests/scaffold/deny.rs, module `rules`) run on the same graph as every run
+# and close three gaps cargo-deny 0.20.2 leaves, read from its source: `private.ignore` below skips
+# any crate whose manifest says publish = false, not only ours, so the rules refuse every such
+# crate that is not of this workspace and read our own crates' licence fields themselves; the
+# sources check never reads a crate from a folder, so the rules refuse every crate that is neither
+# of this workspace nor from crates.io; and a licence that offers a choice passes without saying
+# which was taken, so the rules require the choice in the gate's record
+# (tests/scaffold/licence.rs, LICENCE_CHOICES; 29.20, rule 3).
+#
+# Every rule here is shown to fail on a seeded violation by tests/scaffold/deny.rs, which hands
+# cargo-deny a changed copy of `cargo metadata`, never a changed repository. Documentation read:
+# cargo-deny 0.20.2 (MIT OR Apache-2.0), docs/src/checks at commit
+# bca0dde53651ee946720e4540b5ce2610bec8f06 of https://github.com/EmbarkStudios/cargo-deny.
+
+[graph]
+# Every feature's dependencies, as geom-test's dependency rule reads them: a dependency behind a
+# feature is still a dependency (the facade's `threads` feature brings geom-pool). No `targets`
+# list: every platform's dependencies are checked (29.20, rule 3).
+all-features = true
+
+[licenses]
+# Chapter 29.2's allow-list, exactly, and in its order: "These SPDX identifiers, and no others,
+# may appear in the kernel workspace's Cargo.lock or in a ported file." Adding one needs a row in
+# 29.2 and a kernel owner's yes; tests/scaffold/deny.rs fails until this list and 29.2 agree. An
+# expression that offers a choice (MIT OR Apache-2.0 OR LGPL-2.1-or-later) passes here when one
+# way to comply is allowed; the gate's rules then require the permissive option taken to be
+# recorded (29.20, rule 3).
+allow = [
+    # Permissive.
+    "MIT",
+    "MIT-0",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "ISC",
+    "Zlib",
+    "0BSD",
+    "Unlicense",
+    "CC0-1.0",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    # Copyleft per file: Spare Kit's own licence.
+    "MPL-2.0",
+]
+# Every crate in the graph, "whether a normal, build or dev-dependency, must pass the licence
+# gate" (29.20, rule 3); cargo-deny leaves dev-dependencies out by default.
+include-dev = true
+include-build = true
+# A licence read from a file's text, rather than a manifest's SPDX expression, must match the
+# known text closely: a modified licence is a stop-and-ask (29.20, rule 1), not a near match.
+# cargo-deny's own configuration uses the same value; its default is 0.8.
+confidence-threshold = 0.93
+# Our own crates are not published, and some have no licence field (the facade and kit-core);
+# they are ours, under the repository's licence. cargo-deny skips every crate whose manifest says
+# publish = false, which would let a crate that is not ours through too, so the gate's rules
+# refuse any such crate outside this workspace, and read our own crates' licence fields: 29.2's
+# identifiers only, and MPL-2.0 for a crate of the kernel's family.
+private = { ignore = true }
+# The allow-list is the ledger's, not this graph's: a licence no crate uses today is not an error.
+unused-allowed-license = "allow"
+
+[advisories]
+# The RustSec advisory database (cargo-deny's default), fetched on every run. Every vulnerability
+# is an error (cargo-deny always errs on those); so is a crate that is unmaintained or unsound,
+# anywhere in the graph, and a version yanked from crates.io.
+yanked = "deny"
+unmaintained = "all"
+unsound = "all"
+
+[sources]
+# Crates come from crates.io and nowhere else: no other registry and no git repository. A git
+# dependency is refused whatever its URL, because none is allowed (allow-git is empty). A crate
+# from a folder outside the workspace, which this check does not read, the gate's rules refuse.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []
+
+[bans]
+# A registry dependency must name a version; a path dependency of our own (unpublished) crates
+# needs none. Which crates may enter what ships is deny-ships.toml's and deny-no-std.toml's: the
+# development crates and every crate's development dependencies may use any crate whose licence
+# and source pass (29.1; 29.16 allows criterion, whose default features bring rayon).
+wildcards = "deny"
+allow-wildcard-paths = true

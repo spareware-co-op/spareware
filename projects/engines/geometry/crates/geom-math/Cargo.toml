@@ -1,0 +1,62 @@
+[package]
+name = "geom-math"
+version = "0.0.0"
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+description = "Spare Kit geometry kernel: exact grid vectors, floating-point points and vectors, typed transforms (exact, rational and certified), boxes, double-double arithmetic, and frames tied to map projections with their regional lattices."
+
+[dependencies]
+# The numbers layer: grid coordinates, exact predicates' integers, error-free transformations,
+# intervals and the only maths functions the kernel may use.
+geom-num = { path = "../geom-num" }
+# The operation contract: budgets, cancellation and the operation types every crate above uses
+# (chapter 27's table: geom-math depends on geom-op).
+geom-op = { path = "../geom-op" }
+
+[dev-dependencies]
+# Exact oracles for tests only, never linked into the kernel. All MIT OR Apache-2.0.
+num-bigint = "0.4"
+num-rational = "0.4.2"
+num-traits = "0.2"
+num-integer = "0.1"
+# Without its default fork and timeout features, which pull in code that has no WebAssembly
+# (WASI) build, so the tests also run on wasm32-wasip1.
+proptest = { version = "1.12.0", default-features = false, features = ["std", "bit-set"] }
+
+# The 1M-point transform benchmark (piece G45), with the standard library's clock only; it moves
+# to geom-bench (piece G06) when that harness merges.
+[[bench]]
+name = "transform"
+harness = false
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[lints.clippy]
+# The crate is written to clippy's pedantic idioms; CI denies every warning.
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "deny"
+# Chapter 21's disallowed methods and types (clippy.toml) are errors in every clippy run, not
+# only in one given -D warnings (the merge gate, G12).
+disallowed_methods = "deny"
+disallowed_types = "deny"
+# The panics clippy::panic does not name, todo!, unimplemented! and unreachable!: principle 13
+# (no panics in kernel paths) and chapter 27's denial of panic, as errors (the merge gate, G12).
+todo = "deny"
+unimplemented = "deny"
+unreachable = "deny"
+# Every fixed-width arithmetic step in kernel code is a checked method, and no cast loses a value
+# silently. Tests may use native arithmetic and casts: each test file and test module allows these
+# four, and kernel code allows a cast only where its bound is written beside it.
+arithmetic_side_effects = "deny"
+cast_possible_truncation = "deny"
+cast_possible_wrap = "deny"
+cast_sign_loss = "deny"
+# Exact comparison of doubles is the point of this crate: the interval and error-free code compare
+# bits and bounds exactly, never against a tolerance.
+float_cmp = "allow"

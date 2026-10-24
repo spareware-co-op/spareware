@@ -6,7 +6,12 @@
 //! tools: the completeness gate, the golden store, the minimiser and the triage tool. Crates used as
 //! outside oracles may be development dependencies of this crate only (28.10).
 //!
-//! This first piece (G11) holds the parts every later test leans on:
+//! Layer: Development, in chapter 27's proposed crate table: a development crate, outside the
+//! thirteen layers of the crates that ship. It never ships, and its dependencies are as needed
+//! (chapter 27) within the licence allow-list of 29.2. No kernel crate may have a normal
+//! dependency on it, only a development dependency (chapter 27; 28.1).
+//!
+//! The first piece (G11) holds the parts every later test leans on, and G15 adds the map:
 //!
 //! - [`seed`]: the seed discipline. Every seeded test prints `seed: <hex>` before it draws anything,
 //!   and the environment variable `SPAREKIT_SEED` replays any printed seed exactly (28.5, 28.17).
@@ -21,6 +26,13 @@
 //!   also checks that CI reruns the rule whenever a manifest it reads changes.
 //! - [`licence`]: whether a licence expression is permissive, and the licence records each
 //!   development crate keeps in its header, which `tests/licences.rs` checks against `cargo tree`.
+//! - [`map`]: the map for people and AI (26.3): `projects/engines/geometry/MAP.json`, generated
+//!   from every crate and module header under `projects/engines/geometry/crates`, and the
+//!   facade's under `projects/engines/crates`, by the grammar in
+//!   `projects/engines/geometry/HEADERS.md`, with its `Source:` and `Consulted:` records and their
+//!   licences judged by chapter 29.2's classes (29.20), every published dependency, and every
+//!   kernel crate's error kinds. The binary `map` writes it (`cargo run -p geom-test --bin map --
+//!   write`) and checks it in CI (`-- check`): every header complete, the map current.
 //!
 //! Piece G21 adds the mutation and coverage gates of section 28.8, and the binary
 //! `kernel-quality` that runs them in CI (`.github/workflows/kernel-quality.yml`):
@@ -39,7 +51,7 @@
 //! generator whose output is committed) and `geom-bench` (benchmarks). `geom-bench` is built by
 //! piece G06 in its own worktree, so this piece leaves the benchmark to it.
 //!
-//! Rules this crate keeps:
+//! Invariants this crate keeps:
 //!
 //! - **Development only.** No kernel crate depends on it except as a development dependency; the
 //!   [`deps`] check enforces that. It may use `std` (chapter 27 exempts the development crates from
@@ -54,6 +66,16 @@
 //!   [`grid`] and [`prop`] check it, and CI runs them natively and under wasm32-wasip1.
 //! - **The kernel's lints.** `#![forbid(unsafe_code)]`, and no `unwrap`, `expect`, `panic!` or
 //!   indexing outside tests. A helper fails with a typed error and the test decides.
+//!
+//! Sections: 26, 27, 28 and 29 of the kernel architecture
+//! (`projects/engines/geometry/architecture/`), in part: the map for people and AI of 26.3;
+//! chapter 27's `geom-test` row and its rule that a development crate is never a kernel crate's
+//! normal dependency; 28.1, "Where the code lives", for that rule's check; the property tests of
+//! 28.2, run from a fixed seed; the generators aimed at the hard cases of 28.5; the outside oracles
+//! of 28.10, development dependencies of this crate only; the seed discipline of 28.17; for the
+//! development crates' own dependencies, the permissive-licence promise of 28.1's table (the
+//! architecture's eleventh principle; 29.1); and, for the map, the `Source:` and `Consulted:`
+//! records of 29.20, their licences judged by the classes of 29.2.
 //!
 //! Dependencies, every one permissive (29.1):
 //!
@@ -82,6 +104,7 @@ pub mod foundation;
 pub mod grid;
 pub mod ledger;
 pub mod licence;
+pub mod map;
 pub mod miri;
 pub mod mutants;
 pub mod prop;

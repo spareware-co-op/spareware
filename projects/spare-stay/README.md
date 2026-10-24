@@ -2,7 +2,7 @@
 
 Replaces Airbnb and Booking.com. Stage: Mapping.
 
-Will use the shared kit's accounts, payments, matching, maps, messaging and trust.
+Will use Spare Kit's accounts, payments, matching, maps, messaging and trust.
 
 - [ARCHITECTURE.md](ARCHITECTURE.md): the map.
 - [STATUS.md](STATUS.md): the work board.

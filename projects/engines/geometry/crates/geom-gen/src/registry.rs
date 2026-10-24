@@ -25,22 +25,69 @@ use std::path::{Path, PathBuf};
 use crate::files::{Folder, Registry};
 use crate::generator::{GenError, Generate, Generator};
 use crate::grid_steps;
+use crate::predicates;
 
 /// Every generator, in the order they run.
-pub const GENERATORS: [Generator; 1] = [Generator {
-    name: grid_steps::NAME,
-    output: grid_steps::OUTPUT,
-    about: "the grid steps, common units on each step and the tolerance ladder, exactly, from geom-num",
-    generate: Generate::Plain(grid_steps::generate),
-}];
+pub const GENERATORS: [Generator; 7] = [
+    Generator {
+        name: grid_steps::NAME,
+        output: grid_steps::OUTPUT,
+        about: "the grid steps, common units on each step and the tolerance ladder, exactly, from geom-num",
+        generate: Generate::Plain(grid_steps::generate),
+    },
+    Generator {
+        name: predicates::MODULE_GENERATOR,
+        output: predicates::MODULE_OUTPUT,
+        about: "geom-num's generated predicate module: its declarations, shared helpers and proof",
+        generate: Generate::Plain(predicates::generate_module),
+    },
+    Generator {
+        name: "predicate-orient2d",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/orient2d.rs",
+        about: "orient2d's f64 filter, exact path and bit-range certificate, from its description",
+        generate: Generate::Plain(predicates::generate_orient2d),
+    },
+    Generator {
+        name: "predicate-orient3d",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/orient3d.rs",
+        about: "orient3d's f64 filter, exact path and bit-range certificate, from its description",
+        generate: Generate::Plain(predicates::generate_orient3d),
+    },
+    Generator {
+        name: "predicate-incircle",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/incircle.rs",
+        about: "incircle's f64 filter, exact path and bit-range certificate, from its description",
+        generate: Generate::Plain(predicates::generate_incircle),
+    },
+    Generator {
+        name: "predicate-insphere",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/insphere.rs",
+        about: "insphere's f64 filter, exact path and bit-range certificate, from its description",
+        generate: Generate::Plain(predicates::generate_insphere),
+    },
+    Generator {
+        name: "predicate-plane-side",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/plane_side.rs",
+        about: "the side of a plane: its f64 filter on rounded inputs, exact path and certificate",
+        generate: Generate::Plain(predicates::generate_plane_side),
+    },
+];
 
 /// Every folder only generators write into. A folder stays listed while any file in it remains,
 /// so an orphan left by a removed generator is reported, not forgotten.
-pub const FOLDERS: [Folder; 1] = [Folder {
-    path: "projects/engines/geometry/crates/geom-gen/generated",
-    // Turns off git's line-ending conversion for the outputs, which `check` compares byte for byte.
-    keep: &[".gitattributes"],
-}];
+pub const FOLDERS: [Folder; 2] = [
+    Folder {
+        path: "projects/engines/geometry/crates/geom-gen/generated",
+        // Turns off git's line-ending conversion for the outputs, which `check` compares byte for
+        // byte.
+        keep: &[".gitattributes"],
+    },
+    Folder {
+        path: predicates::OUTPUT_DIR,
+        // The same, for geom-num's generated predicate modules.
+        keep: &[".gitattributes"],
+    },
+];
 
 /// The registry `cargo run -p geom-gen` works with.
 pub const REGISTRY: Registry<'static> = Registry {

@@ -7,9 +7,11 @@ license.workspace = true
 description = "Spare Kit geometry kernel: primitives, transforms and patterns."
 
 [dependencies]
+geom-math = { path = "../geom-math", default-features = false }
+geom-run = { path = "../geom-run", default-features = false }
 # Exactly this crate's row in chapter 30.5's amendment to chapter 27's crate table, checked
 # by the scaffold test in engine-geometry (tests/scaffold).
-# Still to add when they merge: geom-run (G04), geom-math (G03).
+
 geom-check = { path = "../geom-check" }
 geom-curve = { path = "../geom-curve" }
 geom-num = { path = "../geom-num" }
@@ -30,6 +32,15 @@ unwrap_used = "deny"
 expect_used = "deny"
 panic = "deny"
 indexing_slicing = "deny"
+# Chapter 21's disallowed methods and types (clippy.toml) are errors in every clippy run, not
+# only in one given -D warnings (the merge gate, G12).
+disallowed_methods = "deny"
+disallowed_types = "deny"
+# The panics clippy::panic does not name, todo!, unimplemented! and unreachable!: principle 13
+# (no panics in kernel paths) and chapter 27's denial of panic, as errors (the merge gate, G12).
+todo = "deny"
+unimplemented = "deny"
+unreachable = "deny"
 # Every fixed-width arithmetic step in kernel code is a checked method, and no cast loses a value
 # silently. Tests may use native arithmetic and casts: each test file and test module allows these
 # four, and kernel code allows a cast only where its bound is written beside it.

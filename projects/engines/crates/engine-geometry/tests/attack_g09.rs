@@ -73,6 +73,14 @@ mod manifest;
 #[allow(dead_code)]
 #[path = "scaffold/source.rs"]
 mod source;
+// The merge gate (G12) reads crates' sources for global state and lint attributes through
+// `repo`, with the denied lints `posture` names.
+#[allow(dead_code)]
+#[path = "scaffold/globals.rs"]
+mod globals;
+#[allow(dead_code)]
+#[path = "scaffold/posture.rs"]
+mod posture;
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -615,7 +623,10 @@ mod repository {
             .filter(|r| observed.packages.contains_key(r.name))
             .map(|r| r.name)
             .collect();
-        assert_eq!(present.len(), 44, "{present:?}");
+        // 44 scaffold crates, the facade and geom-pool, plus geom-run (G04), geom-math (G03), the
+        // development crates geom-test, geom-fuzz and geom-gen (G11), and geom-bench (G06) now that
+        // they have merged.
+        assert_eq!(present.len(), 51, "{present:?}");
     }
 
     // -------------------------------------------------------------- chapter 27, row by row
@@ -1078,10 +1089,21 @@ mod repository {
     }
 
     #[test]
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "the process id only names this test's own temporary 
+              folder so parallel runs do not collide; nothing the kernel computes depends on it"
+    )]
     fn the_clippy_configuration_is_the_one_clippy_reads() {
         // clippy 1.99.0, run on a probe crate, reads `.clippy.toml` before `clippy.toml` in one
         // folder (warning that it ignores the other), and the nearest folder above a crate that
         // holds neither. `repo::clippy_config` must name the same file.
+        // The process id only names a scratch folder; the clock and process rules (chapter 21)
+        // are for kernel code.
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "test code names a scratch folder"
+        )]
         let base = std::env::temp_dir().join(format!("g09-clippy-lookup-{}", std::process::id()));
         if base.exists() {
             // Left by an earlier run that stopped half way.
@@ -1135,7 +1157,19 @@ mod repository {
                 .lines()
                 .filter(|l| !l.starts_with("//!") && !l.trim().is_empty())
                 .collect();
-            if body != ["#![cfg_attr(not(test), no_std)]", "#![forbid(unsafe_code)]"] {
+            // geom-pool may use std (27): it forbids unsafe code and declares nothing else.
+            let kind = table::TABLE
+                .rows
+                .iter()
+                .find(|r| r.name == name)
+                .unwrap()
+                .kind;
+            let expected: &[&str] = if kind == Kind::KernelStd {
+                &["#![forbid(unsafe_code)]"]
+            } else {
+                &["#![cfg_attr(not(test), no_std)]", "#![forbid(unsafe_code)]"]
+            };
+            if body != expected {
                 wrong.push(format!("{name}: {body:?}"));
             }
         }
@@ -1204,6 +1238,7 @@ mod repository {
         ("geom-p21", "G415"),
         ("geom-panel", "G342 G343 G344 G345"),
         ("geom-poly", "G123 G124 G125 G126 G127 G128 G142"),
+        ("geom-pool", "G33 G456"),
         ("geom-profile", "G229 G230"),
         ("geom-skeleton", "G271 G272 G274 G471"),
         (

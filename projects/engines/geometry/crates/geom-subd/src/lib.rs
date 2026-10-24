@@ -18,10 +18,10 @@
 //! Sections: 9, 16.1, 16.3 and 16.6; open question OQ-16.1, in the kernel architecture
 //! (`projects/engines/geometry/architecture/`).
 //!
+//! Family: Free-form.
+//!
 //! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
-//! Direct dependencies still to add when geom-run merges (G04): geom-run.
-//! Direct dependencies still to add when geom-math merges (G03): geom-math.
 //!
 //! Status: scaffold only; built by pieces G315, G316, G319, G323, G325.
 #![cfg_attr(not(test), no_std)]

@@ -21,10 +21,10 @@
 //! Sections: 16.4, 16.6, 17.3, 19.2 to 19.8, 19.14, 23.11 and 24.4; open questions OQ-16.1 and
 //! OQ-19.2, in the kernel architecture (`projects/engines/geometry/architecture/`).
 //!
+//! Family: Mesh.
+//!
 //! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
-//! Direct dependencies still to add when geom-run merges (G04): geom-run.
-//! Direct dependencies still to add when geom-math merges (G03): geom-math.
 //!
 //! Status: scaffold only; built by pieces G146, G147, G148, G149, G150, G151, G152, G153, G288,
 //! G289, G290, G291, G298, G299, G300, G301, G302, G303, G304, G305, G306, G319, G341, G350, G411.

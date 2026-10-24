@@ -25,11 +25,9 @@
 //! Used by Spare Construct (every discipline, civil ground included), Spare Studio's 3D app and
 //! the simulation engine.
 //!
-//! Its direct dependencies are `kit-core` and every kernel crate it re-exports (none yet: G100
-//! adds them), checked by the scaffold test in `tests/scaffold`, which holds the kernel's crate
-//! table.
-//! Direct dependencies still to add when geom-pool merges (G04): geom-pool, behind the `threads`
-//! feature.
+//! Its direct dependencies are `kit-core`, `geom-pool` behind the `threads` feature, and every
+//! kernel crate it re-exports (none yet: G100 adds them), checked by the scaffold test in
+//! `tests/scaffold`, which holds the kernel's crate table.
 //!
 //! Status: scaffold only; built by pieces G100 and G482, and every operation piece adds its schema
 //! here (chapter 30.1, the standard bar).

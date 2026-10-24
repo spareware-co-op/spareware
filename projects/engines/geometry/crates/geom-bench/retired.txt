@@ -1,0 +1,8 @@
+# Benchmarks this pull request removes or renames, one name per line (a reason may follow the name).
+#
+# Both gates compare every benchmark of the merge base with the pull request. A benchmark that
+# disappears would leave that comparison silently, so a regression could hide behind a rename: the
+# gates fail on any benchmark the merge base has and the pull request does not, unless its name is
+# listed here. Reviewers see the list in the diff. Names stay listed; the file only grows.
+interval/sqrt_nonneg/typical private in geom-num since G02's second round; measured inside interval/norm
+interval/sqrt_nonneg/extreme private in geom-num since G02's second round; measured inside interval/norm

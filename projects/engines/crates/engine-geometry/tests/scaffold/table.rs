@@ -26,10 +26,10 @@
 //!
 //! - When an owner settles G08, accepted rows keep their place and refused ones move as the owner
 //!   says; chapter 27, this table and the crates change in one pull request.
-//! - When a crate under way merges (`geom-math`, `geom-run`, `geom-pool`), the same pull request
-//!   adds its path dependency to every crate its `PENDING` entry names, deletes the entry, and
-//!   deletes the "Direct dependencies still to add" line from each of those crates' headers. The
-//!   check fails until all three are done.
+//! - When a crate under way merges (`geom-math`, `geom-run`), the same pull request adds its path
+//!   dependency to every crate its `PENDING` entry names, deletes the entry, and deletes the
+//!   "Direct dependencies still to add" line from each of those crates' headers. The check fails
+//!   until all three are done.
 //! - A deferred crate (a toolkit, a board format, a binding) is built by first making its row
 //!   `Here` with its exact dependencies.
 //! - A design note that adds an edge changes the row; the check then asks for the `Cargo.toml`.
@@ -346,11 +346,12 @@ const ROWS: &[Row<'static>] = &[
     kernel("geom-gerber",   12, Proposed27, Deferred("G474"), "base format exchange 2d"),
     kernel("geom-ipc2581",  12, Proposed27, Deferred("G475"), "base format exchange 2d"),
     // 13. Facade. engine-geometry's row: every kernel crate it re-exports (none yet: G100 adds
-    // them), and geom-pool behind its `threads` feature.
+    // them), and geom-pool behind its `threads` feature. geom-pool is scaffolded here: G04 built
+    // only geom-run, and the board's pieces G33 and G456 fill it in.
     Row { name: "engine-geometry", layer: Layer::N(13), kind: Kind::Facade, origin: Accepted,
           state: Here, deps: Deps::Exact("pool"), external: "kit-core" },
     Row { name: "geom-pool", layer: Layer::N(13), kind: Kind::KernelStd, origin: Proposed27,
-          state: Elsewhere("G04"), deps: Deps::Exact("run"), external: "" },
+          state: Here, deps: Deps::Exact("run"), external: "" },
     binding("engine-geometry-c",    "G453"),
     binding("engine-geometry-wasm", "G454"),
     binding("engine-geometry-py",   "G455"),
@@ -396,31 +397,7 @@ const SAME_LAYER: &[(&str, &str)] = &[
 ];
 
 /// Dependencies on crates under way in other pieces, added when each merges.
-const PENDING: &[Pending<'static>] = &[
-    Pending {
-        dep: "run",
-        piece: "G04",
-        crates: concat!(
-            "num op bvh nurbs curve surface topo name intersect check poly bool 2d mesh spatial ",
-            "subd field cloud skeleton sweep make blend offset sketch profile terrain align draw ",
-            "convert combine panel analysis format exchange p21 heal ifc step dxf 3dm meshio ",
-            "landxml",
-        ),
-    },
-    Pending {
-        dep: "math",
-        piece: "G03",
-        crates: concat!(
-            "bvh nurbs curve surface topo intersect poly 2d mesh spatial subd field cloud ",
-            "skeleton make sketch terrain align draw format exchange ifc step dxf 3dm meshio",
-        ),
-    },
-    Pending {
-        dep: "pool",
-        piece: "G04",
-        crates: "engine-geometry",
-    },
-];
+const PENDING: &[Pending<'static>] = &[];
 
 /// The facade reaches threads only through `geom-pool`, behind its `threads` feature (27).
 const FEATURE_GATES: &[FeatureGate<'static>] = &[FeatureGate {
@@ -429,13 +406,9 @@ const FEATURE_GATES: &[FeatureGate<'static>] = &[FeatureGate {
     feature: "threads",
 }];
 
-/// Header fields missing from crates this piece may not edit.
-const HEADER_GAPS: &[HeaderGap<'static>] = &[HeaderGap {
-    krate: "num",
-    field: Field::Layer,
-    reason: "G02 wrote geom-num's header before chapter 27's layer table; the next piece that \
-             edits geom-num adds its Layer line and deletes this entry",
-}];
+/// Header fields missing from crates this piece may not edit. None now: G02 added geom-num's
+/// Layer line, the last gap.
+const HEADER_GAPS: &[HeaderGap<'static>] = &[];
 
 /// Inside kernel crates the only published crate used as it is, is `libm` (29.1), and every maths
 /// function reaches the kernel through `geom_num::math` (21), so only `geom-num` names it. The

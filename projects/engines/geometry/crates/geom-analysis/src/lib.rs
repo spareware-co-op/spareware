@@ -15,9 +15,10 @@
 //! Sections: 16.5 and 16.6; open question OQ-16.1, in the kernel architecture
 //! (`projects/engines/geometry/architecture/`).
 //!
+//! Family: Query.
+//!
 //! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
-//! Direct dependencies still to add when geom-run merges (G04): geom-run.
 //!
 //! Proposed in chapter 27, pending the owner's decision G08.
 //!

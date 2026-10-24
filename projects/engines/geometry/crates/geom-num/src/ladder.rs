@@ -1,8 +1,9 @@
 //! The tolerance ladder (chapter 6.5): the only tolerances in the kernel.
 //!
-//! There is no per-entity tolerance that grows. Every threshold is one of these, counted in grid
-//! steps of the frame, so it scales with the step: a circuit board's fit bound (on step `Q1`) is 25
-//! times tighter than a building's (on step `Q0`). The exact polyhedral core uses none of them.
+//! Guarantees: there is no per-entity tolerance that grows. Every threshold is one of these,
+//! counted in grid steps of the frame, so it scales with the step: a circuit board's fit bound (on
+//! step `Q1`) is 25 times tighter than a building's (on step `Q0`). The exact polyhedral core uses
+//! none of them.
 //!
 //! | Name | Steps | At Q0 | At Q1 | Used for |
 //! | --- | --- | --- | --- | --- |
@@ -31,6 +32,13 @@
 //! The rungs chapter 6.5 proposes but an owner has not accepted (the per-operation bound, the
 //! resolution floor, solver convergence, the smallest triangle altitude and the others) are not
 //! here; each joins this module when accepted.
+//!
+//! Method: the tolerance ladder of chapter 6.5
+//! (`projects/engines/geometry/architecture/06-numbers.md`). Each constant's derivation is above,
+//! and `geom-gen`'s grid-steps table recomputes every rung exactly from these constants and checks
+//! it against them.
+//!
+//! Cost: none at run time for the constants; [`quarter_nm`] is one checked multiplication.
 
 use crate::grid::{COORD_BITS, GridStep, Steps};
 use crate::real::Real;

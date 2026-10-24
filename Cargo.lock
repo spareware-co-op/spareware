@@ -3,6 +3,12 @@
 version = 4
 
 [[package]]
+name = "anstyle"
+version = "1.0.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "940b3a0ca603d1eade50a4846a2afffd5ef57a9feac2c0e2ec2e14f9ead76000"
+
+[[package]]
 name = "anyhow"
 version = "1.0.104"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -13,6 +19,16 @@ name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
+
+[[package]]
+name = "bincode-next"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dbe9e7e6d14aeb39557f226bff158a30e367fac279d0e69b8b42fb41999f9a86"
+dependencies = [
+ "serde",
+ "unty-next",
+]
 
 [[package]]
 name = "bit-set"
@@ -197,6 +213,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "clap"
+version = "4.6.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aa8876b300ab35ba921adea3dfd70157a46249b33f95c9084ae5709785478946"
+dependencies = [
+ "clap_builder",
+]
+
+[[package]]
+name = "clap_builder"
+version = "4.6.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec0797fb7aeb1406c84efac526901f7ec3ead2124f946b494e72879d4b54704d"
+dependencies = [
+ "anstyle",
+ "clap_lex",
+ "terminal_size",
+]
+
+[[package]]
+name = "clap_lex"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1c133bc6a41be0d194c306b5506d15e6feeea7b1d6604bd3f8310dfb2ca96486"
+
+[[package]]
+name = "condtype"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "baf0a07a401f374238ab8e2f11a104d2851bf9ce711ec69804834de8af45c7af"
+
+[[package]]
 name = "construct-api"
 version = "0.0.0"
 dependencies = [
@@ -317,10 +365,97 @@ dependencies = [
 ]
 
 [[package]]
+name = "dashu-base"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "861a614e79388a4c72aa66b0bdabc91e3a4f30d53e0c8d962953e207d75884d0"
+dependencies = [
+ "num-modular",
+]
+
+[[package]]
+name = "dashu-int"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "64a0490b40a6a3f6427970035f17f76fd59c01d3cd9f9140809672863a0d64c8"
+dependencies = [
+ "cfg-if",
+ "dashu-base",
+ "num-modular",
+ "static_assertions",
+]
+
+[[package]]
+name = "dashu-ratio"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eb0b7e2610ae7f28b2ab8b09229afedc9cbc7a32e7c647b916a3a49ca00123c1"
+dependencies = [
+ "dashu-base",
+ "dashu-int",
+]
+
+[[package]]
+name = "derive_more"
+version = "2.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d751e9e49156b02b44f9c1815bcb94b984cdcc4396ecc32521c739452808b134"
+dependencies = [
+ "derive_more-impl",
+]
+
+[[package]]
+name = "derive_more-impl"
+version = "2.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "799a97264921d8623a957f6c3b9011f3b5492f557bbb7a5a19b7fa6d06ba8dcb"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "rustc_version",
+ "syn 2.0.119",
+]
+
+[[package]]
+name = "divan"
+version = "0.1.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a405457ec78b8fe08b0e32b4a3570ab5dff6dd16eb9e76a5ee0a9d9cbd898933"
+dependencies = [
+ "cfg-if",
+ "clap",
+ "condtype",
+ "divan-macros",
+ "libc",
+ "regex-lite",
+]
+
+[[package]]
+name = "divan-macros"
+version = "0.1.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9556bc800956545d6420a640173e5ba7dfa82f38d3ea5a167eb555bc69ac3323"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "either"
 version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0e9c71c2167ca323c882b99918929403426e2373ea17242ff5653e0d5e1058be"
+
+[[package]]
+name = "either-or-both"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6717164c227120ba9ddf3e2b32305fc0122741d3ee41a54968eae7573ee01933"
+dependencies = [
+ "indexmap",
+ "serde",
+]
 
 [[package]]
 name = "engine-draw2d"
@@ -333,6 +468,7 @@ dependencies = [
 name = "engine-geometry"
 version = "0.0.0"
 dependencies = [
+ "geom-pool",
  "kit-core",
 ]
 
@@ -381,6 +517,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "00d174d5400e5e8fd687ad1049e2f578285fa914201b1af7e8b112a4546bd826"
 
 [[package]]
+name = "errno"
+version = "0.3.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
+dependencies = [
+ "libc",
+ "windows-sys",
+]
+
+[[package]]
 name = "find-msvc-tools"
 version = "0.1.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -393,9 +539,11 @@ dependencies = [
  "geom-bvh",
  "geom-curve",
  "geom-intersect",
+ "geom-math",
  "geom-name",
  "geom-num",
  "geom-op",
+ "geom-run",
  "geom-topo",
 ]
 
@@ -407,9 +555,11 @@ dependencies = [
  "geom-exchange",
  "geom-format",
  "geom-heal",
+ "geom-math",
  "geom-mesh",
  "geom-num",
  "geom-op",
+ "geom-run",
  "geom-subd",
  "geom-surface",
  "geom-topo",
@@ -420,9 +570,11 @@ name = "geom-align"
 version = "0.0.0"
 dependencies = [
  "geom-curve",
+ "geom-math",
  "geom-name",
  "geom-num",
  "geom-op",
+ "geom-run",
  "geom-sweep",
 ]
 
@@ -433,9 +585,19 @@ dependencies = [
  "geom-intersect",
  "geom-num",
  "geom-op",
+ "geom-run",
  "geom-spatial",
  "geom-surface",
  "geom-topo",
+]
+
+[[package]]
+name = "geom-bench"
+version = "0.0.0"
+dependencies = [
+ "divan",
+ "geom-num",
+ "gungraun",
 ]
 
 [[package]]
@@ -447,6 +609,7 @@ dependencies = [
  "geom-intersect",
  "geom-num",
  "geom-op",
+ "geom-run",
  "geom-surface",
  "geom-topo",
 ]
@@ -462,6 +625,7 @@ dependencies = [
  "geom-num",
  "geom-op",
  "geom-poly",
+ "geom-run",
  "geom-topo",
 ]
 
@@ -469,7 +633,9 @@ dependencies = [
 name = "geom-bvh"
 version = "0.0.0"
 dependencies = [
+ "geom-math",
  "geom-num",
+ "geom-run",
 ]
 
 [[package]]
@@ -479,6 +645,7 @@ dependencies = [
  "geom-intersect",
  "geom-num",
  "geom-op",
+ "geom-run",
  "geom-topo",
 ]
 
@@ -487,9 +654,11 @@ name = "geom-cloud"
 version = "0.0.0"
 dependencies = [
  "geom-linalg",
+ "geom-math",
  "geom-num",
  "geom-nurbs",
  "geom-op",
+ "geom-run",
  "geom-spatial",
  "geom-surface",
 ]
@@ -505,6 +674,7 @@ dependencies = [
  "geom-mesh",
  "geom-num",
  "geom-op",
+ "geom-run",
  "geom-subd",
 ]
 
@@ -521,6 +691,7 @@ dependencies = [
  "geom-num",
  "geom-nurbs",
  "geom-op",
+ "geom-run",
  "geom-spatial",
  "geom-subd",
  "geom-sweep",
@@ -531,9 +702,11 @@ dependencies = [
 name = "geom-curve"
 version = "0.0.0"
 dependencies = [
+ "geom-math",
  "geom-num",
  "geom-nurbs",
  "geom-op",
+ "geom-run",
 ]
 
 [[package]]
@@ -544,10 +717,12 @@ dependencies = [
  "geom-bvh",
  "geom-curve",
  "geom-intersect",
+ "geom-math",
  "geom-mesh",
  "geom-name",
  "geom-num",
  "geom-op",
+ "geom-run",
  "geom-spatial",
  "geom-surface",
  "geom-topo",
@@ -562,9 +737,11 @@ dependencies = [
  "geom-exchange",
  "geom-format",
  "geom-heal",
+ "geom-math",
  "geom-mesh",
  "geom-num",
  "geom-op",
+ "geom-run",
  "geom-subd",
  "geom-sweep",
  "geom-topo",
@@ -578,9 +755,11 @@ dependencies = [
  "geom-curve",
  "geom-format",
  "geom-intersect",
+ "geom-math",
  "geom-num",
  "geom-op",
  "geom-p21",
+ "geom-run",
  "geom-surface",
  "geom-topo",
 ]
@@ -591,9 +770,11 @@ version = "0.0.0"
 dependencies = [
  "geom-2d",
  "geom-bvh",
+ "geom-math",
  "geom-mesh",
  "geom-num",
  "geom-op",
+ "geom-run",
  "geom-surface",
 ]
 
@@ -606,11 +787,13 @@ dependencies = [
  "geom-curve",
  "geom-draw",
  "geom-field",
+ "geom-math",
  "geom-mesh",
  "geom-name",
  "geom-num",
  "geom-op",
  "geom-poly",
+ "geom-run",
  "geom-sketch",
  "geom-subd",
  "geom-surface",
@@ -643,6 +826,7 @@ dependencies = [
  "geom-mesh",
  "geom-num",
  "geom-op",
+ "geom-run",
  "geom-topo",
 ]
 
@@ -658,11 +842,13 @@ dependencies = [
  "geom-exchange",
  "geom-format",
  "geom-heal",
+ "geom-math",
  "geom-mesh",
  "geom-num",
  "geom-op",
  "geom-p21",
  "geom-poly",
+ "geom-run",
  "geom-surface",
  "geom-sweep",
  "geom-terrain",
@@ -675,9 +861,11 @@ version = "0.0.0"
 dependencies = [
  "geom-bvh",
  "geom-curve",
+ "geom-math",
  "geom-num",
  "geom-nurbs",
  "geom-op",
+ "geom-run",
  "geom-surface",
 ]
 
@@ -691,6 +879,7 @@ dependencies = [
  "geom-format",
  "geom-num",
  "geom-op",
+ "geom-run",
  "geom-terrain",
 ]
 
@@ -707,10 +896,25 @@ version = "0.0.0"
 dependencies = [
  "geom-check",
  "geom-curve",
+ "geom-math",
  "geom-num",
  "geom-op",
+ "geom-run",
  "geom-surface",
  "geom-topo",
+]
+
+[[package]]
+name = "geom-math"
+version = "0.0.0"
+dependencies = [
+ "geom-num",
+ "geom-op",
+ "num-bigint",
+ "num-integer",
+ "num-rational",
+ "num-traits",
+ "proptest",
 ]
 
 [[package]]
@@ -722,9 +926,11 @@ dependencies = [
  "geom-curve",
  "geom-intersect",
  "geom-linalg",
+ "geom-math",
  "geom-num",
  "geom-op",
  "geom-poly",
+ "geom-run",
  "geom-surface",
  "geom-topo",
 ]
@@ -736,9 +942,11 @@ dependencies = [
  "geom-exchange",
  "geom-format",
  "geom-heal",
+ "geom-math",
  "geom-mesh",
  "geom-num",
  "geom-op",
+ "geom-run",
  "geom-subd",
 ]
 
@@ -748,6 +956,7 @@ version = "0.0.0"
 dependencies = [
  "geom-num",
  "geom-op",
+ "geom-run",
  "geom-topo",
 ]
 
@@ -755,6 +964,9 @@ dependencies = [
 name = "geom-num"
 version = "0.0.0"
 dependencies = [
+ "dashu-int",
+ "dashu-ratio",
+ "geom-run",
  "libm",
  "num-bigint",
  "num-integer",
@@ -768,8 +980,10 @@ name = "geom-nurbs"
 version = "0.0.0"
 dependencies = [
  "geom-linalg",
+ "geom-math",
  "geom-num",
  "geom-op",
+ "geom-run",
 ]
 
 [[package]]
@@ -780,6 +994,7 @@ dependencies = [
  "geom-intersect",
  "geom-num",
  "geom-op",
+ "geom-run",
  "geom-skeleton",
  "geom-surface",
  "geom-topo",
@@ -790,6 +1005,7 @@ name = "geom-op"
 version = "0.0.0"
 dependencies = [
  "geom-num",
+ "geom-run",
 ]
 
 [[package]]
@@ -799,6 +1015,7 @@ dependencies = [
  "geom-format",
  "geom-num",
  "geom-op",
+ "geom-run",
 ]
 
 [[package]]
@@ -813,6 +1030,7 @@ dependencies = [
  "geom-num",
  "geom-op",
  "geom-poly",
+ "geom-run",
  "geom-surface",
  "geom-topo",
 ]
@@ -821,9 +1039,18 @@ dependencies = [
 name = "geom-poly"
 version = "0.0.0"
 dependencies = [
+ "geom-math",
  "geom-num",
  "geom-op",
+ "geom-run",
  "geom-topo",
+]
+
+[[package]]
+name = "geom-pool"
+version = "0.0.0"
+dependencies = [
+ "geom-run",
 ]
 
 [[package]]
@@ -836,8 +1063,16 @@ dependencies = [
  "geom-name",
  "geom-num",
  "geom-op",
+ "geom-run",
  "geom-sketch",
  "geom-topo",
+]
+
+[[package]]
+name = "geom-run"
+version = "0.0.0"
+dependencies = [
+ "proptest",
 ]
 
 [[package]]
@@ -845,9 +1080,11 @@ name = "geom-skeleton"
 version = "0.0.0"
 dependencies = [
  "geom-2d",
+ "geom-math",
  "geom-num",
  "geom-op",
  "geom-poly",
+ "geom-run",
  "geom-topo",
 ]
 
@@ -857,8 +1094,10 @@ version = "0.0.0"
 dependencies = [
  "geom-curve",
  "geom-linalg",
+ "geom-math",
  "geom-num",
  "geom-op",
+ "geom-run",
 ]
 
 [[package]]
@@ -867,10 +1106,12 @@ version = "0.0.0"
 dependencies = [
  "geom-bvh",
  "geom-intersect",
+ "geom-math",
  "geom-mesh",
  "geom-num",
  "geom-op",
  "geom-poly",
+ "geom-run",
 ]
 
 [[package]]
@@ -881,11 +1122,13 @@ dependencies = [
  "geom-exchange",
  "geom-format",
  "geom-heal",
+ "geom-math",
  "geom-mesh",
  "geom-num",
  "geom-op",
  "geom-p21",
  "geom-poly",
+ "geom-run",
  "geom-surface",
  "geom-topo",
 ]
@@ -894,9 +1137,11 @@ dependencies = [
 name = "geom-subd"
 version = "0.0.0"
 dependencies = [
+ "geom-math",
  "geom-num",
  "geom-nurbs",
  "geom-op",
+ "geom-run",
  "geom-surface",
 ]
 
@@ -905,9 +1150,11 @@ name = "geom-surface"
 version = "0.0.0"
 dependencies = [
  "geom-curve",
+ "geom-math",
  "geom-num",
  "geom-nurbs",
  "geom-op",
+ "geom-run",
 ]
 
 [[package]]
@@ -921,6 +1168,7 @@ dependencies = [
  "geom-num",
  "geom-op",
  "geom-poly",
+ "geom-run",
  "geom-skeleton",
  "geom-surface",
  "geom-topo",
@@ -934,11 +1182,13 @@ dependencies = [
  "geom-bool",
  "geom-bvh",
  "geom-curve",
+ "geom-math",
  "geom-mesh",
  "geom-name",
  "geom-num",
  "geom-op",
  "geom-poly",
+ "geom-run",
  "geom-skeleton",
  "geom-surface",
  "geom-topo",
@@ -958,8 +1208,10 @@ name = "geom-topo"
 version = "0.0.0"
 dependencies = [
  "geom-curve",
+ "geom-math",
  "geom-num",
  "geom-op",
+ "geom-run",
  "geom-surface",
 ]
 
@@ -985,6 +1237,51 @@ dependencies = [
  "libc",
  "r-efi 6.0.0",
  "rand_core 0.10.1",
+]
+
+[[package]]
+name = "gungraun"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c041375e48b8ef7cd2d0e70715598154af627c1a551e41c35fdb4a2b3910831a"
+dependencies = [
+ "bincode-next",
+ "derive_more",
+ "gungraun-common",
+ "gungraun-macros",
+ "gungraun-runner",
+]
+
+[[package]]
+name = "gungraun-common"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc270ba55639babb5806b62d4bfbc35e15ca15791e3ec00c7b92b39c62a9d8eb"
+
+[[package]]
+name = "gungraun-macros"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "08472a9e996a98a5b4274dd342fb32ebe1a5cfeb2662b6578d0c7bf1dd203129"
+dependencies = [
+ "derive_more",
+ "proc-macro-error3",
+ "proc-macro2",
+ "quote",
+ "rustc_version",
+ "serde",
+ "serde_json",
+ "syn 3.0.9",
+]
+
+[[package]]
+name = "gungraun-runner"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e1460377fe936c3efbe8e27c422b745fa54ebaea81ffe4a53a6f17c7a478683"
+dependencies = [
+ "either-or-both",
+ "serde",
 ]
 
 [[package]]
@@ -1080,6 +1377,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
+name = "linux-raw-sys"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32a66949e030da00e8c7d4434b251670a91556f4144941d37452769c25d58a53"
+
+[[package]]
 name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1103,6 +1406,12 @@ checksum = "7ce2d95d4b3734dc35aa2f45e1aa22cd416814592a4f9d9205e11affd5b8e10b"
 dependencies = [
  "num-traits",
 ]
+
+[[package]]
+name = "num-modular"
+version = "0.6.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bd8e500409e6cd603b03e477c26a6caecdc27ac58979a53e881c75eafc079f44"
 
 [[package]]
 name = "num-rational"
@@ -1298,6 +1607,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "proc-macro-error-attr3"
+version = "3.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e564d14133360e1ae169ffde5da25881b5fa47261665b8e5713c212c27799da"
+dependencies = [
+ "proc-macro2",
+ "quote",
+]
+
+[[package]]
+name = "proc-macro-error3"
+version = "3.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8f0d4471b3436c22106b21913b1dda531558918ae9b7ec55d58aa84b43552233"
+dependencies = [
+ "proc-macro-error-attr3",
+ "proc-macro2",
+ "quote",
+ "syn 3.0.9",
+]
+
+[[package]]
 name = "proc-macro2"
 version = "1.0.107"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1409,10 +1740,44 @@ dependencies = [
 ]
 
 [[package]]
+name = "regex-lite"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cab834c73d247e67f4fae452806d17d3c7501756d98c8808d7c9c7aa7d18f973"
+
+[[package]]
 name = "regex-syntax"
 version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
+
+[[package]]
+name = "rustc_version"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cfcb3a22ef46e85b45de6ee7e79d063319ebb6594faafcf1c225ea92ab6e9b92"
+dependencies = [
+ "semver",
+]
+
+[[package]]
+name = "rustix"
+version = "1.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "891efababe418670775f199f0d233d84843c227a0949a883ce15b37c78d6629d"
+dependencies = [
+ "bitflags",
+ "errno",
+ "libc",
+ "linux-raw-sys",
+ "windows-sys",
+]
+
+[[package]]
+name = "semver"
+version = "1.0.28"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8a7852d02fc848982e0c167ef163aaff9cd91dc640ba85e263cb1ce46fae51cd"
 
 [[package]]
 name = "serde"
@@ -1464,6 +1829,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 
 [[package]]
+name = "static_assertions"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
+
+[[package]]
 name = "syn"
 version = "2.0.119"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1483,6 +1854,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
+]
+
+[[package]]
+name = "terminal_size"
+version = "0.4.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "230a1b821ccbd75b185820a1f1ff7b14d21da1e442e22c0863ea5f08771a8874"
+dependencies = [
+ "rustix",
+ "windows-sys",
 ]
 
 [[package]]
@@ -1545,12 +1926,33 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563"
 
 [[package]]
+name = "unty-next"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "16062d030850f35054e37746427b9febb74a2f24c9c6dd6fa2d0c13c5f53221e"
+
+[[package]]
 name = "wasip2"
 version = "1.0.1+wasi-0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0562428422c63773dad2c345a1882263bbf4d65cf3f42e90921f787ef5ad58e7"
 dependencies = [
  "wit-bindgen",
+]
+
+[[package]]
+name = "windows-link"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f0805222e57f7521d6a62e36fa9163bc891acd422f971defe97d64e70d0a4fe5"
+
+[[package]]
+name = "windows-sys"
+version = "0.61.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ae137229bcbd6cdf0f7b80a31df61766145077ddf49416a728b02cb3921ff3fc"
+dependencies = [
+ "windows-link",
 ]
 
 [[package]]

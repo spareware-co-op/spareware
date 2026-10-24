@@ -20,9 +20,10 @@
 //! Sections: 13.11, 13.12, 13.13, 13.22 and 24.8; open question OQ-13.3, in the kernel architecture
 //! (`projects/engines/geometry/architecture/`).
 //!
+//! Family: Offset.
+//!
 //! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
-//! Direct dependencies still to add when geom-run merges (G04): geom-run.
 //!
 //! Status: scaffold only; built by pieces G270, G275, G276, G277, G278, G279.
 #![cfg_attr(not(test), no_std)]

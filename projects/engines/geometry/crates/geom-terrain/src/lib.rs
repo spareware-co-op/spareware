@@ -20,10 +20,10 @@
 //! Sections: 17.3 to 17.7, 17.11, 17.12 and 17.13; open question OQ-17.3, in the kernel
 //! architecture (`projects/engines/geometry/architecture/`).
 //!
+//! Family: Ground.
+//!
 //! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
-//! Direct dependencies still to add when geom-run merges (G04): geom-run.
-//! Direct dependencies still to add when geom-math merges (G03): geom-math.
 //!
 //! Status: scaffold only; built by pieces G362, G363, G364, G365, G366, G367, G368, G369, G370,
 //! G374, G377, G380.

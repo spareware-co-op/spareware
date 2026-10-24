@@ -20,9 +20,10 @@
 //! Sections: 10.2, 11, 13 (introduction), 13.14, 16.1, 22, 23.5 and 23.6, in the kernel
 //! architecture (`projects/engines/geometry/architecture/`).
 //!
+//! Family: Combine.
+//!
 //! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
-//! Direct dependencies still to add when geom-run merges (G04): geom-run.
 //!
 //! Status: scaffold only; built by pieces G129, G130, G131, G132, G133, G137, G138, G139, G144,
 //! G242, G243, G244, G245, G246, G247, G248, G249, G250, G324.

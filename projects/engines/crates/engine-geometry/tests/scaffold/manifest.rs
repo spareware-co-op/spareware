@@ -5,7 +5,9 @@
 //! `unsafe_code` in a manifest's `[lints.rust]` table, or in the workspace's `[workspace.lints.rust]`
 //! table when the manifest sets `[lints] workspace = true`; every key under `lints` in a manifest;
 //! and every key of a clippy configuration, each value in canonical form (`canonical`). The
-//! toolchain check reads `rust-toolchain.toml` with the same reader.
+//! toolchain check reads `rust-toolchain.toml` with the same reader. The merge gate (G12) reads
+//! the items of an array (`array_items`) and the text of a string (`string_text`) from those
+//! values: the paths of clippy's disallowed lists, and the lists of the cargo-deny configurations.
 //!
 //! What it guarantees: a lint counts only as a key of a real table, never as text inside a string,
 //! an array or a comment; a table header, a dotted key and an inline table name the same key. A
@@ -157,6 +159,86 @@ pub fn canonical(value: &str) -> Option<String> {
             }
         }
     }
+}
+
+/// The items of an array value as `canonical` writes it (`[a,"b",{k="v"}]`), each as written, in
+/// order; `None` when the value is not one array this reader reads. Commas inside strings, inline
+/// tables and nested arrays do not split items.
+pub fn array_items(value: &str) -> Option<Vec<String>> {
+    let chars: Vec<char> = value.chars().collect();
+    if chars.first() != Some(&'[') || chars.last() != Some(&']') {
+        return None;
+    }
+    let inner = chars.get(1..chars.len() - 1)?;
+    let mut items = Vec::new();
+    let mut item = String::new();
+    let mut depth = 0usize;
+    let mut i = 0;
+    while let Some(&c) = inner.get(i) {
+        match c {
+            '"' | '\'' => {
+                // A string runs to its closing quote; a basic string's backslash escapes the
+                // next character.
+                item.push(c);
+                i += 1;
+                loop {
+                    let d = *inner.get(i)?;
+                    item.push(d);
+                    i += 1;
+                    if d == '\\' && c == '"' {
+                        item.push(*inner.get(i)?);
+                        i += 1;
+                    } else if d == c {
+                        break;
+                    }
+                }
+                continue;
+            }
+            '[' | '{' => depth += 1,
+            ']' | '}' => depth = depth.checked_sub(1)?,
+            ',' if depth == 0 => {
+                items.push(std::mem::take(&mut item));
+                i += 1;
+                continue;
+            }
+            _ => {}
+        }
+        item.push(c);
+        i += 1;
+    }
+    if depth != 0 {
+        return None;
+    }
+    if !item.is_empty() {
+        items.push(item);
+    }
+    if items.iter().any(String::is_empty) {
+        return None;
+    }
+    Some(items)
+}
+
+/// The text of a one-line string value, either quote: a literal string as it is, a basic string
+/// with its `\"` and `\\` escapes undone; `None` for anything else, a basic string with any other
+/// escape included, so an unusual value is never read as a name it does not hold.
+pub fn string_text(value: &str) -> Option<String> {
+    if let Some(inner) = value.strip_prefix('\'').and_then(|v| v.strip_suffix('\'')) {
+        return (!inner.contains('\'')).then(|| inner.to_owned());
+    }
+    let inner = value.strip_prefix('"')?.strip_suffix('"')?;
+    let mut out = String::new();
+    let mut chars = inner.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' => match chars.next()? {
+                e @ ('"' | '\\') => out.push(e),
+                _ => return None,
+            },
+            '"' => return None,
+            c => out.push(c),
+        }
+    }
+    Some(out)
 }
 
 fn join(table: &str, key: &str) -> String {
@@ -468,6 +550,34 @@ mod tests {
         assert_ne!(canonical("\"a b\""), canonical("\"ab\""));
         // A value that does not lex has no canonical form.
         assert_eq!(canonical("\"open"), None);
+    }
+
+    #[test]
+    fn array_items_and_string_text() {
+        let value = canonical(
+            "[\n  \"MIT\", # a comment, with a comma\n  'Apache-2.0 WITH LLVM-exception',\n  \
+             { crate = \"rayon\", wrappers = [\"geom-pool\", \"a,b\"] },\n  \"x\\\"]\",\n]",
+        )
+        .unwrap();
+        assert_eq!(
+            array_items(&value).unwrap(),
+            [
+                "\"MIT\"",
+                "'Apache-2.0 WITH LLVM-exception'",
+                "{crate=\"rayon\",wrappers=[\"geom-pool\",\"a,b\"]}",
+                "\"x\\\"]\"",
+            ]
+        );
+        assert_eq!(array_items("[]").unwrap(), Vec::<String>::new());
+        for bad in ["", "MIT", "[\"open]", "[a,,b]", "[{a=1]", "[a]]"] {
+            assert_eq!(array_items(bad), None, "{bad}");
+        }
+        assert_eq!(string_text("\"MIT\"").as_deref(), Some("MIT"));
+        assert_eq!(string_text("'f64::max'").as_deref(), Some("f64::max"));
+        assert_eq!(string_text("\"a\\\"b\\\\\"").as_deref(), Some("a\"b\\"));
+        for bad in ["MIT", "\"a\\u0041\"", "\"a", "'a'b'", "true", "\"a\"b\""] {
+            assert_eq!(string_text(bad), None, "{bad}");
+        }
     }
 
     #[test]

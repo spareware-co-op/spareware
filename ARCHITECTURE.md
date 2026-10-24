@@ -2,7 +2,7 @@
 
 *Stage: Mapping. Every choice below is open for discussion until an owner accepts a decision note for it.*
 
-All Spareware programs sit on one shared kit and follow one set of rules. A product is a thin layer of its own rules on top of the kit, so every new app gets accounts, payments, AI access, sync and the open cost ledger for free, and a fix to the kit improves every app at once.
+All Spareware programs sit on Spare Kit and follow one set of rules. A product is a thin layer of its own rules on top of the kit, so every new app gets accounts, payments, AI access, sync and the open cost ledger for free, and a fix to the kit improves every app at once.
 
 ```mermaid
 flowchart TB
@@ -44,7 +44,7 @@ flowchart TB
   end
   API["`**One command and query API per app**
 *every change is an operation; AI, plugins and people use the same path*`"]
-  subgraph Kit[Shared kit]
+  subgraph Kit[Spare Kit]
     ID[Accounts and ID checks]
     PAY[Payments and payouts]
     MATCH[Matching and dispatch]
@@ -70,7 +70,7 @@ flowchart TB
 | Social | [Spare Social](projects/spare-social/ARCHITECTURE.md) (working name); [Spare Music](projects/spare-music/ARCHITECTURE.md) and [Spare Movies](projects/spare-movies/ARCHITECTURE.md) (ideas) | Video storage and delivery at cost, feeds people choose, moderation that removes only what the law requires, open social protocols; for music and movies, paying artists fairly and keeping their work from being copied |
 | Research | [Spare Research](projects/spare-research/ARCHITECTURE.md) (idea) | Free reading and publishing, open peer review, permanent links and long-term copies, hosting only papers the authors have the right to share |
 
-Design tools lean on the Rust core pattern mapped in [Spare Construct's ARCHITECTURE.md](projects/spare-construct/ARCHITECTURE.md), and share its renderer, 2D drawing engine and PDF output with Spare Studio. Marketplaces lean on the shared kit. Both use the same command layer, plugins, sync and AI access.
+Design tools lean on the Rust core pattern mapped in [Spare Construct's ARCHITECTURE.md](projects/spare-construct/ARCHITECTURE.md), and share its renderer, 2D drawing engine and PDF output with Spare Studio. Marketplaces lean on Spare Kit. Both use the same command layer, plugins, sync and AI access.
 
 ## Rules every program follows
 
@@ -83,7 +83,9 @@ Design tools lean on the Rust core pattern mapped in [Spare Construct's ARCHITEC
 7. **Port proven methods; measure everything.** The same ground rules as Spare Construct.
 8. **Always start with "Can we".** Every idea and problem starts from how it could be done, never "it doesn't". If something isn't possible yet, say what it would take.
 
-## The shared kit
+## Spare Kit
+
+Spare Kit is everything the programs share: the kit crates and services in `projects/kit`, and the engines in `projects/engines` (geometry kernel, renderer, simulation, 2D drawing, text, PDF, video and audio). A program builds in only the parts it uses.
 
 | Part | What it does | Used by |
 | --- | --- | --- |
@@ -176,8 +178,8 @@ Across all of them: for ride-sharing, food delivery and short stays the platform
 | `ARCHITECTURE.md` | This map: how all the programs fit |
 | `STATUS.md` | Every project's stage and open work |
 | `Cargo.toml` | One Rust workspace for every program |
-| `projects/kit/` | The shared kit: `crates/` compiled into every app, `services/` that run once for all apps |
-| `projects/engines/` | Shared engines any program can use: geometry core, renderer, simulation, 2D drawing, text, PDF, video and audio |
+| `projects/kit/` | Spare Kit crates compiled into every app, and `services/` that run once for all apps |
+| `projects/engines/` | Spare Kit engines any program can use: geometry core, renderer, simulation, 2D drawing, text, PDF, video and audio |
 | `projects/spare-<name>/` | One folder per program: `README.md`, `ARCHITECTURE.md`, `STATUS.md`, `notes/`, `crates/`, `app/` |
 | `projects/_template/` | The starting folder copied for each new program |
 
@@ -224,4 +226,4 @@ Everything stays in one repo and one workspace, so a change to the kit is checke
 | First marketplace | Ride, Food, Work or another | Research first (piece K05) |
 | Hosting | Co-op hosted at cost; member self-hosting; both | Both |
 
-The shared kit's work board is [projects/kit/STATUS.md](projects/kit/STATUS.md).
+Spare Kit's work board is [projects/kit/STATUS.md](projects/kit/STATUS.md).

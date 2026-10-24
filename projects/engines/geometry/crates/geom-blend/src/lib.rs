@@ -19,9 +19,10 @@
 //! Sections: 13.10, 13.21 and 13.22; open question OQ-13.3, in the kernel architecture
 //! (`projects/engines/geometry/architecture/`).
 //!
+//! Family: Blend.
+//!
 //! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
-//! Direct dependencies still to add when geom-run merges (G04): geom-run.
 //!
 //! Status: scaffold only; built by pieces G262, G263, G264, G265, G266, G267, G268, G269.
 #![cfg_attr(not(test), no_std)]

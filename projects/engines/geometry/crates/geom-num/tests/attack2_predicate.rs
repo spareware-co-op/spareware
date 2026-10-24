@@ -102,6 +102,9 @@ mod wide {
 mod error {
     pub use geom_num::error::NumError;
 }
+mod generated {
+    pub use geom_num::generated::{incircle, insphere, orient2d, orient3d};
+}
 
 /// predicate.rs's code outside its comments and its test module, compiled again so the attack can
 /// call the private fast and total paths, followed by thin wrappers that expose them.
@@ -121,6 +124,7 @@ mod copy {
 
     verbatim! {
         use crate::error::NumError;
+        use crate::generated;
         use crate::grid::{COORD_BITS, P2, P3};
         use crate::sign::Sign;
         use crate::wide::{I256, I384};
@@ -448,18 +452,59 @@ mod copy {
             [p.x.get(), p.y.get(), p.z.get()]
         }
         pub fn orient2d(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
+            if ORIENT2D_FILTER_FIRST {
+                match generated::orient2d::filter(a, b, c) {
+                    Some(sign) => Ok(sign),
+                    None => orient2d_unfiltered(a, b, c),
+                }
+            } else {
+                orient2d_exact(a, b, c)
+            }
+        }
+
+        const ORIENT2D_FILTER_FIRST: bool = !cfg!(all(
+            target_pointer_width = "64",
+            not(target_family = "wasm")
+        ));
+
+        #[inline(never)]
+        fn orient2d_unfiltered(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
+            orient2d_exact(a, b, c)
+        }
+
+        #[inline]
+        fn orient2d_exact(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
+            let exact = generated::orient2d::exact(a, b, c);
             let [a, b, c] = [a, b, c].map(xy);
-            let fast = orient2d_fast(a, b, c).map(Sign::of_i128);
+            let fast = exact.or_else(|| orient2d_fast(a, b, c).map(Sign::of_i128));
             fast_else_total(fast, || orient2d_total(a, b, c))
         }
         pub fn orient3d(a: P3, b: P3, c: P3, d: P3) -> Result<Sign, NumError> {
+            match generated::orient3d::filter(a, b, c, d) {
+                Some(sign) => Ok(sign),
+                None => orient3d_unfiltered(a, b, c, d),
+            }
+        }
+
+        #[inline(never)]
+        fn orient3d_unfiltered(a: P3, b: P3, c: P3, d: P3) -> Result<Sign, NumError> {
+            let exact = generated::orient3d::exact(a, b, c, d);
             let [a, b, c, d] = [a, b, c, d].map(xyz);
-            let fast = orient3d_fast(a, b, c, d).map(Sign::of_i128);
+            let fast = exact.or_else(|| orient3d_fast(a, b, c, d).map(Sign::of_i128));
             fast_else_total(fast, || orient3d_total(a, b, c, d))
         }
         pub fn incircle(a: P2, b: P2, c: P2, d: P2) -> Result<Sign, NumError> {
+            match generated::incircle::filter(a, b, c, d) {
+                Some(sign) => Ok(sign),
+                None => incircle_unfiltered(a, b, c, d),
+            }
+        }
+
+        #[inline(never)]
+        fn incircle_unfiltered(a: P2, b: P2, c: P2, d: P2) -> Result<Sign, NumError> {
+            let exact = generated::incircle::exact(a, b, c, d);
             let [a, b, c, d] = [a, b, c, d].map(xy);
-            let fast = incircle_fast(a, b, c, d).map(|sum| sum.signum());
+            let fast = exact.or_else(|| incircle_fast(a, b, c, d).map(|sum| sum.signum()));
             fast_else_total(fast, || incircle_total(a, b, c, d))
         }
         #[allow(
@@ -467,8 +512,21 @@ mod copy {
             reason = "a to e name the points of the documented formula"
         )]
         pub fn insphere(a: P3, b: P3, c: P3, d: P3, e: P3) -> Result<Sign, NumError> {
+            match generated::insphere::filter(a, b, c, d, e) {
+                Some(sign) => Ok(sign),
+                None => insphere_unfiltered(a, b, c, d, e),
+            }
+        }
+
+        #[inline(never)]
+        #[allow(
+            clippy::many_single_char_names,
+            reason = "a to e name the points of the documented formula"
+        )]
+        fn insphere_unfiltered(a: P3, b: P3, c: P3, d: P3, e: P3) -> Result<Sign, NumError> {
+            let exact = generated::insphere::exact(a, b, c, d, e);
             let [a, b, c, d, e] = [a, b, c, d, e].map(xyz);
-            let fast = insphere_fast(a, b, c, d, e).map(|sum| sum.signum());
+            let fast = exact.or_else(|| insphere_fast(a, b, c, d, e).map(|sum| sum.signum()));
             fast_else_total(fast, || insphere_total(a, b, c, d, e))
         }
     }

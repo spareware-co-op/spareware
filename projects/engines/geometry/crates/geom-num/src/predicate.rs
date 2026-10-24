@@ -15,22 +15,40 @@
 //!   `None` instead of wrapping. So nothing here depends on overflow checks being on, which they
 //!   are not in a default release build. `tests/attack_predicate.rs` scans this file's code to
 //!   keep it that way.
-//! - **Deterministic.** Integer arithmetic only: the same answer on every target.
+//! - **Deterministic.** The same answer on every target: the integer paths are exact, and the
+//!   filter's `f64` operations are correctly rounded everywhere and give a sign only when it is the
+//!   exact sign.
 //!
-//! Two evaluation paths, both exact:
+//! Four evaluation steps, each exact; a call returns from the first that answers:
 //!
-//! 1. **The fast path**, which answers every public call. Every grid coordinate has magnitude at
-//!    most [`COORD_MAX`](crate::grid::COORD_MAX) = 2^40 − 1, and no other coordinate can be made:
+//! 1. **The generated filter** ([`crate::generated`]): the determinant in `f64` with a
+//!    semi-static error bound (Meyer and Pion's method, as Geogram's PCK uses it), generated with
+//!    its error constant by geom-gen from a description of the predicate. It returns a sign only
+//!    when the bound proves it, and `Zero` only when a scale factor is exactly zero; otherwise it
+//!    leaves the call to the next step. Every predicate runs it first, except [`orient2d`] on
+//!    targets where it costs more than the exact path it would save (routing, below). Every grid
+//!    coordinate has magnitude at most
+//!    [`COORD_MAX`](crate::grid::COORD_MAX) = 2^40 − 1, and no other coordinate can be made:
 //!    [`Coord`](crate::grid::Coord) keeps its value private, and its constants and every function
 //!    that makes one (`Coord::new`, `Coord::from_i128`, `refine` and `coarsen`) keep it within
-//!    that range (`tests/attack2_predicate.rs` checks the functions). Orientation runs in `i128`;
-//!    in-circle and in-sphere compute their factors in `i128` and sum the products in
-//!    [`I256`]. Each predicate's doc comment carries the bit-budget derivation
-//!    proving that none of its checked operations returns `None` for any grid input, and the
-//!    derivations' arithmetic is checked when the crate compiles (the budget exponents below, from
-//!    `FAST_DIFF_BITS` on), so a wrong one is a build error.
-//! 2. **The total path**, defence in depth, which no public call reaches. It would answer only if
-//!    a fast-path budget were wrong, so such a mistake would cost time, never a wrong sign. It
+//!    that range (`tests/attack2_predicate.rs` checks the functions). The filter's bound and the
+//!    generated exact path's widths assume that range.
+//! 2. **The generated exact path**, which answers every call the filter leaves: the same
+//!    determinant with checked integer arithmetic, each step in the narrowest type its generated
+//!    bit-range certificate allows (`i64` differences; `i128` products of them, each one
+//!    64 × 64 → 128-bit multiply, and `i128` sums for orientation; `i128` factors and [`I256`]
+//!    products for in-circle and in-sphere). The certificate proves that no step returns `None`
+//!    for a grid input; geom-gen's tests re-derive it with an independent checker.
+//! 3. **The hand-written fast path**, the same determinants as written here before the generator
+//!    existed, now a second line of defence: it would answer only if the generated exact path
+//!    returned `None`, which its certificate rules out. Orientation runs in `i128`; in-circle and
+//!    in-sphere compute their factors in `i128` and sum the products in [`I256`]. Each
+//!    predicate's doc comment carries this path's bit-budget derivation proving that none of its
+//!    checked operations returns `None` for any grid input, and the derivations' arithmetic is
+//!    checked when the crate compiles (the budget exponents below, from `FAST_DIFF_BITS` on), so a
+//!    wrong one is a build error. The generated certificate derives the same budgets.
+//! 4. **The total path**, defence in depth, which no public call reaches. It would answer only if
+//!    both fast-path budgets were wrong, so such a mistake would cost time, never a wrong sign. It
 //!    evaluates the same determinant from the raw `i64` coordinates in
 //!    [`I384`], which holds every intermediate for any `i64` coordinates
 //!    whatsoever, not only grid ones. Here the bounds are not only written: every value on the
@@ -40,6 +58,39 @@
 //!    written where the total path begins). Only this module's unit tests and
 //!    `tests/attack2_predicate.rs`, which compiles this code a second time to call it directly,
 //!    run the total path.
+//!
+//! Routing, measured (chapter 23.2: "whether to filter is measured, not assumed"). The benchmark
+//! `generated_route_against_the_hand_written_fast_path` in this module's tests times, per
+//! predicate, the hand-written fast path, the generated exact path alone, and the filter followed
+//! by the exact path, on random and on degenerate points. Release build, nanoseconds per call net
+//! of the loop, on x86-64 natively (Windows) and on wasm32-wasip1 under wasmtime 50:
+//!
+//! | Predicate | Points | x86-64: hand-written, exact, filter then exact | wasm32: the same |
+//! | --- | --- | --- | --- |
+//! | orient2d | random | 18.7, 3.3, 16.3 | 54.1, 20.8, 7.7 |
+//! | orient2d | degenerate | 19.0, 3.2, 18.9 | 79.2, 31.4, 42.7 |
+//! | orient3d | random | 93.2, 27.7, 26.0 | 285.3, 163.0, 15.4 |
+//! | orient3d | degenerate | 98.4, 31.0, 43.9 | 422.5, 256.7, 197.3 |
+//! | incircle | random | 199.7, 110.9, 24.8 | 796.8, 554.6, 13.8 |
+//! | incircle | degenerate | 160.5, 86.1, 74.1 | 946.3, 635.7, 449.7 |
+//! | insphere | random | 543.7, 291.4, 48.1 | 1825.2, 1391.8, 36.7 |
+//! | insphere | degenerate | 530.2, 260.3, 230.0 | 2632.8, 1826.0, 1324.9 |
+//!
+//! Chapter 6.2 puts the filter first, and principle 12 (G01 section 3) blocks any speed
+//! regression over 5%. On a 64-bit target with a 64 × 64 → 128-bit multiply, orient2d's exact
+//! path is a handful of integer instructions, five times cheaper than its filter, so filtering
+//! first made exactly zero calls (the common case in buildings, chapter 23.2) slower than before
+//! this module was generated. There, and only there, [`orient2d`] goes straight to the exact
+//! path (`ORIENT2D_FILTER_FIRST`): switching a filter off where measurement shows it does not
+//! pay is chapter 23.2's proposed amendment to 6.2, which an owner has yet to accept (section 32),
+//! applied only where principle 12 leaves no other choice. The width-aware exact path does less
+//! work than the hand-written one it replaced (64-bit differences and single widening products
+//! instead of 128-bit differences and general overflow-checked 128-bit products), so no target
+//! is slower than before. Every other predicate, and orient2d on WebAssembly and 32-bit targets,
+//! filters first and is faster than before on both kinds of points on both targets measured. On
+//! x86-64 orient3d's filter breaks even on random points and costs about 40% on degenerate ones,
+//! still twice as fast as before; whether to switch it off too is the owner's call under the same
+//! amendment. Timings move with the machine's load; the ratios within one run are what count.
 //!
 //! What the types cannot rule out is reported. The total path's operations are still checked
 //! methods returning `Option`, because stable Rust has no multiplication that cannot fail by its
@@ -63,8 +114,8 @@
 //! lifted onto the paraboloid z = |p|², written relative to the query point so every entry is a
 //! small difference. Shewchuk evaluates these in floating point with adaptive expansions; on the
 //! grid the inputs are integers below 2^40, so the same determinants evaluate exactly in
-//! fixed-width integers. There is no floating-point filter yet: a generated filter (chapter 6.2) is
-//! a later piece, and it may only ever return early with the sign this exact path gives. The
+//! fixed-width integers. The filter and the exact path in front of the hand-written ones are
+//! generated (module [`crate::generated`], whose header states their method, proof and cost). The
 //! total path's bounds follow the static bit-length analysis of Fortune and Van Wyk, *Static
 //! Analysis Yields Efficient Exact Integer Arithmetic for Computational Geometry*, ACM
 //! Transactions on Graphics 15(3) (1996), carried in Rust's type system so that the compiler
@@ -79,8 +130,19 @@
 //! Notation in the bit budgets: M = `COORD_MAX` = 2^40 − 1 and δ = 2M = 2^41 − 2 < 2^41, the
 //! largest magnitude of a difference of two coordinates. Every bound is on absolute values, and a
 //! sum's bound also bounds each of its partial sums, so the order of evaluation never matters.
+//!
+//! Cost: per call, the generated filter's few dozen `f64` operations where the routing runs
+//! it, and the exact path only when the filter cannot decide (or first, where the filter does
+//! not pay): a fixed number of checked integer operations, each module's header gives the
+//! counts. No allocation and no recursion.
+//!
+//! Consulted: J. R. Shewchuk, `predicates.c`, public domain,
+//!   <https://www.cs.cmu.edu/afs/cs/project/quake/public/code/predicates.c>, for the determinant
+//!   forms and the sign conventions of `orient2d` and `incircle` that the Method and Conventions
+//!   above follow; chapter 29.3 asks for this credit line.
 
 use crate::error::NumError;
+use crate::generated;
 use crate::grid::{COORD_BITS, P2, P3};
 use crate::sign::Sign;
 use crate::wide::{I256, I384};
@@ -673,11 +735,43 @@ fn xyz(p: P3) -> [i64; 3] {
 ///
 /// # Errors
 ///
-/// [`NumError::BudgetExceeded`] only if both paths failed, which no grid points can cause (the
-/// module documentation): never a sign that was not computed.
+/// [`NumError::BudgetExceeded`] only if every exact path failed, which no grid points can cause
+/// (the module documentation): never a sign that was not computed.
 pub fn orient2d(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
+    if ORIENT2D_FILTER_FIRST {
+        match generated::orient2d::filter(a, b, c) {
+            Some(sign) => Ok(sign),
+            None => orient2d_unfiltered(a, b, c),
+        }
+    } else {
+        orient2d_exact(a, b, c)
+    }
+}
+
+/// Whether [`orient2d`] runs its generated filter first on this target: not on a 64-bit target
+/// other than WebAssembly, whose 64 × 64 → 128-bit multiply makes the exact path five times
+/// cheaper than the filter, so the filter would only slow every call it cannot decide (module
+/// documentation, routing); everywhere else, as chapter 6.2 asks. Either way the sign is the
+/// exact one.
+const ORIENT2D_FILTER_FIRST: bool = !cfg!(all(
+    target_pointer_width = "64",
+    not(target_family = "wasm")
+));
+
+/// [`orient2d`] when its filter cannot decide. Out of line, so that a call the filter answers
+/// does not pay for the exact paths' stack frame.
+#[inline(never)]
+fn orient2d_unfiltered(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
+    orient2d_exact(a, b, c)
+}
+
+/// [`orient2d`]'s exact steps: the generated exact path, then the hand-written fast path and the
+/// total path (module documentation).
+#[inline]
+fn orient2d_exact(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
+    let exact = generated::orient2d::exact(a, b, c);
     let [a, b, c] = [a, b, c].map(xy);
-    let fast = orient2d_fast(a, b, c).map(Sign::of_i128);
+    let fast = exact.or_else(|| orient2d_fast(a, b, c).map(Sign::of_i128));
     fast_else_total(fast, || orient2d_total(a, b, c))
 }
 
@@ -698,11 +792,23 @@ pub fn orient2d(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
 ///
 /// # Errors
 ///
-/// [`NumError::BudgetExceeded`] only if both paths failed, which no grid points can cause (the
-/// module documentation): never a sign that was not computed.
+/// [`NumError::BudgetExceeded`] only if every exact path failed, which no grid points can cause
+/// (the module documentation): never a sign that was not computed.
 pub fn orient3d(a: P3, b: P3, c: P3, d: P3) -> Result<Sign, NumError> {
+    match generated::orient3d::filter(a, b, c, d) {
+        Some(sign) => Ok(sign),
+        None => orient3d_unfiltered(a, b, c, d),
+    }
+}
+
+/// [`orient3d`] when its filter cannot decide: the generated exact path, then the hand-written
+/// fast path and the total path (module documentation). Out of line, so that a call the filter
+/// answers does not pay for the exact paths' stack frame.
+#[inline(never)]
+fn orient3d_unfiltered(a: P3, b: P3, c: P3, d: P3) -> Result<Sign, NumError> {
+    let exact = generated::orient3d::exact(a, b, c, d);
     let [a, b, c, d] = [a, b, c, d].map(xyz);
-    let fast = orient3d_fast(a, b, c, d).map(Sign::of_i128);
+    let fast = exact.or_else(|| orient3d_fast(a, b, c, d).map(Sign::of_i128));
     fast_else_total(fast, || orient3d_total(a, b, c, d))
 }
 
@@ -741,11 +847,23 @@ pub fn orient3d(a: P3, b: P3, c: P3, d: P3) -> Result<Sign, NumError> {
 ///
 /// # Errors
 ///
-/// [`NumError::BudgetExceeded`] only if both paths failed, which no grid points can cause (the
-/// module documentation): never a sign that was not computed.
+/// [`NumError::BudgetExceeded`] only if every exact path failed, which no grid points can cause
+/// (the module documentation): never a sign that was not computed.
 pub fn incircle(a: P2, b: P2, c: P2, d: P2) -> Result<Sign, NumError> {
+    match generated::incircle::filter(a, b, c, d) {
+        Some(sign) => Ok(sign),
+        None => incircle_unfiltered(a, b, c, d),
+    }
+}
+
+/// [`incircle`] when its filter cannot decide: the generated exact path, then the hand-written
+/// fast path and the total path (module documentation). Out of line, so that a call the filter
+/// answers does not pay for the exact paths' stack frame.
+#[inline(never)]
+fn incircle_unfiltered(a: P2, b: P2, c: P2, d: P2) -> Result<Sign, NumError> {
+    let exact = generated::incircle::exact(a, b, c, d);
     let [a, b, c, d] = [a, b, c, d].map(xy);
-    let fast = incircle_fast(a, b, c, d).map(|sum| sum.signum());
+    let fast = exact.or_else(|| incircle_fast(a, b, c, d).map(|sum| sum.signum()));
     fast_else_total(fast, || incircle_total(a, b, c, d))
 }
 
@@ -798,15 +916,31 @@ pub fn incircle(a: P2, b: P2, c: P2, d: P2) -> Result<Sign, NumError> {
 ///
 /// # Errors
 ///
-/// [`NumError::BudgetExceeded`] only if both paths failed, which no grid points can cause (the
-/// module documentation): never a sign that was not computed.
+/// [`NumError::BudgetExceeded`] only if every exact path failed, which no grid points can cause
+/// (the module documentation): never a sign that was not computed.
 #[allow(
     clippy::many_single_char_names,
     reason = "a to e name the points of the documented formula"
 )]
 pub fn insphere(a: P3, b: P3, c: P3, d: P3, e: P3) -> Result<Sign, NumError> {
+    match generated::insphere::filter(a, b, c, d, e) {
+        Some(sign) => Ok(sign),
+        None => insphere_unfiltered(a, b, c, d, e),
+    }
+}
+
+/// [`insphere`] when its filter cannot decide: the generated exact path, then the hand-written
+/// fast path and the total path (module documentation). Out of line, so that a call the filter
+/// answers does not pay for the exact paths' stack frame.
+#[inline(never)]
+#[allow(
+    clippy::many_single_char_names,
+    reason = "a to e name the points of the documented formula"
+)]
+fn insphere_unfiltered(a: P3, b: P3, c: P3, d: P3, e: P3) -> Result<Sign, NumError> {
+    let exact = generated::insphere::exact(a, b, c, d, e);
     let [a, b, c, d, e] = [a, b, c, d, e].map(xyz);
-    let fast = insphere_fast(a, b, c, d, e).map(|sum| sum.signum());
+    let fast = exact.or_else(|| insphere_fast(a, b, c, d, e).map(|sum| sum.signum()));
     fast_else_total(fast, || insphere_total(a, b, c, d, e))
 }
 
@@ -1317,5 +1451,462 @@ mod tests {
             }
         }
         assert_eq!(sum_of_products(&[]), Some(I256::ZERO));
+    }
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::disallowed_methods,
+    clippy::many_single_char_names,
+    reason = "tests may use native arithmetic, casts and std reductions"
+)]
+mod generated_tests {
+    //! The generated exact path against the hand-written fast path, value for value, and the
+    //! benchmark of the generated route (filter, then exact path) against the hand-written fast
+    //! path that answered every public call before it. `tests/generated_predicates.rs` checks the
+    //! generated code against an independent oracle; these need the private fast path.
+
+    use std::hint::black_box;
+    use std::time::Instant;
+
+    use super::{
+        fast_else_total, incircle_fast, incircle_total, insphere_fast, insphere_total,
+        orient2d_fast, orient2d_total, orient3d_fast, orient3d_total, xy, xyz,
+    };
+    use crate::error::NumError;
+    use crate::generated::{incircle, insphere, orient2d, orient3d};
+    use crate::grid::{COORD_MAX, P2, P3};
+    use crate::sign::Sign;
+
+    const M: i64 = COORD_MAX;
+
+    /// Coordinates at an edge of the grid, one step inside it, or at its centre.
+    const LEVELS_5: [i64; 5] = [-M, 1 - M, 0, M - 1, M];
+    /// Coordinates at an edge of the grid or at its centre.
+    const LEVELS_3: [i64; 3] = [-M, 0, M];
+
+    /// `SplitMix64`, from a fixed seed (printed).
+    struct Rng(u64);
+
+    impl Rng {
+        fn new(seed: u64) -> Rng {
+            println!("seed: {seed:016x}");
+            Rng(seed)
+        }
+
+        fn next(&mut self) -> u64 {
+            self.0 = self.0.wrapping_add(0x9e37_79b9_7f4a_7c15);
+            let mut z = self.0;
+            z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+            z ^ (z >> 31)
+        }
+
+        /// A grid coordinate, uniform over the whole grid.
+        fn coord(&mut self) -> i64 {
+            (self.next() % (2 * M as u64 + 1)) as i64 - M
+        }
+    }
+
+    fn p2([x, y]: [i64; 2]) -> P2 {
+        P2::new(x, y).unwrap()
+    }
+
+    fn p3([x, y, z]: [i64; 3]) -> P3 {
+        P3::new(x, y, z).unwrap()
+    }
+
+    fn square(levels: &[i64]) -> Vec<[i64; 2]> {
+        levels
+            .iter()
+            .flat_map(|&x| levels.iter().map(move |&y| [x, y]))
+            .collect()
+    }
+
+    fn cube(levels: &[i64]) -> Vec<[i64; 3]> {
+        levels
+            .iter()
+            .flat_map(|&x| square(levels).into_iter().map(move |[y, z]| [x, y, z]))
+            .collect()
+    }
+
+    fn same_2d(a: [i64; 2], b: [i64; 2], c: [i64; 2], d: [i64; 2]) {
+        let [pa, pb, pc, pd] = [a, b, c, d].map(p2);
+        let what = [a, b, c, d];
+        assert_eq!(
+            orient2d::value(pa, pb, pc),
+            orient2d_fast(a, b, c),
+            "{what:?}"
+        );
+        let hand = incircle_fast(a, b, c, d);
+        assert_eq!(incircle::value(pa, pb, pc, pd), hand, "{what:?}");
+    }
+
+    fn same_3d(a: [i64; 3], b: [i64; 3], c: [i64; 3], d: [i64; 3], e: [i64; 3]) {
+        let [pa, pb, pc, pd, pe] = [a, b, c, d, e].map(p3);
+        let what = [a, b, c, d, e];
+        assert_eq!(
+            orient3d::value(pa, pb, pc, pd),
+            orient3d_fast(a, b, c, d),
+            "{what:?}"
+        );
+        let hand = insphere_fast(a, b, c, d, e);
+        assert_eq!(insphere::value(pa, pb, pc, pd, pe), hand, "{what:?}");
+    }
+
+    /// The generated exact path gives the hand-written fast path's value, bit for bit: on every
+    /// triple of points with coordinates in {−M, 1 − M, 0, M − 1, M} (with a fourth point for
+    /// incircle), on every b, c, d with coordinates in {−M, 0, M} after a fixed corner a (with a
+    /// fifth point for insphere), and on random points.
+    #[test]
+    fn the_generated_exact_path_equals_the_hand_written_fast_path() {
+        let mut rng = Rng::new(0x6727_0000_0000_0001);
+        let points = square(&LEVELS_5);
+        for &a in &points {
+            for &b in &points {
+                for &c in &points {
+                    let d = points[(rng.next() % points.len() as u64) as usize];
+                    same_2d(a, b, c, d);
+                }
+            }
+        }
+        let points = cube(&LEVELS_3);
+        for &b in &points {
+            for &c in &points {
+                for &d in &points {
+                    let e = points[(rng.next() % points.len() as u64) as usize];
+                    same_3d(points[0], b, c, d, e);
+                }
+            }
+        }
+        let n = if cfg!(debug_assertions) {
+            20_000
+        } else {
+            400_000
+        };
+        let r2 = |rng: &mut Rng| [rng.coord(), rng.coord()];
+        let r3 = |rng: &mut Rng| [rng.coord(), rng.coord(), rng.coord()];
+        for _ in 0..n {
+            same_2d(r2(&mut rng), r2(&mut rng), r2(&mut rng), r2(&mut rng));
+            same_3d(
+                r3(&mut rng),
+                r3(&mut rng),
+                r3(&mut rng),
+                r3(&mut rng),
+                r3(&mut rng),
+            );
+        }
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // The benchmark.
+    // -----------------------------------------------------------------------------------------
+
+    /// orient2d's public body before the generator: the hand-written fast path, then the total
+    /// path. Never inlined, so each call pays its own entry as a real caller's would.
+    #[inline(never)]
+    fn before_orient2d(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
+        let [a, b, c] = [a, b, c].map(xy);
+        let fast = orient2d_fast(a, b, c).map(Sign::of_i128);
+        fast_else_total(fast, || orient2d_total(a, b, c))
+    }
+
+    /// orient3d's public body before the generator.
+    #[inline(never)]
+    fn before_orient3d(a: P3, b: P3, c: P3, d: P3) -> Result<Sign, NumError> {
+        let [a, b, c, d] = [a, b, c, d].map(xyz);
+        let fast = orient3d_fast(a, b, c, d).map(Sign::of_i128);
+        fast_else_total(fast, || orient3d_total(a, b, c, d))
+    }
+
+    /// incircle's public body before the generator.
+    #[inline(never)]
+    fn before_incircle(a: P2, b: P2, c: P2, d: P2) -> Result<Sign, NumError> {
+        let [a, b, c, d] = [a, b, c, d].map(xy);
+        let fast = incircle_fast(a, b, c, d).map(|sum| sum.signum());
+        fast_else_total(fast, || incircle_total(a, b, c, d))
+    }
+
+    /// insphere's public body before the generator.
+    #[inline(never)]
+    fn before_insphere(a: P3, b: P3, c: P3, d: P3, e: P3) -> Result<Sign, NumError> {
+        let [a, b, c, d, e] = [a, b, c, d, e].map(xyz);
+        let fast = insphere_fast(a, b, c, d, e).map(|sum| sum.signum());
+        fast_else_total(fast, || insphere_total(a, b, c, d, e))
+    }
+
+    /// The public function itself, behind the same kind of never-inlined entry as `before_*`.
+    #[inline(never)]
+    fn now_orient2d(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
+        super::orient2d(a, b, c)
+    }
+
+    #[inline(never)]
+    fn now_orient3d(a: P3, b: P3, c: P3, d: P3) -> Result<Sign, NumError> {
+        super::orient3d(a, b, c, d)
+    }
+
+    #[inline(never)]
+    fn now_incircle(a: P2, b: P2, c: P2, d: P2) -> Result<Sign, NumError> {
+        super::incircle(a, b, c, d)
+    }
+
+    #[inline(never)]
+    fn now_insphere(a: P3, b: P3, c: P3, d: P3, e: P3) -> Result<Sign, NumError> {
+        super::insphere(a, b, c, d, e)
+    }
+
+    /// Nanoseconds per call of `f` over `inputs`, one timed pass.
+    fn pass<T: Copy>(inputs: &[T], mut f: impl FnMut(T) -> Sign) -> f64 {
+        let start = Instant::now();
+        let mut acc = 0i64;
+        for &x in inputs {
+            acc += i64::from(f(black_box(x)).as_i8());
+        }
+        black_box(acc);
+        start.elapsed().as_nanos() as f64 / inputs.len() as f64
+    }
+
+    /// Keeps the smaller time.
+    fn keep_best(best: &mut f64, ns: f64) {
+        if ns < *best {
+            *best = ns;
+        }
+    }
+
+    /// The variants timed for each predicate, in this order.
+    const VARIANTS: usize = 5;
+
+    /// One line of the benchmark, in nanoseconds per call net of the timing loop's own cost
+    /// (`overhead`, a call that only reads its input). "kernel" is the evaluation alone, inlined
+    /// into the timing loop: the hand-written fast path that answered every call before this
+    /// piece, the generated exact path alone, and the generated filter followed, when it cannot
+    /// decide, by the generated exact path. "public" is the public function, called: its body
+    /// before this piece against the function as it is now. A ratio below 1 means faster than
+    /// the hand-written path or the old body.
+    fn report(name: &str, inputs: &str, best: [f64; VARIANTS], overhead: f64) {
+        let [hand, exact, filtered, before, now] = best.map(|ns| ns - overhead);
+        println!(
+            "{name:<9} {inputs:<11} kernel: hand-written {hand:7.2} ns, exact {exact:7.2} ns \
+             ({:.3}), filter then exact {filtered:7.2} ns ({:.3}); public: before {before:7.2} ns, \
+             now {now:7.2} ns ({:.3}) (loop {overhead:.2} ns)",
+            exact / hand,
+            filtered / hand,
+            now / before
+        );
+    }
+
+    /// The benchmark: each predicate's generated routes against the hand-written fast path that
+    /// answered every public call before the generator, on random points (general position, where
+    /// the filter answers) and on degenerate ones (points of one lattice line or plane, so the
+    /// value is exactly zero two times in three and one step off otherwise: left to the exact
+    /// path, the common case in buildings, chapter 23.2). Its figures are what the routing in
+    /// this module is decided on (module documentation). Every variant is timed in turn in every
+    /// round, and each keeps its best round, so a busy machine slows them alike. Run with
+    /// `cargo test -p geom-num --release --lib generated_route -- --ignored --nocapture`, and on
+    /// WebAssembly with `--target wasm32-wasip1` under wasmtime.
+    #[test]
+    #[ignore = "a benchmark: run in release with --ignored --nocapture"]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "four predicates, each timed five ways, in one place"
+    )]
+    fn generated_route_against_the_hand_written_fast_path() {
+        const N: usize = 1 << 14;
+        const ROUNDS: usize = 60;
+        let mut rng = Rng::new(0x6727_0000_0000_0002);
+        let r2 = |rng: &mut Rng| [rng.coord(), rng.coord()];
+        let r3 = |rng: &mut Rng| [rng.coord(), rng.coord(), rng.coord()];
+        // A small lattice vector: each component below 2^19 in magnitude.
+        let small = |rng: &mut Rng| (rng.next() % (1 << 20)) as i64 - (1 << 19);
+        // A base point within 2^39 of the origin, so base + k·u + l·v (|k|, |l| < 2^19) stays on
+        // the grid.
+        let base = |rng: &mut Rng| (rng.next() % (1 << 40)) as i64 - (1 << 39);
+        for degenerate in [false, true] {
+            let label = if degenerate { "degenerate" } else { "random" };
+            // 2D: random points, or four points of one lattice line (every value exactly zero),
+            // the third moved one step in x one time in three.
+            let pts2: Vec<[[i64; 2]; 4]> = (0..N)
+                .map(|_| {
+                    if !degenerate {
+                        return [r2(&mut rng), r2(&mut rng), r2(&mut rng), r2(&mut rng)];
+                    }
+                    let a = [base(&mut rng), base(&mut rng)];
+                    let u = [small(&mut rng), small(&mut rng)];
+                    let at = |rng: &mut Rng| {
+                        let k = small(rng);
+                        [a[0] + k * u[0], a[1] + k * u[1]]
+                    };
+                    let (b, mut c, d) = (at(&mut rng), at(&mut rng), at(&mut rng));
+                    if rng.next() % 3 == 0 {
+                        c[0] += 1;
+                    }
+                    [a, b, c, d]
+                })
+                .collect();
+            let gp2: Vec<[P2; 4]> = pts2.iter().map(|p| p.map(p2)).collect();
+            // 3D: random points, or five points of one lattice plane (every value exactly zero),
+            // the fourth moved one step in x one time in three.
+            let pts3: Vec<[[i64; 3]; 5]> = (0..N)
+                .map(|_| {
+                    if !degenerate {
+                        return std::array::from_fn(|_| r3(&mut rng));
+                    }
+                    let a = [base(&mut rng), base(&mut rng), base(&mut rng)];
+                    let u = [small(&mut rng), small(&mut rng), small(&mut rng)];
+                    let v = [small(&mut rng), small(&mut rng), small(&mut rng)];
+                    let at = |rng: &mut Rng| {
+                        let (k, l) = (small(rng) >> 1, small(rng) >> 1);
+                        std::array::from_fn(|i| a[i] + k * u[i] + l * v[i])
+                    };
+                    let (b, c, mut d, e) = (at(&mut rng), at(&mut rng), at(&mut rng), at(&mut rng));
+                    if rng.next() % 3 == 0 {
+                        d[0] += 1;
+                    }
+                    [a, b, c, d, e]
+                })
+                .collect();
+            let gp3: Vec<[P3; 5]> = pts3.iter().map(|p| p.map(p3)).collect();
+
+            let mut best = [[f64::INFINITY; VARIANTS]; 4];
+            let mut overhead = [f64::INFINITY; 2];
+            for _ in 0..ROUNDS {
+                let [o2, ic, o3, is] = &mut best;
+                keep_best(
+                    &mut overhead[0],
+                    pass(&gp2, |[a, _, _, _]| Sign::of_i64(a.x.get())),
+                );
+                keep_best(
+                    &mut overhead[1],
+                    pass(&gp3, |[a, _, _, _, _]| Sign::of_i64(a.x.get())),
+                );
+                // orient2d.
+                keep_best(
+                    &mut o2[0],
+                    pass(&pts2, |[a, b, c, _]| {
+                        let fast = orient2d_fast(a, b, c).map(Sign::of_i128);
+                        fast_else_total(fast, || orient2d_total(a, b, c)).unwrap()
+                    }),
+                );
+                keep_best(
+                    &mut o2[1],
+                    pass(&gp2, |[a, b, c, _]| orient2d::exact(a, b, c).unwrap()),
+                );
+                keep_best(
+                    &mut o2[2],
+                    pass(&gp2, |[a, b, c, _]| {
+                        orient2d::filter(a, b, c)
+                            .or_else(|| orient2d::exact(a, b, c))
+                            .unwrap()
+                    }),
+                );
+                keep_best(
+                    &mut o2[3],
+                    pass(&gp2, |[a, b, c, _]| before_orient2d(a, b, c).unwrap()),
+                );
+                keep_best(
+                    &mut o2[4],
+                    pass(&gp2, |[a, b, c, _]| now_orient2d(a, b, c).unwrap()),
+                );
+                // incircle.
+                keep_best(
+                    &mut ic[0],
+                    pass(&pts2, |[a, b, c, d]| {
+                        let fast = incircle_fast(a, b, c, d).map(|s| s.signum());
+                        fast_else_total(fast, || incircle_total(a, b, c, d)).unwrap()
+                    }),
+                );
+                keep_best(
+                    &mut ic[1],
+                    pass(&gp2, |[a, b, c, d]| incircle::exact(a, b, c, d).unwrap()),
+                );
+                keep_best(
+                    &mut ic[2],
+                    pass(&gp2, |[a, b, c, d]| {
+                        incircle::filter(a, b, c, d)
+                            .or_else(|| incircle::exact(a, b, c, d))
+                            .unwrap()
+                    }),
+                );
+                keep_best(
+                    &mut ic[3],
+                    pass(&gp2, |[a, b, c, d]| before_incircle(a, b, c, d).unwrap()),
+                );
+                keep_best(
+                    &mut ic[4],
+                    pass(&gp2, |[a, b, c, d]| now_incircle(a, b, c, d).unwrap()),
+                );
+                // orient3d.
+                keep_best(
+                    &mut o3[0],
+                    pass(&pts3, |[a, b, c, d, _]| {
+                        let fast = orient3d_fast(a, b, c, d).map(Sign::of_i128);
+                        fast_else_total(fast, || orient3d_total(a, b, c, d)).unwrap()
+                    }),
+                );
+                keep_best(
+                    &mut o3[1],
+                    pass(&gp3, |[a, b, c, d, _]| orient3d::exact(a, b, c, d).unwrap()),
+                );
+                keep_best(
+                    &mut o3[2],
+                    pass(&gp3, |[a, b, c, d, _]| {
+                        orient3d::filter(a, b, c, d)
+                            .or_else(|| orient3d::exact(a, b, c, d))
+                            .unwrap()
+                    }),
+                );
+                keep_best(
+                    &mut o3[3],
+                    pass(&gp3, |[a, b, c, d, _]| before_orient3d(a, b, c, d).unwrap()),
+                );
+                keep_best(
+                    &mut o3[4],
+                    pass(&gp3, |[a, b, c, d, _]| now_orient3d(a, b, c, d).unwrap()),
+                );
+                // insphere.
+                keep_best(
+                    &mut is[0],
+                    pass(&pts3, |[a, b, c, d, e]| {
+                        let fast = insphere_fast(a, b, c, d, e).map(|s| s.signum());
+                        fast_else_total(fast, || insphere_total(a, b, c, d, e)).unwrap()
+                    }),
+                );
+                keep_best(
+                    &mut is[1],
+                    pass(&gp3, |[a, b, c, d, e]| {
+                        insphere::exact(a, b, c, d, e).unwrap()
+                    }),
+                );
+                keep_best(
+                    &mut is[2],
+                    pass(&gp3, |[a, b, c, d, e]| {
+                        insphere::filter(a, b, c, d, e)
+                            .or_else(|| insphere::exact(a, b, c, d, e))
+                            .unwrap()
+                    }),
+                );
+                keep_best(
+                    &mut is[3],
+                    pass(&gp3, |[a, b, c, d, e]| {
+                        before_insphere(a, b, c, d, e).unwrap()
+                    }),
+                );
+                keep_best(
+                    &mut is[4],
+                    pass(&gp3, |[a, b, c, d, e]| now_insphere(a, b, c, d, e).unwrap()),
+                );
+            }
+            let [o2, ic, o3, is] = best;
+            report("orient2d", label, o2, overhead[0]);
+            report("orient3d", label, o3, overhead[1]);
+            report("incircle", label, ic, overhead[0]);
+            report("insphere", label, is, overhead[1]);
+        }
     }
 }

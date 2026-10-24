@@ -1,0 +1,36 @@
+# cargo-deny's configuration for what the crates that ship build with: "rayon ... DEPEND only in a
+# std executor crate outside the no_std kernel crates" (kernel architecture, chapter 29.4; 23.4;
+# chapter 27's crate table: "geom-pool ... rayon on native targets, Web Workers in a browser").
+#
+# The merge gate (.github/workflows/kernel-gate.yml) runs `cargo deny ... check bans` with this file
+# once for each crate of chapter 27's crate table that ships (the kernel crates, geom-pool, the
+# facade and its binding crates; not the development crates), with that crate's own Cargo.toml as
+# --manifest-path, so the crate is the only root of the graph. The runs are the scaffold test's
+# `gate_deny_*` tests (projects/engines/crates/engine-geometry/tests/scaffold/deny.rs), which also
+# seed a violation to show each ban fails. For one crate by hand:
+#
+#   cargo deny --manifest-path projects/engines/geometry/crates/<crate>/Cargo.toml \
+#     --config projects/engines/geometry/deny-ships.toml check bans
+#
+# Why apart from deny.toml: the development crates, and every crate's development dependencies,
+# are outside what ships, where a crate may be used "as long as nothing it computes feeds a kernel
+# result" (29.1). 29.16 allows criterion there, and criterion's default features bring rayon, so
+# the rayon bans read only what ships: normal and build dependencies.
+
+[graph]
+# Every feature's dependencies (the facade's `threads` feature brings geom-pool); no `targets`
+# list, so every platform's; development dependencies left out, as they never ship.
+all-features = true
+exclude-dev = true
+
+[bans]
+# rayon, which needs std and threads and contains unsafe code, enters only through geom-pool, the
+# std executor crate. wasm-bindgen-rayon, its browser adapter, is a dependency of geom-pool only
+# (29.4) and names rayon itself. rayon-core is rayon's own pool, which rayon re-exports: it enters
+# only through rayon. Bans match crate names; the gate's own rules refuse any crate outside the
+# workspace that takes the name of a crate of the family (geom-pool), so a wrapper is ours.
+deny = [
+    { crate = "rayon", wrappers = ["geom-pool", "wasm-bindgen-rayon"], reason = "threads enter the kernel only through geom-pool (29.4, 23.4)" },
+    { crate = "wasm-bindgen-rayon", wrappers = ["geom-pool"], reason = "a dependency of geom-pool only (29.4)" },
+    { crate = "rayon-core", wrappers = ["rayon"], reason = "rayon's pool, reached only through rayon, which only geom-pool names (29.4)" },
+]

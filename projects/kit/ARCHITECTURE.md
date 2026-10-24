@@ -1,4 +1,4 @@
-# Shared kit: architecture map
+# Spare Kit: architecture map
 
 *Stage: Mapping. The overview is in the root [ARCHITECTURE.md](../../ARCHITECTURE.md); this map goes one level deeper into each part. Every choice is open until an owner accepts a decision note.*
 

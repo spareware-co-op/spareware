@@ -21,9 +21,10 @@
 //! Sections: 13.1 to 13.7, 13.17 and 17.9; open questions OQ-13.3 and OQ-17.3, in the kernel
 //! architecture (`projects/engines/geometry/architecture/`).
 //!
+//! Family: Sweep and Manufacture.
+//!
 //! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
-//! Direct dependencies still to add when geom-run merges (G04): geom-run.
 //!
 //! Status: scaffold only; built by pieces G255, G256, G257, G259, G260, G261, G280, G375.
 #![cfg_attr(not(test), no_std)]
