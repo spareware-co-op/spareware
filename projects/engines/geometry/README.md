@@ -21,5 +21,9 @@ Start here. This folder is the geometry kernel every Spareware program builds on
 | [../crates/engine-geometry](../crates/engine-geometry) | The stable public facade, the only crate programs depend on |
 | `crates/` | The kernel's internal crates (`geom-*`), added piece by piece as the build order allows |
 | [../../kit/notes/G01-evidence](../../kit/notes/G01-evidence/README.md) | The research behind every decision, each report reading the actual source it cites |
+| [PROVENANCE.md](PROVENANCE.md) | Generated: every outside source the code takes, from the headers' `Source:` and `Consulted:` lines (chapter 29.20) |
+| [NOTICE](NOTICE) | Generated: every ported source's licence text and copyright lines, and the credit owed to every source consulted; ships with every binary |
+| [notices/](notices/README.md) | The licence text of each ported source, copied exactly, which `NOTICE` reproduces |
+| [methods/](methods/README.md) | Method notes of the method-only procedure, for methods read in LGPL code (chapter 29.20, rule 6) |
 
 Still to come, as the detailed design proceeds: `AGENTS.md` (playbooks for adding operations, geometry kinds, formats and domain toolkits), `GLOSSARY.md` (every term defined once), and `MAP.json` (a generated, CI-checked map of every crate, module, operation, invariant and error).
