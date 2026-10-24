@@ -24,7 +24,11 @@
 //!   `golden check` instead.
 //! - **Nothing passes unrun.** [`verify`] fails unless the run has exactly one libtest summary,
 //!   its verdict is `ok.`, it says exactly the group's number of tests passed, none failed and none
-//!   was ignored, and every planned id printed its agreeing line.
+//!   was ignored, and every planned id printed its agreeing line: `golden <id> (edition
+//!   <label>): <64 hexadecimal digits> agrees with the store`, read wherever it starts in an
+//!   output line. libtest runs tests on one thread on wasm32-wasip1 (no threads) and whenever
+//!   `RUST_TEST_THREADS=1`, and then prints `test <name> ... ` before the test runs, so the test's
+//!   own first line follows it on the same output line; with several threads it starts its own.
 //!
 //! Method: libtest's documented output (`test result: ok. N passed; M failed; I ignored; ...`) and
 //! command-line filters (<https://doc.rust-lang.org/rustc/tests/index.html>), the golden matrix of
@@ -34,6 +38,7 @@
 
 use core::fmt;
 
+use super::sha256::Digest;
 use super::store::Store;
 
 /// The goldens one `cargo test` invocation runs: one crate's test target.
@@ -207,15 +212,36 @@ pub fn verify(group: &Group, output: &str) -> Result<(), RunError> {
         });
     }
     for id in &group.ids {
-        let prefix = format!("golden {id} (edition ");
-        let agreed = output
-            .lines()
-            .any(|l| l.starts_with(&prefix) && l.contains("agrees with the store"));
-        if !agreed {
+        if !output.lines().any(|line| agrees_in(line, id)) {
             return Err(RunError::Silent(id.clone()));
         }
     }
     Ok(())
+}
+
+/// Whether `line` holds the agreeing line [`super::check`] prints for golden `id`, `golden <id>
+/// (edition <label>): <digest> agrees with the store`, starting anywhere in it (after libtest's
+/// `test <name> ... ` when tests run on one thread). The label must be an edition label and the
+/// digest 64 lowercase hexadecimal digits, so a line for another golden, a differing digest or
+/// text that only mentions the id never counts.
+fn agrees_in(line: &str, id: &str) -> bool {
+    let prefix = format!("golden {id} (edition ");
+    line.match_indices(prefix.as_str()).any(|(at, _)| {
+        let Some(rest) = line.get(at..).and_then(|s| s.strip_prefix(prefix.as_str())) else {
+            return false;
+        };
+        let Some((edition, rest)) = rest.split_once("): ") else {
+            return false;
+        };
+        let label = !edition.is_empty()
+            && edition
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-');
+        let (Some(digest), Some(verdict)) = (rest.get(..64), rest.get(64..)) else {
+            return false;
+        };
+        label && Digest::is_canonical_hex(digest) && verdict.starts_with(" agrees with the store")
+    })
 }
 
 #[cfg(test)]
@@ -300,15 +326,64 @@ mod tests {
 
     #[test]
     fn a_run_that_ran_and_agreed_verifies() {
-        let out = "running 1 test\ngolden geom-a/one (edition pre-edition): aa agrees with the \
-                   store; 2 runs agree\ntest f1 ... ok\n\ntest result: ok. 1 passed; 0 failed; \
-                   0 ignored; 0 measured; 9 filtered out; finished in 0.1s\n";
-        assert_eq!(verify(&group(), out), Ok(()));
+        let out = format!(
+            "running 1 test\ngolden geom-a/one (edition pre-edition): {A} agrees with the \
+             store; 2 runs agree\ntest f1 ... ok\n\ntest result: ok. 1 passed; 0 failed; \
+             0 ignored; 0 measured; 9 filtered out; finished in 0.1s\n"
+        );
+        assert_eq!(verify(&group(), &out), Ok(()));
+    }
+
+    /// On one test thread (wasm32-wasip1, or `RUST_TEST_THREADS=1`) libtest prints `test <name>
+    /// ... ` before the test runs, so the agreeing line follows it on the same output line; that
+    /// run verifies too, and the same form with a differing digest does not.
+    #[test]
+    fn a_run_on_one_thread_verifies_with_its_line_after_the_test_name() {
+        let inline = format!(
+            "running 1 test\ntest f1 ... golden geom-a/one (edition pre-edition): {A} agrees with \
+             the store; 2 runs agree on perturbed heaps\nsection digests\nok\n\ntest result: ok. \
+             1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s\n"
+        );
+        assert_eq!(verify(&group(), &inline), Ok(()));
+        let differs = format!(
+            "running 1 test\ntest f1 ... golden geom-a/one (edition pre-edition): {A} differs \
+             from the store's {A}\nok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored\n"
+        );
+        assert_eq!(
+            verify(&group(), &differs),
+            Err(RunError::Silent("geom-a/one".to_owned()))
+        );
+    }
+
+    /// Only the exact agreeing line counts: not a short digest, a missing edition, another
+    /// golden's id that begins with this one, or a line that only mentions the id.
+    #[test]
+    fn only_the_exact_agreeing_line_counts() {
+        let good = format!("golden geom-a/one (edition pre-edition): {A} agrees with the store");
+        assert!(agrees_in(&good, "geom-a/one"));
+        assert!(agrees_in(
+            &format!("test f1 ... {good}; 2 runs"),
+            "geom-a/one"
+        ));
+        for bad in [
+            "golden geom-a/one (edition pre-edition): aa agrees with the store".to_owned(),
+            format!("golden geom-a/one (edition ): {A} agrees with the store"),
+            format!("golden geom-a/one (edition Pre Edition): {A} agrees with the store"),
+            format!("golden geom-a/one-two (edition pre-edition): {A} agrees with the store"),
+            format!(
+                "golden geom-a/one (edition pre-edition): {} agrees with the store",
+                A.to_uppercase()
+            ),
+            format!("golden geom-a/one (edition pre-edition): {A} is not in the store"),
+            "the store agrees with golden geom-a/one".to_owned(),
+        ] {
+            assert!(!agrees_in(&bad, "geom-a/one"), "{bad}");
+        }
     }
 
     #[test]
     fn every_unproven_run_fails() {
-        let line = "golden geom-a/one (edition pre-edition): aa agrees with the store\n";
+        let line = format!("golden geom-a/one (edition pre-edition): {A} agrees with the store\n");
         let cases = [
             (
                 "nothing ran",
@@ -316,7 +391,7 @@ mod tests {
                     "{line}test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out\n"
                 ),
             ),
-            ("no summary", line.to_owned()),
+            ("no summary", line.clone()),
             (
                 "a failure",
                 format!("{line}test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured\n"),
@@ -331,9 +406,10 @@ mod tests {
             ),
             (
                 "disagreed",
-                "golden geom-a/one (edition pre-edition): aa differs from the store's bb\n\
-                 test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured\n"
-                    .to_owned(),
+                format!(
+                    "golden geom-a/one (edition pre-edition): {A} differs from the store's {A}\n\
+                     test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured\n"
+                ),
             ),
             (
                 "two binaries",

@@ -353,6 +353,26 @@ fn a_run_that_does_not_prove_its_goldens_is_refused() {
         line("geom-num/rng-stream-ranges")
     );
     assert_eq!(verify(rng, &good), Ok(()));
+    // On one test thread (wasm32-wasip1 has none to spare) libtest writes `test <name> ... `
+    // before each test runs, so each agreeing line follows a test's name on its output line, as
+    // the wasm32 legs print it: that run proves its goldens too, and the same run disagreeing
+    // does not.
+    let one_thread = format!(
+        "running 2 tests\ntest rng_golden_hash_is_the_same_on_every_target ... {}geom-num rng \
+         corpus: 28040 calls, 770664 bytes\nok\ntest \
+         rng_stream_range_golden_hash_is_the_same_on_every_target ... {}ok\n\ntest result: ok. 2 \
+         passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.09s\n",
+        line("geom-num/rng-draws"),
+        line("geom-num/rng-stream-ranges")
+    );
+    assert_eq!(verify(rng, &one_thread), Ok(()));
+    assert!(
+        verify(
+            rng,
+            &one_thread.replace("agrees with the store", "differs from the store's")
+        )
+        .is_err()
+    );
     let bad = [
         good.replace("2 passed", "1 passed"),
         good.replace("2 passed", "3 passed"),
