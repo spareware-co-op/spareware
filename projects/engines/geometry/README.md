@@ -41,7 +41,7 @@ Each crate has one job, written at the top of its `lib.rs`. [crates/README.md](c
 
 ### 4. How a change is checked (two minutes)
 
-Six workflows in `.github/workflows/` guard the kernel. [AGENTS.md](AGENTS.md), section 3, lists the commands to run them yourself.
+Seven workflows in `.github/workflows/` guard the kernel. [AGENTS.md](AGENTS.md), section 3, lists the commands to run them yourself.
 
 | Workflow | What it proves |
 | --- | --- |
@@ -50,6 +50,7 @@ Six workflows in `.github/workflows/` guard the kernel. [AGENTS.md](AGENTS.md), 
 | `kernel-gate.yml` | The merge gate: licences, advisories and sources (cargo-deny), chapter 21's bans on platform maths, hash maps, clocks and randomness, no global state, and `no_std` builds, each shown to fail on a seeded violation |
 | `kernel-dev.yml` | The development crates on WebAssembly, every generated file current, and every header complete with `MAP.json` current |
 | `kernel-bench.yml` | The count gates: no benchmark more than 5% more expensive than on the merge base |
+| `kernel-fuzz.yml` | The fuzz targets: each `geom-fuzz` target under libFuzzer for a minute and under ClusterFuzzLite, and its bounded Kani proofs, the same harness under every engine |
 | `kernel-golden.yml` | The golden store: every golden is in the store, every pinned file unchanged, and any edit to a golden carries its record and an owner's approval |
 
 ### 5. The map (one minute)
