@@ -458,7 +458,7 @@ fn any_change_to_the_wide_arithmetic_is_seen() {
         ("carry = c1 || c2;", "carry = c1 && c2;"),
         ("i = i.wrapping_sub(1);", "i = i.wrapping_sub(2);"),
         (
-            "let overflow = self.is_negative() && r.is_negative();",
+            "let overflow = self.is_negative() & r.is_negative();",
             "let overflow = false;",
         ),
     ] {
