@@ -794,7 +794,7 @@ impl<const L: usize> Wide<L> {
             lemma_unsigned_bound(r.limbs(), L as nat);
         }
         // Only the minimum value is negative and stays negative when negated.
-        let overflow = self.is_negative() && r.is_negative();
+        let overflow = self.is_negative() & r.is_negative();
         if overflow { None } else { Some(r) }
     }
 
