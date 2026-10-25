@@ -1,7 +1,8 @@
 //! Reading the repository into what `check::workspace` compares with the table.
 //!
-//! What it does: runs `cargo metadata --format-version 1 --no-deps` with the cargo that runs this
-//! test (the `CARGO` environment variable), and for every workspace crate records its folder, its
+//! What it does: runs `cargo metadata --format-version 1 --no-deps` through the `cargo_metadata`
+//! crate with the cargo that runs this test (the `CARGO` environment variable), and for every
+//! workspace crate records its folder, its
 //! library's header and attributes, whether its manifest forbids unsafe code, its lint settings
 //! (its manifest's `lints` keys and the clippy configuration clippy reads for it), its dependencies
 //! and their sources, and its features. A library counts as `no_std` only if no Rust file in its
@@ -17,8 +18,10 @@
 //! recursion; anything it cannot read stops the test with the reason. It changes nothing.
 //!
 //! Method: cargo's documented metadata format
-//! (<https://doc.rust-lang.org/cargo/commands/cargo-metadata.html#json-format>), read by the
-//! strict parser in `json`.
+//! (<https://doc.rust-lang.org/cargo/commands/cargo-metadata.html#json-format>), read into the
+//! typed model of the `cargo_metadata` crate (<https://docs.rs/cargo_metadata/0.23.1/>), which
+//! piece G12a put in place of a JSON reader written here (chapter 29.1); manifests and clippy
+//! configurations by the `toml` crate, through `manifest`.
 //!
 //! Cost: one `cargo metadata` run without dependency resolution, one read of each crate's
 //! `Cargo.toml`, of its clippy configuration and of each Rust file in its library's source folder.
@@ -38,12 +41,13 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 
+use cargo_metadata::{DependencyKind, MetadataCommand, TargetKind};
+
 use crate::check::{Dep, DepKind, GEOMETRY_CRATES, Observed, Package};
 use crate::globals::{NOT_CRATE_CODE, SourceFile, Sources};
 use crate::header::Header;
-use crate::json::{self, Json};
 use crate::lints::{CLIPPY_FILES, ClippyConfig, Lints};
-use crate::manifest::{lint_settings, manifest_forbids_unsafe, settings};
+use crate::manifest::{keys, lint_settings, manifest_forbids_unsafe};
 use crate::posture::CARGO_CONFIG_FILES;
 use crate::source::{Attributes, attributes, names_extern_crate_std};
 
@@ -69,14 +73,6 @@ fn relative(path: &Path, base: &Path) -> Vec<String> {
             other => panic!("unexpected path component {other:?} in {}", path.display()),
         })
         .collect()
-}
-
-fn text(value: &Json, key: &str) -> String {
-    value
-        .get(key)
-        .and_then(Json::as_str)
-        .unwrap_or_else(|| panic!("cargo metadata: missing text field {key}"))
-        .to_owned()
 }
 
 fn read(path: &Path) -> String {
@@ -117,29 +113,27 @@ fn rust_files(dir: &Path) -> Vec<PathBuf> {
 /// A library's source as `relative` gives it, its header and its attributes; for a package without
 /// a library, none of them. A library counts as `no_std` only if no Rust file in its source folder
 /// declares `extern crate std`.
-fn library(package: &Json, dir_path: &Path) -> (Option<Vec<String>>, Header, Attributes) {
-    let lib_target = package
-        .get("targets")
-        .and_then(Json::as_array)
-        .expect("cargo metadata: no targets")
-        .iter()
-        .find(|target| {
-            target
-                .get("kind")
-                .and_then(Json::as_array)
-                .is_some_and(|kinds| {
-                    kinds.iter().any(|k| {
-                        matches!(
-                            k.as_str(),
-                            Some("lib" | "rlib" | "dylib" | "cdylib" | "staticlib" | "proc-macro")
-                        )
-                    })
-                })
-        });
+fn library(
+    package: &cargo_metadata::Package,
+    dir_path: &Path,
+) -> (Option<Vec<String>>, Header, Attributes) {
+    let lib_target = package.targets.iter().find(|target| {
+        target.kind.iter().any(|k| {
+            matches!(
+                k,
+                TargetKind::Lib
+                    | TargetKind::RLib
+                    | TargetKind::DyLib
+                    | TargetKind::CDyLib
+                    | TargetKind::StaticLib
+                    | TargetKind::ProcMacro
+            )
+        })
+    });
     let Some(target) = lib_target else {
         return (None, Header::default(), Attributes::default());
     };
-    let src = PathBuf::from(text(target, "src_path"));
+    let src = target.src_path.clone().into_std_path_buf();
     let source = read(&src);
     let mut attrs = attributes(&source);
     // `extern crate std` in any module links std into the whole crate.
@@ -158,46 +152,21 @@ fn library(package: &Json, dir_path: &Path) -> (Option<Vec<String>>, Header, Att
 }
 
 /// A package's dependencies of every kind, as `cargo metadata` lists them.
-fn dependencies(package: &Json) -> Vec<Dep> {
+fn dependencies(package: &cargo_metadata::Package) -> Vec<Dep> {
     package
-        .get("dependencies")
-        .and_then(Json::as_array)
-        .expect("cargo metadata: no dependencies list")
+        .dependencies
         .iter()
         .map(|dep| Dep {
-            name: text(dep, "name"),
-            kind: match dep.get("kind").and_then(Json::as_str) {
-                None => DepKind::Normal,
-                Some("build") => DepKind::Build,
-                Some("dev") => DepKind::Dev,
-                Some(other) => panic!("cargo metadata: unknown dependency kind {other}"),
+            name: dep.name.clone(),
+            kind: match dep.kind {
+                DependencyKind::Normal => DepKind::Normal,
+                DependencyKind::Build => DepKind::Build,
+                DependencyKind::Development => DepKind::Dev,
+                other => panic!("cargo metadata: unknown dependency kind {other:?}"),
             },
-            path: dep.get("path").and_then(Json::as_str).is_some(),
-            optional: dep.get("optional").and_then(Json::as_bool).unwrap_or(false),
-            source: dep.get("source").and_then(Json::as_str).map(str::to_owned),
-        })
-        .collect()
-}
-
-/// A package's features and what each switches on, as `cargo metadata` lists them.
-fn features(package: &Json) -> BTreeMap<String, Vec<String>> {
-    package
-        .get("features")
-        .and_then(Json::as_object)
-        .expect("cargo metadata: no features map")
-        .iter()
-        .map(|(feature, enables)| {
-            let enables = enables
-                .as_array()
-                .expect("cargo metadata: a feature is not a list")
-                .iter()
-                .map(|f| {
-                    f.as_str()
-                        .expect("cargo metadata: a feature entry is not text")
-                        .to_owned()
-                })
-                .collect();
-            (feature.clone(), enables)
+            path: dep.path.is_some(),
+            optional: dep.optional,
+            source: dep.source.as_ref().map(|s| s.repr.clone()),
         })
         .collect()
 }
@@ -212,36 +181,25 @@ pub fn clippy_config(dir: &Path, root: &Path) -> Option<ClippyConfig> {
         .find(|path| path.is_file())?;
     Some(ClippyConfig {
         file: relative(&file, root),
-        settings: settings(&read(&file)),
+        settings: keys(&read(&file)),
     })
 }
 
 /// Reads the workspace.
 pub fn observe() -> Observed {
-    let output = Command::new(cargo())
-        .args(["metadata", "--format-version", "1", "--no-deps"])
+    let metadata = MetadataCommand::new()
+        .cargo_path(cargo())
         .current_dir(env!("CARGO_MANIFEST_DIR"))
-        .output()
-        .expect("cannot run cargo metadata");
-    assert!(
-        output.status.success(),
-        "cargo metadata failed:\n{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let stdout = String::from_utf8(output.stdout).expect("cargo metadata wrote non-UTF-8");
-    let metadata =
-        json::parse(&stdout).unwrap_or_else(|e| panic!("cargo metadata wrote invalid JSON: {e:?}"));
-    let root = PathBuf::from(text(&metadata, "workspace_root"));
+        .no_deps()
+        .exec()
+        .unwrap_or_else(|e| panic!("cargo metadata failed: {e}"));
+    let root = metadata.workspace_root.clone().into_std_path_buf();
     let workspace_manifest = read(&root.join("Cargo.toml"));
 
     let mut packages = BTreeMap::new();
-    let listed = metadata
-        .get("packages")
-        .and_then(Json::as_array)
-        .expect("cargo metadata: no packages");
-    for package in listed {
-        let name = text(package, "name");
-        let manifest_path = PathBuf::from(text(package, "manifest_path"));
+    for package in &metadata.packages {
+        let name = package.name.to_string();
+        let manifest_path = package.manifest_path.clone().into_std_path_buf();
         let dir_path = manifest_path
             .parent()
             .expect("a manifest has a folder")
@@ -259,7 +217,7 @@ pub fn observe() -> Observed {
                 clippy: clippy_config(&dir_path, &root),
             },
             deps: dependencies(package),
-            features: features(package),
+            features: package.features.clone(),
         };
         assert!(
             packages.insert(name.clone(), observed).is_none(),

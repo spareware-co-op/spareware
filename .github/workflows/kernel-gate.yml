@@ -27,12 +27,13 @@ name: Kernel gate
 #   build and development dependencies on every platform; RustSec advisories (vulnerabilities,
 #   unmaintained, unsound and yanked crates); crates from crates.io only, git refused. Once for
 #   each crate that ships with deny-ships.toml: rayon only through geom-pool. And once for each
-#   no_std kernel crate with deny-no-std.toml: libm is the only published crate it builds with.
-#   The gate's own rules run on each same graph: no crate outside the workspace skips the licence
-#   check as private, our own crates' licence fields hold 29.2's identifiers (and MPL-2.0 for the
-#   family), no crate comes from a folder outside the workspace or takes a family crate's name,
-#   libm comes from crates.io, and every licence choice is recorded. Then each rule fails on
-#   seeded graphs.
+#   no_std kernel crate with deny-no-std.toml, the vetted allow-list: only the published crates
+#   on it (libm today), each at its pinned version, ship in it. The gate's own rules run on each
+#   same graph: no crate outside the workspace skips the licence check as private, our own
+#   crates' licence fields hold 29.2's identifiers (and MPL-2.0 for the family), no crate comes
+#   from a folder outside the workspace or takes a family crate's name, a no_std crate's
+#   published crates are the vetted ones at their versions from crates.io, and every licence
+#   choice is recorded. Then each rule fails on seeded graphs.
 # - clippy: clippy with the kernel's lint settings over every crate that ships, all targets,
 #   warnings denied, once for each feature selection (default, none, each feature, all), failing
 #   also on clippy's "does not refer to a reachable" message; every file the compiler read for

@@ -11,6 +11,21 @@ description = "Spare Kit geometry kernel, development only: shared test support,
 geom-num = { path = "../geom-num" }
 proptest = { version = "1.12.0", default-features = false, features = ["std", "bit-set"] }
 serde_json = "1.0.149"
+# Cargo's metadata in its typed model, and the command that asks for it, so the dependency rule
+# reads `cargo metadata` as cargo documents it (src/deps.rs; piece G12a put it in place of a
+# field-by-field reading of the JSON; chapter 29.1). cargo_metadata 0.23.1: MIT, the version
+# engine-geometry's scaffold check pins.
+cargo_metadata = "=0.23.1"
+# TOML 1.0, so the map reads each crate's Cargo.toml as cargo does (src/map.rs; piece G12a put it
+# in place of a line reader; chapter 29.1). toml 0.9.6: MIT OR Apache-2.0, the version
+# engine-geometry's scaffold check pins.
+toml = "=0.9.6"
+# Rust's lexer, the one syn parses with, so the map reads source as rustc does (src/map/rust.rs;
+# piece G12a put it in place of a lexer written there; chapter 29.1). proc-macro2 1.0.107: MIT OR
+# Apache-2.0, without its default proc-macro feature (the map runs outside a macro) and with
+# span-locations for byte offsets (also the line of each call site the recursion check names,
+# piece G13); the version engine-geometry's scaffold check pins.
+proc-macro2 = { version = "=1.0.107", default-features = false, features = ["span-locations"] }
 # The golden store (`golden::store`), read into typed records with unknown fields refused.
 # MIT OR Apache-2.0.
 serde = { version = "1.0.229", features = ["derive"] }
@@ -30,10 +45,6 @@ rand = { version = "0.10.3", default-features = false }
 # features: the full syntax tree, its parser, printer and visitors, and the clone and debug traits
 # the recursion check uses; no procedural-macro support.
 syn = { version = "3.0.9", default-features = false, features = ["full", "parsing", "printing", "visit", "visit-mut", "clone-impls", "extra-traits"] }
-# The token spans syn's parser gives, with `span-locations` so a problem or a call site names its
-# line. MIT OR Apache-2.0. Without its default `proc-macro` feature: this is a library, not a
-# procedural macro.
-proc-macro2 = { version = "1.0.107", default-features = false, features = ["span-locations"] }
 # Token printing, for the recursion check's names. MIT OR Apache-2.0.
 quote = { version = "1.0.47", default-features = false }
 # The recursion check's graph and its strongly connected components (Tarjan's algorithm). MIT OR

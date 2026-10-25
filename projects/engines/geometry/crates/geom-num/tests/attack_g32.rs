@@ -831,17 +831,21 @@ fn a_stream_is_a_few_dozen_bytes() {
 // The clippy ban
 // ------------------------------------------------------------------------------------------------
 
-/// The `path` entries of one list of `clippy.toml`.
+/// The paths one list of `clippy.toml` bans, as clippy reads them: each entry a path string or
+/// a table with a `path`. Read by the `toml` crate (piece G12a, in place of a text search).
 fn banned(list: &str) -> BTreeSet<String> {
-    let start = CLIPPY_TOML
-        .find(&format!("{list} = ["))
-        .unwrap_or_else(|| panic!("clippy.toml has no {list} list"));
-    let rest = &CLIPPY_TOML[start..];
-    let end = rest.find("\n]").expect("an unterminated list");
-    rest[..end]
-        .split("path = \"")
-        .skip(1)
-        .map(|p| p.split('"').next().unwrap().to_owned())
+    let config: toml::Table = CLIPPY_TOML.parse().expect("clippy.toml is not TOML");
+    config
+        .get(list)
+        .and_then(toml::Value::as_array)
+        .unwrap_or_else(|| panic!("clippy.toml has no {list} list"))
+        .iter()
+        .map(|item| {
+            item.as_str()
+                .or_else(|| item.get("path").and_then(toml::Value::as_str))
+                .unwrap_or_else(|| panic!("{list}: an entry with no path: {item}"))
+                .to_owned()
+        })
         .collect()
 }
 
