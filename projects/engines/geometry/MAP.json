@@ -1377,6 +1377,7 @@
           "link": "https://github.com/model-checking/kani/blob/0d2328a93f0e0ff66132d6bfa1a7d884877cf862/library/std/src/lib.rs",
           "method_note": null,
           "name": "Kani 0.68.0 `library/std/src/lib.rs`",
+          "notice": [],
           "pinned": true,
           "purpose": "for its `assert!` and `panic!`, which leave their messages unformatted during verification, the rule [`Finding::new`] follows for a finding's detail. No code copied.",
           "take": "port-method"
