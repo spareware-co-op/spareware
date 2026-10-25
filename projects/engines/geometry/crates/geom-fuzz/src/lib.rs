@@ -89,11 +89,13 @@
 //! proof of 28.7, on bolero's harness unchanged; the seeded leg 28.2 asks for; the replay of every
 //! stored crash, 28.16; and the short fuzz and fixed seeds of 28.17.
 //!
-//! Method: none; this root defines only the [`Finding`] type, its constructor, its `Display` and
-//! `Error` implementations and the [`Harness`] alias, whose shape 28.5 gives. Each harness module
-//! names the method it follows. Under Kani a finding's detail is never written
-//! ([`Finding::new`]): Kani reports a failed proof with a trace of every value, and formatting
-//! symbolic values would only enlarge the problem it solves.
+//! Method: [`Finding::new`] leaves a finding's detail unwritten under Kani, as Kani's own `std`
+//! leaves the messages of `assert!` and `panic!` unformatted during verification
+//! (<https://github.com/model-checking/kani/blob/0d2328a93f0e0ff66132d6bfa1a7d884877cf862/library/std/src/lib.rs>,
+//! credited below): Kani reports a failed proof with a trace of every value, and formatting symbolic values
+//! would only enlarge the problem it solves. The rest of this root is the [`Finding`] type, its
+//! `Display` and `Error` implementations and the [`Harness`] alias, whose shape 28.5 gives. Each
+//! harness module names the method it follows.
 //!
 //! Cost: none at run time for the alias; [`Finding::new`] runs its detail closure once, except
 //! under Kani; displaying a [`Finding`] writes its two strings.
@@ -135,6 +137,10 @@
 //! Consulted: cargo-bolero 0.13.5 `bin/cargo-bolero/src/test.rs`, MIT,
 //!   <https://github.com/camshaft/bolero/blob/7642943b6c1f8a9b5e824dd1cd29b7c8e56068b8/bin/cargo-bolero/src/test.rs>,
 //!   for its run limits above: `-T`, `--runs`, `--jobs` and `--max-input-length`. No code copied.
+//! Consulted: Kani 0.68.0 `library/std/src/lib.rs`, MIT OR Apache-2.0,
+//!   <https://github.com/model-checking/kani/blob/0d2328a93f0e0ff66132d6bfa1a7d884877cf862/library/std/src/lib.rs>, for its
+//!   `assert!` and `panic!`, which leave their messages unformatted during verification, the rule
+//!   [`Finding::new`] follows for a finding's detail. No code copied.
 #![forbid(unsafe_code)]
 
 use core::fmt;

@@ -51,6 +51,21 @@ fn prove(bound: u64, draw: &ProofDraw) -> Result<(), Finding> {
     orient2d::check(&case)
 }
 
+/// Panics with `verdict`'s finding, if it has one.
+///
+/// A proof test's body panics on a broken law rather than returning the `Finding`. Under Kani,
+/// bolero's engine turns a returned error into its `PanicError`, whose constructor may capture a
+/// backtrace (`bolero-engine`'s `panic.rs`), and Kani would have to explore that capture, which
+/// kept the first proofs in symbolic execution for an hour. A panic under Kani is a failed
+/// property and nothing more: Kani's `panic!` formats nothing, and its report traces every value.
+/// Under `cargo test` bolero catches the panic and prints its message, the finding, with the
+/// failing draw.
+fn holds(verdict: Result<(), Finding>) {
+    if let Err(finding) = verdict {
+        panic!("{finding}");
+    }
+}
+
 #[cfg_attr(target_family = "wasm", ignore = "bolero's test mode catches panics")]
 #[test]
 #[cfg_attr(kani, kani::proof)]
@@ -60,7 +75,7 @@ fn orient2d_trial_b0() {
     check!()
         .with_generator(proof_draws(0))
         .with_iterations(100)
-        .for_each(|draw| prove(0, draw));
+        .for_each(|draw| holds(prove(0, draw)));
 }
 
 #[cfg_attr(target_family = "wasm", ignore = "bolero's test mode catches panics")]
@@ -72,7 +87,7 @@ fn orient2d_trial_b1() {
     check!()
         .with_generator(proof_draws(1))
         .with_iterations(100)
-        .for_each(|draw| prove(1, draw));
+        .for_each(|draw| holds(prove(1, draw)));
 }
 
 #[cfg_attr(target_family = "wasm", ignore = "bolero's test mode catches panics")]
@@ -84,7 +99,7 @@ fn orient2d_trial_b7() {
     check!()
         .with_generator(proof_draws(7))
         .with_iterations(100)
-        .for_each(|draw| prove(7, draw));
+        .for_each(|draw| holds(prove(7, draw)));
 }
 
 #[cfg_attr(target_family = "wasm", ignore = "bolero's test mode catches panics")]
@@ -96,7 +111,7 @@ fn orient2d_trial_b15() {
     check!()
         .with_generator(proof_draws(15))
         .with_iterations(100)
-        .for_each(|draw| prove(15, draw));
+        .for_each(|draw| holds(prove(15, draw)));
 }
 
 #[cfg_attr(target_family = "wasm", ignore = "bolero's test mode catches panics")]
@@ -108,7 +123,7 @@ fn orient2d_bytes_trial_l4() {
     check!()
         .with_max_len(4)
         .with_iterations(100)
-        .for_each(|data: &[u8]| harness(data));
+        .for_each(|data: &[u8]| holds(harness(data)));
 }
 
 #[cfg_attr(target_family = "wasm", ignore = "bolero's test mode catches panics")]
@@ -120,7 +135,7 @@ fn orient2d_bytes_trial_l8() {
     check!()
         .with_max_len(8)
         .with_iterations(100)
-        .for_each(|data: &[u8]| harness(data));
+        .for_each(|data: &[u8]| holds(harness(data)));
 }
 
 #[cfg_attr(target_family = "wasm", ignore = "bolero's test mode catches panics")]
@@ -132,7 +147,7 @@ fn orient2d_bytes_trial_l16() {
     check!()
         .with_max_len(16)
         .with_iterations(100)
-        .for_each(|data: &[u8]| harness(data));
+        .for_each(|data: &[u8]| holds(harness(data)));
 }
 
 #[cfg_attr(target_family = "wasm", ignore = "bolero's test mode catches panics")]
@@ -144,5 +159,5 @@ fn orient2d_bytes_trial_l24() {
     check!()
         .with_max_len(24)
         .with_iterations(100)
-        .for_each(|data: &[u8]| harness(data));
+        .for_each(|data: &[u8]| holds(harness(data)));
 }

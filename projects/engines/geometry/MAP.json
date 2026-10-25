@@ -1237,7 +1237,7 @@
       "layer": "Development",
       "modules": [
         {
-          "cost": "none at run time for the alias; displaying a [`Finding`] writes its two strings.",
+          "cost": "none at run time for the alias; [`Finding::new`] runs its detail closure once, except under Kani; displaying a [`Finding`] writes its two strings.",
           "does": null,
           "family": [],
           "file": "projects/engines/geometry/crates/geom-fuzz/src/lib.rs",
@@ -1248,7 +1248,10 @@
           ],
           "job": "Spare Kit geometry kernel, development only: the fuzz harnesses.",
           "method": {
-            "none": "this root defines only the [`Finding`] type, its `Display` and `Error` implementations and the [`Harness`] alias, whose shape 28.5 gives. Each harness module names the method it follows."
+            "links": [
+              "https://github.com/model-checking/kani/blob/0d2328a93f0e0ff66132d6bfa1a7d884877cf862/library/std/src/lib.rs"
+            ],
+            "text": "[`Finding::new`] leaves a finding's detail unwritten under Kani, as Kani's own `std` leaves the messages of `assert!` and `panic!` unformatted during verification (<https://github.com/model-checking/kani/blob/0d2328a93f0e0ff66132d6bfa1a7d884877cf862/library/std/src/lib.rs>, credited below): Kani reports a failed proof with a trace of every value, and formatting symbolic values would only enlarge the problem it solves. The rest of this root is the [`Finding`] type, its `Display` and `Error` implementations and the [`Harness`] alias, whose shape 28.5 gives. Each harness module names the method it follows."
           },
           "path": "geom_fuzz",
           "provenance": [],
@@ -1358,6 +1361,15 @@
           "name": "cargo-bolero 0.13.5 `bin/cargo-bolero/src/test.rs`",
           "pinned": true,
           "purpose": "for its run limits above: `-T`, `--runs`, `--jobs` and `--max-input-length`. No code copied.",
+          "take": "port-method"
+        },
+        {
+          "licence": "MIT OR Apache-2.0",
+          "link": "https://github.com/model-checking/kani/blob/0d2328a93f0e0ff66132d6bfa1a7d884877cf862/library/std/src/lib.rs",
+          "method_note": null,
+          "name": "Kani 0.68.0 `library/std/src/lib.rs`",
+          "pinned": true,
+          "purpose": "for its `assert!` and `panic!`, which leave their messages unformatted during verification, the rule [`Finding::new`] follows for a finding's detail. No code copied.",
           "take": "port-method"
         }
       ],
@@ -4890,6 +4902,17 @@
         "projects/engines/geometry/crates/geom-bench/src/bin/geom-bench-counts.rs",
         "projects/engines/geometry/crates/geom-bench/src/counts.rs",
         "projects/engines/geometry/crates/geom-bench/src/lib.rs"
+      ]
+    },
+    {
+      "licence": "MIT OR Apache-2.0",
+      "link": "https://github.com/model-checking/kani/blob/0d2328a93f0e0ff66132d6bfa1a7d884877cf862/library/std/src/lib.rs",
+      "method_note": null,
+      "name": "Kani 0.68.0 `library/std/src/lib.rs`",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-fuzz/src/lib.rs"
       ]
     },
     {
