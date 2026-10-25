@@ -1284,7 +1284,7 @@
       "layer": "Development",
       "modules": [
         {
-          "cost": "none at run time for the alias; displaying a [`Finding`] writes its two strings.",
+          "cost": "none at run time for the alias; [`Finding::new`] runs its detail closure once, except under Kani; displaying a [`Finding`] writes its two strings.",
           "does": null,
           "family": [],
           "file": "projects/engines/geometry/crates/geom-fuzz/src/lib.rs",
@@ -1295,7 +1295,10 @@
           ],
           "job": "Spare Kit geometry kernel, development only: the fuzz harnesses.",
           "method": {
-            "none": "this root defines only the [`Finding`] type, its `Display` and `Error` implementations and the [`Harness`] alias, whose shape 28.5 gives. Each harness module names the method it follows."
+            "links": [
+              "https://github.com/model-checking/kani/blob/0d2328a93f0e0ff66132d6bfa1a7d884877cf862/library/std/src/lib.rs"
+            ],
+            "text": "[`Finding::new`] leaves a finding's detail unwritten under Kani, as Kani's own `std` leaves the messages of `assert!` and `panic!` unformatted during verification (<https://github.com/model-checking/kani/blob/0d2328a93f0e0ff66132d6bfa1a7d884877cf862/library/std/src/lib.rs>, credited below): Kani reports a failed proof with a trace of every value, and formatting symbolic values would only enlarge the problem it solves. The rest of this root is the [`Finding`] type, its `Display` and `Error` implementations and the [`Harness`] alias, whose shape 28.5 gives. Each harness module names the method it follows."
           },
           "path": "geom_fuzz",
           "provenance": [],
@@ -1303,8 +1306,34 @@
           "target": "lib"
         },
         {
+          "cost": "per case, 6 checked `i128` products and 5 checked sums for the reference, one call each to the predicate, the exact path and the filter (each constant time), and at most [`MAX_INPUT_BYTES`] bytes read by [`decode`]. No allocation unless a finding is reported.",
+          "does": "[`check`] takes three grid points a, b, c and computes [`reference`], the determinant of the 3 × 3 matrix whose rows are (a.x, a.y, 1), (b.x, b.y, 1) and (c.x, c.y, 1), expanded along its third column in `i128`: (b.x·c.y − b.y·c.x) − (a.x·c.y − a.y·c.x) + (a.x·b.y − a.y·b.x). That determinant is orient2d's definition (Shewchuk 1997, section 4.1); this module computes it with no code shared with `geom-num`, and by another formula than `geom-num`'s (b − a) × (c − a), so the two agree only if both are right. Against it, `check` holds `geom-num` to three claims:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/orient2d.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to three valid grid points, reading at most [`MAX_INPUT_BYTES`] = 73 bytes; the bound is derived on the constant and a unit test builds the input that reaches it.",
+            "**The oracle cannot overflow on the grid.** Each coordinate has magnitude at most M = 2^40 − 1, so each of the six products is at most M² < 2^80, each 2 × 2 minor at most 2M² < 2^81, and the determinant at most 6M² < 2^83, far inside `i128`. Every step is a checked method all the same, and a step that failed would be reported as a [`Finding`] naming this harness as the defect, never a panic and never a wrapped value.",
+            "**A wrong answer is a [`Finding`]**, naming the claim, the points, the reference value and what `geom-num` gave. An error from the predicate, or a `None` from the exact path, is a finding too, never read as a sign: `geom-num` proves every grid input answers.",
+            "**A panic is a failure.** Nothing is caught: a panic in `geom-num` fails the run, and the engine reports the input.",
+            "**What is proven and what is tested.** For every case [`proof_case`] can give with bound [`PROOF_BOUND`] (every coordinate within `PROOF_BOUND` steps of 0 or of an edge ±(2^40 − 1) of the frame, in any combination), Kani proves that all three claims hold and that nothing on the way panics or overflows (`tests/orient2d.rs`, `orient2d_proof`; Kani checks every arithmetic step, index and unwrap by default). Near the edges the filter's products round, so the proof covers the filter's error bound, not only exact arithmetic. Everywhere else in the frame the claims are tested, by fuzzing and the property tests, not proven."
+          ],
+          "job": "Fuzz target and bounded proof: `geom-num`'s orient2d agrees with the exact determinant of its definition, computed here from scratch.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md",
+              "projects/kit/notes/G01-evidence/08-standards-coverage-testing.md",
+              "https://doi.org/10.1007/PL00009321"
+            ],
+            "text": "an exact oracle for a predicate, the first of chapter 28.6's checks (`projects/engines/geometry/architecture/28-testing.md`), with bounded Kani proofs of sign agreement with an exact integer reference, as evidence report 08 recommends for predicates (`projects/kit/notes/G01-evidence/08-standards-coverage-testing.md`, \"Recommended test architecture\", item 1). The reference is the 3 × 3 determinant of the definition, expanded by cofactors along the column of ones, in Shewchuk's paper: J. R. Shewchuk, \"Adaptive Precision Floating-Point Arithmetic and Fast Robust Geometric Predicates\", *Discrete & Computational Geometry* 18 (1997), 305–363, <https://doi.org/10.1007/PL00009321>."
+          },
+          "path": "geom_fuzz::orient2d",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "4 + 3 + 6 + 6 + 10 = 29 predicate calls per input, each constant time, and at most [`MAX_INPUT_BYTES`] bytes read.",
-          "does": "[`decode`] turns a fuzzer's bytes into grid points with `geom-test`'s [`GridSampler`] (four 2D points, then five 3D points). [`harness`] calls every exact predicate on them: `orient2d`, `incircle`, `orient3d` and `insphere`. For each, it checks that the predicate answers, then swaps every pair of points and checks that the sign flips, `Zero` staying `Zero`.",
+          "does": "[`decode`] turns a fuzzer's bytes into grid points with `geom-test`'s [`GridSampler`] (four 2D points, then five 3D points). [`check`] calls every exact predicate on them: `orient2d`, `incircle`, `orient3d` and `insphere`. For each, it checks that the predicate answers, then swaps every pair of points and checks that the sign flips, `Zero` staying `Zero`. [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout).",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-fuzz/src/predicates.rs",
           "guarantees": [
@@ -1383,9 +1412,19 @@
           "pinned": true,
           "purpose": "for its run limits above: `-T`, `--runs`, `--jobs` and `--max-input-length`. No code copied.",
           "take": "port-method"
+        },
+        {
+          "licence": "MIT OR Apache-2.0",
+          "link": "https://github.com/model-checking/kani/blob/0d2328a93f0e0ff66132d6bfa1a7d884877cf862/library/std/src/lib.rs",
+          "method_note": null,
+          "name": "Kani 0.68.0 `library/std/src/lib.rs`",
+          "notice": [],
+          "pinned": true,
+          "purpose": "for its `assert!` and `panic!`, which leave their messages unformatted during verification, the rule [`Finding::new`] follows for a finding's detail. No code copied.",
+          "take": "port-method"
         }
       ],
-      "sections": "chapter 27's `geom-fuzz` row and its rules for the development crates, and 28.5 of the kernel architecture (`projects/engines/geometry/architecture/`), in part: its tooling (one plain harness function, bolero's `check!` and the cargo-bolero command) and one target, on the swap law of 28.6; the seeded leg 28.2 asks for; the replay of every stored crash, 28.16; and the short fuzz and fixed seeds of 28.17.",
+      "sections": "chapter 27's `geom-fuzz` row and its rules for the development crates, and 28.5 of the kernel architecture (`projects/engines/geometry/architecture/`), in part: its tooling (one plain harness function, bolero's `check!`, libFuzzer under cargo-bolero, and `ClusterFuzzLite` on pull requests) and two targets, on the swap law and the exact oracle of 28.6; a bounded Kani proof of 28.7, on bolero's harness unchanged; the seeded leg 28.2 asks for; the replay of every stored crash, 28.16; and the short fuzz and fixed seeds of 28.17.",
       "spdx": null,
       "status": null,
       "summary": "Spare Kit geometry kernel, development only: the fuzz harnesses."
@@ -5835,6 +5874,17 @@
         "projects/engines/geometry/crates/geom-bench/src/callgrind.rs",
         "projects/engines/geometry/crates/geom-bench/src/counts.rs",
         "projects/engines/geometry/crates/geom-bench/src/lib.rs"
+      ]
+    },
+    {
+      "licence": "MIT OR Apache-2.0",
+      "link": "https://github.com/model-checking/kani/blob/0d2328a93f0e0ff66132d6bfa1a7d884877cf862/library/std/src/lib.rs",
+      "method_note": null,
+      "name": "Kani 0.68.0 `library/std/src/lib.rs`",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-fuzz/src/lib.rs"
       ]
     },
     {

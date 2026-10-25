@@ -15,3 +15,18 @@ edition = "2024"
 publish = false
 # Licence: MPL-2.0 for the core, Apache-2.0 for the SDK and plugins (README.md, Licence). Never relicensed.
 license = "MPL-2.0"
+
+# The profile cargo-bolero builds fuzz targets with (its --profile option defaults to fuzz), as the
+# bolero book asks: book/src/library-installation.md at commit
+# 7642943b6c1f8a9b5e824dd1cd29b7c8e56068b8 of camshaft/bolero on GitHub. It is the dev profile, so
+# debug assertions and overflow checks stay on and a fuzzer finds an overflow as a crash, with full
+# optimisation for speed, and no link-time optimisation, which the book says fuzzing builds do not
+# support well. Nothing else uses it; the geometry kernel runs its fuzz targets this way in
+# .github/workflows/kernel-fuzz.yml (projects/engines/geometry/crates/geom-fuzz/README.md).
+# No URL here: clippy records this file among the files each crate's build read, and the merge
+# gate (G12) reads every such file with a Rust lexer, to which "//" opens a comment.
+[profile.fuzz]
+inherits = "dev"
+opt-level = 3
+incremental = false
+codegen-units = 1
