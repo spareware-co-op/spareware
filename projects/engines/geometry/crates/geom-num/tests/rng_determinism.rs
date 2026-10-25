@@ -3,8 +3,8 @@
 //! every target.
 //!
 //! A randomised kernel method (RANSAC fitting, sampling) must give the same bits on every machine
-//! (chapter 21; the randomised-method rule in `src/rng.rs`), so its random numbers must too. This
-//! test holds `geom_num::rng` to that. Its corpus:
+//! (chapter 21; the randomised-method rule in the kernel's `AGENTS.md`), so its random numbers must
+//! too. This test holds `geom_num::rng` to that. Its corpus:
 //!
 //! - **Streams.** Six seeds (zero, one, all ones, the top bit alone, "SPAREKIT" and the π key of
 //!   Random123's known answers) times six stream ids (zero, one, both sides of the 32-bit boundary,
