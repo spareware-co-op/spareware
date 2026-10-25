@@ -997,11 +997,9 @@ fn expected_module(d: &Desc, x: &Derived, constant: u64, larger: bool) -> Vec<Ex
         .filter(|w| is_wide(w))
         .collect();
     let wides: Vec<&str> = wides.into_iter().collect();
-    match wides.as_slice() {
-        [] => {}
-        [one] => push(format!("use crate::wide::{one};")),
-        many => push(format!("use crate::wide::{{{}}};", many.join(", "))),
-    }
+    // The import names exactly the wide types the code names, so it is settled once the code
+    // lines are known (below).
+    push(WIDE_IMPORT.to_owned());
     let mut helpers = vec!["decide", "largest_magnitude"];
     if x.rows.iter().any(|r| r.coordinates) {
         helpers.push("exact_f64");
@@ -1094,7 +1092,40 @@ fn expected_module(d: &Desc, x: &Derived, constant: u64, larger: bool) -> Vec<Ex
         push(format!("    .map({sign})"));
     }
     push("}".to_owned());
-    out
+    settle_wide_import(out, &wides)
+}
+
+/// Where [`expected_module`] puts the wide-integer import until the code lines are known.
+const WIDE_IMPORT: &str = "<wide import>";
+
+/// Replaces the [`WIDE_IMPORT`] line with an import of the candidate wide types that the code
+/// lines name as a whole word (none, one, or a braced list), or drops it when they name none.
+fn settle_wide_import(out: Vec<Expect>, candidates: &[&str]) -> Vec<Expect> {
+    let code: Vec<&str> = out
+        .iter()
+        .filter_map(|e| match e {
+            Expect::Line(l) if l != WIDE_IMPORT => Some(l.as_str()),
+            _ => None,
+        })
+        .collect();
+    let named = |ty: &str| {
+        code.iter().any(|l| {
+            l.split(|c: char| !(c.is_alphanumeric() || c == '_'))
+                .any(|word| word == ty)
+        })
+    };
+    let used: Vec<&str> = candidates.iter().copied().filter(|ty| named(ty)).collect();
+    let import = match used.as_slice() {
+        [] => None,
+        [one] => Some(format!("use crate::wide::{one};")),
+        many => Some(format!("use crate::wide::{{{}}};", many.join(", "))),
+    };
+    out.into_iter()
+        .filter_map(|e| match e {
+            Expect::Line(l) if l == WIDE_IMPORT => import.clone().map(Expect::Line),
+            other => Some(other),
+        })
+        .collect()
 }
 
 /// The code lines of the parent module, as the checker writes them: one `pub mod` per predicate,
