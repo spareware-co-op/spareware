@@ -5225,9 +5225,9 @@
               "https://doc.rust-lang.org/reference/items/modules.html",
               "https://doc.rust-lang.org/reference/items.html",
               "https://doc.rust-lang.org/reference/attributes/derive.html",
-              "https://docs.rs/syn/2.0.119/syn/"
+              "https://docs.rs/syn/3.0.9/syn/"
             ],
-            "text": "The Rust Reference on modules and the `path` attribute (<https://doc.rust-lang.org/reference/items/modules.html>), on items and associated items (<https://doc.rust-lang.org/reference/items.html>), and on derive (<https://doc.rust-lang.org/reference/attributes/derive.html>); parsing by `syn` (<https://docs.rs/syn/2.0.119/syn/>)."
+            "text": "The Rust Reference on modules and the `path` attribute (<https://doc.rust-lang.org/reference/items/modules.html>), on items and associated items (<https://doc.rust-lang.org/reference/items.html>), and on derive (<https://doc.rust-lang.org/reference/attributes/derive.html>); parsing by `syn` (<https://docs.rs/syn/3.0.9/syn/>)."
           },
           "path": "geom_test::recursion::model",
           "provenance": [],

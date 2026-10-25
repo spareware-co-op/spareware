@@ -106,7 +106,7 @@
 //! - `sha2` 0.11, the SHA-256 of every golden digest (FIPS 180-4).
 //! - `rand` 0.10, without its default features, for its Fisher-Yates shuffle, which the shuffle
 //!   hook drives from `SplitMix64`; it has no generator of its own here.
-//! - `syn` 2.0, `proc-macro2` 1.0 (with span locations) and `quote` 1.0: Rust's grammar for the
+//! - `syn` 3.0, `proc-macro2` 1.0 (with span locations) and `quote` 1.0: Rust's grammar for the
 //!   golden store's repository check and the recursion check's parser, their line numbers and the
 //!   recursion check's token printing.
 //! - `petgraph` 0.8, without default features: the recursion check's strongly connected
