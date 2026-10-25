@@ -763,7 +763,9 @@ fn halves(t: u128) -> (u64, u64) {
         r == if negative { 0xFFFF_FFFF_FFFF_FFFFu64 } else { 0u64 },
 )]
 const fn fill(negative: bool) -> u64 {
-    if negative { u64::MAX } else { 0 }
+    // 0 − 1 wraps to all ones; written without a branch, so a caller's sign fill compiles to a
+    // shift of the sign bit rather than a branch on it.
+    0u64.wrapping_sub(negative as u64)
 }
 
 impl<const L: usize> Wide<L> {

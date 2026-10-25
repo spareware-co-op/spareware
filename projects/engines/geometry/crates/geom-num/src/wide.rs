@@ -143,7 +143,9 @@ fn compare_limbs<const L: usize>(a: &[u64; L], b: &[u64; L]) -> Ordering {
 
 /// The limb that sign-extends a value with this sign.
 const fn fill(negative: bool) -> u64 {
-    if negative { u64::MAX } else { 0 }
+    // 0 − 1 wraps to all ones; written without a branch, so a caller's sign fill compiles to a
+    // shift of the sign bit rather than a branch on it.
+    0u64.wrapping_sub(negative as u64)
 }
 
 /// The low and high 64-bit halves of `t`, t = high · 2^64 + low.
