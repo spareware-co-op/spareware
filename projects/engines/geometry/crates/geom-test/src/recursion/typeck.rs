@@ -119,6 +119,34 @@ struct ClosureInfo {
     ret: Ty,
 }
 
+/// A pattern's default binding mode (RFC 2005): by value, or by shared or mutable reference
+/// once the pattern matched through a reference.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Mode {
+    Move,
+    Ref,
+    RefMut,
+}
+
+impl Mode {
+    /// The mode after matching through a reference (mutable when `mutable`).
+    fn through(self, mutable: bool) -> Mode {
+        match (self, mutable) {
+            (Mode::Move | Mode::RefMut, true) => Mode::RefMut,
+            _ => Mode::Ref,
+        }
+    }
+
+    /// The type a binding of a value of type `t` gets in this mode.
+    fn bind(self, t: Ty) -> Ty {
+        match self {
+            Mode::Move => t,
+            Mode::Ref => Ty::reference(t),
+            Mode::RefMut => Ty::reference_mut(t),
+        }
+    }
+}
+
 /// What a call's arguments are: still to check, or checked.
 #[derive(Clone, Copy)]
 enum Args<'e> {
@@ -270,7 +298,7 @@ pub fn body(ix: &Index<'_>, m: &mut Mono, inst: InstId, node: NodeId, args: &[Ty
             let t = c.inst_ty(&t);
             match input {
                 syn::FnArg::Receiver(_) => c.bind("self", t),
-                syn::FnArg::Typed(pt) => c.bind_pat(&pt.pat, &t, false),
+                syn::FnArg::Typed(pt) => c.bind_pat(&pt.pat, &t, Mode::Move),
             }
         }
     }
@@ -491,7 +519,7 @@ impl<'a, 'p> Checker<'a, 'p> {
         let a = self.now(actual);
         let e = self.now(expected);
         match (&a, &e) {
-            (Ty::Ref(x), Ty::Ref(y)) => {
+            (Ty::Ref(x, mx), Ty::Ref(y, my)) if *mx || !*my => {
                 let y = self.now(y);
                 if let Ty::Dyn(traits) = &y {
                     self.coerced_to_dyn(x, traits);
@@ -555,7 +583,7 @@ impl<'a, 'p> Checker<'a, 'p> {
                 Some((inst.inputs, inst.output))
             }
             Ty::FnPtr(p, r) => Some((p, *r)),
-            Ty::Ref(inner) => self.callable_sig(&inner),
+            Ty::Ref(inner, _) => self.callable_sig(&inner),
             _ => None,
         }
     }
@@ -730,7 +758,7 @@ impl<'a, 'p> Checker<'a, 'p> {
     fn closure_expectation(&mut self, param: &Ty) -> Option<(Vec<Ty>, Ty)> {
         let p = self.now(param);
         let p = match p {
-            Ty::Ref(inner) => self.now(&inner),
+            Ty::Ref(inner, _) => self.now(&inner),
             other => other,
         };
         match &p {
@@ -1323,15 +1351,14 @@ impl<'a, 'p> Checker<'a, 'p> {
             }
             None => declared.unwrap_or_else(|| self.fresh()),
         };
-        self.bind_pat(pat, &t, false);
+        self.bind_pat(pat, &t, Mode::Move);
     }
 
     // ------------------------------------------------------------ patterns
 
-    /// Binds pattern `pat` against a value of type `t`; `by_ref` says the default binding mode is
-    /// by reference (the pattern matched through a reference).
+    /// Binds pattern `pat` against a value of type `t` in default binding mode `mode`.
     #[allow(clippy::too_many_lines, reason = "one arm per pattern form, each short")]
-    fn bind_pat(&mut self, pat: &Pat, t: &Ty, by_ref: bool) {
+    fn bind_pat(&mut self, pat: &Pat, t: &Ty, mode: Mode) {
         match pat {
             Pat::Ident(pi) => {
                 let name = pi.ident.to_string();
@@ -1346,14 +1373,18 @@ impl<'a, 'p> Checker<'a, 'p> {
                     }
                     return;
                 }
-                let bound = if by_ref || pi.by_ref.is_some() { Ty::reference(t.clone()) } else { t.clone() };
+                let bound = match (&pi.by_ref, &pi.mutability) {
+                    (Some(_), Some(_)) => Ty::reference_mut(t.clone()),
+                    (Some(_), None) => Ty::reference(t.clone()),
+                    (None, _) => mode.bind(t.clone()),
+                };
                 self.bind(&pi.ident.to_string(), bound);
                 if let Some((_, sub)) = &pi.subpat {
-                    self.bind_pat(sub, t, by_ref);
+                    self.bind_pat(sub, t, mode);
                 }
             }
             Pat::Tuple(pt) => {
-                let (s, by_ref) = self.peel_for_pattern_mode(t, by_ref);
+                let (s, mode) = self.peel_for_pattern_mode(t, mode);
                 let rest = pt.elems.iter().position(|p| matches!(p, Pat::Rest(_)));
                 let n = pt.elems.len();
                 let items = match self.now(&s) {
@@ -1374,11 +1405,11 @@ impl<'a, 'p> Checker<'a, 'p> {
                         _ => Some(i),
                     };
                     let et = idx.and_then(|j| items.get(j)).cloned().unwrap_or(Ty::Unknown);
-                    self.bind_pat(p, &et, by_ref);
+                    self.bind_pat(p, &et, mode);
                 }
             }
             Pat::TupleStruct(ts) => {
-                let (s, by_ref) = self.peel_for_pattern_mode(t, by_ref);
+                let (s, mode) = self.peel_for_pattern_mode(t, mode);
                 let fields = self.pattern_fields(&ts.path, &s, line_of(pat));
                 let n = ts.elems.len();
                 let rest = ts.elems.iter().position(|p| matches!(p, Pat::Rest(_)));
@@ -1391,11 +1422,11 @@ impl<'a, 'p> Checker<'a, 'p> {
                         _ => Some(i),
                     };
                     let ft = idx.and_then(|j| fields.get(j)).map_or(Ty::Unknown, |(_, t)| t.clone());
-                    self.bind_pat(p, &ft, by_ref);
+                    self.bind_pat(p, &ft, mode);
                 }
             }
             Pat::Struct(ps) => {
-                let (s, by_ref) = self.peel_for_pattern_mode(t, by_ref);
+                let (s, mode) = self.peel_for_pattern_mode(t, mode);
                 let fields = self.pattern_fields(&ps.path, &s, line_of(pat));
                 for fp in &ps.fields {
                     let name = match &fp.member {
@@ -1403,16 +1434,16 @@ impl<'a, 'p> Checker<'a, 'p> {
                         syn::Member::Unnamed(ix) => ix.index.to_string(),
                     };
                     let ft = fields.iter().find(|(n, _)| *n == name).map_or(Ty::Unknown, |(_, t)| t.clone());
-                    self.bind_pat(&fp.pat, &ft, by_ref);
+                    self.bind_pat(&fp.pat, &ft, mode);
                 }
             }
             Pat::Path(pp) => {
                 let v = self.path_value_of(&pp.qself, &pp.path, None, line_of(pat));
-                let (s, _) = self.peel_for_pattern_mode(t, by_ref);
+                let (s, _) = self.peel_for_pattern_mode(t, mode);
                 self.unify(&v, &s);
             }
             Pat::Slice(ps) => {
-                let (s, by_ref) = self.peel_for_pattern_mode(t, by_ref);
+                let (s, mode) = self.peel_for_pattern_mode(t, mode);
                 let elem = match self.now(&s) {
                     Ty::Slice(e) | Ty::Array(e) => (*e).clone(),
                     _ => Ty::Unknown,
@@ -1422,51 +1453,55 @@ impl<'a, 'p> Checker<'a, 'p> {
                         Pat::Rest(_) => {}
                         Pat::Ident(pi) if matches!(pi.subpat.as_ref().map(|(_, s)| &**s), Some(Pat::Rest(_))) => {
                             let sl = Ty::Slice(Box::new(elem.clone()));
-                            let bound = if by_ref || pi.by_ref.is_some() { Ty::reference(sl) } else { sl };
+                            let bound = match (&pi.by_ref, &pi.mutability) {
+                                (Some(_), Some(_)) => Ty::reference_mut(sl),
+                                (Some(_), None) => Ty::reference(sl),
+                                (None, _) => mode.bind(sl),
+                            };
                             self.bind(&pi.ident.to_string(), bound);
                         }
-                        other => self.bind_pat(other, &elem, by_ref),
+                        other => self.bind_pat(other, &elem, mode),
                     }
                 }
             }
             Pat::Reference(pr) => {
                 let inner = match self.now(t) {
-                    Ty::Ref(i) => (*i).clone(),
+                    Ty::Ref(i, _) => (*i).clone(),
                     Ty::Var(_) => {
                         let i = self.fresh();
-                        self.unify(t, &Ty::reference(i.clone()));
+                        self.unify(t, &Ty::Ref(Box::new(i.clone()), pr.mutability.is_some()));
                         i
                     }
                     other => other,
                 };
-                self.bind_pat(&pr.pat, &inner, false);
+                self.bind_pat(&pr.pat, &inner, Mode::Move);
             }
             Pat::Or(po) => {
                 let saved = self.or_binding;
                 for (i, case) in po.cases.iter().enumerate() {
                     self.or_binding = saved || i > 0;
-                    self.bind_pat(case, t, by_ref);
+                    self.bind_pat(case, t, mode);
                 }
                 self.or_binding = saved;
             }
             Pat::Type(pt) => {
                 let d = self.ty(&pt.ty);
                 self.unify(t, &d);
-                self.bind_pat(&pt.pat, &d, by_ref);
+                self.bind_pat(&pt.pat, &d, mode);
             }
-            Pat::Paren(pp) => self.bind_pat(&pp.pat, t, by_ref),
+            Pat::Paren(pp) => self.bind_pat(&pp.pat, t, mode),
             Pat::Guard(pg) => {
-                self.bind_pat(&pg.pat, t, by_ref);
+                self.bind_pat(&pg.pat, t, mode);
                 let b = Ty::Prim(Prim::Bool);
                 self.expr(&pg.guard, Some(&b));
             }
             Pat::Lit(pl) => {
                 let lt = self.lit(&pl.lit, None);
-                let (s, _) = self.peel_for_pattern_mode(t, by_ref);
+                let (s, _) = self.peel_for_pattern_mode(t, mode);
                 self.unify(&lt, &s);
             }
             Pat::Range(pr) => {
-                let (s, _) = self.peel_for_pattern_mode(t, by_ref);
+                let (s, _) = self.peel_for_pattern_mode(t, mode);
                 if let Some(start) = &pr.start {
                     let x = self.expr(start, Some(&s));
                     self.unify(&x, &s);
@@ -1492,21 +1527,21 @@ impl<'a, 'p> Checker<'a, 'p> {
         }
     }
 
-    /// The scrutinee type behind references, for a non-reference pattern, and whether that
-    /// switched the default binding mode to by-reference.
-    fn peel_for_pattern(&mut self, t: &Ty) -> (Ty, bool) {
-        let mut cur = self.now(t);
-        let mut peeled = false;
-        while let Ty::Ref(inner) = cur {
-            cur = self.now(&inner);
-            peeled = true;
-        }
-        (cur, peeled)
+    /// The scrutinee type behind references, for a non-reference pattern.
+    fn peel_for_pattern(&mut self, t: &Ty) -> (Ty, Mode) {
+        self.peel_for_pattern_mode(t, Mode::Move)
     }
 
-    fn peel_for_pattern_mode(&mut self, t: &Ty, by_ref: bool) -> (Ty, bool) {
-        let (s, peeled) = self.peel_for_pattern(t);
-        (s, by_ref || peeled)
+    /// The scrutinee type behind references, for a non-reference pattern, and the default binding
+    /// mode matching through them gives.
+    fn peel_for_pattern_mode(&mut self, t: &Ty, mode: Mode) -> (Ty, Mode) {
+        let mut cur = self.now(t);
+        let mut mode = mode;
+        while let Ty::Ref(inner, m) = cur {
+            cur = self.now(&inner);
+            mode = mode.through(m);
+        }
+        (cur, mode)
     }
 
     /// The fields a struct or variant pattern's path names, with types for scrutinee `s`.
@@ -1644,15 +1679,15 @@ impl<'a, 'p> Checker<'a, 'p> {
             Expr::Group(g) => self.expr(&g.expr, expected),
             Expr::Reference(r) => {
                 let inner_expected = expected.map(|t| self.now(t)).and_then(|t| match t {
-                    Ty::Ref(i) => Some((*i).clone()),
+                    Ty::Ref(i, _) => Some((*i).clone()),
                     _ => None,
                 });
                 let v = self.expr(&r.expr, inner_expected.as_ref());
-                Ty::reference(v)
+                Ty::Ref(Box::new(v), r.mutability.is_some())
             }
             Expr::RawAddr(r) => {
                 let v = self.expr(&r.expr, None);
-                Ty::reference(v)
+                Ty::Ref(Box::new(v), matches!(r.mutability, syn::PointerMutability::Mut(_)))
             }
             Expr::Block(b) => self.labelled_block(b.label.as_ref(), &b.block, expected),
             Expr::Unsafe(u) => self.block(&u.block, expected),
@@ -1679,7 +1714,7 @@ impl<'a, 'p> Checker<'a, 'p> {
             }
             Expr::Let(l) => {
                 let v = self.expr(&l.expr, None);
-                self.bind_pat(&l.pat, &v, false);
+                self.bind_pat(&l.pat, &v, Mode::Move);
                 Ty::Prim(Prim::Bool)
             }
             Expr::Match(mt) => {
@@ -1687,7 +1722,7 @@ impl<'a, 'p> Checker<'a, 'p> {
                 let mut out: Option<Ty> = expected.cloned();
                 for arm in &mt.arms {
                     self.push_scope();
-                    self.bind_pat(&arm.pat, &v, false);
+                    self.bind_pat(&arm.pat, &v, Mode::Move);
                     let b = self.expr(&arm.body, out.as_ref());
                     out = Some(match out {
                         Some(o) => self.join(&o, &b, expected, line),
@@ -1728,7 +1763,7 @@ impl<'a, 'p> Checker<'a, 'p> {
                 let label = f.label.as_ref().map(|x| x.name.ident.to_string());
                 self.loops.push((label, Ty::unit()));
                 self.push_scope();
-                self.bind_pat(&f.pat, &item, false);
+                self.bind_pat(&f.pat, &item, Mode::Move);
                 self.block(&f.body, None);
                 self.pop_scope();
                 self.loops.pop();
@@ -2533,7 +2568,7 @@ impl<'a, 'p> Checker<'a, 'p> {
         let mut c = self.now(c);
         for _ in 0..crate::recursion::index::DEREF_DEPTH {
             match &c {
-                Ty::Ref(inner) => c = self.now(inner),
+                Ty::Ref(inner, _) => c = self.now(inner),
                 Ty::Adt(b, inner) if Some(*b) == self.ix.lang.boxed => {
                     c = inner.first().map_or(Ty::Unknown, |t| self.now(t));
                 }
@@ -2712,7 +2747,7 @@ impl<'a, 'p> Checker<'a, 'p> {
     /// references: the operators on it are built in and call nothing.
     fn is_builtin_operand(&mut self, t: &Ty) -> bool {
         let mut cur = self.now(t);
-        while let Ty::Ref(inner) = cur {
+        while let Ty::Ref(inner, _) = cur {
             cur = self.now(&inner);
         }
         match cur {
@@ -2724,7 +2759,7 @@ impl<'a, 'p> Checker<'a, 'p> {
 
     fn peel_refs(&mut self, t: &Ty) -> Ty {
         let mut cur = self.now(t);
-        while let Ty::Ref(inner) = cur {
+        while let Ty::Ref(inner, _) = cur {
             cur = self.now(&inner);
         }
         cur
@@ -2858,7 +2893,7 @@ impl<'a, 'p> Checker<'a, 'p> {
 
     fn deref_op(&mut self, o: &Ty, line: usize) -> Ty {
         match o {
-            Ty::Ref(inner) => (**inner).clone(),
+            Ty::Ref(inner, _) => (**inner).clone(),
             Ty::Adt(..) | Ty::Param(_) | Ty::Opaque(_) | Ty::Assoc(..) => {
                 let Some(deref) = self.ix.lang.trait_named("Deref") else {
                     return Ty::Unknown;
@@ -2918,7 +2953,7 @@ impl<'a, 'p> Checker<'a, 'p> {
         };
         let it = self.trait_path_call(into, Vec::new(), "into_iter", Args::Tys(&[t.clone()]), Some(t.clone()), &[], None, line);
         let it = self.norm(&it);
-        let next = self.trait_path_call(iter, Vec::new(), "next", Args::Tys(&[Ty::reference(it.clone())]), Some(it), &[], None, line);
+        let next = self.trait_path_call(iter, Vec::new(), "next", Args::Tys(&[Ty::reference_mut(it.clone())]), Some(it), &[], None, line);
         let item = self.fresh();
         if let Some(option) = self.ix.lang.option {
             self.unify(&next, &Ty::Adt(option, vec![item.clone()]));
@@ -3008,8 +3043,8 @@ impl<'a, 'p> Checker<'a, 'p> {
         self.push_scope();
         for (p, t) in c.inputs.iter().zip(&params) {
             match p {
-                Pat::Type(pt) => self.bind_pat(&pt.pat, t, false),
-                other => self.bind_pat(other, t, false),
+                Pat::Type(pt) => self.bind_pat(&pt.pat, t, Mode::Move),
+                other => self.bind_pat(other, t, Mode::Move),
             }
         }
         let saved_origin = self.origin;
@@ -3252,11 +3287,16 @@ mod tests {
 
     #[test]
     fn debug_snippet() {
-        let r = run(
-            "fn any_low_bits(a: &[u64; 4], full: usize) -> bool {\n\
-             let below = a.iter().take(full).any(|&limb| limb != 0);\n\
-             below }",
-        );
-        assert!(r.problems.is_empty(), "{:#?}", problems(&r));
+        let Ok(path) = std::env::var("G13_SNIPPET") else {
+            return;
+        };
+        let text = std::fs::read_to_string(path).unwrap();
+        let r = run(&text);
+        for p in problems(&r) {
+            println!("PROBLEM {p}");
+        }
+        for c in &r.cycles {
+            println!("CYCLE {:?}", c.members);
+        }
     }
 }

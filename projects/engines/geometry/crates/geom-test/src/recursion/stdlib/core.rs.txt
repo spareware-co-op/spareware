@@ -261,6 +261,17 @@ pub mod ops {
             loop {}
         }
     }
+    impl<T: ?Sized> Deref for &mut T {
+        type Target = T;
+        fn deref(&self) -> &T {
+            loop {}
+        }
+    }
+    impl<T: ?Sized> DerefMut for &mut T {
+        fn deref_mut(&mut self) -> &mut T {
+            loop {}
+        }
+    }
     pub trait Drop {
         fn drop(&mut self);
     }
@@ -349,6 +360,38 @@ pub mod ops {
         }
         pub fn is_empty(&self) -> bool {
             self.start.partial_cmp(&self.end);
+            loop {}
+        }
+    }
+    impl<A: crate::iter::Step> Iterator for Range<A> {
+        type Item = A;
+        fn next(&mut self) -> Option<A> {
+            loop {}
+        }
+    }
+    impl<A: crate::iter::Step> DoubleEndedIterator for Range<A> {
+        fn next_back(&mut self) -> Option<A> {
+            loop {}
+        }
+    }
+    impl<A: crate::iter::Step> ExactSizeIterator for Range<A> {}
+    impl<A: crate::iter::Step> crate::iter::FusedIterator for Range<A> {}
+    impl<A: crate::iter::Step> Iterator for RangeInclusive<A> {
+        type Item = A;
+        fn next(&mut self) -> Option<A> {
+            loop {}
+        }
+    }
+    impl<A: crate::iter::Step> DoubleEndedIterator for RangeInclusive<A> {
+        fn next_back(&mut self) -> Option<A> {
+            loop {}
+        }
+    }
+    impl<A: crate::iter::Step> ExactSizeIterator for RangeInclusive<A> {}
+    impl<A: crate::iter::Step> crate::iter::FusedIterator for RangeInclusive<A> {}
+    impl<A: crate::iter::Step> Iterator for RangeFrom<A> {
+        type Item = A;
+        fn next(&mut self) -> Option<A> {
             loop {}
         }
     }
@@ -563,6 +606,16 @@ pub mod cmp {
     impl<A: ?Sized + PartialOrd<B>, B: ?Sized> PartialOrd<&B> for &A {
         fn partial_cmp(&self, other: &&B) -> Option<Ordering> {
             PartialOrd::partial_cmp(*self, *other)
+        }
+    }
+    impl<A: ?Sized + PartialEq<B>, B: ?Sized> PartialEq<&mut B> for &mut A {
+        fn eq(&self, other: &&mut B) -> bool {
+            PartialEq::eq(&**self, &**other)
+        }
+    }
+    impl<A: ?Sized + PartialOrd<B>, B: ?Sized> PartialOrd<&mut B> for &mut A {
+        fn partial_cmp(&self, other: &&mut B) -> Option<Ordering> {
+            PartialOrd::partial_cmp(&**self, &**other)
         }
     }
     impl<A: ?Sized + Eq> Eq for &A {}

@@ -183,8 +183,8 @@ pub enum Ty {
     Prim(Prim),
     /// A struct, enum or union of the crates read, with its generic arguments.
     Adt(ItemId, Vec<Ty>),
-    /// A shared or mutable reference, or a raw pointer.
-    Ref(Box<Ty>),
+    /// A reference or raw pointer, and whether it is mutable (`&mut T`, `*mut T`).
+    Ref(Box<Ty>, bool),
     /// A slice `[T]`.
     Slice(Box<Ty>),
     /// An array `[T; N]`.
@@ -230,17 +230,23 @@ impl Ty {
         Ty::Tuple(Vec::new())
     }
 
-    /// A reference to `t`.
+    /// A shared reference to `t`.
     #[must_use]
     pub fn reference(t: Ty) -> Ty {
-        Ty::Ref(Box::new(t))
+        Ty::Ref(Box::new(t), false)
+    }
+
+    /// A mutable reference to `t`.
+    #[must_use]
+    pub fn reference_mut(t: Ty) -> Ty {
+        Ty::Ref(Box::new(t), true)
     }
 
     /// The type behind any number of references.
     #[must_use]
     pub fn peel(&self) -> &Ty {
         let mut t = self;
-        while let Ty::Ref(inner) = t {
+        while let Ty::Ref(inner, _) = t {
             t = inner;
         }
         t
@@ -255,7 +261,7 @@ impl Ty {
                     a.walk(f);
                 }
             }
-            Ty::Ref(inner) | Ty::Slice(inner) | Ty::Array(inner) => {
+            Ty::Ref(inner, _) | Ty::Slice(inner) | Ty::Array(inner) => {
                 inner.walk(f);
             }
             Ty::Assoc(inner, tr, _) => {
@@ -329,7 +335,7 @@ impl Ty {
             Ty::Adt(id, args) => Ty::Adt(*id, args.iter().map(|a| a.fold(f)).collect()),
             Ty::Tuple(items) => Ty::Tuple(items.iter().map(|a| a.fold(f)).collect()),
             Ty::FnDef(n, args) => Ty::FnDef(*n, args.iter().map(|a| a.fold(f)).collect()),
-            Ty::Ref(inner) => Ty::Ref(Box::new(inner.fold(f))),
+            Ty::Ref(inner, m) => Ty::Ref(Box::new(inner.fold(f)), *m),
             Ty::Slice(inner) => Ty::Slice(Box::new(inner.fold(f))),
             Ty::Array(inner) => Ty::Array(Box::new(inner.fold(f))),
             Ty::Assoc(inner, tr, name) => Ty::Assoc(
@@ -369,7 +375,7 @@ impl Ty {
             Ty::Adt(_, args) | Ty::Tuple(args) | Ty::FnDef(_, args) => {
                 args.iter().map(Ty::depth).max().unwrap_or(0)
             }
-            Ty::Ref(inner) | Ty::Slice(inner) | Ty::Array(inner) | Ty::Assoc(inner, ..) => inner.depth(),
+            Ty::Ref(inner, _) | Ty::Slice(inner) | Ty::Array(inner) | Ty::Assoc(inner, ..) => inner.depth(),
             Ty::FnPtr(params, ret) => params.iter().map(Ty::depth).max().unwrap_or(0).max(ret.depth()),
             Ty::Closure(k) => k.subst.iter().map(Ty::depth).max().unwrap_or(0),
             Ty::Dyn(traits) | Ty::Opaque(traits) => traits
@@ -400,7 +406,7 @@ impl Ty {
             Ty::Adt(id, args) => Ty::Adt(*id, all(args)),
             Ty::Tuple(items) => Ty::Tuple(all(items)),
             Ty::FnDef(n, args) => Ty::FnDef(*n, all(args)),
-            Ty::Ref(inner) => Ty::Ref(Box::new(inner.cut_at(d))),
+            Ty::Ref(inner, m) => Ty::Ref(Box::new(inner.cut_at(d)), *m),
             Ty::Slice(inner) => Ty::Slice(Box::new(inner.cut_at(d))),
             Ty::Array(inner) => Ty::Array(Box::new(inner.cut_at(d))),
             Ty::Assoc(inner, tr, name) => Ty::Assoc(

@@ -304,9 +304,8 @@ impl Infer {
             (Ty::Infer, _) | (_, Ty::Infer) => true,
             (Ty::Prim(p), Ty::Prim(q)) => p == q,
             (Ty::Adt(i, xs), Ty::Adt(j, ys)) => i == j && self.unify_all(xs, ys, d),
-            (Ty::Ref(x), Ty::Ref(y)) | (Ty::Slice(x), Ty::Slice(y)) | (Ty::Array(x), Ty::Array(y)) => {
-                self.unify_at(x, y, d)
-            }
+            (Ty::Ref(x, m), Ty::Ref(y, n)) => m == n && self.unify_at(x, y, d),
+            (Ty::Slice(x), Ty::Slice(y)) | (Ty::Array(x), Ty::Array(y)) => self.unify_at(x, y, d),
             (Ty::Tuple(xs), Ty::Tuple(ys)) => self.unify_all(xs, ys, d),
             (Ty::FnPtr(xs, x), Ty::FnPtr(ys, y)) => self.unify_all(xs, ys, d) && self.unify_at(x, y, d),
             (Ty::Closure(k), Ty::Closure(l)) => same_closure(k, l) && self.unify_all(&k.subst, &l.subst, d),

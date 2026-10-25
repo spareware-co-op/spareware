@@ -460,8 +460,8 @@ impl<'p> Resolver<'p> {
             return Ty::Unknown;
         }
         match ty {
-            syn::Type::Reference(r) => Ty::Ref(Box::new(self.ty_at(scope, &r.elem, depth))),
-            syn::Type::Ptr(p) => Ty::Ref(Box::new(self.ty_at(scope, &p.elem, depth))),
+            syn::Type::Reference(r) => Ty::Ref(Box::new(self.ty_at(scope, &r.elem, depth)), r.mutability.is_some()),
+            syn::Type::Ptr(p) => Ty::Ref(Box::new(self.ty_at(scope, &p.elem, depth)), matches!(p.mutability, syn::PointerMutability::Mut(_))),
             syn::Type::Slice(s) => Ty::Slice(Box::new(self.ty_at(scope, &s.elem, depth))),
             syn::Type::Array(a) => Ty::Array(Box::new(self.ty_at(scope, &a.elem, depth))),
             syn::Type::Tuple(t) => Ty::Tuple(t.elems.iter().map(|e| self.ty_at(scope, e, depth)).collect()),
@@ -871,9 +871,9 @@ mod tests {
         assert_eq!(tys[0], Ty::Adt(w, vec![Ty::Prim(Prim::U64)]));
         assert_eq!(
             tys[1],
-            Ty::Ref(Box::new(Ty::Slice(Box::new(Ty::Adt(w, vec![Ty::Prim(Prim::Bool)])))))
+            Ty::reference(Ty::Slice(Box::new(Ty::Adt(w, vec![Ty::Prim(Prim::Bool)]))))
         );
-        assert_eq!(tys[2], Ty::Ref(Box::new(Ty::Dyn(Vec::new()))), "an outside trait is no bound");
+        assert_eq!(tys[2], Ty::reference(Ty::Dyn(Vec::new())), "an outside trait is no bound");
         let get = p.nodes.iter().find(|n| n.ident == "get").unwrap();
         assert!(matches!(r.self_ty(&get.scope, 0), Ty::Adt(id, ref a) if id == w && matches!(a[0], Ty::Param(_))));
     }
