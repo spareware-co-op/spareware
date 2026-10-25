@@ -2318,6 +2318,16 @@
           "pinned": false,
           "purpose": "0.2.16",
           "take": "depend"
+        },
+        {
+          "licence": "MIT",
+          "link": "https://crates.io/crates/libm/0.2.16",
+          "manifest": "projects/engines/geometry/crates/geom-num/Cargo.toml",
+          "method_note": null,
+          "name": "libm",
+          "pinned": false,
+          "purpose": "0.2.16",
+          "take": "depend"
         }
       ],
       "errors": [
