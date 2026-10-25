@@ -187,7 +187,7 @@ pub fn chosen_way(chosen: &str) -> Option<Way> {
 /// The gate's record of licence choices (29.20, rule 3): every crate in the kernel family's graph
 /// whose licence offers a choice, its expression exactly as its manifest gives it, and the licence
 /// (or licences, joined by `AND`) taken: the first of 29.2's identifiers, in its order, offered.
-pub const LICENCE_CHOICES: [(&str, &str, &str); 82] = [
+pub const LICENCE_CHOICES: [(&str, &str, &str); 84] = [
     ("anstyle", "MIT OR Apache-2.0", "MIT"),
     ("anyhow", "MIT OR Apache-2.0", "MIT"),
     ("autocfg", "Apache-2.0 OR MIT", "MIT"),
@@ -214,6 +214,7 @@ pub const LICENCE_CHOICES: [(&str, &str, &str); 82] = [
     ("equivalent", "Apache-2.0 OR MIT", "MIT"),
     ("errno", "MIT OR Apache-2.0", "MIT"),
     ("find-msvc-tools", "MIT OR Apache-2.0", "MIT"),
+    ("fixedbitset", "MIT OR Apache-2.0", "MIT"),
     ("getrandom", "MIT OR Apache-2.0", "MIT"),
     ("gungraun", "Apache-2.0 OR MIT", "MIT"),
     ("gungraun-common", "Apache-2.0 OR MIT", "MIT"),
@@ -235,6 +236,7 @@ pub const LICENCE_CHOICES: [(&str, &str, &str); 82] = [
     ("num-rational", "MIT OR Apache-2.0", "MIT"),
     ("num-traits", "MIT OR Apache-2.0", "MIT"),
     ("once_cell", "MIT OR Apache-2.0", "MIT"),
+    ("petgraph", "MIT OR Apache-2.0", "MIT"),
     ("ppv-lite86", "MIT OR Apache-2.0", "MIT"),
     ("proc-macro-crate", "MIT OR Apache-2.0", "MIT"),
     ("proc-macro-error-attr3", "MIT OR Apache-2.0", "MIT"),

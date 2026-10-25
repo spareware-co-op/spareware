@@ -38,9 +38,9 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use crate::recursion::graph::{Cycle, TypeCycle};
 use crate::recursion::index::Index;
 use crate::recursion::model::{ItemKind, ModId, NodeKind, Role};
+use crate::recursion::mono::{InstId, InstKind, Mono};
 use crate::recursion::resolve::{Ns, Res};
 use crate::recursion::statement::{Kind, Statement};
-use crate::recursion::mono::{InstId, InstKind, Mono};
 use crate::recursion::ty::NodeId;
 use crate::recursion::{Problem, Rule};
 
@@ -80,7 +80,12 @@ fn candidates(ix: &Index<'_>, module: ModId, name: &str) -> BTreeSet<String> {
             && let Some(q) = &p.qself
         {
             let ty = r.ty(&scope, &q.ty);
-            let segs: Vec<String> = p.path.segments.iter().map(|s| s.ident.to_string()).collect();
+            let segs: Vec<String> = p
+                .path
+                .segments
+                .iter()
+                .map(|s| s.ident.to_string())
+                .collect();
             if let (Some(tr), Some(m)) = (segs.get(q.position.saturating_sub(1)), segs.last()) {
                 out.insert(format!("<{} as {tr}>::{m}", ix.show(&ty)));
             }
@@ -234,7 +239,10 @@ fn suggestion(members: &BTreeSet<String>, kind: Kind) -> String {
 
 /// Checks every statement against the cycles and recursive types of the code.
 #[must_use]
-#[allow(clippy::too_many_lines, reason = "the rules in their written order; each is short")]
+#[allow(
+    clippy::too_many_lines,
+    reason = "the rules in their written order; each is short"
+)]
 pub fn check(
     ix: &Index<'_>,
     mono: &Mono,
@@ -247,17 +255,27 @@ pub fn check(
     for (si, s) in statements.iter().enumerate() {
         let problem = |rule: Rule, what: String| Problem::new(&s.file, s.line, rule, what);
         let Some(module) = module_of_file(ix, &s.file) else {
-            out.problems.push(problem(Rule::Statement, "a statement in a file the check did not read".to_owned()));
+            out.problems.push(problem(
+                Rule::Statement,
+                "a statement in a file the check did not read".to_owned(),
+            ));
             continue;
         };
         match s.kind {
             Kind::Cycle => {
-                let names: Vec<BTreeSet<String>> = s.names.iter().map(|n| candidates(ix, module, n)).collect();
-                let matched = cycles.iter().position(|c| names_exactly(&names, &c.members));
+                let names: Vec<BTreeSet<String>> =
+                    s.names.iter().map(|n| candidates(ix, module, n)).collect();
+                let matched = cycles
+                    .iter()
+                    .position(|c| names_exactly(&names, &c.members));
                 let Some(ci) = matched else {
                     let near: Vec<&Cycle> = cycles
                         .iter()
-                        .filter(|c| names.iter().any(|n| n.intersection(&c.members).next().is_some()))
+                        .filter(|c| {
+                            names
+                                .iter()
+                                .any(|n| n.intersection(&c.members).next().is_some())
+                        })
                         .collect();
                     let what = match near.first() {
                         Some(c) => format!(
@@ -299,12 +317,18 @@ pub fn check(
                 check_test(ix, mono, s, Some(&cycle.insts), &mut out.problems);
             }
             Kind::Types => {
-                let names: Vec<BTreeSet<String>> = s.names.iter().map(|n| type_candidates(ix, module, n)).collect();
+                let names: Vec<BTreeSet<String>> = s
+                    .names
+                    .iter()
+                    .map(|n| type_candidates(ix, module, n))
+                    .collect();
                 let matched = types.iter().position(|t| names_exactly(&names, &t.members));
                 let Some(ti) = matched else {
-                    let near = types
-                        .iter()
-                        .find(|t| names.iter().any(|n| n.intersection(&t.members).next().is_some()));
+                    let near = types.iter().find(|t| {
+                        names
+                            .iter()
+                            .any(|n| n.intersection(&t.members).next().is_some())
+                    });
                     let what = match near {
                         Some(t) => format!(
                             "these names are not exactly the recursive types; they are: {}",
@@ -355,7 +379,9 @@ pub fn check(
             let mut value = None;
             for res in ix.resolver.resolve(&scope, &segs, false, Ns::Value) {
                 if let Res::Item(id) = res
-                    && let ItemKind::Const { init: Some(init), .. } = &program.item(id).kind
+                    && let ItemKind::Const {
+                        init: Some(init), ..
+                    } = &program.item(id).kind
                 {
                     value = literal_value(init);
                 }
@@ -386,10 +412,15 @@ pub fn check(
         if out.bounded.contains_key(&ci) {
             continue;
         }
-        let derived_of_stated = c.member_nodes.iter().all(|n| match program.node(*n).map(|x| &x.kind) {
-            Some(NodeKind::Derived { item, .. }) => stated_types.contains(&program.item(*item).path),
-            _ => false,
-        });
+        let derived_of_stated =
+            c.member_nodes
+                .iter()
+                .all(|n| match program.node(*n).map(|x| &x.kind) {
+                    Some(NodeKind::Derived { item, .. }) => {
+                        stated_types.contains(&program.item(*item).path)
+                    }
+                    _ => false,
+                });
         if derived_of_stated && !c.member_nodes.is_empty() {
             continue;
         }
@@ -411,7 +442,11 @@ pub fn check(
             Rule::Unbounded,
             format!(
                 "a recursive cycle without a stated depth bound: {}; round it: {}; {}",
-                c.members.iter().map(|m| format!("`{m}`")).collect::<Vec<_>>().join(", "),
+                c.members
+                    .iter()
+                    .map(|m| format!("`{m}`"))
+                    .collect::<Vec<_>>()
+                    .join(", "),
                 path.join(" -> "),
                 suggestion(&c.members, Kind::Cycle)
             ),
@@ -437,7 +472,11 @@ pub fn check(
             format!(
                 "recursive types without a stated nesting bound (their drop glue and derived \
                  implementations recurse over them): {}; {}",
-                t.members.iter().map(|m| format!("`{m}`")).collect::<Vec<_>>().join(", "),
+                t.members
+                    .iter()
+                    .map(|m| format!("`{m}`"))
+                    .collect::<Vec<_>>()
+                    .join(", "),
                 suggestion(&t.members, Kind::Types)
             ),
         ));
@@ -475,7 +514,11 @@ fn check_test(
         )));
         return;
     };
-    let text = program.files.get(&tc.source.root).cloned().unwrap_or_default();
+    let text = program
+        .files
+        .get(&tc.source.root)
+        .cloned()
+        .unwrap_or_default();
     let Some(found) = tests_in(&text) else {
         problems.push(problem(format!("{} does not parse", tc.source.root)));
         return;

@@ -51,7 +51,8 @@ fn run_with(lib: &str, tests: Option<&str>) -> Report {
             role: Role::BoundTests,
         });
     }
-    let read: OwnedReader = Box::new(move |p: &str| files.get(p).cloned().ok_or_else(|| format!("no file {p}")));
+    let read: OwnedReader =
+        Box::new(move |p: &str| files.get(p).cloned().ok_or_else(|| format!("no file {p}")));
     analyse(sources, read)
 }
 
@@ -73,7 +74,12 @@ fn unread(r: &Report) -> Vec<String> {
 fn cycles(r: &Report) -> Vec<BTreeSet<String>> {
     r.cycles
         .iter()
-        .map(|c| c.members.iter().map(|m| m.replace("geom_seed::", "")).collect())
+        .map(|c| {
+            c.members
+                .iter()
+                .map(|m| m.replace("geom_seed::", ""))
+                .collect()
+        })
         .collect()
 }
 
@@ -84,7 +90,11 @@ fn set(names: &[&str]) -> BTreeSet<String> {
 /// Asserts the crate reads without problems and has exactly the cycles `want`.
 #[track_caller]
 fn assert_cycles(r: &Report, want: &[&[&str]]) {
-    assert!(unread(r).is_empty(), "the check could not read the crate: {:#?}", unread(r));
+    assert!(
+        unread(r).is_empty(),
+        "the check could not read the crate: {:#?}",
+        unread(r)
+    );
     let got = cycles(r);
     let want: Vec<BTreeSet<String>> = want.iter().map(|w| set(w)).collect();
     assert_eq!(got, want, "cycles");
@@ -96,15 +106,18 @@ fn assert_cycles(r: &Report, want: &[&[&str]]) {
 
 #[test]
 fn direct_and_mutual_recursion_are_cycles() {
-    let r = run("pub fn f(n: u32) -> u32 { if n == 0 { 0 } else { f(n - 1) } }\n\
+    let r = run(
+        "pub fn f(n: u32) -> u32 { if n == 0 { 0 } else { f(n - 1) } }\n\
                  pub fn g(n: u32) -> u32 { if n == 0 { 0 } else { h(n - 1) } }\n\
                  pub fn h(n: u32) -> u32 { g(n) }\n\
-                 pub fn leaf(n: u32) -> u32 { n }");
+                 pub fn leaf(n: u32) -> u32 { n }",
+    );
     assert_cycles(&r, &[&["f"], &["g", "h"]]);
 }
 
 #[test]
-fn a_method_on_the_receivers_type_is_followed_and_a_fields_method_of_the_same_name_is_not_a_cycle() {
+fn a_method_on_the_receivers_type_is_followed_and_a_fields_method_of_the_same_name_is_not_a_cycle()
+{
     let r = run("pub struct A { v: Vec<u8> } pub struct B { a: A }\n\
                  impl A { pub fn len(&self) -> usize { self.v.len() } }\n\
                  impl B { pub fn len(&self) -> usize { self.a.len() } pub fn walk(&self, n: u32) { if n > 0 { self.walk(n - 1) } } }");
@@ -122,8 +135,10 @@ fn recursion_through_a_trait_implementation_and_a_generic_function_is_a_cycle() 
 
 #[test]
 fn a_closure_handed_to_a_generic_function_is_called_by_it() {
-    let r = run("pub fn apply<F: Fn(u32) -> u32>(f: F, x: u32) -> u32 { f(x) }\n\
-                 pub fn r(x: u32) -> u32 { if x == 0 { 0 } else { apply(|y| r(y - 1), x) } }");
+    let r = run(
+        "pub fn apply<F: Fn(u32) -> u32>(f: F, x: u32) -> u32 { f(x) }\n\
+                 pub fn r(x: u32) -> u32 { if x == 0 { 0 } else { apply(|y| r(y - 1), x) } }",
+    );
     assert_cycles(&r, &[&["apply", "r"]]);
 }
 
@@ -139,7 +154,12 @@ fn the_standard_library_calls_back_closures_and_trait_implementations() {
                  pub fn by(a: &u8, b: &u8) -> Ordering { let mut v = vec![1u8]; v.sort_by(by); Ordering::Equal }");
     let got = cycles(&r);
     assert!(unread(&r).is_empty(), "{:#?}", unread(&r));
-    for want in [set(&["via_option"]), set(&["via_iter"]), set(&["<K as Ord>::cmp"]), set(&["by"])] {
+    for want in [
+        set(&["via_option"]),
+        set(&["via_iter"]),
+        set(&["<K as Ord>::cmp"]),
+        set(&["by"]),
+    ] {
         assert!(got.contains(&want), "{want:?} missing from {got:?}");
     }
 }
@@ -179,7 +199,11 @@ fn operators_question_marks_and_formatting_call_their_implementations() {
                  impl core::fmt::Display for T { fn fmt(&self, w: &mut core::fmt::Formatter<'_>) -> core::fmt::Result { if self.0 > 0 { write!(w, \"{}\", T(self.0 - 1)) } else { Ok(()) } } }");
     let got = cycles(&r);
     assert!(unread(&r).is_empty(), "{:#?}", unread(&r));
-    for want in [set(&["<V as Add>::add"]), set(&["<E2 as From>::from", "f"]), set(&["<T as Display>::fmt"])] {
+    for want in [
+        set(&["<V as Add>::add"]),
+        set(&["<E2 as From>::from", "f"]),
+        set(&["<T as Display>::fmt"]),
+    ] {
         assert!(got.contains(&want), "{want:?} missing from {got:?}");
     }
 }
@@ -195,9 +219,11 @@ fn a_trait_method_named_as_a_value_is_called_on_what_it_is_handed() {
 
 #[test]
 fn default_bodies_and_generic_self_recursion_are_cycles() {
-    let r = run("pub trait T { fn a(&self, n: u32) { if n > 0 { self.b(n - 1) } } fn b(&self, n: u32) { self.a(n) } }\n\
+    let r = run(
+        "pub trait T { fn a(&self, n: u32) { if n > 0 { self.b(n - 1) } } fn b(&self, n: u32) { self.a(n) } }\n\
                  pub struct S; impl T for S {}\n\
-                 pub fn each<X: Clone>(x: X, n: u32) { if n > 0 { each(x.clone(), n - 1) } }");
+                 pub fn each<X: Clone>(x: X, n: u32) { if n > 0 { each(x.clone(), n - 1) } }",
+    );
     assert_cycles(&r, &[&["T::a", "T::b"], &["each"]]);
 }
 
@@ -212,21 +238,32 @@ fn deref_index_and_drop_are_calls_too() {
                  impl Drop for D { fn drop(&mut self) { if self.0 > 0 { let _inner = D(self.0 - 1); } } }");
     let got = cycles(&r);
     assert!(unread(&r).is_empty(), "{:#?}", unread(&r));
-    for want in [set(&["<W as Deref>::deref"]), set(&["<I as Index>::index"]), set(&["<D as Drop>::drop"])] {
+    for want in [
+        set(&["<W as Deref>::deref"]),
+        set(&["<I as Index>::index"]),
+        set(&["<D as Drop>::drop"]),
+    ] {
         assert!(got.contains(&want), "{want:?} missing from {got:?}");
     }
 }
 
 #[test]
 fn recursive_types_are_listed_with_their_derived_implementations() {
-    let r = run("#[derive(Clone, Debug)] pub struct Tree { kids: Vec<Tree> }\n\
+    let r = run(
+        "#[derive(Clone, Debug)] pub struct Tree { kids: Vec<Tree> }\n\
                  #[derive(Clone)] pub enum List { Nil, Cons(u8, Box<List>) }\n\
-                 pub struct Flat { x: u8 }");
+                 pub struct Flat { x: u8 }",
+    );
     assert!(unread(&r).is_empty(), "{:#?}", unread(&r));
     let types: Vec<BTreeSet<String>> = r
         .types
         .iter()
-        .map(|t| t.members.iter().map(|m| m.replace("geom_seed::", "")).collect())
+        .map(|t| {
+            t.members
+                .iter()
+                .map(|m| m.replace("geom_seed::", ""))
+                .collect()
+        })
         .collect();
     assert_eq!(types, [set(&["List"]), set(&["Tree"])]);
     let got = cycles(&r);
@@ -264,7 +301,10 @@ fn test_code_and_the_standard_librarys_model_are_not_listed() {
 fn code_the_check_cannot_read_is_reported() {
     for (lib, what) in [
         ("pub fn f() { nowhere::g() }", "resolves to nothing"),
-        ("pub fn f() { core::ptr::nonexistent_function() }", "resolves to nothing"),
+        (
+            "pub fn f() { core::ptr::nonexistent_function() }",
+            "resolves to nothing",
+        ),
         ("pub fn f() -> u8 { mystery!(1) }", "macro"),
     ] {
         let r = run(lib);
@@ -276,7 +316,10 @@ fn code_the_check_cannot_read_is_reported() {
 #[test]
 fn polymorphic_recursion_is_reported_rather_than_followed_forever() {
     let r = run("pub fn grow<T: Clone>(x: T, n: u32) { if n > 0 { grow(vec![x], n - 1) } }");
-    assert!(!r.problems.is_empty() || !r.cycles.is_empty(), "infinitely many copies must not pass silently");
+    assert!(
+        !r.problems.is_empty() || !r.cycles.is_empty(),
+        "infinitely many copies must not pass silently"
+    );
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -294,12 +337,19 @@ const STATED: &str = "//! The seed crate.\n\
 pub const MAX_DEPTH: u32 = 64;\n\
 pub fn walk(n: u32) -> u32 { if n == 0 || n > MAX_DEPTH { 0 } else { walk(n - 1) + 1 } }\n";
 
-const BOUND_TEST: &str = "#[test]\nfn walk_at_its_bound() { assert_eq!(geom_seed::walk(64), 64); }\n";
+const BOUND_TEST: &str =
+    "#[test]\nfn walk_at_its_bound() { assert_eq!(geom_seed::walk(64), 64); }\n";
 
 #[test]
 fn a_cycle_without_a_statement_fails() {
     let r = run("pub fn walk(n: u32) -> u32 { if n == 0 { 0 } else { walk(n - 1) } }");
-    assert!(r.problems.iter().any(|p| p.rule == Rule::Unbounded && p.what.contains("walk")), "{:#?}", r.problems);
+    assert!(
+        r.problems
+            .iter()
+            .any(|p| p.rule == Rule::Unbounded && p.what.contains("walk")),
+        "{:#?}",
+        r.problems
+    );
 }
 
 #[test]
@@ -316,14 +366,35 @@ fn a_statement_untrue_to_the_code_fails() {
     // that does not reach the cycle.
     let wrong_name = STATED.replace("Cycle: `walk`", "Cycle: `walked`");
     let r = run_with(&wrong_name, Some(BOUND_TEST));
-    assert!(r.problems.iter().any(|p| p.rule == Rule::Stale), "{:#?}", r.problems);
+    assert!(
+        r.problems.iter().any(|p| p.rule == Rule::Stale),
+        "{:#?}",
+        r.problems
+    );
     let wrong_bound = STATED.replace("Bound: 64", "Bound: 65");
     let r = run_with(&wrong_bound, Some(BOUND_TEST));
-    assert!(r.problems.iter().any(|p| p.rule == Rule::Bound), "{:#?}", r.problems);
+    assert!(
+        r.problems.iter().any(|p| p.rule == Rule::Bound),
+        "{:#?}",
+        r.problems
+    );
     let r = run_with(STATED, None);
-    assert!(r.problems.iter().any(|p| p.rule == Rule::Test), "{:#?}", r.problems);
-    let r = run_with(STATED, Some("#[test]\nfn walk_at_its_bound() { assert_eq!(1, 1); }\n"));
-    assert!(r.problems.iter().any(|p| p.rule == Rule::Test && p.what.contains("does not reach")), "{:#?}", r.problems);
+    assert!(
+        r.problems.iter().any(|p| p.rule == Rule::Test),
+        "{:#?}",
+        r.problems
+    );
+    let r = run_with(
+        STATED,
+        Some("#[test]\nfn walk_at_its_bound() { assert_eq!(1, 1); }\n"),
+    );
+    assert!(
+        r.problems
+            .iter()
+            .any(|p| p.rule == Rule::Test && p.what.contains("does not reach")),
+        "{:#?}",
+        r.problems
+    );
 }
 
 // ---------------------------------------------------------------------------------------------

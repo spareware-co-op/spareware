@@ -86,6 +86,11 @@ pub fn inst_name(ix: &Index<'_>, m: &Mono, id: InstId) -> String {
 
 /// Every recursive cycle of `m`'s call graph.
 #[must_use]
+#[allow(
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
+    reason = "the components, their joining and their naming, in order; the graph's usual names"
+)]
 pub fn cycles(ix: &Index<'_>, m: &Mono) -> Vec<Cycle> {
     let n = m.insts.len();
     let live = m.reachable();
@@ -115,7 +120,9 @@ pub fn cycles(ix: &Index<'_>, m: &Mono) -> Vec<Cycle> {
     for scc in petgraph::algo::tarjan_scc(&g) {
         let set: BTreeSet<InstId> = scc.iter().map(|x| InstId(x.index())).collect();
         let looped = set.len() > 1
-            || set.iter().any(|i| m.edges.get(i).is_some_and(|e| e.contains_key(i)));
+            || set
+                .iter()
+                .any(|i| m.edges.get(i).is_some_and(|e| e.contains_key(i)));
         if !looped {
             continue;
         }
@@ -179,10 +186,21 @@ pub fn cycles(ix: &Index<'_>, m: &Mono) -> Vec<Cycle> {
         let member_nodes: BTreeSet<NodeId> = insts
             .iter()
             .filter_map(|i| m.inst(*i).map(|x| x.node))
-            .filter(|node| ix.program.node(*node).is_some_and(|nd| shipping.contains(&nd.krate)))
+            .filter(|node| {
+                ix.program
+                    .node(*node)
+                    .is_some_and(|nd| shipping.contains(&nd.krate))
+            })
             .collect();
-        let names: BTreeSet<String> = member_nodes.iter().map(|n| ix.name(*n).to_owned()).collect();
-        let first = members.first().and_then(|ci| comps.get(*ci)).cloned().unwrap_or_default();
+        let names: BTreeSet<String> = member_nodes
+            .iter()
+            .map(|n| ix.name(*n).to_owned())
+            .collect();
+        let first = members
+            .first()
+            .and_then(|ci| comps.get(*ci))
+            .cloned()
+            .unwrap_or_default();
         let path = path_round(ix, m, &first);
         out.push(Cycle {
             members: names,
@@ -282,11 +300,17 @@ pub fn type_cycles(ix: &Index<'_>) -> Vec<TypeCycle> {
     }
     let mut out = Vec::new();
     for scc in petgraph::algo::tarjan_scc(&g) {
-        let items: BTreeSet<ItemId> = scc.iter().filter_map(|n| g.node_weight(*n).copied()).collect();
+        let items: BTreeSet<ItemId> = scc
+            .iter()
+            .filter_map(|n| g.node_weight(*n).copied())
+            .collect();
         if items.len() < 2 && !items.iter().any(|i| self_loops.contains(i)) {
             continue;
         }
-        let members = items.iter().map(|i| program.item(*i).path.clone()).collect();
+        let members = items
+            .iter()
+            .map(|i| program.item(*i).path.clone())
+            .collect();
         out.push(TypeCycle { members, items });
     }
     out.sort_by(|a, b| a.members.iter().next().cmp(&b.members.iter().next()));

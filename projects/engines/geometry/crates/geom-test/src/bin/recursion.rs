@@ -32,8 +32,7 @@ use geom_test::map::repo;
 use geom_test::recursion::stack::{self, Runner};
 use geom_test::recursion::{Problem, Report, Rule, analyse_repo};
 
-const USAGE: &str =
-    "usage: recursion <list|check|gate|path <function>> [--root <workspace root>] [--runner wasmtime|node]";
+const USAGE: &str = "usage: recursion <list|check|gate|path <function>> [--root <workspace root>] [--runner wasmtime|node]";
 
 /// What to do.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -69,18 +68,31 @@ fn main() -> ExitCode {
     match command {
         Command::List => {
             list(&report);
-            let unread: Vec<&Problem> = report.problems.iter().filter(|p| p.rule == Rule::Unread).collect();
+            let unread: Vec<&Problem> = report
+                .problems
+                .iter()
+                .filter(|p| p.rule == Rule::Unread)
+                .collect();
             for p in &unread {
                 eprintln!("{p}");
             }
-            if unread.is_empty() { ExitCode::SUCCESS } else { ExitCode::from(1) }
+            if unread.is_empty() {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(1)
+            }
         }
         Command::Check => finish("check", &report, &report.problems),
         Command::Path => path(&report, function.as_deref().unwrap_or_default()),
         Command::Gate => {
             let mut problems = report.problems.clone();
             let target = root.join("target").join("recursion-stack");
-            problems.extend(stack::run_bound_tests(&root, &report.bound_tests, runner, &target));
+            problems.extend(stack::run_bound_tests(
+                &root,
+                &report.bound_tests,
+                runner,
+                &target,
+            ));
             problems.extend(stack::probes(runner, &target));
             finish("gate", &report, &problems)
         }
@@ -114,11 +126,13 @@ fn parse(args: Vec<String>) -> Result<(Command, Option<PathBuf>, Runner, Option<
                 Some(dir) => root = Some(PathBuf::from(dir)),
                 None => return Err("--root needs a folder".to_owned()),
             },
-            "--runner" if runner.is_none() && command == Command::Gate => match args.next().as_deref() {
-                Some("wasmtime") => runner = Some(Runner::Wasmtime),
-                Some("node") => runner = Some(Runner::Node),
-                _ => return Err("--runner is wasmtime or node".to_owned()),
-            },
+            "--runner" if runner.is_none() && command == Command::Gate => {
+                match args.next().as_deref() {
+                    Some("wasmtime") => runner = Some(Runner::Wasmtime),
+                    Some("node") => runner = Some(Runner::Node),
+                    _ => return Err("--runner is wasmtime or node".to_owned()),
+                }
+            }
             _ => return Err(format!("unexpected argument {arg:?}")),
         }
     }
@@ -139,10 +153,18 @@ fn path(report: &Report, name: &str) -> ExitCode {
     };
     println!(
         "recursion path: a cycle holding `{name}` ({}):",
-        cycle.members.iter().map(|m| format!("`{m}`")).collect::<Vec<_>>().join(", ")
+        cycle
+            .members
+            .iter()
+            .map(|m| format!("`{m}`"))
+            .collect::<Vec<_>>()
+            .join(", ")
     );
     for (n, site) in &cycle.path {
-        println!("    {n}\n        calls on at {}:{}, {}", site.file, site.line, site.how);
+        println!(
+            "    {n}\n        calls on at {}:{}, {}",
+            site.file, site.line, site.how
+        );
     }
     ExitCode::SUCCESS
 }
@@ -157,9 +179,16 @@ fn list(report: &Report) {
         let members: Vec<String> = c.members.iter().map(|m| format!("`{m}`")).collect();
         println!("cycle {}: {}", i.saturating_add(1), members.join(", "));
         for (name, site) in &c.path {
-            println!("    {name}  -> calls on at {}:{}, {}", site.file, site.line, site.how);
+            println!(
+                "    {name}  -> calls on at {}:{}, {}",
+                site.file, site.line, site.how
+            );
         }
-        match report.bounded.get(&i).and_then(|s| report.statements.get(*s)) {
+        match report
+            .bounded
+            .get(&i)
+            .and_then(|s| report.statements.get(*s))
+        {
             Some(s) => println!(
                 "    bound {} ({}:{}); test `{}`",
                 s.bound, s.file, s.line, s.test
@@ -169,9 +198,16 @@ fn list(report: &Report) {
     }
     for (i, t) in report.types.iter().enumerate() {
         let members: Vec<String> = t.members.iter().map(|m| format!("`{m}`")).collect();
-        println!("recursive types {}: {}", i.saturating_add(1), members.join(", "));
+        println!(
+            "recursive types {}: {}",
+            i.saturating_add(1),
+            members.join(", ")
+        );
         match report.typed.get(&i).and_then(|s| report.statements.get(*s)) {
-            Some(s) => println!("    bound {} ({}:{}); test `{}`", s.bound, s.file, s.line, s.test),
+            Some(s) => println!(
+                "    bound {} ({}:{}); test `{}`",
+                s.bound, s.file, s.line, s.test
+            ),
             None => println!("    no stated bound"),
         }
     }
@@ -193,7 +229,11 @@ fn finish(what: &str, report: &Report, problems: &[Problem]) -> ExitCode {
              depth bound{}",
             report.cycles.len(),
             report.types.len(),
-            if what == "gate" { " that holds on the small stack" } else { "" }
+            if what == "gate" {
+                " that holds on the small stack"
+            } else {
+                ""
+            }
         );
         return ExitCode::SUCCESS;
     }

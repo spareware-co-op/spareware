@@ -87,12 +87,52 @@ pub const MODEL_ALIASES: [&str; 2] = ["alloc", "std"];
 
 /// The names of the standard prelude (Rust 2024): every one is outside the kernel.
 pub const PRELUDE: [&str; 46] = [
-    "Copy", "Send", "Sized", "Sync", "Unpin", "Drop", "Fn", "FnMut", "FnOnce", "AsyncFn",
-    "AsyncFnMut", "AsyncFnOnce", "drop", "size_of", "size_of_val", "align_of", "align_of_val",
-    "Box", "ToOwned", "Clone", "PartialEq", "PartialOrd", "Eq", "Ord", "AsRef", "AsMut", "Into",
-    "From", "Default", "Iterator", "Extend", "IntoIterator", "DoubleEndedIterator",
-    "ExactSizeIterator", "Option", "Some", "None", "Result", "Ok", "Err", "String", "ToString",
-    "Vec", "TryFrom", "TryInto", "FromIterator",
+    "Copy",
+    "Send",
+    "Sized",
+    "Sync",
+    "Unpin",
+    "Drop",
+    "Fn",
+    "FnMut",
+    "FnOnce",
+    "AsyncFn",
+    "AsyncFnMut",
+    "AsyncFnOnce",
+    "drop",
+    "size_of",
+    "size_of_val",
+    "align_of",
+    "align_of_val",
+    "Box",
+    "ToOwned",
+    "Clone",
+    "PartialEq",
+    "PartialOrd",
+    "Eq",
+    "Ord",
+    "AsRef",
+    "AsMut",
+    "Into",
+    "From",
+    "Default",
+    "Iterator",
+    "Extend",
+    "IntoIterator",
+    "DoubleEndedIterator",
+    "ExactSizeIterator",
+    "Option",
+    "Some",
+    "None",
+    "Result",
+    "Ok",
+    "Err",
+    "String",
+    "ToString",
+    "Vec",
+    "TryFrom",
+    "TryInto",
+    "FromIterator",
 ];
 
 /// How deep type aliases are expanded.
@@ -121,7 +161,9 @@ impl<'p> Resolver<'p> {
         let model_core = program
             .crates
             .iter()
-            .find(|c| c.source.role == crate::recursion::model::Role::Model && c.source.lib == "core")
+            .find(|c| {
+                c.source.role == crate::recursion::model::Role::Model && c.source.lib == "core"
+            })
             .map(|c| c.root);
         let mut prelude = None;
         if let Some(root) = model_core {
@@ -425,9 +467,11 @@ impl<'p> Resolver<'p> {
                     _ => None,
                 })
                 .collect(),
-            syn::PathArguments::Parenthesized(p) => {
-                p.inputs.iter().map(|t| self.ty_at(scope, &t.ty, depth)).collect()
-            }
+            syn::PathArguments::Parenthesized(p) => p
+                .inputs
+                .iter()
+                .map(|t| self.ty_at(scope, &t.ty, depth))
+                .collect(),
             syn::PathArguments::None => Vec::new(),
         }
     }
@@ -455,22 +499,41 @@ impl<'p> Resolver<'p> {
         self.ty_at(scope, ty, 0)
     }
 
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one arm per form of the type grammar; splitting would scatter it"
+    )]
     fn ty_at(&self, scope: &Scope, ty: &syn::Type, depth: usize) -> Ty {
         if depth > ALIAS_DEPTH {
             return Ty::Unknown;
         }
         match ty {
-            syn::Type::Reference(r) => Ty::Ref(Box::new(self.ty_at(scope, &r.elem, depth)), r.mutability.is_some()),
-            syn::Type::Ptr(p) => Ty::Ref(Box::new(self.ty_at(scope, &p.elem, depth)), matches!(p.mutability, syn::PointerMutability::Mut(_))),
+            syn::Type::Reference(r) => Ty::Ref(
+                Box::new(self.ty_at(scope, &r.elem, depth)),
+                r.mutability.is_some(),
+            ),
+            syn::Type::Ptr(p) => Ty::Ref(
+                Box::new(self.ty_at(scope, &p.elem, depth)),
+                matches!(p.mutability, syn::PointerMutability::Mut(_)),
+            ),
             syn::Type::Slice(s) => Ty::Slice(Box::new(self.ty_at(scope, &s.elem, depth))),
             syn::Type::Array(a) => Ty::Array(Box::new(self.ty_at(scope, &a.elem, depth))),
-            syn::Type::Tuple(t) => Ty::Tuple(t.elems.iter().map(|e| self.ty_at(scope, e, depth)).collect()),
+            syn::Type::Tuple(t) => Ty::Tuple(
+                t.elems
+                    .iter()
+                    .map(|e| self.ty_at(scope, e, depth))
+                    .collect(),
+            ),
             syn::Type::Paren(p) => self.ty_at(scope, &p.elem, depth),
             syn::Type::Group(g) => self.ty_at(scope, &g.elem, depth),
             syn::Type::Never(_) => Ty::Never,
             syn::Type::Infer(_) => Ty::Infer,
             syn::Type::FnPtr(f) => {
-                let params = f.inputs.iter().map(|a| self.ty_at(scope, &a.ty, depth)).collect();
+                let params = f
+                    .inputs
+                    .iter()
+                    .map(|a| self.ty_at(scope, &a.ty, depth))
+                    .collect();
                 let ret = match &f.output {
                     syn::ReturnType::Default => Ty::unit(),
                     syn::ReturnType::Type(_, t) => self.ty_at(scope, t, depth),
@@ -482,7 +545,12 @@ impl<'p> Resolver<'p> {
             syn::Type::Path(tp) => {
                 if let Some(q) = &tp.qself {
                     let base = self.ty_at(scope, &q.ty, depth);
-                    let name = tp.path.segments.last().map(|s| s.ident.to_string()).unwrap_or_default();
+                    let name = tp
+                        .path
+                        .segments
+                        .last()
+                        .map(|s| s.ident.to_string())
+                        .unwrap_or_default();
                     let trait_ref = if q.position > 0 {
                         let trait_path: Vec<String> = tp
                             .path
@@ -492,23 +560,35 @@ impl<'p> Resolver<'p> {
                             .map(|s| s.ident.to_string())
                             .collect();
                         let id = self
-                            .resolve(scope, &trait_path, tp.path.leading_colon.is_some(), Ns::Type)
+                            .resolve(
+                                scope,
+                                &trait_path,
+                                tp.path.leading_colon.is_some(),
+                                Ns::Type,
+                            )
                             .into_iter()
                             .find_map(|r| match r {
-                                Res::Item(id) if matches!(self.program.item(id).kind, ItemKind::Trait { .. }) => {
+                                Res::Item(id)
+                                    if matches!(
+                                        self.program.item(id).kind,
+                                        ItemKind::Trait { .. }
+                                    ) =>
+                                {
                                     Some(id)
                                 }
                                 _ => None,
                             });
                         let seg = tp.path.segments.iter().nth(q.position.saturating_sub(1));
-                        id.zip(seg).and_then(|(id, seg)| self.trait_ref_of(scope, id, seg, depth))
+                        id.zip(seg)
+                            .map(|(id, seg)| self.trait_ref_of(scope, id, seg, depth))
                     } else {
                         None
                     };
                     return Ty::Assoc(Box::new(base), trait_ref.map(Box::new), name);
                 }
                 let segs = Self::segments(&tp.path);
-                let resolved = self.resolve(scope, &segs, tp.path.leading_colon.is_some(), Ns::Type);
+                let resolved =
+                    self.resolve(scope, &segs, tp.path.leading_colon.is_some(), Ns::Type);
                 let last = tp.path.segments.last();
                 let args = last.map(|s| self.args(scope, s, depth)).unwrap_or_default();
                 let Some(res) = resolved.into_iter().next() else {
@@ -518,7 +598,7 @@ impl<'p> Resolver<'p> {
                     && matches!(self.program.item(*id).kind, ItemKind::Trait { .. })
                 {
                     // A trait named as a type: a trait object (edition 2015 syntax).
-                    return Ty::Dyn(self.trait_ref_of(scope, *id, seg, depth).into_iter().collect());
+                    return Ty::Dyn(vec![self.trait_ref_of(scope, *id, seg, depth)]);
                 }
                 self.ty_of_res(scope, &res, args, depth)
             }
@@ -546,7 +626,8 @@ impl<'p> Resolver<'p> {
                     ItemKind::Alias { ty } => {
                         let args = self.fill_defaults(&item.scope, args, depth);
                         let inner = self.ty_at(&item.scope, ty, depth.saturating_add(1));
-                        let map: BTreeMap<GenId, Ty> = item.scope.generics.iter().copied().zip(args).collect();
+                        let map: BTreeMap<GenId, Ty> =
+                            item.scope.generics.iter().copied().zip(args).collect();
                         inner.subst(&map)
                     }
                     ItemKind::Trait { .. } | ItemKind::Const { .. } => Ty::Unknown,
@@ -557,9 +638,12 @@ impl<'p> Resolver<'p> {
                 self.assoc_ty(scope, base, base_ty, name, depth)
             }
             Res::Qualified(t, _) => (**t).clone(),
-            Res::Ext(_) | Res::Mod(_) | Res::Variant(..) | Res::Fn(_) | Res::ConstParam(_) | Res::Macro(_) => {
-                Ty::Unknown
-            }
+            Res::Ext(_)
+            | Res::Mod(_)
+            | Res::Variant(..)
+            | Res::Fn(_)
+            | Res::ConstParam(_)
+            | Res::Macro(_) => Ty::Unknown,
         }
     }
 
@@ -574,8 +658,10 @@ impl<'p> Resolver<'p> {
             let generic = self.program.generic(*g);
             let filled = match &generic.default {
                 Some(d) => {
-                    let map: BTreeMap<GenId, Ty> = generics.iter().copied().zip(args.iter().cloned()).collect();
-                    self.ty_at(&generic.scope, d, depth.saturating_add(1)).subst(&map)
+                    let map: BTreeMap<GenId, Ty> =
+                        generics.iter().copied().zip(args.iter().cloned()).collect();
+                    self.ty_at(&generic.scope, d, depth.saturating_add(1))
+                        .subst(&map)
                 }
                 None => Ty::Infer,
             };
@@ -641,7 +727,14 @@ impl<'p> Resolver<'p> {
             (Res::SelfTy, SelfRef::Trait(t, _)) => {
                 let own = TraitRef {
                     id: t,
-                    args: self.program.item(t).scope.generics.iter().map(|g| Ty::Param(*g)).collect(),
+                    args: self
+                        .program
+                        .item(t)
+                        .scope
+                        .generics
+                        .iter()
+                        .map(|g| Ty::Param(*g))
+                        .collect(),
                     bindings: Vec::new(),
                 };
                 let declaring = self.declaring_ref(&[own], name);
@@ -660,11 +753,17 @@ impl<'p> Resolver<'p> {
     #[must_use]
     pub fn declaring_ref(&self, traits: &[TraitRef], name: &str) -> Option<TraitRef> {
         let id = self.declaring_trait(traits, name)?;
-        Some(traits.iter().find(|t| t.id == id).cloned().unwrap_or(TraitRef {
-            id,
-            args: Vec::new(),
-            bindings: Vec::new(),
-        }))
+        Some(
+            traits
+                .iter()
+                .find(|t| t.id == id)
+                .cloned()
+                .unwrap_or(TraitRef {
+                    id,
+                    args: Vec::new(),
+                    bindings: Vec::new(),
+                }),
+        )
     }
 
     /// The trait among `traits` and their supertraits that declares associated type `name`.
@@ -697,7 +796,11 @@ impl<'p> Resolver<'p> {
     /// The traits of a list of bounds; lifetimes, `?Sized` and bounds that name no trait read are
     /// left out.
     #[must_use]
-    pub fn trait_refs<'b>(&self, scope: &Scope, bounds: impl Iterator<Item = &'b syn::TypeParamBound>) -> Vec<TraitRef> {
+    pub fn trait_refs<'b>(
+        &self,
+        scope: &Scope,
+        bounds: impl Iterator<Item = &'b syn::TypeParamBound>,
+    ) -> Vec<TraitRef> {
         bounds
             .filter_map(|b| match b {
                 syn::TypeParamBound::Trait(t) if t.maybe.is_none() => {
@@ -718,31 +821,43 @@ impl<'p> Resolver<'p> {
             .resolve(scope, &segs, path.leading_colon.is_some(), Ns::Type)
             .into_iter()
             .find_map(|r| match r {
-                Res::Item(id) if matches!(self.program.item(id).kind, ItemKind::Trait { .. }) => Some(id),
+                Res::Item(id) if matches!(self.program.item(id).kind, ItemKind::Trait { .. }) => {
+                    Some(id)
+                }
                 _ => None,
             })?;
         let seg = path.segments.last()?;
-        self.trait_ref_of(scope, id, seg, 0)
+        Some(self.trait_ref_of(scope, id, seg, 0))
     }
 
-    fn trait_ref_of(&self, scope: &Scope, id: ItemId, seg: &syn::PathSegment, depth: usize) -> Option<TraitRef> {
+    fn trait_ref_of(
+        &self,
+        scope: &Scope,
+        id: ItemId,
+        seg: &syn::PathSegment,
+        depth: usize,
+    ) -> TraitRef {
         if let syn::PathArguments::Parenthesized(p) = &seg.arguments {
-            let inputs: Vec<Ty> = p.inputs.iter().map(|t| self.ty_at(scope, &t.ty, depth)).collect();
+            let inputs: Vec<Ty> = p
+                .inputs
+                .iter()
+                .map(|t| self.ty_at(scope, &t.ty, depth))
+                .collect();
             let output = match &p.output {
                 syn::ReturnType::Type(_, t) => self.ty_at(scope, t, depth),
                 syn::ReturnType::Default => Ty::unit(),
             };
-            return Some(TraitRef {
+            return TraitRef {
                 id,
                 args: vec![Ty::Tuple(inputs)],
                 bindings: vec![("Output".to_owned(), output)],
-            });
+            };
         }
-        Some(TraitRef {
+        TraitRef {
             id,
             args: self.args(scope, seg, depth),
             bindings: self.bindings(scope, seg, depth),
-        })
+        }
     }
 
     /// The traits a generic parameter is bounded by, as written (supertraits are the index's,
@@ -783,7 +898,11 @@ mod tests {
         let read = move |p: &str| map.get(p).cloned().ok_or_else(|| "no such file".to_owned());
         let sources: Vec<CrateSource> = ["a", "b"]
             .iter()
-            .filter(|lib| files.iter().any(|(p, _)| p.starts_with(&format!("c/{lib}/"))))
+            .filter(|lib| {
+                files
+                    .iter()
+                    .any(|(p, _)| p.starts_with(&format!("c/{lib}/")))
+            })
             .map(|lib| CrateSource {
                 package: (*lib).to_owned(),
                 lib: (*lib).to_owned(),
@@ -809,6 +928,10 @@ mod tests {
     }
 
     #[test]
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "the fixture's functions are f, g and so on"
+    )]
     fn uses_globs_reexports_and_cfg_alternatives_resolve() {
         let p = program(&[
             (
@@ -820,20 +943,36 @@ mod tests {
                  mod cyc { pub use self::cyc2::*; mod cyc2 { pub use super::*; } }\n\
                  fn user() {}",
             ),
-            ("c/b/src/lib.rs", "use a::n::g; pub enum E { V } use E::*; fn caller() {}"),
+            (
+                "c/b/src/lib.rs",
+                "use a::n::g; pub enum E { V } use E::*; fn caller() {}",
+            ),
         ]);
         let r = Resolver::new(&p);
         let (_, user) = fn_named(&p, "a::user");
         let f = fn_named(&p, "a::m::f").0;
-        assert_eq!(r.resolve(&user.scope, &segs("renamed"), false, Ns::Value), [Res::Fn(f)]);
-        assert_eq!(r.resolve(&user.scope, &segs("n::f"), false, Ns::Value), [Res::Fn(f)]);
+        assert_eq!(
+            r.resolve(&user.scope, &segs("renamed"), false, Ns::Value),
+            [Res::Fn(f)]
+        );
+        assert_eq!(
+            r.resolve(&user.scope, &segs("n::f"), false, Ns::Value),
+            [Res::Fn(f)]
+        );
         let gs = r.resolve(&user.scope, &segs("m::g"), false, Ns::Value);
         assert_eq!(gs.len(), 2, "both cfg alternatives: {gs:?}");
-        assert!(r.resolve(&user.scope, &segs("cyc::nothing"), false, Ns::Value).is_empty());
+        assert_eq!(
+            r.resolve(&user.scope, &segs("cyc::nothing"), false, Ns::Value),
+            Vec::<Res>::new()
+        );
         let (_, caller) = fn_named(&p, "b::caller");
-        assert_eq!(r.resolve(&caller.scope, &segs("g"), false, Ns::Value).len(), 2);
+        assert_eq!(
+            r.resolve(&caller.scope, &segs("g"), false, Ns::Value).len(),
+            2
+        );
         assert!(matches!(
-            r.resolve(&caller.scope, &segs("V"), false, Ns::Value).as_slice(),
+            r.resolve(&caller.scope, &segs("V"), false, Ns::Value)
+                .as_slice(),
             [Res::Variant(_, 0)]
         ));
         assert_eq!(
@@ -845,10 +984,17 @@ mod tests {
             r.resolve(&caller.scope, &segs("Some"), false, Ns::Value),
             [Res::Ext(segs("Some"))]
         );
-        assert!(r.resolve(&caller.scope, &segs("nowhere"), false, Ns::Value).is_empty());
+        assert_eq!(
+            r.resolve(&caller.scope, &segs("nowhere"), false, Ns::Value),
+            Vec::<Res>::new()
+        );
     }
 
     #[test]
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "the fixture's items are f, w and so on"
+    )]
     fn types_expand_aliases_self_and_generics() {
         let p = program(&[(
             "c/a/src/lib.rs",
@@ -873,8 +1019,14 @@ mod tests {
             tys[1],
             Ty::reference(Ty::Slice(Box::new(Ty::Adt(w, vec![Ty::Prim(Prim::Bool)]))))
         );
-        assert_eq!(tys[2], Ty::reference(Ty::Dyn(Vec::new())), "an outside trait is no bound");
+        assert_eq!(
+            tys[2],
+            Ty::reference(Ty::Dyn(Vec::new())),
+            "an outside trait is no bound"
+        );
         let get = p.nodes.iter().find(|n| n.ident == "get").unwrap();
-        assert!(matches!(r.self_ty(&get.scope, 0), Ty::Adt(id, ref a) if id == w && matches!(a[0], Ty::Param(_))));
+        assert!(
+            matches!(r.self_ty(&get.scope, 0), Ty::Adt(id, ref a) if id == w && matches!(a[0], Ty::Param(_)))
+        );
     }
 }

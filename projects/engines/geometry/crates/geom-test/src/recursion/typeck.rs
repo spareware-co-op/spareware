@@ -95,7 +95,12 @@ enum Target {
     /// A closure.
     Closure(ClosureKey),
     /// A trait method on a generic receiver: the trait's default body, if any.
-    Bound { trait_ref: TraitRef, name: String, self_ty: Ty, method_args: Vec<Ty> },
+    Bound {
+        trait_ref: TraitRef,
+        name: String,
+        self_ty: Ty,
+        method_args: Vec<Ty>,
+    },
     /// A trait method on a trait object: every implementation of the trait.
     Dyn { trait_id: ItemId, name: String },
     /// A call through a closure trait object (`dynamic`) or function pointer of this arity.
@@ -157,7 +162,15 @@ enum Args<'e> {
 /// An obligation that waits for a type to be known.
 #[derive(Clone, Debug)]
 enum Pending {
-    Method { origin: Origin, recv: Ty, name: String, args: Vec<Ty>, turbofish: Vec<Ty>, out: Ty, line: usize },
+    Method {
+        origin: Origin,
+        recv: Ty,
+        name: String,
+        args: Vec<Ty>,
+        turbofish: Vec<Ty>,
+        out: Ty,
+        line: usize,
+    },
     TraitFn {
         origin: Origin,
         trait_id: ItemId,
@@ -168,20 +181,82 @@ enum Pending {
         line: usize,
         how: &'static str,
     },
-    Field { base: Ty, name: String, out: Ty, line: usize },
-    Index { origin: Origin, base: Ty, idx: Ty, out: Ty, line: usize },
-    Binary { origin: Origin, lhs: Ty, rhs: Ty, op: (&'static str, &'static str), out: Ty, line: usize },
-    Unary { origin: Origin, operand: Ty, op: (&'static str, &'static str), out: Ty, line: usize },
-    Deref { origin: Origin, operand: Ty, out: Ty, line: usize },
-    CallValue { origin: Origin, callee: Ty, args: Vec<Ty>, out: Ty, line: usize },
-    Projection { assoc: Ty, out: Ty },
+    Field {
+        base: Ty,
+        name: String,
+        out: Ty,
+        line: usize,
+    },
+    Index {
+        origin: Origin,
+        base: Ty,
+        idx: Ty,
+        out: Ty,
+        line: usize,
+    },
+    Binary {
+        origin: Origin,
+        lhs: Ty,
+        rhs: Ty,
+        op: (&'static str, &'static str),
+        out: Ty,
+        line: usize,
+    },
+    Unary {
+        origin: Origin,
+        operand: Ty,
+        op: (&'static str, &'static str),
+        out: Ty,
+        line: usize,
+    },
+    Deref {
+        origin: Origin,
+        operand: Ty,
+        out: Ty,
+        line: usize,
+    },
+    CallValue {
+        origin: Origin,
+        callee: Ty,
+        args: Vec<Ty>,
+        out: Ty,
+        line: usize,
+    },
+    Projection {
+        assoc: Ty,
+        out: Ty,
+    },
     /// A bound's associated-type binding on a generic argument (`I: IntoIterator<Item = T>`):
     /// once `ty` is known, its projection meets `value`.
-    Binding { ty: Ty, trait_ref: TraitRef, name: String, value: Ty },
-    Opaque { node: NodeId, args: Vec<Ty>, declared: Ty, line: usize },
-    Iterate { origin: Origin, iterable: Ty, item: Ty, line: usize },
-    Try { origin: Origin, operand: Ty, out: Ty, line: usize },
-    FnBound { callee: Ty, inputs: Vec<Ty>, output: Ty },
+    Binding {
+        ty: Ty,
+        trait_ref: TraitRef,
+        name: String,
+        value: Ty,
+    },
+    Opaque {
+        node: NodeId,
+        args: Vec<Ty>,
+        declared: Ty,
+        line: usize,
+    },
+    Iterate {
+        origin: Origin,
+        iterable: Ty,
+        item: Ty,
+        line: usize,
+    },
+    Try {
+        origin: Origin,
+        operand: Ty,
+        out: Ty,
+        line: usize,
+    },
+    FnBound {
+        callee: Ty,
+        inputs: Vec<Ty>,
+        output: Ty,
+    },
 }
 
 /// The checker of one instance's body.
@@ -353,8 +428,21 @@ pub fn derived(ix: &Index<'_>, m: &mut Mono, inst: InstId, node: NodeId, args: &
     for f in ix.all_field_types(*item) {
         let f = f.subst(&item_map);
         let f = c.inst_ty(&f);
-        let tr = TraitRef { id: trait_id, args: Vec::new(), bindings: Vec::new() };
-        c.dispatch_trait_fn(Origin::Owner, &tr, &method, &f, &method_args, n.line, how::DERIVED, true);
+        let tr = TraitRef {
+            id: trait_id,
+            args: Vec::new(),
+            bindings: Vec::new(),
+        };
+        c.dispatch_trait_fn(
+            Origin::Owner,
+            &tr,
+            &method,
+            &f,
+            &method_args,
+            n.line,
+            how::DERIVED,
+            true,
+        );
     }
     c.finish(None, n.line);
 }
@@ -363,7 +451,11 @@ pub fn derived(ix: &Index<'_>, m: &mut Mono, inst: InstId, node: NodeId, args: &
 /// coerces to a function pointer or closure trait object; its calls run at compile time.
 pub fn constants(ix: &Index<'_>, m: &mut Mono) {
     for item in &ix.program.items {
-        let ItemKind::Const { ty, init: Some(init) } = &item.kind else {
+        let ItemKind::Const {
+            ty,
+            init: Some(init),
+        } = &item.kind
+        else {
             continue;
         };
         let ships = ix
@@ -375,7 +467,15 @@ pub fn constants(ix: &Index<'_>, m: &mut Mono) {
             continue;
         }
         let file = ix.program.module(item.module).file.clone();
-        let mut c = Checker::new(ix, m, InstId(usize::MAX), NodeId(usize::MAX), &[], item.scope.clone(), &file);
+        let mut c = Checker::new(
+            ix,
+            m,
+            InstId(usize::MAX),
+            NodeId(usize::MAX),
+            &[],
+            item.scope.clone(),
+            &file,
+        );
         c.compile_time = true;
         let declared = c.ty(ty);
         let v = c.expr(init, Some(&declared));
@@ -393,9 +493,24 @@ pub fn constants(ix: &Index<'_>, m: &mut Mono) {
 }
 
 impl<'a, 'p> Checker<'a, 'p> {
-    #[allow(clippy::too_many_arguments, reason = "the checker's shared state, passed once")]
-    fn new(ix: &'a Index<'p>, m: &'a mut Mono, owner: InstId, node: NodeId, args: &[Ty], scope: Scope, file: &str) -> Checker<'a, 'p> {
-        let map = if node.0 == usize::MAX { Map::new() } else { ix.map_of(node, args) };
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the checker's shared state, passed once"
+    )]
+    fn new(
+        ix: &'a Index<'p>,
+        m: &'a mut Mono,
+        owner: InstId,
+        node: NodeId,
+        args: &[Ty],
+        scope: Scope,
+        file: &str,
+    ) -> Checker<'a, 'p> {
+        let map = if node.0 == usize::MAX {
+            Map::new()
+        } else {
+            ix.map_of(node, args)
+        };
         Checker {
             ix,
             m,
@@ -465,7 +580,12 @@ impl<'a, 'p> Checker<'a, 'p> {
                 let Some(tr) = &info.trait_ref else {
                     return;
                 };
-                let map: Map = info.generics.iter().copied().zip(args.iter().cloned()).collect();
+                let map: Map = info
+                    .generics
+                    .iter()
+                    .copied()
+                    .zip(args.iter().cloned())
+                    .collect();
                 let self_ty = info.self_ty.subst(&map);
                 let tr = self.ix.complete(&tr.map(&mut |x| x.subst(&map)), &self_ty);
                 (self_ty, tr)
@@ -475,7 +595,14 @@ impl<'a, 'p> Checker<'a, 'p> {
                 let Some(s) = args.first().cloned() else {
                     return;
                 };
-                (s, TraitRef { id: *t, args: args.iter().skip(1).take(k).cloned().collect(), bindings: Vec::new() })
+                (
+                    s,
+                    TraitRef {
+                        id: *t,
+                        args: args.iter().skip(1).take(k).cloned().collect(),
+                        bindings: Vec::new(),
+                    },
+                )
             }
             _ => return,
         };
@@ -499,8 +626,9 @@ impl<'a, 'p> Checker<'a, 'p> {
     }
 
     fn problem(&mut self, line: usize, what: String) {
-        if self.reported.insert((line, what.clone())) {
+        if !self.reported.contains(&(line, what.clone())) {
             self.problems.push(Problem::unread(&self.file, line, &what));
+            self.reported.insert((line, what));
         }
     }
 
@@ -512,7 +640,9 @@ impl<'a, 'p> Checker<'a, 'p> {
         let own = &self.args;
         let sigs = |k: &ClosureKey| -> Option<(Vec<Ty>, Ty)> {
             if k.owner == node && k.subst == *own {
-                closures.get(k.index).map(|c| (c.params.clone(), c.ret.clone()))
+                closures
+                    .get(k.index)
+                    .map(|c| (c.params.clone(), c.ret.clone()))
             } else {
                 global.get(k).cloned()
             }
@@ -543,7 +673,10 @@ impl<'a, 'p> Checker<'a, 'p> {
         let out = t.fold(&mut |x| match x {
             Ty::Assoc(base, ..) if matches!(**base, Ty::Var(_)) => {
                 let v = self.infer.fresh();
-                waiting.push(Pending::Projection { assoc: x.clone(), out: v.clone() });
+                waiting.push(Pending::Projection {
+                    assoc: x.clone(),
+                    out: v.clone(),
+                });
                 Some(v)
             }
             _ => None,
@@ -591,13 +724,22 @@ impl<'a, 'p> Checker<'a, 'p> {
         if self.compile_time {
             return;
         }
-        self.calls.push(Call { origin: self.origin, target, line, how: how_found });
+        self.calls.push(Call {
+            origin: self.origin,
+            target,
+            line,
+            how: how_found,
+        });
     }
 
     /// Makes `actual` fit `expected`: unification, or a coercion the compiler would make
     /// (dereference, unsizing to a slice or trait object, a closure or function to a function
     /// pointer); a closure or function coerced to a trait object or function pointer is recorded.
-    fn coerce(&mut self, actual: &Ty, expected: &Ty, _line: usize) {
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "the two types and their parts"
+    )]
+    fn coerce(&mut self, actual: &Ty, expected: &Ty, line: usize) {
         if self.unify(actual, expected) {
             return;
         }
@@ -615,7 +757,7 @@ impl<'a, 'p> Checker<'a, 'p> {
                     if self.unify(s, &y) {
                         // Deref coercion runs `Deref::deref` on each step it passes.
                         let derefs: Vec<Ty> = steps.iter().take(i).cloned().collect();
-                        self.implicit_derefs(&derefs, _line);
+                        self.implicit_derefs(&derefs, line);
                         return;
                     }
                 }
@@ -673,7 +815,9 @@ impl<'a, 'p> Checker<'a, 'p> {
             Ty::FnPtr(p, r) => Some((p, *r)),
             Ty::Ref(inner, _) => self.callable_sig(&inner),
             // A generic callable's signature is its closure bound's.
-            g @ (Ty::Param(_) | Ty::Opaque(_) | Ty::Assoc(..)) => self.callable_bound(&g, Vec::new()),
+            g @ (Ty::Param(_) | Ty::Opaque(_) | Ty::Assoc(..)) => {
+                self.callable_bound(&g, Vec::new())
+            }
             Ty::Dyn(traits) => {
                 let d = Ty::Dyn(traits.clone());
                 self.callable_bound(&d, traits)
@@ -708,13 +852,22 @@ impl<'a, 'p> Checker<'a, 'p> {
                 _ => None,
             });
             let declared = self.inst_ty(&declared);
-            self.pending.push(Pending::Opaque { node, args: args.clone(), declared: declared.clone(), line });
+            self.pending.push(Pending::Opaque {
+                node,
+                args: args.clone(),
+                declared: declared.clone(),
+                line,
+            });
             declared
         } else {
             self.inst_ty(&raw_out)
         };
         self.fn_bounds(&generics, &args, &map);
-        Instance { args, inputs, output }
+        Instance {
+            args,
+            inputs,
+            output,
+        }
     }
 
     /// Obligations for the bounds of generic parameters `generics` (fixed to `args`): the
@@ -729,10 +882,16 @@ impl<'a, 'p> Checker<'a, 'p> {
                     let b = b.map(&mut |x| x.subst(map));
                     let mut args_only = b.clone();
                     args_only.bindings.clear();
-                    let args_only = args_only.map(&mut |x| self.ix.fill_infer_ty(x, &mut self.infer));
+                    let args_only =
+                        args_only.map(&mut |x| self.ix.fill_infer_ty(x, &mut self.infer));
                     for (name, value) in &b.bindings {
                         let value = self.inst_ty(value);
-                        self.pending.push(Pending::Binding { ty: a.clone(), trait_ref: args_only.clone(), name: name.clone(), value });
+                        self.pending.push(Pending::Binding {
+                            ty: a.clone(),
+                            trait_ref: args_only.clone(),
+                            name: name.clone(),
+                            value,
+                        });
                     }
                     continue;
                 }
@@ -746,14 +905,24 @@ impl<'a, 'p> Checker<'a, 'p> {
                     Some(o) => self.inst_ty(o),
                     None => continue,
                 };
-                self.pending.push(Pending::FnBound { callee: a.clone(), inputs, output });
+                self.pending.push(Pending::FnBound {
+                    callee: a.clone(),
+                    inputs,
+                    output,
+                });
             }
         }
     }
 
     /// Instantiates trait method `name` (declared by `tr` or a supertrait) with `Self` as
     /// `self_ty`: its inputs, result and the method's own generic arguments.
-    fn instantiate_trait_method(&mut self, tr: &TraitRef, name: &str, self_ty: &Ty, turbofish: &[Ty]) -> Option<(Vec<Ty>, Ty, Vec<Ty>, TraitRef)> {
+    fn instantiate_trait_method(
+        &mut self,
+        tr: &TraitRef,
+        name: &str,
+        self_ty: &Ty,
+        turbofish: &[Ty],
+    ) -> Option<(Vec<Ty>, Ty, Vec<Ty>, TraitRef)> {
         let decl = self.ix.trait_declaring_method(tr.id, name)?;
         let tr = if decl == tr.id {
             self.ix.complete(tr, self_ty)
@@ -762,7 +931,11 @@ impl<'a, 'p> Checker<'a, 'p> {
                 .supertraits(tr, self_ty)
                 .into_iter()
                 .find(|s| s.id == decl)
-                .unwrap_or(TraitRef { id: decl, args: Vec::new(), bindings: Vec::new() })
+                .unwrap_or(TraitRef {
+                    id: decl,
+                    args: Vec::new(),
+                    bindings: Vec::new(),
+                })
         };
         let tr = self.ix.complete(&tr, self_ty);
         let (sig, generics) = self.ix.trait_method(decl, name)?;
@@ -775,7 +948,11 @@ impl<'a, 'p> Checker<'a, 'p> {
             let a = self.ix.fill_infer_ty(a, &mut self.infer);
             map.insert(*g, a);
         }
-        let own: Vec<_> = generics.iter().skip(trait_generics.len().saturating_add(1)).copied().collect();
+        let own: Vec<_> = generics
+            .iter()
+            .skip(trait_generics.len().saturating_add(1))
+            .copied()
+            .collect();
         let mut method_args = Vec::new();
         for (i, g) in own.iter().enumerate() {
             let a = match turbofish.get(i) {
@@ -800,7 +977,14 @@ impl<'a, 'p> Checker<'a, 'p> {
         }
         let outer = match self.ix.program.node(node).map(|n| &n.kind) {
             Some(NodeKind::Method(imp)) => self.ix.program.imp(*imp).scope.generics.len(),
-            Some(NodeKind::TraitDefault(t)) => self.ix.program.item(*t).scope.generics.len().saturating_add(1),
+            Some(NodeKind::TraitDefault(t)) => self
+                .ix
+                .program
+                .item(*t)
+                .scope
+                .generics
+                .len()
+                .saturating_add(1),
             _ => 0,
         };
         for (i, t) in turbofish.iter().enumerate() {
@@ -871,7 +1055,11 @@ impl<'a, 'p> Checker<'a, 'p> {
             Ty::Var(v) => {
                 let root = self.shallow(&Ty::Var(*v));
                 let found = self.pending.iter().find_map(|x| match x {
-                    Pending::FnBound { callee, inputs, output } if self.infer.shallow(callee) == root => {
+                    Pending::FnBound {
+                        callee,
+                        inputs,
+                        output,
+                    } if self.infer.shallow(callee) == root => {
                         Some((inputs.clone(), output.clone()))
                     }
                     _ => None,
@@ -886,16 +1074,26 @@ impl<'a, 'p> Checker<'a, 'p> {
                     Some(Ty::Tuple(items)) => items.clone(),
                     _ => return None,
                 };
-                Some((inputs, tr.binding("Output").cloned().unwrap_or_else(Ty::unit)))
+                Some((
+                    inputs,
+                    tr.binding("Output").cloned().unwrap_or_else(Ty::unit),
+                ))
             }
             Ty::FnPtr(params, ret) => Some((params.clone(), (**ret).clone())),
             Ty::Param(g) => {
-                let tr = self.ix.bounds(*g).into_iter().find(|t| self.ix.is_fn_trait(t.id))?;
+                let tr = self
+                    .ix
+                    .bounds(*g)
+                    .into_iter()
+                    .find(|t| self.ix.is_fn_trait(t.id))?;
                 let inputs = match tr.args.first() {
                     Some(Ty::Tuple(items)) => items.clone(),
                     _ => return None,
                 };
-                Some((inputs, tr.binding("Output").cloned().unwrap_or_else(Ty::unit)))
+                Some((
+                    inputs,
+                    tr.binding("Output").cloned().unwrap_or_else(Ty::unit),
+                ))
             }
             _ => None,
         }
@@ -944,7 +1142,15 @@ impl<'a, 'p> Checker<'a, 'p> {
     #[allow(clippy::too_many_lines, reason = "one arm per kind of obligation")]
     fn try_settle(&mut self, p: &Pending) -> bool {
         match p {
-            Pending::Method { origin, recv, name, args, turbofish, out, line } => {
+            Pending::Method {
+                origin,
+                recv,
+                name,
+                args,
+                turbofish,
+                out,
+                line,
+            } => {
                 let r = self.now(recv);
                 if self.unresolved(&r) {
                     return false;
@@ -956,16 +1162,34 @@ impl<'a, 'p> Checker<'a, 'p> {
                 self.origin = saved;
                 true
             }
-            Pending::TraitFn { origin, trait_id, name, self_ty, trait_args, method_args, line, how: h } => {
+            Pending::TraitFn {
+                origin,
+                trait_id,
+                name,
+                self_ty,
+                trait_args,
+                method_args,
+                line,
+                how: h,
+            } => {
                 let s = self.now(self_ty);
                 if self.unresolved(&s) {
                     return false;
                 }
-                let tr = TraitRef { id: *trait_id, args: trait_args.clone(), bindings: Vec::new() };
+                let tr = TraitRef {
+                    id: *trait_id,
+                    args: trait_args.clone(),
+                    bindings: Vec::new(),
+                };
                 self.dispatch_trait_fn(*origin, &tr, name, &s, method_args, *line, h, false);
                 true
             }
-            Pending::Field { base, name, out, line } => {
+            Pending::Field {
+                base,
+                name,
+                out,
+                line,
+            } => {
                 let b = self.now(base);
                 if self.unresolved(&b) {
                     return false;
@@ -974,7 +1198,13 @@ impl<'a, 'p> Checker<'a, 'p> {
                 self.unify(out, &t);
                 true
             }
-            Pending::Index { origin, base, idx, out, line } => {
+            Pending::Index {
+                origin,
+                base,
+                idx,
+                out,
+                line,
+            } => {
                 let b = self.now(base);
                 if self.unresolved(&b) {
                     return false;
@@ -986,7 +1216,14 @@ impl<'a, 'p> Checker<'a, 'p> {
                 self.unify(out, &t);
                 true
             }
-            Pending::Binary { origin, lhs, rhs, op, out, line } => {
+            Pending::Binary {
+                origin,
+                lhs,
+                rhs,
+                op,
+                out,
+                line,
+            } => {
                 let l = self.now(lhs);
                 if self.unresolved(&l) {
                     return false;
@@ -998,7 +1235,13 @@ impl<'a, 'p> Checker<'a, 'p> {
                 self.unify(out, &t);
                 true
             }
-            Pending::Unary { origin, operand, op, out, line } => {
+            Pending::Unary {
+                origin,
+                operand,
+                op,
+                out,
+                line,
+            } => {
                 let o = self.now(operand);
                 if self.unresolved(&o) {
                     return false;
@@ -1010,7 +1253,12 @@ impl<'a, 'p> Checker<'a, 'p> {
                 self.unify(out, &t);
                 true
             }
-            Pending::Deref { origin, operand, out, line } => {
+            Pending::Deref {
+                origin,
+                operand,
+                out,
+                line,
+            } => {
                 let o = self.now(operand);
                 if self.unresolved(&o) {
                     return false;
@@ -1022,7 +1270,13 @@ impl<'a, 'p> Checker<'a, 'p> {
                 self.unify(out, &t);
                 true
             }
-            Pending::CallValue { origin, callee, args, out, line } => {
+            Pending::CallValue {
+                origin,
+                callee,
+                args,
+                out,
+                line,
+            } => {
                 let c = self.now(callee);
                 if self.unresolved(&c) {
                     return false;
@@ -1046,7 +1300,12 @@ impl<'a, 'p> Checker<'a, 'p> {
                 self.unify(out, &n);
                 true
             }
-            Pending::Opaque { node, args, declared, line } => {
+            Pending::Opaque {
+                node,
+                args,
+                declared,
+                line,
+            } => {
                 let resolved: Vec<Ty> = args.iter().map(|a| self.infer.resolve(a)).collect();
                 if resolved.iter().any(Ty::has_var) && !self.lenient {
                     return false;
@@ -1064,7 +1323,12 @@ impl<'a, 'p> Checker<'a, 'p> {
                 }
                 true
             }
-            Pending::Iterate { origin, iterable, item, line } => {
+            Pending::Iterate {
+                origin,
+                iterable,
+                item,
+                line,
+            } => {
                 let t = self.now(iterable);
                 if self.unresolved(&t) {
                     return false;
@@ -1076,7 +1340,12 @@ impl<'a, 'p> Checker<'a, 'p> {
                 self.unify(item, &got);
                 true
             }
-            Pending::Try { origin, operand, out, line } => {
+            Pending::Try {
+                origin,
+                operand,
+                out,
+                line,
+            } => {
                 let t = self.now(operand);
                 if self.unresolved(&t) {
                     return false;
@@ -1088,7 +1357,12 @@ impl<'a, 'p> Checker<'a, 'p> {
                 self.unify(out, &got);
                 true
             }
-            Pending::Binding { ty, trait_ref, name, value } => {
+            Pending::Binding {
+                ty,
+                trait_ref,
+                name,
+                value,
+            } => {
                 let t = self.now(ty);
                 if self.unresolved(&t) {
                     return false;
@@ -1100,7 +1374,11 @@ impl<'a, 'p> Checker<'a, 'p> {
                 }
                 true
             }
-            Pending::FnBound { callee, inputs, output } => {
+            Pending::FnBound {
+                callee,
+                inputs,
+                output,
+            } => {
                 let c = self.now(callee);
                 if matches!(c, Ty::Var(_)) {
                     return false;
@@ -1178,7 +1456,11 @@ impl<'a, 'p> Checker<'a, 'p> {
                     None => continue,
                 },
             };
-            let site = Site { file: self.file.clone(), line: call.line, how: call.how };
+            let site = Site {
+                file: self.file.clone(),
+                line: call.line,
+                how: call.how,
+            };
             for to in self.targets(&call.target, from) {
                 self.m.edge(from, to, &site);
             }
@@ -1208,6 +1490,10 @@ impl<'a, 'p> Checker<'a, 'p> {
     }
 
     /// The instances a call reaches.
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one arm per kind of target, each short"
+    )]
     fn targets(&mut self, target: &Target, from: InstId) -> Vec<InstId> {
         let ix = self.ix;
         match target {
@@ -1219,7 +1505,12 @@ impl<'a, 'p> Checker<'a, 'p> {
                 let k = self.resolve_key(k);
                 vec![self.m.closure_inst(ix, &k)]
             }
-            Target::Bound { trait_ref, name, self_ty, method_args } => {
+            Target::Bound {
+                trait_ref,
+                name,
+                self_ty,
+                method_args,
+            } => {
                 let tr = trait_ref.map(&mut |t| self.resolve_final(t));
                 let s = self.resolve_final(self_ty);
                 let margs: Vec<Ty> = method_args.iter().map(|a| self.resolve_final(a)).collect();
@@ -1230,7 +1521,9 @@ impl<'a, 'p> Checker<'a, 'p> {
                 }
                 // The blanket implementations of the trait that may apply to the generic type.
                 let tr_args = ix.complete(&tr, &s).args;
-                for (imp, map) in self.with_ix(|ix, infer, sigs| ix.blanket_impls(tr.id, &s, &tr_args, infer, sigs)) {
+                for (imp, map) in self
+                    .with_ix(|ix, infer, sigs| ix.blanket_impls(tr.id, &s, &tr_args, infer, sigs))
+                {
                     let Some(info) = ix.impls.get(imp.0) else {
                         continue;
                     };
@@ -1248,7 +1541,11 @@ impl<'a, 'p> Checker<'a, 'p> {
                     let Some(info) = ix.impls.get(imp.0) else {
                         continue;
                     };
-                    let open: Map = ix.impl_generics(imp).iter().map(|g| (*g, Ty::Param(*g))).collect();
+                    let open: Map = ix
+                        .impl_generics(imp)
+                        .iter()
+                        .map(|g| (*g, Ty::Param(*g)))
+                        .collect();
                     if let Some((n, args)) = ix.impl_fn(imp, name, &open, &info.self_ty, &[]) {
                         let args: Vec<Ty> = args.iter().map(|a| self.resolve_final(a)).collect();
                         out.push(self.m.node_inst(ix, n, args));
@@ -1257,8 +1554,10 @@ impl<'a, 'p> Checker<'a, 'p> {
                 let trait_name = ix.program.item(*trait_id).name.clone();
                 for (item, list) in &ix.derived {
                     for (t, n) in list {
-                        if *t == trait_name && ix.program.node(*n).is_some_and(|x| x.ident == *name) {
-                            let open: Vec<Ty> = ix.node_generics(*n).iter().map(|g| Ty::Param(*g)).collect();
+                        if *t == trait_name && ix.program.node(*n).is_some_and(|x| x.ident == *name)
+                        {
+                            let open: Vec<Ty> =
+                                ix.node_generics(*n).iter().map(|g| Ty::Param(*g)).collect();
                             let _ = item;
                             out.push(self.m.node_inst(ix, *n, open));
                         }
@@ -1267,7 +1566,8 @@ impl<'a, 'p> Checker<'a, 'p> {
                 out
             }
             Target::Erased { dynamic, arity } => {
-                self.m.read(if *dynamic { Dep::Dyn } else { Dep::FnPtr }, from);
+                self.m
+                    .read(if *dynamic { Dep::Dyn } else { Dep::FnPtr }, from);
                 let set: Vec<Ty> = if *dynamic {
                     self.m.dyn_callables.iter().cloned().collect()
                 } else {
@@ -1277,7 +1577,11 @@ impl<'a, 'p> Checker<'a, 'p> {
                 for c in set {
                     match &c {
                         Ty::Closure(k) => {
-                            let fits = self.m.closure_sigs.get(k).is_none_or(|(p, _)| p.len() == *arity);
+                            let fits = self
+                                .m
+                                .closure_sigs
+                                .get(k)
+                                .is_none_or(|(p, _)| p.len() == *arity);
                             if fits {
                                 out.push(self.m.closure_inst(ix, k));
                             }
@@ -1298,31 +1602,70 @@ impl<'a, 'p> Checker<'a, 'p> {
 
     fn report_unsettled(&mut self, p: &Pending) {
         let (line, what) = match p {
-            Pending::Method { recv, name, line, .. } => {
+            Pending::Method {
+                recv, name, line, ..
+            } => {
                 let shown = self.ix.show(&self.infer.resolve(recv));
-                (*line, format!("the receiver of `.{name}(...)` has a type the check cannot infer (`{shown}`)"))
+                (
+                    *line,
+                    format!(
+                        "the receiver of `.{name}(...)` has a type the check cannot infer (`{shown}`)"
+                    ),
+                )
             }
-            Pending::TraitFn { trait_id, name, line, .. } => (
+            Pending::TraitFn {
+                trait_id,
+                name,
+                line,
+                ..
+            } => (
                 *line,
                 format!(
                     "the type `{}::{name}` is called on cannot be inferred",
                     self.ix.program.item(*trait_id).name
                 ),
             ),
-            Pending::Field { name, line, .. } => (*line, format!("the type whose field `{name}` is read cannot be inferred")),
-            Pending::Index { line, .. } => (*line, "the type of an indexed value cannot be inferred".to_owned()),
-            Pending::Binary { op, line, .. } | Pending::Unary { op, line, .. } => {
-                (*line, format!("the operand of an operator (`{}`) has a type the check cannot infer", op.0))
-            }
-            Pending::Deref { line, .. } => (*line, "the type of a dereferenced value cannot be inferred".to_owned()),
-            Pending::CallValue { line, .. } => (*line, "the type of a value called as a function cannot be inferred".to_owned()),
-            Pending::Iterate { line, .. } => (*line, "the type a `for` loop iterates over cannot be inferred".to_owned()),
-            Pending::Try { line, .. } => (*line, "the type `?` is applied to cannot be inferred".to_owned()),
+            Pending::Field { name, line, .. } => (
+                *line,
+                format!("the type whose field `{name}` is read cannot be inferred"),
+            ),
+            Pending::Index { line, .. } => (
+                *line,
+                "the type of an indexed value cannot be inferred".to_owned(),
+            ),
+            Pending::Binary { op, line, .. } | Pending::Unary { op, line, .. } => (
+                *line,
+                format!(
+                    "the operand of an operator (`{}`) has a type the check cannot infer",
+                    op.0
+                ),
+            ),
+            Pending::Deref { line, .. } => (
+                *line,
+                "the type of a dereferenced value cannot be inferred".to_owned(),
+            ),
+            Pending::CallValue { line, .. } => (
+                *line,
+                "the type of a value called as a function cannot be inferred".to_owned(),
+            ),
+            Pending::Iterate { line, .. } => (
+                *line,
+                "the type a `for` loop iterates over cannot be inferred".to_owned(),
+            ),
+            Pending::Try { line, .. } => (
+                *line,
+                "the type `?` is applied to cannot be inferred".to_owned(),
+            ),
             Pending::Opaque { node, line, .. } => (
                 *line,
-                format!("the generic arguments of a call to `{}` (which returns `impl Trait`) cannot be inferred", self.ix.name(*node)),
+                format!(
+                    "the generic arguments of a call to `{}` (which returns `impl Trait`) cannot be inferred",
+                    self.ix.name(*node)
+                ),
             ),
-            Pending::Projection { .. } | Pending::FnBound { .. } | Pending::Binding { .. } => return,
+            Pending::Projection { .. } | Pending::FnBound { .. } | Pending::Binding { .. } => {
+                return;
+            }
         };
         self.problem(line, what);
     }
@@ -1358,7 +1701,11 @@ impl<'a, 'p> Checker<'a, 'p> {
             }
             match &t {
                 Ty::Adt(item, args) => {
-                    let tr = TraitRef { id: drop, args: Vec::new(), bindings: Vec::new() };
+                    let tr = TraitRef {
+                        id: drop,
+                        args: Vec::new(),
+                        bindings: Vec::new(),
+                    };
                     let picks = self.with_ix(|ix, infer, sigs| ix.select(&t, &tr, infer, sigs));
                     for (imp, map) in picks {
                         if let Some((n, a)) = self.ix.impl_fn(imp, "drop", &map, &t, &[]) {
@@ -1369,10 +1716,24 @@ impl<'a, 'p> Checker<'a, 'p> {
                         .ix
                         .program
                         .crates
-                        .get(self.ix.program.module(self.ix.program.item(*item).module).krate)
+                        .get(
+                            self.ix
+                                .program
+                                .module(self.ix.program.item(*item).module)
+                                .krate,
+                        )
                         .is_some_and(|c| c.source.role != crate::recursion::model::Role::Model);
                     if kernel {
-                        let map: Map = self.ix.program.item(*item).scope.generics.iter().copied().zip(args.iter().cloned()).collect();
+                        let map: Map = self
+                            .ix
+                            .program
+                            .item(*item)
+                            .scope
+                            .generics
+                            .iter()
+                            .copied()
+                            .zip(args.iter().cloned())
+                            .collect();
                         for f in self.ix.all_field_types(*item) {
                             todo.push(f.subst(&map));
                         }
@@ -1441,18 +1802,36 @@ impl<'a, 'p> Checker<'a, 'p> {
                 }
                 Stmt::Item(_) => Ty::unit(),
                 Stmt::Expr(e, semi) => {
-                    let t = self.expr(e, if tail && semi.is_none() { expected } else { None });
+                    let t = self.expr(
+                        e,
+                        if tail && semi.is_none() {
+                            expected
+                        } else {
+                            None
+                        },
+                    );
                     if matches!(self.shallow(&t), Ty::Never) {
                         diverged = true;
                     }
                     if semi.is_some() { Ty::unit() } else { t }
                 }
                 Stmt::Macro(sm) => {
-                    let t = self.mac(&sm.mac, if tail && sm.semi_token.is_none() { expected } else { None });
+                    let t = self.mac(
+                        &sm.mac,
+                        if tail && sm.semi_token.is_none() {
+                            expected
+                        } else {
+                            None
+                        },
+                    );
                     if matches!(self.shallow(&t), Ty::Never) {
                         diverged = true;
                     }
-                    if sm.semi_token.is_some() { Ty::unit() } else { t }
+                    if sm.semi_token.is_some() {
+                        Ty::unit()
+                    } else {
+                        t
+                    }
                 }
             };
         }
@@ -1486,7 +1865,10 @@ impl<'a, 'p> Checker<'a, 'p> {
     // ------------------------------------------------------------ patterns
 
     /// Binds pattern `pat` against a value of type `t` in default binding mode `mode`.
-    #[allow(clippy::too_many_lines, reason = "one arm per pattern form, each short")]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one arm per pattern form, each short"
+    )]
     fn bind_pat(&mut self, pat: &Pat, t: &Ty, mode: Mode) {
         match pat {
             Pat::Ident(pi) => {
@@ -1494,7 +1876,9 @@ impl<'a, 'p> Checker<'a, 'p> {
                 if pi.subpat.is_none() && upper(&name) {
                     // A constant or unit item: its type meets the scrutinee's.
                     let segs = vec![name];
-                    let res = self.resolver().resolve(&self.scope, &segs, false, Ns::Value);
+                    let res = self
+                        .resolver()
+                        .resolve(&self.scope, &segs, false, Ns::Value);
                     if let Some(r) = res.first() {
                         let v = self.res_value(r, None, line_of(pat));
                         let s = self.peel_for_pattern(t).0;
@@ -1533,7 +1917,10 @@ impl<'a, 'p> Checker<'a, 'p> {
                         Some(r) if i > r => items.len().checked_sub(n.saturating_sub(i)),
                         _ => Some(i),
                     };
-                    let et = idx.and_then(|j| items.get(j)).cloned().unwrap_or(Ty::Unknown);
+                    let et = idx
+                        .and_then(|j| items.get(j))
+                        .cloned()
+                        .unwrap_or(Ty::Unknown);
                     self.bind_pat(p, &et, mode);
                 }
             }
@@ -1550,7 +1937,9 @@ impl<'a, 'p> Checker<'a, 'p> {
                         Some(r) if i > r => fields.len().checked_sub(n.saturating_sub(i)),
                         _ => Some(i),
                     };
-                    let ft = idx.and_then(|j| fields.get(j)).map_or(Ty::Unknown, |(_, t)| t.clone());
+                    let ft = idx
+                        .and_then(|j| fields.get(j))
+                        .map_or(Ty::Unknown, |(_, t)| t.clone());
                     self.bind_pat(p, &ft, mode);
                 }
             }
@@ -1562,12 +1951,15 @@ impl<'a, 'p> Checker<'a, 'p> {
                         syn::Member::Named(id) => id.to_string(),
                         syn::Member::Unnamed(ix) => ix.index.to_string(),
                     };
-                    let ft = fields.iter().find(|(n, _)| *n == name).map_or(Ty::Unknown, |(_, t)| t.clone());
+                    let ft = fields
+                        .iter()
+                        .find(|(n, _)| *n == name)
+                        .map_or(Ty::Unknown, |(_, t)| t.clone());
                     self.bind_pat(&fp.pat, &ft, mode);
                 }
             }
             Pat::Path(pp) => {
-                let v = self.path_value_of(&pp.qself, &pp.path, None, line_of(pat));
+                let v = self.path_value_of(pp.qself.as_ref(), &pp.path, None, line_of(pat));
                 let (s, _) = self.peel_for_pattern_mode(t, mode);
                 self.unify(&v, &s);
             }
@@ -1580,7 +1972,12 @@ impl<'a, 'p> Checker<'a, 'p> {
                 for p in &ps.elems {
                     match p {
                         Pat::Rest(_) => {}
-                        Pat::Ident(pi) if matches!(pi.subpat.as_ref().map(|(_, s)| &**s), Some(Pat::Rest(_))) => {
+                        Pat::Ident(pi)
+                            if matches!(
+                                pi.subpat.as_ref().map(|(_, s)| &**s),
+                                Some(Pat::Rest(_))
+                            ) =>
+                        {
                             let sl = Ty::Slice(Box::new(elem.clone()));
                             let bound = match (&pi.by_ref, &pi.mutability) {
                                 (Some(_), Some(_)) => Ty::reference_mut(sl),
@@ -1647,11 +2044,20 @@ impl<'a, 'p> Checker<'a, 'p> {
                 self.compile_time = saved;
             }
             Pat::Macro(pm) => {
-                self.problem(line_of(pm), "a macro in a pattern, which the recursion check does not expand".to_owned());
+                self.problem(
+                    line_of(pm),
+                    "a macro in a pattern, which the recursion check does not expand".to_owned(),
+                );
             }
             Pat::Rest(_) | Pat::Wild(_) => {}
             _ => {
-                self.problem(line_of(pat), format!("a pattern the recursion check cannot read: `{}`", macros::excerpt(&pat.to_token_stream())));
+                self.problem(
+                    line_of(pat),
+                    format!(
+                        "a pattern the recursion check cannot read: `{}`",
+                        macros::excerpt(&pat.to_token_stream())
+                    ),
+                );
             }
         }
     }
@@ -1676,8 +2082,15 @@ impl<'a, 'p> Checker<'a, 'p> {
     /// The fields a struct or variant pattern's path names, with types for scrutinee `s`.
     fn pattern_fields(&mut self, path: &syn::Path, s: &Ty, line: usize) -> Vec<(String, Ty)> {
         let segs = Resolver::segments(path);
-        let mut res = self.resolver().resolve(&self.scope, &segs, path.leading_colon.is_some(), Ns::Value);
-        res.extend(self.resolver().resolve(&self.scope, &segs, path.leading_colon.is_some(), Ns::Type));
+        let mut res =
+            self.resolver()
+                .resolve(&self.scope, &segs, path.leading_colon.is_some(), Ns::Value);
+        res.extend(self.resolver().resolve(
+            &self.scope,
+            &segs,
+            path.leading_colon.is_some(),
+            Ns::Type,
+        ));
         let target = res.iter().find_map(|r| match r {
             Res::Variant(item, v) => Some((*item, Some(*v))),
             Res::Item(item) if self.ix.program.item(*item).is_adt() => Some((*item, None)),
@@ -1688,7 +2101,13 @@ impl<'a, 'p> Checker<'a, 'p> {
             _ => None,
         });
         let Some((item, variant)) = target else {
-            self.problem(line, format!("a pattern path that names no struct or variant: `{}`", path.to_token_stream()));
+            self.problem(
+                line,
+                format!(
+                    "a pattern path that names no struct or variant: `{}`",
+                    path.to_token_stream()
+                ),
+            );
             return Vec::new();
         };
         let generics = self.ix.program.item(item).scope.generics.clone();
@@ -1720,20 +2139,26 @@ impl<'a, 'p> Checker<'a, 'p> {
     /// literal or macro makes is kept for drop glue, as a temporary is dropped too.
     fn expr(&mut self, e: &Expr, expected: Option<&Ty>) -> Ty {
         let t = self.expr_inner(e, expected);
-        if matches!(e, Expr::Call(_) | Expr::MethodCall(_) | Expr::Struct(_) | Expr::Macro(_)) {
+        if matches!(
+            e,
+            Expr::Call(_) | Expr::MethodCall(_) | Expr::Struct(_) | Expr::Macro(_)
+        ) {
             self.locals.push(t.clone());
         }
         t
     }
 
-    #[allow(clippy::too_many_lines, reason = "one arm per expression form, each short")]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one arm per expression form, each short"
+    )]
     fn expr_inner(&mut self, e: &Expr, expected: Option<&Ty>) -> Ty {
         let line = line_of(e);
         match e {
             Expr::Lit(l) => self.lit(&l.lit, expected),
             Expr::Path(p) => match self.eta_arity(p) {
                 Some(arity) => self.eta(p, arity, expected),
-                None => self.path_value_of(&p.qself, &p.path, expected, line),
+                None => self.path_value_of(p.qself.as_ref(), &p.path, expected, line),
             },
             Expr::Call(c) => self.call(c, expected, line),
             Expr::MethodCall(mc) => {
@@ -1771,7 +2196,12 @@ impl<'a, 'p> Checker<'a, 'p> {
                 let b = self.now(&base);
                 if self.unresolved(&b) {
                     let out = self.fresh();
-                    self.pending.push(Pending::Field { base, name, out: out.clone(), line });
+                    self.pending.push(Pending::Field {
+                        base,
+                        name,
+                        out: out.clone(),
+                        line,
+                    });
                     return out;
                 }
                 self.field_of(&b, &name, line)
@@ -1782,20 +2212,38 @@ impl<'a, 'p> Checker<'a, 'p> {
                 let b = self.now(&base);
                 if self.unresolved(&b) {
                     let out = self.fresh();
-                    self.pending.push(Pending::Index { origin: self.origin, base, idx, out: out.clone(), line });
+                    self.pending.push(Pending::Index {
+                        origin: self.origin,
+                        base,
+                        idx,
+                        out: out.clone(),
+                        line,
+                    });
                     return out;
                 }
                 self.index_op(&b, &idx, line)
             }
             Expr::Binary(b) => self.binary(b, expected, line),
             Expr::Unary(u) => {
-                let operand = self.expr(&u.expr, if matches!(u.op, UnOp::Deref(_)) { None } else { expected });
+                let operand = self.expr(
+                    &u.expr,
+                    if matches!(u.op, UnOp::Deref(_)) {
+                        None
+                    } else {
+                        expected
+                    },
+                );
                 match u.op {
                     UnOp::Deref(_) => {
                         let o = self.now(&operand);
                         if self.unresolved(&o) {
                             let out = self.fresh();
-                            self.pending.push(Pending::Deref { origin: self.origin, operand, out: out.clone(), line });
+                            self.pending.push(Pending::Deref {
+                                origin: self.origin,
+                                operand,
+                                out: out.clone(),
+                                line,
+                            });
                             return out;
                         }
                         self.deref_op(&o, line)
@@ -1803,7 +2251,10 @@ impl<'a, 'p> Checker<'a, 'p> {
                     UnOp::Not(_) => self.unary(&operand, ("Not", "not"), line),
                     UnOp::Neg(_) => self.unary(&operand, ("Neg", "neg"), line),
                     _ => {
-                        self.problem(line, "a unary operator the recursion check does not know".to_owned());
+                        self.problem(
+                            line,
+                            "a unary operator the recursion check does not know".to_owned(),
+                        );
                         Ty::Unknown
                     }
                 }
@@ -1812,7 +2263,9 @@ impl<'a, 'p> Checker<'a, 'p> {
                 let v = self.expr(&c.expr, None);
                 let t = self.ty(&c.ty);
                 let vs = self.now(&v);
-                if matches!(vs, Ty::Closure(_) | Ty::FnDef(..)) && matches!(self.now(&t), Ty::FnPtr(..)) {
+                if matches!(vs, Ty::Closure(_) | Ty::FnDef(..))
+                    && matches!(self.now(&t), Ty::FnPtr(..))
+                {
                     self.coerce(&v, &t, line);
                 }
                 t
@@ -1829,7 +2282,10 @@ impl<'a, 'p> Checker<'a, 'p> {
             }
             Expr::RawAddr(r) => {
                 let v = self.expr(&r.expr, None);
-                Ty::Ref(Box::new(v), matches!(r.mutability, syn::PointerMutability::Mut(_)))
+                Ty::Ref(
+                    Box::new(v),
+                    matches!(r.mutability, syn::PointerMutability::Mut(_)),
+                )
             }
             Expr::Block(b) => self.labelled_block(b.label.as_ref(), &b.block, expected),
             Expr::Unsafe(u) => self.block(&u.block, expected),
@@ -1897,7 +2353,12 @@ impl<'a, 'p> Checker<'a, 'p> {
                 let item = self.fresh();
                 let t = self.now(&it);
                 if self.unresolved(&t) {
-                    self.pending.push(Pending::Iterate { origin: self.origin, iterable: it, item: item.clone(), line });
+                    self.pending.push(Pending::Iterate {
+                        origin: self.origin,
+                        iterable: it,
+                        item: item.clone(),
+                        line,
+                    });
                 } else {
                     let got = self.iterate(&t, line);
                     self.unify(&item, &got);
@@ -1914,10 +2375,15 @@ impl<'a, 'p> Checker<'a, 'p> {
             Expr::Break(b) => {
                 let label = b.label.as_ref().map(|l| l.ident.to_string());
                 let target = match &label {
-                    Some(name) => self.loops.iter().rposition(|(l, _)| l.as_deref() == Some(name.as_str())),
+                    Some(name) => self
+                        .loops
+                        .iter()
+                        .rposition(|(l, _)| l.as_deref() == Some(name.as_str())),
                     None => self.loops.iter().rposition(|_| true),
                 };
-                let want = target.and_then(|i| self.loops.get(i)).map(|(_, t)| t.clone());
+                let want = target
+                    .and_then(|i| self.loops.get(i))
+                    .map(|(_, t)| t.clone());
                 let v = match &b.expr {
                     Some(x) => self.expr(x, want.as_ref().filter(|t| !matches!(t, Ty::Never))),
                     None => Ty::unit(),
@@ -1956,7 +2422,12 @@ impl<'a, 'p> Checker<'a, 'p> {
                     Some(Ty::Tuple(items)) if items.len() == t.elems.len() => items,
                     _ => Vec::new(),
                 };
-                let items: Vec<Ty> = t.elems.iter().enumerate().map(|(i, x)| self.expr(x, want.get(i))).collect();
+                let items: Vec<Ty> = t
+                    .elems
+                    .iter()
+                    .enumerate()
+                    .map(|(i, x)| self.expr(x, want.get(i)))
+                    .collect();
                 Ty::Tuple(items)
             }
             Expr::Array(a) => {
@@ -2016,7 +2487,12 @@ impl<'a, 'p> Checker<'a, 'p> {
                 let s = self.now(&v);
                 if self.unresolved(&s) {
                     let out = self.fresh();
-                    self.pending.push(Pending::Try { origin: self.origin, operand: v, out: out.clone(), line });
+                    self.pending.push(Pending::Try {
+                        origin: self.origin,
+                        operand: v,
+                        out: out.clone(),
+                        line,
+                    });
                     return out;
                 }
                 self.try_op(&s, line)
@@ -2032,7 +2508,10 @@ impl<'a, 'p> Checker<'a, 'p> {
             _ => {
                 self.problem(
                     line,
-                    format!("an expression the recursion check cannot read: `{}`", macros::excerpt(&e.to_token_stream())),
+                    format!(
+                        "an expression the recursion check cannot read: `{}`",
+                        macros::excerpt(&e.to_token_stream())
+                    ),
                 );
                 Ty::Unknown
             }
@@ -2060,7 +2539,12 @@ impl<'a, 'p> Checker<'a, 'p> {
         a.clone()
     }
 
-    fn labelled_block(&mut self, label: Option<&syn::Label>, b: &syn::Block, expected: Option<&Ty>) -> Ty {
+    fn labelled_block(
+        &mut self,
+        label: Option<&syn::Label>,
+        b: &syn::Block,
+        expected: Option<&Ty>,
+    ) -> Ty {
         match label {
             Some(l) => {
                 self.loops.push((Some(l.name.ident.to_string()), Ty::Never));
@@ -2072,11 +2556,14 @@ impl<'a, 'p> Checker<'a, 'p> {
         }
     }
 
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "the literal and its variable"
+    )]
     fn lit(&mut self, l: &syn::Lit, expected: Option<&Ty>) -> Ty {
         match l {
             syn::Lit::Str(_) => Ty::reference(Ty::Prim(Prim::Str)),
             syn::Lit::ByteStr(_) => Ty::reference(Ty::Array(Box::new(Ty::Prim(Prim::U8)))),
-            syn::Lit::CStr(_) => Ty::Unknown,
             syn::Lit::Byte(_) => Ty::Prim(Prim::U8),
             syn::Lit::Char(_) => Ty::Prim(Prim::Char),
             syn::Lit::Bool(_) => Ty::Prim(Prim::Bool),
@@ -2127,23 +2614,46 @@ impl<'a, 'p> Checker<'a, 'p> {
         };
         let arity_in = |ix: &Index<'_>, t: ItemId| -> Option<usize> {
             let decl = ix.trait_declaring_method(t, &name)?;
-            ix.trait_method(decl, &name).map(|(sig, _)| sig.inputs.len())
+            ix.trait_method(decl, &name)
+                .map(|(sig, _)| sig.inputs.len())
         };
         if let Some(q) = &p.qself {
             if q.position > 0 {
-                let trait_path: Vec<String> = p.path.segments.iter().take(q.position).map(|s| s.ident.to_string()).collect();
-                let res = self.resolver().resolve(&self.scope, &trait_path, p.path.leading_colon.is_some(), Ns::Type);
+                let trait_path: Vec<String> = p
+                    .path
+                    .segments
+                    .iter()
+                    .take(q.position)
+                    .map(|s| s.ident.to_string())
+                    .collect();
+                let res = self.resolver().resolve(
+                    &self.scope,
+                    &trait_path,
+                    p.path.leading_colon.is_some(),
+                    Ns::Type,
+                );
                 let base = self.ty(&q.ty);
                 let b = self.now(&base);
-                if !matches!(b, Ty::Param(_) | Ty::Opaque(_) | Ty::Assoc(..) | Ty::Dyn(_) | Ty::Var(_)) {
+                if !matches!(
+                    b,
+                    Ty::Param(_) | Ty::Opaque(_) | Ty::Assoc(..) | Ty::Dyn(_) | Ty::Var(_)
+                ) {
                     return None;
                 }
-                return res.iter().find_map(|r| trait_of(self.ix, r)).and_then(|t| arity_in(self.ix, t));
+                return res
+                    .iter()
+                    .find_map(|r| trait_of(self.ix, r))
+                    .and_then(|t| arity_in(self.ix, t));
             }
             return None;
         }
         let segs = Resolver::segments(&p.path);
-        let res = self.resolver().resolve(&self.scope, &segs, p.path.leading_colon.is_some(), Ns::Value);
+        let res = self.resolver().resolve(
+            &self.scope,
+            &segs,
+            p.path.leading_colon.is_some(),
+            Ns::Value,
+        );
         let Some(Res::Assoc(base, _)) = res.first() else {
             return None;
         };
@@ -2171,25 +2681,36 @@ impl<'a, 'p> Checker<'a, 'p> {
     /// function items and closures are both callables of their own types).
     fn eta(&mut self, p: &syn::ExprPath, arity: usize, expected: Option<&Ty>) -> Ty {
         let span = syn::spanned::Spanned::span(p);
-        let params: Vec<proc_macro2::Ident> = (0..arity).map(|i| quote::format_ident!("__eta{}", i, span = span)).collect();
+        let params: Vec<proc_macro2::Ident> = (0..arity)
+            .map(|i| quote::format_ident!("__eta{}", i, span = span))
+            .collect();
         let tokens = quote::quote_spanned!(span=> |#(#params),*| #p(#(#params),*));
-        match syn::parse2::<Expr>(tokens) {
-            Ok(closure) => {
-                self.closure_expect = expected.and_then(|e| self.closure_expectation(e));
-                self.expr(&closure, expected)
-            }
-            Err(_) => {
-                self.problem(line_of(p), format!("a trait method used as a value (`{}`)", p.to_token_stream()));
-                Ty::Unknown
-            }
-        }
+        let Ok(closure) = syn::parse2::<Expr>(tokens) else {
+            self.problem(
+                line_of(p),
+                format!("a trait method used as a value (`{}`)", p.to_token_stream()),
+            );
+            return Ty::Unknown;
+        };
+        self.closure_expect = expected.and_then(|e| self.closure_expectation(e));
+        self.expr(&closure, expected)
     }
 
     /// The value a path names (with its qualified self type, if written).
-    fn path_value_of(&mut self, qself: &Option<syn::QSelf>, path: &syn::Path, expected: Option<&Ty>, line: usize) -> Ty {
+    fn path_value_of(
+        &mut self,
+        qself: Option<&syn::QSelf>,
+        path: &syn::Path,
+        expected: Option<&Ty>,
+        line: usize,
+    ) -> Ty {
         if let Some(q) = qself {
             let base = self.ty(&q.ty);
-            let name = path.segments.last().map(|s| s.ident.to_string()).unwrap_or_default();
+            let name = path
+                .segments
+                .last()
+                .map(|s| s.ident.to_string())
+                .unwrap_or_default();
             return self.assoc_value(&base, &name, line);
         }
         if let Some(name) = ident_of(path)
@@ -2198,9 +2719,17 @@ impl<'a, 'p> Checker<'a, 'p> {
             return t;
         }
         let segs = Resolver::segments(path);
-        let res = self.resolver().resolve(&self.scope, &segs, path.leading_colon.is_some(), Ns::Value);
+        let res =
+            self.resolver()
+                .resolve(&self.scope, &segs, path.leading_colon.is_some(), Ns::Value);
         let Some(r) = res.first().cloned() else {
-            self.problem(line, format!("a path that resolves to nothing: `{}`", path.to_token_stream()));
+            self.problem(
+                line,
+                format!(
+                    "a path that resolves to nothing: `{}`",
+                    path.to_token_stream()
+                ),
+            );
             return Ty::Unknown;
         };
         let t = self.res_value(&r, Some(path), line);
@@ -2240,7 +2769,13 @@ impl<'a, 'p> Checker<'a, 'p> {
                     }
                     ItemKind::Struct { .. } => self.ctor_value(*id, None),
                     _ => {
-                        self.problem(line, format!("a path that names no value: `{}`", self.ix.program.item(*id).path));
+                        self.problem(
+                            line,
+                            format!(
+                                "a path that names no value: `{}`",
+                                self.ix.program.item(*id).path
+                            ),
+                        );
                         Ty::Unknown
                     }
                 }
@@ -2253,7 +2788,13 @@ impl<'a, 'p> Checker<'a, 'p> {
                 if let Res::Item(t) = &**base
                     && matches!(self.ix.program.item(*t).kind, ItemKind::Trait { .. })
                 {
-                    self.problem(line, format!("a trait's method used as a value (`{}::{name}`)", self.ix.program.item(*t).name));
+                    self.problem(
+                        line,
+                        format!(
+                            "a trait's method used as a value (`{}::{name}`)",
+                            self.ix.program.item(*t).name
+                        ),
+                    );
                     return Ty::Unknown;
                 }
                 let base_ty = self.base_ty(base, base_args);
@@ -2273,7 +2814,13 @@ impl<'a, 'p> Checker<'a, 'p> {
                 None => Ty::Unknown,
             },
             Res::Ext(segs) => {
-                self.problem(line, format!("a path into a crate the check does not read: `{}`", segs.join("::")));
+                self.problem(
+                    line,
+                    format!(
+                        "a path into a crate the check does not read: `{}`",
+                        segs.join("::")
+                    ),
+                );
                 Ty::Unknown
             }
             Res::Generic(_) | Res::Mod(_) | Res::Prim(_) | Res::Macro(_) | Res::Qualified(..) => {
@@ -2295,7 +2842,9 @@ impl<'a, 'p> Checker<'a, 'p> {
             ItemKind::Enum { variants, .. } => variant
                 .and_then(|v| variants.get(v))
                 .is_some_and(|v| matches!(v.fields, crate::recursion::model::Fields::Unit)),
-            ItemKind::Struct { fields, .. } => matches!(fields, crate::recursion::model::Fields::Unit),
+            ItemKind::Struct { fields, .. } => {
+                matches!(fields, crate::recursion::model::Fields::Unit)
+            }
             _ => false,
         };
         if is_unit {
@@ -2329,7 +2878,10 @@ impl<'a, 'p> Checker<'a, 'p> {
                 Ty::FnDef(*node, args)
             }
             Some(_) => {
-                self.problem(line, format!("a generic parameter's method used as a value (`{name}`)"));
+                self.problem(
+                    line,
+                    format!("a generic parameter's method used as a value (`{name}`)"),
+                );
                 Ty::Unknown
             }
             None => {
@@ -2346,7 +2898,8 @@ impl<'a, 'p> Checker<'a, 'p> {
     fn call(&mut self, c: &syn::ExprCall, expected: Option<&Ty>, line: usize) -> Ty {
         let args: Vec<Expr> = c.args.iter().cloned().collect();
         if let Expr::Path(p) = &*c.func {
-            let local = p.qself.is_none() && ident_of(&p.path).is_some_and(|n| self.local(&n).is_some());
+            let local =
+                p.qself.is_none() && ident_of(&p.path).is_some_and(|n| self.local(&n).is_some());
             if !local {
                 return self.path_call(p, &args, expected, line);
             }
@@ -2356,15 +2909,30 @@ impl<'a, 'p> Checker<'a, 'p> {
         if self.unresolved(&cs) {
             let tys: Vec<Ty> = args.iter().map(|a| self.expr(a, None)).collect();
             let out = self.fresh();
-            self.pending.push(Pending::CallValue { origin: self.origin, callee, args: tys, out: out.clone(), line });
+            self.pending.push(Pending::CallValue {
+                origin: self.origin,
+                callee,
+                args: tys,
+                out: out.clone(),
+                line,
+            });
             return out;
         }
         self.call_value(&cs, Args::Exprs(&args), expected, line)
     }
 
     /// A call by path.
-    #[allow(clippy::too_many_lines, reason = "one arm per kind of callee a path may name")]
-    fn path_call(&mut self, p: &syn::ExprPath, args: &[Expr], expected: Option<&Ty>, line: usize) -> Ty {
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one arm per kind of callee a path may name"
+    )]
+    fn path_call(
+        &mut self,
+        p: &syn::ExprPath,
+        args: &[Expr],
+        expected: Option<&Ty>,
+        line: usize,
+    ) -> Ty {
         let last = p.path.segments.last();
         let name = last.map(|s| s.ident.to_string()).unwrap_or_default();
         let turbofish: Vec<Ty> = last
@@ -2379,13 +2947,28 @@ impl<'a, 'p> Checker<'a, 'p> {
         if let Some(q) = &p.qself {
             let base = self.ty(&q.ty);
             if q.position > 0 {
-                let trait_path: Vec<String> = p.path.segments.iter().take(q.position).map(|s| s.ident.to_string()).collect();
+                let trait_path: Vec<String> = p
+                    .path
+                    .segments
+                    .iter()
+                    .take(q.position)
+                    .map(|s| s.ident.to_string())
+                    .collect();
                 let tid = self
                     .resolver()
-                    .resolve(&self.scope, &trait_path, p.path.leading_colon.is_some(), Ns::Type)
+                    .resolve(
+                        &self.scope,
+                        &trait_path,
+                        p.path.leading_colon.is_some(),
+                        Ns::Type,
+                    )
                     .into_iter()
                     .find_map(|r| match r {
-                        Res::Item(id) if matches!(self.ix.program.item(id).kind, ItemKind::Trait { .. }) => Some(id),
+                        Res::Item(id)
+                            if matches!(self.ix.program.item(id).kind, ItemKind::Trait { .. }) =>
+                        {
+                            Some(id)
+                        }
                         _ => None,
                     });
                 let trait_args = p
@@ -2395,24 +2978,51 @@ impl<'a, 'p> Checker<'a, 'p> {
                     .nth(q.position.saturating_sub(1))
                     .map(|s| self.resolver().segment_args(&self.scope, s))
                     .unwrap_or_default();
-                let trait_args: Vec<Ty> = trait_args.iter().map(|t| {
-                    let t = t.subst(&self.map);
-                    self.inst_ty(&t)
-                }).collect();
-                return match tid {
-                    Some(t) => self.trait_path_call(t, trait_args, &name, Args::Exprs(args), Some(base), &turbofish, expected, line),
-                    None => {
-                        self.problem(line, format!("a qualified path whose trait the check does not read: `{}`", p.to_token_stream()));
-                        Ty::Unknown
-                    }
+                let trait_args: Vec<Ty> = trait_args
+                    .iter()
+                    .map(|t| {
+                        let t = t.subst(&self.map);
+                        self.inst_ty(&t)
+                    })
+                    .collect();
+                let Some(t) = tid else {
+                    self.problem(
+                        line,
+                        format!(
+                            "a qualified path whose trait the check does not read: `{}`",
+                            p.to_token_stream()
+                        ),
+                    );
+                    return Ty::Unknown;
                 };
+                return self.trait_path_call(
+                    t,
+                    trait_args,
+                    &name,
+                    Args::Exprs(args),
+                    Some(base),
+                    &turbofish,
+                    expected,
+                    line,
+                );
             }
             return self.assoc_call(&base, &name, Args::Exprs(args), &turbofish, expected, line);
         }
         let segs = Resolver::segments(&p.path);
-        let res = self.resolver().resolve(&self.scope, &segs, p.path.leading_colon.is_some(), Ns::Value);
+        let res = self.resolver().resolve(
+            &self.scope,
+            &segs,
+            p.path.leading_colon.is_some(),
+            Ns::Value,
+        );
         let Some(r) = res.first().cloned() else {
-            self.problem(line, format!("a call to a path that resolves to nothing: `{}`", p.path.to_token_stream()));
+            self.problem(
+                line,
+                format!(
+                    "a call to a path that resolves to nothing: `{}`",
+                    p.path.to_token_stream()
+                ),
+            );
             for a in args {
                 self.expr(a, None);
             }
@@ -2420,7 +3030,11 @@ impl<'a, 'p> Checker<'a, 'p> {
         };
         match &r {
             Res::Fn(n) => {
-                let given = self.apply_turbofish(*n, vec![Ty::Infer; self.ix.node_generics(*n).len()], &turbofish);
+                let given = self.apply_turbofish(
+                    *n,
+                    vec![Ty::Infer; self.ix.node_generics(*n).len()],
+                    &turbofish,
+                );
                 let inst = self.instantiate(*n, &given, line);
                 if let Some(e) = expected {
                     self.unify(&inst.output, e);
@@ -2447,7 +3061,13 @@ impl<'a, 'p> Checker<'a, 'p> {
                     self.call_value(&callee, Args::Exprs(args), expected, line)
                 }
                 _ => {
-                    self.problem(line, format!("a call to something that is not a function: `{}`", p.path.to_token_stream()));
+                    self.problem(
+                        line,
+                        format!(
+                            "a call to something that is not a function: `{}`",
+                            p.path.to_token_stream()
+                        ),
+                    );
                     Ty::Unknown
                 }
             },
@@ -2463,35 +3083,73 @@ impl<'a, 'p> Checker<'a, 'p> {
                 if let Res::Item(t) = &**base
                     && matches!(self.ix.program.item(*t).kind, ItemKind::Trait { .. })
                 {
-                    let targs: Vec<Ty> = base_args.iter().map(|x| {
-                        let x = x.subst(&self.map);
-                        self.inst_ty(&x)
-                    }).collect();
-                    return self.trait_path_call(*t, targs, name, Args::Exprs(args), None, &turbofish, expected, line);
+                    let targs: Vec<Ty> = base_args
+                        .iter()
+                        .map(|x| {
+                            let x = x.subst(&self.map);
+                            self.inst_ty(&x)
+                        })
+                        .collect();
+                    return self.trait_path_call(
+                        *t,
+                        targs,
+                        name,
+                        Args::Exprs(args),
+                        None,
+                        &turbofish,
+                        expected,
+                        line,
+                    );
                 }
                 let base_ty = self.base_ty(base, base_args);
-                self.assoc_call(&base_ty, name, Args::Exprs(args), &turbofish, expected, line)
+                self.assoc_call(
+                    &base_ty,
+                    name,
+                    Args::Exprs(args),
+                    &turbofish,
+                    expected,
+                    line,
+                )
             }
             Res::SelfTy => match self.self_type() {
                 Some(Ty::Adt(item, _)) => self.construct(item, None, args, expected, line),
                 _ => Ty::Unknown,
             },
             Res::Ext(segs) => {
-                self.problem(line, format!("a call into a crate the check does not read: `{}`", segs.join("::")));
+                self.problem(
+                    line,
+                    format!(
+                        "a call into a crate the check does not read: `{}`",
+                        segs.join("::")
+                    ),
+                );
                 for a in args {
                     self.expr(a, None);
                 }
                 Ty::Unknown
             }
             _ => {
-                self.problem(line, format!("a call to something that is not a function: `{}`", p.path.to_token_stream()));
+                self.problem(
+                    line,
+                    format!(
+                        "a call to something that is not a function: `{}`",
+                        p.path.to_token_stream()
+                    ),
+                );
                 Ty::Unknown
             }
         }
     }
 
     /// A struct's or variant's constructor called with `args`.
-    fn construct(&mut self, item: ItemId, variant: Option<usize>, args: &[Expr], expected: Option<&Ty>, line: usize) -> Ty {
+    fn construct(
+        &mut self,
+        item: ItemId,
+        variant: Option<usize>,
+        args: &[Expr],
+        expected: Option<&Ty>,
+        line: usize,
+    ) -> Ty {
         let generics = self.ix.program.item(item).scope.generics.clone();
         let vars: Vec<Ty> = generics.iter().map(|_| self.infer.fresh()).collect();
         let adt = Ty::Adt(item, vars.clone());
@@ -2499,7 +3157,12 @@ impl<'a, 'p> Checker<'a, 'p> {
             self.unify(&adt, e);
         }
         let map: Map = generics.iter().copied().zip(vars).collect();
-        let fields: Vec<Ty> = self.ix.fields(item, variant).iter().map(|(_, t)| t.subst(&map)).collect();
+        let fields: Vec<Ty> = self
+            .ix
+            .fields(item, variant)
+            .iter()
+            .map(|(_, t)| t.subst(&map))
+            .collect();
         let fields: Vec<Ty> = fields.iter().map(|t| self.inst_ty(t)).collect();
         let _ = line;
         self.check_args(&fields, Args::Exprs(args));
@@ -2508,7 +3171,15 @@ impl<'a, 'p> Checker<'a, 'p> {
 
     /// `Type::name(args)`: the functions of the type, its implementations' or its bounds'.
     #[allow(clippy::too_many_arguments, reason = "each is one part of the call")]
-    fn assoc_call(&mut self, base: &Ty, name: &str, args: Args<'_>, turbofish: &[Ty], expected: Option<&Ty>, line: usize) -> Ty {
+    fn assoc_call(
+        &mut self,
+        base: &Ty,
+        name: &str,
+        args: Args<'_>,
+        turbofish: &[Ty],
+        expected: Option<&Ty>,
+        line: usize,
+    ) -> Ty {
         let b = self.now(base);
         // A variant through an alias or `Self::Variant(..)`.
         if let Ty::Adt(item, _) = &b
@@ -2529,7 +3200,16 @@ impl<'a, 'p> Checker<'a, 'p> {
             }
             return Ty::Unknown;
         }
-        self.dispatch(&picks, name, args, turbofish, expected, line, how::PATH, None)
+        self.dispatch(
+            &picks,
+            name,
+            args,
+            turbofish,
+            expected,
+            line,
+            how::PATH,
+            None,
+        )
     }
 
     /// `Trait::name(args)`, `<T as Trait>::name(args)`: `Self` from `explicit_self`, the
@@ -2547,9 +3227,21 @@ impl<'a, 'p> Checker<'a, 'p> {
         line: usize,
     ) -> Ty {
         let self_ty = explicit_self.unwrap_or_else(|| self.fresh());
-        let tr = TraitRef { id: trait_id, args: trait_args, bindings: Vec::new() };
-        let Some((inputs, output, method_args, tr)) = self.instantiate_trait_method(&tr, name, &self_ty, turbofish) else {
-            self.problem(line, format!("trait `{}` has no method `{name}`", self.ix.program.item(trait_id).name));
+        let tr = TraitRef {
+            id: trait_id,
+            args: trait_args,
+            bindings: Vec::new(),
+        };
+        let Some((inputs, output, method_args, tr)) =
+            self.instantiate_trait_method(&tr, name, &self_ty, turbofish)
+        else {
+            self.problem(
+                line,
+                format!(
+                    "trait `{}` has no method `{name}`",
+                    self.ix.program.item(trait_id).name
+                ),
+            );
             if let Args::Exprs(exprs) = args {
                 for a in exprs {
                     self.expr(a, None);
@@ -2578,7 +3270,16 @@ impl<'a, 'p> Checker<'a, 'p> {
                 how: how::PATH,
             });
         } else {
-            self.dispatch_trait_fn(self.origin, &tr, name, &s, &method_args, line, how::PATH, false);
+            self.dispatch_trait_fn(
+                self.origin,
+                &tr,
+                name,
+                &s,
+                &method_args,
+                line,
+                how::PATH,
+                false,
+            );
         }
         output
     }
@@ -2588,7 +3289,17 @@ impl<'a, 'p> Checker<'a, 'p> {
     /// `quiet` leaves out the problem when none applies (a derived implementation's field whose
     /// bound the derive implies).
     #[allow(clippy::too_many_arguments, reason = "each is one part of the call")]
-    fn dispatch_trait_fn(&mut self, origin: Origin, tr: &TraitRef, name: &str, s: &Ty, method_args: &[Ty], line: usize, how_found: &'static str, quiet: bool) {
+    fn dispatch_trait_fn(
+        &mut self,
+        origin: Origin,
+        tr: &TraitRef,
+        name: &str,
+        s: &Ty,
+        method_args: &[Ty],
+        line: usize,
+        how_found: &'static str,
+        quiet: bool,
+    ) {
         let saved = self.origin;
         self.origin = origin;
         let now = self.now(s);
@@ -2596,11 +3307,31 @@ impl<'a, 'p> Checker<'a, 'p> {
         let decl = self.ix.trait_declaring_method(tr.id, name).unwrap_or(tr.id);
         match &s {
             Ty::Param(_) | Ty::Opaque(_) | Ty::Assoc(..) => {
-                let tr = TraitRef { id: decl, args: tr.args.clone(), bindings: Vec::new() };
-                self.record(Target::Bound { trait_ref: tr, name: name.to_owned(), self_ty: s.clone(), method_args: method_args.to_vec() }, line, how::BOUND);
+                let tr = TraitRef {
+                    id: decl,
+                    args: tr.args.clone(),
+                    bindings: Vec::new(),
+                };
+                self.record(
+                    Target::Bound {
+                        trait_ref: tr,
+                        name: name.to_owned(),
+                        self_ty: s.clone(),
+                        method_args: method_args.to_vec(),
+                    },
+                    line,
+                    how::BOUND,
+                );
             }
             Ty::Dyn(_) => {
-                self.record(Target::Dyn { trait_id: decl, name: name.to_owned() }, line, how::DYN);
+                self.record(
+                    Target::Dyn {
+                        trait_id: decl,
+                        name: name.to_owned(),
+                    },
+                    line,
+                    how::DYN,
+                );
             }
             Ty::Closure(k) if self.ix.is_fn_trait(decl) => {
                 self.record(Target::Closure((**k).clone()), line, how::VALUE);
@@ -2610,7 +3341,13 @@ impl<'a, 'p> Checker<'a, 'p> {
             }
             Ty::Unknown => {
                 if !quiet {
-                    self.problem(line, format!("`{}::{name}` on a type the check cannot infer", self.ix.program.item(decl).name));
+                    self.problem(
+                        line,
+                        format!(
+                            "`{}::{name}` on a type the check cannot infer",
+                            self.ix.program.item(decl).name
+                        ),
+                    );
                 }
             }
             _ => {
@@ -2625,7 +3362,9 @@ impl<'a, 'p> Checker<'a, 'p> {
                 }
                 if !found
                     && let Ty::Adt(item, args) = &s
-                    && let Some(n) = self.ix.derived_fn(*item, &self.ix.program.item(decl).name, name)
+                    && let Some(n) =
+                        self.ix
+                            .derived_fn(*item, &self.ix.program.item(decl).name, name)
                 {
                     let mut a = args.clone();
                     a.extend(method_args.iter().cloned());
@@ -2634,7 +3373,13 @@ impl<'a, 'p> Checker<'a, 'p> {
                 }
                 if !found && !self.ix.is_marker(decl) && !quiet {
                     let shown = self.ix.show(&self.infer.resolve(&s));
-                    self.problem(line, format!("no implementation of `{}` for `{shown}` (for `{name}`)", self.ix.program.item(decl).name));
+                    self.problem(
+                        line,
+                        format!(
+                            "no implementation of `{}` for `{shown}` (for `{name}`)",
+                            self.ix.program.item(decl).name
+                        ),
+                    );
                 }
             }
         }
@@ -2642,7 +3387,15 @@ impl<'a, 'p> Checker<'a, 'p> {
     }
 
     /// `receiver.name(args)` with the receiver's type `recv`.
-    fn method_call(&mut self, recv: &Ty, name: &str, args: &[Expr], turbofish: &[Ty], expected: Option<&Ty>, line: usize) -> Ty {
+    fn method_call(
+        &mut self,
+        recv: &Ty,
+        name: &str,
+        args: &[Expr],
+        turbofish: &[Ty],
+        expected: Option<&Ty>,
+        line: usize,
+    ) -> Ty {
         let r = self.now(recv);
         if self.unresolved(&r) {
             self.settle_quick();
@@ -2666,10 +3419,21 @@ impl<'a, 'p> Checker<'a, 'p> {
     }
 
     /// A method call on a receiver of known type `r`.
-    fn method_on(&mut self, r: &Ty, name: &str, args: Args<'_>, turbofish: &[Ty], expected: Option<&Ty>, line: usize) -> Ty {
+    fn method_on(
+        &mut self,
+        r: &Ty,
+        name: &str,
+        args: Args<'_>,
+        turbofish: &[Ty],
+        expected: Option<&Ty>,
+        line: usize,
+    ) -> Ty {
         let r = self.numeric_default(r);
         if matches!(r, Ty::Unknown) {
-            self.problem(line, format!("the receiver of `.{name}(...)` has a type the check cannot infer"));
+            self.problem(
+                line,
+                format!("the receiver of `.{name}(...)` has a type the check cannot infer"),
+            );
             if let Args::Exprs(exprs) = args {
                 for a in exprs {
                     self.expr(a, None);
@@ -2677,7 +3441,8 @@ impl<'a, 'p> Checker<'a, 'p> {
             }
             return Ty::Unknown;
         }
-        let (picks, adjusted, derefs) = self.with_ix(|ix, infer, sigs| ix.probe(&r, name, infer, sigs));
+        let (picks, adjusted, derefs) =
+            self.with_ix(|ix, infer, sigs| ix.probe(&r, name, infer, sigs));
         self.implicit_derefs(&derefs, line);
         if picks.is_empty() {
             let shown = self.ix.show(&self.infer.resolve(&r));
@@ -2689,12 +3454,28 @@ impl<'a, 'p> Checker<'a, 'p> {
             }
             return Ty::Unknown;
         }
-        self.dispatch(&picks, name, args, turbofish, expected, line, how::RECEIVER, Some(adjusted.unwrap_or(r)))
+        self.dispatch(
+            &picks,
+            name,
+            args,
+            turbofish,
+            expected,
+            line,
+            how::RECEIVER,
+            Some(adjusted.unwrap_or(r)),
+        )
     }
 
     /// What calling `pick` takes and gives: its parameters (after the receiver, for method
     /// syntax), its result, and the call to record.
-    fn prepare(&mut self, pick: &Pick, name: &str, turbofish: &[Ty], line: usize, skip: usize) -> Option<Prepared> {
+    fn prepare(
+        &mut self,
+        pick: &Pick,
+        name: &str,
+        turbofish: &[Ty],
+        line: usize,
+        skip: usize,
+    ) -> Option<Prepared> {
         let before = self.pending.len();
         let (params, output, target) = match pick {
             Pick::Node { node, args } => {
@@ -2703,27 +3484,51 @@ impl<'a, 'p> Checker<'a, 'p> {
                 (inst.inputs, inst.output, Target::Node(*node, inst.args))
             }
             Pick::Bound { trait_ref, self_ty } | Pick::Dyn { trait_ref, self_ty } => {
-                let (inputs, output, margs, tr) = self.instantiate_trait_method(trait_ref, name, self_ty, turbofish)?;
+                let (inputs, output, margs, tr) =
+                    self.instantiate_trait_method(trait_ref, name, self_ty, turbofish)?;
                 let target = if matches!(pick, Pick::Dyn { .. }) {
-                    Target::Dyn { trait_id: tr.id, name: name.to_owned() }
+                    Target::Dyn {
+                        trait_id: tr.id,
+                        name: name.to_owned(),
+                    }
                 } else {
-                    Target::Bound { trait_ref: tr, name: name.to_owned(), self_ty: self_ty.clone(), method_args: margs }
+                    Target::Bound {
+                        trait_ref: tr,
+                        name: name.to_owned(),
+                        self_ty: self_ty.clone(),
+                        method_args: margs,
+                    }
                 };
                 (inputs, output, target)
             }
         };
         let obligations = self.pending.split_off(before.min(self.pending.len()));
-        Some(Prepared { params: params.into_iter().skip(skip).collect(), output, target, obligations })
+        Some(Prepared {
+            params: params.into_iter().skip(skip).collect(),
+            output,
+            target,
+            obligations,
+        })
     }
 
     /// Whether the checked argument types `tys` fit a prepared candidate: its parameters unify
     /// with them, and its bounds' associated-type bindings hold where they can be told.
     fn fits(&mut self, p: &Prepared, tys: &[Ty]) -> bool {
         let snap = self.infer.snapshot();
-        let mut ok = p.params.iter().zip(tys).all(|(x, a)| self.infer.unify(x, a));
+        let mut ok = p
+            .params
+            .iter()
+            .zip(tys)
+            .all(|(x, a)| self.infer.unify(x, a));
         if ok {
             for o in &p.obligations {
-                let Pending::Binding { ty, trait_ref, name, value } = o else {
+                let Pending::Binding {
+                    ty,
+                    trait_ref,
+                    name,
+                    value,
+                } = o
+                else {
                     continue;
                 };
                 let t = self.now(ty);
@@ -2747,7 +3552,17 @@ impl<'a, 'p> Checker<'a, 'p> {
     /// types; several (where open types let more than one implementation apply) each get the
     /// arguments their parameters fit, and every one of them is recorded.
     #[allow(clippy::too_many_arguments, reason = "each is one part of the call")]
-    fn dispatch(&mut self, picks: &[Pick], name: &str, args: Args<'_>, turbofish: &[Ty], expected: Option<&Ty>, line: usize, how_found: &'static str, recv: Option<Ty>) -> Ty {
+    fn dispatch(
+        &mut self,
+        picks: &[Pick],
+        name: &str,
+        args: Args<'_>,
+        turbofish: &[Ty],
+        expected: Option<&Ty>,
+        line: usize,
+        how_found: &'static str,
+        recv: Option<Ty>,
+    ) -> Ty {
         let skip = usize::from(recv.is_some());
         let how_of = |t: &Target| match t {
             Target::Bound { .. } => how::BOUND,
@@ -2755,7 +3570,13 @@ impl<'a, 'p> Checker<'a, 'p> {
             _ => how_found,
         };
         if let [pick] = picks {
-            let Some(Prepared { params, output, target, obligations }) = self.prepare(pick, name, turbofish, line, skip) else {
+            let Some(Prepared {
+                params,
+                output,
+                target,
+                obligations,
+            }) = self.prepare(pick, name, turbofish, line, skip)
+            else {
                 return Ty::Unknown;
             };
             self.pending.extend(obligations);
@@ -2792,10 +3613,20 @@ impl<'a, 'p> Checker<'a, 'p> {
         }
         // When no candidate fits the arguments, every one is kept (the check does not judge
         // types it may have inferred too narrowly).
-        let chosen: Vec<usize> = if fitting.is_empty() { (0..prepared.len()).collect() } else { fitting };
+        let chosen: Vec<usize> = if fitting.is_empty() {
+            (0..prepared.len()).collect()
+        } else {
+            fitting
+        };
         let mut out = None;
         for i in &chosen {
-            let Some(Prepared { params, output, target, obligations }) = prepared.get(*i).cloned() else {
+            let Some(Prepared {
+                params,
+                output,
+                target,
+                obligations,
+            }) = prepared.get(*i).cloned()
+            else {
                 continue;
             };
             if chosen.len() == 1 {
@@ -2851,18 +3682,38 @@ impl<'a, 'p> Checker<'a, 'p> {
             Ty::FnPtr(params, ret) => {
                 let (params, ret) = (params.clone(), (**ret).clone());
                 self.check_args(&params, args);
-                self.record(Target::Erased { dynamic: false, arity: params.len() }, line, how::ERASED);
+                self.record(
+                    Target::Erased {
+                        dynamic: false,
+                        arity: params.len(),
+                    },
+                    line,
+                    how::ERASED,
+                );
                 ret
             }
             Ty::Dyn(traits) | Ty::Opaque(traits) => {
                 let traits = traits.clone();
                 let Some((inputs, output)) = self.callable_bound(&c, traits) else {
-                    self.problem(line, format!("a call of a value of type `{}`, which has no closure trait", self.ix.show(&c)));
+                    self.problem(
+                        line,
+                        format!(
+                            "a call of a value of type `{}`, which has no closure trait",
+                            self.ix.show(&c)
+                        ),
+                    );
                     return Ty::Unknown;
                 };
                 self.check_args(&inputs, args);
                 if matches!(c, Ty::Dyn(_)) {
-                    self.record(Target::Erased { dynamic: true, arity: inputs.len() }, line, how::ERASED);
+                    self.record(
+                        Target::Erased {
+                            dynamic: true,
+                            arity: inputs.len(),
+                        },
+                        line,
+                        how::ERASED,
+                    );
                 }
                 output
             }
@@ -2872,12 +3723,21 @@ impl<'a, 'p> Checker<'a, 'p> {
                     self.check_args(&inputs, args);
                     return output;
                 }
-                self.problem(line, format!("a call of a value of type `{}`, which has no closure bound", self.ix.show(&c)));
+                self.problem(
+                    line,
+                    format!(
+                        "a call of a value of type `{}`, which has no closure bound",
+                        self.ix.show(&c)
+                    ),
+                );
                 Ty::Unknown
             }
             _ => {
                 let shown = self.ix.show(&self.infer.resolve(&c));
-                self.problem(line, format!("a call of a value of type `{shown}`, which the check cannot follow"));
+                self.problem(
+                    line,
+                    format!("a call of a value of type `{shown}`, which the check cannot follow"),
+                );
                 if let Args::Exprs(exprs) = args {
                     for a in exprs {
                         self.expr(a, None);
@@ -2890,13 +3750,20 @@ impl<'a, 'p> Checker<'a, 'p> {
 
     /// The parameter types and result of a closure trait among `t`'s bounds (or `traits`).
     fn callable_bound(&mut self, t: &Ty, traits: Vec<TraitRef>) -> Option<(Vec<Ty>, Ty)> {
-        let all = if traits.is_empty() { self.ix.bounds_of_ty(t) } else { traits };
+        let all = if traits.is_empty() {
+            self.ix.bounds_of_ty(t)
+        } else {
+            traits
+        };
         let tr = all.iter().find(|x| self.ix.is_fn_trait(x.id))?;
         let inputs = match tr.args.first() {
             Some(Ty::Tuple(items)) => items.clone(),
             _ => return None,
         };
-        let output = all.iter().find_map(|x| x.binding("Output").cloned()).unwrap_or_else(Ty::unit);
+        let output = all
+            .iter()
+            .find_map(|x| x.binding("Output").cloned())
+            .unwrap_or_else(Ty::unit);
         let inputs = inputs.iter().map(|x| self.inst_ty(x)).collect();
         let output = self.inst_ty(&output);
         Some((inputs, output))
@@ -2905,19 +3772,27 @@ impl<'a, 'p> Checker<'a, 'p> {
     /// A struct literal.
     fn struct_lit(&mut self, s: &syn::ExprStruct, expected: Option<&Ty>, line: usize) -> Ty {
         let segs = Resolver::segments(&s.path);
-        let mut res = self.resolver().resolve(&self.scope, &segs, s.path.leading_colon.is_some(), Ns::Type);
-        res.extend(self.resolver().resolve(&self.scope, &segs, s.path.leading_colon.is_some(), Ns::Value));
+        let mut res =
+            self.resolver()
+                .resolve(&self.scope, &segs, s.path.leading_colon.is_some(), Ns::Type);
+        res.extend(self.resolver().resolve(
+            &self.scope,
+            &segs,
+            s.path.leading_colon.is_some(),
+            Ns::Value,
+        ));
         let mut self_args: Option<Vec<Ty>> = None;
         let target = res.iter().find_map(|r| match r {
             Res::Variant(item, v) => Some((*item, Some(*v))),
             Res::Item(item) if self.ix.program.item(*item).is_adt() => Some((*item, None)),
-            Res::Item(item) if matches!(self.ix.program.item(*item).kind, ItemKind::Alias { .. }) => {
+            Res::Item(item)
+                if matches!(self.ix.program.item(*item).kind, ItemKind::Alias { .. }) =>
+            {
                 match self.resolver().item_ty(*item) {
                     Ty::Adt(id, _) => Some((id, None)),
                     _ => None,
                 }
             }
-            Res::SelfTy => None,
             Res::Assoc(base, name) => {
                 // `Self::Variant { .. }` or `Alias::Variant { .. }`.
                 let bt = match &**base {
@@ -2926,7 +3801,10 @@ impl<'a, 'p> Checker<'a, 'p> {
                 };
                 match bt {
                     Some(Ty::Adt(item, _)) => match &self.ix.program.item(item).kind {
-                        ItemKind::Enum { variants, .. } => variants.iter().position(|v| v.name == *name).map(|v| (item, Some(v))),
+                        ItemKind::Enum { variants, .. } => variants
+                            .iter()
+                            .position(|v| v.name == *name)
+                            .map(|v| (item, Some(v))),
                         _ => None,
                     },
                     _ => None,
@@ -2949,7 +3827,13 @@ impl<'a, 'p> Checker<'a, 'p> {
             for f in &s.fields {
                 self.expr(&f.expr, None);
             }
-            self.problem(line, format!("a struct literal of a type the check cannot name: `{}`", s.path.to_token_stream()));
+            self.problem(
+                line,
+                format!(
+                    "a struct literal of a type the check cannot name: `{}`",
+                    s.path.to_token_stream()
+                ),
+            );
             return Ty::Unknown;
         };
         let generics = self.ix.program.item(item).scope.generics.clone();
@@ -2968,7 +3852,10 @@ impl<'a, 'p> Checker<'a, 'p> {
                 syn::Member::Named(id) => id.to_string(),
                 syn::Member::Unnamed(i) => i.index.to_string(),
             };
-            let declared = fields.iter().find(|(n, _)| *n == name).map(|(_, t)| t.subst(&map));
+            let declared = fields
+                .iter()
+                .find(|(n, _)| *n == name)
+                .map(|(_, t)| t.subst(&map));
             let declared = declared.map(|d| self.inst_ty(&d));
             let v = self.expr(&fv.expr, declared.as_ref());
             if let Some(d) = &declared {
@@ -2982,28 +3869,46 @@ impl<'a, 'p> Checker<'a, 'p> {
         adt
     }
 
+    /// The value a format string's captured name `n` (`{x}`) names.
+    fn captured(&mut self, n: &str, line: usize) -> Ty {
+        if let Some(v) = self.local(n) {
+            return v;
+        }
+        let segs = vec![n.to_owned()];
+        let res = self
+            .resolver()
+            .resolve(&self.scope, &segs, false, Ns::Value);
+        if let Some(r) = res.first() {
+            return self.res_value(r, None, line);
+        }
+        self.problem(
+            line,
+            format!("a captured name `{n}` that resolves to nothing"),
+        );
+        Ty::Unknown
+    }
+
     // ------------------------------------------------------------ operators and places
 
     fn field_of(&mut self, b: &Ty, name: &str, line: usize) -> Ty {
         let found = self.with_ix(|ix, infer, sigs| ix.field_ty(b, name, infer, sigs));
-        match found {
-            Some((t, derefs)) => {
-                self.implicit_derefs(&derefs, line);
-                self.inst_ty(&t)
-            }
-            None => {
-                let shown = self.ix.show(&self.infer.resolve(b));
-                self.problem(line, format!("no field `{name}` on `{shown}`"));
-                Ty::Unknown
-            }
-        }
+        let Some((t, derefs)) = found else {
+            let shown = self.ix.show(&self.infer.resolve(b));
+            self.problem(line, format!("no field `{name}` on `{shown}`"));
+            return Ty::Unknown;
+        };
+        self.implicit_derefs(&derefs, line);
+        self.inst_ty(&t)
     }
 
     /// The calls auto-dereference makes through `steps` (the types dereferenced, in order): a
     /// reference's is built in; any other runs `Deref::deref`, or `DerefMut::deref_mut` where the
     /// place is mutated (both are recorded, as the check does not track which).
     fn implicit_derefs(&mut self, steps: &[Ty], line: usize) {
-        let (Some(deref), Some(deref_mut)) = (self.ix.lang.trait_named("Deref"), self.ix.lang.trait_named("DerefMut")) else {
+        let (Some(deref), Some(deref_mut)) = (
+            self.ix.lang.trait_named("Deref"),
+            self.ix.lang.trait_named("DerefMut"),
+        ) else {
             return;
         };
         for step in steps {
@@ -3011,12 +3916,29 @@ impl<'a, 'p> Checker<'a, 'p> {
             if matches!(s, Ty::Ref(..) | Ty::Array(_) | Ty::Slice(_) | Ty::Unknown) {
                 continue;
             }
-            let d = TraitRef { id: deref, args: Vec::new(), bindings: Vec::new() };
+            let d = TraitRef {
+                id: deref,
+                args: Vec::new(),
+                bindings: Vec::new(),
+            };
             self.dispatch_trait_fn(self.origin, &d, "deref", &s, &[], line, how::IMPLICIT, true);
-            let dm = TraitRef { id: deref_mut, args: Vec::new(), bindings: Vec::new() };
+            let dm = TraitRef {
+                id: deref_mut,
+                args: Vec::new(),
+                bindings: Vec::new(),
+            };
             let has_mut = self.with_ix(|ix, infer, sigs| ix.may_implement(&s, &dm, infer, sigs, 0));
             if has_mut {
-                self.dispatch_trait_fn(self.origin, &dm, "deref_mut", &s, &[], line, how::IMPLICIT, true);
+                self.dispatch_trait_fn(
+                    self.origin,
+                    &dm,
+                    "deref_mut",
+                    &s,
+                    &[],
+                    line,
+                    how::IMPLICIT,
+                    true,
+                );
             }
         }
     }
@@ -3051,14 +3973,21 @@ impl<'a, 'p> Checker<'a, 'p> {
             return bool_;
         }
         let Some((tr, m)) = binop_trait(&b.op) else {
-            self.problem(line, "a binary operator the recursion check does not know".to_owned());
+            self.problem(
+                line,
+                "a binary operator the recursion check does not know".to_owned(),
+            );
             return Ty::Unknown;
         };
         let compare = matches!(tr, "PartialEq" | "PartialOrd");
         let assign = tr.ends_with("Assign");
         let shift = matches!(tr, "Shl" | "Shr" | "ShlAssign" | "ShrAssign");
         let l = self.expr(&b.left, if compare || assign { None } else { expected });
-        let rhs_expected = if shift || !self.is_builtin_operand(&l) { None } else { Some(self.peel_refs(&l)) };
+        let rhs_expected = if shift || !self.is_builtin_operand(&l) {
+            None
+        } else {
+            Some(self.peel_refs(&l))
+        };
         let r = self.expr(&b.right, rhs_expected.as_ref());
         if self.is_builtin_operand(&l) && self.is_builtin_operand(&r) {
             if !shift {
@@ -3076,7 +4005,14 @@ impl<'a, 'p> Checker<'a, 'p> {
         let lt = self.now(&l);
         let result = if self.unresolved(&lt) {
             let out = self.fresh();
-            self.pending.push(Pending::Binary { origin: self.origin, lhs: l, rhs: r, op: (tr, m), out: out.clone(), line });
+            self.pending.push(Pending::Binary {
+                origin: self.origin,
+                lhs: l,
+                rhs: r,
+                op: (tr, m),
+                out: out.clone(),
+                line,
+            });
             out
         } else {
             self.operator(&lt, Some(&r), tr, m, line)
@@ -3097,7 +4033,13 @@ impl<'a, 'p> Checker<'a, 'p> {
         let o = self.now(operand);
         if self.unresolved(&o) {
             let out = self.fresh();
-            self.pending.push(Pending::Unary { origin: self.origin, operand: operand.clone(), op, out: out.clone(), line });
+            self.pending.push(Pending::Unary {
+                origin: self.origin,
+                operand: operand.clone(),
+                op,
+                out: out.clone(),
+                line,
+            });
             return out;
         }
         self.operator(&o, None, op.0, op.1, line)
@@ -3105,6 +4047,10 @@ impl<'a, 'p> Checker<'a, 'p> {
 
     /// An operator on a left operand of known type `l` that is not built in: trait `tr`'s method
     /// `m`, with the right operand `r` as its argument; the trait's `Output`.
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "the operands, the trait and its method"
+    )]
     fn operator(&mut self, l: &Ty, r: Option<&Ty>, tr: &str, m: &str, line: usize) -> Ty {
         if r.is_none_or(|x| self.is_builtin_operand(x)) && self.is_builtin_operand(l) {
             return self.peel_refs(l);
@@ -3117,18 +4063,35 @@ impl<'a, 'p> Checker<'a, 'p> {
         let l = self.numeric_default(l);
         match &l {
             Ty::Param(_) | Ty::Opaque(_) | Ty::Assoc(..) | Ty::Dyn(_) => {
-                let trf = TraitRef { id: tid, args: args.clone(), bindings: Vec::new() };
+                let trf = TraitRef {
+                    id: tid,
+                    args: args.clone(),
+                    bindings: Vec::new(),
+                };
                 self.dispatch_trait_fn(self.origin, &trf, m, &l, &[], line, how::IMPLICIT, false);
-                let out = Ty::Assoc(Box::new(l.clone()), Some(Box::new(trf.clone())), "Output".to_owned());
+                let out = Ty::Assoc(
+                    Box::new(l.clone()),
+                    Some(Box::new(trf.clone())),
+                    "Output".to_owned(),
+                );
                 self.norm(&out)
             }
             _ => {
-                let trf = TraitRef { id: tid, args: args.clone(), bindings: Vec::new() };
+                let trf = TraitRef {
+                    id: tid,
+                    args: args.clone(),
+                    bindings: Vec::new(),
+                };
                 let picks = self.with_ix(|ix, infer, sigs| ix.select(&l, &trf, infer, sigs));
                 if picks.is_empty() {
                     let shown = self.ix.show(&self.infer.resolve(&l));
-                    let rs = r.map(|x| self.ix.show(&self.infer.resolve(x))).unwrap_or_default();
-                    self.problem(line, format!("no implementation of `{tr}` for `{shown}` (right operand `{rs}`)"));
+                    let rs = r
+                        .map(|x| self.ix.show(&self.infer.resolve(x)))
+                        .unwrap_or_default();
+                    self.problem(
+                        line,
+                        format!("no implementation of `{tr}` for `{shown}` (right operand `{rs}`)"),
+                    );
                     return Ty::Unknown;
                 }
                 let mut out = None;
@@ -3139,7 +4102,10 @@ impl<'a, 'p> Checker<'a, 'p> {
                         if let Some(rt) = r {
                             let inst_inputs = {
                                 let map2 = self.ix.map_of(n, &a);
-                                self.ix.sig(n).and_then(|s| s.inputs.get(1).cloned()).map(|t| t.subst(&map2))
+                                self.ix
+                                    .sig(n)
+                                    .and_then(|s| s.inputs.get(1).cloned())
+                                    .map(|t| t.subst(&map2))
                             };
                             if picks.len() == 1
                                 && let Some(p) = inst_inputs
@@ -3176,15 +4142,35 @@ impl<'a, 'p> Checker<'a, 'p> {
                 let Some(deref) = self.ix.lang.trait_named("Deref") else {
                     return Ty::Unknown;
                 };
-                let tr = TraitRef { id: deref, args: Vec::new(), bindings: Vec::new() };
-                self.dispatch_trait_fn(self.origin, &tr, "deref", o, &[], line, how::IMPLICIT, false);
-                let target = Ty::Assoc(Box::new(o.clone()), Some(Box::new(tr.clone())), "Target".to_owned());
+                let tr = TraitRef {
+                    id: deref,
+                    args: Vec::new(),
+                    bindings: Vec::new(),
+                };
+                self.dispatch_trait_fn(
+                    self.origin,
+                    &tr,
+                    "deref",
+                    o,
+                    &[],
+                    line,
+                    how::IMPLICIT,
+                    false,
+                );
+                let target = Ty::Assoc(
+                    Box::new(o.clone()),
+                    Some(Box::new(tr.clone())),
+                    "Target".to_owned(),
+                );
                 self.norm(&target)
             }
             Ty::Unknown => Ty::Unknown,
             other => {
                 let shown = self.ix.show(other);
-                self.problem(line, format!("a dereference of `{shown}`, which the check cannot follow"));
+                self.problem(
+                    line,
+                    format!("a dereference of `{shown}`, which the check cannot follow"),
+                );
                 Ty::Unknown
             }
         }
@@ -3192,6 +4178,10 @@ impl<'a, 'p> Checker<'a, 'p> {
 
     /// `base[idx]`, `base` known: the first auto-dereference step with an `Index` implementation
     /// for the index's type.
+    #[allow(
+        clippy::too_many_lines,
+        reason = "the auto-dereference steps and their two traits, in order"
+    )]
     fn index_op(&mut self, base: &Ty, idx: &Ty, line: usize) -> Ty {
         let now = self.now(idx);
         // An integer literal indexing a slice, array, `Vec` or `str` is a `usize`: the only
@@ -3217,20 +4207,54 @@ impl<'a, 'p> Checker<'a, 'p> {
         let index_mut = self.ix.lang.trait_named("IndexMut");
         let steps = self.with_ix(|ix, infer, sigs| ix.autoderef(base, infer, sigs));
         for (i, step) in steps.iter().enumerate() {
-            let tr = TraitRef { id: index, args: vec![idx.clone()], bindings: Vec::new() };
+            let tr = TraitRef {
+                id: index,
+                args: vec![idx.clone()],
+                bindings: Vec::new(),
+            };
             let derefs: Vec<Ty> = steps.iter().take(i).cloned().collect();
-            if matches!(step, Ty::Param(_) | Ty::Opaque(_) | Ty::Assoc(..) | Ty::Dyn(_)) {
-                let ok = self.with_ix(|ix, infer, sigs| ix.may_implement(step, &tr, infer, sigs, 0));
+            if matches!(
+                step,
+                Ty::Param(_) | Ty::Opaque(_) | Ty::Assoc(..) | Ty::Dyn(_)
+            ) {
+                let ok =
+                    self.with_ix(|ix, infer, sigs| ix.may_implement(step, &tr, infer, sigs, 0));
                 if !ok {
                     continue;
                 }
                 self.implicit_derefs(&derefs, line);
-                self.dispatch_trait_fn(self.origin, &tr, "index", step, &[], line, how::IMPLICIT, false);
+                self.dispatch_trait_fn(
+                    self.origin,
+                    &tr,
+                    "index",
+                    step,
+                    &[],
+                    line,
+                    how::IMPLICIT,
+                    false,
+                );
                 if let Some(im) = index_mut {
-                    let tm = TraitRef { id: im, args: vec![idx.clone()], bindings: Vec::new() };
-                    self.dispatch_trait_fn(self.origin, &tm, "index_mut", step, &[], line, how::IMPLICIT, true);
+                    let tm = TraitRef {
+                        id: im,
+                        args: vec![idx.clone()],
+                        bindings: Vec::new(),
+                    };
+                    self.dispatch_trait_fn(
+                        self.origin,
+                        &tm,
+                        "index_mut",
+                        step,
+                        &[],
+                        line,
+                        how::IMPLICIT,
+                        true,
+                    );
                 }
-                let out = Ty::Assoc(Box::new(step.clone()), Some(Box::new(tr)), "Output".to_owned());
+                let out = Ty::Assoc(
+                    Box::new(step.clone()),
+                    Some(Box::new(tr)),
+                    "Output".to_owned(),
+                );
                 return self.norm(&out);
             }
             let picks = self.with_ix(|ix, infer, sigs| ix.select(step, &tr, infer, sigs));
@@ -3251,7 +4275,11 @@ impl<'a, 'p> Checker<'a, 'p> {
             // A place that is assigned to or borrowed mutably indexes through `IndexMut`; the check
             // does not track which, so where an implementation applies it is recorded too.
             if let Some(im) = index_mut {
-                let tm = TraitRef { id: im, args: vec![idx.clone()], bindings: Vec::new() };
+                let tm = TraitRef {
+                    id: im,
+                    args: vec![idx.clone()],
+                    bindings: Vec::new(),
+                };
                 let mpicks = self.with_ix(|ix, infer, sigs| ix.select(step, &tm, infer, sigs));
                 for (imp, map) in &mpicks {
                     if let Some((n, a)) = self.ix.impl_fn(*imp, "index_mut", map, step, &[]) {
@@ -3271,12 +4299,33 @@ impl<'a, 'p> Checker<'a, 'p> {
     /// The items a `for` loop over a value of type `t` (known) binds: `IntoIterator::into_iter`,
     /// then `Iterator::next` on its result.
     fn iterate(&mut self, t: &Ty, line: usize) -> Ty {
-        let (Some(into), Some(iter)) = (self.ix.lang.trait_named("IntoIterator"), self.ix.lang.trait_named("Iterator")) else {
+        let (Some(into), Some(iter)) = (
+            self.ix.lang.trait_named("IntoIterator"),
+            self.ix.lang.trait_named("Iterator"),
+        ) else {
             return Ty::Unknown;
         };
-        let it = self.trait_path_call(into, Vec::new(), "into_iter", Args::Tys(&[t.clone()]), Some(t.clone()), &[], None, line);
+        let it = self.trait_path_call(
+            into,
+            Vec::new(),
+            "into_iter",
+            Args::Tys(std::slice::from_ref(t)),
+            Some(t.clone()),
+            &[],
+            None,
+            line,
+        );
         let it = self.norm(&it);
-        let next = self.trait_path_call(iter, Vec::new(), "next", Args::Tys(&[Ty::reference_mut(it.clone())]), Some(it), &[], None, line);
+        let next = self.trait_path_call(
+            iter,
+            Vec::new(),
+            "next",
+            Args::Tys(&[Ty::reference_mut(it.clone())]),
+            Some(it),
+            &[],
+            None,
+            line,
+        );
         let item = self.fresh();
         if let Some(option) = self.ix.lang.option {
             self.unify(&next, &Ty::Adt(option, vec![item.clone()]));
@@ -3306,15 +4355,31 @@ impl<'a, 'p> Checker<'a, 'p> {
                     _ => None,
                 };
                 if let (Some(target), Some(from)) = (target_err, self.ix.lang.trait_named("From")) {
-                    self.trait_path_call(from, vec![err.clone()], "from", Args::Tys(&[err]), Some(target), &[], None, line);
+                    self.trait_path_call(
+                        from,
+                        vec![err.clone()],
+                        "from",
+                        Args::Tys(&[err]),
+                        Some(target),
+                        &[],
+                        None,
+                        line,
+                    );
                 }
                 ok
             }
-            Ty::Adt(id, args) if Some(*id) == lang.option => args.first().cloned().unwrap_or(Ty::Unknown),
-            Ty::Adt(id, args) if self.ix.program.item(*id).name == "ControlFlow" => args.get(1).cloned().unwrap_or(Ty::Unknown),
+            Ty::Adt(id, args) if Some(*id) == lang.option => {
+                args.first().cloned().unwrap_or(Ty::Unknown)
+            }
+            Ty::Adt(id, args) if self.ix.program.item(*id).name == "ControlFlow" => {
+                args.get(1).cloned().unwrap_or(Ty::Unknown)
+            }
             other => {
                 let shown = self.ix.show(&self.infer.resolve(other));
-                self.problem(line, format!("`?` on `{shown}`, which the check does not read"));
+                self.problem(
+                    line,
+                    format!("`?` on `{shown}`, which the check does not read"),
+                );
                 Ty::Unknown
             }
         }
@@ -3329,14 +4394,27 @@ impl<'a, 'p> Checker<'a, 'p> {
             return Ty::Unknown;
         }
         if c.asyncness.is_some() {
-            self.problem(line, "an async closure, which the recursion check cannot read".to_owned());
+            self.problem(
+                line,
+                "an async closure, which the recursion check cannot read".to_owned(),
+            );
         }
         let index = self.closures.len();
-        let key = ClosureKey { owner: self.node, subst: self.args.clone(), index };
-        self.closures.push(ClosureInfo { key: key.clone(), params: Vec::new(), ret: Ty::Unknown });
+        let key = ClosureKey {
+            owner: self.node,
+            subst: self.args.clone(),
+            index,
+        };
+        self.closures.push(ClosureInfo {
+            key: key.clone(),
+            params: Vec::new(),
+            ret: Ty::Unknown,
+        });
         let mut params = Vec::new();
         for (j, p) in c.inputs.iter().enumerate() {
-            let expected = expect.as_ref().and_then(|(inputs, _)| inputs.get(j).cloned());
+            let expected = expect
+                .as_ref()
+                .and_then(|(inputs, _)| inputs.get(j).cloned());
             let t = match p {
                 Pat::Type(pt) => {
                     let d = self.ty(&pt.ty);
@@ -3357,10 +4435,12 @@ impl<'a, 'p> Checker<'a, 'p> {
                 }
                 d
             }
-            syn::ReturnType::Default => expect.as_ref().map_or_else(|| self.fresh(), |(_, o)| o.clone()),
+            syn::ReturnType::Default => expect
+                .as_ref()
+                .map_or_else(|| self.fresh(), |(_, o)| o.clone()),
         };
         if let Some(info) = self.closures.get_mut(index) {
-            info.params = params.clone();
+            info.params.clone_from(&params);
             info.ret = ret.clone();
         }
         self.push_scope();
@@ -3385,10 +4465,18 @@ impl<'a, 'p> Checker<'a, 'p> {
 
     // ------------------------------------------------------------ macros
 
-    #[allow(clippy::too_many_lines, reason = "one arm per kind of macro the reader gives")]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one arm per kind of macro the reader gives"
+    )]
     fn mac(&mut self, mac: &syn::Macro, expected: Option<&Ty>) -> Ty {
         let line = line_of(mac);
-        let name = mac.path.segments.last().map(|s| s.ident.to_string()).unwrap_or_default();
+        let name = mac
+            .path
+            .segments
+            .last()
+            .map(|s| s.ident.to_string())
+            .unwrap_or_default();
         let str_ref = Ty::reference(Ty::Prim(Prim::Str));
         match macros::read(self.resolver(), &self.scope, mac, self.depth) {
             MacroRead::Nothing => match name.as_str() {
@@ -3396,7 +4484,11 @@ impl<'a, 'p> Checker<'a, 'p> {
                 "cfg" => Ty::Prim(Prim::Bool),
                 "file" | "module_path" | "stringify" | "concat" | "env" | "include_str" => str_ref,
                 "include_bytes" => Ty::reference(Ty::Array(Box::new(Ty::Prim(Prim::U8)))),
-                "option_env" => self.ix.lang.option.map_or(Ty::Unknown, |o| Ty::Adt(o, vec![str_ref])),
+                "option_env" => self
+                    .ix
+                    .lang
+                    .option
+                    .map_or(Ty::Unknown, |o| Ty::Adt(o, vec![str_ref])),
                 "compile_error" => Ty::Never,
                 _ => Ty::unit(),
             },
@@ -3407,13 +4499,20 @@ impl<'a, 'p> Checker<'a, 'p> {
                         let t = self.expr(e, Some(&elem));
                         self.coerce(&t, &elem, line);
                     }
-                    self.ix.lang.vec.map_or(Ty::Unknown, |v| Ty::Adt(v, vec![elem]))
+                    self.ix
+                        .lang
+                        .vec
+                        .map_or(Ty::Unknown, |v| Ty::Adt(v, vec![elem]))
                 }
                 "matches" | "assert_matches" | "debug_assert_matches" => {
                     for e in &es {
                         self.expr(e, None);
                     }
-                    if name == "matches" { Ty::Prim(Prim::Bool) } else { Ty::unit() }
+                    if name == "matches" {
+                        Ty::Prim(Prim::Bool)
+                    } else {
+                        Ty::unit()
+                    }
                 }
                 "dbg" => {
                     let mut last = Ty::unit();
@@ -3433,11 +4532,19 @@ impl<'a, 'p> Checker<'a, 'p> {
                     for e in &es {
                         self.expr(e, None);
                     }
-                    self.problem(line, format!("an outside macro `{name}!` the check does not know the result of"));
+                    self.problem(
+                        line,
+                        format!("an outside macro `{name}!` the check does not know the result of"),
+                    );
                     Ty::Unknown
                 }
             },
-            MacroRead::Format { plain, formatted, destination, compared } => {
+            MacroRead::Format {
+                plain,
+                formatted,
+                destination,
+                compared,
+            } => {
                 for e in &plain {
                     self.expr(e, None);
                 }
@@ -3448,7 +4555,14 @@ impl<'a, 'p> Checker<'a, 'p> {
                         let at = self.now(&av);
                         if self.unresolved(&at) {
                             let out = self.fresh();
-                            self.pending.push(Pending::Binary { origin: self.origin, lhs: av, rhs: bv, op: ("PartialEq", "eq"), out, line });
+                            self.pending.push(Pending::Binary {
+                                origin: self.origin,
+                                lhs: av,
+                                rhs: bv,
+                                op: ("PartialEq", "eq"),
+                                out,
+                                line,
+                            });
                         } else {
                             self.operator(&at, Some(&bv), "PartialEq", "eq", line);
                         }
@@ -3458,20 +4572,7 @@ impl<'a, 'p> Checker<'a, 'p> {
                     let (v, t) = match f {
                         Formatted::Expr(e, t) => (self.expr(e, None), *t),
                         Formatted::Captured(n, t) => {
-                            let v = match self.local(n) {
-                                Some(v) => v,
-                                None => {
-                                    let segs = vec![n.clone()];
-                                    let res = self.resolver().resolve(&self.scope, &segs, false, Ns::Value);
-                                    match res.first() {
-                                        Some(r) => self.res_value(r, None, line),
-                                        None => {
-                                            self.problem(line, format!("a captured name `{n}` that resolves to nothing"));
-                                            Ty::Unknown
-                                        }
-                                    }
-                                }
-                            };
+                            let v = self.captured(n, line);
                             (v, *t)
                         }
                     };
@@ -3479,7 +4580,10 @@ impl<'a, 'p> Checker<'a, 'p> {
                         continue;
                     }
                     let Some(tid) = self.ix.fmt_traits.get(t.name()).copied() else {
-                        self.problem(line, format!("the model has no formatting trait `{}`", t.name()));
+                        self.problem(
+                            line,
+                            format!("the model has no formatting trait `{}`", t.name()),
+                        );
                         continue;
                     };
                     let s = self.now(&v);
@@ -3495,23 +4599,50 @@ impl<'a, 'p> Checker<'a, 'p> {
                             how: how::IMPLICIT,
                         });
                     } else {
-                        let tr = TraitRef { id: tid, args: Vec::new(), bindings: Vec::new() };
-                        self.dispatch_trait_fn(self.origin, &tr, "fmt", &s, &[], line, how::IMPLICIT, false);
+                        let tr = TraitRef {
+                            id: tid,
+                            args: Vec::new(),
+                            bindings: Vec::new(),
+                        };
+                        self.dispatch_trait_fn(
+                            self.origin,
+                            &tr,
+                            "fmt",
+                            &s,
+                            &[],
+                            line,
+                            how::IMPLICIT,
+                            false,
+                        );
                     }
                 }
-                let fmt_result = self.ix.model_item("fmt::Error").zip(self.ix.lang.result).map_or(Ty::Unknown, |(e, r)| {
-                    Ty::Adt(r, vec![Ty::unit(), Ty::Adt(e, Vec::new())])
-                });
+                let fmt_result = self
+                    .ix
+                    .model_item("fmt::Error")
+                    .zip(self.ix.lang.result)
+                    .map_or(Ty::Unknown, |(e, r)| {
+                        Ty::Adt(r, vec![Ty::unit(), Ty::Adt(e, Vec::new())])
+                    });
                 let mut result = match name.as_str() {
-                    "format" => self.ix.lang.string.map_or(Ty::Unknown, |s| Ty::Adt(s, Vec::new())),
+                    "format" => self
+                        .ix
+                        .lang
+                        .string
+                        .map_or(Ty::Unknown, |s| Ty::Adt(s, Vec::new())),
                     "write" | "writeln" => fmt_result,
                     "panic" | "unreachable" | "todo" | "unimplemented" => Ty::Never,
-                    "format_args" => self.ix.model_item("fmt::Arguments").map_or(Ty::Unknown, |a| Ty::Adt(a, Vec::new())),
+                    "format_args" => self
+                        .ix
+                        .model_item("fmt::Arguments")
+                        .map_or(Ty::Unknown, |a| Ty::Adt(a, Vec::new())),
                     _ => Ty::unit(),
                 };
                 if let Some(d) = &destination {
                     let dv = self.expr(d, None);
-                    let args_ty = self.ix.model_item("fmt::Arguments").map_or(Ty::Unknown, |a| Ty::Adt(a, Vec::new()));
+                    let args_ty = self
+                        .ix
+                        .model_item("fmt::Arguments")
+                        .map_or(Ty::Unknown, |a| Ty::Adt(a, Vec::new()));
                     let d_now = self.now(&dv);
                     if self.unresolved(&d_now) {
                         let out = self.fresh();
@@ -3526,7 +4657,14 @@ impl<'a, 'p> Checker<'a, 'p> {
                         });
                         result = out;
                     } else {
-                        result = self.method_on(&d_now, "write_fmt", Args::Tys(&[args_ty]), &[], None, line);
+                        result = self.method_on(
+                            &d_now,
+                            "write_fmt",
+                            Args::Tys(&[args_ty]),
+                            &[],
+                            None,
+                            line,
+                        );
                     }
                 }
                 result
@@ -3549,11 +4687,27 @@ impl<'a, 'p> Checker<'a, 'p> {
                             how: how::IMPLICIT,
                         });
                     } else {
-                        let tr = TraitRef { id: clone, args: Vec::new(), bindings: Vec::new() };
-                        self.dispatch_trait_fn(self.origin, &tr, "clone", &s, &[], line, how::IMPLICIT, false);
+                        let tr = TraitRef {
+                            id: clone,
+                            args: Vec::new(),
+                            bindings: Vec::new(),
+                        };
+                        self.dispatch_trait_fn(
+                            self.origin,
+                            &tr,
+                            "clone",
+                            &s,
+                            &[],
+                            line,
+                            how::IMPLICIT,
+                            false,
+                        );
                     }
                 }
-                self.ix.lang.vec.map_or(Ty::Unknown, |vec| Ty::Adt(vec, vec![v]))
+                self.ix
+                    .lang
+                    .vec
+                    .map_or(Ty::Unknown, |vec| Ty::Adt(vec, vec![v]))
             }
             MacroRead::Expanded(stmts) => {
                 self.depth = self.depth.saturating_add(1);
@@ -3568,7 +4722,6 @@ impl<'a, 'p> Checker<'a, 'p> {
         }
     }
 }
-
 
 #[cfg(test)]
 #[allow(

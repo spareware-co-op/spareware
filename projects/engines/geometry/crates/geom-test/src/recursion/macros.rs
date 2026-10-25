@@ -69,7 +69,8 @@ pub const FORMAT_MACROS: [(&str, usize); 16] = [
 ];
 
 /// More of the same: the `debug_` forms of the comparing assertions.
-pub const FORMAT_MACROS_DEBUG: [(&str, usize); 2] = [("debug_assert_eq", 2), ("debug_assert_ne", 2)];
+pub const FORMAT_MACROS_DEBUG: [(&str, usize); 2] =
+    [("debug_assert_eq", 2), ("debug_assert_ne", 2)];
 
 /// The standard macros that expand to literals or configuration only, and run nothing.
 pub const LITERAL_MACROS: [&str; 12] = [
@@ -313,7 +314,10 @@ pub fn target(resolver: &Resolver<'_>, scope: &Scope, path: &syn::Path) -> Targe
         for c in &program.crates {
             if let Some(ids) = program.module(c.root).macros.get(&name)
                 && let Some(id) = ids.first()
-                && program.macros.get(id.0).is_some_and(|d| d.krate == program.module(scope.module).krate)
+                && program
+                    .macros
+                    .get(id.0)
+                    .is_some_and(|d| d.krate == program.module(scope.module).krate)
             {
                 return Target::Local(*id);
             }
@@ -345,7 +349,10 @@ fn stmts(tokens: &TokenStream) -> Option<Vec<syn::Stmt>> {
 fn read_format(name: &str, at: usize, tokens: &TokenStream) -> MacroRead {
     // Named arguments `name = expr` parse as assignment expressions.
     let Some(args) = exprs(tokens) else {
-        return MacroRead::Unread(format!("`{name}!` arguments that do not parse: {}", excerpt(tokens)));
+        return MacroRead::Unread(format!(
+            "`{name}!` arguments that do not parse: {}",
+            excerpt(tokens)
+        ));
     };
     let mut plain: Vec<Expr> = args.iter().take(at).cloned().collect();
     let mut destination = None;
@@ -462,7 +469,9 @@ pub fn read(resolver: &Resolver<'_>, scope: &Scope, mac: &syn::Macro, depth: usi
     match target(resolver, scope, &mac.path) {
         Target::Local(id) => {
             if depth >= EXPANSION_LIMIT {
-                return MacroRead::Unread("macro expansion deeper than the recursion limit".to_owned());
+                return MacroRead::Unread(
+                    "macro expansion deeper than the recursion limit".to_owned(),
+                );
             }
             match expand(resolver.program, scope.module, id, tokens) {
                 Ok(out) => match stmts(&out) {
@@ -491,7 +500,9 @@ pub fn read(resolver: &Resolver<'_>, scope: &Scope, mac: &syn::Macro, depth: usi
                 return MacroRead::Nothing;
             }
             if name == "include" {
-                return MacroRead::Unread("`include!` pastes in code the recursion check does not read".to_owned());
+                return MacroRead::Unread(
+                    "`include!` pastes in code the recursion check does not read".to_owned(),
+                );
             }
             if name == "matches" || name == "assert_matches" {
                 return read_matches(tokens);
@@ -544,7 +555,10 @@ fn read_matches(tokens: &TokenStream) -> MacroRead {
     })
     .parse2(tokens.clone());
     let Ok((e, pat, guard)) = parsed else {
-        return MacroRead::Unread(format!("`matches!` arguments that do not parse: {}", excerpt(tokens)));
+        return MacroRead::Unread(format!(
+            "`matches!` arguments that do not parse: {}",
+            excerpt(tokens)
+        ));
     };
     let guard = guard.map(|g| quote::quote! { if #g });
     let expanded = quote::quote! {
@@ -555,7 +569,10 @@ fn read_matches(tokens: &TokenStream) -> MacroRead {
     };
     match syn::parse2::<Expr>(expanded) {
         Ok(m) => MacroRead::Exprs(vec![m]),
-        Err(_) => MacroRead::Unread(format!("`matches!` arguments that do not parse: {}", excerpt(tokens))),
+        Err(_) => MacroRead::Unread(format!(
+            "`matches!` arguments that do not parse: {}",
+            excerpt(tokens)
+        )),
     }
 }
 
@@ -589,7 +606,12 @@ pub fn expand_items(
             })
             .parse2(out)
             .map(Some)
-            .map_err(|e| format!("the expansion of `{}!` is not items: {e}", mac.path.to_token_stream()))
+            .map_err(|e| {
+                format!(
+                    "the expansion of `{}!` is not items: {e}",
+                    mac.path.to_token_stream()
+                )
+            })
         }
         Target::Outside(name) if LITERAL_MACROS.contains(&name.as_str()) => Ok(None),
         Target::Outside(name) => Err(format!(
@@ -628,12 +650,18 @@ fn rules(body: &TokenStream) -> Result<Vec<(Vec<Matcher>, TokenStream)>, String>
     let tokens: Vec<TokenTree> = body.clone().into_iter().collect();
     let mut i = 0_usize;
     while i < tokens.len() {
-        let (Some(TokenTree::Group(m)), Some(TokenTree::Punct(eq)), Some(TokenTree::Punct(gt)), Some(TokenTree::Group(t))) = (
+        let (
+            Some(TokenTree::Group(m)),
+            Some(TokenTree::Punct(eq)),
+            Some(TokenTree::Punct(gt)),
+            Some(TokenTree::Group(t)),
+        ) = (
             tokens.get(i),
             tokens.get(i.saturating_add(1)),
             tokens.get(i.saturating_add(2)),
             tokens.get(i.saturating_add(3)),
-        ) else {
+        )
+        else {
             return Err("a macro_rules! rule that is not `(matcher) => {transcriber}`".to_owned());
         };
         if eq.as_char() != '=' || gt.as_char() != '>' {
@@ -747,7 +775,11 @@ fn fragment(kind: &str, input: ParseStream) -> syn::Result<TokenStream> {
 }
 
 /// Matches `ms` against `input`, adding bindings.
-fn match_seq(ms: &[Matcher], input: ParseStream, b: &mut BTreeMap<String, Binding>) -> syn::Result<()> {
+fn match_seq(
+    ms: &[Matcher],
+    input: ParseStream,
+    b: &mut BTreeMap<String, Binding>,
+) -> syn::Result<()> {
     for m in ms {
         match m {
             Matcher::Token(t) => {
@@ -766,7 +798,11 @@ fn match_seq(ms: &[Matcher], input: ParseStream, b: &mut BTreeMap<String, Bindin
                 }
                 (|s: ParseStream| {
                     match_seq(inner, s, b)?;
-                    if s.is_empty() { Ok(()) } else { Err(s.error("tokens left in group")) }
+                    if s.is_empty() {
+                        Ok(())
+                    } else {
+                        Err(s.error("tokens left in group"))
+                    }
                 })
                 .parse2(g.stream())?;
             }
@@ -832,7 +868,12 @@ fn names_in(ms: &[Matcher], out: &mut Vec<String>) {
 /// # Errors
 ///
 /// No rule matches, or a transcription is malformed.
-pub fn expand(program: &Program, module: ModId, id: MacroId, tokens: &TokenStream) -> Result<TokenStream, String> {
+pub fn expand(
+    program: &Program,
+    module: ModId,
+    id: MacroId,
+    tokens: &TokenStream,
+) -> Result<TokenStream, String> {
     let Some(def) = program.macros.get(id.0) else {
         return Err("an unknown macro".to_owned());
     };
@@ -848,7 +889,11 @@ pub fn expand(program: &Program, module: ModId, id: MacroId, tokens: &TokenStrea
         let mut bindings = BTreeMap::new();
         let matched = (|s: ParseStream| {
             match_seq(&matcher, s, &mut bindings)?;
-            if s.is_empty() { Ok(()) } else { Err(s.error("tokens left")) }
+            if s.is_empty() {
+                Ok(())
+            } else {
+                Err(s.error("tokens left"))
+            }
         })
         .parse2(tokens.clone());
         if matched.is_ok() {
@@ -863,7 +908,11 @@ pub fn expand(program: &Program, module: ModId, id: MacroId, tokens: &TokenStrea
 }
 
 /// The binding of `name` at the repetition indices `at`.
-fn binding_at<'b>(b: &'b BTreeMap<String, Binding>, name: &str, at: &[usize]) -> Option<&'b Binding> {
+fn binding_at<'b>(
+    b: &'b BTreeMap<String, Binding>,
+    name: &str,
+    at: &[usize],
+) -> Option<&'b Binding> {
     let mut cur = b.get(name)?;
     for i in at {
         match cur {
@@ -941,7 +990,11 @@ fn transcribe(
 
 /// How many times a transcriber repetition repeats: the length of the repeating bindings it
 /// uses, which must agree.
-fn repeat_count(tokens: &TokenStream, b: &BTreeMap<String, Binding>, at: &[usize]) -> Result<usize, String> {
+fn repeat_count(
+    tokens: &TokenStream,
+    b: &BTreeMap<String, Binding>,
+    at: &[usize],
+) -> Result<usize, String> {
     let mut names = Vec::new();
     vars_in(tokens, &mut names);
     let mut count: Option<usize> = None;
@@ -950,7 +1003,9 @@ fn repeat_count(tokens: &TokenStream, b: &BTreeMap<String, Binding>, at: &[usize
             match count {
                 None => count = Some(items.len()),
                 Some(c) if c != items.len() => {
-                    return Err(format!("repetitions of different lengths meet at `${name}`"));
+                    return Err(format!(
+                        "repetitions of different lengths meet at `${name}`"
+                    ));
                 }
                 Some(_) => {}
             }
@@ -1011,7 +1066,11 @@ mod tests {
     fn program(lib: &str) -> Program {
         let text = lib.to_owned();
         let read = move |p: &str| {
-            if p == "c/a/src/lib.rs" { Ok(text.clone()) } else { Err("none".to_owned()) }
+            if p == "c/a/src/lib.rs" {
+                Ok(text.clone())
+            } else {
+                Err("none".to_owned())
+            }
         };
         load(
             &[CrateSource {
@@ -1034,7 +1093,10 @@ mod tests {
              fn helper() {}",
         );
         assert!(p.problems.is_empty(), "{:?}", p.problems);
-        assert!(p.nodes.iter().any(|n| n.name == "a::generated"), "item macros expand");
+        assert!(
+            p.nodes.iter().any(|n| n.name == "a::generated"),
+            "item macros expand"
+        );
         let calls = MacroId(0);
         let out = expand(&p, ModId(0), calls, &"f, g; 1 + 2".parse().unwrap()).unwrap();
         let text = out.to_string().replace(' ', "");
@@ -1048,9 +1110,15 @@ mod tests {
         let r = Resolver::new(&p);
         let scope = p.nodes[0].scope.clone();
         let mac = |s: &str| -> syn::Macro { syn::parse_str(s).unwrap() };
-        assert!(matches!(read(&r, &scope, &mac("concat!(\"a\", \"b\")"), 0), MacroRead::Nothing));
-        let MacroRead::Format { formatted, destination, .. } =
-            read(&r, &scope, &mac("write!(f, \"{} {:?}\", a, b)"), 0)
+        assert!(matches!(
+            read(&r, &scope, &mac("concat!(\"a\", \"b\")"), 0),
+            MacroRead::Nothing
+        ));
+        let MacroRead::Format {
+            formatted,
+            destination,
+            ..
+        } = read(&r, &scope, &mac("write!(f, \"{} {:?}\", a, b)"), 0)
         else {
             panic!("write! is a format macro");
         };
@@ -1060,8 +1128,17 @@ mod tests {
             matches!(read(&r, &scope, &mac("matches!(x, Some(_) if y)"), 0), MacroRead::Exprs(e) if e.len() == 1),
             "`matches!` is the `match` it expands to"
         );
-        assert!(matches!(read(&r, &scope, &mac("vec![x; 3]"), 0), MacroRead::Repeat(..)));
-        assert!(matches!(read(&r, &scope, &mac("include!(\"x.rs\")"), 0), MacroRead::Unread(_)));
-        assert!(matches!(read(&r, &scope, &mac("weird!(=> =>)"), 0), MacroRead::Unread(_)));
+        assert!(matches!(
+            read(&r, &scope, &mac("vec![x; 3]"), 0),
+            MacroRead::Repeat(..)
+        ));
+        assert!(matches!(
+            read(&r, &scope, &mac("include!(\"x.rs\")"), 0),
+            MacroRead::Unread(_)
+        ));
+        assert!(matches!(
+            read(&r, &scope, &mac("weird!(=> =>)"), 0),
+            MacroRead::Unread(_)
+        ));
     }
 }

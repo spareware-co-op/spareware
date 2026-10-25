@@ -174,7 +174,8 @@ impl Infer {
     /// Whether variable class `v` occurs in `t`.
     fn occurs(&self, v: u32, t: &Ty) -> bool {
         let r = self.root(v);
-        self.resolve(t).any(&|x| matches!(x, Ty::Var(y) if self.root(*y) == r))
+        self.resolve(t)
+            .any(&|x| matches!(x, Ty::Var(y) if self.root(*y) == r))
     }
 
     /// A point to roll back to.
@@ -276,6 +277,11 @@ impl Infer {
         xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| self.unify_at(x, y, depth))
     }
 
+    #[allow(
+        clippy::many_single_char_names,
+        clippy::match_same_arms,
+        reason = "the two types and their parts, as unification is written; each arm says why it holds"
+    )]
     fn unify_at(&mut self, a: &Ty, b: &Ty, depth: usize) -> bool {
         if depth > crate::recursion::ty::MAX_DEPTH.saturating_mul(4) {
             return true;
@@ -307,8 +313,12 @@ impl Infer {
             (Ty::Ref(x, m), Ty::Ref(y, n)) => m == n && self.unify_at(x, y, d),
             (Ty::Slice(x), Ty::Slice(y)) | (Ty::Array(x), Ty::Array(y)) => self.unify_at(x, y, d),
             (Ty::Tuple(xs), Ty::Tuple(ys)) => self.unify_all(xs, ys, d),
-            (Ty::FnPtr(xs, x), Ty::FnPtr(ys, y)) => self.unify_all(xs, ys, d) && self.unify_at(x, y, d),
-            (Ty::Closure(k), Ty::Closure(l)) => same_closure(k, l) && self.unify_all(&k.subst, &l.subst, d),
+            (Ty::FnPtr(xs, x), Ty::FnPtr(ys, y)) => {
+                self.unify_all(xs, ys, d) && self.unify_at(x, y, d)
+            }
+            (Ty::Closure(k), Ty::Closure(l)) => {
+                same_closure(k, l) && self.unify_all(&k.subst, &l.subst, d)
+            }
             (Ty::FnDef(n, xs), Ty::FnDef(m, ys)) => n == m && self.unify_all(xs, ys, d),
             (Ty::Param(g), Ty::Param(h)) => g == h,
             (Ty::Dyn(xs), Ty::Dyn(ys)) | (Ty::Opaque(xs), Ty::Opaque(ys)) => {
@@ -316,9 +326,9 @@ impl Infer {
                     && xs.iter().zip(ys).all(|(x, y)| {
                         x.id == y.id
                             && self.unify_all(&x.args, &y.args, d)
-                            && x.bindings.iter().all(|(n, t)| {
-                                y.binding(n).is_none_or(|u| self.unify_at(t, u, d))
-                            })
+                            && x.bindings
+                                .iter()
+                                .all(|(n, t)| y.binding(n).is_none_or(|u| self.unify_at(t, u, d)))
                     })
             }
             // A projection not resolved yet may turn out to be anything.
@@ -373,7 +383,10 @@ mod tests {
         let b = t.fresh();
         assert!(t.unify(&adt(1, vec![a.clone()]), &adt(1, vec![b.clone()])));
         assert!(t.unify(&b, &Ty::Prim(Prim::U64)));
-        assert_eq!(t.resolve(&adt(2, vec![a])), adt(2, vec![Ty::Prim(Prim::U64)]));
+        assert_eq!(
+            t.resolve(&adt(2, vec![a])),
+            adt(2, vec![Ty::Prim(Prim::U64)])
+        );
     }
 
     #[test]
@@ -403,7 +416,10 @@ mod tests {
         assert!(!t.unify(&i, &f));
         let g = t.fresh();
         assert!(t.unify(&g, &i));
-        assert!(!t.unify(&g, &Ty::Prim(Prim::Bool)), "the general variable joined the integer class");
+        assert!(
+            !t.unify(&g, &Ty::Prim(Prim::Bool)),
+            "the general variable joined the integer class"
+        );
         t.default_numeric();
         assert_eq!(t.resolve(&g), Ty::Prim(Prim::I32));
         assert_eq!(t.resolve(&f), Ty::Prim(Prim::F64));

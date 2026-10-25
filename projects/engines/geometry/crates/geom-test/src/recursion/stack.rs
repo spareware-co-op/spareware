@@ -112,7 +112,7 @@ impl Profile {
 }
 
 /// The Node script that runs a WASI program in a worker thread with a given stack.
-const NODE_SCRIPT: &str = r#"// Runs a wasm32-wasip1 program under Node's WASI in a worker thread whose stack is the first
+const NODE_SCRIPT: &str = r"// Runs a wasm32-wasip1 program under Node's WASI in a worker thread whose stack is the first
 // argument, in bytes: cargo's runner for the recursion check (geom-test, src/recursion/stack.rs).
 import { readFile } from 'node:fs/promises';
 import { WASI } from 'node:wasi';
@@ -135,7 +135,7 @@ if (isMainThread) {
   const instance = await WebAssembly.instantiate(module, wasi.getImportObject());
   parentPort.postMessage(wasi.start(instance));
 }
-"#;
+";
 
 /// The cargo runner command for `runner` with an engine stack of `bytes`.
 fn runner_command(runner: Runner, bytes: u32, scratch: &Path) -> Result<String, String> {
@@ -147,7 +147,9 @@ fn runner_command(runner: Runner, bytes: u32, scratch: &Path) -> Result<String, 
             fs::write(&script, NODE_SCRIPT).map_err(|e| format!("{}: {e}", script.display()))?;
             let shown = script.display().to_string().replace('\\', "/");
             if shown.contains(' ') {
-                return Err(format!("the runner script's path {shown} has a space, which cargo's runner splits"));
+                return Err(format!(
+                    "the runner script's path {shown} has a space, which cargo's runner splits"
+                ));
             }
             Ok(format!("node --no-warnings {shown} {bytes}"))
         }
@@ -206,12 +208,17 @@ fn cargo_test(
             "CARGO_TARGET_WASM32_WASIP1_RUNNER",
             runner_command(runner, engine, &target_dir.join("runner"))?,
         );
-    let out = command.output().map_err(|e| format!("cannot start cargo: {e}"))?;
+    let out = command
+        .output()
+        .map_err(|e| format!("cannot start cargo: {e}"))?;
     let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
     let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
     let passed = stdout
         .lines()
-        .filter_map(|l| l.strip_prefix("test ").and_then(|r| r.strip_suffix(" ... ok")))
+        .filter_map(|l| {
+            l.strip_prefix("test ")
+                .and_then(|r| r.strip_suffix(" ... ok"))
+        })
         .map(str::to_owned)
         .collect();
     Ok(Run {
@@ -262,7 +269,8 @@ pub fn run_bound_tests(
             match run {
                 Err(e) => problems.push(Problem::new(file, 1, Rule::Stack, e)),
                 Ok(run) => {
-                    let missing: Vec<&String> = tests.iter().filter(|t| !run.passed.contains(t)).collect();
+                    let missing: Vec<&String> =
+                        tests.iter().filter(|t| !run.passed.contains(t)).collect();
                     if !run.success || !missing.is_empty() {
                         problems.push(Problem::new(
                             file,
@@ -302,7 +310,10 @@ fn write_probe(dir: &Path) -> Result<PathBuf, String> {
         "Cargo.toml",
         "[package]\nname = \"geom-recursion-probe\"\nversion = \"0.0.0\"\nedition = \"2024\"\npublish = false\n\n[workspace]\n",
     )?;
-    write("Cargo.lock", "version = 4\n\n[[package]]\nname = \"geom-recursion-probe\"\nversion = \"0.0.0\"\n")?;
+    write(
+        "Cargo.lock",
+        "version = 4\n\n[[package]]\nname = \"geom-recursion-probe\"\nversion = \"0.0.0\"\n",
+    )?;
     write(
         "src/lib.rs",
         "//! The recursion check's probe: recursion that overflows each WebAssembly stack.\n\
@@ -347,10 +358,24 @@ pub fn probes(runner: Runner, target_dir: &Path) -> Vec<Problem> {
     let probe_target = target_dir.join("probe-target");
     for (test, shadow, engine, what) in [
         ("shadow_probe", STACK_BYTES, CONTROL_BYTES, "shadow stack"),
-        ("engine_probe", CONTROL_BYTES, ENGINE_STACK_BYTES, "engine stack"),
+        (
+            "engine_probe",
+            CONTROL_BYTES,
+            ENGINE_STACK_BYTES,
+            "engine stack",
+        ),
     ] {
         println!("recursion stack: probe {test} must trap with the small {what}");
-        let small = cargo_test(&manifest, None, Profile::Release, runner, shadow, engine, &probe_target, Some(test));
+        let small = cargo_test(
+            &manifest,
+            None,
+            Profile::Release,
+            runner,
+            shadow,
+            engine,
+            &probe_target,
+            Some(test),
+        );
         let control = cargo_test(
             &manifest,
             None,

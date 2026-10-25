@@ -160,7 +160,10 @@ impl Fields {
                     .filter(|f| cfg::ships(&f.attrs))
                     .map(|f| {
                         (
-                            f.ident.as_ref().map(ToString::to_string).unwrap_or_default(),
+                            f.ident
+                                .as_ref()
+                                .map(ToString::to_string)
+                                .unwrap_or_default(),
                             f.ty.clone(),
                         )
                     })
@@ -183,7 +186,11 @@ impl Fields {
     pub fn all(&self) -> Vec<(String, &syn::Type)> {
         match self {
             Fields::Named(f) => f.iter().map(|(n, t)| (n.clone(), t)).collect(),
-            Fields::Tuple(f) => f.iter().enumerate().map(|(i, t)| (i.to_string(), t)).collect(),
+            Fields::Tuple(f) => f
+                .iter()
+                .enumerate()
+                .map(|(i, t)| (i.to_string(), t))
+                .collect(),
             Fields::Unit => Vec::new(),
         }
     }
@@ -210,6 +217,10 @@ pub struct Variant {
 
 /// What an item is.
 #[derive(Clone, Debug)]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "a trait carries its signatures; items are few and read once"
+)]
 pub enum ItemKind {
     /// A struct.
     Struct {
@@ -508,7 +519,10 @@ impl Program {
 }
 
 /// Ids are made by the program and index its tables; one out of range is a bug in this module.
-#[allow(clippy::panic, reason = "an id out of range is a bug in the loader, not an input")]
+#[allow(
+    clippy::panic,
+    reason = "an id out of range is a bug in the loader, not an input"
+)]
 fn unreachable_id(what: &str, id: usize) -> ! {
     panic!("recursion check: {what} id {id} out of range")
 }
@@ -536,7 +550,8 @@ pub fn normalise(path: &str) -> String {
 
 /// The folder of a `/`-separated path.
 fn dir_of(path: &str) -> String {
-    path.rsplit_once('/').map_or(String::new(), |(d, _)| d.to_owned())
+    path.rsplit_once('/')
+        .map_or(String::new(), |(d, _)| d.to_owned())
 }
 
 /// `a/b` joined, either side possibly empty.
@@ -608,7 +623,9 @@ pub fn load(sources: &[CrateSource], read: Reader<'_>) -> Program {
 
 impl Loader<'_> {
     fn problem(&mut self, file: &str, line: usize, what: &str) {
-        self.program.problems.push(Problem::unread(file, line, what));
+        self.program
+            .problems
+            .push(Problem::unread(file, line, what));
     }
 
     fn load_crate(&mut self, krate: usize, source: &CrateSource) {
@@ -651,7 +668,11 @@ impl Loader<'_> {
         let text = match (self.read)(path) {
             Ok(text) => text,
             Err(why) => {
-                self.problem(path, line, &format!("the module file cannot be read: {why}"));
+                self.problem(
+                    path,
+                    line,
+                    &format!("the module file cannot be read: {why}"),
+                );
                 return None;
             }
         };
@@ -753,7 +774,7 @@ impl Loader<'_> {
         }
     }
 
-    fn base_scope(&self, module: ModId) -> Scope {
+    fn base_scope(module: ModId) -> Scope {
         Scope {
             module,
             generics: Vec::new(),
@@ -798,7 +819,7 @@ impl Loader<'_> {
             syn::Item::Fn(mut f) => {
                 lift_impl_params(&mut f.sig);
                 let name = f.sig.ident.to_string();
-                let mut scope = self.base_scope(module);
+                let mut scope = Self::base_scope(module);
                 self.declare_generics(&mut scope, &f.sig.generics);
                 let node = self.new_node(Node {
                     kind: NodeKind::Fn,
@@ -855,7 +876,7 @@ impl Loader<'_> {
             syn::Item::Trait(t) => self.add_trait(module, &t, &file, line),
             syn::Item::TraitAlias(t) => {
                 let name = t.ident.to_string();
-                let mut scope = self.base_scope(module);
+                let mut scope = Self::base_scope(module);
                 let self_gen = GenId(self.program.generics.len());
                 self.program.generics.push(Generic {
                     name: "Self".to_owned(),
@@ -884,13 +905,15 @@ impl Loader<'_> {
             }
             syn::Item::Type(t) => {
                 let name = t.ident.to_string();
-                let mut scope = self.base_scope(module);
+                let mut scope = Self::base_scope(module);
                 self.declare_generics(&mut scope, &t.generics);
                 let id = self.new_item(Item {
                     name: name.clone(),
                     module,
                     path: self.path_of(module, &name),
-                    kind: ItemKind::Alias { ty: (*t.ty).clone() },
+                    kind: ItemKind::Alias {
+                        ty: (*t.ty).clone(),
+                    },
                     scope,
                     line,
                 });
@@ -898,7 +921,7 @@ impl Loader<'_> {
             }
             syn::Item::Const(c) => {
                 let name = c.ident.to_string();
-                let mut scope = self.base_scope(module);
+                let mut scope = Self::base_scope(module);
                 self.declare_generics(&mut scope, &c.generics);
                 let id = self.new_item(Item {
                     name: name.clone(),
@@ -923,7 +946,7 @@ impl Loader<'_> {
                         ty: (*s.ty).clone(),
                         init: Some((*s.expr).clone()),
                     },
-                    scope: self.base_scope(module),
+                    scope: Self::base_scope(module),
                     line,
                 });
                 self.define(module, &name, Def::Item(id), true, false);
@@ -1003,7 +1026,7 @@ impl Loader<'_> {
         line: usize,
         kind: impl FnOnce(&Self) -> ItemKind,
     ) -> ItemId {
-        let mut scope = self.base_scope(module);
+        let mut scope = Self::base_scope(module);
         self.declare_generics(&mut scope, generics);
         let kind = kind(self);
         let id = self.new_item(Item {
@@ -1052,9 +1075,13 @@ impl Loader<'_> {
         id
     }
 
+    #[allow(
+        clippy::too_many_lines,
+        reason = "a trait's items in their written order; each is short"
+    )]
     fn add_trait(&mut self, module: ModId, t: &syn::ItemTrait, file: &str, line: usize) {
         let name = t.ident.to_string();
-        let mut scope = self.base_scope(module);
+        let mut scope = Self::base_scope(module);
         let self_gen = GenId(self.program.generics.len());
         self.program.generics.push(Generic {
             name: "Self".to_owned(),
@@ -1166,7 +1193,7 @@ impl Loader<'_> {
 
     fn add_impl(&mut self, module: ModId, i: &syn::ItemImpl, file: &str, line: usize) {
         let id = ImplId(self.program.impls.len());
-        let mut scope = self.base_scope(module);
+        let mut scope = Self::base_scope(module);
         self.declare_generics(&mut scope, &i.generics);
         scope.self_ref = SelfRef::Impl(id);
         // The impl's generic parameters see `Self` too.
@@ -1233,9 +1260,7 @@ impl Loader<'_> {
                 other => {
                     let what = format!(
                         "an associated item the recursion check cannot read: `{}`",
-                        crate::recursion::macros::excerpt(&quote::ToTokens::to_token_stream(
-                            other
-                        ))
+                        crate::recursion::macros::excerpt(&quote::ToTokens::to_token_stream(other))
                     );
                     self.problem(file, line_of(other), &what);
                 }
@@ -1388,7 +1413,10 @@ impl<'ast> Visit<'ast> for ItemFinder {
 /// other.
 pub fn lift_impl_params(sig: &mut syn::Signature) {
     struct Lift {
-        found: Vec<(syn::Ident, syn::punctuated::Punctuated<syn::TypeParamBound, syn::Token![+]>)>,
+        found: Vec<(
+            syn::Ident,
+            syn::punctuated::Punctuated<syn::TypeParamBound, syn::Token![+]>,
+        )>,
     }
     impl syn::visit_mut::VisitMut for Lift {
         fn visit_type_mut(&mut self, ty: &mut syn::Type) {
@@ -1529,12 +1557,18 @@ mod tests {
 
     #[test]
     fn missing_and_unparsable_files_are_problems() {
-        let read = reader(&[("c/a/src/lib.rs", "mod gone; mod bad;"), ("c/a/src/bad.rs", "fn (")]);
+        let read = reader(&[
+            ("c/a/src/lib.rs", "mod gone; mod bad;"),
+            ("c/a/src/bad.rs", "fn ("),
+        ]);
         let p = load(&[source("a")], &read);
         let what: Vec<&str> = p.problems.iter().map(|x| x.what.as_str()).collect();
         assert_eq!(what.len(), 2, "{what:?}");
         assert!(what.iter().any(|w| w.contains("neither")), "{what:?}");
-        assert!(what.iter().any(|w| w.contains("does not parse")), "{what:?}");
+        assert!(
+            what.iter().any(|w| w.contains("does not parse")),
+            "{what:?}"
+        );
     }
 
     #[test]
@@ -1567,8 +1601,7 @@ mod tests {
 
     #[test]
     fn use_trees_flatten() {
-        let item: syn::ItemUse =
-            syn::parse_str("use a::{b, c::{self as d, *}, e as f};").unwrap();
+        let item: syn::ItemUse = syn::parse_str("use a::{b, c::{self as d, *}, e as f};").unwrap();
         let mut out = Vec::new();
         flatten_use(&item.tree, Vec::new(), false, &mut out);
         let mut got: Vec<(String, Option<String>)> = out

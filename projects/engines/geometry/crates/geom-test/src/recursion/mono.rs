@@ -164,11 +164,18 @@ impl Mono {
             self.global_problems.push(Problem::unread(
                 &n.file,
                 n.line,
-                &format!("`{}` has more than {MAX_COPIES} instantiations", ix.name(node)),
+                &format!(
+                    "`{}` has more than {MAX_COPIES} instantiations",
+                    ix.name(node)
+                ),
             ));
         }
         let id = InstId(self.insts.len());
-        self.insts.push(Inst { kind: kind.clone(), node, owner: id });
+        self.insts.push(Inst {
+            kind: kind.clone(),
+            node,
+            owner: id,
+        });
         self.by_kind.insert(kind, id);
         self.enqueue(id);
         id
@@ -187,7 +194,11 @@ impl Mono {
         }
         let owner = self.node_inst(ix, key.owner, key.subst.clone());
         let id = InstId(self.insts.len());
-        self.insts.push(Inst { kind: kind.clone(), node: key.owner, owner });
+        self.insts.push(Inst {
+            kind: kind.clone(),
+            node: key.owner,
+            owner,
+        });
         self.by_kind.insert(kind, id);
         self.owned.entry(owner).or_default().insert(id);
         id
@@ -213,7 +224,11 @@ impl Mono {
 
     /// Adds the edge `from -> to`, keeping the first site.
     pub fn edge(&mut self, from: InstId, to: InstId, site: &Site) {
-        self.edges.entry(from).or_default().entry(to).or_insert_with(|| site.clone());
+        self.edges
+            .entry(from)
+            .or_default()
+            .entry(to)
+            .or_insert_with(|| site.clone());
     }
 
     /// Records that instance `reader` read `dep`, so it is checked again when `dep` changes.
@@ -223,7 +238,11 @@ impl Mono {
     }
 
     fn changed(&mut self, dep: Dep) {
-        let readers: Vec<InstId> = self.readers.get(&dep).map(|r| r.iter().copied().collect()).unwrap_or_default();
+        let readers: Vec<InstId> = self
+            .readers
+            .get(&dep)
+            .map(|r| r.iter().copied().collect())
+            .unwrap_or_default();
         for r in readers {
             self.enqueue(r);
         }
@@ -242,7 +261,11 @@ impl Mono {
     pub fn coerce(&mut self, callables: impl IntoIterator<Item = Ty>, dynamic: bool) {
         let mut grew = false;
         for c in callables {
-            let set = if dynamic { &mut self.dyn_callables } else { &mut self.fnptr_callables };
+            let set = if dynamic {
+                &mut self.dyn_callables
+            } else {
+                &mut self.fnptr_callables
+            };
             grew |= set.insert(c);
         }
         if grew {
@@ -376,7 +399,10 @@ pub fn analyse(ix: &Index<'_>) -> Mono {
                 m.global_problems.push(Problem::unread(
                     &n.file,
                     n.line,
-                    &format!("the check of `{}` still changes after {MAX_RUNS} readings", n.name),
+                    &format!(
+                        "the check of `{}` still changes after {MAX_RUNS} readings",
+                        n.name
+                    ),
                 ));
             }
             continue;
@@ -386,7 +412,10 @@ pub fn analyse(ix: &Index<'_>) -> Mono {
         };
         if let InstKind::Node(node, args) = inst.kind {
             m.begin_check(id);
-            let derived = ix.program.node(node).is_some_and(|n| matches!(n.kind, NodeKind::Derived { .. }));
+            let derived = ix
+                .program
+                .node(node)
+                .is_some_and(|n| matches!(n.kind, NodeKind::Derived { .. }));
             if derived {
                 crate::recursion::typeck::derived(ix, &mut m, id, node, &args);
             } else {
@@ -432,6 +461,10 @@ mod tests {
     }
 
     #[test]
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "the fixture's functions are f and g"
+    )]
     fn instances_are_made_once_and_queued() {
         let p = program("pub fn g<T>(t: T) {} pub fn f() {}");
         let ix = Index::new(&p);
@@ -449,8 +482,16 @@ mod tests {
         let p = program("pub fn f() {} pub fn g() {}");
         let ix = Index::new(&p);
         let mut m = Mono::default();
-        let f = m.node_inst(&ix, NodeId(p.nodes.iter().position(|n| n.ident == "f").unwrap()), Vec::new());
-        let g = m.node_inst(&ix, NodeId(p.nodes.iter().position(|n| n.ident == "g").unwrap()), Vec::new());
+        let f = m.node_inst(
+            &ix,
+            NodeId(p.nodes.iter().position(|n| n.ident == "f").unwrap()),
+            Vec::new(),
+        );
+        let g = m.node_inst(
+            &ix,
+            NodeId(p.nodes.iter().position(|n| n.ident == "g").unwrap()),
+            Vec::new(),
+        );
         while m.pop().is_some() {}
         m.read(Dep::Ret(f), g);
         m.set_ret(f, Ty::unit());

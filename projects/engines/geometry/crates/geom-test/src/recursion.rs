@@ -151,7 +151,14 @@ impl Problem {
 
 impl fmt::Display for Problem {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}:{}: {}: {}", self.file, self.line, self.rule.label(), self.what)
+        write!(
+            f,
+            "{}:{}: {}: {}",
+            self.file,
+            self.line,
+            self.rule.label(),
+            self.what
+        )
     }
 }
 
@@ -206,7 +213,10 @@ pub fn analyse(sources: Vec<CrateSource>, read: OwnedReader) -> Report {
 
 /// Analyses on the calling thread.
 #[must_use]
-pub fn analyse_here(sources: &[CrateSource], read: &(dyn Fn(&str) -> Result<String, String> + Send + Sync)) -> Report {
+pub fn analyse_here(
+    sources: &[CrateSource],
+    read: &(dyn Fn(&str) -> Result<String, String> + Send + Sync),
+) -> Report {
     let mut all = stdlib::sources();
     all.extend(sources.iter().cloned());
     let program = model::load(&all, &|p| stdlib::read_model(p).map_or_else(|| read(p), Ok));
@@ -217,7 +227,11 @@ pub fn analyse_here(sources: &[CrateSource], read: &(dyn Fn(&str) -> Result<Stri
     let cycles = graph::cycles(&ix, &mono);
     let types = graph::type_cycles(&ix);
     let mut statements = Vec::new();
-    for c in program.crates.iter().filter(|c| c.source.role == Role::Ships) {
+    for c in program
+        .crates
+        .iter()
+        .filter(|c| c.source.role == Role::Ships)
+    {
         let prefix = format!("{}/src/", c.source.folder);
         for (file, text) in program.files.iter().filter(|(f, _)| f.starts_with(&prefix)) {
             let (s, p) = statement::read(file, text);
@@ -230,21 +244,31 @@ pub fn analyse_here(sources: &[CrateSource], read: &(dyn Fn(&str) -> Result<Stri
     problems.sort();
     problems.dedup();
     let mut bound_tests: BTreeMap<String, (String, Vec<String>)> = BTreeMap::new();
-    for c in program.crates.iter().filter(|c| c.source.role == Role::BoundTests) {
-        bound_tests.insert(c.source.package.clone(), (c.source.root.clone(), Vec::new()));
+    for c in program
+        .crates
+        .iter()
+        .filter(|c| c.source.role == Role::BoundTests)
+    {
+        bound_tests.insert(
+            c.source.package.clone(),
+            (c.source.root.clone(), Vec::new()),
+        );
     }
     for s in &statements {
-        let krate = program
-            .crates
-            .iter()
-            .find(|c| c.source.role == Role::Ships && s.file.starts_with(&format!("{}/", c.source.folder)));
+        let krate = program.crates.iter().find(|c| {
+            c.source.role == Role::Ships && s.file.starts_with(&format!("{}/", c.source.folder))
+        });
         if let Some(c) = krate
             && let Some((_, tests)) = bound_tests.get_mut(&c.source.package)
         {
             tests.push(s.test.clone());
         }
     }
-    let edges = mono.edges.values().map(BTreeMap::len).fold(0_usize, usize::saturating_add);
+    let edges = mono
+        .edges
+        .values()
+        .map(BTreeMap::len)
+        .fold(0_usize, usize::saturating_add);
     Report {
         cycles,
         types,
@@ -315,8 +339,7 @@ pub fn sources(root: &Path) -> Result<Vec<CrateSource>, String> {
 pub fn analyse_repo(root: &Path) -> Result<Report, String> {
     let sources = sources(root)?;
     let base = root.to_path_buf();
-    let read: OwnedReader = Box::new(move |p: &str| {
-        std::fs::read_to_string(base.join(p)).map_err(|e| e.to_string())
-    });
+    let read: OwnedReader =
+        Box::new(move |p: &str| std::fs::read_to_string(base.join(p)).map_err(|e| e.to_string()));
     Ok(analyse(sources, read))
 }

@@ -103,7 +103,10 @@ pub fn read(file: &str, text: &str) -> (Vec<Statement>, Vec<Problem>) {
         .enumerate()
         .filter(|(i, l)| {
             l.starts_with("Recursion")
-                && (*i == 0 || lines.get(i.saturating_sub(1)).is_some_and(|p| p.trim().is_empty()))
+                && (*i == 0
+                    || lines
+                        .get(i.saturating_sub(1))
+                        .is_some_and(|p| p.trim().is_empty()))
         })
         .map(|(i, _)| i)
         .collect();
@@ -173,6 +176,10 @@ pub fn read(file: &str, text: &str) -> (Vec<Statement>, Vec<Problem>) {
 }
 
 /// Reads one item.
+#[allow(
+    clippy::too_many_lines,
+    reason = "the parts of a statement in their written order"
+)]
 fn item(file: &str, line: usize, lines: &[String]) -> Result<Statement, Vec<Problem>> {
     let mut parts: Vec<(&str, String)> = Vec::new();
     let mut problems = Vec::new();
@@ -191,13 +198,20 @@ fn item(file: &str, line: usize, lines: &[String]) -> Result<Statement, Vec<Prob
         }
     }
     let get = |label: &str| -> Vec<&String> {
-        parts.iter().filter(|(l, _)| *l == label).map(|(_, t)| t).collect()
+        parts
+            .iter()
+            .filter(|(l, _)| *l == label)
+            .map(|(_, t)| t)
+            .collect()
     };
     let kind = match parts.first().map(|(l, _)| *l) {
         Some("Cycle: ") => Kind::Cycle,
         Some("Types: ") => Kind::Types,
         _ => {
-            bad("an item must open with `Cycle: ` (functions) or `Types: ` (recursive types)".to_owned());
+            bad(
+                "an item must open with `Cycle: ` (functions) or `Types: ` (recursive types)"
+                    .to_owned(),
+            );
             Kind::Cycle
         }
     };
@@ -208,7 +222,10 @@ fn item(file: &str, line: usize, lines: &[String]) -> Result<Statement, Vec<Prob
     for label in PARTS {
         let n = get(label).len();
         if n > 1 {
-            bad(format!("`{}` is written {n} times in one item", label.trim_end()));
+            bad(format!(
+                "`{}` is written {n} times in one item",
+                label.trim_end()
+            ));
         }
     }
     if !get("Cycle: ").is_empty() && !get("Types: ").is_empty() {
@@ -216,12 +233,17 @@ fn item(file: &str, line: usize, lines: &[String]) -> Result<Statement, Vec<Prob
     }
     let names = get(head).first().map(|t| backticked(t)).unwrap_or_default();
     if names.is_empty() || names.iter().any(String::is_empty) {
-        bad(format!("`{}` names nothing: list its members in backticks", head.trim_end()));
+        bad(format!(
+            "`{}` names nothing: list its members in backticks",
+            head.trim_end()
+        ));
     }
     let mut bound = 0_u64;
     let mut constant = None;
     match get("Bound: ").first() {
-        None => bad("no `Bound: ` line: state the most frames of the cycle on the stack at once".to_owned()),
+        None => bad(
+            "no `Bound: ` line: state the most frames of the cycle on the stack at once".to_owned(),
+        ),
         Some(text) => {
             let digits: String = text
                 .chars()
@@ -230,32 +252,39 @@ fn item(file: &str, line: usize, lines: &[String]) -> Result<Statement, Vec<Prob
                 .collect();
             match digits.parse::<u64>() {
                 Ok(n) if n > 0 => bound = n,
-                _ => bad(format!("`Bound: {text}` does not open with a positive whole number")),
+                _ => bad(format!(
+                    "`Bound: {text}` does not open with a positive whole number"
+                )),
             }
-            let named = backticked(text);
-            match named.as_slice() {
+            let constants = backticked(text);
+            match constants.as_slice() {
                 [] => {}
                 [one] if !one.is_empty() => constant = Some(one.clone()),
                 _ => bad(format!("`Bound: {text}` names more than one constant")),
             }
         }
     }
-    let why = get("Why: ").first().map(|t| t.trim().to_owned()).unwrap_or_default();
+    let why = get("Why: ")
+        .first()
+        .map(|t| t.trim().to_owned())
+        .unwrap_or_default();
     if !states(&why) {
         bad("no `Why: ` that states why the bound holds".to_owned());
     }
-    let test = match get("Test: ").first().map(|t| backticked(t)) {
-        Some(names) => match names.as_slice() {
-            [one] if is_ident(one) => one.clone(),
-            _ => {
-                bad("`Test: ` names one test function of `tests/recursion.rs`, in backticks".to_owned());
-                String::new()
-            }
-        },
-        None => {
-            bad("no `Test: ` line naming the test that runs the cycle at its bound".to_owned());
+    let test = if let Some(named) = get("Test: ").first().map(|t| backticked(t)) {
+        if let [one] = named.as_slice()
+            && is_ident(one)
+        {
+            one.clone()
+        } else {
+            bad(
+                "`Test: ` names one test function of `tests/recursion.rs`, in backticks".to_owned(),
+            );
             String::new()
         }
+    } else {
+        bad("no `Test: ` line naming the test that runs the cycle at its bound".to_owned());
+        String::new()
     };
     if !problems.is_empty() {
         return Err(problems);
@@ -312,16 +341,48 @@ mod tests {
     #[test]
     fn every_malformed_part_is_reported() {
         for (from, to, what) in [
-            ("Bound: 1_024 (`MAX_DEPTH`).", "Bound: none.", "positive whole number"),
-            ("Bound: 1_024 (`MAX_DEPTH`).", "Bound: 0.", "positive whole number"),
+            (
+                "Bound: 1_024 (`MAX_DEPTH`).",
+                "Bound: none.",
+                "positive whole number",
+            ),
+            (
+                "Bound: 1_024 (`MAX_DEPTH`).",
+                "Bound: 0.",
+                "positive whole number",
+            ),
             ("//!   Bound: 1_024 (`MAX_DEPTH`).\n", "", "no `Bound: `"),
-            ("Why: one level per call,\n//!   refused past the limit.", "Why: TBD.", "no `Why: `"),
-            ("Test: `walk_at_its_bound`.", "Test: walk_at_its_bound.", "names one test"),
-            ("Test: `walk_at_its_bound`.", "Test: `a`, `b`.", "names one test"),
-            ("Cycle: `Tree::walk`, `walk_children`.", "Cycle: walk.", "names nothing"),
+            (
+                "Why: one level per call,\n//!   refused past the limit.",
+                "Why: TBD.",
+                "no `Why: `",
+            ),
+            (
+                "Test: `walk_at_its_bound`.",
+                "Test: walk_at_its_bound.",
+                "names one test",
+            ),
+            (
+                "Test: `walk_at_its_bound`.",
+                "Test: `a`, `b`.",
+                "names one test",
+            ),
+            (
+                "Cycle: `Tree::walk`, `walk_children`.",
+                "Cycle: walk.",
+                "names nothing",
+            ),
             ("- Cycle:", "- Loop:", "must open with"),
-            ("Bound: 32.", "Bound: 32.\n//!   Bound: 33.", "written 2 times"),
-            ("//! Recursion:\n//!\n", "//! Recursion: none.\n//!\n", "alone"),
+            (
+                "Bound: 32.",
+                "Bound: 32.\n//!   Bound: 33.",
+                "written 2 times",
+            ),
+            (
+                "//! Recursion:\n//!\n",
+                "//! Recursion: none.\n//!\n",
+                "alone",
+            ),
         ] {
             assert!(GOOD.contains(from), "{from}");
             let text = GOOD.replacen(from, to, 1);
@@ -330,14 +391,20 @@ mod tests {
         }
         let (_, p) = read("a.rs", "//! A.\n//!\n//! Recursion:\n//!\n//! Cost: x.\n");
         assert!(p.iter().any(|x| x.what.contains("no `- Cycle:`")), "{p:?}");
-        let twice = format!("{}//!\n//! Recursion:\n//!\n//! - Cycle: `x`.\n", GOOD.replace("fn f() {}\n", ""));
+        let twice = format!(
+            "{}//!\n//! Recursion:\n//!\n//! - Cycle: `x`.\n",
+            GOOD.replace("fn f() {}\n", "")
+        );
         let (_, p) = read("a.rs", &twice);
         assert!(p.iter().any(|x| x.what.contains("twice")), "{p:?}");
     }
 
     #[test]
     fn only_the_header_is_read() {
-        let (s, p) = read("a.rs", "//! A.\nfn f() {}\n//! Recursion:\n//!\n//! - Cycle: `f`.\n");
+        let (s, p) = read(
+            "a.rs",
+            "//! A.\nfn f() {}\n//! Recursion:\n//!\n//! - Cycle: `f`.\n",
+        );
         assert!(s.is_empty() && p.is_empty());
     }
 }

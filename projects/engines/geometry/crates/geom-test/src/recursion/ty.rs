@@ -119,13 +119,19 @@ impl Prim {
     /// Its name.
     #[must_use]
     pub fn name(self) -> &'static str {
-        PRIMS.iter().find(|(p, _)| *p == self).map_or("?", |(_, n)| n)
+        PRIMS
+            .iter()
+            .find(|(p, _)| *p == self)
+            .map_or("?", |(_, n)| n)
     }
 
     /// Whether it is an integer type.
     #[must_use]
     pub fn is_int(self) -> bool {
-        !matches!(self, Prim::Bool | Prim::Char | Prim::Str | Prim::F16 | Prim::F32 | Prim::F64)
+        !matches!(
+            self,
+            Prim::Bool | Prim::Char | Prim::Str | Prim::F16 | Prim::F32 | Prim::F64
+        )
     }
 
     /// Whether it is a floating-point type.
@@ -150,7 +156,10 @@ impl TraitRef {
     /// The binding of associated type `name`, if the bound fixes it.
     #[must_use]
     pub fn binding(&self, name: &str) -> Option<&Ty> {
-        self.bindings.iter().find(|(n, _)| n == name).map(|(_, t)| t)
+        self.bindings
+            .iter()
+            .find(|(n, _)| n == name)
+            .map(|(_, t)| t)
     }
 
     /// The trait reference with `f` applied to every type in it.
@@ -158,8 +167,12 @@ impl TraitRef {
     pub fn map(&self, f: &mut dyn FnMut(&Ty) -> Ty) -> TraitRef {
         TraitRef {
             id: self.id,
-            args: self.args.iter().map(|a| f(a)).collect(),
-            bindings: self.bindings.iter().map(|(n, t)| (n.clone(), f(t))).collect(),
+            args: self.args.iter().map(&mut *f).collect(),
+            bindings: self
+                .bindings
+                .iter()
+                .map(|(n, t)| (n.clone(), f(t)))
+                .collect(),
         }
     }
 }
@@ -343,15 +356,22 @@ impl Ty {
                 tr.as_ref().map(|t| Box::new(t.map(&mut |x| x.fold(f)))),
                 name.clone(),
             ),
-            Ty::FnPtr(params, ret) => Ty::FnPtr(params.iter().map(|p| p.fold(f)).collect(), Box::new(ret.fold(f))),
+            Ty::FnPtr(params, ret) => Ty::FnPtr(
+                params.iter().map(|p| p.fold(f)).collect(),
+                Box::new(ret.fold(f)),
+            ),
             Ty::Closure(k) => Ty::Closure(Box::new(ClosureKey {
                 owner: k.owner,
                 subst: k.subst.iter().map(|a| a.fold(f)).collect(),
                 index: k.index,
             })),
             Ty::Dyn(traits) => Ty::Dyn(traits.iter().map(|t| t.map(&mut |x| x.fold(f))).collect()),
-            Ty::Opaque(traits) => Ty::Opaque(traits.iter().map(|t| t.map(&mut |x| x.fold(f))).collect()),
-            Ty::Prim(_) | Ty::Param(_) | Ty::Never | Ty::Var(_) | Ty::Infer | Ty::Unknown => self.clone(),
+            Ty::Opaque(traits) => {
+                Ty::Opaque(traits.iter().map(|t| t.map(&mut |x| x.fold(f))).collect())
+            }
+            Ty::Prim(_) | Ty::Param(_) | Ty::Never | Ty::Var(_) | Ty::Infer | Ty::Unknown => {
+                self.clone()
+            }
         };
         f(&inner).unwrap_or(inner)
     }
@@ -375,8 +395,15 @@ impl Ty {
             Ty::Adt(_, args) | Ty::Tuple(args) | Ty::FnDef(_, args) => {
                 args.iter().map(Ty::depth).max().unwrap_or(0)
             }
-            Ty::Ref(inner, _) | Ty::Slice(inner) | Ty::Array(inner) | Ty::Assoc(inner, ..) => inner.depth(),
-            Ty::FnPtr(params, ret) => params.iter().map(Ty::depth).max().unwrap_or(0).max(ret.depth()),
+            Ty::Ref(inner, _) | Ty::Slice(inner) | Ty::Array(inner) | Ty::Assoc(inner, ..) => {
+                inner.depth()
+            }
+            Ty::FnPtr(params, ret) => params
+                .iter()
+                .map(Ty::depth)
+                .max()
+                .unwrap_or(0)
+                .max(ret.depth()),
             Ty::Closure(k) => k.subst.iter().map(Ty::depth).max().unwrap_or(0),
             Ty::Dyn(traits) | Ty::Opaque(traits) => traits
                 .iter()
@@ -420,9 +447,15 @@ impl Ty {
                 subst: all(&k.subst),
                 index: k.index,
             })),
-            Ty::Dyn(traits) => Ty::Dyn(traits.iter().map(|t| t.map(&mut |x| x.cut_at(d))).collect()),
-            Ty::Opaque(traits) => Ty::Opaque(traits.iter().map(|t| t.map(&mut |x| x.cut_at(d))).collect()),
-            Ty::Prim(_) | Ty::Param(_) | Ty::Never | Ty::Var(_) | Ty::Infer | Ty::Unknown => self.clone(),
+            Ty::Dyn(traits) => {
+                Ty::Dyn(traits.iter().map(|t| t.map(&mut |x| x.cut_at(d))).collect())
+            }
+            Ty::Opaque(traits) => {
+                Ty::Opaque(traits.iter().map(|t| t.map(&mut |x| x.cut_at(d))).collect())
+            }
+            Ty::Prim(_) | Ty::Param(_) | Ty::Never | Ty::Var(_) | Ty::Infer | Ty::Unknown => {
+                self.clone()
+            }
         }
     }
 }
@@ -475,7 +508,10 @@ mod tests {
         let c = t.cut();
         assert!(c.depth() <= MAX_DEPTH + 1, "{}", c.depth());
         assert!(c.has_unknown());
-        assert_eq!(adt(3, vec![Ty::Prim(Prim::U8)]).cut(), adt(3, vec![Ty::Prim(Prim::U8)]));
+        assert_eq!(
+            adt(3, vec![Ty::Prim(Prim::U8)]).cut(),
+            adt(3, vec![Ty::Prim(Prim::U8)])
+        );
     }
 
     #[test]

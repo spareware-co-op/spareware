@@ -39,6 +39,12 @@
 //! filed under the heads of the receiver's auto-dereference steps (at most [`DEREF_DEPTH`]), each
 //! by one unification; bounds of blanket implementations are checked to depth [`BOUND_DEPTH`].
 
+// `inner` (a reference's referent) and `infer` (the inference table) are both the natural names.
+#![allow(
+    clippy::similar_names,
+    reason = "`inner` and `infer` name different things plainly"
+)]
+
 use std::collections::{BTreeMap, BTreeSet};
 
 use quote::ToTokens;
@@ -83,13 +89,15 @@ pub mod how {
     /// Every implementation of a trait, on a trait object.
     pub const DYN: &str = "a call on a trait object (every implementation of the trait)";
     /// An implicit trait call: an operator, `?`, `for`, indexing, a dereference, formatting.
-    pub const IMPLICIT: &str = "an implicit trait call (operator, ?, for, index, deref, formatting)";
+    pub const IMPLICIT: &str =
+        "an implicit trait call (operator, ?, for, index, deref, formatting)";
     /// A derived implementation's call of its fields' implementations.
     pub const DERIVED: &str = "a derived implementation's call on a field";
     /// A call through a value holding a closure or function item.
     pub const VALUE: &str = "a call through a value (closure or function item)";
     /// A call through a trait object or function pointer: every callable coerced to one.
-    pub const ERASED: &str = "a call through a closure trait object or function pointer (every callable coerced to one)";
+    pub const ERASED: &str =
+        "a call through a closure trait object or function pointer (every callable coerced to one)";
     /// Drop glue.
     pub const DROP: &str = "drop glue (a Drop implementation)";
 }
@@ -308,7 +316,10 @@ impl<'p> Index<'p> {
             let mut scope = imp.scope.clone();
             scope.self_ref = SelfRef::None;
             let self_ty = resolver.ty(&scope, &imp.self_ty);
-            let trait_ref = imp.trait_path.as_ref().and_then(|p| resolver.trait_ref(&imp.scope, p));
+            let trait_ref = imp
+                .trait_path
+                .as_ref()
+                .and_then(|p| resolver.trait_ref(&imp.scope, p));
             match head(&self_ty) {
                 Some(h) => by_head.entry(h).or_default().push(id),
                 None => blanket.push(id),
@@ -326,7 +337,10 @@ impl<'p> Index<'p> {
         let mut derived: BTreeMap<ItemId, Vec<(String, NodeId)>> = BTreeMap::new();
         for (n, node) in program.nodes.iter().enumerate() {
             if let NodeKind::Derived { item, trait_name } = &node.kind {
-                derived.entry(*item).or_default().push((trait_name.clone(), NodeId(n)));
+                derived
+                    .entry(*item)
+                    .or_default()
+                    .push((trait_name.clone(), NodeId(n)));
             }
         }
         let mut index = Index {
@@ -350,9 +364,15 @@ impl<'p> Index<'p> {
             .filter_map(|(n, p)| index.model_item(p).map(|id| ((*n).to_owned(), id)))
             .collect();
         index.complete_impl_traits();
-        index.generics = (0..program.nodes.len()).map(|n| index.generics_of(NodeId(n))).collect();
-        index.sigs = (0..program.nodes.len()).map(|n| index.sig_of(NodeId(n))).collect();
-        index.names = (0..program.nodes.len()).map(|n| index.name_of(NodeId(n))).collect();
+        index.generics = (0..program.nodes.len())
+            .map(|n| index.generics_of(NodeId(n)))
+            .collect();
+        index.sigs = (0..program.nodes.len())
+            .map(|n| index.sig_of(NodeId(n)))
+            .collect();
+        index.names = (0..program.nodes.len())
+            .map(|n| index.name_of(NodeId(n)))
+            .collect();
         index
     }
 
@@ -363,7 +383,9 @@ impl<'p> Index<'p> {
             .program
             .crates
             .iter()
-            .find(|c| c.source.role == crate::recursion::model::Role::Model && c.source.lib == "core")?
+            .find(|c| {
+                c.source.role == crate::recursion::model::Role::Model && c.source.lib == "core"
+            })?
             .root;
         let scope = Scope {
             module: root,
@@ -390,10 +412,18 @@ impl<'p> Index<'p> {
                 let Some(t) = self.lang.trait_named(trait_name) else {
                     continue;
                 };
-                let ident = self.program.node(*node).map(|n| n.ident.clone()).unwrap_or_default();
+                let ident = self
+                    .program
+                    .node(*node)
+                    .map(|n| n.ident.clone())
+                    .unwrap_or_default();
                 add.push(ImplInfo {
                     self_ty: self.adt_open(*item),
-                    trait_ref: Some(TraitRef { id: t, args: Vec::new(), bindings: Vec::new() }),
+                    trait_ref: Some(TraitRef {
+                        id: t,
+                        args: Vec::new(),
+                        bindings: Vec::new(),
+                    }),
                     generics: self.program.item(*item).scope.generics.clone(),
                     methods: BTreeMap::from([(ident, vec![*node])]),
                 });
@@ -427,7 +457,9 @@ impl<'p> Index<'p> {
     /// Whether implementation `imp` defines method `name` itself.
     #[must_use]
     pub fn impl_defines(&self, imp: ImplId, name: &str) -> bool {
-        self.impls.get(imp.0).is_some_and(|i| i.methods.contains_key(name))
+        self.impls
+            .get(imp.0)
+            .is_some_and(|i| i.methods.contains_key(name))
     }
 
     fn find_lang(&self) -> Lang {
@@ -439,7 +471,14 @@ impl<'p> Index<'p> {
             boxed: self.model_item("boxed::Box"),
             ..Lang::default()
         };
-        for r in ["Range", "RangeInclusive", "RangeFrom", "RangeTo", "RangeToInclusive", "RangeFull"] {
+        for r in [
+            "Range",
+            "RangeInclusive",
+            "RangeFrom",
+            "RangeTo",
+            "RangeToInclusive",
+            "RangeFull",
+        ] {
             if let Some(id) = self.model_item(&format!("ops::{r}")) {
                 lang.ranges.insert(r.to_owned(), id);
             }
@@ -502,7 +541,13 @@ impl<'p> Index<'p> {
     /// A type as names show it.
     #[must_use]
     pub fn show(&self, ty: &Ty) -> String {
-        let list = |items: &[Ty]| items.iter().map(|t| self.show(t)).collect::<Vec<_>>().join(", ");
+        let list = |items: &[Ty]| {
+            items
+                .iter()
+                .map(|t| self.show(t))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
         match ty {
             Ty::Adt(id, args) => {
                 let item = self.program.item(*id);
@@ -511,7 +556,11 @@ impl<'p> Index<'p> {
                     .crates
                     .get(self.program.module(item.module).krate)
                     .is_some_and(|c| c.source.role == crate::recursion::model::Role::Model);
-                let base = if model { item.name.clone() } else { item.path.clone() };
+                let base = if model {
+                    item.name.clone()
+                } else {
+                    item.path.clone()
+                };
                 if args.is_empty() {
                     base
                 } else {
@@ -527,11 +576,19 @@ impl<'p> Index<'p> {
             Ty::Param(g) => self.program.generic(*g).name.clone(),
             Ty::Dyn(traits) => format!(
                 "dyn {}",
-                traits.iter().map(|t| self.program.item(t.id).name.clone()).collect::<Vec<_>>().join(" + ")
+                traits
+                    .iter()
+                    .map(|t| self.program.item(t.id).name.clone())
+                    .collect::<Vec<_>>()
+                    .join(" + ")
             ),
             Ty::Opaque(traits) => format!(
                 "impl {}",
-                traits.iter().map(|t| self.program.item(t.id).name.clone()).collect::<Vec<_>>().join(" + ")
+                traits
+                    .iter()
+                    .map(|t| self.program.item(t.id).name.clone())
+                    .collect::<Vec<_>>()
+                    .join(" + ")
             ),
             Ty::Assoc(base, _, name) => format!("{}::{name}", self.show(base)),
             Ty::FnPtr(params, ret) => format!("fn({}) -> {}", list(params), self.show(ret)),
@@ -563,14 +620,26 @@ impl<'p> Index<'p> {
                     .get(imp.0)
                     .map(|i| self.show_head(&i.self_ty))
                     .filter(|s| s != "{unknown}")
-                    .unwrap_or_else(|| self.impl_block(*imp).map(|b| b.self_ty.to_token_stream().to_string()).unwrap_or_default());
+                    .unwrap_or_else(|| {
+                        self.impl_block(*imp)
+                            .map(|b| b.self_ty.to_token_stream().to_string())
+                            .unwrap_or_default()
+                    });
                 match self.impls.get(imp.0).and_then(|i| i.trait_ref.as_ref()) {
-                    Some(tr) => format!("<{self_ty} as {}>::{}", self.program.item(tr.id).name, node.ident),
+                    Some(tr) => format!(
+                        "<{self_ty} as {}>::{}",
+                        self.program.item(tr.id).name,
+                        node.ident
+                    ),
                     None => format!("{self_ty}::{}", node.ident),
                 }
             }
             NodeKind::Derived { item, trait_name } => {
-                format!("<{} as {trait_name}>::{}", self.program.item(*item).path, node.ident)
+                format!(
+                    "<{} as {trait_name}>::{}",
+                    self.program.item(*item).path,
+                    node.ident
+                )
             }
         }
     }
@@ -631,7 +700,11 @@ impl<'p> Index<'p> {
     /// The map from node `id`'s generic parameters to `args`.
     #[must_use]
     pub fn map_of(&self, id: NodeId, args: &[Ty]) -> Map {
-        self.node_generics(id).iter().copied().zip(args.iter().cloned()).collect()
+        self.node_generics(id)
+            .iter()
+            .copied()
+            .zip(args.iter().cloned())
+            .collect()
     }
 
     /// The `Self` type of node `id`, its generic parameters open.
@@ -652,7 +725,16 @@ impl<'p> Index<'p> {
     /// Item `item` with its generic parameters open.
     #[must_use]
     pub fn adt_open(&self, item: ItemId) -> Ty {
-        Ty::Adt(item, self.program.item(item).scope.generics.iter().map(|g| Ty::Param(*g)).collect())
+        Ty::Adt(
+            item,
+            self.program
+                .item(item)
+                .scope
+                .generics
+                .iter()
+                .map(|g| Ty::Param(*g))
+                .collect(),
+        )
     }
 
     fn sig_of(&self, id: NodeId) -> Sig {
@@ -706,7 +788,9 @@ impl<'p> Index<'p> {
                     let own = self_ty.cloned().unwrap_or(Ty::Unknown);
                     let t = match &r.kind {
                         syn::ReceiverKind::Typed(_, t) => self.resolver.ty(scope, t),
-                        syn::ReceiverKind::Reference(_, _, m) => Ty::Ref(Box::new(own), m.is_some()),
+                        syn::ReceiverKind::Reference(_, _, m) => {
+                            Ty::Ref(Box::new(own), m.is_some())
+                        }
                         _ => own,
                     };
                     inputs.push(t);
@@ -718,7 +802,11 @@ impl<'p> Index<'p> {
             syn::ReturnType::Default => Ty::unit(),
             syn::ReturnType::Type(_, t) => self.resolver.ty(scope, t),
         };
-        Sig { inputs, receiver, output }
+        Sig {
+            inputs,
+            receiver,
+            output,
+        }
     }
 
     /// Node `id`'s signature.
@@ -765,8 +853,12 @@ impl<'p> Index<'p> {
             out.push(x);
             let item = self.program.item(x);
             if let ItemKind::Trait { supertraits, .. } = &item.kind {
-                let mut supers: Vec<ItemId> =
-                    self.resolver.trait_refs(&item.scope, supertraits.iter()).into_iter().map(|r| r.id).collect();
+                let mut supers: Vec<ItemId> = self
+                    .resolver
+                    .trait_refs(&item.scope, supertraits.iter())
+                    .into_iter()
+                    .map(|r| r.id)
+                    .collect();
                 supers.reverse();
                 work.extend(supers);
             }
@@ -785,10 +877,18 @@ impl<'p> Index<'p> {
             }
             let item = self.program.item(t.id);
             if let ItemKind::Trait {
-                supertraits, self_gen, ..
+                supertraits,
+                self_gen,
+                ..
             } = &item.kind
             {
-                let mut map: Map = item.scope.generics.iter().copied().zip(t.args.iter().cloned()).collect();
+                let mut map: Map = item
+                    .scope
+                    .generics
+                    .iter()
+                    .copied()
+                    .zip(t.args.iter().cloned())
+                    .collect();
                 map.insert(*self_gen, self_ty.clone());
                 for s in self.resolver.trait_refs(&item.scope, supertraits.iter()) {
                     let s = self.complete(&s, &Ty::Param(*self_gen));
@@ -796,7 +896,10 @@ impl<'p> Index<'p> {
                     // A binding written on the subtrait (`Fn(A) -> R` fixes `FnOnce::Output`)
                     // belongs to whichever trait declares it.
                     for (n, b) in &t.bindings {
-                        if self.resolver.declaring_trait(std::slice::from_ref(&sub), n).is_some()
+                        if self
+                            .resolver
+                            .declaring_trait(std::slice::from_ref(&sub), n)
+                            .is_some()
                             && sub.binding(n).is_none()
                         {
                             sub.bindings.push((n.clone(), b.clone()));
@@ -844,7 +947,12 @@ impl<'p> Index<'p> {
             }
             Ty::Assoc(owner, Some(tr), name) => {
                 let item = self.program.item(tr.id);
-                let ItemKind::Trait { assoc_types, self_gen, .. } = &item.kind else {
+                let ItemKind::Trait {
+                    assoc_types,
+                    self_gen,
+                    ..
+                } = &item.kind
+                else {
                     return Vec::new();
                 };
                 let Some(bounds) = assoc_types.get(name) else {
@@ -852,7 +960,13 @@ impl<'p> Index<'p> {
                 };
                 // The bounds are written in the trait: its `Self` is the projection's base, its
                 // parameters the projection's trait arguments.
-                let mut map: Map = item.scope.generics.iter().copied().zip(tr.args.iter().cloned()).collect();
+                let mut map: Map = item
+                    .scope
+                    .generics
+                    .iter()
+                    .copied()
+                    .zip(tr.args.iter().cloned())
+                    .collect();
                 map.insert(*self_gen, (**owner).clone());
                 let mut out = Vec::new();
                 for b in self.resolver.trait_refs(&item.scope, bounds.iter()) {
@@ -884,7 +998,11 @@ impl<'p> Index<'p> {
             },
             _ => return Vec::new(),
         };
-        fields.all().into_iter().map(|(n, t)| (n, self.resolver.ty(&it.scope, t))).collect()
+        fields
+            .all()
+            .into_iter()
+            .map(|(n, t)| (n, self.resolver.ty(&it.scope, t)))
+            .collect()
     }
 
     /// Every field type of every variant of item `item`, in terms of its parameters.
@@ -895,21 +1013,46 @@ impl<'p> Index<'p> {
                 .flat_map(|v| self.fields(item, Some(v)))
                 .map(|(_, t)| t)
                 .collect(),
-            _ => self.fields(item, None).into_iter().map(|(_, t)| t).collect(),
+            _ => self
+                .fields(item, None)
+                .into_iter()
+                .map(|(_, t)| t)
+                .collect(),
         }
     }
 
     /// The type of field `name` of a value of type `base`, after auto-dereference, with the steps
     /// dereferenced to reach it; `None` when no step has it.
     #[must_use]
-    pub fn field_ty(&self, base: &Ty, name: &str, infer: &mut Infer, sigs: ClosureSigs<'_>) -> Option<(Ty, Vec<Ty>)> {
+    pub fn field_ty(
+        &self,
+        base: &Ty,
+        name: &str,
+        infer: &mut Infer,
+        sigs: ClosureSigs<'_>,
+    ) -> Option<(Ty, Vec<Ty>)> {
         let steps = self.autoderef(base, infer, sigs);
         for (i, step) in steps.iter().enumerate() {
             let before = || steps.iter().take(i).cloned().collect::<Vec<_>>();
             match step {
-                Ty::Adt(id, args) if matches!(self.program.item(*id).kind, ItemKind::Struct { .. } | ItemKind::Union { .. }) => {
-                    let map: Map = self.program.item(*id).scope.generics.iter().copied().zip(args.iter().cloned()).collect();
-                    if let Some((_, t)) = self.fields(*id, None).into_iter().find(|(n, _)| n == name) {
+                Ty::Adt(id, args)
+                    if matches!(
+                        self.program.item(*id).kind,
+                        ItemKind::Struct { .. } | ItemKind::Union { .. }
+                    ) =>
+                {
+                    let map: Map = self
+                        .program
+                        .item(*id)
+                        .scope
+                        .generics
+                        .iter()
+                        .copied()
+                        .zip(args.iter().cloned())
+                        .collect();
+                    if let Some((_, t)) =
+                        self.fields(*id, None).into_iter().find(|(n, _)| n == name)
+                    {
                         return Some((t.subst(&map), before()));
                     }
                 }
@@ -935,8 +1078,16 @@ impl<'p> Index<'p> {
             Ty::Ref(inner, _) => Some((**inner).clone()),
             Ty::Adt(..) | Ty::Param(_) | Ty::Opaque(_) | Ty::Assoc(..) => {
                 let deref = self.lang.trait_named("Deref")?;
-                let tr = TraitRef { id: deref, args: Vec::new(), bindings: Vec::new() };
-                let target = self.normalize(&Ty::Assoc(Box::new(t.clone()), Some(Box::new(tr)), "Target".to_owned()), infer, sigs);
+                let tr = TraitRef {
+                    id: deref,
+                    args: Vec::new(),
+                    bindings: Vec::new(),
+                };
+                let target = self.normalize(
+                    &Ty::Assoc(Box::new(t.clone()), Some(Box::new(tr)), "Target".to_owned()),
+                    infer,
+                    sigs,
+                );
                 match infer.shallow(&target) {
                     Ty::Assoc(..) | Ty::Unknown => None,
                     other => Some(other),
@@ -973,14 +1124,20 @@ impl<'p> Index<'p> {
 
     /// Fresh variables for implementation `imp`'s generic parameters.
     fn fresh_impl(&self, imp: ImplId, infer: &mut Infer) -> Map {
-        self.impl_generics(imp).iter().map(|g| (*g, infer.fresh())).collect()
+        self.impl_generics(imp)
+            .iter()
+            .map(|g| (*g, infer.fresh()))
+            .collect()
     }
 
     /// Whether implementation `imp`, its generic parameters as `map` gives them (variables), may
     /// apply to `ty` (and, for a trait implementation, with trait arguments `trait_args` when
     /// given): its header unifies and its bounds may hold. On success the unification is kept; on
     /// failure nothing changes.
-    #[allow(clippy::too_many_arguments, reason = "the match's inputs and the lookup's state")]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the match's inputs and the lookup's state"
+    )]
     pub fn try_impl(
         &self,
         imp: ImplId,
@@ -997,9 +1154,7 @@ impl<'p> Index<'p> {
         let snap = infer.snapshot();
         let pattern = info.self_ty.subst(map);
         let mut ok = infer.unify(&pattern, ty);
-        if ok
-            && let (Some(args), Some(tr)) = (trait_args, &info.trait_ref)
-        {
+        if ok && let (Some(args), Some(tr)) = (trait_args, &info.trait_ref) {
             for (a, b) in tr.args.iter().zip(args) {
                 if !infer.unify(&a.subst(map), b) {
                     ok = false;
@@ -1028,12 +1183,20 @@ impl<'p> Index<'p> {
         depth: usize,
     ) -> Option<Map> {
         let map = self.fresh_impl(imp, infer);
-        self.try_impl(imp, &map, ty, trait_args, infer, sigs, depth).then_some(map)
+        self.try_impl(imp, &map, ty, trait_args, infer, sigs, depth)
+            .then_some(map)
     }
 
     /// The implementations among `candidates` that may apply to `ty` (with `trait_args`), each
     /// with variables for its parameters; the unification is kept when exactly one applies.
-    fn applicable(&self, candidates: Vec<ImplId>, ty: &Ty, trait_args: Option<&[Ty]>, infer: &mut Infer, sigs: ClosureSigs<'_>) -> Vec<(ImplId, Map)> {
+    fn applicable(
+        &self,
+        candidates: Vec<ImplId>,
+        ty: &Ty,
+        trait_args: Option<&[Ty]>,
+        infer: &mut Infer,
+        sigs: ClosureSigs<'_>,
+    ) -> Vec<(ImplId, Map)> {
         let mut found = Vec::new();
         for imp in candidates {
             // The variables are made before the snapshot, so they outlive its rollback.
@@ -1058,7 +1221,14 @@ impl<'p> Index<'p> {
 
     /// Whether implementation `imp`'s generic parameters, as `map` gives them, may meet their
     /// bounds.
-    fn bounds_may_hold(&self, imp: ImplId, map: &Map, infer: &mut Infer, sigs: ClosureSigs<'_>, depth: usize) -> bool {
+    fn bounds_may_hold(
+        &self,
+        imp: ImplId,
+        map: &Map,
+        infer: &mut Infer,
+        sigs: ClosureSigs<'_>,
+        depth: usize,
+    ) -> bool {
         if depth >= BOUND_DEPTH {
             return true;
         }
@@ -1078,9 +1248,19 @@ impl<'p> Index<'p> {
 
     /// Whether type `t` may implement `tr`: it is not known well enough to say, or an
     /// implementation (or a built-in one, for closures and markers) may apply.
-    pub fn may_implement(&self, t: &Ty, tr: &TraitRef, infer: &mut Infer, sigs: ClosureSigs<'_>, depth: usize) -> bool {
+    pub fn may_implement(
+        &self,
+        t: &Ty,
+        tr: &TraitRef,
+        infer: &mut Infer,
+        sigs: ClosureSigs<'_>,
+        depth: usize,
+    ) -> bool {
         let t = infer.shallow(t);
-        if matches!(t, Ty::Var(_) | Ty::Unknown | Ty::Never | Ty::Infer | Ty::Assoc(_, None, _)) {
+        if matches!(
+            t,
+            Ty::Var(_) | Ty::Unknown | Ty::Never | Ty::Infer | Ty::Assoc(_, None, _)
+        ) {
             return true;
         }
         if self.is_marker(tr.id) {
@@ -1102,33 +1282,50 @@ impl<'p> Index<'p> {
                 .blanket
                 .iter()
                 .copied()
-                .filter(|i| self.impls.get(i.0).and_then(|x| x.trait_ref.as_ref()).is_some_and(|x| x.id == tr.id))
+                .filter(|i| {
+                    self.impls
+                        .get(i.0)
+                        .and_then(|x| x.trait_ref.as_ref())
+                        .is_some_and(|x| x.id == tr.id)
+                })
                 .collect();
             let snap = infer.snapshot();
-            let found = blanket.into_iter().any(|imp| self.match_impl(imp, &t, Some(&tr.args), infer, sigs, depth).is_some());
+            let found = blanket.into_iter().any(|imp| {
+                self.match_impl(imp, &t, Some(&tr.args), infer, sigs, depth)
+                    .is_some()
+            });
             infer.rollback_to(snap);
             return found;
         }
         if self.is_fn_trait(tr.id) {
-            return matches!(t, Ty::Closure(_) | Ty::FnDef(..) | Ty::FnPtr(..) | Ty::Ref(..))
-                || matches!(&t, Ty::Dyn(ts) if ts.iter().any(|x| self.is_fn_trait(x.id)))
+            return matches!(
+                t,
+                Ty::Closure(_) | Ty::FnDef(..) | Ty::FnPtr(..) | Ty::Ref(..)
+            ) || matches!(&t, Ty::Dyn(ts) if ts.iter().any(|x| self.is_fn_trait(x.id)))
                 || matches!(&t, Ty::Adt(id, _) if Some(*id) == self.lang.boxed);
         }
         if let Ty::Dyn(traits) = &t
-            && traits.iter().any(|x| self.trait_closure(x.id).contains(&tr.id))
+            && traits
+                .iter()
+                .any(|x| self.trait_closure(x.id).contains(&tr.id))
         {
             return true;
         }
         if let Ty::Adt(id, _) = &t
-            && self.program.item(*id).derives().iter().any(|d| *d == self.program.item(tr.id).name)
+            && self
+                .program
+                .item(*id)
+                .derives()
+                .iter()
+                .any(|d| *d == self.program.item(tr.id).name)
         {
             return true;
         }
         let snap = infer.snapshot();
-        let found = self
-            .candidates_for(&t, Some(tr.id))
-            .into_iter()
-            .any(|imp| self.match_impl(imp, &t, Some(&tr.args), infer, sigs, depth).is_some());
+        let found = self.candidates_for(&t, Some(tr.id)).into_iter().any(|imp| {
+            self.match_impl(imp, &t, Some(&tr.args), infer, sigs, depth)
+                .is_some()
+        });
         infer.rollback_to(snap);
         found
     }
@@ -1144,7 +1341,9 @@ impl<'p> Index<'p> {
     /// Whether trait `t` is `Fn`, `FnMut` or `FnOnce`.
     #[must_use]
     pub fn is_fn_trait(&self, t: ItemId) -> bool {
-        ["Fn", "FnMut", "FnOnce"].iter().any(|n| self.lang.trait_named(n) == Some(t))
+        ["Fn", "FnMut", "FnOnce"]
+            .iter()
+            .any(|n| self.lang.trait_named(n) == Some(t))
     }
 
     /// The implementations (of trait `tr`, when given) that may apply to a type with `t`'s head:
@@ -1158,7 +1357,12 @@ impl<'p> Index<'p> {
         }
         out.extend(self.blanket.iter().copied());
         if let Some(tr) = tr {
-            out.retain(|i| self.impls.get(i.0).and_then(|x| x.trait_ref.as_ref()).is_some_and(|x| x.id == tr));
+            out.retain(|i| {
+                self.impls
+                    .get(i.0)
+                    .and_then(|x| x.trait_ref.as_ref())
+                    .is_some_and(|x| x.id == tr)
+            });
         }
         out.sort();
         out.dedup();
@@ -1169,9 +1373,18 @@ impl<'p> Index<'p> {
 
     /// The implementations of trait `tr` that type `t` may use, each with its arguments, kept in
     /// `infer` when exactly one applies; a generic `t` gives none (see [`Index::probe`]).
-    pub fn select(&self, t: &Ty, tr: &TraitRef, infer: &mut Infer, sigs: ClosureSigs<'_>) -> Vec<(ImplId, Map)> {
+    pub fn select(
+        &self,
+        t: &Ty,
+        tr: &TraitRef,
+        infer: &mut Infer,
+        sigs: ClosureSigs<'_>,
+    ) -> Vec<(ImplId, Map)> {
         let t = infer.shallow(t);
-        if matches!(t, Ty::Var(_) | Ty::Unknown | Ty::Param(_) | Ty::Assoc(..) | Ty::Opaque(_) | Ty::Dyn(_)) {
+        if matches!(
+            t,
+            Ty::Var(_) | Ty::Unknown | Ty::Param(_) | Ty::Assoc(..) | Ty::Opaque(_) | Ty::Dyn(_)
+        ) {
             return Vec::new();
         }
         let tr = self.complete(tr, &t);
@@ -1183,12 +1396,23 @@ impl<'p> Index<'p> {
     /// default body; with generic arguments from `map` (the implementation's), `Self` being
     /// `self_ty`, and `method_args` for the method's own parameters.
     #[must_use]
-    pub fn impl_fn(&self, imp: ImplId, name: &str, map: &Map, self_ty: &Ty, method_args: &[Ty]) -> Option<(NodeId, Vec<Ty>)> {
+    pub fn impl_fn(
+        &self,
+        imp: ImplId,
+        name: &str,
+        map: &Map,
+        self_ty: &Ty,
+        method_args: &[Ty],
+    ) -> Option<(NodeId, Vec<Ty>)> {
         let info = self.impls.get(imp.0)?;
         if let Some(node) = info.methods.get(name).and_then(|v| v.first()) {
             let generics = self.node_generics(*node);
             let own = info.generics.len();
-            let mut args: Vec<Ty> = generics.iter().take(own).map(|g| map.get(g).cloned().unwrap_or(Ty::Param(*g))).collect();
+            let mut args: Vec<Ty> = generics
+                .iter()
+                .take(own)
+                .map(|g| map.get(g).cloned().unwrap_or(Ty::Param(*g)))
+                .collect();
             args.extend(method_args.iter().cloned());
             while args.len() < generics.len() {
                 args.push(Ty::Infer);
@@ -1203,7 +1427,13 @@ impl<'p> Index<'p> {
     /// Trait `tr`'s default body for method `name` (from `tr` or a supertrait) with `Self` as
     /// `self_ty`: the node and its instance arguments.
     #[must_use]
-    pub fn default_fn(&self, tr: &TraitRef, name: &str, self_ty: &Ty, method_args: &[Ty]) -> Option<(NodeId, Vec<Ty>)> {
+    pub fn default_fn(
+        &self,
+        tr: &TraitRef,
+        name: &str,
+        self_ty: &Ty,
+        method_args: &[Ty],
+    ) -> Option<(NodeId, Vec<Ty>)> {
         for sup in self.supertraits(tr, self_ty) {
             let item = self.program.item(sup.id);
             let ItemKind::Trait { defaults, .. } = &item.kind else {
@@ -1234,7 +1464,8 @@ impl<'p> Index<'p> {
     #[must_use]
     pub fn derived_fn(&self, item: ItemId, trait_name: &str, name: &str) -> Option<NodeId> {
         self.derived.get(&item)?.iter().find_map(|(t, node)| {
-            (t == trait_name && DERIVABLE.iter().any(|(d, m)| d == t && m.contains(&name))).then_some(*node)
+            (t == trait_name && DERIVABLE.iter().any(|(d, m)| d == t && m.contains(&name)))
+                .then_some(*node)
         })
     }
 
@@ -1244,7 +1475,13 @@ impl<'p> Index<'p> {
     /// first auto-dereference step (by value, then by reference; inherent before trait) at which
     /// any receiver unifies, with the receiver's type there and the steps dereferenced to reach
     /// it. Variables are bound only when one candidate is found.
-    pub fn probe(&self, recv: &Ty, name: &str, infer: &mut Infer, sigs: ClosureSigs<'_>) -> (Vec<Pick>, Option<Ty>, Vec<Ty>) {
+    pub fn probe(
+        &self,
+        recv: &Ty,
+        name: &str,
+        infer: &mut Infer,
+        sigs: ClosureSigs<'_>,
+    ) -> (Vec<Pick>, Option<Ty>, Vec<Ty>) {
         let steps = self.autoderef(recv, infer, sigs);
         let mut heads: Vec<ImplId> = Vec::new();
         for s in &steps {
@@ -1265,7 +1502,11 @@ impl<'p> Index<'p> {
                 for inherent in [true, false] {
                     let picks = self.picks_at(step, &adjusted, name, inherent, &heads, infer, sigs);
                     if !picks.is_empty() {
-                        return (picks, Some(adjusted), steps.iter().take(i).cloned().collect());
+                        return (
+                            picks,
+                            Some(adjusted),
+                            steps.iter().take(i).cloned().collect(),
+                        );
                     }
                 }
             }
@@ -1296,7 +1537,10 @@ impl<'p> Index<'p> {
                 continue;
             }
             let provides = info.methods.contains_key(name)
-                || info.trait_ref.as_ref().is_some_and(|tr| self.trait_default_exists(tr.id, name));
+                || info
+                    .trait_ref
+                    .as_ref()
+                    .is_some_and(|tr| self.trait_default_exists(tr.id, name));
             if !provides {
                 continue;
             }
@@ -1312,7 +1556,8 @@ impl<'p> Index<'p> {
                 continue;
             };
             let snap = infer.snapshot();
-            let ok = infer.unify(&recv_ty, adjusted) && self.bounds_may_hold(imp, &map, infer, sigs, 0);
+            let ok =
+                infer.unify(&recv_ty, adjusted) && self.bounds_may_hold(imp, &map, infer, sigs, 0);
             infer.rollback_to(snap);
             if ok {
                 found.push((Pick::Node { node, args }, self_ty));
@@ -1325,7 +1570,10 @@ impl<'p> Index<'p> {
                 other => infer.shallow(other),
             };
             let _ = step;
-            if matches!(referent, Ty::Param(_) | Ty::Opaque(_) | Ty::Assoc(..) | Ty::Dyn(_)) {
+            if matches!(
+                referent,
+                Ty::Param(_) | Ty::Opaque(_) | Ty::Assoc(..) | Ty::Dyn(_)
+            ) {
                 for tr in self.bounds_of_ty(&referent) {
                     let Some(decl) = self.trait_declaring_method(tr.id, name) else {
                         continue;
@@ -1347,14 +1595,23 @@ impl<'p> Index<'p> {
                         map.insert(*g, a.clone());
                     }
                     let snap = infer.snapshot();
-                    let recv = sig.inputs.first().map(|r| self.fill_infer_ty(&r.subst(&map), infer));
+                    let recv = sig
+                        .inputs
+                        .first()
+                        .map(|r| self.fill_infer_ty(&r.subst(&map), infer));
                     let ok = recv.is_some_and(|r| infer.unify(&r, adjusted));
                     infer.rollback_to(snap);
                     if ok {
                         let pick = if matches!(referent, Ty::Dyn(_)) {
-                            Pick::Dyn { trait_ref: tr.clone(), self_ty: referent.clone() }
+                            Pick::Dyn {
+                                trait_ref: tr.clone(),
+                                self_ty: referent.clone(),
+                            }
                         } else {
-                            Pick::Bound { trait_ref: tr.clone(), self_ty: referent.clone() }
+                            Pick::Bound {
+                                trait_ref: tr.clone(),
+                                self_ty: referent.clone(),
+                            }
                         };
                         if !found.iter().any(|(p, _)| *p == pick) {
                             found.push((pick, referent.clone()));
@@ -1380,12 +1637,24 @@ impl<'p> Index<'p> {
 
     /// The blanket implementations of trait `t` (self type a bare generic parameter) that may
     /// apply to `ty` with trait arguments `args`, each with its arguments.
-    pub fn blanket_impls(&self, t: ItemId, ty: &Ty, args: &[Ty], infer: &mut Infer, sigs: ClosureSigs<'_>) -> Vec<(ImplId, Map)> {
+    pub fn blanket_impls(
+        &self,
+        t: ItemId,
+        ty: &Ty,
+        args: &[Ty],
+        infer: &mut Infer,
+        sigs: ClosureSigs<'_>,
+    ) -> Vec<(ImplId, Map)> {
         let candidates: Vec<ImplId> = self
             .blanket
             .iter()
             .copied()
-            .filter(|i| self.impls.get(i.0).and_then(|x| x.trait_ref.as_ref()).is_some_and(|x| x.id == t))
+            .filter(|i| {
+                self.impls
+                    .get(i.0)
+                    .and_then(|x| x.trait_ref.as_ref())
+                    .is_some_and(|x| x.id == t)
+            })
             .collect();
         let mut out = Vec::new();
         for imp in candidates {
@@ -1417,7 +1686,9 @@ impl<'p> Index<'p> {
 
     /// `args` with every `_` a fresh variable.
     pub fn fill_infer(&self, args: Vec<Ty>, infer: &mut Infer) -> Vec<Ty> {
-        args.into_iter().map(|a| self.fill_infer_ty(&a, infer)).collect()
+        args.into_iter()
+            .map(|a| self.fill_infer_ty(&a, infer))
+            .collect()
     }
 
     /// `t` with every `_` a fresh variable.
@@ -1433,16 +1704,31 @@ impl<'p> Index<'p> {
     /// The functions `Type::name` may name, `Type` being `base`: inherent associated functions,
     /// then trait implementations' functions (and default bodies), each with its arguments (the
     /// implementation's fixed by matching `base`). For a generic `base`, the bounds' methods.
-    pub fn assoc_fns(&self, base: &Ty, name: &str, infer: &mut Infer, sigs: ClosureSigs<'_>) -> Vec<Pick> {
+    pub fn assoc_fns(
+        &self,
+        base: &Ty,
+        name: &str,
+        infer: &mut Infer,
+        sigs: ClosureSigs<'_>,
+    ) -> Vec<Pick> {
         let base = infer.shallow(base);
         let mut out = Vec::new();
-        if matches!(base, Ty::Param(_) | Ty::Opaque(_) | Ty::Assoc(..) | Ty::Dyn(_)) {
+        if matches!(
+            base,
+            Ty::Param(_) | Ty::Opaque(_) | Ty::Assoc(..) | Ty::Dyn(_)
+        ) {
             for tr in self.bounds_of_ty(&base) {
                 if self.trait_declaring_method(tr.id, name) == Some(tr.id) {
                     let pick = if matches!(base, Ty::Dyn(_)) {
-                        Pick::Dyn { trait_ref: tr, self_ty: base.clone() }
+                        Pick::Dyn {
+                            trait_ref: tr,
+                            self_ty: base.clone(),
+                        }
                     } else {
-                        Pick::Bound { trait_ref: tr, self_ty: base.clone() }
+                        Pick::Bound {
+                            trait_ref: tr,
+                            self_ty: base.clone(),
+                        }
                     };
                     out.push(pick);
                 }
@@ -1457,7 +1743,10 @@ impl<'p> Index<'p> {
                     self.impls.get(imp.0).is_some_and(|info| {
                         info.trait_ref.is_some() != inherent
                             && (info.methods.contains_key(name)
-                                || info.trait_ref.as_ref().is_some_and(|tr| self.trait_default_exists(tr.id, name)))
+                                || info
+                                    .trait_ref
+                                    .as_ref()
+                                    .is_some_and(|tr| self.trait_default_exists(tr.id, name)))
                     })
                 })
                 .collect();
@@ -1479,15 +1768,29 @@ impl<'p> Index<'p> {
 
     /// The type of associated constant `name` of `base`: from an implementation for it, or a
     /// trait among a generic `base`'s bounds.
-    pub fn assoc_const(&self, base: &Ty, name: &str, infer: &mut Infer, sigs: ClosureSigs<'_>) -> Option<Ty> {
+    pub fn assoc_const(
+        &self,
+        base: &Ty,
+        name: &str,
+        infer: &mut Infer,
+        sigs: ClosureSigs<'_>,
+    ) -> Option<Ty> {
         let base = infer.shallow(base);
         if matches!(base, Ty::Param(_) | Ty::Opaque(_) | Ty::Assoc(..)) {
             for tr in self.bounds_of_ty(&base) {
                 let item = self.program.item(tr.id);
-                if let ItemKind::Trait { consts, self_gen, .. } = &item.kind
+                if let ItemKind::Trait {
+                    consts, self_gen, ..
+                } = &item.kind
                     && let Some(t) = consts.get(name)
                 {
-                    let mut map: Map = item.scope.generics.iter().copied().zip(tr.args.iter().cloned()).collect();
+                    let mut map: Map = item
+                        .scope
+                        .generics
+                        .iter()
+                        .copied()
+                        .zip(tr.args.iter().cloned())
+                        .collect();
                     map.insert(*self_gen, base.clone());
                     return Some(self.resolver.ty(&item.scope, t).subst(&map));
                 }
@@ -1497,9 +1800,15 @@ impl<'p> Index<'p> {
         let candidates: Vec<ImplId> = self
             .candidates_for(&base, None)
             .into_iter()
-            .filter(|imp| self.impl_block(*imp).is_some_and(|b| b.consts.contains_key(name)))
+            .filter(|imp| {
+                self.impl_block(*imp)
+                    .is_some_and(|b| b.consts.contains_key(name))
+            })
             .collect();
-        let (imp, map) = self.applicable(candidates, &base, None, infer, sigs).into_iter().next()?;
+        let (imp, map) = self
+            .applicable(candidates, &base, None, infer, sigs)
+            .into_iter()
+            .next()?;
         let it = self.impl_block(imp)?;
         let t = it.consts.get(name)?;
         let mut scope = it.scope.clone();
@@ -1524,14 +1833,30 @@ impl<'p> Index<'p> {
             return t;
         }
         t.fold(&mut |x| match x {
-            Ty::Assoc(base, tr, name) => Some(self.project(base, tr.as_deref(), name, infer, sigs, depth)),
+            Ty::Assoc(base, tr, name) => {
+                Some(self.project(base, tr.as_deref(), name, infer, sigs, depth))
+            }
             _ => None,
         })
     }
 
     /// `<base as tr>::name`.
-    fn project(&self, base: &Ty, tr: Option<&TraitRef>, name: &str, infer: &mut Infer, sigs: ClosureSigs<'_>, depth: usize) -> Ty {
-        let keep = || Ty::Assoc(Box::new(base.clone()), tr.map(|t| Box::new(t.clone())), name.to_owned());
+    fn project(
+        &self,
+        base: &Ty,
+        tr: Option<&TraitRef>,
+        name: &str,
+        infer: &mut Infer,
+        sigs: ClosureSigs<'_>,
+        depth: usize,
+    ) -> Ty {
+        let keep = || {
+            Ty::Assoc(
+                Box::new(base.clone()),
+                tr.map(|t| Box::new(t.clone())),
+                name.to_owned(),
+            )
+        };
         let base = infer.shallow(base);
         match &base {
             Ty::Var(_) | Ty::Unknown | Ty::Infer => keep(),
@@ -1549,7 +1874,13 @@ impl<'p> Index<'p> {
                 self.sig(*n).map_or_else(keep, |s| s.output.subst(&map))
             }
             Ty::FnPtr(_, out) if name == "Output" => (**out).clone(),
-            Ty::Ref(inner, _) if name == "Output" && matches!(infer.shallow(inner), Ty::Closure(_) | Ty::FnDef(..) | Ty::FnPtr(..)) => {
+            Ty::Ref(inner, _)
+                if name == "Output"
+                    && matches!(
+                        infer.shallow(inner),
+                        Ty::Closure(_) | Ty::FnDef(..) | Ty::FnPtr(..)
+                    ) =>
+            {
                 self.project(inner, tr, name, infer, sigs, depth)
             }
             _ => {
@@ -1558,20 +1889,33 @@ impl<'p> Index<'p> {
                     None => self
                         .candidates_for(&base, None)
                         .into_iter()
-                        .filter(|i| self.impl_block(*i).is_some_and(|b| b.assoc.contains_key(name)))
-                        .filter_map(|i| self.impls.get(i.0).and_then(|x| x.trait_ref.as_ref()).map(|x| x.id))
+                        .filter(|i| {
+                            self.impl_block(*i)
+                                .is_some_and(|b| b.assoc.contains_key(name))
+                        })
+                        .filter_map(|i| {
+                            self.impls
+                                .get(i.0)
+                                .and_then(|x| x.trait_ref.as_ref())
+                                .map(|x| x.id)
+                        })
                         .collect(),
                 };
                 for t in traits {
                     let candidates: Vec<ImplId> = self
                         .candidates_for(&base, Some(t))
                         .into_iter()
-                        .filter(|imp| self.impl_block(*imp).is_some_and(|b| b.assoc.contains_key(name)))
+                        .filter(|imp| {
+                            self.impl_block(*imp)
+                                .is_some_and(|b| b.assoc.contains_key(name))
+                        })
                         .collect();
                     // One implementation applies: its definition, with what matching it fixed
                     // kept. Several (open variables): the projection waits. The trait's arguments
                     // take part when the projection names them (`<usize as SliceIndex<[T]>>`).
-                    let args: Option<Vec<Ty>> = tr.filter(|r| r.id == t && !r.args.is_empty()).map(|r| self.complete(r, &base).args);
+                    let args: Option<Vec<Ty>> = tr
+                        .filter(|r| r.id == t && !r.args.is_empty())
+                        .map(|r| self.complete(r, &base).args);
                     let found = self.applicable(candidates, &base, args.as_deref(), infer, sigs);
                     if let [(imp, map)] = found.as_slice() {
                         let Some(it) = self.impl_block(*imp) else {
@@ -1630,7 +1974,12 @@ mod tests {
     }
 
     fn item(p: &Program, name: &str) -> ItemId {
-        ItemId(p.items.iter().position(|i| i.path == format!("a::{name}")).unwrap())
+        ItemId(
+            p.items
+                .iter()
+                .position(|i| i.path == format!("a::{name}"))
+                .unwrap(),
+        )
     }
 
     fn none(_: &ClosureKey) -> Option<(Vec<Ty>, Ty)> {
@@ -1642,8 +1991,12 @@ mod tests {
             .iter()
             .map(|p| match p {
                 Pick::Node { node, .. } => ix.name(*node).to_owned(),
-                Pick::Bound { trait_ref, .. } => format!("bound {}", ix.program.item(trait_ref.id).name),
-                Pick::Dyn { trait_ref, .. } => format!("dyn {}", ix.program.item(trait_ref.id).name),
+                Pick::Bound { trait_ref, .. } => {
+                    format!("bound {}", ix.program.item(trait_ref.id).name)
+                }
+                Pick::Dyn { trait_ref, .. } => {
+                    format!("dyn {}", ix.program.item(trait_ref.id).name)
+                }
             })
             .collect();
         v.sort();
@@ -1666,15 +2019,44 @@ mod tests {
         let mut infer = Infer::new();
         let a = Ty::Adt(item(&p, "A"), Vec::new());
         let b = Ty::Adt(item(&p, "B"), Vec::new());
-        assert_eq!(names(&ix, &ix.probe(&a, "m", &mut infer, &none).0), ["a::A::m"]);
+        assert_eq!(
+            names(&ix, &ix.probe(&a, "m", &mut infer, &none).0),
+            ["a::A::m"]
+        );
         let (_, _, derefs) = ix.probe(&b, "r", &mut infer, &none);
-        assert_eq!(derefs, [b.clone()], "`b.r()` dereferences `B` to reach `A`'s method");
-        assert_eq!(names(&ix, &ix.probe(&b, "m", &mut infer, &none).0), ["a::B::m"], "inherent first, no deref");
-        assert_eq!(names(&ix, &ix.probe(&Ty::reference(b.clone()), "r", &mut infer, &none).0), ["<a::A as T>::r"]);
-        assert_eq!(names(&ix, &ix.probe(&a, "t", &mut infer, &none).0), ["a::T::t"], "the default body");
-        assert_eq!(names(&ix, &ix.probe(&b, "own", &mut infer, &none).0), ["a::A::own"], "lookup follows Deref to a by-value method (moving out is the borrow checker's to refuse)");
+        assert_eq!(
+            derefs,
+            std::slice::from_ref(&b),
+            "`b.r()` dereferences `B` to reach `A`'s method"
+        );
+        assert_eq!(
+            names(&ix, &ix.probe(&b, "m", &mut infer, &none).0),
+            ["a::B::m"],
+            "inherent first, no deref"
+        );
+        assert_eq!(
+            names(
+                &ix,
+                &ix.probe(&Ty::reference(b.clone()), "r", &mut infer, &none)
+                    .0
+            ),
+            ["<a::A as T>::r"]
+        );
+        assert_eq!(
+            names(&ix, &ix.probe(&a, "t", &mut infer, &none).0),
+            ["a::T::t"],
+            "the default body"
+        );
+        assert_eq!(
+            names(&ix, &ix.probe(&b, "own", &mut infer, &none).0),
+            ["a::A::own"],
+            "lookup follows Deref to a by-value method (moving out is the borrow checker's to refuse)"
+        );
         let c = Ty::Adt(item(&p, "C"), Vec::new());
-        assert_eq!(names(&ix, &ix.probe(&c, "clone", &mut infer, &none).0), ["<a::C as Clone>::clone"]);
+        assert_eq!(
+            names(&ix, &ix.probe(&c, "clone", &mut infer, &none).0),
+            ["<a::C as Clone>::clone"]
+        );
     }
 
     #[test]
@@ -1694,9 +2076,15 @@ mod tests {
             [Pick::Node { args, .. }] => assert_eq!(infer.resolve(&args[0]), x),
             other => panic!("{other:?}"),
         }
-        assert!(ix.probe(&wx, "only_f", &mut infer, &none).0.is_empty(), "W<f64> only");
+        assert!(
+            ix.probe(&wx, "only_f", &mut infer, &none).0.is_empty(),
+            "W<f64> only"
+        );
         let wn = Ty::Adt(w, vec![Ty::Adt(item(&p, "NoClone"), Vec::new())]);
-        assert!(ix.probe(&wn, "get", &mut infer, &none).0.is_empty(), "the implementation's bound does not hold");
+        assert!(
+            ix.probe(&wn, "get", &mut infer, &none).0.is_empty(),
+            "the implementation's bound does not hold"
+        );
         let wf = Ty::Adt(w, vec![Ty::Prim(Prim::F64)]);
         assert_eq!(ix.probe(&wf, "only_f", &mut infer, &none).0.len(), 1);
     }
@@ -1713,8 +2101,14 @@ mod tests {
         let mut infer = Infer::new();
         let g = p.nodes.iter().position(|n| n.ident == "g").unwrap();
         let tg = ix.node_generics(NodeId(g))[0];
-        assert_eq!(names(&ix, &ix.probe(&Ty::Param(tg), "s", &mut infer, &none).0), ["bound S"]);
-        assert_eq!(names(&ix, &ix.probe(&Ty::Param(tg), "d", &mut infer, &none).0), ["bound S"]);
+        assert_eq!(
+            names(&ix, &ix.probe(&Ty::Param(tg), "s", &mut infer, &none).0),
+            ["bound S"]
+        );
+        assert_eq!(
+            names(&ix, &ix.probe(&Ty::Param(tg), "d", &mut infer, &none).0),
+            ["bound S"]
+        );
     }
 
     #[test]
@@ -1728,12 +2122,24 @@ mod tests {
         let mut infer = Infer::new();
         let it = Ty::Adt(item(&p, "It"), Vec::new());
         let iter = ix.lang.trait_named("Iterator").unwrap();
-        let itr = Some(Box::new(TraitRef { id: iter, args: Vec::new(), bindings: Vec::new() }));
-        let n = ix.normalize(&Ty::Assoc(Box::new(it), itr.clone(), "Item".to_owned()), &mut infer, &none);
+        let iter_ref = Some(Box::new(TraitRef {
+            id: iter,
+            args: Vec::new(),
+            bindings: Vec::new(),
+        }));
+        let n = ix.normalize(
+            &Ty::Assoc(Box::new(it), iter_ref.clone(), "Item".to_owned()),
+            &mut infer,
+            &none,
+        );
         assert_eq!(n, Ty::Adt(item(&p, "Item"), Vec::new()));
         let g = p.nodes.iter().position(|n| n.ident == "g").unwrap();
         let ig = ix.node_generics(NodeId(g))[0];
-        let b = ix.normalize(&Ty::Assoc(Box::new(Ty::Param(ig)), itr, "Item".to_owned()), &mut infer, &none);
+        let b = ix.normalize(
+            &Ty::Assoc(Box::new(Ty::Param(ig)), iter_ref, "Item".to_owned()),
+            &mut infer,
+            &none,
+        );
         assert_eq!(b, Ty::Prim(Prim::U8));
     }
 
@@ -1747,9 +2153,21 @@ mod tests {
         let ix = Index::new(&p);
         let mut infer = Infer::new();
         let v = Ty::Adt(item(&p, "V"), Vec::new());
-        let mul = TraitRef { id: ix.lang.trait_named("Mul").unwrap(), args: vec![Ty::Prim(Prim::F64)], bindings: Vec::new() };
+        let mul = TraitRef {
+            id: ix.lang.trait_named("Mul").unwrap(),
+            args: vec![Ty::Prim(Prim::F64)],
+            bindings: Vec::new(),
+        };
         assert_eq!(ix.select(&v, &mul, &mut infer, &none).len(), 1);
-        let any = TraitRef { id: mul.id, args: vec![infer.fresh()], bindings: Vec::new() };
-        assert_eq!(ix.select(&v, &any, &mut infer, &none).len(), 2, "an open right-hand side keeps both");
+        let any = TraitRef {
+            id: mul.id,
+            args: vec![infer.fresh()],
+            bindings: Vec::new(),
+        };
+        assert_eq!(
+            ix.select(&v, &any, &mut infer, &none).len(),
+            2,
+            "an open right-hand side keeps both"
+        );
     }
 }

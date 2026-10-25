@@ -45,10 +45,12 @@ pub const CORE: &str = include_str!("stdlib/core.rs.txt");
 pub const LIBM: &str = include_str!("stdlib/libm.rs.txt");
 
 /// Where the model of `core` is, relative to the workspace root (its text is [`CORE`]).
-pub const CORE_PATH: &str = "projects/engines/geometry/crates/geom-test/src/recursion/stdlib/core.rs.txt";
+pub const CORE_PATH: &str =
+    "projects/engines/geometry/crates/geom-test/src/recursion/stdlib/core.rs.txt";
 
 /// Where the model of `libm` is, relative to the workspace root (its text is [`LIBM`]).
-pub const LIBM_PATH: &str = "projects/engines/geometry/crates/geom-test/src/recursion/stdlib/libm.rs.txt";
+pub const LIBM_PATH: &str =
+    "projects/engines/geometry/crates/geom-test/src/recursion/stdlib/libm.rs.txt";
 
 /// The folder of the model's files.
 pub const FOLDER: &str = "projects/engines/geometry/crates/geom-test/src/recursion/stdlib";

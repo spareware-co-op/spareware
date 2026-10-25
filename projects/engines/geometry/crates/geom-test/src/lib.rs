@@ -33,6 +33,13 @@
 //!   licences judged by chapter 29.2's classes (29.20), every published dependency, and every
 //!   kernel crate's error kinds. The binary `map` writes it (`cargo run -p geom-test --bin map --
 //!   write`) and checks it in CI (`-- check`): every header complete, the map current.
+//! - [`recursion`]: the recursion check (piece G13; 28.8). Every recursive cycle of the crates that
+//!   ship, found on a whole-program call graph that type-checks every body as rustc does, with a
+//!   model of the standard library; each cycle must have its depth bound stated in its module
+//!   header (the `Recursion:` field of `projects/engines/geometry/HEADERS.md`) and a test at the
+//!   bound, which runs on a small WebAssembly stack. The binary `recursion` lists the cycles
+//!   (`cargo run -p geom-test --bin recursion -- list`), checks them (`-- check`) and runs the
+//!   bounds' tests on the small stack (`-- gate`, the merge gate's recursion job).
 //!
 //! Fixtures, reference implementations, oracle clients and the CI tools arrive with the pieces that
 //! need them. The sister development crates are `geom-fuzz` (fuzz harnesses), `geom-gen` (every
@@ -71,6 +78,10 @@
 //! - `proptest` 1.12, without its default `fork` and `timeout` features, as in `geom-num`. [`prop`]
 //!   always runs it from a fixed seed, so its operating-system random path is never taken.
 //! - `serde_json` 1.0, to read `cargo metadata`.
+//! - `syn` 3.0, `proc-macro2` 1.0 (with span locations) and `quote` 1.0: the recursion check's Rust
+//!   parser, its call sites' line numbers and its token printing.
+//! - `petgraph` 0.8, without default features: the recursion check's strongly connected
+//!   components (Tarjan's algorithm).
 //!
 //! Licences of every outside package this crate brings into a build, its own and its dependencies'
 //! on every target (`cargo tree --target all`), each record checked by `tests/licences.rs`. Where a
@@ -79,11 +90,13 @@
 //! - MIT OR Apache-2.0: `proptest`, `bit-set`, `bit-vec`, `bitflags`, `chacha20`, `cfg-if`,
 //!   `cpufeatures`, `libc`, `rand`, `rand_core`, `rand_xorshift`, `getrandom`, `core_detect`,
 //!   `num-traits`, `autocfg`, `regex-syntax`, `unarray`, `serde_json`, `serde`, `serde_core`,
-//!   `serde_derive`, `itoa`, `proc-macro2`, `quote` and `syn`.
+//!   `serde_derive`, `itoa`, `proc-macro2`, `quote`, `syn`, `petgraph`, `fixedbitset`,
+//!   `hashbrown`, `indexmap` and `equivalent`.
 //! - MIT OR Apache-2.0 OR LGPL-2.1-or-later: `r-efi` (UEFI targets only).
 //! - (MIT OR Apache-2.0) AND Unicode-3.0: `unicode-ident`.
 //! - Unlicense OR MIT: `memchr`.
 //! - MIT: `zmij`.
+//! - Zlib: `foldhash`.
 #![forbid(unsafe_code)]
 
 pub mod deps;
