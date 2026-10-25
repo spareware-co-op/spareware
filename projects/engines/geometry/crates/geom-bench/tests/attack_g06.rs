@@ -950,6 +950,26 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
             fold(ip::side_of_tpi(class).iter().map(|(p, t)| p.side_of_tpi(t)))
         }
         ("plane", "to_grid") => fold(ip::to_grid(class).iter().map(Tpi::to_grid)),
+        ("perturb", "orient2d") => fold(
+            inputs::perturb::orient2d(class)
+                .into_iter()
+                .map(|[x, y, z]| geom_num::perturb::orient2d(x, y, z)),
+        ),
+        ("perturb", "orient3d") => fold(
+            inputs::perturb::orient3d(class)
+                .into_iter()
+                .map(|[x, y, z, w]| geom_num::perturb::orient3d(x, y, z, w)),
+        ),
+        ("perturb", "incircle") => fold(
+            inputs::perturb::incircle(class)
+                .into_iter()
+                .map(|[x, y, z, w]| geom_num::perturb::incircle(x, y, z, w)),
+        ),
+        ("perturb", "insphere") => fold(
+            inputs::perturb::insphere(class)
+                .into_iter()
+                .map(|[x, y, z, w, v]| geom_num::perturb::insphere(x, y, z, w, v)),
+        ),
         ("eft", "two_sum") => fold(
             ie::two_sum(class)
                 .into_iter()

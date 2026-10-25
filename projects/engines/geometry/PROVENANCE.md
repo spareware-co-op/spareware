@@ -9,7 +9,7 @@ This is the record of what the geometry kernel's code takes from outside sources
 | Class (29.1) | Sources | Files that take them |
 | --- | --- | --- |
 | PORT | 4 | 4 |
-| PORT METHOD | 27 | 27 |
+| PORT METHOD | 28 | 28 |
 | DEPEND | 1 | 1 |
 
 3 method note(s) under the method-only procedure (29.20, rule 6).
@@ -41,6 +41,7 @@ Each kernel file implements a published method in its own code and copied nothin
 | Geogram PCK | BSD-3-Clause | allowed | <https://github.com/BrunoLevy/geogram/blob/16843b4804de35f14ef54667950ab4c8acdd0062/src/lib/geogram/numerics/predicates/orient3d.h> | none | `projects/engines/geometry/crates/geom-gen/src/predicate_derive.rs`: for its generated filters, a cross-check of the constants here. No code copied. |
 | Geogram PCK | BSD-3-Clause | allowed | <https://github.com/BrunoLevy/geogram/blob/16843b4804de35f14ef54667950ab4c8acdd0062/src/lib/geogram/numerics/predicates/orient3d.pck> | none | `projects/engines/geometry/crates/geom-gen/src/predicates.rs`: for its one description per predicate. No code copied. |
 | Geogram PCK | BSD-3-Clause | allowed | <https://github.com/BrunoLevy/geogram/blob/16843b4804de35f14ef54667950ab4c8acdd0062/src/lib/geogram/numerics/predicates/pck.sh> | none | `projects/engines/geometry/crates/geom-gen/src/predicate_emit.rs`: for how PCK runs FPG over one description per predicate. No code copied. |
+| Geogram's PCK `_SOS` predicates | BSD-3-Clause | allowed | <https://github.com/BrunoLevy/geogram/blob/40d72165ceeeb0a61977d6fdf74d929bfdd77b7b/src/lib/geogram/numerics/PCK.h> | none | `projects/engines/geometry/crates/geom-num/src/perturb.rs`: for the shape of a cascade over keyed points, and its address ordering as the trap to avoid. No code copied. |
 | `GeometricTools`' `BSPrecision.h` | BSL-1.0 | allowed | <https://github.com/davideberly/GeometricTools/blob/e09f5b39a33da6b4bfd0ff8dbb64ddcb7fdfc763/GTE/Mathematics/BSPrecision.h> | none | `projects/engines/geometry/crates/geom-gen/src/predicate_derive.rs`: for its compile-time bit counting, a cross-check of the certificate here. No code copied. |
 | Gitiles | Apache-2.0 | allowed | <https://github.com/google/gitiles/blob/e54582fdd2a8783a6078f3a25eb08bb622f2e497/java/com/google/gitiles/ViewFilter.java> | none | `projects/engines/geometry/crates/geom-test/src/map/links.rs`: for its `+` view commands and the revision that follows them. No code copied. |
 | Gungraun | Apache-2.0 OR MIT | allowed | <https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md> | none | `projects/engines/geometry/crates/geom-bench/src/bin/geom-bench-counts.rs`: for its library-benchmark API and its Callgrind and DHAT settings. No code copied.<br>`projects/engines/geometry/crates/geom-bench/src/callgrind.rs`: for its summary files, its default output layout and its estimated-cycles formula. No code copied; its summary model is used as a dependency.<br>`projects/engines/geometry/crates/geom-bench/src/counts.rs`: for its library-benchmark API and its Callgrind and DHAT settings. No code copied.<br>`projects/engines/geometry/crates/geom-bench/src/lib.rs`: for its library-benchmark API and its Callgrind and DHAT settings. No code copied. |
