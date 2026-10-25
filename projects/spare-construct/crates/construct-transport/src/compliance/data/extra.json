@@ -1,0 +1,2014 @@
+{
+ "LETTERS": [
+  "A",
+  "B",
+  "C",
+  "D",
+  "E",
+  "F"
+ ],
+ "VERSION": "2026-10-09",
+ "ASSUMPTION": "Spare Construct assumption",
+ "SRC": {
+  "rma": "https://www.legislation.govt.nz/act/public/1991/69/en/latest/",
+  "pa": "https://www.legislation.govt.nz/act/public/2026/70/en/latest/",
+  "ftaa": "https://www.legislation.govt.nz/act/public/2024/56/en/latest/",
+  "e27": "https://unitaryplan.aucklandcouncil.govt.nz/Images/Auckland%20Unitary%20Plan%20Operative/Chapter%20E%20Auckland-wide/4.%20Infrastructure/E27%20Transport.pdf",
+  "e38": "https://unitaryplan.aucklandcouncil.govt.nz/images/Auckland%20Unitary%20Plan%20Operative/Chapter%20E%20Auckland-wide/6.%20Subdivision/E38%20Subdivision%20-%20Urban.pdf",
+  "i450": "https://unitaryplan.aucklandcouncil.govt.nz/images/Auckland%20Unitary%20Plan%20Operative/Chapter%20I%20Precincts/4.%20South/I450%20Drury%20Centre%20Precinct.pdf",
+  "i451": "https://unitaryplan.aucklandcouncil.govt.nz/images/Auckland%20Unitary%20Plan%20Operative/Chapter%20I%20Precincts/4.%20South/I451%20Drury%20East%20Precinct.pdf",
+  "pc120": "https://www.aucklandcouncil.govt.nz/content/dam/ac/docs/unitary-plan/aup-modification-schedule-2026.pdf",
+  "atita": "https://at.govt.nz/media/ezemv4cz/auckland-transport-integrated-transport-assessment-guidelines-2025-vestion-2.pdf",
+  "speed": "https://www.nzta.govt.nz/assets/resources/rules/docs/land-transport-rule-setting-of-speed-limits-2024-as-at-15-january-2025.pdf",
+  "speedGuide": "https://www.nzta.govt.nz/assets/Safety/docs/speed-management-resources/guidance-setting-of-speed-limits-rule-2024.pdf",
+  "anop": "https://at.govt.nz/media/1991103/application-of-the-auckalnd-network-operating-plan-august-2022.pdf",
+  "anopTool": "https://at.govt.nz/media/dd1ivvio/anop-assessment-tool-v10-2.xlsx",
+  "ipm27": "https://www.nzta.govt.nz/assets/planning-and-investment/nltp/2027/docs/initial-draft-ipm-for-the-2027-30-nltp-august-2026.pdf",
+  "mbcm": "https://www.nzta.govt.nz/assets/resources/monetised-benefits-and-costs-manual/Monetised-benefits-and-costs-manual-volume-1-procedures.pdf",
+  "minister": "https://www.mcert.govt.nz/assets/Uploads/Transport/Ministerial-statement-on-land-transport-13-August-2026.pdf",
+  "lga": "https://www.legislation.govt.nz/act/public/2002/84/en/latest/",
+  "iff": "https://www.legislation.govt.nz/act/public/2020/47/en/latest/",
+  "ltma": "https://www.legislation.govt.nz/act/public/2003/118/en/latest/",
+  "tou": "https://www.legislation.govt.nz/act/public/2025/0064/latest/",
+  "tsdg": "https://at.govt.nz/media/vqdmxxib/auckland-transport-traffic-signals-design-guidelines-v5.pdf",
+  "ssa": "https://www.nzta.govt.nz/resources/safe-system-audit-guidelines-for-transport-projects",
+  "rasf": "https://at.govt.nz/media/1983549/roads-and-streets-framework-may-2020-web.pdf",
+  "npsud": "https://environment.govt.nz/publications/national-policy-statement-on-urban-development-2020-updated-may-2022/",
+  "npsi": "https://environment.govt.nz/assets/publications/RMA/npsi-2025.pdf",
+  "gps": "https://www.transport.govt.nz/assets/Uploads/Government-Policy-Statement-on-land-transport-2024-FINAL.pdf",
+  "erp2": "https://environment.govt.nz/assets/publications/climate-change/ERP2/New-Zealands-second-emissions-reduction-plan-Amended-January-2026.pdf",
+  "drurydc": "https://www.aucklandcouncil.govt.nz/content/dam/ac/docs/plans-projects-policies-reports-bylaws/misc/drury-development-contributions-policy-transport-assessment.pdf",
+  "gc2501": "https://www.nzta.govt.nz/assets/resources/general-circulars/docs/25-01.pdf",
+  "gc2601": "https://www.nzta.govt.nz/assets/resources/general-circulars/docs/26-01.pdf",
+  "nilsson": "https://lup.lub.lu.se/search/publication/21612"
+ },
+ "REFS": {
+  "gc2501": {
+   "id": "nzta-gc-25-01",
+   "name": "NZTA General Circular 25/01: discount rates",
+   "edition": "6 Jan 2025",
+   "url": "https://www.nzta.govt.nz/assets/resources/general-circulars/docs/25-01.pdf",
+   "verified": true
+  },
+  "gc2601": {
+   "id": "nzta-gc-26-01",
+   "name": "NZTA General Circular 26/01: MBCM v1.7.5",
+   "edition": "29 May 2026",
+   "url": "https://www.nzta.govt.nz/assets/resources/general-circulars/docs/26-01.pdf",
+   "verified": true
+  },
+  "aupMods": {
+   "id": "aup-mods-2026",
+   "name": "AUP plan modification schedule",
+   "edition": "as downloaded Oct 2026 (entries to 21 Sep 2026)",
+   "url": "https://www.aucklandcouncil.govt.nz/content/dam/ac/docs/unitary-plan/aup-modification-schedule-2026.pdf",
+   "verified": true,
+   "pc79": "PC79 transport provisions (E27, E38) fully operative 8 May 2026",
+   "pc120": "PC120 partial withdrawal notified 27 Aug 2026; withdrawn precinct chapters watermarked 3 Sep 2026"
+  }
+ },
+ "STD": {
+  "dates": {
+   "id": "cx-dates",
+   "name": "Statutory commencement dates",
+   "edition": "as at 9 Oct 2026",
+   "verified": true,
+   "transition": "2026-10-30",
+   "rca": "2026-05-07",
+   "tou": "2026-11-18",
+   "privatePcBar": "2028-01-01",
+   "source": "Planning Act 2026 Sch 1 cl 18-21 and Sch 12; LGACA s47; LTMA ss65A-65ZO commencement; RMA s80YA"
+  },
+  "labels": {
+   "junction": "HCM 6 / Akcelik-based, indicative; not SIDRA output",
+   "anop": "Indicative — derived from AT ANOP tool v10.2 logic; confirm in AT's tool.",
+   "s32": "s32(2)(b) quantification where practicable; not MBCM-compliant",
+   "vkt": "information for RMA s74(2)(d) / NPS-UD 1(e); not a pass/fail test (no VKT target in ERP2 ch 9)",
+   "cbds": "Rule CBDS: not an MBCM BCR",
+   "ssa": "Supports, does not replace, an independent Safe System Audit",
+   "gps": "initial draft IPM 2027-30, subject to GPS 2027",
+   "tou": "screening; scheme approval requires full modelling and its own business case",
+   "funding": "legal allocation is the council's decision",
+   "s84a": "binds applicant only (s84A(3))",
+   "limited": "limited consideration (AT ITA s5.1)",
+   "pc120": "PC120 lists this precinct as amended; check proposed text",
+   "pc120Withdrawal": "Council notified a partial withdrawal of PC120 on 27 Aug 2026 (withdrawn precinct chapters are watermarked from 3 Sep 2026): check whether this chapter is still proposed (AUP modification schedule 2026)",
+   "e38pc120": "PC120 annotates some E38 provisions as amended; check the proposed text",
+   "onf": "ONF suggestion: similar but not identical to the Rule class",
+   "meanSpeed": "Mean operating speed is measured, not modelled: a modelled speed is shown only as a placeholder",
+   "dcMethod": "Council-draft method (Drury DC transport assessment); method-agnostic, ready for the development-levy methodology"
+  },
+  "trigger": {
+   "id": "cx-trigger",
+   "name": "Staging trigger criteria",
+   "edition": "Spare Construct assumption",
+   "verified": false,
+   "step": 5,
+   "dos": 0.95,
+   "los": "D",
+   "queue": true,
+   "anop": false,
+   "minStorage": 50,
+   "maxChain": 3000,
+   "worsen": {
+    "dos": 0.05,
+    "delay": 10
+   }
+  },
+  "precinctTest": {
+   "id": "cx-precinct-test",
+   "name": "Precinct ITA tests (I450.9(4), I451.9)",
+   "edition": "AUP July 2026 print",
+   "verified": false,
+   "los": "D",
+   "similar": 1.05,
+   "similarBasis": "Spare Construct assumption: modelled trips within 5% of the table mix count as 'similar'"
+  },
+  "speed": {
+   "id": "speed-rule-2024",
+   "name": "Land Transport Rule: Setting of Speed Limits 2024",
+   "edition": "consolidated as at 15 Jan 2025",
+   "url": "https://www.nzta.govt.nz/assets/resources/rules/docs/land-transport-rule-setting-of-speed-limits-2024-as-at-15-january-2025.pdf",
+   "verified": false,
+   "classes": {
+    "urban-street": {
+     "t": 1,
+     "label": "Urban street",
+     "min": 50,
+     "max": 50
+    },
+    "civic": {
+     "t": 1,
+     "label": "Civic space",
+     "min": 10,
+     "max": 20
+    },
+    "urban-connector": {
+     "t": 1,
+     "label": "Urban connector",
+     "min": 50,
+     "max": 80
+    },
+    "transit": {
+     "t": 1,
+     "label": "Transit corridor",
+     "min": 80,
+     "max": 100
+    },
+    "peri-urban": {
+     "t": 2,
+     "label": "Peri-urban road",
+     "min": 50,
+     "max": 80
+    },
+    "stopping": {
+     "t": 2,
+     "label": "Stopping place",
+     "min": 50,
+     "max": 80
+    },
+    "rural": {
+     "t": 2,
+     "label": "Rural road",
+     "min": 80,
+     "max": 100
+    },
+    "rural-connector": {
+     "t": 2,
+     "label": "Rural connector",
+     "min": 80,
+     "max": 100
+    },
+    "interregional": {
+     "t": 2,
+     "label": "Interregional connector",
+     "min": 100,
+     "max": 100
+    },
+    "expressway": {
+     "t": 2,
+     "label": "Expressway",
+     "min": 100,
+     "max": 120
+    },
+    "beach": {
+     "t": 3,
+     "label": "Beach",
+     "min": 10,
+     "max": 60
+    },
+    "low-volume": {
+     "t": 3,
+     "label": "Low-volume or low-speed road",
+     "min": 10,
+     "max": 30
+    },
+    "unsealed": {
+     "t": 3,
+     "label": "Unsealed rural road",
+     "min": 60,
+     "max": 80
+    },
+    "urban-active": {
+     "t": 3,
+     "label": "Urban street with significant walking or cycling, or no footpaths",
+     "min": 40,
+     "max": 40
+    },
+    "isz-urban": {
+     "t": 3,
+     "label": "Urban intersection speed zone",
+     "min": 30,
+     "max": 70,
+     "crashHistory": true
+    },
+    "isz-rural": {
+     "t": 3,
+     "label": "Rural intersection speed zone",
+     "min": 60,
+     "max": 70,
+     "crashHistory": true
+    },
+    "hill": {
+     "t": 3,
+     "label": "Mountainous or hill corridor",
+     "min": 60,
+     "max": 80
+    }
+   },
+   "minLen": [
+    [
+     40,
+     300
+    ],
+    [
+     60,
+     500
+    ],
+    [
+     70,
+     700
+    ],
+    [
+     80,
+     800
+    ],
+    [
+     100,
+     2000
+    ],
+    [
+     120,
+     3000
+    ]
+   ],
+   "exceptions": {
+    "impracticable": "impracticable (cl 4.6)",
+    "below40": "limit under 40 km/h",
+    "school": "school gate limit",
+    "variable": "part of a variable limit"
+   },
+   "nztaOnly": [
+    110,
+    120
+   ],
+   "varReasons": {
+    "users": "mix of road users",
+    "volume": "changing volumes or congestion",
+    "ttm": "emergency or temporary traffic management",
+    "turning": "turning or crossing crash risk",
+    "climate": "climate or weather",
+    "school": "school",
+    "marae": "marae",
+    "beach": "beach or riverbed driving"
+   },
+   "onf": {
+    "urban-street": [
+     "Local street",
+     "Activity street"
+    ],
+    "civic": [
+     "Civic space"
+    ],
+    "urban-connector": [
+     "Urban connector",
+     "Main street"
+    ],
+    "transit": [
+     "Transit corridor"
+    ],
+    "peri-urban": [
+     "Peri-urban road"
+    ],
+    "stopping": [
+     "Stopping place"
+    ],
+    "rural": [
+     "Rural road"
+    ],
+    "rural-connector": [
+     "Rural connector"
+    ],
+    "interregional": [
+     "Interregional connector"
+    ]
+   },
+   "cbdsSkip": "No CBDS is needed for new roads, school-gate limits or reversals (NZTA Rule guidance)"
+  },
+  "anop": {
+   "id": "anop-v10.2",
+   "name": "AT ANOP Assessment Tool",
+   "edition": "v10.2 (application guide Aug 2022)",
+   "url": "https://at.govt.nz/media/dd1ivvio/anop-assessment-tool-v10-2.xlsx",
+   "verified": false,
+   "speedBands": [
+    [
+     90,
+     "A"
+    ],
+    [
+     70,
+     "B"
+    ],
+    [
+     50,
+     "C"
+    ],
+    [
+     40,
+     "D"
+    ],
+    [
+     30,
+     "E"
+    ]
+   ],
+   "relBands": [
+    [
+     1.1,
+     "A"
+    ],
+    [
+     1.25,
+     "B"
+    ],
+    [
+     1.5,
+     "C"
+    ],
+    [
+     1.75,
+     "D"
+    ],
+    [
+     2,
+     "E"
+    ]
+   ],
+   "relBasis": "85th/median bands between A ≤ 1.1 and F > 2.0 are interpolated (Spare Construct assumption); confirm in the tool",
+   "crossBands": [
+    50,
+    100,
+    200,
+    400,
+    800
+   ],
+   "crossDelay": [
+    10,
+    20,
+    30,
+    45,
+    60
+   ],
+   "score": {
+    "A+": 7,
+    "A": 6,
+    "B": 5,
+    "C": 4,
+    "D": 3,
+    "E": 2,
+    "F": 1,
+    "F-": 0
+   },
+   "cycleFacility": {
+    "separated": "A",
+    "painted": "C",
+    "none": {
+     "arterial": "E",
+     "other": "D"
+    },
+    "basis": "Spare Construct assumption: separated cycleway A, painted lane C, none D (E on arterials); from AT CyclingService TYPEOFFACILITY where loaded"
+   }
+  },
+  "parking": {
+   "id": "e27-parking",
+   "name": "AUP E27 parking, cycle, end-of-trip and loading",
+   "edition": "July 2026 print (PC79 fully operative 8 May 2026)",
+   "url": "https://unitaryplan.aucklandcouncil.govt.nz/Images/Auckland%20Unitary%20Plan%20Operative/Chapter%20E%20Auckland-wide/4.%20Infrastructure/E27%20Transport.pdf",
+   "verified": false,
+   "access4": [
+    "childcare",
+    "school",
+    "tertiary",
+    "medical",
+    "hospital",
+    "community"
+   ],
+   "tripsPerSpaceBasis": "Spare Construct assumption: induced peak commuter trips per extra space (E27.8.2(4)(c))"
+  },
+  "accessible": {
+   "id": "nzs4121-t2",
+   "name": "NZS 4121:2001 Table 2 (accessible car parks), via NZBC D1/AS1",
+   "edition": "NZS 4121:2001",
+   "verified": false,
+   "rows": [
+    [
+     20,
+     1
+    ],
+    [
+     50,
+     2
+    ]
+   ],
+   "per": 50,
+   "basis": "1 for up to 20 car parks, 2 for 21-50, then 1 more for every 50 or part"
+  },
+  "nilsson": {
+   "id": "nilsson-power-model",
+   "name": "Power model of speed and road safety",
+   "edition": "Nilsson G (2004), Lund University Bulletin 221",
+   "url": "https://lup.lub.lu.se/search/publication/21612",
+   "verified": false,
+   "fatal": 4,
+   "dsi": 3,
+   "injury": 2
+  },
+  "e38": {
+   "id": "e38-rear",
+   "name": "AUP E38 Table E38.8.1.2.1 rear site access",
+   "edition": "July 2026 print",
+   "url": "https://unitaryplan.aucklandcouncil.govt.nz/images/Auckland%20Unitary%20Plan%20Operative/Chapter%20E%20Auckland-wide/6.%20Subdivision/E38%20Subdivision%20-%20Urban.pdf",
+   "verified": false,
+   "rows": [
+    {
+     "max": 1,
+     "legal": 3,
+     "formed": 2.5,
+     "len": 50
+    },
+    {
+     "max": 5,
+     "legal": 3.5,
+     "formed": 3,
+     "len": 50
+    },
+    {
+     "max": 10,
+     "legal": 6.9,
+     "formed": 5.5,
+     "len": 100,
+     "ped": 1.4
+    }
+   ],
+   "maxSites": 10
+  },
+  "gps": {
+   "id": "ipm-2027-30-app1",
+   "name": "IPM 2027-30 Appendix 1 GPS ratings",
+   "edition": "Initial draft, August 2026",
+   "url": "https://www.nzta.govt.nz/assets/planning-and-investment/nltp/2027/docs/initial-draft-ipm-for-the-2027-30-nltp-august-2026.pdf",
+   "verified": false,
+   "draft": true,
+   "by": 2035,
+   "complete": 0.75
+  },
+  "tou": {
+   "id": "ltma-tou",
+   "name": "LTMA Part 2 subpart 3 (time-of-use charging)",
+   "edition": "2025 No 64, in force 18 Nov 2026",
+   "url": "https://www.legislation.govt.nz/act/public/2025/0064/latest/",
+   "verified": true,
+   "appraisal": "User benefit by the rule of half on generalised cost (time plus the charge); the charge is a transfer, so revenue offsets the cost in BCR_G and nets out of BCR_N (MBCM v1.7.5 toll-road and BCR_N/BCR_G guidance, NZTA GC 26/01)"
+  },
+  "ftaa": {
+   "id": "ftaa-clock",
+   "name": "FTAA timeframes",
+   "edition": "FTAA 2024 as at 10 Jul 2026",
+   "url": "https://www.legislation.govt.nz/act/public/2024/56/en/latest/",
+   "verified": false,
+   "s54": 20,
+   "s55": 5,
+   "s67": 10,
+   "lapseYears": 2,
+   "dcMonths": 6
+  },
+  "conflicts": {
+   "id": "conflict-points",
+   "name": "Vehicle conflict points by junction form",
+   "edition": "FHWA roundabout guide convention",
+   "verified": false,
+   "x4": 32,
+   "x3": 9,
+   "roundabout4": 8,
+   "roundabout3": 6
+  }
+ },
+ "D": {
+  "D1": "Spare Construct is a browser-based sketch and screening tool. It is not an approved regional transport model and it is not the Auckland Forecasting Centre Macro Strategic Model (MSM). Its results are indicative and are intended to scope, test and support a transport assessment. They must be reviewed, and where necessary confirmed with approved tools, by a suitably qualified transport planner or traffic engineer before they are relied on in any resource consent, plan change, notice of requirement, Fast-track application or funding decision.",
+  "D3": "Junction delay, degree of saturation, level of service and queue results are calculated by Spare Construct using HCM 6 / Akcelik-based methods. They are indicative and are not SIDRA output. Any junction result relied on for a consent decision, signal design (ATOC Traffic Signals Design Guidelines) or condition should be confirmed in SIDRA or another tool accepted by the road controlling authority.",
+  "D4": "The benefit-cost ratio is an indicative screening estimate following NZTA Monetised Benefits and Costs Manual v1.7.5 conventions. It is equivalent to an Indicative Efficiency Rating, not a funding-approval BCR. It is not MBCM-compliant unless the full procedures are applied to a model calibrated and validated to the NZTA Transport Model Development Guidelines and independently reviewed. IPM efficiency bands for 2027-30 are shown from NZTA's initial draft (August 2026) and may change after GPS 2027.",
+  "D5": "ANOP levels of service are indicative Spare Construct estimates. Confirm them in Auckland Transport's ANOP Assessment Tool using AT speed data before relying on them.",
+  "D8": "Crash histories are taken from NZTA CAS and the most recent months may be incomplete. Spare Construct's safety screening and audit briefing pack support, but do not replace, a Safe System Audit by an independent, qualified specialist, or sight distance assessment to Austroads Guide to Road Design Part 4A.",
+  "D9": "This cost benefit disclosure statement follows the structure of clause 3.3 of the Land Transport Rule: Setting of Speed Limits 2024. It is not an MBCM benefit-cost ratio and cannot be used in place of MBCM procedures for NLTF funding.",
+  "D12": "This export is prepared for use in [tool]. Results produced in that tool, not the Spare Construct estimates, should be reported where the tool is required or accepted by the reviewing authority.",
+  "D13": "Values marked \"Spare Construct assumption\" are Spare Construct defaults, not published rules. Agree them with the reviewing authority at scoping or replace them with project-specific values."
+ },
+ "ASSUME": {
+  "tripsPerSpace": 0.5,
+  "walkSpeed": 1.33,
+  "cycleSpeed": 15,
+  "catchMin": 30,
+  "shBuffer": 200,
+  "meanShare": 0.5,
+  "dsiExponent": 3,
+  "injuryExponent": 2,
+  "elasticity": -0.3,
+  "vocPerKm": 0.3,
+  "co2PerT": 100,
+  "crashPerKm": 0.05,
+  "affectedPct": 5,
+  "speedUp": 5
+ },
+ "SET_LABELS": {
+  "tripsPerSpace": [
+   "Induced trips per extra parking space",
+   "trips/space"
+  ],
+  "walkSpeed": [
+   "Walking speed",
+   "m/s"
+  ],
+  "cycleSpeed": [
+   "Cycling speed",
+   "km/h"
+  ],
+  "catchMin": [
+   "Accessibility catchment",
+   "min"
+  ],
+  "shBuffer": [
+   "State highway proximity for NZTA as invitee",
+   "m"
+  ],
+  "meanShare": [
+   "Mean-speed change as a share of the limit change",
+   "×"
+  ],
+  "dsiExponent": [
+   "Fatal and serious crashes: power-model exponent (Nilsson)",
+   "×"
+  ],
+  "injuryExponent": [
+   "Injury crashes: power-model exponent (Nilsson)",
+   "×"
+  ],
+  "elasticity": [
+   "Demand elasticity to generalised cost",
+   "×"
+  ],
+  "vocPerKm": [
+   "Vehicle operating cost",
+   "NZ$/veh-km"
+  ],
+  "co2PerT": [
+   "Carbon value",
+   "NZ$/t CO2e"
+  ],
+  "crashPerKm": [
+   "Crash cost",
+   "NZ$/veh-km"
+  ],
+  "affectedPct": [
+   "Affected link: flow change",
+   "%"
+  ],
+  "speedUp": [
+   "Speed increase that counts as raising speed",
+   "km/h"
+  ]
+ },
+ "MONTHS": [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec"
+ ],
+ "PATHS": {
+  "": "Not set",
+  "rc-landuse": "Resource consent: land use",
+  "rc-subdivision": "Resource consent: subdivision",
+  "precinct": "Precinct staging consent",
+  "pc-private": "Private plan change",
+  "pc-council": "Council plan change",
+  "nor": "Notice of requirement",
+  "outline-plan": "Outline plan of works",
+  "ftaa-consent": "Fast-track: resource consent",
+  "ftaa-nor": "Fast-track: notice of requirement",
+  "nltf": "NLTF funding",
+  "speed-limit": "Speed limit change",
+  "dc-iff": "Growth funding (DC, IFF levy)",
+  "tou": "Time-of-use charging scheme"
+ },
+ "PERIODS": [
+  "AM",
+  "PM",
+  "IP"
+ ],
+ "GFA_KEYS": [
+  "retail",
+  "supermarket",
+  "fastfood",
+  "office",
+  "medical",
+  "industrial",
+  "warehouse"
+ ],
+ "RCA_RE": [
+  {
+   "$re": "\\bAuckland Transport\\b[^.;]{0,30}?\\b(?:road controlling authority|RCA)\\b",
+   "$flags": "i"
+  },
+  {
+   "$re": "\\bAT\\b(?:\\s*\\))?[^.;]{0,20}?\\b(?:road controlling authority|RCA)\\b",
+   "$flags": ""
+  },
+  {
+   "$re": "\\broad controlling authority\\b[^.;]{0,6}(?:\\(|,|:|is|was)?\\s*(?:the\\s+)?(?:Auckland Transport\\b|AT\\b)",
+   "$flags": ""
+  }
+ ],
+ "LINT": [
+  {
+   "id": "scope-1a",
+   "rule": "Out-of-scope effects for a district land use consent",
+   "source": "RMA s104(1A), s92(2AA) (Planning Act 2026 Sch 12 Pt 2)",
+   "level": "warn",
+   "re": {
+    "$re": "\\b(retail distribution|trade competition|demand for (?:the )?(?:project|proposal|development|activity)|viability of (?:the )?(?:project|proposal|development|activity|centre)|views? from private (?:property|properties|land))\\b",
+    "$flags": "i"
+   },
+   "suggest": "Remove it: for consents lodged from 30 Oct 2026 these effects are out of scope (s104(1A)), and a further-information request about them is barred (s92(2AA)). Traffic effects stay in scope."
+  },
+  {
+   "id": "scope-cl7",
+   "rule": "Traffic safety placed under Sch 4 cl 7(1)(f)",
+   "source": "RMA Sch 4 cl 6(1)(b), 7(1)(a)",
+   "level": "warn",
+   "re": {
+    "$re": "\\b(?:cl(?:ause)?\\.?\\s*7\\s*\\(1\\)\\s*\\(f\\))",
+    "$flags": "i"
+   },
+   "also": {
+    "$re": "\\bsafety\\b",
+    "$flags": "i"
+   },
+   "suggest": "Assess traffic safety under Sch 4 cl 6(1)(b) and cl 7(1)(a) (effects on people and the community), not cl 7(1)(f)."
+  },
+  {
+   "id": "scope-95a9",
+   "rule": "s95A(9) special circumstances",
+   "source": "RMA s95A(9) (repealed from 30 Oct 2026); AUP E27.5, C1.13; s95B(10)",
+   "level": "warn",
+   "re": {
+    "$re": "\\bs(?:ection)?\\s?95A\\s*\\(9\\)|\\bspecial circumstances\\b",
+    "$flags": "i"
+   },
+   "suggest": "s95A(9) is repealed for applications lodged from 30 Oct 2026, so the AUP E27.5 / C1.13 cross-references to it have no target. s95B(10) (limited notification special circumstances) remains: cite that if it is what you mean."
+  },
+  {
+   "id": "scope-1c",
+   "rule": "Planning Act or NEA instrument cited in a transition consent",
+   "source": "RMA s104(1C) (Planning Act 2026 Sch 12 Pt 2)",
+   "re": [
+    {
+     "$re": "\\bNational Policy Direction\\b",
+     "$flags": "i"
+    },
+    {
+     "$re": "\\bNatural Environment Act\\b",
+     "$flags": "i"
+    },
+    {
+     "$re": "\\bNEA\\b",
+     "$flags": ""
+    },
+    {
+     "$re": "\\bPlanning Act 2026\\b[^.;]{0,40}\\b(?:national standards?|regional plans?|instruments?|directions?)\\b",
+     "$flags": "i"
+    },
+    {
+     "$re": "\\bnational standards?\\b[^.;]{0,30}\\bPlanning Act\\b",
+     "$flags": "i"
+    }
+   ],
+   "skip": [
+    {
+     "$re": "\\b(?:not|never|no|nor|without)\\b[^.;]{0,50}\\b(?:rel(?:y|ied|ies|iance|ying)|cit(?:e|ed|es|ing)|regard|consider(?:ed|ing)?|appl(?:y|ied|ies|ying)|give effect)\\b",
+     "$flags": "i"
+    },
+    {
+     "$re": "\\bs(?:ection)?\\s?104\\s*\\(1C\\)[^.;]{0,80}\\b(?:bars?|prevents?|prohibits?|precludes?|must not|cannot|may not|does not (?:allow|permit))\\b",
+     "$flags": "i"
+    },
+    {
+     "$re": "\\b(?:bars?|prevents?|prohibits?|precludes?|excludes?)\\b[^.;]{0,60}\\breliance\\b",
+     "$flags": "i"
+    }
+   ],
+   "suggest": "Remove the citation: a consent or NoR processed under the RMA transition regime must not rely on National Policy Direction or other Planning Act or NEA instruments (s104(1C)). Report and package exports stay blocked until it is removed, or until the author records why the sentence is correct (Override).",
+   "warnText": "Set the lodgement date: if this is lodged on or after 30 Oct 2026, s104(1C) bars reliance on Planning Act or NEA instruments and this citation blocks the report exports."
+  },
+  {
+   "id": "scope-e27-ita",
+   "rule": "\"ITA required\" tied to E27.6.1",
+   "source": "AUP E27.6.1, E27.9 (an ITA may be required)",
+   "level": "warn",
+   "re": {
+    "$re": "\\b(?:an? )?(?:ITA|integrated transport assessment)\\s+(?:is\\s+)?(?:required|mandatory)\\b|\\brequires? an? (?:ITA|integrated transport assessment)\\b",
+    "$flags": "i"
+   },
+   "also": {
+    "$re": "E27\\.6\\.1",
+    "$flags": ""
+   },
+   "suggest": "Say \"E27.6.1 may require an ITA\": exceeding a Table E27.6.1.1 threshold makes the activity restricted discretionary, and the assessment matters decide what information is needed."
+  },
+  {
+   "id": "scope-rca",
+   "rule": "Auckland Transport named as road controlling authority",
+   "source": "LGACA 2009 s47 (from 7 May 2026)",
+   "level": "warn",
+   "re": [
+    {
+     "$re": "\\bAuckland Transport\\b[^.;]{0,30}?\\b(?:road controlling authority|RCA)\\b",
+     "$flags": "i"
+    },
+    {
+     "$re": "\\bAT\\b(?:\\s*\\))?[^.;]{0,20}?\\b(?:road controlling authority|RCA)\\b",
+     "$flags": ""
+    },
+    {
+     "$re": "\\broad controlling authority\\b[^.;]{0,6}(?:\\(|,|:|is|was)?\\s*(?:the\\s+)?(?:Auckland Transport\\b|AT\\b)",
+     "$flags": ""
+    }
+   ],
+   "suggest": "Since 7 May 2026 Auckland Council is the road controlling authority (LGACA s47), with local boards on local and collector roads; Auckland Transport continues as the transport CCO. Quote AUP text that names Auckland Transport as written."
+  },
+  {
+   "id": "scope-mbcm",
+   "rule": "\"MBCM-compliant\" BCR without the full procedure and a validated model",
+   "source": "NZTA MBCM v1.7.5; D4",
+   "level": "warn",
+   "re": {
+    "$re": "\\bMBCM[- ]?compliant\\b|\\bcompliant with (?:the )?MBCM\\b",
+    "$flags": "i"
+   },
+   "suggest": "Call it an indicative BCR (equivalent to an Indicative Efficiency Rating). It is MBCM-compliant only when the full procedures are applied to a TMDG-validated, independently reviewed model."
+  },
+  {
+   "id": "scope-tmdg",
+   "rule": "TMDG statistics presented as fitness for purpose",
+   "source": "NZTA TMDG 2019; D6",
+   "level": "warn",
+   "re": {
+    "$re": "\\bTMDG\\b|\\bTransport Model Development Guidelines\\b",
+    "$flags": "i"
+   },
+   "also": {
+    "$re": "\\bfit[- ]for[- ]purpose\\b|\\bfitness for purpose\\b",
+    "$flags": "i"
+   },
+   "suggest": "Report the TMDG statistics as evidence, not as a pass that proves fitness for purpose: that is the analyst's and peer reviewer's judgment (D6)."
+  },
+  {
+   "id": "scope-rasf",
+   "rule": "RASF described as mandatory for developers",
+   "source": "AT Roads and Streets Framework v2 (not mandated for developers)",
+   "level": "warn",
+   "re": {
+    "$re": "\\bRASF\\b|\\bRoads and Streets Framework\\b",
+    "$flags": "i"
+   },
+   "also": {
+    "$re": "\\b(?:mandatory|must comply|is required|requires developers?|obliged|binding)\\b",
+    "$flags": "i"
+   },
+   "suggest": "Describe the RASF as advisory: it is not mandated for developers (RASF v2). Use it to explain the street's place and movement role."
+  }
+ ],
+ "UPGRADE_STATUS": {
+  "operational": "Operational",
+  "construction": "Under construction",
+  "applicant": "Applicant-delivered",
+  "not-started": "Not started"
+ },
+ "I450_ROWS": [
+  {
+   "row": "a",
+   "dw": 710,
+   "retail": null,
+   "commercial": null,
+   "community": null,
+   "up": [
+    {
+     "id": "a1",
+     "name": "Interim signals at Great South Rd / Waihoehoe Rd",
+     "status": "A5"
+    },
+    {
+     "id": "a2",
+     "name": "Interim Waihoehoe Rd upgrade",
+     "status": "A5"
+    }
+   ]
+  },
+  {
+   "row": "b",
+   "dw": 1300,
+   "retail": 24000,
+   "commercial": 6000,
+   "community": 800,
+   "up": [
+    {
+     "id": "b1",
+     "name": "SH1 Papakura–Drury six-laning",
+     "status": "A5"
+    }
+   ]
+  },
+  {
+   "row": "c",
+   "dw": 1800,
+   "retail": 32000,
+   "commercial": 8700,
+   "community": 1000,
+   "up": [
+    {
+     "id": "c1",
+     "name": "Drury Central station",
+     "status": "A5"
+    },
+    {
+     "id": "c2",
+     "name": "SH1 – Creek Rd slip lane",
+     "status": "A6"
+    }
+   ]
+  },
+  {
+   "row": "d",
+   "dw": 3300,
+   "retail": 56000,
+   "commercial": 17900,
+   "community": 2000,
+   "up": [
+    {
+     "id": "d1",
+     "name": "Ultimate Waihoehoe Rd upgrade",
+     "status": "A6"
+    }
+   ]
+  },
+  {
+   "row": "e",
+   "dw": 3800,
+   "retail": 64000,
+   "commercial": 21000,
+   "community": 2400,
+   "up": [
+    {
+     "id": "e1",
+     "name": "Mill Rd southern connection",
+     "status": "A6"
+    },
+    {
+     "id": "e2",
+     "name": "Drury South interchange",
+     "status": "A6"
+    }
+   ]
+  },
+  {
+   "row": "f",
+   "dw": 5800,
+   "retail": 97000,
+   "commercial": 47000,
+   "community": 10000,
+   "up": [
+    {
+     "id": "f1",
+     "name": "Mill Rd north",
+     "status": "A6"
+    },
+    {
+     "id": "f2",
+     "name": "Waihoehoe East",
+     "status": "A6"
+    },
+    {
+     "id": "f3",
+     "name": "Ōpāheke northern connection",
+     "status": "A6"
+    }
+   ]
+  }
+ ],
+ "PRECINCTS": {
+  "I450": {
+   "id": "I450",
+   "name": "Drury Centre",
+   "plan": "Precinct Plan 4",
+   "table": "Table I450.6.2.1",
+   "rule": "I450.6.2(1)",
+   "deemed": "I450.6.2(2)",
+   "ita": "I450.9(4)",
+   "monitor": "I450.9(5)",
+   "status": {
+    "A5": "Non-complying (I450.4.1 (A5))",
+    "A6": "Discretionary (I450.4.1 (A6))",
+    "A9": "Amendment that breaches the standard (I450.4.1 (A9))"
+   },
+   "node": [
+    "Great South",
+    "Waihoehoe"
+   ],
+   "nodeLabel": "Great South Rd / Waihoehoe Rd",
+   "pc120": true,
+   "source": "https://unitaryplan.aucklandcouncil.govt.nz/images/Auckland%20Unitary%20Plan%20Operative/Chapter%20I%20Precincts/4.%20South/I450%20Drury%20Centre%20Precinct.pdf",
+   "edition": "AUP(OP) July 2026 print",
+   "verified": false,
+   "rows": [
+    {
+     "row": "a",
+     "dw": 710,
+     "retail": null,
+     "commercial": null,
+     "community": null,
+     "up": [
+      {
+       "id": "a1",
+       "name": "Interim signals at Great South Rd / Waihoehoe Rd",
+       "status": "A5"
+      },
+      {
+       "id": "a2",
+       "name": "Interim Waihoehoe Rd upgrade",
+       "status": "A5"
+      }
+     ]
+    },
+    {
+     "row": "b",
+     "dw": 1300,
+     "retail": 24000,
+     "commercial": 6000,
+     "community": 800,
+     "up": [
+      {
+       "id": "b1",
+       "name": "SH1 Papakura–Drury six-laning",
+       "status": "A5"
+      }
+     ]
+    },
+    {
+     "row": "c",
+     "dw": 1800,
+     "retail": 32000,
+     "commercial": 8700,
+     "community": 1000,
+     "up": [
+      {
+       "id": "c1",
+       "name": "Drury Central station",
+       "status": "A5"
+      },
+      {
+       "id": "c2",
+       "name": "SH1 – Creek Rd slip lane",
+       "status": "A6"
+      }
+     ]
+    },
+    {
+     "row": "d",
+     "dw": 3300,
+     "retail": 56000,
+     "commercial": 17900,
+     "community": 2000,
+     "up": [
+      {
+       "id": "d1",
+       "name": "Ultimate Waihoehoe Rd upgrade",
+       "status": "A6"
+      }
+     ]
+    },
+    {
+     "row": "e",
+     "dw": 3800,
+     "retail": 64000,
+     "commercial": 21000,
+     "community": 2400,
+     "up": [
+      {
+       "id": "e1",
+       "name": "Mill Rd southern connection",
+       "status": "A6"
+      },
+      {
+       "id": "e2",
+       "name": "Drury South interchange",
+       "status": "A6"
+      }
+     ]
+    },
+    {
+     "row": "f",
+     "dw": 5800,
+     "retail": 97000,
+     "commercial": 47000,
+     "community": 10000,
+     "up": [
+      {
+       "id": "f1",
+       "name": "Mill Rd north",
+       "status": "A6"
+      },
+      {
+       "id": "f2",
+       "name": "Waihoehoe East",
+       "status": "A6"
+      },
+      {
+       "id": "f3",
+       "name": "Ōpāheke northern connection",
+       "status": "A6"
+      }
+     ]
+    }
+   ]
+  },
+  "I451": {
+   "id": "I451",
+   "name": "Drury East",
+   "plan": "Precinct Plan 2",
+   "table": "Table I451.6.2.1",
+   "rule": "I451.6.2(1)",
+   "deemed": "I451.6.2(2)",
+   "ita": "I451.9",
+   "monitor": "I451.9",
+   "status": {
+    "A5": "Non-complying (check the I451 activity table)",
+    "A6": "Discretionary (check the I451 activity table)",
+    "A9": "Amendment that breaches the standard (check the I451 activity table)"
+   },
+   "node": [
+    "Great South",
+    "Waihoehoe"
+   ],
+   "nodeLabel": "Great South Rd / Waihoehoe Rd",
+   "pc120": true,
+   "source": "https://unitaryplan.aucklandcouncil.govt.nz/images/Auckland%20Unitary%20Plan%20Operative/Chapter%20I%20Precincts/4.%20South/I451%20Drury%20East%20Precinct.pdf",
+   "edition": "AUP(OP) July 2026 print",
+   "verified": false,
+   "note": "Drury East uses the same thresholds as I450 (Table I451.6.2.1). The upgrade list is copied from I450: check it against Table I451.6.2.1.",
+   "rows": [
+    {
+     "row": "a",
+     "dw": 710,
+     "retail": null,
+     "commercial": null,
+     "community": null,
+     "up": [
+      {
+       "id": "a1",
+       "name": "Interim signals at Great South Rd / Waihoehoe Rd",
+       "status": "A5"
+      },
+      {
+       "id": "a2",
+       "name": "Interim Waihoehoe Rd upgrade",
+       "status": "A5"
+      }
+     ]
+    },
+    {
+     "row": "b",
+     "dw": 1300,
+     "retail": 24000,
+     "commercial": 6000,
+     "community": 800,
+     "up": [
+      {
+       "id": "b1",
+       "name": "SH1 Papakura–Drury six-laning",
+       "status": "A5"
+      }
+     ]
+    },
+    {
+     "row": "c",
+     "dw": 1800,
+     "retail": 32000,
+     "commercial": 8700,
+     "community": 1000,
+     "up": [
+      {
+       "id": "c1",
+       "name": "Drury Central station",
+       "status": "A5"
+      },
+      {
+       "id": "c2",
+       "name": "SH1 – Creek Rd slip lane",
+       "status": "A6"
+      }
+     ]
+    },
+    {
+     "row": "d",
+     "dw": 3300,
+     "retail": 56000,
+     "commercial": 17900,
+     "community": 2000,
+     "up": [
+      {
+       "id": "d1",
+       "name": "Ultimate Waihoehoe Rd upgrade",
+       "status": "A6"
+      }
+     ]
+    },
+    {
+     "row": "e",
+     "dw": 3800,
+     "retail": 64000,
+     "commercial": 21000,
+     "community": 2400,
+     "up": [
+      {
+       "id": "e1",
+       "name": "Mill Rd southern connection",
+       "status": "A6"
+      },
+      {
+       "id": "e2",
+       "name": "Drury South interchange",
+       "status": "A6"
+      }
+     ]
+    },
+    {
+     "row": "f",
+     "dw": 5800,
+     "retail": 97000,
+     "commercial": 47000,
+     "community": 10000,
+     "up": [
+      {
+       "id": "f1",
+       "name": "Mill Rd north",
+       "status": "A6"
+      },
+      {
+       "id": "f2",
+       "name": "Waihoehoe East",
+       "status": "A6"
+      },
+      {
+       "id": "f3",
+       "name": "Ōpāheke northern connection",
+       "status": "A6"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "MEASURES": [
+  [
+   "dw",
+   "dwellings",
+   "Dwellings"
+  ],
+  [
+   "retail",
+   "retail",
+   "Retail GFA (m²)"
+  ],
+  [
+   "commercial",
+   "commercial",
+   "Other commercial GFA (m²)"
+  ],
+  [
+   "community",
+   "community",
+   "Community GFA (m²)"
+  ]
+ ],
+ "EFFECT": {
+  "id": "cx-effects",
+  "name": "Effect screening for the mitigation register",
+  "edition": "Spare Construct assumption",
+  "verified": false,
+  "dos": 0.9,
+  "dDelay": 10,
+  "vc": 0.9,
+  "dvc": 0.05,
+  "basis": "Spare Construct assumption: a junction is an effect when its DoS is over 0.9 (or its own practical DoS), it reaches LoS E or F, or its delay rises 10 s or more; a road when v/c is over 0.9 and rises 0.05 or more"
+ },
+ "MECHANISMS": {
+  "condition": "Consent condition",
+  "precinct": "Precinct rule",
+  "agreement": "Funding or development agreement",
+  "s84a": "FTAA s84A condition",
+  "designation": "Designation (NoR)",
+  "none": "None"
+ },
+ "RESPONSIBLE": {
+  "applicant": "Applicant",
+  "council": "Auckland Council",
+  "at": "Auckland Transport",
+  "nzta": "NZTA",
+  "kiwirail": "KiwiRail",
+  "other": "Other third party"
+ },
+ "FIT_RANK": {
+  "High": 3,
+  "Moderate": 2,
+  "Low": 1
+ },
+ "HIER": {
+  "integrate": "Integrate land use and transport",
+  "maintain": "Maintain and operate",
+  "demand": "Manage demand",
+  "optimise": "Optimise",
+  "capacity": "New capacity"
+ },
+ "HIER_SRC": "MBCM v1.7.5 s1.5 intervention hierarchy; Ministerial statement on land transport, 13 Aug 2026",
+ "DW_KEYS": [
+  "residential",
+  "apartment",
+  "retirement"
+ ],
+ "D4short": "indicative, equivalent to an IER; not a funding-approval BCR",
+ "MATRIX_RESULT": {
+  "consistent": "Consistent (author)",
+  "inconsistent": "Inconsistent (author)",
+  "not-relevant": "Not relevant (author)"
+ },
+ "SP": {
+  "id": "speed-rule-2024",
+  "name": "Land Transport Rule: Setting of Speed Limits 2024",
+  "edition": "consolidated as at 15 Jan 2025",
+  "url": "https://www.nzta.govt.nz/assets/resources/rules/docs/land-transport-rule-setting-of-speed-limits-2024-as-at-15-january-2025.pdf",
+  "verified": false,
+  "classes": {
+   "urban-street": {
+    "t": 1,
+    "label": "Urban street",
+    "min": 50,
+    "max": 50
+   },
+   "civic": {
+    "t": 1,
+    "label": "Civic space",
+    "min": 10,
+    "max": 20
+   },
+   "urban-connector": {
+    "t": 1,
+    "label": "Urban connector",
+    "min": 50,
+    "max": 80
+   },
+   "transit": {
+    "t": 1,
+    "label": "Transit corridor",
+    "min": 80,
+    "max": 100
+   },
+   "peri-urban": {
+    "t": 2,
+    "label": "Peri-urban road",
+    "min": 50,
+    "max": 80
+   },
+   "stopping": {
+    "t": 2,
+    "label": "Stopping place",
+    "min": 50,
+    "max": 80
+   },
+   "rural": {
+    "t": 2,
+    "label": "Rural road",
+    "min": 80,
+    "max": 100
+   },
+   "rural-connector": {
+    "t": 2,
+    "label": "Rural connector",
+    "min": 80,
+    "max": 100
+   },
+   "interregional": {
+    "t": 2,
+    "label": "Interregional connector",
+    "min": 100,
+    "max": 100
+   },
+   "expressway": {
+    "t": 2,
+    "label": "Expressway",
+    "min": 100,
+    "max": 120
+   },
+   "beach": {
+    "t": 3,
+    "label": "Beach",
+    "min": 10,
+    "max": 60
+   },
+   "low-volume": {
+    "t": 3,
+    "label": "Low-volume or low-speed road",
+    "min": 10,
+    "max": 30
+   },
+   "unsealed": {
+    "t": 3,
+    "label": "Unsealed rural road",
+    "min": 60,
+    "max": 80
+   },
+   "urban-active": {
+    "t": 3,
+    "label": "Urban street with significant walking or cycling, or no footpaths",
+    "min": 40,
+    "max": 40
+   },
+   "isz-urban": {
+    "t": 3,
+    "label": "Urban intersection speed zone",
+    "min": 30,
+    "max": 70,
+    "crashHistory": true
+   },
+   "isz-rural": {
+    "t": 3,
+    "label": "Rural intersection speed zone",
+    "min": 60,
+    "max": 70,
+    "crashHistory": true
+   },
+   "hill": {
+    "t": 3,
+    "label": "Mountainous or hill corridor",
+    "min": 60,
+    "max": 80
+   }
+  },
+  "minLen": [
+   [
+    40,
+    300
+   ],
+   [
+    60,
+    500
+   ],
+   [
+    70,
+    700
+   ],
+   [
+    80,
+    800
+   ],
+   [
+    100,
+    2000
+   ],
+   [
+    120,
+    3000
+   ]
+  ],
+  "exceptions": {
+   "impracticable": "impracticable (cl 4.6)",
+   "below40": "limit under 40 km/h",
+   "school": "school gate limit",
+   "variable": "part of a variable limit"
+  },
+  "nztaOnly": [
+   110,
+   120
+  ],
+  "varReasons": {
+   "users": "mix of road users",
+   "volume": "changing volumes or congestion",
+   "ttm": "emergency or temporary traffic management",
+   "turning": "turning or crossing crash risk",
+   "climate": "climate or weather",
+   "school": "school",
+   "marae": "marae",
+   "beach": "beach or riverbed driving"
+  },
+  "onf": {
+   "urban-street": [
+    "Local street",
+    "Activity street"
+   ],
+   "civic": [
+    "Civic space"
+   ],
+   "urban-connector": [
+    "Urban connector",
+    "Main street"
+   ],
+   "transit": [
+    "Transit corridor"
+   ],
+   "peri-urban": [
+    "Peri-urban road"
+   ],
+   "stopping": [
+    "Stopping place"
+   ],
+   "rural": [
+    "Rural road"
+   ],
+   "rural-connector": [
+    "Rural connector"
+   ],
+   "interregional": [
+    "Interregional connector"
+   ]
+  },
+  "cbdsSkip": "No CBDS is needed for new roads, school-gate limits or reversals (NZTA Rule guidance)"
+ },
+ "PAIR_M": 60,
+ "AN": {
+  "id": "anop-v10.2",
+  "name": "AT ANOP Assessment Tool",
+  "edition": "v10.2 (application guide Aug 2022)",
+  "url": "https://at.govt.nz/media/dd1ivvio/anop-assessment-tool-v10-2.xlsx",
+  "verified": false,
+  "speedBands": [
+   [
+    90,
+    "A"
+   ],
+   [
+    70,
+    "B"
+   ],
+   [
+    50,
+    "C"
+   ],
+   [
+    40,
+    "D"
+   ],
+   [
+    30,
+    "E"
+   ]
+  ],
+  "relBands": [
+   [
+    1.1,
+    "A"
+   ],
+   [
+    1.25,
+    "B"
+   ],
+   [
+    1.5,
+    "C"
+   ],
+   [
+    1.75,
+    "D"
+   ],
+   [
+    2,
+    "E"
+   ]
+  ],
+  "relBasis": "85th/median bands between A ≤ 1.1 and F > 2.0 are interpolated (Spare Construct assumption); confirm in the tool",
+  "crossBands": [
+   50,
+   100,
+   200,
+   400,
+   800
+  ],
+  "crossDelay": [
+   10,
+   20,
+   30,
+   45,
+   60
+  ],
+  "score": {
+   "A+": 7,
+   "A": 6,
+   "B": 5,
+   "C": 4,
+   "D": 3,
+   "E": 2,
+   "F": 1,
+   "F-": 0
+  },
+  "cycleFacility": {
+   "separated": "A",
+   "painted": "C",
+   "none": {
+    "arterial": "E",
+    "other": "D"
+   },
+   "basis": "Spare Construct assumption: separated cycleway A, painted lane C, none D (E on arterials); from AT CyclingService TYPEOFFACILITY where loaded"
+  }
+ },
+ "MODE_LABEL": {
+  "walk": "Walking",
+  "cycle": "Cycling",
+  "pt": "Public transport",
+  "freight": "Freight",
+  "gt": "General traffic"
+ },
+ "LU": {
+  "city-metro": "City or Metropolitan Centre",
+  "town-local": "Town or Local Centre",
+  "special": "THAB, education, hospital, stadium or RTN station",
+  "other": "Outside centres"
+ },
+ "PREF": {
+  "gt": {
+   "motorway": [
+    "C",
+    "C",
+    "C"
+   ],
+   "arterial": [
+    "E",
+    "D",
+    "C"
+   ],
+   "collector": [
+    "F",
+    "E",
+    "D"
+   ],
+   "local": [
+    "F",
+    "F",
+    "E"
+   ]
+  },
+  "freight": {
+   "l1": [
+    "E",
+    "D",
+    "C"
+   ],
+   "l2": [
+    "F",
+    "E",
+    "D"
+   ]
+  },
+  "pt": {
+   "rtn": [
+    "B",
+    "B",
+    "B"
+   ],
+   "ftn": [
+    "C",
+    "C",
+    "C"
+   ],
+   "connector": [
+    "D",
+    "D",
+    "D"
+   ],
+   "local": [
+    "E",
+    "E",
+    "E"
+   ],
+   "peak": [
+    "D",
+    "D",
+    "D"
+   ],
+   "none": [
+    "F",
+    "F",
+    "E"
+   ]
+  },
+  "cycle": {
+   "regional": [
+    "B",
+    "B",
+    "B"
+   ],
+   "connector": [
+    "D",
+    "D",
+    "D"
+   ],
+   "local": [
+    "D",
+    "D",
+    "D"
+   ],
+   "none": [
+    "E",
+    "E",
+    "E"
+   ]
+  },
+  "walk": {
+   "primary": [
+    "B",
+    "B",
+    "B"
+   ],
+   "secondary": [
+    "C",
+    "C",
+    "C"
+   ],
+   "tertiary": [
+    "D",
+    "D",
+    "D"
+   ],
+   "none": [
+    "D",
+    "D",
+    "D"
+   ]
+  }
+ },
+ "HIER_LABEL": {
+  "motorway": "Motorway",
+  "arterial": "Arterial",
+  "collector": "Collector",
+  "local": "Local",
+  "l1": "Level 1A/1B",
+  "l2": "Level 2/3/Access",
+  "rtn": "RTN",
+  "ftn": "FTN / IRTN / other strategic",
+  "connector": "Connector",
+  "peak": "Peak",
+  "none": "None",
+  "regional": "Regional / Major",
+  "primary": "Primary",
+  "secondary": "Secondary",
+  "tertiary": "Tertiary"
+ },
+ "NO_FIT": "Not assessed: no option to compare (the do-minimum and the option are the same scenario)",
+ "PARK_ACT": {
+  "residential": {
+   "label": "Residential",
+   "unit": "dwellings",
+   "grp": "res"
+  },
+  "office": {
+   "label": "Office",
+   "unit": "m² GFA",
+   "grp": "other"
+  },
+  "retail": {
+   "label": "Retail (other)",
+   "unit": "m² GFA",
+   "grp": "retail",
+   "cycle": false
+  },
+  "food": {
+   "label": "Food and beverage",
+   "unit": "m² GFA",
+   "grp": "retail",
+   "cycle": false
+  },
+  "industrial": {
+   "label": "Industrial",
+   "unit": "m² GFA",
+   "grp": "retail",
+   "cycle": false
+  },
+  "childcare": {
+   "label": "Care centre",
+   "unit": "m² GFA",
+   "grp": "other",
+   "cycle": false
+  },
+  "school": {
+   "label": "Education facility",
+   "unit": "m² GFA",
+   "grp": "other",
+   "cycle": false
+  },
+  "tertiary": {
+   "label": "Tertiary education",
+   "unit": "m² GFA",
+   "grp": "other",
+   "cycle": false
+  },
+  "medical": {
+   "label": "Healthcare facility",
+   "unit": "m² GFA",
+   "grp": "other",
+   "cycle": false
+  },
+  "hospital": {
+   "label": "Hospital",
+   "unit": "m² GFA",
+   "grp": "other",
+   "cycle": false
+  },
+  "community": {
+   "label": "Community facility",
+   "unit": "m² GFA",
+   "grp": "other",
+   "cycle": false
+  },
+  "other": {
+   "label": "Other non-residential",
+   "unit": "m² GFA",
+   "grp": "other",
+   "cycle": false
+  }
+ },
+ "SIG": {
+  "road": "Road",
+  "regional": "Regionally significant",
+  "national": "Nationally significant"
+ },
+ "REPORT": [
+  {
+   "id": "compliance-extra-parking",
+   "chapter": "parking",
+   "order": 35,
+   "title": "Parking, cycle parking and loading"
+  },
+  {
+   "id": "compliance-extra-precinct",
+   "chapter": "staging and sequencing",
+   "order": 45,
+   "title": "Precinct staging"
+  },
+  {
+   "id": "compliance-extra-subdivision",
+   "chapter": "land use",
+   "order": 36,
+   "title": "Urban subdivision (E38)"
+  },
+  {
+   "id": "compliance-extra-anop",
+   "chapter": "anop",
+   "order": 35,
+   "title": "ANOP multimodal fit (indicative)"
+  },
+  {
+   "id": "compliance-extra-policy",
+   "chapter": "policy alignment",
+   "order": 72,
+   "title": "Policy alignment"
+  },
+  {
+   "id": "compliance-extra-climate",
+   "chapter": "climate adaptation",
+   "order": 75,
+   "title": "Climate adaptation"
+  },
+  {
+   "id": "compliance-extra-alternatives",
+   "chapter": "assessment",
+   "order": 85,
+   "title": "Options and alternatives"
+  },
+  {
+   "id": "compliance-extra-mitigation",
+   "chapter": "mitigation",
+   "order": 12,
+   "title": "Mitigation register and condition parameters"
+  },
+  {
+   "id": "compliance-extra-triggers",
+   "chapter": "staging triggers",
+   "order": 22,
+   "title": "Trigger finder"
+  },
+  {
+   "id": "compliance-extra-planchange",
+   "chapter": "plan change",
+   "order": 25,
+   "title": "Plan change: process, s32 and full build-out"
+  },
+  {
+   "id": "compliance-extra-ftaa",
+   "chapter": "fast-track",
+   "order": 30,
+   "title": "Fast-track package"
+  },
+  {
+   "id": "compliance-extra-speed",
+   "chapter": "speed limit",
+   "order": 40,
+   "title": "Speed limits and CBDS"
+  },
+  {
+   "id": "compliance-extra-gps",
+   "chapter": "funding",
+   "order": 50,
+   "title": "IPM stage 2 GPS metrics"
+  },
+  {
+   "id": "compliance-extra-funding",
+   "chapter": "growth funding",
+   "order": 60,
+   "title": "Funding attribution"
+  },
+  {
+   "id": "compliance-extra-tou",
+   "chapter": "time-of-use",
+   "order": 70,
+   "title": "Time-of-use screening"
+  },
+  {
+   "id": "compliance-extra-anop-inputs",
+   "chapter": "appendix e",
+   "order": 20,
+   "title": "ANOP tool inputs (anop.csv)"
+  }
+ ],
+ "EXPORTS": [
+  [
+   "lint",
+   "Compliance+: scope linter findings (CSV)",
+   "csv",
+   null,
+   null
+  ],
+  [
+   "precinct",
+   "Compliance+: precinct staging (CSV)",
+   "csv",
+   null,
+   null
+  ],
+  [
+   "mitigation",
+   "Compliance+: mitigation register and conditions (CSV)",
+   "csv",
+   null,
+   null
+  ],
+  [
+   "options",
+   "Compliance+: options appraisal, EAST/AST-ready (CSV)",
+   "csv",
+   null,
+   null
+  ],
+  [
+   "ftaa",
+   "Compliance+: Fast-track package (ZIP)",
+   "zip",
+   null,
+   null
+  ],
+  [
+   "planchange",
+   "Compliance+: plan change s32 pack (CSV)",
+   "csv",
+   null,
+   null
+  ],
+  [
+   "speed",
+   "Compliance+: speed limit validation and CBDS (CSV)",
+   "csv",
+   null,
+   null
+  ],
+  [
+   "anop",
+   "Compliance+: ANOP tool inputs, anop.csv",
+   "csv",
+   null,
+   null
+  ],
+  [
+   "anop-inputs",
+   "Compliance+: ANOP speeds and reliability (CSV)",
+   "csv",
+   null,
+   null
+  ],
+  [
+   "parking",
+   "Compliance+: parking Table P1 (CSV)",
+   "csv",
+   null,
+   null
+  ],
+  [
+   "policy",
+   "Compliance+: policy, GPS metrics and funding (CSV)",
+   "csv",
+   null,
+   null
+  ],
+  [
+   "tou",
+   "Compliance+: time-of-use screening (CSV)",
+   "csv",
+   null,
+   null
+  ],
+  [
+   "climate",
+   "Compliance+: climate hazard table (CSV)",
+   "csv",
+   null,
+   null
+  ],
+  [
+   "tsdg",
+   "Hand-over: ATOC TSDG signal pack (CSV)",
+   "csv",
+   null,
+   null
+  ],
+  [
+   "ssa",
+   "Hand-over: Safe System Audit briefing (CSV)",
+   "csv",
+   null,
+   null
+  ],
+  [
+   "sh",
+   "Hand-over: NZTA state highway impact pack (CSV)",
+   "csv",
+   null,
+   null
+  ],
+  [
+   "mbcm",
+   "Hand-over: MBCM checks, SP and IER fields (CSV)",
+   "csv",
+   null,
+   null
+  ],
+  [
+   "rltp",
+   "Hand-over: RLTP activity sheet (CSV)",
+   "csv",
+   null,
+   null
+  ],
+  [
+   "msm",
+   "Hand-over: MSM / AFC request pack (CSV)",
+   "csv",
+   null,
+   null
+  ]
+ ],
+ "AUTHOR_TEXT": [
+  "mitigation"
+ ]
+}
