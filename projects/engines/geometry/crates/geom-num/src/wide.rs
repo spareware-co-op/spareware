@@ -259,7 +259,7 @@ impl<const L: usize> Wide<L> {
                 Some(v) => *v,
                 None => 0,
             };
-            let (s, c) = (!x).overflowing_add(u64::from(carry));
+            let (s, c) = u64::from(carry).overflowing_add(!x);
             if let Some(o) = out.get_mut(i) {
                 *o = s;
             }

@@ -664,7 +664,7 @@ impl<const L: usize> Wide<L> {
                 Some(v) => *v,
                 None => 0,
             };
-            let (s, c) = (!x).overflowing_add(u64::from(carry));
+            let (s, c) = u64::from(carry).overflowing_add(!x);
             proof! {
                 lemma_prefix_unchanged(out@, i as nat, s, i as nat);
                 lemma_base_step(i as nat);
