@@ -16,8 +16,10 @@
 //! - **Rule 1 names exactly the crates the file bans**, so the rule and the ban cannot drift apart.
 //!
 //! The same lists hold chapter 21's other bans (maths functions, `max` and `min`, and reductions
-//! whose order is not written out), which are not randomness; the file may comment inside a list,
-//! and the reader skips those lines.
+//! whose order is not written out), which are not randomness. The file is read by the `toml` crate
+//! (MIT OR Apache-2.0, a development dependency; piece G12a put it in place of a line reader), so
+//! an entry may be laid out and commented as TOML allows, and is read as clippy reads it: a path,
+//! or a table with a `path`, a `reason` and an `allow-invalid`.
 //!
 //! Whether each path still resolves and fires is clippy's to show, on a seeded violation; that
 //! check belongs to the merge gate (piece G12).
@@ -59,37 +61,40 @@ struct Entry {
     allow_invalid: bool,
 }
 
-/// The value of `key = "..."` in one entry line.
-fn field(line: &str, key: &str) -> Option<String> {
-    let start = line.find(&format!("{key} = \""))? + key.len() + 4;
-    let rest = &line[start..];
-    Some(rest[..rest.find('"')?].to_owned())
-}
-
-/// The entries of one list, `disallowed-types` or `disallowed-methods`.
+/// The entries of one list, `disallowed-types` or `disallowed-methods`, as clippy reads them: a
+/// path string (no reason, invalid paths not allowed), or a table with a `path` and, optionally, a
+/// `reason` and an `allow-invalid` flag.
 fn entries(list: &str) -> Vec<Entry> {
-    let start = CLIPPY_TOML
-        .find(&format!("\n{list} = ["))
+    let config: toml::Table = CLIPPY_TOML.parse().expect("clippy.toml is not TOML");
+    let items = config
+        .get(list)
+        .and_then(toml::Value::as_array)
         .unwrap_or_else(|| panic!("clippy.toml has no {list} list"));
-    // From the list's own line (after the newline found before it); its first line is the header.
-    let rest = &CLIPPY_TOML[start + 1..];
-    let end = rest.find("\n]").expect("an unterminated list");
-    rest[..end]
-        .lines()
-        .skip(1)
-        .map(str::trim)
-        // Blank lines and comments inside a list are legal TOML and hold no entry.
-        .filter(|line| !line.is_empty() && !line.starts_with('#'))
-        .map(|line| {
-            assert!(
-                line.starts_with("{ path = \"") && line.ends_with("},"),
-                "{list}: an entry is one line, {{ path = \"...\", reason = \"...\" }}, not {line:?}"
-            );
-            Entry {
-                path: field(line, "path").expect("an entry without a path"),
-                reason: field(line, "reason").unwrap_or_default(),
-                allow_invalid: line.contains("allow-invalid = true"),
-            }
+    items
+        .iter()
+        .map(|item| match item {
+            toml::Value::String(path) => Entry {
+                path: path.clone(),
+                reason: String::new(),
+                allow_invalid: false,
+            },
+            toml::Value::Table(entry) => Entry {
+                path: entry
+                    .get("path")
+                    .and_then(toml::Value::as_str)
+                    .unwrap_or_else(|| panic!("{list}: an entry without a path: {item}"))
+                    .to_owned(),
+                reason: entry
+                    .get("reason")
+                    .and_then(toml::Value::as_str)
+                    .unwrap_or_default()
+                    .to_owned(),
+                allow_invalid: entry.get("allow-invalid").is_some_and(|flag| {
+                    flag.as_bool()
+                        .unwrap_or_else(|| panic!("{list}: allow-invalid is not a boolean: {item}"))
+                }),
+            },
+            other => panic!("{list}: an entry is a path or a table, not {other}"),
         })
         .collect()
 }

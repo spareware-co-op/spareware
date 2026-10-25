@@ -1,0 +1,12 @@
+[package]
+name = "construct-transport"
+version = "0.0.0"
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+kit-core = { path = "../../../kit/crates/kit-core" }
+engine-sim = { path = "../../../engines/crates/engine-sim" }
+serde = { version = "1", features = ["derive"] }
+# float_roundtrip: parse numbers correctly rounded, as JSON.parse does (the default parser can be one bit off)
+serde_json = { version = "1", features = ["float_roundtrip"] }

@@ -32,7 +32,13 @@
 //! on every target CI runs them on: `kernel.yml`'s six native runners (the allocators of glibc,
 //! macOS and Windows) and `kernel-dev.yml`'s wasm32-wasip1 leg (the dlmalloc of Rust's WebAssembly
 //! targets); the same answer under one seed twice in a row is not required (other threads'
-//! allocations perturb it further, which only helps).
+//! allocations perturb it further, which only helps). On macOS one pair of perturbed runs now and
+//! then gives the same order of small boxes (issue #230: PR #222's macOS arm64 leg, run
+//! 40176921826), probably because macOS's allocator keeps small blocks in lists per processor and
+//! a thread moved to another processor between the perturbation and the case finds a list the
+//! perturbation never touched (not verified). So on macOS the perturbed repeat catches
+//! address-ordered code on most runs rather than on every one, and the CI matrix, which runs every
+//! golden in four configurations on each of two macOS runners, catches it across them.
 //!
 //! Guarantees:
 //!

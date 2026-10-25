@@ -28,11 +28,12 @@ bench = false
 
 [dependencies]
 geom-num = { path = "../geom-num" }
-# SHA-256 for every benchmark's golden digests: RustCrypto's sha2, the one SHA-256 implementation of
-# every golden in the kernel (piece G19; geom-test uses it too). MIT OR Apache-2.0. 0.11.0, the
-# version geom-test pins (0.11.1 needs Rust 1.88, above geom-test's declared 1.86). Without its
-# default `alloc` and `oid` features.
-sha2 = { version = "0.11.0", default-features = false }
+# SHA-256 (FIPS 180-4) for the golden digests, and their hexadecimal form in golden.txt: standard
+# crates in place of the copy this crate held (piece G12a; chapter 29.1, a development crate).
+# sha2 0.11.0: MIT OR Apache-2.0, RustCrypto, without its default alloc and oid features, which
+# the digests do not use. hex 0.4.3: MIT OR Apache-2.0.
+sha2 = { version = "=0.11.0", default-features = false }
+hex = "=0.4.3"
 
 # Reading the gate's summaries, on Unix and Windows, where the judge runs: Gungraun's summary model
 # needs `OsString` to deserialize, which serde provides there only, so the WebAssembly guest
@@ -58,6 +59,12 @@ judge = ["dep:gungraun-runner", "dep:serde_json"]
 [dev-dependencies]
 # Wall-clock timings for people, on every platform. MIT OR Apache-2.0.
 divan = "0.1.21"
+# The coverage test's readers, in place of a line scanner and text searches (piece G12a; chapter
+# 29.1), the versions engine-geometry's scaffold check pins. syn 3.0.9 (MIT OR Apache-2.0) parses
+# geom-num's source, without its default features: it needs no compiler proc_macro and prints
+# nothing. toml 0.9.6 (MIT OR Apache-2.0) reads the manifests and Cargo.lock.
+syn = { version = "=3.0.9", default-features = false, features = ["full", "parsing"] }
+toml = "=0.9.6"
 
 # The merge gate: instruction counts, cache misses and heap use under Valgrind, through Gungraun.
 # Valgrind runs on Linux here, so the gate is Linux only and other platforms never build it.

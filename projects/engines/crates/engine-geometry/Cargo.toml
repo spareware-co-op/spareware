@@ -11,6 +11,23 @@ publish.workspace = true
 kit-core = { path = "../../../kit/crates/kit-core" }
 geom-pool = { path = "../../geometry/crates/geom-pool", optional = true }
 
+[dev-dependencies]
+# The scaffold check and the merge gate (tests/scaffold) read TOML, cargo's metadata and messages,
+# JSON and Rust source with the standard crates for each, in place of readers written there (piece
+# G12a; chapter 29.1, the owner's direction of 2026-10-22). Tests only, never shipped. Each pinned:
+# toml 0.9.6 (MIT OR Apache-2.0), the toml-rs reader (TOML 1.0): the newest release whose optional
+# indexmap requirement (^2.3) resolves beside geom-fuzz's bolero-generator-derive 0.13.5, which pins
+# indexmap =2.11.2, where toml 1.x asks ^2.13 (cargo resolves optional requirements too); the API
+# used here is the same in both. cargo_metadata 0.23.1 (MIT); serde_json 1.0.154 (MIT OR
+# Apache-2.0), for cargo-deny's output and the seeded graphs; syn 3.0.9 (MIT OR Apache-2.0),
+# without its default features, which link the compiler's proc_macro and print code; proc-macro2
+# 1.0.107 (MIT OR Apache-2.0), syn's lexer, with the line numbers the reports give.
+toml = "=0.9.6"
+cargo_metadata = "=0.23.1"
+serde_json = "=1.0.154"
+syn = { version = "=3.0.9", default-features = false, features = ["full", "parsing", "visit"] }
+proc-macro2 = { version = "=1.0.107", default-features = false, features = ["span-locations"] }
+
 [features]
 # Threads for geom-run's helper, through geom-pool alone (23.4, 27). Off by default, so a default
 # build of the facade, wasm32-unknown-unknown included, links no threads.

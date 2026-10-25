@@ -283,13 +283,6 @@ rustc's tidy
     projects/engines/geometry/crates/geom-test/src/map.rs
       for reading a catalogue from one registry and its lists of known exemptions. No code copied.
 
-`rustc_lexer`
-  Licence:      MIT OR Apache-2.0
-  Link:         https://github.com/rust-lang/rust/blob/1731faea0da5b4ebf881d8e53f98066c17a74711/compiler/rustc_lexer/src/lib.rs
-  Consulted by:
-    projects/engines/geometry/crates/geom-test/src/map/rust.rs
-      for its rule telling a character literal from a lifetime and for which block comments are doc comments. No code copied.
-
 `rustdoc-types`
   Licence:      MIT OR Apache-2.0
   Link:         https://github.com/rust-lang/rustdoc-types/blob/2e63bdc44b94e86fe12d6e0034d1ed9c2ac6e9dc/src/lib.rs
