@@ -504,16 +504,20 @@ const fn within_budget(n: &[i128; 3], d: i128) -> bool {
 /// is never zero. Equality is equality of the three planes in order, not of the points: the same
 /// point made from other planes compares unequal.
 ///
-/// Cost: only the planes are stored, so [`Plane::side_of_tpi`] and [`Tpi::to_grid`] recompute the
-/// homogeneous coordinates on every call (three [`I256`] cross products, a dot product and nine
-/// [`I320`] products), and [`Tpi::new`] computes them once to check them and keeps nothing.
-/// Classifying one point against k planes repeats that work k times. Storing (X, w) in the `Tpi`
-/// would save it for 152 more bytes per point; that trade is for chapter 23's cost model to
+/// Cost: the planes are stored, and the sign of w, which [`Tpi::new`] computes exactly while it
+/// checks the point, so [`Plane::side_of_tpi`] never decides it again. [`Tpi::to_grid`], and
+/// [`Plane::side_of_tpi`] when its filter cannot decide, recompute the homogeneous coordinates on
+/// every call (three [`I256`] cross products, a dot product and nine [`I320`] products).
+/// Classifying one point against k planes repeats that work up to k times. Storing (X, w) in the
+/// `Tpi` would save it for 152 more bytes per point; that trade is for chapter 23's cost model to
 /// decide, and is not made here.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Tpi {
     /// The three planes, in the order given.
     planes: [Plane; 3],
+    /// The sign of the point's weight w = det(`n_p`, `n_q`, `n_r`), exact, from [`Tpi::new`]:
+    /// never `Zero`. A function of the planes, so equality and hashing are still the planes'.
+    weight: Sign,
 }
 
 impl Tpi {
@@ -534,10 +538,16 @@ impl Tpi {
         reason = "p, q and r are the planes, and t, w and x the point, as in the formulas"
     )]
     pub fn new(p: Plane, q: Plane, r: Plane) -> Result<Tpi, NumError> {
-        let t = Tpi { planes: [p, q, r] };
+        let mut t = Tpi {
+            planes: [p, q, r],
+            weight: Sign::Zero,
+        };
         match t.homogeneous_checked() {
             Some((_, w)) if w.is_zero() => Err(NumError::Degenerate),
-            Some(_) => Ok(t),
+            Some((_, w)) => {
+                t.weight = w.signum();
+                Ok(t)
+            }
             None => Err(NumError::BudgetExceeded),
         }
     }
@@ -823,10 +833,11 @@ fn lpi_classify<const L: usize>(w1: i128, s2p: i128, w2: i128, s1p: i128) -> Opt
 
 /// The side of plane `s` that the point where `t`'s planes meet is on, through the generated
 /// predicates (chapter 6.2): the sign of the 4 × 4 determinant of the four planes' coefficients
-/// (`tpi_side`, which equals n · X + d · w), times the sign of the point's weight w
-/// (`tpi_weight`), each from its `f64` filter when the filter can decide and from its generated
-/// exact path otherwise. `None` only when a generated exact path does not fit its certified types,
-/// which no planes made by [`Plane::through`] cause; the caller then takes the hand-written paths.
+/// (`tpi_side`, which equals n · X + d · w), from its `f64` filter when the filter can decide and
+/// from its generated exact path otherwise, times the sign of the point's weight w, which
+/// [`Tpi::new`] stored exactly (so the generated `tpi_weight` is never needed here). `None` only
+/// when the generated exact path does not fit its certified types, which no planes made by
+/// [`Plane::through`] cause; the caller then takes the hand-written paths.
 #[allow(
     clippy::many_single_char_names,
     reason = "p, q and r are the three planes and s the fourth, as in the formulas above"
@@ -837,8 +848,6 @@ fn tpi_routed(t: &Tpi, s: &Plane) -> Option<Sign> {
     let ([bx, by, bz], bd) = (q.n, q.d);
     let ([cx, cy, cz], cd) = (r.n, r.d);
     let ([sx, sy, sz], sd) = (s.n, s.d);
-    let weight = generated::tpi_weight::filter(ax, ay, az, bx, by, bz, cx, cy, cz)
-        .or_else(|| generated::tpi_weight::exact(ax, ay, az, bx, by, bz, cx, cy, cz))?;
     let side = generated::tpi_side::filter(
         ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
     )
@@ -847,7 +856,7 @@ fn tpi_routed(t: &Tpi, s: &Plane) -> Option<Sign> {
             ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
         )
     })?;
-    Some(side.mul(weight))
+    Some(side.mul(t.weight))
 }
 
 fn classify<const L: usize>(n: &[i128; 3], d: i128, x: &[I320; 3], w: &I256) -> Option<Sign> {
