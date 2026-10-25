@@ -18,8 +18,20 @@
 //! to the next limb, and only the carry out of the top limb is dropped, as two's complement
 //! defines, before the sign test that decides overflow. A limb product uses `checked_mul` and
 //! `checked_add` on `u128`, which cannot fail ((2^64 − 1)² + 2 (2^64 − 1) = 2^128 − 1, written
-//! beside each), and is split into its two 64-bit halves through its bytes, with no cast and no
-//! shift.
+//! beside each), and is split into its two 64-bit halves by a mask and a shift, each half cast to
+//! `u64` with its bound written beside it.
+//!
+//! Proven (chapter 28.7; piece G37): Verus proves, for every width `L` from 1 to 4096 limbs and so
+//! for [`I256`], [`I320`], [`I384`] and [`I512`], that `checked_add`, `checked_sub`,
+//! `checked_neg` and `checked_mul` return the exact two's-complement result whenever it fits and
+//! `None` exactly when it does not, and that the order ([`Ord`]) is the order of the values. The
+//! proof is in this crate's `verus/wide.rs`, a twin of this module's arithmetic: the same
+//! functions with Verus specifications and proof steps added, which `geom-gen`'s
+//! `tests/verus_twin.rs` holds token for token to the code here, and which `kernel-dev.yml`'s
+//! `verus` job verifies. So the code is written in the part of Rust Verus reads: index loops over
+//! `get` and `get_mut`, and `match` where an `Option` combinator would do. Its trusted base is
+//! Verus, the Z3 solver it uses, and three facts it is told about the standard library, each its
+//! documented behaviour: `u64::overflowing_add`, `u64::overflowing_sub` and `u64::from(bool)`.
 //!
 //! Method: schoolbook addition, subtraction and multiplication on magnitudes with 128-bit
 //! intermediates (Knuth, *The Art of Computer Programming*, volume 2, section 4.3.1,
@@ -55,15 +67,83 @@ pub type I512 = Wide<8>;
 /// The top bit of a limb: the sign bit of the top limb.
 const TOP_BIT: u64 = 1 << 63;
 
-/// The low and high 64-bit halves of `t`, t = high · 2^64 + low: read from its little-endian
-/// bytes, so there is no cast and no shift.
-fn halves(t: u128) -> (u64, u64) {
-    let mut words = [[0u8; 8]; 2];
-    for (byte, &b) in words.iter_mut().flatten().zip(t.to_le_bytes().iter()) {
-        *byte = b;
+/// Limb-wise addition with carry; the carry out of the top limb is dropped (two's complement
+/// wrap), and the caller decides overflow from the signs.
+fn wrapping_add_limbs<const L: usize>(a: &[u64; L], b: &[u64; L]) -> [u64; L] {
+    let mut out = [0u64; L];
+    let mut carry = false;
+    for i in 0..L {
+        let x = match a.get(i) {
+            Some(v) => *v,
+            None => 0,
+        };
+        let y = match b.get(i) {
+            Some(v) => *v,
+            None => 0,
+        };
+        let (s1, c1) = x.overflowing_add(y);
+        let (s2, c2) = s1.overflowing_add(u64::from(carry));
+        if let Some(o) = out.get_mut(i) {
+            *o = s2;
+        }
+        carry = c1 || c2;
     }
-    let [low, high] = words.map(u64::from_le_bytes);
-    (low, high)
+    out
+}
+
+/// Limb-wise subtraction with borrow; the borrow out of the top limb is dropped, and the caller
+/// decides overflow from the signs.
+fn wrapping_sub_limbs<const L: usize>(a: &[u64; L], b: &[u64; L]) -> [u64; L] {
+    let mut out = [0u64; L];
+    let mut borrow = false;
+    for i in 0..L {
+        let x = match a.get(i) {
+            Some(v) => *v,
+            None => 0,
+        };
+        let y = match b.get(i) {
+            Some(v) => *v,
+            None => 0,
+        };
+        let (d1, b1) = x.overflowing_sub(y);
+        let (d2, b2) = d1.overflowing_sub(u64::from(borrow));
+        if let Some(o) = out.get_mut(i) {
+            *o = d2;
+        }
+        borrow = b1 || b2;
+    }
+    out
+}
+
+/// How two limb sequences compare as unsigned numbers: every limb from the lowest up, each one that
+/// differs deciding until a higher one does, so the highest limb that differs decides.
+fn compare_limbs<const L: usize>(a: &[u64; L], b: &[u64; L]) -> Ordering {
+    let mut ord = Ordering::Equal;
+    for i in 0..L {
+        let x = match a.get(i) {
+            Some(v) => *v,
+            None => 0,
+        };
+        let y = match b.get(i) {
+            Some(v) => *v,
+            None => 0,
+        };
+        if x < y {
+            ord = Ordering::Less;
+        } else if x > y {
+            ord = Ordering::Greater;
+        }
+    }
+    ord
+}
+
+/// The low and high 64-bit halves of `t`, t = high · 2^64 + low.
+#[allow(
+    clippy::cast_possible_truncation,
+    reason = "the low half is t masked to 64 bits and the high half t shifted down 64, each below 2^64"
+)]
+fn halves(t: u128) -> (u64, u64) {
+    ((t & 0xFFFF_FFFF_FFFF_FFFF) as u64, (t >> 64) as u64)
 }
 
 impl<const L: usize> Wide<L> {
@@ -141,7 +221,10 @@ impl<const L: usize> Wide<L> {
     /// Whether the value is below zero: whether the top limb's top bit is set.
     #[must_use]
     pub fn is_negative(&self) -> bool {
-        self.0.last().is_some_and(|top| top & TOP_BIT != 0)
+        match self.0.last() {
+            Some(top) => top & TOP_BIT != 0,
+            None => false,
+        }
     }
 
     /// Whether the value is exactly zero.
@@ -162,48 +245,20 @@ impl<const L: usize> Wide<L> {
         }
     }
 
-    /// Limb-wise addition with carry; the carry out of the top limb is dropped (two's complement
-    /// wrap), and the caller decides overflow from the signs.
-    ///
-    /// Each limb: x + y + carry ≤ 2 (2^64 − 1) + 1 = 2^65 − 1, so it is the low 64 bits and one
-    /// carry bit. The two `overflowing_add`s cannot both carry (if x + y carries, its low 64 bits
-    /// are at most 2^64 − 2, and adding 1 does not carry again), so the carry out is either one's
-    /// carry.
-    fn wrapping_add_limbs(a: &[u64; L], b: &[u64; L]) -> [u64; L] {
-        let mut out = [0u64; L];
-        let mut carry = false;
-        for ((o, &x), &y) in out.iter_mut().zip(a.iter()).zip(b.iter()) {
-            let (s1, c1) = x.overflowing_add(y);
-            let (s2, c2) = s1.overflowing_add(u64::from(carry));
-            *o = s2;
-            carry = c1 || c2;
-        }
-        out
-    }
-
-    /// Limb-wise subtraction with borrow; the borrow out of the top limb is dropped, and the caller
-    /// decides overflow from the signs. As for addition, the two `overflowing_sub`s cannot both
-    /// borrow, so the borrow out is either one's borrow.
-    fn wrapping_sub_limbs(a: &[u64; L], b: &[u64; L]) -> [u64; L] {
-        let mut out = [0u64; L];
-        let mut borrow = false;
-        for ((o, &x), &y) in out.iter_mut().zip(a.iter()).zip(b.iter()) {
-            let (d1, b1) = x.overflowing_sub(y);
-            let (d2, b2) = d1.overflowing_sub(u64::from(borrow));
-            *o = d2;
-            borrow = b1 || b2;
-        }
-        out
-    }
-
     /// Two's-complement negation, wrapping at the minimum value: the complement of every limb, plus
     /// one, carried limb by limb.
     fn wrapping_neg(&self) -> Self {
         let mut out = [0u64; L];
         let mut carry = true;
-        for (o, &x) in out.iter_mut().zip(self.0.iter()) {
+        for i in 0..L {
+            let x = match self.0.get(i) {
+                Some(v) => *v,
+                None => 0,
+            };
             let (s, c) = (!x).overflowing_add(u64::from(carry));
-            *o = s;
+            if let Some(o) = out.get_mut(i) {
+                *o = s;
+            }
             carry = c;
         }
         Self(out)
@@ -222,22 +277,22 @@ impl<const L: usize> Wide<L> {
     /// `self + other`, or `None` if the true sum does not fit.
     #[must_use]
     pub fn checked_add(&self, other: &Self) -> Option<Self> {
-        let r = Self(Self::wrapping_add_limbs(&self.0, &other.0));
+        let r = Self(wrapping_add_limbs(&self.0, &other.0));
         // Overflow happens exactly when both operands share a sign and the result does not.
         let overflow =
             self.is_negative() == other.is_negative() && r.is_negative() != self.is_negative();
-        (!overflow).then_some(r)
+        if overflow { None } else { Some(r) }
     }
 
     /// `self − other`, or `None` if the true difference does not fit.
     #[must_use]
     pub fn checked_sub(&self, other: &Self) -> Option<Self> {
-        let r = Self(Self::wrapping_sub_limbs(&self.0, &other.0));
+        let r = Self(wrapping_sub_limbs(&self.0, &other.0));
         // Overflow happens exactly when the operands differ in sign and the result's sign is not
         // self's.
         let overflow =
             self.is_negative() != other.is_negative() && r.is_negative() != self.is_negative();
-        (!overflow).then_some(r)
+        if overflow { None } else { Some(r) }
     }
 
     /// `−self`, or `None` for the minimum value, whose negation does not fit.
@@ -246,7 +301,17 @@ impl<const L: usize> Wide<L> {
         let r = self.wrapping_neg();
         // Only the minimum value is negative and stays negative when negated.
         let overflow = self.is_negative() && r.is_negative();
-        (!overflow).then_some(r)
+        if overflow { None } else { Some(r) }
+    }
+
+    /// How this value compares with `other`: by sign first, and for the same sign by the limbs,
+    /// since two's-complement values of one sign order like their unsigned bit patterns.
+    fn compare(&self, other: &Self) -> Ordering {
+        match (self.is_negative(), other.is_negative()) {
+            (true, false) => Ordering::Less,
+            (false, true) => Ordering::Greater,
+            _ => compare_limbs(&self.0, &other.0),
+        }
     }
 
     /// `self × other`, or `None` if the true product does not fit.
@@ -256,53 +321,60 @@ impl<const L: usize> Wide<L> {
         let a = self.magnitude();
         let b = other.magnitude();
         let mut out = [0u64; L];
-        for (i, &ai) in a.iter().enumerate() {
-            if ai == 0 {
-                continue;
-            }
-            let mut carry = 0u64;
-            for (j, &bj) in b.iter().enumerate() {
-                // At most (2^64 − 1)², below 2^128: `checked_mul` never fails here.
-                let prod = u128::from(ai).checked_mul(u128::from(bj))?;
-                // Limb indices are below L, so their sum is below 2L: never fails.
-                match out.get_mut(i.checked_add(j)?) {
-                    Some(slot) => {
-                        // slot and carry are below 2^64 and prod at most (2^64 − 1)², so the sum
-                        // is at most (2^64 − 1)² + 2 (2^64 − 1) = 2^128 − 1: never fails.
-                        let t = prod
-                            .checked_add(u128::from(*slot))?
-                            .checked_add(u128::from(carry))?;
-                        (*slot, carry) = halves(t);
-                    }
-                    // Any non-zero contribution at or above limb L makes the magnitude at least
-                    // 2^(64L).
-                    None => {
-                        if prod != 0 || carry != 0 {
-                            return None;
+        for i in 0..L {
+            let ai = match a.get(i) {
+                Some(v) => *v,
+                None => 0,
+            };
+            if ai != 0 {
+                let mut carry = 0u64;
+                for j in 0..L {
+                    let bj = match b.get(j) {
+                        Some(v) => *v,
+                        None => 0,
+                    };
+                    // At most (2^64 − 1)², below 2^128: `checked_mul` never fails here.
+                    let prod = u128::from(ai).checked_mul(u128::from(bj))?;
+                    // Limb indices are below L, so their sum is below 2L: never fails.
+                    let k = i.checked_add(j)?;
+                    match out.get(k) {
+                        Some(&old) => {
+                            // old and carry are below 2^64 and prod at most (2^64 − 1)², so the
+                            // sum is at most (2^64 − 1)² + 2 (2^64 − 1) = 2^128 − 1: never fails.
+                            let t = prod
+                                .checked_add(u128::from(old))?
+                                .checked_add(u128::from(carry))?;
+                            let (low, high) = halves(t);
+                            if let Some(slot) = out.get_mut(k) {
+                                *slot = low;
+                            }
+                            carry = high;
+                        }
+                        // Any non-zero contribution at or above limb L makes the magnitude at least
+                        // 2^(64L).
+                        None => {
+                            if prod != 0 || carry != 0 {
+                                return None;
+                            }
                         }
                     }
                 }
-            }
-            if carry != 0 {
-                return None;
+                if carry != 0 {
+                    return None;
+                }
             }
         }
         // The magnitude fits in 64 × L unsigned bits. It must also fit the signed range: below
         // 2^(64L−1) for a positive result, at most 2^(64L−1) for a negative one.
-        let top_bit_set = out.last().is_some_and(|top| top & TOP_BIT != 0);
-        if !top_bit_set {
-            let m = Self(out);
+        let m = Self(out);
+        if !m.is_negative() {
             return Some(if negative { m.wrapping_neg() } else { m });
         }
         // Top bit set: only the exact magnitude 2^(64L−1) with a negative sign fits (the minimum
-        // value).
-        let is_power = out
-            .iter()
-            .rev()
-            .enumerate()
-            .all(|(k, &limb)| if k == 0 { limb == TOP_BIT } else { limb == 0 });
-        if negative && is_power {
-            Some(Self::min_value())
+        // value), the one non-zero magnitude that negation leaves unchanged.
+        let n = m.wrapping_neg();
+        if negative && matches!(compare_limbs(&n.0, &m.0), Ordering::Equal) {
+            Some(n)
         } else {
             None
         }
@@ -355,20 +427,7 @@ impl<const L: usize> Wide<L> {
 
 impl<const L: usize> Ord for Wide<L> {
     fn cmp(&self, other: &Self) -> Ordering {
-        match (self.is_negative(), other.is_negative()) {
-            (true, false) => Ordering::Less,
-            (false, true) => Ordering::Greater,
-            // Same sign: two's-complement values order like their unsigned bit patterns.
-            _ => {
-                for (x, y) in self.0.iter().rev().zip(other.0.iter().rev()) {
-                    match x.cmp(y) {
-                        Ordering::Equal => {}
-                        ord => return ord,
-                    }
-                }
-                Ordering::Equal
-            }
-        }
+        self.compare(other)
     }
 }
 

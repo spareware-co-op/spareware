@@ -13,6 +13,11 @@
 //!   name, an added statement, a changed doc comment and a removed attribute, on either side.
 //! - `the_twin_is_current`: the committed twin is what the generator writes now, from geom-num's
 //!   grid bound.
+//! - `the_wide_twin_is_the_shipped_arithmetic_token_for_token` (piece G37): every function of
+//!   `geom-num`'s wide-integer twin (`verus/wide.rs`), annotations removed, is the one in
+//!   `src/wide.rs`; `every_function_the_wide_twin_runs_is_proven_and_compared` and
+//!   `the_order_is_the_proven_comparison` leave nothing out, and
+//!   `any_change_to_the_wide_arithmetic_is_seen` shows the comparison catches a change.
 //! - `the_twin_refuses_what_it_does_not_model`: a description with rounded inputs (`plane_side`),
 //!   or with a step wider than `i128` (`incircle`, `insphere`), is refused with the reason, never
 //!   emitted as a twin that models it wrongly; `orient2d` and `orient3d` are covered.
@@ -100,7 +105,7 @@ fn strip(trees: &[TokenTree]) -> Vec<TokenTree> {
                 }
             }
         }
-        if is_ident(t, "proof")
+        if (is_ident(t, "proof") || is_ident(t, "proof_decl"))
             && trees.get(k + 1).is_some_and(|n| is_punct(n, '!'))
             && matches!(trees.get(k + 2), Some(TokenTree::Group(_)))
         {
@@ -125,9 +130,51 @@ fn strip(trees: &[TokenTree]) -> Vec<TokenTree> {
     out
 }
 
-/// The tokens as one canonical string: equal exactly when the token trees are equal.
+/// The tokens as one canonical string: equal exactly when the token trees are equal, except for
+/// the spacing of punctuation where it cannot change the program: after a `?` (no operator begins
+/// with one) and before anything that is not punctuation. So a line rustfmt breaks after a `?`
+/// still compares equal, and `&&` still differs from `& &`.
 fn canonical(trees: &[TokenTree]) -> String {
-    trees.iter().cloned().collect::<TokenStream>().to_string()
+    let mut out = String::new();
+    render(trees, &mut out);
+    out
+}
+
+fn render(trees: &[TokenTree], out: &mut String) {
+    for (k, t) in trees.iter().enumerate() {
+        match t {
+            TokenTree::Group(g) => {
+                let (open, close) = match g.delimiter() {
+                    proc_macro2::Delimiter::Parenthesis => ("(", ")"),
+                    proc_macro2::Delimiter::Brace => ("{", "}"),
+                    proc_macro2::Delimiter::Bracket => ("[", "]"),
+                    proc_macro2::Delimiter::None => ("", ""),
+                };
+                out.push_str(open);
+                out.push(' ');
+                let inner: Vec<TokenTree> = g.stream().into_iter().collect();
+                render(&inner, out);
+                out.push_str(close);
+                out.push(' ');
+            }
+            TokenTree::Ident(i) => {
+                out.push_str(&i.to_string());
+                out.push(' ');
+            }
+            TokenTree::Literal(l) => {
+                out.push_str(&l.to_string());
+                out.push(' ');
+            }
+            TokenTree::Punct(p) => {
+                out.push(p.as_char());
+                let next_is_punct = matches!(trees.get(k + 1), Some(TokenTree::Punct(_)));
+                let joint = p.spacing() == proc_macro2::Spacing::Joint;
+                if !(joint && next_is_punct && p.as_char() != '?') {
+                    out.push(' ');
+                }
+            }
+        }
+    }
 }
 
 /// `text` with the first `from` inside `value`'s item (from its doc comment on) replaced by `to`.
@@ -160,11 +207,11 @@ fn the_twin_carries_its_annotations() {
     assert!(item.contains("verus_spec"), "{item}");
     for coordinate in ["a . x", "a . y", "b . x", "b . y", "c . x", "c . y"] {
         assert!(
-            item.contains(&format!("{coordinate} . on_grid ()")),
+            item.contains(&format!("{coordinate} . on_grid ( )")),
             "{coordinate}: {item}"
         );
     }
-    assert!(item.contains("spec_value (a , b , c)"), "{item}");
+    assert!(item.contains("spec_value ( a , b , c )"), "{item}");
     assert_eq!(item.matches("proof !").count(), 2, "{item}");
     assert!(item.len() > canonical(&value_item(SHIPPED)).len());
 }
@@ -223,5 +270,152 @@ fn the_twin_refuses_what_it_does_not_model() {
             }
             other => panic!("a predicate this test does not know: {other}"),
         }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// geom-num's wide-integer twin (piece G37).
+
+/// The wide-integer twin and the module it shadows.
+const WIDE_TWIN: &str = include_str!("../../geom-num/verus/wide.rs");
+const WIDE: &str = include_str!("../../geom-num/src/wide.rs");
+
+/// Every function the wide twin runs, all of them proven there.
+const WIDE_PROVEN: [&str; 12] = [
+    "wrapping_add_limbs",
+    "wrapping_sub_limbs",
+    "compare_limbs",
+    "halves",
+    "wrapping_neg",
+    "magnitude",
+    "checked_add",
+    "checked_sub",
+    "checked_neg",
+    "compare",
+    "checked_mul",
+    "is_negative",
+];
+
+/// Whether the token at `k` opens the `verus!` block: `verus`, `!`, then a group.
+fn is_verus_block(trees: &[TokenTree], k: usize) -> bool {
+    k >= 2 && is_punct(&trees[k - 1], '!') && is_ident(&trees[k - 2], "verus")
+}
+
+/// The item `fn name` in `trees`, at any depth outside the `verus!` block, with its attributes and
+/// visibility.
+fn find_fn(trees: &[TokenTree], name: &str) -> Option<Vec<TokenTree>> {
+    if let Some(at) = (0..trees.len().saturating_sub(1))
+        .find(|&k| is_ident(&trees[k], "fn") && is_ident(&trees[k + 1], name))
+    {
+        let mut start = at;
+        if start > 0 && is_ident(&trees[start - 1], "pub") {
+            start -= 1;
+        }
+        while start >= 2
+            && is_punct(&trees[start - 2], '#')
+            && matches!(&trees[start - 1], TokenTree::Group(g) if g.delimiter() == proc_macro2::Delimiter::Bracket)
+        {
+            start -= 2;
+        }
+        let body = (at..trees.len())
+            .find(|&k| matches!(&trees[k], TokenTree::Group(g) if g.delimiter() == proc_macro2::Delimiter::Brace))?;
+        return Some(trees[start..=body].to_vec());
+    }
+    trees.iter().enumerate().find_map(|(k, t)| match t {
+        TokenTree::Group(g) if !is_verus_block(trees, k) => {
+            let inner: Vec<TokenTree> = g.stream().into_iter().collect();
+            find_fn(&inner, name)
+        }
+        _ => None,
+    })
+}
+
+/// The names of every `fn` in `trees` outside the `verus!` block.
+fn fn_names(trees: &[TokenTree], names: &mut Vec<String>) {
+    for (k, t) in trees.iter().enumerate() {
+        if is_ident(t, "fn") {
+            if let Some(TokenTree::Ident(n)) = trees.get(k + 1) {
+                names.push(n.to_string());
+            }
+        }
+        if let TokenTree::Group(g) = t {
+            if !is_verus_block(trees, k) {
+                let inner: Vec<TokenTree> = g.stream().into_iter().collect();
+                fn_names(&inner, names);
+            }
+        }
+    }
+}
+
+/// Whether every proven function of a twin, annotations removed, is the shipped one.
+fn same_functions(twin: &str, shipped: &str) -> bool {
+    let (twin, shipped) = (tokens(twin), tokens(shipped));
+    WIDE_PROVEN.iter().all(
+        |name| match (find_fn(&twin, name), find_fn(&shipped, name)) {
+            (Some(t), Some(s)) => canonical(&strip(&t)) == canonical(&s),
+            _ => false,
+        },
+    )
+}
+
+#[test]
+fn the_wide_twin_is_the_shipped_arithmetic_token_for_token() {
+    let (twin, shipped) = (tokens(WIDE_TWIN), tokens(WIDE));
+    for name in WIDE_PROVEN {
+        let t = find_fn(&twin, name).unwrap_or_else(|| panic!("the twin has no `fn {name}`"));
+        let s = find_fn(&shipped, name).unwrap_or_else(|| panic!("wide.rs has no `fn {name}`"));
+        assert_eq!(canonical(&strip(&t)), canonical(&s), "`fn {name}` differs");
+        assert!(
+            canonical(&t).contains("verus_spec"),
+            "`fn {name}` has no specification in the twin"
+        );
+    }
+}
+
+#[test]
+fn every_function_the_wide_twin_runs_is_proven_and_compared() {
+    let mut names = Vec::new();
+    fn_names(&tokens(WIDE_TWIN), &mut names);
+    names.sort();
+    let mut proven: Vec<String> = WIDE_PROVEN.iter().map(|n| (*n).to_owned()).collect();
+    proven.sort();
+    assert_eq!(names, proven);
+}
+
+#[test]
+fn the_order_is_the_proven_comparison() {
+    let cmp = find_fn(&tokens(WIDE), "cmp").unwrap();
+    assert_eq!(
+        canonical(&cmp),
+        canonical(&tokens(
+            "fn cmp(&self, other: &Self) -> Ordering { self.compare(other) }"
+        ))
+    );
+}
+
+#[test]
+fn any_change_to_the_wide_arithmetic_is_seen() {
+    assert!(same_functions(WIDE_TWIN, WIDE));
+    for (from, to) in [
+        (
+            ".checked_add(u128::from(carry))?",
+            ".wrapping_add(u128::from(carry))",
+        ),
+        ("carry = c1 || c2;", "carry = c1 && c2;"),
+        ("ord = Ordering::Greater;", "ord = Ordering::Less;"),
+        (
+            "let overflow = self.is_negative() && r.is_negative();",
+            "let overflow = false;",
+        ),
+    ] {
+        assert!(WIDE.contains(from) && WIDE_TWIN.contains(from), "{from}");
+        assert!(
+            !same_functions(&WIDE_TWIN.replacen(from, to, 1), WIDE),
+            "twin: {from}"
+        );
+        assert!(
+            !same_functions(WIDE_TWIN, &WIDE.replacen(from, to, 1)),
+            "wide.rs: {from}"
+        );
     }
 }
