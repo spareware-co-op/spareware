@@ -33,14 +33,27 @@ name: Kernel development crates
 #   with the command that fixes it. The map reads files under projects/engines/geometry and
 #   projects/engines/crates, and resolves header links into projects/engines/geometry and
 #   projects/kit/notes; the path filters below cover all of them.
+# - `cargo run -p geom-test --bin provenance -- check`, the kernel's source ledger and notices
+#   (chapter 29.20, rules 4 to 6; piece G16): it regenerates projects/engines/geometry/PROVENANCE.md
+#   and projects/engines/geometry/NOTICE from the map's Source: and Consulted: records, the licence
+#   texts in projects/engines/geometry/notices/ and the method notes in
+#   projects/engines/geometry/methods/, and fails on any difference, on a ported source without its
+#   licence text or a licence text no port uses, and on a method note that breaks its template or
+#   credits another source than the records naming it. geom-test's tests/ledger_repo.rs checks the
+#   same in kernel.yml's run; this step reports it on its own.
+# - `cargo run -p geom-test --bin source-scan -- check`, the banned-source scan (chapter 29.20,
+#   rules 2 and 7; piece G16): every file of the kernel's crates and the facade's, scanned for
+#   Numerical Recipes markers, copyleft notices, statements that code was taken from a copyleft
+#   source, and Autodesk hatch pattern and linetype names, outside the scanner's own named files.
+#   geom-test's tests/scan_repo.rs checks the same in kernel.yml's run.
 # - The development crates' tests on wasm32-wasip1 under wasmtime, a 32-bit target: kernel.yml's
 #   WebAssembly job leaves the development crates out. A seed must draw the same test data and a
 #   generator give the same bytes there as natively, and the golden hashes and committed-output
 #   tests fail on a target that differs.
 #
-# The dependency rule, the fuzz target, the generator check and the map check run natively on every
-# operating system kernel.yml tests, the same six runners, so the map's bytes are proved the same on
-# each of them.
+# The dependency rule, the fuzz target, the generator check, the map check, the ledger check and the
+# banned-source scan run natively on every operating system kernel.yml tests, the same six runners,
+# so the map's and the ledger's bytes are proved the same on each of them.
 #
 # Seeds: every seeded test prints its seed as `seed: <hex>` and runs from a fixed default on pull
 # requests, so they run the same cases every time (28.17); SPAREKIT_SEED=<hex> replays any printed
@@ -145,6 +158,10 @@ jobs:
         run: cargo run --locked -p geom-gen -- check
       - name: Every crate and module header is complete, and MAP.json is current
         run: cargo run --locked -p geom-test --bin map -- check
+      - name: PROVENANCE.md and NOTICE are current, and every port has its licence text
+        run: cargo run --locked -p geom-test --bin provenance -- check
+      - name: No banned-source marker in the kernel's crates
+        run: cargo run --locked -p geom-test --bin source-scan -- check
 
   wasm:
     name: Development crates (wasm32-wasip1 under wasmtime)

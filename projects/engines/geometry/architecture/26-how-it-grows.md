@@ -34,7 +34,7 @@ A newcomer, human or AI, should be able to find where anything is done, what it 
 | --- | --- |
 | `geometry/README.md` | Start here: what the kernel is, the ten-minute tour, where everything lives |
 | `geometry/ARCHITECTURE.md` | The decisions in this note, kept current. Every later change links its decision note |
-| `geometry/AGENTS.md` | Playbooks for agents and people: how to add an operation, a geometry kind, a format, a domain toolkit; the checklist each pull request must pass; the principles in section 3; the randomised-method rule, written for now in `geom_num::rng`'s header (G32) |
+| `geometry/AGENTS.md` | Playbooks for agents and people: how to add an operation, a geometry kind, a format, a domain toolkit; the checklist each pull request must pass; the principles in section 3; the randomised-method rule, which G32 wrote in `geom_num::rng`'s header and G17 lifted here |
 | `geometry/GLOSSARY.md` | Every term defined once in plain words: fin, pcurve, pave block, region, ε_fit, Certified, role, carrier |
 | `geometry/MAP.json` | A machine-readable map of every crate, module, operation, geometry kind, invariant and error kind, with links. Generated from annotations in the code and checked in CI, so it can never drift from the code |
 | Each crate's `lib.rs` | Its one job, the invariants it keeps, and the sections of this note it implements |

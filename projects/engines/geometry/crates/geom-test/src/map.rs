@@ -243,23 +243,11 @@ pub struct Gap {
     pub reason: &'static str,
 }
 
-/// The method-note problem of `geom-num`'s interval module, which [`GAPS`] accepts.
-const CGAL_NOTE: &str = "the record for CGAL `FPU.h` reads code under LGPL-3.0-or-later OR \
-                         LicenseRef-Commercial, which chapter 29.2 allows only under the \
-                         method-only procedure (29.20, rule 6): add a \"Method note: \
-                         `projects/engines/geometry/methods/<note>.md`\" line naming its note";
-
-/// The known gaps of this workspace. Each is listed in the map; each must still occur.
-pub const GAPS: &[Gap] = &[Gap {
-    file: "projects/engines/geometry/crates/geom-num/src/interval.rs",
-    rule: Rule::Consulted,
-    problem: CGAL_NOTE,
-    reason: "G02 read CGAL's FPU.h, under LGPL-3.0-or-later, before the method-only \
-                 procedure's notes had a home. Build piece G16 (provenance, notices and method \
-                 notes) creates projects/engines/geometry/methods/, takes this record through \
-                 29.20 rule 6 (a note in plain words and a second reviewer) or replaces the \
-                 source with the permissive Geogram record beside it, and deletes this entry.",
-}];
+/// The known gaps of this workspace. Each is listed in the map; each must still occur. There are
+/// none: the last, `geom-num`'s interval module crediting CGAL's `FPU.h` (LGPL) without a method
+/// note, was closed by build piece G16, which wrote the note
+/// (`projects/engines/geometry/methods/cgal-nextafter-widening.md`).
+pub const GAPS: &[Gap] = &[];
 
 /// A folder that headers link into but that this tree does not hold yet, with the piece that
 /// brings it. While it is absent, links into it are not checked for existence; once it exists,
@@ -331,6 +319,9 @@ pub struct Generated {
     pub text: String,
     /// Every problem not covered by a gap, sorted by file, rule and message.
     pub problems: Vec<Problem>,
+    /// The map as a value, which [`crate::ledger`] reads to write `PROVENANCE.md` and `NOTICE`
+    /// from the same records, so the ledger never parses a header a second way.
+    pub map: Value,
 }
 
 /// Whether `name` is a development crate (chapter 27; [`DEVELOPMENT_CRATES`]).
@@ -638,6 +629,7 @@ fn record_value(r: &provenance::Record) -> Value {
         ("link", Value::from(r.link.as_str())),
         ("method_note", Value::from(r.method_note.clone())),
         ("name", Value::from(r.name.as_str())),
+        ("notice", Value::from(r.notice.clone())),
         ("pinned", Value::from(r.pinned)),
         ("purpose", Value::from(r.purpose.as_str())),
         ("take", Value::from(r.take.name())),
@@ -1267,6 +1259,7 @@ pub fn build(input: &Input, gaps: &[Gap]) -> Generated {
     Generated {
         text: map.to_text(),
         problems,
+        map,
     }
 }
 

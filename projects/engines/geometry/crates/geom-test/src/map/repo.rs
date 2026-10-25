@@ -336,7 +336,9 @@ pub fn check_with(
     gaps: &[Gap],
     pending: &[Pending],
 ) -> Result<Vec<Problem>, MapError> {
-    let Generated { text, mut problems } = build(&read_with(root, pending)?, gaps);
+    let Generated {
+        text, mut problems, ..
+    } = build(&read_with(root, pending)?, gaps);
     problems.extend(compare(committed(root)?.as_deref(), &text));
     problems.extend(stale_pending(root, pending));
     problems.sort();
@@ -363,7 +365,9 @@ pub fn write_with(
     gaps: &[Gap],
     pending: &[Pending],
 ) -> Result<(Vec<Problem>, bool), MapError> {
-    let Generated { text, mut problems } = build(&read_with(root, pending)?, gaps);
+    let Generated {
+        text, mut problems, ..
+    } = build(&read_with(root, pending)?, gaps);
     problems.extend(stale_pending(root, pending));
     problems.sort();
     let path = root.join(MAP_FILE);
