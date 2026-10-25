@@ -602,15 +602,22 @@ fn check_names(d: &Derivation, imports: &[&str]) -> Result<(), EmitError> {
     Ok(())
 }
 
-/// Whether the inputs need the `many_single_char_names` allowance: more than four one-letter
-/// names, clippy's default threshold.
+/// Whether a generated function needs the `many_single_char_names` allowance: more than four
+/// one-letter names in scope, clippy's default threshold, counting the inputs and the steps the
+/// function binds (a one-letter step, such as `ssi_weight`'s `w`, is in scope too).
 fn many_single_char_names(d: &Derivation) -> bool {
-    d.description
+    let inputs = d
+        .description
         .inputs
         .iter()
         .filter(|i| i.name.chars().count() == 1)
-        .count()
-        > 4
+        .count();
+    let steps = d
+        .steps
+        .iter()
+        .filter(|s| s.name.chars().count() == 1)
+        .count();
+    inputs.saturating_add(steps) > 4
 }
 
 /// The allowances a generated function needs: one-letter point names past clippy's threshold,
@@ -1124,7 +1131,7 @@ pub fn predicate_module_serving(
             "`{name}`: a line of code would pass {WIDTH} columns, which rustfmt rewraps: {long}"
         ));
     }
-    Ok(wide_imports(out, &wides))
+    Ok(wide_imports(&out, &wides))
 }
 
 /// The placeholder line [`predicate_module_serving`] writes where the module's wide-integer import
@@ -1136,7 +1143,7 @@ const WIDE_IMPORTS: &str = "// geom-gen: wide imports";
 /// type its code names, when the step's value is formed by a method of a narrower type, so the
 /// candidates (every width a step needs) are filtered by whether the code outside doc comments
 /// names them as a whole word.
-fn wide_imports(module: String, candidates: &[&str]) -> String {
+fn wide_imports(module: &str, candidates: &[&str]) -> String {
     let code: Vec<&str> = module
         .lines()
         .filter(|l| !l.trim_start().starts_with("//") && *l != WIDE_IMPORTS)
@@ -1144,8 +1151,11 @@ fn wide_imports(module: String, candidates: &[&str]) -> String {
     let named = |ty: &str| {
         code.iter().any(|l| {
             l.match_indices(ty).any(|(at, _)| {
-                let before = l[..at].chars().next_back();
-                let after = l[at + ty.len()..].chars().next();
+                let before = l.get(..at).and_then(|head| head.chars().next_back());
+                let after = l
+                    .get(at..)
+                    .and_then(|tail| tail.strip_prefix(ty))
+                    .and_then(|tail| tail.chars().next());
                 !before.is_some_and(|c| c.is_alphanumeric() || c == '_')
                     && !after.is_some_and(|c| c.is_alphanumeric() || c == '_')
             })

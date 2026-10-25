@@ -551,7 +551,7 @@ mod tests {
         );
     }
 
-    /// SplitMix64 (Steele, Lea and Flood, 2014), for the inputs of the width-aware products' tests.
+    /// `SplitMix64` (Steele, Lea and Flood, 2014), for the inputs of the width-aware products' tests.
     struct Mix(u64);
 
     impl Mix {
@@ -603,11 +603,7 @@ mod tests {
                         };
                     }
                     let v = Wide::from_le_limbs(limbs);
-                    let v = if v.is_negative() {
-                        v.wrapping_neg()
-                    } else {
-                        v
-                    };
+                    let v = if v.is_negative() { v.wrapping_neg() } else { v };
                     if self.next() % 2 == 0 {
                         v
                     } else {
@@ -624,7 +620,11 @@ mod tests {
         for _ in 0..20_000 {
             let (a, b) = (mix.i128(), mix.i128());
             let general = Wide::<L>::from_i128(a).checked_mul(&Wide::<L>::from_i128(b));
-            assert_eq!(Wide::<L>::product_i128(a, b), general, "{a} · {b} in {L} limbs");
+            assert_eq!(
+                Wide::<L>::product_i128(a, b),
+                general,
+                "{a} · {b} in {L} limbs"
+            );
             let w = mix.wide::<L>();
             let general = w.checked_mul(&Wide::<L>::from_i128(b));
             assert_eq!(w.checked_mul_i128(b), general, "{w:?} · {b}");
@@ -651,7 +651,10 @@ mod tests {
             I256::product_i128(i128::MIN, i128::MAX),
             I256::from_i128(i128::MIN).checked_mul(&I256::from_i128(i128::MAX))
         );
-        assert_eq!(Wide::<2>::product_i128(i128::MIN, 1), Some(Wide::min_value()));
+        assert_eq!(
+            Wide::<2>::product_i128(i128::MIN, 1),
+            Some(Wide::min_value())
+        );
         assert_eq!(Wide::<2>::product_i128(i128::MIN, -1), None);
         assert_eq!(Wide::<2>::product_i128(1 << 64, 1 << 63), None);
         // The minimum value is reached by a negative product and refused for a positive one.
@@ -703,23 +706,52 @@ mod zz_timing {
         let a = black_box(0x1234_5678_9abc_def0_1357i128 * 3);
         let b = black_box(-0x7654_3210_fedc_ba98_2468i128);
         time("loop", |k| k);
-        time("product_i128 I256", |k| I256::product_i128(a + k as i128, b).unwrap().to_le_limbs()[1]);
+        time("product_i128 I256", |k| {
+            I256::product_i128(a + k as i128, b).unwrap().to_le_limbs()[1]
+        });
         time("general I256 of i128", |k| {
-            I256::from_i128(a + k as i128).checked_mul(&I256::from_i128(b)).unwrap().to_le_limbs()[1]
+            I256::from_i128(a + k as i128)
+                .checked_mul(&I256::from_i128(b))
+                .unwrap()
+                .to_le_limbs()[1]
         });
         let w = I256::product_i128(a, b).unwrap();
-        time("checked_mul_i128 I320", |k| w.resize::<5>().unwrap().checked_mul_i128(b + k as i128).unwrap().to_le_limbs()[1]);
+        time("checked_mul_i128 I320", |k| {
+            w.resize::<5>()
+                .unwrap()
+                .checked_mul_i128(b + k as i128)
+                .unwrap()
+                .to_le_limbs()[1]
+        });
         time("general I320", |k| {
-            w.resize::<5>().unwrap().checked_mul(&I320::from_i128(b + k as i128)).unwrap().to_le_limbs()[1]
+            w.resize::<5>()
+                .unwrap()
+                .checked_mul(&I320::from_i128(b + k as i128))
+                .unwrap()
+                .to_le_limbs()[1]
         });
         let x = w.resize::<5>().unwrap().checked_mul_i128(b).unwrap();
-        time("checked_mul_i128 I384", |k| x.resize::<6>().unwrap().checked_mul_i128(b + k as i128).unwrap().to_le_limbs()[1]);
-        time("checked_add I256", |k| w.checked_add(&I256::from_i128(k as i128)).unwrap().to_le_limbs()[0]);
+        time("checked_mul_i128 I384", |k| {
+            x.resize::<6>()
+                .unwrap()
+                .checked_mul_i128(b + k as i128)
+                .unwrap()
+                .to_le_limbs()[1]
+        });
+        time("checked_add I256", |k| {
+            w.checked_add(&I256::from_i128(k as i128))
+                .unwrap()
+                .to_le_limbs()[0]
+        });
         time("checked_add I384", |k| {
             let y: I384 = x.resize().unwrap();
-            y.checked_add(&Wide::from_i128(k as i128)).unwrap().to_le_limbs()[0]
+            y.checked_add(&Wide::from_i128(k as i128))
+                .unwrap()
+                .to_le_limbs()[0]
         });
         time("i128 as f64", |k| ((a + k as i128) as f64).to_bits());
-        time("i128 checked_mul", |k| (a + k as i128).checked_mul(b >> 40).unwrap() as u64);
+        time("i128 checked_mul", |k| {
+            (a + k as i128).checked_mul(b >> 40).unwrap() as u64
+        });
     }
 }

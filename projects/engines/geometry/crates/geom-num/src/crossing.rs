@@ -51,6 +51,10 @@ impl Ssi {
     ///
     /// [`NumError::Degenerate`] when the lines meet in no point or in a whole line: they are
     /// parallel or the same line, or a = b, or c = d. Decided exactly: w = (b − a) × (d − c) = 0.
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "a, b, c and d are the two lines' points, p and q the third line's, and w the weight, as in the formulas"
+    )]
     pub fn new(a: P2, b: P2, c: P2, d: P2) -> Result<Ssi, NumError> {
         let s = Ssi {
             points: [a, b, c, d],
@@ -82,12 +86,16 @@ impl Ssi {
     ///
     /// Bit budget: with coordinates within ±M (M = 2^40 − 1), each of oa, ob is a 2 × 2
     /// determinant of differences within ±2M, whose largest magnitude lies at a corner of the box,
-    /// at most 4M² (82 bits); so |w| ≤ 8M² and |X_i| ≤ 8M³ (123 bits), all in `i128`.
+    /// at most 4M² (82 bits); so |w| ≤ 8M² and |`X_i`| ≤ 8M³ (123 bits), all in `i128`.
     ///
     /// # Errors
     ///
     /// [`NumError::BudgetExceeded`] if a step does not fit, which no grid points can cause (the
     /// budget above).
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "a, b, c and d are the two lines' points, p and q the third line's, and w the weight, as in the formulas"
+    )]
     pub fn homogeneous(&self) -> Result<([i128; 2], i128), NumError> {
         let [a, b, _, _] = self.points;
         let (oa, ob) = self.offsets().ok_or(NumError::BudgetExceeded)?;
@@ -120,12 +128,17 @@ impl Ssi {
     /// [`NumError::BudgetExceeded`] if an orient2d does not fit an `i128` or the total path
     /// failed, neither of which grid points can cause.
     pub fn orient2d(&self, p: P2, q: P2) -> Result<Sign, NumError> {
-        self.routed(p, q).map_or_else(|| self.orient2d_hand(p, q), Ok)
+        self.routed(p, q)
+            .map_or_else(|| self.orient2d_hand(p, q), Ok)
     }
 
     /// [`Ssi::orient2d`] through the generated predicates: `ssi_side` times `ssi_weight`, each
     /// filter first and its generated exact path otherwise. `None` only when a generated exact
     /// path does not fit its certified types.
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "a, b, c and d are the two lines' points, p and q the third line's, and w the weight, as in the formulas"
+    )]
     fn routed(&self, p: P2, q: P2) -> Option<Sign> {
         let [a, b, c, d] = self.points;
         let weight = generated::ssi_weight::filter(a, b, c, d)
@@ -138,9 +151,14 @@ impl Ssi {
     /// [`Ssi::orient2d`] by hand: oa · ob₂ − ob · oa₂ in [`I256`], then in [`I320`], times the
     /// sign of w.
     #[inline(never)]
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "a, b, c and d are the two lines' points, p and q the third line's, and w the weight, as in the formulas"
+    )]
     fn orient2d_hand(&self, p: P2, q: P2) -> Result<Sign, NumError> {
         let [a, b, _, _] = self.points;
-        let (Some((oa, ob)), Some(oa2), Some(ob2)) = (self.offsets(), cross(p, q, a), cross(p, q, b))
+        let (Some((oa, ob)), Some(oa2), Some(ob2)) =
+            (self.offsets(), cross(p, q, a), cross(p, q, b))
         else {
             return Err(NumError::BudgetExceeded);
         };
@@ -151,7 +169,7 @@ impl Ssi {
             .ok_or(NumError::BudgetExceeded)
     }
 
-    /// The point committed to the grid: each coordinate X_i / w rounded half to even, by the same
+    /// The point committed to the grid: each coordinate `X_i` / w rounded half to even, by the same
     /// code that commits every implicit point ([`crate::plane::Tpi::to_grid`]), with whether both
     /// coordinates were exact.
     ///

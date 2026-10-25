@@ -105,8 +105,9 @@ const ERROR: f64 = f64::from_bits(0x3cc0_0000_0000_0003);
 #[inline]
 #[must_use]
 #[allow(
+    clippy::many_single_char_names,
     clippy::similar_names,
-    reason = "each name is a step of the description, named by the language's rule"
+    reason = "names, parameters and lines follow the description: one per input and step"
 )]
 pub fn filter(a: P2, b: P2, c: P2, d: P2) -> Option<Sign> {
     let ba_x = exact_f64(b.x) - exact_f64(a.x);
@@ -127,8 +128,9 @@ pub fn filter(a: P2, b: P2, c: P2, d: P2) -> Option<Sign> {
 #[inline]
 #[must_use]
 #[allow(
+    clippy::many_single_char_names,
     clippy::similar_names,
-    reason = "each name is a step of the description, named by the language's rule"
+    reason = "names, parameters and lines follow the description: one per input and step"
 )]
 pub fn value(a: P2, b: P2, c: P2, d: P2) -> Option<i128> {
     let ba_x = b.x.get().checked_sub(a.x.get())?;
@@ -144,6 +146,10 @@ pub fn value(a: P2, b: P2, c: P2, d: P2) -> Option<i128> {
 /// `ssi_weight`'s exact sign: the sign of [`value`], or `None` as for [`value`].
 #[inline]
 #[must_use]
+#[allow(
+    clippy::many_single_char_names,
+    reason = "one-letter names are the description's points"
+)]
 pub fn exact(a: P2, b: P2, c: P2, d: P2) -> Option<Sign> {
     value(a, b, c, d).map(Sign::of_i128)
 }

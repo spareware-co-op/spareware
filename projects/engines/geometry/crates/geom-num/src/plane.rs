@@ -397,8 +397,13 @@ impl Plane {
     /// [`I320`], times the sign of w₁.
     #[inline(never)]
     fn side_of_lpi_hand(&self, l: &Lpi) -> Result<Sign, NumError> {
-        let (w1, s1p) = l.plane.weight_and_offset(l.p, l.q).ok_or(NumError::BudgetExceeded)?;
-        let (w2, s2p) = self.weight_and_offset(l.p, l.q).ok_or(NumError::BudgetExceeded)?;
+        let (w1, s1p) = l
+            .plane
+            .weight_and_offset(l.p, l.q)
+            .ok_or(NumError::BudgetExceeded)?;
+        let (w2, s2p) = self
+            .weight_and_offset(l.p, l.q)
+            .ok_or(NumError::BudgetExceeded)?;
         let side = |w1: i128, s2p: i128, w2: i128, s1p: i128| {
             lpi_classify::<4>(w1, s2p, w2, s1p).or_else(|| lpi_classify::<5>(w1, s2p, w2, s1p))
         };
@@ -740,11 +745,11 @@ impl Lpi {
     }
 
     /// The point's homogeneous coordinates: numerators X and denominator w, with the point at
-    /// X / w. With sₚ = n · p + d and s_q = n · q + d, the point p + t (q − p) lies on the plane
-    /// for t = −sₚ / (s_q − sₚ), so X = s_q p − sₚ q and w = s_q − sₚ = n · (q − p), never zero.
+    /// X / w. With `s_p` = n · p + d and `s_q` = n · q + d, the point p + t (q − p) lies on the plane
+    /// for t = −`s_p` / (`s_q` − `s_p`), so X = `s_q` p − `s_p` q and w = `s_q` − `s_p` = n · (q − p), never zero.
     /// Swapping p and q negates both.
     ///
-    /// Bit budget: |s| < 2^126 ([`Plane::side_of_lpi`]) and |p_i|, |q_i| ≤ M < 2^40, so each X_i
+    /// Bit budget: |s| < 2^126 ([`Plane::side_of_lpi`]) and |`p_i`|, |`q_i`| ≤ M < 2^40, so each `X_i`
     /// is below 2^167, in [`I256`]; w is below 2^126, an `i128`.
     ///
     /// # Errors
@@ -772,7 +777,7 @@ impl Lpi {
         Ok(([x, y, z], w))
     }
 
-    /// The point committed to the grid: each coordinate X_i / w rounded half to even, exactly as
+    /// The point committed to the grid: each coordinate `X_i` / w rounded half to even, exactly as
     /// [`Tpi::to_grid`] commits, by the same code, with whether every coordinate was exact.
     ///
     /// # Errors
@@ -781,10 +786,11 @@ impl Lpi {
     /// [`NumError::BudgetExceeded`] as for [`Lpi::homogeneous`].
     pub fn to_grid(&self) -> Result<Rounded<P3>, NumError> {
         let (x, w) = self.homogeneous()?;
-        let (Some(a), Some(b), Some(c)) = (x[0].resize(), x[1].resize(), x[2].resize()) else {
+        let [x0, x1, x2] = x;
+        let (Some(r0), Some(r1), Some(r2)) = (x0.resize(), x1.resize(), x2.resize()) else {
             return Err(NumError::BudgetExceeded);
         };
-        let x: [I320; 3] = [a, b, c];
+        let x: [I320; 3] = [r0, r1, r2];
         let w = I256::from_i128(w);
         commit::<BUDGET_LIMBS>(&x, &w)
             .or_else(|| commit::<TOTAL_LIMBS>(&x, &w))
@@ -821,6 +827,10 @@ fn lpi_classify<const L: usize>(w1: i128, s2p: i128, w2: i128, s1p: i128) -> Opt
 /// (`tpi_weight`), each from its `f64` filter when the filter can decide and from its generated
 /// exact path otherwise. `None` only when a generated exact path does not fit its certified types,
 /// which no planes made by [`Plane::through`] cause; the caller then takes the hand-written paths.
+#[allow(
+    clippy::many_single_char_names,
+    reason = "p, q and r are the three planes and s the fourth, as in the formulas above"
+)]
 fn tpi_routed(t: &Tpi, s: &Plane) -> Option<Sign> {
     let [p, q, r] = t.planes;
     let ([ax, ay, az], ad) = (p.n, p.d);
@@ -833,7 +843,9 @@ fn tpi_routed(t: &Tpi, s: &Plane) -> Option<Sign> {
         ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
     )
     .or_else(|| {
-        generated::tpi_side::exact(ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd)
+        generated::tpi_side::exact(
+            ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
+        )
     })?;
     Some(side.mul(weight))
 }
