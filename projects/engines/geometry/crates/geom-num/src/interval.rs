@@ -125,6 +125,7 @@
 //!   <https://github.com/CGAL/cgal/blob/cbc3b81d4607c6f3a9d1f3a47d8709a2be3e6bfa/Number_types/include/CGAL/FPU.h#L347-L358>,
 //!   for its widening with `nextafter` when the rounding mode cannot change, which the Method
 //!   above names.
+//!   Method note: `projects/engines/geometry/methods/cgal-nextafter-widening.md`.
 //! Consulted: `libm` 0.2.16, MIT,
 //!   <https://github.com/rust-lang/compiler-builtins/tree/dfd2203a4d6110820ad7bb65cafe1bf331a03a3d/libm/src/math>,
 //!   for which instruction or routine its square root and fused multiply-add use on each target,

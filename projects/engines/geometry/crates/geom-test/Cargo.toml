@@ -32,6 +32,22 @@ syn = { version = "2.0.119", default-features = false, features = ["full", "pars
 # Apache-2.0. Without its default `proc-macro` feature: this is a library, not a procedural macro.
 proc-macro2 = { version = "1.0.107", default-features = false, features = ["span-locations"] }
 
+[dev-dependencies]
+# A CommonMark parser, so tests/attack_g17.rs reads the kernel's README.md, AGENTS.md and
+# GLOSSARY.md (their links, headings and code spans) as Markdown rather than by a home-made parser.
+# MIT (pulldown-cmark's manifest); without its default features, the HTML writer and the command
+# line, which the test does not use.
+pulldown-cmark = { version = "0.13.5", default-features = false }
+# Unicode's canonical decomposition, so tests/attack_g17.rs sorts the glossary's headwords with
+# their accents set aside ("Bézier" as "Bezier"), as GLOSSARY.md states its order.
+# (MIT OR Apache-2.0) AND Unicode-3.0 (unicode-normalization's manifest), taken as MIT AND
+# Unicode-3.0.
+unicode-normalization = "0.1.26"
+# The exact oracle of the banned-source scanner's cited Cash-Karp fixture: its tableau checked
+# against the order conditions in rational arithmetic (tests/scan_seeded.rs). MIT OR Apache-2.0,
+# the version geom-num's tests already use.
+num-rational = "0.4.2"
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"

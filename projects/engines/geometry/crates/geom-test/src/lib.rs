@@ -11,8 +11,8 @@
 //! (chapter 27) within the licence allow-list of 29.2. No kernel crate may have a normal
 //! dependency on it, only a development dependency (chapter 27; 28.1).
 //!
-//! The first piece (G11) holds the parts every later test leans on, G15 adds the map, and G19 the
-//! golden store and the determinism matrix:
+//! The first piece (G11) holds the parts every later test leans on, G15 adds the map, G16 the
+//! source ledger and the banned-source scan, and G19 the golden store and the determinism matrix:
 //!
 //! - [`seed`]: the seed discipline. Every seeded test prints `seed: <hex>` before it draws anything,
 //!   and the environment variable `SPAREKIT_SEED` replays any printed seed exactly (28.5, 28.17).
@@ -42,6 +42,18 @@
 //!   The binary `golden` lists the
 //!   store, checks it against the repository (`-- check`), runs every golden in one CI leg's
 //!   configuration (`-- run`) and holds a pull request's edits to the approval rule (`-- diff`).
+//! - [`ledger`]: the kernel's source ledger and notices (29.20, rules 4 to 6):
+//!   `projects/engines/geometry/PROVENANCE.md` and `projects/engines/geometry/NOTICE`, generated
+//!   from the map's `Source:` and `Consulted:` records, the hand-kept licence texts of ported
+//!   sources (`projects/engines/geometry/notices/`) and the method notes of the method-only
+//!   procedure (`projects/engines/geometry/methods/`), each note held to its template. The binary
+//!   `provenance` writes both files (`-- write`) and checks them in CI (`-- check`).
+//! - [`scan`]: the banned-source scanner (29.20, rules 2 and 7): the routine names, macros and
+//!   constants of the numerical book chapter 29.4 bans, copyleft licence notices, statements of
+//!   origin that name a copyleft project, and Autodesk hatch pattern and linetype names, in every
+//!   file of the kernel's crates and the facade's. The binary `source-scan` runs it in CI
+//!   (`-- check`). This crate's own description must pass it too, so it names the markers only
+//!   by kind; [`scan::markers`] lists them.
 //!
 //! Fixtures, reference implementations, oracle clients and the CI tools arrive with the pieces that
 //! need them. The sister development crates are `geom-fuzz` (fuzz harnesses), `geom-gen` (every
@@ -73,7 +85,9 @@
 //! of 28.10, development dependencies of this crate only; the seed discipline of 28.17; for the
 //! development crates' own dependencies, the permissive-licence promise of 28.1's table (the
 //! architecture's eleventh principle; 29.1); and, for the map, the `Source:` and `Consulted:`
-//! records of 29.20, their licences judged by the classes of 29.2.
+//! records of 29.20, their licences judged by the classes of 29.2; for the ledger, the
+//! `PROVENANCE.md`, `NOTICE` and method notes of 29.20's rules 4 to 6; and for the scanner, the
+//! markers of 29.20's rules 2 and 7.
 //!
 //! Dependencies, every one permissive (29.1):
 //!
@@ -85,6 +99,14 @@
 //! - `sha2` 0.11, the SHA-256 of every golden digest (FIPS 180-4).
 //! - `rand` 0.10, without its default features, for its Fisher-Yates shuffle, which the shuffle
 //!   hook drives from `SplitMix64`; it has no generator of its own here.
+//! - `pulldown-cmark` 0.13.5, a development dependency without its default features (the HTML
+//!   writer and the command line), so `tests/attack_g17.rs` reads the kernel's README.md,
+//!   AGENTS.md and GLOSSARY.md as Markdown.
+//! - `unicode-normalization` 0.1.26, a development dependency, so the same test sorts the
+//!   glossary's headwords with their accents set aside.
+//! - `num-rational` 0.4, a development dependency only: the exact oracle of the scanner's cited
+//!   Cash-Karp fixture, whose tableau its tests check against the order conditions in rational
+//!   arithmetic.
 //!
 //! Licences of every outside package this crate brings into a build, its own and its dependencies'
 //! on every target (`cargo tree --target all`), each record checked by `tests/licences.rs`. Where a
@@ -94,20 +116,24 @@
 //!   `cpufeatures`, `libc`, `rand`, `rand_core`, `rand_xorshift`, `getrandom`, `core_detect`,
 //!   `num-traits`, `autocfg`, `regex-syntax`, `unarray`, `serde_json`, `serde`, `serde_core`,
 //!   `serde_derive`, `itoa`, `proc-macro2`, `quote`, `syn`, `sha2`, `digest`, `block-buffer`,
-//!   `crypto-common`, `hybrid-array` and `typenum`.
+//!   `crypto-common`, `hybrid-array`, `typenum`, `num-rational`, `num-bigint` and `num-integer`.
 //! - MIT OR Apache-2.0 OR LGPL-2.1-or-later: `r-efi` (UEFI targets only).
-//! - (MIT OR Apache-2.0) AND Unicode-3.0: `unicode-ident`.
+//! - (MIT OR Apache-2.0) AND Unicode-3.0: `unicode-ident` and `unicode-normalization`.
+//! - Zlib OR Apache-2.0 OR MIT: `tinyvec`, which `unicode-normalization` brings in.
+//! - MIT OR Apache-2.0: `unicase`, which `pulldown-cmark` brings in.
 //! - Unlicense OR MIT: `memchr`.
-//! - MIT: `zmij`.
+//! - MIT: `zmij` and `pulldown-cmark`.
 #![forbid(unsafe_code)]
 
 pub mod deps;
 pub mod golden;
 pub mod grid;
+pub mod ledger;
 pub mod licence;
 pub mod map;
 pub mod prop;
 pub mod rng;
+pub mod scan;
 pub mod seed;
 
 pub use rng::{ByteSource, Entropy, SplitMix64};

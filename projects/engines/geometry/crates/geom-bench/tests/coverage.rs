@@ -510,11 +510,23 @@ fn the_gate_is_five_percent_on_every_measure() {
         GATED_HEAP_METRICS,
         ["TotalBytes", "TotalBlocks", "AtTGmaxBytes", "MaximumBytes"]
     );
+    // A bare local run gates every measure at a plain 5%. The workflow's limits replace these and
+    // gate instructions and estimated cycles; the miss counts are judged from Gungraun's summaries
+    // (geom_bench::callgrind, G18a), which gate only those that can resolve 5%.
     for metric in GATED_METRICS {
         assert!(
             GATE.contains(&format!("(EventKind::{metric}, GATE_PERCENT)")),
             "{metric}"
         );
+    }
+    #[cfg(all(feature = "judge", any(unix, windows)))]
+    {
+        let judged: Vec<&str> = geom_bench::callgrind::JUDGED
+            .iter()
+            .map(|&(_, name)| name)
+            .collect();
+        assert_eq!(judged, GATED_METRICS);
+        assert_eq!(geom_bench::callgrind::floor(5), Some(20));
     }
     for metric in GATED_HEAP_METRICS {
         assert!(
@@ -530,7 +542,7 @@ fn the_gate_is_five_percent_on_every_measure() {
     };
     let as_written = |s: &str| s.replace(".0%", "%");
     assert_eq!(
-        as_written(&limits(&GATED_METRICS).join(",")),
+        as_written(&limits(&GATED_METRICS[..2]).join(",")),
         CALLGRIND_LIMITS
     );
     assert_eq!(
@@ -567,6 +579,9 @@ fn the_workflow_passes_the_documented_limits_and_build() {
         "\"$COUNTS\" compare",
         "\"$COUNTS\" growth",
         "geom-bench-counts\" removed",
+        "--save-summary=json",
+        "\"$CARGO_TARGET_DIR/release/geom-bench-counts\" callgrind",
+        "\"$CARGO_TARGET_DIR/gungraun/geom-bench/instructions\"",
         "retired.txt",
         "test --locked --release -p geom-bench",
         "fmt --check -p geom-bench",
@@ -620,6 +635,12 @@ fn the_pins_are_exact_and_agree() {
     // Gungraun: the runner binary must match the library exactly; the manifest pins it, the
     // documentation and the lock file must agree.
     assert!(MANIFEST.contains(&format!("gungraun = \"={GUNGRAUN_VERSION}\"")));
+    // The summary model the miss-count judge reads (geom_bench::callgrind) is the runner's own, at
+    // exactly the runner's version, so the schema read is the one written.
+    assert!(MANIFEST.contains(&format!(
+        "gungraun-runner = {{ version = \"={GUNGRAUN_VERSION}\", default-features = false, \
+         features = [\"summary\"], optional = true }}"
+    )));
     // Each `[[package]]` entry's lines; the gungraun entry's `version`.
     let locked = LOCK
         .split("[[package]]")
