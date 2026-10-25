@@ -12,12 +12,12 @@
 //!
 //! A crate may neither leave a setting out nor add one, looser or stricter, so one posture covers the
 //! kernel, and a change to `geom-num`'s settings fails this check until every crate carries it.
-//! Comments and layout are not settings: a copy may word its comments for itself, and spacing, line
-//! breaks, comments inside arrays and a comma before a closing bracket are ignored
-//! (`manifest::canonical`). Everything else is compared as written: a table header, a dotted key
-//! and an inline table name the same key, but `"deny"` and `'deny'`, or an inline table with its
-//! keys in another order, differ, so the check errs towards reporting a difference, never towards
-//! hiding one.
+//! Settings are compared as the TOML values cargo and clippy read, parsed by the `toml` crate
+//! (`manifest`): a table header, a dotted key and an inline table name the same key, and comments
+//! and layout are not settings (a copy may word its comments for itself, and spacing, line breaks,
+//! a comma before a closing bracket, `"deny"` or `'deny'` and the order of an inline table's keys
+//! give equal values). Every other change gives a different value, so a looser, stricter or
+//! missing setting is never hidden.
 //!
 //! The clippy configuration clippy reads for a crate is the first `.clippy.toml` or `clippy.toml`, in
 //! that order, in the crate's folder or the nearest folder above it that holds one: clippy's lookup
@@ -36,13 +36,15 @@
 //! development crates, whose test tooling may use what kernel code may not; and binding crates,
 //! which hold the audited `unsafe`.
 //!
-//! Method: key by key comparison of two ordered maps read by `manifest`.
+//! Method: key by key comparison of two ordered maps of TOML values read by `manifest` (the `toml`
+//! crate, <https://docs.rs/toml/0.9.6/toml/>).
 //!
 //! Cost: linear in the number of keys of each crate.
 
 use std::collections::BTreeMap;
 
 use crate::check::{Observed, Rule};
+use crate::manifest::Keys;
 use crate::table::{Kind, Row, Table, full_name};
 
 /// The names of a clippy configuration file, in the order clippy looks for them in one folder.
@@ -55,20 +57,20 @@ const SHOWN: usize = 72;
 const BEFORE: usize = 16;
 
 /// The clippy configuration clippy reads for a crate.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ClippyConfig {
     /// Its path relative to the workspace root, one component per entry.
     pub file: Vec<String>,
-    /// Its keys, values canonical; `None` when it is not TOML the reader reads.
-    pub settings: Option<BTreeMap<String, String>>,
+    /// Its keys and values; `None` when it is not TOML.
+    pub settings: Option<Keys>,
 }
 
 /// A crate's lint settings, as the files cargo and clippy read for it set them.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Lints {
-    /// The keys under `lints` in its manifest, values canonical; `None` when the manifest is not
-    /// TOML the reader reads.
-    pub tables: Option<BTreeMap<String, String>>,
+    /// The keys under `lints` in its manifest, with their values; `None` when the manifest is not
+    /// TOML.
+    pub tables: Option<Keys>,
     /// The clippy configuration clippy reads for it; `None` when no folder from its own up to the
     /// workspace root holds one, so clippy runs with its defaults.
     pub clippy: Option<ClippyConfig>,
@@ -102,15 +104,13 @@ fn shown(value: &str, from: usize) -> String {
 
 /// What differs between the settings of a copy and of its reference, one entry per key, in key
 /// order: a key the copy leaves out, a key it adds, or a key it sets to another value.
-pub fn differences(
-    reference: &BTreeMap<String, String>,
-    copy: &BTreeMap<String, String>,
-) -> Vec<String> {
+pub fn differences(reference: &Keys, copy: &Keys) -> Vec<String> {
     let mut found = Vec::new();
     for (key, wanted) in reference {
         match copy.get(key) {
-            None => found.push(format!("lacks {key} = {}", shown(wanted, 0))),
+            None => found.push(format!("lacks {key} = {}", shown(&wanted.to_string(), 0))),
             Some(got) if got != wanted => {
+                let (got, wanted) = (got.to_string(), wanted.to_string());
                 let at = got
                     .chars()
                     .zip(wanted.chars())
@@ -118,8 +118,8 @@ pub fn differences(
                     .unwrap_or_else(|| got.chars().count().min(wanted.chars().count()));
                 found.push(format!(
                     "sets {key} = {}, not {}",
-                    shown(got, at),
-                    shown(wanted, at)
+                    shown(&got, at),
+                    shown(&wanted, at)
                 ));
             }
             Some(_) => {}
@@ -127,7 +127,7 @@ pub fn differences(
     }
     for (key, got) in copy {
         if !reference.contains_key(key) {
-            found.push(format!("adds {key} = {}", shown(got, 0)));
+            found.push(format!("adds {key} = {}", shown(&got.to_string(), 0)));
         }
     }
     found
@@ -160,7 +160,7 @@ fn reference_clippy<'o>(
     source: &str,
     lints: &'o Lints,
     add: &mut impl FnMut(&str, Rule, String),
-) -> Option<(String, &'o BTreeMap<String, String>)> {
+) -> Option<(String, &'o Keys)> {
     let Some(config) = &lints.clippy else {
         add(
             source,
@@ -176,9 +176,7 @@ fn reference_clippy<'o>(
         add(
             source,
             Rule::ClippyConfig,
-            format!(
-                "{file} is not TOML this check reads, so the kernel's clippy settings are unknown"
-            ),
+            format!("{file} is not TOML, so the kernel's clippy settings are unknown"),
         );
         return None;
     };
@@ -189,7 +187,7 @@ fn reference_clippy<'o>(
 fn compare_tables(
     name: &str,
     source: &str,
-    wanted: &BTreeMap<String, String>,
+    wanted: &Keys,
     lints: &Lints,
     add: &mut impl FnMut(&str, Rule, String),
 ) {
@@ -197,7 +195,7 @@ fn compare_tables(
         add(
             name,
             Rule::LintTables,
-            "its Cargo.toml is not TOML this check reads".to_owned(),
+            "its Cargo.toml is not TOML".to_owned(),
         );
         return;
     };
@@ -219,7 +217,7 @@ fn compare_tables(
 fn compare_clippy(
     name: &str,
     reference_file: &str,
-    wanted: &BTreeMap<String, String>,
+    wanted: &Keys,
     lints: &Lints,
     add: &mut impl FnMut(&str, Rule, String),
 ) {
@@ -236,9 +234,7 @@ fn compare_clippy(
         add(
             name,
             Rule::ClippyConfig,
-            format!(
-                "{file}, the clippy configuration it is built with, is not TOML this check reads"
-            ),
+            format!("{file}, the clippy configuration it is built with, is not TOML"),
         );
         return;
     };
@@ -274,8 +270,7 @@ pub fn workspace(table: &Table<'_>, observed: &Observed, add: &mut impl FnMut(&s
         add(
             &source,
             Rule::LintTables,
-            "its Cargo.toml is not TOML this check reads, so the kernel's lint settings are unknown"
-                .to_owned(),
+            "its Cargo.toml is not TOML, so the kernel's lint settings are unknown".to_owned(),
         );
     }
     let clippy = reference_clippy(&source, &reference.lints, add);
@@ -300,10 +295,14 @@ pub fn workspace(table: &Table<'_>, observed: &Observed, add: &mut impl FnMut(&s
 mod tests {
     use super::*;
 
-    fn map(entries: &[(&str, &str)]) -> BTreeMap<String, String> {
+    /// Settings from (key, value as TOML writes it) pairs.
+    fn map(entries: &[(&str, &str)]) -> Keys {
         entries
             .iter()
-            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+            .map(|(k, v)| {
+                let value = crate::manifest::keys(&format!("v = {v}\n")).unwrap()["v"].clone();
+                ((*k).to_owned(), value)
+            })
             .collect()
     }
 
@@ -315,7 +314,12 @@ mod tests {
             Vec::<String>::new()
         );
         assert_eq!(
-            differences(&BTreeMap::new(), &BTreeMap::new()),
+            differences(&Keys::new(), &Keys::new()),
+            Vec::<String>::new()
+        );
+        // The same values in another layout are the same settings.
+        assert_eq!(
+            differences(&map(&[("a", "'deny'")]), &map(&[("a", "\"deny\"")])),
             Vec::<String>::new()
         );
     }
