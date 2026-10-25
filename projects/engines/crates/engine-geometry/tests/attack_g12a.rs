@@ -51,7 +51,11 @@ fn root() -> PathBuf {
 
 /// The vetted record of the real libm entry, for seeding variants of it.
 fn real_list() -> String {
-    fs::read_to_string(root().join("projects/engines/geometry/deny-no-std.toml")).unwrap()
+    // With LF line ends, as committed: a Windows checkout may convert them to CRLF, and the seeded
+    // changes below are written with LF.
+    fs::read_to_string(root().join("projects/engines/geometry/deny-no-std.toml"))
+        .unwrap()
+        .replace("\r\n", "\n")
 }
 
 #[test]
