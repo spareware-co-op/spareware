@@ -690,8 +690,8 @@ fn wrapping_sub_limbs<const L: usize>(a: &[u64; L], b: &[u64; L]) -> [u64; L] {
     out
 }
 
-/// How two limb sequences compare as unsigned numbers: every limb from the lowest up, each one that
-/// differs deciding until a higher one does, so the highest limb that differs decides.
+/// How two limb sequences compare as unsigned numbers: from the top limb down, the first limb that
+/// differs decides.
 #[verus_spec(r =>
     ensures
         (r == Ordering::Less) == (unsigned(a@, L as nat) < unsigned(b@, L as nat)),
@@ -699,19 +699,23 @@ fn wrapping_sub_limbs<const L: usize>(a: &[u64; L], b: &[u64; L]) -> [u64; L] {
         (r == Ordering::Equal) == (unsigned(a@, L as nat) == unsigned(b@, L as nat)),
 )]
 fn compare_limbs<const L: usize>(a: &[u64; L], b: &[u64; L]) -> Ordering {
-    let mut ord = Ordering::Equal;
+    let mut i = L;
     #[verus_spec(
         invariant
-            (ord == Ordering::Less) == (unsigned(a@, i as nat) < unsigned(b@, i as nat)),
-            (ord == Ordering::Greater) == (unsigned(a@, i as nat) > unsigned(b@, i as nat)),
-            (ord == Ordering::Equal) == (unsigned(a@, i as nat) == unsigned(b@, i as nat)),
+            i <= L,
+            a@.len() == L,
+            b@.len() == L,
+            unsigned(a@, L as nat) - unsigned(a@, i as nat) == unsigned(b@, L as nat) - unsigned(b@, i as nat),
+        decreases i,
     )]
-    for i in 0..L {
-        let x = match a.get(i) {
+    while i > 0 {
+        // i > 0, so i − 1 never wraps.
+        i = i.wrapping_sub(1);
+        let high_a = match a.get(i) {
             Some(v) => *v,
             None => 0,
         };
-        let y = match b.get(i) {
+        let high_b = match b.get(i) {
             Some(v) => *v,
             None => 0,
         };
@@ -721,19 +725,18 @@ fn compare_limbs<const L: usize>(a: &[u64; L], b: &[u64; L]) -> Ordering {
             lemma_base_step(i as nat);
             let p = base(i as nat);
             let (ua, ub) = (unsigned(a@, i as nat), unsigned(b@, i as nat));
-            assert(x < y ==> ua + x as int * p < ub + y as int * p) by (nonlinear_arith)
-                requires 0 <= ua < p, 0 <= ub < p, 0 <= x as int, 0 <= y as int;
-            assert(x > y ==> ua + x as int * p > ub + y as int * p) by (nonlinear_arith)
-                requires 0 <= ua < p, 0 <= ub < p, 0 <= x as int, 0 <= y as int;
-            assert(x == y ==> (ua + x as int * p < ub + y as int * p) == (ua < ub));
+            assert(unsigned(a@, (i + 1) as nat) == ua + high_a as int * p);
+            assert(unsigned(b@, (i + 1) as nat) == ub + high_b as int * p);
+            assert(high_a < high_b ==> ua + high_a as int * p < ub + high_b as int * p) by (nonlinear_arith)
+                requires 0 <= ua < p, 0 <= ub < p, 0 <= high_a as int, 0 <= high_b as int;
+            assert(high_a > high_b ==> ua + high_a as int * p > ub + high_b as int * p) by (nonlinear_arith)
+                requires 0 <= ua < p, 0 <= ub < p, 0 <= high_a as int, 0 <= high_b as int;
         }
-        if x < y {
-            ord = Ordering::Less;
-        } else if x > y {
-            ord = Ordering::Greater;
+        if high_a != high_b {
+            return if high_a < high_b { Ordering::Less } else { Ordering::Greater };
         }
     }
-    ord
+    Ordering::Equal
 }
 
 /// The low and high 64-bit halves of `t`, t = high · 2^64 + low.
