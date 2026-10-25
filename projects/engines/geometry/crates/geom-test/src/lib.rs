@@ -97,8 +97,12 @@
 //! - `geom-num` (MPL-2.0, ours), the numbers layer under test.
 //! - `proptest` 1.12, without its default `fork` and `timeout` features, as in `geom-num`. [`prop`]
 //!   always runs it from a fixed seed, so its operating-system random path is never taken.
-//! - `serde_json` 1.0, to read `cargo metadata` and the golden store, and `serde` 1.0 with its
-//!   derive, to read the store into typed records.
+//! - `serde_json` 1.0, to read the golden store, and `serde` 1.0 with its derive, to read the
+//!   store into typed records; `cargo_metadata` 0.23.1, `cargo metadata`'s typed model and the
+//!   command that runs it (piece G12a put it in place of a field-by-field reading; 29.1).
+//! - `toml` 0.9.6, so the map reads each crate's `Cargo.toml` as cargo does, and `proc-macro2`
+//!   1.0.107, Rust's lexer, so it reads source as rustc does (piece G12a put both in place of
+//!   readers written here; 29.1).
 //! - `sha2` 0.11, the SHA-256 of every golden digest (FIPS 180-4).
 //! - `rand` 0.10, without its default features, for its Fisher-Yates shuffle, which the shuffle
 //!   hook drives from `SplitMix64`; it has no generator of its own here.
@@ -118,14 +122,16 @@
 //! - MIT OR Apache-2.0: `proptest`, `bit-set`, `bit-vec`, `bitflags`, `chacha20`, `cfg-if`,
 //!   `cpufeatures`, `libc`, `rand`, `rand_core`, `rand_xorshift`, `getrandom`, `core_detect`,
 //!   `num-traits`, `autocfg`, `regex-syntax`, `unarray`, `serde_json`, `serde`, `serde_core`,
-//!   `serde_derive`, `itoa`, `proc-macro2`, `quote`, `syn`, `sha2`, `digest`, `block-buffer`,
-//!   `crypto-common`, `hybrid-array`, `typenum`, `num-rational`, `num-bigint` and `num-integer`.
+//!   `serde_derive`, `itoa`, `proc-macro2`, `quote`, `syn`, `toml`, `toml_datetime`, `toml_parser`,
+//!   `toml_writer`, `serde_spanned`, `camino`, `cargo-platform`, `semver`, `thiserror`,
+//!   `thiserror-impl`, `sha2`, `digest`, `block-buffer`, `crypto-common`, `hybrid-array`, `typenum`,
+//!   `num-rational`, `num-bigint` and `num-integer`.
 //! - MIT OR Apache-2.0 OR LGPL-2.1-or-later: `r-efi` (UEFI targets only).
 //! - (MIT OR Apache-2.0) AND Unicode-3.0: `unicode-ident` and `unicode-normalization`.
 //! - Zlib OR Apache-2.0 OR MIT: `tinyvec`, which `unicode-normalization` brings in.
 //! - MIT OR Apache-2.0: `unicase`, which `pulldown-cmark` brings in.
 //! - Unlicense OR MIT: `memchr`.
-//! - MIT: `zmij` and `pulldown-cmark`.
+//! - MIT: `zmij`, `winnow`, `cargo_metadata` and `pulldown-cmark`.
 #![forbid(unsafe_code)]
 
 pub mod deps;
