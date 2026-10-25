@@ -256,6 +256,7 @@
               "link": "https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md",
               "method_note": null,
               "name": "Gungraun",
+              "notice": [],
               "pinned": true,
               "purpose": "for its summary files, its default output layout and its estimated-cycles formula. No code copied; its summary model is used as a dependency.",
               "take": "port-method"

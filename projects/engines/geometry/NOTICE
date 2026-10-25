@@ -205,6 +205,8 @@ Gungraun
   Consulted by:
     projects/engines/geometry/crates/geom-bench/src/bin/geom-bench-counts.rs
       for its library-benchmark API and its Callgrind and DHAT settings. No code copied.
+    projects/engines/geometry/crates/geom-bench/src/callgrind.rs
+      for its summary files, its default output layout and its estimated-cycles formula. No code copied; its summary model is used as a dependency.
     projects/engines/geometry/crates/geom-bench/src/counts.rs
       for its library-benchmark API and its Callgrind and DHAT settings. No code copied.
     projects/engines/geometry/crates/geom-bench/src/lib.rs
