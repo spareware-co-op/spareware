@@ -635,8 +635,15 @@ pub fn generate_ssi_side() -> Result<Vec<u8>, GenError> {
 /// `kernel-dev.yml`'s `verus` job verifies the crate.
 pub const VERUS_DIR: &str = "projects/engines/geometry/crates/geom-num/verus/generated";
 
-/// The predicates with a Verus twin (pieces G36 and G38), by name.
-pub const VERUS_TWINS: [&str; 4] = ["orient2d", "orient3d", "incircle", "insphere"];
+/// The predicates with a Verus twin (pieces G36, G38 and G39), by name.
+pub const VERUS_TWINS: [&str; 6] = [
+    "orient2d",
+    "orient3d",
+    "incircle",
+    "insphere",
+    "ssi_weight",
+    "ssi_side",
+];
 
 /// The twin of the predicate called `name`, as bytes.
 fn twin_of(name: &str) -> Result<Vec<u8>, GenError> {
@@ -681,6 +688,25 @@ pub fn generate_verus_incircle() -> Result<Vec<u8>, GenError> {
 /// [`GenError::Generator`] if the derivation or the emission fails.
 pub fn generate_verus_insphere() -> Result<Vec<u8>, GenError> {
     twin_of("insphere")
+}
+
+/// Generator `verus-ssi-weight`: `ssi_weight`'s exact path as a Verus-annotated twin (piece
+/// G39).
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_verus_ssi_weight() -> Result<Vec<u8>, GenError> {
+    twin_of("ssi_weight")
+}
+
+/// Generator `verus-ssi-side`: `ssi_side`'s exact path as a Verus-annotated twin (piece G39).
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_verus_ssi_side() -> Result<Vec<u8>, GenError> {
+    twin_of("ssi_side")
 }
 
 /// Generator `predicate-module`: the module that declares the predicates and holds their helpers.

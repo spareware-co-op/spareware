@@ -255,7 +255,7 @@ fn the_twin_is_current() {
 const MODEL: &str = include_str!("../../geom-num/verus/model.rs");
 
 /// Every predicate twin of the Verus crate (pieces G36 and G38) and the module it shadows.
-const PREDICATE_TWINS: [(&str, &str, &str); 4] = [
+const PREDICATE_TWINS: [(&str, &str, &str); 6] = [
     (
         "orient2d",
         include_str!("../../geom-num/verus/generated/orient2d.rs"),
@@ -276,6 +276,16 @@ const PREDICATE_TWINS: [(&str, &str, &str); 4] = [
         include_str!("../../geom-num/verus/generated/insphere.rs"),
         include_str!("../../geom-num/src/generated/insphere.rs"),
     ),
+    (
+        "ssi_weight",
+        include_str!("../../geom-num/verus/generated/ssi_weight.rs"),
+        include_str!("../../geom-num/src/generated/ssi_weight.rs"),
+    ),
+    (
+        "ssi_side",
+        include_str!("../../geom-num/verus/generated/ssi_side.rs"),
+        include_str!("../../geom-num/src/generated/ssi_side.rs"),
+    ),
 ];
 
 /// The Verus crate's root, which must hold every predicate twin as a module.
@@ -288,6 +298,8 @@ fn every_predicate_twin_is_its_shipped_value_token_for_token() {
         geom_gen::predicates::generate_verus_orient3d,
         geom_gen::predicates::generate_verus_incircle,
         geom_gen::predicates::generate_verus_insphere,
+        geom_gen::predicates::generate_verus_ssi_weight,
+        geom_gen::predicates::generate_verus_ssi_side,
     ];
     for ((name, twin, shipped), generate) in PREDICATE_TWINS.iter().zip(shipped_generators) {
         let t = find_fn(&tokens(twin), "value").unwrap_or_else(|| panic!("{name}: no value"));

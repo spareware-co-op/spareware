@@ -28,7 +28,7 @@ use crate::grid_steps;
 use crate::predicates;
 
 /// Every generator, in the order they run.
-pub const GENERATORS: [Generator; 17] = [
+pub const GENERATORS: [Generator; 19] = [
     Generator {
         name: grid_steps::NAME,
         output: grid_steps::OUTPUT,
@@ -130,6 +130,18 @@ pub const GENERATORS: [Generator; 17] = [
         output: "projects/engines/geometry/crates/geom-num/verus/generated/insphere.rs",
         about: "insphere's exact path as a Verus-annotated twin, which Verus verifies in CI",
         generate: Generate::Plain(predicates::generate_verus_insphere),
+    },
+    Generator {
+        name: "verus-ssi-weight",
+        output: "projects/engines/geometry/crates/geom-num/verus/generated/ssi_weight.rs",
+        about: "ssi_weight's exact path as a Verus-annotated twin, which Verus verifies in CI",
+        generate: Generate::Plain(predicates::generate_verus_ssi_weight),
+    },
+    Generator {
+        name: "verus-ssi-side",
+        output: "projects/engines/geometry/crates/geom-num/verus/generated/ssi_side.rs",
+        about: "ssi_side's exact path as a Verus-annotated twin, which Verus verifies in CI",
+        generate: Generate::Plain(predicates::generate_verus_ssi_side),
     },
 ];
 
