@@ -4,11 +4,14 @@
 //! It proves, for every width L from 1 to 4096 limbs, so for `I256`, `I320`, `I384` and `I512`:
 //! `checked_add`, `checked_sub`, `checked_neg` and `checked_mul` give the exact two's-complement
 //! result whenever it fits and `None` exactly when it does not; `compare`, which `Ord::cmp` calls,
-//! orders values as integers; and the helpers they use do what each one's specification says.
+//! orders values as integers; `from_i128` gives the value it is given (piece G38); and the helpers
+//! they use do what each one's specification says.
 //!
 //! The functions below the `verus!` block, with their `#[verus_spec]` attributes and their
 //! `proof!` and `proof_decl!` blocks removed, are token for token those of `src/wide.rs`:
-//! `geom-gen`'s `tests/verus_twin.rs` compares them. Inside the `verus!` block are the definitions
+//! `geom-gen`'s `tests/verus_twin.rs` compares them. `from_i128`, an associated function without
+//! `self`, which `#[verus_spec]` cannot annotate, is written inside the `verus!` block instead,
+//! and the test compares its doc comment, attributes, parameters and body. Also inside the block are the definitions
 //! (the unsigned value of a limb sequence, two's complement, what fits), the lemmas, a model of
 //! `Wide` with the same field, and three facts Verus is told about the standard library, each that
 //! function's documented behaviour: `u64::overflowing_add`, `u64::overflowing_sub` and
@@ -447,6 +450,61 @@ proof fn lemma_mul_result(tot: int, b: int, x: int, y: int, negative: bool)
         requires tot == (if x < 0 { -x } else { x }) * (if y < 0 { -y } else { y });
 }
 
+
+/// Limbs holding v's two's complement in their low two and its sign fill above have v's value.
+proof fn lemma_from_i128(s: Seq<u64>, v: i128, low: u64, high: u64)
+    requires
+        2 <= s.len() <= 4096,
+        s[0] == low,
+        s[1] == high,
+        low as int + high as int * 0x1_0000_0000_0000_0000 == (if v < 0 { v as int + 0x1_0000_0000_0000_0000_0000_0000_0000_0000 } else { v as int }),
+        forall|k: int| 2 <= k < s.len() ==> s[k] == (if v < 0 { 0xFFFF_FFFF_FFFF_FFFFu64 } else { 0u64 }),
+    ensures
+        signed(s, s.len()) == v as int,
+{
+    let n = s.len();
+    lemma_fill_prefix(s, v, low, high, n);
+    lemma_base_monotone(2, n);
+    lemma_base_step(0);
+    lemma_base_step(1);
+    lemma2_to64();
+    lemma_unsigned_bound(s, n);
+}
+
+/// The value of the first m limbs (m ≥ 2): v's two low halves, plus, for a negative v, the sign
+/// fill's base(m) − base(2).
+proof fn lemma_fill_prefix(s: Seq<u64>, v: i128, low: u64, high: u64, m: nat)
+    requires
+        2 <= m <= s.len(),
+        s[0] == low,
+        s[1] == high,
+        forall|k: int| 2 <= k < s.len() ==> s[k] == (if v < 0 { 0xFFFF_FFFF_FFFF_FFFFu64 } else { 0u64 }),
+    ensures
+        unsigned(s, m) == low as int + high as int * 0x1_0000_0000_0000_0000
+            + (if v < 0 { base(m) - base(2) } else { 0 }),
+    decreases m,
+{
+    lemma_base_step(0);
+    lemma_base_step(1);
+    lemma2_to64();
+    if m == 2 {
+        assert(unsigned(s, 0) == 0);
+        assert(unsigned(s, 1) == unsigned(s, 0) + s[0] as int * pow2(0) as int);
+        assert(unsigned(s, 2) == unsigned(s, 1) + s[1] as int * pow2(64) as int);
+        assert(pow2(0) == 1 && pow2(64) == 0x1_0000_0000_0000_0000) by { lemma2_to64(); lemma2_to64_rest(); }
+    } else {
+        let k = (m - 1) as nat;
+        lemma_fill_prefix(s, v, low, high, k);
+        lemma_base_step(k);
+        if v < 0 {
+            assert(s[k as int] as int * base(k) == base(k) * 0x1_0000_0000_0000_0000 - base(k)) by (nonlinear_arith)
+                requires s[k as int] as int == 0xFFFF_FFFF_FFFF_FFFF;
+        } else {
+            assert(s[k as int] as int * base(k) == 0) by (nonlinear_arith) requires s[k as int] as int == 0;
+        }
+    }
+}
+
 const TOP_BIT: u64 = 1 << 63;
 
 #[derive(Clone, Copy)]
@@ -461,6 +519,48 @@ impl<const L: usize> Wide<L> {
     /// The signed value.
     pub closed spec fn value(self) -> int {
         signed(self.0@, L as nat)
+    }
+}
+
+
+impl<const L: usize> Wide<L> {
+    /// From an `i128`, exactly.
+    #[must_use]
+    pub fn from_i128(v: i128) -> (r: Self)
+        requires
+            2 <= L <= 4096,
+        ensures
+            r.value() == v as int,
+    {
+        let mut limbs = [fill(v < 0); L];
+        // v's two's complement in 128 bits, read as unsigned: v itself when v is not negative, and
+        // v + 2^128 when it is, made as (v − i128::MIN) + 2^127 so that no cast loses a value.
+        #[allow(clippy::cast_sign_loss, reason = "each cast value is at least zero")]
+        let u = if v < 0 {
+            match v.checked_sub(i128::MIN) {
+                Some(d) => (d as u128) | (1u128 << 127),
+                None => 0,
+            }
+        } else {
+            v as u128
+        };
+        let (low, high) = halves(u);
+        if let Some(limb) = limbs.get_mut(0) {
+            *limb = low;
+        }
+        if let Some(limb) = limbs.get_mut(1) {
+            *limb = high;
+        }
+        proof {
+            if v < 0 {
+                let d = (v - i128::MIN) as u128;
+                assert(d < 0x8000_0000_0000_0000_0000_0000_0000_0000u128);
+                assert(d | (1u128 << 127) == d + 0x8000_0000_0000_0000_0000_0000_0000_0000u128) by (bit_vector)
+                    requires d < 0x8000_0000_0000_0000_0000_0000_0000_0000u128;
+            }
+            lemma_from_i128(limbs@, v, low, high);
+        }
+        Self(limbs)
     }
 }
 
@@ -637,6 +737,15 @@ fn halves(t: u128) -> (u64, u64) {
         assert((t >> 64u128) < 0x1_0000_0000_0000_0000u128) by (bit_vector);
     }
     ((t & 0xFFFF_FFFF_FFFF_FFFF) as u64, (t >> 64) as u64)
+}
+
+/// The limb that sign-extends a value with this sign.
+#[verus_spec(r =>
+    ensures
+        r == if negative { 0xFFFF_FFFF_FFFF_FFFFu64 } else { 0u64 },
+)]
+const fn fill(negative: bool) -> u64 {
+    if negative { u64::MAX } else { 0 }
 }
 
 impl<const L: usize> Wide<L> {

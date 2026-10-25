@@ -281,7 +281,8 @@ const WIDE_TWIN: &str = include_str!("../../geom-num/verus/wide.rs");
 const WIDE: &str = include_str!("../../geom-num/src/wide.rs");
 
 /// Every function the wide twin runs, all of them proven there.
-const WIDE_PROVEN: [&str; 12] = [
+const WIDE_PROVEN: [&str; 13] = [
+    "fill",
     "wrapping_add_limbs",
     "wrapping_sub_limbs",
     "compare_limbs",
@@ -308,6 +309,9 @@ fn find_fn(trees: &[TokenTree], name: &str) -> Option<Vec<TokenTree>> {
         .find(|&k| is_ident(&trees[k], "fn") && is_ident(&trees[k + 1], name))
     {
         let mut start = at;
+        if start > 0 && is_ident(&trees[start - 1], "const") {
+            start -= 1;
+        }
         if start > 0 && is_ident(&trees[start - 1], "pub") {
             start -= 1;
         }
@@ -418,4 +422,68 @@ fn any_change_to_the_wide_arithmetic_is_seen() {
             "wide.rs: {from}"
         );
     }
+}
+
+/// The item `fn name` inside the `verus!` block of `trees`, as written there: attributes,
+/// signature with its Verus clauses, and body.
+fn find_fn_in_verus(trees: &[TokenTree], name: &str) -> Option<Vec<TokenTree>> {
+    trees.iter().enumerate().find_map(|(k, t)| match t {
+        TokenTree::Group(g) if is_verus_block(trees, k) => {
+            let inner: Vec<TokenTree> = g.stream().into_iter().collect();
+            find_fn(&inner, name)
+        }
+        _ => None,
+    })
+}
+
+/// The parts of a function the twin must share with the shipped code when the twin writes it in
+/// Verus's own syntax: its attributes (doc comment included), its parameters and its body, with
+/// the body's `proof { ... }` blocks removed.
+fn shared_parts(item: &[TokenTree]) -> String {
+    let at = item.iter().position(|t| is_ident(t, "fn")).unwrap();
+    let mut head = item[..at].to_vec();
+    if head.last().is_some_and(|t| is_ident(t, "pub")) {
+        head.pop();
+    }
+    let params = item[at + 2..]
+        .iter()
+        .find(|t| matches!(t, TokenTree::Group(g) if g.delimiter() == proc_macro2::Delimiter::Parenthesis))
+        .cloned()
+        .unwrap();
+    let body = item.last().cloned().unwrap();
+    let body: Vec<TokenTree> = match body {
+        TokenTree::Group(g) => g.stream().into_iter().collect(),
+        _ => panic!("no body"),
+    };
+    let mut kept = Vec::new();
+    let mut k = 0;
+    while k < body.len() {
+        if is_ident(&body[k], "proof")
+            && matches!(body.get(k + 1), Some(TokenTree::Group(g)) if g.delimiter() == proc_macro2::Delimiter::Brace)
+        {
+            k += 2;
+            continue;
+        }
+        kept.push(body[k].clone());
+        k += 1;
+    }
+    format!(
+        "{} | {} | {}",
+        canonical(&head),
+        canonical(&[params]),
+        canonical(&strip(&kept))
+    )
+}
+
+#[test]
+fn from_i128_is_the_shipped_one_in_doc_attributes_parameters_and_body() {
+    let twin = find_fn_in_verus(&tokens(WIDE_TWIN), "from_i128").expect("the twin's from_i128");
+    let shipped = find_fn(&tokens(WIDE), "from_i128").expect("wide.rs's from_i128");
+    assert_eq!(shared_parts(&twin), shared_parts(&shipped));
+    let text = canonical(&twin);
+    assert!(text.contains("ensures r . value ( ) == v as int"), "{text}");
+    // A change on either side is seen.
+    let changed = WIDE.replacen("(1u128 << 127)", "(1u128 << 126)", 1);
+    let changed = find_fn(&tokens(&changed), "from_i128").unwrap();
+    assert_ne!(shared_parts(&twin), shared_parts(&changed));
 }
