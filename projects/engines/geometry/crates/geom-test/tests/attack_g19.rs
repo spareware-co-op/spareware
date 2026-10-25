@@ -195,17 +195,17 @@ fn kernel_yml_runs_every_golden_in_every_native_build_mode() {
     let yml = KERNEL_YML.replace("\r\n", "\n");
     let steps = [
         "      - name: Every golden in release, with overflow checks on
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.mode == 'release' }}
         env:
           RUSTFLAGS: -C overflow-checks=on
         run: cargo run --locked -p geom-test --bin golden -- run --release
 ",
         "      - name: Every golden in release as shipped, without overflow checks
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.mode == 'release' }}
         run: cargo run --locked -p geom-test --bin golden -- run --release
 ",
         "      - name: geom-num's every test vector in release as shipped
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.mode == 'release' }}
         run: cargo test -p geom-num --release --locked --no-fail-fast
 ",
         "        env:
@@ -217,24 +217,24 @@ fn kernel_yml_runs_every_golden_in_every_native_build_mode() {
         run: cargo run --locked -p geom-test --bin golden -- run --release
 ",
         "      - name: geom-num's every test vector in release for this machine's own CPU
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.mode == 'release' }}
         env:
           RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
           CARGO_TARGET_DIR: target-native
         run: cargo test -p geom-num --release --locked --no-fail-fast
 ",
         "      - name: Every golden in debug
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.mode == 'debug' }}
         run: cargo run --locked -p geom-test --bin golden -- run
 ",
         "      - name: Test suite in release, with overflow checks on
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.mode == 'release' }}
         env:
           RUSTFLAGS: -C overflow-checks=on
         run: cargo test $KERNEL_CRATES --release --locked --no-fail-fast
 ",
         "      - name: Test suite in debug
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.mode == 'debug' }}
         run: cargo test $KERNEL_CRATES --locked --no-fail-fast
 ",
     ];
