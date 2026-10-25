@@ -64,11 +64,12 @@ use geom_bench::inputs::{self, BATCH, Class};
 use geom_bench::kernels;
 use geom_bench::rng::{SplitMix64, fnv1a, seed_for};
 use geom_bench::sha256::{Digest, Sha256};
+use geom_num::crossing::Ssi;
 use geom_num::dd::{self as dd, DD};
 use geom_num::exact_sum::ExactSum;
 use geom_num::grid::{self, COORD_MAX, Coord, GridStep, P2, P3, Rounded, Steps};
 use geom_num::interval::Interval;
-use geom_num::plane::{Plane, Tpi};
+use geom_num::plane::{Lpi, Plane, Tpi};
 use geom_num::real::Real;
 use geom_num::rng::{self as rng, Philox, RngError, Seed, Stream, StreamId, StreamRange};
 use geom_num::wide::Wide;
@@ -950,6 +951,38 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
             fold(ip::side_of_tpi(class).iter().map(|(p, t)| p.side_of_tpi(t)))
         }
         ("plane", "to_grid") => fold(ip::to_grid(class).iter().map(Tpi::to_grid)),
+        ("plane", "lpi_new") => fold(
+            ip::lpi_new(class)
+                .into_iter()
+                .map(|(p, q, plane)| Lpi::new(p, q, plane)),
+        ),
+        ("plane", "lpi_homogeneous") => {
+            fold(ip::lpi_homogeneous(class).iter().map(Lpi::homogeneous))
+        }
+        ("plane", "side_of_lpi") => {
+            fold(ip::side_of_lpi(class).iter().map(|(p, l)| p.side_of_lpi(l)))
+        }
+        ("plane", "lpi_to_grid") => fold(ip::lpi_to_grid(class).iter().map(Lpi::to_grid)),
+        ("crossing", "ssi_new") => fold(
+            inputs::crossing::ssi_new(class)
+                .into_iter()
+                .map(|[a, b, c, d]| Ssi::new(a, b, c, d)),
+        ),
+        ("crossing", "ssi_homogeneous") => fold(
+            inputs::crossing::ssi_homogeneous(class)
+                .iter()
+                .map(Ssi::homogeneous),
+        ),
+        ("crossing", "ssi_orient2d") => fold(
+            inputs::crossing::ssi_orient2d(class)
+                .into_iter()
+                .map(|(s, p, q)| s.orient2d(p, q)),
+        ),
+        ("crossing", "ssi_to_grid") => fold(
+            inputs::crossing::ssi_to_grid(class)
+                .iter()
+                .map(Ssi::to_grid),
+        ),
         ("perturb", "orient2d") => fold(
             inputs::perturb::orient2d(class)
                 .into_iter()
@@ -1221,6 +1254,80 @@ fn generated_digest(name: &str, class: Class) -> Option<Digest> {
             i::plane_side_value(class)
                 .into_iter()
                 .map(|([x, y, z], d, p)| gp::plane_side::value(x, y, z, d, p)),
+        ),
+        "tpi_weight_filter" => fold(i::tpi_weight_filter(class).into_iter().map(
+            |[[ax, ay, az], [bx, by, bz], [cx, cy, cz]]| {
+                gp::tpi_weight::filter(ax, ay, az, bx, by, bz, cx, cy, cz)
+            },
+        )),
+        "tpi_side_filter" => fold(i::tpi_side_filter(class).into_iter().map(
+            |[
+                ([ax, ay, az], ad),
+                ([bx, by, bz], bd),
+                ([cx, cy, cz], cd),
+                ([sx, sy, sz], sd),
+            ]| {
+                gp::tpi_side::filter(
+                    ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
+                )
+            },
+        )),
+        "lpi_weight_filter" => fold(
+            i::lpi_weight_filter(class)
+                .into_iter()
+                .map(|([nx, ny, nz], p, q)| gp::lpi_weight::filter(nx, ny, nz, p, q)),
+        ),
+        "lpi_side_filter" => fold(i::lpi_side_filter(class).into_iter().map(
+            |(([ax, ay, az], ad), ([bx, by, bz], bd), p, q)| {
+                gp::lpi_side::filter(ax, ay, az, ad, bx, by, bz, bd, p, q)
+            },
+        )),
+        "ssi_weight_filter" => fold(
+            i::ssi_weight_filter(class)
+                .into_iter()
+                .map(|[a, b, c, d]| gp::ssi_weight::filter(a, b, c, d)),
+        ),
+        "ssi_side_filter" => fold(
+            i::ssi_side_filter(class)
+                .into_iter()
+                .map(|([a, b, c, d], p, q)| gp::ssi_side::filter(a, b, c, d, p, q)),
+        ),
+        "tpi_weight_value" => fold(i::tpi_weight_value(class).into_iter().map(
+            |[[ax, ay, az], [bx, by, bz], [cx, cy, cz]]| {
+                gp::tpi_weight::value(ax, ay, az, bx, by, bz, cx, cy, cz)
+            },
+        )),
+        "tpi_side_value" => fold(i::tpi_side_value(class).into_iter().map(
+            |[
+                ([ax, ay, az], ad),
+                ([bx, by, bz], bd),
+                ([cx, cy, cz], cd),
+                ([sx, sy, sz], sd),
+            ]| {
+                gp::tpi_side::value(
+                    ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
+                )
+            },
+        )),
+        "lpi_weight_value" => fold(
+            i::lpi_weight_value(class)
+                .into_iter()
+                .map(|([nx, ny, nz], p, q)| gp::lpi_weight::value(nx, ny, nz, p, q)),
+        ),
+        "lpi_side_value" => fold(i::lpi_side_value(class).into_iter().map(
+            |(([ax, ay, az], ad), ([bx, by, bz], bd), p, q)| {
+                gp::lpi_side::value(ax, ay, az, ad, bx, by, bz, bd, p, q)
+            },
+        )),
+        "ssi_weight_value" => fold(
+            i::ssi_weight_value(class)
+                .into_iter()
+                .map(|[a, b, c, d]| gp::ssi_weight::value(a, b, c, d)),
+        ),
+        "ssi_side_value" => fold(
+            i::ssi_side_value(class)
+                .into_iter()
+                .map(|([a, b, c, d], p, q)| gp::ssi_side::value(a, b, c, d, p, q)),
         ),
         _ => return None,
     })
@@ -3989,5 +4096,130 @@ fn every_class_is_measured_somewhere() {
             cases().any(|case| case.class == class),
             "{class} is never benchmarked"
         );
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// The line-plane points and the crossings (G29): exact values from their definitions.
+// ---------------------------------------------------------------------------------------------
+
+/// N homogeneous numerators over a denominator rounded half to even to the grid, as every
+/// implicit point's `to_grid` documents: the coordinates and whether all were exact, or the first
+/// coordinate outside the frame.
+fn commit_exact<const N: usize>(x: &[Big; N], w: &Big) -> Result<([i64; N], bool), NumError> {
+    let m = Big::from_i64(COORD_MAX);
+    let mut coords = [0i64; N];
+    let mut exact = true;
+    for (coord, xi) in coords.iter_mut().zip(x) {
+        let (q, e) = round_half_even(xi, w);
+        if q > m || q < m.negated() {
+            let saturated = if q.negative { i128::MIN } else { i128::MAX };
+            return Err(NumError::OutOfRange {
+                value: q.to_i128().unwrap_or(saturated),
+            });
+        }
+        *coord = i64::try_from(q.to_i128().unwrap()).unwrap();
+        exact &= e;
+    }
+    Ok((coords, exact))
+}
+
+/// The point where the line from p to q meets the plane (n, d): with sₚ = n · p + d and
+/// s_q = n · q + d, X = s_q p − sₚ q and w = s_q − sₚ.
+fn lpi_exact(l: &Lpi) -> ([Big; 3], Big) {
+    let (n, d) = coefficients(l.plane());
+    let [p, q] = l.points();
+    let coords = |r: P3| [big(r.x), big(r.y), big(r.z)];
+    let (p, q) = (coords(p), coords(q));
+    let offset = |r: &[Big; 3]| {
+        n.iter()
+            .zip(r)
+            .fold(d.clone(), |acc, (ni, ri)| acc.plus(&ni.times(ri)))
+    };
+    let (sp, sq) = (offset(&p), offset(&q));
+    let x = [0, 1, 2].map(|i| sq.times(&p[i]).minus(&sp.times(&q[i])));
+    (x, sq.minus(&sp))
+}
+
+/// The point where the line from a to b crosses the line from c to d: with oa and ob the cross
+/// products (d − c) × (a − c) and (d − c) × (b − c), X = oa b − ob a and w = oa − ob.
+fn ssi_exact(s: &Ssi) -> ([Big; 2], Big) {
+    let [a, b, c, d] = s.points().map(|r| [big(r.x), big(r.y)]);
+    let cross = |o: &[Big; 2], e: &[Big; 2], f: &[Big; 2]| {
+        e[0].minus(&o[0])
+            .times(&f[1].minus(&o[1]))
+            .minus(&e[1].minus(&o[1]).times(&f[0].minus(&o[0])))
+    };
+    let (oa, ob) = (cross(&c, &d, &a), cross(&c, &d, &b));
+    let x = [0, 1].map(|i| oa.times(&b[i]).minus(&ob.times(&a[i])));
+    (x, oa.minus(&ob))
+}
+
+#[test]
+fn line_plane_points_and_crossings_agree_with_exact_values_on_every_input() {
+    use inputs::crossing as c;
+    use inputs::plane as p;
+    for (a, b, plane) in p::lpi_new(Degenerate) {
+        assert_eq!(Lpi::new(a, b, plane), Err(NumError::Degenerate));
+    }
+    for class in [Typical, Extreme] {
+        for l in p::lpi_homogeneous(class) {
+            let (x, w) = l.homogeneous().unwrap();
+            let (ex, ew) = lpi_exact(&l);
+            assert_eq!(Big::from_i128(w), ew, "{class}");
+            assert_eq!(x.map(|xi| big_of_wide(&xi)), ex, "{class}");
+        }
+    }
+    for class in [Typical, Degenerate, NearlyDegenerate, Extreme] {
+        for (plane, l) in p::side_of_lpi(class) {
+            let (n, d) = coefficients(&plane);
+            let (x, w) = lpi_exact(&l);
+            let value = n
+                .iter()
+                .zip(&x)
+                .fold(d.times(&w), |acc, (ni, xi)| acc.plus(&ni.times(xi)));
+            assert_eq!(
+                plane.side_of_lpi(&l),
+                Ok(value.sign().mul(w.sign())),
+                "{class}"
+            );
+        }
+    }
+    for class in [Typical, OnGrid, Extreme, Overflow] {
+        for l in p::lpi_to_grid(class) {
+            let (x, w) = lpi_exact(&l);
+            let want = commit_exact(&x, &w).map(|([a, b, c], e)| (P3::new(a, b, c).unwrap(), e));
+            assert_eq!(parts(l.to_grid()), want, "{class}");
+        }
+    }
+    for [a, b, cc, d] in c::ssi_new(Degenerate) {
+        assert_eq!(Ssi::new(a, b, cc, d), Err(NumError::Degenerate));
+    }
+    for class in [Typical, Extreme] {
+        for s in c::ssi_homogeneous(class) {
+            let (x, w) = s.homogeneous().unwrap();
+            let (ex, ew) = ssi_exact(&s);
+            assert_eq!(Big::from_i128(w), ew, "{class}");
+            assert_eq!(x.map(Big::from_i128), ex, "{class}");
+        }
+    }
+    for class in [Typical, Degenerate, NearlyDegenerate, Extreme] {
+        for (s, p, q) in c::ssi_orient2d(class) {
+            let (x, w) = ssi_exact(&s);
+            let [px, py] = [big(p.x), big(p.y)];
+            let (qx, qy) = (big(q.x).minus(&px), big(q.y).minus(&py));
+            // (q − p) × (X − w p): orient2d(p, q, X / w) times w².
+            let rx = x[0].minus(&w.times(&px));
+            let ry = x[1].minus(&w.times(&py));
+            let value = qx.times(&ry).minus(&qy.times(&rx));
+            assert_eq!(s.orient2d(p, q), Ok(value.sign().mul(w.sign())), "{class}");
+        }
+    }
+    for class in [Typical, OnGrid, Extreme, Overflow] {
+        for s in c::ssi_to_grid(class) {
+            let (x, w) = ssi_exact(&s);
+            let want = commit_exact(&x, &w).map(|([a, b], e)| (P2::new(a, b).unwrap(), e));
+            assert_eq!(parts(s.to_grid()), want, "{class}");
+        }
     }
 }

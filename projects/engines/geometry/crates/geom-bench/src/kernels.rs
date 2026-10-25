@@ -166,7 +166,7 @@ pub mod wide {
 /// Plane-based geometry: `geom_num::plane`.
 pub mod plane {
     use geom_num::grid::{P3, Rounded};
-    use geom_num::plane::{Plane, Tpi};
+    use geom_num::plane::{Lpi, Plane, Tpi};
     use geom_num::wide::{I256, I320};
     use geom_num::{NumError, Sign};
 
@@ -206,6 +206,63 @@ pub mod plane {
     #[inline(never)]
     pub fn to_grid(batch: &[Tpi], out: &mut Vec<Result<Rounded<P3>, NumError>>) {
         run(batch, out, Tpi::to_grid);
+    }
+
+    /// `Lpi::new` on each (p, q, plane) triple.
+    #[inline(never)]
+    pub fn lpi_new(batch: &[(P3, P3, Plane)], out: &mut Vec<Result<Lpi, NumError>>) {
+        run(batch, out, |&(p, q, plane)| Lpi::new(p, q, plane));
+    }
+
+    /// `Lpi::homogeneous` on each line-plane point.
+    #[inline(never)]
+    pub fn lpi_homogeneous(batch: &[Lpi], out: &mut Vec<Result<([I256; 3], i128), NumError>>) {
+        run(batch, out, Lpi::homogeneous);
+    }
+
+    /// `Plane::side_of_lpi` on each (plane, line-plane point) pair.
+    #[inline(never)]
+    pub fn side_of_lpi(batch: &[(Plane, Lpi)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |(p, l)| p.side_of_lpi(l));
+    }
+
+    /// `Lpi::to_grid` on each line-plane point.
+    #[inline(never)]
+    pub fn lpi_to_grid(batch: &[Lpi], out: &mut Vec<Result<Rounded<P3>, NumError>>) {
+        run(batch, out, Lpi::to_grid);
+    }
+}
+
+/// Where two lines cross in the plane: `geom_num::crossing` (G29).
+pub mod crossing {
+    use geom_num::crossing::Ssi;
+    use geom_num::grid::{P2, Rounded};
+    use geom_num::{NumError, Sign};
+
+    use super::run;
+
+    /// `Ssi::new` on each point quadruple.
+    #[inline(never)]
+    pub fn ssi_new(batch: &[[P2; 4]], out: &mut Vec<Result<Ssi, NumError>>) {
+        run(batch, out, |&[a, b, c, d]| Ssi::new(a, b, c, d));
+    }
+
+    /// `Ssi::homogeneous` on each crossing.
+    #[inline(never)]
+    pub fn ssi_homogeneous(batch: &[Ssi], out: &mut Vec<Result<([i128; 2], i128), NumError>>) {
+        run(batch, out, Ssi::homogeneous);
+    }
+
+    /// `Ssi::orient2d` on each (crossing, p, q) triple.
+    #[inline(never)]
+    pub fn ssi_orient2d(batch: &[(Ssi, P2, P2)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |&(s, p, q)| s.orient2d(p, q));
+    }
+
+    /// `Ssi::to_grid` on each crossing.
+    #[inline(never)]
+    pub fn ssi_to_grid(batch: &[Ssi], out: &mut Vec<Result<Rounded<P2>, NumError>>) {
+        run(batch, out, Ssi::to_grid);
     }
 }
 
@@ -814,9 +871,12 @@ pub mod exact_sum {
 /// its domain; the kernel stores whichever it returns.
 pub mod generated {
     use geom_num::Sign;
-    use geom_num::generated::{incircle, insphere, orient2d, orient3d, plane_side};
+    use geom_num::generated::{
+        incircle, insphere, lpi_side, lpi_weight, orient2d, orient3d, plane_side, ssi_side,
+        ssi_weight, tpi_side, tpi_weight,
+    };
     use geom_num::grid::{P2, P3};
-    use geom_num::wide::I256;
+    use geom_num::wide::{I256, I384};
 
     use super::run;
 
@@ -885,6 +945,136 @@ pub mod generated {
     pub fn plane_side_value(batch: &[([i128; 3], i128, P3)], out: &mut Vec<Option<i128>>) {
         run(batch, out, |&([nx, ny, nz], d, p)| {
             plane_side::value(nx, ny, nz, d, p)
+        });
+    }
+    /// A plane's normal and offset.
+    type Coefficients = ([i128; 3], i128);
+
+    /// `generated::tpi_weight::filter` on each normal triple.
+    #[inline(never)]
+    pub fn tpi_weight_filter(batch: &[[[i128; 3]; 3]], out: &mut Vec<Option<Sign>>) {
+        run(batch, out, |&[[ax, ay, az], [bx, by, bz], [cx, cy, cz]]| {
+            tpi_weight::filter(ax, ay, az, bx, by, bz, cx, cy, cz)
+        });
+    }
+
+    /// `generated::tpi_weight::value` on each normal triple.
+    #[inline(never)]
+    pub fn tpi_weight_value(batch: &[[[i128; 3]; 3]], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&[[ax, ay, az], [bx, by, bz], [cx, cy, cz]]| {
+            tpi_weight::value(ax, ay, az, bx, by, bz, cx, cy, cz)
+        });
+    }
+
+    /// `generated::tpi_side::filter` on each plane quadruple.
+    #[inline(never)]
+    pub fn tpi_side_filter(batch: &[[Coefficients; 4]], out: &mut Vec<Option<Sign>>) {
+        run(
+            batch,
+            out,
+            |&[
+                ([ax, ay, az], ad),
+                ([bx, by, bz], bd),
+                ([cx, cy, cz], cd),
+                ([sx, sy, sz], sd),
+            ]| {
+                tpi_side::filter(
+                    ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
+                )
+            },
+        );
+    }
+
+    /// `generated::tpi_side::value` on each plane quadruple.
+    #[inline(never)]
+    pub fn tpi_side_value(batch: &[[Coefficients; 4]], out: &mut Vec<Option<I384>>) {
+        run(
+            batch,
+            out,
+            |&[
+                ([ax, ay, az], ad),
+                ([bx, by, bz], bd),
+                ([cx, cy, cz], cd),
+                ([sx, sy, sz], sd),
+            ]| {
+                tpi_side::value(
+                    ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
+                )
+            },
+        );
+    }
+
+    /// `generated::lpi_weight::filter` on each (normal, p, q).
+    #[inline(never)]
+    pub fn lpi_weight_filter(batch: &[([i128; 3], P3, P3)], out: &mut Vec<Option<Sign>>) {
+        run(batch, out, |&([nx, ny, nz], p, q)| {
+            lpi_weight::filter(nx, ny, nz, p, q)
+        });
+    }
+
+    /// `generated::lpi_weight::value` on each (normal, p, q).
+    #[inline(never)]
+    pub fn lpi_weight_value(batch: &[([i128; 3], P3, P3)], out: &mut Vec<Option<i128>>) {
+        run(batch, out, |&([nx, ny, nz], p, q)| {
+            lpi_weight::value(nx, ny, nz, p, q)
+        });
+    }
+
+    /// `generated::lpi_side::filter` on each (plane, plane, p, q).
+    #[inline(never)]
+    pub fn lpi_side_filter(
+        batch: &[(Coefficients, Coefficients, P3, P3)],
+        out: &mut Vec<Option<Sign>>,
+    ) {
+        run(
+            batch,
+            out,
+            |&(([ax, ay, az], ad), ([bx, by, bz], bd), p, q)| {
+                lpi_side::filter(ax, ay, az, ad, bx, by, bz, bd, p, q)
+            },
+        );
+    }
+
+    /// `generated::lpi_side::value` on each (plane, plane, p, q).
+    #[inline(never)]
+    pub fn lpi_side_value(
+        batch: &[(Coefficients, Coefficients, P3, P3)],
+        out: &mut Vec<Option<I256>>,
+    ) {
+        run(
+            batch,
+            out,
+            |&(([ax, ay, az], ad), ([bx, by, bz], bd), p, q)| {
+                lpi_side::value(ax, ay, az, ad, bx, by, bz, bd, p, q)
+            },
+        );
+    }
+
+    /// `generated::ssi_weight::filter` on each point quadruple.
+    #[inline(never)]
+    pub fn ssi_weight_filter(batch: &[[P2; 4]], out: &mut Vec<Option<Sign>>) {
+        run(batch, out, |&[a, b, c, d]| ssi_weight::filter(a, b, c, d));
+    }
+
+    /// `generated::ssi_weight::value` on each point quadruple.
+    #[inline(never)]
+    pub fn ssi_weight_value(batch: &[[P2; 4]], out: &mut Vec<Option<i128>>) {
+        run(batch, out, |&[a, b, c, d]| ssi_weight::value(a, b, c, d));
+    }
+
+    /// `generated::ssi_side::filter` on each (lines, p, q).
+    #[inline(never)]
+    pub fn ssi_side_filter(batch: &[([P2; 4], P2, P2)], out: &mut Vec<Option<Sign>>) {
+        run(batch, out, |&([a, b, c, d], p, q)| {
+            ssi_side::filter(a, b, c, d, p, q)
+        });
+    }
+
+    /// `generated::ssi_side::value` on each (lines, p, q).
+    #[inline(never)]
+    pub fn ssi_side_value(batch: &[([P2; 4], P2, P2)], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&([a, b, c, d], p, q)| {
+            ssi_side::value(a, b, c, d, p, q)
         });
     }
 }
