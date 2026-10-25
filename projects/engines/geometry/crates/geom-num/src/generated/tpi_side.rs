@@ -238,7 +238,7 @@
 //! the filter cannot decide, is 54 checked integer operations.
 
 use crate::sign::Sign;
-use crate::wide::{I256, I320, I384};
+use crate::wide::{I256, I384};
 
 use super::{decide, larger, largest_magnitude, rounded_f64, within};
 

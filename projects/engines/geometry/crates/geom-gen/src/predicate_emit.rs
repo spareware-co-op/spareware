@@ -987,14 +987,7 @@ pub fn predicate_module_serving(
         line(&mut out, &format!("use crate::grid::{t};"));
     }
     line(&mut out, "use crate::sign::Sign;");
-    match wides.as_slice() {
-        [] => {}
-        [one] => line(&mut out, &format!("use crate::wide::{one};")),
-        many => line(
-            &mut out,
-            &format!("use crate::wide::{{{}}};", many.join(", ")),
-        ),
-    }
+    line(&mut out, WIDE_IMPORTS);
     line(&mut out, "");
     line(&mut out, &format!("use super::{{{}}};", helpers.join(", ")));
     line(&mut out, "");
@@ -1131,7 +1124,51 @@ pub fn predicate_module_serving(
             "`{name}`: a line of code would pass {WIDTH} columns, which rustfmt rewraps: {long}"
         ));
     }
-    Ok(out)
+    Ok(wide_imports(out, &wides))
+}
+
+/// The placeholder line [`predicate_module_serving`] writes where the module's wide-integer import
+/// goes, replaced by [`wide_imports`] once the module's code is known.
+const WIDE_IMPORTS: &str = "// geom-gen: wide imports";
+
+/// Replaces the [`WIDE_IMPORTS`] line with an import of exactly the wide-integer types the code
+/// names, so a module imports no type it does not use. A step's certified width can exceed the
+/// type its code names, when the step's value is formed by a method of a narrower type, so the
+/// candidates (every width a step needs) are filtered by whether the code outside doc comments
+/// names them as a whole word.
+fn wide_imports(module: String, candidates: &[&str]) -> String {
+    let code: Vec<&str> = module
+        .lines()
+        .filter(|l| !l.trim_start().starts_with("//") && *l != WIDE_IMPORTS)
+        .collect();
+    let named = |ty: &str| {
+        code.iter().any(|l| {
+            l.match_indices(ty).any(|(at, _)| {
+                let before = l[..at].chars().next_back();
+                let after = l[at + ty.len()..].chars().next();
+                !before.is_some_and(|c| c.is_alphanumeric() || c == '_')
+                    && !after.is_some_and(|c| c.is_alphanumeric() || c == '_')
+            })
+        })
+    };
+    let used: Vec<&str> = candidates.iter().copied().filter(|ty| named(ty)).collect();
+    let import = match used.as_slice() {
+        [] => None,
+        [one] => Some(format!("use crate::wide::{one};")),
+        many => Some(format!("use crate::wide::{{{}}};", many.join(", "))),
+    };
+    let mut out = String::with_capacity(module.len());
+    for l in module.split_inclusive('\n') {
+        if l.trim_end_matches('\n') == WIDE_IMPORTS {
+            if let Some(import) = &import {
+                out.push_str(import);
+                out.push('\n');
+            }
+        } else {
+            out.push_str(l);
+        }
+    }
+    out
 }
 
 /// One row of the parent module's table, for one predicate: what its module serves, and

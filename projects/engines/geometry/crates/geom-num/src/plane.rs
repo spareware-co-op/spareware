@@ -90,6 +90,7 @@
 use core::cmp::Ordering;
 
 use crate::error::NumError;
+use crate::generated;
 use crate::grid::{COORD_BITS, COORD_MAX, Coord, P3, Rounded};
 use crate::sign::Sign;
 use crate::wide::{I256, I320, Wide};
@@ -349,6 +350,13 @@ impl Plane {
     /// could only if the checked wide arithmetic itself were wrong (module docs, "No answer is
     /// silently wrong"), and then this reports it rather than answering.
     pub fn side_of_tpi(&self, t: &Tpi) -> Result<Sign, NumError> {
+        tpi_routed(t, self).map_or_else(|| self.side_of_tpi_hand(t), Ok)
+    }
+
+    /// [`Plane::side_of_tpi`] after the generated paths: the hand-written budgeted path in
+    /// [`I384`], then the total path in [`I512`].
+    #[inline(never)]
+    fn side_of_tpi_hand(&self, t: &Tpi) -> Result<Sign, NumError> {
         let (x, w) = t.homogeneous()?;
         classify::<BUDGET_LIMBS>(&self.n, self.d, &x, &w)
             .or_else(|| classify::<TOTAL_LIMBS>(&self.n, self.d, &x, &w))
@@ -637,6 +645,29 @@ fn dot(a: &[i128; 3], c: &[I256; 3]) -> Option<I256> {
 /// The sign of n · X + d · w times the sign of w, in `Wide<L>`: [`I384`] on the budgeted path,
 /// [`I512`] on the total path. `None` if a step does not fit. Budgets for both on
 /// [`Plane::side_of_tpi`].
+/// The side of plane `s` that the point where `t`'s planes meet is on, through the generated
+/// predicates (chapter 6.2): the sign of the 4 × 4 determinant of the four planes' coefficients
+/// (`tpi_side`, which equals n · X + d · w), times the sign of the point's weight w
+/// (`tpi_weight`), each from its `f64` filter when the filter can decide and from its generated
+/// exact path otherwise. `None` only when a generated exact path does not fit its certified types,
+/// which no planes made by [`Plane::through`] cause; the caller then takes the hand-written paths.
+fn tpi_routed(t: &Tpi, s: &Plane) -> Option<Sign> {
+    let [p, q, r] = t.planes;
+    let ([ax, ay, az], ad) = (p.n, p.d);
+    let ([bx, by, bz], bd) = (q.n, q.d);
+    let ([cx, cy, cz], cd) = (r.n, r.d);
+    let ([sx, sy, sz], sd) = (s.n, s.d);
+    let weight = generated::tpi_weight::filter(ax, ay, az, bx, by, bz, cx, cy, cz)
+        .or_else(|| generated::tpi_weight::exact(ax, ay, az, bx, by, bz, cx, cy, cz))?;
+    let side = generated::tpi_side::filter(
+        ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
+    )
+    .or_else(|| {
+        generated::tpi_side::exact(ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd)
+    })?;
+    Some(side.mul(weight))
+}
+
 fn classify<const L: usize>(n: &[i128; 3], d: i128, x: &[I320; 3], w: &I256) -> Option<Sign> {
     let mut acc = Wide::<L>::from_i128(d).checked_mul(&w.resize::<L>()?)?;
     for (&ni, xi) in n.iter().zip(x.iter()) {
