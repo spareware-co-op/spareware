@@ -1081,5 +1081,15 @@ mod tests {
         assert_eq!(whole(libm::scalbn(1.0, 100)), Some(1 << 100));
         assert_eq!(whole(-3.0), Some(-3));
         assert_eq!(whole(0.5), None);
+        // Inside whole's range of exponents, a value with bits below 1 is not an integer.
+        assert_eq!(whole(1.5), None);
+        assert_eq!(whole(-2.5), None);
+        assert_eq!(whole(libm::scalbn(1.0, 51) + 0.5), None);
+        // scale_pow2 refuses a scale outside ±2400, the range its loops are proved for; no caller
+        // passes one.
+        assert!(scale_pow2(1.0, 2401).is_err() && scale_pow2(1.0, -2401).is_err());
+        assert!(scale_pow2(1.0, i32::MAX).is_err() && scale_pow2(1.0, i32::MIN).is_err());
+        assert_eq!(scale_pow2(1.0, 2400).unwrap(), f64::INFINITY);
+        assert_eq!(scale_pow2(1.0, -2400).unwrap(), 0.0);
     }
 }
