@@ -1064,18 +1064,21 @@ mod tests {
         assert_eq!(scale_pow2(1.5, -1075).unwrap(), f64::from_bits(1));
         assert_eq!(scale_pow2(1.0, -1075).unwrap(), 0.0);
         assert_eq!(scale_pow2(1.5, -1074).unwrap(), f64::from_bits(2));
-        assert_eq!(scale_pow2(1.5 - 2.0f64.powi(-52), -1076).unwrap(), 0.0);
         assert_eq!(
-            scale_pow2(1.0 + 2.0f64.powi(-52), -1075).unwrap(),
+            scale_pow2(1.5 - libm::scalbn(1.0, -52), -1076).unwrap(),
+            0.0
+        );
+        assert_eq!(
+            scale_pow2(1.0 + libm::scalbn(1.0, -52), -1075).unwrap(),
             f64::from_bits(1)
         );
         assert_eq!(scale_pow2(1.5, -2000).unwrap(), 0.0);
         assert_eq!(scale_pow2(1.0, 1024).unwrap(), f64::INFINITY);
         assert_eq!(
             scale_pow2(f64::from_bits(1), 2097).unwrap(),
-            2.0f64.powi(1023)
+            libm::scalbn(1.0, 1023)
         );
-        assert_eq!(whole(2.0f64.powi(100)), Some(1 << 100));
+        assert_eq!(whole(libm::scalbn(1.0, 100)), Some(1 << 100));
         assert_eq!(whole(-3.0), Some(-3));
         assert_eq!(whole(0.5), None);
     }
