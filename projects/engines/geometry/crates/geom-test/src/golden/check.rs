@@ -20,7 +20,9 @@
 //! - **Twice, on two heaps.** The case runs exactly [`REPEATS`] times, each run under a different
 //!   seed's perturbation held for the whole run; a case whose output depends on an address, on
 //!   leftover state from an earlier run, or on anything else that differs between two runs in one
-//!   process fails with [`GoldenError::Repeat`], naming both digests.
+//!   process fails with [`GoldenError::Repeat`], naming both digests. An address-dependent case is
+//!   caught on every run with glibc's, Windows' and WebAssembly's allocators, and on most runs on
+//!   macOS ([`super::perturb`] says why).
 //! - **The store decides.** The digest must equal the store's for the id in the current edition;
 //!   otherwise [`GoldenError::Mismatch`] names the edition, the id, both digests and the two things
 //!   a mismatch can mean (a bug on this target, or a deliberate change that must be recorded in the
@@ -300,18 +302,27 @@ mod tests {
         ));
     }
 
-    /// Code that orders values by their addresses is caught by the perturbed repeat: over a few
-    /// stores, the two runs disagree.
+    /// Code that orders values by their addresses is caught by the perturbed repeat, and never
+    /// accepted. On macOS one check now and then sees the same order twice (issue #230,
+    /// [`super::super::perturb`]), so the check is made up to five times and must report a repeat
+    /// at least once; with glibc's, Windows' and WebAssembly's allocators the first check does.
     #[test]
     fn address_ordered_code_fails_as_a_repeat() {
         let store = store_with("geom-x/a", [0; 32]);
-        let c = check_in(&store, "geom-x/a", || {
-            (super::super::perturb::address_order_digest(64), ())
-        });
+        let verdicts: Vec<Result<(), GoldenError>> = (0..5)
+            .map(|_| {
+                check_in(&store, "geom-x/a", || {
+                    (super::super::perturb::address_order_digest(64), ())
+                })
+                .verdict()
+            })
+            .collect();
+        assert!(verdicts.iter().all(Result::is_err), "{verdicts:?}");
         assert!(
-            matches!(c.verdict(), Err(GoldenError::Repeat { .. })),
-            "{:?}",
-            c.verdict()
+            verdicts
+                .iter()
+                .any(|v| matches!(v, Err(GoldenError::Repeat { .. }))),
+            "{verdicts:?}"
         );
     }
 
