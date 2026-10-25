@@ -28,6 +28,11 @@ bench = false
 
 [dependencies]
 geom-num = { path = "../geom-num" }
+# SHA-256 for every benchmark's golden digests: RustCrypto's sha2, the one SHA-256 implementation of
+# every golden in the kernel (piece G19; geom-test uses it too). MIT OR Apache-2.0. 0.11.0, the
+# version geom-test pins (0.11.1 needs Rust 1.88, above geom-test's declared 1.86). Without its
+# default `alloc` and `oid` features.
+sha2 = { version = "0.11.0", default-features = false }
 
 # Reading the gate's summaries, on Unix and Windows, where the judge runs: Gungraun's summary model
 # needs `OsString` to deserialize, which serde provides there only, so the WebAssembly guest

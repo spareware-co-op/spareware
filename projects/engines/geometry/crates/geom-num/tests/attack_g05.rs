@@ -2397,6 +2397,8 @@ fn outputs(a: f64, b: f64) -> [u64; 5] {
     ]
 }
 
+use geom_test::golden;
+
 /// FNV-1a over a stream of 64-bit words.
 fn fnv(words: impl Iterator<Item = u64>) -> u64 {
     let mut h = 0xcbf2_9ce4_8422_2325u64;
@@ -2430,9 +2432,18 @@ fn identical_bits_on_every_thread_count() {
     }
 }
 
-/// The hash of the five functions over `determinism_inputs(100_000)`, each result as a `word`
-/// (a value's bits, or a marker for its error), recorded on x86_64-pc-windows-gnu. Correct
-/// rounding fixes every bit, so every target must reproduce it. The same value was reproduced
+/// The golden in the golden store (`geom-test/golden/store.json`): the SHA-256 of the words
+/// [`FNV_GOLDEN`] hashes, each as eight little-endian bytes, in order. Piece G19 moved this golden
+/// to SHA-256, the hash chapters 21 and 28.13 give every golden, over the same bytes; the FNV-1a
+/// value is kept and still checked, to show the bytes are the ones it was fixed on. `kernel.yml`
+/// runs it on every target and build mode (`golden run`), each time twice in the process on two
+/// differently perturbed heaps (`geom_test::golden::check`).
+const GOLDEN: &str = "geom-num/proven-maths";
+
+/// The 64-bit FNV-1a hash of the five functions over `determinism_inputs(100_000)`, each result as
+/// a `word` (a value's bits, or a marker for its error), recorded on x86_64-pc-windows-gnu: the
+/// golden until piece G19 moved it to SHA-256 ([`GOLDEN`]). Correct rounding fixes every bit, so
+/// every target must reproduce it. The same value was reproduced
 /// with `-C target-cpu=native` (hardware FMA in `libm::fma`), and this test passes on
 /// wasm32-wasip1 under wasmtime (`proptest` is a dev-dependency without its fork and timeout
 /// features, so the test targets build there).
@@ -2441,14 +2452,29 @@ fn identical_bits_on_every_thread_count() {
 /// contract (`geom_num::math`: a `Real` or an error) the arguments that are not finite, the
 /// overflows of `exp` and the pole of `ln` are errors where they were infinities or NaN, and a zero
 /// `sinpi` is +0 where it was −0 for a negative whole argument; every finite value is the same.
-const GOLDEN: u64 = 0x0f3a_941b_17ab_4c66;
+const FNV_GOLDEN: u64 = 0x0f3a_941b_17ab_4c66;
 
 #[test]
 fn golden_hash_is_the_same_on_every_target() {
-    let inputs = determinism_inputs(100_000);
-    let h = fnv(inputs.iter().flat_map(|&(a, b)| outputs(a, b)));
-    eprintln!("golden hash on this target: {h:#018x}");
-    assert_eq!(h, GOLDEN, "golden hash differs on this target: {h:#018x}");
+    let checked = golden::check(GOLDEN, || {
+        let inputs = determinism_inputs(100_000);
+        let words: Vec<u64> = inputs.iter().flat_map(|&(a, b)| outputs(a, b)).collect();
+        let mut sha = golden::Sha256::new();
+        for w in &words {
+            sha.write(&w.to_le_bytes());
+        }
+        (sha.finish(), words)
+    });
+    let h = fnv(checked.value.iter().copied());
+    eprintln!(
+        "golden hash on this target: SHA-256 {}, FNV-1a {h:#018x}",
+        checked.digest
+    );
+    assert_eq!(
+        h, FNV_GOLDEN,
+        "FNV-1a hash differs on this target: {h:#018x}"
+    );
+    checked.verdict().unwrap_or_else(|e| panic!("{e}"));
 }
 
 // ---------------------------------------------------------------------------------------------
