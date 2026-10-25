@@ -63,7 +63,7 @@ fn <target>_fuzz() {
 fn <target>_proof() {
     bolero::check!()
         .with_generator(proof_draws(PROOF_BOUND))
-        .for_each(|draw| prove(PROOF_BOUND, draw));
+        .for_each(|draw| holds(prove(PROOF_BOUND, draw)));
 }
 
 #[test]
@@ -95,10 +95,19 @@ Rules:
   Under Kani every generated value is symbolic, so the proof covers the whole domain; under
   `cargo test` the same test is a property test over that domain, on every operating system.
   Aiming at hard cases is pointless there: Kani covers every case.
+- The proof test's body panics on a broken law, through `holds`, rather than returning the
+  `Finding`. Under Kani, bolero's engine turns a returned error into its `PanicError`, whose
+  constructor may capture a backtrace (`bolero-engine`'s `panic.rs`), and Kani would have to
+  explore that capture; a panic is a failed property and nothing more, and Kani's `panic!`
+  formats nothing. Under `cargo test` bolero catches the panic and prints the finding with the
+  failing draw. The fuzz test still returns the `Finding`, which the fuzzers report.
+- A finding is made with `Finding::new(law, || detail)`, so its detail is written only when it is
+  reported, and never under Kani, which traces every value itself; formatting symbolic values
+  would only enlarge the problem Kani solves.
 - The proof test sets Kani's unwind bound above the longest loop a passing case runs (10 for
-  orient2d: six coordinates). Without one, Kani unwinds the digit loops that format a `Finding`
-  on symbolic values forever; with one, those loops are cut, and Kani's unwinding assertions,
-  on by default, fail the proof if a cut loop can be reached, so the bound hides nothing.
+  orient2d: six coordinates), so a loop Kani cannot bound is cut rather than unwound forever.
+  Kani's unwinding assertions, on by default, fail the proof if a cut loop can be reached, so
+  the bound hides nothing.
 - Corpus and crash files live in `tests/__fuzz__/<target>/corpus` and `tests/__fuzz__/<target>/crashes`
   (bolero names the folder after the test, without `_fuzz`). `cargo test` replays both on every
   run, so a crash found by any engine and saved there stays a test forever (28.16). Corpora only
@@ -149,7 +158,7 @@ proof.
 (`cargo::rustc-check-cfg`), not in the manifest's `[lints]` table, which repeats `geom-num`'s
 exactly.
 
-One trap, found by the first proof. Kani 0.68.0 cannot compile a read of an enum's niche when the
+Two traps, found by the first proof. First, Kani 0.68.0 cannot compile a read of an enum's niche when the
 niche starts above 2^64: `codegen_get_discriminant` in
 `kani-compiler/src/codegen_cprover_gotoc/codegen/rvalue.rs` unwraps `u64::try_from(niche_start)`,
 unchanged on Kani's main branch on 2026-10-25. rustc makes such a niche when it widens an enum's
@@ -158,7 +167,11 @@ or `Result` around that enum then marks its other variant with the tag value 2^1
 `geom_num::NumError` was such an enum, so the proof failed to compile in `P2::new`; its tag is now
 one byte (`#[repr(u8)]`, explained on the type). Any other kernel enum that carries an `i128` or
 `u128` and is wrapped in an `Option` or `Result` needs the same until Kani is fixed; the Kani job
-fails to compile, never passes, when one is missed.
+fails to compile, never passes, when one is missed. Second, a proof whose body returns its
+finding, or formats one, never finishes: the first orient2d proofs, the smallest domain among
+them, were still in CBMC's symbolic execution when the job's hour ran out, in bolero's error
+path (its backtrace capture) and in the formatting of the finding's detail. Hence `holds` and
+`Finding::new`, above.
 
 **ClusterFuzzLite**, with Docker, through OSS-Fuzz's helper (as ClusterFuzzLite's build
 integration guide describes):
