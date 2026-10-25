@@ -133,16 +133,6 @@ jobs:
         harness:
           - orient2d_fuzz
           - orient2d_proof
-          # Trial harnesses, measuring how far the proof's bound and the fuzz target's byte length
-          # can go within the budget; removed once both are chosen.
-          - orient2d_trial_b0
-          - orient2d_trial_b1
-          - orient2d_trial_b7
-          - orient2d_trial_b15
-          - orient2d_bytes_trial_l4
-          - orient2d_bytes_trial_l8
-          - orient2d_bytes_trial_l16
-          - orient2d_bytes_trial_l24
     defaults:
       run:
         shell: bash

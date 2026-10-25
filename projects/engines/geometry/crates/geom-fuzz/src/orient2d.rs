@@ -84,8 +84,10 @@ use crate::Finding;
 pub const MAX_INPUT_BYTES: usize = 73;
 
 /// The Kani proof's bound: each coordinate of a proven case lies within this many grid steps of 0
-/// or of an edge of the frame (see [`proof_case`]).
-pub const PROOF_BOUND: u64 = 3;
+/// or of an edge of the frame (see [`proof_case`]). Chosen from Kani trials on the hosted runner
+/// (PR #209): bound 0 proved in 3½ minutes and bound 1 in 19, while bounds 3, 7 and 15 did not
+/// finish within the job's hour, the hard part being the equivalence of the wide multiplications.
+pub const PROOF_BOUND: u64 = 1;
 
 /// One case: the three points orient2d is asked about, in order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

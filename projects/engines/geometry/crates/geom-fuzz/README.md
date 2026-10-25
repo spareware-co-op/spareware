@@ -104,6 +104,11 @@ Rules:
 - A finding is made with `Finding::new(law, || detail)`, so its detail is written only when it is
   reported, and never under Kani, which traces every value itself; formatting symbolic values
   would only enlarge the problem Kani solves.
+- Each Kani bound is measured, not guessed: trial harnesses ran on the hosted runner until each
+  bound was chosen, then were removed. For orient2d (PR #209) the proof's bound is 1 (bound 0
+  took 3½ minutes, 1 took 19, and 3, 7 and 15 did not finish within the job's hour) and the fuzz
+  target is proven on every byte string of at most 4 bytes (8 minutes; 8, 16 and 24 bytes did not
+  finish). A new target repeats the trials before its bounds are set.
 - The proof test sets Kani's unwind bound above the longest loop a passing case runs (10 for
   orient2d: six coordinates), so a loop Kani cannot bound is cut rather than unwound forever.
   Kani's unwinding assertions, on by default, fail the proof if a cut loop can be reached, so
