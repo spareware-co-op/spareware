@@ -14,6 +14,15 @@
 //! - `extreme`: coordinates within 2^10 steps of ±(2^40 − 1); the first input is the
 //!   configuration that reaches the predicate's largest determinant.
 //!
+//! So each predicate's benchmarks give its filtered and its exact cost (piece G28): on `typical`
+//! inputs its generated filter decides every call, and on `nearly_degenerate` ones none, so every
+//! call there also runs the exact path (`tests/inputs.rs` checks both). orient2d on 64-bit targets
+//! other than WebAssembly skips its filter (`geom_num::predicate`'s routing), so there every class
+//! measures its exact path. `generated/<op>_filter` and `generated/<op>_value` measure the two
+//! parts on their own ([`super::generated`]). The instruction-count gate measures every one on
+//! Linux x86-64 and on Linux aarch64, and the fuel gate on wasm32: three targets (the crate
+//! documentation).
+//!
 //! Method: Shewchuk's three input classes (random, nearly degenerate, exactly degenerate; 1997,
 //! section 6, <https://doi.org/10.1007/PL00009321>) and the extremes of the frame; unimodular bases
 //! from the extended Euclidean algorithm (Knuth, volume 2, section 4.5.2); Pythagorean triples and
