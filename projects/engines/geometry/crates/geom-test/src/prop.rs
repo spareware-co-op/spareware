@@ -363,23 +363,30 @@ mod tests {
         );
     }
 
-    /// The first cases of seeds 0..64, hashed: FNV-1a 64 over every coordinate's little-endian
-    /// bytes. CI runs this natively on 64-bit targets and under wasm32-wasip1, so a seed draws the
+    /// The first cases of seeds 0..64, over every coordinate's little-endian bytes: SHA-256, in the
+    /// golden store as `geom-test/prop-cases` (piece G19), and the 64-bit FNV-1a digest G11 first
+    /// pinned, `FNV_GOLDEN`, kept to show the bytes are the ones it was fixed on. CI runs this on
+    /// every target and build mode and under wasm32-wasip1 (the golden matrix), so a seed draws the
     /// same proptest cases on every target. A change here changes every property test's cases: it
-    /// must be deliberate and said so in its pull request.
+    /// must be deliberate and recorded in the store.
     #[test]
     fn the_same_seed_gives_the_same_cases_on_every_target() {
-        const GOLDEN: u64 = 0xc721_5d77_28da_881f;
-        let mut hash: u64 = 0xcbf2_9ce4_8422_2325; // FNV-1a 64 offset basis
-        for i in 0..64 {
-            let p = first_value(&p3(), Seed(i)).unwrap();
-            for c in [p.x, p.y, p.z] {
-                for b in c.get().to_le_bytes() {
-                    hash = (hash ^ u64::from(b)).wrapping_mul(0x0000_0100_0000_01b3);
+        const FNV_GOLDEN: u64 = 0xc721_5d77_28da_881f;
+        let checked = crate::golden::check("geom-test/prop-cases", || {
+            let mut bytes = Vec::new();
+            for i in 0..64 {
+                let p = first_value(&p3(), Seed(i)).unwrap();
+                for c in [p.x, p.y, p.z] {
+                    bytes.extend_from_slice(&c.get().to_le_bytes());
                 }
             }
-        }
-        assert_eq!(hash, GOLDEN, "{hash:#018x}");
+            (crate::golden::sha256(&bytes), bytes)
+        });
+        let fnv = checked.value.iter().fold(0xcbf2_9ce4_8422_2325u64, |h, b| {
+            (h ^ u64::from(*b)).wrapping_mul(0x0000_0100_0000_01b3)
+        });
+        assert_eq!(fnv, FNV_GOLDEN, "{fnv:#018x}");
+        checked.verdict().unwrap_or_else(|e| panic!("{e}"));
     }
 
     #[test]

@@ -129,6 +129,7 @@ Run everything from the repository root. The first build of the whole kernel tak
 | `cargo test --locked --package engine-geometry --test scaffold -- --ignored gate_clippy --nocapture --test-threads 1` | clippy over every crate that ships, with every feature selection, and a probe that breaks each rule once | `kernel-gate.yml` |
 | `cargo test --locked --package engine-geometry --test scaffold -- --ignored gate_build --nocapture --test-threads 1` | A kernel crate that does not build for `wasm32v1-none` (no `std`) or `wasm32-unknown-unknown` | `kernel-gate.yml` |
 | `cargo test --locked -p geom-bench --release` | The benchmarks' inputs, golden digests and wiring; a public `geom-num` function neither measured nor excused | `kernel-bench.yml` (the count gates run there too, on Linux) |
+| `cargo run --locked -p geom-test --bin golden -- check` | A golden outside the store, a pinned file changed, or a golden edited without its record | `kernel-golden.yml` (and every golden on every target in `kernel.yml`) |
 
 If you touch `geom-bench`, also run `cargo clippy --locked --target x86_64-unknown-linux-gnu -p geom-bench --all-targets -- -D warnings` (`rustup target add x86_64-unknown-linux-gnu`; its instruction-count benchmarks compile only for Linux). On another platform the count gates themselves cannot run; `geom-bench`'s crate header explains how to run them on Linux.
 

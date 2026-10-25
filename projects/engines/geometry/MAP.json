@@ -817,12 +817,12 @@
           "target": "lib"
         },
         {
-          "cost": "one compression (64 rounds of 32-bit operations) per 64-byte block, so linear in the message; the state is the eight hash words, one block and two counters, and nothing is allocated.",
+          "cost": "one compression (64 rounds of 32-bit operations) per 64-byte block, so linear in the message; the state is a fixed few hundred bytes, and nothing is allocated.",
           "does": null,
           "family": [],
           "file": "projects/engines/geometry/crates/geom-bench/src/sha256.rs",
           "guarantees": [
-            "the digest of every message below 2^61 bytes (2^64 bits, the standard's limit) is the one FIPS 180-4 defines, whatever pieces the message is fed in (the tests check the standard's examples, a million bytes in uneven pieces, and every padding length); and no method panics."
+            "the digest of every message below 2^61 bytes (2^64 bits, the standard's limit) is the one FIPS 180-4 defines, whatever pieces the message is fed in (the tests check the standard's examples, a million bytes in uneven pieces, and every padding length), on every target: `sha2` uses a processor's SHA instructions where it finds them and portable code elsewhere, WebAssembly included, and each computes the one function the standard defines; and no method panics."
           ],
           "job": "SHA-256, the hash of every benchmark's golden digests.",
           "method": {
@@ -830,7 +830,7 @@
               "https://csrc.nist.gov/pubs/fips/180-4/upd1/final",
               "https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values"
             ],
-            "text": "the Secure Hash Standard, NIST FIPS 180-4, sections 4.1.2 (functions), 4.2.2 (constants), 5.1.1 (padding), 5.3.3 (initial value) and 6.2.2 (the compression function): <https://csrc.nist.gov/pubs/fips/180-4/upd1/final>. The message schedule is kept as a sliding window of sixteen words, which computes the same W_t as the standard's 64-word array. The tests check the standard's own examples (<https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values>)."
+            "text": "the Secure Hash Standard, NIST FIPS 180-4, <https://csrc.nist.gov/pubs/fips/180-4/upd1/final>, computed by the `sha2` crate (MIT OR Apache-2.0, a dependency, not a port). The tests check the standard's own examples (<https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values>)."
           },
           "path": "geom_bench::sha256",
           "provenance": [],
@@ -4157,6 +4157,7 @@
         4,
         6,
         7,
+        21,
         26,
         27,
         28,
@@ -4177,6 +4178,23 @@
       "kind": "development",
       "layer": "Development",
       "modules": [
+        {
+          "cost": "`run` costs one `cargo test` per crate and test target; the other commands read the store and, for `check`, the kernel's sources once.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/bin/golden.rs",
+          "guarantees": [
+            "`list`, `check`, `run` and `diff` never write a file. Exit codes: 0 when everything checked holds; 1 when a check fails (a problem, a failed or unproven golden, a refused or unapproved edit); 2 for a usage error or a file or command that cannot be read or run."
+          ],
+          "job": "`golden`: the golden store's tool: list it, check it against the repository, run every golden in one CI leg's configuration, and hold a pull request's edits to the owner-approval rule.",
+          "method": {
+            "none": "it parses its arguments and calls [`geom_test::golden`], whose module headers carry the methods."
+          },
+          "path": "golden",
+          "provenance": [],
+          "spdx": null,
+          "target": "bin"
+        },
         {
           "cost": "one build of the map ([`geom_test::map::build`]) and one read or write of `MAP.json`.",
           "does": null,
@@ -4247,6 +4265,246 @@
             "text": "breadth-first search (Cormen, Leiserson, Rivest and Stein, *Introduction to Algorithms*, 3rd edition, section 22.2) over the union of the declared and resolved graphs from each kernel crate, on the JSON format documented at <https://doc.rust-lang.org/cargo/commands/cargo-metadata.html>. Breadth-first search finds a shortest chain to each development crate."
           },
           "path": "geom_test::deps",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "as each part's header states.",
+          "does": "chapter 28.1 puts \"the golden store\" among `geom-test`'s CI tools, and chapter 28.13 says what it holds and what runs through it. The parts:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/golden.rs",
+          "guarantees": [
+            "**One store, one hash.** Every golden digest of the kernel's crates is in the store; [`repo`] fails on a golden digest constant anywhere else, and every one is SHA-256 from [`sha256`].",
+            "**Every golden on every leg.** `kernel.yml` runs the store's whole current edition through [`matrix`] on each of its targets and build modes, so a golden added to the store is checked everywhere the day it lands.",
+            "**Perturbations change nothing, or the golden fails.** Every golden runs twice on two differently perturbed heaps; order-free cases also run in shuffled orders.",
+            "**Edits are visible and approved.** A changed digest without its history record, a removed golden, or any change to a frozen edition is refused; any other edit to an existing golden needs a kernel owner's approval on the pull request's head commit."
+          ],
+          "job": "The golden store and the determinism matrix: every golden digest of the kernel in one store keyed by edition, the one SHA-256 every golden is hashed with, the perturbations every golden must survive, and the runner that checks every golden on every target and build mode.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md",
+              "projects/engines/geometry/architecture/21-determinism.md",
+              "projects/kit/notes/G01-evidence/05-exact-arithmetic-determinism.md"
+            ],
+            "text": "golden hashes of canonical outputs per kernel edition and operation version, with perturbations that must change nothing, chapter 28.13 of the kernel architecture (`projects/engines/geometry/architecture/28-testing.md`); the determinism matrix of chapter 21 (`projects/engines/geometry/architecture/21-determinism.md`), which follows Rapier's and `Box2D`'s determinism tests (`projects/kit/notes/G01-evidence/05-exact-arithmetic-determinism.md`, section 7)."
+          },
+          "path": "geom_test::golden",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the case's cost twice, plus two perturbations ([`super::perturb`]) and one parse of the store.",
+          "does": "[`check`] takes a golden's id and its case, a closure that computes the case's canonical output and returns its SHA-256 (and anything else the test wants to look at, such as per-section digests or tallies). It runs the case [`REPEATS`] times, each under [`Heap::shift_and_fragment`] with one of [`PERTURBATION_SEEDS`], then compares the digests with each other and with [`Store::expected`]. It prints one line, `golden <id> (edition <label>): <digest> ...`, which `golden run` reads to know the check really ran, and returns a [`Checked`] holding the first run's value and the verdict, so a test can print its diagnostics before it fails.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/golden/check.rs",
+          "guarantees": [
+            "**Twice, on two heaps.** The case runs exactly [`REPEATS`] times, each run under a different seed's perturbation held for the whole run; a case whose output depends on an address, on leftover state from an earlier run, or on anything else that differs between two runs in one process fails with [`GoldenError::Repeat`], naming both digests.",
+            "**The store decides.** The digest must equal the store's for the id in the current edition; otherwise [`GoldenError::Mismatch`] names the edition, the id, both digests and the two things a mismatch can mean (a bug on this target, or a deliberate change that must be recorded in the store and approved by a kernel owner). A golden the store does not hold is [`GoldenError::Store`]. Nothing is ever written to the store from here.",
+            "**The repeat is checked before the store**, so a case that is not even repeatable is reported as such, not as a changed golden.",
+            "**No panic**: the verdict is returned, and the test decides how to fail."
+          ],
+          "job": "Checking a golden: run its case twice in this process, each time on a differently perturbed heap, require one digest, and require the digest the store holds for it in the current edition.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md",
+              "projects/kit/notes/G01-evidence/05-exact-arithmetic-determinism.md"
+            ],
+            "text": "golden hashes of canonical outputs with in-process repeats and heap perturbation, chapter 28.13 of the kernel architecture (`projects/engines/geometry/architecture/28-testing.md`), the method chapter 21 takes from Rapier's and `Box2D`'s determinism tests (`projects/kit/notes/G01-evidence/05-exact-arithmetic-determinism.md`, section 7)."
+          },
+          "path": "geom_test::golden::check",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the two stores' sizes, with a logarithmic factor for the keyed maps; linear in the number of reviews.",
+          "does": "[`diff`] compares the store at a pull request's base with the store at its head and returns a [`Diff`]: the goldens added, the goldens changed (and how), and every [`Diff::refusals`] entry, a change no approval can make. [`Diff::needs_approval`] says whether a kernel owner's approval is required. [`approved`] decides, from a pull request's reviews, whether that approval has been given. The binary `golden` runs both in `.github/workflows/kernel-golden.yml` on every pull request and every review.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/golden/diff.rs",
+          "guarantees": [
+            "**Every difference is seen.** Goldens are matched by edition, id and operation versions; every field is compared; a golden present on one side only is an addition or a removal.",
+            "**A refusal is final.** [`Diff::is_acceptable`] is false whenever a refusal exists, whatever the reviews say.",
+            "**Approval is per head commit.** A review of an earlier commit does not approve later changes, so an approved store cannot be changed again without a fresh approval.",
+            "**Deterministic.** Reports list editions in store order and goldens in key order."
+          ],
+          "job": "The owner-approval rule for edits to the golden store: what a change to the store does, what it may never do, and when a kernel owner must approve it.",
+          "method": {
+            "links": [
+              "https://github.com/obi1kenobi/cargo-semver-checks",
+              "https://docs.github.com/en/rest/pulls/reviews",
+              "https://docs.github.com/en/graphql/reference/enums#commentauthorassociation"
+            ],
+            "text": "a three-way rule check over the two parsed stores (base, head) in the manner of `cargo-semver-checks`' comparison of a crate's public API across two versions (<https://github.com/obi1kenobi/cargo-semver-checks>): every difference is classified against a written rule; the review rule follows GitHub's documentation of pull request reviews (<https://docs.github.com/en/rest/pulls/reviews>) and author associations (<https://docs.github.com/en/graphql/reference/enums#commentauthorassociation>)."
+          },
+          "path": "geom_test::golden::diff",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the store and in the output read.",
+          "does": "[`plan`] groups the current edition's test-checked goldens by crate and test target; [`Group::cargo_args`] gives the `cargo test` arguments that run exactly those test functions (libtest's `--exact` filters) with the leg's own arguments (`--release`, `--target wasm32-wasip1`, ...) and its environment (`RUSTFLAGS` with `-C target-cpu=native` or overflow checks off, `CARGO_TARGET_DIR`), which cargo inherits; [`verify`] reads a run's output and requires that libtest ran exactly the planned functions, all passed, and that every planned golden printed its `golden <id> ... agrees with the store` line ([`super::check`]). The binary `golden run` drives it, and `.github/workflows/kernel.yml` runs it on every target and build mode: debug, release with overflow checks on and as shipped, natively with `-C target-cpu=native`, and on wasm32-wasip1 under wasmtime and Node in debug and release.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/golden/matrix.rs",
+          "guarantees": [
+            "**Exactly the store's goldens.** One group per crate and test target, in store order, each naming its functions exactly; a golden checked by a file has no test and is checked by `golden check` instead.",
+            "**Nothing passes unrun.** [`verify`] fails unless the run has exactly one libtest summary, its verdict is `ok.`, it says exactly the group's number of tests passed, none failed and none was ignored, and every planned id printed its agreeing line: `golden <id> (edition <label>): <64 hexadecimal digits> agrees with the store`, read wherever it starts in an output line. libtest runs tests on one thread on wasm32-wasip1 (no threads) and whenever `RUST_TEST_THREADS=1`, and then prints `test <name> ... ` before the test runs, so the test's own first line follows it on the same output line; with several threads it starts its own."
+          ],
+          "job": "The determinism matrix's runner: every golden of the current edition, run by cargo in whatever configuration a CI leg sets, with proof that each one really ran and agreed.",
+          "method": {
+            "links": [
+              "https://doc.rust-lang.org/rustc/tests/index.html",
+              "projects/engines/geometry/architecture/21-determinism.md"
+            ],
+            "text": "libtest's documented output (`test result: ok. N passed; M failed; I ignored; ...`) and command-line filters (<https://doc.rust-lang.org/rustc/tests/index.html>), the golden matrix of chapters 21 and 28.13 (`projects/engines/geometry/architecture/21-determinism.md`)."
+          },
+          "path": "geom_test::golden::matrix",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "about a thousand allocations (8 to 32 for each of the 52 classes, and up to 16 shift blocks) and half as many frees for one perturbation, at most [`MAX_BYTES`] bytes reserved, linear in that count; nothing is written into the blocks.",
+          "does": "[`Heap::shift_and_fragment`] drives the program's own global allocator from a [`Seed`] into a layout no other seed gives, and holds it there until the [`Heap`] is dropped:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/golden/perturb.rs",
+          "guarantees": [
+            "**Seeded.** Every size and choice comes from [`SplitMix64`] keyed by the seed: the requests the allocator sees, in order, are a function of the seed (where they land is the allocator's).",
+            "**Bounded.** At most [`MAX_BYTES`] bytes are requested in all, and no block exceeds 64 KiB, so a perturbation never asks for more memory than a small test does and never reaches a size that allocators serve with fresh pages (`mmap`) and return at once, which would perturb nothing.",
+            "**Nothing initialised, nothing read.** Blocks are reserved capacity (`Vec::with_capacity`), never written or read, so a perturbation costs allocator calls, not memory traffic; each block passes through `std::hint::black_box` so the optimiser cannot remove an allocation it can see unused.",
+            "**Held while the case runs.** The pinned blocks live in the returned [`Heap`] and are freed when it is dropped, after the case.",
+            "**No panic; no allocation failure ignored.** A failed allocation aborts the process, as every `Vec` allocation does, never returns a smaller heap silently."
+          ],
+          "job": "The perturbing allocator: a seeded shift and fragmentation of the heap before a golden case runs, so that any result that depends on where memory lands changes from run to run and is caught.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/2451116.2451141",
+              "https://doi.org/10.1145/1133981.1133985"
+            ],
+            "text": "heap-layout randomisation as in Stabilizer (C. Curtsinger and E. D. Berger, \"Stabilizer: Statistically Sound Performance Evaluation\", ASPLOS 2013, <https://doi.org/10.1145/2451116.2451141>), whose shuffling layer fills a pool per size class and hands blocks out in random order, and `DieHard`'s randomised placement (E. D. Berger and B. G. Zorn, \"`DieHard`: Probabilistic Memory Safety for Unsafe Languages\", PLDI 2006, <https://doi.org/10.1145/1133981.1133985>), applied here from outside the allocator by freeing a seeded share of each size class's pool in a seeded order; the shuffle is the Fisher-Yates shuffle of [`super::shuffle`]."
+          },
+          "path": "geom_test::golden::perturb",
+          "provenance": [
+            {
+              "licence": "MPL-2.0",
+              "link": "https://github.com/fitzgen/shuffling-allocator/blob/983334621d6c6fd6aa4d40d24edd3221208bf085/src/lib.rs",
+              "method_note": null,
+              "name": "shuffling-allocator",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for its size classes and shuffling layer and to judge whether it could be used; not taken, for the reasons above. No code copied.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the size of the kernel's Rust sources: one parse and one walk per file.",
+          "does": "[`check`] reads the kernel's crates under `projects/engines/geometry/crates`, parses every Rust source of their `src` and `tests` folders as Rust ([`scan`]), and returns every [`Problem`]:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/golden/repo.rs",
+          "guarantees": [
+            "**Code, not text.** Every file is parsed by `syn`, Rust's grammar as the compiler's procedural macros read it: a call or a constant in a comment, a doc comment or a string literal is never counted, and a call inside a macro whose arguments are expressions (`assert!`, `println!`, `vec!`, ...) is.",
+            "**The named function checks the golden.** A golden's `check` passes only when its function (its path through inline modules included) exists in the target's file and calls the store's check with the golden's id itself, directly or inside a closure, not through a helper.",
+            "**It never passes by accident.** A folder it cannot read, a crate with no files, a file it cannot parse, or a store whose current edition has no golden is a problem, not a pass.",
+            "**Every problem names its file**, relative to the workspace root with `/`, and a line where one applies.",
+            "**Deterministic.** Files are read in path order; problems are sorted."
+          ],
+          "job": "The golden store against the repository: every golden is checked where the store says, every golden check in the code is in the store, no golden digest hides outside it, and every pinned file is unchanged.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md",
+              "https://github.com/dtolnay/syn"
+            ],
+            "text": "a syntax-tree walk with `syn`'s visitor (`syn::visit`), the way `cargo-semver-checks` and clippy read Rust as syntax rather than text; the call and import forms above are this check's written grammar, as the map's headers have theirs (chapter 26.3 and the merge gate of 28.8, `projects/engines/geometry/architecture/28-testing.md`). `syn`: D. Tolnay, <https://github.com/dtolnay/syn> (a dependency, MIT OR Apache-2.0)."
+          },
+          "path": "geom_test::golden::repo",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the message, one compression per 64-byte block; the state is a fixed 112 bytes or so and nothing is allocated, except the 64-character `String` of [`hex`].",
+          "does": "[`Sha256`] takes a canonical byte stream piece by piece and gives its 32-byte digest; [`sha256`] hashes one buffer; [`hex`] writes a digest as the 64 lowercase hexadecimal digits the golden store keeps, and [`Digest`] reads them back. The hashing itself is the `RustCrypto` project's `sha2` crate. Before this module, each crate's golden tests carried a hand-written copy of `geom-num`'s implementation, which chapter 21 left to the golden store's piece (G19) to replace with one; every copy now uses this one, and every digest they pinned is unchanged, since SHA-256 is one function whoever computes it.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/golden/sha256.rs",
+          "guarantees": [
+            "**The digest FIPS 180-4 defines.** For every message, in whatever pieces it is written, the digest is the standard's SHA-256. The tests check the standard's examples (the empty message, \"abc\", the two-block 448-bit and 896-bit messages and one million \"a\"s) in pieces of every size around the 55-, 56- and 64-byte padding edges, and every message length from 0 to 130 bytes against one call.",
+            "**The same digest on every target and build.** `sha2` picks a processor's SHA instructions where it has them (x86 SHA-NI, the Arm SHA-2 extension) and portable 32-bit code elsewhere, WebAssembly included; each computes the one function FIPS 180-4 defines, so the choice changes speed, never bits. The kernel's goldens pass on every leg of `kernel.yml` with it.",
+            "**No panic.** Writing, finishing and formatting never panic; [`Digest::from_hex`] refuses anything but exactly 64 hexadecimal digits with `None`."
+          ],
+          "job": "SHA-256, the hash of every golden digest: the one implementation every kernel test hashes with.",
+          "method": {
+            "links": [
+              "https://csrc.nist.gov/pubs/fips/180-4/upd1/final",
+              "projects/engines/geometry/architecture/28-testing.md",
+              "https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values"
+            ],
+            "text": "NIST FIPS 180-4, *Secure Hash Standard* (2015), <https://csrc.nist.gov/pubs/fips/180-4/upd1/final>, computed by the `sha2` crate (`RustCrypto`, MIT OR Apache-2.0, a dependency, not a port). Chapters 21 and 28.13 of the kernel architecture (`projects/engines/geometry/architecture/28-testing.md`) name SHA-256 as the golden hash. The test vectors are NIST's examples, <https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values>."
+          },
+          "path": "geom_test::golden::sha256",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one shuffle is linear in the number of inputs; [`order_free`] runs the case `shuffles + 2` times (once for a single input or none) and copies the inputs once per run.",
+          "does": "[`Orders`] makes seeded permutations; [`order_free`] runs a case on its inputs in the given order, in the reverse order and in `shuffles` shuffled orders, and returns the one digest they all give, or an [`OrderError`] naming the first permutation that gave another.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/golden/shuffle.rs",
+          "guarantees": [
+            "**Seeded and portable.** A seed gives the same permutations on every target, 32-bit and 64-bit: the shuffle is `rand`'s Fisher-Yates over [`SplitMix64`], which draws each index as a 32-bit value for slices shorter than 2^32 elements, so the word stream and the permutation do not depend on the width of `usize`. A golden in the tests pins the first permutations.",
+            "**Every permutation can come.** Durstenfeld's form of the Fisher-Yates shuffle with unbiased bounded draws gives each of the n! permutations of n inputs with equal probability, so a failure is not limited to orders a hand-written list happened to try.",
+            "**The given order is always run first, then its reverse**, so a case that fails in its own order fails as such, and every case of two or more inputs meets at least one other order whatever the seed: for two inputs, the reverse is the only other order, so both are run.",
+            "**No panic.** An error names the permutation and both digests."
+          ],
+          "job": "The input-shuffle hook: a case whose contract says the order of its inputs does not matter is run on its inputs in their own order and in seeded shuffled orders, and every run must give the same canonical output, bit for bit.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/364520.364540"
+            ],
+            "text": "R. Durstenfeld, \"Algorithm 235: Random permutation\", *Communications of the ACM* 7(7), 1964, <https://doi.org/10.1145/364520.364540>, the modern form of the Fisher-Yates shuffle (Knuth, *The Art of Computer Programming*, volume 2, section 3.4.2, Algorithm P), as `rand`'s `SliceRandom::shuffle` implements it (a dependency, MIT OR Apache-2.0), driven by this crate's [`SplitMix64`]."
+          },
+          "path": "geom_test::golden::shuffle",
+          "provenance": [
+            {
+              "licence": "MIT OR Apache-2.0",
+              "link": "https://github.com/rust-random/rand/blob/9e7d328f60d6372ae22927f37d1a816fc980f25e/src/seq/slice.rs",
+              "method_note": null,
+              "name": "rand",
+              "notice": [],
+              "pinned": true,
+              "purpose": "to confirm that its shuffle draws 32-bit indices below 2^32 elements, which makes it portable. No code copied.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the size of the store for a parse; a lookup scans the current edition's goldens.",
+          "does": "[`Store::parse`] reads the store's JSON text (`golden/store.json` in this crate's folder, [`STORE_PATH`]) into typed records and checks the rules below; [`Store::embedded`] parses the copy compiled into this crate, which every golden test reads, on every target (WebAssembly test runs have no file system); [`Store::expected`] gives the digest a golden must reproduce in the current edition.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/golden/store.rs",
+          "guarantees": [
+            "**Nothing ambiguous parses.** Unknown fields, a missing field, a digest that is not 64 lowercase hexadecimal digits, a malformed id or edition label, a golden with both or neither of `check` and `file`, a `check` in another crate than its id names, two goldens with one key in an edition, two editions with one label, no open edition, an open edition that is not the last, a history record whose digest equals the value that replaced it, an unknown kind, an empty piece or reason: each is a [`StoreError`], never a silent choice.",
+            "**One answer per key.** [`Store::expected`] finds the golden by id and operation versions in the current edition, or says that it is not there.",
+            "**Deterministic.** Records keep the file's order; maps are `BTreeMap`s; nothing reads a clock."
+          ],
+          "job": "The golden store: every golden digest of the kernel, keyed by kernel edition, golden and operation versions, with the record of every change.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md",
+              "projects/engines/geometry/architecture/26-how-it-grows.md",
+              "projects/engines/geometry/architecture/32-decisions.md",
+              "https://www.rfc-editor.org/rfc/rfc8259"
+            ],
+            "text": "golden hashes per edition and operation version, chapter 28.13 of the kernel architecture (`projects/engines/geometry/architecture/28-testing.md`), with the editions of 26.2 (`projects/engines/geometry/architecture/26-how-it-grows.md`) and the rule for goldens before the first edition in 32.12 (`projects/engines/geometry/architecture/32-decisions.md`). The records are JSON (RFC 8259, <https://www.rfc-editor.org/rfc/rfc8259>), read with `serde`."
+          },
+          "path": "geom_test::golden::store",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -4904,7 +5162,7 @@
       ],
       "name": "geom-test",
       "provenance": [],
-      "sections": "26, 27, 28 and 29 of the kernel architecture (`projects/engines/geometry/architecture/`), in part: the map for people and AI of 26.3; chapter 27's `geom-test` row and its rule that a development crate is never a kernel crate's normal dependency; 28.1, \"Where the code lives\", for that rule's check; the property tests of 28.2, run from a fixed seed; the generators aimed at the hard cases of 28.5; the outside oracles of 28.10, development dependencies of this crate only; the seed discipline of 28.17; for the development crates' own dependencies, the permissive-licence promise of 28.1's table (the architecture's eleventh principle; 29.1); and, for the map, the `Source:` and `Consulted:` records of 29.20, their licences judged by the classes of 29.2; for the ledger, the `PROVENANCE.md`, `NOTICE` and method notes of 29.20's rules 4 to 6; and for the scanner, the markers of 29.20's rules 2 and 7.",
+      "sections": "21, 26, 27, 28 and 29 of the kernel architecture (`projects/engines/geometry/architecture/`), in part: the determinism matrix of 21 and the golden store of 28.13, keyed by the editions of 26.2; the map for people and AI of 26.3; chapter 27's `geom-test` row and its rule that a development crate is never a kernel crate's normal dependency; 28.1, \"Where the code lives\", for that rule's check; the property tests of 28.2, run from a fixed seed; the generators aimed at the hard cases of 28.5; the outside oracles of 28.10, development dependencies of this crate only; the seed discipline of 28.17; for the development crates' own dependencies, the permissive-licence promise of 28.1's table (the architecture's eleventh principle; 29.1); and, for the map, the `Source:` and `Consulted:` records of 29.20, their licences judged by the classes of 29.2; for the ledger, the `PROVENANCE.md`, `NOTICE` and method notes of 29.20's rules 4 to 6; and for the scanner, the markers of 29.20's rules 2 and 7.",
       "spdx": null,
       "status": null,
       "summary": "Spare Kit geometry kernel, development only: the shared test support every kernel test uses."
@@ -5162,6 +5420,17 @@
       ]
     },
     {
+      "licence": "MPL-2.0",
+      "link": "https://github.com/fitzgen/shuffling-allocator/blob/983334621d6c6fd6aa4d40d24edd3221208bf085/src/lib.rs",
+      "method_note": null,
+      "name": "shuffling-allocator",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-test/src/golden/perturb.rs"
+      ]
+    },
+    {
       "licence": "Apache-2.0",
       "link": "https://github.com/google/gitiles/blob/e54582fdd2a8783a6078f3a25eb08bb622f2e497/java/com/google/gitiles/ViewFilter.java",
       "method_note": null,
@@ -5265,6 +5534,17 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-test/src/map.rs"
+      ]
+    },
+    {
+      "licence": "MIT OR Apache-2.0",
+      "link": "https://github.com/rust-random/rand/blob/9e7d328f60d6372ae22927f37d1a816fc980f25e/src/seq/slice.rs",
+      "method_note": null,
+      "name": "rand",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-test/src/golden/shuffle.rs"
       ]
     },
     {
