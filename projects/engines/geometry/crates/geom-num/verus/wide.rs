@@ -919,8 +919,12 @@ const TOP_BIT: u64 = 1 << 63;
 #[derive(Clone, Copy)]
 pub struct Wide<const L: usize>([u64; L]);
 
-/// 256-bit signed integer: in-circle and in-sphere tests.
+/// 256-bit signed integer: in-circle and in-sphere tests, three-plane denominators.
 pub type I256 = Wide<4>;
+/// 320-bit signed integer: three-plane point numerators.
+pub type I320 = Wide<5>;
+/// 384-bit signed integer: classifying a three-plane point against a plane.
+pub type I384 = Wide<6>;
 
 /// Half the base of four limbs: 2^255, the bound an `I256` value must stay below.
 pub proof fn lemma_half_base_4()
@@ -931,6 +935,33 @@ pub proof fn lemma_half_base_4()
     lemma_base_step(1);
     lemma_base_step(2);
     lemma_base_step(3);
+    lemma2_to64();
+}
+
+/// Half the base of five limbs: 2^319, the bound an `I320` value must stay below.
+pub proof fn lemma_half_base_5()
+    ensures
+        base(5) / 2 == 1067993517960455041197510853084776057301352261178326384973520803911109862890320275011481043468288,
+{
+    lemma_base_step(0);
+    lemma_base_step(1);
+    lemma_base_step(2);
+    lemma_base_step(3);
+    lemma_base_step(4);
+    lemma2_to64();
+}
+
+/// Half the base of six limbs: 2^383, the bound an `I384` value must stay below.
+pub proof fn lemma_half_base_6()
+    ensures
+        base(6) / 2 == 19701003098197239606139520050071806902539869635232723333974146702122860885748605305707133127442457820403313995153408,
+{
+    lemma_base_step(0);
+    lemma_base_step(1);
+    lemma_base_step(2);
+    lemma_base_step(3);
+    lemma_base_step(4);
+    lemma_base_step(5);
     lemma2_to64();
 }
 

@@ -5,10 +5,10 @@
 //!
 //! A Verus-annotated twin of `ssi_weight`'s exact path, `value` in
 //! `projects/engines/geometry/crates/geom-num/src/generated/ssi_weight.rs` (chapter 28.7 of the
-//! kernel architecture, "Predicates, by generated twins"; pieces G36 and G38). It proves that for
-//! every input whose coordinates are on the grid (|v| ≤ 2^40 − 1), `value` returns `Some` of the
-//! description's value over the mathematical integers: no checked step overflows, and the result is
-//! the value the description defines.
+//! kernel architecture, "Predicates, by generated twins"; pieces G36, G38 and G39). It proves that
+//! for every input whose coordinates are on the grid (|v| ≤ 2^40 − 1), `value` returns `Some` of
+//! the description's value over the mathematical integers: no checked step overflows, and the
+//! result is the value the description defines.
 //!
 //! The twin's `value`, with its `#[verus_spec]` attribute and its `proof!` blocks removed, is token
 //! for token the shipped one: the same emitter code writes both, and geom-gen's
@@ -35,6 +35,41 @@ pub open spec fn spec_value(a: P2, b: P2, c: P2, d: P2) -> int {
     let w_2 = ba_y * dc_x;
     let w = w_1 - w_2;
     w
+}
+
+/// `ba_x`'s certified bound.
+pub open spec fn bound_of_ba_x() -> int {
+    2199023255550int
+}
+
+/// `ba_y`'s certified bound.
+pub open spec fn bound_of_ba_y() -> int {
+    2199023255550int
+}
+
+/// `dc_x`'s certified bound.
+pub open spec fn bound_of_dc_x() -> int {
+    2199023255550int
+}
+
+/// `dc_y`'s certified bound.
+pub open spec fn bound_of_dc_y() -> int {
+    2199023255550int
+}
+
+/// `w_1`'s certified bound.
+pub open spec fn bound_of_w_1() -> int {
+    4835703278449720605802500int
+}
+
+/// `w_2`'s certified bound.
+pub open spec fn bound_of_w_2() -> int {
+    4835703278449720605802500int
+}
+
+/// `w`'s certified bound.
+pub open spec fn bound_of_w() -> int {
+    9671406556899441211605000int
 }
 
 } // verus!
@@ -66,10 +101,13 @@ pub fn value(a: P2, b: P2, c: P2, d: P2) -> Option<i128> {
     let ba_y = b.y.get().checked_sub(a.y.get())?;
     let dc_x = d.x.get().checked_sub(c.x.get())?;
     let dc_y = d.y.get().checked_sub(c.y.get())?;
-    proof! { lemma_product_bound(ba_x as int, dc_y as int, 2199023255550, 2199023255550); }
+    proof! { lemma_product_bound(ba_x as int, dc_y as int, bound_of_ba_x(), bound_of_dc_y()); }
     let w_1 = i128::from(ba_x).checked_mul(i128::from(dc_y))?;
-    proof! { lemma_product_bound(ba_y as int, dc_x as int, 2199023255550, 2199023255550); }
+    proof! { assert(-bound_of_w_1() <= w_1 as int <= bound_of_w_1()); }
+    proof! { lemma_product_bound(ba_y as int, dc_x as int, bound_of_ba_y(), bound_of_dc_x()); }
     let w_2 = i128::from(ba_y).checked_mul(i128::from(dc_x))?;
+    proof! { assert(-bound_of_w_2() <= w_2 as int <= bound_of_w_2()); }
     let w = w_1.checked_sub(w_2)?;
+    proof! { assert(-bound_of_w() <= w as int <= bound_of_w()); }
     Some(w)
 }

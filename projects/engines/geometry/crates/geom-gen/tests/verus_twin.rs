@@ -18,9 +18,9 @@
 //!   `src/wide.rs`; `every_function_the_wide_twin_runs_is_proven_and_compared` and
 //!   `the_order_is_the_proven_comparison` leave nothing out, and
 //!   `any_change_to_the_wide_arithmetic_is_seen` shows the comparison catches a change.
-//! - `the_twin_refuses_what_it_does_not_model`: a description with rounded inputs (`plane_side`),
-//!   or with a step wider than `i128` (`incircle`, `insphere`), is refused with the reason, never
-//!   emitted as a twin that models it wrongly; `orient2d` and `orient3d` are covered.
+//! - `every_predicate_has_a_twin_and_the_rest_is_refused`: every predicate of the kernel has a
+//!   twin, and a description with a step wider than `I384` is refused with the reason, never
+//!   emitted as a twin that models it wrongly.
 
 // Tests may use native arithmetic to walk their token lists.
 #![allow(
@@ -36,6 +36,7 @@
     clippy::indexing_slicing
 )]
 
+use geom_gen::predicate_derive::derive;
 use geom_gen::predicate_emit::verus_twin;
 use geom_gen::predicates::{PREDICATES, derivation, generate_verus_orient2d};
 use proc_macro2::{Group, TokenStream, TokenTree};
@@ -212,7 +213,10 @@ fn the_twin_carries_its_annotations() {
         );
     }
     assert!(item.contains("spec_value ( a , b , c )"), "{item}");
-    assert_eq!(item.matches("proof !").count(), 2, "{item}");
+    // A bound before each of the two products, and each of the three operations' bound after it.
+    assert_eq!(item.matches("lemma_product_bound").count(), 2, "{item}");
+    assert_eq!(item.matches("assert ( - bound_of_").count(), 3, "{item}");
+    assert_eq!(item.matches("proof !").count(), 5, "{item}");
     assert!(item.len() > canonical(&value_item(SHIPPED)).len());
 }
 
@@ -255,7 +259,7 @@ fn the_twin_is_current() {
 const MODEL: &str = include_str!("../../geom-num/verus/model.rs");
 
 /// Every predicate twin of the Verus crate (pieces G36 and G38) and the module it shadows.
-const PREDICATE_TWINS: [(&str, &str, &str); 6] = [
+const PREDICATE_TWINS: [(&str, &str, &str); 11] = [
     (
         "orient2d",
         include_str!("../../geom-num/verus/generated/orient2d.rs"),
@@ -286,6 +290,31 @@ const PREDICATE_TWINS: [(&str, &str, &str); 6] = [
         include_str!("../../geom-num/verus/generated/ssi_side.rs"),
         include_str!("../../geom-num/src/generated/ssi_side.rs"),
     ),
+    (
+        "plane_side",
+        include_str!("../../geom-num/verus/generated/plane_side.rs"),
+        include_str!("../../geom-num/src/generated/plane_side.rs"),
+    ),
+    (
+        "tpi_weight",
+        include_str!("../../geom-num/verus/generated/tpi_weight.rs"),
+        include_str!("../../geom-num/src/generated/tpi_weight.rs"),
+    ),
+    (
+        "tpi_side",
+        include_str!("../../geom-num/verus/generated/tpi_side.rs"),
+        include_str!("../../geom-num/src/generated/tpi_side.rs"),
+    ),
+    (
+        "lpi_weight",
+        include_str!("../../geom-num/verus/generated/lpi_weight.rs"),
+        include_str!("../../geom-num/src/generated/lpi_weight.rs"),
+    ),
+    (
+        "lpi_side",
+        include_str!("../../geom-num/verus/generated/lpi_side.rs"),
+        include_str!("../../geom-num/src/generated/lpi_side.rs"),
+    ),
 ];
 
 /// The Verus crate's root, which must hold every predicate twin as a module.
@@ -300,6 +329,11 @@ fn every_predicate_twin_is_its_shipped_value_token_for_token() {
         geom_gen::predicates::generate_verus_insphere,
         geom_gen::predicates::generate_verus_ssi_weight,
         geom_gen::predicates::generate_verus_ssi_side,
+        geom_gen::predicates::generate_verus_plane_side,
+        geom_gen::predicates::generate_verus_tpi_weight,
+        geom_gen::predicates::generate_verus_tpi_side,
+        geom_gen::predicates::generate_verus_lpi_weight,
+        geom_gen::predicates::generate_verus_lpi_side,
     ];
     for ((name, twin, shipped), generate) in PREDICATE_TWINS.iter().zip(shipped_generators) {
         let t = find_fn(&tokens(twin), "value").unwrap_or_else(|| panic!("{name}: no value"));
@@ -318,21 +352,24 @@ fn every_predicate_twin_is_its_shipped_value_token_for_token() {
 }
 
 #[test]
-fn the_twin_refuses_what_it_does_not_model() {
+fn every_predicate_has_a_twin_and_the_rest_is_refused() {
     for p in &PREDICATES {
         let d = derivation(p).unwrap();
         let twin = verus_twin(&d, "test", "shipped.rs");
-        match p.comparison.name {
-            "orient2d" | "orient3d" | "incircle" | "insphere" | "ssi_weight" | "ssi_side" => {
-                assert!(twin.is_ok(), "{}: {twin:?}", p.comparison.name);
-            }
-            "plane_side" | "tpi_weight" | "tpi_side" | "lpi_weight" | "lpi_side" => {
-                let e = twin.unwrap_err().0;
-                assert!(e.contains("rounded input"), "{e}");
-            }
-            other => panic!("a predicate this test does not know: {other}"),
-        }
+        assert!(twin.is_ok(), "{}: {twin:?}", p.comparison.name);
     }
+    // A step wider than I384, the widest budgeted width: refused with the reason.
+    let wide = derive(
+        "predicate too_wide
+input n m: rounded 125 in n
+let a = n * m
+let b = a * a
+sign b
+",
+    )
+    .unwrap();
+    let e = verus_twin(&wide, "test", "shipped.rs").unwrap_err().0;
+    assert!(e.contains("up to I384"), "{e}");
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -592,4 +629,40 @@ fn product_i128_is_the_shipped_one_in_doc_attributes_parameters_and_body() {
     assert!(changed != WIDE);
     let changed = find_fn(&tokens(&changed), "product_i128").unwrap();
     assert_ne!(shared_parts(&twin), shared_parts(&changed));
+}
+
+// ---------------------------------------------------------------------------------------------
+// The range check of a rounded input (piece G39).
+
+/// The twin of `within` and the generated module that ships it.
+const ROUNDED_TWIN: &str = include_str!("../../geom-num/verus/rounded.rs");
+const GENERATED_MOD: &str = include_str!("../../geom-num/src/generated/mod.rs");
+
+/// Whether the twin's `within`, annotations removed and its `pub` (the predicate twins, in other
+/// modules, call it) dropped, is the shipped one.
+fn same_within(twin: &str, shipped: &str) -> bool {
+    let t = find_fn(&tokens(twin), "within").expect("the twin's within");
+    let s = find_fn(&tokens(shipped), "within").expect("mod.rs's within");
+    canonical(&strip(&t)).replacen("pub fn within", "fn within", 1) == canonical(&s)
+}
+
+#[test]
+fn within_is_the_shipped_range_check_token_for_token() {
+    assert!(same_within(ROUNDED_TWIN, GENERATED_MOD));
+    let t = find_fn(&tokens(ROUNDED_TWIN), "within").unwrap();
+    assert!(canonical(&t).contains("verus_spec"));
+    // A change on either side is seen.
+    let (from, to) = (
+        "if v.unsigned_abs() <= limit {",
+        "if v.unsigned_abs() < limit {",
+    );
+    assert!(ROUNDED_TWIN.contains(from) && GENERATED_MOD.contains(from));
+    assert!(!same_within(
+        &ROUNDED_TWIN.replacen(from, to, 1),
+        GENERATED_MOD
+    ));
+    assert!(!same_within(
+        ROUNDED_TWIN,
+        &GENERATED_MOD.replacen(from, to, 1)
+    ));
 }

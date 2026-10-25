@@ -636,13 +636,18 @@ pub fn generate_ssi_side() -> Result<Vec<u8>, GenError> {
 pub const VERUS_DIR: &str = "projects/engines/geometry/crates/geom-num/verus/generated";
 
 /// The predicates with a Verus twin (pieces G36, G38 and G39), by name.
-pub const VERUS_TWINS: [&str; 6] = [
+pub const VERUS_TWINS: [&str; 11] = [
     "orient2d",
     "orient3d",
     "incircle",
     "insphere",
     "ssi_weight",
     "ssi_side",
+    "plane_side",
+    "tpi_weight",
+    "tpi_side",
+    "lpi_weight",
+    "lpi_side",
 ];
 
 /// The twin of the predicate called `name`, as bytes.
@@ -707,6 +712,56 @@ pub fn generate_verus_ssi_weight() -> Result<Vec<u8>, GenError> {
 /// [`GenError::Generator`] if the derivation or the emission fails.
 pub fn generate_verus_ssi_side() -> Result<Vec<u8>, GenError> {
     twin_of("ssi_side")
+}
+
+/// Generator `verus-plane-side`: `plane_side`'s exact path as a Verus-annotated twin
+/// (piece G39).
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_verus_plane_side() -> Result<Vec<u8>, GenError> {
+    twin_of("plane_side")
+}
+
+/// Generator `verus-tpi-weight`: `tpi_weight`'s exact path as a Verus-annotated twin
+/// (piece G39).
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_verus_tpi_weight() -> Result<Vec<u8>, GenError> {
+    twin_of("tpi_weight")
+}
+
+/// Generator `verus-tpi-side`: `tpi_side`'s exact path as a Verus-annotated twin
+/// (piece G39).
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_verus_tpi_side() -> Result<Vec<u8>, GenError> {
+    twin_of("tpi_side")
+}
+
+/// Generator `verus-lpi-weight`: `lpi_weight`'s exact path as a Verus-annotated twin
+/// (piece G39).
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_verus_lpi_weight() -> Result<Vec<u8>, GenError> {
+    twin_of("lpi_weight")
+}
+
+/// Generator `verus-lpi-side`: `lpi_side`'s exact path as a Verus-annotated twin
+/// (piece G39).
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_verus_lpi_side() -> Result<Vec<u8>, GenError> {
+    twin_of("lpi_side")
 }
 
 /// Generator `predicate-module`: the module that declares the predicates and holds their helpers.

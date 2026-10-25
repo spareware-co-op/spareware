@@ -5,10 +5,10 @@
 //!
 //! A Verus-annotated twin of `orient2d`'s exact path, `value` in
 //! `projects/engines/geometry/crates/geom-num/src/generated/orient2d.rs` (chapter 28.7 of the
-//! kernel architecture, "Predicates, by generated twins"; pieces G36 and G38). It proves that for
-//! every input whose coordinates are on the grid (|v| ≤ 2^40 − 1), `value` returns `Some` of the
-//! description's value over the mathematical integers: no checked step overflows, and the result is
-//! the value the description defines.
+//! kernel architecture, "Predicates, by generated twins"; pieces G36, G38 and G39). It proves that
+//! for every input whose coordinates are on the grid (|v| ≤ 2^40 − 1), `value` returns `Some` of
+//! the description's value over the mathematical integers: no checked step overflows, and the
+//! result is the value the description defines.
 //!
 //! The twin's `value`, with its `#[verus_spec]` attribute and its `proof!` blocks removed, is token
 //! for token the shipped one: the same emitter code writes both, and geom-gen's
@@ -37,6 +37,41 @@ pub open spec fn spec_value(a: P2, b: P2, c: P2) -> int {
     det
 }
 
+/// `ba_x`'s certified bound.
+pub open spec fn bound_of_ba_x() -> int {
+    2199023255550int
+}
+
+/// `ba_y`'s certified bound.
+pub open spec fn bound_of_ba_y() -> int {
+    2199023255550int
+}
+
+/// `ca_x`'s certified bound.
+pub open spec fn bound_of_ca_x() -> int {
+    2199023255550int
+}
+
+/// `ca_y`'s certified bound.
+pub open spec fn bound_of_ca_y() -> int {
+    2199023255550int
+}
+
+/// `det_1`'s certified bound.
+pub open spec fn bound_of_det_1() -> int {
+    4835703278449720605802500int
+}
+
+/// `det_2`'s certified bound.
+pub open spec fn bound_of_det_2() -> int {
+    4835703278449720605802500int
+}
+
+/// `det`'s certified bound.
+pub open spec fn bound_of_det() -> int {
+    9671406556899441211605000int
+}
+
 } // verus!
 
 /// `orient2d`'s exact value: each step in the type its certificate gives it, with checked
@@ -63,10 +98,13 @@ pub fn value(a: P2, b: P2, c: P2) -> Option<i128> {
     let ba_y = b.y.get().checked_sub(a.y.get())?;
     let ca_x = c.x.get().checked_sub(a.x.get())?;
     let ca_y = c.y.get().checked_sub(a.y.get())?;
-    proof! { lemma_product_bound(ba_x as int, ca_y as int, 2199023255550, 2199023255550); }
+    proof! { lemma_product_bound(ba_x as int, ca_y as int, bound_of_ba_x(), bound_of_ca_y()); }
     let det_1 = i128::from(ba_x).checked_mul(i128::from(ca_y))?;
-    proof! { lemma_product_bound(ba_y as int, ca_x as int, 2199023255550, 2199023255550); }
+    proof! { assert(-bound_of_det_1() <= det_1 as int <= bound_of_det_1()); }
+    proof! { lemma_product_bound(ba_y as int, ca_x as int, bound_of_ba_y(), bound_of_ca_x()); }
     let det_2 = i128::from(ba_y).checked_mul(i128::from(ca_x))?;
+    proof! { assert(-bound_of_det_2() <= det_2 as int <= bound_of_det_2()); }
     let det = det_1.checked_sub(det_2)?;
+    proof! { assert(-bound_of_det() <= det as int <= bound_of_det()); }
     Some(det)
 }
