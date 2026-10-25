@@ -73,9 +73,12 @@ Every decision has a chapter in [architecture/](architecture/), numbered to matc
 | [GLOSSARY.md](GLOSSARY.md) | Every term used in phases 1 to 3, defined once |
 | [HEADERS.md](HEADERS.md) | The grammar of crate and module headers, which the map reads |
 | [MAP.json](MAP.json) | The generated map of every crate, module, error kind and outside source |
-| [NOTICE](NOTICE) | The licence text and credit of every source code was ported from |
 | `deny.toml`, `deny-ships.toml`, `deny-no-std.toml` | cargo-deny's rules for the merge gate: licences, advisories and sources; what shipping crates may build with; the one allow-list for kernel crates |
 | [architecture/](architecture/) | One file per chapter, numbered to match G01 |
 | [crates/](crates/) | The kernel's crates (`geom-*`), one folder each, folder name = crate name |
 | [../crates/engine-geometry](../crates/engine-geometry) | The stable public facade, the only crate programs depend on |
 | [../../kit/notes/G01-evidence](../../kit/notes/G01-evidence/README.md) | The research behind every decision |
+| [PROVENANCE.md](PROVENANCE.md) | Generated: every outside source the code takes, from the headers' `Source:` and `Consulted:` lines (chapter 29.20) |
+| [NOTICE](NOTICE) | Generated: every ported source's licence text and copyright lines, and the credit owed to every source consulted; ships with every binary |
+| [notices/](notices/README.md) | The licence text of each ported source, copied exactly, which `NOTICE` reproduces |
+| [methods/](methods/README.md) | Method notes of the method-only procedure, for methods read in LGPL code (chapter 29.20, rule 6) |

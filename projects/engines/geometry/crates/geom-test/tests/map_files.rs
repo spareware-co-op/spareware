@@ -57,20 +57,6 @@ const MODULE: &str = "//! A module.
 //! Cost: constant.
 ";
 
-/// An interval module that consulted LGPL code without a method note, as `geom-num`'s does.
-const INTERVAL: &str = "//! Intervals.
-//!
-//! Guarantees: inclusion.
-//!
-//! Method: outward widening (doi:10.1000/182).
-//!
-//! Cost: constant.
-//!
-//! Consulted: CGAL `FPU.h`, `LGPL-3.0-or-later OR LicenseRef-Commercial`,
-//!   <https://github.com/CGAL/cgal/blob/cbc3b81d4607c6f3a9d1f3a47d8709a2be3e6bfa/Number_types/include/CGAL/FPU.h#L347-L358>,
-//!   for its widening.
-";
-
 /// A scratch workspace under `CARGO_TARGET_TMPDIR`, emptied first and removed on drop.
 struct Scratch(PathBuf);
 
@@ -108,25 +94,6 @@ impl Scratch {
 
     fn module(&self) -> PathBuf {
         self.path("projects/engines/geometry/crates/geom-x/src/a.rs")
-    }
-
-    /// Adds a `geom-num` whose interval module consulted LGPL code with no method note, as the real
-    /// one does, so the binary's known gap (`map::GAPS`) occurs here too.
-    fn with_the_known_gaps(self) -> Scratch {
-        let num = self.path("projects/engines/geometry/crates/geom-num");
-        fs::create_dir_all(num.join("src")).unwrap();
-        fs::write(num.join("Cargo.toml"), "[package]\nname = \"geom-num\"\n").unwrap();
-        fs::write(
-            num.join("src/lib.rs"),
-            LIB.replace(
-                "//! Layer: 2, Geometry.",
-                "//! Layer: 1, Numbers and the contract.",
-            )
-            .replace("pub mod a;\n", "pub mod interval;\n"),
-        )
-        .unwrap();
-        fs::write(num.join("src/interval.rs"), INTERVAL).unwrap();
-        self
     }
 }
 
@@ -257,7 +224,7 @@ fn a_pending_folder_is_checked_once_it_exists() {
 
 #[test]
 fn the_binary_exits_0_1_and_2() {
-    let s = Scratch::new("binary").with_the_known_gaps();
+    let s = Scratch::new("binary");
     let root = s.0.to_str().unwrap();
     let (code, text) = run(&["check", "--root", root]);
     assert_eq!(code, 1, "no map yet: {text}");

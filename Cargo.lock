@@ -1200,6 +1200,7 @@ name = "geom-test"
 version = "0.0.0"
 dependencies = [
  "geom-num",
+ "num-rational",
  "proptest",
  "pulldown-cmark",
  "serde_json",

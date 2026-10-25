@@ -1,0 +1,40 @@
+Name: CORE-MATH, correctly rounded mathematical functions (Inria)
+Project: https://core-math.gitlabpages.inria.fr/
+Link: https://gitlab.inria.fr/core-math/core-math/-/tree/0ce0cbc15935e24c656280e5a46c34e89f301b7a
+Licence: MIT
+Licence file: https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/LICENSE
+
+Credit:
+atan2.c credits Silviu-Ioan Filip, who designed the code that generates its rational
+approximation of atan(z) over (0, 1), which atan2.rs ports.
+
+Test data, under projects/engines/geometry/crates/geom-num/tests/ (never compiled into a
+shipped binary): samples of CORE-MATH's lists of hard-to-round inputs. Those lists carry the MIT
+permission notice of the licence text below and no copyright line of their own.
+
+  math_sinpi_cospi.rs   src/binary64/sinpi/sinpi.wc and src/binary64/cospi/cospi.wc
+  attack_g05.rs         src/binary64/sinpi/sinpi.wc (its set (b))
+  math_exp_ln.rs        src/binary64/exp/exp.wc and src/binary64/log/log.wc
+  math_atan2.rs         src/binary64/atan2/atan2.wc
+
+Licence text:
+The CORE-MATH code is distributed under the following license
+(MIT license, https://spdx.org/licenses/MIT).
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

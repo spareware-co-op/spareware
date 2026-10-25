@@ -67,7 +67,7 @@ const PATH_EXTENSIONS: [&str; 9] = [
 
 /// The paths the three documents name before a board piece creates them: the document, the path
 /// as written, and the piece. Each must still be missing; once it exists, its row goes.
-const PENDING_PATHS: [(&str, &str, &str); 1] = [("GLOSSARY.md", "methods/", "G16")];
+const PENDING_PATHS: [(&str, &str, &str); 0] = [];
 
 /// Each thing AGENTS.md tells a reader to edit, copy or run: as AGENTS.md writes it, the file it
 /// lives in (written from the kernel's folder), and the text that declares it there.
