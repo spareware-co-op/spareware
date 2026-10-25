@@ -1,0 +1,162 @@
+{
+  "format": 1,
+  "about": "The geometry kernel's golden store (chapter 28.13): every golden digest, SHA-256 in lowercase hexadecimal, keyed by kernel edition, golden id and operation versions. Read by geom_test::golden (store.rs explains every field and rule). Never edit a digest without appending a history record holding the old digest, its kind (bug, improvement or corpus), the piece and why; a kernel owner approves every edit to an existing golden (.github/workflows/kernel-golden.yml checks it), and nothing in a frozen edition ever changes. Run `cargo run -p geom-test --bin golden -- check` after any change.",
+  "editions": [
+    {
+      "edition": "pre-edition",
+      "state": "open",
+      "goldens": [
+        {
+          "id": "geom-num/determinism",
+          "what": "geom-num's determinism corpus: 87,618 calls into every module of the numbers layer (predicates, planes, three-plane points, grid steps, wide integers, error-free transformations, intervals, the maths module and the scalars), each result in the canonical encoding of tests/determinism.rs.",
+          "check": {
+            "crate": "geom-num",
+            "test": "determinism",
+            "function": "golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "fb19edfc7c58ca5e93a8921dfbdd2ab2dfacc2d180fbe6dec540efbede954564",
+          "history": [
+            {
+              "sha256": "c9c61875e6da8cff4ffa79f147d8f32187fa2929564100ce834849bb43a211f8",
+              "kind": "improvement",
+              "piece": "G05",
+              "why": "The correctly rounded maths of piece G05 (issue #174): 92 of G02's 7,677 maths records moved by one unit in the last place to the correctly rounded value (exp 9, ln 3, sinpi 52, cospi 19, atan2 9); the refusals of Interval::exp and Interval::ln moved from the interval section to the maths section, now certified; 2,700 records were added from their own generator (SEED_G05) for the libm twins and the interval versions. No error changed; the other sections give G02's digests unchanged."
+            }
+          ]
+        },
+        {
+          "id": "geom-num/rng-draws",
+          "what": "The draw corpus of geom_num::rng (Philox4x32-10, piece G32): at least 20,000 draws of every kind over six seeds and streams from six starting positions, in the canonical encoding of tests/rng_determinism.rs.",
+          "check": {
+            "crate": "geom-num",
+            "test": "rng_determinism",
+            "function": "rng_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "706bf19f86a2ac5ba9be55866a1a5b151702dd6707b9b3b67a5c4c347cbabb7f"
+        },
+        {
+          "id": "geom-num/rng-stream-ranges",
+          "what": "The stream-range corpus of geom_num::rng (piece G32): stream ranges of every size and index, their streams and their errors, in the canonical encoding of tests/rng_determinism.rs.",
+          "check": {
+            "crate": "geom-num",
+            "test": "rng_determinism",
+            "function": "rng_stream_range_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "4d2c3a986913d7751a8f49eb3a7e5340eb973b591154c7acdaaf0ad47b6472f7"
+        },
+        {
+          "id": "geom-num/dd-exact-sum",
+          "what": "Double-double arithmetic and ExactSum (piece G25) on 6,000 adversarial operand pairs at every exponent: every DD operation, two_prod_fma and fma, 903,792 recorded bytes in the encoding of tests/attack_g25.rs.",
+          "check": {
+            "crate": "geom-num",
+            "test": "attack_g25",
+            "function": "adv_bits_are_the_same_on_every_target_and_profile"
+          },
+          "sha256": "ce0e1901d8d11ff1b2d490e929b51fae2adfd7479c63126f8359ac917d0cb0fd"
+        },
+        {
+          "id": "geom-num/proven-maths",
+          "what": "The five correctly rounded maths functions of piece G05 (sinpi, cospi, exp, ln and atan2) over 100,000 inputs, each result a word (a value's bits or a marker for its error) as tests/attack_g05.rs records it; the SHA-256 of the bytes whose 64-bit FNV-1a digest G05 pinned.",
+          "check": {
+            "crate": "geom-num",
+            "test": "attack_g05",
+            "function": "golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "3b7df11af336c9c692854f222e2227c3ee0d90fb539cf004cc0b5f3cb3800cc4"
+        },
+        {
+          "id": "geom-num/order-free",
+          "what": "The input-shuffle hook on geom-num's order-free contracts (piece G19): ExactSum over seeded term sets added in their own order and in shuffled orders, one by one, as slices, as streams and as shuffled chunks merged in shuffled order, and DD addition and multiplication and two_sum in both operand orders, in the encoding of tests/order_free.rs.",
+          "check": {
+            "crate": "geom-num",
+            "test": "order_free",
+            "function": "order_free_contracts_give_one_answer_in_every_order"
+          },
+          "sha256": "1c9ef01a48433fd9f6da1ecc6d234d124f450d02df34e40b6542e3e1ca16a7c8"
+        },
+        {
+          "id": "geom-math/determinism",
+          "what": "geom-math's determinism corpus (piece G03): vectors, floats, double-double, grid, rational, general and typed transforms, boxes, frames and shifts, at least 30,000 calls in the canonical encoding of tests/determinism.rs.",
+          "check": {
+            "crate": "geom-math",
+            "test": "determinism",
+            "function": "golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "dd9daf8861292fda5cd2de1d789a6f9739a4672145c9756cdc5299a6fe772ab6",
+          "history": [
+            {
+              "sha256": "d79932a18468bf79d55bdb204597c001ad9b512c5000fae5e87d7db01a72f126",
+              "kind": "improvement",
+              "piece": "G05",
+              "why": "The correctly rounded sinpi and cospi of piece G05 (CORE-MATH ports in place of an msun-method approximation), which geom-math's rotations call: only the two sections that build rotations from them changed, transform (6773dadd...852b18 before) and boxes (2e8f3297...bc7e3e before); every other section's digest is the same. Recorded on main in G03's pull request (commit bbbc379), before the store existed."
+            }
+          ]
+        },
+        {
+          "id": "geom-math/workload",
+          "what": "geom-math's attack workload (piece G03): map conversions both ways, double-double arithmetic and transform classification and inversion, as tests/attack_g03.rs records it.",
+          "check": {
+            "crate": "geom-math",
+            "test": "attack_g03",
+            "function": "results_identical_across_targets"
+          },
+          "sha256": "977828731c890a725eae9d2f6eb79b9d04a69f927ffcf20525228c93f2cfda25",
+          "history": [
+            {
+              "sha256": "c1c5d1b624f95d7ce6b6640acef43dda0a90ae2c4beb6c30483fa87a234747c9",
+              "kind": "improvement",
+              "piece": "G05",
+              "why": "The correctly rounded sinpi and cospi of piece G05 (CORE-MATH ports in place of an msun-method approximation), which the workload's rotations call; sqrt, abs, floor, ceil and round_ties_even, the only other maths functions geom-math calls, are unchanged. Recorded on main in G03's pull request (commit c19cca4), before the store existed."
+            }
+          ]
+        },
+        {
+          "id": "geom-run/helpers",
+          "what": "geom-run's parallel helpers (piece G04) on the serial executor and on pools of 1, 2, 3 and 8 threads with chunk sizes 1, 7 and 4,096: every answer, error and meter, in the canonical encoding of tests/golden.rs.",
+          "check": {
+            "crate": "geom-run",
+            "test": "golden",
+            "function": "golden_hash_is_the_same_on_every_target_thread_count_and_chunk_size"
+          },
+          "sha256": "b5e1993aceab1c8f0a6cdfd0c786974375634b5470c635da384122a4bc015172"
+        },
+        {
+          "id": "geom-test/grid-sampler",
+          "what": "3,000 draws of geom-test's grid sampler (piece G11) from the default seed, every coordinate's little-endian bytes; the SHA-256 of the bytes whose 64-bit FNV-1a digest G11 pinned.",
+          "check": {
+            "crate": "geom-test",
+            "test": "lib",
+            "function": "grid::tests::the_same_seed_gives_the_same_data_on_every_target"
+          },
+          "sha256": "20918c21b82e75c8dd599f7ec6b424a12783584e4e46a4806f1de18fc2f5a1ac"
+        },
+        {
+          "id": "geom-test/prop-cases",
+          "what": "The first proptest case of seeds 0 to 63 from geom-test's grid strategies (piece G11), every coordinate's little-endian bytes; the SHA-256 of the bytes whose 64-bit FNV-1a digest G11 pinned.",
+          "check": {
+            "crate": "geom-test",
+            "test": "lib",
+            "function": "prop::tests::the_same_seed_gives_the_same_cases_on_every_target"
+          },
+          "sha256": "c45bff24db9659cbc69550a8ef2cdc00f81982cd6c75074abcadb8fb3c45e559"
+        },
+        {
+          "id": "geom-test/shuffle-permutations",
+          "what": "The permutations of 0 to 63 inputs the input-shuffle hook draws from the default seed (piece G19), every index as eight little-endian bytes: the orders every order-free golden runs in.",
+          "check": {
+            "crate": "geom-test",
+            "test": "lib",
+            "function": "golden::shuffle::tests::the_permutation_stream_is_pinned"
+          },
+          "sha256": "a78a89171f0b81299c6fdfa1f62551b94ec1917a285a8017d1b307fa51349215"
+        },
+        {
+          "id": "geom-bench/output-hashes",
+          "what": "geom-bench's golden file (piece G06, chapter 23.13's output hashes): the SHA-256 of every benchmark's inputs and results, one line per benchmark, which every benchmark harness checks; pinned here by the SHA-256 of the file's text with LF line ends, so an edit to it is an edit to the store.",
+          "file": "projects/engines/geometry/crates/geom-bench/src/golden.txt",
+          "sha256": "87aaef0ad599b2af639669d5dce53496ce67b574ec71d1e055594f139130882a"
+        }
+      ]
+    }
+  ]
+}

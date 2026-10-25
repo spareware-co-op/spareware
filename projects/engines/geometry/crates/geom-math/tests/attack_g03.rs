@@ -26,9 +26,6 @@
     reason = "oracles and generators; the rules are for kernel code"
 )]
 
-#[path = "common/sha256.rs"]
-mod sha256;
-
 use std::cmp::Ordering;
 
 use num_bigint::BigInt;
@@ -46,7 +43,7 @@ use geom_math::{
 use geom_num::grid::{COORD_MAX, GridStep, P2, P3};
 use geom_num::ladder::ANGULAR;
 use geom_num::{NumError, math};
-use sha256::{Sha256, hex};
+use geom_test::golden::{self, Sha256, hex};
 
 // ---------------------------------------------------------------------------------------------
 // A deterministic generator (SplitMix64), so every run sees the same cases.
@@ -2300,8 +2297,10 @@ fn workload(seed: u64) -> String {
     hex(h.0.finish())
 }
 
-/// The workload's SHA-256 digest on one thread, in hexadecimal. Every target the kernel builds for
-/// must give this value (`x86_64` natively and wasm32-wasip1 under wasmtime both run this file).
+/// The workload's golden in the golden store (`geom-test/golden/store.json`): its SHA-256 digest
+/// on one thread. Every target the kernel builds for must give it (`kernel.yml` runs it in every
+/// configuration through `golden run`, each time twice in one process on two differently perturbed
+/// heaps), and the store's digest records these changes:
 ///
 /// It replaced the workload's 64-bit FNV-1a digest, `0x32b6_dcb7_d33c_e019`, when the hash moved
 /// to SHA-256 (chapter 28.13): both are hashes of the same bytes, so no result changed. It replaced
@@ -2309,18 +2308,21 @@ fn workload(seed: u64) -> String {
 /// rotations call, correctly rounded (ports of CORE-MATH in place of an msun-method
 /// approximation): of the maths functions geom-math calls, only those two changed, so every
 /// rotation now uses the correctly rounded sine and cosine.
-const WORKLOAD_DIGEST: &str = "977828731c890a725eae9d2f6eb79b9d04a69f927ffcf20525228c93f2cfda25";
+const WORKLOAD: &str = "geom-math/workload";
 
 /// Principle 5 and chapter 21: bit-identical results on every target. The workload covers map
 /// conversions both ways, double-double arithmetic and transform classification and inversion;
 /// its digest is pinned, so a target that rounds differently anywhere in it fails here.
 #[test]
 fn results_identical_across_targets() {
-    let one = workload(0x0D5E_ED00);
-    assert_eq!(
-        one, WORKLOAD_DIGEST,
-        "digest {one} differs from the pinned {WORKLOAD_DIGEST}"
-    );
+    let checked = golden::check(WORKLOAD, || {
+        let one = workload(0x0D5E_ED00);
+        let digest = golden::Digest::from_hex(&one).unwrap();
+        (digest.0, one)
+    });
+    checked
+        .verdict()
+        .unwrap_or_else(|e| panic!("the workload's digest differs: {e}"));
 }
 
 /// Principle 5: bit-identical results on every thread count chapter 21 lists (1, 2, 3 and 8).

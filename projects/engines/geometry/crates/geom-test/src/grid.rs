@@ -378,32 +378,41 @@ mod tests {
         }
     }
 
-    /// The golden hash of 3,000 draws from the default seed: FNV-1a 64 over every coordinate's
-    /// little-endian bytes. CI runs this on every platform, and it also runs under WebAssembly, so
-    /// a seed gives the same test data on every target. A change here changes every seeded test's
-    /// inputs: it must be deliberate and said so in its pull request.
+    /// The golden hash of 3,000 draws from the default seed, over every coordinate's little-endian
+    /// bytes: SHA-256, in the golden store as `geom-test/grid-sampler` (piece G19), and the 64-bit
+    /// FNV-1a digest G11 first pinned, `FNV_GOLDEN`, kept to show the bytes are the ones it was
+    /// fixed on. CI runs this on every platform and build mode and under WebAssembly (the golden
+    /// matrix), so a seed gives the same test data on every target. A change here changes every
+    /// seeded test's inputs: it must be deliberate and recorded in the store.
     #[test]
     fn the_same_seed_gives_the_same_data_on_every_target() {
-        const GOLDEN: u64 = 0x478c_1099_7c52_44b6;
-        let mut rng = SplitMix64::new(fixed("grid.rs unit test", Seed::DEFAULT));
-        let mut s = GridSampler::new();
-        let mut hash: u64 = 0xcbf2_9ce4_8422_2325; // FNV-1a 64 offset basis
-        let mut eat = |c: Coord| {
-            for b in c.get().to_le_bytes() {
-                hash = (hash ^ u64::from(b)).wrapping_mul(0x0000_0100_0000_01b3);
+        const FNV_GOLDEN: u64 = 0x478c_1099_7c52_44b6;
+        let draws = || {
+            let mut rng = SplitMix64::new(fixed("grid.rs unit test", Seed::DEFAULT));
+            let mut s = GridSampler::new();
+            let mut bytes = Vec::new();
+            let mut eat = |c: Coord| bytes.extend_from_slice(&c.get().to_le_bytes());
+            for _ in 0..1_000 {
+                eat(s.coord(&mut rng));
+                let p = s.p2(&mut rng);
+                eat(p.x);
+                eat(p.y);
+                let q = s.p3(&mut rng);
+                eat(q.x);
+                eat(q.y);
+                eat(q.z);
             }
+            bytes
         };
-        for _ in 0..1_000 {
-            eat(s.coord(&mut rng));
-            let p = s.p2(&mut rng);
-            eat(p.x);
-            eat(p.y);
-            let q = s.p3(&mut rng);
-            eat(q.x);
-            eat(q.y);
-            eat(q.z);
-        }
-        assert_eq!(hash, GOLDEN, "{hash:#018x}");
+        let checked = crate::golden::check("geom-test/grid-sampler", || {
+            let bytes = draws();
+            (crate::golden::sha256(&bytes), bytes)
+        });
+        let fnv = checked.value.iter().fold(0xcbf2_9ce4_8422_2325u64, |h, b| {
+            (h ^ u64::from(*b)).wrapping_mul(0x0000_0100_0000_01b3)
+        });
+        assert_eq!(fnv, FNV_GOLDEN, "{fnv:#018x}");
+        checked.verdict().unwrap_or_else(|e| panic!("{e}"));
     }
 
     #[test]

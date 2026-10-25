@@ -281,9 +281,14 @@ jobs:
     env:
       # The target this leg measures, for its summary and annotations.
       TARGET: ${{ matrix.target }}
-      # One target directory for both trees: shared dependencies build once, and Gungraun keeps its
-      # saved runs in target/gungraun, where the second run finds the first.
+      # Each tree builds into a target directory of its own. Cargo names a path crate's build by
+      # its place in the workspace, which is the same in both checkouts, so in one shared directory
+      # the second tree reused the first tree's crates and the pull request was measured on the
+      # merge base's code (a pull request with 424 benchmarks ran the base's 350). The pull request
+      # builds here; the merge base in target-base, set on its step. Gungraun keeps both trees'
+      # saved runs in one home, where the second run finds the first.
       CARGO_TARGET_DIR: ${{ github.workspace }}/target
+      GUNGRAUN_HOME: ${{ github.workspace }}/gungraun
       # Every function on its own cache line, so the code the measured pass runs only once sits on
       # lines it already fetched (geom_bench::harness).
       RUSTFLAGS: "-C llvm-args=-align-all-functions=6"
@@ -318,7 +323,9 @@ jobs:
       - name: Cache the Rust build
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          workspaces: head -> ../target
+          workspaces: |
+            head -> ../target
+            base -> ../target-base
           key: ${{ matrix.target }}-${{ needs.scope.outputs.base_toolchain }}-${{ needs.scope.outputs.head_toolchain }}
           cache-directories: ~/.gungraun-runner
 
@@ -368,9 +375,10 @@ jobs:
         env:
           # Read when the benchmark is compiled (gungraun::main! uses option_env!).
           GUNGRAUN_RUNNER: ${{ env.BASE_RUNNER }}
+          CARGO_TARGET_DIR: ${{ github.workspace }}/target-base
         run: |
           set -euo pipefail
-          rm -rf "${CARGO_TARGET_DIR:?}/gungraun"
+          rm -rf "${GUNGRAUN_HOME:?}"
           cargo "+$BASE_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench instructions -- \
             --save-baseline=base 2>&1 | tee "$RUNNER_TEMP/base.log"
           cargo "+$BASE_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench instructions -- --list \
@@ -399,7 +407,7 @@ jobs:
           if [ "$HAS_BASE" = true ]; then
             compare=(--baseline=base)
           else
-            rm -rf "${CARGO_TARGET_DIR:?}/gungraun"
+            rm -rf "${GUNGRAUN_HOME:?}"
             compare=()
           fi
           cargo "+$HEAD_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench instructions -- \
@@ -430,7 +438,7 @@ jobs:
           # Exit status 1: a rise over the limit; 2: the judgement could not be made.
           status=0
           "$CARGO_TARGET_DIR/release/geom-bench-counts" callgrind \
-            "$CARGO_TARGET_DIR/gungraun/geom-bench/instructions" "$RUNNER_TEMP/judged.names" \
+            "$GUNGRAUN_HOME/geom-bench/instructions" "$RUNNER_TEMP/judged.names" \
             "$GATE_PERCENT" "Instructions, estimated cycles and cache misses on $TARGET" \
             > "$RUNNER_TEMP/callgrind.md" || status=$?
           case "$status" in
@@ -672,10 +680,13 @@ jobs:
       - name: Build each tree's guest for wasm32-wasip1
         run: |
           set -euo pipefail
+          # Each tree's guest in a target directory of its own: in one shared directory cargo would
+          # take one tree's crates for the other's, as it names a path crate's build by its place in
+          # the workspace, the same in both checkouts.
           guest() {
             (cd "$1" && cargo "+$2" build --locked --release -p geom-bench \
-              --bin geom-bench-guest --target wasm32-wasip1)
-            cp "$CARGO_TARGET_DIR/wasm32-wasip1/release/geom-bench-guest.wasm" "$RUNNER_TEMP/$1.wasm"
+              --bin geom-bench-guest --target wasm32-wasip1 --target-dir "$CARGO_TARGET_DIR/guest-$1")
+            cp "$CARGO_TARGET_DIR/guest-$1/wasm32-wasip1/release/geom-bench-guest.wasm" "$RUNNER_TEMP/$1.wasm"
           }
           if [ "$HAS_BASE" = true ]; then
             guest base "$BASE_TOOLCHAIN"
