@@ -4300,7 +4300,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/golden/check.rs",
           "guarantees": [
-            "**Twice, on two heaps.** The case runs exactly [`REPEATS`] times, each run under a different seed's perturbation held for the whole run; a case whose output depends on an address, on leftover state from an earlier run, or on anything else that differs between two runs in one process fails with [`GoldenError::Repeat`], naming both digests.",
+            "**Twice, on two heaps.** The case runs exactly [`REPEATS`] times, each run under a different seed's perturbation held for the whole run; a case whose output depends on an address, on leftover state from an earlier run, or on anything else that differs between two runs in one process fails with [`GoldenError::Repeat`], naming both digests. An address-dependent case is caught on every run with glibc's, Windows' and WebAssembly's allocators, and on most runs on macOS ([`super::perturb`] says why).",
             "**The store decides.** The digest must equal the store's for the id in the current edition; otherwise [`GoldenError::Mismatch`] names the edition, the id, both digests and the two things a mismatch can mean (a bug on this target, or a deliberate change that must be recorded in the store and approved by a kernel owner). A golden the store does not hold is [`GoldenError::Store`]. Nothing is ever written to the store from here.",
             "**The repeat is checked before the store**, so a case that is not even repeatable is reported as such, not as a changed golden.",
             "**No panic**: the verdict is returned, and the test decides how to fail."
