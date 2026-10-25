@@ -4,5 +4,11 @@ version = "0.0.0"
 edition.workspace = true
 publish.workspace = true
 
+[[bin]]
+name = "construct"
+path = "src/main.rs"
+
 [dependencies]
 construct-api = { path = "../construct-api" }
+# float_roundtrip: numbers are read correctly rounded, as JSON.parse does
+serde_json = { version = "1", features = ["float_roundtrip"] }

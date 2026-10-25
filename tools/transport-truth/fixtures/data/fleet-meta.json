@@ -1,0 +1,1 @@
+{"name":"MVR_Oct26","fields":[{"name":"OBJECTID","type":"esriFieldTypeOID","alias":"OBJECTID"},{"name":"tla","type":"esriFieldTypeString","alias":"tla"},{"name":"VEHICLE_TYPE","type":"esriFieldTypeString","alias":"VEHICLE_TYPE"},{"name":"Motive_Power","type":"esriFieldTypeString","alias":"Motive_Power"},{"name":"MAKE","type":"esriFieldTypeString","alias":"MAKE"}]}
