@@ -28,7 +28,10 @@
 //! for `wasm32v1-none` and `wasm32-unknown-unknown` with every feature selection (`--ignored
 //! gate_build`) and clippy over every crate that ships, likewise (`--ignored gate_clippy`), both
 //! of which also hold every file the compiler read to the source rules, each with its seeded
-//! violations (`deny`, `gate`).
+//! violations (`deny`, `gate`). The recursion check (piece G13) runs there too: every recursive
+//! cycle of the crates that ship has its depth bound stated and each bound's test runs on a small
+//! `wasm32-wasip1` stack, and seeded workspaces fail it (`--ignored gate_recursion`,
+//! `recursion`).
 //!
 //! The repository tests run natively only: they start cargo and read files. The table check and
 //! the seeded tests of each rule run on every target.
@@ -57,6 +60,8 @@ mod lints;
 mod manifest;
 mod overrides;
 mod posture;
+#[cfg(not(target_family = "wasm"))]
+mod recursion;
 #[cfg(not(target_family = "wasm"))]
 mod repo;
 mod seeded;

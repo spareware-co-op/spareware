@@ -56,8 +56,9 @@ pub const STACK_BYTES: u32 = 256 * 1024;
 /// The engine's stack for WebAssembly frames the bound tests run with: 256 KiB.
 pub const ENGINE_STACK_BYTES: u32 = 256 * 1024;
 
-/// The stacks the probes' control runs use, large enough for both probes: 4 MiB.
-pub const CONTROL_BYTES: u32 = 4 * 1024 * 1024;
+/// The stacks the probes' control runs use, large enough for both probes on both engines (V8's
+/// WebAssembly frames are larger than wasmtime's): 32 MiB.
+pub const CONTROL_BYTES: u32 = 32 * 1024 * 1024;
 
 /// The target the bound tests run on.
 pub const TARGET: &str = "wasm32-wasip1";
@@ -80,8 +81,8 @@ pub const SCRUBBED_ENV: [&str; 10] = [
 pub const SHADOW_PROBE_DEPTH: u32 = 128;
 
 /// How deep the engine-stack probe goes: 50 000 frames, each at least 16 bytes of engine stack
-/// (a return address and a frame pointer) and at most 80, so 0.8 to 4 MB: past 256 KiB, within
-/// the control's 4 MiB.
+/// (a return address and a frame pointer), so at least 0.8 MB: past 256 KiB, and within the
+/// control's 32 MiB at up to 670 bytes a frame.
 pub const ENGINE_PROBE_DEPTH: u32 = 50_000;
 
 /// The WebAssembly engine that runs the tests.

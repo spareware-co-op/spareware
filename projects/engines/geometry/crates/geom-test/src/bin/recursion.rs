@@ -123,7 +123,11 @@ fn parse(args: Vec<String>) -> Result<(Command, Option<PathBuf>, Runner, Option<
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--root" if root.is_none() => match args.next() {
-                Some(dir) => root = Some(PathBuf::from(dir)),
+                // Absolute, so the runner script written under it is found from any folder.
+                Some(dir) => match std::path::absolute(&dir) {
+                    Ok(path) => root = Some(path),
+                    Err(e) => return Err(format!("--root {dir}: {e}")),
+                },
                 None => return Err("--root needs a folder".to_owned()),
             },
             "--runner" if runner.is_none() && command == Command::Gate => {
