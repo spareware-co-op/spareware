@@ -122,12 +122,12 @@ pub fn value(a: P2, b: P2, c: P2, d: P2) -> Option<I256> {
     let ab = ab_1.checked_sub(ab_2)?;
     proof! { lemma_half_base_4(); }
     proof! { lemma_product_bound(a_lift as int, bc as int, 9671406556899441211605000, 9671406556899441211605000); }
-    let det_1 = I256::from_i128(a_lift).checked_mul(&I256::from_i128(bc))?;
+    let det_1 = I256::product_i128(a_lift, bc)?;
     proof! { lemma_product_bound(b_lift as int, ca as int, 9671406556899441211605000, 9671406556899441211605000); }
-    let det_2 = I256::from_i128(b_lift).checked_mul(&I256::from_i128(ca))?;
+    let det_2 = I256::product_i128(b_lift, ca)?;
     let det_3 = det_1.checked_add(&det_2)?;
     proof! { lemma_product_bound(c_lift as int, ab as int, 9671406556899441211605000, 9671406556899441211605000); }
-    let det_4 = I256::from_i128(c_lift).checked_mul(&I256::from_i128(ab))?;
+    let det_4 = I256::product_i128(c_lift, ab)?;
     let det = det_3.checked_add(&det_4)?;
     Some(det)
 }

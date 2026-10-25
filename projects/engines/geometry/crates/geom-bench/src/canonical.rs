@@ -25,11 +25,12 @@
 
 use core::cmp::Ordering;
 
+use geom_num::crossing::Ssi;
 use geom_num::dd::DD;
 use geom_num::exact_sum::ExactSum;
 use geom_num::grid::{Coord, GridStep, P2, P3, Rounded, Steps};
 use geom_num::interval::Interval;
-use geom_num::plane::{Plane, Tpi};
+use geom_num::plane::{Lpi, Plane, Tpi};
 use geom_num::real::Real;
 use geom_num::rng::{Philox, RngError, Seed, Stream, StreamId, StreamRange};
 use geom_num::wide::Wide;
@@ -179,6 +180,25 @@ impl Canonical for Tpi {
     fn encode(&self, h: &mut Sha256) {
         for plane in self.planes() {
             plane.encode(h);
+        }
+    }
+}
+
+impl Canonical for Lpi {
+    // A line-plane point is exactly its line's two points and its plane, in order.
+    fn encode(&self, h: &mut Sha256) {
+        for p in self.points() {
+            p.encode(h);
+        }
+        self.plane().encode(h);
+    }
+}
+
+impl Canonical for Ssi {
+    // A crossing is exactly its four points, in order.
+    fn encode(&self, h: &mut Sha256) {
+        for p in self.points() {
+            p.encode(h);
         }
     }
 }

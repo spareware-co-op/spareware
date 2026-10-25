@@ -272,15 +272,15 @@ pub fn value(a: P3, b: P3, c: P3, d: P3, e: P3) -> Option<I256> {
     let abc = abc_3.checked_add(abc_4)?;
     proof! { lemma_half_base_4(); }
     proof! { lemma_product_bound(a_lift as int, bcd as int, 14507109835349161817407500, 63802943797501876581358390621973250000); }
-    let det_1 = I256::from_i128(a_lift).checked_mul(&I256::from_i128(bcd))?;
+    let det_1 = I256::product_i128(a_lift, bcd)?;
     proof! { lemma_product_bound(b_lift as int, acd as int, 14507109835349161817407500, 63802943797501876581358390621973250000); }
-    let det_2 = I256::from_i128(b_lift).checked_mul(&I256::from_i128(acd))?;
+    let det_2 = I256::product_i128(b_lift, acd)?;
     let det_3 = det_1.checked_sub(&det_2)?;
     proof! { lemma_product_bound(c_lift as int, abd as int, 14507109835349161817407500, 63802943797501876581358390621973250000); }
-    let det_4 = I256::from_i128(c_lift).checked_mul(&I256::from_i128(abd))?;
+    let det_4 = I256::product_i128(c_lift, abd)?;
     let det_5 = det_3.checked_add(&det_4)?;
     proof! { lemma_product_bound(d_lift as int, abc as int, 14507109835349161817407500, 63802943797501876581358390621973250000); }
-    let det_6 = I256::from_i128(d_lift).checked_mul(&I256::from_i128(abc))?;
+    let det_6 = I256::product_i128(d_lift, abc)?;
     let det = det_5.checked_sub(&det_6)?;
     Some(det)
 }
