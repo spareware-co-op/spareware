@@ -13,10 +13,9 @@
 //!
 //! Every value is written in a canonical little-endian encoding, with a tag before every variant;
 //! a `usize` is written as 8 bytes, so 32-bit and 64-bit targets write the same bytes. The bytes
-//! are hashed with SHA-256 (FIPS 180-4), the hash chapters 21 and 28.13 specify for goldens, as
-//! geom-num's golden test does: `common/sha256.rs` is a copy of geom-num's implementation, with its
-//! checks against the standard's test vectors and constants, until the golden store (piece G19)
-//! holds the one shared copy. The corpus comes from `SplitMix64` with a fixed seed, so the inputs
+//! are hashed with SHA-256 (FIPS 180-4), the hash chapters 21 and 28.13 specify for goldens, from
+//! `geom_test::golden`, the one implementation every golden uses (piece G19), checked there against
+//! the standard's test vectors. The corpus comes from `SplitMix64` with a fixed seed, so the inputs
 //! are the same on every target by construction and only the helper's answers can differ.
 //!
 //! **The hash function changed once, and nothing else with it.** G04 first hashed these bytes with
@@ -26,12 +25,16 @@
 //! reproduced from the same bytes: the switch changed the hash function, not the corpus, its
 //! encoding or any answer.
 //!
-//! **The same constant must hold on every target**: Linux, Windows and macOS on x86-64 and arm64,
-//! and wasm32-wasip1 (a 32-bit target) under wasmtime, in debug and release, with overflow checks
-//! on or off. A changed hash is one of two things. Either it is a bug: some target, pool or chunk
-//! size gives other answers. Or the helper's answers or this corpus were changed on purpose, in a
-//! pull request that updates `GOLDEN`, says which answers changed and why, and is approved by a
-//! kernel owner. Never update the constant to make one target pass. The test also checks that the
+//! **The same digest must hold on every target**: Linux, Windows and macOS on x86-64 and arm64,
+//! and wasm32-wasip1 (a 32-bit target) under wasmtime and Node, in debug and release, with overflow
+//! checks on or off and with `-C target-cpu=native` (`kernel.yml` runs it in each, through `golden
+//! run`). The digest lives in the golden store (`geom-test/golden/store.json`, id
+//! `geom-run/helpers`), and `geom_test::golden::check` runs the serial corpus twice in one process
+//! on two differently perturbed heaps before comparing it with the store's. A changed hash is one
+//! of two things. Either it is a bug: some target, pool or chunk size gives other answers. Or the
+//! helper's answers or this corpus were changed on purpose, in a pull request that records the
+//! change in the store, says which answers changed and why, and is approved by a kernel owner.
+//! Never update the store to make one target pass. The test also checks that the
 //! corpus still reaches every outcome it is built to reach, so a corpus that silently stopped
 //! testing the hard cases fails.
 
@@ -54,9 +57,6 @@
 )]
 
 mod common;
-// Included here alone, not through `common`, so its tests of SHA-256 run once.
-#[path = "common/sha256.rs"]
-mod sha256;
 
 use std::collections::BTreeSet;
 
@@ -68,11 +68,11 @@ use geom_run::{
     BatchBudget, Budget, BudgetKind, Exceeded, Exec, Interrupted, ItemError, ItemResult, Phase,
     RunError, Stop, Stopped, Usage, WorkMeter,
 };
-use sha256::{Sha256, hex};
+use geom_test::golden::{self, Sha256, Store, hex};
 
-/// The golden digest of the corpus: SHA-256, in hexadecimal. See the module documentation before
-/// changing it.
-const GOLDEN: &str = "b5e1993aceab1c8f0a6cdfd0c786974375634b5470c635da384122a4bc015172";
+/// The corpus's golden in the golden store: its SHA-256 digest. See the module documentation
+/// before changing it.
+const GOLDEN: &str = "geom-run/helpers";
 
 /// The golden G04 first recorded: the 64-bit FNV-1a hash of the same corpus bytes. Not a golden
 /// any more; kept to show that the move to SHA-256 changed only the hash function (see
@@ -632,7 +632,11 @@ fn golden_hash_is_the_same_on_every_target_thread_count_and_chunk_size() {
         ("threads 3", Exec::with_pool(&THREADS_3)),
         ("threads 8", Exec::with_pool(&THREADS_8)),
     ];
-    let reference = corpus(Exec::serial(), 1, Recorder::new());
+    let checked = golden::check(GOLDEN, || {
+        let r = corpus(Exec::serial(), 1, Recorder::new());
+        (r.hash.clone().finish(), r)
+    });
+    let reference = &checked.value;
     let missing: Vec<_> = REQUIRED
         .iter()
         .filter(|outcome| !reference.seen.contains(*outcome))
@@ -654,12 +658,9 @@ fn golden_hash_is_the_same_on_every_target_thread_count_and_chunk_size() {
         }
     }
     println!("geom-run golden hash: {hash}");
-    assert_eq!(
-        hash, GOLDEN,
-        "geom-run's golden digest is {hash} here but {GOLDEN} is expected. Either this target \
-         gives other answers (a bug) or the helper's answers or the corpus changed (a deliberate \
-         change must update GOLDEN and say so)"
-    );
+    checked.verdict().unwrap_or_else(|e| {
+        panic!("{e}. For this corpus: this target gives other answers (a bug), or the helper's answers or the corpus changed on purpose")
+    });
 }
 
 /// The move from FNV-1a 64 to SHA-256 changed the hash function and nothing else. The corpus's
@@ -689,8 +690,13 @@ fn the_sha256_golden_hashes_the_bytes_the_fnv_golden_hashed() {
     sha.write(bytes);
     let digest = hex(sha.finish());
     println!("SHA-256 of the recorded bytes:   {digest}");
+    let golden = Store::embedded()
+        .unwrap()
+        .expected(GOLDEN)
+        .unwrap()
+        .to_string();
     assert_eq!(
-        digest, GOLDEN,
+        digest, golden,
         "the same bytes must give the SHA-256 golden"
     );
     assert_eq!(

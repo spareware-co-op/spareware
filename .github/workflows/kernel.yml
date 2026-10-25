@@ -1,14 +1,24 @@
 name: Kernel
 
-# Tests every crate of the geometry kernel on every target the kernel builds for.
-# geom-num's determinism test (tests/determinism.rs) hashes a fixed corpus of kernel results with
-# SHA-256; its golden digest must be the same on every target here, in debug and in release,
-# release both with overflow checks on and as it ships (off), and natively with
-# -C target-cpu=native (chapter 21). A target that disagrees is a bug, never a reason to change
-# the golden value.
+# Tests every crate of the geometry kernel on every target the kernel builds for, and runs the
+# determinism matrix (chapter 21; piece G19).
 #
-# The golden digest runs first, in every configuration, and every step runs even when an earlier
-# one failed (`if: !cancelled()`), so a failing suite never hides the digest of a target.
+# The matrix: every golden of the golden store (projects/engines/geometry/crates/geom-test/
+# golden/store.json, chapter 28.13), each the SHA-256 of a fixed corpus's canonical outputs, must
+# give the store's digest on every target here, in debug and in release, release both with
+# overflow checks on and as it ships (off), and natively with -C target-cpu=native; on wasm32 in
+# debug and in both release modes. `cargo run -p geom-test --bin golden -- run <cargo test
+# arguments>` runs them: one `cargo test` per crate and test target, with this step's arguments and
+# environment, each golden twice in one process on two differently perturbed heaps (the perturbing
+# allocator and the in-process repeat), and it fails unless every golden of the store ran and
+# agreed, so a golden added to the store joins every leg at once and a renamed test cannot pass
+# unrun. geom-num's whole test suite, every one of its test vectors, also runs in every native
+# configuration and in both release modes on wasm32 (its debug suite there takes well over an
+# hour, so wasm32's debug leg runs the goldens). A target that disagrees is a bug, never a reason
+# to change a golden: a golden changes only by an approved edit of the store (kernel-golden.yml).
+#
+# The goldens run first, in every configuration, and every step runs even when an earlier one
+# failed (`if: !cancelled()`), so a failing suite never hides the digests of a target.
 #
 # Every action is pinned to a full commit, checked against its tag when it was pinned; update a
 # pin only after reviewing the new commit.
@@ -117,18 +127,21 @@ jobs:
       # lands (chapter 27: one folder per crate, folder name = crate name).
       - name: List the kernel's crates
         run: echo "KERNEL_CRATES=$(for d in projects/engines/geometry/crates/*/; do printf -- '-p %s ' "$(basename "$d")"; done)" >> "$GITHUB_ENV"
-      - name: Golden digest in release, with overflow checks on
+      - name: Every golden in release, with overflow checks on
         if: ${{ !cancelled() && matrix.mode == 'release' }}
         env:
           RUSTFLAGS: -C overflow-checks=on
-        run: cargo test -p geom-num --release --locked --test determinism -- --nocapture
-      - name: Golden digest in release as shipped, without overflow checks
+        run: cargo run --locked -p geom-test --bin golden -- run --release
+      - name: Every golden in release as shipped, without overflow checks
         if: ${{ !cancelled() && matrix.mode == 'release' }}
-        run: cargo test -p geom-num --release --locked --test determinism -- --nocapture
+        run: cargo run --locked -p geom-test --bin golden -- run --release
+      - name: geom-num's every test vector in release as shipped
+        if: ${{ !cancelled() && matrix.mode == 'release' }}
+        run: cargo test -p geom-num --release --locked --no-fail-fast
       - name: Show this machine's CPU features
         if: ${{ !cancelled() && matrix.mode == 'release' }}
         run: rustc -vV && rustc --print cfg -C target-cpu=native
-      - name: Golden digest in release for this machine's own CPU
+      - name: Every golden in release for this machine's own CPU
         if: ${{ !cancelled() && matrix.mode == 'release' }}
         env:
           RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
@@ -136,10 +149,16 @@ jobs:
           # does not name the processor, so a restored native build from another machine's CPU
           # can hold instructions this one lacks (SIGILL). Built fresh here, it is this CPU's.
           CARGO_TARGET_DIR: target-native
-        run: cargo test -p geom-num --release --locked --test determinism -- --nocapture
-      - name: Golden digest in debug
+        run: cargo run --locked -p geom-test --bin golden -- run --release
+      - name: geom-num's every test vector in release for this machine's own CPU
+        if: ${{ !cancelled() && matrix.mode == 'release' }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+          CARGO_TARGET_DIR: target-native
+        run: cargo test -p geom-num --release --locked --no-fail-fast
+      - name: Every golden in debug
         if: ${{ !cancelled() && matrix.mode == 'debug' }}
-        run: cargo test -p geom-num --locked --test determinism -- --nocapture
+        run: cargo run --locked -p geom-test --bin golden -- run
       - name: Test suite in release, with overflow checks on
         if: ${{ !cancelled() && matrix.mode == 'release' }}
         env:
@@ -210,21 +229,27 @@ jobs:
           exit(wasi.start(instance));
           EOF
           echo "CARGO_TARGET_WASM32_WASIP1_RUNNER=node --no-warnings $RUNNER_TEMP/wasi-run.mjs" >> "$GITHUB_ENV"
-      - name: Golden digest in release, with overflow checks on
+      # Every golden of the store, geom-test's included (its library's goldens are pure
+      # computation, which WASI runs); the golden tool itself runs natively and builds and runs the
+      # tests for wasm32-wasip1 through the runner set above.
+      - name: Every golden on wasm32 in release, with overflow checks on
         if: ${{ !cancelled() }}
         env:
           RUSTFLAGS: -C overflow-checks=on
-        run: cargo test -p geom-num --target wasm32-wasip1 --release --locked --test determinism -- --nocapture
-      - name: Golden digest in release as shipped, without overflow checks
+        run: cargo run --locked -p geom-test --bin golden -- run --target wasm32-wasip1 --release
+      - name: Every golden on wasm32 in release as shipped, without overflow checks
         if: ${{ !cancelled() }}
-        run: cargo test -p geom-num --target wasm32-wasip1 --release --locked --test determinism -- --nocapture
-      - name: Golden digest in debug
+        run: cargo run --locked -p geom-test --bin golden -- run --target wasm32-wasip1 --release
+      - name: Every golden on wasm32 in debug
         if: ${{ !cancelled() }}
-        run: cargo test -p geom-num --target wasm32-wasip1 --locked --test determinism -- --nocapture
+        run: cargo run --locked -p geom-test --bin golden -- run --target wasm32-wasip1
+      - name: geom-num's every test vector on wasm32 in release as shipped
+        if: ${{ !cancelled() }}
+        run: cargo test -p geom-num --target wasm32-wasip1 --release --locked --no-fail-fast
       # The whole suite in release. In debug, wasm32-wasip1 runs every test on one thread with no
-      # optimisation, which takes well over an hour, so the debug leg here is the golden digest
-      # above (chapter 21 asks for the corpus in debug and release); the native jobs run the whole
-      # suite in debug.
+      # optimisation, which takes well over an hour, so the debug leg here is every golden of the
+      # store above (chapter 21 asks for the corpus in debug and release); the native jobs run the
+      # whole suite in debug.
       - name: Test suite in release, with overflow checks on
         if: ${{ !cancelled() }}
         env:

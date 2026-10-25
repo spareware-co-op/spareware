@@ -19,9 +19,14 @@ name: Kernel benchmarks
 # them:
 #  - instructions: every benchmark under Valgrind, through Gungraun. Callgrind counts instructions,
 #    L1 and last-level cache misses and estimated cycles; DHAT counts the heap the measured function
-#    uses. A rise over 5% in any of them fails. It runs twice, on Linux x86-64 and on Linux aarch64,
-#    each leg a gate of its own, so with the fuel job every benchmark is measured on the three
-#    targets chapter 23.3 names: x86-64 and aarch64 natively, and wasm32 (piece G28).
+#    uses. A rise over 5% in instructions, estimated cycles or heap fails, and so does one in a miss
+#    count of 20 or more at the merge base. A miss count below 20 cannot show a 5% change smaller
+#    than one event, and code layout alone moves it by one or two, so its changes are listed and
+#    judged through estimated cycles, which weight every miss (chapter 23.13; piece G18a;
+#    geom_bench::callgrind judges them from Gungraun's summary files). It runs twice, on Linux
+#    x86-64 and on Linux aarch64, each leg a gate of its own under the same rule, so with the fuel
+#    job every benchmark is measured on the three targets chapter 23.3 names: x86-64 and aarch64
+#    natively, and wasm32 (piece G28).
 #  - fuel: every benchmark built for wasm32-wasip1 and run in Wasmtime with fuel metering, which
 #    counts WebAssembly operators. A rise over 5% fails, and each scale benchmark, run at n, 2n and
 #    4n, must grow no faster than its stated cost.
@@ -101,9 +106,11 @@ env:
   # The gate (principle 12) and the listing threshold (chapter 23.13), in percent.
   GATE_PERCENT: "5"
   LIST_PERCENT: "1"
-  # Gungraun's soft limits for every gated measure (geom_bench::CALLGRIND_LIMITS and DHAT_LIMITS;
-  # a test checks they agree).
-  CALLGRIND_LIMITS: "ir=5%,estimatedcycles=5%,i1mr=5%,d1mr=5%,d1mw=5%,ilmr=5%,dlmr=5%,dlmw=5%"
+  # Gungraun's soft limits for the measures it gates itself (geom_bench::CALLGRIND_LIMITS and
+  # DHAT_LIMITS; a test checks they agree). They replace the tree's own. The miss counts are not
+  # here: geom-bench-counts judges them from the summaries, gated at GATE_PERCENT only on counts
+  # that can resolve it.
+  CALLGRIND_LIMITS: "ir=5%,estimatedcycles=5%"
   DHAT_LIMITS: "totalbytes=5%,totalblocks=5%,attgmaxbytes=5%,maximumbytes=5%"
   # What is compared: a pull request's base branch and head, or the main a push replaced and the
   # main it made.
@@ -274,9 +281,14 @@ jobs:
     env:
       # The target this leg measures, for its summary and annotations.
       TARGET: ${{ matrix.target }}
-      # One target directory for both trees: shared dependencies build once, and Gungraun keeps its
-      # saved runs in target/gungraun, where the second run finds the first.
+      # Each tree builds into a target directory of its own. Cargo names a path crate's build by
+      # its place in the workspace, which is the same in both checkouts, so in one shared directory
+      # the second tree reused the first tree's crates and the pull request was measured on the
+      # merge base's code (a pull request with 424 benchmarks ran the base's 350). The pull request
+      # builds here; the merge base in target-base, set on its step. Gungraun keeps both trees'
+      # saved runs in one home, where the second run finds the first.
       CARGO_TARGET_DIR: ${{ github.workspace }}/target
+      GUNGRAUN_HOME: ${{ github.workspace }}/gungraun
       # Every function on its own cache line, so the code the measured pass runs only once sits on
       # lines it already fetched (geom_bench::harness).
       RUSTFLAGS: "-C llvm-args=-align-all-functions=6"
@@ -311,7 +323,9 @@ jobs:
       - name: Cache the Rust build
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          workspaces: head -> ../target
+          workspaces: |
+            head -> ../target
+            base -> ../target-base
           key: ${{ matrix.target }}-${{ needs.scope.outputs.base_toolchain }}-${{ needs.scope.outputs.head_toolchain }}
           cache-directories: ~/.gungraun-runner
 
@@ -361,21 +375,28 @@ jobs:
         env:
           # Read when the benchmark is compiled (gungraun::main! uses option_env!).
           GUNGRAUN_RUNNER: ${{ env.BASE_RUNNER }}
+          CARGO_TARGET_DIR: ${{ github.workspace }}/target-base
         run: |
           set -euo pipefail
-          rm -rf "${CARGO_TARGET_DIR:?}/gungraun"
-          cargo "+$BASE_TOOLCHAIN" bench --locked -p geom-bench --bench instructions -- \
+          rm -rf "${GUNGRAUN_HOME:?}"
+          cargo "+$BASE_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench instructions -- \
             --save-baseline=base 2>&1 | tee "$RUNNER_TEMP/base.log"
-          cargo "+$BASE_TOOLCHAIN" bench --locked -p geom-bench --bench instructions -- --list \
+          cargo "+$BASE_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench instructions -- --list \
             | sed -nE 's/^instructions::([a-z0-9_]+)::([a-z0-9_]+)::([a-z0-9_]+): benchmark$/\1\/\2\/\3/p' \
             | sort > "$RUNNER_TEMP/base.names"
 
+      # Every run of the benchmark binary in this job builds it with --no-default-features, without
+      # geom-bench's judge: Gungraun's runner crate is also in the benchmark binary, and turning on
+      # its summary model there would change the binary measured.
+      #
       # The gate. Gungraun compares every benchmark with the merge base's saved run and, after
-      # reporting all of them, fails (exit code 3, reported by cargo as a failed bench) if any gated
-      # measure rose by more than 5%. The limits are this workflow's, passed on the command line,
-      # which takes precedence over the configuration in the tree. Each benchmark's teardown also
-      # checks its golden digests and fails the run if they differ. A benchmark with no saved run
-      # is recorded, not compared.
+      # reporting all of them, fails (exit code 3, reported by cargo as a failed bench) if
+      # instructions, estimated cycles or a heap measure rose by more than 5%. The limits are this
+      # workflow's, passed on the command line, which takes precedence over the configuration in
+      # the tree. Each benchmark's teardown also checks its golden digests and fails the run if
+      # they differ. A benchmark with no saved run is recorded, not compared. Every benchmark's
+      # counts, from both runs, are saved as JSON (summary.json in its output folder) for the next
+      # step.
       - name: Benchmark the pull request against the merge base
         id: gate
         working-directory: head
@@ -386,13 +407,51 @@ jobs:
           if [ "$HAS_BASE" = true ]; then
             compare=(--baseline=base)
           else
-            rm -rf "${CARGO_TARGET_DIR:?}/gungraun"
+            rm -rf "${GUNGRAUN_HOME:?}"
             compare=()
           fi
-          cargo "+$HEAD_TOOLCHAIN" bench --locked -p geom-bench --bench instructions -- \
-            "${compare[@]}" --save-baseline=head \
+          cargo "+$HEAD_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench instructions -- \
+            "${compare[@]}" --save-baseline=head --save-summary=json \
             --callgrind-limits="$CALLGRIND_LIMITS" --dhat-limits="$DHAT_LIMITS" \
             2>&1 | tee "$RUNNER_TEMP/head.log"
+
+      # The miss counts (and instructions and estimated cycles again, exactly), judged from the
+      # summaries the gate saved, by one rule on both legs (geom_bench::callgrind; chapter 23.13):
+      # a rise over 5% fails on instructions, on estimated cycles, and on a miss count of 20 or more
+      # at the merge base, the smallest count on which one event is within 5%. A smaller miss count
+      # would fail on any single event, which code layout alone causes, so its changes are listed
+      # and judged through estimated cycles. Every benchmark the run lists must have exactly one
+      # summary with every count, or the judgement fails. It runs after a failed gate too, to
+      # report everything.
+      - name: Judge instructions, cycles and cache misses from the summaries
+        id: judge
+        if: always() && needs.scope.outputs.base_gate == 'true' && steps.gate.outcome != 'skipped'
+        working-directory: head
+        env:
+          GUNGRAUN_RUNNER: ${{ env.HEAD_RUNNER }}
+        run: |
+          set -euo pipefail
+          cargo "+$HEAD_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench instructions -- --list \
+            | sed -nE 's/^instructions::([a-z0-9_]+)::([a-z0-9_]+)::([a-z0-9_]+): benchmark$/\1\/\2\/\3/p' \
+            | sort > "$RUNNER_TEMP/judged.names"
+          cargo "+$HEAD_TOOLCHAIN" build --locked --release -p geom-bench --bin geom-bench-counts
+          # Exit status 1: a rise over the limit; 2: the judgement could not be made.
+          status=0
+          "$CARGO_TARGET_DIR/release/geom-bench-counts" callgrind \
+            "$GUNGRAUN_HOME/geom-bench/instructions" "$RUNNER_TEMP/judged.names" \
+            "$GATE_PERCENT" "Instructions, estimated cycles and cache misses on $TARGET" \
+            > "$RUNNER_TEMP/callgrind.md" || status=$?
+          case "$status" in
+            0) ;;
+            1)
+              echo "::error::Instructions, estimated cycles or a cache-miss count on $TARGET rose by more than $GATE_PERCENT%; see the job summary."
+              exit 1
+              ;;
+            *)
+              echo "::error::geom-bench-counts could not judge the summaries (exit status $status); see the job log."
+              exit 1
+              ;;
+          esac
 
       # Chapter 23.13 lists every change over 1%. The two saved runs are compared again with 1%
       # limits each way; these runs read the saved results and measure nothing. Their failing exit
@@ -407,7 +466,7 @@ jobs:
           GUNGRAUN_RUNNER: ${{ env.HEAD_RUNNER }}
         run: |
           set -euo pipefail
-          cargo "+$HEAD_TOOLCHAIN" bench --locked -p geom-bench --bench instructions -- --list \
+          cargo "+$HEAD_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench instructions -- --list \
             | sed -nE 's/^instructions::([a-z0-9_]+)::([a-z0-9_]+)::([a-z0-9_]+): benchmark$/\1\/\2\/\3/p' \
             | sort > "$RUNNER_TEMP/head.names"
           comm -13 "$RUNNER_TEMP/base.names" "$RUNNER_TEMP/head.names" > "$RUNNER_TEMP/added.names"
@@ -429,7 +488,7 @@ jobs:
             log="$RUNNER_TEMP/${way%%:*}.log"
             # Its failing exit status only means something was listed; whether the run completed
             # is checked next.
-            cargo "+$HEAD_TOOLCHAIN" bench --locked -p geom-bench --bench instructions -- \
+            cargo "+$HEAD_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench instructions -- \
               --load-baseline=head --baseline=base \
               --callgrind-limits="ir=${limit}%,estimatedcycles=${limit}%,i1mr=${limit}%,d1mr=${limit}%,d1mw=${limit}%,ilmr=${limit}%,dlmr=${limit}%,dlmw=${limit}%" \
               --dhat-limits="totalbytes=${limit}%,totalblocks=${limit}%,attgmaxbytes=${limit}%,maximumbytes=${limit}%" \
@@ -464,6 +523,7 @@ jobs:
         if: always()
         env:
           GATE_OUTCOME: ${{ steps.gate.outcome }}
+          JUDGE_OUTCOME: ${{ steps.judge.outcome }}
         run: |
           # Only reports: the steps before it decide whether the job passes, so nothing here may
           # fail it, and a file an earlier step did not write is left out.
@@ -478,11 +538,21 @@ jobs:
             echo "Merge base \`${MERGE_BASE:0:12}\` (Rust $BASE_TOOLCHAIN) against" \
               "\`${HEAD_SHA:0:12}\` (Rust $HEAD_TOOLCHAIN), measured in one job with" \
               "$(valgrind --version 2>/dev/null). The gate: no benchmark's instructions, estimated" \
-              "cycles, cache misses or heap use may rise by more than $GATE_PERCENT%, and every" \
-              "benchmark's inputs and results must match golden.txt."
+              "cycles or heap use may rise by more than $GATE_PERCENT%, nor any cache-miss count" \
+              "large enough to resolve $GATE_PERCENT% (20 or more at the merge base; smaller ones" \
+              "are listed and judged through estimated cycles), and every benchmark's inputs and" \
+              "results must match golden.txt."
             echo
             case "$GATE_OUTCOME/$HAS_BASE" in
-              success/true) echo "**Passed.**" ;;
+              success/true)
+                if [ "$JUDGE_OUTCOME" = success ]; then
+                  echo "**Passed.**"
+                elif [ -s "$t/callgrind.md" ] && ! grep -q '^\*\*Passed' "$t/callgrind.md"; then
+                  echo "**Failed: rises over $GATE_PERCENT% in the summaries' judgement.** They block the merge; see below."
+                else
+                  echo "**Failed:** the summaries could not be judged (${JUDGE_OUTCOME:-not run}). See the job log."
+                fi
+                ;;
               success/false) echo "**Recorded.** The merge base has no count benchmarks, so nothing was compared; this run checks that they build, run and match their golden digests." ;;
               failure/*)
                 if listed "$t/head.log"; then
@@ -502,6 +572,10 @@ jobs:
               echo '```text'
               regressions "$t/head.log"
               echo '```'
+            fi
+            if [ -s "$t/callgrind.md" ]; then
+              echo
+              cat "$t/callgrind.md"
             fi
             if [ "$HAS_BASE" = true ] && [ -f "$t/rises.log" ]; then
               for way in rises falls; do
@@ -606,10 +680,13 @@ jobs:
       - name: Build each tree's guest for wasm32-wasip1
         run: |
           set -euo pipefail
+          # Each tree's guest in a target directory of its own: in one shared directory cargo would
+          # take one tree's crates for the other's, as it names a path crate's build by its place in
+          # the workspace, the same in both checkouts.
           guest() {
             (cd "$1" && cargo "+$2" build --locked --release -p geom-bench \
-              --bin geom-bench-guest --target wasm32-wasip1)
-            cp "$CARGO_TARGET_DIR/wasm32-wasip1/release/geom-bench-guest.wasm" "$RUNNER_TEMP/$1.wasm"
+              --bin geom-bench-guest --target wasm32-wasip1 --target-dir "$CARGO_TARGET_DIR/guest-$1")
+            cp "$CARGO_TARGET_DIR/guest-$1/wasm32-wasip1/release/geom-bench-guest.wasm" "$RUNNER_TEMP/$1.wasm"
           }
           if [ "$HAS_BASE" = true ]; then
             guest base "$BASE_TOOLCHAIN"

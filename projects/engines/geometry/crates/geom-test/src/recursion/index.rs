@@ -786,12 +786,13 @@ impl<'p> Index<'p> {
                 syn::FnArg::Receiver(r) => {
                     receiver = true;
                     let own = self_ty.cloned().unwrap_or(Ty::Unknown);
-                    let t = match &r.kind {
-                        syn::ReceiverKind::Typed(_, t) => self.resolver.ty(scope, t),
-                        syn::ReceiverKind::Reference(_, _, m) => {
-                            Ty::Ref(Box::new(own), m.is_some())
-                        }
-                        _ => own,
+                    // `self: T` names its type; `&self` and `&mut self` borrow the impl's own.
+                    let t = if r.colon_token.is_some() {
+                        self.resolver.ty(scope, &r.ty)
+                    } else if r.reference.is_some() {
+                        Ty::Ref(Box::new(own), r.mutability.is_some())
+                    } else {
+                        own
                     };
                     inputs.push(t);
                 }

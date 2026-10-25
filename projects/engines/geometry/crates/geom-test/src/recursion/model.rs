@@ -25,7 +25,7 @@
 //! (<https://doc.rust-lang.org/reference/items/modules.html>), on items and associated items
 //! (<https://doc.rust-lang.org/reference/items.html>), and on derive
 //! (<https://doc.rust-lang.org/reference/attributes/derive.html>); parsing by `syn`
-//! (<https://docs.rs/syn/3.0.9/syn/>).
+//! (<https://docs.rs/syn/2.0.119/syn/>).
 //!
 //! Cost: one parse of every file the module tree reaches; linear in the number of items; no
 //! recursion (modules and function bodies are queued).
@@ -734,7 +734,7 @@ impl Loader<'_> {
                     self.program.generics.push(Generic {
                         name: t.ident.to_string(),
                         bounds: t.bounds.iter().cloned().collect(),
-                        default: t.default.as_ref().map(|(_, d)| d.clone()),
+                        default: t.default.clone(),
                         scope: scope.clone(),
                     });
                     scope.generics.push(id);
@@ -1218,7 +1218,7 @@ impl Loader<'_> {
         self.program.impls.push(Impl {
             scope: scope.clone(),
             self_ty: (*i.self_ty).clone(),
-            trait_path: i.trait_.as_ref().map(|(p, _)| p.clone()),
+            trait_path: i.trait_.as_ref().map(|(_, p, _)| p.clone()),
             methods: BTreeMap::new(),
             assoc,
             consts,

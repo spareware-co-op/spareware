@@ -34,22 +34,27 @@
 //! target by construction and only the kernel's results can differ.
 //!
 //! Every result is written in a canonical little-endian byte encoding, in a fixed field order (see
-//! `Recorder`), and hashed with SHA-256 (FIPS 180-4), the hash chapters 21 and 28.13 specify,
-//! written here and checked against the standard's own test vectors and constants. Doubles go in
-//! as their bits, so a difference of one unit in the last place shows. A NaN would be written as
+//! `Recorder`), and hashed with SHA-256 (FIPS 180-4), the hash chapters 21 and 28.13 specify, from
+//! `geom_test::golden`, the one implementation every golden uses (piece G19), checked there against
+//! the standard's test vectors. Doubles go in as their bits, so a difference of one unit in the
+//! last place shows. A NaN would be written as
 //! one canonical pattern, because Rust does not fix a NaN's sign or payload (RFC 3514), but no
 //! result here may be NaN, and the test checks that.
 //!
 //! **The same digest must hold on every target `.github/workflows/kernel.yml` runs**: Linux and
 //! Windows on x86-64 and arm64, macOS on arm64 and x86-64, and wasm32-wasip1 under wasmtime and
 //! under Node; in debug and in release, release both with overflow checks on and as it ships
-//! (without them), and natively with `-C target-cpu=native`. A changed digest is one of two
-//! things. Either it is a bug: some target computes different bits, so the same model would give
-//! different geometry on different machines. Or the kernel's results were changed on purpose,
+//! (without them), and natively with `-C target-cpu=native`. The digest lives in the golden store
+//! (`geom-test/golden/store.json`, id `geom-num/determinism`), and `geom_test::golden::check` runs
+//! the corpus twice in the process, each time on a heap the perturbing allocator has shifted and
+//! fragmented differently, before it compares the digest with the store's. A changed digest is one
+//! of two things. Either it is a bug: some target computes different bits, so the same model would
+//! give different geometry on different machines. Or the kernel's results were changed on purpose,
 //! which is a deliberate kernel edition change (chapter 21, section 28.13): its pull request
-//! updates `GOLDEN`, says which results changed and why, and a kernel owner approves it. A change
-//! to this corpus changes the digest too and is reviewed the same way. Never update the constant
-//! to make one target pass.
+//! records the change in the store (the old digest in the golden's history, with its kind, piece
+//! and why), says which results changed, and a kernel owner approves it. A change to this corpus
+//! changes the digest too and is recorded the same way. Never update the store to make one target
+//! pass.
 //!
 //! To help find the cause when one target disagrees, the test prints a digest per section: compare
 //! the CI logs of two targets to see which part of the kernel differs. It also checks that the
@@ -80,7 +85,6 @@
 
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
-use std::fmt::Write;
 
 use geom_num::eft::{fast_two_sum, split, two_prod, two_sum};
 use geom_num::grid::{
@@ -93,31 +97,29 @@ use geom_num::plane::{Plane, Tpi};
 use geom_num::predicate::{incircle, insphere, orient2d, orient3d};
 use geom_num::{Coord, Exactness, GridStep, NumError, P2, P3, Real, Rounded, Sign, Steps, Wide};
 use geom_num::{ladder, math};
+use geom_test::golden::{self, Sha256, hex};
 
-/// The golden digest of the corpus: SHA-256, in hexadecimal.
+/// The corpus's golden in the golden store (`geom-test/golden/store.json`).
 ///
-/// The same constant must hold on every target `.github/workflows/kernel.yml` runs (the module
+/// The same digest must hold on every target `.github/workflows/kernel.yml` runs (the module
 /// documentation lists them). A change is either a bug (a target computes different bits, so the
 /// same model would give different geometry on different machines) or a deliberate kernel edition
-/// change, made in a pull request that updates this constant, says which, and is approved by a
-/// kernel owner. See the module documentation.
+/// change, recorded in the store in a pull request that says which and is approved by a kernel
+/// owner. See the module documentation.
 ///
-/// Changes, each deliberate:
-///
-/// - From `c9c61875e6da8cff4ffa79f147d8f32187fa2929564100ce834849bb43a211f8` (piece G02) when the
-///   correctly rounded maths of piece G05 (issue #174) merged. The sections `predicates`,
-///   `planes`, `tpi`, `grid`, `wide`, `eft` and `scalars` give G02's digests unchanged. `interval`
-///   no longer records the refusals of `Interval::exp` and `Interval::ln` (indices 3 and 4), which
-///   are certified now and recorded in `math`; with those two records put back it gives G02's
-///   digest, so nothing else in it moved. `math`: of G02's 7,677 records, 92 moved, each by one
-///   unit in the last place to the correctly rounded value, where `libm` (and, for `sinpi` and
-///   `cospi`, G02's reduction before `libm`) was one unit off: `exp` 9, `ln` 3, `sinpi` 52,
-///   `cospi` 19 and `atan2` 9 (for example `exp(1)`, from 2.7182818284590455 to 2.718281828459045,
-///   the double nearest e). No error changed, and no other function's result. 2,700 records were
-///   added, from a generator of their own (`SEED_G05`): the `libm` twins of the five, now in
-///   `math::unproven` (indices 23 to 27), and the interval versions `Interval::sinpi`, `cospi`,
-///   `exp` and `ln` (28 to 31).
-const GOLDEN: &str = "fb19edfc7c58ca5e93a8921dfbdd2ab2dfacc2d180fbe6dec540efbede954564";
+/// The digest's history is in the store: G02 set it, and it changed once, when the correctly
+/// rounded maths of piece G05 (issue #174) merged. The sections `predicates`, `planes`, `tpi`,
+/// `grid`, `wide`, `eft` and `scalars` give G02's digests unchanged. `interval` no longer records
+/// the refusals of `Interval::exp` and `Interval::ln` (indices 3 and 4), which are certified now
+/// and recorded in `math`; with those two records put back it gives G02's digest, so nothing else
+/// in it moved. `math`: of G02's 7,677 records, 92 moved, each by one unit in the last place to the
+/// correctly rounded value, where `libm` (and, for `sinpi` and `cospi`, G02's reduction before
+/// `libm`) was one unit off: `exp` 9, `ln` 3, `sinpi` 52, `cospi` 19 and `atan2` 9 (for example
+/// `exp(1)`, from 2.7182818284590455 to 2.718281828459045, the double nearest e). No error
+/// changed, and no other function's result. 2,700 records were added, from a generator of their
+/// own (`SEED_G05`): the `libm` twins of the five, now in `math::unproven` (indices 23 to 27), and
+/// the interval versions `Interval::sinpi`, `cospi`, `exp` and `ln` (28 to 31).
+const GOLDEN: &str = "geom-num/determinism";
 
 /// The calls each section makes, in order: the corpus is fixed, so these are its exact counts,
 /// and a section that loses calls fails by name.
@@ -131,88 +133,6 @@ const SECTION_CALLS: [(&str, u64); 9] = [
     ("interval", 19_149),
     ("math", 10_377),
     ("scalars", 4_209),
-];
-
-/// SHA-256's initial hash value: the first 32 bits of the fractional parts of the square roots of
-/// the first eight primes (FIPS 180-4, section 5.3.3). Checked against that definition below.
-const SHA256_INITIAL: [u32; 8] = [
-    0x6a09_e667,
-    0xbb67_ae85,
-    0x3c6e_f372,
-    0xa54f_f53a,
-    0x510e_527f,
-    0x9b05_688c,
-    0x1f83_d9ab,
-    0x5be0_cd19,
-];
-
-/// SHA-256's round constants: the first 32 bits of the fractional parts of the cube roots of the
-/// first 64 primes (FIPS 180-4, section 4.2.2). Checked against that definition below.
-const SHA256_ROUND: [u32; 64] = [
-    0x428a_2f98,
-    0x7137_4491,
-    0xb5c0_fbcf,
-    0xe9b5_dba5,
-    0x3956_c25b,
-    0x59f1_11f1,
-    0x923f_82a4,
-    0xab1c_5ed5,
-    0xd807_aa98,
-    0x1283_5b01,
-    0x2431_85be,
-    0x550c_7dc3,
-    0x72be_5d74,
-    0x80de_b1fe,
-    0x9bdc_06a7,
-    0xc19b_f174,
-    0xe49b_69c1,
-    0xefbe_4786,
-    0x0fc1_9dc6,
-    0x240c_a1cc,
-    0x2de9_2c6f,
-    0x4a74_84aa,
-    0x5cb0_a9dc,
-    0x76f9_88da,
-    0x983e_5152,
-    0xa831_c66d,
-    0xb003_27c8,
-    0xbf59_7fc7,
-    0xc6e0_0bf3,
-    0xd5a7_9147,
-    0x06ca_6351,
-    0x1429_2967,
-    0x27b7_0a85,
-    0x2e1b_2138,
-    0x4d2c_6dfc,
-    0x5338_0d13,
-    0x650a_7354,
-    0x766a_0abb,
-    0x81c2_c92e,
-    0x9272_2c85,
-    0xa2bf_e8a1,
-    0xa81a_664b,
-    0xc24b_8b70,
-    0xc76c_51a3,
-    0xd192_e819,
-    0xd699_0624,
-    0xf40e_3585,
-    0x106a_a070,
-    0x19a4_c116,
-    0x1e37_6c08,
-    0x2748_774c,
-    0x34b0_bcb5,
-    0x391c_0cb3,
-    0x4ed8_aa4a,
-    0x5b9c_ca4f,
-    0x682e_6ff3,
-    0x748f_82ee,
-    0x78a5_636f,
-    0x84c8_7814,
-    0x8cc7_0208,
-    0x90be_fffa,
-    0xa450_6ceb,
-    0xbef9_a3f7,
-    0xc671_78f2,
 ];
 
 /// Multiplier of the corpus generator: Knuth's MMIX linear congruential generator modulo 2^64
@@ -294,118 +214,6 @@ const SPECIAL: [f64; 16] = [
 // ---------------------------------------------------------------------------------------------
 // The hash and the canonical encoding.
 // ---------------------------------------------------------------------------------------------
-
-/// SHA-256, as FIPS 180-4 (*Secure Hash Standard*, NIST, 2015) specifies it: the message is
-/// padded with a one bit, zeros and its length in bits (section 5.1.1), and compressed 512 bits at
-/// a time by the function of section 6.2.2. Bytes are taken as they come, so the whole corpus is
-/// never held in memory. Every addition is modulo 2^32, as the standard defines it.
-#[derive(Clone)]
-struct Sha256 {
-    /// The hash value so far, H(i).
-    state: [u32; 8],
-    /// The block being filled.
-    block: [u8; 64],
-    /// Bytes in `block`.
-    filled: usize,
-    /// Message bytes so far.
-    length: u64,
-}
-
-impl Sha256 {
-    /// The hash of the empty message so far.
-    const fn new() -> Sha256 {
-        Sha256 {
-            state: SHA256_INITIAL,
-            block: [0; 64],
-            filled: 0,
-            length: 0,
-        }
-    }
-
-    /// Takes the message's next bytes.
-    fn write(&mut self, bytes: &[u8]) {
-        self.length += u64::try_from(bytes.len()).unwrap();
-        for &b in bytes {
-            self.push(b);
-        }
-    }
-
-    /// One byte into the block, compressing a full block.
-    fn push(&mut self, b: u8) {
-        self.block[self.filled] = b;
-        self.filled += 1;
-        if self.filled == 64 {
-            self.compress();
-            self.filled = 0;
-        }
-    }
-
-    /// The compression function on the full block (FIPS 180-4, section 6.2.2).
-    fn compress(&mut self) {
-        let mut w = [0u32; 64];
-        for (word, bytes) in w.iter_mut().zip(self.block.chunks_exact(4)) {
-            *word = u32::from_be_bytes(bytes.try_into().unwrap());
-        }
-        for t in 16..64 {
-            let s0 = w[t - 15].rotate_right(7) ^ w[t - 15].rotate_right(18) ^ (w[t - 15] >> 3);
-            let s1 = w[t - 2].rotate_right(17) ^ w[t - 2].rotate_right(19) ^ (w[t - 2] >> 10);
-            w[t] = w[t - 16]
-                .wrapping_add(s0)
-                .wrapping_add(w[t - 7])
-                .wrapping_add(s1);
-        }
-        let [mut a, mut b, mut c, mut d, mut e, mut f, mut g, mut h] = self.state;
-        for (&k, &wt) in SHA256_ROUND.iter().zip(&w) {
-            let s1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
-            let choose = (e & f) ^ (!e & g);
-            let t1 = h
-                .wrapping_add(s1)
-                .wrapping_add(choose)
-                .wrapping_add(k)
-                .wrapping_add(wt);
-            let s0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22);
-            let majority = (a & b) ^ (a & c) ^ (b & c);
-            let t2 = s0.wrapping_add(majority);
-            h = g;
-            g = f;
-            f = e;
-            e = d.wrapping_add(t1);
-            d = c;
-            c = b;
-            b = a;
-            a = t1.wrapping_add(t2);
-        }
-        for (state, v) in self.state.iter_mut().zip([a, b, c, d, e, f, g, h]) {
-            *state = state.wrapping_add(v);
-        }
-    }
-
-    /// The digest: the message padded (section 5.1.1) and its last blocks compressed.
-    fn finish(mut self) -> [u8; 32] {
-        let bits = self.length.wrapping_mul(8);
-        self.push(0x80);
-        while self.filled != 56 {
-            self.push(0);
-        }
-        for b in bits.to_be_bytes() {
-            self.push(b);
-        }
-        let mut digest = [0u8; 32];
-        for (out, word) in digest.chunks_exact_mut(4).zip(self.state) {
-            out.copy_from_slice(&word.to_be_bytes());
-        }
-        digest
-    }
-}
-
-/// A digest in hexadecimal, as `GOLDEN` is written.
-fn hex(digest: [u8; 32]) -> String {
-    let mut out = String::with_capacity(64);
-    for b in digest {
-        write!(out, "{b:02x}").unwrap();
-    }
-    out
-}
 
 /// The kernel operations the corpus calls. A call writes its discriminant first, so the byte
 /// stream says which operation each result came from. The discriminants are part of the encoding:
@@ -2257,103 +2065,8 @@ fn required() -> Vec<(Op, &'static str)> {
     out
 }
 
-/// The SHA-256 of `bytes`, written in `pieces`-byte pieces.
-fn sha256_in_pieces(bytes: &[u8], pieces: usize) -> String {
-    let mut h = Sha256::new();
-    for piece in bytes.chunks(pieces) {
-        h.write(piece);
-    }
-    hex(h.finish())
-}
-
-/// SHA-256 gives the digests of FIPS 180-4's examples (NIST's "SHA-256" example document and the
-/// standard's test vectors): the empty message, "abc" (one block), the 448-bit and 896-bit
-/// messages (two blocks, padding in a block of its own) and one million "a"s; whatever the size of
-/// the pieces the bytes arrive in.
-#[test]
-fn sha256_matches_the_standards_test_vectors() {
-    let cases = [
-        (
-            "",
-            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-        ),
-        (
-            "abc",
-            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
-        ),
-        (
-            "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq",
-            "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1",
-        ),
-        (
-            concat!(
-                "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmn",
-                "hijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu",
-            ),
-            "cf5b16a778af8380036ce59e7b0492370b249b11e8f07a51afac45037afee9d1",
-        ),
-    ];
-    for (message, want) in cases {
-        for pieces in [1, 3, 55, 56, 63, 64, 65, 1000] {
-            let got = sha256_in_pieces(message.as_bytes(), pieces);
-            assert_eq!(got, want, "{message:?} in {pieces}-byte pieces");
-        }
-    }
-    let million = vec![b'a'; 1_000_000];
-    let want = "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0";
-    assert_eq!(sha256_in_pieces(&million, 4_096), want);
-}
-
-/// The first `n` primes.
-fn primes(n: usize) -> Vec<u128> {
-    let mut out: Vec<u128> = Vec::new();
-    let mut candidate = 2u128;
-    while out.len() < n {
-        if out.iter().all(|p| candidate % p != 0) {
-            out.push(candidate);
-        }
-        candidate += 1;
-    }
-    out
-}
-
-/// The first 32 bits of the fractional part of the `k`-th root of `p`: the integer `k`-th root
-/// of p · 2^(32k), by bisection, modulo 2^32. Exact in `u128` for the primes used (p · 2^96 below
-/// 2^105).
-fn root_fraction_bits(p: u128, k: u32) -> u32 {
-    let target = p << (32 * k);
-    let (mut lo, mut hi) = (0u128, 1u128 << 40);
-    while hi - lo > 1 {
-        let mid = lo.midpoint(hi);
-        if mid.pow(k) <= target {
-            lo = mid;
-        } else {
-            hi = mid;
-        }
-    }
-    u32::try_from(lo & 0xffff_ffff).unwrap()
-}
-
-/// SHA-256's constants are what FIPS 180-4 defines them to be, computed here from the primes, so
-/// a mistyped constant cannot hide behind a matching test vector.
-#[test]
-fn sha256_constants_follow_their_definitions() {
-    let initial: Vec<u32> = primes(8)
-        .iter()
-        .map(|&p| root_fraction_bits(p, 2))
-        .collect();
-    assert_eq!(initial, SHA256_INITIAL);
-    let round: Vec<u32> = primes(64)
-        .iter()
-        .map(|&p| root_fraction_bits(p, 3))
-        .collect();
-    assert_eq!(round, SHA256_ROUND);
-}
-
-/// The golden digest. The same constant must hold on every target; a change is a bug or a
-/// deliberate kernel edition change (see the module documentation and `GOLDEN`).
-#[test]
-fn golden_hash_is_the_same_on_every_target() {
+/// The whole corpus, recorded section by section.
+fn corpus() -> Recorder {
     let mut g = Gen(SEED);
     let mut r = Recorder::new();
     predicates(&mut g, &mut r);
@@ -2374,7 +2087,18 @@ fn golden_hash_is_the_same_on_every_target() {
     r.end_section("math");
     scalars(&mut g, &mut r);
     r.end_section("scalars");
+    r
+}
 
+/// The golden digest. The same digest must hold on every target; a change is a bug or a
+/// deliberate kernel edition change (see the module documentation and `GOLDEN`).
+#[test]
+fn golden_hash_is_the_same_on_every_target() {
+    let checked = golden::check(GOLDEN, || {
+        let r = corpus();
+        (r.total.clone().finish(), r)
+    });
+    let r = &checked.value;
     let hash = hex(r.total.clone().finish());
     println!("geom-num determinism corpus: {} calls", r.calls);
     for (name, calls, digest) in &r.report {
@@ -2399,11 +2123,7 @@ fn golden_hash_is_the_same_on_every_target() {
     }
     assert_eq!(counts.len(), SECTION_CALLS.len(), "sections {counts:?}");
     assert_eq!(r.nans, 0, "a result in the corpus is NaN");
-    assert_eq!(
-        hash, GOLDEN,
-        "geom-num's golden digest is {hash} here but {GOLDEN} is expected. Either this target \
-         computes different bits (a bug: compare the section digests above with another target's \
-         log) or the kernel's results changed (a deliberate kernel edition change must update \
-         GOLDEN and say so)"
-    );
+    checked.verdict().unwrap_or_else(|e| {
+        panic!("{e}. Compare the section digests above with another target's log to find the part of the kernel that differs")
+    });
 }

@@ -28,6 +28,32 @@ bench = false
 
 [dependencies]
 geom-num = { path = "../geom-num" }
+# SHA-256 for every benchmark's golden digests: RustCrypto's sha2, the one SHA-256 implementation of
+# every golden in the kernel (piece G19; geom-test uses it too). MIT OR Apache-2.0. 0.11.0, the
+# version geom-test pins (0.11.1 needs Rust 1.88, above geom-test's declared 1.86). Without its
+# default `alloc` and `oid` features.
+sha2 = { version = "0.11.0", default-features = false }
+
+# Reading the gate's summaries, on Unix and Windows, where the judge runs: Gungraun's summary model
+# needs `OsString` to deserialize, which serde provides there only, so the WebAssembly guest
+# (geom-bench-guest, built for wasm32-wasip1) never builds it. Both are optional, behind the
+# `judge` feature below.
+[target.'cfg(any(unix, windows))'.dependencies]
+# Gungraun's summary model, the typed schema of the `summary.json` files the gate's runs write, which
+# `geom-bench-counts callgrind` reads (`geom_bench::callgrind`). Only the model: no runner, no
+# Valgrind. Apache-2.0 OR MIT. Exactly the version of `gungraun` below, so the schema read is the
+# one the runner writes (a test checks they agree).
+gungraun-runner = { version = "=0.20.0", default-features = false, features = ["summary"], optional = true }
+# The JSON parser for those summaries. MIT OR Apache-2.0.
+serde_json = { version = "1.0.154", optional = true }
+
+[features]
+default = ["judge"]
+# The judge of the instruction-and-cache gate (`geom_bench::callgrind`), on by default. The gate's
+# measured runs build without it (`cargo bench --no-default-features`): Gungraun's runner crate is
+# also a dependency of the benchmark binary, so turning on its summary model would change the
+# binary being measured, and a measurement must not change with the tool that judges it.
+judge = ["dep:gungraun-runner", "dep:serde_json"]
 
 [dev-dependencies]
 # Wall-clock timings for people, on every platform. MIT OR Apache-2.0.

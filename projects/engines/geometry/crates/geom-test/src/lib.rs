@@ -11,8 +11,8 @@
 //! (chapter 27) within the licence allow-list of 29.2. No kernel crate may have a normal
 //! dependency on it, only a development dependency (chapter 27; 28.1).
 //!
-//! The first piece (G11) holds the parts every later test leans on, G15 adds the map, and G16 the
-//! source ledger and the banned-source scan:
+//! The first piece (G11) holds the parts every later test leans on, G15 adds the map, G16 the
+//! source ledger and the banned-source scan, and G19 the golden store and the determinism matrix:
 //!
 //! - [`seed`]: the seed discipline. Every seeded test prints `seed: <hex>` before it draws anything,
 //!   and the environment variable `SPAREKIT_SEED` replays any printed seed exactly (28.5, 28.17).
@@ -34,6 +34,14 @@
 //!   licences judged by chapter 29.2's classes (29.20), every published dependency, and every
 //!   kernel crate's error kinds. The binary `map` writes it (`cargo run -p geom-test --bin map --
 //!   write`) and checks it in CI (`-- check`): every header complete, the map current.
+//! - [`golden`]: the golden store of 28.13 (`golden/store.json`), keyed by kernel edition, golden
+//!   id and operation versions, with the record of every change and the owner-approval rule for
+//!   edits; the one SHA-256 every golden is hashed with (the `sha2` crate of the `RustCrypto`
+//!   project); the perturbing allocator, the in-process repeat and the input-shuffle hook every
+//!   golden runs under; and the runner that checks every golden on every target and build mode.
+//!   The binary `golden` lists the
+//!   store, checks it against the repository (`-- check`), runs every golden in one CI leg's
+//!   configuration (`-- run`) and holds a pull request's edits to the approval rule (`-- diff`).
 //! - [`ledger`]: the kernel's source ledger and notices (29.20, rules 4 to 6):
 //!   `projects/engines/geometry/PROVENANCE.md` and `projects/engines/geometry/NOTICE`, generated
 //!   from the map's `Source:` and `Consulted:` records, the hand-kept licence texts of ported
@@ -75,8 +83,9 @@
 //! - **The kernel's lints.** `#![forbid(unsafe_code)]`, and no `unwrap`, `expect`, `panic!` or
 //!   indexing outside tests. A helper fails with a typed error and the test decides.
 //!
-//! Sections: 26, 27, 28 and 29 of the kernel architecture
-//! (`projects/engines/geometry/architecture/`), in part: the map for people and AI of 26.3;
+//! Sections: 21, 26, 27, 28 and 29 of the kernel architecture
+//! (`projects/engines/geometry/architecture/`), in part: the determinism matrix of 21 and the
+//! golden store of 28.13, keyed by the editions of 26.2; the map for people and AI of 26.3;
 //! chapter 27's `geom-test` row and its rule that a development crate is never a kernel crate's
 //! normal dependency; 28.1, "Where the code lives", for that rule's check; the property tests of
 //! 28.2, run from a fixed seed; the generators aimed at the hard cases of 28.5; the outside oracles
@@ -92,9 +101,14 @@
 //! - `geom-num` (MPL-2.0, ours), the numbers layer under test.
 //! - `proptest` 1.12, without its default `fork` and `timeout` features, as in `geom-num`. [`prop`]
 //!   always runs it from a fixed seed, so its operating-system random path is never taken.
-//! - `serde_json` 1.0, to read `cargo metadata`.
-//! - `syn` 3.0, `proc-macro2` 1.0 (with span locations) and `quote` 1.0: the recursion check's Rust
-//!   parser, its call sites' line numbers and its token printing.
+//! - `serde_json` 1.0, to read `cargo metadata` and the golden store, and `serde` 1.0 with its
+//!   derive, to read the store into typed records.
+//! - `sha2` 0.11, the SHA-256 of every golden digest (FIPS 180-4).
+//! - `rand` 0.10, without its default features, for its Fisher-Yates shuffle, which the shuffle
+//!   hook drives from `SplitMix64`; it has no generator of its own here.
+//! - `syn` 2.0, `proc-macro2` 1.0 (with span locations) and `quote` 1.0: Rust's grammar for the
+//!   golden store's repository check and the recursion check's parser, their line numbers and the
+//!   recursion check's token printing.
 //! - `petgraph` 0.8, without default features: the recursion check's strongly connected
 //!   components (Tarjan's algorithm).
 //! - `pulldown-cmark` 0.13.5, a development dependency without its default features (the HTML
@@ -113,8 +127,9 @@
 //! - MIT OR Apache-2.0: `proptest`, `bit-set`, `bit-vec`, `bitflags`, `chacha20`, `cfg-if`,
 //!   `cpufeatures`, `libc`, `rand`, `rand_core`, `rand_xorshift`, `getrandom`, `core_detect`,
 //!   `num-traits`, `autocfg`, `regex-syntax`, `unarray`, `serde_json`, `serde`, `serde_core`,
-//!   `serde_derive`, `itoa`, `proc-macro2`, `quote`, `syn`, `petgraph`, `fixedbitset`,
-//!   `hashbrown`, `indexmap`, `equivalent`, `num-rational`, `num-bigint` and `num-integer`.
+//!   `serde_derive`, `itoa`, `proc-macro2`, `quote`, `syn`, `sha2`, `digest`, `block-buffer`,
+//!   `crypto-common`, `hybrid-array`, `typenum`, `petgraph`, `fixedbitset`, `hashbrown`,
+//!   `indexmap`, `equivalent`, `foldhash`, `num-rational`, `num-bigint` and `num-integer`.
 //! - MIT OR Apache-2.0 OR LGPL-2.1-or-later: `r-efi` (UEFI targets only).
 //! - (MIT OR Apache-2.0) AND Unicode-3.0: `unicode-ident` and `unicode-normalization`.
 //! - Zlib OR Apache-2.0 OR MIT: `tinyvec`, which `unicode-normalization` brings in.
@@ -125,6 +140,7 @@
 #![forbid(unsafe_code)]
 
 pub mod deps;
+pub mod golden;
 pub mod grid;
 pub mod ledger;
 pub mod licence;

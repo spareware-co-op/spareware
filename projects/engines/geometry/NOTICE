@@ -205,6 +205,8 @@ Gungraun
   Consulted by:
     projects/engines/geometry/crates/geom-bench/src/bin/geom-bench-counts.rs
       for its library-benchmark API and its Callgrind and DHAT settings. No code copied.
+    projects/engines/geometry/crates/geom-bench/src/callgrind.rs
+      for its summary files, its default output layout and its estimated-cycles formula. No code copied; its summary model is used as a dependency.
     projects/engines/geometry/crates/geom-bench/src/counts.rs
       for its library-benchmark API and its Callgrind and DHAT settings. No code copied.
     projects/engines/geometry/crates/geom-bench/src/lib.rs
@@ -230,6 +232,13 @@ PROJ (its copy of the EPSG dataset, whose own terms of use cover the data)
   Consulted by:
     projects/engines/geometry/crates/geom-math/src/frame.rs
       for the defining parameters of EPSG:2193, NZTM2000. No code copied.
+
+rand
+  Licence:      MIT OR Apache-2.0
+  Link:         https://github.com/rust-random/rand/blob/9e7d328f60d6372ae22927f37d1a816fc980f25e/src/seq/slice.rs
+  Consulted by:
+    projects/engines/geometry/crates/geom-test/src/golden/shuffle.rs
+      to confirm that its shuffle draws 32-bit indices below 2^32 elements, which makes it portable. No code copied.
 
 Random123
   Licence:      BSD-3-Clause
@@ -296,6 +305,13 @@ Shewchuk's `predicates.c`
       for its error constants (`exactinit`), a cross-check of the analysis here. No code copied.
     projects/engines/geometry/crates/geom-num/src/predicate.rs
       for the determinant forms and the sign conventions of `orient2d` and `incircle` that the Method and Conventions above follow; chapter 29.3 asks for this credit line.
+
+shuffling-allocator
+  Licence:      MPL-2.0
+  Link:         https://github.com/fitzgen/shuffling-allocator/blob/983334621d6c6fd6aa4d40d24edd3221208bf085/src/lib.rs
+  Consulted by:
+    projects/engines/geometry/crates/geom-test/src/golden/perturb.rs
+      for its size classes and shuffling layer and to judge whether it could be used; not taken, for the reasons above. No code copied.
 
 SPDX License List 3.29.0
   Licence:      CC-BY-3.0

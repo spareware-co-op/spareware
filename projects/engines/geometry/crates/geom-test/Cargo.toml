@@ -11,13 +11,33 @@ description = "Spare Kit geometry kernel, development only: shared test support,
 geom-num = { path = "../geom-num" }
 proptest = { version = "1.12.0", default-features = false, features = ["std", "bit-set"] }
 serde_json = "1.0.149"
-# The recursion check (src/recursion): a real Rust parser for the call graph (syn, MIT OR
-# Apache-2.0), with line numbers for every call site (proc-macro2's span-locations, MIT OR
-# Apache-2.0) and token printing for names (quote, MIT OR Apache-2.0); and petgraph (MIT OR
-# Apache-2.0) for the graph and its strongly connected components.
-syn = { version = "3.0.9", default-features = false, features = ["full", "parsing", "printing", "visit", "visit-mut", "clone-impls", "extra-traits"] }
+# The golden store (`golden::store`), read into typed records with unknown fields refused.
+# MIT OR Apache-2.0.
+serde = { version = "1.0.229", features = ["derive"] }
+# SHA-256 (FIPS 180-4), the hash of every golden digest (chapters 21 and 28.13): RustCrypto's sha2,
+# the one implementation every kernel test hashes with, through `golden::sha256`. MIT OR
+# Apache-2.0. 0.11.0, not 0.11.1: 0.11.1 needs Rust 1.88 and this crate declares 1.86. Without its
+# default `alloc` and `oid` features, which nothing here uses.
+sha2 = { version = "0.11.0", default-features = false }
+# The Fisher-Yates shuffle of the input-shuffle hook (`golden::shuffle`), driven by `SplitMix64`.
+# MIT OR Apache-2.0. Without its default features, so it has no generator of its own and never
+# reaches the operating system's random source.
+rand = { version = "0.10.3", default-features = false }
+# Rust's grammar, for the golden store's repository check (`golden::repo`), where every kernel
+# source is parsed as Rust so a comment or a string never counts as code, and for the recursion
+# check's call graph (src/recursion). MIT OR Apache-2.0. The 2.0 line, the one the rest of the
+# dependency tree (serde's derive) already brings, so the build holds one copy. Without its default
+# features: the full syntax tree, its parser, printer and visitors, and the clone and debug traits
+# the recursion check uses; no procedural-macro support.
+syn = { version = "2.0.119", default-features = false, features = ["full", "parsing", "printing", "visit", "visit-mut", "clone-impls", "extra-traits"] }
+# The token spans syn's parser gives, with `span-locations` so a problem or a call site names its
+# line. MIT OR Apache-2.0. Without its default `proc-macro` feature: this is a library, not a
+# procedural macro.
 proc-macro2 = { version = "1.0.107", default-features = false, features = ["span-locations"] }
+# Token printing, for the recursion check's names. MIT OR Apache-2.0.
 quote = { version = "1.0.47", default-features = false }
+# The recursion check's graph and its strongly connected components (Tarjan's algorithm). MIT OR
+# Apache-2.0. Without its default features.
 petgraph = { version = "0.8.3", default-features = false }
 
 [dev-dependencies]

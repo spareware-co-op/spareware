@@ -470,7 +470,7 @@ impl<'p> Resolver<'p> {
             syn::PathArguments::Parenthesized(p) => p
                 .inputs
                 .iter()
-                .map(|t| self.ty_at(scope, &t.ty, depth))
+                .map(|t| self.ty_at(scope, t, depth))
                 .collect(),
             syn::PathArguments::None => Vec::new(),
         }
@@ -514,7 +514,7 @@ impl<'p> Resolver<'p> {
             ),
             syn::Type::Ptr(p) => Ty::Ref(
                 Box::new(self.ty_at(scope, &p.elem, depth)),
-                matches!(p.mutability, syn::PointerMutability::Mut(_)),
+                p.mutability.is_some(),
             ),
             syn::Type::Slice(s) => Ty::Slice(Box::new(self.ty_at(scope, &s.elem, depth))),
             syn::Type::Array(a) => Ty::Array(Box::new(self.ty_at(scope, &a.elem, depth))),
@@ -528,7 +528,7 @@ impl<'p> Resolver<'p> {
             syn::Type::Group(g) => self.ty_at(scope, &g.elem, depth),
             syn::Type::Never(_) => Ty::Never,
             syn::Type::Infer(_) => Ty::Infer,
-            syn::Type::FnPtr(f) => {
+            syn::Type::BareFn(f) => {
                 let params = f
                     .inputs
                     .iter()
@@ -803,7 +803,9 @@ impl<'p> Resolver<'p> {
     ) -> Vec<TraitRef> {
         bounds
             .filter_map(|b| match b {
-                syn::TypeParamBound::Trait(t) if t.maybe.is_none() => {
+                syn::TypeParamBound::Trait(t)
+                    if matches!(t.modifier, syn::TraitBoundModifier::None) =>
+                {
                     self.trait_ref(scope, &t.path)
                 }
                 _ => None,
@@ -841,7 +843,7 @@ impl<'p> Resolver<'p> {
             let inputs: Vec<Ty> = p
                 .inputs
                 .iter()
-                .map(|t| self.ty_at(scope, &t.ty, depth))
+                .map(|t| self.ty_at(scope, t, depth))
                 .collect();
             let output = match &p.output {
                 syn::ReturnType::Type(_, t) => self.ty_at(scope, t, depth),

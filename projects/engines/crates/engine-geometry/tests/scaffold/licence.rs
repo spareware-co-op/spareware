@@ -187,13 +187,14 @@ pub fn chosen_way(chosen: &str) -> Option<Way> {
 /// The gate's record of licence choices (29.20, rule 3): every crate in the kernel family's graph
 /// whose licence offers a choice, its expression exactly as its manifest gives it, and the licence
 /// (or licences, joined by `AND`) taken: the first of 29.2's identifiers, in its order, offered.
-pub const LICENCE_CHOICES: [(&str, &str, &str); 87] = [
+pub const LICENCE_CHOICES: [(&str, &str, &str); 93] = [
     ("anstyle", "MIT OR Apache-2.0", "MIT"),
     ("anyhow", "MIT OR Apache-2.0", "MIT"),
     ("autocfg", "Apache-2.0 OR MIT", "MIT"),
     ("bit-set", "Apache-2.0 OR MIT", "MIT"),
     ("bit-vec", "Apache-2.0 OR MIT", "MIT"),
     ("bitflags", "MIT OR Apache-2.0", "MIT"),
+    ("block-buffer", "MIT OR Apache-2.0", "MIT"),
     ("borsh", "MIT OR Apache-2.0", "MIT"),
     ("cc", "MIT OR Apache-2.0", "MIT"),
     ("cfg-if", "MIT OR Apache-2.0", "MIT"),
@@ -204,9 +205,11 @@ pub const LICENCE_CHOICES: [(&str, &str, &str); 87] = [
     ("condtype", "MIT OR Apache-2.0", "MIT"),
     ("core_detect", "MIT/Apache-2.0", "MIT"),
     ("cpufeatures", "MIT OR Apache-2.0", "MIT"),
+    ("crypto-common", "MIT OR Apache-2.0", "MIT"),
     ("dashu-base", "MIT OR Apache-2.0", "MIT"),
     ("dashu-int", "MIT OR Apache-2.0", "MIT"),
     ("dashu-ratio", "MIT OR Apache-2.0", "MIT"),
+    ("digest", "MIT OR Apache-2.0", "MIT"),
     ("divan", "MIT OR Apache-2.0", "MIT"),
     ("divan-macros", "MIT OR Apache-2.0", "MIT"),
     ("either", "MIT OR Apache-2.0", "MIT"),
@@ -221,6 +224,7 @@ pub const LICENCE_CHOICES: [(&str, &str, &str); 87] = [
     ("gungraun-macros", "Apache-2.0 OR MIT", "MIT"),
     ("gungraun-runner", "Apache-2.0 OR MIT", "MIT"),
     ("hashbrown", "MIT OR Apache-2.0", "MIT"),
+    ("hybrid-array", "MIT OR Apache-2.0", "MIT"),
     ("indexmap", "Apache-2.0 OR MIT", "MIT"),
     ("itoa", "MIT OR Apache-2.0", "MIT"),
     ("lazy_static", "MIT OR Apache-2.0", "MIT"),
@@ -264,6 +268,7 @@ pub const LICENCE_CHOICES: [(&str, &str, &str); 87] = [
     ("serde_core", "MIT OR Apache-2.0", "MIT"),
     ("serde_derive", "MIT OR Apache-2.0", "MIT"),
     ("serde_json", "MIT OR Apache-2.0", "MIT"),
+    ("sha2", "MIT OR Apache-2.0", "MIT"),
     ("shlex", "MIT OR Apache-2.0", "MIT"),
     ("static_assertions", "MIT OR Apache-2.0", "MIT"),
     ("syn", "MIT OR Apache-2.0", "MIT"),
@@ -272,6 +277,7 @@ pub const LICENCE_CHOICES: [(&str, &str, &str); 87] = [
     ("toml_datetime", "MIT OR Apache-2.0", "MIT"),
     ("toml_edit", "MIT OR Apache-2.0", "MIT"),
     ("toml_parser", "MIT OR Apache-2.0", "MIT"),
+    ("typenum", "MIT OR Apache-2.0", "MIT"),
     ("unarray", "MIT OR Apache-2.0", "MIT"),
     ("unicase", "MIT OR Apache-2.0", "MIT"),
     (

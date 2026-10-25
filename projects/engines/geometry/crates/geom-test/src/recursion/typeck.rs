@@ -2016,11 +2016,6 @@ impl<'a, 'p> Checker<'a, 'p> {
                 self.bind_pat(&pt.pat, &d, mode);
             }
             Pat::Paren(pp) => self.bind_pat(&pp.pat, t, mode),
-            Pat::Guard(pg) => {
-                self.bind_pat(&pg.pat, t, mode);
-                let b = Ty::Prim(Prim::Bool);
-                self.expr(&pg.guard, Some(&b));
-            }
             Pat::Lit(pl) => {
                 let lt = self.lit(&pl.lit, None);
                 let (s, _) = self.peel_for_pattern_mode(t, mode);
@@ -2321,6 +2316,10 @@ impl<'a, 'p> Checker<'a, 'p> {
                 for arm in &mt.arms {
                     self.push_scope();
                     self.bind_pat(&arm.pat, &v, Mode::Move);
+                    if let Some((_, guard)) = &arm.guard {
+                        let b = Ty::Prim(Prim::Bool);
+                        self.expr(guard, Some(&b));
+                    }
                     let b = self.expr(&arm.body, out.as_ref());
                     out = Some(match out {
                         Some(o) => self.join(&o, &b, expected, line),
