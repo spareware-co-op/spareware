@@ -88,6 +88,11 @@ mod overrides;
 #[allow(dead_code)]
 #[path = "scaffold/posture.rs"]
 mod posture;
+// The recursion gate's runs (piece G13), so gate.rs's check that every gate test has its job
+// holds in this binary too.
+#[allow(dead_code)]
+#[path = "scaffold/recursion.rs"]
+mod recursion;
 #[allow(dead_code)]
 #[path = "scaffold/repo.rs"]
 mod repo;
