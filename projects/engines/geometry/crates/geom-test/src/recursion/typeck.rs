@@ -611,8 +611,11 @@ impl<'a, 'p> Checker<'a, 'p> {
                     return;
                 }
                 let steps = self.with_ix(|ix, infer, sigs| ix.autoderef(x, infer, sigs));
-                for s in steps {
-                    if self.unify(&s, &y) {
+                for (i, s) in steps.iter().enumerate() {
+                    if self.unify(s, &y) {
+                        // Deref coercion runs `Deref::deref` on each step it passes.
+                        let derefs: Vec<Ty> = steps.iter().take(i).cloned().collect();
+                        self.implicit_derefs(&derefs, _line);
                         return;
                     }
                 }
@@ -1713,8 +1716,18 @@ impl<'a, 'p> Checker<'a, 'p> {
 
     // ------------------------------------------------------------ expressions
 
-    #[allow(clippy::too_many_lines, reason = "one arm per expression form, each short")]
+    /// The type of expression `e`, checked with the expected type `expected`; a value a call,
+    /// literal or macro makes is kept for drop glue, as a temporary is dropped too.
     fn expr(&mut self, e: &Expr, expected: Option<&Ty>) -> Ty {
+        let t = self.expr_inner(e, expected);
+        if matches!(e, Expr::Call(_) | Expr::MethodCall(_) | Expr::Struct(_) | Expr::Macro(_)) {
+            self.locals.push(t.clone());
+        }
+        t
+    }
+
+    #[allow(clippy::too_many_lines, reason = "one arm per expression form, each short")]
+    fn expr_inner(&mut self, e: &Expr, expected: Option<&Ty>) -> Ty {
         let line = line_of(e);
         match e {
             Expr::Lit(l) => self.lit(&l.lit, expected),
@@ -2664,7 +2677,8 @@ impl<'a, 'p> Checker<'a, 'p> {
             }
             return Ty::Unknown;
         }
-        let (picks, adjusted) = self.with_ix(|ix, infer, sigs| ix.probe(&r, name, infer, sigs));
+        let (picks, adjusted, derefs) = self.with_ix(|ix, infer, sigs| ix.probe(&r, name, infer, sigs));
+        self.implicit_derefs(&derefs, line);
         if picks.is_empty() {
             let shown = self.ix.show(&self.infer.resolve(&r));
             self.problem(line, format!("no method `{name}` on `{shown}`"));
@@ -2973,11 +2987,36 @@ impl<'a, 'p> Checker<'a, 'p> {
     fn field_of(&mut self, b: &Ty, name: &str, line: usize) -> Ty {
         let found = self.with_ix(|ix, infer, sigs| ix.field_ty(b, name, infer, sigs));
         match found {
-            Some(t) => self.inst_ty(&t),
+            Some((t, derefs)) => {
+                self.implicit_derefs(&derefs, line);
+                self.inst_ty(&t)
+            }
             None => {
                 let shown = self.ix.show(&self.infer.resolve(b));
                 self.problem(line, format!("no field `{name}` on `{shown}`"));
                 Ty::Unknown
+            }
+        }
+    }
+
+    /// The calls auto-dereference makes through `steps` (the types dereferenced, in order): a
+    /// reference's is built in; any other runs `Deref::deref`, or `DerefMut::deref_mut` where the
+    /// place is mutated (both are recorded, as the check does not track which).
+    fn implicit_derefs(&mut self, steps: &[Ty], line: usize) {
+        let (Some(deref), Some(deref_mut)) = (self.ix.lang.trait_named("Deref"), self.ix.lang.trait_named("DerefMut")) else {
+            return;
+        };
+        for step in steps {
+            let s = self.now(step);
+            if matches!(s, Ty::Ref(..) | Ty::Array(_) | Ty::Slice(_) | Ty::Unknown) {
+                continue;
+            }
+            let d = TraitRef { id: deref, args: Vec::new(), bindings: Vec::new() };
+            self.dispatch_trait_fn(self.origin, &d, "deref", &s, &[], line, how::IMPLICIT, true);
+            let dm = TraitRef { id: deref_mut, args: Vec::new(), bindings: Vec::new() };
+            let has_mut = self.with_ix(|ix, infer, sigs| ix.may_implement(&s, &dm, infer, sigs, 0));
+            if has_mut {
+                self.dispatch_trait_fn(self.origin, &dm, "deref_mut", &s, &[], line, how::IMPLICIT, true);
             }
         }
     }
@@ -3175,21 +3214,50 @@ impl<'a, 'p> Checker<'a, 'p> {
         let Some(index) = self.ix.lang.trait_named("Index") else {
             return Ty::Unknown;
         };
+        let index_mut = self.ix.lang.trait_named("IndexMut");
         let steps = self.with_ix(|ix, infer, sigs| ix.autoderef(base, infer, sigs));
-        for step in steps {
+        for (i, step) in steps.iter().enumerate() {
             let tr = TraitRef { id: index, args: vec![idx.clone()], bindings: Vec::new() };
-            let picks = self.with_ix(|ix, infer, sigs| ix.select(&step, &tr, infer, sigs));
+            let derefs: Vec<Ty> = steps.iter().take(i).cloned().collect();
+            if matches!(step, Ty::Param(_) | Ty::Opaque(_) | Ty::Assoc(..) | Ty::Dyn(_)) {
+                let ok = self.with_ix(|ix, infer, sigs| ix.may_implement(step, &tr, infer, sigs, 0));
+                if !ok {
+                    continue;
+                }
+                self.implicit_derefs(&derefs, line);
+                self.dispatch_trait_fn(self.origin, &tr, "index", step, &[], line, how::IMPLICIT, false);
+                if let Some(im) = index_mut {
+                    let tm = TraitRef { id: im, args: vec![idx.clone()], bindings: Vec::new() };
+                    self.dispatch_trait_fn(self.origin, &tm, "index_mut", step, &[], line, how::IMPLICIT, true);
+                }
+                let out = Ty::Assoc(Box::new(step.clone()), Some(Box::new(tr)), "Output".to_owned());
+                return self.norm(&out);
+            }
+            let picks = self.with_ix(|ix, infer, sigs| ix.select(step, &tr, infer, sigs));
             if picks.is_empty() {
                 continue;
             }
+            self.implicit_derefs(&derefs, line);
             let mut out = None;
             for (imp, map) in &picks {
-                if let Some((n, a)) = self.ix.impl_fn(*imp, "index", map, &step, &[]) {
+                if let Some((n, a)) = self.ix.impl_fn(*imp, "index", map, step, &[]) {
                     let a = self.ix.fill_infer(a, &mut self.infer);
                     self.record(Target::Node(n, a), line, how::IMPLICIT);
                 }
                 if out.is_none() {
                     out = self.impl_assoc(*imp, map, "Output");
+                }
+            }
+            // A place that is assigned to or borrowed mutably indexes through `IndexMut`; the check
+            // does not track which, so where an implementation applies it is recorded too.
+            if let Some(im) = index_mut {
+                let tm = TraitRef { id: im, args: vec![idx.clone()], bindings: Vec::new() };
+                let mpicks = self.with_ix(|ix, infer, sigs| ix.select(step, &tm, infer, sigs));
+                for (imp, map) in &mpicks {
+                    if let Some((n, a)) = self.ix.impl_fn(*imp, "index_mut", map, step, &[]) {
+                        let a = self.ix.fill_infer(a, &mut self.infer);
+                        self.record(Target::Node(n, a), line, how::IMPLICIT);
+                    }
                 }
             }
             return out.unwrap_or(Ty::Unknown);
@@ -3540,18 +3608,81 @@ mod tests {
         r.problems.iter().map(ToString::to_string).collect()
     }
 
+    /// Asserts the check infers every type a call depends on in `text`.
+    #[track_caller]
+    fn reads(text: &str) {
+        let r = run(text);
+        assert!(r.problems.is_empty(), "{:#?}", problems(&r));
+    }
+
     #[test]
-    fn debug_snippet() {
-        let Ok(path) = std::env::var("G13_SNIPPET") else {
-            return;
-        };
-        let text = std::fs::read_to_string(path).unwrap();
-        let r = run(&text);
-        for p in problems(&r) {
-            println!("PROBLEM {p}");
-        }
-        for c in &r.cycles {
-            println!("CYCLE {:?}", c.members);
-        }
+    fn closure_parameters_come_from_the_bound_they_are_passed_to() {
+        reads(
+            "pub fn any_low(a: &[u64; 4], full: usize) -> bool {
+             a.iter().take(full).any(|&limb| limb != 0) }
+             pub fn total(chunk: &[usize]) -> Option<usize> {
+             chunk.iter().try_fold(0_usize, |sum, &count| sum.checked_add(count)) }",
+        );
+    }
+
+    #[test]
+    fn integer_literals_index_by_usize_and_ranges_iterate() {
+        reads(
+            "const B: [f64; 3] = [1.0, 2.0, 3.0];
+             pub fn poly(z: f64) -> f64 { z * (B[0] + z * B[1]) }
+             pub fn bits(n: u32) -> u32 { let mut x = 0; for b in (0u32..64).rev() { x += b; } for _ in 0..3 { x += 1; } x + n }",
+        );
+    }
+
+    #[test]
+    fn conversions_take_their_target_from_the_where_clause_or_the_use() {
+        reads(
+            "pub fn entry<I: TryInto<usize>>(table: &[u8], i: I) -> u8 {
+             match i.try_into().ok().and_then(|i| table.get(i)) { Some(v) => *v, None => 0 } }
+             pub fn widen(v: i32, g: i64) -> Option<i32> { i64::from(v).checked_div(g).and_then(|q| i32::try_from(q).ok()) }
+             pub fn caller() -> u8 { entry(&[1], 0u64) + entry(&[1], 0usize) }",
+        );
+    }
+
+    #[test]
+    fn bindings_of_bounds_choose_between_implementations() {
+        // `Vec<T>: Extend<T>` and `Vec<T>: Extend<&T>` both apply by their headers; the item type
+        // chooses.
+        reads(
+            "pub fn feed<P>(mut payloads: impl Iterator<Item = P>) -> Vec<(P, Option<u8>)> {
+             let mut slots: Vec<(P, Option<u8>)> = Vec::new();
+             slots.extend(payloads.by_ref().take(3).map(|p| (p, None))); slots }
+             pub fn caller() -> usize { feed([1u8, 2].into_iter()).len() }",
+        );
+    }
+
+    #[test]
+    fn patterns_bind_through_references_and_mutability_is_kept() {
+        reads(
+            "pub fn sum(pairs: &[(u64, u64)]) -> u64 { let mut t = 0; for (a, b) in pairs { t += a.wrapping_add(*b); } t }
+             pub fn bump(v: &mut [u64; 3]) { for x in v.iter_mut() { *x = x.wrapping_add(1); } for x in v { *x += 1; } }
+             pub fn first(v: &Option<(u8, u8)>) -> u8 { match v { Some((a, _)) => a.count_ones() as u8, None => 0 } }",
+        );
+    }
+
+    #[test]
+    fn generic_callables_give_their_signatures_through_bounds() {
+        reads(
+            "pub fn run<T, X, F>(items: &[T], f: &F) -> Vec<X> where F: Fn(usize, &T) -> Result<X, ()> {
+             items.iter().enumerate().filter_map(|(i, t)| f(i, t).ok()).collect() }
+             pub fn outer<T, C>(items: &[T], count: &C) -> usize where C: Fn(usize, &T) -> Result<usize, ()> {
+             run::<_, _, _>(items, count).len() }",
+        );
+    }
+
+    #[test]
+    fn trait_methods_named_as_values_and_derived_comparisons_are_read() {
+        reads(
+            "pub trait Cancel { fn requested(&self) -> bool; }
+             pub fn poll(c: Option<&dyn Cancel>) -> bool { c.is_some_and(Cancel::requested) }
+             pub fn fill<U: Default>(buf: &mut Vec<U>, n: usize) { buf.resize_with(n, U::default); }
+             #[derive(Clone, Copy, Debug, PartialEq)] pub struct M { m: [[f64; 4]; 3] }
+             pub fn same(a: &M, b: &M) -> bool { a == b }",
+        );
     }
 }

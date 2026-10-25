@@ -213,13 +213,6 @@ pub fn analyse_here(sources: &[CrateSource], read: &(dyn Fn(&str) -> Result<Stri
     let ix = Index::new(&program);
     let mut problems = program.problems.clone();
     let mono = mono::analyse(&ix);
-    if std::env::var("G13_EDGES").is_ok() {
-        for (from, tos) in &mono.edges {
-            for (to, site) in tos {
-                eprintln!("EDGE {} -> {} @{}:{} {}", graph::inst_name(&ix, &mono, *from), graph::inst_name(&ix, &mono, *to), site.file, site.line, site.how);
-            }
-        }
-    }
     problems.extend(mono.all_problems(&ix));
     let cycles = graph::cycles(&ix, &mono);
     let types = graph::type_cycles(&ix);

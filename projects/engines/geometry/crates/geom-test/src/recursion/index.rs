@@ -899,21 +899,23 @@ impl<'p> Index<'p> {
         }
     }
 
-    /// The type of field `name` of a value of type `base`, after auto-dereference; `None` when no
-    /// step has it.
+    /// The type of field `name` of a value of type `base`, after auto-dereference, with the steps
+    /// dereferenced to reach it; `None` when no step has it.
     #[must_use]
-    pub fn field_ty(&self, base: &Ty, name: &str, infer: &mut Infer, sigs: ClosureSigs<'_>) -> Option<Ty> {
-        for step in self.autoderef(base, infer, sigs) {
-            match &step {
+    pub fn field_ty(&self, base: &Ty, name: &str, infer: &mut Infer, sigs: ClosureSigs<'_>) -> Option<(Ty, Vec<Ty>)> {
+        let steps = self.autoderef(base, infer, sigs);
+        for (i, step) in steps.iter().enumerate() {
+            let before = || steps.iter().take(i).cloned().collect::<Vec<_>>();
+            match step {
                 Ty::Adt(id, args) if matches!(self.program.item(*id).kind, ItemKind::Struct { .. } | ItemKind::Union { .. }) => {
                     let map: Map = self.program.item(*id).scope.generics.iter().copied().zip(args.iter().cloned()).collect();
                     if let Some((_, t)) = self.fields(*id, None).into_iter().find(|(n, _)| n == name) {
-                        return Some(t.subst(&map));
+                        return Some((t.subst(&map), before()));
                     }
                 }
                 Ty::Tuple(items) => {
                     if let Some(t) = name.parse::<usize>().ok().and_then(|i| items.get(i)) {
-                        return Some(t.clone());
+                        return Some((t.clone(), before()));
                     }
                 }
                 _ => {}
@@ -1240,9 +1242,9 @@ impl<'p> Index<'p> {
 
     /// What `receiver.name(...)` calls, the receiver being of type `recv`: the candidates of the
     /// first auto-dereference step (by value, then by reference; inherent before trait) at which
-    /// any receiver unifies, with the receiver's type there. Variables are bound only when one
-    /// candidate is found.
-    pub fn probe(&self, recv: &Ty, name: &str, infer: &mut Infer, sigs: ClosureSigs<'_>) -> (Vec<Pick>, Option<Ty>) {
+    /// any receiver unifies, with the receiver's type there and the steps dereferenced to reach
+    /// it. Variables are bound only when one candidate is found.
+    pub fn probe(&self, recv: &Ty, name: &str, infer: &mut Infer, sigs: ClosureSigs<'_>) -> (Vec<Pick>, Option<Ty>, Vec<Ty>) {
         let steps = self.autoderef(recv, infer, sigs);
         let mut heads: Vec<ImplId> = Vec::new();
         for s in &steps {
@@ -1253,7 +1255,7 @@ impl<'p> Index<'p> {
         }
         heads.sort();
         heads.dedup();
-        for step in &steps {
+        for (i, step) in steps.iter().enumerate() {
             // By value, then by shared and by mutable reference.
             for autoref in [None, Some(false), Some(true)] {
                 let adjusted = match autoref {
@@ -1263,12 +1265,12 @@ impl<'p> Index<'p> {
                 for inherent in [true, false] {
                     let picks = self.picks_at(step, &adjusted, name, inherent, &heads, infer, sigs);
                     if !picks.is_empty() {
-                        return (picks, Some(adjusted));
+                        return (picks, Some(adjusted), steps.iter().take(i).cloned().collect());
                     }
                 }
             }
         }
-        (Vec::new(), None)
+        (Vec::new(), None, Vec::new())
     }
 
     /// The candidates at one step: implementation methods (inherent ones, or trait ones and
@@ -1665,6 +1667,8 @@ mod tests {
         let a = Ty::Adt(item(&p, "A"), Vec::new());
         let b = Ty::Adt(item(&p, "B"), Vec::new());
         assert_eq!(names(&ix, &ix.probe(&a, "m", &mut infer, &none).0), ["a::A::m"]);
+        let (_, _, derefs) = ix.probe(&b, "r", &mut infer, &none);
+        assert_eq!(derefs, [b.clone()], "`b.r()` dereferences `B` to reach `A`'s method");
         assert_eq!(names(&ix, &ix.probe(&b, "m", &mut infer, &none).0), ["a::B::m"], "inherent first, no deref");
         assert_eq!(names(&ix, &ix.probe(&Ty::reference(b.clone()), "r", &mut infer, &none).0), ["<a::A as T>::r"]);
         assert_eq!(names(&ix, &ix.probe(&a, "t", &mut infer, &none).0), ["a::T::t"], "the default body");
@@ -1685,7 +1689,7 @@ mod tests {
         let w = item(&p, "W");
         let x = Ty::Adt(item(&p, "X"), Vec::new());
         let wx = Ty::Adt(w, vec![x.clone()]);
-        let (picks, _) = ix.probe(&wx, "get", &mut infer, &none);
+        let (picks, _, _) = ix.probe(&wx, "get", &mut infer, &none);
         match picks.as_slice() {
             [Pick::Node { args, .. }] => assert_eq!(infer.resolve(&args[0]), x),
             other => panic!("{other:?}"),
