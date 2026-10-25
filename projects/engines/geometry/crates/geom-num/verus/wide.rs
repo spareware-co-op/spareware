@@ -505,6 +505,199 @@ pub proof fn lemma_fill_prefix(s: Seq<u64>, v: i128, low: u64, high: u64, m: nat
     }
 }
 
+/// The limbs from m up to n of s, as a number of their own.
+pub open spec fn part(s: Seq<u64>, m: nat, n: nat) -> int {
+    unsigned(s.subrange(m as int, n as int), (n - m) as nat)
+}
+
+/// Two sequences that agree on their first n limbs have the same value there.
+pub proof fn lemma_prefix_eq(s: Seq<u64>, t: Seq<u64>, n: nat)
+    requires
+        n <= s.len(),
+        n <= t.len(),
+        forall|j: int| 0 <= j < n ==> s[j] == t[j],
+    ensures
+        unsigned(s, n) == unsigned(t, n),
+    decreases n,
+{
+    if n > 0 {
+        lemma_prefix_eq(s, t, (n - 1) as nat);
+    }
+}
+
+/// The value of the first n limbs splits at m: the first m limbs, plus base(m) times the limbs
+/// from m to n, which are below base(n − m).
+pub proof fn lemma_split(s: Seq<u64>, m: nat, n: nat)
+    requires
+        m <= n <= s.len(),
+    ensures
+        unsigned(s, n) == unsigned(s, m) + base(m) * part(s, m, n),
+        0 <= part(s, m, n) < base((n - m) as nat),
+    decreases n,
+{
+    let sub = s.subrange(m as int, n as int);
+    lemma_unsigned_bound(sub, (n - m) as nat);
+    if n == m {
+        assert(part(s, m, n) == 0);
+        assert(base(m) * 0 == 0) by (nonlinear_arith);
+    } else {
+        let k = (n - 1) as nat;
+        lemma_split(s, m, k);
+        let prev = s.subrange(m as int, k as int);
+        lemma_prefix_eq(sub, prev, (k - m) as nat);
+        assert(sub[(k - m) as int] == s[k as int]);
+        assert(unsigned(sub, (n - m) as nat) == unsigned(sub, (k - m) as nat) + sub[(k - m) as int] as int * base((k - m) as nat));
+        lemma_base_mul(m, (k - m) as nat);
+        assert(m + (k - m) as nat == k);
+        let (a, b, x, p) = (unsigned(s, m), part(s, m, k), s[k as int] as int, base((k - m) as nat));
+        assert(base(m) * (b + x * p) == base(m) * b + x * (base(m) * p)) by (nonlinear_arith);
+    }
+}
+
+/// Limbs from m to n that all equal the sign fill f make the number 0 (f = 0) or base(n − m) − 1
+/// (f = all ones); and conversely, the number is one of those only when every limb is f.
+pub proof fn lemma_part_fill(s: Seq<u64>, m: nat, n: nat, f: u64)
+    requires
+        m <= n <= s.len(),
+        f == 0 || f == 0xFFFF_FFFF_FFFF_FFFFu64,
+    ensures
+        (forall|j: int| m <= j < n ==> s[j] == f)
+            == (part(s, m, n) == if f == 0 { 0 } else { base((n - m) as nat) - 1 }),
+    decreases n,
+{
+    lemma_split(s, m, n);
+    if n > m {
+        let k = (n - 1) as nat;
+        lemma_part_fill(s, m, k, f);
+        lemma_split(s, m, k);
+        let sub = s.subrange(m as int, n as int);
+        let prev = s.subrange(m as int, k as int);
+        lemma_prefix_eq(sub, prev, (k - m) as nat);
+        let p = base((k - m) as nat);
+        lemma_base_step((k - m) as nat);
+        assert((n - m) as nat == (k - m) as nat + 1);
+        let lo = part(s, m, k);
+        let x = s[k as int] as int;
+        assert(part(s, m, n) == lo + x * p);
+        lemma_unsigned_bound(prev, (k - m) as nat);
+        if f == 0 {
+            assert((lo + x * p == 0) == (lo == 0 && x == 0)) by (nonlinear_arith)
+                requires 0 <= lo < p, 0 <= x, p > 0;
+        } else {
+            assert((lo + x * p == p * 0x1_0000_0000_0000_0000 - 1) == (lo == p - 1 && x == 0xFFFF_FFFF_FFFF_FFFF)) by (nonlinear_arith)
+                requires 0 <= lo < p, 0 <= x <= 0xFFFF_FFFF_FFFF_FFFF, p > 0;
+        }
+    } else {
+        assert(base(0) == 1) by {
+            lemma2_to64();
+        }
+    }
+}
+
+/// If the signed value of L limbs fits M < L limbs, the limbs from M up are its sign fill.
+pub proof fn lemma_fits_means_fill(u_l: int, u_m: int, h: int, bm: int, bk: int, bl: int, negative: bool)
+    requires
+        bm > 0,
+        bk > 0,
+        bl == bm * bk,
+        bl == 2 * (bl / 2),
+        bm == 2 * (bm / 2),
+        bm <= bl / 2,
+        0 <= u_m < bm,
+        0 <= h < bk,
+        u_l == u_m + bm * h,
+        negative == (u_l >= bl / 2),
+        -(bm / 2) <= (if negative { u_l - bl } else { u_l }) < bm / 2,
+    ensures
+        h == (if negative { bk - 1 } else { 0 }),
+        negative == (u_m >= bm / 2),
+{
+    if negative {
+        assert(bm * h > bl - bm - bm / 2 - 1) by (nonlinear_arith)
+            requires u_l - bl >= -(bm / 2), u_l == u_m + bm * h, u_m < bm;
+        assert(bm * (bk - 1) == bl - bm) by (nonlinear_arith) requires bl == bm * bk;
+        assert(h > bk - 2) by (nonlinear_arith)
+            requires bm * h > bl - bm - bm / 2 - 1, bm * (bk - 1) == bl - bm, bm > 0, bm == 2 * (bm / 2);
+    } else {
+        assert(bm * h < bm) by (nonlinear_arith) requires u_l < bm / 2, u_l == u_m + bm * h, u_m >= 0, bm > 0;
+        assert(h < 1) by (nonlinear_arith) requires bm * h < bm, bm > 0;
+    }
+}
+
+/// A dropped limb that is not the sign fill means the value does not fit M limbs.
+pub proof fn lemma_resize_too_wide(s: Seq<u64>, l: nat, m: nat, negative: bool, k: nat)
+    requires
+        2 <= m < l <= s.len(),
+        m <= k < l,
+        negative == (unsigned(s, l) >= base(l) / 2),
+        s[k as int] != (if negative { 0xFFFF_FFFF_FFFF_FFFFu64 } else { 0u64 }),
+    ensures
+        !fits(signed(s, l), m),
+{
+    let f: u64 = if negative { 0xFFFF_FFFF_FFFF_FFFFu64 } else { 0u64 };
+    lemma_split(s, m, l);
+    lemma_part_fill(s, m, l, f);
+    lemma_unsigned_bound(s, m);
+    lemma_unsigned_bound(s, l);
+    lemma_base_mul(m, (l - m) as nat);
+    lemma_base_monotone(m + 1, l);
+    lemma_base_step(m);
+    lemma_top_bit(s, l);
+    lemma_top_bit(s, m);
+    assert((m + (l - m) as nat) == l);
+    if fits(signed(s, l), m) {
+        lemma_fits_means_fill(unsigned(s, l), unsigned(s, m), part(s, m, l), base(m), base((l - m) as nat), base(l), negative);
+        assert(s[k as int] == f);
+    }
+}
+
+/// What the resized limbs hold: when widening, the value; when narrowing with every dropped limb
+/// the sign fill, the value exactly when the sign survives, and otherwise a value that does not
+/// fit.
+pub proof fn lemma_resize_result(s: Seq<u64>, t: Seq<u64>, l: nat, m: nat, negative: bool)
+    requires
+        2 <= l <= 4096,
+        2 <= m <= 4096,
+        s.len() == l,
+        t.len() == m,
+        negative == (unsigned(s, l) >= base(l) / 2),
+        forall|j: int| 0 <= j < m ==> t[j] == (if j < l { s[j] } else { if negative { 0xFFFF_FFFF_FFFF_FFFFu64 } else { 0u64 } }),
+        m < l ==> forall|j: int| m <= j < l ==> s[j] == (if negative { 0xFFFF_FFFF_FFFF_FFFFu64 } else { 0u64 }),
+    ensures
+        ((unsigned(t, m) >= base(m) / 2) == negative) ==> fits(signed(s, l), m) && signed(t, m) == signed(s, l),
+        ((unsigned(t, m) >= base(m) / 2) != negative) ==> !fits(signed(s, l), m),
+{
+    let f: u64 = if negative { 0xFFFF_FFFF_FFFF_FFFFu64 } else { 0u64 };
+    lemma_top_bit(s, l);
+    lemma_top_bit(t, m);
+    lemma_unsigned_bound(s, l);
+    lemma_unsigned_bound(t, m);
+    if m >= l {
+        lemma_prefix_eq(t, s, l);
+        lemma_split(t, l, m);
+        lemma_part_fill(t, l, m, f);
+        lemma_base_mul(l, (m - l) as nat);
+        assert(l + (m - l) as nat == m);
+        lemma_base_monotone(l, m);
+        let bl = base(l);
+        let bk = base((m - l) as nat);
+        assert(bl * (if negative { bk - 1 } else { 0 }) == (if negative { base(m) - bl } else { 0 })) by (nonlinear_arith)
+            requires base(m) == bl * bk;
+    } else {
+        lemma_prefix_eq(t, s, m);
+        lemma_split(s, m, l);
+        lemma_part_fill(s, m, l, f);
+        lemma_base_mul(m, (l - m) as nat);
+        assert(m + (l - m) as nat == l);
+        lemma_base_monotone(m + 1, l);
+        lemma_base_step(m);
+        let bm = base(m);
+        let bk = base((l - m) as nat);
+        assert(bm * (if negative { bk - 1 } else { 0 }) == (if negative { base(l) - bm } else { 0 })) by (nonlinear_arith)
+            requires base(l) == bm * bk;
+    }
+}
+
 const TOP_BIT: u64 = 1 << 63;
 
 #[derive(Clone, Copy)]
@@ -1111,6 +1304,76 @@ impl<const L: usize> Wide<L> {
             }
             None
         }
+    }
+
+    /// The same value in a `Wide<M>`, or `None` if it does not fit.
+    #[must_use]
+    #[verus_spec(r =>
+        requires
+            2 <= L <= 4096,
+            2 <= M <= 4096,
+        ensures
+            match r {
+                Some(w) => fits(self.value(), M as nat) && w.value() == self.value(),
+                None => !fits(self.value(), M as nat),
+            },
+    )]
+    pub fn resize<const M: usize>(&self) -> Option<Wide<M>> {
+        let negative = self.is_negative();
+        let sign = fill(negative);
+        let mut out = [sign; M];
+        // The limbs both widths hold, copied; above them, the sign fill.
+        #[verus_spec(
+            invariant
+                out@.len() == M,
+                self.limbs().len() == L,
+                forall|j: int| 0 <= j < i ==> out@[j] == (if j < L { self.limbs()[j] } else { sign }),
+                forall|j: int| i <= j < M ==> out@[j] == sign,
+        )]
+        for i in 0..M {
+            if i < L {
+                let x = match self.0.get(i) {
+                    Some(v) => *v,
+                    None => 0,
+                };
+                if let Some(slot) = out.get_mut(i) {
+                    *slot = x;
+                }
+            }
+        }
+        if M < L {
+            // Narrowing: every dropped limb must be pure sign extension.
+            #[verus_spec(
+                invariant
+                    2 <= M < L <= 4096,
+                    M <= i <= L,
+                    self.limbs().len() == L,
+                    negative == (unsigned(self.limbs(), L as nat) >= base(L as nat) / 2),
+                    sign == (if negative { 0xFFFF_FFFF_FFFF_FFFFu64 } else { 0u64 }),
+                    forall|j: int| M <= j < i ==> self.limbs()[j] == sign,
+            )]
+            for i in M..L {
+                let x = match self.0.get(i) {
+                    Some(v) => *v,
+                    None => 0,
+                };
+                if x != sign {
+                    proof! {
+                        lemma_resize_too_wide(self.limbs(), L as nat, M as nat, negative, i as nat);
+                    }
+                    return None;
+                }
+            }
+        }
+        let r = Wide::<M>(out);
+        proof! {
+            lemma_resize_result(self.limbs(), r.limbs(), L as nat, M as nat, negative);
+        }
+        // The sign must survive.
+        if r.is_negative() != negative {
+            return None;
+        }
+        Some(r)
     }
 
     /// Whether the value is below zero: whether the top limb's top bit is set.

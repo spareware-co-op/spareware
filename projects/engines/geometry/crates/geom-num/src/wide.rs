@@ -398,19 +398,37 @@ impl<const L: usize> Wide<L> {
     /// The same value in a `Wide<M>`, or `None` if it does not fit.
     #[must_use]
     pub fn resize<const M: usize>(&self) -> Option<Wide<M>> {
-        let () = Wide::<M>::AT_LEAST_TWO_LIMBS;
-        let fill = fill(self.is_negative());
-        let mut out = [fill; M];
-        for (o, &x) in out.iter_mut().zip(self.0.iter()) {
-            *o = x;
+        let negative = self.is_negative();
+        let sign = fill(negative);
+        let mut out = [sign; M];
+        // The limbs both widths hold, copied; above them, the sign fill.
+        for i in 0..M {
+            if i < L {
+                let x = match self.0.get(i) {
+                    Some(v) => *v,
+                    None => 0,
+                };
+                if let Some(slot) = out.get_mut(i) {
+                    *slot = x;
+                }
+            }
+        }
+        if M < L {
+            // Narrowing: every dropped limb must be pure sign extension.
+            for i in M..L {
+                let x = match self.0.get(i) {
+                    Some(v) => *v,
+                    None => 0,
+                };
+                if x != sign {
+                    return None;
+                }
+            }
         }
         let r = Wide::<M>(out);
-        if M < L {
-            // Narrowing: the dropped limbs must be pure sign extension, and the sign must survive.
-            let dropped_ok = self.0.iter().skip(M).all(|&x| x == fill);
-            if !dropped_ok || r.is_negative() != self.is_negative() {
-                return None;
-            }
+        // The sign must survive.
+        if r.is_negative() != negative {
+            return None;
         }
         Some(r)
     }

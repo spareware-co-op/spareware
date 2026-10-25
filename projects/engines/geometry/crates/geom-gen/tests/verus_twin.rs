@@ -297,7 +297,7 @@ fn every_predicate_twin_is_its_shipped_value_token_for_token() {
         let fresh = String::from_utf8(generate().unwrap()).unwrap();
         assert_eq!(fresh, twin.replace("\r\n", "\n"), "{name} is not current");
         assert!(
-            CRATE_ROOT.contains(&format!(
+            CRATE_ROOT.replace("\r\n", "\n").contains(&format!(
                 "#[path = \"generated/{name}.rs\"]\npub mod {name};"
             )),
             "{name} is not a module of the crate"
@@ -331,8 +331,9 @@ const WIDE_TWIN: &str = include_str!("../../geom-num/verus/wide.rs");
 const WIDE: &str = include_str!("../../geom-num/src/wide.rs");
 
 /// Every function the wide twin runs, all of them proven there.
-const WIDE_PROVEN: [&str; 13] = [
+const WIDE_PROVEN: [&str; 14] = [
     "fill",
+    "resize",
     "wrapping_add_limbs",
     "wrapping_sub_limbs",
     "compare_limbs",
