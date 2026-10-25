@@ -311,10 +311,10 @@ fn the_twin_refuses_what_it_does_not_model() {
         let d = derivation(p).unwrap();
         let twin = verus_twin(&d, "test", "shipped.rs");
         match p.comparison.name {
-            "orient2d" | "orient3d" | "incircle" | "insphere" => {
+            "orient2d" | "orient3d" | "incircle" | "insphere" | "ssi_weight" | "ssi_side" => {
                 assert!(twin.is_ok(), "{}: {twin:?}", p.comparison.name);
             }
-            "plane_side" => {
+            "plane_side" | "tpi_weight" | "tpi_side" | "lpi_weight" | "lpi_side" => {
                 let e = twin.unwrap_err().0;
                 assert!(e.contains("rounded input"), "{e}");
             }
@@ -331,8 +331,10 @@ const WIDE_TWIN: &str = include_str!("../../geom-num/verus/wide.rs");
 const WIDE: &str = include_str!("../../geom-num/src/wide.rs");
 
 /// Every function the wide twin runs, all of them proven there.
-const WIDE_PROVEN: [&str; 14] = [
+const WIDE_PROVEN: [&str; 16] = [
     "fill",
+    "from_magnitude",
+    "checked_mul_i128",
     "resize",
     "wrapping_add_limbs",
     "wrapping_sub_limbs",
@@ -365,6 +367,12 @@ fn find_fn(trees: &[TokenTree], name: &str) -> Option<Vec<TokenTree>> {
         }
         if start > 0 && is_ident(&trees[start - 1], "pub") {
             start -= 1;
+        } else if start >= 2
+            && is_ident(&trees[start - 2], "pub")
+            && matches!(&trees[start - 1], TokenTree::Group(g) if g.delimiter() == proc_macro2::Delimiter::Parenthesis)
+        {
+            // `pub(crate)` and the like.
+            start -= 2;
         }
         while start >= 2
             && is_punct(&trees[start - 2], '#')
@@ -372,8 +380,17 @@ fn find_fn(trees: &[TokenTree], name: &str) -> Option<Vec<TokenTree>> {
         {
             start -= 2;
         }
-        let body = (at..trees.len())
-            .find(|&k| matches!(&trees[k], TokenTree::Group(g) if g.delimiter() == proc_macro2::Delimiter::Brace))?;
+        // The body is the first brace group that ends the signature: a brace group inside a Verus
+        // clause (`ensures match r { ... },`, or `if c { ... } else { ... }`) is followed by a
+        // comma, `else`, a method call or another brace group, and is skipped.
+        let is_brace = |t: &TokenTree| matches!(t, TokenTree::Group(g) if g.delimiter() == proc_macro2::Delimiter::Brace);
+        let continues = |t: Option<&TokenTree>| {
+            t.is_some_and(|t| {
+                is_punct(t, ',') || is_punct(t, '.') || is_ident(t, "else") || is_brace(t)
+            })
+        };
+        let body =
+            (at..trees.len()).find(|&k| is_brace(&trees[k]) && !continues(trees.get(k + 1)))?;
         return Some(trees[start..=body].to_vec());
     }
     trees.iter().enumerate().find_map(|(k, t)| match t {
@@ -452,12 +469,11 @@ fn the_order_is_the_proven_comparison() {
 fn any_change_to_the_wide_arithmetic_is_seen() {
     assert!(same_functions(WIDE_TWIN, WIDE));
     for (from, to) in [
-        (
-            ".checked_add(u128::from(carry))?",
-            ".wrapping_add(u128::from(carry))",
-        ),
+        ("let b = other.magnitude();", "let b = self.magnitude();"),
         ("carry = c1 || c2;", "carry = c1 && c2;"),
         ("i = i.wrapping_sub(1);", "i = i.wrapping_sub(2);"),
+        ("let k = i.checked_add(shift)?;", "let k = i;"),
+        ("} else if limb != 0 {", "} else if limb > 1 {"),
         (
             "let overflow = self.is_negative() && r.is_negative();",
             "let overflow = false;",
@@ -536,5 +552,32 @@ fn from_i128_is_the_shipped_one_in_doc_attributes_parameters_and_body() {
     // A change on either side is seen.
     let changed = WIDE.replacen("(1u128 << 127)", "(1u128 << 126)", 1);
     let changed = find_fn(&tokens(&changed), "from_i128").unwrap();
+    assert_ne!(shared_parts(&twin), shared_parts(&changed));
+}
+
+#[test]
+fn product_i128_is_the_shipped_one_in_doc_attributes_parameters_and_body() {
+    let twin =
+        find_fn_in_verus(&tokens(WIDE_TWIN), "product_i128").expect("the twin's product_i128");
+    let shipped = find_fn(&tokens(WIDE), "product_i128").expect("wide.rs's product_i128");
+    assert_eq!(shared_parts(&twin), shared_parts(&shipped));
+    let text = canonical(&twin);
+    assert!(
+        text.contains("# [ doc"),
+        "the doc comment is compared: {text}"
+    );
+    assert!(text.contains("pub ( crate ) fn product_i128"), "{text}");
+    assert!(
+        text.contains("w . value ( ) == a as int * b as int"),
+        "{text}"
+    );
+    // A change on either side is seen.
+    let changed = WIDE.replacen(
+        "let (l2, l3) = halves(upper);",
+        "let (l3, l2) = halves(upper);",
+        1,
+    );
+    assert!(changed != WIDE);
+    let changed = find_fn(&tokens(&changed), "product_i128").unwrap();
     assert_ne!(shared_parts(&twin), shared_parts(&changed));
 }

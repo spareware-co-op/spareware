@@ -21,17 +21,20 @@
 //! beside each), and is split into its two 64-bit halves by a mask and a shift, each half cast to
 //! `u64` with its bound written beside it.
 //!
-//! Proven (chapter 28.7; piece G37): Verus proves, for every width `L` from 1 to 4096 limbs and so
-//! for [`I256`], [`I320`], [`I384`] and [`I512`], that `checked_add`, `checked_sub`,
-//! `checked_neg` and `checked_mul` return the exact two's-complement result whenever it fits and
-//! `None` exactly when it does not, and that the order ([`Ord`]) is the order of the values. The
+//! Proven (chapter 28.7; pieces G37 to G39): Verus proves, for every width `L` from 1 to 4096 limbs
+//! and so for [`I256`], [`I320`], [`I384`] and [`I512`], that `checked_add`, `checked_sub`,
+//! `checked_neg`, `checked_mul`, the width-aware products `product_i128` and `checked_mul_i128`,
+//! and `resize` return the exact two's-complement result whenever it fits and `None` exactly when
+//! it does not, that `from_i128` gives the value it is given, and that the order ([`Ord`]) is the
+//! order of the values. The
 //! proof is in this crate's `verus/wide.rs`, a twin of this module's arithmetic: the same
 //! functions with Verus specifications and proof steps added, which `geom-gen`'s
 //! `tests/verus_twin.rs` holds token for token to the code here, and which `kernel-dev.yml`'s
 //! `verus` job verifies. So the code is written in the part of Rust Verus reads: index loops over
 //! `get` and `get_mut`, and `match` where an `Option` combinator would do. Its trusted base is
-//! Verus, the Z3 solver it uses, and three facts it is told about the standard library, each its
-//! documented behaviour: `u64::overflowing_add`, `u64::overflowing_sub` and `u64::from(bool)`.
+//! Verus, the Z3 solver it uses, and four facts it is told about the standard library, each its
+//! documented behaviour: `u64::overflowing_add`, `u64::overflowing_sub`, `u64::from(bool)` and
+//! `i128::unsigned_abs`.
 //!
 //! Method: schoolbook addition, subtraction and multiplication on magnitudes with 128-bit
 //! intermediates (Knuth, *The Art of Computer Programming*, volume 2, section 4.3.1,
@@ -153,6 +156,39 @@ const fn fill(negative: bool) -> u64 {
 )]
 fn halves(t: u128) -> (u64, u64) {
     ((t & 0xFFFF_FFFF_FFFF_FFFF) as u64, (t >> 64) as u64)
+}
+
+/// The value with magnitude `m` (limbs little-endian, any number of them) and the given sign, or
+/// `None` if it does not fit: the limbs from `L` on must be zero, and the magnitude must be below
+/// 2^(64L−1), or exactly 2^(64L−1) for a negative value (the minimum value), as
+/// [`Wide::checked_mul`] decides it.
+fn from_magnitude<const L: usize>(m: &[u64], negative: bool) -> Option<Wide<L>> {
+    let mut out = [0u64; L];
+    for k in 0..m.len() {
+        let limb = match m.get(k) {
+            Some(v) => *v,
+            None => 0,
+        };
+        if k < L {
+            if let Some(o) = out.get_mut(k) {
+                *o = limb;
+            }
+        } else if limb != 0 {
+            return None;
+        }
+    }
+    let v = Wide::<L>(out);
+    if !v.is_negative() {
+        return Some(if negative { v.wrapping_neg() } else { v });
+    }
+    // Top bit set: only the exact magnitude 2^(64L−1) with a negative sign fits (the minimum
+    // value), the one non-zero magnitude that negation leaves unchanged.
+    let n = v.wrapping_neg();
+    if negative && matches!(compare_limbs(&n.0, &v.0), Ordering::Equal) {
+        Some(n)
+    } else {
+        None
+    }
 }
 
 impl<const L: usize> Wide<L> {
@@ -430,7 +466,7 @@ impl<const L: usize> Wide<L> {
             .checked_add(u128::from(h10))?
             .checked_add(u128::from(carry))?;
         let (l2, l3) = halves(upper);
-        Self::from_magnitude(&[l0, l1, l2, l3], negative)
+        from_magnitude(&[l0, l1, l2, l3], negative)
     }
 
     /// `self × b` for an `i128` b, or `None` if the true product does not fit.
@@ -447,59 +483,45 @@ impl<const L: usize> Wide<L> {
         let a = self.magnitude();
         let (b0, b1) = halves(b.unsigned_abs());
         let mut out = [0u64; L];
-        for (shift, bj) in [b0, b1].into_iter().enumerate() {
-            if bj == 0 {
-                continue;
-            }
-            let mut carry = 0u64;
-            for (i, &ai) in a.iter().enumerate() {
-                let prod = u128::from(ai).checked_mul(u128::from(bj))?;
-                // Limb indices are below L and the shift at most 1: never fails.
-                match out.get_mut(i.checked_add(shift)?) {
-                    Some(slot) => {
-                        let t = prod
-                            .checked_add(u128::from(*slot))?
-                            .checked_add(u128::from(carry))?;
-                        (*slot, carry) = halves(t);
-                    }
-                    // A non-zero contribution at limb L makes the magnitude at least 2^(64L).
-                    None => {
-                        if prod != 0 || carry != 0 {
-                            return None;
+        for shift in 0..2 {
+            let bj = if shift == 0 { b0 } else { b1 };
+            if bj != 0 {
+                let mut carry = 0u64;
+                for i in 0..L {
+                    let ai = match a.get(i) {
+                        Some(v) => *v,
+                        None => 0,
+                    };
+                    // At most (2^64 − 1)², below 2^128: `checked_mul` never fails here.
+                    let prod = u128::from(ai).checked_mul(u128::from(bj))?;
+                    // Limb indices are below L and the shift at most 1: never fails.
+                    let k = i.checked_add(shift)?;
+                    match out.get(k) {
+                        Some(&old) => {
+                            // At most (2^64 − 1)² + 2 (2^64 − 1) = 2^128 − 1: never fails.
+                            let t = prod
+                                .checked_add(u128::from(old))?
+                                .checked_add(u128::from(carry))?;
+                            let (low, high) = halves(t);
+                            if let Some(slot) = out.get_mut(k) {
+                                *slot = low;
+                            }
+                            carry = high;
+                        }
+                        // A non-zero contribution at limb L makes the magnitude at least 2^(64L).
+                        None => {
+                            if prod != 0 || carry != 0 {
+                                return None;
+                            }
                         }
                     }
                 }
+                if carry != 0 {
+                    return None;
+                }
             }
-            if carry != 0 {
-                return None;
-            }
         }
-        Self::from_magnitude(&out, negative)
-    }
-
-    /// The value with magnitude `m` (limbs little-endian, any number of them) and the given sign,
-    /// or `None` if it does not fit: the limbs from `L` on must be zero, and the magnitude must be
-    /// below 2^(64L−1), or exactly 2^(64L−1) for a negative value (the minimum value), as
-    /// [`Wide::checked_mul`] decides it.
-    fn from_magnitude(m: &[u64], negative: bool) -> Option<Self> {
-        if m.iter().skip(L).any(|&limb| limb != 0) {
-            return None;
-        }
-        let mut out = [0u64; L];
-        for (o, &limb) in out.iter_mut().zip(m.iter()) {
-            *o = limb;
-        }
-        let top_bit_set = out.last().is_some_and(|top| top & TOP_BIT != 0);
-        if !top_bit_set {
-            let v = Self(out);
-            return Some(if negative { v.wrapping_neg() } else { v });
-        }
-        let is_power = out
-            .iter()
-            .rev()
-            .enumerate()
-            .all(|(k, &limb)| if k == 0 { limb == TOP_BIT } else { limb == 0 });
-        (negative && is_power).then(Self::min_value)
+        from_magnitude(&out, negative)
     }
 
     /// The same value in a `Wide<M>`, or `None` if it does not fit.
