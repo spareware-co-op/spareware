@@ -115,7 +115,9 @@ fn every_golden_is_sha256_and_geom_num_has_all_its_corpora() {
 /// unchanged. Their histories hold exactly the changes made to them on main before the store
 /// existed, each with the digest the constant had before: G05 moved geom-num's corpus and both
 /// of geom-math's goldens (its correctly rounded maths); nothing else moved, so no other golden has
-/// a record.
+/// a record from then. Records after those are later pieces' changes, appended in order, and the
+/// digest each golden had when the store was made is the first such record's old digest, or the
+/// current one when nothing has moved it since.
 #[test]
 fn the_goldens_the_crates_pinned_are_byte_identical_in_the_store() {
     let before: [(&str, &str); 7] = [
@@ -150,10 +152,6 @@ fn the_goldens_the_crates_pinned_are_byte_identical_in_the_store() {
     ];
     let store = Store::embedded().unwrap();
     let edition = store.current().unwrap();
-    for (id, digest) in before {
-        let g = edition.golden(id, &BTreeMap::new()).unwrap();
-        assert_eq!(g.sha256, digest, "{id} moved");
-    }
     // The changes main made before the store, each the constant's earlier value (G02's and G03's
     // SHA-256 goldens, moved by G05), and no other record anywhere.
     let changed: BTreeMap<&str, &str> = [
@@ -172,16 +170,33 @@ fn the_goldens_the_crates_pinned_are_byte_identical_in_the_store() {
     ]
     .into_iter()
     .collect();
+    let mut born = BTreeMap::new();
     for g in &edition.goldens {
-        match changed.get(g.id.as_str()) {
+        let made_before = match changed.get(g.id.as_str()) {
             Some(old) => {
-                assert_eq!(g.history.len(), 1, "{}", g.id);
+                assert!(!g.history.is_empty(), "{} lost its record", g.id);
                 assert_eq!(g.history[0].sha256, *old, "{}", g.id);
                 assert_eq!(g.history[0].kind, ChangeKind::Improvement, "{}", g.id);
                 assert_eq!(g.history[0].piece, "G05", "{}", g.id);
+                1
             }
-            None => assert!(g.history.is_empty(), "{} has a history record", g.id),
+            None => 0,
+        };
+        for later in &g.history[made_before..] {
+            assert_ne!(
+                later.piece, "G05",
+                "{} has a record from before the store",
+                g.id
+            );
         }
+        let digest = g
+            .history
+            .get(made_before)
+            .map_or(g.sha256.as_str(), |later| later.sha256.as_str());
+        born.insert(g.id.as_str(), digest);
+    }
+    for (id, digest) in before {
+        assert_eq!(born.get(id).copied(), Some(digest), "{id} moved");
     }
 }
 
