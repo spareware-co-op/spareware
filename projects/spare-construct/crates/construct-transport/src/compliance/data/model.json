@@ -1,0 +1,213 @@
+{
+ "CLASSES": {
+  "motorway": {
+   "label": "Motorway",
+   "rank": 6,
+   "speed": 100,
+   "lanes": 2,
+   "cap": 2000,
+   "lw": 3.5,
+   "minPx": 4.5,
+   "color": "#3d5ccc"
+  },
+  "ramp": {
+   "label": "Ramp",
+   "rank": 5,
+   "speed": 70,
+   "lanes": 1,
+   "cap": 1700,
+   "lw": 3.5,
+   "minPx": 3,
+   "color": "#7b93e8"
+  },
+  "arterial": {
+   "label": "Arterial",
+   "rank": 4,
+   "speed": 50,
+   "lanes": 2,
+   "cap": 1200,
+   "lw": 3.5,
+   "minPx": 3.6,
+   "color": "#d4501a"
+  },
+  "collector": {
+   "label": "Collector",
+   "rank": 3,
+   "speed": 50,
+   "lanes": 1,
+   "cap": 1000,
+   "lw": 3.3,
+   "minPx": 2.6,
+   "color": "#12858a"
+  },
+  "local": {
+   "label": "Local",
+   "rank": 2,
+   "speed": 50,
+   "lanes": 1,
+   "cap": 800,
+   "lw": 3,
+   "minPx": 1.7,
+   "color": "#8a9490"
+  }
+ },
+ "LANDUSES": {
+  "residential": {
+   "label": "Houses",
+   "unit": "dwellings",
+   "per": 1,
+   "group": "Residential"
+  },
+  "apartment": {
+   "label": "Apartments",
+   "unit": "dwellings",
+   "per": 1,
+   "group": "Residential"
+  },
+  "retirement": {
+   "label": "Retirement village",
+   "unit": "units",
+   "per": 1,
+   "group": "Residential"
+  },
+  "retail": {
+   "label": "Retail",
+   "unit": "m² GFA",
+   "per": 100,
+   "group": "Commercial"
+  },
+  "supermarket": {
+   "label": "Supermarket",
+   "unit": "m² GFA",
+   "per": 100,
+   "group": "Commercial"
+  },
+  "fastfood": {
+   "label": "Fast food",
+   "unit": "m² GFA",
+   "per": 100,
+   "group": "Commercial"
+  },
+  "office": {
+   "label": "Office",
+   "unit": "m² GFA",
+   "per": 100,
+   "group": "Commercial"
+  },
+  "hotel": {
+   "label": "Hotel",
+   "unit": "rooms",
+   "per": 1,
+   "group": "Commercial"
+  },
+  "school": {
+   "label": "School",
+   "unit": "students",
+   "per": 1,
+   "group": "Community"
+  },
+  "childcare": {
+   "label": "Childcare",
+   "unit": "child places",
+   "per": 1,
+   "group": "Community"
+  },
+  "medical": {
+   "label": "Medical centre",
+   "unit": "m² GFA",
+   "per": 100,
+   "group": "Community"
+  },
+  "tertiary": {
+   "label": "Tertiary education",
+   "unit": "students",
+   "per": 1,
+   "group": "Community"
+  },
+  "industrial": {
+   "label": "Industrial",
+   "unit": "m² GFA",
+   "per": 100,
+   "group": "Industrial"
+  },
+  "warehouse": {
+   "label": "Warehouse and logistics",
+   "unit": "m² GFA",
+   "per": 100,
+   "group": "Industrial"
+  }
+ },
+ "CONTROLS": {
+  "none": "Uncontrolled",
+  "priority": "Give way (minor road)",
+  "stop": "Stop (minor road)",
+  "roundabout": "Roundabout",
+  "signals": "Traffic signals"
+ },
+ "STATUS": {
+  "existing": "Existing",
+  "proposed": "Proposed",
+  "closed": "Closed"
+ },
+ "CYCLE": {
+  "none": "None",
+  "painted": "Painted cycle lane",
+  "separated": "Separated cycleway"
+ },
+ "SCENARIO_ROLES": {
+  "existing": {
+   "label": "Existing (base year)",
+   "short": "Existing",
+   "code": "S0",
+   "order": 0,
+   "side": "without"
+  },
+  "baseline": {
+   "label": "Future baseline (do-minimum)",
+   "short": "Baseline",
+   "code": "S1",
+   "order": 1,
+   "side": "without"
+  },
+  "proposal": {
+   "label": "With proposal (option)",
+   "short": "With proposal",
+   "code": "S2",
+   "order": 2,
+   "side": "with"
+  },
+  "mitigation": {
+   "label": "With proposal and mitigation (option)",
+   "short": "With mitigation",
+   "code": "S3",
+   "order": 3,
+   "side": "with"
+  },
+  "sensitivity": {
+   "label": "Sensitivity test",
+   "short": "Sensitivity",
+   "code": "ST",
+   "order": 4,
+   "side": "other"
+  },
+  "permitted": {
+   "label": "Permitted baseline (RMA s104(2): may disregard)",
+   "short": "Permitted baseline",
+   "code": "PB",
+   "order": 5,
+   "side": "without"
+  }
+ },
+ "FUNDING": {
+  "funded": "Funded (NLTP, RLTP or LTP)",
+  "programmed": "Programmed, not yet funded",
+  "unfunded": "Unfunded"
+ },
+ "REGISTER_TYPES": {
+  "consent": "Granted resource consent",
+  "ftaa": "Fast-track (FTAA) approval",
+  "planchange": "Operative plan change",
+  "precinct": "Precinct yield",
+  "network": "Committed network project"
+ }
+}
