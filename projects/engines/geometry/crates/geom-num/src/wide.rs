@@ -115,26 +115,30 @@ fn wrapping_sub_limbs<const L: usize>(a: &[u64; L], b: &[u64; L]) -> [u64; L] {
     out
 }
 
-/// How two limb sequences compare as unsigned numbers: every limb from the lowest up, each one that
-/// differs deciding until a higher one does, so the highest limb that differs decides.
+/// How two limb sequences compare as unsigned numbers: from the top limb down, the first limb that
+/// differs decides.
 fn compare_limbs<const L: usize>(a: &[u64; L], b: &[u64; L]) -> Ordering {
-    let mut ord = Ordering::Equal;
-    for i in 0..L {
-        let x = match a.get(i) {
+    let mut i = L;
+    while i > 0 {
+        // i > 0, so i − 1 never wraps.
+        i = i.wrapping_sub(1);
+        let high_a = match a.get(i) {
             Some(v) => *v,
             None => 0,
         };
-        let y = match b.get(i) {
+        let high_b = match b.get(i) {
             Some(v) => *v,
             None => 0,
         };
-        if x < y {
-            ord = Ordering::Less;
-        } else if x > y {
-            ord = Ordering::Greater;
+        if high_a != high_b {
+            return if high_a < high_b {
+                Ordering::Less
+            } else {
+                Ordering::Greater
+            };
         }
     }
-    ord
+    Ordering::Equal
 }
 
 /// The low and high 64-bit halves of `t`, t = high · 2^64 + low.

@@ -402,7 +402,7 @@ fn any_change_to_the_wide_arithmetic_is_seen() {
             ".wrapping_add(u128::from(carry))",
         ),
         ("carry = c1 || c2;", "carry = c1 && c2;"),
-        ("ord = Ordering::Greater;", "ord = Ordering::Less;"),
+        ("i = i.wrapping_sub(1);", "i = i.wrapping_sub(2);"),
         (
             "let overflow = self.is_negative() && r.is_negative();",
             "let overflow = false;",
