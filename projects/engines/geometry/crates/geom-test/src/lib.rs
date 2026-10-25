@@ -86,6 +86,11 @@
 //! - `proptest` 1.12, without its default `fork` and `timeout` features, as in `geom-num`. [`prop`]
 //!   always runs it from a fixed seed, so its operating-system random path is never taken.
 //! - `serde_json` 1.0, to read `cargo metadata`.
+//! - `pulldown-cmark` 0.13.5, a development dependency without its default features (the HTML
+//!   writer and the command line), so `tests/attack_g17.rs` reads the kernel's README.md,
+//!   AGENTS.md and GLOSSARY.md as Markdown.
+//! - `unicode-normalization` 0.1.26, a development dependency, so the same test sorts the
+//!   glossary's headwords with their accents set aside.
 //! - `num-rational` 0.4, a development dependency only: the exact oracle of the scanner's cited
 //!   Cash-Karp fixture, whose tableau its tests check against the order conditions in rational
 //!   arithmetic.
@@ -100,9 +105,11 @@
 //!   `serde_derive`, `itoa`, `proc-macro2`, `quote`, `syn`, `num-rational`, `num-bigint` and
 //!   `num-integer`.
 //! - MIT OR Apache-2.0 OR LGPL-2.1-or-later: `r-efi` (UEFI targets only).
-//! - (MIT OR Apache-2.0) AND Unicode-3.0: `unicode-ident`.
+//! - (MIT OR Apache-2.0) AND Unicode-3.0: `unicode-ident` and `unicode-normalization`.
+//! - Zlib OR Apache-2.0 OR MIT: `tinyvec`, which `unicode-normalization` brings in.
+//! - MIT OR Apache-2.0: `unicase`, which `pulldown-cmark` brings in.
 //! - Unlicense OR MIT: `memchr`.
-//! - MIT: `zmij`.
+//! - MIT: `zmij` and `pulldown-cmark`.
 #![forbid(unsafe_code)]
 
 pub mod deps;

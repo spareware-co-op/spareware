@@ -3146,7 +3146,7 @@
             "**All or nothing.** A draw that fails leaves its stream exactly as it was.",
             "**No panics, no `unsafe`, no allocation, no `std`.** The block function, every draw and every range operation are `const fn`s, so a table of random numbers can be computed at compile time, with the same bits."
           ],
-          "job": "Counter-based random numbers from explicit seeds (Philox4x32-10), and the rule every randomised kernel method follows.",
+          "job": "Counter-based random numbers from explicit seeds (Philox4x32-10): the one generator every randomised kernel method draws from.",
           "method": {
             "links": [
               "https://doi.org/10.1145/2063384.2063405",
@@ -3215,7 +3215,7 @@
       ],
       "name": "geom-num",
       "provenance": [],
-      "sections": "chapter 6 of the kernel architecture (`projects/engines/geometry/architecture/06-numbers.md`), with the numeric parts of chapters 9 (exactness), 21 (determinism) and 28 (testing), and the random generator chapters 16 (free-form) and 17 (survey, terrain and civil) ask of this crate ([`rng`], which also holds the randomised-method rule).",
+      "sections": "chapter 6 of the kernel architecture (`projects/engines/geometry/architecture/06-numbers.md`), with the numeric parts of chapters 9 (exactness), 21 (determinism) and 28 (testing), and the random generator chapters 16 (free-form) and 17 (survey, terrain and civil) ask of this crate ([`rng`], the one generator of the randomised-method rule in the kernel's `AGENTS.md`).",
       "spdx": null,
       "status": null,
       "summary": "Spare Kit geometry kernel: the numbers layer."
