@@ -281,7 +281,16 @@ impl<const L: usize> Wide<L> {
     /// Whether the value is exactly zero.
     #[must_use]
     pub fn is_zero(&self) -> bool {
-        self.0.iter().all(|&limb| limb == 0)
+        for i in 0..L {
+            let limb = match self.0.get(i) {
+                Some(v) => *v,
+                None => 0,
+            };
+            if limb != 0 {
+                return false;
+            }
+        }
+        true
     }
 
     /// The sign of the value.

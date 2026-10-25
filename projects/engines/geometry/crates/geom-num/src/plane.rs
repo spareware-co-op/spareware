@@ -358,9 +358,13 @@ impl Plane {
     #[inline(never)]
     fn side_of_tpi_hand(&self, t: &Tpi) -> Result<Sign, NumError> {
         let (x, w) = t.homogeneous()?;
-        classify::<BUDGET_LIMBS>(&self.n, self.d, &x, &w)
-            .or_else(|| classify::<TOTAL_LIMBS>(&self.n, self.d, &x, &w))
-            .ok_or(NumError::BudgetExceeded)
+        match classify::<BUDGET_LIMBS>(&self.n, self.d, &x, &w) {
+            Some(s) => Ok(s),
+            None => match classify::<TOTAL_LIMBS>(&self.n, self.d, &x, &w) {
+                Some(s) => Ok(s),
+                None => Err(NumError::BudgetExceeded),
+            },
+        }
     }
 
     /// Which side of this plane the point where a line meets another plane is on, exactly.
@@ -397,19 +401,20 @@ impl Plane {
     /// [`I320`], times the sign of w₁.
     #[inline(never)]
     fn side_of_lpi_hand(&self, l: &Lpi) -> Result<Sign, NumError> {
-        let (w1, s1p) = l
-            .plane
-            .weight_and_offset(l.p, l.q)
-            .ok_or(NumError::BudgetExceeded)?;
-        let (w2, s2p) = self
-            .weight_and_offset(l.p, l.q)
-            .ok_or(NumError::BudgetExceeded)?;
-        let side = |w1: i128, s2p: i128, w2: i128, s1p: i128| {
-            lpi_classify::<4>(w1, s2p, w2, s1p).or_else(|| lpi_classify::<5>(w1, s2p, w2, s1p))
+        let (Some((w1, s1p)), Some((w2, s2p))) = (
+            l.plane.weight_and_offset(l.p, l.q),
+            self.weight_and_offset(l.p, l.q),
+        ) else {
+            return Err(NumError::BudgetExceeded);
         };
-        side(w1, s2p, w2, s1p)
-            .map(|s| s.mul(Sign::of_i128(w1)))
-            .ok_or(NumError::BudgetExceeded)
+        let side = match lpi_classify::<4>(w1, s2p, w2, s1p) {
+            Some(s) => Some(s),
+            None => lpi_classify::<5>(w1, s2p, w2, s1p),
+        };
+        match side {
+            Some(s) => Ok(s.mul(Sign::of_i128(w1))),
+            None => Err(NumError::BudgetExceeded),
+        }
     }
 
     /// w = n · (q − p) and sₚ = n · p + d for the line from p to q, in `i128`: `None` if either
@@ -423,7 +428,7 @@ impl Plane {
 
 /// q − p for two coordinates, in `i128`. Checked like every step here, although it always fits:
 /// |q − p| < 2^64 for any two `i64` values.
-const fn difference(q: Coord, p: Coord) -> Option<i128> {
+pub(crate) const fn difference(q: Coord, p: Coord) -> Option<i128> {
     (q.get() as i128).checked_sub(p.get() as i128)
 }
 
@@ -594,7 +599,10 @@ impl Tpi {
     /// same computation for the same planes, so it cannot happen; were the checked arithmetic
     /// itself wrong, this reports it rather than returning coordinates.
     pub fn homogeneous(&self) -> Result<([I320; 3], I256), NumError> {
-        self.homogeneous_checked().ok_or(NumError::BudgetExceeded)
+        match self.homogeneous_checked() {
+            Some(h) => Ok(h),
+            None => Err(NumError::BudgetExceeded),
+        }
     }
 
     /// [`Tpi::homogeneous`] with every wide operation checked: `None` only if a budget were wrong.
@@ -613,17 +621,12 @@ impl Tpi {
             I320::from_i128(q.d),
             I320::from_i128(r.d),
         );
-        let mut x = [I320::ZERO; 3];
-        for (xi, ((a, b), c)) in x
-            .iter_mut()
-            .zip(c_qr.iter().zip(c_rp.iter()).zip(c_pq.iter()))
-        {
-            let sum = dp
-                .checked_mul(&a.resize::<5>()?)?
-                .checked_add(&dq.checked_mul(&b.resize::<5>()?)?)?
-                .checked_add(&dr.checked_mul(&c.resize::<5>()?)?)?;
-            *xi = sum.checked_neg()?;
-        }
+        let ([qr_x, qr_y, qr_z], [rp_x, rp_y, rp_z], [pq_x, pq_y, pq_z]) = (c_qr, c_rp, c_pq);
+        let x = [
+            numerator(&dp, &dq, &dr, &qr_x, &rp_x, &pq_x)?,
+            numerator(&dp, &dq, &dr, &qr_y, &rp_y, &pq_y)?,
+            numerator(&dp, &dq, &dr, &qr_z, &rp_z, &pq_z)?,
+        ];
         Some((x, w))
     }
 
@@ -702,16 +705,23 @@ fn product_difference(p: i128, q: i128, r: i128, s: i128) -> Option<I256> {
 /// a · c for a normal a (|`a_i`| < 2^83) and a cross product of normals c (|`c_i`| < 2^167): each
 /// product below 2^250, every partial sum below 3 · 2^250 < 2^252, in [`I256`].
 fn dot(a: &[i128; 3], c: &[I256; 3]) -> Option<I256> {
-    let mut acc = I256::ZERO;
-    for (&ai, ci) in a.iter().zip(c.iter()) {
-        acc = acc.checked_add(&I256::from_i128(ai).checked_mul(ci)?)?;
-    }
-    Some(acc)
+    let ([ax, ay, az], [cx, cy, cz]) = (*a, c);
+    I256::from_i128(ax)
+        .checked_mul(cx)?
+        .checked_add(&I256::from_i128(ay).checked_mul(cy)?)?
+        .checked_add(&I256::from_i128(az).checked_mul(cz)?)
 }
 
-/// The sign of n · X + d · w times the sign of w, in `Wide<L>`: [`I384`] on the budgeted path,
-/// [`I512`] on the total path. `None` if a step does not fit. Budgets for both on
-/// [`Plane::side_of_tpi`].
+/// One numerator of [`Tpi::homogeneous`], −(`d_1` a + `d_2` b + `d_3` c) for the offsets `d_k` and one
+/// component a, b, c of each cross product of normals (|d| < 2^125, |a|, |b|, |c| < 2^167): each
+/// product below 2^292, every partial sum below 3 · 2^292 < 2^294, in [`I320`].
+fn numerator(dp: &I320, dq: &I320, dr: &I320, a: &I256, b: &I256, c: &I256) -> Option<I320> {
+    dp.checked_mul(&a.resize::<5>()?)?
+        .checked_add(&dq.checked_mul(&b.resize::<5>()?)?)?
+        .checked_add(&dr.checked_mul(&c.resize::<5>()?)?)?
+        .checked_neg()
+}
+
 /// The point where the line through two grid points meets a plane: an implicit point, kept as its
 /// definition and never rounded inside an operation (chapter 6.3), like a [`Tpi`]. An edge of a
 /// flat-faced solid cut by a plane meets it at such a point.
@@ -768,19 +778,16 @@ impl Lpi {
     /// for the same line and plane, and the products cannot exceed [`I256`] for any `i128`
     /// offsets and grid coordinates (at most 2^127 · 2^40 each).
     pub fn homogeneous(&self) -> Result<([I256; 3], i128), NumError> {
-        let (w, sp) = self
-            .plane
-            .weight_and_offset(self.p, self.q)
-            .ok_or(NumError::BudgetExceeded)?;
-        let sq = sp.checked_add(w).ok_or(NumError::BudgetExceeded)?;
-        let axis = |pc: Coord, qc: Coord| {
-            I256::product_i128(sq, i128::from(pc.get()))?
-                .checked_sub(&I256::product_i128(sp, i128::from(qc.get()))?)
+        let Some((w, sp)) = self.plane.weight_and_offset(self.p, self.q) else {
+            return Err(NumError::BudgetExceeded);
+        };
+        let Some(sq) = sp.checked_add(w) else {
+            return Err(NumError::BudgetExceeded);
         };
         let (Some(x), Some(y), Some(z)) = (
-            axis(self.p.x, self.q.x),
-            axis(self.p.y, self.q.y),
-            axis(self.p.z, self.q.z),
+            lpi_axis(sq, sp, self.p.x, self.q.x),
+            lpi_axis(sq, sp, self.p.y, self.q.y),
+            lpi_axis(sq, sp, self.p.z, self.q.z),
         ) else {
             return Err(NumError::BudgetExceeded);
         };
@@ -806,6 +813,13 @@ impl Lpi {
             .or_else(|| commit::<TOTAL_LIMBS>(&x, &w))
             .unwrap_or(Err(NumError::BudgetExceeded))
     }
+}
+
+/// One numerator of [`Lpi::homogeneous`], `s_q` · `p_i` − `s_p` · `q_i`, in [`I256`]: `None` if a
+/// step does not fit, which no `i128` offsets and grid coordinates cause.
+fn lpi_axis(sq: i128, sp: i128, pc: Coord, qc: Coord) -> Option<I256> {
+    I256::product_i128(sq, i128::from(pc.get()))?
+        .checked_sub(&I256::product_i128(sp, i128::from(qc.get()))?)
 }
 
 /// The side of plane `s` that the point where `l`'s line meets its plane is on, through the
@@ -859,13 +873,17 @@ fn tpi_routed(t: &Tpi, s: &Plane) -> Option<Sign> {
     Some(side.mul(t.weight))
 }
 
+/// The sign of n · X + d · w times the sign of w, in `Wide<L>`: [`I384`] on the budgeted path,
+/// [`I512`] on the total path. `None` if a step does not fit. Budgets for both on
+/// [`Plane::side_of_tpi`].
 fn classify<const L: usize>(n: &[i128; 3], d: i128, x: &[I320; 3], w: &I256) -> Option<Sign> {
-    let mut acc = Wide::<L>::from_i128(d).checked_mul(&w.resize::<L>()?)?;
-    for (&ni, xi) in n.iter().zip(x.iter()) {
-        let term = Wide::<L>::from_i128(ni).checked_mul(&xi.resize::<L>()?)?;
-        acc = acc.checked_add(&term)?;
-    }
-    Some(acc.signum().mul(w.signum()))
+    let ([nx, ny, nz], [xx, xy, xz]) = (*n, x);
+    let side = Wide::<L>::from_i128(d)
+        .checked_mul(&w.resize::<L>()?)?
+        .checked_add(&Wide::<L>::from_i128(nx).checked_mul(&xx.resize::<L>()?)?)?
+        .checked_add(&Wide::<L>::from_i128(ny).checked_mul(&xy.resize::<L>()?)?)?
+        .checked_add(&Wide::<L>::from_i128(nz).checked_mul(&xz.resize::<L>()?)?)?;
+    Some(side.signum().mul(w.signum()))
 }
 
 /// The point X / w committed to the grid, as in [`Tpi::to_grid`] (method and budgets there), in
