@@ -331,10 +331,10 @@ const SINPI_HARD_CASES: [(u64, u64); 4] = [
 ];
 
 /// The mirror images of the hard cases answer as the identities say: sinpi(−a) = −sinpi(a) for
-/// every one (its reduction gives iq = 2^12 − iq_a and z = −z_a), and for the entry at 903, whose
+/// every one (its reduction gives `iq = 2^12 − iq_a` and `z = −z_a`), and for the entry at 903, whose
 /// mirrors are doubles too, sinpi(1 − a) = sinpi(a), cospi(½ − a) = cospi(a − ½) = sinpi(a) and
 /// cospi(½ + a) = −sinpi(a). The accurate path recognises a mirror image by the second half of its
-/// hard-case test (x = −h.x and iq = 2048 − h.iq).
+/// hard-case test (`x = −h.x` and `iq = 2048 − h.iq`).
 #[test]
 fn sinpi_and_cospi_at_the_mirror_images_of_the_hard_cases() {
     let bits_of = |v: Result<Real, NumError>| v.unwrap().get().to_bits();
