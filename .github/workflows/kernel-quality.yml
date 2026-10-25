@@ -301,11 +301,20 @@ jobs:
       - name: Measure each crate with its own tests
         env:
           RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
-          # Optimised builds let rustc inline small functions into other crates, and llvm-cov then
-          # reads a function's coverage from whichever test binary it meets first, so a function
-          # used only by another binary is reported as never run; this keeps every function's
-          # coverage in its own crate (geom_test::coverage::check_log fails a run where it did not).
-          RUSTFLAGS: -Z cross-crate-inline-threshold=never
+          # llvm-cov keeps the first coverage record of each function name it reads, across every
+          # test binary, and drops the rest. Two things would give a function a first record that
+          # is not its real count:
+          # - Optimised builds let rustc inline small functions into other crates, where the copy
+          #   has different coverage data (llvm-cov's "mismatched data"); the threshold stops that
+          #   (geom_test::coverage::check_log fails a run where it did not work).
+          # - A function the crate itself never calls is not compiled into its library, and rustc
+          #   records it there with every count zero; an `#[inline]` function that only another
+          #   test binary calls is then reported as never run whenever a binary holding that zero
+          #   record is read first. -C link-dead-code compiles every function into the library,
+          #   so every record of a function reads the same counters, which llvm-profdata merge
+          #   adds up over every test process (https://llvm.org/docs/CommandGuide/llvm-profdata.html).
+          #   geom-test's seeded_gates test proves it on an `#[inline]` function.
+          RUSTFLAGS: -Z cross-crate-inline-threshold=never -C link-dead-code
         run: |
           # The list comes from the judge itself, so it measures what it will judge.
           # shellcheck disable=SC2086 # SCOPE holds an option and its value.

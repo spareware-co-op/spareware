@@ -501,7 +501,9 @@ pub fn measure(repo: &Path, krate: &str, lcov: &str) -> Result<CrateReport, Cove
 /// the report (its lines no longer counted at all, which would make the bar easier). Both happen
 /// in optimised builds when rustc lets small functions be inlined into other crates, which
 /// `-Z cross-crate-inline-threshold=never` stops; the workflow passes it, and this check fails a
-/// run where it did not work.
+/// run where it did not work. (The workflow also passes `-C link-dead-code`, so a function the
+/// crate never calls itself has no all-zero record to shadow the copy a test runs; that case
+/// gives no warning, and the seeded gates test it.)
 #[must_use]
 pub fn check_log(krate: &str, log: &str) -> Option<String> {
     let line = log.lines().find(|l| l.contains("mismatched data"))?;

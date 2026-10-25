@@ -476,7 +476,7 @@ fn every_gate_is_judged_and_tool_failures_are_not_swallowed() {
         .unwrap();
     assert_eq!(
         text(&measure["env"]["RUSTFLAGS"]),
-        "-Z cross-crate-inline-threshold=never"
+        "-Z cross-crate-inline-threshold=never -C link-dead-code"
     );
     // The seeded gates run with --ignored, on the coverage nightly.
     let seeded = runs(&w, "gates-seeded");

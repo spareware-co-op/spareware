@@ -22,6 +22,9 @@
 //!   the foundation bar refuses.
 //! - **A `coverage(off)` mark** fails while it cites no proof, and passes once it cites a Kani
 //!   harness its ledger entry names.
+//! - **An `#[inline]` function only another test binary calls** is counted as run, as the coverage
+//!   job measures (`-C link-dead-code`): never reported as never run because a binary that does not
+//!   call it was read first.
 //!
 //! The tests need cargo-mutants and cargo-llvm-cov installed, and cargo-llvm-cov a nightly
 //! toolchain with `llvm-tools` (named by `SPAREKIT_COVERAGE_TOOLCHAIN`), so they are ignored in an
@@ -289,7 +292,10 @@ impl Fixture {
         let out = self.run(
             cargo()
                 .env("RUSTUP_TOOLCHAIN", &toolchain)
-                .env("RUSTFLAGS", "-Z cross-crate-inline-threshold=never")
+                .env(
+                    "RUSTFLAGS",
+                    "-Z cross-crate-inline-threshold=never -C link-dead-code",
+                )
                 .args([
                     "llvm-cov",
                     "--locked",
@@ -508,6 +514,57 @@ fn seeded_uncovered_code_fails_the_coverage_gate_until_tests_reach_it() {
     assert!(weak.1.contains("both ways on lines: 11"), "{}", weak.1);
     f.write(&format!("{CRATE}/tests/api.rs"), STRONG_TESTS);
     let dir = f.measure("strong");
+    let args = [
+        "coverage",
+        "--crates",
+        "geom-num",
+        "--lcov-dir",
+        dir.to_str().unwrap(),
+    ];
+    assert_passes(&f.judge(&args));
+}
+
+/// An `#[inline]` function the crate never calls itself, appended to the seeded code: its lines
+/// are 21 to 23.
+const INLINE_FN: &str = "
+/// One more than `x`, wrapping.
+#[inline]
+pub fn next(x: i32) -> i32 {
+    x.wrapping_add(1)
+}
+";
+
+/// The only test binary that calls `next`: named to sort after `api`, which does not.
+const INLINE_TESTS: &str = "use geom_num::next;
+
+#[test]
+fn counts_on() {
+    assert_eq!(next(4), 5);
+    assert_eq!(next(-1), 0);
+}
+";
+
+#[test]
+#[ignore = "runs cargo-llvm-cov on a nightly toolchain; CI's gates-seeded job runs it with --ignored"]
+fn an_inline_function_only_another_test_binary_calls_is_counted_as_run() {
+    // The crate never calls `next`, so without -C link-dead-code its library holds a record of
+    // `next` with every count zero, and every test binary links that record in; llvm-cov keeps
+    // the first record of a name it reads, so the copy `z_inline` runs could be dropped and `next`
+    // reported as never run. With it, every record reads `next`'s real counters.
+    let f = Fixture::new("inline");
+    f.write(&format!("{CRATE}/src/lib.rs"), &format!("{LIB}{INLINE_FN}"));
+    f.write(&format!("{CRATE}/tests/api.rs"), STRONG_TESTS);
+    f.write(&format!("{CRATE}/tests/z_inline.rs"), INLINE_TESTS);
+    let dir = f.measure("inline");
+    let lcov = std::fs::read_to_string(dir.join("geom-num.lcov")).unwrap();
+    for line in 21..=23 {
+        assert!(
+            lcov.lines()
+                .any(|l| l.starts_with(&format!("DA:{line},")) && !l.ends_with(",0")),
+            "line {line} of `next` is not counted as run:
+{lcov}"
+        );
+    }
     let args = [
         "coverage",
         "--crates",
