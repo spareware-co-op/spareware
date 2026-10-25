@@ -60,20 +60,28 @@ fn verify(run: &'static mut Named) {
     }
 }
 
-/// The gate's tools and limits. Callgrind, with its cache simulation, counts instructions, cache
-/// misses and estimated cycles; DHAT counts the heap use of the measured function. Instructions,
-/// estimated cycles and every heap measure have a soft limit of [`GATE_PERCENT`]: a rise beyond it
-/// against the baseline is a regression, and the run exits with code 3 after reporting every
-/// benchmark. The miss counts have none here: a percentage limit would fail on one event on the
-/// counts too small to resolve it, so `geom_bench::callgrind` judges them from the run's summaries.
-/// The workflow passes the same limits on the command line (`geom_bench::CALLGRIND_LIMITS` and
-/// `DHAT_LIMITS`), which take precedence, so the gate does not depend on this file.
+/// The gate's tools and limits for a bare local run. Callgrind, with its cache simulation, counts
+/// instructions, cache misses and estimated cycles; DHAT counts the heap use of the measured
+/// function. Each measure has a soft limit of [`GATE_PERCENT`] here: a rise beyond it against the
+/// baseline is a regression, and the run exits with code 3 after reporting every benchmark. The
+/// workflow passes its own limits on the command line, which replace these
+/// (`geom_bench::CALLGRIND_LIMITS` and `DHAT_LIMITS`), so the gate does not depend on this file:
+/// they gate instructions, estimated cycles and heap, and `geom_bench::callgrind` judges the miss
+/// counts from the run's summaries, gating only those large enough to resolve 5%. A bare run is
+/// stricter than the gate on miss counts below 20; pass the workflow's limits to compare as CI does
+/// (the crate documentation). This code is part of the measured binary, so it is left as it was.
 pub fn config() -> LibraryBenchmarkConfig {
     let mut callgrind = Callgrind::default();
     callgrind.args([ZERO_BEFORE]);
     callgrind.soft_limits([
         (EventKind::Ir, GATE_PERCENT),
         (EventKind::EstimatedCycles, GATE_PERCENT),
+        (EventKind::I1mr, GATE_PERCENT),
+        (EventKind::D1mr, GATE_PERCENT),
+        (EventKind::D1mw, GATE_PERCENT),
+        (EventKind::ILmr, GATE_PERCENT),
+        (EventKind::DLmr, GATE_PERCENT),
+        (EventKind::DLmw, GATE_PERCENT),
     ]);
     let mut dhat = Dhat::default();
     dhat.soft_limits([

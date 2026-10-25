@@ -34,6 +34,7 @@
 use std::io::Write as _;
 use std::process::ExitCode;
 
+#[cfg(all(feature = "judge", any(unix, windows)))]
 use geom_bench::callgrind::{judge, read_summaries};
 use geom_bench::counts::{Counts, compare, growth, growth_report, parse_names, unretired_removals};
 
@@ -80,6 +81,7 @@ fn run(args: &[&str], out: &mut String) -> Result<bool, String> {
             }
             Ok(removed.is_empty())
         }
+        #[cfg(all(feature = "judge", any(unix, windows)))]
         ["callgrind", folder, names, gate, title] => {
             let gate = percent(gate)?;
             let names = parse_names(&read(names)?);
@@ -87,6 +89,12 @@ fn run(args: &[&str], out: &mut String) -> Result<bool, String> {
             out.push_str(&judgement.report(title));
             Ok(judgement.passed())
         }
+        #[cfg(not(all(feature = "judge", any(unix, windows))))]
+        ["callgrind", ..] => Err(
+            "callgrind needs the `judge` feature, on Unix or Windows: Gungraun's summary model is \
+             not built here"
+                .to_owned(),
+        ),
         _ => Err(
             "usage: geom-bench-counts compare <base> <head> <gate %> <list %> <retired> \
                   <title> | growth <counts> | removed <base names> <head names> <retired> | \

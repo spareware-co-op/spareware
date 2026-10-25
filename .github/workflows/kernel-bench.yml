@@ -371,12 +371,16 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf "${CARGO_TARGET_DIR:?}/gungraun"
-          cargo "+$BASE_TOOLCHAIN" bench --locked -p geom-bench --bench instructions -- \
+          cargo "+$BASE_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench instructions -- \
             --save-baseline=base 2>&1 | tee "$RUNNER_TEMP/base.log"
-          cargo "+$BASE_TOOLCHAIN" bench --locked -p geom-bench --bench instructions -- --list \
+          cargo "+$BASE_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench instructions -- --list \
             | sed -nE 's/^instructions::([a-z0-9_]+)::([a-z0-9_]+)::([a-z0-9_]+): benchmark$/\1\/\2\/\3/p' \
             | sort > "$RUNNER_TEMP/base.names"
 
+      # Every run of the benchmark binary in this job builds it with --no-default-features, without
+      # geom-bench's judge: Gungraun's runner crate is also in the benchmark binary, and turning on
+      # its summary model there would change the binary measured.
+      #
       # The gate. Gungraun compares every benchmark with the merge base's saved run and, after
       # reporting all of them, fails (exit code 3, reported by cargo as a failed bench) if
       # instructions, estimated cycles or a heap measure rose by more than 5%. The limits are this
@@ -398,7 +402,7 @@ jobs:
             rm -rf "${CARGO_TARGET_DIR:?}/gungraun"
             compare=()
           fi
-          cargo "+$HEAD_TOOLCHAIN" bench --locked -p geom-bench --bench instructions -- \
+          cargo "+$HEAD_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench instructions -- \
             "${compare[@]}" --save-baseline=head --save-summary=json \
             --callgrind-limits="$CALLGRIND_LIMITS" --dhat-limits="$DHAT_LIMITS" \
             2>&1 | tee "$RUNNER_TEMP/head.log"
@@ -419,7 +423,7 @@ jobs:
           GUNGRAUN_RUNNER: ${{ env.HEAD_RUNNER }}
         run: |
           set -euo pipefail
-          cargo "+$HEAD_TOOLCHAIN" bench --locked -p geom-bench --bench instructions -- --list \
+          cargo "+$HEAD_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench instructions -- --list \
             | sed -nE 's/^instructions::([a-z0-9_]+)::([a-z0-9_]+)::([a-z0-9_]+): benchmark$/\1\/\2\/\3/p' \
             | sort > "$RUNNER_TEMP/judged.names"
           cargo "+$HEAD_TOOLCHAIN" build --locked --release -p geom-bench --bin geom-bench-counts
@@ -454,7 +458,7 @@ jobs:
           GUNGRAUN_RUNNER: ${{ env.HEAD_RUNNER }}
         run: |
           set -euo pipefail
-          cargo "+$HEAD_TOOLCHAIN" bench --locked -p geom-bench --bench instructions -- --list \
+          cargo "+$HEAD_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench instructions -- --list \
             | sed -nE 's/^instructions::([a-z0-9_]+)::([a-z0-9_]+)::([a-z0-9_]+): benchmark$/\1\/\2\/\3/p' \
             | sort > "$RUNNER_TEMP/head.names"
           comm -13 "$RUNNER_TEMP/base.names" "$RUNNER_TEMP/head.names" > "$RUNNER_TEMP/added.names"
@@ -476,7 +480,7 @@ jobs:
             log="$RUNNER_TEMP/${way%%:*}.log"
             # Its failing exit status only means something was listed; whether the run completed
             # is checked next.
-            cargo "+$HEAD_TOOLCHAIN" bench --locked -p geom-bench --bench instructions -- \
+            cargo "+$HEAD_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench instructions -- \
               --load-baseline=head --baseline=base \
               --callgrind-limits="ir=${limit}%,estimatedcycles=${limit}%,i1mr=${limit}%,d1mr=${limit}%,d1mw=${limit}%,ilmr=${limit}%,dlmr=${limit}%,dlmw=${limit}%" \
               --dhat-limits="totalbytes=${limit}%,totalblocks=${limit}%,attgmaxbytes=${limit}%,maximumbytes=${limit}%" \

@@ -206,17 +206,20 @@
 //! export RUSTFLAGS="-C llvm-args=-align-all-functions=6"
 //! git switch main
 //! rm -rf target/gungraun
-//! cargo bench -p geom-bench --bench instructions -- --save-baseline=main
+//! cargo bench --no-default-features -p geom-bench --bench instructions -- --save-baseline=main
 //! git switch my-branch
-//! cargo bench -p geom-bench --bench instructions -- --baseline=main --save-summary=json \
-//!     --callgrind-limits='ir=5%,estimatedcycles=5%' \
+//! cargo bench --no-default-features -p geom-bench --bench instructions -- --baseline=main \
+//!     --save-summary=json --callgrind-limits='ir=5%,estimatedcycles=5%' \
 //!     --dhat-limits='totalbytes=5%,totalblocks=5%,attgmaxbytes=5%,maximumbytes=5%'
-//! cargo bench -p geom-bench --bench instructions -- --list \
+//! cargo bench --no-default-features -p geom-bench --bench instructions -- --list \
 //!     | sed -nE 's/^instructions::([a-z0-9_]+)::([a-z0-9_]+)::([a-z0-9_]+): benchmark$/\1\/\2\/\3/p' \
 //!     > names.txt
 //! cargo run --release -p geom-bench --bin geom-bench-counts -- callgrind \
 //!     target/gungraun/geom-bench/instructions names.txt 5 "Instructions, cycles and misses"
 //! ```
+//!
+//! The measured runs leave out the `judge` feature (`--no-default-features`), as CI's do, so the
+//! benchmark binary is the same whether or not the judge is built (`Cargo.toml` says why).
 //!
 //! Pass `--bench instructions` or `--bench wall_clock`: the two harnesses take different options.
 //! On other platforms `benches/instructions` only prints a note and exits.
@@ -259,6 +262,9 @@
 
 #![forbid(unsafe_code)]
 
+// Unix and Windows only, with the `judge` feature (on by default): Gungraun's summary model does not
+// build for WebAssembly, and the gate's measured runs leave it out (Cargo.toml).
+#[cfg(all(feature = "judge", any(unix, windows)))]
 pub mod callgrind;
 pub mod canonical;
 pub mod catalogue;

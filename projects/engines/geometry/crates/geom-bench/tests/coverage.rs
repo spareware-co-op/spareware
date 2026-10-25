@@ -510,27 +510,24 @@ fn the_gate_is_five_percent_on_every_measure() {
         GATED_HEAP_METRICS,
         ["TotalBytes", "TotalBlocks", "AtTGmaxBytes", "MaximumBytes"]
     );
-    // Gungraun gates instructions and estimated cycles itself; the miss counts are judged from its
-    // summaries (geom_bench::callgrind, G18a), so the tree's configuration must not gate them at a
-    // plain 5%, which fails on one event on the counts too small to resolve it.
-    for metric in &GATED_METRICS[..2] {
+    // A bare local run gates every measure at a plain 5%. The workflow's limits replace these and
+    // gate instructions and estimated cycles; the miss counts are judged from Gungraun's summaries
+    // (geom_bench::callgrind, G18a), which gate only those that can resolve 5%.
+    for metric in GATED_METRICS {
         assert!(
             GATE.contains(&format!("(EventKind::{metric}, GATE_PERCENT)")),
             "{metric}"
         );
     }
-    for metric in misses {
-        assert!(
-            !GATE.contains(&format!("EventKind::{metric}")),
-            "gate.rs sets a percentage limit on {metric}"
-        );
+    #[cfg(all(feature = "judge", any(unix, windows)))]
+    {
+        let judged: Vec<&str> = geom_bench::callgrind::JUDGED
+            .iter()
+            .map(|&(_, name)| name)
+            .collect();
+        assert_eq!(judged, GATED_METRICS);
+        assert_eq!(geom_bench::callgrind::floor(5), Some(20));
     }
-    let judged: Vec<&str> = geom_bench::callgrind::JUDGED
-        .iter()
-        .map(|&(_, name)| name)
-        .collect();
-    assert_eq!(judged, GATED_METRICS);
-    assert_eq!(geom_bench::callgrind::floor(5), Some(20));
     for metric in GATED_HEAP_METRICS {
         assert!(
             GATE.contains(&format!("(DhatMetric::{metric}, GATE_PERCENT)")),
@@ -642,7 +639,7 @@ fn the_pins_are_exact_and_agree() {
     // exactly the runner's version, so the schema read is the one written.
     assert!(MANIFEST.contains(&format!(
         "gungraun-runner = {{ version = \"={GUNGRAUN_VERSION}\", default-features = false, \
-         features = [\"summary\"] }}"
+         features = [\"summary\"], optional = true }}"
     )));
     // Each `[[package]]` entry's lines; the gungraun entry's `version`.
     let locked = LOCK

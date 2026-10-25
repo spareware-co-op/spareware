@@ -12,6 +12,8 @@
 //! Gungraun's own serializer writes for the same data, so the seeded cases are summaries the gate
 //! can meet.
 
+// The judge exists on Unix and Windows, with the `judge` feature (geom-bench's Cargo.toml says why).
+#![cfg(all(feature = "judge", any(unix, windows)))]
 // Helpers outside `#[test]` functions are not covered by clippy.toml's allow-*-in-tests settings;
 // clippy.toml says tests may use these, and a broken seeded summary must stop the test loudly.
 #![allow(
@@ -35,6 +37,7 @@ use serde_json::{Value, json};
 const WORKFLOW: &str = include_str!("../../../../../../.github/workflows/kernel-bench.yml");
 const CHAPTER: &str = include_str!("../../../architecture/23-performance.md");
 const GATE: &str = include_str!("../benches/instructions/gate.rs");
+const MANIFEST: &str = include_str!("../Cargo.toml");
 
 /// One measure's change, as `compare` and the judge make them.
 fn change(base: u64, head: u64) -> Change {
@@ -779,8 +782,9 @@ fn workflow_step(name: &str) -> &'static str {
 fn both_legs_judge_the_summaries_by_the_same_rule() {
     // One job measures both processors (its matrix), and the judgement is a step of that job with
     // no condition on the leg, so both legs run it, with the workflow's own percentage.
-    let job = &WORKFLOW
-        [WORKFLOW.find("\n  instructions:\n").unwrap()..WORKFLOW.find("\n  fuel:\n").unwrap()];
+    // No needle ends in a line break: a Windows checkout gives the workflow CRLF line ends.
+    let job =
+        &WORKFLOW[WORKFLOW.find("\n  instructions:").unwrap()..WORKFLOW.find("\n  fuel:").unwrap()];
     assert!(job.contains("- target: x86-64") && job.contains("- target: aarch64"));
     let judge_step =
         workflow_step("Judge instructions, cycles and cache misses from the summaries");
@@ -804,14 +808,27 @@ fn both_legs_judge_the_summaries_by_the_same_rule() {
     let gate = workflow_step("Benchmark the pull request against the merge base");
     assert!(gate.contains("--save-summary=json"));
     assert!(gate.contains("--callgrind-limits=\"$CALLGRIND_LIMITS\""));
-    assert!(WORKFLOW.contains("  CALLGRIND_LIMITS: \"ir=5%,estimatedcycles=5%\"\n"));
+    assert!(WORKFLOW.contains("  CALLGRIND_LIMITS: \"ir=5%,estimatedcycles=5%\""));
     for miss in ["i1mr=5", "d1mr=5", "d1mw=5", "ilmr=5", "dlmr=5", "dlmw=5"] {
         assert!(!gate.contains(miss));
         assert!(!WORKFLOW.contains(&format!("CALLGRIND_LIMITS: \"{miss}")));
     }
-    for &(_, miss) in &MISSES {
-        assert!(!GATE.contains(&format!("EventKind::{miss}")), "{miss}");
+    // Every measured run builds without the judge, so the benchmark binary does not change with
+    // the tool that judges it: Gungraun's runner crate is in both.
+    let job_lines: Vec<&str> = job.lines().map(str::trim).collect();
+    let runs: Vec<&&str> = job_lines
+        .iter()
+        .filter(|l| l.starts_with("cargo \"+$") && l.contains(" bench "))
+        .collect();
+    assert_eq!(runs.len(), 6, "{runs:#?}");
+    for run in runs {
+        assert!(
+            run.contains(" bench --no-default-features --locked -p geom-bench "),
+            "{run}"
+        );
     }
+    assert!(MANIFEST.contains("default = [\"judge\"]"));
+    assert!(MANIFEST.contains("judge = [\"dep:gungraun-runner\", \"dep:serde_json\"]"));
     // The summary reports the judgement.
     let summary = workflow_step("Write the summary");
     assert!(summary.contains("JUDGE_OUTCOME: ${{ steps.judge.outcome }}"));
@@ -845,4 +862,12 @@ fn the_rule_is_written_in_chapter_23_13_and_the_gate_header() {
         );
     }
     assert!(GATE.contains("a count below 20"));
+    // The code of the measured binary is the merge base's: the bare-run limits stay, and the
+    // workflow's replace them.
+    for &(_, miss) in &MISSES {
+        assert!(
+            GATE.contains(&format!("(EventKind::{miss}, GATE_PERCENT)")),
+            "{miss}"
+        );
+    }
 }
