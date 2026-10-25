@@ -175,6 +175,9 @@ enum Pending {
     Deref { origin: Origin, operand: Ty, out: Ty, line: usize },
     CallValue { origin: Origin, callee: Ty, args: Vec<Ty>, out: Ty, line: usize },
     Projection { assoc: Ty, out: Ty },
+    /// A bound's associated-type binding on a generic argument (`I: IntoIterator<Item = T>`):
+    /// once `ty` is known, its projection meets `value`.
+    Binding { ty: Ty, trait_ref: TraitRef, name: String, value: Ty },
     Opaque { node: NodeId, args: Vec<Ty>, declared: Ty, line: usize },
     Iterate { origin: Origin, iterable: Ty, item: Ty, line: usize },
     Try { origin: Origin, operand: Ty, out: Ty, line: usize },
@@ -209,6 +212,16 @@ struct Checker<'a, 'p> {
     or_binding: bool,
     /// Whether the last round is running: generic arguments left open are taken as unknown.
     lenient: bool,
+}
+
+/// A candidate of a call made ready: its parameters, result, the call to record, and the
+/// obligations its bounds make.
+#[derive(Clone, Debug)]
+struct Prepared {
+    params: Vec<Ty>,
+    output: Ty,
+    target: Target,
+    obligations: Vec<Pending>,
 }
 
 /// What instantiating a function's signature gave.
@@ -623,11 +636,23 @@ impl<'a, 'p> Checker<'a, 'p> {
         Instance { args, inputs, output }
     }
 
-    /// Obligations for the closure bounds of generic parameters `generics` (fixed to `args`).
+    /// Obligations for the bounds of generic parameters `generics` (fixed to `args`): the
+    /// closure bounds' signatures, and the associated-type bindings of the others.
     fn fn_bounds(&mut self, generics: &[crate::recursion::ty::GenId], args: &[Ty], map: &Map) {
         for (g, a) in generics.iter().zip(args) {
             for b in self.ix.bounds(*g) {
                 if !self.ix.is_fn_trait(b.id) {
+                    if b.bindings.is_empty() {
+                        continue;
+                    }
+                    let b = b.map(&mut |x| x.subst(map));
+                    let mut args_only = b.clone();
+                    args_only.bindings.clear();
+                    let args_only = args_only.map(&mut |x| self.ix.fill_infer_ty(x, &mut self.infer));
+                    for (name, value) in &b.bindings {
+                        let value = self.inst_ty(value);
+                        self.pending.push(Pending::Binding { ty: a.clone(), trait_ref: args_only.clone(), name: name.clone(), value });
+                    }
                     continue;
                 }
                 let b = b.map(&mut |x| x.subst(map));
@@ -982,6 +1007,18 @@ impl<'a, 'p> Checker<'a, 'p> {
                 self.unify(out, &got);
                 true
             }
+            Pending::Binding { ty, trait_ref, name, value } => {
+                let t = self.now(ty);
+                if self.unresolved(&t) {
+                    return false;
+                }
+                let proj = Ty::Assoc(Box::new(t), Some(Box::new(trait_ref.clone())), name.clone());
+                let n = self.norm(&proj);
+                if !matches!(self.shallow(&n), Ty::Assoc(..)) {
+                    self.unify(&n, value);
+                }
+                true
+            }
             Pending::FnBound { callee, inputs, output } => {
                 let c = self.now(callee);
                 if matches!(c, Ty::Var(_)) {
@@ -1193,7 +1230,7 @@ impl<'a, 'p> Checker<'a, 'p> {
                 *line,
                 format!("the generic arguments of a call to `{}` (which returns `impl Trait`) cannot be inferred", self.ix.name(*node)),
             ),
-            Pending::Projection { .. } | Pending::FnBound { .. } => return,
+            Pending::Projection { .. } | Pending::FnBound { .. } | Pending::Binding { .. } => return,
         };
         self.problem(line, what);
     }
@@ -1592,7 +1629,10 @@ impl<'a, 'p> Checker<'a, 'p> {
         let line = line_of(e);
         match e {
             Expr::Lit(l) => self.lit(&l.lit, expected),
-            Expr::Path(p) => self.path_value_of(&p.qself, &p.path, expected, line),
+            Expr::Path(p) => match self.eta_arity(p) {
+                Some(arity) => self.eta(p, arity, expected),
+                None => self.path_value_of(&p.qself, &p.path, expected, line),
+            },
             Expr::Call(c) => self.call(c, expected, line),
             Expr::MethodCall(mc) => {
                 let recv = self.expr(&mc.receiver, None);
@@ -1969,6 +2009,79 @@ impl<'a, 'p> Checker<'a, 'p> {
     }
 
     // ------------------------------------------------------------ paths
+
+    /// How many parameters the trait method a path names as a value takes, when its `Self` is not
+    /// known here: `Trait::method`, `<T as Trait>::method`, or `T::method` on a generic `T`. Such a
+    /// value is the function item `<Self as Trait>::method`, which [`Checker::eta`] reads as the
+    /// closure that calls it.
+    fn eta_arity(&mut self, p: &syn::ExprPath) -> Option<usize> {
+        let name = p.path.segments.last()?.ident.to_string();
+        if upper(&name) {
+            return None;
+        }
+        let trait_of = |ix: &Index<'_>, r: &Res| match r {
+            Res::Item(t) if matches!(ix.program.item(*t).kind, ItemKind::Trait { .. }) => Some(*t),
+            _ => None,
+        };
+        let arity_in = |ix: &Index<'_>, t: ItemId| -> Option<usize> {
+            let decl = ix.trait_declaring_method(t, &name)?;
+            ix.trait_method(decl, &name).map(|(sig, _)| sig.inputs.len())
+        };
+        if let Some(q) = &p.qself {
+            if q.position > 0 {
+                let trait_path: Vec<String> = p.path.segments.iter().take(q.position).map(|s| s.ident.to_string()).collect();
+                let res = self.resolver().resolve(&self.scope, &trait_path, p.path.leading_colon.is_some(), Ns::Type);
+                let base = self.ty(&q.ty);
+                let b = self.now(&base);
+                if !matches!(b, Ty::Param(_) | Ty::Opaque(_) | Ty::Assoc(..) | Ty::Dyn(_) | Ty::Var(_)) {
+                    return None;
+                }
+                return res.iter().find_map(|r| trait_of(self.ix, r)).and_then(|t| arity_in(self.ix, t));
+            }
+            return None;
+        }
+        let segs = Resolver::segments(&p.path);
+        let res = self.resolver().resolve(&self.scope, &segs, p.path.leading_colon.is_some(), Ns::Value);
+        let Some(Res::Assoc(base, _)) = res.first() else {
+            return None;
+        };
+        if let Some(t) = trait_of(self.ix, base) {
+            return arity_in(self.ix, t);
+        }
+        let base_ty = match &**base {
+            Res::Generic(g) => self.map.get(g).cloned().unwrap_or(Ty::Param(*g)),
+            Res::SelfTy => self.self_type()?,
+            _ => return None,
+        };
+        let b = self.now(&base_ty);
+        if !matches!(b, Ty::Param(_) | Ty::Opaque(_) | Ty::Assoc(..) | Ty::Dyn(_)) {
+            return None;
+        }
+        self.ix
+            .bounds_of_ty(&b)
+            .iter()
+            .find(|tr| self.ix.trait_declaring_method(tr.id, &name) == Some(tr.id))
+            .and_then(|tr| arity_in(self.ix, tr.id))
+    }
+
+    /// A trait method named as a value whose `Self` is not known here: the closure
+    /// `|a0, .., an| path(a0, .., an)`, which calls exactly what the function item would (Rust's
+    /// function items and closures are both callables of their own types).
+    fn eta(&mut self, p: &syn::ExprPath, arity: usize, expected: Option<&Ty>) -> Ty {
+        let span = syn::spanned::Spanned::span(p);
+        let params: Vec<proc_macro2::Ident> = (0..arity).map(|i| quote::format_ident!("__eta{}", i, span = span)).collect();
+        let tokens = quote::quote_spanned!(span=> |#(#params),*| #p(#(#params),*));
+        match syn::parse2::<Expr>(tokens) {
+            Ok(closure) => {
+                self.closure_expect = expected.and_then(|e| self.closure_expectation(e));
+                self.expr(&closure, expected)
+            }
+            Err(_) => {
+                self.problem(line_of(p), format!("a trait method used as a value (`{}`)", p.to_token_stream()));
+                Ty::Unknown
+            }
+        }
+    }
 
     /// The value a path names (with its qualified self type, if written).
     fn path_value_of(&mut self, qself: &Option<syn::QSelf>, path: &syn::Path, expected: Option<&Ty>, line: usize) -> Ty {
@@ -2478,7 +2591,8 @@ impl<'a, 'p> Checker<'a, 'p> {
 
     /// What calling `pick` takes and gives: its parameters (after the receiver, for method
     /// syntax), its result, and the call to record.
-    fn prepare(&mut self, pick: &Pick, name: &str, turbofish: &[Ty], line: usize, skip: usize) -> Option<(Vec<Ty>, Ty, Target)> {
+    fn prepare(&mut self, pick: &Pick, name: &str, turbofish: &[Ty], line: usize, skip: usize) -> Option<Prepared> {
+        let before = self.pending.len();
         let (params, output, target) = match pick {
             Pick::Node { node, args } => {
                 let gargs = self.apply_turbofish(*node, args.clone(), turbofish);
@@ -2495,7 +2609,34 @@ impl<'a, 'p> Checker<'a, 'p> {
                 (inputs, output, target)
             }
         };
-        Some((params.into_iter().skip(skip).collect(), output, target))
+        let obligations = self.pending.split_off(before.min(self.pending.len()));
+        Some(Prepared { params: params.into_iter().skip(skip).collect(), output, target, obligations })
+    }
+
+    /// Whether the checked argument types `tys` fit a prepared candidate: its parameters unify
+    /// with them, and its bounds' associated-type bindings hold where they can be told.
+    fn fits(&mut self, p: &Prepared, tys: &[Ty]) -> bool {
+        let snap = self.infer.snapshot();
+        let mut ok = p.params.iter().zip(tys).all(|(x, a)| self.infer.unify(x, a));
+        if ok {
+            for o in &p.obligations {
+                let Pending::Binding { ty, trait_ref, name, value } = o else {
+                    continue;
+                };
+                let t = self.now(ty);
+                if self.unresolved(&t) {
+                    continue;
+                }
+                let proj = Ty::Assoc(Box::new(t), Some(Box::new(trait_ref.clone())), name.clone());
+                let n = self.with_ix(|ix, infer, sigs| ix.normalize(&proj, infer, sigs));
+                if !matches!(self.shallow(&n), Ty::Assoc(..)) && !self.infer.unify(&n, value) {
+                    ok = false;
+                    break;
+                }
+            }
+        }
+        self.infer.rollback_to(snap);
+        ok
     }
 
     /// Calls `picks` with `args`; `method` says the receiver was given by method syntax (it is
@@ -2511,9 +2652,10 @@ impl<'a, 'p> Checker<'a, 'p> {
             _ => how_found,
         };
         if let [pick] = picks {
-            let Some((params, output, target)) = self.prepare(pick, name, turbofish, line, skip) else {
+            let Some(Prepared { params, output, target, obligations }) = self.prepare(pick, name, turbofish, line, skip) else {
                 return Ty::Unknown;
             };
+            self.pending.extend(obligations);
             if let Some(e) = expected {
                 self.unify(&output, e);
             }
@@ -2532,21 +2674,22 @@ impl<'a, 'p> Checker<'a, 'p> {
                 prepared.push(p);
             }
         }
-        let fitting: Vec<usize> = prepared
-            .iter()
-            .enumerate()
-            .filter(|(_, (params, _, _))| params.iter().zip(&tys).all(|(p, a)| self.infer.can_unify(p, a)))
-            .map(|(i, _)| i)
-            .collect();
+        let mut fitting: Vec<usize> = Vec::new();
+        for (i, p) in prepared.iter().enumerate() {
+            if self.fits(p, &tys) {
+                fitting.push(i);
+            }
+        }
         // When no candidate fits the arguments, every one is kept (the check does not judge
         // types it may have inferred too narrowly).
         let chosen: Vec<usize> = if fitting.is_empty() { (0..prepared.len()).collect() } else { fitting };
         let mut out = None;
         for i in &chosen {
-            let Some((params, output, target)) = prepared.get(*i).cloned() else {
+            let Some(Prepared { params, output, target, obligations }) = prepared.get(*i).cloned() else {
                 continue;
             };
             if chosen.len() == 1 {
+                self.pending.extend(obligations);
                 for (p, a) in params.iter().zip(&tys) {
                     self.coerce(a, p, line);
                 }
@@ -2915,6 +3058,22 @@ impl<'a, 'p> Checker<'a, 'p> {
     /// `base[idx]`, `base` known: the first auto-dereference step with an `Index` implementation
     /// for the index's type.
     fn index_op(&mut self, base: &Ty, idx: &Ty, line: usize) -> Ty {
+        let now = self.now(idx);
+        // An integer literal indexing a slice, array, `Vec` or `str` is a `usize`: the only
+        // integer type with a `SliceIndex` implementation.
+        if let Ty::Var(v) = &now
+            && self.infer.kind_of(*v) == VarKind::Int
+        {
+            let peeled = self.peel_refs(base);
+            let std_container = match &peeled {
+                Ty::Slice(_) | Ty::Array(_) | Ty::Prim(Prim::Str) => true,
+                Ty::Adt(id, _) => Some(*id) == self.ix.lang.vec || Some(*id) == self.ix.lang.string,
+                _ => false,
+            };
+            if std_container {
+                self.unify(&now, &Ty::Prim(Prim::Usize));
+            }
+        }
         let now = self.now(idx);
         let idx = self.numeric_default(&now);
         let Some(index) = self.ix.lang.trait_named("Index") else {
