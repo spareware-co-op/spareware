@@ -92,6 +92,7 @@ pub mod grid;
 pub mod interval;
 pub mod ladder;
 pub mod math;
+pub mod perturb;
 pub mod plane;
 pub mod predicate;
 pub mod real;
