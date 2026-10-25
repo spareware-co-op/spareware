@@ -159,7 +159,7 @@
         "Every benchmark runs the operation it is named after (`tests/attack_g06.rs`), on inputs that are what their class claims (`tests/inputs.rs`).",
         "Inputs and results are pinned by golden digests that must match in every build profile and on wasm32 (`tests/golden.rs`, and the fuel gate).",
         "The gate, the catalogue and `geom-num`'s public functions agree (`tests/coverage.rs`).",
-        "The library has no `unsafe` code, no panicking calls or indexing outside tests, no recursion, no hash maps, no randomness (inputs come from fixed seeds) and no platform maths."
+        "The library has no `unsafe` code, no panicking calls or indexing outside tests, no recursion, no hash maps of its own (Gungraun's summary model keeps counts in an insertion-ordered `IndexMap`, which [`callgrind`] only looks up by key, so no result depends on its hashing), no randomness (inputs come from fixed seeds) and no platform maths."
       ],
       "job": "the kernel's benchmarks, and the count gates that block a regression over 5%.",
       "kind": "development",
@@ -761,7 +761,7 @@
             "Every benchmark runs the operation it is named after (`tests/attack_g06.rs`), on inputs that are what their class claims (`tests/inputs.rs`).",
             "Inputs and results are pinned by golden digests that must match in every build profile and on wasm32 (`tests/golden.rs`, and the fuel gate).",
             "The gate, the catalogue and `geom-num`'s public functions agree (`tests/coverage.rs`).",
-            "The library has no `unsafe` code, no panicking calls or indexing outside tests, no recursion, no hash maps, no randomness (inputs come from fixed seeds) and no platform maths."
+            "The library has no `unsafe` code, no panicking calls or indexing outside tests, no recursion, no hash maps of its own (Gungraun's summary model keeps counts in an insertion-ordered `IndexMap`, which [`callgrind`] only looks up by key, so no result depends on its hashing), no randomness (inputs come from fixed seeds) and no platform maths."
           ],
           "job": "Spare Kit geometry kernel, development only: benchmarks, and the count gates that block a regression over 5%.",
           "method": {

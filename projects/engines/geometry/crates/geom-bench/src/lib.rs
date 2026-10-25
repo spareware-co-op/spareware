@@ -29,7 +29,9 @@
 //!   wasm32 (`tests/golden.rs`, and the fuel gate).
 //! - The gate, the catalogue and `geom-num`'s public functions agree (`tests/coverage.rs`).
 //! - The library has no `unsafe` code, no panicking calls or indexing outside tests, no recursion,
-//!   no hash maps, no randomness (inputs come from fixed seeds) and no platform maths.
+//!   no hash maps of its own (Gungraun's summary model keeps counts in an insertion-ordered
+//!   `IndexMap`, which [`callgrind`] only looks up by key, so no result depends on its hashing),
+//!   no randomness (inputs come from fixed seeds) and no platform maths.
 //!
 //! Method: deterministic count gates in place of timing, as chapter 23.13 sets them out: Valgrind's
 //! Callgrind and DHAT through Gungraun (<https://github.com/gungraun/gungraun>), Wasmtime's fuel
@@ -196,9 +198,9 @@
 //! To compare a change with `main` as CI does, save a baseline on `main` and compare the branch
 //! with it, passing the gate's limits and saving Gungraun's summaries. A rise over 5% in
 //! instructions, estimated cycles or heap ends the run with `Gungraun result: Regressed`, the list
-//! of rises, and a failed bench (the harness exits with code 3); the miss counts are then judged
-//! from the summaries, and `geom-bench-counts` exits with 1 on a rise over 5% on a miss count of 20
-//! or more:
+//! of rises, and a failed bench (the harness exits with code 3); every Callgrind count is then
+//! judged from the summaries, and `geom-bench-counts` exits with 1 on a rise over 5% in
+//! instructions, in estimated cycles, or in a miss count of 20 or more:
 //!
 //! ```text
 //! export RUSTFLAGS="-C llvm-args=-align-all-functions=6"

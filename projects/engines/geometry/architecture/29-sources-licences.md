@@ -428,7 +428,7 @@ Nothing here enters a kernel crate.
 
 | Source | Licence | Use | Conditions |
 | --- | --- | --- | --- |
-| proptest, bolero, cargo-fuzz, cargo-mutants, cargo-llvm-cov, gungraun (formerly iai-callgrind; Apache-2.0 OR MIT, checked 2026-10-21 at `a11cdc15`), criterion, divan, cargo-semver-checks, cargo-deny, Kani, Verus | MIT, Apache-2.0, or both | DEPEND (development only) | — |
+| proptest, bolero, cargo-fuzz, cargo-mutants, cargo-llvm-cov, gungraun (formerly iai-callgrind; Apache-2.0 OR MIT, checked 2026-10-21 at `a11cdc15`) with the summary model of its `gungraun-runner` crate, and serde_json, which read the gate's summary files (G18a), criterion, divan, cargo-semver-checks, cargo-deny, Kani, Verus | MIT, Apache-2.0, or both | DEPEND (development only) | — |
 | Valgrind; git | GPL-2.0 | Separate development tools | Never linked; gungraun runs Valgrind as a program |
 | wasmtime | Apache-2.0 WITH LLVM-exception (checked 2026-10-21 at [`5afd6358`](https://github.com/bytecodealliance/wasmtime/tree/5afd63588b1f5520391c6a37fc38dfd3ccd607c2)) | DEPEND (development only) | Counts WebAssembly fuel for the benchmark gates (23.13, 28.14) |
 | FPTaylor | MIT (checked 2026-10-21 at [`b5a77cae`](https://github.com/soarlab/FPTaylor/tree/b5a77cae348400f21f83512210d9f43c4bffb381)) | A separate tool, out of process | Proves the error bounds of predicate filters, with HOL Light certificates (28.6) |
