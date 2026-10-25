@@ -413,6 +413,27 @@ fn should_panic_checks(text: &str) -> Vec<String> {
     out
 }
 
+/// The proof tests of a test file's `text` whose body does not hand its verdict to `holds`, which
+/// panics with a finding. Returned instead, the finding would reach bolero's `PanicError` under
+/// Kani, whose backtrace capture kept the first proofs in symbolic execution for the job's hour
+/// (the crate README, the rules of the layout). A body runs from its `fn` line to the first line
+/// that closes it, `}` at the start of a line.
+fn proofs_without_holds(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    for name in proof_tests(text) {
+        let Some(start) = text.find(&format!("fn {name}(")) else {
+            out.push(name);
+            continue;
+        };
+        let body = &text[start..];
+        let body = &body[..body.find("\n}").unwrap_or(body.len())];
+        if !body.contains("holds(") {
+            out.push(name);
+        }
+    }
+    out
+}
+
 /// What the layout gets wrong: each target's test file and its tests, and the CI matrices.
 fn layout_violations(
     targets: &BTreeSet<String>,
@@ -441,6 +462,13 @@ fn layout_violations(
             found.push(format!(
                 "tests/{file}.rs calls bolero's check! in {function}, which is not a #[test] \
                  function, so cargo-bolero cannot select that target by its test's name"
+            ));
+        }
+        for function in proofs_without_holds(text) {
+            found.push(format!(
+                "tests/{file}.rs's proof test {function} returns its finding instead of handing \
+                 it to holds, so under Kani bolero's error path, backtrace capture included, \
+                 enters the proof"
             ));
         }
         for function in should_panic_checks(text) {
@@ -609,6 +637,19 @@ fn attack_a_should_panic_bolero_test_is_refused() {
     assert!(
         v.iter()
             .any(|v| v.contains("tests/panicking.rs") && v.contains("#[should_panic]")),
+        "{v:?}"
+    );
+    // A proof test that returns its finding, as the first proofs did.
+    let mut returning = tests.clone();
+    let text = returning.get_mut("orient2d").unwrap();
+    *text = text.replace(
+        ".for_each(|draw| holds(prove(PROOF_BOUND, draw)));",
+        ".for_each(|draw| prove(PROOF_BOUND, draw));",
+    );
+    let v = layout_violations(&targets, &returning, &workflow);
+    assert!(
+        v.iter()
+            .any(|v| v.contains("orient2d_proof") && v.contains("holds")),
         "{v:?}"
     );
     // A #[should_panic] test without check!, and a bolero test that catches the panic itself,
