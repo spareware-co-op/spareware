@@ -100,6 +100,12 @@ pub struct Record {
     pub purpose: String,
     /// The method-only procedure's note (29.20, rule 6), when the record names one.
     pub method_note: Option<String>,
+    /// For a `Source:` record, the origin's notice as the record copies it: every line after the
+    /// line holding the record's link and before `Changed for Spare Kit: `, trimmed. These are the
+    /// origin's copyright lines, copied exactly, and the links of any further origin files the
+    /// port takes, each followed by its own copyright lines; `NOTICE` reproduces them
+    /// ([`crate::ledger`]). Empty for a `Consulted:` record.
+    pub notice: Vec<String>,
 }
 
 /// A header's provenance.
@@ -221,6 +227,7 @@ fn consulted(lines: &[String], out: &mut Provenance) {
         pinned,
         purpose,
         method_note: method_note.filter(|p| !p.is_empty()),
+        notice: Vec::new(),
     });
 }
 
@@ -365,6 +372,7 @@ fn source(lines: &[String], out: &mut Provenance) {
         .and_then(|at| continuation.get(at..))
         .map(join)
         .and_then(|text| text.strip_prefix(CHANGED).map(str::to_owned));
+    let notice = notice_lines(lines, &link, changed_at);
     match &changed {
         None => out.problems.push((
             Rule::Source,
@@ -384,7 +392,26 @@ fn source(lines: &[String], out: &mut Provenance) {
         pinned,
         purpose: changed.unwrap_or_default(),
         method_note: None,
+        notice,
     });
+}
+
+/// The lines of a `Source:` record after the one holding its `link` and before the continuation
+/// line at `changed_at` (`Changed for Spare Kit: `), trimmed and without blank lines: the origin's
+/// notice as the record copies it.
+fn notice_lines(lines: &[String], link: &str, changed_at: Option<usize>) -> Vec<String> {
+    let Some(link_at) = lines.iter().position(|l| l.contains(link)) else {
+        return Vec::new();
+    };
+    // `changed_at` counts continuation lines, which start at the record's second line.
+    let end = changed_at.map_or(lines.len(), |at| at.saturating_add(1));
+    lines
+        .get(link_at.saturating_add(1)..end.max(link_at.saturating_add(1)))
+        .unwrap_or_default()
+        .iter()
+        .map(|l| l.trim().to_owned())
+        .filter(|l| !l.is_empty())
+        .collect()
 }
 
 /// The canonical `AND` operands of an expression, and its canonical whole.
@@ -614,6 +641,7 @@ mod tests {
         assert_eq!(p.records[0].licence, "BSD-3-Clause");
         assert_eq!(p.records[0].purpose, "integer-grid inputs, Rust output.");
         assert!(p.records[0].pinned);
+        assert_eq!(p.records[0].notice, ["Copyright (c) 2000-2022 Inria"]);
 
         let consulted = of("Knot removal.\n\
              \n\

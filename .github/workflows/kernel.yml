@@ -65,16 +65,21 @@ env:
 
 jobs:
   test:
-    name: Test (${{ matrix.name }})
-    runs-on: ${{ matrix.os }}
-    # Every kernel crate in release and in debug on one runner; geom-num's debug suite alone
-    # takes over half an hour on a 12-thread machine, so the limit leaves room as crates grow.
+    name: Test (${{ matrix.target.name }}, ${{ matrix.mode }})
+    runs-on: ${{ matrix.target.os }}
+    # Every kernel crate in release on one runner and in debug on another, side by side, so a
+    # run takes the longer of the two instead of their sum; geom-num's debug suite alone takes
+    # over half an hour on a 12-thread machine, so the limit leaves room as crates grow.
     timeout-minutes: 240
     strategy:
       # Every target reports, so a golden digest that differs on one target shows which.
       fail-fast: false
       matrix:
-        include:
+        # The release legs run the golden digests (with and without overflow checks, and for the
+        # runner's own CPU) and the whole suite with overflow checks on; the debug legs run the
+        # golden digest and the whole suite in debug: together, the steps one runner used to run.
+        mode: [release, debug]
+        target:
           - name: Linux x86-64
             os: ubuntu-latest
           - name: Linux arm64
@@ -105,23 +110,26 @@ jobs:
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Release and debug builds are cached apart, so neither leg restores the other's.
+          key: ${{ matrix.mode }}
       # Every crate in the kernel's folder is checked here, so a new crate is covered the day it
       # lands (chapter 27: one folder per crate, folder name = crate name).
       - name: List the kernel's crates
         run: echo "KERNEL_CRATES=$(for d in projects/engines/geometry/crates/*/; do printf -- '-p %s ' "$(basename "$d")"; done)" >> "$GITHUB_ENV"
       - name: Golden digest in release, with overflow checks on
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.mode == 'release' }}
         env:
           RUSTFLAGS: -C overflow-checks=on
         run: cargo test -p geom-num --release --locked --test determinism -- --nocapture
       - name: Golden digest in release as shipped, without overflow checks
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.mode == 'release' }}
         run: cargo test -p geom-num --release --locked --test determinism -- --nocapture
       - name: Show this machine's CPU features
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.mode == 'release' }}
         run: rustc -vV && rustc --print cfg -C target-cpu=native
       - name: Golden digest in release for this machine's own CPU
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.mode == 'release' }}
         env:
           RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
           # Its own build folder, which the build cache never saves or restores: the cache's key
@@ -130,15 +138,15 @@ jobs:
           CARGO_TARGET_DIR: target-native
         run: cargo test -p geom-num --release --locked --test determinism -- --nocapture
       - name: Golden digest in debug
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.mode == 'debug' }}
         run: cargo test -p geom-num --locked --test determinism -- --nocapture
       - name: Test suite in release, with overflow checks on
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.mode == 'release' }}
         env:
           RUSTFLAGS: -C overflow-checks=on
         run: cargo test $KERNEL_CRATES --release --locked --no-fail-fast
       - name: Test suite in debug
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.mode == 'debug' }}
         run: cargo test $KERNEL_CRATES --locked --no-fail-fast
 
   wasm:
