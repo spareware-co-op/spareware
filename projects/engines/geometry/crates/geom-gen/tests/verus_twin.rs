@@ -524,7 +524,7 @@ fn any_change_to_the_wide_arithmetic_is_seen() {
         ("let k = i.checked_add(shift)?;", "let k = i;"),
         ("} else if limb != 0 {", "} else if limb > 1 {"),
         (
-            "let overflow = self.is_negative() && r.is_negative();",
+            "let overflow = self.is_negative() & r.is_negative();",
             "let overflow = false;",
         ),
     ] {
