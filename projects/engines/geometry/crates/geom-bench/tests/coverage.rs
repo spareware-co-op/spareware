@@ -681,14 +681,15 @@ fn the_pins_are_exact_and_agree() {
     // Gungraun: the runner binary must match the library exactly; the manifest pins it, the
     // documentation and the lock file must agree.
     let exact = format!("={GUNGRAUN_VERSION}");
-    assert_eq!(requirements(MANIFEST, "gungraun"), [exact.clone()]);
+    assert_eq!(requirements(MANIFEST, "gungraun"), [exact.as_str()]);
     assert_eq!(locked_versions("gungraun"), [GUNGRAUN_VERSION]);
     // The summary model the miss-count judge reads (geom_bench::callgrind) is the runner's own, at
     // exactly the runner's version, so the schema read is the one written.
     assert!(MANIFEST.contains(&format!(
-        "gungraun-runner = {{ version = \"={GUNGRAUN_VERSION}\", default-features = false,          features = [\"summary\"], optional = true }}"
+        "gungraun-runner = {{ version = \"={GUNGRAUN_VERSION}\", default-features = false, \
+         features = [\"summary\"], optional = true }}"
     )));
-    assert_eq!(requirements(MANIFEST, "gungraun-runner"), [exact]);
+    assert_eq!(requirements(MANIFEST, "gungraun-runner"), [exact.as_str()]);
     assert_eq!(locked_versions("gungraun-runner"), [GUNGRAUN_VERSION]);
     let docs = include_str!("../src/lib.rs");
     assert!(docs.contains(&format!("gungraun-runner --version {GUNGRAUN_VERSION}")));
