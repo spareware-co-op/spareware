@@ -1,0 +1,149 @@
+name: Kernel goldens
+
+# The geometry kernel's golden store (kernel architecture, chapter 28.13; piece G19):
+# projects/engines/geometry/crates/geom-test/golden/store.json, every golden digest of the kernel
+# keyed by kernel edition, golden id and operation versions, with the record of every change.
+# kernel.yml runs every golden of the store on every target and build mode (`golden run`); this
+# workflow holds the store to its rules:
+#
+# - `golden check`, on every pull request and push that touches the kernel: every golden is checked
+#   where the store says (its test function exists and calls golden::check with the golden's id),
+#   every golden check in the kernel's code is in the store, no golden digest is kept outside it,
+#   and every pinned golden file (geom-bench's src/golden.txt) still has the store's digest.
+# - `golden diff`, on every pull request and on every review of one: the store at the pull
+#   request's base against the store it would merge. A change no approval can make fails outright:
+#   any change to a frozen edition, a removed or renamed edition, a removed golden, a changed digest
+#   without exactly one new history record holding the old digest, its kind (bug, improvement or
+#   corpus), its piece and why, or rewritten history. Any other edit to an existing golden, and
+#   releasing an edition, fails until a kernel owner approves the pull request's current head
+#   commit: an approving review on that commit from a reviewer GitHub reports as an owner or member
+#   of the organisation, or with write, maintain or admin permission on the repository, who is not
+#   the author, with no such reviewer's latest review asking for changes (geom-test's
+#   src/golden/diff.rs). A review re-runs this job, so the approval turns it green; a later push
+#   needs a fresh approval. Adding goldens needs only ordinary review. .github/CODEOWNERS asks
+#   @spareware-co-op/owners to review everything under projects/engines/, and branch protection's
+#   "Require review from Code Owners" (an owner's setting on GitHub) makes that team the only one
+#   whose approval counts.
+#
+# Before the first kernel edition the store holds one open edition, "pre-edition", and every edit
+# to a golden is approved by a kernel owner in its pull request (chapter 32.12, recommendation A).
+#
+# If this workflow becomes a required check, note that the pull_request path filter below means a
+# pull request outside those paths never runs it; drop the filter or require a summary job first.
+#
+# Supply chain: every action is pinned to the same full commit as in kernel.yml; update a pin in
+# all the kernel workflows together, after reviewing the new commit. The token can read the
+# repository and its pull requests' reviews, nothing more.
+
+on:
+  pull_request:
+    paths:
+      - "projects/engines/geometry/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/kernel-golden.yml"
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+  push:
+    branches: [main]
+    paths:
+      - "projects/engines/geometry/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/kernel-golden.yml"
+
+permissions:
+  contents: read
+  pull-requests: read
+
+# A newer push to, or review of, the same pull request cancels the run it supersedes; pushes to
+# main all run.
+concurrency:
+  group: kernel-golden-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
+
+env:
+  # The same pinned compiler as kernel.yml (chapter 28.13, the toolchain guard).
+  RUST_TOOLCHAIN: "1.99.0"
+
+jobs:
+  store:
+    name: Golden store
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The base commit's store is read with `git show`, so the history is fetched.
+          fetch-depth: 0
+      # A review of a pull request that does not touch the store has nothing to approve here.
+      # The base compared with is the one the merge would land on: for a pull request (and a
+      # review of one) the checkout is GitHub's test merge commit, refs/pull/<n>/merge, whose
+      # first parent is the base branch's tip it was made on, so the diff is exactly what merging
+      # does to the store. The event's base.sha can be older than that tip, and a diff from it
+      # would count the base branch's own later edits as this pull request's. A checkout with one
+      # parent falls back to base.sha.
+      - name: Does this pull request edit the golden store?
+        id: edits
+        env:
+          EVENT_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          store=projects/engines/geometry/crates/geom-test/golden/store.json
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            echo "store=unknown" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git rev-parse --verify --quiet HEAD^2 > /dev/null; then
+            BASE=$(git rev-parse HEAD^1)
+          else
+            BASE=$EVENT_BASE
+          fi
+          echo "base=$BASE" >> "$GITHUB_OUTPUT"
+          if git diff --quiet "$BASE" HEAD -- "$store"; then
+            echo "The store is the same as at the base, $BASE."
+            echo "store=same" >> "$GITHUB_OUTPUT"
+          else
+            git diff --stat "$BASE" HEAD -- "$store"
+            echo "store=edited" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        if: github.event_name != 'pull_request_review' || steps.edits.outputs.store == 'edited'
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        if: github.event_name != 'pull_request_review' || steps.edits.outputs.store == 'edited'
+      - name: The store against the repository
+        if: github.event_name != 'pull_request_review'
+        run: cargo run --locked -p geom-test --bin golden -- check
+      - name: The pull request's reviews and its reviewers' permissions
+        if: github.event_name != 'push' && steps.edits.outputs.store == 'edited'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/reviews" | jq -s 'add // []' > "$RUNNER_TEMP/reviews.json"
+          echo '{}' > "$RUNNER_TEMP/permissions.json"
+          for login in $(jq -r '.[] | select(.user != null) | .user.login' "$RUNNER_TEMP/reviews.json" | sort -u); do
+            permission=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$login/permission" --jq .permission 2>/dev/null || echo none)
+            jq --arg login "$login" --arg permission "$permission" '. + {($login): $permission}' "$RUNNER_TEMP/permissions.json" > "$RUNNER_TEMP/permissions.next"
+            mv "$RUNNER_TEMP/permissions.next" "$RUNNER_TEMP/permissions.json"
+          done
+          jq -c '[.[] | {user: .user.login, state, commit_id, author_association}]' "$RUNNER_TEMP/reviews.json"
+          cat "$RUNNER_TEMP/permissions.json"
+      - name: Edits to the store, and a kernel owner's approval where one is needed
+        if: github.event_name != 'push' && steps.edits.outputs.store == 'edited'
+        env:
+          BASE: ${{ steps.edits.outputs.base }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: >-
+          cargo run --locked -p geom-test --bin golden -- diff
+          --base "$BASE"
+          --reviews "$RUNNER_TEMP/reviews.json"
+          --permissions "$RUNNER_TEMP/permissions.json"
+          --head "$HEAD_SHA"
+          --author "$AUTHOR"

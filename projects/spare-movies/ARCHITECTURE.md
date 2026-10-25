@@ -141,7 +141,7 @@ Spare Movies keeps a ratings pack per country, never invents an official rating,
 
 **A catalogue worth switching for.** The first catalogue will be independent films, not studio titles. Filmmakers looking for a new home after Vimeo On Demand closes, festivals, film schools and libraries are the natural first users.
 
-## What it uses from the shared kit and engines
+## What it uses from Spare Kit
 
 Spare Movies depends on 187 kit parts by ID. The main ones:
 

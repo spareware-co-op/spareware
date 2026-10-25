@@ -1,0 +1,218 @@
+name: Kernel gate
+
+# The geometry kernel's merge gate (kernel architecture, chapter 28.8; piece G12).
+#
+# Required for merging: one check, "Kernel gate / Merge gate" (the `gate` job below). It passes
+# only when every other job of this workflow passed, so it is the one status check to require in
+# the branch protection rules of main; requiring it is an owner's setting on GitHub, not in this
+# file. The jobs it needs, each of which fails when what it checks is wrong:
+#
+# - rules: the crate graph (every Cargo.toml names exactly chapter 27's crate table, layers kept,
+#   no cycle, kernel crates no_std and free of unsafe code, piece G09's scaffold check); every
+#   crate that ships carries chapter 21's disallowed methods and types (platform maths of f64 and
+#   f32, f64 and f32 max and min, the relaxed "algebraic" operations, Iterator::sum and product
+#   and the Sum and Product trait functions, HashMap and HashSet, std's clocks, process id,
+#   thread identity and randomly seeded hasher) and chapter 27's denials (unwrap, expect, panic
+#   and the other panic macros, unchecked indexing), as errors, with no lint group or second
+#   spelling in its manifest that lowers them; no crate that ships lowers one of those in an
+#   attribute of its source outside test code; no cargo configuration file sits on the way to a
+#   crate of the family; no crate that ships names a static, a thread-local or a lazy global
+#   (principle 7); the three cargo-deny configurations say exactly what the gate requires; the
+#   record of licence choices is sound; and this workflow itself runs, pins and requires what the
+#   gate needs, with nothing that lets a check pass unrun. Every rule's seeded violations run
+#   here too.
+# - deny: cargo-deny, a pinned release checked against its SHA-256, once for each crate of the
+#   crate table in the workspace, that crate the only root of its graph, with
+#   projects/engines/geometry/deny.toml: chapter 29.2's licence allow-list exactly, for normal,
+#   build and development dependencies on every platform; RustSec advisories (vulnerabilities,
+#   unmaintained, unsound and yanked crates); crates from crates.io only, git refused. Once for
+#   each crate that ships with deny-ships.toml: rayon only through geom-pool. And once for each
+#   no_std kernel crate with deny-no-std.toml: libm is the only published crate it builds with.
+#   The gate's own rules run on each same graph: no crate outside the workspace skips the licence
+#   check as private, our own crates' licence fields hold 29.2's identifiers (and MPL-2.0 for the
+#   family), no crate comes from a folder outside the workspace or takes a family crate's name,
+#   libm comes from crates.io, and every licence choice is recorded. Then each rule fails on
+#   seeded graphs.
+# - clippy: clippy with the kernel's lint settings over every crate that ships, all targets,
+#   warnings denied, once for each feature selection (default, none, each feature, all), failing
+#   also on clippy's "does not refer to a reachable" message; every file the compiler read for
+#   those crates held to the ban on global state and the rule on lint attributes; and a probe
+#   crate with geom-num's own settings that breaks each rule once (one of them behind a feature),
+#   which must give exactly its errors per broken line, and one whose ban lapsed.
+# - builds: every no_std kernel crate built on its own for wasm32v1-none (no std at all: the
+#   no_std proof) and for wasm32-unknown-unknown (the browsers' wasm32), warnings denied, with
+#   each feature selection, every file the compiler read held to the same source rules; and probe
+#   crates that link std, assume a 64-bit usize (plainly or behind a feature) or warn, which must
+#   fail, and one whose statics only the compiler's file list shows.
+#
+# The checks themselves live beside the crate table they read, in
+# projects/engines/crates/engine-geometry/tests/scaffold (deny.rs, gate.rs, globals.rs,
+# licence.rs, overrides.rs, posture.rs), so the workflow holds no list of crates. kernel.yml and
+# kernel-build.yml keep running the kernel's tests, golden digests and per-target builds on their
+# own path filters; this workflow runs on every pull request, every push to main and every
+# merge-queue check, with no path filter, so its one required check always reports.
+#
+# gate.rs's `workflow` check reads this file line by line: each job runs its one test command,
+# written out exactly; no step continues on error, is skipped by a condition, swallows a failure
+# or runs in another shell; no environment is set beyond the pins below and the gate job's
+# results; and the YAML stays in the plain block style that check reads. A change here that the
+# check does not know fails the rules job until the check learns it.
+#
+# Supply chain: every action is pinned to the same full commit as in kernel.yml; update a pin in
+# all the kernel workflows together, after reviewing the new commit. cargo-deny is the release
+# named below, from its project's own GitHub releases, checked against GitHub's SHA-256 of that
+# asset (equal to the .sha256 file the release publishes) before it runs; change the version and
+# the checksum together. The workflow can only read the repository.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  # A merge queue, if main ever uses one, checks each queued merge with this same required check.
+  merge_group:
+
+permissions:
+  contents: read
+
+# A newer push to the same pull request cancels the runs it supersedes; pushes to main all run.
+concurrency:
+  group: kernel-gate-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Equal to rust-toolchain.toml, kernel.yml and kernel-build.yml: one pinned compiler (chapter
+  # 28.13, the toolchain guard). The scaffold check fails until all of them agree.
+  RUST_TOOLCHAIN: "1.99.0"
+  CARGO_TERM_COLOR: always
+  # cargo-deny 0.20.2 (MIT OR Apache-2.0), released 2026-07-09: the x86_64 Linux build's archive,
+  # cargo-deny-0.20.2-x86_64-unknown-linux-musl.tar.gz.
+  CARGO_DENY_VERSION: "0.20.2"
+  CARGO_DENY_SHA256: "9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f"
+
+jobs:
+  rules:
+    name: Crate graph, lint rules, global state, gate configuration
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: The compiler in use is the pinned one
+        run: |
+          set -euo pipefail
+          # rust-toolchain.toml overrides the toolchain installed above, so this shows the two
+          # agree; the scaffold check compares the files themselves.
+          version=$(rustc --version)
+          echo "$version"
+          case "$version" in
+            "rustc $RUST_TOOLCHAIN "*) ;;
+            *) echo "::error::rustc is not $RUST_TOOLCHAIN: rust-toolchain.toml and RUST_TOOLCHAIN disagree"; exit 1 ;;
+          esac
+      - name: The crate table, the lint rules, the ban on global state and the gate's configuration
+        run: cargo test --locked --package engine-geometry --test scaffold
+
+  deny:
+    name: cargo-deny over every crate of the kernel's family
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Install cargo-deny ${{ env.CARGO_DENY_VERSION }}, checked against its SHA-256
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          name="cargo-deny-${CARGO_DENY_VERSION}-x86_64-unknown-linux-musl"
+          curl --proto '=https' --tlsv1.2 -sSfL -o "$name.tar.gz" \
+            "https://github.com/EmbarkStudios/cargo-deny/releases/download/${CARGO_DENY_VERSION}/$name.tar.gz"
+          echo "${CARGO_DENY_SHA256}  $name.tar.gz" | sha256sum --check --strict
+          tar -xzf "$name.tar.gz"
+          echo "$RUNNER_TEMP/$name" >> "$GITHUB_PATH"
+      - name: The cargo-deny in use is the pinned one
+        run: |
+          set -euo pipefail
+          version=$(cargo deny --version)
+          echo "$version"
+          test "$version" = "cargo-deny $CARGO_DENY_VERSION"
+      # One run per crate of the table, then the seeded graphs; one test at a time, so each
+      # run's report reads whole in the log.
+      - name: Licences, advisories, sources and bans of every crate, and each rule's seeded violations
+        run: cargo test --locked --package engine-geometry --test scaffold -- --ignored gate_deny --nocapture --test-threads 1
+
+  clippy:
+    name: Clippy with the kernel's lint rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Every crate that ships, and a probe that breaks each rule once
+        run: cargo test --locked --package engine-geometry --test scaffold -- --ignored gate_clippy --nocapture --test-threads 1
+
+  builds:
+    name: no_std and wasm32 builds of every kernel crate
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: wasm32v1-none, wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Every kernel crate on its own, for wasm32v1-none and wasm32-unknown-unknown, and the probes
+        run: cargo test --locked --package engine-geometry --test scaffold -- --ignored gate_build --nocapture --test-threads 1
+
+  gate:
+    name: Merge gate
+    needs: [rules, deny, clippy, builds]
+    # Runs when a job it needs failed or was cancelled too, so the required check always reports;
+    # it passes only when every one of them succeeded.
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every job of the gate passed
+        shell: bash
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          set -euo pipefail
+          echo "results: $RESULTS"
+          test -n "$RESULTS"
+          for result in $RESULTS; do
+            if [ "$result" != "success" ]; then
+              echo "::error::a job of the kernel's merge gate did not pass ($result)"
+              exit 1
+            fi
+          done

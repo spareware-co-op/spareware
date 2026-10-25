@@ -1,0 +1,41 @@
+# cargo-deny's configuration for the no_std kernel crates alone: "Inside kernel crates, only
+# libm" (kernel architecture, chapter 29.1; 21; 29.20, rule 3). Every other crate a kernel crate
+# would use is a PORT, written into our own code (principle 11: nothing enters as it is).
+#
+# The merge gate (.github/workflows/kernel-gate.yml) runs `cargo deny ... check bans` with this
+# file once for each kernel crate of chapter 27's crate table (the rows of kind Kernel, the ones
+# kernel-build.yml builds for wasm32v1-none), with that crate's own Cargo.toml as --manifest-path,
+# so the crate is the only root of the graph. Only the bans check reads this file; the licence,
+# advisory and source rules for the same crates are deny.toml's, beside it. The runs are the
+# scaffold test's `gate_deny_*` tests (projects/engines/crates/engine-geometry/tests/scaffold/
+# deny.rs), which also seed a violation to show the rule fails. For one crate by hand:
+#
+#   cargo deny --manifest-path projects/engines/geometry/crates/<crate>/Cargo.toml \
+#     --config projects/engines/geometry/deny-no-std.toml check bans
+#
+# geom-pool and the facade, which may use std (chapter 27), are not checked with this file:
+# geom-pool brings rayon, and both are held by deny.toml's rules and deny-ships.toml's rayon bans.
+# Which published crates each may name beyond those is not settled by the chapters; the piece that
+# builds geom-pool (G04) and the facade's pieces settle it.
+#
+# cargo-deny's bans match crate names only, so `allow = ["libm"]` would pass any crate named libm,
+# a `[patch.crates-io] libm = { path = "..." }` included. The gate's own rules (tests/scaffold/
+# deny.rs, module `rules`) run on the same graph and refuse every crate outside the workspace that
+# is not libm from crates.io: the release Cargo.lock pins (29.4), not code patched in.
+
+[graph]
+# What ships: normal and build dependencies, with every feature on. Development dependencies
+# (proptest, bolero, the oracles) build only tests, which 28.1 allows any kernel crate.
+all-features = true
+exclude-dev = true
+
+[bans]
+# The only published crate allowed in the graph of a kernel crate. Our own crates are workspace
+# members and are allowed as such; which of them a kernel crate may name is the crate table's
+# rule (projects/engines/crates/engine-geometry/tests/scaffold), which also holds that only
+# geom-num names libm, the kernel's one door to maths functions (21). A path crate outside the
+# workspace is not allowed, and libm must come from crates.io (the gate's rules, above).
+allow = ["libm"]
+allow-workspace = true
+wildcards = "deny"
+allow-wildcard-paths = true

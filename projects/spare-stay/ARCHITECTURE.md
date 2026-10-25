@@ -11,7 +11,7 @@ Short stays where hosts and guests pay only the at-cost fee, and hosts own the a
 - Calendars stay in sync with other booking sites, so hosts can join without leaving them.
 - Local rules (council registration, levies, house rules) are shown and kept.
 
-## What it uses from the shared kit
+## What it uses from Spare Kit
 
 Accounts and ID checks, payments (deposits and refunds), matching (dates and search), maps, messaging, ratings and disputes, member voting, the open cost ledger, and the marketplace engine.
 

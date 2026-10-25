@@ -1,0 +1,196 @@
+name: Kernel development crates
+
+# What only this workflow runs for the geometry kernel's development crates (chapter 28 of the
+# kernel architecture, projects/engines/geometry/architecture/28-testing.md). kernel.yml tests
+# every crate in projects/engines/geometry/crates, these included: their whole test suites natively
+# on every operating system the kernel targets, in release with overflow checks on and in debug,
+# and their formatting and lints. So this workflow runs only:
+#
+# - The development-dependency rule: no kernel crate has a normal or build dependency on a
+#   development crate (28.1, chapter 27), over `cargo metadata`'s whole resolved graph
+#   (geom-test's tests/dependency_rule.rs). It reads manifests outside the kernel's folder (the
+#   facade and its binding crates in projects/engines/crates/, and kit-core, which the facade
+#   reaches, in projects/kit/crates/), and kernel.yml does not run when those change; this
+#   workflow does (path filters, below).
+# - The fuzz target, in bolero's test mode on stable Rust and its seeded leg (geom-fuzz's
+#   tests/predicates.rs): the short fuzz of 28.17, as its own step, so a fuzz failure reports as
+#   one. kernel.yml's suites run these tests too, among geom-fuzz's others.
+# - `cargo run -p geom-gen -- check`, which regenerates every committed generator output in memory
+#   and fails, naming each file, on any difference or on an orphan in a generated folder
+#   (chapter 27, "Generated code and data have one home"). kernel.yml runs no binary.
+# - `cargo run -p geom-test --bin map -- check`, the map for people and AI (chapter 26.3, piece
+#   G15): it reads every crate and module header of the kernel's crates
+#   (projects/engines/geometry/crates) and of the facade and its binding crates
+#   (projects/engines/crates/engine-geometry*) by the grammar in
+#   projects/engines/geometry/HEADERS.md, and fails, naming the file and the field, on any header
+#   that lacks a required field or writes a placeholder for it, any provenance record that is
+#   incomplete or takes more than chapter 29.2 allows, any link to outside code that no Source: or
+#   Consulted: line credits, any method link into the repository that does not exist, any
+#   published dependency whose licence the header does not record, any error kind without a doc
+#   comment, and any known gap or pending folder that no longer applies; and fails if the
+#   committed projects/engines/geometry/MAP.json differs from the map the headers give. kernel.yml's
+#   run of geom-test's suite checks the same (tests/map_repo.rs); this step reports it on its own,
+#   with the command that fixes it. The map reads files under projects/engines/geometry and
+#   projects/engines/crates, and resolves header links into projects/engines/geometry and
+#   projects/kit/notes; the path filters below cover all of them.
+# - `cargo run -p geom-test --bin provenance -- check`, the kernel's source ledger and notices
+#   (chapter 29.20, rules 4 to 6; piece G16): it regenerates projects/engines/geometry/PROVENANCE.md
+#   and projects/engines/geometry/NOTICE from the map's Source: and Consulted: records, the licence
+#   texts in projects/engines/geometry/notices/ and the method notes in
+#   projects/engines/geometry/methods/, and fails on any difference, on a ported source without its
+#   licence text or a licence text no port uses, and on a method note that breaks its template or
+#   credits another source than the records naming it. geom-test's tests/ledger_repo.rs checks the
+#   same in kernel.yml's run; this step reports it on its own.
+# - `cargo run -p geom-test --bin source-scan -- check`, the banned-source scan (chapter 29.20,
+#   rules 2 and 7; piece G16): every file of the kernel's crates and the facade's, scanned for
+#   Numerical Recipes markers, copyleft notices, statements that code was taken from a copyleft
+#   source, and Autodesk hatch pattern and linetype names, outside the scanner's own named files.
+#   geom-test's tests/scan_repo.rs checks the same in kernel.yml's run.
+# - The development crates' tests on wasm32-wasip1 under wasmtime, a 32-bit target: kernel.yml's
+#   WebAssembly job leaves the development crates out. A seed must draw the same test data and a
+#   generator give the same bytes there as natively, and the golden hashes and committed-output
+#   tests fail on a target that differs.
+#
+# The dependency rule, the fuzz target, the generator check, the map check, the ledger check and the
+# banned-source scan run natively on every operating system kernel.yml tests, the same six runners,
+# so the map's and the ledger's bytes are proved the same on each of them.
+#
+# Seeds: every seeded test prints its seed as `seed: <hex>` and runs from a fixed default on pull
+# requests, so they run the same cases every time (28.17); SPAREKIT_SEED=<hex> replays any printed
+# seed. bolero's test mode is the short fuzz of 28.17: bolero draws its inputs' seeds itself and
+# prints BOLERO_RANDOM_SEED=<seed> with any failure, which replays it. Long libFuzzer runs
+# (cargo-bolero) and nightly runs with fresh seeds belong to later pieces.
+#
+# Path filters: the workflow runs when any file the dependency rule or the map reads changes, as
+# well as the development crates; projects/kit/notes/** is there for the evidence notes that
+# module headers link to, which the map check resolves. The rule reads every kernel crate's
+# manifest (projects/engines/geometry/**, and the facade and its binding crates in
+# projects/engines/crates/), every manifest they reach (the facade reaches kit-core, in
+# projects/kit/crates/), the workspace's Cargo.toml ([patch],
+# [workspace.dependencies], members), Cargo.lock, and cargo's configuration in .cargo/ ([patch],
+# path overrides). Moving a development crate from [dev-dependencies] to [dependencies] changes no
+# line of Cargo.lock, so the manifests themselves must be filtered. geom-test's
+# tests/dependency_rule.rs fails if a manifest the rule reads is not matched by both triggers. A
+# rust-toolchain file, which would override the pinned compiler below, reruns everything here too,
+# as it does kernel.yml (28.13, the toolchain guard).
+#
+# --locked: Cargo.lock is committed and must already list every dependency (28.13, the toolchain
+# guard), so CI never resolves a different version from the one reviewed.
+#
+# Supply chain: every action is pinned to the same full commit as in kernel.yml, checked against
+# its tag when it was pinned there (the tag beside each); update a pin in both files together, and
+# only after reviewing the new commit. wasmtime is a pinned release checked against its SHA-256
+# before it runs. The workflow can only read the repository.
+
+on:
+  pull_request:
+    paths:
+      - "projects/engines/geometry/**"
+      - "projects/engines/crates/**"
+      - "projects/kit/crates/**"
+      - "projects/kit/notes/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".cargo/**"
+      - "rust-toolchain.toml"
+      - "rust-toolchain"
+      - ".github/workflows/kernel-dev.yml"
+  push:
+    branches: [main]
+    paths:
+      - "projects/engines/geometry/**"
+      - "projects/engines/crates/**"
+      - "projects/kit/crates/**"
+      - "projects/kit/notes/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".cargo/**"
+      - "rust-toolchain.toml"
+      - "rust-toolchain"
+      - ".github/workflows/kernel-dev.yml"
+
+permissions:
+  contents: read
+
+env:
+  # The same pinned compiler as kernel.yml (chapter 28.13, the toolchain guard).
+  RUST_TOOLCHAIN: "1.99.0"
+
+jobs:
+  native:
+    name: Development crates (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Every platform reports, so a difference on one platform shows which.
+      fail-fast: false
+      matrix:
+        # The runners of kernel.yml's test job.
+        include:
+          - name: Linux x86-64
+            os: ubuntu-latest
+          - name: Linux arm64
+            os: ubuntu-24.04-arm
+          - name: Windows x86-64
+            os: windows-latest
+          - name: Windows arm64
+            os: windows-11-arm
+          - name: macOS arm64
+            os: macos-latest
+          - name: macOS x86-64
+            os: macos-15-intel
+    defaults:
+      run:
+        # bash with -eo pipefail on every runner, Windows included.
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: The development-dependency rule, and CI's reruns of it
+        run: cargo test --locked -p geom-test --test dependency_rule
+      - name: The predicates fuzz target, in bolero's test mode and the seeded leg
+        run: cargo test --locked -p geom-fuzz --test predicates
+      - name: Every committed generator output is current, with no orphan
+        run: cargo run --locked -p geom-gen -- check
+      - name: Every crate and module header is complete, and MAP.json is current
+        run: cargo run --locked -p geom-test --bin map -- check
+      - name: PROVENANCE.md and NOTICE are current, and every port has its licence text
+        run: cargo run --locked -p geom-test --bin provenance -- check
+      - name: No banned-source marker in the kernel's crates
+        run: cargo run --locked -p geom-test --bin source-scan -- check
+
+  wasm:
+    name: Development crates (wasm32-wasip1 under wasmtime)
+    runs-on: ubuntu-latest
+    env:
+      WASMTIME_VERSION: v50.0.0
+      # GitHub's digest of the release asset wasmtime-v50.0.0-x86_64-linux.tar.xz.
+      WASMTIME_SHA256: 77c19ee0437991f9ac7837b9c269d9c7076744f85dad263fea5214cc2723c7ff
+      CARGO_TARGET_WASM32_WASIP1_RUNNER: wasmtime
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: wasm32-wasip1
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Install wasmtime ${{ env.WASMTIME_VERSION }}, checked against its SHA-256
+        run: |
+          cd "$RUNNER_TEMP"
+          name="wasmtime-${WASMTIME_VERSION}-x86_64-linux"
+          curl --proto '=https' --tlsv1.2 -sSfL -o "$name.tar.xz" \
+            "https://github.com/bytecodealliance/wasmtime/releases/download/${WASMTIME_VERSION}/$name.tar.xz"
+          echo "${WASMTIME_SHA256}  $name.tar.xz" | sha256sum --check --strict
+          tar -xJf "$name.tar.xz"
+          echo "$RUNNER_TEMP/$name" >> "$GITHUB_PATH"
+      - name: geom-test, geom-fuzz (the seeded leg) and geom-gen on a 32-bit target
+        run: cargo test --locked -p geom-test -p geom-fuzz -p geom-gen --target wasm32-wasip1

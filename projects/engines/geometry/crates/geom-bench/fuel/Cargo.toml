@@ -1,0 +1,31 @@
+[package]
+name = "geom-bench-fuel"
+version = "0.0.0"
+edition = "2024"
+# Development only: never published, never a dependency of anything.
+publish = false
+license = "MPL-2.0"
+description = "Spare Kit geometry kernel: the WebAssembly fuel gate's host, which counts the fuel of every geom-bench benchmark in Wasmtime."
+
+# A workspace of its own, with its own Cargo.lock: Wasmtime is a large dependency that only this
+# tool needs, so it stays out of the kernel's workspace and lock file.
+[workspace]
+
+[dependencies]
+# The fuel counter chapter 23.13 names. Apache-2.0 WITH LLVM-exception. The exact version is
+# pinned because its fuel cost model defines the counts: change it only in a pull request of its
+# own, and keep geom_bench::WASMTIME_VERSION in step (a test checks).
+wasmtime = { version = "=49.0.0", default-features = false, features = ["cranelift", "runtime", "std"] }
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+unreachable = "deny"
+todo = "deny"
+unimplemented = "deny"
+indexing_slicing = "deny"
