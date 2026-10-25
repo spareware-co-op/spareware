@@ -981,13 +981,12 @@ version = "0.0.0"
 dependencies = [
  "geom-num",
  "geom-op",
- "hex",
+ "geom-test",
  "num-bigint",
  "num-integer",
  "num-rational",
  "num-traits",
  "proptest",
- "sha2",
 ]
 
 [[package]]
@@ -1040,7 +1039,7 @@ dependencies = [
  "dashu-int",
  "dashu-ratio",
  "geom-run",
- "hex",
+ "geom-test",
  "libm",
  "num-bigint",
  "num-integer",
@@ -1048,7 +1047,6 @@ dependencies = [
  "num-traits",
  "proptest",
  "robust",
- "sha2",
  "toml",
 ]
 
@@ -1149,9 +1147,8 @@ dependencies = [
 name = "geom-run"
 version = "0.0.0"
 dependencies = [
- "hex",
+ "geom-test",
  "proptest",
- "sha2",
 ]
 
 [[package]]
@@ -1283,7 +1280,11 @@ dependencies = [
  "proc-macro2",
  "proptest",
  "pulldown-cmark",
+ "rand 0.10.3",
+ "serde",
  "serde_json",
+ "sha2",
+ "syn 2.0.119",
  "toml",
  "unicode-normalization",
 ]

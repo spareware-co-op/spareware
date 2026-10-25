@@ -34,23 +34,27 @@
 //! target by construction and only the kernel's results can differ.
 //!
 //! Every result is written in a canonical little-endian byte encoding, in a fixed field order (see
-//! `Recorder`), and hashed with SHA-256 (FIPS 180-4), the hash chapters 21 and 28.13 specify,
-//! computed by the `sha2` crate (MIT OR Apache-2.0; piece G12a, chapter 29.1) and
-//! checked here against the standard's own test vectors. Doubles go in
-//! as their bits, so a difference of one unit in the last place shows. A NaN would be written as
+//! `Recorder`), and hashed with SHA-256 (FIPS 180-4), the hash chapters 21 and 28.13 specify, from
+//! `geom_test::golden`, the one implementation every golden uses (piece G19), checked there against
+//! the standard's test vectors. Doubles go in as their bits, so a difference of one unit in the
+//! last place shows. A NaN would be written as
 //! one canonical pattern, because Rust does not fix a NaN's sign or payload (RFC 3514), but no
 //! result here may be NaN, and the test checks that.
 //!
 //! **The same digest must hold on every target `.github/workflows/kernel.yml` runs**: Linux and
 //! Windows on x86-64 and arm64, macOS on arm64 and x86-64, and wasm32-wasip1 under wasmtime and
 //! under Node; in debug and in release, release both with overflow checks on and as it ships
-//! (without them), and natively with `-C target-cpu=native`. A changed digest is one of two
-//! things. Either it is a bug: some target computes different bits, so the same model would give
-//! different geometry on different machines. Or the kernel's results were changed on purpose,
+//! (without them), and natively with `-C target-cpu=native`. The digest lives in the golden store
+//! (`geom-test/golden/store.json`, id `geom-num/determinism`), and `geom_test::golden::check` runs
+//! the corpus twice in the process, each time on a heap the perturbing allocator has shifted and
+//! fragmented differently, before it compares the digest with the store's. A changed digest is one
+//! of two things. Either it is a bug: some target computes different bits, so the same model would
+//! give different geometry on different machines. Or the kernel's results were changed on purpose,
 //! which is a deliberate kernel edition change (chapter 21, section 28.13): its pull request
-//! updates `GOLDEN`, says which results changed and why, and a kernel owner approves it. A change
-//! to this corpus changes the digest too and is reviewed the same way. Never update the constant
-//! to make one target pass.
+//! records the change in the store (the old digest in the golden's history, with its kind, piece
+//! and why), says which results changed, and a kernel owner approves it. A change to this corpus
+//! changes the digest too and is recorded the same way. Never update the store to make one target
+//! pass.
 //!
 //! To help find the cause when one target disagrees, the test prints a digest per section: compare
 //! the CI logs of two targets to see which part of the kernel differs. It also checks that the
@@ -93,32 +97,29 @@ use geom_num::plane::{Plane, Tpi};
 use geom_num::predicate::{incircle, insphere, orient2d, orient3d};
 use geom_num::{Coord, Exactness, GridStep, NumError, P2, P3, Real, Rounded, Sign, Steps, Wide};
 use geom_num::{ladder, math};
-use sha2::{Digest as _, Sha256};
+use geom_test::golden::{self, Sha256, hex};
 
-/// The golden digest of the corpus: SHA-256, in hexadecimal.
+/// The corpus's golden in the golden store (`geom-test/golden/store.json`).
 ///
-/// The same constant must hold on every target `.github/workflows/kernel.yml` runs (the module
+/// The same digest must hold on every target `.github/workflows/kernel.yml` runs (the module
 /// documentation lists them). A change is either a bug (a target computes different bits, so the
 /// same model would give different geometry on different machines) or a deliberate kernel edition
-/// change, made in a pull request that updates this constant, says which, and is approved by a
-/// kernel owner. See the module documentation.
+/// change, recorded in the store in a pull request that says which and is approved by a kernel
+/// owner. See the module documentation.
 ///
-/// Changes, each deliberate:
-///
-/// - From `c9c61875e6da8cff4ffa79f147d8f32187fa2929564100ce834849bb43a211f8` (piece G02) when the
-///   correctly rounded maths of piece G05 (issue #174) merged. The sections `predicates`,
-///   `planes`, `tpi`, `grid`, `wide`, `eft` and `scalars` give G02's digests unchanged. `interval`
-///   no longer records the refusals of `Interval::exp` and `Interval::ln` (indices 3 and 4), which
-///   are certified now and recorded in `math`; with those two records put back it gives G02's
-///   digest, so nothing else in it moved. `math`: of G02's 7,677 records, 92 moved, each by one
-///   unit in the last place to the correctly rounded value, where `libm` (and, for `sinpi` and
-///   `cospi`, G02's reduction before `libm`) was one unit off: `exp` 9, `ln` 3, `sinpi` 52,
-///   `cospi` 19 and `atan2` 9 (for example `exp(1)`, from 2.7182818284590455 to 2.718281828459045,
-///   the double nearest e). No error changed, and no other function's result. 2,700 records were
-///   added, from a generator of their own (`SEED_G05`): the `libm` twins of the five, now in
-///   `math::unproven` (indices 23 to 27), and the interval versions `Interval::sinpi`, `cospi`,
-///   `exp` and `ln` (28 to 31).
-const GOLDEN: &str = "fb19edfc7c58ca5e93a8921dfbdd2ab2dfacc2d180fbe6dec540efbede954564";
+/// The digest's history is in the store: G02 set it, and it changed once, when the correctly
+/// rounded maths of piece G05 (issue #174) merged. The sections `predicates`, `planes`, `tpi`,
+/// `grid`, `wide`, `eft` and `scalars` give G02's digests unchanged. `interval` no longer records
+/// the refusals of `Interval::exp` and `Interval::ln` (indices 3 and 4), which are certified now
+/// and recorded in `math`; with those two records put back it gives G02's digest, so nothing else
+/// in it moved. `math`: of G02's 7,677 records, 92 moved, each by one unit in the last place to the
+/// correctly rounded value, where `libm` (and, for `sinpi` and `cospi`, G02's reduction before
+/// `libm`) was one unit off: `exp` 9, `ln` 3, `sinpi` 52, `cospi` 19 and `atan2` 9 (for example
+/// `exp(1)`, from 2.7182818284590455 to 2.718281828459045, the double nearest e). No error
+/// changed, and no other function's result. 2,700 records were added, from a generator of their
+/// own (`SEED_G05`): the `libm` twins of the five, now in `math::unproven` (indices 23 to 27), and
+/// the interval versions `Interval::sinpi`, `cospi`, `exp` and `ln` (28 to 31).
+const GOLDEN: &str = "geom-num/determinism";
 
 /// The calls each section makes, in order: the corpus is fixed, so these are its exact counts,
 /// and a section that loses calls fails by name.
@@ -340,7 +341,7 @@ impl Recorder {
     fn end_section(&mut self, name: &'static str) {
         let section = std::mem::replace(&mut self.section, Sha256::new());
         self.report
-            .push((name, self.section_calls, section.finalize().into()));
+            .push((name, self.section_calls, section.finish()));
         self.section_calls = 0;
     }
 
@@ -358,8 +359,8 @@ impl Recorder {
     }
 
     fn bytes(&mut self, bytes: &[u8]) {
-        self.total.update(bytes);
-        self.section.update(bytes);
+        self.total.write(bytes);
+        self.section.write(bytes);
     }
 
     fn put_u8(&mut self, v: u8) {
@@ -2064,59 +2065,8 @@ fn required() -> Vec<(Op, &'static str)> {
     out
 }
 
-/// The SHA-256 of `bytes`, written in `pieces`-byte pieces.
-fn sha256_in_pieces(bytes: &[u8], pieces: usize) -> String {
-    let mut h = Sha256::new();
-    for piece in bytes.chunks(pieces) {
-        h.update(piece);
-    }
-    hex::encode(h.finalize())
-}
-
-/// The `sha2` crate gives the digests of FIPS 180-4's examples (NIST's "SHA-256" example document
-/// and the standard's test vectors): the empty message, "abc" (one block), the 448-bit and
-/// 896-bit messages (two blocks, padding in a block of its own) and one million "a"s; whatever
-/// the size of the pieces the bytes arrive in. The golden digest below is only as good as the hash
-/// it is taken with, so the dependency is held to the standard here, on every target the golden
-/// runs on.
-#[test]
-fn sha256_matches_the_standards_test_vectors() {
-    let cases = [
-        (
-            "",
-            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-        ),
-        (
-            "abc",
-            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
-        ),
-        (
-            "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq",
-            "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1",
-        ),
-        (
-            concat!(
-                "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmn",
-                "hijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu",
-            ),
-            "cf5b16a778af8380036ce59e7b0492370b249b11e8f07a51afac45037afee9d1",
-        ),
-    ];
-    for (message, want) in cases {
-        for pieces in [1, 3, 55, 56, 63, 64, 65, 1000] {
-            let got = sha256_in_pieces(message.as_bytes(), pieces);
-            assert_eq!(got, want, "{message:?} in {pieces}-byte pieces");
-        }
-    }
-    let million = vec![b'a'; 1_000_000];
-    let want = "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0";
-    assert_eq!(sha256_in_pieces(&million, 4_096), want);
-}
-
-/// The golden digest. The same constant must hold on every target; a change is a bug or a
-/// deliberate kernel edition change (see the module documentation and `GOLDEN`).
-#[test]
-fn golden_hash_is_the_same_on_every_target() {
+/// The whole corpus, recorded section by section.
+fn corpus() -> Recorder {
     let mut g = Gen(SEED);
     let mut r = Recorder::new();
     predicates(&mut g, &mut r);
@@ -2137,11 +2087,22 @@ fn golden_hash_is_the_same_on_every_target() {
     r.end_section("math");
     scalars(&mut g, &mut r);
     r.end_section("scalars");
+    r
+}
 
-    let hash = hex::encode(r.total.clone().finalize());
+/// The golden digest. The same digest must hold on every target; a change is a bug or a
+/// deliberate kernel edition change (see the module documentation and `GOLDEN`).
+#[test]
+fn golden_hash_is_the_same_on_every_target() {
+    let checked = golden::check(GOLDEN, || {
+        let r = corpus();
+        (r.total.clone().finish(), r)
+    });
+    let r = &checked.value;
+    let hash = hex(r.total.clone().finish());
     println!("geom-num determinism corpus: {} calls", r.calls);
     for (name, calls, digest) in &r.report {
-        println!("  {name:<10} {calls:>6} calls  {}", hex::encode(digest));
+        println!("  {name:<10} {calls:>6} calls  {}", hex(*digest));
     }
     println!("geom-num golden hash: {hash}");
 
@@ -2162,11 +2123,7 @@ fn golden_hash_is_the_same_on_every_target() {
     }
     assert_eq!(counts.len(), SECTION_CALLS.len(), "sections {counts:?}");
     assert_eq!(r.nans, 0, "a result in the corpus is NaN");
-    assert_eq!(
-        hash, GOLDEN,
-        "geom-num's golden digest is {hash} here but {GOLDEN} is expected. Either this target \
-         computes different bits (a bug: compare the section digests above with another target's \
-         log) or the kernel's results changed (a deliberate kernel edition change must update \
-         GOLDEN and say so)"
-    );
+    checked.verdict().unwrap_or_else(|e| {
+        panic!("{e}. Compare the section digests above with another target's log to find the part of the kernel that differs")
+    });
 }
