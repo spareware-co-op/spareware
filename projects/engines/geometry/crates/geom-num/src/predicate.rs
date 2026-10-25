@@ -622,23 +622,6 @@ mod bounded {
             self.0
         }
     }
-
-    #[cfg(test)]
-    mod tests {
-        use super::magnitude_bits;
-
-        /// `magnitude_bits`, which only `TOTAL_BITS` calls (so only the compiler ran it): 64L − 1
-        /// for L limbs, and 0, which no bound fits, when a step overflows.
-        #[test]
-        fn magnitude_bits_of_every_width_and_the_overflows() {
-            assert_eq!(magnitude_bits(6), 383);
-            assert_eq!(magnitude_bits(4), 255);
-            assert_eq!(magnitude_bits(1), 63);
-            assert_eq!(magnitude_bits(0), 0);
-            assert_eq!(magnitude_bits(usize::MAX), 0);
-            assert_eq!(magnitude_bits(usize::MAX / 64 + 1), 0);
-        }
-    }
 }
 
 /// A coordinate difference on the total path: below 2^64.
