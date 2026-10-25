@@ -12,6 +12,9 @@
 //! - **`DD`.** `DD::from_real`, which nothing called; `from_sum` and `exact_product` refusing a
 //!   non-finite second operand (only a non-finite first one was tried); and the zero shortcuts of
 //!   `mul_f64`, `mul` and `div_f64` with a zero `DD`.
+//! - **`math::sinpi` and `math::cospi`.** The accurate path's hard cases are tested at their own
+//!   inputs, never at their mirror images (−a, and 1 − a, ½ − a and ½ + a where those are doubles),
+//!   which the path recognises by the second half of its test.
 //!
 //! Seeds: the randomised test prints `seed: <hex>` and runs from a fixed default;
 //! `SPAREKIT_SEED=<hex>` replays another (chapter 28.17).
@@ -34,6 +37,7 @@
 
 use geom_num::generated::plane_side;
 use geom_num::grid::COORD_MAX;
+use geom_num::math;
 use geom_num::{DD, NumError, P2, P3, Real, Sign};
 use num_bigint::BigInt;
 
@@ -310,4 +314,44 @@ fn dd_products_and_quotients_with_a_zero_are_plus_zero() {
     assert_eq!(x.negate().mul(DD::ZERO).map(bits), Ok(zero));
     assert_eq!(DD::ZERO.div_f64(0.0), Err(NumError::NotFinite));
     assert_eq!(DD::ZERO.div_f64(-0.0), Err(NumError::NotFinite));
+}
+
+// ---------------------------------------------------------------------------------------------
+// math::sinpi and math::cospi
+// ---------------------------------------------------------------------------------------------
+
+/// Each input whose accurate path ends at one of sinpi's listed hard cases (`SINPI_HARD` in
+/// src/math/sincospi.rs, from CORE-MATH's `as_sinpi_refine`): a = (iq + x/2)/2^11 for its entry
+/// (iq, x, r), exactly a double, with the correctly rounded sin(πa), the entry's r, as bits.
+const SINPI_HARD_CASES: [(u64, u64); 4] = [
+    (0x3fa2_f6c4_a600_85cd, 0x3fbd_b8a7_9a80_c3a0), // iq 76
+    (0x3faa_f661_a8af_86da, 0x3fc5_146c_0bc4_5bce), // iq 108
+    (0x3fce_99d7_85d7_05f5, 0x3fe5_d656_1936_b699), // iq 490
+    (0x3fdc_3642_2fd2_e52a, 0x3fef_72c9_0696_2631), // iq 903, also in cospi's list
+];
+
+/// The mirror images of the hard cases answer as the identities say: sinpi(−a) = −sinpi(a) for
+/// every one (its reduction gives iq = 2^12 − iq_a and z = −z_a), and for the entry at 903, whose
+/// mirrors are doubles too, sinpi(1 − a) = sinpi(a), cospi(½ − a) = cospi(a − ½) = sinpi(a) and
+/// cospi(½ + a) = −sinpi(a). The accurate path recognises a mirror image by the second half of its
+/// hard-case test (x = −h.x and iq = 2048 − h.iq).
+#[test]
+fn sinpi_and_cospi_at_the_mirror_images_of_the_hard_cases() {
+    let bits_of = |v: Result<Real, NumError>| v.unwrap().get().to_bits();
+    for (a, r) in SINPI_HARD_CASES {
+        let (a, r) = (f64::from_bits(a), f64::from_bits(r));
+        assert_eq!(bits_of(math::sinpi(a)), r.to_bits(), "sinpi({a:e})");
+        assert_eq!(bits_of(math::sinpi(-a)), (-r).to_bits(), "sinpi(-{a:e})");
+    }
+    let (a, r) = SINPI_HARD_CASES[3];
+    let (a, r) = (f64::from_bits(a), f64::from_bits(r));
+    // Each mirror is exactly a double (Sterbenz's lemma for 1 − a and ½ − a; ½ + a has a's last
+    // place), so these are the mirror images themselves.
+    assert_eq!((1.0 - a).to_bits(), 0x3fe1_e4de_e816_8d6b);
+    assert_eq!((0.5 - a).to_bits(), 0x3fae_4dee_8168_d6b0);
+    assert_eq!((0.5 + a).to_bits(), 0x3fee_1b21_17e9_7295);
+    assert_eq!(bits_of(math::sinpi(1.0 - a)), r.to_bits());
+    assert_eq!(bits_of(math::cospi(0.5 - a)), r.to_bits());
+    assert_eq!(bits_of(math::cospi(a - 0.5)), r.to_bits());
+    assert_eq!(bits_of(math::cospi(0.5 + a)), (-r).to_bits());
 }
