@@ -212,6 +212,13 @@ Gungraun
     projects/engines/geometry/crates/geom-bench/src/lib.rs
       for its library-benchmark API and its Callgrind and DHAT settings. No code copied.
 
+Kani 0.68.0 `library/std/src/lib.rs`
+  Licence:      MIT OR Apache-2.0
+  Link:         https://github.com/model-checking/kani/blob/0d2328a93f0e0ff66132d6bfa1a7d884877cf862/library/std/src/lib.rs
+  Consulted by:
+    projects/engines/geometry/crates/geom-fuzz/src/lib.rs
+      for its `assert!` and `panic!`, which leave their messages unformatted during verification, the rule [`Finding::new`] follows for a finding's detail. No code copied.
+
 `libm` 0.2.16
   Licence:      MIT
   Link:         https://github.com/rust-lang/compiler-builtins/tree/dfd2203a4d6110820ad7bb65cafe1bf331a03a3d/libm/src/math

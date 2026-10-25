@@ -924,9 +924,9 @@ pub fn probe_source(lines: &[ProbeLine]) -> String {
 /// The line of the probe's library that holds the first probe line.
 pub const FIRST_LINE: usize = 3;
 
-/// The four runs of the gate's workflow, by job: the job, its exact `run:` line, and the filter of
+/// The five runs of the gate's workflow, by job: the job, its exact `run:` line, and the filter of
 /// ignored tests it selects (none for the rules job, which runs every test not ignored).
-pub const RUNS: [(&str, &str, Option<&str>); 4] = [
+pub const RUNS: [(&str, &str, Option<&str>); 5] = [
     (
         "rules",
         "run: cargo test --locked --package engine-geometry --test scaffold",
@@ -947,6 +947,11 @@ pub const RUNS: [(&str, &str, Option<&str>); 4] = [
         "run: cargo test --locked --package engine-geometry --test scaffold -- --ignored gate_build --nocapture --test-threads 1",
         Some("gate_build"),
     ),
+    (
+        "recursion",
+        "run: cargo test --locked --package engine-geometry --test scaffold -- --ignored gate_recursion --nocapture --test-threads 1",
+        Some("gate_recursion"),
+    ),
 ];
 
 /// What `.github/workflows/kernel-gate.yml` gets wrong for the gate, given its text and
@@ -956,6 +961,7 @@ pub fn workflow(yml: &str, kernel_yml: &str) -> Vec<String> {
     let mut wrong = Vec::new();
     workflow_triggers_and_pins(yml, &lines, kernel_yml, &mut wrong);
     workflow_cargo_deny(yml, &lines, &mut wrong);
+    workflow_wasmtime(&lines, &mut wrong);
     workflow_runs(&lines, &mut wrong);
     workflow_nothing_swallowed(&lines, &mut wrong);
     workflow_gate_job(&lines, &mut wrong);
@@ -1070,7 +1076,10 @@ fn workflow_cargo_deny(yml: &str, lines: &[&str], wrong: &mut Vec<String>) {
                 .all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()))
     });
     let sha_ok = env_value("CARGO_DENY_SHA256").is_some_and(|v| lower_hex(&v, 64));
-    if !version_ok || !sha_ok || !yml.contains("sha256sum --check --strict") {
+    let checked = code(&job_lines(lines, "deny"))
+        .iter()
+        .any(|l| l == "echo \"${CARGO_DENY_SHA256}  $name.tar.gz\" | sha256sum --check --strict");
+    if !version_ok || !sha_ok || !checked {
         wrong.push(
             "cargo-deny is not installed as one exact release checked against its SHA-256"
                 .to_owned(),
@@ -1081,8 +1090,43 @@ fn workflow_cargo_deny(yml: &str, lines: &[&str], wrong: &mut Vec<String>) {
     }
 }
 
+/// wasmtime, which runs the recursion check's bound tests: one exact release from its project's
+/// own releases, checked against its SHA-256 before it runs, in the recursion job.
+fn workflow_wasmtime(lines: &[&str], wrong: &mut Vec<String>) {
+    let env_value = |key: &str| {
+        lines
+            .iter()
+            .find_map(|l| l.trim().strip_prefix(&format!("{key}:")))
+            .map(|v| v.trim().trim_matches('"').to_owned())
+    };
+    let version_ok = env_value("WASMTIME_VERSION").is_some_and(|v| {
+        let parts: Vec<&str> = v.split('.').collect();
+        parts.len() == 3
+            && parts
+                .iter()
+                .all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()))
+    });
+    let sha_ok = env_value("WASMTIME_SHA256").is_some_and(|v| lower_hex(&v, 64));
+    let job = code(&job_lines(lines, "recursion"));
+    let checked = job
+        .iter()
+        .any(|l| l == "echo \"${WASMTIME_SHA256}  $name.tar.xz\" | sha256sum --check --strict");
+    if !version_ok || !sha_ok || !checked {
+        wrong.push(
+            "wasmtime is not installed as one exact release checked against its SHA-256".to_owned(),
+        );
+    }
+    if !job.iter().any(|l| {
+        l.contains(
+            "https://github.com/bytecodealliance/wasmtime/releases/download/v${WASMTIME_VERSION}/",
+        )
+    }) {
+        wrong.push("wasmtime does not come from its project's own releases".to_owned());
+    }
+}
+
 /// What it runs: each check job runs its one test command, written out exactly, and no other
-/// line runs `cargo test`; the jobs are those four and the gate; the tools they need are
+/// line runs `cargo test`; the jobs are those five and the gate; the tools they need are
 /// installed.
 fn workflow_runs(lines: &[&str], wrong: &mut Vec<String>) {
     let expected: BTreeSet<&str> = RUNS.iter().map(|(_, run, _)| *run).collect();
@@ -1108,6 +1152,7 @@ fn workflow_runs(lines: &[&str], wrong: &mut Vec<String>) {
     for (needle, job) in [
         ("targets: wasm32v1-none, wasm32-unknown-unknown", "builds"),
         ("components: clippy", "clippy"),
+        ("targets: wasm32-wasip1", "recursion"),
     ] {
         if !code(&job_lines(lines, job)).iter().any(|l| l == needle) {
             wrong.push(format!("the {job} job does not install {needle:?}"));
@@ -1237,6 +1282,8 @@ fn workflow_nothing_swallowed(lines: &[&str], wrong: &mut Vec<String>) {
         "CARGO_TERM_COLOR",
         "CARGO_DENY_VERSION",
         "CARGO_DENY_SHA256",
+        "WASMTIME_VERSION",
+        "WASMTIME_SHA256",
     ]
     .map(str::to_owned)
     .into();
@@ -1384,7 +1431,8 @@ mod tests {
             .filter(|t| t.contains("gate_deny"))
             .cloned()
             .collect();
-        assert_eq!(filters_select_every_gate_test(&only_deny).len(), 2);
+        // Every other filter (clippy, builds, recursion) then selects nothing.
+        assert_eq!(filters_select_every_gate_test(&only_deny).len(), 3);
     }
 
     /// Changes to kernel-gate.yml, each of which the check must refuse: (what, the changed text).
@@ -1447,8 +1495,30 @@ mod tests {
             (
                 "a job left out of the gate",
                 swap(
+                    "needs: [rules, deny, clippy, builds, recursion]",
                     "needs: [rules, deny, clippy, builds]",
-                    "needs: [rules, deny, clippy]",
+                ),
+            ),
+            (
+                "no recursion runs",
+                swap("--ignored gate_recursion", "--ignored gate_nothing"),
+            ),
+            (
+                "no wasip1 target",
+                swap("targets: wasm32-wasip1", "targets: wasm32-unknown-unknown"),
+            ),
+            (
+                "wasmtime unchecked",
+                swap(
+                    "echo \"${WASMTIME_SHA256}  $name.tar.xz\" | sha256sum --check --strict",
+                    "true",
+                ),
+            ),
+            (
+                "wasmtime from elsewhere",
+                swap(
+                    "https://github.com/bytecodealliance/wasmtime/releases/download/",
+                    "https://example.com/wasmtime/",
                 ),
             ),
             (

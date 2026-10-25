@@ -1421,7 +1421,12 @@ const Engine = (() => {
   const busFreq = (r, period) => { const f = r && r.freqs && typeof r.freqs === 'object' ? r.freqs[period] : null; return f != null && f !== '' && isFinite(+f) ? Math.max(0, +f) : Math.max(0, +(r && r.freq) || 0); };
   // PCU per bus for the route preload: settings.busPcu, or the earlier engine value for a settings object without it
   const busPcuOf = S => (S && +S.busPcu > 0 && isFinite(+S.busPcu) ? +S.busPcu : STANDARDS.bus.legacy);
+  /* The model run goes to the Rust engine once js/rust-engine.js has loaded it (useRust); until then, and if it cannot
+     load, this JavaScript prototype runs it. */
+  let rustAssign = null;
+  const useRust = f => { rustAssign = f; };
   async function assign(sc, opts = {}) {
+    if (rustAssign) return rustAssign(sc, opts);
     const S = opts.settings || Store.S, period = opts.period || S.period, prog = opts.onProgress || (() => {});
     const t0 = performance.now();
     const G = buildGraph(sc, S, period);
@@ -2208,7 +2213,7 @@ const Engine = (() => {
   }
 
   return { buildGraph, connectorMap, applySignal, arcTime, effCap, dijkstra, trace, resolveRoute, workspace, spt, pathTo,
-    turnType, turnPenalty, turnBanned, movement, approachName, TURN_DEF, yearOf, tripEnds, demand, applyME, assign, travel, isochrone, selectLink, capital, econ, lts, losOf, pcuF, growth, ef, LOS_SIG, LOS_UNSIG, LOS_VC,
+    turnType, turnPenalty, turnBanned, movement, approachName, TURN_DEF, yearOf, tripEnds, demand, applyME, assign, useRust, travel, isochrone, selectLink, capital, econ, lts, losOf, pcuF, growth, ef, LOS_SIG, LOS_UNSIG, LOS_VC,
     STANDARDS, JUNCTION_LABEL, growthBasis, junctionSet, convSet, junctionResult, delayText, convText, updateNodeCaps,
     uspwf: uspwf1, agpwf: agpwf1, pwf, econPeriod, ipmBand, bcrText, snr, exportReady,
     mov: { cpot, twoStage, pPrime, priorityCaps, rbtCaps, laneModel, approachCap, allocLanes, q95: q95v, delay: dHCM, majorDelay }, zoneClass, stageOf, modelStatus, modelMeta, siteLegs, SELECT_LABEL,

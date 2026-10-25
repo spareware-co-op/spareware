@@ -1284,7 +1284,7 @@
       "layer": "Development",
       "modules": [
         {
-          "cost": "none at run time for the alias; displaying a [`Finding`] writes its two strings.",
+          "cost": "none at run time for the alias; [`Finding::new`] runs its detail closure once, except under Kani; displaying a [`Finding`] writes its two strings.",
           "does": null,
           "family": [],
           "file": "projects/engines/geometry/crates/geom-fuzz/src/lib.rs",
@@ -1295,7 +1295,10 @@
           ],
           "job": "Spare Kit geometry kernel, development only: the fuzz harnesses.",
           "method": {
-            "none": "this root defines only the [`Finding`] type, its `Display` and `Error` implementations and the [`Harness`] alias, whose shape 28.5 gives. Each harness module names the method it follows."
+            "links": [
+              "https://github.com/model-checking/kani/blob/0d2328a93f0e0ff66132d6bfa1a7d884877cf862/library/std/src/lib.rs"
+            ],
+            "text": "[`Finding::new`] leaves a finding's detail unwritten under Kani, as Kani's own `std` leaves the messages of `assert!` and `panic!` unformatted during verification (<https://github.com/model-checking/kani/blob/0d2328a93f0e0ff66132d6bfa1a7d884877cf862/library/std/src/lib.rs>, credited below): Kani reports a failed proof with a trace of every value, and formatting symbolic values would only enlarge the problem it solves. The rest of this root is the [`Finding`] type, its `Display` and `Error` implementations and the [`Harness`] alias, whose shape 28.5 gives. Each harness module names the method it follows."
           },
           "path": "geom_fuzz",
           "provenance": [],
@@ -1303,8 +1306,34 @@
           "target": "lib"
         },
         {
+          "cost": "per case, 6 checked `i128` products and 5 checked sums for the reference, one call each to the predicate, the exact path and the filter (each constant time), and at most [`MAX_INPUT_BYTES`] bytes read by [`decode`]. No allocation unless a finding is reported.",
+          "does": "[`check`] takes three grid points a, b, c and computes [`reference`], the determinant of the 3 × 3 matrix whose rows are (a.x, a.y, 1), (b.x, b.y, 1) and (c.x, c.y, 1), expanded along its third column in `i128`: (b.x·c.y − b.y·c.x) − (a.x·c.y − a.y·c.x) + (a.x·b.y − a.y·b.x). That determinant is orient2d's definition (Shewchuk 1997, section 4.1); this module computes it with no code shared with `geom-num`, and by another formula than `geom-num`'s (b − a) × (c − a), so the two agree only if both are right. Against it, `check` holds `geom-num` to three claims:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/orient2d.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to three valid grid points, reading at most [`MAX_INPUT_BYTES`] = 73 bytes; the bound is derived on the constant and a unit test builds the input that reaches it.",
+            "**The oracle cannot overflow on the grid.** Each coordinate has magnitude at most M = 2^40 − 1, so each of the six products is at most M² < 2^80, each 2 × 2 minor at most 2M² < 2^81, and the determinant at most 6M² < 2^83, far inside `i128`. Every step is a checked method all the same, and a step that failed would be reported as a [`Finding`] naming this harness as the defect, never a panic and never a wrapped value.",
+            "**A wrong answer is a [`Finding`]**, naming the claim, the points, the reference value and what `geom-num` gave. An error from the predicate, or a `None` from the exact path, is a finding too, never read as a sign: `geom-num` proves every grid input answers.",
+            "**A panic is a failure.** Nothing is caught: a panic in `geom-num` fails the run, and the engine reports the input.",
+            "**What is proven and what is tested.** For every case [`proof_case`] can give with bound [`PROOF_BOUND`] (every coordinate within `PROOF_BOUND` steps of 0 or of an edge ±(2^40 − 1) of the frame, in any combination), Kani proves that all three claims hold and that nothing on the way panics or overflows (`tests/orient2d.rs`, `orient2d_proof`; Kani checks every arithmetic step, index and unwrap by default). Near the edges the filter's products round, so the proof covers the filter's error bound, not only exact arithmetic. Everywhere else in the frame the claims are tested, by fuzzing and the property tests, not proven."
+          ],
+          "job": "Fuzz target and bounded proof: `geom-num`'s orient2d agrees with the exact determinant of its definition, computed here from scratch.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md",
+              "projects/kit/notes/G01-evidence/08-standards-coverage-testing.md",
+              "https://doi.org/10.1007/PL00009321"
+            ],
+            "text": "an exact oracle for a predicate, the first of chapter 28.6's checks (`projects/engines/geometry/architecture/28-testing.md`), with bounded Kani proofs of sign agreement with an exact integer reference, as evidence report 08 recommends for predicates (`projects/kit/notes/G01-evidence/08-standards-coverage-testing.md`, \"Recommended test architecture\", item 1). The reference is the 3 × 3 determinant of the definition, expanded by cofactors along the column of ones, in Shewchuk's paper: J. R. Shewchuk, \"Adaptive Precision Floating-Point Arithmetic and Fast Robust Geometric Predicates\", *Discrete & Computational Geometry* 18 (1997), 305–363, <https://doi.org/10.1007/PL00009321>."
+          },
+          "path": "geom_fuzz::orient2d",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "4 + 3 + 6 + 6 + 10 = 29 predicate calls per input, each constant time, and at most [`MAX_INPUT_BYTES`] bytes read.",
-          "does": "[`decode`] turns a fuzzer's bytes into grid points with `geom-test`'s [`GridSampler`] (four 2D points, then five 3D points). [`harness`] calls every exact predicate on them: `orient2d`, `incircle`, `orient3d` and `insphere`. For each, it checks that the predicate answers, then swaps every pair of points and checks that the sign flips, `Zero` staying `Zero`.",
+          "does": "[`decode`] turns a fuzzer's bytes into grid points with `geom-test`'s [`GridSampler`] (four 2D points, then five 3D points). [`check`] calls every exact predicate on them: `orient2d`, `incircle`, `orient3d` and `insphere`. For each, it checks that the predicate answers, then swaps every pair of points and checks that the sign flips, `Zero` staying `Zero`. [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout).",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-fuzz/src/predicates.rs",
           "guarantees": [
@@ -1383,9 +1412,19 @@
           "pinned": true,
           "purpose": "for its run limits above: `-T`, `--runs`, `--jobs` and `--max-input-length`. No code copied.",
           "take": "port-method"
+        },
+        {
+          "licence": "MIT OR Apache-2.0",
+          "link": "https://github.com/model-checking/kani/blob/0d2328a93f0e0ff66132d6bfa1a7d884877cf862/library/std/src/lib.rs",
+          "method_note": null,
+          "name": "Kani 0.68.0 `library/std/src/lib.rs`",
+          "notice": [],
+          "pinned": true,
+          "purpose": "for its `assert!` and `panic!`, which leave their messages unformatted during verification, the rule [`Finding::new`] follows for a finding's detail. No code copied.",
+          "take": "port-method"
         }
       ],
-      "sections": "chapter 27's `geom-fuzz` row and its rules for the development crates, and 28.5 of the kernel architecture (`projects/engines/geometry/architecture/`), in part: its tooling (one plain harness function, bolero's `check!` and the cargo-bolero command) and one target, on the swap law of 28.6; the seeded leg 28.2 asks for; the replay of every stored crash, 28.16; and the short fuzz and fixed seeds of 28.17.",
+      "sections": "chapter 27's `geom-fuzz` row and its rules for the development crates, and 28.5 of the kernel architecture (`projects/engines/geometry/architecture/`), in part: its tooling (one plain harness function, bolero's `check!`, libFuzzer under cargo-bolero, and `ClusterFuzzLite` on pull requests) and two targets, on the swap law and the exact oracle of 28.6; a bounded Kani proof of 28.7, on bolero's harness unchanged; the seeded leg 28.2 asks for; the replay of every stored crash, 28.16; and the short fuzz and fixed seeds of 28.17.",
       "spdx": null,
       "status": null,
       "summary": "Spare Kit geometry kernel, development only: the fuzz harnesses."
@@ -4234,6 +4273,23 @@
           "target": "bin"
         },
         {
+          "cost": "one analysis of the workspace ([`geom_test::recursion::analyse_repo`]); for `gate`, the builds and runs of [`geom_test::recursion::stack`].",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/bin/recursion.rs",
+          "guarantees": [
+            "`list` prints every cycle (its members, a path round it with the line of each call, and its statement or \"no stated bound\") and every recursive type, and exits 0 unless the code cannot be read; `check` prints every problem and exits 1 if there is any; `gate` runs `check`, then every bound test on the small stack in debug and release and the probes, and exits 1 if anything failed; `path` prints a shortest path round a cycle holding the named function, each call with how it was found (by path, on the receiver's type, through a bound, through a value, as a callback of outside code, ...), to show why it is recursive. Exit code 2 is a usage error or a workspace that cannot be read. None of them writes anything in the repository; `gate` builds in `target/recursion-stack`."
+          ],
+          "job": "`recursion`: list every recursive cycle in the crates that ship, check each has a stated depth bound that is true to the code, and run each bound's test on the small WebAssembly stack.",
+          "method": {
+            "none": "it parses its arguments and calls [`geom_test::recursion`], whose module headers carry the method."
+          },
+          "path": "recursion",
+          "provenance": [],
+          "spdx": null,
+          "target": "bin"
+        },
+        {
           "cost": "one read of every scanned file ([`geom_test::scan::repo::check`]).",
           "does": null,
           "family": [],
@@ -5019,6 +5075,375 @@
           "target": "lib"
         },
         {
+          "cost": "one parse of every file of the crates that ship and of the model, and one type check of each instance's body, again when what it read changes (see [`mono`]); the analysis runs on a thread with [`ANALYSIS_STACK`] bytes of stack, because the checker recurses over syntax trees.",
+          "does": "[`analyse`] reads every crate that ships (the kernel crates under `projects/engines/geometry/crates` and the facade `engine-geometry` and its binding crates, [`sources`]) with `syn` ([`model`], [`resolve`], [`macros`], [`cfg`]), together with a model of the standard library and `libm` written as Rust ([`stdlib`]), and builds the call graph of the program as the compiler copies it: one instance for each instantiation of each generic function, closures as types of their own ([`mono`]), each body type-checked as rustc does it, with inference variables ([`typeck`], over [`index`], [`ty`] and [`infer`]), so every call reaches what the compiler would call. It finds the graph's recursive cycles, named by the functions they run, and the kernel's recursive types ([`graph`]); reads every `Recursion:` statement of the module headers ([`statement`]); and checks each cycle against them ([`check`]): a cycle without a stated bound, a statement that names no cycle or not exactly one, a bound constant that disagrees, a test that is missing or does not reach its cycle, and code the analysis cannot read are all [`Problem`]s. [`stack`] runs the tests on the small stack. The binary `recursion` lists the cycles, checks them, and runs the tests:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/recursion.rs",
+          "guarantees": [
+            "**Every cycle is listed.** The call graph holds every call Rust can make in a build that ships ([`typeck`] states the routes, [`mono`] the treatment of generic parameters left open, and [`stdlib`] what the standard library may call back); a strongly connected component of it with a cycle is a recursive cycle ([`graph`]). Code the analysis cannot read, or whose types it cannot infer where a call depends on them, is a problem, never skipped, so the check cannot pass over code it did not see.",
+            "**A cycle without a stated bound fails**, and so does a statement that is not true to the code ([`check`]); CI runs the check in the merge gate (`.github/workflows/kernel-gate.yml`).",
+            "**Each stated bound is run** by its test on the small stack, in debug and in release, and the stack's limits are shown in force by probes ([`stack`]).",
+            "**Deterministic**: the same tree gives the same report, in the same order."
+          ],
+          "job": "The recursion check (piece G13; chapter 28.8): every recursive cycle in the crates that ship, each with its depth bound stated in a module header and tested on a small WebAssembly stack.",
+          "method": {
+            "links": [
+              "https://rustc-dev-guide.rust-lang.org/backend/monomorph.html",
+              "https://rustc-dev-guide.rust-lang.org/type-inference.html",
+              "https://doi.org/10.1137/0201010",
+              "projects/kit/notes/G01-evidence/13-vetting-smlib.md"
+            ],
+            "text": "a whole-program call graph from source by monomorphisation, as rustc's collector builds it from MIR (<https://rustc-dev-guide.rust-lang.org/backend/monomorph.html>), here from `syn`'s syntax trees with name resolution and type inference as rustc's type checker performs them (<https://rustc-dev-guide.rust-lang.org/type-inference.html>); cycles as strongly connected components (Tarjan, \"Depth-first search and linear graph algorithms\", SIAM J. Computing 1 (1972), <https://doi.org/10.1137/0201010>). The rule that input-driven recursion carries a stated bound because wasm32 has no guard page follows solidcore's (G01 evidence 13, `projects/kit/notes/G01-evidence/13-vetting-smlib.md`)."
+          },
+          "path": "geom_test::recursion",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the size of the attributes; no recursion beyond the nesting of `all`, `any`, `not` and `cfg_attr` as written.",
+          "does": "[`effective`] expands every `#[cfg_attr(predicate, attributes...)]` whose predicate is not known to be false into the attributes it adds, and [`ships`] says whether an item, statement or expression with those attributes is compiled into the crates that ship. A predicate is read in three values: `test`, `doc`, `doctest`, `kani` and `miri` are false (test, documentation, proof and interpreter builds are not what ships); every other option (`feature = \"...\"`, `target_arch = \"...\"`, `debug_assertions`, ...) is unknown, because some build that ships may set it. `all`, `any` and `not` combine them as Kleene's strong three-valued logic.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/recursion/cfg.rs",
+          "guarantees": [
+            "**Over every build that ships, never one.** Code is left out only when its predicate is false in every build of the crates that ship, so the call graph is the union of every feature and target, and code behind a feature or a target is analysed like the rest.",
+            "**A predicate it cannot read keeps the code.** A `cfg` or `cfg_attr` whose arguments do not parse is unknown, never false, so unreadable configuration never hides code."
+          ],
+          "job": "Which code ships: `#[cfg(...)]` and `#[cfg_attr(...)]` read for the recursion check.",
+          "method": {
+            "links": [
+              "https://doc.rust-lang.org/reference/conditional-compilation.html",
+              "https://doc.rust-lang.org/reference/conditional-compilation.html#the-cfg_attr-attribute",
+              "https://en.wikipedia.org/wiki/Three-valued_logic"
+            ],
+            "text": "the conditional-compilation grammar of The Rust Reference (<https://doc.rust-lang.org/reference/conditional-compilation.html>), its `cfg_attr` expansion (<https://doc.rust-lang.org/reference/conditional-compilation.html#the-cfg_attr-attribute>), evaluated in Kleene's strong logic of indeterminacy (S. C. Kleene, *Introduction to Metamathematics*, 1952, section 64; <https://en.wikipedia.org/wiki/Three-valued_logic>)."
+          },
+          "path": "geom_test::recursion::cfg",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in statements times cycles, plus one breadth-first search of the call graph per test.",
+          "does": "[`check`] matches each statement ([`crate::recursion::statement`]) to the cycle or recursive type it names, and reports:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/recursion/check.rs",
+          "guarantees": [
+            "**Every cycle is bounded or reported**, and every statement is checked against the code it names, so a bound cannot outlive its cycle or silently cover a cycle that grew.",
+            "**Names are resolved as the code resolves them**: relative to the statement's module, from `crate::`, or through its `use` declarations ([`crate::recursion::resolve`]).",
+            "**Deterministic.** Problems come in statement and cycle order."
+          ],
+          "job": "The recursion check's rules: every recursive cycle has a stated depth bound, and every statement is true to the code.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/HEADERS.md"
+            ],
+            "text": "matching of named sets against strongly connected components; reachability by breadth-first search (Cormen, Leiserson, Rivest and Stein, *Introduction to Algorithms*, 3rd edition, section 22.2); the module-header grammar of `projects/engines/geometry/HEADERS.md`."
+          },
+          "path": "geom_test::recursion::check",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in instances and edges for the components, plus one breadth-first search per cycle.",
+          "does": "[`cycles`] finds the strongly connected components of the call graph over instances ([`crate::recursion::mono`]) that hold a call cycle (more than one instance, or an instance that calls itself), names each by the functions and derived implementations its instances are copies of (a closure counted as the function it is written in), and joins components that share a function into one [`Cycle`], since a statement names functions as written. Each cycle carries a shortest path round it, with the file and line of each call and how it was found. [`type_cycles`] finds the kernel's structs, enums and unions that contain themselves, through any field type: their drop glue recurses over their nesting.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/recursion/graph.rs",
+          "guarantees": [
+            "**Every cycle.** A function that can be re-entered while it runs lies on a closed walk of the instance graph, which lies inside one strongly connected component, and every component holding a closed walk is reported, unless none of its instances belongs to a crate that ships (the bound tests exercise cycles; the standard library's model is not checked).",
+            "**Every recursive type.** A type that contains itself through its fields' types, at any depth and through the arguments of the standard library's types (`Box<T>`, `Vec<T>`, `Option<T>`), lies on a cycle of the field graph and is reported.",
+            "**Deterministic.** Cycles come in the order of their first member's name, members and paths in a fixed order."
+          ],
+          "job": "The recursion check's cycles: the recursive cycles of the instance call graph, named by the functions they run, and the kernel's recursive types.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/0201010",
+              "https://doi.org/10.1145/321879.321884"
+            ],
+            "text": "strongly connected components by Tarjan's algorithm (R. E. Tarjan, \"Depth-first search and linear graph algorithms\", SIAM J. Computing 1 (1972), <https://doi.org/10.1137/0201010>), from `petgraph`, whose implementation is iterative; components joined by union-find over shared names (R. E. Tarjan, \"Efficiency of a good but not linear set union algorithm\", J. ACM 22 (1975), <https://doi.org/10.1145/321879.321884>); shortest cycle paths by breadth-first search (Cormen, Leiserson, Rivest and Stein, *Introduction to Algorithms*, 3rd edition, section 22.2)."
+          },
+          "path": "geom_test::recursion::graph",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "building is linear in implementations and nodes; a lookup tries the implementations filed under the heads of the receiver's auto-dereference steps (at most [`DEREF_DEPTH`]), each by one unification; bounds of blanket implementations are checked to depth [`BOUND_DEPTH`].",
+          "does": "[`Index::new`] resolves every implementation's self type and trait and files it by the head of its self type ([`Head`]); every function's signature in types ([`Sig`]); every node's name (`geom_num::wide::I256::mul`, `<geom_num::wide::I256 as Mul>::mul`). Given an inference table ([`Infer`]), [`Index::probe`] finds what `receiver.name(...)` calls as rustc's method lookup does; [`Index::select`] which implementation of a trait a type uses (operators, `?`, `for`, conversions); [`Index::normalize`] resolves associated types; [`Index::assoc_fns`] finds what `Type::name` names.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/recursion/index.rs",
+          "guarantees": [
+            "**The compiler's lookup.** Method lookup tries the receiver's auto-dereference steps in order (references, `Deref` implementations, an array unsized to a slice), at each step the receiver by value and then by reference, and at each of those inherent methods before trait methods; the first that has a candidate whose receiver unifies wins. Traits need not be in scope (code that compiles names only methods it may call, so this only adds candidates when two traits offer one name, and then both are kept).",
+            "**Over-approximate where types are open.** Where unresolved variables let several implementations apply, every one of them is a candidate and none is committed to; a blanket implementation applies when its bounds may hold (a bound on a type not known yet may).",
+            "**Generic receivers.** On a receiver whose type is a generic parameter, an `impl Trait` or a projection, a method of one of its bounds is a [`Pick::Bound`]: the trait's default body for it, and the blanket implementations, are what it may run from here (other implementations are checked from their own instances, [`crate::recursion::mono`]). On a trait object, a [`Pick::Dyn`]: every implementation of the trait may run.",
+            "**Deterministic.** Every table is ordered and candidates come in implementation order."
+          ],
+          "job": "What a call may reach: the recursion check's tables of implementations and signatures, and its method lookup, trait selection and projection normalisation.",
+          "method": {
+            "links": [
+              "https://doc.rust-lang.org/reference/expressions/method-call-expr.html",
+              "https://rustc-dev-guide.rust-lang.org/method-lookup.html",
+              "https://rustc-dev-guide.rust-lang.org/traits/resolution.html",
+              "https://rustc-dev-guide.rust-lang.org/traits/goals-and-clauses.html#normalization",
+              "https://doi.org/10.1007/3-540-49538-X_5"
+            ],
+            "text": "Rust's method-call resolution (The Rust Reference, <https://doc.rust-lang.org/reference/expressions/method-call-expr.html>; the rustc dev guide, <https://rustc-dev-guide.rust-lang.org/method-lookup.html>); trait selection by unification of implementation headers with their bounds checked (<https://rustc-dev-guide.rust-lang.org/traits/resolution.html>); projection normalisation (<https://rustc-dev-guide.rust-lang.org/traits/goals-and-clauses.html#normalization>); class hierarchy analysis for trait objects (J. Dean, D. Grove and C. Chambers, ECOOP 1995, <https://doi.org/10.1007/3-540-49538-X_5>)."
+          },
+          "path": "geom_test::recursion::index",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a unification is linear in the size of the two types; finding a variable's root follows its chain of unions (no path compression, so undo stays simple).",
+          "does": "[`Infer`] holds the inference variables of one reading of one body: general ones, and the integer and floating-point ones an unsuffixed literal gets. [`Infer::unify`] makes two types equal by binding variables, and fails, binding nothing, when they cannot be; [`Infer::resolve`] gives a type with every bound variable replaced. [`Infer::snapshot`] and [`Infer::rollback_to`] let the checker try a unification (does this implementation apply?) and undo it. [`Infer::default_numeric`] gives the literal variables nothing else fixed their defaults, `i32` and `f64`, as the compiler does.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/recursion/infer.rs",
+          "guarantees": [
+            "**Unification is all or nothing.** A failed [`Infer::unify`] leaves the table as it was.",
+            "**No infinite types.** A variable is never bound to a type that holds it (the occurs check).",
+            "**Literal variables stay numeric.** An integer variable binds only to an integer type or a variable, a floating-point one only to a floating-point type or a variable.",
+            "**`!` and unknown types bind nothing.** Unifying with [`Ty::Never`] (which coerces to any type) or [`Ty::Unknown`] succeeds without binding, so a variable keeps the type its other uses give it."
+          ],
+          "job": "Inference variables for the recursion check's type checker: one table per body checked.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/321250.321253",
+              "https://doi.org/10.1145/321879.321884",
+              "https://rustc-dev-guide.rust-lang.org/type-inference.html",
+              "https://doc.rust-lang.org/reference/expressions/literal-expr.html"
+            ],
+            "text": "first-order unification with union-find over variables (J. A. Robinson, \"A machine-oriented logic based on the resolution principle\", J. ACM 12 (1965), <https://doi.org/10.1145/321250.321253>; R. E. Tarjan, \"Efficiency of a good but not linear set union algorithm\", J. ACM 22 (1975), <https://doi.org/10.1145/321879.321884>), with an undo log for snapshots, as rustc's `InferCtxt` keeps one (<https://rustc-dev-guide.rust-lang.org/type-inference.html>); integer and float variables and their defaults from The Rust Reference (<https://doc.rust-lang.org/reference/expressions/literal-expr.html>)."
+          },
+          "path": "geom_test::recursion::infer",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "matching is linear in the invocation's tokens for each rule tried, times the speculative parses of repetitions; transcription is linear in its output. Recursion follows the nesting of token groups in a macro's rules.",
+          "does": "[`read`] says what an invocation in a function body means for the call graph. The standard library's formatting macros (`format!`, `write!`, `panic!`, `assert_eq!`, ...) become their argument expressions, each with the formatting trait its placeholder calls (`{}` Display, `{:?}` Debug, `{:x}` `LowerHex`, ...), read from the format string by [`format_traits`]; `vec!`, `matches!`, `assert!`, `debug_assert!`, `dbg!` and `addr_of!` become the expressions they evaluate; macros that only make literals (`concat!`, `stringify!`, `line!`, `cfg!`, `include_str!`, ...) run nothing. A `macro_rules!` macro of the crates read is expanded by its own rules ([`expand`]): its matchers are matched fragment by fragment with `syn`'s parsers, with repetitions, and its transcriber is filled in, `$crate` included. [`expand_items`] does the same for invocations in item position.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/recursion/macros.rs",
+          "guarantees": [
+            "**What runs is read, or the invocation is reported.** An invocation is either read as above, or, for an outside macro the check does not know, read as comma-separated expressions or as statements when its tokens parse so, or else reported as unread ([`MacroRead::Unread`]); it is never skipped.",
+            "**Expansion is the compiler's.** Rules are tried in order and the first whose matcher matches the whole input is used; fragments are parsed by the same grammar `syn` gives the compiler's fragment kinds; a transcription whose repetitions do not agree in length is an error, as in the compiler.",
+            "**Terminates.** Expansion depth is limited to [`EXPANSION_LIMIT`], the compiler's default recursion limit."
+          ],
+          "job": "Macros for the recursion check: what code a macro invocation runs.",
+          "method": {
+            "links": [
+              "https://doc.rust-lang.org/reference/macros-by-example.html",
+              "https://doc.rust-lang.org/std/fmt/index.html#syntax"
+            ],
+            "text": "The Rust Reference, \"Macros By Example\": matching, fragment specifiers, repetitions, transcription and `$crate` (<https://doc.rust-lang.org/reference/macros-by-example.html>); `std::fmt`'s format string grammar (<https://doc.rust-lang.org/std/fmt/index.html#syntax>)."
+          },
+          "path": "geom_test::recursion::macros",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one parse of every file the module tree reaches; linear in the number of items; no recursion (modules and function bodies are queued).",
+          "does": "[`load`] parses each crate from its root file and follows its module tree as the compiler does: `mod name;` from `name.rs` or `name/mod.rs` beside its parent (or from a `#[path]`), inline `mod name { ... }`, and the items of function bodies, which get a scope of their own. It records every item that ships ([`crate::recursion::cfg`]): functions, methods of inherent and trait implementations, trait methods with default bodies, structs, enums, unions, traits, type aliases, constants, statics, `use` declarations and `macro_rules!` macros, and expands every macro invocation in item position ([`crate::recursion::macros`]). Each function body, and each implementation a `#[derive]` writes, is a [`Node`] of the call graph.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/recursion/model.rs",
+          "guarantees": [
+            "**The compiler's module tree.** A file is read only when a `mod` declaration that ships reaches it, by the reference's rules for `mod` files and `#[path]`, so code the compiler does not build is not analysed and code it builds is.",
+            "**Nothing unread passes silently.** A module file that cannot be found or parsed, an item form the reader does not know, and a macro in item position that cannot be expanded are each a [`Problem`]; the check fails on any problem.",
+            "**Deterministic.** Crates, modules and items are numbered in the order the files declare them, so node ids and every listing are the same on every run."
+          ],
+          "job": "The program the recursion check reads: every crate that ships, parsed by `syn`, as modules, items, implementations, generic parameters and function bodies.",
+          "method": {
+            "links": [
+              "https://doc.rust-lang.org/reference/items/modules.html",
+              "https://doc.rust-lang.org/reference/items.html",
+              "https://doc.rust-lang.org/reference/attributes/derive.html",
+              "https://docs.rs/syn/3.0.9/syn/"
+            ],
+            "text": "The Rust Reference on modules and the `path` attribute (<https://doc.rust-lang.org/reference/items/modules.html>), on items and associated items (<https://doc.rust-lang.org/reference/items.html>), and on derive (<https://doc.rust-lang.org/reference/attributes/derive.html>); parsing by `syn` (<https://docs.rs/syn/3.0.9/syn/>)."
+          },
+          "path": "geom_test::recursion::model",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one check of each instance's body, plus one more each time something it read changed.",
+          "does": "Rust compiles one copy of a generic function for each instantiation of its type parameters, and a closure is a type of its own whose body belongs to the copy of the function that writes it. [`analyse`] builds the call graph over those copies ([`Inst`]): its roots are every function, method, trait default body and derived implementation of the crates that ship and of the bound tests, a generic one with its parameters left open ([`Ty::Param`]: the copy that stands for every instantiation from outside the crates read). It checks each body ([`crate::recursion::typeck`]) and adds, for every call, the copy the call reaches with the generic arguments the checker inferred, queueing new copies. A body is checked again when something it read grows: the hidden type a callee's `impl Trait` result turned out to be, or the callables coerced to closure trait objects and function pointers anywhere, which a call through one may run. Each check of a body replaces that body's edges and problems.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/recursion/mono.rs",
+          "guarantees": [
+            "**Every copy a call can reach is an instance**, with the generic arguments the call fixes; a type nested deeper than [`crate::recursion::ty::MAX_DEPTH`] is cut to an unknown part, and a function with more than [`MAX_COPIES`] copies is reported, so the graph is finite.",
+            "**Generic parameters left open.** Dispatch on a receiver of a bare generic parameter reaches the trait's default body and blanket implementations, never the other implementations ([`crate::recursion::index::Pick::Bound`]), and a call through a bare generic callable reaches nothing. This loses no cycle: a cycle runs concrete copies, and every implementation and closure is a root of its own (a non-generic one is checked with its exact types, a generic one through its own open copy), from which the checker follows the cycle with types whose heads are known, dispatching exactly; and a cycle whose every copy is generic and that passes through a bare parameter's implementation would need a type that contains itself. What it avoids is the false cycle a generic implementation would form with its own copy at a nested type (`Vec<Vec<T>>`'s `clone` calling `Vec<T>`'s). Callables an open parameter stands for come from outside the crates read, and recursion through them is their caller's.",
+            "**A fixed point.** Hidden result types only become known and the callable sets only grow, and a body is checked again only when something it read changed; a body checked more than [`MAX_RUNS`] times is reported.",
+            "**Deterministic.** Instances are numbered in the order they are found, the work list is first in, first out, and every table is ordered."
+          ],
+          "job": "Instances: the recursion check's call graph over functions as the compiler copies them, one per instantiation of their generic parameters, and the work list that builds it.",
+          "method": {
+            "links": [
+              "https://rustc-dev-guide.rust-lang.org/backend/monomorph.html",
+              "https://doc.rust-lang.org/reference/types/closure.html",
+              "https://doi.org/10.1145/512950.512973"
+            ],
+            "text": "monomorphisation as rustc's collector performs it (<https://rustc-dev-guide.rust-lang.org/backend/monomorph.html>), here over the source with the checker's types, closures as types (The Rust Reference, <https://doc.rust-lang.org/reference/types/closure.html>); chaotic iteration to the least fixed point with a work list (P. Cousot and R. Cousot, POPL 1977, <https://doi.org/10.1145/512950.512973>; F. Nielson, H. R. Nielson and C. Hankin, *Principles of Program Analysis*, Springer 1999, section 1.6)."
+          },
+          "path": "geom_test::recursion::mono",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "each lookup is linear in the number of `use` declarations it follows, memoised per module, name and namespace; no recursion (lookups use an explicit work list).",
+          "does": "[`Resolver::resolve`] follows a path as the compiler's name resolution does: `crate`, `self`, `super` and `Self`; generic and const parameters; the items of a function body's scope, then of its module; `use` declarations, renamed, grouped, `self` and glob, and the re-exports they lead through; the other crates read by name, the standard library's model among them under its names `core`, `alloc` and `std` ([`crate::recursion::stdlib`]); and the standard prelude, from the model's `prelude` module. Later segments step into modules, enum variants and associated items. [`Resolver::ty`] turns a written type into a [`Ty`], expanding type aliases and `Self`, and [`Resolver::trait_ref`] a bound into a [`TraitRef`] with its associated-type bindings (`Fn(A) -> R` as `Fn<(A,)>` with `Output = R`).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/recursion/resolve.rs",
+          "guarantees": [
+            "**Every alternative.** A name defined twice in one namespace (as under `#[cfg]`s that are both kept, [`crate::recursion::cfg`]) resolves to both, so a call reaches every function it may name in some build.",
+            "**Terminates on any input.** `use` cycles and glob cycles are cut by a visited set; alias expansion stops at a fixed depth ([`ALIAS_DEPTH`]).",
+            "**Outside is outside.** A path is an outside path only when it starts at a crate that is neither read nor modelled (or, without a model, at the standard library or its prelude); a path that resolves nowhere resolves to nothing, and the type checker reports it."
+          ],
+          "job": "Name resolution for the recursion check: what a path in the kernel's source names, and what type a written type is.",
+          "method": {
+            "links": [
+              "https://doc.rust-lang.org/reference/paths.html",
+              "https://doc.rust-lang.org/reference/names/namespaces.html",
+              "https://doc.rust-lang.org/reference/items/use-declarations.html",
+              "https://doc.rust-lang.org/reference/names/preludes.html"
+            ],
+            "text": "The Rust Reference on paths, namespaces, `use` declarations and the preludes (<https://doc.rust-lang.org/reference/paths.html>, <https://doc.rust-lang.org/reference/names/namespaces.html>, <https://doc.rust-lang.org/reference/items/use-declarations.html>, <https://doc.rust-lang.org/reference/names/preludes.html>); visibility is not checked (code that compiles only names what it may see, so ignoring visibility only adds alternatives)."
+          },
+          "path": "geom_test::recursion::resolve",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "two builds of each crate's bound tests for `wasm32-wasip1` and their runs, and four builds and runs of the probe crate.",
+          "does": "[`run_bound_tests`] runs each crate's `tests/recursion.rs` for `wasm32-wasip1`, in debug and in release, linked with a shadow stack of [`STACK_BYTES`] in linear memory (`-C link-arg=-zstack-size=...`) and run by a WebAssembly engine whose own stack for WebAssembly frames is limited to [`ENGINE_STACK_BYTES`] ([`Runner`]), and checks that every test a statement names ran and passed. [`probes`] builds a small crate whose tests overflow each of the two stacks and requires them to trap with the small limits and pass with [`CONTROL_BYTES`], so a limit that was not applied fails the check instead of letting every bound pass.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/recursion/stack.rs",
+          "guarantees": [
+            "**A named test that did not run is a failure**, as is one that failed or a run that trapped, so a test skipped, ignored or renamed cannot pass the check.",
+            "**The limits are shown to be in force**: the probes trap with them and pass without them, in the same build and runner as the bound tests, or the check fails.",
+            "**Nothing outside steers the build**: each run starts without the variables that change the compiler, its flags or the target (`SCRUBBED_ENV`), builds in its own folder and uses `--locked`."
+          ],
+          "job": "The small WebAssembly stack: every stated bound's test run there, and probes that show the stack's limits are in force.",
+          "method": {
+            "links": [
+              "https://lld.llvm.org/WebAssembly.html",
+              "https://docs.wasmtime.dev/cli-options.html",
+              "https://nodejs.org/api/worker_threads.html",
+              "https://nodejs.org/api/wasi.html",
+              "https://doc.rust-lang.org/cargo/reference/config.html#targettriplerunner"
+            ],
+            "text": "wasm-ld's `-z stack-size` (<https://lld.llvm.org/WebAssembly.html>); wasmtime's `-W max-wasm-stack` (<https://docs.wasmtime.dev/cli-options.html>); Node's `worker_threads` `resourceLimits.stackSizeMb` and `node:wasi` (<https://nodejs.org/api/worker_threads.html>, <https://nodejs.org/api/wasi.html>); cargo's target runner (<https://doc.rust-lang.org/cargo/reference/config.html#targettriplerunner>); libtest's output lines (`test <name> ... ok`)."
+          },
+          "path": "geom_test::recursion::stack",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the length of the header.",
+          "does": "[`read`] finds the `Recursion:` paragraph of a file's `//!` header and reads the list after it. Each item states one cycle (or one group of recursive types) in four labelled parts, the first on the item's first line and each other at the start of a line of its own:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/recursion/statement.rs",
+          "guarantees": [
+            "**Read as written, or reported.** A part that is missing, written twice, empty, a placeholder ([`crate::map::header::PLACEHOLDERS`]) or malformed is a [`Problem`] naming the file, the line and what to write; a `Recursion:` paragraph without a list, or written twice, is one too. A statement is never read from text that is not in this grammar.",
+            "**Header only.** Only the `//!` lines that open the file are read, as the map reads headers (`projects/engines/geometry/HEADERS.md`)."
+          ],
+          "job": "The `Recursion` field of a module header: each recursive cycle's stated depth bound.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/HEADERS.md"
+            ],
+            "text": "the header grammar of `projects/engines/geometry/HEADERS.md` (paragraphs, `- ` list items with indented continuation lines, labels before a colon), which this field joins."
+          },
+          "path": "geom_test::recursion::statement",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "two more crates for the loader to parse, about 5 000 lines; their instances are checked only when kernel code calls them.",
+          "does": "the kernel's crates call `core`, `alloc` (and `std` in tests) and `libm` constantly, and the standard library calls kernel code back through what it is handed: closures (`Option::map`, `Iterator::fold`, `sort_by`) and trait implementations of kernel types (`sort` runs `Ord::cmp`, `Vec::clone` runs `Clone::clone`, formatting runs `Display::fmt`). Their real source is not read; instead [`CORE`] and [`LIBM`] are Rust written from their documented signatures, which [`sources`] gives the loader as two crates of role [`Role::Model`]: `core` (also answering to `alloc` and `std`, [`crate::recursion::resolve::MODEL_ALIASES`]) and `libm`. A function of the model that calls back has a body that makes exactly those calls (`Option::map` calls `f`; `Map`'s `next` calls its closure; `[T]::sort` calls `T::cmp`); one that calls nothing back has the body `loop {}`. The type checker reads the model's bodies as it reads the kernel's, instance by instance, so a callback reaches exactly the closure or implementation the call was handed.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/recursion/stdlib.rs",
+          "guarantees": [
+            "**Never less than the library calls.** Each modelled function's body calls every closure it is handed and every trait method of its type parameters that the documented function may call; adapters that defer a call (an iterator's `map`) keep the closure in their result and call it where the library does (in `next`). By parametricity, code that does not know the kernel's types reaches kernel code only through the values and bounds it is handed (J. C. Reynolds, \"Types, abstraction and parametric polymorphism\", IFIP 1983; P. Wadler, \"Theorems for free!\", FPCA 1989, <https://doi.org/10.1145/99370.99404>), so these are all the calls it can make into the kernel.",
+            "**What is not modelled is reported.** A path into the standard library that names nothing in the model resolves to nothing, and the type checker reports it as code it cannot read; the model is extended rather than guessed."
+          ],
+          "job": "The recursion check's model of the standard library and of `libm`: Rust source the check reads in place of theirs, so a call into them is checked as any other call is.",
+          "method": {
+            "links": [
+              "https://doc.rust-lang.org/std/",
+              "https://doc.rust-lang.org/core/",
+              "https://docs.rs/libm/0.2.16/libm/"
+            ],
+            "text": "the standard library's documented signatures and behaviour (<https://doc.rust-lang.org/std/>, <https://doc.rust-lang.org/core/>, <https://docs.rs/libm/0.2.16/libm/>), written as stubs: a library model, which the type checker reads as ordinary code, under parametricity as above."
+          },
+          "path": "geom_test::recursion::stdlib",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "each operation is linear in the size of the types it touches; recursion follows the nesting of a type, which [`MAX_DEPTH`] bounds for every type an instance is keyed by.",
+          "does": "[`Ty`] is a type of the program: a primitive, a struct, enum or union of the crates read (the standard library's model among them, [`crate::recursion::stdlib`]) with its arguments, a reference or raw pointer, a slice, array or tuple, a generic parameter left open, a trait object, a return-position `impl Trait`, a projection not yet resolved, a function pointer, one closure, one function item, the never type, an inference variable of the body being checked, a `_` written in the source, or a type the checker could not infer ([`Ty::Unknown`]). [`TraitRef`] is a trait with its arguments and its associated-type bindings (`Iterator<Item = u64>`; `Fn(A) -> R` is `Fn<(A,)>` with `Output = R`).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/recursion/ty.rs",
+          "guarantees": [
+            "**One type per value.** As in Rust, every expression of one instance has exactly one type; what the checker does not know yet is an inference variable, and what it cannot learn is [`Ty::Unknown`], which the checker reports wherever a call would depend on it.",
+            "**Finite.** [`Ty::cut`] replaces everything nested deeper than [`MAX_DEPTH`] by [`Ty::Unknown`], so instances, which are keyed by types, are finitely many.",
+            "**Deterministic.** Types are ordered (`Ord`), so every table keyed by them iterates the same way on every run."
+          ],
+          "job": "Types for the recursion check's type checker: Rust's types as far as a call graph needs them, with inference variables.",
+          "method": {
+            "links": [
+              "https://doc.rust-lang.org/reference/types.html",
+              "https://doc.rust-lang.org/reference/types/closure.html",
+              "https://doc.rust-lang.org/reference/types/function-item.html",
+              "https://rustc-dev-guide.rust-lang.org/type-inference.html"
+            ],
+            "text": "the type grammar of The Rust Reference (<https://doc.rust-lang.org/reference/types.html>), with closures and function items as types of their own (<https://doc.rust-lang.org/reference/types/closure.html>, <https://doc.rust-lang.org/reference/types/function-item.html>), and inference variables as in rustc's type checker (<https://rustc-dev-guide.rust-lang.org/type-inference.html>)."
+          },
+          "path": "geom_test::recursion::ty",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one pass over each instance's body, each expression's lookups as [`Index`] costs them, and at most [`MAX_SETTLE`] rounds over the obligations. The checker recurses over the syntax tree, so its depth is the nesting depth of the source's expressions; [`crate::recursion::analyse`] runs it on a thread with a large stack.",
+          "does": "[`body`] checks the body of one instance ([`crate::recursion::mono`]) as rustc's type checker does, in one pass over the source with inference variables ([`Infer`]): every expression gets a type, from the signatures and field types the source writes (the standard library's model among them, [`crate::recursion::stdlib`]), literals, and what unification learns; an expected type flows down into each expression (a `let` annotation, a parameter's type, a closure bound's parameters). Every call is recorded with what it calls:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/recursion/typeck.rs",
+          "guarantees": [
+            "**Every call is an edge, or the code is reported.** A call whose target cannot be known (a receiver whose type cannot be inferred, a path that resolves to nothing, a method no type has, a syntax form the checker does not read) is a [`Problem`]; the check fails on any.",
+            "**Precise where the program is.** A call reaches exactly what the compiler would call for the instance's types, through the standard library's model, apart from what [`Index::probe`] and [`crate::recursion::mono`] state for generic receivers and trait objects.",
+            "**Deterministic.** One pass in source order (closure arguments after the others, as rustc checks them), obligations in the order they were made."
+          ],
+          "job": "The type checker: every call one instance's body makes, as edges of the call graph.",
+          "method": {
+            "links": [
+              "https://rustc-dev-guide.rust-lang.org/type-inference.html",
+              "https://rustc-dev-guide.rust-lang.org/ty-module/instantiating-binders.html",
+              "https://rustc-dev-guide.rust-lang.org/traits/resolution.html",
+              "https://rust-lang.github.io/rfcs/2005-match-ergonomics.html",
+              "https://doc.rust-lang.org/reference/expressions.html",
+              "https://doc.rust-lang.org/reference/patterns.html",
+              "https://doc.rust-lang.org/reference/type-coercions.html",
+              "https://doc.rust-lang.org/reference/destructors.html"
+            ],
+            "text": "Hindley-Milner inference with bidirectional checking as rustc's typeck performs it (<https://rustc-dev-guide.rust-lang.org/type-inference.html>, <https://rustc-dev-guide.rust-lang.org/ty-module/instantiating-binders.html>), with deferred obligations (<https://rustc-dev-guide.rust-lang.org/traits/resolution.html>) and default binding modes for patterns (RFC 2005, <https://rust-lang.github.io/rfcs/2005-match-ergonomics.html>); expression, pattern and statement semantics from The Rust Reference (<https://doc.rust-lang.org/reference/expressions.html>, <https://doc.rust-lang.org/reference/patterns.html>), its operator traits, `?`, `for` loops, coercions (<https://doc.rust-lang.org/reference/type-coercions.html>) and drop scopes (<https://doc.rust-lang.org/reference/destructors.html>)."
+          },
+          "path": "geom_test::recursion::typeck",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a handful of integer operations per word. [`SplitMix64::below`] draws one word, and draws again with probability below `n / 2^64`, so fewer than two words on average.",
           "does": "[`SplitMix64`] turns a [`Seed`] into a stream of 64-bit words. [`ByteSource`] turns a fuzzer's bytes into the same kind of stream. Both implement [`Entropy`], so one builder (for example [`crate::grid::GridSampler`]) makes test data from a seed in a property test and from coverage-guided bytes in a fuzz target.",
           "family": [],
@@ -5449,6 +5874,17 @@
         "projects/engines/geometry/crates/geom-bench/src/callgrind.rs",
         "projects/engines/geometry/crates/geom-bench/src/counts.rs",
         "projects/engines/geometry/crates/geom-bench/src/lib.rs"
+      ]
+    },
+    {
+      "licence": "MIT OR Apache-2.0",
+      "link": "https://github.com/model-checking/kani/blob/0d2328a93f0e0ff66132d6bfa1a7d884877cf862/library/std/src/lib.rs",
+      "method_note": null,
+      "name": "Kani 0.68.0 `library/std/src/lib.rs`",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-fuzz/src/lib.rs"
       ]
     },
     {

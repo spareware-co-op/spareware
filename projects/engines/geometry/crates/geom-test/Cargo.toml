@@ -23,7 +23,8 @@ toml = "=0.9.6"
 # Rust's lexer, the one syn parses with, so the map reads source as rustc does (src/map/rust.rs;
 # piece G12a put it in place of a lexer written there; chapter 29.1). proc-macro2 1.0.107: MIT OR
 # Apache-2.0, without its default proc-macro feature (the map runs outside a macro) and with
-# span-locations for byte offsets; the version engine-geometry's scaffold check pins.
+# span-locations for byte offsets (also the line of each call site the recursion check names,
+# piece G13); the version engine-geometry's scaffold check pins.
 proc-macro2 = { version = "=1.0.107", default-features = false, features = ["span-locations"] }
 # The golden store (`golden::store`), read into typed records with unknown fields refused.
 # MIT OR Apache-2.0.
@@ -37,11 +38,18 @@ sha2 = { version = "0.11.0", default-features = false }
 # MIT OR Apache-2.0. Without its default features, so it has no generator of its own and never
 # reaches the operating system's random source.
 rand = { version = "0.10.3", default-features = false }
-# Rust's grammar for the golden store's repository check (`golden::repo`): every kernel source is
-# parsed as Rust, so a comment or a string never counts as code. MIT OR Apache-2.0. Without its
-# default features: the full syntax tree, its parser and its visitor only, no procedural-macro or
-# printing support.
-syn = { version = "2.0.119", default-features = false, features = ["full", "parsing", "visit"] }
+# Rust's grammar, for the golden store's repository check (`golden::repo`), where every kernel
+# source is parsed as Rust so a comment or a string never counts as code, and for the recursion
+# check's call graph (src/recursion). MIT OR Apache-2.0. The 3.0 line, the one serde's derive
+# already brings into this crate's build, so the build holds one copy. Without its default
+# features: the full syntax tree, its parser, printer and visitors, and the clone and debug traits
+# the recursion check uses; no procedural-macro support.
+syn = { version = "3.0.9", default-features = false, features = ["full", "parsing", "printing", "visit", "visit-mut", "clone-impls", "extra-traits"] }
+# Token printing, for the recursion check's names. MIT OR Apache-2.0.
+quote = { version = "1.0.47", default-features = false }
+# The recursion check's graph and its strongly connected components (Tarjan's algorithm). MIT OR
+# Apache-2.0. Without its default features.
+petgraph = { version = "0.8.3", default-features = false }
 
 [dev-dependencies]
 # A CommonMark parser, so tests/attack_g17.rs reads the kernel's README.md, AGENTS.md and
@@ -62,6 +70,9 @@ num-rational = "0.4.2"
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"
+# Kani sets `cfg(kani)` when it compiles a proof; proofs and the code they need sit beside the
+# code under it (chapter 28.7).
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(kani)"] }
 
 [lints.clippy]
 # The crate is written to clippy's pedantic idioms; CI denies every warning.

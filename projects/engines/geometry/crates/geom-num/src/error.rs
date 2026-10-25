@@ -13,7 +13,20 @@
 use core::fmt;
 
 /// Why a number could not be made or an exact computation could not proceed.
+///
+/// Under Kani, its tag is one byte (`repr(u8)`, set only when `cfg(kani)` is on). Left to itself,
+/// rustc widens the tag to the 16-byte alignment of `OutOfRange`'s `i128`, and a
+/// `Result<_, NumError>` then marks `Ok` with the tag value 2^128 − 1. Kani 0.68.0 cannot compile a
+/// read of such a niche whose start exceeds `u64` (`kani-compiler/src/codegen_cprover_gotoc/
+/// codegen/rvalue.rs`, `codegen_get_discriminant`, `u64::try_from(*niche_start).unwrap()`; open as
+/// <https://github.com/model-checking/kani/issues/5024>), so without it no function that matches
+/// on a `Result<_, NumError>`, `P2::new` among them, could be proven by Kani (chapter 28.7; found
+/// by G14's proof, `geom-fuzz`'s `tests/orient2d.rs`). Built normally, the layout is rustc's own:
+/// the one-byte tag in every build cost `interval::new` 12.7% more instructions on x86-64 (the
+/// count gate on G14's pull request), and the tag's width changes no value safe code can observe,
+/// so the proofs cover the same behaviour. Drop the attribute once Kani reads such niches.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(kani, repr(u8))]
 pub enum NumError {
     /// A coordinate is outside the 40-bit range of a frame (more than 2^40 − 1 grid steps from its
     /// origin).
