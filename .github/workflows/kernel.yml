@@ -168,6 +168,30 @@ jobs:
         if: ${{ !cancelled() && matrix.mode == 'debug' }}
         run: cargo test $KERNEL_CRATES --locked --no-fail-fast
 
+  guard:
+    name: The toolchain guard trips
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # The proof of the toolchain and dependency guard (chapter 28.13; piece G20). This workflow
+    # reruns every golden on every target whenever the toolchain pin, Cargo.lock, the workspace
+    # manifest or anything under the kernel changes (the path filters above), so a change there
+    # that moves a result fails the test job. This job shows that it would: `guard prove` patches
+    # in a copy of libm whose sin flips the last bit of every result, one ulp, and requires
+    # geom-num's determinism golden to report a digest that differs from the store's. A run that
+    # passes, builds the real libm, or fails for another reason fails this job.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: guard
+      - name: A one-bit change to libm's sin fails a golden
+        run: cargo run --locked --release -p geom-test --bin guard -- prove
+
   wasm:
     name: Test (wasm32-wasip1 under ${{ matrix.runtime }})
     runs-on: ubuntu-latest

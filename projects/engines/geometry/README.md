@@ -45,7 +45,7 @@ Six workflows in `.github/workflows/` guard the kernel. [AGENTS.md](AGENTS.md), 
 
 | Workflow | What it proves |
 | --- | --- |
-| `kernel.yml` | Formatting, clippy with the kernel's lints, and every test, natively on six runners (Linux, Windows and macOS on x86-64 and arm64) in debug and release, and on 32-bit WebAssembly under wasmtime and Node; the golden digests that prove the same bits everywhere |
+| `kernel.yml` | Formatting, clippy with the kernel's lints, and every test, natively on six runners (Linux, Windows and macOS on x86-64 and arm64) in debug and release, and on 32-bit WebAssembly under wasmtime and Node; the golden digests that prove the same bits everywhere, rerun whenever the toolchain pin or `Cargo.lock` changes, and the proof that a one-bit change to `libm` fails them |
 | `kernel-build.yml` | The crate table, and every kernel crate built on its own with warnings denied, natively, for WebAssembly, and for a target with no `std` |
 | `kernel-gate.yml` | The merge gate: licences, advisories and sources (cargo-deny), chapter 21's bans on platform maths, hash maps, clocks and randomness, no global state, and `no_std` builds, each shown to fail on a seeded violation |
 | `kernel-dev.yml` | The development crates on WebAssembly, every generated file current, and every header complete with `MAP.json` current |
