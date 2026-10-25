@@ -581,7 +581,12 @@ fn the_workflow_passes_the_documented_limits_and_build() {
         "geom-bench-counts\" removed",
         "--save-summary=json",
         "\"$CARGO_TARGET_DIR/release/geom-bench-counts\" callgrind",
-        "\"$CARGO_TARGET_DIR/gungraun/geom-bench/instructions\"",
+        "\"$GUNGRAUN_HOME/geom-bench/instructions\"",
+        // Each tree builds apart (cargo names a path crate's build by its place in the workspace),
+        // and both trees' saved runs share one Gungraun home.
+        "GUNGRAUN_HOME: ${{ github.workspace }}/gungraun",
+        "CARGO_TARGET_DIR: ${{ github.workspace }}/target-base",
+        "--target-dir \"$CARGO_TARGET_DIR/guest-$1\"",
         "retired.txt",
         "test --locked --release -p geom-bench",
         "fmt --check -p geom-bench",
