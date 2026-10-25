@@ -211,11 +211,11 @@ const ROUNDS_INSIDE: i64 = 2 * COORD_MAX + 1;
 const TWO_POW_126: i128 = 1 << 126;
 
 /// Limbs of [`I384`], the width every wide budget here fits (limit 2^383).
-const BUDGET_LIMBS: usize = 6;
+pub(crate) const BUDGET_LIMBS: usize = 6;
 
 /// Limbs of [`I512`] (limit 2^511), the width of the total path, where no step of
 /// [`Plane::side_of_tpi`] or [`Tpi::to_grid`] can overflow for any value the types hold.
-const TOTAL_LIMBS: usize = 8;
+pub(crate) const TOTAL_LIMBS: usize = 8;
 
 /// A plane: the points p with n · p + d = 0, with integer coefficients.
 ///
@@ -852,13 +852,25 @@ fn classify<const L: usize>(n: &[i128; 3], d: i128, x: &[I320; 3], w: &I256) -> 
 /// `None` if a step does not fit `Wide<L>`, or if w = 0, which no [`Tpi`] has; the inner `Result`
 /// is the commit, or `OutOfRange` for the first coordinate outside the frame.
 fn commit<const L: usize>(x: &[I320; 3], w: &I256) -> Option<Result<Rounded<P3>, NumError>> {
+    Some(commit_axes::<L, 3>(x, w)?.map(|([x, y, z], exact)| Rounded::new(P3 { x, y, z }, exact)))
+}
+
+/// Each of N homogeneous numerators `x` over the denominator `w` committed to the grid, half to
+/// even, in `Wide<L>`, with whether every coordinate was exact: the rounding of [`commit`], shared
+/// by every implicit point, in two dimensions and three. The outer `Option` is `None` if a step
+/// does not fit `Wide<L>`, or if w = 0; the inner `Result` is the coordinates, or `OutOfRange` for
+/// the first one outside the frame.
+pub(crate) fn commit_axes<const L: usize, const N: usize>(
+    x: &[I320; N],
+    w: &I256,
+) -> Option<Result<([Coord; N], bool), NumError>> {
     if w.is_zero() {
         return None;
     }
     let w_negative = w.is_negative();
     let w = w.resize::<L>()?;
     let w = if w_negative { w.checked_neg()? } else { w };
-    let mut coords = [Coord::ZERO; 3];
+    let mut coords = [Coord::ZERO; N];
     let mut exact = true;
     for (coord, xi) in coords.iter_mut().zip(x.iter()) {
         match round_axis(xi, &w, w_negative)? {
@@ -869,8 +881,7 @@ fn commit<const L: usize>(x: &[I320; 3], w: &I256) -> Option<Result<Rounded<P3>,
             Err(e) => return Some(Err(e)),
         }
     }
-    let [x, y, z] = coords;
-    Some(Ok(Rounded::new(P3 { x, y, z }, exact)))
+    Some(Ok((coords, exact)))
 }
 
 /// 2^127 in `Wide<L>`, made as 2^126 + 2^126 so that no step leaves `i128`, or `None` if it does
