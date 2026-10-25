@@ -67,8 +67,9 @@ const _: () = assert!(MAX_LEN as usize >= MAX_INPUT_BYTES);
 /// harness for every byte string of at most this many bytes (`geom_fuzz::orient2d`, what is proven
 /// and what is tested). The longest that fits the Kani job's budget: in the trials of PR #209,
 /// strings of at most 4 bytes proved in 8 minutes and 8, 16 and 24 bytes did not finish within the
-/// job's hour (the crate README).
-const KANI_MAX_LEN: usize = 4;
+/// job's hour; after G28 routed orient2d to its exact paths on 64-bit targets, 4 bytes no longer
+/// finished either, so the bound is 2 (the crate README).
+const KANI_MAX_LEN: usize = 2;
 
 /// Draws of the proof's domain with bound `bound`: for each of the six coordinates, near an edge
 /// or not, negative or not, and an offset in `0..=bound`. Under Kani each choice is symbolic,

@@ -107,8 +107,10 @@ Rules:
 - Each Kani bound is measured, not guessed: trial harnesses ran on the hosted runner until each
   bound was chosen, then were removed. For orient2d (PR #209) the proof's bound is 1 (bound 0
   took 3½ minutes, 1 took 19, and 3, 7 and 15 did not finish within the job's hour) and the fuzz
-  target is proven on every byte string of at most 4 bytes (8 minutes; 8, 16 and 24 bytes did not
-  finish). A new target repeats the trials before its bounds are set.
+  target was proven on every byte string of at most 4 bytes (8 minutes; 8, 16 and 24 bytes did not
+  finish). Once G28 routed orient2d to its exact paths on 64-bit targets, 4 bytes no longer
+  finished within the hour, so the fuzz target's bound is 2. A new target, or a change to the code
+  a proof reaches, repeats the trials before its bounds are set.
 - The proof test sets Kani's unwind bound above the longest loop a passing case runs (10 for
   orient2d: six coordinates), so a loop Kani cannot bound is cut rather than unwound forever.
   Kani's unwinding assertions, on by default, fail the proof if a cut loop can be reached, so
