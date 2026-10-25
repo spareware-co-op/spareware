@@ -157,6 +157,7 @@
               "link": "https://www.cs.cmu.edu/afs/cs/project/quake/public/code/predicates.c",
               "method_note": null,
               "name": "J. R. Shewchuk, `predicates.c`",
+              "notice": [],
               "pinned": false,
               "purpose": "for its signs.",
               "take": "port-method"
@@ -238,6 +239,7 @@
               "link": "https://github.com/example/lgpl/blob/0123456789abcdef0123456789abcdef01234567/widen.h#L1-L9",
               "method_note": "projects/engines/geometry/methods/example-widening.md",
               "name": "Example `widen.h`",
+              "notice": [],
               "pinned": true,
               "purpose": "for its widening.",
               "take": "port-method"
@@ -268,6 +270,9 @@
               "link": "https://github.com/example/example/blob/0123456789abcdef0123456789abcdef01234567/src/x.c",
               "method_note": null,
               "name": "Example",
+              "notice": [
+                "Copyright (c) 2020 Example Authors"
+              ],
               "pinned": true,
               "purpose": "rewritten in Rust with checked arithmetic.",
               "take": "port"

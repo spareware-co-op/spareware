@@ -11,8 +11,8 @@
 //! Map: chapter 6 of the kernel architecture
 //! (`projects/engines/geometry/architecture/06-numbers.md`), with the numeric parts of chapters 9
 //! (exactness), 21 (determinism) and 28 (testing), and the random generator chapters 16
-//! (free-form) and 17 (survey, terrain and civil) ask of this crate ([`rng`], which also holds the
-//! randomised-method rule).
+//! (free-form) and 17 (survey, terrain and civil) ask of this crate ([`rng`], the one generator of
+//! the randomised-method rule in the kernel's `AGENTS.md`).
 //!
 //! Invariants this crate keeps:
 //!
