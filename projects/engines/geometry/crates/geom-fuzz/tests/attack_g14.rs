@@ -451,7 +451,7 @@ fn layout_violations(
                 found.push(format!("tests/{t}.rs has no `{test}`"));
             }
         }
-        if !text.contains("for_each(|data: &[u8]| harness(data))") {
+        if !text.contains("for_each(|data: &[u8]| holds(harness(data)))") {
             found.push(format!(
                 "tests/{t}.rs does not hand the fuzzer's raw bytes to its harness"
             ));
@@ -559,8 +559,8 @@ fn attack_every_target_has_its_tests_and_is_in_both_ci_matrices() {
     let mut typed = tests.clone();
     let text = typed.get_mut("orient2d").unwrap();
     *text = text.replace(
-        ".for_each(|data: &[u8]| harness(data))",
-        ".for_each(|data: &[u8]| harness(&data[1..]))",
+        ".for_each(|data: &[u8]| holds(harness(data)))",
+        ".for_each(|data: &[u8]| holds(harness(&data[1..])))",
     );
     assert!(
         layout_violations(&targets, &typed, &workflow)

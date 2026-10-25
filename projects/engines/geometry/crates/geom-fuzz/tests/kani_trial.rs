@@ -25,7 +25,10 @@
     clippy::indexing_slicing
 )]
 
+mod common;
+
 use bolero::{ValueGenerator, check, produce};
+use common::holds;
 use geom_fuzz::Finding;
 use geom_fuzz::orient2d::{self, ProofDraw, harness, proof_case};
 
@@ -49,21 +52,6 @@ fn prove(bound: u64, draw: &ProofDraw) -> Result<(), Finding> {
         })
     })?;
     orient2d::check(&case)
-}
-
-/// Panics with `verdict`'s finding, if it has one.
-///
-/// A proof test's body panics on a broken law rather than returning the `Finding`. Under Kani,
-/// bolero's engine turns a returned error into its `PanicError`, whose constructor may capture a
-/// backtrace (`bolero-engine`'s `panic.rs`), and Kani would have to explore that capture, which
-/// kept the first proofs in symbolic execution for an hour. A panic under Kani is a failed
-/// property and nothing more: Kani's `panic!` formats nothing, and its report traces every value.
-/// Under `cargo test` bolero catches the panic and prints its message, the finding, with the
-/// failing draw.
-fn holds(verdict: Result<(), Finding>) {
-    if let Err(finding) = verdict {
-        panic!("{finding}");
-    }
 }
 
 #[cfg_attr(target_family = "wasm", ignore = "bolero's test mode catches panics")]

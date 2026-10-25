@@ -35,6 +35,9 @@
     clippy::indexing_slicing
 )]
 
+mod common;
+
+use common::holds;
 use core::sync::atomic::{AtomicBool, Ordering};
 
 use geom_fuzz::predicates::{MAX_INPUT_BYTES, harness};
@@ -69,7 +72,7 @@ fn predicates_fuzz() {
     bolero::check!()
         .with_iterations(ITERATIONS)
         .with_max_len(usize::from(MAX_LEN))
-        .for_each(|data: &[u8]| harness(data));
+        .for_each(|data: &[u8]| holds(harness(data)));
 }
 
 /// bolero's test mode fails, with its panic "test failed", on a harness that returns a

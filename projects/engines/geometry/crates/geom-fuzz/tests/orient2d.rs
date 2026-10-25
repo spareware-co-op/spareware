@@ -38,7 +38,10 @@
     clippy::indexing_slicing
 )]
 
+mod common;
+
 use bolero::{ValueGenerator, check, produce};
+use common::holds;
 use geom_fuzz::Finding;
 use geom_fuzz::orient2d::{self, MAX_INPUT_BYTES, PROOF_BOUND, ProofDraw, harness, proof_case};
 use geom_fuzz::seeded;
@@ -59,6 +62,11 @@ const SEEDED_CASES: u32 = 20_000;
 const MAX_LEN: u16 = 96;
 
 const _: () = assert!(MAX_LEN as usize >= MAX_INPUT_BYTES);
+
+/// The longest byte string Kani proves the fuzz target on: under Kani, `orient2d_fuzz` proves the
+/// harness for every byte string of at most this many bytes (`geom_fuzz::orient2d`, what is proven
+/// and what is tested). The longest that fits the Kani job's budget (the crate README).
+const KANI_MAX_LEN: usize = 8;
 
 /// Draws of the proof's domain with bound `bound`: for each of the six coordinates, near an edge
 /// or not, negative or not, and an offset in `0..=bound`. Under Kani each choice is symbolic,
@@ -86,32 +94,24 @@ fn prove(bound: u64, draw: &ProofDraw) -> Result<(), Finding> {
     orient2d::check(&case)
 }
 
-/// Panics with `verdict`'s finding, if it has one.
-///
-/// A proof test's body panics on a broken law rather than returning the [`Finding`]. Under Kani,
-/// bolero's engine turns a returned error into its `PanicError`, whose constructor may capture a
-/// backtrace (`bolero-engine`'s `panic.rs`), and Kani would have to explore that capture, which
-/// kept the first proofs in symbolic execution for an hour. A panic under Kani is a failed
-/// property and nothing more: Kani's `panic!` formats nothing, and its report traces every value.
-/// Under `cargo test` bolero catches the panic and prints its message, the finding, with the
-/// failing draw.
-fn holds(verdict: Result<(), Finding>) {
-    if let Err(finding) = verdict {
-        panic!("{finding}");
-    }
-}
-
 #[cfg_attr(
     target_family = "wasm",
     ignore = "bolero's test mode reads its corpus folders from the host and catches panics, \
               which WASI cannot; the seeded leg runs the same harness there"
 )]
 #[test]
+#[cfg_attr(kani, kani::proof)]
+#[cfg_attr(kani, kani::solver(cadical))]
+#[cfg_attr(kani, kani::unwind(10))]
 fn orient2d_fuzz() {
     check!()
         .with_iterations(ITERATIONS)
-        .with_max_len(usize::from(MAX_LEN))
-        .for_each(|data: &[u8]| harness(data));
+        .with_max_len(if cfg!(kani) {
+            KANI_MAX_LEN
+        } else {
+            usize::from(MAX_LEN)
+        })
+        .for_each(|data: &[u8]| holds(harness(data)));
 }
 
 /// Under Kani, loops are unwound at most 10 times. Every loop a passing case runs is shorter:
