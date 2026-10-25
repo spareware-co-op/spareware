@@ -17,10 +17,10 @@
 //! function's documented behaviour: `u64::overflowing_add`, `u64::overflowing_sub` and
 //! `u64::from(bool)`. Those, Verus and the Z3 solver it uses are what the proof trusts.
 //!
-//! Verify: `verus --crate-type=lib <this file>`, with the Verus release `kernel-dev.yml` pins; its
-//! `verus` job does this on every pull request.
+//! It is a module of `geom-num`'s Verus crate, `verus/lib.rs`, which the predicate twins share.
+//! Verify: `verus --crate-type=lib projects/engines/geometry/crates/geom-num/verus/lib.rs`, with the
+//! Verus release `kernel-dev.yml` pins; its `verus` job does this on every pull request.
 
-#![feature(proc_macro_hygiene)]
 use vstd::arithmetic::power2::*;
 use core::cmp::Ordering;
 use vstd::prelude::*;
@@ -70,7 +70,7 @@ pub open spec fn base(n: nat) -> int {
     pow2((64 * n) as nat) as int
 }
 
-proof fn lemma_base_step(n: nat)
+pub proof fn lemma_base_step(n: nat)
     ensures
         base(n + 1) == base(n) * 0x1_0000_0000_0000_0000,
         base(n) > 0,
@@ -80,7 +80,7 @@ proof fn lemma_base_step(n: nat)
     lemma_pow2_pos((64 * n) as nat);
 }
 
-proof fn lemma_unsigned_bound(s: Seq<u64>, n: nat)
+pub proof fn lemma_unsigned_bound(s: Seq<u64>, n: nat)
     requires
         n <= s.len(),
     ensures
@@ -107,7 +107,7 @@ proof fn lemma_unsigned_bound(s: Seq<u64>, n: nat)
     }
 }
 
-proof fn lemma_prefix_unchanged(s: Seq<u64>, j: nat, v: u64, n: nat)
+pub proof fn lemma_prefix_unchanged(s: Seq<u64>, j: nat, v: u64, n: nat)
     requires
         j < s.len(),
         n <= j,
@@ -121,7 +121,7 @@ proof fn lemma_prefix_unchanged(s: Seq<u64>, j: nat, v: u64, n: nat)
 }
 
 /// The top bit of the top limb is set exactly when the unsigned value is at least half the base.
-proof fn lemma_top_bit(s: Seq<u64>, n: nat)
+pub proof fn lemma_top_bit(s: Seq<u64>, n: nat)
     requires
         1 <= n <= s.len(),
     ensures
@@ -163,7 +163,7 @@ pub open spec fn fits(v: int, n: nat) -> bool {
 /// The sign rule of two's-complement addition: with a wrapped sum r = ua + ub − c·2h, the true
 /// sum of the signed values fits exactly when the operands' signs differ or the result's sign is
 /// theirs, and then the result's signed value is the sum.
-proof fn lemma_add_sign_rule(ua: int, ub: int, r: int, c: bool, h: int)
+pub proof fn lemma_add_sign_rule(ua: int, ub: int, r: int, c: bool, h: int)
     requires
         h > 0,
         0 <= ua < 2 * h,
@@ -183,7 +183,7 @@ proof fn lemma_add_sign_rule(ua: int, ub: int, r: int, c: bool, h: int)
 }
 
 /// The same rule for subtraction: r = ua − ub + c·2h.
-proof fn lemma_sub_sign_rule(ua: int, ub: int, r: int, c: bool, h: int)
+pub proof fn lemma_sub_sign_rule(ua: int, ub: int, r: int, c: bool, h: int)
     requires
         h > 0,
         0 <= ua < 2 * h,
@@ -202,7 +202,7 @@ proof fn lemma_sub_sign_rule(ua: int, ub: int, r: int, c: bool, h: int)
 {
 }
 
-proof fn lemma_base_mul(i: nat, j: nat)
+pub proof fn lemma_base_mul(i: nat, j: nat)
     ensures
         base(i + j) == base(i) * base(j),
 {
@@ -210,7 +210,7 @@ proof fn lemma_base_mul(i: nat, j: nat)
     assert((64 * i) as nat + (64 * j) as nat == (64 * (i + j)) as nat);
 }
 
-proof fn lemma_base_monotone(i: nat, j: nat)
+pub proof fn lemma_base_monotone(i: nat, j: nat)
     requires
         i <= j,
     ensures
@@ -221,7 +221,7 @@ proof fn lemma_base_monotone(i: nat, j: nat)
     }
 }
 
-proof fn lemma_unsigned_prefix_le(s: Seq<u64>, n: nat, m: nat)
+pub proof fn lemma_unsigned_prefix_le(s: Seq<u64>, n: nat, m: nat)
     requires
         n <= m <= s.len(),
     ensures
@@ -241,7 +241,7 @@ proof fn lemma_unsigned_prefix_le(s: Seq<u64>, n: nat, m: nat)
 }
 
 /// Writing v at position k changes the value of the first n limbs (k < n) by (v − s[k]) · base(k).
-proof fn lemma_update_value(s: Seq<u64>, k: nat, v: u64, n: nat)
+pub proof fn lemma_update_value(s: Seq<u64>, k: nat, v: u64, n: nat)
     requires
         k < n <= s.len(),
     ensures
@@ -259,7 +259,7 @@ proof fn lemma_update_value(s: Seq<u64>, k: nat, v: u64, n: nat)
 
 /// The magnitude of a product is the product of the magnitudes, and it fits exactly as its signed
 /// value does.
-proof fn lemma_product_magnitude(x: int, y: int)
+pub proof fn lemma_product_magnitude(x: int, y: int)
     ensures
         (if x * y < 0 { -(x * y) } else { x * y }) == (if x < 0 { -x } else { x }) * (if y < 0 { -y } else { y }),
         (x * y < 0) == ((x < 0) != (y < 0) && x != 0 && y != 0),
@@ -268,7 +268,7 @@ proof fn lemma_product_magnitude(x: int, y: int)
     assert((x * y < 0) == ((x < 0) != (y < 0) && x != 0 && y != 0)) by (nonlinear_arith);
 }
 
-proof fn lemma_zero_limbs(s: Seq<u64>, n: nat)
+pub proof fn lemma_zero_limbs(s: Seq<u64>, n: nat)
     requires
         n <= s.len(),
         forall|k: int| 0 <= k < s.len() ==> s[k] == 0,
@@ -286,7 +286,7 @@ proof fn lemma_zero_limbs(s: Seq<u64>, n: nat)
 
 /// The magnitudes' product is at least what the rows so far and the current row up to limb j
 /// account for, plus the current product at position i + j.
-proof fn lemma_product_lower_bound(a: Seq<u64>, b: Seq<u64>, n: nat, i: nat, j: nat, ai: u64, bj: u64)
+pub proof fn lemma_product_lower_bound(a: Seq<u64>, b: Seq<u64>, n: nat, i: nat, j: nat, ai: u64, bj: u64)
     requires
         i < n <= a.len(),
         j < n <= b.len(),
@@ -318,7 +318,7 @@ proof fn lemma_product_lower_bound(a: Seq<u64>, b: Seq<u64>, n: nat, i: nat, j: 
 }
 
 /// A product whose magnitude reaches the base does not fit.
-proof fn lemma_too_big(x: int, y: int, mag_x: int, mag_y: int, n: nat)
+pub proof fn lemma_too_big(x: int, y: int, mag_x: int, mag_y: int, n: nat)
     requires
         mag_x == (if x < 0 { -x } else { x }),
         mag_y == (if y < 0 { -y } else { y }),
@@ -330,7 +330,7 @@ proof fn lemma_too_big(x: int, y: int, mag_x: int, mag_y: int, n: nat)
     lemma_product_magnitude(x, y);
 }
 
-proof fn lemma_exit_at_or_above_l(
+pub proof fn lemma_exit_at_or_above_l(
     a: Seq<u64>, b: Seq<u64>, out: Seq<u64>, i: nat, j: nat, ai: u64, bj: u64, carry: u64, prod: int, x: int, y: int,
 )
     requires
@@ -362,7 +362,7 @@ proof fn lemma_exit_at_or_above_l(
     lemma_too_big(x, y, unsigned(a, n), unsigned(b, n), n);
 }
 
-proof fn lemma_exit_at_carry(a: Seq<u64>, b: Seq<u64>, out: Seq<u64>, i: nat, ai: u64, carry: u64, x: int, y: int)
+pub proof fn lemma_exit_at_carry(a: Seq<u64>, b: Seq<u64>, out: Seq<u64>, i: nat, ai: u64, carry: u64, x: int, y: int)
     requires
         a.len() == b.len() == out.len(),
         i < a.len(),
@@ -390,7 +390,7 @@ proof fn lemma_exit_at_carry(a: Seq<u64>, b: Seq<u64>, out: Seq<u64>, i: nat, ai
 }
 
 /// A finished row: the rows below i and row i make the rows below i + 1.
-proof fn lemma_row_done(a: Seq<u64>, b: Seq<u64>, i: nat, ai: u64)
+pub proof fn lemma_row_done(a: Seq<u64>, b: Seq<u64>, i: nat, ai: u64)
     requires
         i < a.len(),
         a[i as int] == ai,
@@ -407,7 +407,7 @@ proof fn lemma_row_done(a: Seq<u64>, b: Seq<u64>, i: nat, ai: u64)
 /// One step of a row: writing the low half of prod + old + carry at position k = i + j moves the
 /// value of the limbs by (low − old) · base(k), and the high half carries to position k + 1, so the
 /// limbs and the carry account for prod · base(k) more.
-proof fn lemma_slot_step(
+pub proof fn lemma_slot_step(
     before: Seq<u64>, after: Seq<u64>, k: nat, old: u64, low: u64, high: u64, carry: u64, prod: int, i: nat, j: nat,
 )
     requires
@@ -430,7 +430,7 @@ proof fn lemma_slot_step(
 
 /// Where the product lands: with tot = |x| · |y| below the base b and h = b / 2, a magnitude below
 /// h fits with either sign, and a magnitude of h or more fits only as −h.
-proof fn lemma_mul_result(tot: int, b: int, x: int, y: int, negative: bool)
+pub proof fn lemma_mul_result(tot: int, b: int, x: int, y: int, negative: bool)
     requires
         b > 0,
         b == 2 * (b / 2),
@@ -452,7 +452,7 @@ proof fn lemma_mul_result(tot: int, b: int, x: int, y: int, negative: bool)
 
 
 /// Limbs holding v's two's complement in their low two and its sign fill above have v's value.
-proof fn lemma_from_i128(s: Seq<u64>, v: i128, low: u64, high: u64)
+pub proof fn lemma_from_i128(s: Seq<u64>, v: i128, low: u64, high: u64)
     requires
         2 <= s.len() <= 4096,
         s[0] == low,
@@ -473,7 +473,7 @@ proof fn lemma_from_i128(s: Seq<u64>, v: i128, low: u64, high: u64)
 
 /// The value of the first m limbs (m ≥ 2): v's two low halves, plus, for a negative v, the sign
 /// fill's base(m) − base(2).
-proof fn lemma_fill_prefix(s: Seq<u64>, v: i128, low: u64, high: u64, m: nat)
+pub proof fn lemma_fill_prefix(s: Seq<u64>, v: i128, low: u64, high: u64, m: nat)
     requires
         2 <= m <= s.len(),
         s[0] == low,
@@ -509,6 +509,21 @@ const TOP_BIT: u64 = 1 << 63;
 
 #[derive(Clone, Copy)]
 pub struct Wide<const L: usize>([u64; L]);
+
+/// 256-bit signed integer: in-circle and in-sphere tests.
+pub type I256 = Wide<4>;
+
+/// Half the base of four limbs: 2^255, the bound an `I256` value must stay below.
+pub proof fn lemma_half_base_4()
+    ensures
+        base(4) / 2 == 57896044618658097711785492504343953926634992332820282019728792003956564819968,
+{
+    lemma_base_step(0);
+    lemma_base_step(1);
+    lemma_base_step(2);
+    lemma_base_step(3);
+    lemma2_to64();
+}
 
 impl<const L: usize> Wide<L> {
     /// The limbs, least significant first.

@@ -327,29 +327,57 @@ pub fn generate_plane_side() -> Result<Vec<u8>, GenError> {
     module_of(named("plane_side")?)
 }
 
-/// The name of the generator of orient2d's Verus twin.
-pub const VERUS_ORIENT2D_GENERATOR: &str = "verus-orient2d";
+/// The folder of `geom-num`'s Verus crate that the predicate twins are generated into: modules of
+/// `verus/lib.rs`, outside every crate's sources, so Cargo never builds them;
+/// `kernel-dev.yml`'s `verus` job verifies the crate.
+pub const VERUS_DIR: &str = "projects/engines/geometry/crates/geom-num/verus/generated";
 
-/// Where orient2d's Verus twin is written: a Verus file in geom-gen's generated folder, outside
-/// every crate's sources, so Cargo never builds it; `kernel-dev.yml`'s `verus` job verifies it.
-pub const VERUS_ORIENT2D_OUTPUT: &str =
-    "projects/engines/geometry/crates/geom-gen/generated/verus-orient2d.rs";
+/// The predicates with a Verus twin (pieces G36 and G38), by name.
+pub const VERUS_TWINS: [&str; 4] = ["orient2d", "orient3d", "incircle", "insphere"];
 
-/// Generator `verus-orient2d`: the Verus-annotated twin of orient2d's exact path (chapter 28.7;
-/// piece G36), whose `value` is the shipped one with its annotations.
+/// The twin of the predicate called `name`, as bytes.
+fn twin_of(name: &str) -> Result<Vec<u8>, GenError> {
+    let generator = format!("verus-{name}");
+    let d = derivation(named(name)?)?;
+    verus_twin(&d, &generator, &format!("{OUTPUT_DIR}/{name}.rs"))
+        .map(String::into_bytes)
+        .map_err(|e| GenError::generator(&generator, e.0))
+}
+
+/// Generator `verus-orient2d`: orient2d's exact path as a Verus-annotated twin (piece G36).
 ///
 /// # Errors
 ///
 /// [`GenError::Generator`] if the derivation or the emission fails.
 pub fn generate_verus_orient2d() -> Result<Vec<u8>, GenError> {
-    let d = derivation(named("orient2d")?)?;
-    verus_twin(
-        &d,
-        VERUS_ORIENT2D_GENERATOR,
-        &format!("{OUTPUT_DIR}/orient2d.rs"),
-    )
-    .map(String::into_bytes)
-    .map_err(|e| GenError::generator(VERUS_ORIENT2D_GENERATOR, e.0))
+    twin_of("orient2d")
+}
+
+/// Generator `verus-orient3d`: orient3d's exact path as a Verus-annotated twin (piece G38).
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_verus_orient3d() -> Result<Vec<u8>, GenError> {
+    twin_of("orient3d")
+}
+
+/// Generator `verus-incircle`: incircle's exact path as a Verus-annotated twin (piece G38).
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_verus_incircle() -> Result<Vec<u8>, GenError> {
+    twin_of("incircle")
+}
+
+/// Generator `verus-insphere`: insphere's exact path as a Verus-annotated twin (piece G38).
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_verus_insphere() -> Result<Vec<u8>, GenError> {
+    twin_of("insphere")
 }
 
 /// Generator `predicate-module`: the module that declares the predicates and holds their helpers.

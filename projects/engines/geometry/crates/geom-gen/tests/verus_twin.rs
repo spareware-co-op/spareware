@@ -41,7 +41,7 @@ use geom_gen::predicates::{PREDICATES, derivation, generate_verus_orient2d};
 use proc_macro2::{Group, TokenStream, TokenTree};
 
 /// The committed twin.
-const TWIN: &str = include_str!("../generated/verus-orient2d.rs");
+const TWIN: &str = include_str!("../../geom-num/verus/generated/orient2d.rs");
 
 /// The committed module the twin shadows.
 const SHIPPED: &str = include_str!("../../geom-num/src/generated/orient2d.rs");
@@ -245,10 +245,64 @@ fn any_change_to_either_side_is_seen() {
 fn the_twin_is_current() {
     let fresh = String::from_utf8(generate_verus_orient2d().unwrap()).unwrap();
     assert_eq!(fresh, TWIN.replace("\r\n", "\n"));
-    assert!(TWIN.contains(&format!(
+    assert!(MODEL.contains(&format!(
         "pub const COORD_MAX: i64 = {};",
         geom_num::grid::COORD_MAX
     )));
+}
+
+/// The model of `geom_num::grid`'s types the predicate twins verify against (piece G38).
+const MODEL: &str = include_str!("../../geom-num/verus/model.rs");
+
+/// Every predicate twin of the Verus crate (pieces G36 and G38) and the module it shadows.
+const PREDICATE_TWINS: [(&str, &str, &str); 4] = [
+    (
+        "orient2d",
+        include_str!("../../geom-num/verus/generated/orient2d.rs"),
+        include_str!("../../geom-num/src/generated/orient2d.rs"),
+    ),
+    (
+        "orient3d",
+        include_str!("../../geom-num/verus/generated/orient3d.rs"),
+        include_str!("../../geom-num/src/generated/orient3d.rs"),
+    ),
+    (
+        "incircle",
+        include_str!("../../geom-num/verus/generated/incircle.rs"),
+        include_str!("../../geom-num/src/generated/incircle.rs"),
+    ),
+    (
+        "insphere",
+        include_str!("../../geom-num/verus/generated/insphere.rs"),
+        include_str!("../../geom-num/src/generated/insphere.rs"),
+    ),
+];
+
+/// The Verus crate's root, which must hold every predicate twin as a module.
+const CRATE_ROOT: &str = include_str!("../../geom-num/verus/lib.rs");
+
+#[test]
+fn every_predicate_twin_is_its_shipped_value_token_for_token() {
+    let shipped_generators = [
+        generate_verus_orient2d,
+        geom_gen::predicates::generate_verus_orient3d,
+        geom_gen::predicates::generate_verus_incircle,
+        geom_gen::predicates::generate_verus_insphere,
+    ];
+    for ((name, twin, shipped), generate) in PREDICATE_TWINS.iter().zip(shipped_generators) {
+        let t = find_fn(&tokens(twin), "value").unwrap_or_else(|| panic!("{name}: no value"));
+        let s = find_fn(&tokens(shipped), "value").unwrap_or_else(|| panic!("{name}: no value"));
+        assert_eq!(canonical(&strip(&t)), canonical(&s), "{name}");
+        assert!(canonical(&t).contains("verus_spec"), "{name}");
+        let fresh = String::from_utf8(generate().unwrap()).unwrap();
+        assert_eq!(fresh, twin.replace("\r\n", "\n"), "{name} is not current");
+        assert!(
+            CRATE_ROOT.contains(&format!(
+                "#[path = \"generated/{name}.rs\"]\npub mod {name};"
+            )),
+            "{name} is not a module of the crate"
+        );
+    }
 }
 
 #[test]
@@ -257,16 +311,12 @@ fn the_twin_refuses_what_it_does_not_model() {
         let d = derivation(p).unwrap();
         let twin = verus_twin(&d, "test", "shipped.rs");
         match p.comparison.name {
-            "orient2d" | "orient3d" => {
+            "orient2d" | "orient3d" | "incircle" | "insphere" => {
                 assert!(twin.is_ok(), "{}: {twin:?}", p.comparison.name);
             }
             "plane_side" => {
                 let e = twin.unwrap_err().0;
                 assert!(e.contains("rounded input"), "{e}");
-            }
-            "incircle" | "insphere" => {
-                let e = twin.unwrap_err().0;
-                assert!(e.contains("wider") || e.contains("wide integers"), "{e}");
             }
             other => panic!("a predicate this test does not know: {other}"),
         }
