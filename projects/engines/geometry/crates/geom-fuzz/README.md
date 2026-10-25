@@ -171,8 +171,9 @@ niche starts above 2^64: `codegen_get_discriminant` in
 unchanged on Kani's main branch on 2026-10-25. rustc makes such a niche when it widens an enum's
 tag to 128 bits, which it does for an enum whose data starts with an `i128` or `u128`; an `Option`
 or `Result` around that enum then marks its other variant with the tag value 2^128 − 1.
-`geom_num::NumError` was such an enum, so the proof failed to compile in `P2::new`; its tag is now
-one byte (`#[repr(u8)]`, explained on the type). Any other kernel enum that carries an `i128` or
+`geom_num::NumError` was such an enum, so the proof failed to compile in `P2::new`; under Kani its tag
+is now one byte (`#[cfg_attr(kani, repr(u8))]`, explained on the type; built normally its layout
+is rustc's own, because a one-byte tag in every build made `interval::new` 12.7% dearer). Any other kernel enum that carries an `i128` or
 `u128` and is wrapped in an `Option` or `Result` needs the same until Kani is fixed; the Kani job
 fails to compile, never passes, when one is missed. Second, a proof whose body returns its
 finding, or formats one, never finishes: the first orient2d proofs, the smallest domain among
