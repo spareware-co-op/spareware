@@ -212,6 +212,10 @@ struct Checker<'a, 'p> {
     or_binding: bool,
     /// Whether the last round is running: generic arguments left open are taken as unknown.
     lenient: bool,
+    /// The instance's where-clauses with its generic arguments put in, `(type, bound)`: rustc
+    /// checks a generic body once, against its bounds, so where a bound fixes what a call's
+    /// implementation leaves open (`I: TryInto<usize>` for `i.try_into()`), so does it here.
+    hints: Vec<(Ty, TraitRef)>,
 }
 
 /// A candidate of a call made ready: its parameters, result, the call to record, and the
@@ -418,6 +422,73 @@ impl<'a, 'p> Checker<'a, 'p> {
             closure_expect: None,
             or_binding: false,
             lenient: false,
+            hints: Vec::new(),
+        }
+        .with_hints()
+    }
+
+    /// Fills [`Checker::hints`].
+    fn with_hints(mut self) -> Self {
+        if self.node.0 == usize::MAX {
+            return self;
+        }
+        let mut hints = Vec::new();
+        for g in self.ix.node_generics(self.node) {
+            let Some(value) = self.map.get(g).cloned() else {
+                continue;
+            };
+            if matches!(value, Ty::Param(_)) {
+                continue;
+            }
+            for b in self.ix.bounds(*g) {
+                hints.push((value.clone(), b.map(&mut |x| x.subst(&self.map))));
+            }
+        }
+        self.hints = hints;
+        self
+    }
+
+    /// Applies the instance's where-clauses to the implementation a call reached: where one
+    /// bounds the implementation's self type by the same trait, the trait arguments meet.
+    fn apply_hints(&mut self, target: &Target) {
+        if self.hints.is_empty() {
+            return;
+        }
+        let Target::Node(n, args) = target else {
+            return;
+        };
+        let (self_ty, trait_ref) = match self.ix.program.node(*n).map(|x| &x.kind) {
+            Some(NodeKind::Method(imp)) => {
+                let Some(info) = self.ix.impls.get(imp.0) else {
+                    return;
+                };
+                let Some(tr) = &info.trait_ref else {
+                    return;
+                };
+                let map: Map = info.generics.iter().copied().zip(args.iter().cloned()).collect();
+                let self_ty = info.self_ty.subst(&map);
+                let tr = self.ix.complete(&tr.map(&mut |x| x.subst(&map)), &self_ty);
+                (self_ty, tr)
+            }
+            Some(NodeKind::TraitDefault(t)) => {
+                let k = self.ix.program.item(*t).scope.generics.len();
+                let Some(s) = args.first().cloned() else {
+                    return;
+                };
+                (s, TraitRef { id: *t, args: args.iter().skip(1).take(k).cloned().collect(), bindings: Vec::new() })
+            }
+            _ => return,
+        };
+        let hints = self.hints.clone();
+        for (hs, ht) in hints {
+            if ht.id != trait_ref.id || !self.infer.can_unify(&hs, &self_ty) {
+                continue;
+            }
+            self.unify(&hs, &self_ty);
+            let ht = self.ix.complete(&ht, &hs);
+            for (a, b) in trait_ref.args.iter().zip(&ht.args) {
+                self.unify(a, b);
+            }
         }
     }
 
@@ -516,6 +587,7 @@ impl<'a, 'p> Checker<'a, 'p> {
     }
 
     fn record(&mut self, target: Target, line: usize, how_found: &'static str) {
+        self.apply_hints(&target);
         if self.compile_time {
             return;
         }
@@ -597,6 +669,12 @@ impl<'a, 'p> Checker<'a, 'p> {
             }
             Ty::FnPtr(p, r) => Some((p, *r)),
             Ty::Ref(inner, _) => self.callable_sig(&inner),
+            // A generic callable's signature is its closure bound's.
+            g @ (Ty::Param(_) | Ty::Opaque(_) | Ty::Assoc(..)) => self.callable_bound(&g, Vec::new()),
+            Ty::Dyn(traits) => {
+                let d = Ty::Dyn(traits.clone());
+                self.callable_bound(&d, traits)
+            }
             _ => None,
         }
     }
@@ -1142,13 +1220,24 @@ impl<'a, 'p> Checker<'a, 'p> {
                 let tr = trait_ref.map(&mut |t| self.resolve_final(t));
                 let s = self.resolve_final(self_ty);
                 let margs: Vec<Ty> = method_args.iter().map(|a| self.resolve_final(a)).collect();
-                match ix.default_fn(&tr, name, &s, &margs) {
-                    Some((n, args)) => {
-                        let args: Vec<Ty> = args.iter().map(|a| self.resolve_final(a)).collect();
-                        vec![self.m.node_inst(ix, n, args)]
-                    }
-                    None => Vec::new(),
+                let mut out = Vec::new();
+                if let Some((n, args)) = ix.default_fn(&tr, name, &s, &margs) {
+                    let args: Vec<Ty> = args.iter().map(|a| self.resolve_final(a)).collect();
+                    out.push(self.m.node_inst(ix, n, args));
                 }
+                // The blanket implementations of the trait that may apply to the generic type.
+                let tr_args = ix.complete(&tr, &s).args;
+                for (imp, map) in self.with_ix(|ix, infer, sigs| ix.blanket_impls(tr.id, &s, &tr_args, infer, sigs)) {
+                    let Some(info) = ix.impls.get(imp.0) else {
+                        continue;
+                    };
+                    let self_ty = info.self_ty.subst(&map);
+                    if let Some((n, args)) = ix.impl_fn(imp, name, &map, &self_ty, &margs) {
+                        let args: Vec<Ty> = args.iter().map(|a| self.resolve_final(a)).collect();
+                        out.push(self.m.node_inst(ix, n, args));
+                    }
+                }
+                out
             }
             Target::Dyn { trait_id, name } => {
                 let mut out = Vec::new();
@@ -2427,7 +2516,7 @@ impl<'a, 'p> Checker<'a, 'p> {
             }
             return Ty::Unknown;
         }
-        self.dispatch(&picks, name, args, turbofish, expected, line, how::PATH, false)
+        self.dispatch(&picks, name, args, turbofish, expected, line, how::PATH, None)
     }
 
     /// `Trait::name(args)`, `<T as Trait>::name(args)`: `Self` from `explicit_self`, the
@@ -2575,7 +2664,7 @@ impl<'a, 'p> Checker<'a, 'p> {
             }
             return Ty::Unknown;
         }
-        let (picks, _) = self.with_ix(|ix, infer, sigs| ix.probe(&r, name, infer, sigs));
+        let (picks, adjusted) = self.with_ix(|ix, infer, sigs| ix.probe(&r, name, infer, sigs));
         if picks.is_empty() {
             let shown = self.ix.show(&self.infer.resolve(&r));
             self.problem(line, format!("no method `{name}` on `{shown}`"));
@@ -2586,7 +2675,7 @@ impl<'a, 'p> Checker<'a, 'p> {
             }
             return Ty::Unknown;
         }
-        self.dispatch(&picks, name, args, turbofish, expected, line, how::RECEIVER, true)
+        self.dispatch(&picks, name, args, turbofish, expected, line, how::RECEIVER, Some(adjusted.unwrap_or(r)))
     }
 
     /// What calling `pick` takes and gives: its parameters (after the receiver, for method
@@ -2639,13 +2728,13 @@ impl<'a, 'p> Checker<'a, 'p> {
         ok
     }
 
-    /// Calls `picks` with `args`; `method` says the receiver was given by method syntax (it is
-    /// not among `args`). One candidate is checked with the arguments' expected types; several
-    /// (where open types let more than one implementation apply) each get the arguments their
-    /// parameters fit, and every one of them is recorded.
+    /// Calls `picks` with `args`; `recv` is the receiver given by method syntax (it is not among
+    /// `args`), as the lookup adjusted it. One candidate is checked with the arguments' expected
+    /// types; several (where open types let more than one implementation apply) each get the
+    /// arguments their parameters fit, and every one of them is recorded.
     #[allow(clippy::too_many_arguments, reason = "each is one part of the call")]
-    fn dispatch(&mut self, picks: &[Pick], name: &str, args: Args<'_>, turbofish: &[Ty], expected: Option<&Ty>, line: usize, how_found: &'static str, method: bool) -> Ty {
-        let skip = usize::from(method);
+    fn dispatch(&mut self, picks: &[Pick], name: &str, args: Args<'_>, turbofish: &[Ty], expected: Option<&Ty>, line: usize, how_found: &'static str, recv: Option<Ty>) -> Ty {
+        let skip = usize::from(recv.is_some());
         let how_of = |t: &Target| match t {
             Target::Bound { .. } => how::BOUND,
             Target::Dyn { .. } => how::DYN,
@@ -2664,13 +2753,20 @@ impl<'a, 'p> Checker<'a, 'p> {
             self.record(target, line, h);
             return output;
         }
-        let tys: Vec<Ty> = match args {
-            Args::Exprs(exprs) => exprs.iter().map(|a| self.expr(a, None)).collect(),
-            Args::Tys(t) => t.to_vec(),
-        };
+        // The receiver takes part in choosing (the lookup did not commit to any candidate).
+        let mut tys: Vec<Ty> = recv.into_iter().collect();
+        match args {
+            Args::Exprs(exprs) => {
+                for a in exprs {
+                    let t = self.expr(a, None);
+                    tys.push(t);
+                }
+            }
+            Args::Tys(t) => tys.extend(t.iter().cloned()),
+        }
         let mut prepared = Vec::new();
         for pick in picks {
-            if let Some(p) = self.prepare(pick, name, turbofish, line, skip) {
+            if let Some(p) = self.prepare(pick, name, turbofish, line, 0) {
                 prepared.push(p);
             }
         }

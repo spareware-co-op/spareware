@@ -88,9 +88,13 @@ pub fn inst_name(ix: &Index<'_>, m: &Mono, id: InstId) -> String {
 #[must_use]
 pub fn cycles(ix: &Index<'_>, m: &Mono) -> Vec<Cycle> {
     let n = m.insts.len();
+    let live = m.reachable();
     let mut g: petgraph::graph::DiGraph<(), ()> = petgraph::graph::DiGraph::with_capacity(n, 0);
     let nodes: Vec<petgraph::graph::NodeIndex> = (0..n).map(|_| g.add_node(())).collect();
     for (from, tos) in &m.edges {
+        if !live.contains(from) {
+            continue;
+        }
         for to in tos.keys() {
             if let (Some(a), Some(b)) = (nodes.get(from.0), nodes.get(to.0)) {
                 g.add_edge(*a, *b, ());

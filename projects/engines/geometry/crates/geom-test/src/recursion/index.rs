@@ -1361,6 +1361,12 @@ impl<'p> Index<'p> {
                 }
             }
         }
+        // A generic receiver's bounds win over implementations that would also apply (rustc
+        // prefers where-clauses): the blanket implementations are reached through the bound
+        // ([`crate::recursion::mono`]).
+        if found.iter().any(|(p, _)| matches!(p, Pick::Bound { .. })) {
+            found.retain(|(p, _)| matches!(p, Pick::Bound { .. }));
+        }
         if let [(Pick::Node { node, args }, _)] = found.as_slice() {
             // One candidate: keep what it fixes.
             if let Some(r) = self.receiver_of(*node, args) {
@@ -1368,6 +1374,25 @@ impl<'p> Index<'p> {
             }
         }
         found.into_iter().map(|(p, _)| p).collect()
+    }
+
+    /// The blanket implementations of trait `t` (self type a bare generic parameter) that may
+    /// apply to `ty` with trait arguments `args`, each with its arguments.
+    pub fn blanket_impls(&self, t: ItemId, ty: &Ty, args: &[Ty], infer: &mut Infer, sigs: ClosureSigs<'_>) -> Vec<(ImplId, Map)> {
+        let candidates: Vec<ImplId> = self
+            .blanket
+            .iter()
+            .copied()
+            .filter(|i| self.impls.get(i.0).and_then(|x| x.trait_ref.as_ref()).is_some_and(|x| x.id == t))
+            .collect();
+        let mut out = Vec::new();
+        for imp in candidates {
+            let map = self.fresh_impl(imp, infer);
+            if self.try_impl(imp, &map, ty, Some(args), infer, sigs, 0) {
+                out.push((imp, map));
+            }
+        }
+        out
     }
 
     /// Whether trait `t` itself has a default body for method `name`.

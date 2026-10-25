@@ -132,6 +132,8 @@ pub struct Mono {
     owned: BTreeMap<InstId, BTreeSet<InstId>>,
     /// Problems not tied to one instance's check.
     pub global_problems: Vec<Problem>,
+    /// The roots: every node of the crates that ship and of the bound tests, open.
+    pub roots: Vec<InstId>,
 }
 
 impl Mono {
@@ -254,12 +256,93 @@ impl Mono {
         Some(id)
     }
 
-    /// Every problem the checks found, sorted.
+    /// The instances the roots reach by the edges of the last check of every body: an instance
+    /// made by an earlier check that a later one no longer calls is not among them.
     #[must_use]
-    pub fn all_problems(&self) -> Vec<Problem> {
+    pub fn reachable(&self) -> BTreeSet<InstId> {
+        let mut seen: BTreeSet<InstId> = self.roots.iter().copied().collect();
+        let mut queue: VecDeque<InstId> = self.roots.iter().copied().collect();
+        while let Some(x) = queue.pop_front() {
+            for to in self.edges.get(&x).into_iter().flat_map(BTreeMap::keys) {
+                if seen.insert(*to) {
+                    queue.push_back(*to);
+                }
+            }
+        }
+        seen
+    }
+
+    /// Every problem the checks found, sorted. A problem in the standard library's model, or in
+    /// an instance whose generic arguments the check could not infer, is reported where the
+    /// crates that ship reach it (the nearest call from a crate read whose own arguments are
+    /// known), naming the instance, since that call is what to look at.
+    #[must_use]
+    pub fn all_problems(&self, ix: &Index<'_>) -> Vec<Problem> {
         let mut out: Vec<Problem> = self.global_problems.clone();
-        for p in self.problems.values() {
-            out.extend(p.iter().cloned());
+        let live = self.reachable();
+        let mut callers: BTreeMap<InstId, Vec<(InstId, &Site)>> = BTreeMap::new();
+        for (from, tos) in &self.edges {
+            for (to, site) in tos {
+                callers.entry(*to).or_default().push((*from, site));
+            }
+        }
+        let suspect = |id: InstId| -> bool {
+            self.inst(id).is_some_and(|i| {
+                ix.is_model(i.node)
+                    || match &i.kind {
+                        InstKind::Node(_, args) => args.iter().any(Ty::has_unknown),
+                        InstKind::Closure(k) => k.subst.iter().any(Ty::has_unknown),
+                    }
+            })
+        };
+        for (id, problems) in &self.problems {
+            if !live.contains(id) {
+                continue;
+            }
+            if !suspect(*id) {
+                out.extend(problems.iter().cloned());
+                continue;
+            }
+            // Breadth-first back along the calls to the nearest caller that is not suspect.
+            let mut seen = BTreeSet::from([*id]);
+            let mut queue = VecDeque::from([*id]);
+            let mut site: Option<Site> = None;
+            while let Some(x) = queue.pop_front() {
+                for (from, s) in callers.get(&x).into_iter().flatten() {
+                    if !suspect(*from) {
+                        site = Some((*s).clone());
+                        queue.clear();
+                        break;
+                    }
+                    if seen.insert(*from) {
+                        queue.push_back(*from);
+                    }
+                }
+            }
+            let name = self.inst(*id).map(|i| match &i.kind {
+                InstKind::Node(n, args) => {
+                    let shown: Vec<String> = args.iter().map(|a| ix.show(a)).collect();
+                    format!("{} [{}]", ix.name(*n), shown.join(", "))
+                }
+                InstKind::Closure(k) => format!("{}::{{closure#{}}}", ix.name(k.owner), k.index),
+            });
+            for p in problems {
+                match &site {
+                    Some(s) => out.push(Problem::new(
+                        &s.file,
+                        s.line,
+                        p.rule,
+                        format!(
+                            "{} (in `{}`, which this call reaches, at {}:{})",
+                            p.what,
+                            name.clone().unwrap_or_default(),
+                            p.file,
+                            p.line
+                        ),
+                    )),
+                    None => out.push(p.clone()),
+                }
+            }
         }
         out.sort();
         out.dedup();
@@ -279,7 +362,8 @@ pub fn analyse(ix: &Index<'_>) -> Mono {
         }
         let id = NodeId(i);
         let open: Vec<Ty> = ix.node_generics(id).iter().map(|g| Ty::Param(*g)).collect();
-        m.node_inst(ix, id, open);
+        let root = m.node_inst(ix, id, open);
+        m.roots.push(root);
     }
     crate::recursion::typeck::constants(ix, &mut m);
     while let Some(id) = m.pop() {
