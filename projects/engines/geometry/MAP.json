@@ -817,20 +817,24 @@
           "target": "lib"
         },
         {
-          "cost": "one compression (64 rounds of 32-bit operations) per 64-byte block, so linear in the message; the state is a fixed few hundred bytes, and nothing is allocated.",
+          "cost": "one compression of 64 rounds per 64-byte block, so linear in the message; the state is `sha2`'s fixed block buffer, and nothing is allocated except the string `Display` writes.",
           "does": null,
           "family": [],
           "file": "projects/engines/geometry/crates/geom-bench/src/sha256.rs",
           "guarantees": [
-            "the digest of every message below 2^61 bytes (2^64 bits, the standard's limit) is the one FIPS 180-4 defines, whatever pieces the message is fed in (the tests check the standard's examples, a million bytes in uneven pieces, and every padding length), on every target: `sha2` uses a processor's SHA instructions where it finds them and portable code elsewhere, WebAssembly included, and each computes the one function the standard defines; and no method panics."
+            "**The digest FIPS 180-4 defines**, whatever pieces the message is fed in: `sha2`'s, which the tests check against the standard's own examples, a million bytes in uneven pieces and every padding length.",
+            "**The same digest on every target**: SHA-256 is fully specified integer arithmetic, and `sha2`'s portable and processor-specific back ends compute the same function (the tests run on every target the gates run on, wasm32 included).",
+            "**A hexadecimal digest reads back as itself**: [`Digest::from_hex`] takes exactly 64 digits, either case, and refuses anything else; [`Digest`]'s `Display` writes 64 lowercase digits.",
+            "No method panics."
           ],
-          "job": "SHA-256, the hash of every benchmark's golden digests.",
+          "job": "SHA-256, the hash of every benchmark's golden digests: the `sha2` crate's, with the golden digest type the gates compare and the hexadecimal form `golden.txt` stores.",
           "method": {
             "links": [
               "https://csrc.nist.gov/pubs/fips/180-4/upd1/final",
+              "https://docs.rs/sha2/0.11.0/sha2/",
               "https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values"
             ],
-            "text": "the Secure Hash Standard, NIST FIPS 180-4, <https://csrc.nist.gov/pubs/fips/180-4/upd1/final>, computed by the `sha2` crate (MIT OR Apache-2.0, a dependency, not a port). The tests check the standard's own examples (<https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values>)."
+            "text": "the Secure Hash Standard, NIST FIPS 180-4 (<https://csrc.nist.gov/pubs/fips/180-4/upd1/final>), as the `sha2` crate implements it (<https://docs.rs/sha2/0.11.0/sha2/>), checked against the standard's example values (<https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values>)."
           },
           "path": "geom_bench::sha256",
           "provenance": [],
@@ -4252,7 +4256,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/deps.rs",
           "guarantees": [
-            "**It never passes by accident.** Metadata it cannot read (a missing field, an unknown dependency kind, or no resolved graph, which is what `cargo metadata --no-deps` gives) is an error, not a pass, and so is a workspace with no kernel crate, because a check that checked nothing must not pass.",
+            "**It never passes by accident.** Metadata it cannot read (a missing field, a field of the wrong type, an unknown dependency kind, a resolved edge without its kinds, or no resolved graph, which is what `cargo metadata --no-deps` gives) is an error, not a pass, and so is a workspace with no kernel crate, because a check that checked nothing must not pass.",
             "**Deterministic.** Kernel crates are visited in name order, declared dependencies in manifest order and resolved ones in name order; the report lists violations in that order.",
             "**Every chain is shown** from the kernel crate to the development crate, with the kind of each edge, so the fix is obvious.",
             "**It changes nothing.** [`cargo_metadata`] runs cargo with `--locked`, so it fails rather than write a `Cargo.lock`."
@@ -4260,9 +4264,10 @@
           "job": "The dependency rule: no kernel crate depends, normally or at build time, on a development crate.",
           "method": {
             "links": [
-              "https://doc.rust-lang.org/cargo/commands/cargo-metadata.html"
+              "https://doc.rust-lang.org/cargo/commands/cargo-metadata.html",
+              "https://docs.rs/cargo_metadata/0.23.1/"
             ],
-            "text": "breadth-first search (Cormen, Leiserson, Rivest and Stein, *Introduction to Algorithms*, 3rd edition, section 22.2) over the union of the declared and resolved graphs from each kernel crate, on the JSON format documented at <https://doc.rust-lang.org/cargo/commands/cargo-metadata.html>. Breadth-first search finds a shortest chain to each development crate."
+            "text": "breadth-first search (Cormen, Leiserson, Rivest and Stein, *Introduction to Algorithms*, 3rd edition, section 22.2) over the union of the declared and resolved graphs from each kernel crate, on the JSON format documented at <https://doc.rust-lang.org/cargo/commands/cargo-metadata.html>. Breadth-first search finds a shortest chain to each development crate. The metadata is read into the typed model of the `cargo_metadata` crate (MIT, <https://docs.rs/cargo_metadata/0.23.1/>), which also builds the `cargo metadata` command: piece G12a put it in place of the field-by-field reading of the JSON that was written here (chapter 29.1). [`check`] takes the JSON itself, not the model, so the tests can seed a violation into real metadata as a manifest would and hand it over."
           },
           "path": "geom_test::deps",
           "provenance": [],
@@ -4300,7 +4305,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/golden/check.rs",
           "guarantees": [
-            "**Twice, on two heaps.** The case runs exactly [`REPEATS`] times, each run under a different seed's perturbation held for the whole run; a case whose output depends on an address, on leftover state from an earlier run, or on anything else that differs between two runs in one process fails with [`GoldenError::Repeat`], naming both digests.",
+            "**Twice, on two heaps.** The case runs exactly [`REPEATS`] times, each run under a different seed's perturbation held for the whole run; a case whose output depends on an address, on leftover state from an earlier run, or on anything else that differs between two runs in one process fails with [`GoldenError::Repeat`], naming both digests. An address-dependent case is caught on every run with glibc's, Windows' and WebAssembly's allocators, and on most runs on macOS ([`super::perturb`] says why).",
             "**The store decides.** The digest must equal the store's for the id in the current edition; otherwise [`GoldenError::Mismatch`] names the edition, the id, both digests and the two things a mismatch can mean (a bug on this target, or a deliberate change that must be recorded in the store and approved by a kernel owner). A golden the store does not hold is [`GoldenError::Store`]. Nothing is ever written to the store from here.",
             "**The repeat is checked before the store**, so a case that is not even repeatable is reported as such, not as a changed golden.",
             "**No panic**: the verdict is returned, and the test decides how to fail."
@@ -4697,9 +4702,10 @@
             "links": [
               "projects/engines/geometry/architecture/27-crates-folders.md",
               "https://github.com/rust-lang/rust/blob/1731faea0da5b4ebf881d8e53f98066c17a74711/src/tools/tidy/src/error_codes.rs",
-              "https://github.com/rust-lang/rustdoc-types/blob/2e63bdc44b94e86fe12d6e0034d1ed9c2ac6e9dc/src/lib.rs"
+              "https://github.com/rust-lang/rustdoc-types/blob/2e63bdc44b94e86fe12d6e0034d1ed9c2ac6e9dc/src/lib.rs",
+              "https://docs.rs/toml/0.9.6/toml/"
             ],
-            "text": "regenerate and compare, the way the kernel keeps every generated file honest (chapter 27, \"Generated code and data have one home\", `projects/engines/geometry/architecture/27-crates-folders.md`), and the way Clippy's `cargo dev update_lints` and rust-analyzer's tidy tests keep their generated lint lists and module documentation current; headers are read by the written grammar ([`header`]), never by guessing, as rustc's tidy reads its error-code registry rather than the compiler's messages (<https://github.com/rust-lang/rust/blob/1731faea0da5b4ebf881d8e53f98066c17a74711/src/tools/tidy/src/error_codes.rs>). rustdoc's JSON output would give the same doc text with resolved items, but it needs a nightly compiler and its format changes with every breaking release (`FORMAT_VERSION` 61 at <https://github.com/rust-lang/rustdoc-types/blob/2e63bdc44b94e86fe12d6e0034d1ed9c2ac6e9dc/src/lib.rs>), so the map reads the source, which the pinned stable toolchain can always do."
+            "text": "regenerate and compare, the way the kernel keeps every generated file honest (chapter 27, \"Generated code and data have one home\", `projects/engines/geometry/architecture/27-crates-folders.md`), and the way Clippy's `cargo dev update_lints` and rust-analyzer's tidy tests keep their generated lint lists and module documentation current; headers are read by the written grammar ([`header`]), never by guessing, as rustc's tidy reads its error-code registry rather than the compiler's messages (<https://github.com/rust-lang/rust/blob/1731faea0da5b4ebf881d8e53f98066c17a74711/src/tools/tidy/src/error_codes.rs>). rustdoc's JSON output would give the same doc text with resolved items, but it needs a nightly compiler and its format changes with every breaking release (`FORMAT_VERSION` 61 at <https://github.com/rust-lang/rustdoc-types/blob/2e63bdc44b94e86fe12d6e0034d1ed9c2ac6e9dc/src/lib.rs>), so the map reads the source, which the pinned stable toolchain can always do. Each crate's `Cargo.toml` is parsed by the `toml` crate (MIT OR Apache-2.0, <https://docs.rs/toml/0.9.6/toml/>), the TOML 1.0 reader of the toml-rs project that cargo's own manifest reading is built on; piece G12a put it in place of a line reader (chapter 29.1)."
           },
           "path": "geom_test::map",
           "provenance": [
@@ -4964,36 +4970,26 @@
           "target": "lib"
         },
         {
-          "cost": "linear in the length of the source, plus one `char` and its offset held per character.",
-          "does": "[`tokens`] splits a source file into [`Token`]s: identifiers, punctuation, literals, lifetimes and outer doc comments (`///` and `/** */`), each with its text and byte offset. Plain comments, inner doc comments (`//!`, `/*! */`) and whitespace are dropped. The item scanner in [`crate::map::errors`] reads the tokens.",
+          "cost": "linear in the length of the source, for the lexer and for the walk over its tokens.",
+          "does": "[`tokens`] splits a source file into [`Token`]s: identifiers, punctuation (each delimiter included), literals, lifetimes and outer doc comments (`///` and `/** */`), each with its text and byte offset. Plain comments, inner doc comments (`//!`, `/*! */`) and whitespace are dropped. The item scanner in [`crate::map::errors`] reads the tokens.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/map/rust.rs",
           "guarantees": [
-            "**Comments and literals never look like code.** Text inside a comment, a string, a raw string (any number of `#`), a byte or C string or a character literal is never an identifier or punctuation token, and block comments nest as Rust nests them.",
-            "**An error, never a guess.** A block comment, string, raw string or character literal that does not end is a [`LexError`] naming its byte offset, so a file the lexer cannot read is reported, not mapped from a wrong reading.",
-            "**No recursion and no panics.** One pass over the characters, with an explicit counter for nested block comments; every position step is a checked or saturating method."
+            "**Comments and literals never look like code.** Text inside a comment, a string, a raw string (any number of `#`), a byte or C string or a character literal is never an identifier or punctuation token, and block comments nest as Rust nests them: the lexer is the one `syn` parses with, which follows rustc's.",
+            "**An error, never a guess.** A comment or literal that does not end, and a delimiter that does not close, is a [`LexError`] naming the byte offset where the lexer stopped, so a file the lexer cannot read is reported, not mapped from a wrong reading.",
+            "**No recursion and no panics** here: groups are opened with an explicit stack, and every offset is the lexer's own."
           ],
-          "job": "Rust source as tokens, for the map: enough of the language's lexical grammar to find items without being misled by comments, strings or character literals.",
+          "job": "Rust source as tokens, for the map: the language's lexical grammar, from the standard lexer, so that items are found without being misled by comments, strings or character literals.",
           "method": {
             "links": [
-              "https://doc.rust-lang.org/reference/comments.html",
-              "https://doc.rust-lang.org/reference/tokens.html"
+              "https://docs.rs/proc-macro2/1.0.107/proc_macro2/",
+              "https://doc.rust-lang.org/reference/tokens.html",
+              "https://doc.rust-lang.org/reference/comments.html"
             ],
-            "text": "the lexical grammar of The Rust Reference: comments, nested block comments and which comments are doc comments (<https://doc.rust-lang.org/reference/comments.html>); string, raw string, byte, C string and character literals, raw identifiers and lifetimes (<https://doc.rust-lang.org/reference/tokens.html>). A `'` opens a character literal when the character after the next one is a `'`, or when the next one cannot start an identifier, and a lifetime otherwise, which is the rule of `rustc_lexer`'s `lifetime_or_char`. Numbers are read loosely (digits, letters, `_`, and a `.` or exponent sign inside a decimal literal): the map needs only to step over them."
+            "text": "the `proc-macro2` crate's lexer (MIT OR Apache-2.0, <https://docs.rs/proc-macro2/1.0.107/proc_macro2/>), with its `span-locations` feature for byte offsets: the lexical grammar of The Rust Reference (<https://doc.rust-lang.org/reference/tokens.html>, <https://doc.rust-lang.org/reference/comments.html>) as `syn` reads it. It gives a doc comment as the attribute it means, `#[doc = \"...\"]`, with the comment's span on every token, so a `#` whose span covers a comment in the source is that comment, read from the source text with its markers dropped. Piece G12a put the crate in place of a lexer written here (chapter 29.1, the owner's direction of 2026-10-22: use well-known permissive crates rather than hand-rolling)."
           },
           "path": "geom_test::map::rust",
-          "provenance": [
-            {
-              "licence": "MIT OR Apache-2.0",
-              "link": "https://github.com/rust-lang/rust/blob/1731faea0da5b4ebf881d8e53f98066c17a74711/compiler/rustc_lexer/src/lib.rs",
-              "method_note": null,
-              "name": "`rustc_lexer`",
-              "notice": [],
-              "pinned": true,
-              "purpose": "for its rule telling a character literal from a lifetime and for which block comments are doc comments. No code copied.",
-              "take": "port-method"
-            }
-          ],
+          "provenance": [],
           "spdx": null,
           "target": "lib"
         },
@@ -5501,17 +5497,6 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-test/src/map/errors.rs"
-      ]
-    },
-    {
-      "licence": "MIT OR Apache-2.0",
-      "link": "https://github.com/rust-lang/rust/blob/1731faea0da5b4ebf881d8e53f98066c17a74711/compiler/rustc_lexer/src/lib.rs",
-      "method_note": null,
-      "name": "`rustc_lexer`",
-      "pinned": true,
-      "take": "port-method",
-      "used_by": [
-        "projects/engines/geometry/crates/geom-test/src/map/rust.rs"
       ]
     },
     {
