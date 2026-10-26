@@ -7,7 +7,8 @@
 // 28.6; piece G35), normalised: each coordinate difference divided by its axis maximum,
 // so every variable is in [-1, 1] and the scale S is 1. The error model
 // fl(t) = t(1 + e) is homogeneous, so a bound B here bounds the error by B * S at every
-// scale (the method note). HOL Light checks FPTaylor's certificate against K below.
+// scale (the method note). HOL Light checks FPTaylor's certificate, and compares its
+// bound with K below.
 // hol-light-bound: &40564819207303354358693384683511 * &2 ipow (-- &156)
 
 Variables

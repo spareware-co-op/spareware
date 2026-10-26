@@ -10,9 +10,9 @@ name: Kernel certificates
 # - Gappa proves the claim for binary64 rounding on whole-number inputs scaled by their axis
 #   maxima, so one proof covers every scale, and Rocq checks Gappa's proof (with Gappa's support
 #   library over Flocq), listing every axiom it rests on.
-# - FPTaylor bounds the normalised problem with a proof certificate, and HOL Light checks the
-#   certificate against the same bound; the error model is homogeneous, so the bound holds at
-#   every scale.
+# - FPTaylor bounds the normalised problem with a proof certificate, HOL Light checks the
+#   certificate, and the job reports whether its bound is within Gappa's K; the error model is
+#   homogeneous, so the bound holds at every scale.
 #
 # The method note, projects/kit/notes/G35-filter-certificates.md, says what each proof covers and
 # what the written argument covers. Nothing here is a dependency: the tools run as separate

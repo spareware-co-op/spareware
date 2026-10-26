@@ -10,7 +10,7 @@
 //! within K · S and the computed bound within a relative error R of C · S, with K = C · (1 − R):
 //! together, |error| ≤ K · S ≤ bound, so an answer has the exact sign. [`fptaylor_problem`] states
 //! the normalised problem for `FPTaylor`, every difference in [−1, 1] so that S is 1, with the same K
-//! as the bound HOL Light checks its certificate against. Both problems carry Gappa's hints and
+//! as the bound HOL Light compares the certificate's with. Both problems carry Gappa's hints and
 //! HOL Light's bound in their text, so the tools' runs need nothing else.
 //!
 //! Guarantees:
@@ -500,7 +500,7 @@ fn gappa_hints(out: &mut String, sh: &Shape<'_>) -> Result<(), EmitError> {
 }
 
 /// The `FPTaylor` problem of `d`'s filter (module documentation), as text: the normalised problem
-/// and, in a structured comment, the bound HOL Light checks the certificate against.
+/// and, in a structured comment, the bound HOL Light compares the certificate's with.
 ///
 /// # Errors
 ///
@@ -522,7 +522,8 @@ pub fn fptaylor_problem(d: &Derivation, generator: &str) -> Result<String, EmitE
             "28.6; piece G35), normalised: each coordinate difference divided by its axis maximum,",
             "so every variable is in [-1, 1] and the scale S is 1. The error model",
             "fl(t) = t(1 + e) is homogeneous, so a bound B here bounds the error by B * S at every",
-            "scale (the method note). HOL Light checks FPTaylor's certificate against K below.",
+            "scale (the method note). HOL Light checks FPTaylor's certificate, and compares its",
+            "bound with K below.",
         ],
     );
     line(
