@@ -492,8 +492,9 @@ mod proofs {
     }
 
     /// The order never panics and is antisymmetric, with the sign agreeing with the order against
-    /// zero.
+    /// zero. Unwound at most 17 times: the longest loop it reaches is `from_i128`'s 16 bytes.
     #[kani::proof]
+    #[kani::unwind(17)]
     fn order_and_sign_agree() {
         let (a, b) = (any_i256(), any_i256());
         assert!(a.cmp(&b) == b.cmp(&a).reverse());
@@ -507,8 +508,10 @@ mod proofs {
     }
 
     /// `from_i128` and `to_i128` are inverse for every `i128`, and `resize` to two limbs and back
-    /// keeps every value it accepts.
+    /// keeps every value it accepts. Unwound at most 17 times: the longest loops are the 16 bytes
+    /// of an `i128`.
     #[kani::proof]
+    #[kani::unwind(17)]
     fn i128_conversions_and_resize_round_trip() {
         let v: i128 = kani::any();
         let w = I256::from_i128(v);
@@ -531,10 +534,15 @@ mod proofs {
         assert!(max.signum() == Sign::Positive && min.signum() == Sign::Negative);
     }
 
-    /// `checked_mul` never panics or overflows, for every pair of `I256` values.
+    /// `checked_mul` never panics or overflows, for every pair of two-limb values. At four limbs
+    /// the solver ran out of CI's hour (16 symbolic 128-bit limb products and their checks); the
+    /// code is the same for every width, and every width is proven by Verus (piece G37). Unwound
+    /// at most 17 times, past every loop it reaches.
     #[kani::proof]
+    #[kani::unwind(17)]
     fn mul_never_panics() {
-        let (a, b) = (any_i256(), any_i256());
+        let a = Wide::<2>::from_le_limbs([kani::any(), kani::any()]);
+        let b = Wide::<2>::from_le_limbs([kani::any(), kani::any()]);
         let _ = a.checked_mul(&b);
     }
 }
