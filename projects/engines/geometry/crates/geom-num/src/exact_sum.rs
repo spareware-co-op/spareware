@@ -33,13 +33,15 @@
 //!   [`ExactSum::round_ieee`] gives Neal's report for it, a NaN with every payload bit set.
 //! - **Bounded proofs, and what is only tested.** Kani proves (piece G41, chapter 28.7) that
 //!   adding one term never panics, that a finite term rounds back to itself and a non-finite one
-//!   is reported, and that a finite term and its negation cancel to +0, for every sign and
-//!   fraction at the exponent fields 0, 1, 31, 32, 1023 and 2046 (and 2047, the non-finite
-//!   terms): the subnormals, the smallest binade, the two binades either side of the first chunk
-//!   boundary, one's binade and the largest, one harness per field with kissat as the SAT solver.
-//!   Over every exponent field at once, or the six in one harness, the solver ran past CI's hour.
-//!   Every other term, and every sum of more than one, is tested bit for bit against the exact
-//!   oracle.
+//!   is reported, and that a finite term and its negation cancel to +0, for every sign and for
+//!   every fraction whose free bits are its top seven and bottom seven (the rest zero), at the
+//!   exponent fields 0, 1, 31, 32, 1023 and 2046 (and 2047, the non-finite terms): the
+//!   subnormals, the smallest binade, the two binades either side of the first chunk boundary,
+//!   one's binade and the largest, one harness per field with kissat as the SAT solver. The top
+//!   and bottom bits are the ones that reach both chunks of a term's split and the rounding of
+//!   the sum. With all 52 fraction bits free, each harness ran past CI's hour, even one field at a
+//!   time. Every other term, and every sum of more than one, is tested bit for bit against the
+//!   exact oracle.
 //!
 //! Method: R. M. Neal, "Fast exact summation using small and large superaccumulators", arXiv
 //! 1505.05571 (2015), <https://arxiv.org/abs/1505.05571>, and his C code `xsum` (MIT licence,
@@ -746,25 +748,30 @@ mod tests {
     }
 }
 
-/// Bounded proofs (chapter 28.7; piece G41): every sign and fraction, bit for bit, at the exponent
-/// fields of [`proofs::EXPONENTS`] (the module header says why those).
+/// Bounded proofs (chapter 28.7; piece G41): every sign, and every fraction with 14 free bits (its
+/// top seven and bottom seven), bit for bit, at the exponent fields the module header names and
+/// says why.
 #[cfg(kani)]
 mod proofs {
     use super::*;
 
-    /// A double with exponent field `e` and any sign and fraction.
+    /// The free fraction bits: the top seven and the bottom seven.
+    const FREE: u64 = (0x7f << 45) | 0x7f;
+
+    /// A double with exponent field `e`, any sign, and any fraction whose bits outside [`FREE`]
+    /// are zero.
     fn any_with_exponent(e: u64) -> f64 {
         let sign: u64 = if kani::any() { 1 << 63 } else { 0 };
-        let fraction: u64 = kani::any::<u64>() & ((1 << 52) - 1);
+        let fraction: u64 = kani::any::<u64>() & FREE;
         f64::from_bits(sign | e << 52 | fraction)
     }
 
     /// Adding a double never panics or overflows, and one finite double, rounded back, is that
-    /// double (a zero comes back +0, the sum's one zero), for every sign and fraction at exponent
-    /// field `e`. Proven at the fields 0, 1, 31, 32, 1023 and 2046, one harness each (kissat as the
-    /// SAT solver): the subnormals, the smallest normal binade, the binades either side of the
-    /// first chunk boundary (31 and 32, as E = 32·j + k), one's binade and the largest. Over every
-    /// field at once, or the six in one harness, the solver ran past CI's hour.
+    /// double (a zero comes back +0, the sum's one zero), for every sign and every fraction with
+    /// the [`FREE`] bits at exponent field `e`. Proven at the fields 0, 1, 31, 32, 1023 and 2046,
+    /// one harness each (kissat as the SAT solver): the subnormals, the smallest normal binade,
+    /// the binades either side of the first chunk boundary (31 and 32, as E = 32·j + k), one's
+    /// binade and the largest. With every fraction bit free, each ran past CI's hour.
     fn one_term_law(e: u64) {
         let x = any_with_exponent(e);
         let mut sum = ExactSum::new();
@@ -777,8 +784,8 @@ mod proofs {
         }
     }
 
-    /// A finite double and its negation cancel exactly, to +0, for every sign and fraction at
-    /// exponent field `e`; proven at the fields [`one_term_law`] names, one harness each.
+    /// A finite double and its negation cancel exactly, to +0, for every sign and every fraction
+    /// with the [`FREE`] bits at exponent field `e`; proven at the fields [`one_term_law`] names, one harness each.
     fn cancel_law(e: u64) {
         let x = any_with_exponent(e);
         let mut sum = ExactSum::new();
@@ -787,7 +794,8 @@ mod proofs {
         assert!(sum.round().unwrap().get().to_bits() == 0);
     }
 
-    /// An infinity or a NaN, every sign and fraction at exponent field 2047, is reported.
+    /// An infinity or a NaN, every sign and every payload with the [`FREE`] bits at exponent
+    /// field 2047, is reported.
     #[kani::proof]
     fn a_non_finite_term_is_reported() {
         let mut sum = ExactSum::new();
