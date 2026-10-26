@@ -28,7 +28,7 @@ use crate::grid_steps;
 use crate::predicates;
 
 /// Every generator, in the order they run.
-pub const GENERATORS: [Generator; 8] = [
+pub const GENERATORS: [Generator; 12] = [
     Generator {
         name: grid_steps::NAME,
         output: grid_steps::OUTPUT,
@@ -76,6 +76,30 @@ pub const GENERATORS: [Generator; 8] = [
         output: predicates::VERUS_ORIENT2D_OUTPUT,
         about: "orient2d's exact path as a Verus-annotated twin, which Verus verifies in CI",
         generate: Generate::Plain(predicates::generate_verus_orient2d),
+    },
+    Generator {
+        name: "gappa-orient2d",
+        output: "projects/engines/geometry/crates/geom-gen/generated/gappa-orient2d.g",
+        about: "orient2d's f64 filter for Gappa, whose proof of its error bound Rocq checks",
+        generate: Generate::Plain(predicates::generate_gappa_orient2d),
+    },
+    Generator {
+        name: "gappa-orient3d",
+        output: "projects/engines/geometry/crates/geom-gen/generated/gappa-orient3d.g",
+        about: "orient3d's f64 filter for Gappa, whose proof of its error bound Rocq checks",
+        generate: Generate::Plain(predicates::generate_gappa_orient3d),
+    },
+    Generator {
+        name: "fptaylor-orient2d",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-orient2d.fpt",
+        about: "orient2d's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_orient2d),
+    },
+    Generator {
+        name: "fptaylor-orient3d",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-orient3d.fpt",
+        about: "orient3d's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_orient3d),
     },
 ];
 

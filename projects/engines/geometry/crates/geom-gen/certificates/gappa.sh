@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Piece G35's Gappa pipeline, run inside the pinned Rocq container (kernel-certificates.yml):
-# builds Gappa from its release tarball, installs the Gappa support library for Rocq from opam,
-# then for each problem asks Gappa for its enclosures, writes Gappa's Rocq proof of them and
-# checks that proof with Rocq. Usage: gappa.sh <problem.g>...
+# The Gappa pipeline of the filter certificates (chapter 28.6; pieces G35 and G40), run inside the
+# pinned Rocq container by kernel-certificates.yml: builds Gappa from its release tarball, installs
+# the Gappa support library for Rocq from opam, then for each problem has Gappa prove its goal,
+# writes Gappa's Rocq proof of it, and checks that proof with Rocq, printing every axiom it rests
+# on. Usage: gappa.sh <problem.g>...  (geom-gen writes the problems: generated/gappa-*.g)
 set -euo pipefail
 
 # Gappa 1.8.3 (2026-09-09; CeCILL or GPL, run as a separate program, never linked).
@@ -32,7 +33,8 @@ opam list --installed | grep -E 'rocq|coq|flocq|gappa'
 
 status=0
 for problem in "$@"; do
-  name=$(basename "$problem" .g)
+  # A Rocq module name has no hyphens.
+  name=$(basename "$problem" .g | tr - _)
   echo "::group::Gappa on $name"
   # The enclosures Gappa proves, as it reports them.
   "$gappa" "$problem" || status=1

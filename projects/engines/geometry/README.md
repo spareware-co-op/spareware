@@ -41,7 +41,7 @@ Each crate has one job, written at the top of its `lib.rs`. [crates/README.md](c
 
 ### 4. How a change is checked (two minutes)
 
-Seven workflows in `.github/workflows/` guard the kernel. [AGENTS.md](AGENTS.md), section 3, lists the commands to run them yourself.
+Eight workflows in `.github/workflows/` guard the kernel. [AGENTS.md](AGENTS.md), section 3, lists the commands to run them yourself.
 
 | Workflow | What it proves |
 | --- | --- |
@@ -52,6 +52,7 @@ Seven workflows in `.github/workflows/` guard the kernel. [AGENTS.md](AGENTS.md)
 | `kernel-bench.yml` | The count gates: no benchmark more than 5% more expensive than on the merge base |
 | `kernel-fuzz.yml` | The fuzz targets: each `geom-fuzz` target under libFuzzer for a minute and under ClusterFuzzLite, and its bounded Kani proofs, the same harness under every engine |
 | `kernel-golden.yml` | The golden store: every golden is in the store, every pinned file unchanged, and any edit to a golden carries its record and an owner's approval |
+| `kernel-certificates.yml` | The filters' error bounds, machine-checked: Gappa's proofs checked by Rocq and FPTaylor's certificates checked by HOL Light, each tool in a container pinned by digest (orient2d and orient3d today) |
 
 ### 5. The map (one minute)
 

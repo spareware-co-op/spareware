@@ -1,6 +1,8 @@
 //! Generators `predicate-module`, `predicate-orient2d`, `predicate-orient3d`, `predicate-incircle`,
 //! `predicate-insphere` and `predicate-plane-side`: the kernel's predicates, from their
-//! descriptions.
+//! descriptions; `verus-orient2d`, orient2d's Verus twin; and `gappa-orient2d`, `gappa-orient3d`,
+//! `fptaylor-orient2d` and `fptaylor-orient3d`, the problems that machine-check those filters'
+//! error bounds ([`crate::predicate_certificates`]).
 //!
 //! What it does: holds the description of each predicate on explicit grid points (chapter 6.2:
 //! orientation in 2D and 3D, in-circle and in-sphere), and of the side of a plane, whose
@@ -40,8 +42,11 @@
 //! exact operations each.
 
 use crate::generator::GenError;
+use crate::predicate_certificates::{fptaylor_problem, gappa_problem};
 use crate::predicate_derive::{Derivation, derive};
-use crate::predicate_emit::{Comparison, parent_module, predicate_module_serving, verus_twin};
+use crate::predicate_emit::{
+    Comparison, EmitError, parent_module, predicate_module_serving, verus_twin,
+};
 
 /// The folder the generated modules are written into, relative to the workspace root.
 pub const OUTPUT_DIR: &str = "projects/engines/geometry/crates/geom-num/src/generated";
@@ -350,6 +355,60 @@ pub fn generate_verus_orient2d() -> Result<Vec<u8>, GenError> {
     )
     .map(String::into_bytes)
     .map_err(|e| GenError::generator(VERUS_ORIENT2D_GENERATOR, e.0))
+}
+
+/// The folder the certificates' problems are written into: geom-gen's generated folder, outside
+/// every crate's sources; `kernel-certificates.yml` runs the tools on them.
+pub const CERTIFICATES_DIR: &str = "projects/engines/geometry/crates/geom-gen/generated";
+
+/// One problem of a filter certificate (chapter 28.6; piece G35), as bytes.
+fn certificate(
+    predicate: &str,
+    generator: &'static str,
+    emit: fn(&Derivation, &str) -> Result<String, EmitError>,
+) -> Result<Vec<u8>, GenError> {
+    let d = derivation(named(predicate)?)?;
+    emit(&d, generator)
+        .map(String::into_bytes)
+        .map_err(|e| GenError::generator(generator, e.0))
+}
+
+/// Generator `gappa-orient2d`: orient2d's filter for Gappa, whose proof Rocq checks.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_gappa_orient2d() -> Result<Vec<u8>, GenError> {
+    certificate("orient2d", "gappa-orient2d", gappa_problem)
+}
+
+/// Generator `gappa-orient3d`: orient3d's filter for Gappa, whose proof Rocq checks.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_gappa_orient3d() -> Result<Vec<u8>, GenError> {
+    certificate("orient3d", "gappa-orient3d", gappa_problem)
+}
+
+/// Generator `fptaylor-orient2d`: orient2d's normalised filter for `FPTaylor`, whose certificate
+/// HOL Light checks.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_fptaylor_orient2d() -> Result<Vec<u8>, GenError> {
+    certificate("orient2d", "fptaylor-orient2d", fptaylor_problem)
+}
+
+/// Generator `fptaylor-orient3d`: orient3d's normalised filter for `FPTaylor`, whose certificate
+/// HOL Light checks.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_fptaylor_orient3d() -> Result<Vec<u8>, GenError> {
+    certificate("orient3d", "fptaylor-orient3d", fptaylor_problem)
 }
 
 /// Generator `predicate-module`: the module that declares the predicates and holds their helpers.

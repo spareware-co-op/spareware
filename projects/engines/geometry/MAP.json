@@ -1585,6 +1585,29 @@
           "target": "bin"
         },
         {
+          "cost": "linear in the description's steps; no allocation beyond the text.",
+          "does": "a generated filter computes the description's steps in `f64` on the coordinate differences, the scale S from the axis maxima, and the bound `fl(C · scale)`, and answers when the computed value is beyond the bound. [`gappa_problem`] states exactly that computation in Gappa's binary64 with rounding to nearest, beside the same steps evaluated exactly, on whole-number differences bounded by their axis maxima, and asks Gappa to prove that the error is within K · S and the computed bound within a relative error R of C · S, with K = C · (1 − R): together, |error| ≤ K · S ≤ bound, so an answer has the exact sign. [`fptaylor_problem`] states the normalised problem for `FPTaylor`, every difference in [−1, 1] so that S is 1, with the same K as the bound HOL Light checks its certificate against. Both problems carry Gappa's hints and HOL Light's bound in their text, so the tools' runs need nothing else.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-gen/src/predicate_certificates.rs",
+          "guarantees": [
+            "**The shipped steps.** Each problem holds one rounded definition per operation of the filter, in the generated code's order, with its operands and operation, and the constant and the scale's product order as the code has them; `tests/certificate_problems.rs` holds the committed problems to the committed filters statement by statement.",
+            "**Exact numbers.** R = (k + 1)u, for the k roundings between the axis maxima and the bound, bounds the bound's relative error ((1 + u)^k − 1 < (k + 1)u for u = 2^−53), and K = C · (1 − R) is computed exactly from the constant's bits: both are dyadic, written exactly.",
+            "**Refused, never approximated.** A filter the problems cannot state yet, one with rounded inputs, a scale of several monomials, or a coordinate loaded without a translation, is refused with the reason; piece G40 extends them to every filter."
+          ],
+          "job": "The problems that machine-check a predicate filter's error bound (chapter 28.6 of the kernel architecture; piece G35): the filter's claim stated for Gappa, whose proof Rocq checks, and for `FPTaylor`, whose certificate HOL Light checks.",
+          "method": {
+            "links": [
+              "doi:10.1051/ita:2007005",
+              "doi:10.1145/3230733"
+            ],
+            "text": "Melquiond and Pion's certified semi-static filters, Gappa proofs of a homogeneous predicate's error as a multiple of the product of its inputs' maxima (*Formally certified floating-point filters for homogeneous geometric predicates*, RAIRO Theoretical Informatics and Applications 41 (2007), doi:10.1051/ita:2007005), with Gappa's `LIN` predicate (`a // b`) in place of their special rounding operators, which current Gappa no longer has; and `FPTaylor`'s symbolic Taylor forms on the normalised problem (Solovyev et al., *Rigorous Estimation of Floating-Point Round-off Errors with Symbolic Taylor Expansions*, ACM TOPLAS 41 (2018), doi:10.1145/3230733)."
+          },
+          "path": "geom_gen::predicate_certificates",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "linear in the number of steps, times the size of the numbers (a few limbs, a few dozen coefficients) and of the scale sets (a few monomials).",
           "does": "[`derive`] takes a description ([`crate::predicate_lang`]) and returns a [`Derivation`]: for every step, a [`StepCert`] (the bound on its exact value over the input domain, its bits, the integer type the exact path computes it in, and the filter's scale, unit bound and unit error for it), the scale expression the filter evaluates at run time, the number of roundings in it, and the error constant, exactly and as the `f64` the filter uses.",
           "family": [],
@@ -1718,7 +1741,7 @@
             "**The same formulas as `predicate.rs`.** Each description evaluates the determinant that `geom-num`'s hand-written fast path evaluates, term for term and with the same signs, so the generated exact value equals the hand-written one (tested in `geom-num`), and the generated filter's sign, when it gives one, is that value's sign. In-sphere shares the three cross products its four 3 × 3 determinants need instead of recomputing them; the values are the same. `plane_side` evaluates n · p + d as `geom-num`'s `Plane::side` does, term for term.",
             "**Pure.** No input but the descriptions and `geom-num`'s constants; the same bytes on every target."
           ],
-          "job": "Generators `predicate-module`, `predicate-orient2d`, `predicate-orient3d`, `predicate-incircle`, `predicate-insphere` and `predicate-plane-side`: the kernel's predicates, from their descriptions.",
+          "job": "Generators `predicate-module`, `predicate-orient2d`, `predicate-orient3d`, `predicate-incircle`, `predicate-insphere` and `predicate-plane-side`: the kernel's predicates, from their descriptions; `verus-orient2d`, orient2d's Verus twin; and `gappa-orient2d`, `gappa-orient3d`, `fptaylor-orient2d` and `fptaylor-orient3d`, the problems that machine-check those filters' error bounds ([`crate::predicate_certificates`]).",
           "method": {
             "links": [
               "https://doi.org/10.1016/j.cad.2015.10.004",
