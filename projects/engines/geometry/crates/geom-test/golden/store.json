@@ -45,6 +45,16 @@
           "sha256": "4d2c3a986913d7751a8f49eb3a7e5340eb973b591154c7acdaaf0ad47b6472f7"
         },
         {
+          "id": "geom-num/roots-and-quadrature",
+          "what": "Brent's zero and minimum, the generated Gauss-Legendre and Gauss-Kronrod rules and the adaptive integrator (piece G51): every rule's nodes and weights and 1,440 results over fixed problems, in the canonical encoding of tests/roots_quadrature_determinism.rs.",
+          "check": {
+            "crate": "geom-num",
+            "test": "roots_quadrature_determinism",
+            "function": "roots_and_quadrature_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "a1b86fdbdb23392b891283697f6bac1fc51f1dce54633ac6a7c937cb3df1a31d"
+        },
+        {
           "id": "geom-num/dd-exact-sum",
           "what": "Double-double arithmetic and ExactSum (piece G25) on 6,000 adversarial operand pairs at every exponent: every DD operation, two_prod_fma and fma, 903,792 recorded bytes in the encoding of tests/attack_g25.rs.",
           "check": {

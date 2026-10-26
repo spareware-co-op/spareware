@@ -55,7 +55,8 @@ const LOCK: &str = include_str!("../../../../../../Cargo.lock");
 const KERNEL_WORKFLOW: &str = include_str!("../../../../../../.github/workflows/kernel.yml");
 
 /// The source of every module of `geom-num`, by module name.
-const GEOM_NUM: [(&str, &str); 17] = [
+const GEOM_NUM: [(&str, &str); 20] = [
+    ("brent", include_str!("../../geom-num/src/brent.rs")),
     ("dd", include_str!("../../geom-num/src/dd.rs")),
     ("eft", include_str!("../../geom-num/src/eft.rs")),
     ("error", include_str!("../../geom-num/src/error.rs")),
@@ -72,6 +73,14 @@ const GEOM_NUM: [(&str, &str); 17] = [
     ("math", include_str!("../../geom-num/src/math.rs")),
     ("plane", include_str!("../../geom-num/src/plane.rs")),
     ("predicate", include_str!("../../geom-num/src/predicate.rs")),
+    (
+        "quadrature",
+        include_str!("../../geom-num/src/quadrature.rs"),
+    ),
+    (
+        "quadrature_rules",
+        include_str!("../../geom-num/src/quadrature_rules/mod.rs"),
+    ),
     ("real", include_str!("../../geom-num/src/real.rs")),
     ("rng", include_str!("../../geom-num/src/rng.rs")),
     ("sign", include_str!("../../geom-num/src/sign.rs")),
