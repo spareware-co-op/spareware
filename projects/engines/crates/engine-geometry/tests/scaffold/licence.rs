@@ -187,7 +187,7 @@ pub fn chosen_way(chosen: &str) -> Option<Way> {
 /// The gate's record of licence choices (29.20, rule 3): every crate in the kernel family's graph
 /// whose licence offers a choice, its expression exactly as its manifest gives it, and the licence
 /// (or licences, joined by `AND`) taken: the first of 29.2's identifiers, in its order, offered.
-pub const LICENCE_CHOICES: [(&str, &str, &str); 101] = [
+pub const LICENCE_CHOICES: [(&str, &str, &str); 106] = [
     ("anstyle", "MIT OR Apache-2.0", "MIT"),
     ("anyhow", "MIT OR Apache-2.0", "MIT"),
     ("autocfg", "Apache-2.0 OR MIT", "MIT"),
@@ -207,6 +207,9 @@ pub const LICENCE_CHOICES: [(&str, &str, &str); 101] = [
     ("condtype", "MIT OR Apache-2.0", "MIT"),
     ("core_detect", "MIT/Apache-2.0", "MIT"),
     ("cpufeatures", "MIT OR Apache-2.0", "MIT"),
+    ("crossbeam-deque", "MIT OR Apache-2.0", "MIT"),
+    ("crossbeam-epoch", "MIT OR Apache-2.0", "MIT"),
+    ("crossbeam-utils", "MIT OR Apache-2.0", "MIT"),
     ("crypto-common", "MIT OR Apache-2.0", "MIT"),
     ("dashu-base", "MIT OR Apache-2.0", "MIT"),
     ("dashu-int", "MIT OR Apache-2.0", "MIT"),
@@ -257,6 +260,8 @@ pub const LICENCE_CHOICES: [(&str, &str, &str); 101] = [
     ("rand_core", "MIT OR Apache-2.0", "MIT"),
     ("rand_xorshift", "MIT OR Apache-2.0", "MIT"),
     ("rand_xoshiro", "MIT OR Apache-2.0", "MIT"),
+    ("rayon", "MIT OR Apache-2.0", "MIT"),
+    ("rayon-core", "MIT OR Apache-2.0", "MIT"),
     ("regex-lite", "MIT OR Apache-2.0", "MIT"),
     ("regex-syntax", "MIT OR Apache-2.0", "MIT"),
     ("robust", "MIT OR Apache-2.0", "MIT"),

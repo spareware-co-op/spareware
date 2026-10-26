@@ -3490,8 +3490,34 @@
         27,
         29
       ],
-      "depends": [],
-      "errors": [],
+      "depends": [
+        {
+          "licence": "Apache-2.0 OR MIT",
+          "link": "https://crates.io/crates/rayon/1.12.0",
+          "manifest": "projects/engines/geometry/crates/geom-pool/Cargo.toml",
+          "method_note": null,
+          "name": "rayon",
+          "pinned": false,
+          "purpose": "1.12.0",
+          "take": "depend"
+        }
+      ],
+      "errors": [
+        {
+          "doc": "A failure to build a [`Rayon`] pool.",
+          "file": "projects/engines/geometry/crates/geom-pool/src/native.rs",
+          "kinds": [
+            {
+              "doc": "The operating system would not start the pool's threads.",
+              "name": "CannotStartThreads",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_pool::native",
+          "name": "PoolError",
+          "non_exhaustive": false
+        }
+      ],
       "family": [],
       "file": "projects/engines/geometry/crates/geom-pool/src/lib.rs",
       "folder": "projects/engines/geometry/crates/geom-pool",
@@ -3501,17 +3527,43 @@
         "It never panics, except to pass on a task's panic (23.4).",
         "In a browser it starts Web Workers only where shared memory is allowed; elsewhere the kernel runs serially, with the same answer (23.4, 29.4).",
         "It is the one `geom-*` crate that ships and may use `std`, because threads need it (the development crates use it too, and never ship); it still forbids unsafe code and carries `geom-num`'s lint posture (27).",
-        "The only published crates it may name are rayon and, for Web Workers, wasm-bindgen-rayon, each by its row of section 29.4; it names neither yet."
+        "The only published crates it may name are rayon and, for Web Workers, wasm-bindgen-rayon, each by its row of section 29.4. It names rayon, on native targets only ([`native`], piece G33); wasm-bindgen-rayon waits for piece G456, and until then WebAssembly runs serially."
       ],
       "job": "Threads for `geom-run`'s helper: rayon on native targets, Web Workers in a browser.",
       "kind": "kernel",
       "layer": "13",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "one scope and one spawned job per task, each a small heap allocation inside rayon, and the pool's threads, started once when it is built and stopped when it is dropped.",
+          "does": "[`Rayon`] owns a `rayon::ThreadPool` of a fixed number of threads and implements [`Pool`]: [`Pool::run_all`] spawns every task into one scope of that pool and returns when all of them have finished. The helper (`geom_run::Exec::with_pool`) decides everything else: the fixed chunks, the order results are read in, the lowest-numbered failure, so every answer is the serial executor's, bit for bit, whatever the pool does (23.4).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-pool/src/native.rs",
+          "guarantees": [
+            "**Every task runs exactly once**, on some thread of the pool, in any order: each is spawned once into the scope, and the scope returns only after every spawned job has finished.",
+            "**Re-entrant.** A task may call the helper again with the same pool. The nested scope runs on the worker thread that opened it, and while it waits that thread runs other jobs of the pool, rayon's work stealing, instead of blocking; so a nested call makes progress on any number of threads, one included.",
+            "**No panic of its own.** `run_all` panics only to pass on a task's panic, after every task has finished: rayon's scope catches a job's panic and resumes it when the scope ends. Building a pool reports a failure to start its threads as [`PoolError`], never a panic.",
+            "**The thread count is the caller's.** It is fixed when the pool is built and never read by the helper, whose chunks do not depend on it (23.4); rayon's own environment variable (`RAYON_NUM_THREADS`) is not consulted, because the count is set explicitly."
+          ],
+          "job": "rayon's work-stealing pool behind `geom-run`'s `Pool` trait, for native targets.",
+          "method": {
+            "links": [
+              "https://docs.rs/rayon/1.12.0/rayon/struct.ThreadPool.html#method.in_place_scope",
+              "doi:10.1145/324133.324234",
+              "projects/kit/notes/G33-rayon-audit.md"
+            ],
+            "text": "rayon's scoped spawning, `ThreadPool::in_place_scope` and `Scope::spawn`, whose documented contract is that the scope returns when every job spawned into it, and every job those spawned, has completed, and that a panic in a job is propagated when the scope ends (<https://docs.rs/rayon/1.12.0/rayon/struct.ThreadPool.html#method.in_place_scope>), over its work-stealing scheduler, after Blumofe and Leiserson, \"Scheduling Multithreaded Computations by Work Stealing\", Journal of the ACM 46(5), 1999 (`doi:10.1145/324133.324234`). rayon's audit is `projects/kit/notes/G33-rayon-audit.md`."
+          },
+          "path": "geom_pool::native",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-pool",
       "provenance": [],
       "sections": "23.4 and 29.4; open question OQ-23.4; chapters 21 and 27 (\"Proposed rule changes\"), in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G33, G456.",
+      "status": null,
       "summary": "Spare Kit geometry kernel: threads for the parallel helper."
     },
     {
@@ -5639,6 +5691,17 @@
       "take": "depend",
       "used_by": [
         "projects/engines/geometry/crates/geom-num/Cargo.toml"
+      ]
+    },
+    {
+      "licence": "Apache-2.0 OR MIT",
+      "link": "https://crates.io/crates/rayon/1.12.0",
+      "method_note": null,
+      "name": "rayon",
+      "pinned": false,
+      "take": "depend",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-pool/Cargo.toml"
       ]
     },
     {
