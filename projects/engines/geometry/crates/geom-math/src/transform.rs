@@ -91,7 +91,7 @@
     reason = "variable names follow the formulas of the method each function cites"
 )]
 
-use geom_num::grid::{Coord, P3};
+use geom_num::grid::{Coord, P2, P3};
 use geom_num::interval::Interval;
 use geom_num::ladder::ANGULAR;
 use geom_num::sign::Sign;
@@ -101,7 +101,7 @@ use geom_num::{NumError, math};
 use crate::dd::DD;
 use crate::error::{MathError, budget};
 use crate::exact::{const_pow2, dyadic, exponent, round_scaled, scale_b, shl_into};
-use crate::float::F3;
+use crate::float::{F2, F3};
 use crate::grid_transform::{Axis, GridTransform};
 use crate::rounded::Rounded;
 
@@ -439,6 +439,69 @@ impl Transform {
         let [x, y, z] = p.to_array();
         let [r0, r1, r2] = self.m.map(|[a, b, c, t]| a * x + b * y + c * z + t);
         F3::new(r0, r1, r2)
+    }
+
+    /// Whether the transform acts in the plane: its z row is exactly (0, 0, 1, 0), so it leaves every
+    /// z unchanged and maps the plane z = 0 of a 2D frame onto itself; its determinant is then that
+    /// of its 2 × 2 part, so its classification holds in the plane too.
+    #[must_use]
+    pub fn acts_in_plane(&self) -> bool {
+        let [_, _, z] = self.m;
+        z == [0.0, 0.0, 1.0, 0.0]
+    }
+
+    /// The image of a 2D point: [`Transform::apply_point`] at z = 0, bit for bit.
+    ///
+    /// # Errors
+    ///
+    /// [`MathError::NotInPlane`] if the transform does not act in the plane;
+    /// [`NumError::NotFinite`] if a coordinate overflows.
+    pub fn apply_point_2d(&self, p: F2) -> Result<F2, MathError> {
+        if !self.acts_in_plane() {
+            return Err(MathError::NotInPlane);
+        }
+        let q = self.apply_point(F3::new(p.x(), p.y(), 0.0)?)?;
+        Ok(F2::new(q.x(), q.y())?)
+    }
+
+    /// The image of a 2D vector: [`Transform::apply_vector`] at z = 0, bit for bit.
+    ///
+    /// # Errors
+    ///
+    /// [`MathError::NotInPlane`] if the transform does not act in the plane;
+    /// [`NumError::NotFinite`] if a coordinate overflows.
+    pub fn apply_vector_2d(&self, v: F2) -> Result<F2, MathError> {
+        if !self.acts_in_plane() {
+            return Err(MathError::NotInPlane);
+        }
+        let w = self.apply_vector(F3::new(v.x(), v.y(), 0.0)?)?;
+        Ok(F2::new(w.x(), w.y())?)
+    }
+
+    /// The image of a 2D grid point: [`Transform::apply_grid`]'s x and y at z = 0, rounded once to
+    /// the grid, ties to even, with whether it was exact. Only the x and y rows are evaluated, by
+    /// the same per-row rounding as in 3D, so the result is 3D's bit for bit; the z row, which
+    /// acting in the plane makes z itself, would give 0 exactly, a whole step that 3D's filter
+    /// sends down its exact path every time.
+    ///
+    /// # Errors
+    ///
+    /// [`MathError::NotInPlane`] if the transform does not act in the plane; otherwise as
+    /// [`Transform::apply_grid`].
+    pub fn apply_grid_2d(&self, p: P2) -> Result<Rounded<P2>, MathError> {
+        if !self.acts_in_plane() {
+            return Err(MathError::NotInPlane);
+        }
+        let v = [p.x.get(), p.y.get(), 0];
+        let [r0, r1, _] = self.m;
+        let (x, y) = (round_row(r0, v)?, round_row(r1, v)?);
+        Ok(Rounded::new(
+            P2 {
+                x: x.value(),
+                y: y.value(),
+            },
+            x.is_exact() && y.is_exact(),
+        ))
     }
 
     /// The image of a vector: the linear part only, each coordinate evaluated as
