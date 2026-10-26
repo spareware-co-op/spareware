@@ -1,7 +1,11 @@
 //! Spare Construct: headless command line.
 //!
-//! Runs scripts, converts files, prints sheets and runs checks without a screen.
-//! Map: "Headless API, AI and add-ins".
-//! No code yet: this crate waits until its program reaches the Design stage.
+//! Runs every Transport command without a screen: one command, a batch of commands in JSON lines, the command list with its
+//! schemas, or an MCP server so an AI agent can use the same commands. Map: "Headless API, AI and add-ins".
 
-fn main() {}
+mod cli;
+
+fn main() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    std::process::exit(cli::run(args));
+}

@@ -159,19 +159,19 @@
         "Every benchmark runs the operation it is named after (`tests/attack_g06.rs`), on inputs that are what their class claims (`tests/inputs.rs`).",
         "Inputs and results are pinned by golden digests that must match in every build profile and on wasm32 (`tests/golden.rs`, and the fuel gate).",
         "The gate, the catalogue and `geom-num`'s public functions agree (`tests/coverage.rs`).",
-        "The library has no `unsafe` code, no panicking calls or indexing outside tests, no recursion, no hash maps, no randomness (inputs come from fixed seeds) and no platform maths."
+        "The library has no `unsafe` code, no panicking calls or indexing outside tests, no recursion, no hash maps of its own (Gungraun's summary model keeps counts in an insertion-ordered `IndexMap`, which [`callgrind`] only looks up by key, so no result depends on its hashing), no randomness (inputs come from fixed seeds) and no platform maths."
       ],
       "job": "the kernel's benchmarks, and the count gates that block a regression over 5%.",
       "kind": "development",
       "layer": "Development",
       "modules": [
         {
-          "cost": "reading the files, then O(n log n) for n benchmarks.",
+          "cost": "reading and parsing the files, then O(n log n) for n benchmarks.",
           "does": null,
           "family": [],
           "file": "projects/engines/geometry/crates/geom-bench/src/bin/geom-bench-counts.rs",
           "guarantees": [
-            "the exit status is the check's verdict, and every check is exact for any count and any whole-number percentage the arguments can hold (`geom_bench::counts`); a missing, unreadable or malformed file, or an argument that is not a whole number, exits with 2, never with a pass."
+            "the exit status is the check's verdict, and every check is exact for any count and any whole-number percentage the arguments can hold (`geom_bench::counts`, `geom_bench::callgrind`); a missing, unreadable or malformed file, a benchmark without exactly one summary, or an argument that is not a whole number, exits with 2, never with a pass."
           ],
           "job": "`geom-bench-counts`: the checks the gates run on count files, from the command line. The checks themselves are in `geom_bench::counts`.",
           "method": {
@@ -188,6 +188,7 @@
               "link": "https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md",
               "method_note": null,
               "name": "Gungraun",
+              "notice": [],
               "pinned": true,
               "purpose": "for its library-benchmark API and its Callgrind and DHAT settings. No code copied.",
               "take": "port-method"
@@ -218,6 +219,7 @@
               "link": "https://github.com/bytecodealliance/wasmtime/blob/5afd63588b1f5520391c6a37fc38dfd3ccd607c2/crates/wasmtime/src/config.rs#L627-L646",
               "method_note": null,
               "name": "Wasmtime",
+              "notice": [],
               "pinned": true,
               "purpose": "for what fuel counts and how `Config::consume_fuel` meters it. No code copied.",
               "take": "port-method"
@@ -225,6 +227,43 @@
           ],
           "spdx": null,
           "target": "bin"
+        },
+        {
+          "cost": "reading and parsing every summary, linear in their size; then O(n log n) for n benchmarks, which are kept in an ordered map.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/callgrind.rs",
+          "guarantees": [
+            "**Exact, for every count.** Every limit is tested in integers ([`Change::rose_over`]): 100 · head > (100 + p) · base, and a count resolves p% exactly when it is at least ⌈100 / p⌉. Percentages are computed, as floating point, for display only.",
+            "**Every benchmark judged, or no verdict.** Every benchmark the run lists has exactly one summary, every summary is a benchmark the run lists and of the schema version the gate's Gungraun writes, and every summary carries a whole count for each of the eight judged measures, from the pull request and, for a benchmark the merge base has, from the merge base; anything else is an error, never a pass.",
+            "**Deterministic reports.** Benchmarks are judged and reported in name order, and measures in the order of [`JUDGED`], the same on every run and every platform.",
+            "**Totality.** No input makes [`parse_summary`], [`judge`] or [`read_summaries`] panic."
+          ],
+          "job": "The instruction-and-cache gate's verdict, read from Gungraun's machine-readable summaries: instructions and estimated cycles are gated at the gate's percentage on every benchmark, and each L1 and last-level miss count is gated at that percentage only where its merge-base count can resolve it; a smaller miss count is listed and judged through estimated cycles.",
+          "method": {
+            "links": [
+              "https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/crates/gungraun-runner/src/runner/args.rs#L1325-L1358",
+              "https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/crates/gungraun-runner/src/summary/model.rs#L29",
+              "https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/crates/gungraun-runner/src/runner/callgrind/mod.rs#L110-L126",
+              "https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md"
+            ],
+            "text": "the summary files Gungraun writes with `--save-summary`, one per benchmark in its output folder (<https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/crates/gungraun-runner/src/runner/args.rs#L1325-L1358>), read through Gungraun's own typed summary model (`gungraun_runner::summary::model`, schema version 7, <https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/crates/gungraun-runner/src/summary/model.rs#L29>; the `summary` feature of the `gungraun-runner` crate at exactly the version the gate runs) and `serde_json`; estimated cycles as Gungraun computes them (<https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/crates/gungraun-runner/src/runner/callgrind/mod.rs#L110-L126>); the percentage limit of Gungraun's soft limits (<https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md>), applied exactly; the resolution floor is ours, derived above, because no source sets a floor for a percentage limit on small counts."
+          },
+          "path": "geom_bench::callgrind",
+          "provenance": [
+            {
+              "licence": "Apache-2.0 OR MIT",
+              "link": "https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md",
+              "method_note": null,
+              "name": "Gungraun",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for its summary files, its default output layout and its estimated-cycles formula. No code copied; its summary model is used as a dependency.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
         },
         {
           "cost": "linear in the bytes encoded, from one byte (a sign) to a few hundred (three planes) per value, each fed to SHA-256 once; nothing is allocated.",
@@ -289,6 +328,7 @@
               "link": "https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md",
               "method_note": null,
               "name": "Gungraun",
+              "notice": [],
               "pinned": true,
               "purpose": "for its library-benchmark API and its Callgrind and DHAT settings. No code copied.",
               "take": "port-method"
@@ -339,6 +379,7 @@
               "link": "https://github.com/bytecodealliance/wasmtime/blob/5afd63588b1f5520391c6a37fc38dfd3ccd607c2/crates/wasmtime/src/config.rs#L627-L646",
               "method_note": null,
               "name": "Wasmtime",
+              "notice": [],
               "pinned": true,
               "purpose": "for what fuel counts and how `Config::consume_fuel` meters it. No code copied.",
               "take": "port-method"
@@ -725,7 +766,7 @@
             "Every benchmark runs the operation it is named after (`tests/attack_g06.rs`), on inputs that are what their class claims (`tests/inputs.rs`).",
             "Inputs and results are pinned by golden digests that must match in every build profile and on wasm32 (`tests/golden.rs`, and the fuel gate).",
             "The gate, the catalogue and `geom-num`'s public functions agree (`tests/coverage.rs`).",
-            "The library has no `unsafe` code, no panicking calls or indexing outside tests, no recursion, no hash maps, no randomness (inputs come from fixed seeds) and no platform maths."
+            "The library has no `unsafe` code, no panicking calls or indexing outside tests, no recursion, no hash maps of its own (Gungraun's summary model keeps counts in an insertion-ordered `IndexMap`, which [`callgrind`] only looks up by key, so no result depends on its hashing), no randomness (inputs come from fixed seeds) and no platform maths."
           ],
           "job": "Spare Kit geometry kernel, development only: benchmarks, and the count gates that block a regression over 5%.",
           "method": {
@@ -766,6 +807,7 @@
               "link": "https://prng.di.unimi.it/splitmix64.c",
               "method_note": null,
               "name": "Vigna's SplitMix64 reference code",
+              "notice": [],
               "pinned": false,
               "purpose": "for the constants and steps of SplitMix64, which the tests check against its published outputs. No code copied.",
               "take": "port-method"
@@ -775,20 +817,24 @@
           "target": "lib"
         },
         {
-          "cost": "one compression (64 rounds of 32-bit operations) per 64-byte block, so linear in the message; the state is the eight hash words, one block and two counters, and nothing is allocated.",
+          "cost": "one compression of 64 rounds per 64-byte block, so linear in the message; the state is `sha2`'s fixed block buffer, and nothing is allocated except the string `Display` writes.",
           "does": null,
           "family": [],
           "file": "projects/engines/geometry/crates/geom-bench/src/sha256.rs",
           "guarantees": [
-            "the digest of every message below 2^61 bytes (2^64 bits, the standard's limit) is the one FIPS 180-4 defines, whatever pieces the message is fed in (the tests check the standard's examples, a million bytes in uneven pieces, and every padding length); and no method panics."
+            "**The digest FIPS 180-4 defines**, whatever pieces the message is fed in: `sha2`'s, which the tests check against the standard's own examples, a million bytes in uneven pieces and every padding length.",
+            "**The same digest on every target**: SHA-256 is fully specified integer arithmetic, and `sha2`'s portable and processor-specific back ends compute the same function (the tests run on every target the gates run on, wasm32 included).",
+            "**A hexadecimal digest reads back as itself**: [`Digest::from_hex`] takes exactly 64 digits, either case, and refuses anything else; [`Digest`]'s `Display` writes 64 lowercase digits.",
+            "No method panics."
           ],
-          "job": "SHA-256, the hash of every benchmark's golden digests.",
+          "job": "SHA-256, the hash of every benchmark's golden digests: the `sha2` crate's, with the golden digest type the gates compare and the hexadecimal form `golden.txt` stores.",
           "method": {
             "links": [
               "https://csrc.nist.gov/pubs/fips/180-4/upd1/final",
+              "https://docs.rs/sha2/0.11.0/sha2/",
               "https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values"
             ],
-            "text": "the Secure Hash Standard, NIST FIPS 180-4, sections 4.1.2 (functions), 4.2.2 (constants), 5.1.1 (padding), 5.3.3 (initial value) and 6.2.2 (the compression function): <https://csrc.nist.gov/pubs/fips/180-4/upd1/final>. The message schedule is kept as a sliding window of sixteen words, which computes the same W_t as the standard's 64-word array. The tests check the standard's own examples (<https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values>)."
+            "text": "the Secure Hash Standard, NIST FIPS 180-4 (<https://csrc.nist.gov/pubs/fips/180-4/upd1/final>), as the `sha2` crate implements it (<https://docs.rs/sha2/0.11.0/sha2/>), checked against the standard's example values (<https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values>)."
           },
           "path": "geom_bench::sha256",
           "provenance": [],
@@ -803,6 +849,7 @@
           "link": "https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md",
           "method_note": null,
           "name": "Gungraun",
+          "notice": [],
           "pinned": true,
           "purpose": "for its library-benchmark API and its Callgrind and DHAT settings. No code copied.",
           "take": "port-method"
@@ -1237,7 +1284,7 @@
       "layer": "Development",
       "modules": [
         {
-          "cost": "none at run time for the alias; displaying a [`Finding`] writes its two strings.",
+          "cost": "none at run time for the alias; [`Finding::new`] runs its detail closure once, except under Kani; displaying a [`Finding`] writes its two strings.",
           "does": null,
           "family": [],
           "file": "projects/engines/geometry/crates/geom-fuzz/src/lib.rs",
@@ -1248,7 +1295,10 @@
           ],
           "job": "Spare Kit geometry kernel, development only: the fuzz harnesses.",
           "method": {
-            "none": "this root defines only the [`Finding`] type, its `Display` and `Error` implementations and the [`Harness`] alias, whose shape 28.5 gives. Each harness module names the method it follows."
+            "links": [
+              "https://github.com/model-checking/kani/blob/0d2328a93f0e0ff66132d6bfa1a7d884877cf862/library/std/src/lib.rs"
+            ],
+            "text": "[`Finding::new`] leaves a finding's detail unwritten under Kani, as Kani's own `std` leaves the messages of `assert!` and `panic!` unformatted during verification (<https://github.com/model-checking/kani/blob/0d2328a93f0e0ff66132d6bfa1a7d884877cf862/library/std/src/lib.rs>, credited below): Kani reports a failed proof with a trace of every value, and formatting symbolic values would only enlarge the problem it solves. The rest of this root is the [`Finding`] type, its `Display` and `Error` implementations and the [`Harness`] alias, whose shape 28.5 gives. Each harness module names the method it follows."
           },
           "path": "geom_fuzz",
           "provenance": [],
@@ -1256,8 +1306,34 @@
           "target": "lib"
         },
         {
+          "cost": "per case, 6 checked `i128` products and 5 checked sums for the reference, one call each to the predicate, the exact path and the filter (each constant time), and at most [`MAX_INPUT_BYTES`] bytes read by [`decode`]. No allocation unless a finding is reported.",
+          "does": "[`check`] takes three grid points a, b, c and computes [`reference`], the determinant of the 3 × 3 matrix whose rows are (a.x, a.y, 1), (b.x, b.y, 1) and (c.x, c.y, 1), expanded along its third column in `i128`: (b.x·c.y − b.y·c.x) − (a.x·c.y − a.y·c.x) + (a.x·b.y − a.y·b.x). That determinant is orient2d's definition (Shewchuk 1997, section 4.1); this module computes it with no code shared with `geom-num`, and by another formula than `geom-num`'s (b − a) × (c − a), so the two agree only if both are right. Against it, `check` holds `geom-num` to three claims:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/orient2d.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to three valid grid points, reading at most [`MAX_INPUT_BYTES`] = 73 bytes; the bound is derived on the constant and a unit test builds the input that reaches it.",
+            "**The oracle cannot overflow on the grid.** Each coordinate has magnitude at most M = 2^40 − 1, so each of the six products is at most M² < 2^80, each 2 × 2 minor at most 2M² < 2^81, and the determinant at most 6M² < 2^83, far inside `i128`. Every step is a checked method all the same, and a step that failed would be reported as a [`Finding`] naming this harness as the defect, never a panic and never a wrapped value.",
+            "**A wrong answer is a [`Finding`]**, naming the claim, the points, the reference value and what `geom-num` gave. An error from the predicate, or a `None` from the exact path, is a finding too, never read as a sign: `geom-num` proves every grid input answers.",
+            "**A panic is a failure.** Nothing is caught: a panic in `geom-num` fails the run, and the engine reports the input.",
+            "**What is proven and what is tested.** For every case [`proof_case`] can give with bound [`PROOF_BOUND`] (every coordinate within `PROOF_BOUND` steps of 0 or of an edge ±(2^40 − 1) of the frame, in any combination), Kani proves that all three claims hold and that nothing on the way panics or overflows (`tests/orient2d.rs`, `orient2d_proof`; Kani checks every arithmetic step, index and unwrap by default). Near the edges the filter's products round, so the proof covers the filter's error bound, not only exact arithmetic. Everywhere else in the frame the claims are tested, by fuzzing and the property tests, not proven."
+          ],
+          "job": "Fuzz target and bounded proof: `geom-num`'s orient2d agrees with the exact determinant of its definition, computed here from scratch.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md",
+              "projects/kit/notes/G01-evidence/08-standards-coverage-testing.md",
+              "https://doi.org/10.1007/PL00009321"
+            ],
+            "text": "an exact oracle for a predicate, the first of chapter 28.6's checks (`projects/engines/geometry/architecture/28-testing.md`), with bounded Kani proofs of sign agreement with an exact integer reference, as evidence report 08 recommends for predicates (`projects/kit/notes/G01-evidence/08-standards-coverage-testing.md`, \"Recommended test architecture\", item 1). The reference is the 3 × 3 determinant of the definition, expanded by cofactors along the column of ones, in Shewchuk's paper: J. R. Shewchuk, \"Adaptive Precision Floating-Point Arithmetic and Fast Robust Geometric Predicates\", *Discrete & Computational Geometry* 18 (1997), 305–363, <https://doi.org/10.1007/PL00009321>."
+          },
+          "path": "geom_fuzz::orient2d",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "4 + 3 + 6 + 6 + 10 = 29 predicate calls per input, each constant time, and at most [`MAX_INPUT_BYTES`] bytes read.",
-          "does": "[`decode`] turns a fuzzer's bytes into grid points with `geom-test`'s [`GridSampler`] (four 2D points, then five 3D points). [`harness`] calls every exact predicate on them: `orient2d`, `incircle`, `orient3d` and `insphere`. For each, it checks that the predicate answers, then swaps every pair of points and checks that the sign flips, `Zero` staying `Zero`.",
+          "does": "[`decode`] turns a fuzzer's bytes into grid points with `geom-test`'s [`GridSampler`] (four 2D points, then five 3D points). [`check`] calls every exact predicate on them: `orient2d`, `incircle`, `orient3d` and `insphere`. For each, it checks that the predicate answers, then swaps every pair of points and checks that the sign flips, `Zero` staying `Zero`. [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout).",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-fuzz/src/predicates.rs",
           "guarantees": [
@@ -1312,6 +1388,7 @@
           "link": "https://github.com/camshaft/bolero/blob/7642943b6c1f8a9b5e824dd1cd29b7c8e56068b8/lib/bolero/src/test/mod.rs",
           "method_note": null,
           "name": "bolero 0.13.7 `lib/bolero/src/test/mod.rs`",
+          "notice": [],
           "pinned": true,
           "purpose": "for how its test mode draws a seed per input, prints a failing input's seed and replays it, as described above. No code copied.",
           "take": "port-method"
@@ -1321,6 +1398,7 @@
           "link": "https://github.com/camshaft/bolero/blob/7642943b6c1f8a9b5e824dd1cd29b7c8e56068b8/bin/cargo-bolero/src/project.rs",
           "method_note": null,
           "name": "cargo-bolero 0.13.5 `bin/cargo-bolero/src/project.rs`",
+          "notice": [],
           "pinned": true,
           "purpose": "for the options of `cargo bolero test` above: the sanitizer and its default, and the toolchain. No code copied.",
           "take": "port-method"
@@ -1330,12 +1408,23 @@
           "link": "https://github.com/camshaft/bolero/blob/7642943b6c1f8a9b5e824dd1cd29b7c8e56068b8/bin/cargo-bolero/src/test.rs",
           "method_note": null,
           "name": "cargo-bolero 0.13.5 `bin/cargo-bolero/src/test.rs`",
+          "notice": [],
           "pinned": true,
           "purpose": "for its run limits above: `-T`, `--runs`, `--jobs` and `--max-input-length`. No code copied.",
           "take": "port-method"
+        },
+        {
+          "licence": "MIT OR Apache-2.0",
+          "link": "https://github.com/model-checking/kani/blob/0d2328a93f0e0ff66132d6bfa1a7d884877cf862/library/std/src/lib.rs",
+          "method_note": null,
+          "name": "Kani 0.68.0 `library/std/src/lib.rs`",
+          "notice": [],
+          "pinned": true,
+          "purpose": "for its `assert!` and `panic!`, which leave their messages unformatted during verification, the rule [`Finding::new`] follows for a finding's detail. No code copied.",
+          "take": "port-method"
         }
       ],
-      "sections": "chapter 27's `geom-fuzz` row and its rules for the development crates, and 28.5 of the kernel architecture (`projects/engines/geometry/architecture/`), in part: its tooling (one plain harness function, bolero's `check!` and the cargo-bolero command) and one target, on the swap law of 28.6; the seeded leg 28.2 asks for; the replay of every stored crash, 28.16; and the short fuzz and fixed seeds of 28.17.",
+      "sections": "chapter 27's `geom-fuzz` row and its rules for the development crates, and 28.5 of the kernel architecture (`projects/engines/geometry/architecture/`), in part: its tooling (one plain harness function, bolero's `check!`, libFuzzer under cargo-bolero, and `ClusterFuzzLite` on pull requests) and two targets, on the swap law and the exact oracle of 28.6; a bounded Kani proof of 28.7, on bolero's harness unchanged; the seeded leg 28.2 asks for; the replay of every stored crash, 28.16; and the short fuzz and fixed seeds of 28.17.",
       "spdx": null,
       "status": null,
       "summary": "Spare Kit geometry kernel, development only: the fuzz harnesses."
@@ -1522,6 +1611,7 @@
               "link": "https://github.com/davideberly/GeometricTools/blob/e09f5b39a33da6b4bfd0ff8dbb64ddcb7fdfc763/GTE/Mathematics/BSPrecision.h",
               "method_note": null,
               "name": "`GeometricTools`' `BSPrecision.h`",
+              "notice": [],
               "pinned": true,
               "purpose": "for its compile-time bit counting, a cross-check of the certificate here. No code copied.",
               "take": "port-method"
@@ -1531,6 +1621,7 @@
               "link": "https://www.cs.cmu.edu/afs/cs/project/quake/public/code/predicates.c",
               "method_note": null,
               "name": "Shewchuk's `predicates.c`",
+              "notice": [],
               "pinned": false,
               "purpose": "for its error constants (`exactinit`), a cross-check of the analysis here. No code copied.",
               "take": "port-method"
@@ -1540,6 +1631,7 @@
               "link": "https://github.com/BrunoLevy/geogram/blob/16843b4804de35f14ef54667950ab4c8acdd0062/src/lib/geogram/numerics/predicates/orient3d.h",
               "method_note": null,
               "name": "Geogram PCK",
+              "notice": [],
               "pinned": true,
               "purpose": "for its generated filters, a cross-check of the constants here. No code copied.",
               "take": "port-method"
@@ -1550,7 +1642,7 @@
         },
         {
           "cost": "linear in the number of steps.",
-          "does": "[`predicate_module`] writes a predicate's module from its [`Derivation`]: a header with the description, the bit-range certificate and the error analysis, the error constant, `filter` (the `f64` evaluation and its decision), and `value` and `exact` (the checked integer evaluation). [`parent_module`] writes the module that declares them and holds the helpers they share. Both are formatted as rustfmt formats them, so `cargo fmt --check` passes on the committed files.",
+          "does": "[`predicate_module`] writes a predicate's module from its [`Derivation`]: a header with the description, the bit-range certificate and the error analysis, the error constant, `filter` (the `f64` evaluation and its decision), and `value` and `exact` (the checked integer evaluation). [`parent_module`] writes the module that declares them and holds the helpers they share. Both are formatted as rustfmt formats them, so `cargo fmt --check` passes on the committed files. [`verus_twin`] writes a Verus-annotated twin of a predicate's exact path (chapter 28.7; piece G36): a model of the grid's types, the description's value over the integers, and `value` written by the same function as the module's, with a `#[verus_spec]` attribute and a `proof!` hint before each product, so with those removed it is the shipped `value` token for token.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-gen/src/predicate_emit.rs",
           "guarantees": [
@@ -1576,6 +1668,7 @@
               "link": "https://github.com/BrunoLevy/geogram/blob/16843b4804de35f14ef54667950ab4c8acdd0062/src/lib/geogram/numerics/predicates/pck.sh",
               "method_note": null,
               "name": "Geogram PCK",
+              "notice": [],
               "pinned": true,
               "purpose": "for how PCK runs FPG over one description per predicate. No code copied.",
               "take": "port-method"
@@ -1607,6 +1700,7 @@
               "link": "https://github.com/BrunoLevy/geogram/blob/16843b4804de35f14ef54667950ab4c8acdd0062/src/lib/geogram/numerics/predicates/orient2d.pck",
               "method_note": null,
               "name": "Geogram PCK",
+              "notice": [],
               "pinned": true,
               "purpose": "for the form of its predicate descriptions. No code copied.",
               "take": "port-method"
@@ -1640,6 +1734,7 @@
               "link": "https://github.com/BrunoLevy/geogram/blob/16843b4804de35f14ef54667950ab4c8acdd0062/src/lib/geogram/numerics/predicates/orient3d.pck",
               "method_note": null,
               "name": "Geogram PCK",
+              "notice": [],
               "pinned": true,
               "purpose": "for its one description per predicate. No code copied.",
               "take": "port-method"
@@ -2056,6 +2151,7 @@
               "link": "https://github.com/OSGeo/PROJ/blob/5fa31c29f0a806568ed7bc76c1a557604db4a804/data/sql/projected_crs.sql#L375",
               "method_note": null,
               "name": "PROJ (its copy of the EPSG dataset, whose own terms of use cover the data)",
+              "notice": [],
               "pinned": true,
               "purpose": "for the defining parameters of EPSG:2193, NZTM2000. No code copied.",
               "take": "port-method"
@@ -2739,6 +2835,7 @@
               "link": "https://github.com/BrunoLevy/geogram/blob/40d72165ceeeb0a61977d6fdf74d929bfdd77b7b/src/lib/geogram/numerics/interval_nt.h#L455-L462",
               "method_note": null,
               "name": "Geogram `interval_nt.h`",
+              "notice": [],
               "pinned": true,
               "purpose": "for its round-to-nearest interval class `intervalRN`, which the Method above compares.",
               "take": "port-method"
@@ -2746,8 +2843,9 @@
             {
               "licence": "LGPL-3.0-or-later OR LicenseRef-Commercial",
               "link": "https://github.com/CGAL/cgal/blob/cbc3b81d4607c6f3a9d1f3a47d8709a2be3e6bfa/Number_types/include/CGAL/FPU.h#L347-L358",
-              "method_note": null,
+              "method_note": "projects/engines/geometry/methods/cgal-nextafter-widening.md",
               "name": "CGAL `FPU.h`",
+              "notice": [],
               "pinned": true,
               "purpose": "for its widening with `nextafter` when the rounding mode cannot change, which the Method above names.",
               "take": "port-method"
@@ -2757,6 +2855,7 @@
               "link": "https://github.com/rust-lang/compiler-builtins/tree/dfd2203a4d6110820ad7bb65cafe1bf331a03a3d/libm/src/math",
               "method_note": null,
               "name": "`libm` 0.2.16",
+              "notice": [],
               "pinned": true,
               "purpose": "for which instruction or routine its square root and fused multiply-add use on each target, as the guarantees above state.",
               "take": "port-method"
@@ -2831,6 +2930,11 @@
               "link": "https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/atan2/atan2.c",
               "method_note": null,
               "name": "CORE-MATH `src/binary64/atan2/atan2.c` and `src/binary64/atan2/tint.h` at commit `0ce0cbc15935e24c656280e5a46c34e89f301b7a`, by Paul Zimmermann and Alexei Sibidanov, with the help of Silviu-Ioan Filip, who designed the code that generates its rational approximation of `atan`",
+              "notice": [
+                "Copyright (c) 2024-2025 Paul Zimmermann and Alexei Sibidanov",
+                "<https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/atan2/tint.h>",
+                "Copyright (c) 2023-2024 Paul Zimmermann and Alexei Sibidanov"
+              ],
               "pinned": true,
               "purpose": "translated to safe `no_std` Rust, with the 192-bit arithmetic in `u128` and `u64` steps under the crate's rule (`lib.rs`) and total shifts; round-to-nearest only, without the exception flags, `fenv` or `errno`; the canonical NaN for a NaN; the double nearest the 192-bit value where the C stops the program; tiny quotients decided exactly by integer arithmetic; written proofs of the fast-path and accurate-path bounds. Every change is listed under \"Changes from the C source\" below; none changes a correctly rounded result.",
               "take": "port"
@@ -2885,6 +2989,9 @@
               "link": "https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/exp/exp.c",
               "method_note": null,
               "name": "CORE-MATH `src/binary64/exp/exp.c` at commit `0ce0cbc15935e24c656280e5a46c34e89f301b7a`, by Alexei Sibidanov",
+              "notice": [
+                "Copyright (c) 2022-2026 Alexei Sibidanov <sibid@uvic.ca>."
+              ],
               "pinned": true,
               "purpose": "translated to safe `no_std` Rust, with total table reads and the integer steps under the crate's rule (`lib.rs`); round-to-nearest only, without the exception flags or `errno`; the overflow and underflow results returned directly; the canonical NaN for a NaN; a written proof of the error bound. Every change is listed under \"Changes from the C source\" below; none changes a result.",
               "take": "port"
@@ -2939,6 +3046,13 @@
               "link": "https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/log/log.c",
               "method_note": null,
               "name": "CORE-MATH `src/binary64/log/log.c` and `src/binary64/log/dint.h` at commit `0ce0cbc15935e24c656280e5a46c34e89f301b7a`, by Paul Zimmermann and Tom Hubrecht (log.c) and Tom Hubrecht (dint.h, from his correctly rounded `pow`)",
+              "notice": [
+                "Copyright (c) 2022 INRIA and CERN.",
+                "Authors: Paul Zimmermann and Tom Hubrecht.",
+                "<https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/log/dint.h>",
+                "Copyright (c) 2022 CERN.",
+                "Author: Tom Hubrecht"
+              ],
               "pinned": true,
               "purpose": "translated to safe `no_std` Rust, with the 128-bit arithmetic in `u128` and `u64` steps under the crate's rule (`lib.rs`) and total shifts; round-to-nearest only, without the exception flags or `errno`; the canonical NaN for a NaN or a negative input; the fast path's seven `fma`s replaced by plain operations, with its bound re-derived; a Taylor series in the accurate path just below 1; the accurate path's tables trimmed to the entries its index reaches; a written proof of the error bound. Every change is listed under \"Changes from the C source\" below; none changes a correctly rounded result.",
               "take": "port"
@@ -2969,6 +3083,10 @@
               "link": "https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/sinpi/sinpi.c",
               "method_note": null,
               "name": "CORE-MATH `src/binary64/sinpi/sinpi.c` and `src/binary64/cospi/cospi.c` at commit `0ce0cbc15935e24c656280e5a46c34e89f301b7a`, by Alexei Sibidanov",
+              "notice": [
+                "<https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/cospi/cospi.c>",
+                "Copyright (c) 2023-2026 Alexei Sibidanov <sibid@uvic.ca>."
+              ],
               "pinned": true,
               "purpose": "translated to safe `no_std` Rust, with total shifts and table reads and the integer steps under the crate's rule (`lib.rs`); round-to-nearest only, without the exception flags or `errno`; the canonical NaN for NaN and infinite inputs; the main fast path's error constant raised from 2^−78 to `ER0 = 0x1.1p−78`, which the proof covers; a written proof of the error bound. Every change is listed under \"Changes from the C source\" below; none changes a correctly rounded result.",
               "take": "port"
@@ -3072,6 +3190,7 @@
               "link": "https://www.cs.cmu.edu/afs/cs/project/quake/public/code/predicates.c",
               "method_note": null,
               "name": "J. R. Shewchuk, `predicates.c`",
+              "notice": [],
               "pinned": false,
               "purpose": "for the determinant forms and the sign conventions of `orient2d` and `incircle` that the Method and Conventions above follow; chapter 29.3 asks for this credit line.",
               "take": "port-method"
@@ -3117,7 +3236,7 @@
             "**All or nothing.** A draw that fails leaves its stream exactly as it was.",
             "**No panics, no `unsafe`, no allocation, no `std`.** The block function, every draw and every range operation are `const fn`s, so a table of random numbers can be computed at compile time, with the same bits."
           ],
-          "job": "Counter-based random numbers from explicit seeds (Philox4x32-10), and the rule every randomised kernel method follows.",
+          "job": "Counter-based random numbers from explicit seeds (Philox4x32-10): the one generator every randomised kernel method draws from.",
           "method": {
             "links": [
               "https://doi.org/10.1145/2063384.2063405",
@@ -3134,6 +3253,7 @@
               "link": "https://github.com/DEShawResearch/random123/blob/9545ff6413f258be2f04c1d319d99aaef7521150/include/Random123/philox.h",
               "method_note": null,
               "name": "Random123",
+              "notice": [],
               "pinned": true,
               "purpose": "for the word order, the multiplier for each word and the order of key steps and rounds of Philox4x32-10, as the authors' reference implementation fixes them. No code copied.",
               "take": "port-method"
@@ -3185,7 +3305,7 @@
       ],
       "name": "geom-num",
       "provenance": [],
-      "sections": "chapter 6 of the kernel architecture (`projects/engines/geometry/architecture/06-numbers.md`), with the numeric parts of chapters 9 (exactness), 21 (determinism) and 28 (testing), and the random generator chapters 16 (free-form) and 17 (survey, terrain and civil) ask of this crate ([`rng`], which also holds the randomised-method rule).",
+      "sections": "chapter 6 of the kernel architecture (`projects/engines/geometry/architecture/06-numbers.md`), with the numeric parts of chapters 9 (exactness), 21 (determinism) and 28 (testing), and the random generator chapters 16 (free-form) and 17 (survey, terrain and civil) ask of this crate ([`rng`], the one generator of the randomised-method rule in the kernel's `AGENTS.md`).",
       "spdx": null,
       "status": null,
       "summary": "Spare Kit geometry kernel: the numbers layer."
@@ -3559,6 +3679,7 @@
               "link": "https://github.com/rayon-rs/rayon/blob/ee0a00bdb1ab039e178a215ad5712fb7fa58e58f/src/iter/mod.rs#L1675-L1680",
               "method_note": null,
               "name": "rayon",
+              "notice": [],
               "pinned": true,
               "purpose": "for the lowest-index rule of `find_first`, which this crate applies to failures. No code copied.",
               "take": "port-method"
@@ -3631,6 +3752,7 @@
               "link": "https://github.com/rayon-rs/rayon/blob/ee0a00bdb1ab039e178a215ad5712fb7fa58e58f/src/iter/mod.rs#L1675-L1680",
               "method_note": null,
               "name": "rayon",
+              "notice": [],
               "pinned": true,
               "purpose": "for the lowest-index rule of `find_first`, which this crate applies to failures. No code copied.",
               "take": "port-method"
@@ -3665,6 +3787,7 @@
               "link": "https://github.com/rayon-rs/rayon/blob/ee0a00bdb1ab039e178a215ad5712fb7fa58e58f/src/iter/mod.rs#L1675-L1680",
               "method_note": null,
               "name": "rayon",
+              "notice": [],
               "pinned": true,
               "purpose": "for the lowest-index rule of `find_first`, and its indexed iterators' input order. No code copied.",
               "take": "port-method"
@@ -3674,6 +3797,7 @@
               "link": "https://github.com/dimforge/rapier/blob/475caa3ff4646fd9a796b67d14116256f4962bc7/crates/rapier3d/tests/thread_count_determinism.rs#L274-L295",
               "method_note": null,
               "name": "Rapier",
+              "notice": [],
               "pinned": true,
               "purpose": "for how it tests that results do not depend on the thread count. No code copied.",
               "take": "port-method"
@@ -3729,6 +3853,7 @@
               "link": "https://github.com/rayon-rs/rayon/blob/ee0a00bdb1ab039e178a215ad5712fb7fa58e58f/src/iter/mod.rs#L1675-L1680",
               "method_note": null,
               "name": "rayon",
+              "notice": [],
               "pinned": true,
               "purpose": "for the lowest-index rule of `find_first`, which this crate applies to failures. No code copied.",
               "take": "port-method"
@@ -3831,6 +3956,7 @@
           "link": "https://github.com/rayon-rs/rayon/blob/ee0a00bdb1ab039e178a215ad5712fb7fa58e58f/src/iter/mod.rs#L1675-L1680",
           "method_note": null,
           "name": "rayon",
+          "notice": [],
           "pinned": true,
           "purpose": "for the lowest-index rule of `find_first`, which this crate applies to failures. No code copied.",
           "take": "port-method"
@@ -4080,6 +4206,11 @@
     },
     {
       "chapters": [
+        2,
+        4,
+        6,
+        7,
+        21,
         26,
         27,
         28,
@@ -4100,6 +4231,23 @@
       "kind": "development",
       "layer": "Development",
       "modules": [
+        {
+          "cost": "`run` costs one `cargo test` per crate and test target; the other commands read the store and, for `check`, the kernel's sources once.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/bin/golden.rs",
+          "guarantees": [
+            "`list`, `check`, `run` and `diff` never write a file. Exit codes: 0 when everything checked holds; 1 when a check fails (a problem, a failed or unproven golden, a refused or unapproved edit); 2 for a usage error or a file or command that cannot be read or run."
+          ],
+          "job": "`golden`: the golden store's tool: list it, check it against the repository, run every golden in one CI leg's configuration, and hold a pull request's edits to the owner-approval rule.",
+          "method": {
+            "none": "it parses its arguments and calls [`geom_test::golden`], whose module headers carry the methods."
+          },
+          "path": "golden",
+          "provenance": [],
+          "spdx": null,
+          "target": "bin"
+        },
         {
           "cost": "what each gate costs (see its module), plus one `cargo metadata` run for `affected --changed` and `miri-packages`.",
           "does": "one subcommand per step of the workflow, each a thin front to a module of `geom_test`; `kernel-quality --help` lists them and `kernel-quality <command> --help` gives each one's options.",
@@ -4136,8 +4284,59 @@
           "target": "bin"
         },
         {
+          "cost": "one build of the map and the ledger ([`geom_test::ledger::build`]) and one read or write of each generated file.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/bin/provenance.rs",
+          "guarantees": [
+            "`check` writes nothing; `write` writes only `PROVENANCE.md` and `NOTICE`, and each only when its bytes change. Both print every problem, one per line as `<file>: <rule>: <what to do>`, and a summary. Exit codes: 0 when there is no problem and (for `check`) both committed files are current; 1 when any problem or difference is found; 2 for a usage error or a file that cannot be read or written. `--root` names the workspace root to work in; by default it is the workspace this binary was built in."
+          ],
+          "job": "`provenance`: write or check `projects/engines/geometry/PROVENANCE.md` and `projects/engines/geometry/NOTICE`, the kernel's source ledger and notices, generated from the map's provenance records, the licence texts under `notices/` and the method notes under `methods/`.",
+          "method": {
+            "none": "it parses its arguments and calls [`geom_test::ledger::repo`], whose module headers carry the method."
+          },
+          "path": "provenance",
+          "provenance": [],
+          "spdx": null,
+          "target": "bin"
+        },
+        {
+          "cost": "one analysis of the workspace ([`geom_test::recursion::analyse_repo`]); for `gate`, the builds and runs of [`geom_test::recursion::stack`].",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/bin/recursion.rs",
+          "guarantees": [
+            "`list` prints every cycle (its members, a path round it with the line of each call, and its statement or \"no stated bound\") and every recursive type, and exits 0 unless the code cannot be read; `check` prints every problem and exits 1 if there is any; `gate` runs `check`, then every bound test on the small stack in debug and release and the probes, and exits 1 if anything failed; `path` prints a shortest path round a cycle holding the named function, each call with how it was found (by path, on the receiver's type, through a bound, through a value, as a callback of outside code, ...), to show why it is recursive. Exit code 2 is a usage error or a workspace that cannot be read. None of them writes anything in the repository; `gate` builds in `target/recursion-stack`."
+          ],
+          "job": "`recursion`: list every recursive cycle in the crates that ship, check each has a stated depth bound that is true to the code, and run each bound's test on the small WebAssembly stack.",
+          "method": {
+            "none": "it parses its arguments and calls [`geom_test::recursion`], whose module headers carry the method."
+          },
+          "path": "recursion",
+          "provenance": [],
+          "spdx": null,
+          "target": "bin"
+        },
+        {
+          "cost": "one read of every scanned file ([`geom_test::scan::repo::check`]).",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/bin/source-scan.rs",
+          "guarantees": [
+            "it writes nothing. It prints every finding, one per line as `<file>:<line>: <category>: \"<marker>\": <what the rule is and what to do>` (or `<file>: Unreadable: ...`, `<file>: Stale exemption: ...`), and a summary. Exit codes: 0 when nothing is found; 1 when anything is; 2 for a usage error or a folder or file that cannot be read. `--root` names the workspace root to scan; by default it is the workspace this binary was built in."
+          ],
+          "job": "`source-scan`: the banned-source scan of the geometry kernel's crates and the facade's.",
+          "method": {
+            "none": "it parses its arguments and calls [`geom_test::scan::repo`], whose module headers carry the method."
+          },
+          "path": "source-scan",
+          "provenance": [],
+          "spdx": null,
+          "target": "bin"
+        },
+        {
           "cost": "linear in the size of the LCOV files and the crates' sources.",
-          "does": "[`parse_lcov`] reads the LCOV file cargo-llvm-cov writes for one crate (`cargo llvm-cov -p <crate> --branch --lcov`). [`measure`] counts, for every file under the crate's `src/`, the lines and branches outside test code (found by [`crate::rust_source`]) and how many of them the crate's tests ran. [`judge`] applies the bars of [`crate::foundation`]: in the foundation set every line run and every branch taken both ways; elsewhere at least 90% of lines. [`check_marks`] checks every `coverage(off)` mark in the kernel's crates against [`crate::ledger::Ledger::coverage_off`].",
+          "does": "[`parse_lcov`] reads the LCOV file cargo-llvm-cov writes for one crate (`cargo llvm-cov -p <crate> --branch --lcov`). [`measure`] counts, for every file under the crate's `src/`, the lines and branches outside test code (found by [`crate::rust_source`]) and how many of them the crate's tests ran. [`judge`] applies the bars of [`crate::foundation`]: in the foundation set every line run and every branch taken both ways; elsewhere at least 90% of lines. [`check_marks`] checks every `coverage(off)` mark in the kernel's crates against [`crate::quality_ledger::Ledger::coverage_off`].",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/coverage.rs",
           "guarantees": [
@@ -4168,7 +4367,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/deps.rs",
           "guarantees": [
-            "**It never passes by accident.** Metadata it cannot read (a missing field, an unknown dependency kind, or no resolved graph, which is what `cargo metadata --no-deps` gives) is an error, not a pass, and so is a workspace with no kernel crate, because a check that checked nothing must not pass.",
+            "**It never passes by accident.** Metadata it cannot read (a missing field, a field of the wrong type, an unknown dependency kind, a resolved edge without its kinds, or no resolved graph, which is what `cargo metadata --no-deps` gives) is an error, not a pass, and so is a workspace with no kernel crate, because a check that checked nothing must not pass.",
             "**Deterministic.** Kernel crates are visited in name order, declared dependencies in manifest order and resolved ones in name order; the report lists violations in that order.",
             "**Every chain is shown** from the kernel crate to the development crate, with the kind of each edge, so the fix is obvious.",
             "**It changes nothing.** [`cargo_metadata`] runs cargo with `--locked`, so it fails rather than write a `Cargo.lock`."
@@ -4176,9 +4375,10 @@
           "job": "The dependency rule: no kernel crate depends, normally or at build time, on a development crate.",
           "method": {
             "links": [
-              "https://doc.rust-lang.org/cargo/commands/cargo-metadata.html"
+              "https://doc.rust-lang.org/cargo/commands/cargo-metadata.html",
+              "https://docs.rs/cargo_metadata/0.23.1/"
             ],
-            "text": "breadth-first search (Cormen, Leiserson, Rivest and Stein, *Introduction to Algorithms*, 3rd edition, section 22.2) over the union of the declared and resolved graphs from each kernel crate, on the JSON format documented at <https://doc.rust-lang.org/cargo/commands/cargo-metadata.html>. Breadth-first search finds a shortest chain to each development crate."
+            "text": "breadth-first search (Cormen, Leiserson, Rivest and Stein, *Introduction to Algorithms*, 3rd edition, section 22.2) over the union of the declared and resolved graphs from each kernel crate, on the JSON format documented at <https://doc.rust-lang.org/cargo/commands/cargo-metadata.html>. Breadth-first search finds a shortest chain to each development crate. The metadata is read into the typed model of the `cargo_metadata` crate (MIT, <https://docs.rs/cargo_metadata/0.23.1/>), which also builds the `cargo metadata` command: piece G12a put it in place of the field-by-field reading of the JSON that was written here (chapter 29.1). [`check`] takes the JSON itself, not the model, so the tests can seed a violation into real metadata as a manifest would and hand it over."
           },
           "path": "geom_test::deps",
           "provenance": [],
@@ -4209,6 +4409,246 @@
           "target": "lib"
         },
         {
+          "cost": "as each part's header states.",
+          "does": "chapter 28.1 puts \"the golden store\" among `geom-test`'s CI tools, and chapter 28.13 says what it holds and what runs through it. The parts:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/golden.rs",
+          "guarantees": [
+            "**One store, one hash.** Every golden digest of the kernel's crates is in the store; [`repo`] fails on a golden digest constant anywhere else, and every one is SHA-256 from [`sha256`].",
+            "**Every golden on every leg.** `kernel.yml` runs the store's whole current edition through [`matrix`] on each of its targets and build modes, so a golden added to the store is checked everywhere the day it lands.",
+            "**Perturbations change nothing, or the golden fails.** Every golden runs twice on two differently perturbed heaps; order-free cases also run in shuffled orders.",
+            "**Edits are visible and approved.** A changed digest without its history record, a removed golden, or any change to a frozen edition is refused; any other edit to an existing golden needs a kernel owner's approval on the pull request's head commit."
+          ],
+          "job": "The golden store and the determinism matrix: every golden digest of the kernel in one store keyed by edition, the one SHA-256 every golden is hashed with, the perturbations every golden must survive, and the runner that checks every golden on every target and build mode.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md",
+              "projects/engines/geometry/architecture/21-determinism.md",
+              "projects/kit/notes/G01-evidence/05-exact-arithmetic-determinism.md"
+            ],
+            "text": "golden hashes of canonical outputs per kernel edition and operation version, with perturbations that must change nothing, chapter 28.13 of the kernel architecture (`projects/engines/geometry/architecture/28-testing.md`); the determinism matrix of chapter 21 (`projects/engines/geometry/architecture/21-determinism.md`), which follows Rapier's and `Box2D`'s determinism tests (`projects/kit/notes/G01-evidence/05-exact-arithmetic-determinism.md`, section 7)."
+          },
+          "path": "geom_test::golden",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the case's cost twice, plus two perturbations ([`super::perturb`]) and one parse of the store.",
+          "does": "[`check`] takes a golden's id and its case, a closure that computes the case's canonical output and returns its SHA-256 (and anything else the test wants to look at, such as per-section digests or tallies). It runs the case [`REPEATS`] times, each under [`Heap::shift_and_fragment`] with one of [`PERTURBATION_SEEDS`], then compares the digests with each other and with [`Store::expected`]. It prints one line, `golden <id> (edition <label>): <digest> ...`, which `golden run` reads to know the check really ran, and returns a [`Checked`] holding the first run's value and the verdict, so a test can print its diagnostics before it fails.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/golden/check.rs",
+          "guarantees": [
+            "**Twice, on two heaps.** The case runs exactly [`REPEATS`] times, each run under a different seed's perturbation held for the whole run; a case whose output depends on an address, on leftover state from an earlier run, or on anything else that differs between two runs in one process fails with [`GoldenError::Repeat`], naming both digests. An address-dependent case is caught on every run with glibc's, Windows' and WebAssembly's allocators, and on most runs on macOS ([`super::perturb`] says why).",
+            "**The store decides.** The digest must equal the store's for the id in the current edition; otherwise [`GoldenError::Mismatch`] names the edition, the id, both digests and the two things a mismatch can mean (a bug on this target, or a deliberate change that must be recorded in the store and approved by a kernel owner). A golden the store does not hold is [`GoldenError::Store`]. Nothing is ever written to the store from here.",
+            "**The repeat is checked before the store**, so a case that is not even repeatable is reported as such, not as a changed golden.",
+            "**No panic**: the verdict is returned, and the test decides how to fail."
+          ],
+          "job": "Checking a golden: run its case twice in this process, each time on a differently perturbed heap, require one digest, and require the digest the store holds for it in the current edition.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md",
+              "projects/kit/notes/G01-evidence/05-exact-arithmetic-determinism.md"
+            ],
+            "text": "golden hashes of canonical outputs with in-process repeats and heap perturbation, chapter 28.13 of the kernel architecture (`projects/engines/geometry/architecture/28-testing.md`), the method chapter 21 takes from Rapier's and `Box2D`'s determinism tests (`projects/kit/notes/G01-evidence/05-exact-arithmetic-determinism.md`, section 7)."
+          },
+          "path": "geom_test::golden::check",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the two stores' sizes, with a logarithmic factor for the keyed maps; linear in the number of reviews.",
+          "does": "[`diff`] compares the store at a pull request's base with the store at its head and returns a [`Diff`]: the goldens added, the goldens changed (and how), and every [`Diff::refusals`] entry, a change no approval can make. [`Diff::needs_approval`] says whether a kernel owner's approval is required. [`approved`] decides, from a pull request's reviews, whether that approval has been given. The binary `golden` runs both in `.github/workflows/kernel-golden.yml` on every pull request and every review.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/golden/diff.rs",
+          "guarantees": [
+            "**Every difference is seen.** Goldens are matched by edition, id and operation versions; every field is compared; a golden present on one side only is an addition or a removal.",
+            "**A refusal is final.** [`Diff::is_acceptable`] is false whenever a refusal exists, whatever the reviews say.",
+            "**Approval is per head commit.** A review of an earlier commit does not approve later changes, so an approved store cannot be changed again without a fresh approval.",
+            "**Deterministic.** Reports list editions in store order and goldens in key order."
+          ],
+          "job": "The owner-approval rule for edits to the golden store: what a change to the store does, what it may never do, and when a kernel owner must approve it.",
+          "method": {
+            "links": [
+              "https://github.com/obi1kenobi/cargo-semver-checks",
+              "https://docs.github.com/en/rest/pulls/reviews",
+              "https://docs.github.com/en/graphql/reference/enums#commentauthorassociation"
+            ],
+            "text": "a three-way rule check over the two parsed stores (base, head) in the manner of `cargo-semver-checks`' comparison of a crate's public API across two versions (<https://github.com/obi1kenobi/cargo-semver-checks>): every difference is classified against a written rule; the review rule follows GitHub's documentation of pull request reviews (<https://docs.github.com/en/rest/pulls/reviews>) and author associations (<https://docs.github.com/en/graphql/reference/enums#commentauthorassociation>)."
+          },
+          "path": "geom_test::golden::diff",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the store and in the output read.",
+          "does": "[`plan`] groups the current edition's test-checked goldens by crate and test target; [`Group::cargo_args`] gives the `cargo test` arguments that run exactly those test functions (libtest's `--exact` filters) with the leg's own arguments (`--release`, `--target wasm32-wasip1`, ...) and its environment (`RUSTFLAGS` with `-C target-cpu=native` or overflow checks off, `CARGO_TARGET_DIR`), which cargo inherits; [`verify`] reads a run's output and requires that libtest ran exactly the planned functions, all passed, and that every planned golden printed its `golden <id> ... agrees with the store` line ([`super::check`]). The binary `golden run` drives it, and `.github/workflows/kernel.yml` runs it on every target and build mode: debug, release with overflow checks on and as shipped, natively with `-C target-cpu=native`, and on wasm32-wasip1 under wasmtime and Node in debug and release.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/golden/matrix.rs",
+          "guarantees": [
+            "**Exactly the store's goldens.** One group per crate and test target, in store order, each naming its functions exactly; a golden checked by a file has no test and is checked by `golden check` instead.",
+            "**Nothing passes unrun.** [`verify`] fails unless the run has exactly one libtest summary, its verdict is `ok.`, it says exactly the group's number of tests passed, none failed and none was ignored, and every planned id printed its agreeing line: `golden <id> (edition <label>): <64 hexadecimal digits> agrees with the store`, read wherever it starts in an output line. libtest runs tests on one thread on wasm32-wasip1 (no threads) and whenever `RUST_TEST_THREADS=1`, and then prints `test <name> ... ` before the test runs, so the test's own first line follows it on the same output line; with several threads it starts its own."
+          ],
+          "job": "The determinism matrix's runner: every golden of the current edition, run by cargo in whatever configuration a CI leg sets, with proof that each one really ran and agreed.",
+          "method": {
+            "links": [
+              "https://doc.rust-lang.org/rustc/tests/index.html",
+              "projects/engines/geometry/architecture/21-determinism.md"
+            ],
+            "text": "libtest's documented output (`test result: ok. N passed; M failed; I ignored; ...`) and command-line filters (<https://doc.rust-lang.org/rustc/tests/index.html>), the golden matrix of chapters 21 and 28.13 (`projects/engines/geometry/architecture/21-determinism.md`)."
+          },
+          "path": "geom_test::golden::matrix",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "about a thousand allocations (8 to 32 for each of the 52 classes, and up to 16 shift blocks) and half as many frees for one perturbation, at most [`MAX_BYTES`] bytes reserved, linear in that count; nothing is written into the blocks.",
+          "does": "[`Heap::shift_and_fragment`] drives the program's own global allocator from a [`Seed`] into a layout no other seed gives, and holds it there until the [`Heap`] is dropped:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/golden/perturb.rs",
+          "guarantees": [
+            "**Seeded.** Every size and choice comes from [`SplitMix64`] keyed by the seed: the requests the allocator sees, in order, are a function of the seed (where they land is the allocator's).",
+            "**Bounded.** At most [`MAX_BYTES`] bytes are requested in all, and no block exceeds 64 KiB, so a perturbation never asks for more memory than a small test does and never reaches a size that allocators serve with fresh pages (`mmap`) and return at once, which would perturb nothing.",
+            "**Nothing initialised, nothing read.** Blocks are reserved capacity (`Vec::with_capacity`), never written or read, so a perturbation costs allocator calls, not memory traffic; each block passes through `std::hint::black_box` so the optimiser cannot remove an allocation it can see unused.",
+            "**Held while the case runs.** The pinned blocks live in the returned [`Heap`] and are freed when it is dropped, after the case.",
+            "**No panic; no allocation failure ignored.** A failed allocation aborts the process, as every `Vec` allocation does, never returns a smaller heap silently."
+          ],
+          "job": "The perturbing allocator: a seeded shift and fragmentation of the heap before a golden case runs, so that any result that depends on where memory lands changes from run to run and is caught.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/2451116.2451141",
+              "https://doi.org/10.1145/1133981.1133985"
+            ],
+            "text": "heap-layout randomisation as in Stabilizer (C. Curtsinger and E. D. Berger, \"Stabilizer: Statistically Sound Performance Evaluation\", ASPLOS 2013, <https://doi.org/10.1145/2451116.2451141>), whose shuffling layer fills a pool per size class and hands blocks out in random order, and `DieHard`'s randomised placement (E. D. Berger and B. G. Zorn, \"`DieHard`: Probabilistic Memory Safety for Unsafe Languages\", PLDI 2006, <https://doi.org/10.1145/1133981.1133985>), applied here from outside the allocator by freeing a seeded share of each size class's pool in a seeded order; the shuffle is the Fisher-Yates shuffle of [`super::shuffle`]."
+          },
+          "path": "geom_test::golden::perturb",
+          "provenance": [
+            {
+              "licence": "MPL-2.0",
+              "link": "https://github.com/fitzgen/shuffling-allocator/blob/983334621d6c6fd6aa4d40d24edd3221208bf085/src/lib.rs",
+              "method_note": null,
+              "name": "shuffling-allocator",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for its size classes and shuffling layer and to judge whether it could be used; not taken, for the reasons above. No code copied.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the size of the kernel's Rust sources: one parse and one walk per file.",
+          "does": "[`check`] reads the kernel's crates under `projects/engines/geometry/crates`, parses every Rust source of their `src` and `tests` folders as Rust ([`scan`]), and returns every [`Problem`]:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/golden/repo.rs",
+          "guarantees": [
+            "**Code, not text.** Every file is parsed by `syn`, Rust's grammar as the compiler's procedural macros read it: a call or a constant in a comment, a doc comment or a string literal is never counted, and a call inside a macro whose arguments are expressions (`assert!`, `println!`, `vec!`, ...) is.",
+            "**The named function checks the golden.** A golden's `check` passes only when its function (its path through inline modules included) exists in the target's file and calls the store's check with the golden's id itself, directly or inside a closure, not through a helper.",
+            "**It never passes by accident.** A folder it cannot read, a crate with no files, a file it cannot parse, or a store whose current edition has no golden is a problem, not a pass.",
+            "**Every problem names its file**, relative to the workspace root with `/`, and a line where one applies.",
+            "**Deterministic.** Files are read in path order; problems are sorted."
+          ],
+          "job": "The golden store against the repository: every golden is checked where the store says, every golden check in the code is in the store, no golden digest hides outside it, and every pinned file is unchanged.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md",
+              "https://github.com/dtolnay/syn"
+            ],
+            "text": "a syntax-tree walk with `syn`'s visitor (`syn::visit`), the way `cargo-semver-checks` and clippy read Rust as syntax rather than text; the call and import forms above are this check's written grammar, as the map's headers have theirs (chapter 26.3 and the merge gate of 28.8, `projects/engines/geometry/architecture/28-testing.md`). `syn`: D. Tolnay, <https://github.com/dtolnay/syn> (a dependency, MIT OR Apache-2.0)."
+          },
+          "path": "geom_test::golden::repo",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the message, one compression per 64-byte block; the state is a fixed 112 bytes or so and nothing is allocated, except the 64-character `String` of [`hex`].",
+          "does": "[`Sha256`] takes a canonical byte stream piece by piece and gives its 32-byte digest; [`sha256`] hashes one buffer; [`hex`] writes a digest as the 64 lowercase hexadecimal digits the golden store keeps, and [`Digest`] reads them back. The hashing itself is the `RustCrypto` project's `sha2` crate. Before this module, each crate's golden tests carried a hand-written copy of `geom-num`'s implementation, which chapter 21 left to the golden store's piece (G19) to replace with one; every copy now uses this one, and every digest they pinned is unchanged, since SHA-256 is one function whoever computes it.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/golden/sha256.rs",
+          "guarantees": [
+            "**The digest FIPS 180-4 defines.** For every message, in whatever pieces it is written, the digest is the standard's SHA-256. The tests check the standard's examples (the empty message, \"abc\", the two-block 448-bit and 896-bit messages and one million \"a\"s) in pieces of every size around the 55-, 56- and 64-byte padding edges, and every message length from 0 to 130 bytes against one call.",
+            "**The same digest on every target and build.** `sha2` picks a processor's SHA instructions where it has them (x86 SHA-NI, the Arm SHA-2 extension) and portable 32-bit code elsewhere, WebAssembly included; each computes the one function FIPS 180-4 defines, so the choice changes speed, never bits. The kernel's goldens pass on every leg of `kernel.yml` with it.",
+            "**No panic.** Writing, finishing and formatting never panic; [`Digest::from_hex`] refuses anything but exactly 64 hexadecimal digits with `None`."
+          ],
+          "job": "SHA-256, the hash of every golden digest: the one implementation every kernel test hashes with.",
+          "method": {
+            "links": [
+              "https://csrc.nist.gov/pubs/fips/180-4/upd1/final",
+              "projects/engines/geometry/architecture/28-testing.md",
+              "https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values"
+            ],
+            "text": "NIST FIPS 180-4, *Secure Hash Standard* (2015), <https://csrc.nist.gov/pubs/fips/180-4/upd1/final>, computed by the `sha2` crate (`RustCrypto`, MIT OR Apache-2.0, a dependency, not a port). Chapters 21 and 28.13 of the kernel architecture (`projects/engines/geometry/architecture/28-testing.md`) name SHA-256 as the golden hash. The test vectors are NIST's examples, <https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values>."
+          },
+          "path": "geom_test::golden::sha256",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one shuffle is linear in the number of inputs; [`order_free`] runs the case `shuffles + 2` times (once for a single input or none) and copies the inputs once per run.",
+          "does": "[`Orders`] makes seeded permutations; [`order_free`] runs a case on its inputs in the given order, in the reverse order and in `shuffles` shuffled orders, and returns the one digest they all give, or an [`OrderError`] naming the first permutation that gave another.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/golden/shuffle.rs",
+          "guarantees": [
+            "**Seeded and portable.** A seed gives the same permutations on every target, 32-bit and 64-bit: the shuffle is `rand`'s Fisher-Yates over [`SplitMix64`], which draws each index as a 32-bit value for slices shorter than 2^32 elements, so the word stream and the permutation do not depend on the width of `usize`. A golden in the tests pins the first permutations.",
+            "**Every permutation can come.** Durstenfeld's form of the Fisher-Yates shuffle with unbiased bounded draws gives each of the n! permutations of n inputs with equal probability, so a failure is not limited to orders a hand-written list happened to try.",
+            "**The given order is always run first, then its reverse**, so a case that fails in its own order fails as such, and every case of two or more inputs meets at least one other order whatever the seed: for two inputs, the reverse is the only other order, so both are run.",
+            "**No panic.** An error names the permutation and both digests."
+          ],
+          "job": "The input-shuffle hook: a case whose contract says the order of its inputs does not matter is run on its inputs in their own order and in seeded shuffled orders, and every run must give the same canonical output, bit for bit.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/364520.364540"
+            ],
+            "text": "R. Durstenfeld, \"Algorithm 235: Random permutation\", *Communications of the ACM* 7(7), 1964, <https://doi.org/10.1145/364520.364540>, the modern form of the Fisher-Yates shuffle (Knuth, *The Art of Computer Programming*, volume 2, section 3.4.2, Algorithm P), as `rand`'s `SliceRandom::shuffle` implements it (a dependency, MIT OR Apache-2.0), driven by this crate's [`SplitMix64`]."
+          },
+          "path": "geom_test::golden::shuffle",
+          "provenance": [
+            {
+              "licence": "MIT OR Apache-2.0",
+              "link": "https://github.com/rust-random/rand/blob/9e7d328f60d6372ae22927f37d1a816fc980f25e/src/seq/slice.rs",
+              "method_note": null,
+              "name": "rand",
+              "notice": [],
+              "pinned": true,
+              "purpose": "to confirm that its shuffle draws 32-bit indices below 2^32 elements, which makes it portable. No code copied.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the size of the store for a parse; a lookup scans the current edition's goldens.",
+          "does": "[`Store::parse`] reads the store's JSON text (`golden/store.json` in this crate's folder, [`STORE_PATH`]) into typed records and checks the rules below; [`Store::embedded`] parses the copy compiled into this crate, which every golden test reads, on every target (WebAssembly test runs have no file system); [`Store::expected`] gives the digest a golden must reproduce in the current edition.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/golden/store.rs",
+          "guarantees": [
+            "**Nothing ambiguous parses.** Unknown fields, a missing field, a digest that is not 64 lowercase hexadecimal digits, a malformed id or edition label, a golden with both or neither of `check` and `file`, a `check` in another crate than its id names, two goldens with one key in an edition, two editions with one label, no open edition, an open edition that is not the last, a history record whose digest equals the value that replaced it, an unknown kind, an empty piece or reason: each is a [`StoreError`], never a silent choice.",
+            "**One answer per key.** [`Store::expected`] finds the golden by id and operation versions in the current edition, or says that it is not there.",
+            "**Deterministic.** Records keep the file's order; maps are `BTreeMap`s; nothing reads a clock."
+          ],
+          "job": "The golden store: every golden digest of the kernel, keyed by kernel edition, golden and operation versions, with the record of every change.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md",
+              "projects/engines/geometry/architecture/26-how-it-grows.md",
+              "projects/engines/geometry/architecture/32-decisions.md",
+              "https://www.rfc-editor.org/rfc/rfc8259"
+            ],
+            "text": "golden hashes per edition and operation version, chapter 28.13 of the kernel architecture (`projects/engines/geometry/architecture/28-testing.md`), with the editions of 26.2 (`projects/engines/geometry/architecture/26-how-it-grows.md`) and the rule for goldens before the first edition in 32.12 (`projects/engines/geometry/architecture/32-decisions.md`). The records are JSON (RFC 8259, <https://www.rfc-editor.org/rfc/rfc8259>), read with `serde`."
+          },
+          "path": "geom_test::golden::store",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "constant per draw. The memory of earlier draws is capped at [`HISTORY`] coordinates and [`HISTORY`] points of each dimension, overwritten in a fixed rotation.",
           "does": "a [`GridSampler`] draws coordinates, 2D points and 3D points from any [`Entropy`]: a seeded [`crate::SplitMix64`] in a property test, or a fuzzer's bytes through [`crate::ByteSource`] in a fuzz target. It remembers what it drew, so later draws can repeat or nearly repeat earlier ones.",
           "family": [],
@@ -4234,21 +4674,124 @@
           "target": "lib"
         },
         {
-          "cost": "linear in the size of the file.",
-          "does": "[`Ledger::parse`] reads the ledger file (`projects/engines/geometry/quality-ledger.json`, [`LEDGER_PATH`]) strictly. The mutation gate ([`crate::mutants`]) matches every surviving mutant against [`Ledger::survivors`]; the coverage gate ([`crate::coverage`]) matches every `coverage(off)` mark against [`Ledger::coverage_off`].",
+          "cost": "linear in the map's records, the licence texts and the notes, plus sorting them.",
+          "does": "[`build`] takes the map as a value ([`crate::map::Generated::map`], the records `MAP.json` holds), the hand-kept licence texts under `projects/engines/geometry/notices/` ([`notices`]) and the method notes under `projects/engines/geometry/methods/` ([`methods`]), and returns the text of both files with every [`Problem`]: a ported source with no licence text, a licence text no port uses, a method note that breaks its template, a record whose method note credits another source, or a map whose headers are incomplete. [`repo`] reads the inputs from a workspace on disk and writes or checks the committed files; the binary `provenance` (`cargo run -p geom-test --bin provenance -- check`) runs it in CI.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/ledger.rs",
           "guarantees": [
-            "the file is read strictly, so a typo cannot drop an entry silently. An unknown or missing field, a wrong type, an empty or short reason, an unknown kind or tool, an absolute or backslashed path, a zero occurrence count and two entries with one key are all [`LedgerError`]s, never a smaller ledger."
+            "**One text per input.** Sources, files and notes are written in a fixed order (sorted by class, name, link and path), with `\\n` line ends, no timestamps and no absolute paths, so the same tree gives the same bytes on every target.",
+            "**Every record is in the ledger.** Every `port`, `port-method` and `depend` source of the map is a row of `PROVENANCE.md`, with every file that takes it and what each took, and every method note is listed with the records that name it.",
+            "**Every ported source carries its licence text and copyright lines.** Every source a `Source:` record ports, grouped by repository and commit, has exactly one licence text under `notices/`, for the same repository, commit and licence, and `NOTICE` reproduces it in full with the copyright lines each ported file's header copies; a port without one, a licence text no port uses, a licence that differs, and an origin file whose `Source:` record copies no copyright line for it are problems ([`Rule::Notice`]).",
+            "**Every source consulted is credited.** Every `Consulted:` record's source is in `NOTICE`'s credits, with its licence, link, method note and what each file consulted it for (rule 4: a PORT METHOD module \"credits every source it consulted\").",
+            "**Every method note keeps the procedure's record.** A note that breaks the template, holds code, is named by a record that credits another licence or repository, or does not record a module whose record names it is a problem ([`Rule::Note`]; [`methods`]).",
+            "**Nothing generated from an incomplete map passes.** When the map's headers have problems, a record may be missing, so the check reports it ([`Rule::Map`]) and the map's own check names each one. A source the map lists that no file records, and a file's record that no source of the map holds, are [`Rule::Map`] problems too, so no record leaves the ledger in silence."
           ],
-          "job": "The quality ledger: every surviving mutant the kernel keeps, with why, and every `coverage(off)` mark, with the proof it cites.",
+          "job": "The kernel's source ledger and notices: `projects/engines/geometry/PROVENANCE.md` and `projects/engines/geometry/NOTICE`, generated from the map's provenance records, and the check that both committed files are current.",
           "method": {
             "links": [
-              "https://www.rfc-editor.org/rfc/rfc8259"
+              "projects/engines/geometry/architecture/27-crates-folders.md",
+              "projects/engines/geometry/architecture/29-sources-licences.md",
+              "https://www.apache.org/licenses/LICENSE-2.0"
             ],
-            "text": "JSON (RFC 8259, <https://www.rfc-editor.org/rfc/rfc8259>) read with `serde_json` into its value tree and checked field by field."
+            "text": "regenerate and compare, as the map does ([`crate::map`]) and as chapter 27 keeps every generated file honest (\"Generated code and data have one home\", `projects/engines/geometry/architecture/27-crates-folders.md`); the ledger's content is chapter 29.20's rules 4 and 5 and its `SourceRecord` (`projects/engines/geometry/architecture/29-sources-licences.md`); the notice file follows the Apache License 2.0's NOTICE convention, section 4(d), of carrying attribution notices in one readable text file distributed with the work (<https://www.apache.org/licenses/LICENSE-2.0>)."
           },
           "path": "geom_test::ledger",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the size of the notes, and in the number of records times the number of notes.",
+          "does": "[`parse`] reads one note ([`Note`]) and reports where it breaks the template; [`read`] reads every file of the folder, holding `TEMPLATE.md` to the same fields and sections; [`check_records`] compares each note with the `Consulted:` records whose `Method note:` line names it, and [`check_code_record`] checks that the note records each of those files.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/ledger/methods.rs",
+          "guarantees": [
+            "**The template's fields, once each.** A note opens with `# Method note: <title>`, and its table has one row for each of [`FIELDS`], each stating something and none left as the template's `<placeholder>`. `TEMPLATE.md` must have every field and section too, with placeholders, so the template and the check cannot drift apart.",
+            "**A copyleft source, pinned.** The licence is one chapter 29.2 classifies as method only (LGPL) or owner only (GPL), the classes rule 6 serves, and the pinned link names a full commit.",
+            "**The sections, in order, each with content.** [`SECTIONS`] appear as `## ` headings in that order, each followed by text; other sections may come between or after them.",
+            "**No code** (rule 6, step 3). A line that opens a fenced code block (three backticks or tildes, however indented), an indented code block (four spaces or a tab after a blank line) or an HTML `pre` or `code` element is a problem. Inline backticks, for the public names a note may use, are not.",
+            "**The record credits the source the note describes.** A `Consulted:` record naming the note gives the note's licence and links into the note's repository (or, off a code-hosting site, to the same file); otherwise the note has a problem, and stop and ask an owner (rule 1).",
+            "**The note records the code written from it.** Every file whose `Consulted:` record names the note appears, by its path, in the note's `Code written from it` field (rule 6, step 5: the module, the session, and that the source was not in its context)."
+          ],
+          "job": "The method notes of the method-only procedure: every note under `projects/engines/geometry/methods/` read, held to the template, and matched to the records that name it.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/29-sources-licences.md",
+              "https://spec.commonmark.org/0.31.2/",
+              "https://github.github.com/gfm/#tables-extension-"
+            ],
+            "text": "chapter 29.20, rule 6, the method-only procedure (`projects/engines/geometry/architecture/29-sources-licences.md`); headings, fences and indented code blocks as `CommonMark` 0.31.2 defines them, sections 4.2, 4.4 and 4.5 (<https://spec.commonmark.org/0.31.2/>), and tables as GitHub Flavored Markdown's table extension (<https://github.github.com/gfm/#tables-extension->)."
+          },
+          "path": "geom_test::ledger::methods",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the size of the files, and in the number of ports times the number of files to match them.",
+          "does": "[`parse`] reads one licence-text file ([`Notice`]); [`read`] reads every file of the folder; [`match_ports`] groups the map's `port` sources by repository and commit and pairs each group with its licence text ([`Port`]), which `NOTICE` reproduces.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/ledger/notices.rs",
+          "guarantees": [
+            "**The file says what it is the licence of.** A licence-text file opens with `Key: value` lines: `Name`, `Link` (the source's repository pinned to a full commit), `Licence` (an SPDX expression on chapter 29.2's allow-list, since only allowed code is ported) and `Licence file` (the origin's licence file, pinned to the same repository and commit), and optionally `Project`; then an optional `Credit:` section and a required `Licence text:` section that runs to the end of the file. A missing, repeated, unknown or empty key, an unpinned link and a missing or empty text are problems.",
+            "**One licence text per ported source, used.** Every group of `port` records with one repository and commit has exactly one licence-text file with that repository and commit, the same licence as every record of the group, and every licence-text file belongs to a group; every origin file a port names has at least one copyright line in its record, a run of links sharing the lines after it ([`crate::ledger::origins`]); anything else is a [`Rule::Notice`] problem.",
+            "**Exactly as written.** The credit and the licence text are kept byte for byte, apart from `\\r\\n` read as `\\n` and blank lines at the end of the file."
+          ],
+          "job": "The hand-kept licence texts of ported sources: one file per source under `projects/engines/geometry/notices/`, matched to the ports the map records.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/29-sources-licences.md",
+              "https://www.apache.org/licenses/LICENSE-2.0"
+            ],
+            "text": "chapter 29.20, rule 4, on notices (`projects/engines/geometry/architecture/29-sources-licences.md`); the Apache License 2.0, section 4(a) and (d), which ask that a redistribution carries the licence and the attribution notices (<https://www.apache.org/licenses/LICENSE-2.0>), as the MIT licence asks that its notice be included."
+          },
+          "path": "geom_test::ledger::notices",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the size of the output.",
+          "does": "[`provenance`] writes the ledger as Markdown tables, one per class of chapter 29.1 the code takes (PORT, PORT METHOD, DEPEND), and one of the method notes; [`notice`] writes the notices as plain text: each ported source with its ported files, the origin files and copyright lines each header copies, any further credit and the licence text in full; then the credits of every source consulted; then the published crates.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/ledger/render.rs",
+          "guarantees": [
+            "**Deterministic text.** Sections and rows are written in a fixed order (ported sources by name, credits by name then link, uses by file, notes by path), with `\\n` line ends and one final newline, from nothing but the inputs.",
+            "**Valid tables.** A table cell never holds a line break or an unescaped `|`: line breaks become spaces and `|` is written `\\|`, as GitHub Flavored Markdown's table extension asks.",
+            "**Nothing dropped.** Every source of the map is written, with every file that uses it; a ported source with no licence text is still listed in `NOTICE`, with a line saying its text is missing (the check fails on it, [`crate::ledger::notices::match_ports`])."
+          ],
+          "job": "The text of `PROVENANCE.md` and `NOTICE`, written from the map's sources, the licence texts and the method notes.",
+          "method": {
+            "links": [
+              "https://github.github.com/gfm/#tables-extension-",
+              "projects/engines/geometry/architecture/29-sources-licences.md"
+            ],
+            "text": "tables as GitHub Flavored Markdown 0.29's table extension defines them (<https://github.github.com/gfm/#tables-extension->); the notice layout of the hand-kept file G05 wrote, which it replaces, and chapter 29.20, rule 4 (`projects/engines/geometry/architecture/29-sources-licences.md`)."
+          },
+          "path": "geom_test::ledger::render",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one build of the map, one read of each licence text and note, and one read and at most one write of each generated file, plus the ledger's own cost ([`crate::ledger::build`]).",
+          "does": "[`read`] builds the map of a workspace root ([`crate::map::repo::read`] and [`crate::map::build`], with the known gaps) and reads every file directly under the licence texts' folder and the method notes' folder; [`check`] builds the ledger and compares both files with the committed ones; [`write()`] builds it and writes each file whose bytes differ.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/ledger/repo.rs",
+          "guarantees": [
+            "**The map's own reading.** The records come from the map built exactly as the map's check builds it, so the ledger and `MAP.json` can never disagree about a header.",
+            "**Every file, in a fixed order.** Each folder is listed in sorted order; a missing folder is an empty one; a file that is not UTF-8, and a folder or symbolic link inside either folder, are reported, never skipped.",
+            "**`check` changes nothing**; `write` changes only `PROVENANCE.md` and `NOTICE`, and each only when its bytes differ.",
+            "**I/O failures are errors, not passes**: [`MapError`], which the binary turns into exit code 2."
+          ],
+          "job": "The ledger on disk: reading a workspace's map, licence texts and method notes, and writing or checking the committed `PROVENANCE.md` and `NOTICE`.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/27-crates-folders.md"
+            ],
+            "text": "regenerate and compare, as [`crate::map::repo`] does for the map (chapter 27, \"Generated code and data have one home\", `projects/engines/geometry/architecture/27-crates-folders.md`)."
+          },
+          "path": "geom_test::ledger::repo",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -4293,9 +4836,10 @@
             "links": [
               "projects/engines/geometry/architecture/27-crates-folders.md",
               "https://github.com/rust-lang/rust/blob/1731faea0da5b4ebf881d8e53f98066c17a74711/src/tools/tidy/src/error_codes.rs",
-              "https://github.com/rust-lang/rustdoc-types/blob/2e63bdc44b94e86fe12d6e0034d1ed9c2ac6e9dc/src/lib.rs"
+              "https://github.com/rust-lang/rustdoc-types/blob/2e63bdc44b94e86fe12d6e0034d1ed9c2ac6e9dc/src/lib.rs",
+              "https://docs.rs/toml/0.9.6/toml/"
             ],
-            "text": "regenerate and compare, the way the kernel keeps every generated file honest (chapter 27, \"Generated code and data have one home\", `projects/engines/geometry/architecture/27-crates-folders.md`), and the way Clippy's `cargo dev update_lints` and rust-analyzer's tidy tests keep their generated lint lists and module documentation current; headers are read by the written grammar ([`header`]), never by guessing, as rustc's tidy reads its error-code registry rather than the compiler's messages (<https://github.com/rust-lang/rust/blob/1731faea0da5b4ebf881d8e53f98066c17a74711/src/tools/tidy/src/error_codes.rs>). rustdoc's JSON output would give the same doc text with resolved items, but it needs a nightly compiler and its format changes with every breaking release (`FORMAT_VERSION` 61 at <https://github.com/rust-lang/rustdoc-types/blob/2e63bdc44b94e86fe12d6e0034d1ed9c2ac6e9dc/src/lib.rs>), so the map reads the source, which the pinned stable toolchain can always do."
+            "text": "regenerate and compare, the way the kernel keeps every generated file honest (chapter 27, \"Generated code and data have one home\", `projects/engines/geometry/architecture/27-crates-folders.md`), and the way Clippy's `cargo dev update_lints` and rust-analyzer's tidy tests keep their generated lint lists and module documentation current; headers are read by the written grammar ([`header`]), never by guessing, as rustc's tidy reads its error-code registry rather than the compiler's messages (<https://github.com/rust-lang/rust/blob/1731faea0da5b4ebf881d8e53f98066c17a74711/src/tools/tidy/src/error_codes.rs>). rustdoc's JSON output would give the same doc text with resolved items, but it needs a nightly compiler and its format changes with every breaking release (`FORMAT_VERSION` 61 at <https://github.com/rust-lang/rustdoc-types/blob/2e63bdc44b94e86fe12d6e0034d1ed9c2ac6e9dc/src/lib.rs>), so the map reads the source, which the pinned stable toolchain can always do. Each crate's `Cargo.toml` is parsed by the `toml` crate (MIT OR Apache-2.0, <https://docs.rs/toml/0.9.6/toml/>), the TOML 1.0 reader of the toml-rs project that cargo's own manifest reading is built on; piece G12a put it in place of a line reader (chapter 29.1)."
           },
           "path": "geom_test::map",
           "provenance": [
@@ -4304,6 +4848,7 @@
               "link": "https://github.com/rust-lang/rust/blob/1731faea0da5b4ebf881d8e53f98066c17a74711/src/tools/tidy/src/error_codes.rs",
               "method_note": null,
               "name": "rustc's tidy",
+              "notice": [],
               "pinned": true,
               "purpose": "for reading a catalogue from one registry and its lists of known exemptions. No code copied.",
               "take": "port-method"
@@ -4313,6 +4858,7 @@
               "link": "https://github.com/rust-lang/rustdoc-types/blob/2e63bdc44b94e86fe12d6e0034d1ed9c2ac6e9dc/src/lib.rs",
               "method_note": null,
               "name": "`rustdoc-types`",
+              "notice": [],
               "pinned": true,
               "purpose": "for what rustdoc's JSON format holds and how it is versioned, to decide not to use it. No code copied.",
               "take": "port-method"
@@ -4346,6 +4892,7 @@
               "link": "https://github.com/spdx/license-list-data/blob/31ba1a50e5397e00a304dbadc76531740e89ee48/json/licenses.json",
               "method_note": null,
               "name": "SPDX License List 3.29.0",
+              "notice": [],
               "pinned": true,
               "purpose": "to check that every identifier in the tables below is a real SPDX licence identifier, and to list the deprecated GPL, LGPL and AGPL forms and the non-commercial licences.",
               "take": "port-method"
@@ -4380,6 +4927,7 @@
               "link": "https://github.com/rust-lang/rust-clippy/blob/3583eb8a9ae1161bd7d80907acfa09b3612a93f9/clippy_dev/src/parse/cursor.rs",
               "method_note": null,
               "name": "Clippy's `clippy_dev` token cursor",
+              "notice": [],
               "pinned": true,
               "purpose": "for the approach of finding declarations with a token cursor. No code copied.",
               "take": "port-method"
@@ -4486,6 +5034,7 @@
               "link": "https://github.com/npm/hosted-git-info/blob/8c3bebb5e42142b7bce06b085b4c1bd1adba7371/lib/hosts.js",
               "method_note": null,
               "name": "npm `hosted-git-info` 10.1.1",
+              "notice": [],
               "pinned": true,
               "purpose": "for the address layouts of GitHub, Bitbucket, GitLab, gists and sourcehut and where each puts its revision. No code copied.",
               "take": "port-method"
@@ -4495,6 +5044,7 @@
               "link": "https://github.com/google/gitiles/blob/e54582fdd2a8783a6078f3a25eb08bb622f2e497/java/com/google/gitiles/ViewFilter.java",
               "method_note": null,
               "name": "Gitiles",
+              "notice": [],
               "pinned": true,
               "purpose": "for its `+` view commands and the revision that follows them. No code copied.",
               "take": "port-method"
@@ -4554,35 +5104,26 @@
           "target": "lib"
         },
         {
-          "cost": "linear in the length of the source, plus one `char` and its offset held per character.",
-          "does": "[`tokens`] splits a source file into [`Token`]s: identifiers, punctuation, literals, lifetimes and outer doc comments (`///` and `/** */`), each with its text and byte offset. Plain comments, inner doc comments (`//!`, `/*! */`) and whitespace are dropped. The item scanner in [`crate::map::errors`] reads the tokens.",
+          "cost": "linear in the length of the source, for the lexer and for the walk over its tokens.",
+          "does": "[`tokens`] splits a source file into [`Token`]s: identifiers, punctuation (each delimiter included), literals, lifetimes and outer doc comments (`///` and `/** */`), each with its text and byte offset. Plain comments, inner doc comments (`//!`, `/*! */`) and whitespace are dropped. The item scanner in [`crate::map::errors`] reads the tokens.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/map/rust.rs",
           "guarantees": [
-            "**Comments and literals never look like code.** Text inside a comment, a string, a raw string (any number of `#`), a byte or C string or a character literal is never an identifier or punctuation token, and block comments nest as Rust nests them.",
-            "**An error, never a guess.** A block comment, string, raw string or character literal that does not end is a [`LexError`] naming its byte offset, so a file the lexer cannot read is reported, not mapped from a wrong reading.",
-            "**No recursion and no panics.** One pass over the characters, with an explicit counter for nested block comments; every position step is a checked or saturating method."
+            "**Comments and literals never look like code.** Text inside a comment, a string, a raw string (any number of `#`), a byte or C string or a character literal is never an identifier or punctuation token, and block comments nest as Rust nests them: the lexer is the one `syn` parses with, which follows rustc's.",
+            "**An error, never a guess.** A comment or literal that does not end, and a delimiter that does not close, is a [`LexError`] naming the byte offset where the lexer stopped, so a file the lexer cannot read is reported, not mapped from a wrong reading.",
+            "**No recursion and no panics** here: groups are opened with an explicit stack, and every offset is the lexer's own."
           ],
-          "job": "Rust source as tokens, for the map: enough of the language's lexical grammar to find items without being misled by comments, strings or character literals.",
+          "job": "Rust source as tokens, for the map: the language's lexical grammar, from the standard lexer, so that items are found without being misled by comments, strings or character literals.",
           "method": {
             "links": [
-              "https://doc.rust-lang.org/reference/comments.html",
-              "https://doc.rust-lang.org/reference/tokens.html"
+              "https://docs.rs/proc-macro2/1.0.107/proc_macro2/",
+              "https://doc.rust-lang.org/reference/tokens.html",
+              "https://doc.rust-lang.org/reference/comments.html"
             ],
-            "text": "the lexical grammar of The Rust Reference: comments, nested block comments and which comments are doc comments (<https://doc.rust-lang.org/reference/comments.html>); string, raw string, byte, C string and character literals, raw identifiers and lifetimes (<https://doc.rust-lang.org/reference/tokens.html>). A `'` opens a character literal when the character after the next one is a `'`, or when the next one cannot start an identifier, and a lifetime otherwise, which is the rule of `rustc_lexer`'s `lifetime_or_char`. Numbers are read loosely (digits, letters, `_`, and a `.` or exponent sign inside a decimal literal): the map needs only to step over them."
+            "text": "the `proc-macro2` crate's lexer (MIT OR Apache-2.0, <https://docs.rs/proc-macro2/1.0.107/proc_macro2/>), with its `span-locations` feature for byte offsets: the lexical grammar of The Rust Reference (<https://doc.rust-lang.org/reference/tokens.html>, <https://doc.rust-lang.org/reference/comments.html>) as `syn` reads it. It gives a doc comment as the attribute it means, `#[doc = \"...\"]`, with the comment's span on every token, so a `#` whose span covers a comment in the source is that comment, read from the source text with its markers dropped. Piece G12a put the crate in place of a lexer written here (chapter 29.1, the owner's direction of 2026-10-22: use well-known permissive crates rather than hand-rolling)."
           },
           "path": "geom_test::map::rust",
-          "provenance": [
-            {
-              "licence": "MIT OR Apache-2.0",
-              "link": "https://github.com/rust-lang/rust/blob/1731faea0da5b4ebf881d8e53f98066c17a74711/compiler/rustc_lexer/src/lib.rs",
-              "method_note": null,
-              "name": "`rustc_lexer`",
-              "pinned": true,
-              "purpose": "for its rule telling a character literal from a lifetime and for which block comments are doc comments. No code copied.",
-              "take": "port-method"
-            }
-          ],
+          "provenance": [],
           "spdx": null,
           "target": "lib"
         },
@@ -4636,6 +5177,7 @@
               "link": "https://github.com/sourcefrog/cargo-mutants/tree/8ab1dc786a1f61a4e370416cc6c68b81a704e917",
               "method_note": null,
               "name": "cargo-mutants",
+              "notice": [],
               "pinned": true,
               "purpose": "for the format of the output files this module reads (`book/src/mutants-out.md`, `src/outcome.rs`, `src/mutant.rs` and `src/output.rs` at its v27.1.0 tag). No code copied.",
               "take": "port-method"
@@ -4670,6 +5212,395 @@
           "target": "lib"
         },
         {
+          "cost": "linear in the size of the file.",
+          "does": "[`Ledger::parse`] reads the ledger file (`projects/engines/geometry/quality-ledger.json`, [`LEDGER_PATH`]) strictly. The mutation gate ([`crate::mutants`]) matches every surviving mutant against [`Ledger::survivors`]; the coverage gate ([`crate::coverage`]) matches every `coverage(off)` mark against [`Ledger::coverage_off`].",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/quality_ledger.rs",
+          "guarantees": [
+            "the file is read strictly, so a typo cannot drop an entry silently. An unknown or missing field, a wrong type, an empty or short reason, an unknown kind or tool, an absolute or backslashed path, a zero occurrence count and two entries with one key are all [`LedgerError`]s, never a smaller ledger."
+          ],
+          "job": "The quality ledger: every surviving mutant the kernel keeps, with why, and every `coverage(off)` mark, with the proof it cites.",
+          "method": {
+            "links": [
+              "https://www.rfc-editor.org/rfc/rfc8259"
+            ],
+            "text": "JSON (RFC 8259, <https://www.rfc-editor.org/rfc/rfc8259>) read with `serde_json` into its value tree and checked field by field."
+          },
+          "path": "geom_test::quality_ledger",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one parse of every file of the crates that ship and of the model, and one type check of each instance's body, again when what it read changes (see [`mono`]); the analysis runs on a thread with [`ANALYSIS_STACK`] bytes of stack, because the checker recurses over syntax trees.",
+          "does": "[`analyse`] reads every crate that ships (the kernel crates under `projects/engines/geometry/crates` and the facade `engine-geometry` and its binding crates, [`sources`]) with `syn` ([`model`], [`resolve`], [`macros`], [`cfg`]), together with a model of the standard library and `libm` written as Rust ([`stdlib`]), and builds the call graph of the program as the compiler copies it: one instance for each instantiation of each generic function, closures as types of their own ([`mono`]), each body type-checked as rustc does it, with inference variables ([`typeck`], over [`index`], [`ty`] and [`infer`]), so every call reaches what the compiler would call. It finds the graph's recursive cycles, named by the functions they run, and the kernel's recursive types ([`graph`]); reads every `Recursion:` statement of the module headers ([`statement`]); and checks each cycle against them ([`check`]): a cycle without a stated bound, a statement that names no cycle or not exactly one, a bound constant that disagrees, a test that is missing or does not reach its cycle, and code the analysis cannot read are all [`Problem`]s. [`stack`] runs the tests on the small stack. The binary `recursion` lists the cycles, checks them, and runs the tests:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/recursion.rs",
+          "guarantees": [
+            "**Every cycle is listed.** The call graph holds every call Rust can make in a build that ships ([`typeck`] states the routes, [`mono`] the treatment of generic parameters left open, and [`stdlib`] what the standard library may call back); a strongly connected component of it with a cycle is a recursive cycle ([`graph`]). Code the analysis cannot read, or whose types it cannot infer where a call depends on them, is a problem, never skipped, so the check cannot pass over code it did not see.",
+            "**A cycle without a stated bound fails**, and so does a statement that is not true to the code ([`check`]); CI runs the check in the merge gate (`.github/workflows/kernel-gate.yml`).",
+            "**Each stated bound is run** by its test on the small stack, in debug and in release, and the stack's limits are shown in force by probes ([`stack`]).",
+            "**Deterministic**: the same tree gives the same report, in the same order."
+          ],
+          "job": "The recursion check (piece G13; chapter 28.8): every recursive cycle in the crates that ship, each with its depth bound stated in a module header and tested on a small WebAssembly stack.",
+          "method": {
+            "links": [
+              "https://rustc-dev-guide.rust-lang.org/backend/monomorph.html",
+              "https://rustc-dev-guide.rust-lang.org/type-inference.html",
+              "https://doi.org/10.1137/0201010",
+              "projects/kit/notes/G01-evidence/13-vetting-smlib.md"
+            ],
+            "text": "a whole-program call graph from source by monomorphisation, as rustc's collector builds it from MIR (<https://rustc-dev-guide.rust-lang.org/backend/monomorph.html>), here from `syn`'s syntax trees with name resolution and type inference as rustc's type checker performs them (<https://rustc-dev-guide.rust-lang.org/type-inference.html>); cycles as strongly connected components (Tarjan, \"Depth-first search and linear graph algorithms\", SIAM J. Computing 1 (1972), <https://doi.org/10.1137/0201010>). The rule that input-driven recursion carries a stated bound because wasm32 has no guard page follows solidcore's (G01 evidence 13, `projects/kit/notes/G01-evidence/13-vetting-smlib.md`)."
+          },
+          "path": "geom_test::recursion",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the size of the attributes; no recursion beyond the nesting of `all`, `any`, `not` and `cfg_attr` as written.",
+          "does": "[`effective`] expands every `#[cfg_attr(predicate, attributes...)]` whose predicate is not known to be false into the attributes it adds, and [`ships`] says whether an item, statement or expression with those attributes is compiled into the crates that ship. A predicate is read in three values: `test`, `doc`, `doctest`, `kani` and `miri` are false (test, documentation, proof and interpreter builds are not what ships); every other option (`feature = \"...\"`, `target_arch = \"...\"`, `debug_assertions`, ...) is unknown, because some build that ships may set it. `all`, `any` and `not` combine them as Kleene's strong three-valued logic.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/recursion/cfg.rs",
+          "guarantees": [
+            "**Over every build that ships, never one.** Code is left out only when its predicate is false in every build of the crates that ship, so the call graph is the union of every feature and target, and code behind a feature or a target is analysed like the rest.",
+            "**A predicate it cannot read keeps the code.** A `cfg` or `cfg_attr` whose arguments do not parse is unknown, never false, so unreadable configuration never hides code."
+          ],
+          "job": "Which code ships: `#[cfg(...)]` and `#[cfg_attr(...)]` read for the recursion check.",
+          "method": {
+            "links": [
+              "https://doc.rust-lang.org/reference/conditional-compilation.html",
+              "https://doc.rust-lang.org/reference/conditional-compilation.html#the-cfg_attr-attribute",
+              "https://en.wikipedia.org/wiki/Three-valued_logic"
+            ],
+            "text": "the conditional-compilation grammar of The Rust Reference (<https://doc.rust-lang.org/reference/conditional-compilation.html>), its `cfg_attr` expansion (<https://doc.rust-lang.org/reference/conditional-compilation.html#the-cfg_attr-attribute>), evaluated in Kleene's strong logic of indeterminacy (S. C. Kleene, *Introduction to Metamathematics*, 1952, section 64; <https://en.wikipedia.org/wiki/Three-valued_logic>)."
+          },
+          "path": "geom_test::recursion::cfg",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in statements times cycles, plus one breadth-first search of the call graph per test.",
+          "does": "[`check`] matches each statement ([`crate::recursion::statement`]) to the cycle or recursive type it names, and reports:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/recursion/check.rs",
+          "guarantees": [
+            "**Every cycle is bounded or reported**, and every statement is checked against the code it names, so a bound cannot outlive its cycle or silently cover a cycle that grew.",
+            "**Names are resolved as the code resolves them**: relative to the statement's module, from `crate::`, or through its `use` declarations ([`crate::recursion::resolve`]).",
+            "**Deterministic.** Problems come in statement and cycle order."
+          ],
+          "job": "The recursion check's rules: every recursive cycle has a stated depth bound, and every statement is true to the code.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/HEADERS.md"
+            ],
+            "text": "matching of named sets against strongly connected components; reachability by breadth-first search (Cormen, Leiserson, Rivest and Stein, *Introduction to Algorithms*, 3rd edition, section 22.2); the module-header grammar of `projects/engines/geometry/HEADERS.md`."
+          },
+          "path": "geom_test::recursion::check",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in instances and edges for the components, plus one breadth-first search per cycle.",
+          "does": "[`cycles`] finds the strongly connected components of the call graph over instances ([`crate::recursion::mono`]) that hold a call cycle (more than one instance, or an instance that calls itself), names each by the functions and derived implementations its instances are copies of (a closure counted as the function it is written in), and joins components that share a function into one [`Cycle`], since a statement names functions as written. Each cycle carries a shortest path round it, with the file and line of each call and how it was found. [`type_cycles`] finds the kernel's structs, enums and unions that contain themselves, through any field type: their drop glue recurses over their nesting.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/recursion/graph.rs",
+          "guarantees": [
+            "**Every cycle.** A function that can be re-entered while it runs lies on a closed walk of the instance graph, which lies inside one strongly connected component, and every component holding a closed walk is reported, unless none of its instances belongs to a crate that ships (the bound tests exercise cycles; the standard library's model is not checked).",
+            "**Every recursive type.** A type that contains itself through its fields' types, at any depth and through the arguments of the standard library's types (`Box<T>`, `Vec<T>`, `Option<T>`), lies on a cycle of the field graph and is reported.",
+            "**Deterministic.** Cycles come in the order of their first member's name, members and paths in a fixed order."
+          ],
+          "job": "The recursion check's cycles: the recursive cycles of the instance call graph, named by the functions they run, and the kernel's recursive types.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/0201010",
+              "https://doi.org/10.1145/321879.321884"
+            ],
+            "text": "strongly connected components by Tarjan's algorithm (R. E. Tarjan, \"Depth-first search and linear graph algorithms\", SIAM J. Computing 1 (1972), <https://doi.org/10.1137/0201010>), from `petgraph`, whose implementation is iterative; components joined by union-find over shared names (R. E. Tarjan, \"Efficiency of a good but not linear set union algorithm\", J. ACM 22 (1975), <https://doi.org/10.1145/321879.321884>); shortest cycle paths by breadth-first search (Cormen, Leiserson, Rivest and Stein, *Introduction to Algorithms*, 3rd edition, section 22.2)."
+          },
+          "path": "geom_test::recursion::graph",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "building is linear in implementations and nodes; a lookup tries the implementations filed under the heads of the receiver's auto-dereference steps (at most [`DEREF_DEPTH`]), each by one unification; bounds of blanket implementations are checked to depth [`BOUND_DEPTH`].",
+          "does": "[`Index::new`] resolves every implementation's self type and trait and files it by the head of its self type ([`Head`]); every function's signature in types ([`Sig`]); every node's name (`geom_num::wide::I256::mul`, `<geom_num::wide::I256 as Mul>::mul`). Given an inference table ([`Infer`]), [`Index::probe`] finds what `receiver.name(...)` calls as rustc's method lookup does; [`Index::select`] which implementation of a trait a type uses (operators, `?`, `for`, conversions); [`Index::normalize`] resolves associated types; [`Index::assoc_fns`] finds what `Type::name` names.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/recursion/index.rs",
+          "guarantees": [
+            "**The compiler's lookup.** Method lookup tries the receiver's auto-dereference steps in order (references, `Deref` implementations, an array unsized to a slice), at each step the receiver by value and then by reference, and at each of those inherent methods before trait methods; the first that has a candidate whose receiver unifies wins. Traits need not be in scope (code that compiles names only methods it may call, so this only adds candidates when two traits offer one name, and then both are kept).",
+            "**Over-approximate where types are open.** Where unresolved variables let several implementations apply, every one of them is a candidate and none is committed to; a blanket implementation applies when its bounds may hold (a bound on a type not known yet may).",
+            "**Generic receivers.** On a receiver whose type is a generic parameter, an `impl Trait` or a projection, a method of one of its bounds is a [`Pick::Bound`]: the trait's default body for it, and the blanket implementations, are what it may run from here (other implementations are checked from their own instances, [`crate::recursion::mono`]). On a trait object, a [`Pick::Dyn`]: every implementation of the trait may run.",
+            "**Deterministic.** Every table is ordered and candidates come in implementation order."
+          ],
+          "job": "What a call may reach: the recursion check's tables of implementations and signatures, and its method lookup, trait selection and projection normalisation.",
+          "method": {
+            "links": [
+              "https://doc.rust-lang.org/reference/expressions/method-call-expr.html",
+              "https://rustc-dev-guide.rust-lang.org/method-lookup.html",
+              "https://rustc-dev-guide.rust-lang.org/traits/resolution.html",
+              "https://rustc-dev-guide.rust-lang.org/traits/goals-and-clauses.html#normalization",
+              "https://doi.org/10.1007/3-540-49538-X_5"
+            ],
+            "text": "Rust's method-call resolution (The Rust Reference, <https://doc.rust-lang.org/reference/expressions/method-call-expr.html>; the rustc dev guide, <https://rustc-dev-guide.rust-lang.org/method-lookup.html>); trait selection by unification of implementation headers with their bounds checked (<https://rustc-dev-guide.rust-lang.org/traits/resolution.html>); projection normalisation (<https://rustc-dev-guide.rust-lang.org/traits/goals-and-clauses.html#normalization>); class hierarchy analysis for trait objects (J. Dean, D. Grove and C. Chambers, ECOOP 1995, <https://doi.org/10.1007/3-540-49538-X_5>)."
+          },
+          "path": "geom_test::recursion::index",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a unification is linear in the size of the two types; finding a variable's root follows its chain of unions (no path compression, so undo stays simple).",
+          "does": "[`Infer`] holds the inference variables of one reading of one body: general ones, and the integer and floating-point ones an unsuffixed literal gets. [`Infer::unify`] makes two types equal by binding variables, and fails, binding nothing, when they cannot be; [`Infer::resolve`] gives a type with every bound variable replaced. [`Infer::snapshot`] and [`Infer::rollback_to`] let the checker try a unification (does this implementation apply?) and undo it. [`Infer::default_numeric`] gives the literal variables nothing else fixed their defaults, `i32` and `f64`, as the compiler does.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/recursion/infer.rs",
+          "guarantees": [
+            "**Unification is all or nothing.** A failed [`Infer::unify`] leaves the table as it was.",
+            "**No infinite types.** A variable is never bound to a type that holds it (the occurs check).",
+            "**Literal variables stay numeric.** An integer variable binds only to an integer type or a variable, a floating-point one only to a floating-point type or a variable.",
+            "**`!` and unknown types bind nothing.** Unifying with [`Ty::Never`] (which coerces to any type) or [`Ty::Unknown`] succeeds without binding, so a variable keeps the type its other uses give it."
+          ],
+          "job": "Inference variables for the recursion check's type checker: one table per body checked.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/321250.321253",
+              "https://doi.org/10.1145/321879.321884",
+              "https://rustc-dev-guide.rust-lang.org/type-inference.html",
+              "https://doc.rust-lang.org/reference/expressions/literal-expr.html"
+            ],
+            "text": "first-order unification with union-find over variables (J. A. Robinson, \"A machine-oriented logic based on the resolution principle\", J. ACM 12 (1965), <https://doi.org/10.1145/321250.321253>; R. E. Tarjan, \"Efficiency of a good but not linear set union algorithm\", J. ACM 22 (1975), <https://doi.org/10.1145/321879.321884>), with an undo log for snapshots, as rustc's `InferCtxt` keeps one (<https://rustc-dev-guide.rust-lang.org/type-inference.html>); integer and float variables and their defaults from The Rust Reference (<https://doc.rust-lang.org/reference/expressions/literal-expr.html>)."
+          },
+          "path": "geom_test::recursion::infer",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "matching is linear in the invocation's tokens for each rule tried, times the speculative parses of repetitions; transcription is linear in its output. Recursion follows the nesting of token groups in a macro's rules.",
+          "does": "[`read`] says what an invocation in a function body means for the call graph. The standard library's formatting macros (`format!`, `write!`, `panic!`, `assert_eq!`, ...) become their argument expressions, each with the formatting trait its placeholder calls (`{}` Display, `{:?}` Debug, `{:x}` `LowerHex`, ...), read from the format string by [`format_traits`]; `vec!`, `matches!`, `assert!`, `debug_assert!`, `dbg!` and `addr_of!` become the expressions they evaluate; macros that only make literals (`concat!`, `stringify!`, `line!`, `cfg!`, `include_str!`, ...) run nothing. A `macro_rules!` macro of the crates read is expanded by its own rules ([`expand`]): its matchers are matched fragment by fragment with `syn`'s parsers, with repetitions, and its transcriber is filled in, `$crate` included. [`expand_items`] does the same for invocations in item position.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/recursion/macros.rs",
+          "guarantees": [
+            "**What runs is read, or the invocation is reported.** An invocation is either read as above, or, for an outside macro the check does not know, read as comma-separated expressions or as statements when its tokens parse so, or else reported as unread ([`MacroRead::Unread`]); it is never skipped.",
+            "**Expansion is the compiler's.** Rules are tried in order and the first whose matcher matches the whole input is used; fragments are parsed by the same grammar `syn` gives the compiler's fragment kinds; a transcription whose repetitions do not agree in length is an error, as in the compiler.",
+            "**Terminates.** Expansion depth is limited to [`EXPANSION_LIMIT`], the compiler's default recursion limit."
+          ],
+          "job": "Macros for the recursion check: what code a macro invocation runs.",
+          "method": {
+            "links": [
+              "https://doc.rust-lang.org/reference/macros-by-example.html",
+              "https://doc.rust-lang.org/std/fmt/index.html#syntax"
+            ],
+            "text": "The Rust Reference, \"Macros By Example\": matching, fragment specifiers, repetitions, transcription and `$crate` (<https://doc.rust-lang.org/reference/macros-by-example.html>); `std::fmt`'s format string grammar (<https://doc.rust-lang.org/std/fmt/index.html#syntax>)."
+          },
+          "path": "geom_test::recursion::macros",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one parse of every file the module tree reaches; linear in the number of items; no recursion (modules and function bodies are queued).",
+          "does": "[`load`] parses each crate from its root file and follows its module tree as the compiler does: `mod name;` from `name.rs` or `name/mod.rs` beside its parent (or from a `#[path]`), inline `mod name { ... }`, and the items of function bodies, which get a scope of their own. It records every item that ships ([`crate::recursion::cfg`]): functions, methods of inherent and trait implementations, trait methods with default bodies, structs, enums, unions, traits, type aliases, constants, statics, `use` declarations and `macro_rules!` macros, and expands every macro invocation in item position ([`crate::recursion::macros`]). Each function body, and each implementation a `#[derive]` writes, is a [`Node`] of the call graph.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/recursion/model.rs",
+          "guarantees": [
+            "**The compiler's module tree.** A file is read only when a `mod` declaration that ships reaches it, by the reference's rules for `mod` files and `#[path]`, so code the compiler does not build is not analysed and code it builds is.",
+            "**Nothing unread passes silently.** A module file that cannot be found or parsed, an item form the reader does not know, and a macro in item position that cannot be expanded are each a [`Problem`]; the check fails on any problem.",
+            "**Deterministic.** Crates, modules and items are numbered in the order the files declare them, so node ids and every listing are the same on every run."
+          ],
+          "job": "The program the recursion check reads: every crate that ships, parsed by `syn`, as modules, items, implementations, generic parameters and function bodies.",
+          "method": {
+            "links": [
+              "https://doc.rust-lang.org/reference/items/modules.html",
+              "https://doc.rust-lang.org/reference/items.html",
+              "https://doc.rust-lang.org/reference/attributes/derive.html",
+              "https://docs.rs/syn/3.0.9/syn/"
+            ],
+            "text": "The Rust Reference on modules and the `path` attribute (<https://doc.rust-lang.org/reference/items/modules.html>), on items and associated items (<https://doc.rust-lang.org/reference/items.html>), and on derive (<https://doc.rust-lang.org/reference/attributes/derive.html>); parsing by `syn` (<https://docs.rs/syn/3.0.9/syn/>)."
+          },
+          "path": "geom_test::recursion::model",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one check of each instance's body, plus one more each time something it read changed.",
+          "does": "Rust compiles one copy of a generic function for each instantiation of its type parameters, and a closure is a type of its own whose body belongs to the copy of the function that writes it. [`analyse`] builds the call graph over those copies ([`Inst`]): its roots are every function, method, trait default body and derived implementation of the crates that ship and of the bound tests, a generic one with its parameters left open ([`Ty::Param`]: the copy that stands for every instantiation from outside the crates read). It checks each body ([`crate::recursion::typeck`]) and adds, for every call, the copy the call reaches with the generic arguments the checker inferred, queueing new copies. A body is checked again when something it read grows: the hidden type a callee's `impl Trait` result turned out to be, or the callables coerced to closure trait objects and function pointers anywhere, which a call through one may run. Each check of a body replaces that body's edges and problems.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/recursion/mono.rs",
+          "guarantees": [
+            "**Every copy a call can reach is an instance**, with the generic arguments the call fixes; a type nested deeper than [`crate::recursion::ty::MAX_DEPTH`] is cut to an unknown part, and a function with more than [`MAX_COPIES`] copies is reported, so the graph is finite.",
+            "**Generic parameters left open.** Dispatch on a receiver of a bare generic parameter reaches the trait's default body and blanket implementations, never the other implementations ([`crate::recursion::index::Pick::Bound`]), and a call through a bare generic callable reaches nothing. This loses no cycle: a cycle runs concrete copies, and every implementation and closure is a root of its own (a non-generic one is checked with its exact types, a generic one through its own open copy), from which the checker follows the cycle with types whose heads are known, dispatching exactly; and a cycle whose every copy is generic and that passes through a bare parameter's implementation would need a type that contains itself. What it avoids is the false cycle a generic implementation would form with its own copy at a nested type (`Vec<Vec<T>>`'s `clone` calling `Vec<T>`'s). Callables an open parameter stands for come from outside the crates read, and recursion through them is their caller's.",
+            "**A fixed point.** Hidden result types only become known and the callable sets only grow, and a body is checked again only when something it read changed; a body checked more than [`MAX_RUNS`] times is reported.",
+            "**Deterministic.** Instances are numbered in the order they are found, the work list is first in, first out, and every table is ordered."
+          ],
+          "job": "Instances: the recursion check's call graph over functions as the compiler copies them, one per instantiation of their generic parameters, and the work list that builds it.",
+          "method": {
+            "links": [
+              "https://rustc-dev-guide.rust-lang.org/backend/monomorph.html",
+              "https://doc.rust-lang.org/reference/types/closure.html",
+              "https://doi.org/10.1145/512950.512973"
+            ],
+            "text": "monomorphisation as rustc's collector performs it (<https://rustc-dev-guide.rust-lang.org/backend/monomorph.html>), here over the source with the checker's types, closures as types (The Rust Reference, <https://doc.rust-lang.org/reference/types/closure.html>); chaotic iteration to the least fixed point with a work list (P. Cousot and R. Cousot, POPL 1977, <https://doi.org/10.1145/512950.512973>; F. Nielson, H. R. Nielson and C. Hankin, *Principles of Program Analysis*, Springer 1999, section 1.6)."
+          },
+          "path": "geom_test::recursion::mono",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "each lookup is linear in the number of `use` declarations it follows, memoised per module, name and namespace; no recursion (lookups use an explicit work list).",
+          "does": "[`Resolver::resolve`] follows a path as the compiler's name resolution does: `crate`, `self`, `super` and `Self`; generic and const parameters; the items of a function body's scope, then of its module; `use` declarations, renamed, grouped, `self` and glob, and the re-exports they lead through; the other crates read by name, the standard library's model among them under its names `core`, `alloc` and `std` ([`crate::recursion::stdlib`]); and the standard prelude, from the model's `prelude` module. Later segments step into modules, enum variants and associated items. [`Resolver::ty`] turns a written type into a [`Ty`], expanding type aliases and `Self`, and [`Resolver::trait_ref`] a bound into a [`TraitRef`] with its associated-type bindings (`Fn(A) -> R` as `Fn<(A,)>` with `Output = R`).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/recursion/resolve.rs",
+          "guarantees": [
+            "**Every alternative.** A name defined twice in one namespace (as under `#[cfg]`s that are both kept, [`crate::recursion::cfg`]) resolves to both, so a call reaches every function it may name in some build.",
+            "**Terminates on any input.** `use` cycles and glob cycles are cut by a visited set; alias expansion stops at a fixed depth ([`ALIAS_DEPTH`]).",
+            "**Outside is outside.** A path is an outside path only when it starts at a crate that is neither read nor modelled (or, without a model, at the standard library or its prelude); a path that resolves nowhere resolves to nothing, and the type checker reports it."
+          ],
+          "job": "Name resolution for the recursion check: what a path in the kernel's source names, and what type a written type is.",
+          "method": {
+            "links": [
+              "https://doc.rust-lang.org/reference/paths.html",
+              "https://doc.rust-lang.org/reference/names/namespaces.html",
+              "https://doc.rust-lang.org/reference/items/use-declarations.html",
+              "https://doc.rust-lang.org/reference/names/preludes.html"
+            ],
+            "text": "The Rust Reference on paths, namespaces, `use` declarations and the preludes (<https://doc.rust-lang.org/reference/paths.html>, <https://doc.rust-lang.org/reference/names/namespaces.html>, <https://doc.rust-lang.org/reference/items/use-declarations.html>, <https://doc.rust-lang.org/reference/names/preludes.html>); visibility is not checked (code that compiles only names what it may see, so ignoring visibility only adds alternatives)."
+          },
+          "path": "geom_test::recursion::resolve",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "two builds of each crate's bound tests for `wasm32-wasip1` and their runs, and four builds and runs of the probe crate.",
+          "does": "[`run_bound_tests`] runs each crate's `tests/recursion.rs` for `wasm32-wasip1`, in debug and in release, linked with a shadow stack of [`STACK_BYTES`] in linear memory (`-C link-arg=-zstack-size=...`) and run by a WebAssembly engine whose own stack for WebAssembly frames is limited to [`ENGINE_STACK_BYTES`] ([`Runner`]), and checks that every test a statement names ran and passed. [`probes`] builds a small crate whose tests overflow each of the two stacks and requires them to trap with the small limits and pass with [`CONTROL_BYTES`], so a limit that was not applied fails the check instead of letting every bound pass.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/recursion/stack.rs",
+          "guarantees": [
+            "**A named test that did not run is a failure**, as is one that failed or a run that trapped, so a test skipped, ignored or renamed cannot pass the check.",
+            "**The limits are shown to be in force**: the probes trap with them and pass without them, in the same build and runner as the bound tests, or the check fails.",
+            "**Nothing outside steers the build**: each run starts without the variables that change the compiler, its flags or the target (`SCRUBBED_ENV`), builds in its own folder and uses `--locked`."
+          ],
+          "job": "The small WebAssembly stack: every stated bound's test run there, and probes that show the stack's limits are in force.",
+          "method": {
+            "links": [
+              "https://lld.llvm.org/WebAssembly.html",
+              "https://docs.wasmtime.dev/cli-options.html",
+              "https://nodejs.org/api/worker_threads.html",
+              "https://nodejs.org/api/wasi.html",
+              "https://doc.rust-lang.org/cargo/reference/config.html#targettriplerunner"
+            ],
+            "text": "wasm-ld's `-z stack-size` (<https://lld.llvm.org/WebAssembly.html>); wasmtime's `-W max-wasm-stack` (<https://docs.wasmtime.dev/cli-options.html>); Node's `worker_threads` `resourceLimits.stackSizeMb` and `node:wasi` (<https://nodejs.org/api/worker_threads.html>, <https://nodejs.org/api/wasi.html>); cargo's target runner (<https://doc.rust-lang.org/cargo/reference/config.html#targettriplerunner>); libtest's output lines (`test <name> ... ok`)."
+          },
+          "path": "geom_test::recursion::stack",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the length of the header.",
+          "does": "[`read`] finds the `Recursion:` paragraph of a file's `//!` header and reads the list after it. Each item states one cycle (or one group of recursive types) in four labelled parts, the first on the item's first line and each other at the start of a line of its own:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/recursion/statement.rs",
+          "guarantees": [
+            "**Read as written, or reported.** A part that is missing, written twice, empty, a placeholder ([`crate::map::header::PLACEHOLDERS`]) or malformed is a [`Problem`] naming the file, the line and what to write; a `Recursion:` paragraph without a list, or written twice, is one too. A statement is never read from text that is not in this grammar.",
+            "**Header only.** Only the `//!` lines that open the file are read, as the map reads headers (`projects/engines/geometry/HEADERS.md`)."
+          ],
+          "job": "The `Recursion` field of a module header: each recursive cycle's stated depth bound.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/HEADERS.md"
+            ],
+            "text": "the header grammar of `projects/engines/geometry/HEADERS.md` (paragraphs, `- ` list items with indented continuation lines, labels before a colon), which this field joins."
+          },
+          "path": "geom_test::recursion::statement",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "two more crates for the loader to parse, about 5 000 lines; their instances are checked only when kernel code calls them.",
+          "does": "the kernel's crates call `core`, `alloc` (and `std` in tests) and `libm` constantly, and the standard library calls kernel code back through what it is handed: closures (`Option::map`, `Iterator::fold`, `sort_by`) and trait implementations of kernel types (`sort` runs `Ord::cmp`, `Vec::clone` runs `Clone::clone`, formatting runs `Display::fmt`). Their real source is not read; instead [`CORE`] and [`LIBM`] are Rust written from their documented signatures, which [`sources`] gives the loader as two crates of role [`Role::Model`]: `core` (also answering to `alloc` and `std`, [`crate::recursion::resolve::MODEL_ALIASES`]) and `libm`. A function of the model that calls back has a body that makes exactly those calls (`Option::map` calls `f`; `Map`'s `next` calls its closure; `[T]::sort` calls `T::cmp`); one that calls nothing back has the body `loop {}`. The type checker reads the model's bodies as it reads the kernel's, instance by instance, so a callback reaches exactly the closure or implementation the call was handed.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/recursion/stdlib.rs",
+          "guarantees": [
+            "**Never less than the library calls.** Each modelled function's body calls every closure it is handed and every trait method of its type parameters that the documented function may call; adapters that defer a call (an iterator's `map`) keep the closure in their result and call it where the library does (in `next`). By parametricity, code that does not know the kernel's types reaches kernel code only through the values and bounds it is handed (J. C. Reynolds, \"Types, abstraction and parametric polymorphism\", IFIP 1983; P. Wadler, \"Theorems for free!\", FPCA 1989, <https://doi.org/10.1145/99370.99404>), so these are all the calls it can make into the kernel.",
+            "**What is not modelled is reported.** A path into the standard library that names nothing in the model resolves to nothing, and the type checker reports it as code it cannot read; the model is extended rather than guessed."
+          ],
+          "job": "The recursion check's model of the standard library and of `libm`: Rust source the check reads in place of theirs, so a call into them is checked as any other call is.",
+          "method": {
+            "links": [
+              "https://doc.rust-lang.org/std/",
+              "https://doc.rust-lang.org/core/",
+              "https://docs.rs/libm/0.2.16/libm/"
+            ],
+            "text": "the standard library's documented signatures and behaviour (<https://doc.rust-lang.org/std/>, <https://doc.rust-lang.org/core/>, <https://docs.rs/libm/0.2.16/libm/>), written as stubs: a library model, which the type checker reads as ordinary code, under parametricity as above."
+          },
+          "path": "geom_test::recursion::stdlib",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "each operation is linear in the size of the types it touches; recursion follows the nesting of a type, which [`MAX_DEPTH`] bounds for every type an instance is keyed by.",
+          "does": "[`Ty`] is a type of the program: a primitive, a struct, enum or union of the crates read (the standard library's model among them, [`crate::recursion::stdlib`]) with its arguments, a reference or raw pointer, a slice, array or tuple, a generic parameter left open, a trait object, a return-position `impl Trait`, a projection not yet resolved, a function pointer, one closure, one function item, the never type, an inference variable of the body being checked, a `_` written in the source, or a type the checker could not infer ([`Ty::Unknown`]). [`TraitRef`] is a trait with its arguments and its associated-type bindings (`Iterator<Item = u64>`; `Fn(A) -> R` is `Fn<(A,)>` with `Output = R`).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/recursion/ty.rs",
+          "guarantees": [
+            "**One type per value.** As in Rust, every expression of one instance has exactly one type; what the checker does not know yet is an inference variable, and what it cannot learn is [`Ty::Unknown`], which the checker reports wherever a call would depend on it.",
+            "**Finite.** [`Ty::cut`] replaces everything nested deeper than [`MAX_DEPTH`] by [`Ty::Unknown`], so instances, which are keyed by types, are finitely many.",
+            "**Deterministic.** Types are ordered (`Ord`), so every table keyed by them iterates the same way on every run."
+          ],
+          "job": "Types for the recursion check's type checker: Rust's types as far as a call graph needs them, with inference variables.",
+          "method": {
+            "links": [
+              "https://doc.rust-lang.org/reference/types.html",
+              "https://doc.rust-lang.org/reference/types/closure.html",
+              "https://doc.rust-lang.org/reference/types/function-item.html",
+              "https://rustc-dev-guide.rust-lang.org/type-inference.html"
+            ],
+            "text": "the type grammar of The Rust Reference (<https://doc.rust-lang.org/reference/types.html>), with closures and function items as types of their own (<https://doc.rust-lang.org/reference/types/closure.html>, <https://doc.rust-lang.org/reference/types/function-item.html>), and inference variables as in rustc's type checker (<https://rustc-dev-guide.rust-lang.org/type-inference.html>)."
+          },
+          "path": "geom_test::recursion::ty",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one pass over each instance's body, each expression's lookups as [`Index`] costs them, and at most [`MAX_SETTLE`] rounds over the obligations. The checker recurses over the syntax tree, so its depth is the nesting depth of the source's expressions; [`crate::recursion::analyse`] runs it on a thread with a large stack.",
+          "does": "[`body`] checks the body of one instance ([`crate::recursion::mono`]) as rustc's type checker does, in one pass over the source with inference variables ([`Infer`]): every expression gets a type, from the signatures and field types the source writes (the standard library's model among them, [`crate::recursion::stdlib`]), literals, and what unification learns; an expected type flows down into each expression (a `let` annotation, a parameter's type, a closure bound's parameters). Every call is recorded with what it calls:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/recursion/typeck.rs",
+          "guarantees": [
+            "**Every call is an edge, or the code is reported.** A call whose target cannot be known (a receiver whose type cannot be inferred, a path that resolves to nothing, a method no type has, a syntax form the checker does not read) is a [`Problem`]; the check fails on any.",
+            "**Precise where the program is.** A call reaches exactly what the compiler would call for the instance's types, through the standard library's model, apart from what [`Index::probe`] and [`crate::recursion::mono`] state for generic receivers and trait objects.",
+            "**Deterministic.** One pass in source order (closure arguments after the others, as rustc checks them), obligations in the order they were made."
+          ],
+          "job": "The type checker: every call one instance's body makes, as edges of the call graph.",
+          "method": {
+            "links": [
+              "https://rustc-dev-guide.rust-lang.org/type-inference.html",
+              "https://rustc-dev-guide.rust-lang.org/ty-module/instantiating-binders.html",
+              "https://rustc-dev-guide.rust-lang.org/traits/resolution.html",
+              "https://rust-lang.github.io/rfcs/2005-match-ergonomics.html",
+              "https://doc.rust-lang.org/reference/expressions.html",
+              "https://doc.rust-lang.org/reference/patterns.html",
+              "https://doc.rust-lang.org/reference/type-coercions.html",
+              "https://doc.rust-lang.org/reference/destructors.html"
+            ],
+            "text": "Hindley-Milner inference with bidirectional checking as rustc's typeck performs it (<https://rustc-dev-guide.rust-lang.org/type-inference.html>, <https://rustc-dev-guide.rust-lang.org/ty-module/instantiating-binders.html>), with deferred obligations (<https://rustc-dev-guide.rust-lang.org/traits/resolution.html>) and default binding modes for patterns (RFC 2005, <https://rust-lang.github.io/rfcs/2005-match-ergonomics.html>); expression, pattern and statement semantics from The Rust Reference (<https://doc.rust-lang.org/reference/expressions.html>, <https://doc.rust-lang.org/reference/patterns.html>), its operator traits, `?`, `for` loops, coercions (<https://doc.rust-lang.org/reference/type-coercions.html>) and drop scopes (<https://doc.rust-lang.org/reference/destructors.html>)."
+          },
+          "path": "geom_test::recursion::typeck",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a handful of integer operations per word. [`SplitMix64::below`] draws one word, and draws again with probability below `n / 2^64`, so fewer than two words on average.",
           "does": "[`SplitMix64`] turns a [`Seed`] into a stream of 64-bit words. [`ByteSource`] turns a fuzzer's bytes into the same kind of stream. Both implement [`Entropy`], so one builder (for example [`crate::grid::GridSampler`]) makes test data from a seed in a property test and from coverage-guided bytes in a fuzz target.",
           "family": [],
@@ -4698,6 +5629,7 @@
               "link": "https://prng.di.unimi.it/splitmix.c",
               "method_note": null,
               "name": "S. Vigna, `splitmix.c`",
+              "notice": [],
               "pinned": false,
               "purpose": "for the generator's constants and the 50 reference outputs the unit tests check. No code copied.",
               "take": "port-method"
@@ -4733,6 +5665,80 @@
           "target": "lib"
         },
         {
+          "cost": "linear in the text's length times the number of markers, all of them short.",
+          "does": "[`scan_text`] reads one file's text and returns every [`Hit`]: a Numerical Recipes routine name, macro, variable name, author or step-control constant; a copyleft licence's notice text; a statement that code was taken, ported, adapted or copied from a copyleft source; or an Autodesk hatch pattern or linetype name or description. [`repo`] scans every file of the kernel's crates and the facade's, with its named exemptions, and the binary `source-scan` (`cargo run -p geom-test --bin source-scan -- check`) runs it in CI.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/scan.rs",
+          "guarantees": [
+            "**Every marker of [`markers`] is found, wherever it is**: in code, a comment, a string or a data file, matched by words, so punctuation, line breaks inside a phrase and comment marks (`//!`, `#`, `*`, `;`, `--`) do not hide it. A routine name is found as a part of an identifier (`ST_pythag`, `smosPythag`), with or without a trailing number or the precision prefix of the book's variants (`tqli2`, `dpythag`); a variable name as a word or a part; a phrase also when it is written as one identifier (`numerical_recipes`, `takenFromCgal`); a description also when a string literal escapes its backslashes (`/\\\\/\\\\/`); and a constant as a value however its decimal literal is written (`1.89e-4`, `0.000189`, `.000189`, `1.89E-04_f64`).",
+            "**A taken-from statement needs a taking phrase and a banned source.** A hit needs a taking phrase ([`markers::TAKING`], its two words at most [`markers::TAKING_GAP`] words apart) followed within [`markers::WINDOW`] words by a copyleft source's name ([`markers::COPYLEFT_SOURCES`]), with no negation in the [`markers::NEGATION_REACH`] words before the phrase and in the same clause (a clause ends at `.`, `!`, `?`, `;`, `:` or `,`), so \"no code is taken from OCCT\" is not a hit, and \"based on CGAL's widening\", \"No tests. Taken from CGAL.\" and \"Not tested: adapted from CGAL\" are.",
+            "**Each hit names its line, category and marker**, in the order they occur; one marker on one line is reported once.",
+            "**Words, not meaning.** A marker spelt with look-alike characters, split by punctuation inside a word, built at run time, written as an expression or a hexadecimal float, named after the phrase that takes it (\"CGAL, from which this was taken\"), or paraphrased is not found: rule 7 leaves the rest to review.",
+            "**Deterministic.** The same text gives the same hits on every target: words are runs of Unicode letters, digits and `_`, compared after lower-casing, and numbers are compared as the doubles Rust parses them to, which is exact and the same everywhere."
+          ],
+          "job": "The banned-source scanner: finds the markers that show code in the kernel's crates may come from a source chapter 29 bans: Numerical Recipes, copyleft code, and Autodesk's hatch patterns and linetypes.",
+          "method": {
+            "links": [
+              "https://scancode-toolkit.readthedocs.io/en/stable/explanations/license-detection-reference.html",
+              "projects/engines/geometry/architecture/29-sources-licences.md",
+              "https://doc.rust-lang.org/reference/tokens.html#floating-point-literals"
+            ],
+            "text": "matching words and short phrases of a written marker list, the method of license scanners such as `ScanCode` (Apache-2.0), whose rules are lists of words matched against a file's word sequence (<https://scancode-toolkit.readthedocs.io/en/stable/explanations/license-detection-reference.html>); the markers and their sources are chapter 29.20, rules 2 and 7 (`projects/engines/geometry/architecture/29-sources-licences.md`), and [`markers`]; number literals as the Rust Reference's float literal grammar (<https://doc.rust-lang.org/reference/tokens.html#floating-point-literals>), which C's matches for the forms the markers take."
+          },
+          "path": "geom_test::scan",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant tables.",
+          "does": "holds the tables [`crate::scan::scan_text`] matches, each with where it comes from. Nothing else in the repository's scanned crates may hold these markers, so this file is one of the scanner's named exemptions ([`crate::scan::repo::EXEMPT`]).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/scan/markers.rs",
+          "guarantees": [
+            "**Every marker has a written source.** Each table below says which rule of chapter 29.20, or which evidence report, names it; a marker found only by memory is not here.",
+            "**Distinctive markers only.** Common words that a routine, pattern or licence shares with ordinary text (Brent, Jacobi, golden, spline; CENTER, HIDDEN, BRICK; a bare \"Triangle\", the GPL constraint solver Frontier, the GPL repository offsets-and-remeshing and the proof tool Gappa, which runs only as a separate program) are left out, so a hit is a reason to look, not noise. The phrases of taken-from statements need both a taking phrase and a copyleft source's name within [`WINDOW`] words, with no negation just before."
+          ],
+          "job": "The banned-source scanner's markers: the words, phrases, names and values that show code may come from a source chapter 29 bans.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/29-sources-licences.md",
+              "projects/kit/notes/G01-evidence/13-vetting-smlib.md",
+              "projects/kit/notes/G01-evidence/12-vetting-cadcraft.md",
+              "https://help.autodesk.com/cloudhelp/2025/ENU/AutoCAD-Customization/files/GUID-A6F2E6FF-1717-44B6-A476-0CA817ADD77E.htm",
+              "https://help.autodesk.com/cloudhelp/2017/ENU/AutoCAD-LT/files/GUID-79B99823-7600-4CAB-BD12-04D5103D90CB.htm"
+            ],
+            "text": "chapter 29.20, rules 2 and 7, and chapter 29.4 and 29.6 on Numerical Recipes (`projects/engines/geometry/architecture/29-sources-licences.md`); the Numerical Recipes markers evidence report 13 found in `SMLib`, `NLib` and solidcore (routine names, macros, the step-control constants and the variable names of the Cash-Karp step), and the Autodesk pattern and linetype names and descriptions evidence report 12 found reproduced in `CADCraft` (`projects/kit/notes/G01-evidence/13-vetting-smlib.md`, `projects/kit/notes/G01-evidence/12-vetting-cadcraft.md`); the hatch pattern names Autodesk's own customization guide shows, `ANSI31` among them (<https://help.autodesk.com/cloudhelp/2025/ENU/AutoCAD-Customization/files/GUID-A6F2E6FF-1717-44B6-A476-0CA817ADD77E.htm>) and AR-B816 (<https://help.autodesk.com/cloudhelp/2017/ENU/AutoCAD-LT/files/GUID-79B99823-7600-4CAB-BD12-04D5103D90CB.htm>)."
+          },
+          "path": "geom_test::scan::markers",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one listing per folder and one read of each file, plus the scan's own cost, linear in the files' total size.",
+          "does": "[`files`] lists every file under the kernel's crates folder and under each facade crate (`engine-geometry` and its binding crates), skipping build output; [`check`] scans each with [`crate::scan::scan_text`] and returns every [`Finding`]: a hit, a file that cannot be read as a file, or an exemption that no longer applies.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/scan/repo.rs",
+          "guarantees": [
+            "**Every file, every kind.** Every regular file under the scanned folders is read, whatever its name or extension (source, manifest, data, fixture), in every reading [`readings`] gives: as UTF-8 with any invalid byte replaced, so a marker in ASCII is found even in a binary file; as UTF-16 when the file opens with a UTF-16 byte-order mark; and, when it holds a zero byte, again with its zero bytes dropped, so text stored as UTF-16 without a mark is read too. A file's hits are those of all its readings. Folders named `target` (build output) are the only ones skipped. A symbolic link or junction is reported, never followed or skipped, and so is a folder deeper than [`MAX_DEPTH`].",
+            "**Exemptions are named, few and cannot rot.** A file in [`EXEMPT`] (or the list a test passes) is not reported, but each exemption must name a file that exists and still holds a hit; otherwise the exemption itself is a finding. Only the scanner's own marker tables and its seeded tests are exempt.",
+            "**Deterministic order.** Files are scanned in path order and findings sorted by file, line and text, with paths relative to the workspace root and `/`, the same on every system.",
+            "**I/O failures are errors, not passes**: [`MapError`], which the binary turns into exit code 2."
+          ],
+          "job": "The banned-source scan of a workspace: every file of the kernel's crates and of the facade's, scanned, with the scanner's own files as named exemptions.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/29-sources-licences.md"
+            ],
+            "text": "the same walk as the map's ([`crate::map::repo`]): sorted listings, no recursion, links reported; the scope is the code chapter 29.20's rule 7 covers, every crate of the kernel (`projects/engines/geometry/architecture/29-sources-licences.md`)."
+          },
+          "path": "geom_test::scan::repo",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "constant time; one environment read per [`resolve`], none for [`fixed`].",
           "does": "a [`Seed`] is a 64-bit value that decides every input a seeded test draws. [`resolve`] picks a test's seed, the value of the environment variable [`ENV_VAR`] (`SPAREKIT_SEED`) when it is set and the test's fixed default otherwise, and prints it as `seed: <hex>` before the test draws anything. [`fixed`] prints a seed that a test must use whatever the environment says, because its assertions depend on that seed (a golden hash, a recorded case).",
           "family": [],
@@ -4760,7 +5766,7 @@
       ],
       "name": "geom-test",
       "provenance": [],
-      "sections": "26, 27, 28 and 29 of the kernel architecture (`projects/engines/geometry/architecture/`), in part: the map for people and AI of 26.3; chapter 27's `geom-test` row and its rule that a development crate is never a kernel crate's normal dependency; 28.1, \"Where the code lives\", for that rule's check; the property tests of 28.2, run from a fixed seed; the generators aimed at the hard cases of 28.5; the outside oracles of 28.10, development dependencies of this crate only; the seed discipline of 28.17; for the development crates' own dependencies, the permissive-licence promise of 28.1's table (the architecture's eleventh principle; 29.1); and, for the map, the `Source:` and `Consulted:` records of 29.20, their licences judged by the classes of 29.2.",
+      "sections": "21, 26, 27, 28 and 29 of the kernel architecture (`projects/engines/geometry/architecture/`), in part: the determinism matrix of 21 and the golden store of 28.13, keyed by the editions of 26.2; the map for people and AI of 26.3; chapter 27's `geom-test` row and its rule that a development crate is never a kernel crate's normal dependency; 28.1, \"Where the code lives\", for that rule's check; the property tests of 28.2, run from a fixed seed; the generators aimed at the hard cases of 28.5; the outside oracles of 28.10, development dependencies of this crate only; the seed discipline of 28.17; for the development crates' own dependencies, the permissive-licence promise of 28.1's table (the architecture's eleventh principle; 29.1); and, for the map, the `Source:` and `Consulted:` records of 29.20, their licences judged by the classes of 29.2; for the ledger, the `PROVENANCE.md`, `NOTICE` and method notes of 29.20's rules 4 to 6; and for the scanner, the markers of 29.20's rules 2 and 7.",
       "spdx": null,
       "status": null,
       "summary": "Spare Kit geometry kernel, development only: the shared test support every kernel test uses."
@@ -4802,14 +5808,7 @@
     }
   ],
   "format": 1,
-  "gaps": [
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/interval.rs",
-      "problem": "the record for CGAL `FPU.h` reads code under LGPL-3.0-or-later OR LicenseRef-Commercial, which chapter 29.2 allows only under the method-only procedure (29.20, rule 6): add a \"Method note: `projects/engines/geometry/methods/<note>.md`\" line naming its note",
-      "reason": "G02 read CGAL's FPU.h, under LGPL-3.0-or-later, before the method-only procedure's notes had a home. Build piece G16 (provenance, notices and method notes) creates projects/engines/geometry/methods/, takes this record through 29.20 rule 6 (a note in plain words and a second reviewer) or replaces the source with the permissive Geogram record beside it, and deletes this entry.",
-      "rule": "Consulted"
-    }
-  ],
+  "gaps": [],
   "generated_by": "cargo run -p geom-test --bin map -- write",
   "grammar": "projects/engines/geometry/HEADERS.md",
   "pending": [],
@@ -4927,7 +5926,7 @@
     {
       "licence": "LGPL-3.0-or-later OR LicenseRef-Commercial",
       "link": "https://github.com/CGAL/cgal/blob/cbc3b81d4607c6f3a9d1f3a47d8709a2be3e6bfa/Number_types/include/CGAL/FPU.h",
-      "method_note": null,
+      "method_note": "projects/engines/geometry/methods/cgal-nextafter-widening.md",
       "name": "CGAL `FPU.h`",
       "pinned": true,
       "take": "port-method",
@@ -5025,6 +6024,17 @@
       ]
     },
     {
+      "licence": "MPL-2.0",
+      "link": "https://github.com/fitzgen/shuffling-allocator/blob/983334621d6c6fd6aa4d40d24edd3221208bf085/src/lib.rs",
+      "method_note": null,
+      "name": "shuffling-allocator",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-test/src/golden/perturb.rs"
+      ]
+    },
+    {
       "licence": "Apache-2.0",
       "link": "https://github.com/google/gitiles/blob/e54582fdd2a8783a6078f3a25eb08bb622f2e497/java/com/google/gitiles/ViewFilter.java",
       "method_note": null,
@@ -5044,8 +6054,20 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-bench/src/bin/geom-bench-counts.rs",
+        "projects/engines/geometry/crates/geom-bench/src/callgrind.rs",
         "projects/engines/geometry/crates/geom-bench/src/counts.rs",
         "projects/engines/geometry/crates/geom-bench/src/lib.rs"
+      ]
+    },
+    {
+      "licence": "MIT OR Apache-2.0",
+      "link": "https://github.com/model-checking/kani/blob/0d2328a93f0e0ff66132d6bfa1a7d884877cf862/library/std/src/lib.rs",
+      "method_note": null,
+      "name": "Kani 0.68.0 `library/std/src/lib.rs`",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-fuzz/src/lib.rs"
       ]
     },
     {
@@ -5098,17 +6120,6 @@
     },
     {
       "licence": "MIT OR Apache-2.0",
-      "link": "https://github.com/rust-lang/rust/blob/1731faea0da5b4ebf881d8e53f98066c17a74711/compiler/rustc_lexer/src/lib.rs",
-      "method_note": null,
-      "name": "`rustc_lexer`",
-      "pinned": true,
-      "take": "port-method",
-      "used_by": [
-        "projects/engines/geometry/crates/geom-test/src/map/rust.rs"
-      ]
-    },
-    {
-      "licence": "MIT OR Apache-2.0",
       "link": "https://github.com/rust-lang/rust/blob/1731faea0da5b4ebf881d8e53f98066c17a74711/src/tools/tidy/src/error_codes.rs",
       "method_note": null,
       "name": "rustc's tidy",
@@ -5127,6 +6138,17 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-test/src/map.rs"
+      ]
+    },
+    {
+      "licence": "MIT OR Apache-2.0",
+      "link": "https://github.com/rust-random/rand/blob/9e7d328f60d6372ae22927f37d1a816fc980f25e/src/seq/slice.rs",
+      "method_note": null,
+      "name": "rand",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-test/src/golden/shuffle.rs"
       ]
     },
     {

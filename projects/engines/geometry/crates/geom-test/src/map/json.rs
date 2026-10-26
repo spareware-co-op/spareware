@@ -108,6 +108,47 @@ fn newline(out: &mut String, depth: usize) {
 }
 
 impl Value {
+    /// The value of `key` in an object; `None` for a missing key or a value that is not an
+    /// object.
+    #[must_use]
+    pub fn get(&self, key: &str) -> Option<&Value> {
+        match self {
+            Value::Object(map) => map.get(key),
+            _ => None,
+        }
+    }
+
+    /// The text of a string value; `None` for any other value.
+    #[must_use]
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            Value::String(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    /// The items of an array value; empty for any other value, so a missing list reads as an
+    /// empty one.
+    #[must_use]
+    pub fn items(&self) -> &[Value] {
+        match self {
+            Value::Array(items) => items,
+            _ => &[],
+        }
+    }
+
+    /// The text of `key` in an object, or empty when it is missing or not a string.
+    #[must_use]
+    pub fn text(&self, key: &str) -> &str {
+        self.get(key).and_then(Value::as_str).unwrap_or_default()
+    }
+
+    /// The items of `key` in an object, or empty when it is missing or not an array.
+    #[must_use]
+    pub fn list(&self, key: &str) -> &[Value] {
+        self.get(key).map_or(&[], Value::items)
+    }
+
     /// The value as JSON text, indented by two spaces, ending in a newline.
     #[must_use]
     pub fn to_text(&self) -> String {
@@ -189,5 +230,22 @@ mod tests {
         let back: serde_json::Value = serde_json::from_str(&text).unwrap();
         assert_eq!(back["alpha"], "a \"q\" \\ \n\t\u{1} − ε");
         assert_eq!(back["zeta"], 3);
+    }
+
+    #[test]
+    fn reads_back_what_it_holds() {
+        let v = object([
+            ("name", Value::from("x")),
+            ("list", Value::from(vec!["a".to_owned(), "b".to_owned()])),
+            ("n", Value::Number(1)),
+        ]);
+        assert_eq!(v.text("name"), "x");
+        assert_eq!(v.text("n"), "");
+        assert_eq!(v.text("missing"), "");
+        assert_eq!(v.list("list").len(), 2);
+        assert_eq!(v.list("list")[1].as_str(), Some("b"));
+        assert_eq!(v.list("name"), &[]);
+        assert!(Value::from("x").get("name").is_none());
+        assert_eq!(Value::Null.items(), &[]);
     }
 }

@@ -15,6 +15,9 @@ description = "Spare Kit geometry kernel: the parallel helper, budgets and cance
 # MIT OR Apache-2.0. Without its default fork and timeout features, which pull in code that has no
 # WebAssembly (WASI) build, so the tests also run on wasm32-wasip1, as geom-num's do.
 proptest = { version = "1.12.0", default-features = false, features = ["std", "bit-set"] }
+# The golden store, its one SHA-256 and the perturbations every golden runs under (piece G19):
+# the kernel's development crate, a development dependency only (chapter 28.1).
+geom-test = { path = "../geom-test" }
 
 # A plain timing harness until the kernel's benchmark crate (geom-bench) exists: `cargo bench`.
 [[bench]]
@@ -27,6 +30,9 @@ harness = false
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"
+# Kani sets `cfg(kani)` when it compiles a proof; proofs and the code they need sit beside the
+# code under it (chapter 28.7).
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(kani)"] }
 
 [lints.clippy]
 # The crate is written to clippy's pedantic idioms; CI denies every warning.

@@ -7,7 +7,7 @@
 //! how many of them the crate's tests ran. [`judge`] applies the bars of
 //! [`crate::foundation`]: in the foundation set every line run and every branch taken both ways;
 //! elsewhere at least 90% of lines. [`check_marks`] checks every `coverage(off)` mark in the kernel's
-//! crates against [`crate::ledger::Ledger::coverage_off`].
+//! crates against [`crate::quality_ledger::Ledger::coverage_off`].
 //!
 //! Guarantees, each because a gate that passes when it should fail is worse than none:
 //!
@@ -47,7 +47,7 @@ use crate::foundation::{
     ELSEWHERE_LINES, FOUNDATION_BRANCHES, FOUNDATION_LINES, Place, Set, kernel_crates,
     missing_foundation_module, place,
 };
-use crate::ledger::{Ledger, Tool};
+use crate::quality_ledger::{Ledger, Tool};
 use crate::rust_source::{ProofTool, Scan, defines_proof, scan};
 
 /// Why coverage data could not be used.

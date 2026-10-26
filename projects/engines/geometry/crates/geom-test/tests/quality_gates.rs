@@ -58,8 +58,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use geom_test::coverage::{self, check_log, check_marks, measure};
 use geom_test::foundation::{Place, Set, place};
-use geom_test::ledger::{Kind, Ledger, SCHEMA};
 use geom_test::mutants::{self, Mode, judge, read_run};
+use geom_test::quality_ledger::{Kind, Ledger, SCHEMA};
 use geom_test::seed::resolve;
 use geom_test::{Seed, SplitMix64};
 use serde_json::{Value, json};
@@ -1666,7 +1666,7 @@ fn repo_root() -> PathBuf {
 #[test]
 fn the_repository_ledger_reads_and_every_mark_in_the_kernel_has_its_proof() {
     let root = std::fs::canonicalize(repo_root()).unwrap();
-    let ledger = Ledger::read(&root.join(geom_test::ledger::LEDGER_PATH)).unwrap();
+    let ledger = Ledger::read(&root.join(geom_test::quality_ledger::LEDGER_PATH)).unwrap();
     for s in &ledger.survivors {
         // The foundation set keeps only equivalent mutants (and hangs, which are caught by time).
         if let Place::Kernel {

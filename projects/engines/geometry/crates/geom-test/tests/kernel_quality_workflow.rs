@@ -156,7 +156,7 @@ fn it_runs_on_kernel_pull_requests_weekly_and_on_demand() {
     ] {
         assert!(paths.contains(&path), "no path filter {path}");
     }
-    assert!(geom_test::ledger::LEDGER_PATH.starts_with("projects/engines/geometry/"));
+    assert!(geom_test::quality_ledger::LEDGER_PATH.starts_with("projects/engines/geometry/"));
 }
 
 #[cfg_attr(

@@ -102,6 +102,7 @@ The families of chapter 10.2's catalogue, as the `Family` field writes them: `Ma
 | Cost | Yes | A paragraph opening `Cost: `, followed by the cost (time, memory, allocation, recursion), which states something | `cost` |
 | Family | No | As for crates | `family` |
 | Provenance | When the module took or consulted an outside source | Below | `provenance`, `spdx` |
+| Recursion | When the module holds a function of a recursive cycle, or defines a recursive type | [The `Recursion` field](#the-recursion-field) below | Not in the map: the recursion check reads it |
 
 Each module field is written once; a second `Guarantees`, `Method`, `Cost` or `Family` paragraph is a problem rather than a silent choice. Other paragraphs (`Why: `, derivations, tables, notation) are prose: the map leaves them out.
 
@@ -123,9 +124,36 @@ Each module field is written once; a second `Guarantees`, `Method`, `Cost` or `F
 //! Cost: constant time and no allocation.
 ```
 
+## The `Recursion` field
+
+WebAssembly has no guard page, so recursion that runs too deep corrupts memory instead of trapping; every recursive cycle in a crate that ships therefore states its depth bound (chapter 28.8; the rule follows solidcore's, G01 evidence 13). The recursion check (`geom-test`'s `src/recursion`, piece G13) finds every cycle on the program's call graph and reads this field from the headers of the modules that hold them.
+
+```rust
+//! Recursion:
+//!
+//! - Cycle: `Tree::walk`, `walk_children`.
+//!   Bound: 64 (`MAX_DEPTH`).
+//!   Why: each call goes one level down the tree, and `Tree::walk` refuses past `MAX_DEPTH`.
+//!   Test: `walk_at_its_bound`.
+//! - Types: `Expr`.
+//!   Bound: 32 (`MAX_NESTING`).
+//!   Why: the parser refuses an expression nested deeper than `MAX_NESTING`.
+//!   Test: `deepest_expr_drops_and_clones`.
+```
+
+| Part | Exact syntax |
+| --- | --- |
+| `Cycle:` | Every function of the cycle, in backticks, as the module names them (relative to it, from `crate::`, or through its `use` declarations); a closure is named by the function it is written in, an implementation's method as `Type::method` or `<Type as Trait>::method`. Exactly the cycle's members: `recursion list` prints them |
+| `Types:` | Instead of `Cycle:`, the structs, enums or unions that contain themselves through their fields: their drop glue and derived implementations recurse over their nesting, so one statement covers those derived cycles too |
+| `Bound:` | The most frames of the cycle that are ever on the stack at once (for types, the deepest nesting of their values): a positive whole number, then the constant that enforces it in backticks when there is one (`const NAME: T = <integer literal>;` in the crate, whose value must be the bound) |
+| `Why:` | Why the bound holds, as a sentence that states something |
+| `Test:` | A `#[test]` function of the crate's `tests/recursion.rs`, not ignored, that runs the cycle at its bound; the check requires its call graph to reach the cycle |
+
+Each item starts with `- Cycle: ` or `- Types: ` and each other part opens a line of its own; the field is written once per file, in the header of a module that holds one of the cycle's functions (or defines one of the types). `cargo run -p geom-test --bin recursion -- list` prints every cycle and recursive type with a path round it and the line of each call; `-- check` fails on a cycle without a statement (`Unbounded`), a statement that is not exactly one cycle's members (`Stale`), a statement in the wrong file or malformed (`Statement`), a bound constant that disagrees (`Bound`), a missing, ignored or unreaching test (`Test`), and code the check cannot read (`Unread`); `-- gate`, which the merge gate's recursion job runs, also runs every crate's `tests/recursion.rs` for `wasm32-wasip1` in debug and in release on a 256 KiB shadow stack and a 256 KiB engine stack (`Stack`).
+
 ## Provenance lines
 
-These are the lines of chapter 29.20, rule 4. The map reads them into one record per source (`sources` in `MAP.json`), which build piece G16 turns into `PROVENANCE.md` and `NOTICE`.
+These are the lines of chapter 29.20, rule 4. The map reads them into one record per source (`sources` in `MAP.json`). The same records produce [`PROVENANCE.md`](PROVENANCE.md), the ledger of every source the code takes, and [`NOTICE`](NOTICE), every ported source's licence text and copyright lines and the credit owed to every source consulted: `cargo run -p geom-test --bin provenance -- write` writes both from the map, the licence texts in [`notices/`](notices/README.md) and the method notes in [`methods/`](methods/README.md), and `-- check` (CI) fails when either differs, when a port has no licence text, or when a method note breaks its template (`geom_test::ledger`). Each record in a module's `provenance` list keeps its `notice`: for a `Source:` record, every line after the one holding its link and before `Changed for Spare Kit: ` (the origin's copyright lines, and the links of any further origin files with theirs), which `NOTICE` reproduces. Each origin file's copyright lines follow its link; a run of links with no line between them (two files of one author) shares the lines after the last link of the run, and an origin file left with no copyright line fails the ledger's check.
 
 | Line | Syntax | Checked |
 | --- | --- | --- |
@@ -245,9 +273,7 @@ Operations and geometry kinds, which chapter 26.3 also asks the map to list, joi
 
 ## Known gaps and pending folders
 
-A problem that cannot be fixed in the piece that finds it is listed in `geom_test::map::GAPS` with its file, its rule, its exact message and its reason, and the piece that closes it, the way the scaffold check lists its header gaps. A listed gap hides that one problem and no other (a different problem in the same file and rule is still reported), `MAP.json` shows it, and a gap that no longer occurs fails the check, so the list cannot outlive its reason. Today there is one (geom-num's missing `Layer` line, the other gap first listed here, closed when piece G09 added the line and deleted the scaffold check's matching record):
-
-- `projects/engines/geometry/crates/geom-num/src/interval.rs` credits CGAL's `FPU.h`, under `LGPL-3.0-or-later OR LicenseRef-Commercial`, without a method note: G02 read it before the method-only procedure's notes had a home. Build piece G16, which creates `projects/engines/geometry/methods/`, takes the record through rule 6 or replaces the source with the permissive Geogram record beside it.
+A problem that cannot be fixed in the piece that finds it is listed in `geom_test::map::GAPS` with its file, its rule, its exact message and its reason, and the piece that closes it, the way the scaffold check lists its header gaps. A listed gap hides that one problem and no other (a different problem in the same file and rule is still reported), `MAP.json` shows it, and a gap that no longer occurs fails the check, so the list cannot outlive its reason. Today there are none. The two first listed here are closed: geom-num's missing `Layer` line, when piece G09 added the line and deleted the scaffold check's matching record; and `geom-num`'s interval module crediting CGAL's `FPU.h` (LGPL) without a method note, when piece G16 created `projects/engines/geometry/methods/` and wrote the note, `methods/cgal-nextafter-widening.md`, which the record now names.
 
 A folder the headers link into that this tree does not hold yet is listed in `geom_test::map::PENDING` with the piece that brings it. While the folder is absent, links into it are not checked for existence; once it exists, every link into it must resolve and the entry fails the check until it is deleted. Today there are none: the two first listed, `projects/engines/geometry/architecture/` and `projects/kit/notes/G01-evidence/` (the kernel architecture's chapters and G01's evidence, written on piece G01's branch), arrived when G01 merged, and every link into them is now checked.
 

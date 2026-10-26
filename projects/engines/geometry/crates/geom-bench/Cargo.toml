@@ -28,10 +28,43 @@ bench = false
 
 [dependencies]
 geom-num = { path = "../geom-num" }
+# SHA-256 (FIPS 180-4) for the golden digests, and their hexadecimal form in golden.txt: standard
+# crates in place of the copy this crate held (piece G12a; chapter 29.1, a development crate).
+# sha2 0.11.0: MIT OR Apache-2.0, RustCrypto, without its default alloc and oid features, which
+# the digests do not use. hex 0.4.3: MIT OR Apache-2.0.
+sha2 = { version = "=0.11.0", default-features = false }
+hex = "=0.4.3"
+
+# Reading the gate's summaries, on Unix and Windows, where the judge runs: Gungraun's summary model
+# needs `OsString` to deserialize, which serde provides there only, so the WebAssembly guest
+# (geom-bench-guest, built for wasm32-wasip1) never builds it. Both are optional, behind the
+# `judge` feature below.
+[target.'cfg(any(unix, windows))'.dependencies]
+# Gungraun's summary model, the typed schema of the `summary.json` files the gate's runs write, which
+# `geom-bench-counts callgrind` reads (`geom_bench::callgrind`). Only the model: no runner, no
+# Valgrind. Apache-2.0 OR MIT. Exactly the version of `gungraun` below, so the schema read is the
+# one the runner writes (a test checks they agree).
+gungraun-runner = { version = "=0.20.0", default-features = false, features = ["summary"], optional = true }
+# The JSON parser for those summaries. MIT OR Apache-2.0.
+serde_json = { version = "1.0.154", optional = true }
+
+[features]
+default = ["judge"]
+# The judge of the instruction-and-cache gate (`geom_bench::callgrind`), on by default. The gate's
+# measured runs build without it (`cargo bench --no-default-features`): Gungraun's runner crate is
+# also a dependency of the benchmark binary, so turning on its summary model would change the
+# binary being measured, and a measurement must not change with the tool that judges it.
+judge = ["dep:gungraun-runner", "dep:serde_json"]
 
 [dev-dependencies]
 # Wall-clock timings for people, on every platform. MIT OR Apache-2.0.
 divan = "0.1.21"
+# The coverage test's readers, in place of a line scanner and text searches (piece G12a; chapter
+# 29.1), the versions engine-geometry's scaffold check pins. syn 3.0.9 (MIT OR Apache-2.0) parses
+# geom-num's source, without its default features: it needs no compiler proc_macro and prints
+# nothing. toml 0.9.6 (MIT OR Apache-2.0) reads the manifests and Cargo.lock.
+syn = { version = "=3.0.9", default-features = false, features = ["full", "parsing"] }
+toml = "=0.9.6"
 
 # The merge gate: instruction counts, cache misses and heap use under Valgrind, through Gungraun.
 # Valgrind runs on Linux here, so the gate is Linux only and other platforms never build it.
@@ -51,6 +84,9 @@ harness = false
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"
+# Kani sets `cfg(kani)` when it compiles a proof; proofs and the code they need sit beside the
+# code under it (chapter 28.7).
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(kani)"] }
 
 [lints.clippy]
 unwrap_used = "deny"

@@ -41,8 +41,8 @@ use std::process::ExitCode;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use geom_test::coverage::{self, CrateReport};
-use geom_test::ledger::{LEDGER_PATH, Ledger};
 use geom_test::mutants::{self, Mode};
+use geom_test::quality_ledger::{LEDGER_PATH, Ledger};
 
 /// The geometry kernel's mutation and coverage gates (section 28.8 of the kernel architecture).
 #[derive(Parser)]

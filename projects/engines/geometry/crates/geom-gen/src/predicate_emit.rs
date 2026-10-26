@@ -5,7 +5,11 @@
 //! constant, `filter` (the `f64` evaluation and its decision), and `value` and `exact` (the
 //! checked integer evaluation). [`parent_module`] writes the module that declares them and holds
 //! the helpers they share. Both are formatted as rustfmt formats them, so `cargo fmt --check`
-//! passes on the committed files.
+//! passes on the committed files. [`verus_twin`] writes a Verus-annotated twin of a predicate's
+//! exact path (chapter 28.7; piece G36): a model of the grid's types, the description's value over
+//! the integers, and `value` written by the same function as the module's, with a `#[verus_spec]`
+//! attribute and a `proof!` hint before each product, so with those removed it is the shipped
+//! `value` token for token.
 //!
 //! Guarantees:
 //!
@@ -909,34 +913,7 @@ pub fn predicate_module_serving(
     line(&mut out, "");
 
     // The exact path.
-    let range = if has_rounded(d) {
-        "; `None` also for a rounded input outside its declared range"
-    } else {
-        ""
-    };
-    item_para(
-        &mut out,
-        &format!(
-            "`{name}`'s exact value: each step in the type its certificate gives it, with checked \
-             arithmetic; `None` only if a step overflowed, which the certificate rules out{range}."
-        ),
-    );
-    line(&mut out, "#[inline]");
-    line(&mut out, "#[must_use]");
-    allowances(&mut out, d, true, d.steps.len().saturating_add(1));
-    line(
-        &mut out,
-        &format!(
-            "pub fn value({parameters}) -> Option<{}> {{",
-            root.width.rust()
-        ),
-    );
-    for (step, cert) in d.steps.iter().zip(&d.certs) {
-        line(&mut out, &exact_statement(step, cert, d)?);
-    }
-    line(&mut out, &format!("    Some({})", root_step.name));
-    line(&mut out, "}");
-    line(&mut out, "");
+    value_item(&mut out, d, &parameters, false)?;
     item_para(
         &mut out,
         &format!("`{name}`'s exact sign: the sign of [`value`], or `None` as for [`value`]."),
@@ -965,6 +942,321 @@ pub fn predicate_module_serving(
             "`{name}`: a line of code would pass {WIDTH} columns, which rustfmt rewraps: {long}"
         ));
     }
+    Ok(out)
+}
+
+/// The exact path's item, `value`, as the module ships it. With `twin`, also its Verus
+/// annotations (chapter 28.7): a `#[verus_spec]` attribute after its other attributes, saying that
+/// for inputs on the grid it returns `Some` of the description's value over the integers, and
+/// before each product a `proof!` block bounding the product by its operands' certified bounds.
+/// Apart from those, the text is the same either way, so the twin's `value` is the shipped one token
+/// for token (`tests/verus_twin.rs` checks the committed files).
+fn value_item(
+    out: &mut String,
+    d: &Derivation,
+    parameters: &str,
+    twin: bool,
+) -> Result<(), EmitError> {
+    let name = &d.description.name;
+    let Some((root_step, root)) = d.steps.get(d.result).zip(d.certs.get(d.result)) else {
+        return fail("the result step is missing");
+    };
+    let range = if has_rounded(d) {
+        "; `None` also for a rounded input outside its declared range"
+    } else {
+        ""
+    };
+    item_para(
+        out,
+        &format!(
+            "`{name}`'s exact value: each step in the type its certificate gives it, with checked \
+             arithmetic; `None` only if a step overflowed, which the certificate rules out{range}."
+        ),
+    );
+    line(out, "#[inline]");
+    line(out, "#[must_use]");
+    allowances(out, d, true, d.steps.len().saturating_add(1));
+    if twin {
+        verus_spec(out, d)?;
+    }
+    line(
+        out,
+        &format!(
+            "pub fn value({parameters}) -> Option<{}> {{",
+            root.width.rust()
+        ),
+    );
+    for (step, cert) in d.steps.iter().zip(&d.certs) {
+        if let (
+            true,
+            StepKind::Op {
+                op: Op::Mul,
+                left,
+                right,
+            },
+        ) = (twin, &step.kind)
+        {
+            line(out, &product_proof(d, *left, *right)?);
+        }
+        line(out, &exact_statement(step, cert, d)?);
+    }
+    line(out, &format!("    Some({})", root_step.name));
+    line(out, "}");
+    line(out, "");
+    Ok(())
+}
+
+/// The coordinates of a point type, in order.
+fn axes_of(ty: &str) -> &'static [&'static str] {
+    if ty == "P3" {
+        &["x", "y", "z"]
+    } else {
+        &["x", "y"]
+    }
+}
+
+/// The twin's `#[verus_spec]`: every coordinate of every input on the grid, and the result
+/// `Some` of the description's value over the integers (`spec_value`).
+fn verus_spec(out: &mut String, d: &Derivation) -> Result<(), EmitError> {
+    let Some(ty) = point_type(d)? else {
+        return fail("the twin covers point inputs only");
+    };
+    line(out, "#[verus_spec(r =>");
+    line(out, "    requires");
+    for input in &d.description.inputs {
+        for axis in axes_of(ty) {
+            line(out, &format!("        {}.{axis}.on_grid(),", input.name));
+        }
+    }
+    line(out, "    ensures");
+    line(
+        out,
+        &format!(
+            "        r matches Some(v) && v as int == spec_value({}),",
+            args(d)
+        ),
+    );
+    line(out, ")]");
+    Ok(())
+}
+
+/// The twin's hint before a product: the product of the steps `left` and `right` is bounded by
+/// the product of their certified bounds (`lemma_product_bound`), which Verus's linear arithmetic
+/// cannot see alone.
+fn product_proof(d: &Derivation, left: usize, right: usize) -> Result<String, EmitError> {
+    let operand = |i: usize| -> Result<(&str, String), EmitError> {
+        match (d.steps.get(i), d.certs.get(i)) {
+            (Some(s), Some(c)) => Ok((
+                s.name.as_str(),
+                c.bound
+                    .to_decimal()
+                    .ok_or_else(|| EmitError("a bound's decimal".to_owned()))?,
+            )),
+            _ => fail("a step's operand is missing"),
+        }
+    };
+    let (l, lb) = operand(left)?;
+    let (r, rb) = operand(right)?;
+    Ok(format!(
+        "    proof! {{ lemma_product_bound({l} as int, {r} as int, {lb}, {rb}); }}"
+    ))
+}
+
+/// The twin's integer value of one step, as Verus's `spec_value` computes it: the description's
+/// arithmetic over the mathematical integers, where nothing overflows.
+fn spec_expression(step: &Step, d: &Derivation) -> Result<String, EmitError> {
+    let name = |i: usize| -> Result<&str, EmitError> {
+        match d.steps.get(i) {
+            Some(s) => Ok(s.name.as_str()),
+            None => fail("a step's operand is missing"),
+        }
+    };
+    Ok(match &step.kind {
+        StepKind::LoadCoord { point, axis } => format!("{point}.{}@", axis.letter()),
+        StepKind::Translate {
+            minuend,
+            subtrahend,
+            axis,
+        } => format!("{minuend}.{a}@ - {subtrahend}.{a}@", a = axis.letter()),
+        StepKind::LoadRounded { .. } => return fail("the twin covers point inputs only"),
+        StepKind::Op { op, left, right } => {
+            format!("{} {} {}", name(*left)?, op.symbol(), name(*right)?)
+        }
+    })
+}
+
+/// The Verus model the twin verifies against: the grid's bound, and `geom_num::grid`'s coordinate
+/// type, as Verus code inside the twin's `verus!` block.
+const TWIN_MODEL: [&str; 33] = [
+    "/// The grid's bound, `geom_num::grid::COORD_MAX`: every coordinate has magnitude at most this.",
+    "pub const COORD_MAX: i64 = {COORD_MAX};",
+    "",
+    "/// A model of `geom_num::grid::Coord`: an `i64` that its type keeps on the grid.",
+    "#[derive(Clone, Copy)]",
+    "pub struct Coord {",
+    "    v: i64,",
+    "}",
+    "",
+    "impl Coord {",
+    "    /// Its value, as an integer.",
+    "    pub closed spec fn view(self) -> int {",
+    "        self.v as int",
+    "    }",
+    "",
+    "    /// Whether it is on the grid, as every `geom_num::grid::Coord` is.",
+    "    pub closed spec fn on_grid(self) -> bool {",
+    "        -COORD_MAX <= self.v <= COORD_MAX",
+    "    }",
+    "",
+    "    /// `geom_num::grid::Coord::get`: its value.",
+    "    pub fn get(self) -> (r: i64)",
+    "        ensures",
+    "            r == self.view(),",
+    "    {",
+    "        self.v",
+    "    }",
+    "}",
+    "",
+    "/// A model of `geom_num::grid::{ty}`.",
+    "#[derive(Clone, Copy)]",
+    "pub struct {ty} {",
+    "{fields}",
+];
+
+/// The lemma the twin's `proof!` blocks call, which closes the twin's `verus!` block.
+const TWIN_LEMMA: [&str; 20] = [
+    "/// Two factors of magnitude at most mx and my have a product of magnitude at most mx · my.",
+    "pub proof fn lemma_product_bound(x: int, y: int, mx: int, my: int)",
+    "    requires",
+    "        0 <= mx,",
+    "        0 <= my,",
+    "        -mx <= x <= mx,",
+    "        -my <= y <= my,",
+    "    ensures",
+    "        -(mx * my) <= x * y <= mx * my,",
+    "{",
+    "    assert(-(mx * my) <= x * y <= mx * my) by (nonlinear_arith)",
+    "        requires",
+    "            0 <= mx,",
+    "            0 <= my,",
+    "            -mx <= x <= mx,",
+    "            -my <= y <= my,",
+    "    ;",
+    "}",
+    "",
+    "} // verus!",
+];
+
+/// A Verus-annotated twin of a predicate's exact path (chapter 28.7; piece G36), for `verus` to
+/// verify: a model of the grid's coordinate and point types, the description's value over the
+/// integers (`spec_value`), the lemma that bounds a product, and `value` exactly as the shipped
+/// module (`shipped`, a repository path) writes it, with its annotations ([`value_item`]).
+///
+/// # Errors
+///
+/// An [`EmitError`] for a description the twin does not cover yet: rounded inputs (no model of
+/// their range check), a step wider than `i128` (no Verus model of the wide integers), or no
+/// point inputs.
+pub fn verus_twin(d: &Derivation, generator: &str, shipped: &str) -> Result<String, EmitError> {
+    let name = &d.description.name;
+    if has_rounded(d) {
+        return fail(format!(
+            "`{name}`: the twin covers point inputs only; a rounded input's range check has no \
+             model yet"
+        ));
+    }
+    if d.certs.iter().any(|c| c.width > Width::I128) {
+        return fail(format!(
+            "`{name}`: the twin covers exact paths in i64 and i128 only; the wide integers have no \
+             Verus model yet"
+        ));
+    }
+    let Some(ty) = point_type(d)? else {
+        return fail(format!("`{name}`: the twin covers point inputs only"));
+    };
+    let Some(root_step) = d.steps.get(d.result) else {
+        return fail("the result step is missing");
+    };
+    let parameters = params(d, Some(ty))?;
+    let mut out = String::new();
+    let paragraphs = [
+        format!(
+            "Generated by geom-gen, generator `{generator}` (seed: none, it uses no randomness), \
+             from the description `{}` in `{DESCRIPTIONS_PATH}`. Do not edit: change the \
+             description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo \
+             run -p geom-gen -- check` and fails on any difference.",
+            name.to_uppercase()
+        ),
+        format!(
+            "A Verus-annotated twin of `{name}`'s exact path, `value` in `{shipped}` (chapter 28.7 \
+             of the kernel architecture, \"Predicates, by generated twins\"; piece G36). It proves \
+             that for every input whose coordinates are on the grid (|v| ≤ 2^{COORD_BITS} − 1), \
+             `value` returns `Some` of the description's value over the mathematical integers: no \
+             checked step overflows, and the result is the value the description defines."
+        ),
+        format!(
+            "The twin's `value`, with its `#[verus_spec]` attribute and its `proof!` blocks \
+             removed, is token for token the shipped one: the same emitter code writes both, and \
+             geom-gen's `tests/verus_twin.rs` compares the committed files. Above it, `Coord` and \
+             `{ty}` model `geom_num::grid`'s types: a coordinate is an `i64` its type keeps on the \
+             grid, which the twin's `requires` states for its inputs, and `get` returns it."
+        ),
+        "Verify: `verus --crate-type=lib <this file>`, with the Verus release `kernel-dev.yml` \
+         pins; its `verus` job does this on every pull request."
+            .to_owned(),
+    ];
+    for (k, text) in paragraphs.iter().enumerate() {
+        if k > 0 {
+            line(&mut out, "//!");
+        }
+        doc_para(&mut out, text);
+    }
+    line(&mut out, "");
+    line(&mut out, "use vstd::prelude::*;");
+    line(&mut out, "");
+    line(&mut out, "verus! {");
+    line(&mut out, "");
+    let fields: Vec<String> = axes_of(ty)
+        .iter()
+        .map(|axis| format!("    pub {axis}: Coord,"))
+        .collect();
+    for text in TWIN_MODEL {
+        line(
+            &mut out,
+            &text
+                .replace("{COORD_MAX}", &COORD_MAX.to_string())
+                .replace("{ty}", ty)
+                .replace("{fields}", &fields.join("\n")),
+        );
+    }
+    line(&mut out, "}");
+    line(&mut out, "");
+    line(
+        &mut out,
+        &format!(
+            "/// `{name}`'s value over the integers, step by step as its description defines it."
+        ),
+    );
+    line(
+        &mut out,
+        &format!("pub open spec fn spec_value({parameters}) -> int {{"),
+    );
+    for step in &d.steps {
+        line(
+            &mut out,
+            &format!("    let {} = {};", step.name, spec_expression(step, d)?),
+        );
+    }
+    line(&mut out, &format!("    {}", root_step.name));
+    line(&mut out, "}");
+    line(&mut out, "");
+    for text in TWIN_LEMMA {
+        line(&mut out, text);
+    }
+    line(&mut out, "");
+    value_item(&mut out, d, &parameters, true)?;
+    out.truncate(out.trim_end().len());
+    out.push('\n');
     Ok(out)
 }
 

@@ -8,7 +8,9 @@
 //!   `cargo bolero test predicates_fuzz --package geom-fuzz` the same test is a libFuzzer target
 //!   (see the crate header for the command).
 //! - `bolero_fails_on_a_finding` shows the wiring: a harness that returns a `Finding` fails the
-//!   bolero leg, not only one that panics.
+//!   bolero leg, not only one that panics. It catches bolero's panic itself rather than being a
+//!   `#[should_panic]` test, which would break `ClusterFuzzLite`'s build (the crate README, the
+//!   rules of the layout).
 //! - `predicates_seeded` runs the same harness on [`SEEDED_CASES`] byte strings from the printed
 //!   seed (`SPAREKIT_SEED` replays it), so every pull request also runs a fixed set of cases, the
 //!   same on every target.
@@ -32,6 +34,11 @@
     clippy::panic,
     clippy::indexing_slicing
 )]
+
+mod common;
+
+use common::holds;
+use core::sync::atomic::{AtomicBool, Ordering};
 
 use geom_fuzz::predicates::{MAX_INPUT_BYTES, harness};
 use geom_fuzz::seeded;
@@ -65,24 +72,50 @@ fn predicates_fuzz() {
     bolero::check!()
         .with_iterations(ITERATIONS)
         .with_max_len(usize::from(MAX_LEN))
-        .for_each(|data: &[u8]| harness(data));
+        .for_each(|data: &[u8]| holds(harness(data)));
 }
 
+/// bolero's test mode fails, with its panic "test failed", on a harness that returns a
+/// [`geom_fuzz::Finding`].
+///
+/// Not a `#[should_panic]` test. cargo-bolero's `build-clusterfuzz` builds each test binary by
+/// running one of its bolero tests, the first it listed, with `CARGO_BOLERO_SELECT` set, where
+/// `check!` returns without running its body (`bolero-engine`'s `TargetLocation::should_run`); a
+/// `#[should_panic]` test fails there, and the build with it. So this test notes whether the body
+/// ran, and holds bolero to failing exactly when it did; a body that did not run is accepted only
+/// in cargo-bolero's selection mode.
 #[cfg_attr(
     target_family = "wasm",
-    ignore = "a should_panic test needs unwinding, which wasm32-wasip1 does not have"
+    ignore = "catching bolero's panic needs unwinding, which wasm32-wasip1 does not have"
 )]
 #[test]
-#[should_panic(expected = "test failed")]
 fn bolero_fails_on_a_finding() {
-    bolero::check!()
-        .with_iterations(100)
-        .for_each(|_: &[u8]| -> Result<(), geom_fuzz::Finding> {
-            Err(geom_fuzz::Finding {
-                law: "never holds".into(),
-                detail: String::new(),
-            })
-        });
+    let ran = AtomicBool::new(false);
+    let outcome = std::panic::catch_unwind(|| {
+        bolero::check!().with_iterations(100).for_each(
+            |_: &[u8]| -> Result<(), geom_fuzz::Finding> {
+                ran.store(true, Ordering::Relaxed);
+                Err(geom_fuzz::Finding {
+                    law: "never holds".into(),
+                    detail: String::new(),
+                })
+            },
+        );
+    });
+    if ran.load(Ordering::Relaxed) {
+        let payload = outcome.expect_err("bolero returned normally from a harness that failed");
+        let message = payload
+            .downcast_ref::<&str>()
+            .copied()
+            .or_else(|| payload.downcast_ref::<String>().map(String::as_str));
+        assert_eq!(message, Some("test failed"));
+    } else {
+        assert!(outcome.is_ok());
+        assert!(
+            std::env::var_os("CARGO_BOLERO_SELECT").is_some(),
+            "bolero ran no input, outside cargo-bolero's selection mode"
+        );
+    }
 }
 
 #[test]

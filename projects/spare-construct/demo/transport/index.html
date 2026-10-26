@@ -21,6 +21,7 @@ if (window.parent === window) location.replace('../#plan:transport');
       <button id="runBtn" class="btn primary" title="Run this scenario for the AM and PM peaks (Ctrl+Enter)"><span class="lbl">Run<span class="lbl-x"> model</span></span><span class="run-stale"></span></button>
       <button id="runMore" class="btn primary icon" title="More ways to run the model" aria-label="More ways to run the model" aria-haspopup="menu">▾</button>
     </div>
+    <span id="engineBadge" class="engine-badge" data-engine="js" title="Model runs use the JavaScript prototype until the Rust engine loads.">Prototype engine</span>
     <button id="simBtn" class="btn ib" title="Watch vehicles move through the network (Space)" aria-label="Simulate"><span class="ico" aria-hidden="true">▶</span><span class="lbl">Simulate</span></button>
   </div>
   <div class="grp"><span class="glbl">Tools</span><nav id="tools" aria-label="Tools"></nav></div>
@@ -117,6 +118,7 @@ if (window.parent === window) location.replace('../#plan:transport');
 <script src="js/features/compliance-extra.js"></script>
 <script src="js/features/onboarding.js"></script>
 <script src="js/sample.js"></script>
+<script type="module" src="js/rust-engine.js"></script>
 <script>UI.init();</script>
 </body>
 </html>

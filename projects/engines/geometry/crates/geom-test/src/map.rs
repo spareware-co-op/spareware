@@ -50,7 +50,10 @@
 //! rustdoc's JSON output would give the same doc text with resolved items, but it needs a nightly
 //! compiler and its format changes with every breaking release (`FORMAT_VERSION` 61 at
 //! <https://github.com/rust-lang/rustdoc-types/blob/2e63bdc44b94e86fe12d6e0034d1ed9c2ac6e9dc/src/lib.rs>),
-//! so the map reads the source, which the pinned stable toolchain can always do.
+//! so the map reads the source, which the pinned stable toolchain can always do. Each crate's
+//! `Cargo.toml` is parsed by the `toml` crate (MIT OR Apache-2.0,
+//! <https://docs.rs/toml/0.9.6/toml/>), the TOML 1.0 reader of the toml-rs project that cargo's
+//! own manifest reading is built on; piece G12a put it in place of a line reader (chapter 29.1).
 //!
 //! Cost: linear in the size of the source files read, plus sorting the crates, modules and sources.
 //!
@@ -240,23 +243,11 @@ pub struct Gap {
     pub reason: &'static str,
 }
 
-/// The method-note problem of `geom-num`'s interval module, which [`GAPS`] accepts.
-const CGAL_NOTE: &str = "the record for CGAL `FPU.h` reads code under LGPL-3.0-or-later OR \
-                         LicenseRef-Commercial, which chapter 29.2 allows only under the \
-                         method-only procedure (29.20, rule 6): add a \"Method note: \
-                         `projects/engines/geometry/methods/<note>.md`\" line naming its note";
-
-/// The known gaps of this workspace. Each is listed in the map; each must still occur.
-pub const GAPS: &[Gap] = &[Gap {
-    file: "projects/engines/geometry/crates/geom-num/src/interval.rs",
-    rule: Rule::Consulted,
-    problem: CGAL_NOTE,
-    reason: "G02 read CGAL's FPU.h, under LGPL-3.0-or-later, before the method-only \
-                 procedure's notes had a home. Build piece G16 (provenance, notices and method \
-                 notes) creates projects/engines/geometry/methods/, takes this record through \
-                 29.20 rule 6 (a note in plain words and a second reviewer) or replaces the \
-                 source with the permissive Geogram record beside it, and deletes this entry.",
-}];
+/// The known gaps of this workspace. Each is listed in the map; each must still occur. There are
+/// none: the last, `geom-num`'s interval module crediting CGAL's `FPU.h` (LGPL) without a method
+/// note, was closed by build piece G16, which wrote the note
+/// (`projects/engines/geometry/methods/cgal-nextafter-widening.md`).
+pub const GAPS: &[Gap] = &[];
 
 /// A folder that headers link into but that this tree does not hold yet, with the piece that
 /// brings it. While it is absent, links into it are not checked for existence; once it exists,
@@ -328,6 +319,9 @@ pub struct Generated {
     pub text: String,
     /// Every problem not covered by a gap, sorted by file, rule and message.
     pub problems: Vec<Problem>,
+    /// The map as a value, which [`crate::ledger`] reads to write `PROVENANCE.md` and `NOTICE`
+    /// from the same records, so the ledger never parses a header a second way.
+    pub map: Value,
 }
 
 /// Whether `name` is a development crate (chapter 27; [`DEVELOPMENT_CRATES`]).
@@ -452,56 +446,48 @@ struct Manifest {
     dependencies: Vec<Dependency>,
 }
 
-/// A table of normal or build dependencies.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum DependencyTable<'a> {
-    /// `[dependencies]`: one dependency per line.
-    Plain,
-    /// `[dependencies.<package>]`: one dependency, its fields one per line.
-    Package(&'a str),
+/// The tables of a manifest that list what a crate builds with: normal and build dependencies.
+const DEPENDENCY_TABLES: [&str; 2] = ["dependencies", "build-dependencies"];
+
+/// The published crates one dependency table names, in name order: every entry that is not a path
+/// dependency, by its package's name (`package = "..."` when the entry renames it), with the
+/// version requirement it gives, if any.
+fn published(table: &toml::Table) -> Vec<Dependency> {
+    let mut found: Vec<Dependency> = table
+        .iter()
+        .filter_map(|(key, entry)| {
+            let (name, version) = match entry {
+                toml::Value::String(version) => (key.clone(), Some(version.clone())),
+                toml::Value::Table(fields) => {
+                    if fields.contains_key("path") {
+                        return None;
+                    }
+                    let name = fields
+                        .get("package")
+                        .and_then(toml::Value::as_str)
+                        .map_or_else(|| key.clone(), str::to_owned);
+                    let version = fields
+                        .get("version")
+                        .and_then(toml::Value::as_str)
+                        .map(str::to_owned);
+                    (name, version)
+                }
+                _ => (key.clone(), None),
+            };
+            Some(Dependency { name, version })
+        })
+        .collect();
+    found.sort_by(|a, b| a.name.cmp(&b.name));
+    found
 }
 
-/// Whether a table header names normal or build dependencies, and which package a dotted header
-/// (`[dependencies.libm]`) names.
-fn dependency_table(table: &str) -> Option<DependencyTable<'_>> {
-    let inner = table.trim_start_matches('[').trim_end_matches(']');
-    let inner = inner
-        .strip_prefix("target.")
-        .and_then(|t| t.rsplit_once("'.").or_else(|| t.rsplit_once("\".")))
-        .map_or(inner, |(_, rest)| rest);
-    let (kind, package) = inner.split_once('.').unwrap_or((inner, ""));
-    matches!(kind, "dependencies" | "build-dependencies").then_some(if package.is_empty() {
-        DependencyTable::Plain
-    } else {
-        DependencyTable::Package(package)
-    })
-}
-
-/// A dotted dependency table being read (`[dependencies.<package>]`): its package, its version and
-/// whether it is a path dependency.
-type Dotted = Option<(String, Option<String>, bool)>;
-
-/// Ends a dotted dependency table: a published package joins the manifest's dependencies.
-fn finish(dotted: &mut Dotted, manifest: &mut Manifest) {
-    if let Some((name, version, local)) = dotted.take()
-        && !local
-    {
-        manifest.dependencies.push(Dependency { name, version });
-    }
-}
-
-/// A TOML value as text: a basic string's content (whatever follows it on the line), or the
-/// value itself.
-fn string_value(value: &str) -> String {
-    if value.starts_with('"') {
-        value.split('"').nth(1).unwrap_or_default().to_owned()
-    } else {
-        value.to_owned()
-    }
-}
-
-/// The manifest rule (a `Cargo.toml` whose package name is the folder's, and no target whose root
-/// is moved with `path`), and what the map reads from it.
+/// The manifest rule (a `Cargo.toml` that is TOML, whose package name is the folder's, and with
+/// no target whose root is moved with `path`), and what the map reads from it. The manifest is
+/// parsed by the `toml` crate, so a key counts as cargo reads it, whatever the layout: a table
+/// header, a dotted key or an inline table. Dependencies are listed table by table,
+/// `[dependencies]` then `[build-dependencies]`, then the same tables of each `[target.'...']` in
+/// its key's order, each table's entries in name order, so the list does not depend on how a
+/// manifest orders them.
 fn check_manifest(krate: &CrateInput) -> (Manifest, Vec<(Rule, String)>) {
     let Some(text) = &krate.manifest else {
         return (
@@ -512,70 +498,60 @@ fn check_manifest(krate: &CrateInput) -> (Manifest, Vec<(Rule, String)>) {
             )],
         );
     };
+    let table: toml::Table = match text.parse() {
+        Ok(table) => table,
+        Err(e) => {
+            return (
+                Manifest::default(),
+                vec![(
+                    Rule::Manifest,
+                    format!("Cargo.toml is not TOML, so cargo cannot read it: {e}"),
+                )],
+            );
+        }
+    };
     let mut problems = Vec::new();
     let mut manifest = Manifest::default();
-    let mut table = String::new();
-    let mut name: Option<String> = None;
-    let mut dotted: Dotted = None;
-    for line in text.lines() {
-        let line = line.trim();
-        if line.starts_with('[') {
-            finish(&mut dotted, &mut manifest);
-            line.clone_into(&mut table);
-            if let Some(DependencyTable::Package(package)) = dependency_table(&table) {
-                dotted = Some((package.to_owned(), None, false));
-            }
-            continue;
-        }
-        let Some((key, value)) = line.split_once('=') else {
-            continue;
-        };
-        let (key, value) = (key.trim(), value.trim());
-        if table == "[package]" && key == "name" {
-            name = Some(string_value(value));
-        }
-        if table == "[package]" && key == "license" {
-            manifest.licence = Some(string_value(value));
-        }
-        if key == "path" && matches!(table.as_str(), "[lib]" | "[[bin]]") {
+    let package = table.get("package").and_then(toml::Value::as_table);
+    let name = package
+        .and_then(|p| p.get("name"))
+        .and_then(toml::Value::as_str);
+    manifest.licence = package
+        .and_then(|p| p.get("license"))
+        .and_then(toml::Value::as_str)
+        .map(str::to_owned);
+    let lib = table.get("lib").into_iter();
+    let bins = table
+        .get("bin")
+        .and_then(toml::Value::as_array)
+        .into_iter()
+        .flatten();
+    for (header, target) in lib
+        .map(|t| ("[lib]", t))
+        .chain(bins.map(|t| ("[[bin]]", t)))
+    {
+        if let Some(path) = target.get("path") {
             problems.push((
                 Rule::Manifest,
                 format!(
-                    "{table} sets path = {value}; the map reads crate roots where cargo finds them \
+                    "{header} sets path = {path}; the map reads crate roots where cargo finds them \
                      by default (src/lib.rs, src/main.rs, src/bin/)"
                 ),
             ));
         }
-        match (dependency_table(&table), &mut dotted) {
-            (Some(DependencyTable::Package(_)), Some((_, version, local))) => {
-                if key == "version" {
-                    *version = Some(string_value(value));
-                }
-                *local |= key == "path";
+    }
+    let mut owners: Vec<&toml::Table> = vec![&table];
+    if let Some(targets) = table.get("target").and_then(toml::Value::as_table) {
+        owners.extend(targets.values().filter_map(toml::Value::as_table));
+    }
+    for owner in owners {
+        for kind in DEPENDENCY_TABLES {
+            if let Some(deps) = owner.get(kind).and_then(toml::Value::as_table) {
+                manifest.dependencies.extend(published(deps));
             }
-            (Some(DependencyTable::Plain), _) if !line.starts_with('#') => {
-                let package = key.split('.').next().unwrap_or(key).trim().to_owned();
-                let local = value.contains("path") && value.starts_with('{');
-                let version = if value.starts_with('"') {
-                    Some(string_value(value))
-                } else {
-                    value
-                        .split_once("version")
-                        .and_then(|(_, rest)| rest.split('"').nth(1))
-                        .map(str::to_owned)
-                };
-                if !local {
-                    manifest.dependencies.push(Dependency {
-                        name: package,
-                        version,
-                    });
-                }
-            }
-            _ => {}
         }
     }
-    finish(&mut dotted, &mut manifest);
-    if name.as_deref() != Some(krate.name.as_str()) {
+    if name != Some(krate.name.as_str()) {
         problems.push((
             Rule::Manifest,
             format!(
@@ -653,6 +629,7 @@ fn record_value(r: &provenance::Record) -> Value {
         ("link", Value::from(r.link.as_str())),
         ("method_note", Value::from(r.method_note.clone())),
         ("name", Value::from(r.name.as_str())),
+        ("notice", Value::from(r.notice.clone())),
         ("pinned", Value::from(r.pinned)),
         ("purpose", Value::from(r.purpose.as_str())),
         ("take", Value::from(r.take.name())),
@@ -1282,6 +1259,7 @@ pub fn build(input: &Input, gaps: &[Gap]) -> Generated {
     Generated {
         text: map.to_text(),
         problems,
+        map,
     }
 }
 
@@ -1385,16 +1363,64 @@ mod tests {
             .iter()
             .map(|d| (d.name.as_str(), d.version.as_deref()))
             .collect();
+        // [dependencies] in name order (the dotted `[dependencies.baz]` among them), then the
+        // target's build dependencies; path dependencies and dev-dependencies are not listed.
         assert_eq!(
             names,
             [
-                ("libm", Some("0.2.16")),
-                ("foo", Some("1.2.3")),
                 ("bar", None),
-                ("cc", Some("1.0.0")),
                 ("baz", Some("0.1.0")),
+                ("foo", Some("1.2.3")),
+                ("libm", Some("0.2.16")),
+                ("cc", Some("1.0.0")),
             ]
         );
+    }
+
+    #[test]
+    fn manifests_are_read_as_toml_whatever_their_layout() {
+        let read = |text: &str| {
+            check_manifest(&CrateInput {
+                name: "geom-x".into(),
+                folder: format!("{CRATES_DIR}/geom-x"),
+                manifest: Some(text.into()),
+                files: Vec::new(),
+            })
+        };
+        // Single quotes, an inline table across lines, a renamed package and a comment holding
+        // `=` are TOML, read as cargo reads them.
+        let (manifest, problems) = read(
+            "[package]\nname = 'geom-x' # the folder's name\nlicense = 'MPL-2.0'\n\
+             [dependencies]\nm = { package = \"libm\", version = \"0.2.16\" }\n\
+             # x = \"1\"\n[lib]\ndoctest = false\n",
+        );
+        assert_eq!(problems, []);
+        assert_eq!(manifest.licence.as_deref(), Some("MPL-2.0"));
+        assert_eq!(
+            manifest.dependencies,
+            [Dependency {
+                name: "libm".into(),
+                version: Some("0.2.16".into())
+            }]
+        );
+        // A manifest cargo could not read is a problem, not a partial reading.
+        let (manifest, problems) = read("[package]\nname = \"geom-x\n");
+        assert_eq!(manifest, Manifest::default());
+        assert!(
+            problems.len() == 1 && problems[0].1.contains("is not TOML"),
+            "{problems:?}"
+        );
+        // A target whose root is moved, written as an inline table or in an array of tables.
+        for moved in [
+            "lib = { path = \"src/x.rs\" }\n[package]\nname = \"geom-x\"\n",
+            "[package]\nname = \"geom-x\"\n[[bin]]\nname = \"t\"\npath = \"x.rs\"\n",
+        ] {
+            let (_, problems) = read(moved);
+            assert!(
+                problems.len() == 1 && problems[0].1.contains("sets path"),
+                "{moved}: {problems:?}"
+            );
+        }
     }
 
     #[test]

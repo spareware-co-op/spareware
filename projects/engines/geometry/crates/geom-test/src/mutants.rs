@@ -7,7 +7,7 @@
 //! - **Caught** mutants pass. So do **unviable** ones (the mutated code does not build), but only
 //!   when their log holds a compiler diagnostic at a source location; a build that failed for any
 //!   other reason (a linker, the disk, a killed process) tested nothing and fails the gate.
-//! - A **missed** mutant passes only if the ledger keeps it ([`crate::ledger::Survivor`]) with a
+//! - A **missed** mutant passes only if the ledger keeps it ([`crate::quality_ledger::Survivor`]) with a
 //!   kind its place allows: in the foundation set only `equivalent`; elsewhere also `harmless`
 //!   and `known`.
 //! - A **timed-out** mutant passes only if the ledger keeps it as `hangs`.
@@ -80,7 +80,7 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 
 use crate::foundation::{Place, Set, place};
-use crate::ledger::{Kind, Ledger, Survivor};
+use crate::quality_ledger::{Kind, Ledger, Survivor};
 
 /// One mutant, as cargo-mutants describes it.
 #[derive(Clone, Debug, PartialEq, Eq)]

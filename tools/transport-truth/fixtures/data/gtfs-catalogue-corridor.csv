@@ -1,0 +1,12 @@
+id,data_type,entity_type,location.country_code,location.subdivision_name,location.municipality,provider,name,note,feed_contact_email,static_reference,urls.direct_download,urls.authentication_type,urls.authentication_info,urls.api_key_parameter_name,urls.latest,urls.license,location.bounding_box.minimum_latitude,location.bounding_box.maximum_latitude,location.bounding_box.minimum_longitude,location.bounding_box.maximum_longitude,status
+mdb-1029,gtfs,,NZ,,,Auckland Transport,AT GTFS,,,,,,,,https://files.mobilitydatabase.org/mdb-1029/latest.zip,https://at.govt.nz/licence,-44.1,-35.9,172,175.9,active
+mdb-9999,gtfs,,NZ,,,Small Council Shuttle,Shuttle,,,,,,,,https://files.mobilitydatabase.org/mdb-9999/latest.zip,,-37.1122,-37.0878,174.94,174.9796,active
+mdb-8888,gtfs,,NZ,,,"Wide Regional, ""Bus"" Co",Regional,,,,,,,,,https://at.govt.nz/licence,-38,-36,174,176,active
+mdb-1132,gtfs,,NZ,,,Metlink,Wellington,,,,,,,,https://files.mobilitydatabase.org/mdb-1132/latest.zip,https://at.govt.nz/licence,-41.65,-40.6,174.55,176.1,active
+mdb-7777,gtfs-rt,,NZ,,,Auckland Transport,Realtime,,,,,,,,https://files.mobilitydatabase.org/mdb-7777/latest.zip,https://at.govt.nz/licence,-37.45,-36.05,174.15,175.6,active
+mdb-6666,gtfs,,NZ,,,Old Operator,Old,,,,,,,,https://files.mobilitydatabase.org/mdb-6666/latest.zip,https://at.govt.nz/licence,-37.45,-36.05,174.15,175.6,inactive
+mdb-5555,gtfs,,NZ,,,Deprecated,No status,,,,,,,,https://files.mobilitydatabase.org/mdb-5555/latest.zip,https://at.govt.nz/licence,-37.45,-36.05,174.15,175.6,
+mdb-4444,gtfs,,NZ,,,Broken box,Broken,,,,,,,,https://files.mobilitydatabase.org/mdb-4444/latest.zip,https://at.govt.nz/licence,x,-36.05,174.15,175.6,active
+mdb-3333,gtfs,,AU,,,Aussie Feed,AU,,,,,,,,https://files.mobilitydatabase.org/mdb-3333/latest.zip,https://at.govt.nz/licence,-35,-33,144,146,active
+tld-2222,gtfs,,NZ,,,Same size A,A,,,,,,,,https://files.mobilitydatabase.org/tld-2222/latest.zip,https://at.govt.nz/licence,-37.5,-36,174,175.5,active
+tld-2223,gtfs,,NZ,,,Same size B,B,,,,,,,,https://files.mobilitydatabase.org/tld-2223/latest.zip,https://at.govt.nz/licence,-37.5,-36,174,175.5,active
