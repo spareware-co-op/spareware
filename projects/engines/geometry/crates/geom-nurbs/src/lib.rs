@@ -36,7 +36,11 @@
 //!   (A5.1, A5.4), each returning a [`Changed`] value with a certified deviation ([`ops`]).
 //! - Bezier extraction and degree elevation of curves, [`Curve::to_bezier`] and
 //!   [`Curve::elevate`] (A5.6, A5.9).
-//! - Certified knot removal of curves, [`Curve::remove_knot`] (A5.8).
+//! - Certified knot removal and degree reduction of curves, [`Curve::remove_knot`] and
+//!   [`Curve::reduce_degree`] (A5.8, A5.11).
+//! - Knot insertion, refinement, Bezier extraction and degree elevation of surfaces,
+//!   [`Surface::insert_knot`], [`Surface::refine`], [`Surface::to_bezier`] and
+//!   [`Surface::elevate`] (A5.3, A5.5, A5.7, A5.10).
 //! - [`NurbsError`], in [`error`].
 //!
 //! Status: basis, evaluation and knot operations built (G56); interpolation and approximation
@@ -55,8 +59,10 @@ mod elevate;
 pub mod error;
 mod index;
 mod insert;
+mod net;
 pub mod ops;
 pub mod point;
+mod reduce;
 mod remove;
 pub mod surface;
 

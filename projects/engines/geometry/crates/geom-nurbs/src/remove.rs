@@ -239,7 +239,7 @@ fn certify<const D: usize>(
 /// `enclosure − exact`: the largest |ΔP| for a nonrational shape, and for a rational one
 /// (max |Δ(w·P)| + `p_max`·max |Δw|) / `w_min`, with `w_min` a lower bound on the second shape's
 /// weight function (`crate::ops`).
-fn difference_bound<const D: usize>(
+pub(crate) fn difference_bound<const D: usize>(
     exact: &[Hom<f64, D>],
     enclosure: &[Hom<Interval, D>],
     rational: bool,

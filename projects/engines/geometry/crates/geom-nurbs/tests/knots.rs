@@ -466,3 +466,76 @@ fn removal_refuses_what_it_cannot_remove() {
     let (same, removed) = curve.remove_knot(1.0, 0, 1.0, &mut m).unwrap();
     assert_eq!((same.value, removed), (curve, 0));
 }
+
+#[test]
+fn reduction_undoes_elevation() {
+    let mut rng = Lcg(61);
+    for curve in curves(0x0006_1abc, true) {
+        let p = curve.degree();
+        let (lo, hi) = curve.basis().domain();
+        if curve
+            .basis()
+            .knots()
+            .iter()
+            .any(|&k| lo < k && k < hi && curve.basis().multiplicity(k) > p)
+        {
+            continue;
+        }
+        let up = curve.elevate(1, &mut meter()).unwrap().value;
+        let scale = curve
+            .homogeneous()
+            .iter()
+            .flat_map(|r| r.iter().map(|x| x.abs()))
+            .fold(1.0_f64, |a, b| if b > a { b } else { a });
+        let out = up.reduce_degree(1e-8 * scale, &mut meter()).unwrap();
+        assert_eq!(out.value.degree(), p);
+        assert_eq!(out.value.basis().knots(), curve.basis().knots());
+        assert!(out.deviation <= 1e-8 * scale);
+        same_curve(&up, &out.value, out.deviation, &mut rng);
+    }
+}
+
+#[test]
+fn reduction_is_certified_or_refused() {
+    let mut rng = Lcg(62);
+    for curve in curves(0x0006_2abd, true) {
+        let p = curve.degree();
+        let (lo, hi) = curve.basis().domain();
+        let full = curve
+            .basis()
+            .knots()
+            .iter()
+            .any(|&k| lo < k && k < hi && curve.basis().multiplicity(k) > p);
+        if p < 2 {
+            assert_eq!(
+                curve.reduce_degree(1.0, &mut meter()).unwrap_err(),
+                NurbsError::Degree { degree: 0 }
+            );
+            continue;
+        }
+        if full {
+            assert_eq!(
+                curve.reduce_degree(1.0, &mut meter()).unwrap_err(),
+                NurbsError::Discontinuous
+            );
+            continue;
+        }
+        // A generic curve is not of lower degree: a zero tolerance refuses it.
+        assert_eq!(
+            curve.reduce_degree(0.0, &mut meter()).unwrap_err(),
+            NurbsError::OutsideTolerance
+        );
+        // A tolerance larger than the curve: the result is returned with a certified deviation.
+        match curve.reduce_degree(1e12, &mut meter()) {
+            Ok(out) => {
+                assert_eq!(out.value.degree(), p - 1);
+                same_curve(&curve, &out.value, out.deviation, &mut rng);
+            }
+            Err(e) => assert!(curve.is_rational() && e == NurbsError::OutsideTolerance, "{e}"),
+        }
+    }
+    let unclamped = curves(7, false).into_iter().find(|c| !c.basis().is_clamped() && c.degree() > 1).unwrap();
+    assert_eq!(unclamped.reduce_degree(1.0, &mut meter()).unwrap_err(), NurbsError::NotClamped);
+    let any = curves(8, true).into_iter().find(|c| c.degree() > 1).unwrap();
+    assert_eq!(any.reduce_degree(f64::NAN, &mut meter()).unwrap_err(), NurbsError::Tolerance);
+}
