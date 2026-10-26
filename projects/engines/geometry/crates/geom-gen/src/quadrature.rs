@@ -93,6 +93,12 @@ fn fail<T>(message: impl Into<String>) -> Result<T, GenError> {
     Err(GenError::generator(NAME, message.into()))
 }
 
+/// `v[i]`, or an error naming what was missing.
+fn at<'a, T>(v: &'a [T], i: usize, what: &str) -> Result<&'a T, GenError> {
+    v.get(i)
+        .ok_or_else(|| GenError::generator(NAME, format!("{what}: no entry {i}")))
+}
+
 /// A polynomial with rational coefficients, constant term first.
 #[derive(Clone, Debug, PartialEq)]
 struct Poly(Vec<RBig>);
@@ -251,7 +257,11 @@ fn b(k: usize) -> RBig {
 fn legendre(n: usize) -> Vec<Poly> {
     let mut p = vec![Poly::constant(RBig::ONE), Poly(vec![RBig::ZERO, RBig::ONE])];
     for k in 1..n {
-        let next = p[k].times_x().sub(&p[k - 1].scaled(&b(k)));
+        // p holds P₀, …, Pₖ: the last two are Pₖ and Pₖ₋₁.
+        let [.., before, last] = p.as_slice() else {
+            break;
+        };
+        let next = last.times_x().sub(&before.scaled(&b(k)));
         p.push(next);
     }
     p.truncate(n + 1);
@@ -400,7 +410,8 @@ fn quotient(num: (RBig, RBig), den: (RBig, RBig)) -> Option<(RBig, RBig)> {
 
 /// The brackets of the n zeros of Pₙ, ascending, isolated by Sturm counts.
 fn gauss_brackets(n: usize) -> Result<Vec<Bracket>, GenError> {
-    let pn = IntPoly::new(&legendre(n)[n]);
+    let all = legendre(n);
+    let pn = IntPoly::new(at(&all, n, "the Legendre polynomials")?);
     let mut out = Vec::new();
     // Each work item: an interval and the number of zeros above each end.
     let mut work = vec![(RBig::from(-1), RBig::ONE, n, 0usize)];
@@ -456,7 +467,7 @@ fn gauss(n: usize) -> Result<Vec<(f64, f64)>, GenError> {
     let s = christoffel(&p, n);
     let slope = s.slope_bound();
     let s = IntPoly::new(&s);
-    let pn = IntPoly::new(&p[n]);
+    let pn = IntPoly::new(at(&p, n, "the Legendre polynomials")?);
     let weight = |br: &Bracket| {
         let (lo, hi) = enclose(&s, &slope, br);
         quotient((RBig::ONE, RBig::ONE), (lo, hi))
@@ -496,26 +507,45 @@ fn stieltjes(pn: &Poly, n: usize) -> Result<Poly, GenError> {
         })
         .collect();
     // Gaussian elimination, exact.
+    let entry = |row: &[RBig], col: usize| -> Result<RBig, GenError> {
+        at(row, col, "the system's row").cloned()
+    };
     for col in 0..m {
-        let Some(piv) = (col..m).find(|&r| a[r][col] != RBig::ZERO) else {
+        let Some(piv) = (col..m).find(|&r| {
+            a.get(r)
+                .and_then(|row| row.get(col))
+                .is_some_and(|v| *v != RBig::ZERO)
+        }) else {
             return fail(format!("the system for E{} is singular", n + 1));
         };
         a.swap(col, piv);
-        for r in 0..m {
-            if r != col && a[r][col] != RBig::ZERO {
-                let f = &a[r][col] / &a[col][col];
-                let pivot_row = a[col].clone();
-                for (x, y) in a[r].iter_mut().zip(pivot_row.iter()) {
+        let pivot_row = at(&a, col, "the system")?.clone();
+        let pivot = entry(&pivot_row, col)?;
+        for (r, row) in a.iter_mut().enumerate() {
+            let head = entry(row, col)?;
+            if r != col && head != RBig::ZERO {
+                let f = &head / &pivot;
+                for (x, y) in row.iter_mut().zip(pivot_row.iter()) {
                     *x = &*x - &f * y;
                 }
             }
         }
     }
-    let mut coeffs = vec![RBig::ZERO; n + 2];
-    coeffs[n + 1] = RBig::ONE;
-    for j in 1..=m {
-        coeffs[n + 1 - 2 * j] = &a[j - 1][m] / &a[j - 1][j - 1];
-    }
+    // Eₙ₊₁'s coefficients: 1 at degree n + 1, the solution at degrees n + 1 − 2j, zero elsewhere.
+    let coeffs: Vec<RBig> = (0..n + 2)
+        .map(|d| {
+            if d == n + 1 {
+                return Ok(RBig::ONE);
+            }
+            let gap = n + 1 - d;
+            if gap % 2 != 0 || gap / 2 > m {
+                return Ok(RBig::ZERO);
+            }
+            let j = gap / 2;
+            let row = at(&a, j - 1, "the system")?;
+            Ok(entry(row, m)? / entry(row, j - 1)?)
+        })
+        .collect::<Result<_, GenError>>()?;
     Ok(Poly(coeffs))
 }
 
@@ -529,7 +559,7 @@ struct KronrodTable {
 
 fn kronrod(n: usize) -> Result<KronrodTable, GenError> {
     let p = legendre(n);
-    let pn = p[n].clone();
+    let pn = at(&p, n, "the Legendre polynomials")?.clone();
     let e = stieltjes(&pn, n)?;
     let q = pn.mul(&e);
     let dq = q.derivative();
@@ -555,7 +585,10 @@ fn kronrod(n: usize) -> Result<KronrodTable, GenError> {
     cuts.push(RBig::ONE);
     let mut all: Vec<(f64, f64)> = Vec::new();
     for w in cuts.windows(2) {
-        let (lo, hi) = (w[0].clone(), w[1].clone());
+        let (lo, hi) = match w {
+            [lo, hi] => (lo.clone(), hi.clone()),
+            _ => return fail("a window of two cuts has another length"),
+        };
         let (sl, sh) = (e_int.sign_at(&lo), e_int.sign_at(&hi));
         if sl == 0 || sh == 0 || sl == sh {
             return fail(format!(
@@ -589,13 +622,13 @@ fn kronrod(n: usize) -> Result<KronrodTable, GenError> {
 
 /// A double as Rust source, exactly: `f64::from_bits(0x…)` with its shortest decimal in a comment.
 fn bits(v: f64) -> String {
-    let h = format!("{:016x}", v.to_bits());
+    let b = v.to_bits();
     format!(
-        "f64::from_bits(0x{}_{}_{}_{})",
-        &h[0..4],
-        &h[4..8],
-        &h[8..12],
-        &h[12..16]
+        "f64::from_bits(0x{:04x}_{:04x}_{:04x}_{:04x})",
+        b >> 48,
+        (b >> 32) & 0xffff,
+        (b >> 16) & 0xffff,
+        b & 0xffff
     )
 }
 
