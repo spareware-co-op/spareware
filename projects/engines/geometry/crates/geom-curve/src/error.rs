@@ -45,6 +45,9 @@ pub enum CurveError {
     /// The operation needs a finite domain, and the curve is a ray or an infinite line; or its
     /// result would drift without bound along one (an inexact transform of its direction).
     Unbounded,
+    /// The segments of a composite curve do not meet: a segment's end and the next one's start
+    /// have certified enclosures that do not overlap.
+    Disjoint,
     /// The data or a transform collapses the kind: parallel vectors where independent ones are
     /// needed, a zero length or direction, or a singular transform.
     Degenerate,
@@ -75,6 +78,9 @@ impl fmt::Display for CurveError {
             CurveError::Unbounded => f.write_str(
                 "the curve is a ray or an infinite line, and the operation needs a finite domain",
             ),
+            CurveError::Disjoint => {
+                f.write_str("a composite curve's segments do not meet end to start")
+            }
             CurveError::Degenerate => f.write_str(
                 "the curve's data or the transform is degenerate (parallel or zero vectors, or a                  singular transform)",
             ),

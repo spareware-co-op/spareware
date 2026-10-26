@@ -278,6 +278,7 @@ fn map_truth(map: &ParamMap, t: &IBig) -> IBig {
         ParamMap::Same => return t.clone(),
         ParamMap::Circular(b) => (b, true),
         ParamMap::Hyperbolic(b) => (b, false),
+        ParamMap::Pieces(_) => panic!("no analytic kind converts to a composite's map"),
     };
     let mut k = 0;
     while k + 2 < breaks.len() && fx(breaks[k + 1]) < *t {

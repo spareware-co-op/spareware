@@ -1132,6 +1132,11 @@
               "shape": "unit"
             },
             {
+              "doc": "The segments of a composite curve do not meet: a segment's end and the next one's start have certified enclosures that do not overlap.",
+              "name": "Disjoint",
+              "shape": "unit"
+            },
+            {
               "doc": "The data or a transform collapses the kind: parallel vectors where independent ones are needed, a zero length or direction, or a singular transform.",
               "name": "Degenerate",
               "shape": "unit"
@@ -1207,6 +1212,75 @@
             "text": "the conjugate-diameter form of an ellipse, c + cos θ·u + sin θ·v, the image of the unit circle under the affine map taking the axes to u and v, of which the principal-axis form is the case u ⟂ v; and its analogues for the other kinds. Chapter 7 asks for the kind change to be explicit (`projects/engines/geometry/architecture/07-geometry-types.md`)."
           },
           "path": "geom_curve::axes",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one match per call.",
+          "does": "[`Basis`] is a closed enum with one variant per leaf kind (NURBS, the analytic kinds, the bulge polyline), dispatching the kind contract to each, with the conversions to and from [`CurveKind`]. The kinds that hold curves hold a `Basis`, never a `CurveKind`, so no kind contains itself: no recursive type, no recursive call, nothing for WebAssembly's stack to bound (chapter 28.8).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/basis.rs",
+          "guarantees": [
+            "**The same behaviour as the kind.** Every method is the leaf kind's own.",
+            "**Leaves stay leaves.** Every leaf's reversal and transform is a leaf (a circle may become an ellipse, a bulge polyline its NURBS form); a split of a bulge polyline is a trimmed one, so the trimmed kind splits by its interval instead."
+          ],
+          "job": "The leaf curve kinds: the kinds that hold no other curve, which the trimmed, composite and offset kinds and curves on surfaces are built on.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/07-geometry-types.md",
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "the storage-and-behaviour split chapter 7 decides, closed enums for storage and traits for behaviour (`projects/engines/geometry/architecture/07-geometry-types.md`); a leaf's breaks are a NURBS curve's knots (where its smoothness may drop, The NURBS Book, 2nd ed., P2.5, <https://doi.org/10.1007/978-3-642-59223-2>) and a polyline's vertices."
+          },
+          "path": "geom_curve::basis",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(k) per evaluation of order k; a bound O(1) per segment the span meets; conversion O(n) for n segments.",
+          "does": "[`BulgePolyline`] stores 2D vertices, one bulge per segment (b = tan(θ/4) for an arc of sweep θ, positive turning anticlockwise; 0 for a straight segment) and optionally a start and end width per segment. Segment i runs over parameters [s + i, s + i + 1] (s, the start, is 0 for a new polyline). Each segment is exactly the rational quadratic its bulge defines, in homogeneous form with p₀ and p₂ its ends and w = (1 − b²)/(1 + b²): h₁ = ((1 − b²)·m + b·(d.y, −d.x))/(1 + b²), with m the chord's middle and d = p₂ − p₀, so C(v) = (B₀p₀ + B₁h₁ + B₂p₂)/(B₀ + B₁w + B₂) with v the parameter within the segment. Every value is a rational function of the stored doubles: a bulge arc is stored exactly, a semicircle (w = 0) and a major arc (w < 0) included, whose denominator stays at least (1 + w)/2 > 0.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/bulge.rs",
+          "guarantees": [
+            "**Exact definition, certified evaluation.** Points, derivatives of every order (Leibniz's rule on W·C = A) and bounds over spans are interval evaluations of those rational functions.",
+            "**An exact NURBS form.** The segments are rational quadratic Bezier pieces on the same parameter; an arc whose middle weight is low (a semicircle or more) is first halved, or quartered, by de Casteljau's algorithm at dyadic parameters, which keeps every weight positive. The deviation bounds only the rounding of the pieces' points and weights.",
+            "**Transforms change the kind explicitly.** A similarity keeps a bulge polyline (vertices mapped, widths scaled, bulges negated by a mirror); any other transform makes its NURBS form.",
+            "**Splits are trimmed polylines.** A split leaves the polyline untouched and trims it (`crate::trimmed`); a reversal reverses the vertices and negates the bulges, exactly."
+          ],
+          "job": "The bulge polyline kind: lines and arcs through vertices, each arc given by its bulge, with optional widths, as DXF's LWPOLYLINE stores them.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/14-2d-drafting.md",
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "the bulge of DXF's LWPOLYLINE (chapter 14's polyline row, `projects/engines/geometry/architecture/14-2d-drafting.md`), written as the rational quadratic form of a circular arc (L. Piegl and W. Tiller, *The NURBS Book*, 2nd ed., section 7.3, <https://doi.org/10.1007/978-3-642-59223-2>) with the middle point carried homogeneously, so the semicircle's point at infinity is a finite h₁."
+          },
+          "path": "geom_curve::bulge",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "evaluation is a binary search over the starts plus the segment's; a bound is the bounds of the segments it meets; the conversion is linear in the Bezier pieces, each O(p²·D).",
+          "does": "[`Composite`] stores segments (trimmed curves, so a segment is any leaf kind on any interval) and starts s₀ < s₁ < … < sₙ: segment k runs over [sₖ, sₖ₊₁] of the composite's parameter, mapped affinely onto its own interval [aₖ, bₖ], so the joints sit at the starts exactly. A new composite starts at 0 and gives each segment its own length, sₖ₊₁ = sₖ + (bₖ − aₖ), rounded, which the affine map absorbs. Consecutive segments must meet: the end of one and the start of the next must have certified enclosures that overlap (chapter 14: \"ends must be the same exact point\"; there is no join fuzz), and each joint keeps a certified bound on its gap, 0 when both ends are the same exact point.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/composite.rs",
+          "guarantees": [
+            "**Exact definition.** Evaluation at a parameter whose segment parameter is exact is the segment's; otherwise the segment parameter is enclosed and the segment bounded over it, so enclosures stay certified; derivatives carry the affine map's factor.",
+            "**Certified conversion.** The deviation adds, per segment, the segment's conversion, elevation and Bezier extraction, the joint's gap and weight rescaling (the rational bound of `crate::rational`), and the rounding of shifted knots (a Bezier piece reparametrised by e at its ends moves by at most |N′|·e).",
+            "**Exact operations where they can be.** A split at a joint, a reversal and a split whose segment parameter is exact change no point; a transform moves each segment with its own deviation, the joints' gaps recomputed within it."
+          ],
+          "job": "The composite curve kind: trimmed curves joined end to end into one curve, and its conversion to one NURBS curve.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/14-2d-drafting.md",
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "STEP's `composite_curve` (ISO 10303-42) with segments on parameter trims, joined as chapter 14 asks (`projects/engines/geometry/architecture/14-2d-drafting.md`); conversion by degree elevation (A5.9) and Bezier decomposition (A5.6) of L. Piegl and W. Tiller, *The NURBS Book*, 2nd ed. (<https://doi.org/10.1007/978-3-642-59223-2>)."
+          },
+          "path": "geom_curve::composite",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -1363,6 +1437,28 @@
           "target": "lib"
         },
         {
+          "cost": "O(K) for a sum, O(K²) for a product, quotient or root.",
+          "does": "a [`Jet`] of order K holds enclosures of f(t), f′(t)/1!, …, f⁽ᴷ⁾(t)/K! at every parameter t of an interval (a point, for an enclosure; a span, for a bound). Sums, products, quotients and square roots of jets are the jets of the sums, products, quotients and roots, by the recurrences of automatic differentiation, so a jet of an offset curve's formula gives its derivatives to order K from the basis curve's derivatives to order K + 1.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/jet.rs",
+          "guarantees": [
+            "**Certified.** If each input coefficient encloses its function's coefficient at every t of the interval, so does each output coefficient: every recurrence is a polynomial or a quotient in the inputs, evaluated in interval arithmetic (inclusion isotonicity).",
+            "**Refused where undefined.** A quotient by, or a root of, a jet whose value may be zero (or, for the root, negative) is an error, never a guess."
+          ],
+          "job": "Truncated Taylor series in interval arithmetic: the derivatives of a formula built from curves' derivatives, enclosed, without differentiating the formula by hand.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/1.9780898717761",
+              "https://doi.org/10.1137/1.9780898717716"
+            ],
+            "text": "the Taylor-coefficient recurrences of automatic differentiation (A. Griewank and A. Walther, *Evaluating Derivatives*, 2nd ed., SIAM (2008), <https://doi.org/10.1137/1.9780898717761>, on univariate Taylor propagation), evaluated in intervals as in Taylor-model and interval AD methods (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), <https://doi.org/10.1137/1.9780898717716>)."
+          },
+          "path": "geom_curve::jet",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "constant per evaluation; conversion and transforms constant.",
           "does": "[`Line`] stores an origin o, a direction d (any nonzero vector) and a domain whose ends may be infinite: finite for a segment, one infinite end for a ray, both for an infinite line ([`Extent`]). It implements the kind contract through the shared analytic form (`crate::form`, shape `Linear`). A ray or infinite line has no finite NURBS form and no bound over an infinite span; both are refused, never clamped.",
           "family": [],
@@ -1446,6 +1542,50 @@
             "text": "The NURBS Book, 2nd ed. (<https://doi.org/10.1007/978-3-642-59223-2>): A3.1, A3.2, A4.2, A5.1, de Casteljau subdivision (section 1.3), hodographs (section 3.3) and affine invariance (P4.10), on `geom-nurbs` (pieces G56 and G59)."
           },
           "path": "geom_curve::nurbs",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "an evaluation of order k is the basis's of order k + 1 plus O(k²) interval operations; the cache is the Taylor conversion of `crate::taylor`, eight to 128 pieces per smooth interval of the basis.",
+          "does": "[`Offset`] stores a trimmed basis curve C and an [`OffsetLaw`]:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/offset.rs",
+          "guarantees": [
+            "**Certified, or refused.** Where the normal may vanish (a cusp of the basis, or a span too wide to separate it from zero) a derivative bound is `Unbounded` and an enclosure is refused, never guessed; a bound on the points still holds there, from the basis's bound widened by the offset's largest size.",
+            "**Exact split and reversal.** A split trims the basis; a reversal reverses the basis and negates the distances (the left normal of the reversed curve is the right normal).",
+            "**Transforms keep the kind only when exact.** A grid transform of an offset whose basis moves exactly gives an offset (a mirror negating the side); any other transform gives the moved NURBS cache, with both deviations."
+          ],
+          "job": "The offset curve kind: a basis curve moved along its normal, in 2D, in 3D against a reference direction, or by distances that vary along it, with a certified NURBS cache.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1016/0167-8396(90"
+            ],
+            "text": "offset curves as defined in ISO 10303-42 (`offset_curve_2d`, `offset_curve_3d`) and IFC 4.3 (`IfcOffsetCurveByDistances`), evaluated with automatic differentiation in interval arithmetic; offsets of conics and splines are neither conics nor splines (R. T. Farouki and C. A. Neff, \"Analytic properties of plane offset curves\", Computer Aided Geometric Design 7 (1990), <https://doi.org/10.1016/0167-8396(90)90023-K>), hence the certified cache."
+          },
+          "path": "geom_curve::offset",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the NURBS kind's costs on the cache.",
+          "does": "[`OnSurface`] stores the pcurve (a trimmed 2D curve in the surface's (u, v) space), an opaque [`SurfaceRef`] into the geometry pool that holds the surface (chapter 8.1: geometry attaches by index into a body's pools), and the 3D curve as a NURBS cache on the pcurve's parameter with a certified bound on its distance from S(pcurve(t)). `geom-curve` sits below `geom-surface` and cannot see surfaces (chapter 27), so, as chapter 12 lays out for the intersection curve, it evaluates, bounds, splits and converts the kind through its cache alone: the kind's curve is the cache, and [`OnSurface::error`] says how far the surface's own curve may be from it. The surface crates build the cache and its bound, and evaluate S on the pcurve when they need the exact curve.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/on_surface.rs",
+          "guarantees": [
+            "**The contract on the cache.** Every evaluation, bound, split and transform is the NURBS kind's on the cache, certified for the cache; the error carries over: a split adds its deviation to each half's error, and a transform scales the error by an upper bound on the transform's stretch (its linear part's Frobenius norm) and adds its deviation.",
+            "**Exact pcurve.** The pcurve is never approximated here: a split trims it, a reversal reverses it, a transform leaves it (the surface moves with the pool, its parameters do not)."
+          ],
+          "job": "The curve-on-surface kind: a curve in a surface's parameter space (a pcurve), the surface held by reference, and its 3D curve as a certified NURBS cache.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/08-topology.md",
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "the pcurve and its 3D cache of chapter 8 (`projects/engines/geometry/architecture/08-topology.md`, fins and their pcurves) and the cache-only evaluation chapter 12 gives the intersection curve (`projects/engines/geometry/architecture/12-intersections.md`)."
+          },
+          "path": "geom_curve::on_surface",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -1559,13 +1699,35 @@
           "provenance": [],
           "spdx": null,
           "target": "lib"
+        },
+        {
+          "cost": "the basis's costs; a conversion adds at most two splits.",
+          "does": "[`Trimmed`] stores a [`Basis`] (any leaf kind: NURBS, analytic or bulge polyline) and an interval [a, b] inside its domain, and is the basis on that interval, on the basis's own parameter. Trimming keeps the basis exactly as stored: a NURBS curve trimmed at a crossing keeps its knots and control points, where cutting it would insert knots and round (chapter 14: \"a trimmed spline is section 7's trimmed curve, the original curve on an implicit parameter interval\"). Composite and offset curves and curves on surfaces are built on trimmed curves, so the kinds that hold curves hold only leaves: no kind contains itself.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/trimmed.rs",
+          "guarantees": [
+            "**Exact.** Evaluation, enclosures and bounds are the basis's, inside the interval; a split changes only the interval; a reversal or transform is the basis's, with its deviation.",
+            "**Refused outside.** A parameter or span outside the interval is an error, though the basis would take it.",
+            "**Converted by cutting.** The NURBS form is the basis cut at the interval's ends (exact for the analytic kinds, by knot insertion for NURBS), then converted; the deviations add."
+          ],
+          "job": "The trimmed curve kind: a basis curve on a parameter interval inside its domain, the basis itself left untouched.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/07-geometry-types.md"
+            ],
+            "text": "STEP's `trimmed_curve` with parameter trims (ISO 10303-42), on the kinds of chapter 7 (`projects/engines/geometry/architecture/07-geometry-types.md`)."
+          },
+          "path": "geom_curve::trimmed",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
         }
       ],
       "name": "geom-curve",
       "provenance": [],
       "sections": "7, 12.1, 12.4, 17.8, 19.3 and 26.1, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the traits, the enum, the NURBS kind and the contract (G60) and the analytic kinds (G61) built; the other kinds to come in G62, G63, G64, G67, G68, G175, G361 and G371.",
+      "status": "the traits, the enum, the NURBS kind and the contract (G60), the analytic kinds (G61) and the bulge, trimmed, composite, offset and curve-on-surface kinds (G62) built; the other kinds to come in G63, G64, G67, G68, G175, G361 and G371.",
       "summary": "Spare Kit geometry kernel: every curve kind."
     },
     {

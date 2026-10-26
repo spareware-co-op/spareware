@@ -186,6 +186,22 @@ impl Motion {
         ])
     }
 
+    /// The exact image M·h + w·t of a homogeneous point h with weight w, enclosed.
+    pub(crate) fn homogeneous_image<const D: usize>(
+        &self,
+        h: &[Interval; D],
+        w: Interval,
+    ) -> Result<[Interval; D], CurveError> {
+        let linear = self.apply_enclosed(h, false)?;
+        let zero = point(0.0)?;
+        let mut out = [zero; D];
+        for ((o, &l), row) in out.iter_mut().zip(&linear).zip(self.entries.exact_rows()) {
+            let [_, _, _, t] = *row;
+            *o = tight::add(l, tight::mul(w, t)?)?;
+        }
+        Ok(out)
+    }
+
     /// The exact image of an enclosed point (with the translation) or vector (without).
     pub(crate) fn enclosed<const D: usize>(
         &self,
