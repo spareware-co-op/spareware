@@ -5419,22 +5419,23 @@
           "target": "lib"
         },
         {
-          "cost": "two more crates for the loader to parse, about 5 000 lines; their instances are checked only when kernel code calls them.",
-          "does": "the kernel's crates call `core`, `alloc` (and `std` in tests) and `libm` constantly, and the standard library calls kernel code back through what it is handed: closures (`Option::map`, `Iterator::fold`, `sort_by`) and trait implementations of kernel types (`sort` runs `Ord::cmp`, `Vec::clone` runs `Clone::clone`, formatting runs `Display::fmt`). Their real source is not read; instead [`CORE`] and [`LIBM`] are Rust written from their documented signatures, which [`sources`] gives the loader as two crates of role [`Role::Model`]: `core` (also answering to `alloc` and `std`, [`crate::recursion::resolve::MODEL_ALIASES`]) and `libm`. A function of the model that calls back has a body that makes exactly those calls (`Option::map` calls `f`; `Map`'s `next` calls its closure; `[T]::sort` calls `T::cmp`); one that calls nothing back has the body `loop {}`. The type checker reads the model's bodies as it reads the kernel's, instance by instance, so a callback reaches exactly the closure or implementation the call was handed.",
+          "cost": "three more crates for the loader to parse, about 5 000 lines; their instances are checked only when kernel code calls them.",
+          "does": "the kernel's crates call `core`, `alloc` (and `std` in tests) and `libm` constantly, and the standard library calls kernel code back through what it is handed: closures (`Option::map`, `Iterator::fold`, `sort_by`) and trait implementations of kernel types (`sort` runs `Ord::cmp`, `Vec::clone` runs `Clone::clone`, formatting runs `Display::fmt`). Their real source is not read; instead [`CORE`], [`LIBM`] and [`RAYON`] are Rust written from their documented signatures, which [`sources`] gives the loader as three crates of role [`Role::Model`]: `core` (also answering to `alloc` and `std`, [`crate::recursion::resolve::MODEL_ALIASES`]), `libm` and `rayon` (`geom-pool`, the one kernel crate that depends on it, runs its tasks on a rayon pool: `in_place_scope` runs its closure and `Scope::spawn` its body). A function of the model that calls back has a body that makes exactly those calls (`Option::map` calls `f`; `Map`'s `next` calls its closure; `[T]::sort` calls `T::cmp`); one that calls nothing back has the body `loop {}`. The type checker reads the model's bodies as it reads the kernel's, instance by instance, so a callback reaches exactly the closure or implementation the call was handed.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/recursion/stdlib.rs",
           "guarantees": [
             "**Never less than the library calls.** Each modelled function's body calls every closure it is handed and every trait method of its type parameters that the documented function may call; adapters that defer a call (an iterator's `map`) keep the closure in their result and call it where the library does (in `next`). By parametricity, code that does not know the kernel's types reaches kernel code only through the values and bounds it is handed (J. C. Reynolds, \"Types, abstraction and parametric polymorphism\", IFIP 1983; P. Wadler, \"Theorems for free!\", FPCA 1989, <https://doi.org/10.1145/99370.99404>), so these are all the calls it can make into the kernel.",
             "**What is not modelled is reported.** A path into the standard library that names nothing in the model resolves to nothing, and the type checker reports it as code it cannot read; the model is extended rather than guessed."
           ],
-          "job": "The recursion check's model of the standard library and of `libm`: Rust source the check reads in place of theirs, so a call into them is checked as any other call is.",
+          "job": "The recursion check's model of the standard library, of `libm` and of the part of `rayon` that `geom-pool` calls: Rust source the check reads in place of theirs, so a call into them is checked as any other call is.",
           "method": {
             "links": [
               "https://doc.rust-lang.org/std/",
               "https://doc.rust-lang.org/core/",
-              "https://docs.rs/libm/0.2.16/libm/"
+              "https://docs.rs/libm/0.2.16/libm/",
+              "https://docs.rs/rayon/1.12.0/rayon/"
             ],
-            "text": "the standard library's documented signatures and behaviour (<https://doc.rust-lang.org/std/>, <https://doc.rust-lang.org/core/>, <https://docs.rs/libm/0.2.16/libm/>), written as stubs: a library model, which the type checker reads as ordinary code, under parametricity as above."
+            "text": "the standard library's documented signatures and behaviour (<https://doc.rust-lang.org/std/>, <https://doc.rust-lang.org/core/>, <https://docs.rs/libm/0.2.16/libm/>, <https://docs.rs/rayon/1.12.0/rayon/>), written as stubs: a library model, which the type checker reads as ordinary code, under parametricity as above."
           },
           "path": "geom_test::recursion::stdlib",
           "provenance": [],
