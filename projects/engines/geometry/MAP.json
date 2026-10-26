@@ -1932,6 +1932,16 @@
               "shape": "unit"
             },
             {
+              "doc": "An iteration did not converge within its cap (the SVDs and the eigensolver).",
+              "name": "NoConvergence",
+              "shape": "unit"
+            },
+            {
+              "doc": "The matrix is not symmetric where a symmetric one is needed (the eigensolver).",
+              "name": "NotSymmetric",
+              "shape": "unit"
+            },
+            {
               "doc": "A step its own bounds rule out failed: a defect, reported, never answered.",
               "name": "Defect",
               "shape": "unit"
@@ -1956,6 +1966,50 @@
       "kind": "kernel",
       "layer": "1",
       "modules": [
+        {
+          "cost": "one allocation of len · count doubles; access is constant time, copies linear.",
+          "does": "[`Cols`] holds `count` columns of `len` doubles each, one after another, so a column is one contiguous slice and two columns can be borrowed together for a rotation. [`Cols::to_matrix`] copies chosen columns, in a chosen order, into a row-major [`Matrix`].",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-linalg/src/cols.rs",
+          "guarantees": [
+            "**No panic, no abort.** Every index is checked and every index sum and product too; a bad one is [`LinalgError::Defect`]. The storage is allocated fallibly.",
+            "**Exact copies.** Moving values between [`Cols`] and [`Matrix`] copies them unchanged."
+          ],
+          "job": "Matrices stored by columns, for the factorisations that work column by column (the SVDs and the symmetric eigensolver), and checked index arithmetic for them.",
+          "method": {
+            "links": [
+              "https://www.netlib.org/lapack/lug/"
+            ],
+            "text": "column-major storage as LAPACK uses it (E. Anderson et al., *LAPACK Users' Guide*, 3rd ed., SIAM (1999), <https://www.netlib.org/lapack/lug/>)."
+          },
+          "path": "geom_linalg::cols",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "(4/3)·n³ for the reduction and 2·n³ for its accumulation, charged first as 4·n³; each QR step then charges (block + 1)·(4n + 12). One working copy, the tridiagonal and Q.",
+          "does": "[`SymmetricEigen::factor`] reduces a symmetric n × n matrix to tridiagonal form T by n − 2 Householder similarity transformations (Golub and Van Loan's algorithm 8.3.1), then applies implicit QR steps with Wilkinson's shift (algorithm 8.3.2), chasing the bulge down T with Givens rotations, until every subdiagonal entry is negligible (|`b_i`| ≤ 2^−52·(|`a_i`| + |`a_(i+1)`|)); the diagonal is then Λ, and the accumulated transformations Q. Eigenvalues come smallest first, each with its unit eigenvector as a column of Q.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-linalg/src/eigen.rs",
+          "guarantees": [
+            "**Symmetric or refused.** A matrix that is not square is [`LinalgError::Shape`]; one whose entries are not exactly symmetric, `a_ij` ≠ `a_ji` for some pair, is [`LinalgError::NotSymmetric`]. Only the lower triangle is read after that check.",
+            "**Deterministic.** Fixed order of reflections, rotations and deflation tests; the shift from the trailing 2 × 2 block, computed on the block scaled to magnitude 1; IEEE 754 operations in the order written and the correctly rounded square root; a stable sort of the eigenvalues with ties broken by position.",
+            "**Accuracy, checked against exact rationals.** The method is backward stable: Q·Λ·Qᵀ is a symmetric matrix within a small multiple of u·‖A‖ of A, so each eigenvalue is within that of an exact one (Golub and Van Loan, section 8.3.6). The tests check the residual and Q's orthogonality exactly and bracket each eigenvalue by exact inertia counts of A − x·I.",
+            "**Bounded.** At most 30·n QR steps, then [`LinalgError::NoConvergence`]; each step charges its work before it runs, the reduction its own first."
+          ],
+          "job": "The symmetric eigenproblem: A = Q·Λ·Qᵀ for a symmetric matrix, by Householder tridiagonalisation and the implicit symmetric QR algorithm with Wilkinson's shift.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/1.9781611971163"
+            ],
+            "text": "G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins (2013), algorithms 8.3.1 (Householder tridiagonalisation), 8.3.2 (the implicit symmetric QR step with Wilkinson shift) and 8.3.3 (the symmetric QR algorithm), and section 8.3.6 (accuracy); J. H. Wilkinson, *The Algebraic Eigenvalue Problem*, Clarendon Press (1965), chapter 8, for the shift; B. N. Parlett, *The Symmetric Eigenvalue Problem*, SIAM (1998), chapter 8, <https://doi.org/10.1137/1.9781611971163>, for the shift's convergence. Written in our own words from the books (chapter 29.4)."
+          },
+          "path": "geom_linalg::eigen",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
         {
           "cost": "a matrix of r × c entries is one allocation of r · c doubles; access is constant time.",
           "does": "[`Matrix`] is a dense matrix stored by rows, every entry a finite `f64`, made only by fallible constructors (an allocation that cannot be made is [`LinalgError::OutOfMemory`], never an abort). [`Work`] is a budget in units of one multiply-add: each factorisation knows its cost from its shape, charges it in full before touching a number, and refuses with [`LinalgError::OutOfWork`] when the budget cannot cover it, so a factorisation either finishes or never starts (chapter 15.6: \"budgets in work, not time\").",
@@ -2003,6 +2057,28 @@
           "target": "lib"
         },
         {
+          "cost": "constant per call; [`rotate_slices`] is linear in the vectors' length.",
+          "does": "[`hypot`] gives √(a² + b²) without overflow or underflow; [`givens`] gives the rotation (c, s) and r with c·y + s·z = r and −s·y + c·z = 0, which zeroes z against y; [`rotate`] applies a rotation to a pair of numbers, and [`rotate_slices`] to two vectors element by element.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-linalg/src/rotation.rs",
+          "guarantees": [
+            "**No spurious overflow or underflow.** [`hypot`] divides both numbers by the larger magnitude before squaring, so the squares lie in [0, 1] and the sum in [1, 2].",
+            "**Deterministic.** IEEE 754 operations in the order written and the correctly rounded square root of `geom_num::math`; no fused multiply-add.",
+            "**Exact identity when nothing is to be zeroed.** A zero z gives c = 1, s = 0 and r = y, so a rotation that has nothing to do changes no bit."
+          ],
+          "job": "Plane rotations and the norm of two numbers, for the iterative factorisations.",
+          "method": {
+            "links": [
+              "https://www.netlib.org/lapack/lug/"
+            ],
+            "text": "Givens rotations as Golub and Van Loan compute them (G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins (2013), section 5.1.8 and algorithm 5.1.3), with the norm scaled as LAPACK's `xLAPY2` does (E. Anderson et al., *LAPACK Users' Guide*, 3rd ed., SIAM (1999), <https://www.netlib.org/lapack/lug/>); written in our own words (chapter 29.4)."
+          },
+          "path": "geom_linalg::rotation",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "as charged above; one allocation of n² doubles for LU or Cholesky, n doubles per solve.",
           "does": "[`Lu::factor`] factors a square matrix as P·A = L·U by Gaussian elimination with partial pivoting, and [`Lu::solve`] solves A·x = b with it. [`Cholesky::factor`] factors a symmetric positive definite matrix as A = G·Gᵀ, and [`Cholesky::solve`] solves with it. [`solve_lower`] and [`solve_upper`] are forward and back substitution on a triangle, and [`solve_tridiagonal`] solves a tridiagonal system by Gaussian elimination with partial pivoting.",
           "family": [],
@@ -2023,13 +2099,38 @@
           "provenance": [],
           "spdx": null,
           "target": "lib"
+        },
+        {
+          "cost": "Jacobi charges n²·(5m + 2n) per sweep and converges in a handful of sweeps; Golub–Kahan charges 8·m·n² + 4·n³ for the reduction and the accumulation, then (k + 1)·(4(m + n) + 12) per QR step. Each allocates its working copy, U and V.",
+          "does": "[`Svd::jacobi`] and [`Svd::golub_kahan`] factor an m × n matrix as A = U·Σ·Vᵀ, with k = min(m, n) singular values in Σ, largest first, U m × k and V n × k with orthonormal columns. A wide matrix is factored through its transpose.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-linalg/src/svd.rs",
+          "guarantees": [
+            "**Deterministic.** Fixed sweep order (pairs (p, q), p < q, row by row), fixed deflation and shift rules, IEEE 754 operations in the order written, the correctly rounded square root of `geom_num::math`, no fused multiply-add, and a stable sort with ties broken by column index. The same input gives the same bits on every target.",
+            "**Accuracy, checked against exact rationals.** Both are backward stable: the computed factors are those of a matrix A + E with ‖E‖ a small multiple of u·‖A‖ (Golub and Van Loan, 8.6.3), so each singular value is within that of the exact one. Jacobi does better on graded matrices A = B·D with B well conditioned: each singular value to a small multiple of u·κ(B) in relative terms, however small (Demmel and Veselić, theorem 4.4). The tests check both claims with exact rational arithmetic: the residual and the orthogonality of U and V, and each singular value bracketed by exact inertia counts of Aᵀ·A.",
+            "**Bounded.** Jacobi stops after [`MAX_SWEEPS`] sweeps and Golub–Kahan after 6·k² QR steps with [`LinalgError::NoConvergence`]; neither has ever needed it in the tests. Each sweep or step charges its work before it runs; the reductions charge theirs first.",
+            "**Typed failures.** Columns whose norms differ by more than the doubles can hold (a rotation angle that is not finite) are [`LinalgError::NotFinite`], never a silently wrong factor."
+          ],
+          "job": "The singular value decomposition, two ways: one-sided Jacobi, accurate to the last bits of tiny singular values of graded matrices, and Golub–Kahan, the fast general method.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/0106005",
+              "https://doi.org/10.1137/0613074",
+              "https://doi.org/10.1137/0702016"
+            ],
+            "text": "M. R. Hestenes, \"Inversion of matrices by biorthogonalization and related results\", *Journal of the SIAM* 6(1) (1958), 51–90, <https://doi.org/10.1137/0106005>. J. Demmel and K. Veselić, \"Jacobi's method is more accurate than QR\", *SIAM Journal on Matrix Analysis and Applications* 13(4) (1992), 1204–1245, <https://doi.org/10.1137/0613074>. G. Golub and W. Kahan, \"Calculating the singular values and pseudo-inverse of a matrix\", *Journal of the SIAM, Series B* 2(2) (1965), 205–224, <https://doi.org/10.1137/0702016>. G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins (2013), algorithms 5.4.2 (bidiagonalisation), 8.6.1 and 8.6.2 (the Golub–Kahan SVD step and algorithm) and section 8.6.3 (accuracy)."
+          },
+          "path": "geom_linalg::svd",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
         }
       ],
       "name": "geom-linalg",
       "provenance": [],
       "sections": "15.6 and 16.6; open questions OQ-15.7, OQ-16.1 and OQ-29.16; chapter 27 (\"Who owns what\"), in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "dense decompositions built (G49); singular values and eigenvalues (G50) and the sparse parts (G215) to come.",
+      "status": "dense decompositions built (G49, G50); the sparse parts (G215) to come.",
       "summary": "Spare Kit geometry kernel: deterministic linear algebra."
     },
     {
