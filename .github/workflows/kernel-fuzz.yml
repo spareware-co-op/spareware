@@ -172,6 +172,11 @@ jobs:
       fail-fast: false
       matrix:
         proof:
+          - eft::proofs::split_adds_back_exactly
+          - eft::proofs::two_prod_is_the_rounded_product_and_its_error
+          - eft::proofs::two_sum_is_the_rounded_sum_and_its_error
+          - exact_sum::proofs::a_term_and_its_negation_cancel
+          - exact_sum::proofs::one_term_rounds_back_to_itself
           - exactness::proofs::combine_keeps_the_less_exact_class
           - exactness::proofs::within_never_panics_and_respects_the_ceiling
           - grid::proofs::coarsen_is_nearest_and_reported

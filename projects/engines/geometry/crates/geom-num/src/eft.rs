@@ -541,3 +541,53 @@ pub const fn two_prod(a: f64, b: f64) -> (f64, f64) {
     }
     (p, scaled_error(a, b, p))
 }
+
+/// Bounded proofs (chapter 28.7; piece G41): every pair of finite doubles, bit for bit. The
+/// transformations through the fused multiply-add (`two_prod_fma` and what calls it) are left out:
+/// Kani cannot model the processor instruction `libm` uses for it, so those are only tested.
+#[cfg(kani)]
+mod proofs {
+    use super::*;
+
+    /// A symbolic finite double.
+    fn finite() -> f64 {
+        let x = f64::from_bits(kani::any());
+        kani::assume(x.is_finite());
+        x
+    }
+
+    /// `two_sum` and `fast_two_sum` agree bit for bit, the sum is the rounded sum, and the error
+    /// is below half a unit of it (adding it back rounds to the sum), for every pair of finite
+    /// doubles whose sum does not overflow.
+    #[kani::proof]
+    fn two_sum_is_the_rounded_sum_and_its_error() {
+        let (a, b) = (finite(), finite());
+        let (s, e) = two_sum(a, b);
+        let (fs, fe) = fast_two_sum(a, b);
+        assert!(s.to_bits() == fs.to_bits() && e.to_bits() == fe.to_bits());
+        assert!(s.to_bits() == (a + b).to_bits());
+        if s.is_finite() {
+            assert!(e.is_finite() && s + e == s);
+        }
+    }
+
+    /// `split` cuts a double into two halves that add back to it exactly.
+    #[kani::proof]
+    fn split_adds_back_exactly() {
+        let a = finite();
+        let (hi, lo) = split(a);
+        assert!(hi + lo == a);
+    }
+
+    /// `two_prod` gives the rounded product, and an error that, when finite, adds back to it
+    /// without changing it, for every pair of finite doubles.
+    #[kani::proof]
+    fn two_prod_is_the_rounded_product_and_its_error() {
+        let (a, b) = (finite(), finite());
+        let (p, e) = two_prod(a, b);
+        assert!(p.to_bits() == (a * b).to_bits());
+        if p.is_finite() && e.is_finite() {
+            assert!(p + e == p);
+        }
+    }
+}

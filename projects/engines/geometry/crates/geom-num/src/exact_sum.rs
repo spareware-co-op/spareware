@@ -736,3 +736,39 @@ mod tests {
         );
     }
 }
+
+/// Bounded proofs (chapter 28.7; piece G41): every double, bit for bit.
+#[cfg(kani)]
+mod proofs {
+    use super::*;
+
+    /// Adding any double never panics or overflows, and one finite double, rounded back, is that
+    /// double (a zero comes back +0, the sum's one zero).
+    #[kani::proof]
+    fn one_term_rounds_back_to_itself() {
+        let x = f64::from_bits(kani::any());
+        let mut sum = ExactSum::new();
+        sum.add(x);
+        if x.is_finite() {
+            let back = sum.round().unwrap().get();
+            if x == 0.0 {
+                assert!(back.to_bits() == 0);
+            } else {
+                assert!(back.to_bits() == x.to_bits());
+            }
+        } else {
+            assert!(sum.round().is_err());
+        }
+    }
+
+    /// A finite double and its negation cancel exactly, to +0.
+    #[kani::proof]
+    fn a_term_and_its_negation_cancel() {
+        let x = f64::from_bits(kani::any());
+        kani::assume(x.is_finite());
+        let mut sum = ExactSum::new();
+        sum.add(x);
+        sum.add(-x);
+        assert!(sum.round().unwrap().get().to_bits() == 0);
+    }
+}
