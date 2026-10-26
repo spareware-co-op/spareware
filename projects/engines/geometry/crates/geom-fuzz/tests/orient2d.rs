@@ -129,7 +129,7 @@ fn orient2d_fuzz() {
 )]
 #[test]
 #[cfg_attr(kani, kani::proof)]
-#[cfg_attr(kani, kani::solver(cadical))]
+#[cfg_attr(kani, kani::solver(kissat))]
 #[cfg_attr(kani, kani::unwind(10))]
 fn orient2d_proof() {
     check!()
