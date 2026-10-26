@@ -6,6 +6,9 @@
 //! - `model`: the model of `geom_num::grid`'s types the predicate twins verify against.
 //! - `rounded`: the range check of a rounded input (`within` in `src/generated/mod.rs`), written
 //!   by hand.
+//! - `sign`, `plane` and `crossing`: the sign every predicate returns (`src/sign.rs`), the
+//!   plane-based points and their classification (`src/plane.rs`) and the 2D segment crossings
+//!   (`src/crossing.rs`), written by hand.
 //! - `orient2d`, `orient3d`, `incircle`, `insphere`, the 2D crossing predicates `ssi_weight` and
 //!   `ssi_side`, the side of a plane `plane_side`, and the three-plane and line-plane predicates
 //!   `tpi_weight`, `tpi_side`, `lpi_weight` and `lpi_side`: the predicates' exact paths
@@ -17,8 +20,11 @@
 
 #![feature(proc_macro_hygiene)]
 
+pub mod crossing;
 pub mod model;
+pub mod plane;
 pub mod rounded;
+pub mod sign;
 pub mod wide;
 
 #[path = "generated/orient2d.rs"]

@@ -6,7 +6,8 @@
 //! result whenever it fits and `None` exactly when it does not, and so do `resize` and the
 //! width-aware products `product_i128` and `checked_mul_i128` (piece G39); `compare`, which
 //! `Ord::cmp` calls, orders values as integers; `from_i128` gives the value it is given (piece
-//! G38); and the helpers they use do what each one's specification says.
+//! G38); `is_zero` and `signum` give the value's sign (piece G39); and the helpers they use do what
+//! each one's specification says.
 //!
 //! The functions below the `verus!` block, with their `#[verus_spec]` attributes and their
 //! `proof!` and `proof_decl!` blocks removed, are token for token those of `src/wide.rs`:
@@ -15,10 +16,10 @@
 //! block instead, and the test compares each one's doc comment, attributes, visibility, parameters
 //! and body. Also inside the block are the definitions
 //! (the unsigned value of a limb sequence, two's complement, what fits), the lemmas, a model of
-//! `Wide` with the same field, and four facts Verus is told about the standard library, each that
+//! `Wide` with the same field, and five facts Verus is told about the standard library, each that
 //! function's documented behaviour: `u64::overflowing_add`, `u64::overflowing_sub`,
-//! `u64::from(bool)` and `i128::unsigned_abs`. Those, Verus and the Z3 solver it uses are what the
-//! proof trusts.
+//! `u64::from(bool)`, `i128::unsigned_abs` and `i128::checked_neg`. Those, Verus and the Z3 solver
+//! it uses are what the proof trusts.
 //!
 //! It is a module of `geom-num`'s Verus crate, `verus/lib.rs`, which the predicate twins share.
 //! Verify: `verus --crate-type=lib projects/engines/geometry/crates/geom-num/verus/lib.rs`, with the
@@ -27,6 +28,8 @@
 use vstd::arithmetic::power2::*;
 use core::cmp::Ordering;
 use vstd::prelude::*;
+
+use crate::sign::*;
 
 verus! {
 
@@ -60,6 +63,11 @@ pub assume_specification[ <u64 as core::convert::From<bool>>::from ](b: bool) ->
 pub assume_specification[ i128::unsigned_abs ](x: i128) -> (r: u128)
     ensures
         r as int == if x < 0 { -(x as int) } else { x as int },
+;
+
+pub assume_specification[ i128::checked_neg ](x: i128) -> (r: Option<i128>)
+    ensures
+        r == if x == i128::MIN { None::<i128> } else { Some((-(x as int)) as i128) },
 ;
 
 // ---- The value of a limb sequence.
@@ -951,6 +959,22 @@ pub proof fn lemma_half_base_5()
     lemma2_to64();
 }
 
+/// Half the base of eight limbs: 2^511, the bound an `I512` value must stay below.
+pub proof fn lemma_half_base_8()
+    ensures
+        base(8) / 2 == 6703903964971298549787012499102923063739682910296196688861780721860882015036773488400937149083451713845015929093243025426876941405973284973216824503042048,
+{
+    lemma_base_step(0);
+    lemma_base_step(1);
+    lemma_base_step(2);
+    lemma_base_step(3);
+    lemma_base_step(4);
+    lemma_base_step(5);
+    lemma_base_step(6);
+    lemma_base_step(7);
+    lemma2_to64();
+}
+
 /// Half the base of six limbs: 2^383, the bound an `I384` value must stay below.
 pub proof fn lemma_half_base_6()
     ensures
@@ -975,6 +999,18 @@ impl<const L: usize> Wide<L> {
     pub closed spec fn value(self) -> int {
         signed(self.0@, L as nat)
     }
+}
+
+/// Every value of L limbs fits L limbs.
+pub proof fn lemma_value_bound<const L: usize>(w: Wide<L>)
+    requires
+        1 <= L <= 4096,
+    ensures
+        fits(w.value(), L as nat),
+        -(base(L as nat) / 2) <= w.value() < base(L as nat) / 2,
+{
+    lemma_unsigned_bound(w.0@, L as nat);
+    lemma_top_bit(w.0@, L as nat);
 }
 
 
@@ -1944,6 +1980,72 @@ impl<const L: usize> Wide<L> {
             return None;
         }
         Some(r)
+    }
+
+    /// Whether the value is exactly zero.
+    #[must_use]
+    #[verus_spec(r =>
+        requires
+            1 <= L <= 4096,
+        ensures
+            r == (self.value() == 0),
+    )]
+    pub fn is_zero(&self) -> bool {
+        proof! {
+            lemma_unsigned_bound(self.limbs(), L as nat);
+        }
+        #[verus_spec(
+            invariant
+                1 <= L <= 4096,
+                self.limbs().len() == L,
+                0 <= unsigned(self.limbs(), L as nat) < base(L as nat),
+                forall|j: int| 0 <= j < i ==> self.limbs()[j] == 0,
+        )]
+        for i in 0..L {
+            let limb = match self.0.get(i) {
+                Some(v) => *v,
+                None => 0,
+            };
+            if limb != 0 {
+                proof! {
+                    lemma_limb_too_big(self.limbs(), i as nat, 0);
+                    lemma_base_step(0);
+                    lemma2_to64();
+                    lemma_top_bit(self.limbs(), L as nat);
+                }
+                return false;
+            }
+        }
+        proof! {
+            assert(forall|k: int| 0 <= k < self.limbs().len() ==> self.limbs()[k] == 0);
+            lemma_zero_limbs(self.limbs(), L as nat);
+            assert(unsigned(self.limbs(), L as nat) == 0);
+            lemma_top_bit(self.limbs(), L as nat);
+            assert(self.value() == 0);
+        }
+        true
+    }
+
+    /// The sign of the value.
+    #[must_use]
+    #[verus_spec(r =>
+        requires
+            1 <= L <= 4096,
+        ensures
+            r == sign_of(self.value()),
+    )]
+    pub fn signum(&self) -> Sign {
+        proof! {
+            lemma_top_bit(self.limbs(), L as nat);
+            lemma_unsigned_bound(self.limbs(), L as nat);
+        }
+        if self.is_negative() {
+            Sign::Negative
+        } else if self.is_zero() {
+            Sign::Zero
+        } else {
+            Sign::Positive
+        }
     }
 
     /// Whether the value is below zero: whether the top limb's top bit is set.
