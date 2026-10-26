@@ -519,6 +519,18 @@ mod proofs {
         }
     }
 
+    /// The extremes are the limits: one past the largest value and the negation of the smallest
+    /// do not fit, and the largest is the negation of one above the smallest.
+    #[kani::proof]
+    fn extremes_are_the_limits() {
+        let (max, min) = (I256::max_value(), I256::min_value());
+        assert!(max.checked_add(&I256::one()).is_none());
+        assert!(min.checked_sub(&I256::one()).is_none());
+        assert!(min.checked_neg().is_none());
+        assert!(min.checked_add(&I256::one()).and_then(|m| m.checked_neg()) == Some(max));
+        assert!(max.signum() == Sign::Positive && min.signum() == Sign::Negative);
+    }
+
     /// `checked_mul` never panics or overflows, for every pair of `I256` values.
     #[kani::proof]
     fn mul_never_panics() {

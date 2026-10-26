@@ -1020,7 +1020,24 @@ mod proofs {
             assert!(stream.position() > before);
         }
         let _ = stream.next_u64();
-        let _ = stream.next_f64();
+        // A double is drawn whenever the stream has words left, never refused as a defect: the
+        // `Real::new` check after the draw cannot fail.
+        assert!(!matches!(stream.next_f64(), Err(RngError::Defect)));
+    }
+
+    /// Lemire's method never reports a defect, for every word and every bound: the 128-bit
+    /// product cannot overflow and the bound is never zero, so both defensive arms are unreachable.
+    #[kani::proof]
+    fn lemire_never_reports_a_defect() {
+        let word: u64 = kani::any();
+        let bound: u64 = kani::any();
+        kani::assume(bound != 0);
+        let mut threshold = None;
+        let first = lemire(word, NonZeroU64::new(bound).unwrap(), &mut threshold);
+        assert!(!matches!(first, Err(RngError::Defect)));
+        // With the threshold cached, a second word is judged the same way.
+        let second = lemire(kani::any(), NonZeroU64::new(bound).unwrap(), &mut threshold);
+        assert!(!matches!(second, Err(RngError::Defect)));
     }
 
     /// Cutting a seed's streams into chunks never panics or overflows, and a chunk that is made
