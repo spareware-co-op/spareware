@@ -97,9 +97,22 @@ The choice is per predicate and per target, and every variant gives the same val
 
 **The I384 cost on wasm32.** The 384-bit exact path (`tpi_side`) costs 1.5 to 1.9 times native x86-64 with the limb variant (Node, Wasmtime, Chromium; WebKit and Safari 0.9 to 1.1 times, Firefox 8.3 times), against 2.5 to 4.1 times as shipped. Section 31 records it under R4.
 
+## Avnaim et al.'s method, the reference
+
+`geom_num::avnaim` implements the method's two-dimensional case from the paper (section 2), the sign of a 2 × 2 determinant using only comparisons, subtractions and Euclidean divisions on the entries, never a product, as orient2d's reference. Checking the algebra corrected one step of the paper: replacing the second row by the first minus the second negates the determinant, which the paper's equation omits. It agrees with 128-bit products on 1.2 million random, near-degenerate and extreme cases, with the shipped `orient2d` at every sign combination of the grid's extremes (`tests/attack_g42.rs`), and with big integers in geom-fuzz's `variants` target. Measured locally (x86-64 Windows, and Node 24), in nanoseconds per call:
+
+| Inputs | Shipped `orient2d` value, native | Avnaim, native | Shipped, Node | Avnaim, Node |
+| --- | ---: | ---: | ---: | ---: |
+| typical | 4.5 | 13.8 | 22.3 | 29.9 |
+| extreme | – | 15.6 | – | 27.2 |
+| degenerate | – | 79.5 | – | 224 |
+| nearly degenerate | – | 204 | – | 438 |
+
+The method's cost grows with how close the input is to degenerate: each pass of its Euclidean loop halves one row, and nearly proportional rows take many passes. The shipped path's cost is constant. Buildings are full of exactly those inputs: walls sharing a face, aligned openings (risk R4). The method needs half the bits, but on these targets it is slower on every class, and it is not adopted for any target. `kernel-variants.yml` times it beside orient2d on every engine.
+
 ## Open
 
-- **Avnaim et al.'s method,** the reference chapter 23.3 names, is not built yet. Its paper's text could not be read here without downloading it, and the only implementation found (DGtal's `AvnaimEtAl2x2DetSignComputer`) is LGPL, readable for method only.
+- **Avnaim et al.'s three-dimensional case** (the paper's section 3: a walk through a lattice of boxes in (b + 1)-bit arithmetic, with the 2 × 2 method at its leaves) is not ported. Its two-dimensional case, the cheaper of the two, already loses to the shipped paths on every input class, so porting the 3 × 3 case cannot change the choice above, and it is left unported.
 - **Newer browsers.** Playwright 1.52's builds are older than current releases. Rerun with a current Playwright, and with each browser's wide-arithmetic flag where it has one, to learn when the wide build reaches a browser by default.
 - **Budgets above 384 bits** (576 and 768 bits, 13 and 18) are unmeasured; the same variants apply to them once they are generated.
 - **Firefox's factor** of five to six over the other engines is not explained.

@@ -154,7 +154,7 @@
           "id": "geom-bench/output-hashes",
           "what": "geom-bench's golden file (piece G06, chapter 23.13's output hashes): the SHA-256 of every benchmark's inputs and results, one line per benchmark, which every benchmark harness checks; pinned here by the SHA-256 of the file's text with LF line ends, so an edit to it is an edit to the store.",
           "file": "projects/engines/geometry/crates/geom-bench/src/golden.txt",
-          "history": [{"sha256": "87aaef0ad599b2af639669d5dce53496ce67b574ec71d1e055594f139130882a", "kind": "corpus", "piece": "G29", "why": "74 new benchmarks: the line-plane point, the 2D crossing and their generated predicates; no existing digest moved"}, {"sha256": "e8a4b32fa50de11e27cfde59f8d624a9fe47420e6b292e73f1fe70c17110175f", "kind": "corpus", "piece": "G42", "why": "168 new benchmarks: the plain-i128 and width-aware limb variants of every generated exact path, and Wide32 at the widths Wide is measured at; no existing digest moved"}], "sha256": "d530f09e84039c2c1e5aea6e8df3c3a3a1f2487052c5c317281be0219abf89d9"
+          "history": [{"sha256": "87aaef0ad599b2af639669d5dce53496ce67b574ec71d1e055594f139130882a", "kind": "corpus", "piece": "G29", "why": "74 new benchmarks: the line-plane point, the 2D crossing and their generated predicates; no existing digest moved"}, {"sha256": "e8a4b32fa50de11e27cfde59f8d624a9fe47420e6b292e73f1fe70c17110175f", "kind": "corpus", "piece": "G42", "why": "172 new benchmarks: the plain-i128 and width-aware limb variants of every generated exact path, Avnaim et al.'s sign of orient2d, and Wide32 at the widths Wide is measured at; no existing digest moved"}], "sha256": "8f8c7427f842f8ef0ee5889a9934899c38c20552676ebdd1a4c88220b44c229a"
         }
       ]
     }

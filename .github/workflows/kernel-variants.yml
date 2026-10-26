@@ -38,7 +38,7 @@ env:
   CARGO_TERM_COLOR: always
   # The benchmarks timed: every generated exact path in each variant on typical and extreme inputs,
   # and the limb integers' sums and products at 256 and 384 bits.
-  CASES: '^generated/[a-z0-9_]+_value(_plain|_limbs)?/(typical|extreme)$|^wide/i(256|384)_(add|mul)/typical$|^wide32/w(8|12)_(add|product)/typical$|^wide32/w3_product_i64/typical$'
+  CASES: '^generated/orient2d_avnaim/(typical|extreme)$|^generated/[a-z0-9_]+_value(_plain|_limbs)?/(typical|extreme)$|^wide/i(256|384)_(add|mul)/typical$|^wide32/w(8|12)_(add|product)/typical$|^wide32/w3_product_i64/typical$'
 
 jobs:
   native:

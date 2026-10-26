@@ -1398,3 +1398,18 @@ pub mod limbs {
         });
     }
 }
+
+/// Avnaim et al.'s sign of orient2d (piece G42), the reference chapter 23.3 names, on inputs of the
+/// classes of the generated `orient2d`'s.
+pub mod avnaim {
+    use geom_num::Sign;
+    use geom_num::grid::P2;
+
+    use super::run;
+
+    /// `avnaim::orient2d` on each triple.
+    #[inline(never)]
+    pub fn orient2d(batch: &[[P2; 3]], out: &mut Vec<Option<Sign>>) {
+        run(batch, out, |&[a, b, c]| geom_num::avnaim::orient2d(a, b, c));
+    }
+}

@@ -95,6 +95,15 @@ def main():
                 row = [f"**{fmt(t)}**" if v == fastest else fmt(t) for v, t in cells.items()]
                 out.append(f"| {p} | {c} | {' | '.join(row)} | {fastest} |")
         out.append("")
+        avnaim = [(c, run["times"].get(f"generated/orient2d_avnaim/{c}"),
+                   run["times"].get(f"generated/orient2d_value/{c}")) for c in CLASSES]
+        avnaim = [a for a in avnaim if a[1] is not None]
+        if avnaim:
+            out.append("| orient2d | Avnaim et al.'s sign | Shipped value |")
+            out.append("| --- | ---: | ---: |")
+            for c, ta, ts in avnaim:
+                out.append(f"| {c} | {fmt(ta)} | {fmt(ts)} |")
+            out.append("")
         pairs = [("wide/i256_mul/typical", "wide32/w8_product/typical"),
                  ("wide/i384_mul/typical", "wide32/w12_product/typical"),
                  ("wide/i256_add/typical", "wide32/w8_add/typical"),

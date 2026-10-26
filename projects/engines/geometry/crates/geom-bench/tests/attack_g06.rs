@@ -1444,6 +1444,12 @@ fn generated_digest(name: &str, class: Class) -> Option<Digest> {
                 .into_iter()
                 .map(|([a, b, c, d], p, q)| gp::ssi_side::value(a, b, c, d, p, q)),
         ),
+        // Avnaim et al.'s sign of orient2d (piece G42): the shipped exact sign on its inputs.
+        "orient2d_avnaim" => fold(
+            i::orient2d_avnaim(class)
+                .into_iter()
+                .map(|[a, b, c]| gp::orient2d::exact(a, b, c)),
+        ),
         // The width-aware limb variant (piece G42): the shipped value on the variant's inputs,
         // so a variant that returned anything else fails its digest.
         "orient2d_value_limbs" => fold(

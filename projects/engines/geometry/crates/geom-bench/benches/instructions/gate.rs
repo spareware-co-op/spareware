@@ -2110,6 +2110,16 @@ pub mod generated {
     }
 
     #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/orient2d_avnaim/typical"))]
+    #[bench::degenerate(leak("generated/orient2d_avnaim/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/orient2d_avnaim/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/orient2d_avnaim/extreme"))]
+    fn orient2d_avnaim(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
     #[bench::typical(leak("generated/orient2d_value_limbs/typical"))]
     #[bench::degenerate(leak("generated/orient2d_value_limbs/degenerate"))]
     #[bench::nearly_degenerate(leak("generated/orient2d_value_limbs/nearly_degenerate"))]
@@ -2224,7 +2234,7 @@ pub mod generated {
         benchmarks = orient2d_filter, orient2d_value, orient3d_filter, orient3d_value, incircle_filter, incircle_value, insphere_filter, insphere_value, plane_side_filter, plane_side_value,
             tpi_weight_filter, tpi_weight_value, tpi_side_filter, tpi_side_value, lpi_weight_filter, lpi_weight_value, lpi_side_filter, lpi_side_value, ssi_weight_filter, ssi_weight_value, ssi_side_filter, ssi_side_value,
             orient2d_value_plain, orient3d_value_plain, incircle_value_plain, insphere_value_plain, plane_side_value_plain, tpi_weight_value_plain, tpi_side_value_plain, lpi_weight_value_plain, lpi_side_value_plain, ssi_weight_value_plain, ssi_side_value_plain,
-            orient2d_value_limbs, orient3d_value_limbs, incircle_value_limbs, insphere_value_limbs, plane_side_value_limbs, tpi_weight_value_limbs, tpi_side_value_limbs, lpi_weight_value_limbs, lpi_side_value_limbs, ssi_weight_value_limbs, ssi_side_value_limbs
+            orient2d_avnaim, orient2d_value_limbs, orient3d_value_limbs, incircle_value_limbs, insphere_value_limbs, plane_side_value_limbs, tpi_weight_value_limbs, tpi_side_value_limbs, lpi_weight_value_limbs, lpi_side_value_limbs, ssi_weight_value_limbs, ssi_side_value_limbs
     );
 }
 

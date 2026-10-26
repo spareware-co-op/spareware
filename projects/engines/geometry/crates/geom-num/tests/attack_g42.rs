@@ -10,6 +10,8 @@
 //! - At every sign combination of the grid's extremes, for every predicate whose inputs are all
 //!   points.
 //! - A rounded input one past its declared range: every variant refuses it.
+//! - Avnaim et al.'s sign of orient2d (`geom_num::avnaim`), the reference chapter 23.3 names,
+//!   gives the shipped exact sign on the same inputs.
 //!
 //! The shipped paths are tested against big integers in `generated_predicates.rs` and
 //! `attack_g29.rs`, so agreement with them is agreement with the exact value. Values of different
@@ -35,6 +37,7 @@
     clippy::similar_names
 )]
 
+use geom_num::avnaim;
 use geom_num::generated::{
     incircle, insphere, limbs, lpi_side, lpi_weight, orient2d, orient3d, plain, plane_side,
     ssi_side, ssi_weight, tpi_side, tpi_weight,
@@ -150,6 +153,7 @@ fn explicit_point_predicates_agree_on_random_inputs() {
     for _ in 0..CASES {
         let (a, b, c, d, e, f) = (g.p2(), g.p2(), g.p2(), g.p2(), g.p2(), g.p2());
         agree!(orient2d, orient2d_value; a, b, c);
+        assert_eq!(avnaim::orient2d(a, b, c), orient2d::exact(a, b, c));
         agree!(incircle, incircle_value; a, b, c, d);
         agree!(ssi_weight, ssi_weight_value; a, b, c, d);
         agree!(ssi_side, ssi_side_value; a, b, c, d, e, f);
@@ -208,6 +212,7 @@ fn explicit_point_predicates_agree_at_every_extreme() {
     for c in extremes(6) {
         let [a, b, e] = p2s(&c);
         agree!(orient2d, orient2d_value; a, b, e);
+        assert_eq!(avnaim::orient2d(a, b, e), orient2d::exact(a, b, e));
     }
     for c in extremes(8) {
         let [a, b, e, f] = p2s(&c);

@@ -383,3 +383,10 @@ pub fn ssi_weight_value_limbs(class: Class) -> Vec<[P2; 4]> {
 pub fn ssi_side_value_limbs(class: Class) -> Vec<([P2; 4], P2, P2)> {
     ssi_three("generated::limbs::ssi_side_value", class)
 }
+
+/// Inputs for `avnaim::orient2d` (piece G42): the class and generator of
+/// `generated::orient2d::value`'s, drawn under the method's own name.
+#[must_use]
+pub fn orient2d_avnaim(class: Class) -> Vec<[P2; 3]> {
+    predicate::orient2d_from("avnaim::orient2d", class)
+}

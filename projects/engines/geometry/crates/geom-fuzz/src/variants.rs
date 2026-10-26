@@ -7,7 +7,8 @@
 //! random bit length. [`check`] evaluates each registered predicate's description (geom-gen's
 //! `PREDICATES`, read by its `predicate_lang::parse`) on those inputs in big integers, and compares
 //! the shipped `value`, the plain-`i128` variant (`geom_num::generated::plain`) and the width-aware
-//! limb variant (`geom_num::generated::limbs`) with that exact value. [`harness`] is `decode` then
+//! limb variant (`geom_num::generated::limbs`) with that exact value, and Avnaim et al.'s sign of
+//! orient2d (`geom_num::avnaim`) with its sign. [`harness`] is `decode` then
 //! `check`, the function every fuzzing engine drives (the crate README sets out the layout).
 //!
 //! Guarantees:
@@ -36,6 +37,7 @@ use core::fmt::Debug;
 
 use geom_gen::predicate_lang::{Axis, Expr, InputKind, Op, parse};
 use geom_gen::predicates::PREDICATES;
+use geom_num::avnaim;
 use geom_num::generated::{
     incircle, insphere, limbs, lpi_side, lpi_weight, orient2d, orient3d, plain, plane_side,
     ssi_side, ssi_weight, tpi_side, tpi_weight,
@@ -378,6 +380,22 @@ pub fn check(inputs: &Inputs) -> Result<(), Finding> {
             .map(|(_, v)| v.clone());
         let args = Args(bound.iter().map(|(_, a)| *a).collect());
         compare(&d.name, &bound, &call(&d.name, &args)?, exact.as_ref())?;
+        if d.name == "orient2d" {
+            let sign = avnaim::orient2d(args.p2(0)?, args.p2(1)?, args.p2(2)?);
+            let want = exact.as_ref().map(|v| match v.sign() {
+                num_bigint::Sign::Minus => geom_num::Sign::Negative,
+                num_bigint::Sign::NoSign => geom_num::Sign::Zero,
+                num_bigint::Sign::Plus => geom_num::Sign::Positive,
+            });
+            if sign != want {
+                return Err(Finding {
+                    law:
+                        "Avnaim et al.'s sign of orient2d is the exact value's sign (chapter 23.3)"
+                            .into(),
+                    detail: format!("inputs: {bound:?}\nreturned: {sign:?}\nexact: {exact:?}"),
+                });
+            }
+        }
     }
     Ok(())
 }
