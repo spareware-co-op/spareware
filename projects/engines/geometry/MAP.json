@@ -4344,6 +4344,7 @@
             "**Nothing is skipped silently.** A source file that defines a function but has no coverage data was never compiled into the measured tests, and fails; so does a crate with no LCOV file at all, and a foundation crate whose code has `if` or `while` but whose data holds no branch record (the run was made without `--branch`).",
             "**A missing foundation module fails.** A crate of [`crate::foundation::FOUNDATION_MODULES`] with code but no file of its foundation module fails, so moving the module cannot drop it from the foundation bar.",
             "**Every mark cites a checked proof.** A `coverage(off)` mark must have a comment right above it citing `proof: <path>::<name>`, the same proof as its ledger entry, and the cited file must define that function as a Kani harness (`#[kani::proof]`) or a Verus `proof fn`. A ledger entry with no mark is stale and fails.",
+            "**Waiting lines are named, and can only go.** A foundation line the tests do not run passes only while the ledger's `awaiting_proof` names it, with the piece that proves it unreachable or tests it ([`excuse_awaiting`]); an entry that matches more or fewer missed lines than it says fails. When every kernel branch outcome of a file with a count of 0 waits so, which of them llvm-cov folded no longer matters, and the file's folding note is not a failure.",
             "**Exact arithmetic.** Percentages are compared as integers: hit × 100 ≥ found × bar."
           ],
           "job": "The coverage gate: line and branch coverage of each kernel crate by its own tests, against the bars of section 28.8, and every `coverage(off)` mark against the proof it cites.",
@@ -5219,7 +5220,7 @@
           "guarantees": [
             "the file is read strictly, so a typo cannot drop an entry silently. An unknown or missing field, a wrong type, an empty or short reason, an unknown kind or tool, an absolute or backslashed path, a zero occurrence count and two entries with one key are all [`LedgerError`]s, never a smaller ledger."
           ],
-          "job": "The quality ledger: every surviving mutant the kernel keeps, with why, and every `coverage(off)` mark, with the proof it cites.",
+          "job": "The quality ledger: every surviving mutant the kernel keeps, with why, every `coverage(off)` mark, with the proof it cites, and every foundation line still waiting for its proof.",
           "method": {
             "links": [
               "https://www.rfc-editor.org/rfc/rfc8259"

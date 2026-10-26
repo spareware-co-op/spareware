@@ -1,6 +1,6 @@
 {
   "schema": "spare-kit-quality-ledger/1",
-  "about": "The geometry kernel's quality ledger (kernel architecture 28.8). survivors: every mutant cargo-mutants makes that the kernel's tests do not catch and the kernel keeps, keyed by file, cargo-mutants' description and the trimmed text of the mutated line, with why; in the foundation set only equivalent mutants (no input through the crate's public interface can tell them from the original) may be kept. coverage_off: every coverage(off) mark in a kernel crate, with the Kani or Verus proof that the code it hides cannot run. geom-test's kernel-quality binary checks both in .github/workflows/kernel-quality.yml; geom_test::ledger documents the format.",
+  "about": "The geometry kernel's quality ledger (kernel architecture 28.8). survivors: every mutant cargo-mutants makes that the kernel's tests do not catch and the kernel keeps, keyed by file, cargo-mutants' description and the trimmed text of the mutated line, with why; in the foundation set only equivalent mutants (no input through the crate's public interface can tell them from the original) may be kept. coverage_off: every coverage(off) mark in a kernel crate, with the Kani or Verus proof that the code it hides cannot run. awaiting_proof: every foundation line the tests do not run yet, by its file, its trimmed text and how many missed lines have it, with the piece that proves it unreachable or tests it (the coverage gate landed before those proofs: owner decision of 2026-10-27); the list can only shrink. geom-test's kernel-quality binary checks both in .github/workflows/kernel-quality.yml; geom_test::quality_ledger documents the format.",
   "survivors": [
     {
       "file": "projects/engines/geometry/crates/geom-num/src/eft.rs",
@@ -91,5 +91,987 @@
       "reason": "The mutant also runs the narrowing check when M equals L, a resize to the same width. Then no limb is dropped (skipping M limbs of an L-limb array leaves none, so all() holds) and the copy r has the very limbs of self, so its sign is self's: the check never returns None, and Wide::resize returns the same Some(r) for every value and every pair of widths."
     }
   ],
-  "coverage_off": []
+  "coverage_off": [],
+  "awaiting_proof": [
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/dd.rs",
+      "line_text": "if let Ok(e) = math::fma(a, b, -p) {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "A double-double defensive arm the tests do not reach: fma failing on finite operands, a non-finite split, or a branch of the exactness shortcut. G41's Kani harnesses for the error-free transforms prove it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/dd.rs",
+      "line_text": "}",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "A double-double defensive arm the tests do not reach: fma failing on finite operands, a non-finite split, or a branch of the exactness shortcut. G41's Kani harnesses for the error-free transforms prove it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/dd.rs",
+      "line_text": "if hi.is_finite() && lo.is_finite() {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "A double-double defensive arm the tests do not reach: fma failing on finite operands, a non-finite split, or a branch of the exactness shortcut. G41's Kani harnesses for the error-free transforms prove it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/dd.rs",
+      "line_text": "let exact = te == 0.0 && (t == 0.0 || t == 1.0 || t == -1.0);",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "A double-double defensive arm the tests do not reach: fma failing on finite operands, a non-finite split, or a branch of the exactness shortcut. G41's Kani harnesses for the error-free transforms prove it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "line_text": "if propagate(&mut theirs).is_none() {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "line_text": "self.lost = true;",
+      "occurrences": 8,
+      "piece": "G41",
+      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "line_text": "if propagate(&mut self.chunks).is_none() {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "line_text": "let Ok(j) = usize::try_from(exponent >> 5) else {",
+      "occurrences": 2,
+      "piece": "G41",
+      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "line_text": "return;",
+      "occurrences": 9,
+      "piece": "G41",
+      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "line_text": "if let Some([first, second, ..]) = self.chunks.get_mut(j..) {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "line_text": "let ok = bump(first, low, negative) && bump(second, high, negative);",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "line_text": "if !ok {",
+      "occurrences": 2,
+      "piece": "G41",
+      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "line_text": "let Some([a, b, c, ..]) = self.chunks.get_mut(j..) else {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "line_text": ".is_ok_and(|part| part < (1 << 32) && bump(chunk, small(part), negative));",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "line_text": "None => false,",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "line_text": "[] => return None,",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "line_text": "if !(12..=65).contains(&shift) {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "line_text": "return None;",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "line_text": "if let (Some(count), Some(chunk)) = (self.counts.get_mut(index), self.chunks.get_mut(index))",
+      "occurrences": 2,
+      "piece": "G41",
+      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "line_text": "}",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "line_text": "let Some(used) = self.used.get_mut(word) else {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "line_text": "sum.lost = true;",
+      "occurrences": 7,
+      "piece": "G41",
+      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "line_text": "let (Some(count), Some(chunk)) = (self.counts.get_mut(index), self.chunks.get_mut(index))",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "line_text": "let Some(n) = LARGE_ADDS.checked_sub(*count) else {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "line_text": "let Ok(pattern) = u64::try_from(index) else {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "line_text": "let Some(significands) = u128::from(fractions).checked_add(implicit) else {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "line_text": "let Ok(position) = usize::try_from(position) else {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/grid.rs",
+      "line_text": "None => Err(NumError::BudgetExceeded),",
+      "occurrences": 2,
+      "piece": "G41",
+      "reason": "The grid's budget arm: a checked step that the tests' inputs never overflow. G41 proves it unreachable, or a test reaches it with inputs at the budget."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "line_text": "let (Some((p_top, p_rest)), Some((q_top, q_rest))) = (P.split_last(), Q.split_last()) else {",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "line_text": "return None;",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "line_text": "let (Some((my, ey)), Some((mx, ex))) = (odd_parts(y), odd_parts(x)) else {",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "line_text": "return super::NAN;",
+      "occurrences": 2,
+      "piece": "G47",
+      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "line_text": "let Some(d) = ey.checked_sub(ex) else {",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "line_text": "let Some(k) = my.checked_div(mx) else {",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "line_text": "return super::NAN; // never: mx ≠ 0 here",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "line_text": "if k >= 1 << 53 {",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "line_text": "return t; // not reachable: q would be a midpoint of the normal range",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "line_text": "_ => Wide192 { hi: 0, lo: 0 },",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "line_text": "if self.is_zero() {",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "line_text": "return if b.is_zero() {",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "line_text": "Ordering::Equal",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "line_text": "Ordering::Less",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "line_text": "if self.sgn ^ b.sgn != 0 {",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "line_text": "}",
+      "occurrences": 2,
+      "piece": "G47",
+      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "line_text": "ex: self.ex.checked_add(1)?,",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "line_text": "..*self",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "line_text": "if self.ex >= 1025 {",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "line_text": "return Some(s * f64::INFINITY); // |a| ≥ 2^1024",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "line_text": "if self.ex <= -1074 {",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "line_text": "if self.ex < -1074 {",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "line_text": "return Some(s * 0.0);",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "line_text": "let mid = self.h == 1 << 63 && self.m == 0 && self.l == 0;",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "line_text": "return Some(if mid { s * 0.0 } else { s * f64::from_bits(1) });",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "line_text": "} else if low > 0x400 || mm != 0 || ll != 0 {",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "line_text": "0.5 // exactly the midpoint: ties to even",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/exp.rs",
+      "line_text": "let Some((last, rest)) = c.split_last() else {",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "The polynomial table is a non-empty constant, so the empty-table arm never runs. G47, which proves exp's error bound, proves it unreachable."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/exp.rs",
+      "line_text": "return (0.0, 0.0);",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "The polynomial table is a non-empty constant, so the empty-table arm never runs. G47, which proves exp's error bound, proves it unreachable."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
+      "line_text": "None => 0,",
+      "occurrences": 2,
+      "piece": "G47",
+      "reason": "hexf reads the kernel's hex float constants, which are all well formed and exact, so its arms for malformed, underflowing or inexact literals never run in the tests. G47 proves them unreachable, or tests the parser with such literals."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
+      "line_text": "if let [_, _, tail @ ..] = rest {",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "hexf reads the kernel's hex float constants, which are all well formed and exact, so its arms for malformed, underflowing or inexact literals never run in the tests. G47 proves them unreachable, or tests the parser with such literals."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
+      "line_text": "}",
+      "occurrences": 2,
+      "piece": "G47",
+      "reason": "hexf reads the kernel's hex float constants, which are all well formed and exact, so its arms for malformed, underflowing or inexact literals never run in the tests. G47 proves them unreachable, or tests the parser with such literals."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
+      "line_text": "None => None,",
+      "occurrences": 2,
+      "piece": "G47",
+      "reason": "hexf reads the kernel's hex float constants, which are all well formed and exact, so its arms for malformed, underflowing or inexact literals never run in the tests. G47 proves them unreachable, or tests the parser with such literals."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
+      "line_text": "if let [_, tail @ ..] = rest {",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "hexf reads the kernel's hex float constants, which are all well formed and exact, so its arms for malformed, underflowing or inexact literals never run in the tests. G47 proves them unreachable, or tests the parser with such literals."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
+      "line_text": "let kept = if drop > 0 {",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "hexf reads the kernel's hex float constants, which are all well formed and exact, so its arms for malformed, underflowing or inexact literals never run in the tests. G47 proves them unreachable, or tests the parser with such literals."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
+      "line_text": "assert!(drop < 128, \"hex float underflows binary64\");",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "hexf reads the kernel's hex float constants, which are all well formed and exact, so its arms for malformed, underflowing or inexact literals never run in the tests. G47 proves them unreachable, or tests the parser with such literals."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
+      "line_text": "let lost = significand & !(u128::MAX << drop);",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "hexf reads the kernel's hex float constants, which are all well formed and exact, so its arms for malformed, underflowing or inexact literals never run in the tests. G47 proves them unreachable, or tests the parser with such literals."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
+      "line_text": "assert!(lost == 0, \"hex float is not exactly a binary64 number\");",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "hexf reads the kernel's hex float constants, which are all well formed and exact, so its arms for malformed, underflowing or inexact literals never run in the tests. G47 proves them unreachable, or tests the parser with such literals."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
+      "line_text": "significand >> drop",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "hexf reads the kernel's hex float constants, which are all well formed and exact, so its arms for malformed, underflowing or inexact literals never run in the tests. G47 proves them unreachable, or tests the parser with such literals."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "line_text": "let Some(e) = e.checked_add(i64::from(above)) else {",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "line_text": "return (super::NAN, super::NAN);",
+      "occurrences": 2,
+      "piece": "G47",
+      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "line_text": "let Some(k) = i.checked_sub(362) else {",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "line_text": "let Some(mut e) = signed(bits >> 52).checked_sub(0x3ff) else {",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "line_text": "return super::NAN;",
+      "occurrences": 2,
+      "piece": "G47",
+      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "line_text": "let Some(scaled) = signed(bits >> 52).checked_sub(0x3ff + 52) else {",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "line_text": "None => super::NAN,",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "line_text": "if self.sgn ^ b.sgn != 0 {",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "line_text": "return Some(ZERO);",
+      "occurrences": 4,
+      "piece": "G47",
+      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "line_text": "}",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "line_text": "ex: self.ex.checked_add(1)?,",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "line_text": "..self",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "line_text": "if sh < 128 {",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "line_text": "None => shl128(1, 128u64.abs_diff(sh)),",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "line_text": "big_b = 0;",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "line_text": "if c == 0 {",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "line_text": "if carry {",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "line_text": "t = t.checked_add(t & 1)?;",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "line_text": "t = (1u128 << 127) | (t >> 1);",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "line_text": "m = m.checked_sub(1)?;",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "line_text": "let m = (bits & MANTISSA) | if biased != 0 { 1u64 << 52 } else { 0 };",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "line_text": "let shift = if t > 11 { i64::from(t.abs_diff(12)) } else { 0 }; // t − 12",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "line_text": "let (Some(&inverse), Some(&log_inverse)) = (",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "line_text": "return None; // never: k is in range, as above",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "line_text": "let Some((first, rest)) = P2_COEFFS.split_first() else {",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "line_text": "let Some((first, rest)) = LOG1P_TAYLOR.split_first() else {",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "line_text": "let Some((last, rest)) = c.split_last() else {",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In sinpi and cospi's port: the empty-table arm, and the nudge and hard-case branches that only inputs of the exceptional list reach. G47 proves them unreachable, or tests them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "line_text": "return (l, 0.0);",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In sinpi and cospi's port: the empty-table arm, and the nudge and hard-case branches that only inputs of the exceptional list reach. G47 proves them unreachable, or tests them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "line_text": "if t & MANTISSA == 0 && (t << 1) != 0 {",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In sinpi and cospi's port: the empty-table arm, and the nudge and hard-case branches that only inputs of the exceptional list reach. G47 proves them unreachable, or tests them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "line_text": "let w = y2.to_bits();",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In sinpi and cospi's port: the empty-table arm, and the nudge and hard-case branches that only inputs of the exceptional list reach. G47 proves them unreachable, or tests them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "line_text": "let nudged = if (w ^ t) >> 63 != 0 {",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In sinpi and cospi's port: the empty-table arm, and the nudge and hard-case branches that only inputs of the exceptional list reach. G47 proves them unreachable, or tests them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "line_text": "t.checked_sub(1)",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In sinpi and cospi's port: the empty-table arm, and the nudge and hard-case branches that only inputs of the exceptional list reach. G47 proves them unreachable, or tests them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "line_text": "t.checked_add(1)",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In sinpi and cospi's port: the empty-table arm, and the nudge and hard-case branches that only inputs of the exceptional list reach. G47 proves them unreachable, or tests them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "line_text": "from_checked_bits(nudged)",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In sinpi and cospi's port: the empty-table arm, and the nudge and hard-case branches that only inputs of the exceptional list reach. G47 proves them unreachable, or tests them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "line_text": "if (x == h.x && iq == h.iq) || (x == -h.x && 2048u64.checked_sub(h.iq) == Some(iq)) {",
+      "occurrences": 1,
+      "piece": "G47",
+      "reason": "In sinpi and cospi's port: the empty-table arm, and the nudge and hard-case branches that only inputs of the exceptional list reach. G47 proves them unreachable, or tests them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": "Some((n, d)) if within_budget(&n, d) => Ok(Plane { n, d }),",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "A plane predicate's budget or degenerate-input arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal). G41 proves it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": "_ => Err(NumError::BudgetExceeded),",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "A plane predicate's budget or degenerate-input arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal). G41 proves it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": "None => Err(NumError::BudgetExceeded),",
+      "occurrences": 3,
+      "piece": "G41",
+      "reason": "A plane predicate's budget or degenerate-input arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal). G41 proves it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": ".or_else(|| classify::<TOTAL_LIMBS>(&self.n, self.d, &x, &w))",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "A plane predicate's budget or degenerate-input arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal). G41 proves it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": "_ => None,",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "A plane predicate's budget or degenerate-input arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal). G41 proves it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": "let (Some(tx), Some(ty), Some(tz)) = (",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "A plane predicate's budget or degenerate-input arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal). G41 proves it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": "return None;",
+      "occurrences": 4,
+      "piece": "G41",
+      "reason": "A plane predicate's budget or degenerate-input arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal). G41 proves it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": "None => None,",
+      "occurrences": 3,
+      "piece": "G41",
+      "reason": "A plane predicate's budget or degenerate-input arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal). G41 proves it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": "let (Some(ux), Some(uy), Some(uz), Some(vx), Some(vy), Some(vz)) = (",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "A plane predicate's budget or degenerate-input arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal). G41 proves it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": "let (Some(nx), Some(ny), Some(nz)) = (",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "A plane predicate's budget or degenerate-input arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal). G41 proves it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": "nx.unsigned_abs() < NORMAL_LIMIT",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "A plane predicate's budget or degenerate-input arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal). G41 proves it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": "&& ny.unsigned_abs() < NORMAL_LIMIT",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "A plane predicate's budget or degenerate-input arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal). G41 proves it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": "&& nz.unsigned_abs() < NORMAL_LIMIT",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "A plane predicate's budget or degenerate-input arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal). G41 proves it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": ".or_else(|| commit::<TOTAL_LIMBS>(&x, &w))",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "A plane predicate's budget or degenerate-input arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal). G41 proves it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": "if w.is_zero() {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "A plane predicate's budget or degenerate-input arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal). G41 proves it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",
+      "line_text": "const fn magnitude_bits(limbs: usize) -> usize {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "magnitude_bits runs only at compile time, in constants, and the filtered orient2d path is off while ORIENT2D_FILTER_FIRST is false (G42's measurement keeps it off), so no test runs these lines. G41 proves or removes them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",
+      "line_text": "let Some(bits) = limbs.checked_mul(64) else {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "magnitude_bits runs only at compile time, in constants, and the filtered orient2d path is off while ORIENT2D_FILTER_FIRST is false (G42's measurement keeps it off), so no test runs these lines. G41 proves or removes them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",
+      "line_text": "return 0;",
+      "occurrences": 2,
+      "piece": "G41",
+      "reason": "magnitude_bits runs only at compile time, in constants, and the filtered orient2d path is off while ORIENT2D_FILTER_FIRST is false (G42's measurement keeps it off), so no test runs these lines. G41 proves or removes them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",
+      "line_text": "let Some(magnitude) = bits.checked_sub(1) else {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "magnitude_bits runs only at compile time, in constants, and the filtered orient2d path is off while ORIENT2D_FILTER_FIRST is false (G42's measurement keeps it off), so no test runs these lines. G41 proves or removes them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",
+      "line_text": "magnitude",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "magnitude_bits runs only at compile time, in constants, and the filtered orient2d path is off while ORIENT2D_FILTER_FIRST is false (G42's measurement keeps it off), so no test runs these lines. G41 proves or removes them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",
+      "line_text": "}",
+      "occurrences": 2,
+      "piece": "G41",
+      "reason": "magnitude_bits runs only at compile time, in constants, and the filtered orient2d path is off while ORIENT2D_FILTER_FIRST is false (G42's measurement keeps it off), so no test runs these lines. G41 proves or removes them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",
+      "line_text": "if ORIENT2D_FILTER_FIRST {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "magnitude_bits runs only at compile time, in constants, and the filtered orient2d path is off while ORIENT2D_FILTER_FIRST is false (G42's measurement keeps it off), so no test runs these lines. G41 proves or removes them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",
+      "line_text": "match generated::orient2d::filter(a, b, c) {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "magnitude_bits runs only at compile time, in constants, and the filtered orient2d path is off while ORIENT2D_FILTER_FIRST is false (G42's measurement keeps it off), so no test runs these lines. G41 proves or removes them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",
+      "line_text": "Some(sign) => Ok(sign),",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "magnitude_bits runs only at compile time, in constants, and the filtered orient2d path is off while ORIENT2D_FILTER_FIRST is false (G42's measurement keeps it off), so no test runs these lines. G41 proves or removes them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",
+      "line_text": "None => orient2d_unfiltered(a, b, c),",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "magnitude_bits runs only at compile time, in constants, and the filtered orient2d path is off while ORIENT2D_FILTER_FIRST is false (G42's measurement keeps it off), so no test runs these lines. G41 proves or removes them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",
+      "line_text": "fn orient2d_unfiltered(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "magnitude_bits runs only at compile time, in constants, and the filtered orient2d path is off while ORIENT2D_FILTER_FIRST is false (G42's measurement keeps it off), so no test runs these lines. G41 proves or removes them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",
+      "line_text": "orient2d_exact(a, b, c)",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "magnitude_bits runs only at compile time, in constants, and the filtered orient2d path is off while ORIENT2D_FILTER_FIRST is false (G42's measurement keeps it off), so no test runs these lines. G41 proves or removes them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/rng.rs",
+      "line_text": "Err(e) => return Err(e),",
+      "occurrences": 2,
+      "piece": "G41",
+      "reason": "The generator's defect arm: it reports RngError::Defect for a word the counter-based generator cannot produce (a non-finite double, an overflowing bound product), so the tests never reach it. G41 proves it unreachable."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/rng.rs",
+      "line_text": "let Ok(x) = Real::new(x) else {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The generator's defect arm: it reports RngError::Defect for a word the counter-based generator cannot produce (a non-finite double, an overflowing bound product), so the tests never reach it. G41 proves it unreachable."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/rng.rs",
+      "line_text": "self.drawn = drawn;",
+      "occurrences": 2,
+      "piece": "G41",
+      "reason": "The generator's defect arm: it reports RngError::Defect for a word the counter-based generator cannot produce (a non-finite double, an overflowing bound product), so the tests never reach it. G41 proves it unreachable."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/rng.rs",
+      "line_text": "self.block = block;",
+      "occurrences": 2,
+      "piece": "G41",
+      "reason": "The generator's defect arm: it reports RngError::Defect for a word the counter-based generator cannot produce (a non-finite double, an overflowing bound product), so the tests never reach it. G41 proves it unreachable."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/rng.rs",
+      "line_text": "return Err(RngError::Defect);",
+      "occurrences": 4,
+      "piece": "G41",
+      "reason": "The generator's defect arm: it reports RngError::Defect for a word the counter-based generator cannot produce (a non-finite double, an overflowing bound product), so the tests never reach it. G41 proves it unreachable."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/rng.rs",
+      "line_text": "Err(e) => break e,",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The generator's defect arm: it reports RngError::Defect for a word the counter-based generator cannot produce (a non-finite double, an overflowing bound product), so the tests never reach it. G41 proves it unreachable."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/rng.rs",
+      "line_text": "let Some(value) = low.checked_add(value) else {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The generator's defect arm: it reports RngError::Defect for a word the counter-based generator cannot produce (a non-finite double, an overflowing bound product), so the tests never reach it. G41 proves it unreachable."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/rng.rs",
+      "line_text": "let Some(product) = (word as u128).checked_mul(bound as u128) else {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The generator's defect arm: it reports RngError::Defect for a word the counter-based generator cannot produce (a non-finite double, an overflowing bound product), so the tests never reach it. G41 proves it unreachable."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/rng.rs",
+      "line_text": "let Some(limit) = bound.wrapping_neg().checked_rem(bound) else {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The generator's defect arm: it reports RngError::Defect for a word the counter-based generator cannot produce (a non-finite double, an overflowing bound product), so the tests never reach it. G41 proves it unreachable."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
+      "line_text": "if let Some(top) = limbs.last_mut() {",
+      "occurrences": 2,
+      "piece": "G41",
+      "reason": "The `if let Some(top)` on a fixed-size limb array always matches, so the else side of its branch never runs. G41's wide-integer harnesses prove it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
+      "line_text": "}",
+      "occurrences": 2,
+      "piece": "G41",
+      "reason": "The `if let Some(top)` on a fixed-size limb array always matches, so the else side of its branch never runs. G41's wide-integer harnesses prove it."
+    }
+  ]
 }

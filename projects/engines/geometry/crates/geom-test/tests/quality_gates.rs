@@ -56,7 +56,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use geom_test::coverage::{self, check_log, check_marks, measure};
+use geom_test::coverage::{self, check_log, check_marks, excuse_awaiting, measure};
 use geom_test::foundation::{Place, Set, place};
 use geom_test::mutants::{self, Mode, judge, read_run};
 use geom_test::quality_ledger::{Kind, Ledger, SCHEMA};
@@ -1280,6 +1280,66 @@ fn a_run_that_warned_about_mismatched_data_fails() {
     assert!(check_log("geom-num", "running 3 tests\ntest result: ok\n").is_none());
     let warned = "warning: 135 functions have mismatched data\n";
     assert!(check_log("geom-num", warned).is_some_and(|w| w.contains("cannot be trusted")));
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads and writes files in a temporary folder, which a WebAssembly test run cannot"
+)]
+#[test]
+fn a_foundation_line_waits_for_its_proof_only_with_an_exact_entry() {
+    let repo = Repo::new("awaiting");
+    let rel = format!("{K}/geom-num/src/lib.rs");
+    // Lines 2, 3 and 4 hold `if x > 0`, `if x > 1` and `if x > 2`; line 3 never runs.
+    repo.write(&rel, &kernel_source(3, 0));
+    let lines = [(1, 1), (2, 1), (3, 0), (4, 1), (5, 1), (6, 1)];
+    let branches = [
+        (2, Some(1)),
+        (2, Some(1)),
+        (3, None),
+        (3, None),
+        (4, Some(1)),
+        (4, Some(1)),
+    ];
+    let plain = lcov_record(&repo, &rel, &lines, &branches, None);
+    let judge_with = |lcov: &str, entries: Vec<Value>| -> Vec<String> {
+        let text = json!({"schema": SCHEMA, "survivors": [], "coverage_off": [], "awaiting_proof": entries})
+            .to_string();
+        let ledger = Ledger::parse(&text).unwrap();
+        let mut reports = vec![measure(&repo.root, "geom-num", lcov).unwrap()];
+        let mut failures = excuse_awaiting(&repo.root, &mut reports, &ledger).unwrap();
+        failures.extend(coverage::judge(&reports));
+        failures
+    };
+    let run = |entries: Vec<Value>| judge_with(&plain, entries);
+    let entry = |text: &str, n: u64| json!({"file": rel, "line_text": text, "occurrences": n, "piece": "G41", "reason": REASON});
+    let missed = "if x > 1 { return 1; }";
+    // No entry: the line and its branch fail the foundation bar.
+    assert_eq!(run(vec![]).len(), 2, "{:?}", run(vec![]));
+    // The exact entry: it passes.
+    assert_eq!(run(vec![entry(missed, 1)]), Vec::<String>::new());
+    // An entry for a line the tests run is stale.
+    let f = run(vec![entry(missed, 1), entry("if x > 2 { return 2; }", 1)]);
+    assert!(f.len() == 1 && f[0].contains("the run has 0"), "{f:?}");
+    // A wrong count excuses nothing.
+    let f = run(vec![entry(missed, 2)]);
+    assert!(f.iter().any(|x| x.contains("the run has 1")), "{f:?}");
+    assert!(f.len() == 3, "{f:?}");
+    // An entry for a crate the run did not measure waits for the run that does.
+    let other = json!({"file": format!("{K}/geom-bool/src/lib.rs"), "line_text": "x", "occurrences": 1, "piece": "G41", "reason": REASON});
+    assert!(run(vec![entry(missed, 1), other]).is_empty());
+    // Folded outcomes among zeros in test and kernel code both: the folding note fails the file,
+    // unless every kernel outcome with a count of 0 waits for its proof.
+    repo.write(&rel, &kernel_source(3, 1));
+    let mut with_test = branches.to_vec();
+    with_test.extend([(9, Some(0)), (9, None)]);
+    let folded = lcov_record(&repo, &rel, &lines, &with_test, Some(with_test.len() - 1));
+    let f = judge_with(&folded, vec![]);
+    assert!(f.iter().any(|x| x.contains("folded")), "{f:?}");
+    assert_eq!(
+        judge_with(&folded, vec![entry(missed, 1)]),
+        Vec::<String>::new()
+    );
 }
 
 // ---------------------------------------------------------------------------------------------

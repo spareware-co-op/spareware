@@ -24,6 +24,11 @@
 //!   citing `proof: <path>::<name>`, the same proof as its ledger entry, and the cited file must
 //!   define that function as a Kani harness (`#[kani::proof]`) or a Verus `proof fn`. A ledger
 //!   entry with no mark is stale and fails.
+//! - **Waiting lines are named, and can only go.** A foundation line the tests do not run passes
+//!   only while the ledger's `awaiting_proof` names it, with the piece that proves it unreachable
+//!   or tests it ([`excuse_awaiting`]); an entry that matches more or fewer missed lines than it
+//!   says fails. When every kernel branch outcome of a file with a count of 0 waits so, which of
+//!   them llvm-cov folded no longer matters, and the file's folding note is not a failure.
 //! - **Exact arithmetic.** Percentages are compared as integers: hit × 100 ≥ found × bar.
 //!
 //! Method: the LCOV tracefile records (`SF`, `DA`, `BRDA`, `BRF`, `end_of_record`) that
@@ -224,6 +229,11 @@ pub struct FileReport {
     pub missed_lines: Vec<usize>,
     /// Lines with a branch outcome the tests never took.
     pub missed_branches: Vec<usize>,
+    /// Missed lines the ledger's `awaiting_proof` excuses, moved here from `missed_lines` by
+    /// [`excuse_awaiting`].
+    pub awaiting_lines: Vec<usize>,
+    /// Lines with untaken branch outcomes the ledger excuses, moved here from `missed_branches`.
+    pub awaiting_branches: Vec<usize>,
     /// Whether the file has `if` or `while` outside test code.
     pub has_branch_sites: bool,
     /// Why its branch count is not exact, when folded outcomes cannot be placed (see
@@ -479,6 +489,8 @@ pub fn measure(repo: &Path, krate: &str, lcov: &str) -> Result<CrateReport, Cove
             counts,
             missed_lines,
             missed_branches,
+            awaiting_lines: Vec::new(),
+            awaiting_branches: Vec::new(),
             has_branch_sites: !scanned.branch_sites.is_empty(),
             branch_note: branches.problem,
         });
@@ -532,10 +544,15 @@ pub fn judge(reports: &[CrateReport]) -> Vec<String> {
             ));
         }
         for x in foundation_files {
-            if let Some(note) = &x.branch_note {
+            let branches_wait = x.missed_branches.is_empty() && !x.awaiting_branches.is_empty();
+            if let Some(note) = &x.branch_note
+                && !branches_wait
+            {
                 failures.push(note.clone());
             }
-            if !meets(x.counts.lines_hit, x.counts.lines_found, FOUNDATION_LINES) {
+            // Every miss the counts show is either listed, or waits for its proof.
+            let lines_wait = x.missed_lines.is_empty() && !x.awaiting_lines.is_empty();
+            if !lines_wait && !meets(x.counts.lines_hit, x.counts.lines_found, FOUNDATION_LINES) {
                 failures.push(format!(
                     "{}: lines {}/{} ({}), below {FOUNDATION_LINES}%; never run: {}",
                     x.file,
@@ -545,11 +562,13 @@ pub fn judge(reports: &[CrateReport]) -> Vec<String> {
                     list(&x.missed_lines)
                 ));
             }
-            if !meets(
-                x.counts.branches_hit,
-                x.counts.branches_found,
-                FOUNDATION_BRANCHES,
-            ) {
+            if !branches_wait
+                && !meets(
+                    x.counts.branches_hit,
+                    x.counts.branches_found,
+                    FOUNDATION_BRANCHES,
+                )
+            {
                 failures.push(format!(
                     "{}: branches {}/{} ({}), below {FOUNDATION_BRANCHES}%; not taken both ways \
                      on lines: {}",
@@ -572,6 +591,116 @@ pub fn judge(reports: &[CrateReport]) -> Vec<String> {
         }
     }
     failures
+}
+
+/// Moves every missed line and branch line of the foundation set that the ledger's
+/// `awaiting_proof` names out of `missed_lines` and `missed_branches`, into `awaiting_lines` and
+/// `awaiting_branches`, so [`judge`] accepts them, and returns every entry that does not fit, one
+/// line each.
+///
+/// An entry fits when exactly `occurrences` lines of its file, missed as lines or as branches,
+/// have its `line_text` as their trimmed text. An entry that matches another number excuses none
+/// of them and fails: fewer means the line runs now, changed or is gone, so the entry must go; more
+/// means a new line no test runs, which needs its own reason. An entry outside the foundation set,
+/// or for a file the run has no data for, fails too. Entries of crates the run did not measure are
+/// left for the run that does.
+///
+/// # Errors
+///
+/// [`CoverageError`] if a file an entry names cannot be read.
+pub fn excuse_awaiting(
+    repo: &Path,
+    reports: &mut [CrateReport],
+    ledger: &Ledger,
+) -> Result<Vec<String>, CoverageError> {
+    let mut failures = Vec::new();
+    for entry in &ledger.awaiting_proof {
+        let what = format!(
+            "{}: awaiting_proof entry {:?} ({})",
+            entry.file, entry.line_text, entry.piece
+        );
+        let Place::Kernel { krate, set } = place(&entry.file) else {
+            failures.push(format!("{what} is not a kernel source file"));
+            continue;
+        };
+        let Some(report) = reports.iter_mut().find(|r| r.krate == krate) else {
+            continue;
+        };
+        if set != Set::Foundation {
+            failures.push(format!(
+                "{what} is outside the foundation set, whose bar needs no entry"
+            ));
+            continue;
+        }
+        let Some(file) = report.files.iter_mut().find(|f| f.file == entry.file) else {
+            failures.push(format!(
+                "{what} names a file the run has no data for: remove it if the file is gone"
+            ));
+            continue;
+        };
+        let text = std::fs::read_to_string(repo.join(&entry.file))
+            .map_err(|e| cov_err(format!("{} cannot be read: {e}", entry.file)))?;
+        let lines: Vec<&str> = text.lines().collect();
+        let matching = |line: usize| {
+            line.checked_sub(1)
+                .and_then(|i| lines.get(i))
+                .is_some_and(|t| t.trim() == entry.line_text)
+        };
+        let found: BTreeSet<usize> = file
+            .missed_lines
+            .iter()
+            .chain(&file.missed_branches)
+            .copied()
+            .filter(|&l| matching(l))
+            .collect();
+        if to_u64(found.len()) != entry.occurrences {
+            failures.push(format!(
+                "{what} expects {} missed line(s) with that text, and the run has {} ({}): remove \
+                 or correct it, or test the line",
+                entry.occurrences,
+                found.len(),
+                list(&found.iter().copied().collect::<Vec<_>>())
+            ));
+            continue;
+        }
+        let (wait, miss): (Vec<usize>, Vec<usize>) =
+            file.missed_lines.iter().partition(|l| found.contains(l));
+        file.awaiting_lines.extend(wait);
+        file.awaiting_lines.sort_unstable();
+        file.missed_lines = miss;
+        let (wait, miss): (Vec<usize>, Vec<usize>) =
+            file.missed_branches.iter().partition(|l| found.contains(l));
+        file.awaiting_branches.extend(wait);
+        file.awaiting_branches.sort_unstable();
+        file.missed_branches = miss;
+    }
+    Ok(failures)
+}
+
+/// The foundation lines that wait for their proofs ([`excuse_awaiting`]), one line per file, for
+/// the gate to print beside its verdict.
+#[must_use]
+pub fn awaiting_notes(reports: &[CrateReport]) -> Vec<String> {
+    let mut out = Vec::new();
+    for r in reports {
+        for x in &r.files {
+            let mut parts = Vec::new();
+            if !x.awaiting_lines.is_empty() {
+                parts.push(format!("lines {}", list(&x.awaiting_lines)));
+            }
+            if !x.awaiting_branches.is_empty() {
+                parts.push(format!("branches on lines {}", list(&x.awaiting_branches)));
+            }
+            if !parts.is_empty() {
+                out.push(format!(
+                    "{}: {} wait for their proofs",
+                    x.file,
+                    parts.join(" and ")
+                ));
+            }
+        }
+    }
+    out
 }
 
 fn list(lines: &[usize]) -> String {

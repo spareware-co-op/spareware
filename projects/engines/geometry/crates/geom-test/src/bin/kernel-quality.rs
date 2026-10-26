@@ -213,9 +213,15 @@ fn judge_coverage(scope: &Scope, dir: &Path, repo: &Repo) -> Result<bool, String
             )),
         }
     }
+    failures.extend(
+        coverage::excuse_awaiting(&root, &mut reports, &ledger).map_err(|e| e.to_string())?,
+    );
     failures.extend(coverage::judge(&reports));
     failures.extend(coverage::check_marks(&root, &ledger).map_err(|e| e.to_string())?);
     print!("{}", coverage::table(&reports));
+    for note in coverage::awaiting_notes(&reports) {
+        println!("awaiting proof: {note}");
+    }
     if failures.is_empty() {
         println!(
             "PASS: {} crate(s) meet section 28.8's coverage bars",

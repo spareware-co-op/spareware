@@ -1,5 +1,5 @@
-//! The quality ledger: every surviving mutant the kernel keeps, with why, and every
-//! `coverage(off)` mark, with the proof it cites.
+//! The quality ledger: every surviving mutant the kernel keeps, with why, every `coverage(off)`
+//! mark, with the proof it cites, and every foundation line still waiting for its proof.
 //!
 //! What it does: [`Ledger::parse`] reads the ledger file
 //! (`projects/engines/geometry/quality-ledger.json`, [`LEDGER_PATH`]) strictly. The mutation gate
@@ -24,6 +24,16 @@
 //! marks), `proof` (`<path>::<name>`, the Kani harness or Verus proof function that shows the code
 //! cannot be reached, which the mark's comment cites too), `tool` (`kani` or `verus`) and
 //! `reason`.
+//!
+//! An `awaiting_proof` entry names a line of the foundation set the tests do not run yet, kept
+//! only until the board piece it names proves the line unreachable or tests it: the coverage gate
+//! (piece G21) landed before the Kani proofs of piece G41, which in turn need it.
+//! Its fields are `file`, `line_text` (the trimmed text of the line, as for survivors),
+//! `occurrences` (how many missed lines of the file have that text, at least 1), `piece` (the
+//! board piece that removes it, such as `G41`) and `reason`. The coverage gate
+//! ([`crate::coverage::excuse_awaiting`]) accepts exactly those missed lines and branches, and
+//! fails an entry that matches any other number of them, so the list can only shrink. The field
+//! may be left out when it is empty.
 //!
 //! Guarantees: the file is read strictly, so a typo cannot drop an entry silently. An unknown or
 //! missing field, a wrong type, an empty or short reason, an unknown kind or tool, an absolute or
@@ -151,6 +161,22 @@ pub struct CoverageOffEntry {
     pub reason: String,
 }
 
+/// One kind of foundation line the tests do not run yet, waiting for the piece that proves it
+/// unreachable or tests it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AwaitingProof {
+    /// The source file, relative to the repository root.
+    pub file: String,
+    /// The trimmed text of the line.
+    pub line_text: String,
+    /// How many missed lines of the file have this text.
+    pub occurrences: u64,
+    /// The board piece that removes the entry, such as `G41`.
+    pub piece: String,
+    /// Why the tests do not run the line, in words.
+    pub reason: String,
+}
+
 /// The whole ledger.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Ledger {
@@ -158,6 +184,8 @@ pub struct Ledger {
     pub survivors: Vec<Survivor>,
     /// `coverage(off)` marks, in file order.
     pub coverage_off: Vec<CoverageOffEntry>,
+    /// Foundation lines waiting for their proofs, in file order.
+    pub awaiting_proof: Vec<AwaitingProof>,
 }
 
 /// Why the ledger could not be read.
@@ -246,6 +274,44 @@ fn reason(map: &Map<String, Value>, at: &str) -> Result<String, LedgerError> {
     Ok(text)
 }
 
+fn occurrences(map: &Map<String, Value>, at: &str) -> Result<u64, LedgerError> {
+    map.get("occurrences")
+        .ok_or_else(|| err(&format!("{at}.occurrences"), "is missing"))?
+        .as_u64()
+        .filter(|&n| n >= 1)
+        .ok_or_else(|| {
+            err(
+                &format!("{at}.occurrences"),
+                "is not a whole number of at least 1",
+            )
+        })
+}
+
+fn awaiting(value: &Value, at: &str) -> Result<AwaitingProof, LedgerError> {
+    let map = object(
+        value,
+        at,
+        &["file", "line_text", "occurrences", "piece", "reason"],
+    )?;
+    let piece = string(map, at, "piece")?;
+    let number = piece
+        .strip_prefix('G')
+        .map(|rest| rest.trim_end_matches(|c: char| c.is_ascii_lowercase()));
+    if !number.is_some_and(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit())) {
+        return Err(err(
+            &format!("{at}.piece"),
+            format!("{piece:?} is not a board piece such as G41"),
+        ));
+    }
+    Ok(AwaitingProof {
+        file: path(map, at, "file")?,
+        line_text: string(map, at, "line_text")?,
+        occurrences: occurrences(map, at)?,
+        piece,
+        reason: reason(map, at)?,
+    })
+}
+
 fn survivor(value: &Value, at: &str) -> Result<Survivor, LedgerError> {
     let map = object(
         value,
@@ -259,17 +325,7 @@ fn survivor(value: &Value, at: &str) -> Result<Survivor, LedgerError> {
             "reason",
         ],
     )?;
-    let occurrences = map
-        .get("occurrences")
-        .ok_or_else(|| err(&format!("{at}.occurrences"), "is missing"))?
-        .as_u64()
-        .filter(|&n| n >= 1)
-        .ok_or_else(|| {
-            err(
-                &format!("{at}.occurrences"),
-                "is not a whole number of at least 1",
-            )
-        })?;
+    let occurrences = occurrences(map, at)?;
     let kind_text = string(map, at, "kind")?;
     let kind = Kind::parse(&kind_text).ok_or_else(|| {
         err(
@@ -329,7 +385,13 @@ impl Ledger {
         let map = object(
             &root,
             "(file)",
-            &["schema", "about", "survivors", "coverage_off"],
+            &[
+                "schema",
+                "about",
+                "survivors",
+                "coverage_off",
+                "awaiting_proof",
+            ],
         )?;
         let schema = string(map, "(file)", "schema")?;
         if schema != SCHEMA {
@@ -352,6 +414,16 @@ impl Ledger {
                 .coverage_off
                 .push(coverage_off(value, &format!("coverage_off, entry {i}"))?);
         }
+        if let Some(value) = map.get("awaiting_proof") {
+            let entries = value
+                .as_array()
+                .ok_or_else(|| err("awaiting_proof", "is not a list"))?;
+            for (i, value) in entries.iter().enumerate() {
+                ledger
+                    .awaiting_proof
+                    .push(awaiting(value, &format!("awaiting_proof, entry {i}"))?);
+            }
+        }
         let mut keys = BTreeSet::new();
         for (i, s) in ledger.survivors.iter().enumerate() {
             if !keys.insert(s.key()) {
@@ -368,6 +440,16 @@ impl Ledger {
                 return Err(err(
                     &format!("coverage_off, entry {i}"),
                     "has the same file and item as an earlier entry",
+                ));
+            }
+        }
+        let mut waiting = BTreeSet::new();
+        for (i, a) in ledger.awaiting_proof.iter().enumerate() {
+            if !waiting.insert((a.file.clone(), a.line_text.clone())) {
+                return Err(err(
+                    &format!("awaiting_proof, entry {i}"),
+                    "has the same file and line_text as an earlier entry: merge them and count \
+                     occurrences",
                 ));
             }
         }
@@ -447,5 +529,44 @@ mod tests {
         assert!(
             Ledger::parse(&format!("{{\"schema\": \"{SCHEMA}\", \"survivors\": []}}")).is_err()
         );
+    }
+
+    fn with_awaiting(entries: &str) -> String {
+        format!(
+            "{{\"schema\": \"{SCHEMA}\", \"survivors\": [], \"coverage_off\": [], \
+             \"awaiting_proof\": [{entries}]}}"
+        )
+    }
+
+    fn awaiting_fields() -> String {
+        format!(
+            "{{\"file\": \"a/src/b.rs\", \"line_text\": \"return None;\", \"occurrences\": 2, \
+             \"piece\": \"G41\", \"reason\": \"{REASON}\"}}"
+        )
+    }
+
+    #[test]
+    fn awaiting_entries_read_strictly() {
+        let good = awaiting_fields();
+        let ledger = Ledger::parse(&with_awaiting(&good)).unwrap();
+        assert_eq!(ledger.awaiting_proof.len(), 1);
+        assert_eq!(ledger.awaiting_proof[0].occurrences, 2);
+        assert_eq!(ledger.awaiting_proof[0].piece, "G41");
+        assert!(Ledger::parse(&with_awaiting(&good.replace("\"G41\"", "\"G41a\""))).is_ok());
+        for bad in [
+            good.replace("\"G41\"", "\"41\""),
+            good.replace("\"G41\"", "\"G\""),
+            good.replace("\"G41\"", "\"G4x1\""),
+            good.replace("\"occurrences\": 2", "\"occurrences\": 0"),
+            good.replace(REASON, "short"),
+            good.replace("a/src/b.rs", "/a/src/b.rs"),
+            good.replace("\"piece\"", "\"pieces\""),
+            format!("{good}, {good}"),
+        ] {
+            assert!(Ledger::parse(&with_awaiting(&bad)).is_err(), "{bad}");
+        }
+        // Left out, it is empty.
+        let none = format!("{{\"schema\": \"{SCHEMA}\", \"survivors\": [], \"coverage_off\": []}}");
+        assert_eq!(Ledger::parse(&none).unwrap().awaiting_proof, Vec::new());
     }
 }

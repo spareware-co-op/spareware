@@ -21,7 +21,8 @@ name: Kernel quality
 #   measured by its own tests with cargo-llvm-cov, lines and branches, on the pinned nightly that
 #   branch coverage needs. The foundation set needs 100% of lines and branches, every other kernel
 #   crate 90% of lines, and every `coverage(off)` mark must cite a Kani or Verus proof that the
-#   ledger records. A pull request measures the crates it changes and every kernel crate that
+#   ledger records. A foundation line the tests do not run yet passes only while the ledger's
+#   awaiting_proof list names it, with the piece that proves it unreachable or tests it. A pull request measures the crates it changes and every kernel crate that
 #   depends on one of them; the weekly run measures all.
 # - The gates' own proof, on every pull request that touches the kernel and weekly: geom-test's
 #   seeded_gates test runs the real cargo-mutants and cargo-llvm-cov on a seeded crate and shows
