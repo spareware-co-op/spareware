@@ -689,7 +689,7 @@ fn within_is_the_shipped_range_check_token_for_token() {
 // The sign, plane and crossing twins (piece G39).
 
 const SIGN_TWIN: &str = include_str!("../../geom-num/verus/sign.rs");
-const SIGN: &str = include_str!("../../geom-num/src/sign.rs");
+const SIGN_SOURCE: &str = include_str!("../../geom-num/src/sign.rs");
 const PLANE_TWIN: &str = include_str!("../../geom-num/verus/plane.rs");
 const PLANE: &str = include_str!("../../geom-num/src/plane.rs");
 const CROSSING_TWIN: &str = include_str!("../../geom-num/verus/crossing.rs");
@@ -707,7 +707,7 @@ type HandTwin = (
 );
 
 const HAND_TWINS: [HandTwin; 3] = [
-    ("sign", SIGN_TWIN, SIGN, &["mul"], &["of_i128"]),
+    ("sign", SIGN_TWIN, SIGN_SOURCE, &["mul"], &["of_i128"]),
     (
         "plane",
         PLANE_TWIN,
