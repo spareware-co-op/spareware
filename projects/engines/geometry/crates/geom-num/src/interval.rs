@@ -89,8 +89,9 @@
 //! non-negative itself.
 //!
 //! Bounded proofs, and what is only tested: Kani proves (piece G41, chapter 28.7) that `new`,
-//! `add`, `sub`, `mul` and `square` enclose the rounded result or refuse, never panicking, for
-//! every finite double or pair of them. `div` is proven for every finite dividend over six
+//! `add`, `sub` and `mul` enclose the rounded result or refuse, never panicking, for every finite
+//! double or pair of them. `square` is proven for every finite double whose significand has at
+//! most 14 bits: squaring a symbolic 53-bit significand ran past CI's hour. `div` is proven for every finite dividend over six
 //! divisors: ±0, refused; the smallest subnormal, whose quotients overflow; the largest double,
 //! whose quotients underflow; and 3 and −0.1, inexact of either sign. Over every divisor at once
 //! the solver ran past CI's hour (four corner quotients, each a 53-bit division). Every other
@@ -810,10 +811,14 @@ mod proofs {
         }
     }
 
-    /// `square` of a point is never negative and encloses the rounded square.
+    /// `square` of a point is never negative and encloses the rounded square, for every finite
+    /// double whose significand has at most 14 bits (any sign and exponent field, the low 39
+    /// fraction bits zero). Over every finite double the solver ran past CI's hour: squaring a
+    /// symbolic 53-bit significand is a hard problem for it.
     #[kani::proof]
     fn square_is_never_negative_and_encloses() {
-        let x = finite();
+        let x = f64::from_bits(kani::any::<u64>() & !((1 << 39) - 1));
+        kani::assume(x.is_finite());
         if let Ok(r) = Interval::point(x).unwrap().square() {
             assert!(r.lo() >= 0.0 && r.lo() <= r.hi());
             if (x * x).is_finite() {
