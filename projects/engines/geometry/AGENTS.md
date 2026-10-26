@@ -132,6 +132,7 @@ Run everything from the repository root. The first build of the whole kernel tak
 | `cargo bolero test orient2d_fuzz --package geom-fuzz --engine libfuzzer` and `cargo kani --tests -p geom-fuzz --harness orient2d_proof --exact`, on Linux or macOS (the crate README says how to install both) | A fuzz target that finds a case breaking its law, or a bounded proof that fails | `kernel-fuzz.yml` (with ClusterFuzzLite) |
 | `cargo run --locked -p geom-test --bin golden -- check` | A golden outside the store, a pinned file changed, or a golden edited without its record | `kernel-golden.yml` (and every golden on every target in `kernel.yml`) |
 | `cargo run --locked --release -p geom-test --bin guard -- prove` | The toolchain guard not tripping: `libm`'s `sin` changed by one bit must fail the golden `geom-num/determinism` | `kernel.yml` (the guard job) |
+| `verus --crate-type=lib projects/engines/geometry/crates/geom-gen/generated/verus-orient2d.rs`, with the Verus release `kernel-dev.yml` pins (Linux, macOS or Windows) | A Verus twin that no longer verifies; `crates/geom-gen/tests/verus_twin.rs` fails if a twin is not the shipped code token for token | `kernel-dev.yml` (the verus job) |
 
 If you touch `geom-bench`, also run `cargo clippy --locked --target x86_64-unknown-linux-gnu -p geom-bench --all-targets -- -D warnings` (`rustup target add x86_64-unknown-linux-gnu`; its instruction-count benchmarks compile only for Linux). On another platform the count gates themselves cannot run; `geom-bench`'s crate header explains how to run them on Linux.
 

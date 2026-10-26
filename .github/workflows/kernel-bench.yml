@@ -470,7 +470,7 @@ jobs:
                 find "$GUNGRAUN_HOME" -path "*/$group/*$name*" -name 'callgrind*.out*' \
                   | grep -- "$id" | sort | while read -r out; do
                     echo "--- $out"
-                    callgrind_annotate --threshold=99 "$out" | head -n 60
+                    callgrind_annotate --inclusive=yes --threshold=100 --auto=no "$out" | head -n 80
                   done
               done
 

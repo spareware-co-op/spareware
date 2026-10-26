@@ -1642,7 +1642,7 @@
         },
         {
           "cost": "linear in the number of steps.",
-          "does": "[`predicate_module`] writes a predicate's module from its [`Derivation`]: a header with the description, the bit-range certificate and the error analysis, the error constant, `filter` (the `f64` evaluation and its decision), and `value` and `exact` (the checked integer evaluation). [`parent_module`] writes the module that declares them and holds the helpers they share. Both are formatted as rustfmt formats them, so `cargo fmt --check` passes on the committed files.",
+          "does": "[`predicate_module`] writes a predicate's module from its [`Derivation`]: a header with the description, the bit-range certificate and the error analysis, the error constant, `filter` (the `f64` evaluation and its decision), and `value` and `exact` (the checked integer evaluation). [`parent_module`] writes the module that declares them and holds the helpers they share. Both are formatted as rustfmt formats them, so `cargo fmt --check` passes on the committed files. [`verus_twin`] writes a Verus-annotated twin of a predicate's exact path (chapter 28.7; piece G36): a model of the grid's types, the description's value over the integers, and `value` written by the same function as the module's, with a `#[verus_spec]` attribute and a `proof!` hint before each product, so with those removed it is the shipped `value` token for token.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-gen/src/predicate_emit.rs",
           "guarantees": [
