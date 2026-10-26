@@ -1586,7 +1586,7 @@
         },
         {
           "cost": "linear in the description's steps; no allocation beyond the text.",
-          "does": "a generated filter computes the description's steps in `f64` on the coordinate differences, the scale S from the axis maxima, and the bound `fl(C · scale)`, and answers when the computed value is beyond the bound. [`gappa_problem`] states exactly that computation in Gappa's binary64 with rounding to nearest, beside the same steps evaluated exactly, on whole-number differences bounded by their axis maxima, and asks Gappa to prove that the error is within K · S and the computed bound within a relative error R of C · S, with K = C · (1 − R): together, |error| ≤ K · S ≤ bound, so an answer has the exact sign. [`fptaylor_problem`] states the normalised problem for `FPTaylor`, every difference in [−1, 1] so that S is 1, with the same K as the bound HOL Light checks its certificate against. Both problems carry Gappa's hints and HOL Light's bound in their text, so the tools' runs need nothing else.",
+          "does": "a generated filter computes the description's steps in `f64` on the coordinate differences, the scale S from the axis maxima, and the bound `fl(C · scale)`, and answers when the computed value is beyond the bound. [`gappa_problem`] states exactly that computation in Gappa's binary64 with rounding to nearest, beside the same steps evaluated exactly, on whole-number differences bounded by their axis maxima, and asks Gappa to prove that the error is within K · S and the computed bound within a relative error R of C · S, with K = C · (1 − R): together, |error| ≤ K · S ≤ bound, so an answer has the exact sign. [`fptaylor_problem`] states the normalised problem for `FPTaylor`, every difference in [−1, 1] so that S is 1, with the same K, which HOL Light compares the certificate's bound with. Both problems carry Gappa's hints and HOL Light's bound in their text, so the tools' runs need nothing else.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-gen/src/predicate_certificates.rs",
           "guarantees": [
@@ -1597,10 +1597,10 @@
           "job": "The problems that machine-check a predicate filter's error bound (chapter 28.6 of the kernel architecture; piece G35): the filter's claim stated for Gappa, whose proof Rocq checks, and for `FPTaylor`, whose certificate HOL Light checks.",
           "method": {
             "links": [
-              "doi:10.1051/ita:2007005",
-              "doi:10.1145/3230733"
+              "https://doi.org/10.1051/ita:2007005",
+              "https://doi.org/10.1145/3230733"
             ],
-            "text": "Melquiond and Pion's certified semi-static filters, Gappa proofs of a homogeneous predicate's error as a multiple of the product of its inputs' maxima (*Formally certified floating-point filters for homogeneous geometric predicates*, RAIRO Theoretical Informatics and Applications 41 (2007), doi:10.1051/ita:2007005), with Gappa's `LIN` predicate (`a // b`) in place of their special rounding operators, which current Gappa no longer has; and `FPTaylor`'s symbolic Taylor forms on the normalised problem (Solovyev et al., *Rigorous Estimation of Floating-Point Round-off Errors with Symbolic Taylor Expansions*, ACM TOPLAS 41 (2018), doi:10.1145/3230733)."
+            "text": "Melquiond and Pion's certified semi-static filters, Gappa proofs of a homogeneous predicate's error as a multiple of the product of its inputs' maxima (*Formally certified floating-point filters for homogeneous geometric predicates*, RAIRO Theoretical Informatics and Applications 41 (2007), <https://doi.org/10.1051/ita:2007005>), with Gappa's `LIN` predicate (`a // b`) in place of their special rounding operators, which current Gappa no longer has; and `FPTaylor`'s symbolic Taylor forms on the normalised problem (Solovyev et al., *Rigorous Estimation of Floating-Point Round-off Errors with Symbolic Taylor Expansions*, ACM TOPLAS 41 (2018), <https://doi.org/10.1145/3230733>)."
           },
           "path": "geom_gen::predicate_certificates",
           "provenance": [],

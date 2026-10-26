@@ -52,16 +52,15 @@ Runs of `kernel-certificates.yml` on pull request #262.
 | 40306012279 | the same, with `Print Assumptions` | only the four classical-reals axioms | only the four classical-reals axioms |
 | 40308045670 | Gappa and Rocq on the generated problems, with the goals stated: error within K · S, bound within R | proved; Rocq checked | proved; Rocq checked |
 | 40304947857 | FPTaylor v0.9.3, bound only | 4u + 16u² (0x1.0000000000002p-51), certificate written | 22.1u (0x1.617d000000003p-49), certificate written |
+| 40325231942 | FPTaylor v0.9.3 and HOL Light (OCaml 4.11, the verifier's `max_dim` raised to 9) | certificate checked in 1 s; its bound, 4u + 16u², above K = 4u + 12u² | certificate checked in 177 s; its bound within K |
+
+Run 40325231942's job still failed, on its own last step: the HOL Light toplevel prints its prompt, `# `, before some lines, and the step looked for lines starting "checked". It now allows the prompt, and run 40332187133 passed: both certificates checked, orient2d's bound above K and orient3d's within it, as above.
 
 What the numbers say:
 
 - Gappa's error bound equals the derivation's E for orient2d, and exceeds it for orient3d only in the second-order term, by 0.75u², from rounding its intervals outward. The computed bound is at least (28u + 140u²) · S for orient3d, 87.25u² · S above Gappa's error, and (4u + 16u²) · S for orient2d, 14u² · S above (both checked in exact rationals).
 - FPTaylor's own bound for orient2d is 4u + 16u²: its first-order term, 4u, and second-order term, 2u², summed upward in doubles. That is 4u² above K = 4u + 12u², so HOL Light can check FPTaylor's certificate but not, from it, that K bounds the error; Gappa's proof does (4u + 2u²). Run 40316957754 showed this (HOL Light's comparison with K failed for orient2d), and showed orient3d's nine variables beyond the verifier's eight.
 - FPTaylor finds orient3d's worst error near 22.1u · S, not 28u: the derivation adds every operation's worst case at once, and no input reaches them all together. The constant is sound and about 27% larger than it needs to be. Tightening it would change the filter's answers on some inputs, so it would be a new generator version (chapter 26.2), not an edit; it is noted for G40.
-
-| 40325231942 | FPTaylor v0.9.3 and HOL Light (OCaml 4.11, the verifier's `max_dim` raised to 9) | certificate checked in 1 s; its bound, 4u + 16u², above K = 4u + 12u² | certificate checked in 177 s; its bound within K |
-
-That run's job still failed, on its own last step: the HOL Light toplevel prints its prompt, `# `, before some lines, and the step looked for lines starting "checked"; it now allows the prompt.
 
 ## 5. Options and recommendation
 
