@@ -1,0 +1,4 @@
+# Corpus and crash files are fuzzers' raw bytes: never convert their line endings or diff them as text.
+* binary
+# These notes themselves are text.
+.gitattributes text diff merge eol=lf

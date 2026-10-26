@@ -1,0 +1,187 @@
+{
+ "version": 0.6,
+ "generator": "Overpass API 0.7.62.1",
+ "elements": [
+  {
+   "type": "way",
+   "id": 1,
+   "nodes": [
+    101,
+    102,
+    103
+   ],
+   "tags": {
+    "highway": "residential",
+    "lanes": "2;3",
+    "maxspeed": "50 mph",
+    "oneway": "true",
+    "cycleway:both": "separate",
+    "bus:lanes": "|designated|"
+   }
+  },
+  {
+   "type": "way",
+   "id": 2,
+   "nodes": [
+    103,
+    104
+   ],
+   "tags": {
+    "highway": "tertiary",
+    "lanes": "two",
+    "maxspeed": "signals",
+    "oneway": "1",
+    "lanes:psv": "bus"
+   }
+  },
+  {
+   "type": "way",
+   "id": 3,
+   "nodes": [
+    104,
+    105
+   ],
+   "tags": {
+    "highway": "motorway_link",
+    "oneway": "no",
+    "lanes": "1"
+   }
+  },
+  {
+   "type": "way",
+   "id": 4,
+   "nodes": [
+    105,
+    106
+   ],
+   "tags": {
+    "highway": "secondary",
+    "junction": "circular",
+    "maxspeed": "40"
+   }
+  },
+  {
+   "type": "way",
+   "id": 5,
+   "nodes": [
+    106,
+    101
+   ],
+   "tags": {
+    "highway": "primary",
+    "oneway": "-1",
+    "lanes": "3",
+    "lanes:forward": "2",
+    "cycleway:right": "track"
+   }
+  },
+  {
+   "type": "way",
+   "id": 6,
+   "nodes": [
+    101
+   ],
+   "tags": {
+    "highway": "residential"
+   }
+  },
+  {
+   "type": "way",
+   "id": 7,
+   "tags": {
+    "highway": "residential"
+   }
+  },
+  {
+   "type": "way",
+   "id": 8,
+   "nodes": [
+    101,
+    103
+   ],
+   "tags": {
+    "highway": "residential",
+    "area": "no",
+    "access": "private"
+   }
+  },
+  {
+   "type": "way",
+   "id": 9,
+   "nodes": [
+    102,
+    105
+   ],
+   "tags": {
+    "highway": "service",
+    "service": "alley",
+    "access": "private"
+   }
+  },
+  {
+   "type": "way",
+   "id": 10,
+   "nodes": [
+    102,
+    106
+   ]
+  },
+  {
+   "type": "node",
+   "id": 101,
+   "lat": -37.0701,
+   "lon": 174.9401
+  },
+  {
+   "type": "node",
+   "id": 102,
+   "lat": -37.0702,
+   "lon": 174.9411,
+   "tags": {
+    "highway": "stop"
+   }
+  },
+  {
+   "type": "node",
+   "id": 103,
+   "lat": -37.0702,
+   "lon": 174.9421,
+   "tags": {
+    "highway": "traffic_signals"
+   }
+  },
+  {
+   "type": "node",
+   "id": 104,
+   "lat": -37.0712,
+   "lon": 174.9421
+  },
+  {
+   "type": "node",
+   "id": 105,
+   "lat": -37.0712,
+   "lon": 174.9411,
+   "tags": {
+    "highway": "stop"
+   }
+  },
+  {
+   "type": "node",
+   "id": 106,
+   "lat": -37.0712,
+   "lon": 174.9401,
+   "tags": {
+    "highway": "traffic_signals"
+   }
+  },
+  {
+   "type": "relation",
+   "id": 5,
+   "members": []
+  },
+  {
+   "type": "node",
+   "id": 107
+  }
+ ]
+}

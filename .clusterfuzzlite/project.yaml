@@ -1,0 +1,4 @@
+# ClusterFuzzLite's project file for the geometry kernel's fuzz targets (kernel architecture,
+# chapter 28.5; projects/engines/geometry/crates/geom-fuzz/README.md). ClusterFuzzLite's Rust
+# support takes the address sanitizer only.
+language: rust
