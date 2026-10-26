@@ -34,11 +34,11 @@
 //! Method: Melquiond and Pion's certified semi-static filters, Gappa proofs of a homogeneous
 //! predicate's error as a multiple of the product of its inputs' maxima (*Formally certified
 //! floating-point filters for homogeneous geometric predicates*, RAIRO Theoretical Informatics and
-//! Applications 41 (2007), doi:10.1051/ita:2007005), with Gappa's `LIN` predicate (`a // b`) in
-//! place of their special rounding operators, which current Gappa no longer has; and `FPTaylor`'s
-//! symbolic Taylor forms on the normalised problem (Solovyev et al., *Rigorous Estimation of
-//! Floating-Point Round-off Errors with Symbolic Taylor Expansions*, ACM TOPLAS 41 (2018),
-//! doi:10.1145/3230733).
+//! Applications 41 (2007), <https://doi.org/10.1051/ita:2007005>), with Gappa's `LIN` predicate
+//! (`a // b`) in place of their special rounding operators, which current Gappa no longer has; and
+//! `FPTaylor`'s symbolic Taylor forms on the normalised problem (Solovyev et al., *Rigorous
+//! Estimation of Floating-Point Round-off Errors with Symbolic Taylor Expansions*, ACM TOPLAS 41
+//! (2018), <https://doi.org/10.1145/3230733>).
 //!
 //! Cost: linear in the description's steps; no allocation beyond the text.
 
