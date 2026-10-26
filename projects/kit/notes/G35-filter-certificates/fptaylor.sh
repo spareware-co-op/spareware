@@ -19,9 +19,11 @@ work=$(mktemp -d)
 # The image's user installs system packages through sudo; a root user needs none.
 SUDO=$(command -v sudo || true)
 $SUDO apt-get update -qq
-$SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git gcc make m4 >/dev/null
+$SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git gcc make m4 pkg-config libpcre2-dev >/dev/null
 eval "$(opam env)"
+opam update -q >/dev/null
 opam install -y num camlp5 ocamlfind >/dev/null
+opam list --installed | grep -E '^(ocaml|num|camlp5|ocamlfind) '
 ocaml -version
 camlp5 -v 2>&1 | head -n 1
 
