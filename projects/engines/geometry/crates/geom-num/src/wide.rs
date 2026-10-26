@@ -454,3 +454,75 @@ mod tests {
         assert_eq!(Wide::<6>::min_value().resize::<4>(), None);
     }
 }
+
+/// Bounded proofs (chapter 28.7; piece G41) at four limbs (`I256`): no panic and no overflow in
+/// the checked arithmetic, for every pair of values, with each result checked against a second
+/// computation where Kani can afford one. `geom-num`'s Verus twin (`verus/wide.rs`, pieces G37 to
+/// G39, where present) proves exactness for every width; these harnesses prove the shipped
+/// machine code free of panics and overflow.
+#[cfg(kani)]
+mod proofs {
+    use super::*;
+
+    /// A symbolic `I256`.
+    fn any_i256() -> I256 {
+        Wide::from_le_limbs([kani::any(), kani::any(), kani::any(), kani::any()])
+    }
+
+    /// `checked_add` and `checked_sub` never panic, and agree with each other: a + b − b is a
+    /// whenever a + b fits.
+    #[kani::proof]
+    fn add_and_sub_never_panic_and_invert() {
+        let (a, b) = (any_i256(), any_i256());
+        if let Some(s) = a.checked_add(&b) {
+            assert!(s.checked_sub(&b) == Some(a));
+        }
+        let _ = a.checked_sub(&b);
+    }
+
+    /// `checked_neg` never panics, refuses exactly the most negative value, and is its own
+    /// inverse.
+    #[kani::proof]
+    fn neg_refuses_exactly_the_minimum() {
+        let a = any_i256();
+        match a.checked_neg() {
+            Some(n) => assert!(n.checked_neg() == Some(a)),
+            None => assert!(a == Wide::min_value()),
+        }
+    }
+
+    /// The order never panics and is antisymmetric, with the sign agreeing with the order against
+    /// zero.
+    #[kani::proof]
+    fn order_and_sign_agree() {
+        let (a, b) = (any_i256(), any_i256());
+        assert!(a.cmp(&b) == b.cmp(&a).reverse());
+        let zero = Wide::from_i128(0);
+        let sign = match a.cmp(&zero) {
+            Ordering::Less => Sign::Negative,
+            Ordering::Equal => Sign::Zero,
+            Ordering::Greater => Sign::Positive,
+        };
+        assert!(a.signum() == sign && a.is_negative() == (sign == Sign::Negative));
+    }
+
+    /// `from_i128` and `to_i128` are inverse for every `i128`, and `resize` to two limbs and back
+    /// keeps every value it accepts.
+    #[kani::proof]
+    fn i128_conversions_and_resize_round_trip() {
+        let v: i128 = kani::any();
+        let w = I256::from_i128(v);
+        assert!(w.to_i128() == Some(v));
+        let a = any_i256();
+        if let Some(narrow) = a.resize::<2>() {
+            assert!(narrow.resize::<4>() == Some(a));
+        }
+    }
+
+    /// `checked_mul` never panics or overflows, for every pair of `I256` values.
+    #[kani::proof]
+    fn mul_never_panics() {
+        let (a, b) = (any_i256(), any_i256());
+        let _ = a.checked_mul(&b);
+    }
+}

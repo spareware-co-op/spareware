@@ -569,3 +569,137 @@ mod tests {
         assert_eq!(q2(COORD_MAX), (1_759_218_604, false));
     }
 }
+
+/// Bounded proofs (chapter 28.7; piece G41): Kani checks every case of each harness's domain,
+/// with its overflow, bounds and panic checks on, and each assertion below.
+#[cfg(kani)]
+mod proofs {
+    use super::*;
+
+    /// One of the three steps, by a symbolic byte.
+    fn step(b: u8) -> GridStep {
+        match b % 3 {
+            0 => GridStep::Q0,
+            1 => GridStep::Q1,
+            _ => GridStep::Q2,
+        }
+    }
+
+    /// A symbolic coordinate: any value of the frame.
+    fn coord() -> Coord {
+        let v: i64 = kani::any();
+        kani::assume(v >= -COORD_MAX && v <= COORD_MAX);
+        Coord(v)
+    }
+
+    /// `Coord::new` accepts exactly −(2^40 − 1) ..= 2^40 − 1, keeps the value, and refuses every
+    /// other `i64` with that value, for every `i64`.
+    #[kani::proof]
+    fn coord_new_accepts_exactly_the_frame() {
+        let v: i64 = kani::any();
+        match Coord::new(v) {
+            Ok(c) => assert!(c.get() == v && v >= -COORD_MAX && v <= COORD_MAX),
+            Err(e) => assert!(
+                e == NumError::OutOfRange {
+                    value: i128::from(v)
+                } && (v > COORD_MAX || v < -COORD_MAX)
+            ),
+        }
+    }
+
+    /// `Coord::from_i128` does the same for every `i128`.
+    #[kani::proof]
+    fn coord_from_i128_accepts_exactly_the_frame() {
+        let v: i128 = kani::any();
+        match Coord::from_i128(v) {
+            Ok(c) => {
+                assert!(i128::from(c.get()) == v && v >= COORD_MIN_I128 && v <= COORD_MAX_I128)
+            }
+            Err(e) => assert!(
+                e == NumError::OutOfRange { value: v }
+                    && (v > COORD_MAX_I128 || v < COORD_MIN_I128)
+            ),
+        }
+    }
+
+    /// `P3::new` never panics, and accepts exactly three coordinates of the frame.
+    #[kani::proof]
+    fn p3_new_accepts_exactly_three_frame_coordinates() {
+        let (x, y, z): (i64, i64, i64) = (kani::any(), kani::any(), kani::any());
+        let inside = |v: i64| v >= -COORD_MAX && v <= COORD_MAX;
+        assert!(P3::new(x, y, z).is_ok() == (inside(x) && inside(y) && inside(z)));
+    }
+
+    /// `refine` never panics or overflows, and is exact or refused, for every coordinate and every
+    /// pair of steps: towards a finer step it multiplies by 25 per rung, or refuses with the
+    /// product when that leaves the frame; towards a coarser one it refuses.
+    #[kani::proof]
+    fn refine_is_exact_or_refused() {
+        let c = coord();
+        let (from, to) = (step(kani::any()), step(kani::any()));
+        let got = refine(c, from, to);
+        match to.rung().checked_sub(from.rung()) {
+            None => assert!(got == Err(NumError::WrongDirection)),
+            Some(k) => {
+                let factor: i128 = match k {
+                    0 => 1,
+                    1 => 25,
+                    _ => 625,
+                };
+                let product = i128::from(c.get()) * factor;
+                match got {
+                    Ok(f) => assert!(i128::from(f.get()) == product),
+                    Err(e) => assert!(
+                        e == NumError::OutOfRange { value: product }
+                            && (product > COORD_MAX_I128 || product < COORD_MIN_I128)
+                    ),
+                }
+            }
+        }
+    }
+
+    /// `coarsen` never panics or overflows, and towards a coarser step gives the nearest step,
+    /// within half a coarse step, no larger in magnitude, exact exactly when the division is.
+    #[kani::proof]
+    fn coarsen_is_nearest_and_reported() {
+        let c = coord();
+        let (from, to) = (step(kani::any()), step(kani::any()));
+        let got = coarsen(c, from, to);
+        match from.rung().checked_sub(to.rung()) {
+            None => assert!(got == Err(NumError::WrongDirection)),
+            Some(k) => {
+                let d: i128 = match k {
+                    0 => 1,
+                    1 => 25,
+                    _ => 625,
+                };
+                let v = i128::from(c.get());
+                match got {
+                    Ok(r) => {
+                        let q = i128::from(r.value().get());
+                        let moved = q * d - v;
+                        assert!(2 * moved.abs() < d);
+                        assert!(q.abs() <= v.abs());
+                        assert!(r.is_exact() == (v % d == 0));
+                    }
+                    Err(_) => assert!(false, "coarsening towards a coarser step always answers"),
+                }
+            }
+        }
+    }
+
+    /// `Steps::refine` never panics: the exact product, or `None` on overflow or towards a coarser
+    /// step, for every count.
+    #[kani::proof]
+    fn steps_refine_is_exact_or_none() {
+        let n: u64 = kani::any();
+        let (from, to) = (step(kani::any()), step(kani::any()));
+        let want = match to.rung().checked_sub(from.rung()) {
+            None => None,
+            Some(0) => Some(n),
+            Some(1) => n.checked_mul(25),
+            Some(_) => n.checked_mul(625),
+        };
+        assert!(Steps(n).refine(from, to).map(Steps::get) == want);
+    }
+}
