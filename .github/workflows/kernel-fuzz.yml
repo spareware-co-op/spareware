@@ -23,10 +23,10 @@ name: Kernel fuzzing and proofs
 #   binaries they start.
 #
 # Path filters: the workflow runs when the code a target fuzzes or proves changes: geom-fuzz and
-# every crate of the workspace it depends on (geom-num, geom-run and geom-test today; geom-fuzz's
-# tests/attack_g14.rs fails until a new target's crates are listed here), the workspace files that
-# change any build (Cargo.toml, Cargo.lock, .cargo/, the toolchain file), the ClusterFuzzLite files
-# and this workflow.
+# every crate of the workspace it depends on (geom-gen, geom-num, geom-run and geom-test today;
+# geom-fuzz's tests/attack_g14.rs fails until a new target's crates are listed here), the workspace
+# files that change any build (Cargo.toml, Cargo.lock, .cargo/, the toolchain file), the
+# ClusterFuzzLite files and this workflow.
 #
 # Pins: the compiler in RUST_TOOLCHAIN is the workspace's (the scaffold test checks every
 # workflow that names it); FUZZ_NIGHTLY is the nightly compiler for libFuzzer's flags, a dated
@@ -44,6 +44,7 @@ on:
   pull_request:
     paths:
       - "projects/engines/geometry/crates/geom-fuzz/**"
+      - "projects/engines/geometry/crates/geom-gen/**"
       - "projects/engines/geometry/crates/geom-num/**"
       - "projects/engines/geometry/crates/geom-run/**"
       - "projects/engines/geometry/crates/geom-test/**"
@@ -58,6 +59,7 @@ on:
     branches: [main]
     paths:
       - "projects/engines/geometry/crates/geom-fuzz/**"
+      - "projects/engines/geometry/crates/geom-gen/**"
       - "projects/engines/geometry/crates/geom-num/**"
       - "projects/engines/geometry/crates/geom-run/**"
       - "projects/engines/geometry/crates/geom-test/**"
@@ -93,7 +95,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [orient2d_fuzz, predicates_fuzz]
+        target: [orient2d_fuzz, predicates_fuzz, variants_fuzz]
     defaults:
       run:
         shell: bash
@@ -207,6 +209,38 @@ jobs:
         run: |
           start=$(date +%s)
           cargo kani -p geom-num --harness "${{ matrix.proof }}" --exact
+          echo "Proved in $(( $(date +%s) - start )) seconds."
+      - name: Kani left Cargo.lock as it was
+        run: git diff --exit-code -- Cargo.lock
+
+  kani-limbs:
+    name: Kani, geom-num limb steps
+    runs-on: ubuntu-latest
+    # Piece G42: one bounded proof for every kind of step the generated limb variant performs
+    # (chapter 23.3), all in one run so they share one build; the generator writes them beside the
+    # variant, in geom-num's src/generated/limbs.rs, and geom-num's tests/kani_harnesses.rs holds
+    # this job to them.
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Install Kani ${{ env.KANI_VERSION }}
+        run: |
+          cargo install kani-verifier --version "$KANI_VERSION" --locked
+          cargo kani setup
+      - name: Cargo.lock is the reviewed one
+        run: cargo metadata --locked --format-version 1 > /dev/null
+      - name: Prove every limb step
+        run: |
+          start=$(date +%s)
+          cargo kani -p geom-num --harness generated::limbs::proofs::
           echo "Proved in $(( $(date +%s) - start )) seconds."
       - name: Kani left Cargo.lock as it was
         run: git diff --exit-code -- Cargo.lock

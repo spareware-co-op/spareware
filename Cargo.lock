@@ -920,8 +920,10 @@ name = "geom-fuzz"
 version = "0.0.0"
 dependencies = [
  "bolero",
+ "geom-gen",
  "geom-num",
  "geom-test",
+ "num-bigint",
 ]
 
 [[package]]

@@ -48,6 +48,7 @@ pub mod real;
 pub mod rng;
 pub mod sign;
 pub mod wide;
+pub mod wide32;
 
 /// Inputs per batch. Large enough that the call and loop around the batch are a small share of
 /// each count, small enough that every batch and its results fit the simulated 32 KiB first-level

@@ -55,7 +55,7 @@ const LOCK: &str = include_str!("../../../../../../Cargo.lock");
 const KERNEL_WORKFLOW: &str = include_str!("../../../../../../.github/workflows/kernel.yml");
 
 /// The source of every module of `geom-num`, by module name.
-const GEOM_NUM: [(&str, &str); 18] = [
+const GEOM_NUM: [(&str, &str); 19] = [
     ("dd", include_str!("../../geom-num/src/dd.rs")),
     ("eft", include_str!("../../geom-num/src/eft.rs")),
     ("error", include_str!("../../geom-num/src/error.rs")),
@@ -77,6 +77,7 @@ const GEOM_NUM: [(&str, &str); 18] = [
     ("rng", include_str!("../../geom-num/src/rng.rs")),
     ("sign", include_str!("../../geom-num/src/sign.rs")),
     ("wide", include_str!("../../geom-num/src/wide.rs")),
+    ("wide32", include_str!("../../geom-num/src/wide32.rs")),
 ];
 
 /// The files inside `geom-num`'s `math` module that hold public functions, by name: `unproven`, a
@@ -100,7 +101,7 @@ const MATH_PRIVATE: [&str; 6] = ["atan2", "exp", "hexf", "log", "sincospi", "sup
 
 /// The modules of `geom-num`'s `generated`, one per predicate (piece G27), by path; their free
 /// functions are `generated::<predicate>::<function>`.
-const GENERATED_PARTS: [(&str, &str); 12] = [
+const GENERATED_PARTS: [(&str, &str); 13] = [
     (
         "generated::orient2d",
         include_str!("../../geom-num/src/generated/orient2d.rs"),
@@ -148,6 +149,10 @@ const GENERATED_PARTS: [(&str, &str); 12] = [
     (
         "generated::plain",
         include_str!("../../geom-num/src/generated/plain.rs"),
+    ),
+    (
+        "generated::limbs",
+        include_str!("../../geom-num/src/generated/limbs.rs"),
     ),
 ];
 

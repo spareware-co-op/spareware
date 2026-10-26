@@ -13,7 +13,10 @@
 //! arithmetic, with the certified enclosures of the proven maths functions; grid coordinates and
 //! grid steps; total order on doubles; exactness classes; the deterministic maths functions, those
 //! with proven error bounds and those without; the counter-based random numbers (the Philox4x32-10 block, a
-//! stream's draws, and stream ranges); double-double arithmetic; and the exact sum of doubles.
+//! stream's draws, and stream ranges); double-double arithmetic; the exact sum of doubles; and
+//! chapter 23.3's comparison of exact-path variants (piece G42): every generated exact path in
+//! plain `i128` and in width-aware 32-bit limbs beside the shipped one, and the 32-bit-limb
+//! integers `Wide32` at the bit widths `Wide` is measured at.
 //! Public functions of `geom-num` without a benchmark of their own
 //! are listed with the reason in [`catalogue::UNMEASURED`], and a test keeps that list complete.
 //!
