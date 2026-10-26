@@ -126,7 +126,9 @@ jobs:
   kani:
     name: Kani (${{ matrix.harness }})
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # A trial (piece G37): orient2d_proof ran out of the hour twice on the rewritten wide integers,
+    # which its total path reaches; this measures how long it now takes, to set its budget.
+    timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:
