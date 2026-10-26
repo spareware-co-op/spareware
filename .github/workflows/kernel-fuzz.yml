@@ -126,10 +126,10 @@ jobs:
   kani:
     name: Kani (${{ matrix.harness }})
     runs-on: ubuntu-latest
-    # A trial (piece G37): orient2d_proof ran out of the hour twice on the rewritten wide integers,
-    # which its total path reaches, and out of three hours with CaDiCaL (main proves it in 18
-    # minutes); this measures it with kissat, to set its budget.
-    timeout-minutes: 180
+    # orient2d_proof is the slowest harness: on G37's rewritten wide integers, which its total
+    # path reaches, kissat proves it in 47 minutes on the hosted runner (run 40291338626; CaDiCaL
+    # ran past three hours). 75 minutes is about one and a half times that.
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
