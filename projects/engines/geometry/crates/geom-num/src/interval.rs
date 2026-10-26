@@ -91,9 +91,10 @@
 //! Bounded proofs, and what is only tested: Kani proves (piece G41, chapter 28.7) that `new`,
 //! `add`, `sub` and `mul` enclose the rounded result or refuse, never panicking, for every finite
 //! double or pair of them. `square` is proven for every finite double whose significand has at
-//! most 14 bits: squaring a symbolic 53-bit significand ran past CI's hour. `div` is proven for every finite dividend over six
-//! divisors: ±0, refused; the smallest subnormal, whose quotients overflow; the largest double,
-//! whose quotients underflow; and 3 and −0.1, inexact of either sign; one harness per divisor,
+//! most 14 bits: squaring a symbolic 53-bit significand ran past CI's hour. `div` is proven for
+//! every finite dividend over six divisors: ±0, refused; the smallest subnormal, whose quotients
+//! overflow; the largest double, whose quotients underflow; and 3 and −0.1, inexact of either sign
+//! (−0.1 for dividends whose significand has at most 14 bits); one harness per divisor,
 //! with kissat as the SAT solver. Over every divisor at once, or the six in one harness, the
 //! solver ran past CI's hour (four corner quotients, each a 53-bit division). Every other divisor
 //! is tested (`tests/attack2_interval.rs`).
@@ -845,7 +846,17 @@ mod proofs {
     #[kani::proof]
     #[kani::solver(kissat)]
     fn div_by_minus_a_tenth() {
-        div_law(-0.1);
+        // Dividends of at most 14 significand bits: dividing a symbolic 53-bit significand by the
+        // 53-bit −0.1 ran past CI's hour (run 40323412527); 3, a two-bit divisor, proves in full.
+        let x = f64::from_bits(kani::any::<u64>() & !((1 << 39) - 1));
+        kani::assume(x.is_finite());
+        let (a, b) = (Interval::point(x).unwrap(), Interval::point(-0.1).unwrap());
+        let r = a.div(b).unwrap();
+        assert!(r.lo() <= r.hi());
+        let rounded = x / -0.1;
+        if rounded.is_finite() {
+            assert!(r.contains(rounded));
+        }
     }
 
     /// `square` of a point is never negative and encloses the rounded square, for every finite

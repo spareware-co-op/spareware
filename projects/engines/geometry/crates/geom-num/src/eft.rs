@@ -55,7 +55,8 @@
 //!   five others, in either order (against the largest double, for operands below 2^969, where no
 //!   step overflows; the overflow fallback is only tested, because its NaN intermediate trips
 //!   Kani's NaN check); and that `two_prod` gives the rounded product and its error
-//!   for every finite first factor over six second factors, one for each of its paths (the
+//!   for every finite first factor whose significand has at most 14 bits (every sign and
+//!   exponent: a symbolic 53-bit significand ran past CI's hour) over six second factors, one for each of its paths (the
 //!   proofs module has one harness per value, with kissat as the SAT solver). Over every pair at
 //!   once, or one law's values in one harness, the solver ran past CI's hour. Every
 //!   other pair, and everything through the fused multiply-add, is tested against exact
@@ -664,7 +665,10 @@ mod proofs {
     /// and the largest double (overflow). Over every pair at once, or the six in one harness, the
     /// solver ran past CI's hour.
     fn two_prod_law(b: f64) {
-        let a = finite();
+        // Significands of at most 14 bits (the low 39 fraction bits zero), every sign and exponent:
+        // with a symbolic 53-bit significand every factor ran past CI's hour (run 40323412527).
+        let a = f64::from_bits(kani::any::<u64>() & !((1 << 39) - 1));
+        kani::assume(a.is_finite());
         let (p, e) = two_prod(a, b);
         assert!(p.to_bits() == (a * b).to_bits());
         if p.is_finite() && e.is_finite() {
