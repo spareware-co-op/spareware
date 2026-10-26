@@ -38,10 +38,10 @@ for problem in "$@"; do
   "$gappa" "$problem" || status=1
   # Its Rocq proof of the same, checked by Rocq.
   "$gappa" -Bcoq "$problem" >"$work/${name}_gappa.v" || status=1
-  # What the proof assumes (rewriting hints become hypotheses to discharge) and what it states.
-  grep -n -E 'Hypothesis|Variable|Axiom|Parameter|Admitted|Lemma|Theorem|Definition'     "$work/${name}_gappa.v" | tail -n 40 || true
-  tail -n 30 "$work/${name}_gappa.v"
+  # Every axiom and assumption the final theorem rests on, as Rocq reports it.
+  echo 'Print Assumptions l1.' >>"$work/${name}_gappa.v"
   (cd "$work" && coqc "${name}_gappa.v") && echo "Rocq checked Gappa's proof of $name" || status=1
+  if [ -n "${OUT:-}" ]; then cp "$work/${name}_gappa.v" "$OUT/"; fi
   echo "::endgroup::"
 done
 exit "$status"

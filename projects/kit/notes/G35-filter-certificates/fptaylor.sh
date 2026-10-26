@@ -60,6 +60,12 @@ echo "::endgroup::"
 # its bound. FPTaylor's formal/load.hl, with this machine's paths.
 session="$work/session.ml"
 {
+  # camlp5 8.03.06 and later need PCRE2, which HOL Light's loader for OCaml before 4.14 does not
+  # load (it loads camlp5o.cma directly), so findlib loads it, and Re, first.
+  echo '#use "topfind";;'
+  echo '#require "pcre2";;'
+  echo '#require "re";;'
+  echo "#use \"$work/hol-light/hol.ml\";;"
   echo "let formal_ineqs_path = \"$work/hol-light/Formal_ineqs\";;"
   echo "let fptaylor_path = \"$work/FPTaylor\";;"
   echo 'let fptaylor_formal_path = fptaylor_path ^ "/formal";;'
@@ -82,6 +88,6 @@ session="$work/session.ml"
 cat "$session"
 
 export HOLLIGHT_DIR="$work/hol-light"
-"$work/hol-light/ocaml-hol" -I "$(camlp5 -where)" camlp5o.cma -init "$work/hol-light/hol.ml" \
-  -safe-string -I "$work/hol-light" <"$session" | tee "$work/hol.log" | grep -v '^val \|^- : ' || true
+"$work/hol-light/ocaml-hol" -I "$(camlp5 -where)" -safe-string -I "$work/hol-light" \
+  <"$session" | tee "$work/hol.log" | grep -v '^val \|^- : ' || true
 grep -q '^checked ' "$work/hol.log"
