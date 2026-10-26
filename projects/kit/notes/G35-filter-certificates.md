@@ -58,7 +58,14 @@ What the numbers say:
 - Gappa's error bound equals the derivation's E for orient2d, and exceeds it for orient3d only in the second-order term, by 0.75u², from rounding its intervals outward. The computed bound is at least (28u + 140u²) · S for orient3d, 87.25u² · S above Gappa's error, and (4u + 16u²) · S for orient2d, 14u² · S above (both checked in exact rationals).
 - FPTaylor finds orient3d's worst error near 22.1u · S, not 28u: the derivation adds every operation's worst case at once, and no input reaches them all together. The constant is sound and about 27% larger than it needs to be. Tightening it would change the filter's answers on some inputs, so it would be a new generator version (chapter 26.2), not an edit; it is noted for G40.
 
-(HOL Light's check of both certificates and the run on the generated problems: to record.)
+Runs on pull request #264 (piece G40, section 7):
+
+| Run | Pipeline | Problems | Result |
+| --- | --- | --- | --- |
+| 40314782445 | Gappa 1.8.3 and Rocq 9.1.1, as above | orient2d, orient3d; incircle cases x and y; insphere cases x, y and z | every goal proved, every proof checked by Rocq, only the four classical-reals axioms |
+| 40322430267 | the same | the seven above and plane_side's four term cases (d, z-n, y-n, x-n), on rounded inputs | every goal proved, every proof checked by Rocq, only the four classical-reals axioms |
+
+(HOL Light's check of both certificates: to record.)
 
 ## 5. Options and recommendation
 
