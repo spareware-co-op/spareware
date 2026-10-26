@@ -42,6 +42,8 @@
 //!
 //! Cost: linear in the description's steps; no allocation beyond the text.
 
+use std::collections::BTreeSet;
+
 use crate::predicate_derive::{Derivation, Monomial, ScaleExpr};
 use crate::predicate_emit::{DESCRIPTIONS_PATH, EmitError};
 use crate::predicate_lang::{Op, StepKind, max_name};
@@ -68,14 +70,49 @@ struct Shape<'d> {
     group_of: Vec<Option<usize>>,
     /// The result's scale monomial.
     monomial: Monomial,
+    /// Each step's scale monomial: its only one, or, in a case, the one that dominates the rest.
+    monomials: Vec<Monomial>,
+    /// The case: the group whose maximum is the largest, for a scale of several monomials.
+    case: Option<usize>,
     /// The roundings between the maxima and the bound.
     roundings: u32,
     /// K = numerator · 2^−exponent.
     k: (u128, u32),
 }
 
-/// The shape of `d`, or why the problems cannot state its filter yet.
-fn shape(d: &Derivation) -> Result<Shape<'_>, EmitError> {
+/// The least monomial that is at least every one of `set` whenever group `g`'s maximum is the
+/// largest: of the set's degree, with each other group's exponent the least the set has for it
+/// and the rest of the degree on `g`. Each member is reached from it by moving exponents off `g`,
+/// which cannot increase it in the case. For a product it is the product of its factors' (the
+/// least of a sum of exponents is the sum of the least), so the steps' monomials stay consistent.
+/// `None` if the set is empty or not of one degree.
+fn dominant(set: &BTreeSet<Monomial>, g: usize) -> Option<Monomial> {
+    let degree = |m: &Monomial| m.iter().fold(0u32, |a, e| a.saturating_add(*e));
+    let first = set.iter().next()?;
+    let total = degree(first);
+    if set.iter().any(|m| degree(m) != total) {
+        return None;
+    }
+    let mut top: Monomial = (0..first.len())
+        .map(|h| {
+            if h == g {
+                0
+            } else {
+                set.iter()
+                    .filter_map(|m| m.get(h).copied())
+                    .min()
+                    .unwrap_or(0)
+            }
+        })
+        .collect();
+    let rest = total.checked_sub(degree(&top))?;
+    *top.get_mut(g)? = rest;
+    Some(top)
+}
+
+/// The shape of `d` (in `case`, for a scale of several monomials), or why the problems cannot
+/// state its filter yet.
+fn shape(d: &Derivation, case: Option<usize>) -> Result<Shape<'_>, EmitError> {
     let mut group_of = vec![None; d.steps.len()];
     for (g, group) in d.groups.iter().enumerate() {
         for &v in &group.vars {
@@ -103,22 +140,41 @@ fn shape(d: &Derivation) -> Result<Shape<'_>, EmitError> {
             }
         }
     }
-    let Some(result) = d.certs.get(d.result) else {
+    let mut monomials = Vec::with_capacity(d.certs.len());
+    for (step, cert) in d.steps.iter().zip(&d.certs) {
+        let mut set = cert.scale.iter();
+        let m = match (set.next(), set.next(), case) {
+            (Some(m), None, _) => m.clone(),
+            (Some(_), Some(_), Some(g)) => match dominant(&cert.scale, g) {
+                Some(m) => m,
+                None => {
+                    return fail(format!(
+                        "step `{}`: no monomial of its scale dominates the others in this case",
+                        step.name
+                    ));
+                }
+            },
+            _ => {
+                return fail(format!(
+                    "step `{}` has a scale of several monomials, which a single LIN goal cannot \
+                     state: one problem per case of the largest maximum",
+                    step.name
+                ));
+            }
+        };
+        monomials.push(m);
+    }
+    let Some(monomial) = monomials.get(d.result).cloned() else {
         return fail("the result step is missing");
-    };
-    let mut monomials = result.scale.iter();
-    let (Some(monomial), None) = (monomials.next(), monomials.next()) else {
-        return fail(
-            "the result's scale has several monomials, which a single LIN goal cannot state \
-             (piece G40 extends the problems)",
-        );
     };
     let roundings = d.roundings;
     let k = dyadic_k(d.constant_bits, roundings)?;
     Ok(Shape {
         d,
         group_of,
-        monomial: monomial.clone(),
+        monomial,
+        monomials,
+        case,
         roundings,
         k,
     })
@@ -187,16 +243,33 @@ fn canonical(monomial: &Monomial, d: &Derivation) -> Result<String, EmitError> {
 }
 
 /// The scale as the filter computes it, with each product rounded: `rnd(rnd(m_x * m_y) * m_z)`.
-fn scale_rounded(e: &ScaleExpr, d: &Derivation) -> Result<String, EmitError> {
+/// In a case, `larger(a, b)` is the side holding the dominant monomial: rounding is monotone, so
+/// the rounded side that is larger exactly is at least the other rounded (the method note).
+fn scale_rounded(e: &ScaleExpr, d: &Derivation, case: Option<usize>) -> Result<String, EmitError> {
     Ok(match e {
         ScaleExpr::Max(g) => match d.groups.get(*g) {
             Some(group) => max_name(&group.name),
             None => return fail("the scale names a missing group"),
         },
-        ScaleExpr::Mul(l, r) => format!("rnd({} * {})", scale_rounded(l, d)?, scale_rounded(r, d)?),
-        ScaleExpr::One | ScaleExpr::Larger(..) => {
-            return fail("the scale is 1 or a larger-of, which the problems do not state yet");
+        ScaleExpr::Mul(lhs, rhs) => format!(
+            "rnd({} * {})",
+            scale_rounded(lhs, d, case)?,
+            scale_rounded(rhs, d, case)?
+        ),
+        ScaleExpr::Larger(lhs, rhs) => {
+            let n = d.groups.len();
+            let (left, right) = (lhs.monomials(n), rhs.monomials(n));
+            let both: BTreeSet<Monomial> = left.union(&right).cloned().collect();
+            let Some(top) = case.and_then(|g| dominant(&both, g)) else {
+                return fail("the scale takes a larger-of, which only a case resolves");
+            };
+            if left.contains(&top) {
+                scale_rounded(lhs, d, case)?
+            } else {
+                scale_rounded(rhs, d, case)?
+            }
         }
+        ScaleExpr::One => return fail("the scale is 1, which no filter on points has"),
     })
 }
 
@@ -206,7 +279,7 @@ fn scale_rounded(e: &ScaleExpr, d: &Derivation) -> Result<String, EmitError> {
 fn natural_scales(s: &Shape<'_>) -> Result<Vec<String>, EmitError> {
     let d = s.d;
     let mut natural: Vec<String> = Vec::with_capacity(d.steps.len());
-    for ((step, cert), group) in d.steps.iter().zip(&d.certs).zip(&s.group_of) {
+    for (step, group) in d.steps.iter().zip(&s.group_of) {
         let text = match (&step.kind, group) {
             (_, Some(g)) => match d.groups.get(*g) {
                 Some(group) => max_name(&group.name),
@@ -234,12 +307,8 @@ fn natural_scales(s: &Shape<'_>) -> Result<Vec<String>, EmitError> {
             }
             (_, None) => {
                 // A sum or difference: both operands are brought to the canonical scale.
-                let mut monomials = cert.scale.iter();
-                let (Some(m), None) = (monomials.next(), monomials.next()) else {
-                    return fail(format!(
-                        "step `{}` has a scale of several monomials (piece G40)",
-                        step.name
-                    ));
+                let Some(m) = s.monomials.get(natural.len()) else {
+                    return fail(format!("step `{}` has no monomial", step.name));
                 };
                 canonical(m, d)?
             }
@@ -306,25 +375,59 @@ impl Shape<'_> {
 ///
 /// [`EmitError`] if the filter is not one the problems state yet (module documentation).
 pub fn gappa_problem(d: &Derivation, generator: &str) -> Result<String, EmitError> {
-    let sh = shape(d)?;
+    gappa_problem_in(d, generator, None)
+}
+
+/// The Gappa problem of one case of `d`'s filter, whose scale has several monomials: the case
+/// where the maximum of group `case` (an axis letter) is the largest. One problem per group
+/// covers every input.
+///
+/// # Errors
+///
+/// [`EmitError`] if the group is not one of the filter's, or the filter is not one the problems
+/// state yet (module documentation).
+pub fn gappa_case_problem(
+    d: &Derivation,
+    generator: &str,
+    case: &str,
+) -> Result<String, EmitError> {
+    let Some(g) = d.groups.iter().position(|group| group.name == case) else {
+        return fail(format!("no group `{case}`"));
+    };
+    gappa_problem_in(d, generator, Some(g))
+}
+
+/// The Gappa problem, in `case` if one is given.
+fn gappa_problem_in(
+    d: &Derivation,
+    generator: &str,
+    case: Option<usize>,
+) -> Result<String, EmitError> {
+    let sh = shape(d, case)?;
     let name = &d.description.name;
-    let mut out = String::new();
-    header(
-        &mut out,
-        "#",
-        generator,
-        d,
-        &[
-            &format!(
-                "{name}'s f64 filter (geom_num::generated::{name}::filter) for Gappa (chapter 28.6;"
-            ),
-            "piece G35). Gappa proves the goal below for binary64 with rounding to nearest, on",
-            "whole-number coordinate differences, each at most its axis maximum in magnitude, and",
-            "writes a proof that Rocq checks. The goal: the computed value is within K * S of the",
-            "exact one, and the computed bound within a relative error R of C * S, where",
-            "K = C * (1 - R); so whenever the filter answers, its sign is the exact one.",
-        ],
+    let case_line = match case.and_then(|g| d.groups.get(g)) {
+        Some(group) => format!(
+            "This is the case where m_{} is the largest maximum; each other case has its own problem.",
+            group.name
+        ),
+        None => String::new(),
+    };
+    let first = format!(
+        "{name}'s f64 filter (geom_num::generated::{name}::filter) for Gappa (chapter 28.6;"
     );
+    let mut about: Vec<&str> = vec![
+        &first,
+        "pieces G35 and G40). Gappa proves the goal below for binary64 with rounding to",
+        "nearest, on whole-number coordinate differences, each at most its axis maximum in",
+        "magnitude, and writes a proof that Rocq checks. The goal: the computed value is within",
+        "K * S of the exact one, and the computed bound within a relative error R of C * S,",
+        "where K = C * (1 - R); so whenever the filter answers, its sign is the exact one.",
+    ];
+    if !case_line.is_empty() {
+        about.push(&case_line);
+    }
+    let mut out = String::new();
+    header(&mut out, "#", generator, d, &about);
     gappa_definitions(&mut out, &sh)?;
     gappa_formula(&mut out, &sh)?;
     gappa_hints(&mut out, &sh)?;
@@ -370,7 +473,7 @@ fn gappa_definitions(out: &mut String, sh: &Shape<'_>) -> Result<(), EmitError> 
     line(out, &format!("S = {};", canonical(&sh.monomial, d)?));
     line(
         out,
-        &format!("scale = {};", scale_rounded(&d.scale_expr, d)?),
+        &format!("scale = {};", scale_rounded(&d.scale_expr, d, sh.case)?),
     );
     line(out, &format!("C = {};", hex_float(d.constant_bits)));
     line(out, "bound = rnd(C * scale);");
@@ -408,6 +511,18 @@ fn gappa_formula(out: &mut String, sh: &Shape<'_>) -> Result<(), EmitError> {
                 step.name,
                 max_name(&group.name)
             ));
+        }
+    }
+    // In a case, every difference is also at most the largest maximum in magnitude.
+    if let Some(top) = sh.case.and_then(|c| d.groups.get(c)) {
+        for (step, g) in d.steps.iter().zip(&sh.group_of) {
+            if g.is_some_and(|g| Some(g) != sh.case) {
+                hypotheses.push(format!(
+                    "{} // {} in [-1, 1]",
+                    step.name,
+                    max_name(&top.name)
+                ));
+            }
         }
     }
     let Some(result) = d.steps.get(d.result) else {
@@ -478,17 +593,10 @@ fn gappa_hints(out: &mut String, sh: &Shape<'_>) -> Result<(), EmitError> {
     );
     let natural = natural_scales(sh)?;
     let mut seen: Vec<(String, String)> = Vec::new();
-    for ((step, cert), nat) in d.steps.iter().zip(&d.certs).zip(&natural) {
+    for ((step, m), nat) in d.steps.iter().zip(&sh.monomials).zip(&natural) {
         if !matches!(step.kind, StepKind::Op { op: Op::Mul, .. }) {
             continue;
         }
-        let mut monomials = cert.scale.iter();
-        let (Some(m), None) = (monomials.next(), monomials.next()) else {
-            return fail(format!(
-                "step `{}` has several scale monomials (piece G40)",
-                step.name
-            ));
-        };
         let canon = canonical(m, d)?;
         if *nat != canon && !seen.iter().any(|(a, b)| *a == *nat && *b == canon) {
             line(out, &format!("{nat} -> {canon};"));
@@ -506,7 +614,7 @@ fn gappa_hints(out: &mut String, sh: &Shape<'_>) -> Result<(), EmitError> {
 ///
 /// [`EmitError`] if the filter is not one the problems state yet (module documentation).
 pub fn fptaylor_problem(d: &Derivation, generator: &str) -> Result<String, EmitError> {
-    let sh = shape(d)?;
+    let sh = shape(d, None)?;
     let name = &d.description.name;
     let (numerator, exponent) = sh.k;
     let mut out = String::new();

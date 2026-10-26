@@ -324,7 +324,8 @@ fn the_problems_refuse_what_they_cannot_state() {
         let d = derivation(p).unwrap();
         let gappa = gappa_problem(&d, "test").unwrap_err();
         let fptaylor = fptaylor_problem(&d, "test").unwrap_err();
-        assert!(gappa.0.contains("G40"), "{name}: {}", gappa.0);
+        let why = if name == "plane_side" { "G40" } else { "one problem per case" };
+        assert!(gappa.0.contains(why), "{name}: {}", gappa.0);
         assert_eq!(gappa, fptaylor, "{name}");
     }
 }

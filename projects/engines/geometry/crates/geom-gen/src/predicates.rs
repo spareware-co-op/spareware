@@ -1,8 +1,9 @@
 //! Generators `predicate-module`, `predicate-orient2d`, `predicate-orient3d`, `predicate-incircle`,
 //! `predicate-insphere` and `predicate-plane-side`: the kernel's predicates, from their
 //! descriptions; `verus-orient2d`, orient2d's Verus twin; and `gappa-orient2d`, `gappa-orient3d`,
-//! `fptaylor-orient2d` and `fptaylor-orient3d`, the problems that machine-check those filters'
-//! error bounds ([`crate::predicate_certificates`]).
+//! `gappa-incircle-x`, `gappa-incircle-y`, `gappa-insphere-x`, `gappa-insphere-y`,
+//! `gappa-insphere-z`, `fptaylor-orient2d` and `fptaylor-orient3d`, the problems that
+//! machine-check those filters' error bounds ([`crate::predicate_certificates`]).
 //!
 //! What it does: holds the description of each predicate on explicit grid points (chapter 6.2:
 //! orientation in 2D and 3D, in-circle and in-sphere), and of the side of a plane, whose
@@ -42,7 +43,7 @@
 //! exact operations each.
 
 use crate::generator::GenError;
-use crate::predicate_certificates::{fptaylor_problem, gappa_problem};
+use crate::predicate_certificates::{fptaylor_problem, gappa_case_problem, gappa_problem};
 use crate::predicate_derive::{Derivation, derive};
 use crate::predicate_emit::{
     Comparison, EmitError, parent_module, predicate_module_serving, verus_twin,
@@ -389,6 +390,69 @@ pub fn generate_gappa_orient2d() -> Result<Vec<u8>, GenError> {
 /// [`GenError::Generator`] if the derivation or the emission fails.
 pub fn generate_gappa_orient3d() -> Result<Vec<u8>, GenError> {
     certificate("orient3d", "gappa-orient3d", gappa_problem)
+}
+
+/// One case of a filter certificate whose scale has several monomials (piece G40), as bytes: the
+/// case where group `case`'s maximum is the largest.
+fn case_certificate(
+    predicate: &str,
+    generator: &'static str,
+    case: &str,
+) -> Result<Vec<u8>, GenError> {
+    let d = derivation(named(predicate)?)?;
+    gappa_case_problem(&d, generator, case)
+        .map(String::into_bytes)
+        .map_err(|e| GenError::generator(generator, e.0))
+}
+
+/// Generator `gappa-incircle-x`: incircle's filter for Gappa in the case where `m_x` is the
+/// largest maximum.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_gappa_incircle_x() -> Result<Vec<u8>, GenError> {
+    case_certificate("incircle", "gappa-incircle-x", "x")
+}
+
+/// Generator `gappa-incircle-y`: incircle's filter for Gappa in the case where `m_y` is the
+/// largest maximum.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_gappa_incircle_y() -> Result<Vec<u8>, GenError> {
+    case_certificate("incircle", "gappa-incircle-y", "y")
+}
+
+/// Generator `gappa-insphere-x`: insphere's filter for Gappa in the case where `m_x` is the
+/// largest maximum.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_gappa_insphere_x() -> Result<Vec<u8>, GenError> {
+    case_certificate("insphere", "gappa-insphere-x", "x")
+}
+
+/// Generator `gappa-insphere-y`: insphere's filter for Gappa in the case where `m_y` is the
+/// largest maximum.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_gappa_insphere_y() -> Result<Vec<u8>, GenError> {
+    case_certificate("insphere", "gappa-insphere-y", "y")
+}
+
+/// Generator `gappa-insphere-z`: insphere's filter for Gappa in the case where `m_z` is the
+/// largest maximum.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_gappa_insphere_z() -> Result<Vec<u8>, GenError> {
+    case_certificate("insphere", "gappa-insphere-z", "z")
 }
 
 /// Generator `fptaylor-orient2d`: orient2d's normalised filter for `FPTaylor`, whose certificate

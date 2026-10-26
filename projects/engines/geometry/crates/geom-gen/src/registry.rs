@@ -28,7 +28,7 @@ use crate::grid_steps;
 use crate::predicates;
 
 /// Every generator, in the order they run.
-pub const GENERATORS: [Generator; 12] = [
+pub const GENERATORS: [Generator; 17] = [
     Generator {
         name: grid_steps::NAME,
         output: grid_steps::OUTPUT,
@@ -88,6 +88,36 @@ pub const GENERATORS: [Generator; 12] = [
         output: "projects/engines/geometry/crates/geom-gen/generated/gappa-orient3d.g",
         about: "orient3d's f64 filter for Gappa, whose proof of its error bound Rocq checks",
         generate: Generate::Plain(predicates::generate_gappa_orient3d),
+    },
+    Generator {
+        name: "gappa-incircle-x",
+        output: "projects/engines/geometry/crates/geom-gen/generated/gappa-incircle-x.g",
+        about: "incircle's f64 filter for Gappa where m_x is the largest maximum; Rocq checks the proof",
+        generate: Generate::Plain(predicates::generate_gappa_incircle_x),
+    },
+    Generator {
+        name: "gappa-incircle-y",
+        output: "projects/engines/geometry/crates/geom-gen/generated/gappa-incircle-y.g",
+        about: "incircle's f64 filter for Gappa where m_y is the largest maximum; Rocq checks the proof",
+        generate: Generate::Plain(predicates::generate_gappa_incircle_y),
+    },
+    Generator {
+        name: "gappa-insphere-x",
+        output: "projects/engines/geometry/crates/geom-gen/generated/gappa-insphere-x.g",
+        about: "insphere's f64 filter for Gappa where m_x is the largest maximum; Rocq checks the proof",
+        generate: Generate::Plain(predicates::generate_gappa_insphere_x),
+    },
+    Generator {
+        name: "gappa-insphere-y",
+        output: "projects/engines/geometry/crates/geom-gen/generated/gappa-insphere-y.g",
+        about: "insphere's f64 filter for Gappa where m_y is the largest maximum; Rocq checks the proof",
+        generate: Generate::Plain(predicates::generate_gappa_insphere_y),
+    },
+    Generator {
+        name: "gappa-insphere-z",
+        output: "projects/engines/geometry/crates/geom-gen/generated/gappa-insphere-z.g",
+        about: "insphere's f64 filter for Gappa where m_z is the largest maximum; Rocq checks the proof",
+        generate: Generate::Plain(predicates::generate_gappa_insphere_z),
     },
     Generator {
         name: "fptaylor-orient2d",
