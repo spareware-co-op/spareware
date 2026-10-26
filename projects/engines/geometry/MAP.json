@@ -3196,7 +3196,8 @@
           "file": "projects/engines/geometry/crates/geom-num/src/real.rs",
           "guarantees": [
             "Every `Real` is finite: [`Real::new`] is the only way to make one, and it refuses NaN and the infinities.",
-            "Equality and order are both IEEE 754's `totalOrder`, so they agree, and −0 and +0 are different values, on every target."
+            "Equality and order are both IEEE 754's `totalOrder`, so they agree, and −0 and +0 are different values, on every target.",
+            "[`Real::total_max`] and [`Real::total_min`] have named tie rules: they pick by `totalOrder`, so −0 is below +0, and on a tie, which under `totalOrder` is always the same bits, they return the first argument."
           ],
           "job": "`Real`: a floating-point number that is never NaN and never infinite.",
           "method": {

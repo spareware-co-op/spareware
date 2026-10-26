@@ -920,6 +920,7 @@ Proposed in 31.5 (R23) and 32.5: one consolidated crate-list note settles all of
 | Question | Raised in | Decided in |
 | --- | --- | --- |
 | hypermesh's history (forked from MPL-2.0 boolmesh, relicensed MIT under a notice), before any reuse | 11, 29 | After the 32.9 contact; ledger row |
+| What "vendored" should mean for `libm`, which G24's done-when asks for, when the merge gate allows it only from crates.io and refuses a copy patched in (`deny-no-std.toml`): A, vendor the whole crates.io graph by source replacement; B, port the files the kernel reaches into `geom-num`, making `libm` a PORT (changes 29.1's decision); C, keep the DEPEND and take the audit pinned to the release's checksum as the vendored record. G24's audit recommends C (`projects/kit/notes/G24-libm-audit.md`, section 9) | 29, G24 | Owner decision; piece "NaN-free scalar, total order and deterministic maths module" |
 | List Lifted Surfacing's Adobe Research Licence dependencies (mtetcol, space-time-functions, arrangement-benchmark, mtet) and libigl's GPL CGAL module as never read; VolumeRemesher (LGPL by repository) and GMP as method only | 13 | Ledger rows in 29 |
 | TiGL is built on OpenCascade types, so its Gordon method is re-derived, not translated; Parasolid concepts read through a mirror are used as concepts only | 13 | Ledger rows; piece "Network surfaces, Coons patches and N-sided fills" |
 | Check every Clothoids and G1fitting file header for third-party provenance before any port (Fresnel.cc derives from a book) | 17 | Piece "Spiral evaluation with certified bounds" |
