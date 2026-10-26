@@ -735,3 +735,76 @@ mod tests {
         }
     }
 }
+
+/// Bounded proofs (chapter 28.7; piece G41): every finite double, bit for bit. The operations
+/// whose bounds need `libm` (`mul_add`, `sqrt`, `norm`) are left out: Kani cannot model the
+/// processor instructions libm calls, so those are only tested.
+#[cfg(kani)]
+mod proofs {
+    use super::*;
+
+    /// A symbolic finite double.
+    fn finite() -> f64 {
+        let x = f64::from_bits(kani::any());
+        kani::assume(x.is_finite());
+        x
+    }
+
+    /// `Interval::new` accepts exactly two finite bounds in order, for every pair of doubles.
+    #[kani::proof]
+    fn new_accepts_exactly_ordered_finite_bounds() {
+        let (lo, hi) = (f64::from_bits(kani::any()), f64::from_bits(kani::any()));
+        match Interval::new(lo, hi) {
+            Ok(i) => assert!(lo.is_finite() && hi.is_finite() && lo <= hi && i.lo() <= i.hi()),
+            Err(NumError::NotFinite) => assert!(!lo.is_finite() || !hi.is_finite()),
+            Err(NumError::EmptyInterval) => assert!(lo > hi),
+            Err(_) => assert!(false, "no other error"),
+        }
+    }
+
+    /// `add`, `sub` and `mul` of two points enclose the rounded result of the same operation,
+    /// with ordered finite bounds, or refuse; never a panic.
+    #[kani::proof]
+    fn add_sub_mul_enclose_the_rounded_result() {
+        let (x, y) = (finite(), finite());
+        let (a, b) = (Interval::point(x).unwrap(), Interval::point(y).unwrap());
+        for (got, rounded) in [(a.add(b), x + y), (a.sub(b), x - y), (a.mul(b), x * y)] {
+            if let Ok(r) = got {
+                assert!(r.lo() <= r.hi());
+                if rounded.is_finite() {
+                    assert!(r.contains(rounded));
+                }
+            }
+        }
+    }
+
+    /// `div` encloses the rounded quotient whenever the divisor does not contain zero, and
+    /// refuses when it does.
+    #[kani::proof]
+    fn div_encloses_or_refuses_a_divisor_with_zero() {
+        let (x, y) = (finite(), finite());
+        let (a, b) = (Interval::point(x).unwrap(), Interval::point(y).unwrap());
+        match a.div(b) {
+            Ok(r) => {
+                assert!(y != 0.0 && r.lo() <= r.hi());
+                let rounded = x / y;
+                if rounded.is_finite() {
+                    assert!(r.contains(rounded));
+                }
+            }
+            Err(e) => assert!(y == 0.0 || e != NumError::DivisorContainsZero),
+        }
+    }
+
+    /// `square` of a point is never negative and encloses the rounded square.
+    #[kani::proof]
+    fn square_is_never_negative_and_encloses() {
+        let x = finite();
+        if let Ok(r) = Interval::point(x).unwrap().square() {
+            assert!(r.lo() >= 0.0 && r.lo() <= r.hi());
+            if (x * x).is_finite() {
+                assert!(r.contains(x * x));
+            }
+        }
+    }
+}

@@ -995,3 +995,43 @@ mod tests {
         assert_eq!(TWO_POW_MINUS_53 * 9_007_199_254_740_992.0, 1.0);
     }
 }
+
+/// Bounded proofs (chapter 28.7; piece G41): every key, counter, seed and stream.
+#[cfg(kani)]
+mod proofs {
+    use super::*;
+
+    /// Philox4x32-10 never panics or overflows, for every counter and key.
+    #[kani::proof]
+    fn philox_never_panics() {
+        let counter: [u32; 4] = [kani::any(), kani::any(), kani::any(), kani::any()];
+        let key: [u32; 2] = [kani::any(), kani::any()];
+        let _ = philox4x32_10(counter, key);
+    }
+
+    /// A stream's draws never panic or overflow, from any block of any stream of any seed: each
+    /// answers or reports that the stream ran out, and a draw that answers moves the position on.
+    #[kani::proof]
+    fn draws_never_panic() {
+        let philox = Philox::new(Seed(kani::any()), StreamId(kani::any()));
+        let mut stream = philox.stream_from(kani::any());
+        let before = stream.position();
+        if stream.next_u32().is_ok() {
+            assert!(stream.position() > before);
+        }
+        let _ = stream.next_u64();
+        let _ = stream.next_f64();
+    }
+
+    /// Cutting a seed's streams into chunks never panics or overflows, and a chunk that is made
+    /// lies inside the range it was cut from.
+    #[kani::proof]
+    fn stream_ranges_cut_without_overflow() {
+        let all = StreamRange::all(Seed(kani::any()));
+        let (index, size): (u64, u64) = (kani::any(), kani::any());
+        if let Ok(chunk) = all.chunk(index, size) {
+            assert!(chunk.first().0 >= all.first().0 && chunk.last().0 <= all.last().0);
+            let _ = chunk.philox(kani::any());
+        }
+    }
+}

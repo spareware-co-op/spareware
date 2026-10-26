@@ -172,15 +172,24 @@ jobs:
       fail-fast: false
       matrix:
         proof:
+          - exactness::proofs::combine_keeps_the_less_exact_class
+          - exactness::proofs::within_never_panics_and_respects_the_ceiling
           - grid::proofs::coarsen_is_nearest_and_reported
           - grid::proofs::coord_from_i128_accepts_exactly_the_frame
           - grid::proofs::coord_new_accepts_exactly_the_frame
           - grid::proofs::p3_new_accepts_exactly_three_frame_coordinates
           - grid::proofs::refine_is_exact_or_refused
           - grid::proofs::steps_refine_is_exact_or_none
+          - interval::proofs::add_sub_mul_enclose_the_rounded_result
+          - interval::proofs::div_encloses_or_refuses_a_divisor_with_zero
+          - interval::proofs::new_accepts_exactly_ordered_finite_bounds
+          - interval::proofs::square_is_never_negative_and_encloses
           - ladder::proofs::quarter_nm_always_answers_exactly
           - real::proofs::real_new_refuses_exactly_nan_and_the_infinities
           - real::proofs::total_order_and_its_tie_rules
+          - rng::proofs::draws_never_panic
+          - rng::proofs::philox_never_panics
+          - rng::proofs::stream_ranges_cut_without_overflow
           - sign::proofs::signs_follow_the_integers
           - wide::proofs::add_and_sub_never_panic_and_invert
           - wide::proofs::i128_conversions_and_resize_round_trip
