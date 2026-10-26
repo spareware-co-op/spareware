@@ -32,6 +32,10 @@
 //! - [`Surface`], in [`surface`]: surfaces, their points and partial derivatives (A3.5, A3.6,
 //!   A4.3, A4.4).
 //! - [`Point`], in [`point`]: the control points the algorithms take, `geom-math`'s and arrays.
+//! - Knot insertion and refinement of curves, [`Curve::insert_knot`] and [`Curve::refine`]
+//!   (A5.1, A5.4), each returning a [`Changed`] value with a certified deviation ([`ops`]).
+//! - Bezier extraction and degree elevation of curves, [`Curve::to_bezier`] and
+//!   [`Curve::elevate`] (A5.6, A5.9).
 //! - [`NurbsError`], in [`error`].
 //!
 //! Status: basis, evaluation and knot operations built (G56); interpolation and approximation
@@ -41,16 +45,22 @@
 
 extern crate alloc;
 
+mod arith;
 pub mod basis;
+mod bezier;
 mod budget;
 pub mod curve;
+mod elevate;
 pub mod error;
 mod index;
+mod insert;
+pub mod ops;
 pub mod point;
 pub mod surface;
 
 pub use basis::{Basis, Limit, MAX_DEGREE};
 pub use curve::Curve;
 pub use error::NurbsError;
+pub use ops::{Changed, Direction};
 pub use point::Point;
 pub use surface::Surface;
