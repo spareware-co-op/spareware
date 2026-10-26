@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 # The FPTaylor pipeline of the filter certificates (chapter 28.6; pieces G35 and G40), run inside
-# the pinned OCaml 4.13 container by kernel-certificates.yml: builds FPTaylor v0.9.3, the last
+# the pinned OCaml 4.11 container by kernel-certificates.yml: builds FPTaylor v0.9.3, the last
 # release that records proof certificates, asks it for each problem's error bound with a
 # certificate, builds HOL Light, and has HOL Light check each certificate against the bound the
 # problem names in its `// hol-light-bound:` line.
 # Usage: fptaylor.sh <problem.fpt>...  (geom-gen writes the problems: generated/fptaylor-*.fpt)
 #
-# OCaml 4.13, not 4.14: FPTaylor saves certificates as marshalled `Num` values, and HOL Light uses
-# the Num library below OCaml 4.14 and Zarith from 4.14 on (its Makefile), so both must be 4.13.
+# OCaml 4.11: FPTaylor saves certificates as marshalled `Num` values, and HOL Light uses the Num
+# library below OCaml 4.14 and Zarith from 4.14 on (its Makefile); and FPTaylor's 2020 checker
+# calls `compare` where an opened `List` shadows it with `List.compare` from OCaml 4.12 on
+# (formal/build_tform2.hl, line 534). Below 4.12 the checker runs as written.
 set -euo pipefail
 
 FPTAYLOR_COMMIT=f85a7a7797990fe5fb3436071afaa72c3f05629b    # v0.9.3 (MIT)

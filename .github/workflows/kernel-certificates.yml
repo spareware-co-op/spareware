@@ -35,8 +35,8 @@ concurrency:
 env:
   # rocq/rocq-prover:9.1.1 (OCaml 4.14.2), pinned by digest.
   ROCQ_IMAGE: rocq/rocq-prover:9.1@sha256:9a1e969649a3cc3c6f310d5be5a842e2187384560337c6c0807aba9f8565efba
-  # ocaml/opam:ubuntu-24.04-ocaml-4.13, pinned by digest (fptaylor.sh says why 4.13).
-  OCAML_IMAGE: ocaml/opam:ubuntu-24.04-ocaml-4.13@sha256:819c3f568ba8afaa36900a8bed1e6e9e69ea7ba96432df330e3d3ab25870646a
+  # ocaml/opam:ubuntu-24.04-ocaml-4.11, pinned by digest (fptaylor.sh says why 4.11).
+  OCAML_IMAGE: ocaml/opam:ubuntu-24.04-ocaml-4.11@sha256:b1a078473ec36987790399dc62e9f5147400000045d475652c4d4cc88dfc8530
   SCRIPTS: projects/engines/geometry/crates/geom-gen/certificates
   PROBLEMS: projects/engines/geometry/crates/geom-gen/generated
 
