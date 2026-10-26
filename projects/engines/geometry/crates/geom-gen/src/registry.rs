@@ -28,7 +28,7 @@ use crate::grid_steps;
 use crate::predicates;
 
 /// Every generator, in the order they run.
-pub const GENERATORS: [Generator; 17] = [
+pub const GENERATORS: [Generator; 21] = [
     Generator {
         name: grid_steps::NAME,
         output: grid_steps::OUTPUT,
@@ -118,6 +118,30 @@ pub const GENERATORS: [Generator; 17] = [
         output: "projects/engines/geometry/crates/geom-gen/generated/gappa-insphere-z.g",
         about: "insphere's f64 filter for Gappa where m_z is the largest maximum; Rocq checks the proof",
         generate: Generate::Plain(predicates::generate_gappa_insphere_z),
+    },
+    Generator {
+        name: "gappa-plane-side-d",
+        output: "projects/engines/geometry/crates/geom-gen/generated/gappa-plane-side-d.g",
+        about: "plane_side's f64 filter for Gappa where m_d is the largest term; Rocq checks the proof",
+        generate: Generate::Plain(predicates::generate_gappa_plane_side_d),
+    },
+    Generator {
+        name: "gappa-plane-side-z-n",
+        output: "projects/engines/geometry/crates/geom-gen/generated/gappa-plane-side-z-n.g",
+        about: "plane_side's f64 filter for Gappa where m_z * m_n is the largest term; Rocq checks the proof",
+        generate: Generate::Plain(predicates::generate_gappa_plane_side_z_n),
+    },
+    Generator {
+        name: "gappa-plane-side-y-n",
+        output: "projects/engines/geometry/crates/geom-gen/generated/gappa-plane-side-y-n.g",
+        about: "plane_side's f64 filter for Gappa where m_y * m_n is the largest term; Rocq checks the proof",
+        generate: Generate::Plain(predicates::generate_gappa_plane_side_y_n),
+    },
+    Generator {
+        name: "gappa-plane-side-x-n",
+        output: "projects/engines/geometry/crates/geom-gen/generated/gappa-plane-side-x-n.g",
+        about: "plane_side's f64 filter for Gappa where m_x * m_n is the largest term; Rocq checks the proof",
+        generate: Generate::Plain(predicates::generate_gappa_plane_side_x_n),
     },
     Generator {
         name: "fptaylor-orient2d",
