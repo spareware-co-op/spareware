@@ -616,6 +616,22 @@ fn gappa_hints(out: &mut String, sh: &Shape<'_>) -> Result<(), EmitError> {
             seen.push((nat.clone(), canon));
         }
     }
+    // The bound's relative error is stated against C * S, and Gappa matches products as written:
+    // where the filter multiplies the maxima out in another order than S's, the scale's exact
+    // form is tied to S.
+    let exact = scale_rounded(&d.scale_expr, d, sh.case)?.replace("rnd(", "(");
+    let mut factors = canonical(&sh.monomial, d)?
+        .split(" * ")
+        .map(str::to_owned)
+        .collect::<Vec<_>>()
+        .into_iter();
+    let first = factors.next().unwrap_or_default();
+    let written = factors.fold(first, |acc, f| format!("({acc} * {f})"));
+    if exact != written {
+        line(out, "");
+        line(out, "# The scale as the filter multiplies it out is S.");
+        line(out, &format!("C * S -> C * {exact};"));
+    }
     Ok(())
 }
 

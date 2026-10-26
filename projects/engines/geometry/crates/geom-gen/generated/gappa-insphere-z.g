@@ -248,3 +248,6 @@ m_z * (m_x * m_y) -> m_x * m_y * m_z;
 m_x * m_y * m_z -> m_z * (m_x * m_y);
 (m_z * m_z) * (m_x * m_y * m_z) -> m_x * m_y * m_z * m_z * m_z;
 m_x * m_y * m_z * m_z * m_z -> (m_z * m_z) * (m_x * m_y * m_z);
+
+# The scale as the filter multiplies it out is S.
+C * S -> C * (((m_x * m_y) * m_z) * (m_z * m_z));
