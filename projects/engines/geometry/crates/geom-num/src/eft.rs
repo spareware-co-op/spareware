@@ -52,7 +52,9 @@
 //! - **Bounded proofs, and what is only tested.** Kani proves (piece G41, chapter 28.7) that
 //!   `split` adds back exactly or reports, for every finite double; that `two_sum` and
 //!   `fast_two_sum` agree and give the rounded sum and its error for every finite operand against
-//!   five others, in either order; and that `two_prod` gives the rounded product and its error
+//!   five others, in either order (against the largest double, for operands below 2^969, where no
+//!   step overflows; the overflow fallback is only tested, because its NaN intermediate trips
+//!   Kani's NaN check); and that `two_prod` gives the rounded product and its error
 //!   for every finite first factor over six second factors, one for each of its paths (the
 //!   proofs module has one harness per value, with kissat as the SAT solver). Over every pair at
 //!   once, or one law's values in one harness, the solver ran past CI's hour. Every
@@ -615,11 +617,24 @@ mod proofs {
         two_sum_law(f64::from_bits(1));
     }
 
-    /// [`two_sum_law`] with the largest double: overflow.
+    /// [`two_sum_law`] with the largest double, for every first operand below 2^969 in magnitude:
+    /// sums up to the edge of overflow, where no step overflows (Ω + 2^969 is below the midpoint
+    /// Ω + 2^970, so every sum and difference rounds to at most Ω). Beyond that an intermediate
+    /// overflows by design and the fallback returns [`fast_two_sum`]'s pair; Kani's NaN check
+    /// reports the NaN that intermediate makes (run 40323412527), so that path is tested against
+    /// exact rationals (`tests/attack2_eft.rs`), not proven.
     #[kani::proof]
     #[kani::solver(kissat)]
     fn two_sum_with_the_largest_double() {
-        two_sum_law(f64::MAX);
+        let x = finite();
+        kani::assume(abs(x) < f64::from_bits(0x7c80_0000_0000_0000));
+        for (a, b) in [(x, f64::MAX), (f64::MAX, x)] {
+            let (s, e) = two_sum(a, b);
+            let (fs, fe) = fast_two_sum(a, b);
+            assert!(s.to_bits() == fs.to_bits() && e.to_bits() == fe.to_bits());
+            assert!(s.to_bits() == (a + b).to_bits());
+            assert!(s.is_finite() && e.is_finite() && s + e == s);
+        }
     }
 
     /// `split` cuts a double into two halves that add back to it exactly, for every finite double
