@@ -1,0 +1,283 @@
+//! Attacks on piece G42's plain-`i128` variant of the generated exact paths
+//! (`geom_num::generated::plain`, chapter 23.3): for every registered predicate,
+//! `<predicate>_value` must return exactly what the shipped module's `value` returns, `None`
+//! included.
+//!
+//! - On random inputs across the whole domain: grid coordinates and rounded inputs of every bit
+//!   length, mixed with the extremes ±(2^40 − 1) and ±(2^bits − 1), zeros and small values, so
+//!   degenerate inputs (zero results) occur too.
+//! - At every sign combination of the grid's extremes, for every predicate whose inputs are all
+//!   points.
+//! - A rounded input one past its declared range: both refuse it.
+//!
+//! The shipped paths are tested against big integers in `generated_predicates.rs` and
+//! `attack_g29.rs`, so agreement with them is agreement with the exact value. Values of different
+//! types (the plain variant holds an `i64` result in an `i128`) are compared as `I512`.
+//!
+//! Seeds: each randomised test prints `seed: <hex>` and runs from a fixed default;
+//! `SPAREKIT_SEED=<hex>` replays another (chapter 28.17).
+
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::disallowed_methods,
+    reason = "generators; the rules are for kernel code"
+)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::many_single_char_names,
+    clippy::similar_names
+)]
+
+use geom_num::generated::{
+    incircle, insphere, lpi_side, lpi_weight, orient2d, orient3d, plain, plane_side, ssi_side,
+    ssi_weight, tpi_side, tpi_weight,
+};
+use geom_num::grid::{COORD_MAX, P2, P3};
+use geom_num::{I512, Wide};
+use geom_test::rng::SplitMix64;
+use geom_test::seed::{self, Seed};
+
+/// Random cases per predicate.
+const CASES: usize = 20_000;
+
+/// The default seed of the randomised tests here.
+const SEED: Seed = Seed(0x0642_0000_0000_0001);
+
+/// A value of any exact-path result type, as an `I512`, which holds them all.
+trait Exact {
+    fn i512(self) -> I512;
+}
+
+impl Exact for i64 {
+    fn i512(self) -> I512 {
+        I512::from_i64(self)
+    }
+}
+
+impl Exact for i128 {
+    fn i512(self) -> I512 {
+        I512::from_i128(self)
+    }
+}
+
+impl<const L: usize> Exact for Wide<L> {
+    fn i512(self) -> I512 {
+        self.resize::<8>()
+            .expect("no exact path is wider than I512")
+    }
+}
+
+/// Both results, compared as `I512`s. Every input drawn here is in the domain, so the shipped path
+/// must answer: a `None` from it would make the comparison empty.
+fn same<A: Exact, B: Exact>(shipped: Option<A>, variant: Option<B>) -> bool {
+    assert!(
+        shipped.is_some(),
+        "the shipped path refused an input in its domain"
+    );
+    shipped.map(Exact::i512) == variant.map(Exact::i512)
+}
+
+/// Draws inputs: a value of a random bit length and sign, an extreme, zero or a small value.
+struct Draw(SplitMix64);
+
+impl Draw {
+    fn new(label: &str) -> Draw {
+        Draw(SplitMix64::new(seed::resolve(label, SEED).unwrap()))
+    }
+
+    /// A value with |v| ≤ 2^bits − 1.
+    fn value(&mut self, bits: u32) -> i128 {
+        let max = (1i128 << bits) - 1;
+        let pick = self.0.next_u64() % 16;
+        let sign = if self.0.coin() { 1 } else { -1 };
+        match pick {
+            0..=3 => sign * max,
+            4 | 5 => 0,
+            6 | 7 => sign * i128::from(self.0.next_u64() % 4),
+            _ => {
+                let raw = (u128::from(self.0.next_u64()) << 64 | u128::from(self.0.next_u64()))
+                    >> (128 - bits);
+                let keep = self.0.next_u64() % u64::from(bits + 1);
+                sign * (raw >> (u64::from(bits) - keep)) as i128
+            }
+        }
+    }
+
+    fn coord(&mut self) -> i64 {
+        let v = self.value(40);
+        assert!(v.unsigned_abs() <= COORD_MAX as u128);
+        v as i64
+    }
+
+    fn p2(&mut self) -> P2 {
+        P2::new(self.coord(), self.coord()).unwrap()
+    }
+
+    fn p3(&mut self) -> P3 {
+        P3::new(self.coord(), self.coord(), self.coord()).unwrap()
+    }
+
+    /// A plane normal's coordinate: 83 bits.
+    fn n(&mut self) -> i128 {
+        self.value(83)
+    }
+
+    /// A plane offset: 125 bits.
+    fn d(&mut self) -> i128 {
+        self.value(125)
+    }
+}
+
+#[test]
+fn explicit_point_predicates_agree_on_random_inputs() {
+    let mut g = Draw::new("attack_g42::explicit_point_predicates_agree_on_random_inputs");
+    for _ in 0..CASES {
+        let (a, b, c, d, e, f) = (g.p2(), g.p2(), g.p2(), g.p2(), g.p2(), g.p2());
+        assert!(same(
+            orient2d::value(a, b, c),
+            plain::orient2d_value(a, b, c)
+        ));
+        assert!(same(
+            incircle::value(a, b, c, d),
+            plain::incircle_value(a, b, c, d)
+        ));
+        assert!(same(
+            ssi_weight::value(a, b, c, d),
+            plain::ssi_weight_value(a, b, c, d)
+        ));
+        assert!(same(
+            ssi_side::value(a, b, c, d, e, f),
+            plain::ssi_side_value(a, b, c, d, e, f)
+        ));
+        let (a, b, c, d, e) = (g.p3(), g.p3(), g.p3(), g.p3(), g.p3());
+        assert!(same(
+            orient3d::value(a, b, c, d),
+            plain::orient3d_value(a, b, c, d)
+        ));
+        assert!(same(
+            insphere::value(a, b, c, d, e),
+            plain::insphere_value(a, b, c, d, e)
+        ));
+    }
+}
+
+#[test]
+fn plane_predicates_agree_on_random_inputs() {
+    let mut g = Draw::new("attack_g42::plane_predicates_agree_on_random_inputs");
+    for _ in 0..CASES {
+        let (p, q) = (g.p3(), g.p3());
+        let [nx, ny, nz] = [g.n(), g.n(), g.n()];
+        let d = g.d();
+        assert!(same(
+            plane_side::value(nx, ny, nz, d, p),
+            plain::plane_side_value(nx, ny, nz, d, p)
+        ));
+        assert!(same(
+            lpi_weight::value(nx, ny, nz, p, q),
+            plain::lpi_weight_value(nx, ny, nz, p, q)
+        ));
+        let n: [i128; 12] = core::array::from_fn(|_| g.n());
+        let o: [i128; 4] = core::array::from_fn(|_| g.d());
+        assert!(same(
+            tpi_weight::value(n[0], n[1], n[2], n[3], n[4], n[5], n[6], n[7], n[8]),
+            plain::tpi_weight_value(n[0], n[1], n[2], n[3], n[4], n[5], n[6], n[7], n[8])
+        ));
+        assert!(same(
+            tpi_side::value(
+                n[0], n[1], n[2], o[0], n[3], n[4], n[5], o[1], n[6], n[7], n[8], o[2], n[9],
+                n[10], n[11], o[3]
+            ),
+            plain::tpi_side_value(
+                n[0], n[1], n[2], o[0], n[3], n[4], n[5], o[1], n[6], n[7], n[8], o[2], n[9],
+                n[10], n[11], o[3]
+            )
+        ));
+        assert!(same(
+            lpi_side::value(n[0], n[1], n[2], o[0], n[3], n[4], n[5], o[1], p, q),
+            plain::lpi_side_value(n[0], n[1], n[2], o[0], n[3], n[4], n[5], o[1], p, q)
+        ));
+    }
+}
+
+/// Every sign combination of ±(2^40 − 1) over `count` coordinates.
+fn extremes(count: u32) -> impl Iterator<Item = Vec<i64>> {
+    (0u32..1 << count).map(move |bits| {
+        (0..count)
+            .map(|i| {
+                if bits >> i & 1 == 1 {
+                    -COORD_MAX
+                } else {
+                    COORD_MAX
+                }
+            })
+            .collect()
+    })
+}
+
+fn p2s<const N: usize>(c: &[i64]) -> [P2; N] {
+    core::array::from_fn(|i| P2::new(c[2 * i], c[2 * i + 1]).unwrap())
+}
+
+fn p3s<const N: usize>(c: &[i64]) -> [P3; N] {
+    core::array::from_fn(|i| P3::new(c[3 * i], c[3 * i + 1], c[3 * i + 2]).unwrap())
+}
+
+#[test]
+fn explicit_point_predicates_agree_at_every_extreme() {
+    for c in extremes(6) {
+        let [a, b, e] = p2s(&c);
+        assert!(same(
+            orient2d::value(a, b, e),
+            plain::orient2d_value(a, b, e)
+        ));
+    }
+    for c in extremes(8) {
+        let [a, b, e, f] = p2s(&c);
+        assert!(same(
+            incircle::value(a, b, e, f),
+            plain::incircle_value(a, b, e, f)
+        ));
+        assert!(same(
+            ssi_weight::value(a, b, e, f),
+            plain::ssi_weight_value(a, b, e, f)
+        ));
+    }
+    for c in extremes(12) {
+        let [a, b, e, f, g, h] = p2s(&c);
+        assert!(same(
+            ssi_side::value(a, b, e, f, g, h),
+            plain::ssi_side_value(a, b, e, f, g, h)
+        ));
+        let [a, b, e, f] = p3s(&c);
+        assert!(same(
+            orient3d::value(a, b, e, f),
+            plain::orient3d_value(a, b, e, f)
+        ));
+    }
+    for c in extremes(15) {
+        let [a, b, e, f, g] = p3s(&c);
+        let shipped = insphere::value(a, b, e, f, g);
+        assert!(shipped.is_some());
+        assert!(same(shipped, plain::insphere_value(a, b, e, f, g)));
+    }
+}
+
+#[test]
+fn a_rounded_input_past_its_range_is_refused_by_both() {
+    let p = P3::new(1, 2, 3).unwrap();
+    let (n, d) = ((1i128 << 83) - 1, (1i128 << 125) - 1);
+    assert!(plane_side::value(n, n, n, d, p).is_some());
+    assert!(plain::plane_side_value(n, n, n, d, p).is_some());
+    for (nx, d) in [(n + 1, d), (-n - 1, d), (n, d + 1), (n, -d - 1)] {
+        assert_eq!(plane_side::value(nx, n, n, d, p), None);
+        assert_eq!(plain::plane_side_value(nx, n, n, d, p), None);
+    }
+    assert_eq!(lpi_weight::value(n + 1, n, n, p, p), None);
+    assert_eq!(plain::lpi_weight_value(n + 1, n, n, p, p), None);
+}

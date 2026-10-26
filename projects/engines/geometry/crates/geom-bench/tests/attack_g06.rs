@@ -1309,6 +1309,70 @@ fn generated_digest(name: &str, class: Class) -> Option<Digest> {
                 .into_iter()
                 .map(|([a, b, c, d], p, q)| gp::ssi_side::value(a, b, c, d, p, q)),
         ),
+        // The plain-i128 variant (piece G42): the shipped value on the variant's inputs, so a
+        // variant that returned anything else fails its digest.
+        "orient2d_value_plain" => fold(
+            i::orient2d_value_plain(class)
+                .into_iter()
+                .map(|[a, b, c]| gp::orient2d::value(a, b, c)),
+        ),
+        "orient3d_value_plain" => fold(
+            i::orient3d_value_plain(class)
+                .into_iter()
+                .map(|[a, b, c, d]| gp::orient3d::value(a, b, c, d)),
+        ),
+        "incircle_value_plain" => fold(
+            i::incircle_value_plain(class)
+                .into_iter()
+                .map(|[a, b, c, d]| gp::incircle::value(a, b, c, d)),
+        ),
+        "insphere_value_plain" => fold(
+            i::insphere_value_plain(class)
+                .into_iter()
+                .map(|[a, b, c, d, e]| gp::insphere::value(a, b, c, d, e)),
+        ),
+        "plane_side_value_plain" => fold(
+            i::plane_side_value_plain(class)
+                .into_iter()
+                .map(|([x, y, z], d, p)| gp::plane_side::value(x, y, z, d, p)),
+        ),
+        "tpi_weight_value_plain" => fold(i::tpi_weight_value_plain(class).into_iter().map(
+            |[[ax, ay, az], [bx, by, bz], [cx, cy, cz]]| {
+                gp::tpi_weight::value(ax, ay, az, bx, by, bz, cx, cy, cz)
+            },
+        )),
+        "tpi_side_value_plain" => fold(i::tpi_side_value_plain(class).into_iter().map(
+            |[
+                ([ax, ay, az], ad),
+                ([bx, by, bz], bd),
+                ([cx, cy, cz], cd),
+                ([sx, sy, sz], sd),
+            ]| {
+                gp::tpi_side::value(
+                    ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
+                )
+            },
+        )),
+        "lpi_weight_value_plain" => fold(
+            i::lpi_weight_value_plain(class)
+                .into_iter()
+                .map(|([nx, ny, nz], p, q)| gp::lpi_weight::value(nx, ny, nz, p, q)),
+        ),
+        "lpi_side_value_plain" => fold(i::lpi_side_value_plain(class).into_iter().map(
+            |(([ax, ay, az], ad), ([bx, by, bz], bd), p, q)| {
+                gp::lpi_side::value(ax, ay, az, ad, bx, by, bz, bd, p, q)
+            },
+        )),
+        "ssi_weight_value_plain" => fold(
+            i::ssi_weight_value_plain(class)
+                .into_iter()
+                .map(|[a, b, c, d]| gp::ssi_weight::value(a, b, c, d)),
+        ),
+        "ssi_side_value_plain" => fold(
+            i::ssi_side_value_plain(class)
+                .into_iter()
+                .map(|([a, b, c, d], p, q)| gp::ssi_side::value(a, b, c, d, p, q)),
+        ),
         _ => return None,
     })
 }

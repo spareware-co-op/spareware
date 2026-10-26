@@ -1078,3 +1078,120 @@ pub mod generated {
         });
     }
 }
+
+/// The plain-`i128` variant of the generated exact paths (chapter 23.3; piece G42), on the same
+/// inputs as the shipped `value` kernels of [`generated`], so the two compare directly.
+pub mod plain {
+    use geom_num::generated::plain;
+    use geom_num::grid::{P2, P3};
+    use geom_num::wide::{I256, I384};
+
+    use super::run;
+
+    /// A plane's normal and offset.
+    type Coefficients = ([i128; 3], i128);
+
+    /// `generated::plain::orient2d_value` on each triple.
+    #[inline(never)]
+    pub fn orient2d_value(batch: &[[P2; 3]], out: &mut Vec<Option<i128>>) {
+        run(batch, out, |&[a, b, c]| plain::orient2d_value(a, b, c));
+    }
+
+    /// `generated::plain::orient3d_value` on each quadruple.
+    #[inline(never)]
+    pub fn orient3d_value(batch: &[[P3; 4]], out: &mut Vec<Option<i128>>) {
+        run(batch, out, |&[a, b, c, d]| {
+            plain::orient3d_value(a, b, c, d)
+        });
+    }
+
+    /// `generated::plain::incircle_value` on each quadruple.
+    #[inline(never)]
+    pub fn incircle_value(batch: &[[P2; 4]], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&[a, b, c, d]| {
+            plain::incircle_value(a, b, c, d)
+        });
+    }
+
+    /// `generated::plain::insphere_value` on each quintuple.
+    #[inline(never)]
+    pub fn insphere_value(batch: &[[P3; 5]], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&[a, b, c, d, e]| {
+            plain::insphere_value(a, b, c, d, e)
+        });
+    }
+
+    /// `generated::plain::plane_side_value` on each (normal, offset, point).
+    #[inline(never)]
+    pub fn plane_side_value(batch: &[([i128; 3], i128, P3)], out: &mut Vec<Option<i128>>) {
+        run(batch, out, |&([nx, ny, nz], d, p)| {
+            plain::plane_side_value(nx, ny, nz, d, p)
+        });
+    }
+
+    /// `generated::plain::tpi_weight_value` on each normal triple.
+    #[inline(never)]
+    pub fn tpi_weight_value(batch: &[[[i128; 3]; 3]], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&[[ax, ay, az], [bx, by, bz], [cx, cy, cz]]| {
+            plain::tpi_weight_value(ax, ay, az, bx, by, bz, cx, cy, cz)
+        });
+    }
+
+    /// `generated::plain::tpi_side_value` on each plane quadruple.
+    #[inline(never)]
+    pub fn tpi_side_value(batch: &[[Coefficients; 4]], out: &mut Vec<Option<I384>>) {
+        run(
+            batch,
+            out,
+            |&[
+                ([ax, ay, az], ad),
+                ([bx, by, bz], bd),
+                ([cx, cy, cz], cd),
+                ([sx, sy, sz], sd),
+            ]| {
+                plain::tpi_side_value(
+                    ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
+                )
+            },
+        );
+    }
+
+    /// `generated::plain::lpi_weight_value` on each (normal, p, q).
+    #[inline(never)]
+    pub fn lpi_weight_value(batch: &[([i128; 3], P3, P3)], out: &mut Vec<Option<i128>>) {
+        run(batch, out, |&([nx, ny, nz], p, q)| {
+            plain::lpi_weight_value(nx, ny, nz, p, q)
+        });
+    }
+
+    /// `generated::plain::lpi_side_value` on each (plane, plane, p, q).
+    #[inline(never)]
+    pub fn lpi_side_value(
+        batch: &[(Coefficients, Coefficients, P3, P3)],
+        out: &mut Vec<Option<I256>>,
+    ) {
+        run(
+            batch,
+            out,
+            |&(([ax, ay, az], ad), ([bx, by, bz], bd), p, q)| {
+                plain::lpi_side_value(ax, ay, az, ad, bx, by, bz, bd, p, q)
+            },
+        );
+    }
+
+    /// `generated::plain::ssi_weight_value` on each point quadruple.
+    #[inline(never)]
+    pub fn ssi_weight_value(batch: &[[P2; 4]], out: &mut Vec<Option<i128>>) {
+        run(batch, out, |&[a, b, c, d]| {
+            plain::ssi_weight_value(a, b, c, d)
+        });
+    }
+
+    /// `generated::plain::ssi_side_value` on each (lines, p, q).
+    #[inline(never)]
+    pub fn ssi_side_value(batch: &[([P2; 4], P2, P2)], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&([a, b, c, d], p, q)| {
+            plain::ssi_side_value(a, b, c, d, p, q)
+        });
+    }
+}

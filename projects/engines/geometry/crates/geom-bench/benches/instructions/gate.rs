@@ -1687,10 +1687,121 @@ pub mod generated {
         run
     }
 
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/orient2d_value_plain/typical"))]
+    #[bench::degenerate(leak("generated/orient2d_value_plain/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/orient2d_value_plain/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/orient2d_value_plain/extreme"))]
+    fn orient2d_value_plain(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/orient3d_value_plain/typical"))]
+    #[bench::degenerate(leak("generated/orient3d_value_plain/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/orient3d_value_plain/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/orient3d_value_plain/extreme"))]
+    fn orient3d_value_plain(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/incircle_value_plain/typical"))]
+    #[bench::degenerate(leak("generated/incircle_value_plain/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/incircle_value_plain/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/incircle_value_plain/extreme"))]
+    fn incircle_value_plain(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/insphere_value_plain/typical"))]
+    #[bench::degenerate(leak("generated/insphere_value_plain/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/insphere_value_plain/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/insphere_value_plain/extreme"))]
+    fn insphere_value_plain(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/plane_side_value_plain/typical"))]
+    #[bench::degenerate(leak("generated/plane_side_value_plain/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/plane_side_value_plain/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/plane_side_value_plain/extreme"))]
+    fn plane_side_value_plain(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/tpi_weight_value_plain/typical"))]
+    #[bench::degenerate(leak("generated/tpi_weight_value_plain/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/tpi_weight_value_plain/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/tpi_weight_value_plain/extreme"))]
+    fn tpi_weight_value_plain(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/tpi_side_value_plain/typical"))]
+    #[bench::degenerate(leak("generated/tpi_side_value_plain/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/tpi_side_value_plain/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/tpi_side_value_plain/extreme"))]
+    fn tpi_side_value_plain(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/lpi_weight_value_plain/typical"))]
+    #[bench::degenerate(leak("generated/lpi_weight_value_plain/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/lpi_weight_value_plain/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/lpi_weight_value_plain/extreme"))]
+    fn lpi_weight_value_plain(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/lpi_side_value_plain/typical"))]
+    #[bench::degenerate(leak("generated/lpi_side_value_plain/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/lpi_side_value_plain/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/lpi_side_value_plain/extreme"))]
+    fn lpi_side_value_plain(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/ssi_weight_value_plain/typical"))]
+    #[bench::degenerate(leak("generated/ssi_weight_value_plain/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/ssi_weight_value_plain/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/ssi_weight_value_plain/extreme"))]
+    fn ssi_weight_value_plain(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/ssi_side_value_plain/typical"))]
+    #[bench::degenerate(leak("generated/ssi_side_value_plain/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/ssi_side_value_plain/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/ssi_side_value_plain/extreme"))]
+    fn ssi_side_value_plain(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
     library_benchmark_group!(
         name = generated;
         benchmarks = orient2d_filter, orient2d_value, orient3d_filter, orient3d_value, incircle_filter, incircle_value, insphere_filter, insphere_value, plane_side_filter, plane_side_value,
-            tpi_weight_filter, tpi_weight_value, tpi_side_filter, tpi_side_value, lpi_weight_filter, lpi_weight_value, lpi_side_filter, lpi_side_value, ssi_weight_filter, ssi_weight_value, ssi_side_filter, ssi_side_value
+            tpi_weight_filter, tpi_weight_value, tpi_side_filter, tpi_side_value, lpi_weight_filter, lpi_weight_value, lpi_side_filter, lpi_side_value, ssi_weight_filter, ssi_weight_value, ssi_side_filter, ssi_side_value,
+            orient2d_value_plain, orient3d_value_plain, incircle_value_plain, insphere_value_plain, plane_side_value_plain, tpi_weight_value_plain, tpi_side_value_plain, lpi_weight_value_plain, lpi_side_value_plain, ssi_weight_value_plain, ssi_side_value_plain
     );
 }
 

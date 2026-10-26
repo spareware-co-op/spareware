@@ -18,8 +18,12 @@
 //!   several), except the run-time scale, which it reads and evaluates: it must compute exactly the
 //!   result's scale, with the roundings the constant counts (a scale computed over several lines,
 //!   one term per line, is read as the one expression its lines compute together);
+//! - the plain-`i128` variant `plain.rs` (piece G42), line for line outside comments and
+//!   attributes: for each registered predicate, in their order, `<predicate>_value` with the same
+//!   steps, each held in `i128` or in its certificate's wide type, both operands widened to it and
+//!   the general method, so every type it uses is at least as wide as the certificate's;
 //! - the parent module `mod.rs`, line for line outside comments and attributes: one `pub mod` per
-//!   registered predicate and the helpers the proof relies on, as the checker writes them: `decide`
+//!   registered predicate and per variant, and the helpers the proof relies on, as the checker writes them: `decide`
 //!   with strict comparisons and the zero-scale case, `largest_magnitude` taking absolute values,
 //!   `larger` by comparison, the exact conversion of a coordinate, and the range check and
 //!   correctly rounded conversion of a rounded input.
@@ -422,6 +426,8 @@ struct Row {
     /// The filter's statement and the exact path's.
     filter: String,
     exact: String,
+    /// The exact path's statement in the plain-`i128` variant (piece G42).
+    plain: String,
     bound: Big,
     bits: u32,
     width: &'static str,
@@ -473,6 +479,12 @@ fn limbs_of(width: &str) -> usize {
 /// Whether a width is one of the `Wide` types (operands by reference).
 fn is_wide(width: &str) -> bool {
     width.starts_with('I')
+}
+
+/// The type the plain-`i128` variant (piece G42) holds a step of width `w` in: `i128` for an
+/// `i64` step, the same type otherwise.
+fn held(w: &'static str) -> &'static str {
+    if w == "i64" { "i128" } else { w }
 }
 
 /// `name`, held in `from`, as a `to`.
@@ -566,6 +578,7 @@ impl Walker<'_> {
                     computes: format!("{p}.{a}"),
                     filter: format!("exact_f64({p}.{a})"),
                     exact: coord_exact(p, *a, w),
+                    plain: coord_exact(p, *a, held(w)),
                     bits,
                     width: w,
                     scale: self.unit(&a.to_string()),
@@ -605,6 +618,7 @@ impl Walker<'_> {
                     computes: n.clone(),
                     filter: format!("rounded_f64({n}, {bits})?"),
                     exact,
+                    plain: format!("within({n}, {bits})?"),
                     bits: *bits,
                     width: w,
                     scale: self.unit(g),
@@ -634,6 +648,12 @@ impl Walker<'_> {
                                 '-',
                                 &coord_exact(q, *qa, w),
                                 w,
+                            ),
+                            plain: checked(
+                                &coord_exact(p, *pa, held(w)),
+                                '-',
+                                &coord_exact(q, *qa, held(w)),
+                                held(w),
                             ),
                             bits,
                             width: w,
@@ -712,10 +732,20 @@ impl Walker<'_> {
                         w,
                     )
                 };
+                // The plain-`i128` variant (piece G42): the step held in `i128` or wider, both
+                // operands widened to it, and the general method.
+                let pw = held(w);
+                let plain = checked(
+                    &conv(&a.name, held(a.width), pw),
+                    *op,
+                    &conv(&b.name, held(b.width), pw),
+                    pw,
+                );
                 let row = Row {
                     computes: format!("{} {op} {}", a.name, b.name),
                     filter: format!("{} {op} {}", a.name, b.name),
                     exact,
+                    plain,
                     bound,
                     bits,
                     width: w,
@@ -977,6 +1007,82 @@ fn literal(bits: u64) -> String {
     format!("0x{}_{}_{}_{}", &h[0..4], &h[4..8], &h[8..12], &h[12..16])
 }
 
+/// A function's first line or lines: on one line when it fits 100 columns, otherwise one
+/// parameter per line, as rustfmt's default layout writes it.
+fn signature_lines(name: &str, params: &[String], ret: &str) -> Vec<String> {
+    let one = format!("pub fn {name}({}) -> {ret} {{", params.join(", "));
+    if one.chars().count() <= 100 {
+        return vec![one];
+    }
+    let mut lines = vec![format!("pub fn {name}(")];
+    lines.extend(params.iter().map(|p| format!("    {p},")));
+    lines.push(format!(") -> {ret} {{"));
+    lines
+}
+
+/// A description's parameters, in its order: a point as `P2` or `P3`, a rounded input as `i128`.
+fn parameters(d: &Desc) -> Vec<String> {
+    d.inputs
+        .iter()
+        .map(|(n, k)| match k {
+            Kind::Point(2) => format!("{n}: P2"),
+            Kind::Point(_) => format!("{n}: P3"),
+            Kind::Rounded(..) => format!("{n}: i128"),
+        })
+        .collect()
+}
+
+/// The code lines of the plain-`i128` variant (piece G42), as the checker writes them from its
+/// own derivation of every registered predicate, in their order: the imports, then for each
+/// predicate `<predicate>_value`, each step in the type [`held`] gives it.
+fn expected_plain() -> Result<Vec<Expect>, String> {
+    let mut parts = Vec::new();
+    for p in &PREDICATES {
+        parts.push((p.comparison.name, read(p.text)?, derive_again(p.text)?));
+    }
+    let mut points: BTreeSet<&str> = BTreeSet::new();
+    let mut wides: BTreeSet<&str> = BTreeSet::new();
+    for (_, d, x) in &parts {
+        for (_, k) in &d.inputs {
+            match k {
+                Kind::Point(2) => points.insert("P2"),
+                Kind::Point(_) => points.insert("P3"),
+                Kind::Rounded(..) => false,
+            };
+        }
+        wides.extend(x.rows.iter().map(|r| held(r.width)).filter(|w| is_wide(w)));
+    }
+    let mut out = Vec::new();
+    let mut push = |s: String| out.push(Expect::Line(s));
+    let points: Vec<&str> = points.into_iter().collect();
+    match points.as_slice() {
+        [] => {}
+        [one] => push(format!("use crate::grid::{one};")),
+        many => push(format!("use crate::grid::{{{}}};", many.join(", "))),
+    }
+    push(WIDE_IMPORT.to_owned());
+    if parts
+        .iter()
+        .any(|(_, _, x)| x.rows.iter().any(|r| r.rounded))
+    {
+        push("use super::within;".to_owned());
+    }
+    for (name, d, x) in &parts {
+        let root = &x.rows[x.result];
+        let ret = format!("Option<{}>", held(root.width));
+        for l in signature_lines(&format!("{name}_value"), &parameters(d), &ret) {
+            push(l);
+        }
+        for r in &x.rows {
+            push(format!("    let {} = {};", r.name, r.plain));
+        }
+        push(format!("    Some({})", root.name));
+        push("}".to_owned());
+    }
+    let wides: Vec<&str> = wides.into_iter().collect();
+    Ok(settle_wide_import(out, &wides))
+}
+
 /// The code lines of a predicate module, as the checker writes them from its own derivation.
 fn expected_module(d: &Desc, x: &Derived, constant: u64, larger: bool) -> Vec<Expect> {
     let mut out = Vec::new();
@@ -1017,27 +1123,8 @@ fn expected_module(d: &Desc, x: &Derived, constant: u64, larger: bool) -> Vec<Ex
         "const ERROR: f64 = f64::from_bits({});",
         literal(constant)
     ));
-    let params: Vec<String> = d
-        .inputs
-        .iter()
-        .map(|(n, k)| match k {
-            Kind::Point(2) => format!("{n}: P2"),
-            Kind::Point(_) => format!("{n}: P3"),
-            Kind::Rounded(..) => format!("{n}: i128"),
-        })
-        .collect();
-    // A signature on one line when it fits 100 columns, otherwise one parameter per line, as
-    // rustfmt's default layout writes it.
-    let signature = |name: &str, ret: &str| -> Vec<String> {
-        let one = format!("pub fn {name}({}) -> {ret} {{", params.join(", "));
-        if one.chars().count() <= 100 {
-            return vec![one];
-        }
-        let mut lines = vec![format!("pub fn {name}(")];
-        lines.extend(params.iter().map(|p| format!("    {p},")));
-        lines.push(format!(") -> {ret} {{"));
-        lines
-    };
+    let params = parameters(d);
+    let signature = |name: &str, ret: &str| signature_lines(name, &params, ret);
     let args: Vec<&str> = d.inputs.iter().map(|(n, _)| n.as_str()).collect();
     let root = &x.rows[x.result];
     for l in signature("filter", "Option<Sign>") {
@@ -1126,6 +1213,31 @@ fn settle_wide_import(out: Vec<Expect>, candidates: &[&str]) -> Vec<Expect> {
             other => Some(other),
         })
         .collect()
+}
+
+/// The plain-`i128` variant's code lines against [`expected_plain`]'s, line for line (piece G42).
+fn verify_plain(plain: &str) -> Vec<String> {
+    let want = match expected_plain() {
+        Ok(w) => w,
+        Err(e) => return vec![format!("a description: {e}")],
+    };
+    let got = code_lines(plain);
+    let mut bad = Vec::new();
+    if got.len() != want.len() {
+        bad.push(format!(
+            "{} lines of code in plain.rs, {} expected",
+            got.len(),
+            want.len()
+        ));
+    }
+    for (g, w) in got.iter().zip(&want) {
+        match w {
+            Expect::Line(w) if g == w => {}
+            Expect::Line(w) => bad.push(format!("plain.rs: `{g}`, expected `{w}`")),
+            Expect::Scale => bad.push("plain.rs: a scale where none belongs".to_owned()),
+        }
+    }
+    bad
 }
 
 /// The code lines of the parent module, as the checker writes them: one `pub mod` per predicate,
@@ -1387,7 +1499,9 @@ fn verify(text: &str, module: &str) -> Vec<String> {
 
 /// Checks the committed parent module against the registered predicates; returns what failed.
 fn verify_parent(parent: &str) -> Vec<String> {
-    let names: Vec<&str> = PREDICATES.iter().map(|p| p.comparison.name).collect();
+    let mut names: Vec<&str> = PREDICATES.iter().map(|p| p.comparison.name).collect();
+    // The one variant module (piece G42).
+    names.push("plain");
     let mut coordinates = false;
     let mut rounded = false;
     for p in &PREDICATES {
@@ -1421,6 +1535,9 @@ fn verify_parent(parent: &str) -> Vec<String> {
 
 /// The parent module, built into the test so it also runs on wasm32.
 const PARENT: &str = include_str!("../../geom-num/src/generated/mod.rs");
+
+/// The plain-`i128` variant (piece G42), built into the test so it also runs on wasm32.
+const PLAIN: &str = include_str!("../../geom-num/src/generated/plain.rs");
 
 /// The committed modules, built into the test so it also runs on wasm32. A test ties this list to
 /// `PREDICATES`.
@@ -1495,6 +1612,8 @@ fn the_checker_agrees_with_every_committed_module() {
     }
     let bad = verify_parent(PARENT);
     assert!(bad.is_empty(), "mod.rs:\n{}", bad.join("\n"));
+    let bad = verify_plain(PLAIN);
+    assert!(bad.is_empty(), "plain.rs:\n{}", bad.join("\n"));
 }
 
 /// The modules read here are exactly the registered predicates, in their order; and, natively,
@@ -1515,6 +1634,7 @@ fn the_committed_list_is_every_registered_predicate() {
     files.sort();
     let mut want: Vec<String> = registered.iter().map(|n| format!("{n}.rs")).collect();
     want.push("mod.rs".to_owned());
+    want.push("plain.rs".to_owned());
     want.push(".gitattributes".to_owned());
     want.sort();
     assert_eq!(files, want);
@@ -1747,6 +1867,33 @@ fn edits(module: &str) -> Vec<(String, String, &'static str)> {
     out
 }
 
+/// One hand edit of the plain-`i128` variant each (piece G42): a narrower type than the variant
+/// holds, an unchecked product, a step dropped and a range check skipped.
+fn plain_edits() -> Vec<(&'static str, &'static str, &'static str)> {
+    vec![
+        (
+            "    let ba_x = i128::from(b.x.get()).checked_sub(i128::from(a.x.get()))?;",
+            "    let ba_x = b.x.get().checked_sub(a.x.get())?;",
+            "a translation held in i64",
+        ),
+        (
+            "    let det_1 = ba_x.checked_mul(ca_y)?;",
+            "    let det_1 = ba_x.wrapping_mul(ca_y);",
+            "a product that wraps",
+        ),
+        (
+            "    let det_2 = ba_y.checked_mul(ca_x)?;\n",
+            "",
+            "a step dropped",
+        ),
+        (
+            "    let nx = within(nx, 83)?;",
+            "    let nx = Some(nx)?;",
+            "a rounded input's range check skipped",
+        ),
+    ]
+}
+
 /// One hand edit of the parent module, each breaking what the proof relies on.
 fn parent_edits() -> Vec<(&'static str, &'static str, &'static str)> {
     vec![
@@ -1784,8 +1931,8 @@ fn parent_edits() -> Vec<(&'static str, &'static str, &'static str)> {
 }
 
 /// A hand-edited constant, certificate row, unit error, filter statement, exact-path type,
-/// parameter order or helper in a committed module is refused by the checker, whatever produced
-/// it.
+/// parameter order or helper in a committed module, or a hand-edited line of the plain-`i128`
+/// variant, is refused by the checker, whatever produced it.
 #[test]
 fn the_checker_refuses_hand_edited_modules() {
     for (name, module) in COMMITTED {
@@ -1796,6 +1943,14 @@ fn the_checker_refuses_hand_edited_modules() {
             let bad = verify(p.text, &edited);
             assert!(!bad.is_empty(), "{name}: {what}: the checker accepted it");
         }
+    }
+    for (from, to, what) in plain_edits() {
+        let edited = PLAIN.replacen(from, to, 1);
+        assert_ne!(edited, PLAIN, "plain.rs: {what}: the edit changed nothing");
+        assert!(
+            !verify_plain(&edited).is_empty(),
+            "plain.rs: {what}: the checker accepted it"
+        );
     }
     for (from, to, what) in parent_edits() {
         let edited = PARENT.replacen(from, to, 1);

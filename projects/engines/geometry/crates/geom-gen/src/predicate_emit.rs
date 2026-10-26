@@ -85,6 +85,33 @@ fn fail<T>(message: impl Into<String>) -> Result<T, EmitError> {
     Err(EmitError(message.into()))
 }
 
+/// How an exact path holds its steps and forms its products: the variants chapter 23.3 compares
+/// (piece G42). Every style computes the same value with checked arithmetic, so only the cost
+/// differs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Style {
+    /// The shipped exact paths: each step in the narrowest type its certificate gives it, from
+    /// `i64` up, and a product of operands that fit `i128` formed in a wide type by
+    /// `product_i128` or `checked_mul_i128` (piece G29).
+    WidthAware,
+    /// Plain `i128`: each step in `i128`, or in its certificate's wide type when it does not fit
+    /// 127 bits, with both operands widened to that type and the general `checked_mul`: no width
+    /// analysis beyond each result's type. On WebAssembly every product then goes through
+    /// `__multi3`, the library routine Rust's `i128` multiply becomes there.
+    Plain,
+}
+
+impl Style {
+    /// The type a step certified to fit `width` is held in.
+    #[must_use]
+    pub const fn held(self, width: Width) -> Width {
+        match (self, width) {
+            (Style::Plain, Width::I64) => Width::I128,
+            (_, w) => w,
+        }
+    }
+}
+
 /// A line to `out`; writing to a `String` cannot fail.
 fn line(out: &mut String, text: &str) {
     out.push_str(text);
@@ -437,14 +464,19 @@ fn checked(left: &str, op: Op, right: &str, width: Width) -> String {
 }
 
 /// The exact path's statement for one step.
-fn exact_statement(step: &Step, cert: &StepCert, d: &Derivation) -> Result<String, EmitError> {
+fn exact_statement(
+    step: &Step,
+    cert: &StepCert,
+    d: &Derivation,
+    style: Style,
+) -> Result<String, EmitError> {
     let operand = |i: usize| -> Result<(&str, Width), EmitError> {
         match (d.steps.get(i), d.certs.get(i)) {
-            (Some(s), Some(c)) => Ok((s.name.as_str(), c.width)),
+            (Some(s), Some(c)) => Ok((s.name.as_str(), style.held(c.width))),
             _ => fail("a step's operand is missing"),
         }
     };
-    let w = cert.width;
+    let w = style.held(cert.width);
     let body = match &step.kind {
         StepKind::LoadCoord { point, axis } => coordinate(point, *axis, w)?,
         StepKind::Translate {
@@ -469,7 +501,7 @@ fn exact_statement(step: &Step, cert: &StepCert, d: &Derivation) -> Result<Strin
             op: Op::Mul,
             left,
             right,
-        } if w > Width::I128 => {
+        } if w > Width::I128 && style == Style::WidthAware => {
             let (l, lw) = operand(*left)?;
             let (r, rw) = operand(*right)?;
             wide_product(l, lw, r, rw, w)?
@@ -1171,6 +1203,19 @@ fn value_item(
     parameters: &[String],
     twin: bool,
 ) -> Result<(), EmitError> {
+    value_fn(out, d, parameters, twin, Style::WidthAware, "value")
+}
+
+/// The exact path's function, named `fn_name`, in `style`; with `twin`, its Verus annotations, as
+/// [`value_item`] describes.
+fn value_fn(
+    out: &mut String,
+    d: &Derivation,
+    parameters: &[String],
+    twin: bool,
+    style: Style,
+    fn_name: &str,
+) -> Result<(), EmitError> {
     let name = &d.description.name;
     let Some((root_step, root)) = d.steps.get(d.result).zip(d.certs.get(d.result)) else {
         return fail("the result step is missing");
@@ -1180,13 +1225,18 @@ fn value_item(
     } else {
         ""
     };
-    item_para(
-        out,
-        &format!(
+    let text = match style {
+        Style::WidthAware => format!(
             "`{name}`'s exact value: each step in the type its certificate gives it, with checked \
              arithmetic; `None` only if a step overflowed, which the certificate rules out{range}."
         ),
-    );
+        Style::Plain => format!(
+            "`{name}`'s exact value in plain `i128` (chapter 23.3): each step in `i128`, or in its \
+             certificate's wide type with both operands widened to it, with checked arithmetic; \
+             `None` only if a step overflowed, which the certificate rules out{range}."
+        ),
+    };
+    item_para(out, &text);
     line(out, "#[inline]");
     line(out, "#[must_use]");
     allowances(out, d, true, d.steps.len().saturating_add(1));
@@ -1195,9 +1245,9 @@ fn value_item(
     }
     signature(
         out,
-        "value",
+        fn_name,
         parameters,
-        &format!("Option<{}>", root.width.rust()),
+        &format!("Option<{}>", style.held(root.width).rust()),
     );
     for (step, cert) in d.steps.iter().zip(&d.certs) {
         if let (
@@ -1211,7 +1261,7 @@ fn value_item(
         {
             line(out, &product_proof(d, *left, *right)?);
         }
-        line(out, &exact_statement(step, cert, d)?);
+        line(out, &exact_statement(step, cert, d, style)?);
     }
     line(out, &format!("    Some({})", root_step.name));
     line(out, "}");
@@ -1480,6 +1530,148 @@ pub fn verus_twin(d: &Derivation, generator: &str, shipped: &str) -> Result<Stri
     Ok(out)
 }
 
+/// The file of one exact-path variant (chapter 23.3; piece G42): for each predicate, in the order
+/// given, its exact value as `<predicate>_value`, written in `style`. The module sits beside the
+/// predicate modules (`plain.rs` for [`Style::Plain`]) and shares their helpers; the shipped
+/// [`Style::WidthAware`] paths are the predicate modules themselves, so that style is refused here.
+///
+/// # Errors
+///
+/// An [`EmitError`] for [`Style::WidthAware`], for a description [`predicate_module`] refuses, or
+/// for a line of code past [`WIDTH`] columns.
+pub fn variant_module(
+    derivations: &[&Derivation],
+    generator: &str,
+    style: Style,
+) -> Result<String, EmitError> {
+    let (file, what) = match style {
+        Style::Plain => (
+            "plain",
+            "the plain-`i128` variant: each step in `i128`, or in its certificate's wide type when \
+             it does not fit 127 bits, with both operands widened to that type and the general \
+             `checked_mul`, so no product is narrower than its result's type. On WebAssembly \
+             every product then goes through `__multi3`, the library routine Rust's `i128` \
+             multiply becomes there",
+        ),
+        Style::WidthAware => {
+            return fail("the width-aware exact paths are the predicate modules themselves");
+        }
+    };
+    let mut out = String::new();
+    variant_header(&mut out, generator, what);
+    let mut points: Vec<&str> = Vec::new();
+    let mut wides: Vec<&str> = Vec::new();
+    for d in derivations {
+        points.extend(point_type(d)?);
+        wides.extend(
+            d.certs
+                .iter()
+                .map(|c| style.held(c.width))
+                .filter(|w| *w > Width::I128)
+                .map(Width::rust),
+        );
+    }
+    points.sort_unstable();
+    points.dedup();
+    wides.sort_unstable();
+    wides.dedup();
+    match points.as_slice() {
+        [] => {}
+        [one] => line(&mut out, &format!("use crate::grid::{one};")),
+        many => line(
+            &mut out,
+            &format!("use crate::grid::{{{}}};", many.join(", ")),
+        ),
+    }
+    line(&mut out, WIDE_IMPORTS);
+    if derivations.iter().any(|d| has_rounded(d)) {
+        line(&mut out, "");
+        line(&mut out, "use super::within;");
+    }
+    for d in derivations {
+        let mut imports: Vec<&str> = Vec::new();
+        imports.extend(point_type(d)?);
+        imports.extend(wides.iter().copied());
+        if has_rounded(d) {
+            imports.push("within");
+        }
+        check_names(d, &imports)?;
+        // Each function ends with an empty line, so only the first needs one before it.
+        if !out.ends_with("\n\n") {
+            line(&mut out, "");
+        }
+        let ty = point_type(d)?;
+        let parameters = params(d, ty)?;
+        let name = format!("{}_value", d.description.name);
+        value_fn(&mut out, d, &parameters, false, style, &name)?;
+    }
+    // value_fn ends each function with an empty line: the file ends with the last brace.
+    while out.ends_with("\n\n") {
+        out.pop();
+    }
+    if let Some(long) = out
+        .lines()
+        .find(|l| !l.trim_start().starts_with("//") && l.chars().count() > WIDTH)
+    {
+        return fail(format!(
+            "`{file}`: a line of code would pass {WIDTH} columns, which rustfmt rewraps: {long}"
+        ));
+    }
+    Ok(wide_imports(&out, &wides))
+}
+
+/// The header of a variant module: where it comes from, what `what` (the variant, from its
+/// name to the end of a sentence) computes, and its guarantees, method and cost.
+fn variant_header(out: &mut String, generator: &str, what: &str) {
+    doc_para(
+        out,
+        &format!(
+            "Generated by geom-gen, generator `{generator}` (seed: none, it uses no randomness), \
+             from the descriptions in `{DESCRIPTIONS_PATH}` and `{EMITTER_PATH}`. Do not edit: \
+             change the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p \
+             geom-gen -- check` and fails on any difference."
+        ),
+    );
+    doc(out, "");
+    doc_para(
+        out,
+        &format!(
+            "The exact paths of the generated predicates in {what} (chapter 23.3 of the kernel \
+             architecture, `projects/engines/geometry/architecture/23-performance.md`; piece \
+             G42). For each predicate, `<predicate>_value` performs the steps of the predicate \
+             module's `value`, in their order and with their names, each held in the type above, \
+             so it returns the same value, as an `i128` where the shipped path returns an `i64`. \
+             The benchmarks compare the two on every target, and the tests check that they agree \
+             on every input they draw and at the grid's extremes."
+        ),
+    );
+    doc(out, "");
+    doc_para(
+        out,
+        "Guarantees: as each predicate module's `value`. Every step is a checked method, the \
+         certificate in the predicate module's header bounds every step within the type it is \
+         held in here (a type at least as wide as the one the certificate names), so a step never \
+         returns `None` for an input in the domain; nothing depends on overflow checks being on. \
+         geom-gen's independent checker re-derives every line from its own derivation.",
+    );
+    doc(out, "");
+    doc_para(
+        out,
+        "Method: each predicate's steps as its module's certificate derives them, held as \
+         chapter 23.3 describes the baseline of its comparison of exact-path variants, \
+         `projects/engines/geometry/architecture/23-performance.md`.",
+    );
+    doc(out, "");
+    doc_para(
+        out,
+        "Cost: the predicate module's `value`, with each product at the width of its result.",
+    );
+    line(out, "");
+}
+
+/// The variant modules the parent module declares beside the predicate modules (piece G42).
+pub const VARIANT_MODULES: [&str; 1] = ["plain"];
+
 /// One row of the parent module's table, for one predicate: what its module serves, and
 /// Shewchuk's stage-A bound and FPG's constant for the same predicate, as published.
 pub struct Comparison {
@@ -1561,6 +1753,7 @@ pub fn parent_module(
         .iter()
         .map(|(d, _)| d.description.name.as_str())
         .collect();
+    names.extend(VARIANT_MODULES);
     names.sort_unstable();
     for n in names {
         line(&mut out, &format!("pub mod {n};"));

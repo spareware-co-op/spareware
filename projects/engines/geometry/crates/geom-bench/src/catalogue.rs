@@ -294,6 +294,19 @@ pub static OPS: &[Op] = &[
     Op { group: "generated", name: "ssi_weight_value", measures: "generated::ssi_weight::value", classes: TDNE, prepare: |c| bind(inputs::generated::ssi_weight_value(c), kernels::generated::ssi_weight_value) },
     Op { group: "generated", name: "ssi_side_filter", measures: "generated::ssi_side::filter", classes: TDNE, prepare: |c| bind(inputs::generated::ssi_side_filter(c), kernels::generated::ssi_side_filter) },
     Op { group: "generated", name: "ssi_side_value", measures: "generated::ssi_side::value", classes: TDNE, prepare: |c| bind(inputs::generated::ssi_side_value(c), kernels::generated::ssi_side_value) },
+    // The plain-i128 variant of each exact path (chapter 23.3; piece G42), on inputs of the same
+    // classes as the shipped value's.
+    Op { group: "generated", name: "orient2d_value_plain", measures: "generated::plain::orient2d_value", classes: TDNE, prepare: |c| bind(inputs::generated::orient2d_value_plain(c), kernels::plain::orient2d_value) },
+    Op { group: "generated", name: "orient3d_value_plain", measures: "generated::plain::orient3d_value", classes: TDNE, prepare: |c| bind(inputs::generated::orient3d_value_plain(c), kernels::plain::orient3d_value) },
+    Op { group: "generated", name: "incircle_value_plain", measures: "generated::plain::incircle_value", classes: TDNE, prepare: |c| bind(inputs::generated::incircle_value_plain(c), kernels::plain::incircle_value) },
+    Op { group: "generated", name: "insphere_value_plain", measures: "generated::plain::insphere_value", classes: TDNE, prepare: |c| bind(inputs::generated::insphere_value_plain(c), kernels::plain::insphere_value) },
+    Op { group: "generated", name: "plane_side_value_plain", measures: "generated::plain::plane_side_value", classes: TDNE, prepare: |c| bind(inputs::generated::plane_side_value_plain(c), kernels::plain::plane_side_value) },
+    Op { group: "generated", name: "tpi_weight_value_plain", measures: "generated::plain::tpi_weight_value", classes: TDNE, prepare: |c| bind(inputs::generated::tpi_weight_value_plain(c), kernels::plain::tpi_weight_value) },
+    Op { group: "generated", name: "tpi_side_value_plain", measures: "generated::plain::tpi_side_value", classes: TDNE, prepare: |c| bind(inputs::generated::tpi_side_value_plain(c), kernels::plain::tpi_side_value) },
+    Op { group: "generated", name: "lpi_weight_value_plain", measures: "generated::plain::lpi_weight_value", classes: TDNE, prepare: |c| bind(inputs::generated::lpi_weight_value_plain(c), kernels::plain::lpi_weight_value) },
+    Op { group: "generated", name: "lpi_side_value_plain", measures: "generated::plain::lpi_side_value", classes: TDNE, prepare: |c| bind(inputs::generated::lpi_side_value_plain(c), kernels::plain::lpi_side_value) },
+    Op { group: "generated", name: "ssi_weight_value_plain", measures: "generated::plain::ssi_weight_value", classes: TDNE, prepare: |c| bind(inputs::generated::ssi_weight_value_plain(c), kernels::plain::ssi_weight_value) },
+    Op { group: "generated", name: "ssi_side_value_plain", measures: "generated::plain::ssi_side_value", classes: TDNE, prepare: |c| bind(inputs::generated::ssi_side_value_plain(c), kernels::plain::ssi_side_value) },
 ];
 
 /// The groups of [`OPS`], in order.
