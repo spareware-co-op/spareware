@@ -87,7 +87,7 @@ pub const MAX_INPUT_BYTES: usize = 73;
 /// or of an edge of the frame (see [`proof_case`]). Chosen from Kani trials on the hosted runner
 /// (PR #209): bound 0 proved in 3½ minutes and bound 1 in 19, while bounds 3, 7 and 15 did not
 /// finish within the job's hour, the hard part being the equivalence of the wide multiplications.
-/// On the wide integers piece G37 rewrote, bound 1 takes 47 minutes with kissat (CaDiCaL ran past
+/// On the wide integers piece G37 rewrote, bound 1 takes 47 minutes with kissat (`CaDiCaL` ran past
 /// three hours), within the job's 75.
 pub const PROOF_BOUND: u64 = 1;
 
