@@ -1,6 +1,6 @@
 # G35: Machine-checked proofs of the filters' error bounds, with Gappa and FPTaylor
 
-Piece G35 of the kernel's work board (chapter 30), for chapter 28.6 of the [kernel architecture](../../engines/geometry/architecture/28-testing.md). Status: spike done for Gappa and Rocq; HOL Light's check of FPTaylor's certificates in progress (section 4).
+Piece G35 of the kernel's work board (chapter 30), for chapter 28.6 of the [kernel architecture](../../engines/geometry/architecture/28-testing.md). Status: spike done. Gappa and Rocq prove both filters; HOL Light checks both FPTaylor certificates (section 4).
 
 ## The answer in plain words
 
@@ -59,7 +59,9 @@ What the numbers say:
 - FPTaylor's own bound for orient2d is 4u + 16u²: its first-order term, 4u, and second-order term, 2u², summed upward in doubles. That is 4u² above K = 4u + 12u², so HOL Light can check FPTaylor's certificate but not, from it, that K bounds the error; Gappa's proof does (4u + 2u²). Run 40316957754 showed this (HOL Light's comparison with K failed for orient2d), and showed orient3d's nine variables beyond the verifier's eight.
 - FPTaylor finds orient3d's worst error near 22.1u · S, not 28u: the derivation adds every operation's worst case at once, and no input reaches them all together. The constant is sound and about 27% larger than it needs to be. Tightening it would change the filter's answers on some inputs, so it would be a new generator version (chapter 26.2), not an edit; it is noted for G40.
 
-(HOL Light's check of both certificates and the run on the generated problems: to record.)
+| 40325231942 | FPTaylor v0.9.3 and HOL Light (OCaml 4.11, the verifier's `max_dim` raised to 9) | certificate checked in 1 s; its bound, 4u + 16u², above K = 4u + 12u² | certificate checked in 177 s; its bound within K |
+
+That run's job still failed, on its own last step: the HOL Light toplevel prints its prompt, `# `, before some lines, and the step looked for lines starting "checked"; it now allows the prompt.
 
 ## 5. Options and recommendation
 
