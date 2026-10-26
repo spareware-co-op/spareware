@@ -13,8 +13,8 @@
 //!   the module's text, and the Gappa problem bounds the computed bound's relative error by
 //!   (k + 1) · 2^−53.
 //! - `the_problems_are_current`: the committed problems are what the generators write now.
-//! - `the_problems_refuse_what_they_cannot_state`: a filter of rounded inputs (`plane_side`) and
-//!   one whose scale has several monomials (`incircle`, `insphere`) are refused, with the reason.
+//! - `the_problems_refuse_what_they_cannot_state`: a filter whose scale has several monomials
+//!   (`plane_side`, `incircle`, `insphere`) gets no single problem, with the reason: one per case.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -324,11 +324,7 @@ fn the_problems_refuse_what_they_cannot_state() {
         let d = derivation(p).unwrap();
         let gappa = gappa_problem(&d, "test").unwrap_err();
         let fptaylor = fptaylor_problem(&d, "test").unwrap_err();
-        let why = if name == "plane_side" {
-            "G40"
-        } else {
-            "one problem per case"
-        };
+        let why = "one problem per case";
         assert!(gappa.0.contains(why), "{name}: {}", gappa.0);
         assert_eq!(gappa, fptaylor, "{name}");
     }
