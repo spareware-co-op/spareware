@@ -36,7 +36,11 @@ fn single(a: Interval) -> Option<f64> {
 }
 
 /// The point interval at `x`.
-pub(crate) fn point(x: f64) -> Result<Interval, CurveError> {
+///
+/// # Errors
+///
+/// [`CurveError::NotFinite`] if a bound overflows (or, for a quotient or root, if the divisor holds zero or the operand holds a negative number).
+pub fn point(x: f64) -> Result<Interval, CurveError> {
     Ok(Interval::point(x)?)
 }
 
@@ -47,7 +51,11 @@ fn exact_product(x: f64, y: f64) -> Option<f64> {
 }
 
 /// `a + b`.
-pub(crate) fn add(a: Interval, b: Interval) -> Result<Interval, CurveError> {
+///
+/// # Errors
+///
+/// [`CurveError::NotFinite`] if a bound overflows (or, for a quotient or root, if the divisor holds zero or the operand holds a negative number).
+pub fn add(a: Interval, b: Interval) -> Result<Interval, CurveError> {
     if let (Some(x), Some(y)) = (single(a), single(b)) {
         let (s, e) = two_sum(x, y);
         if s.is_finite() && e == 0.0 {
@@ -58,12 +66,20 @@ pub(crate) fn add(a: Interval, b: Interval) -> Result<Interval, CurveError> {
 }
 
 /// `a − b`.
-pub(crate) fn sub(a: Interval, b: Interval) -> Result<Interval, CurveError> {
+///
+/// # Errors
+///
+/// [`CurveError::NotFinite`] if a bound overflows (or, for a quotient or root, if the divisor holds zero or the operand holds a negative number).
+pub fn sub(a: Interval, b: Interval) -> Result<Interval, CurveError> {
     add(a, b.neg())
 }
 
 /// `a · b`.
-pub(crate) fn mul(a: Interval, b: Interval) -> Result<Interval, CurveError> {
+///
+/// # Errors
+///
+/// [`CurveError::NotFinite`] if a bound overflows (or, for a quotient or root, if the divisor holds zero or the operand holds a negative number).
+pub fn mul(a: Interval, b: Interval) -> Result<Interval, CurveError> {
     if let (Some(x), Some(y)) = (single(a), single(b))
         && let Some(p) = exact_product(x, y)
     {
@@ -77,7 +93,7 @@ pub(crate) fn mul(a: Interval, b: Interval) -> Result<Interval, CurveError> {
 /// # Errors
 ///
 /// [`CurveError::NotFinite`] if `b` contains zero or the quotient overflows.
-pub(crate) fn div(a: Interval, b: Interval) -> Result<Interval, CurveError> {
+pub fn div(a: Interval, b: Interval) -> Result<Interval, CurveError> {
     if let (Some(x), Some(y)) = (single(a), single(b))
         && y != 0.0
     {
@@ -94,7 +110,7 @@ pub(crate) fn div(a: Interval, b: Interval) -> Result<Interval, CurveError> {
 /// # Errors
 ///
 /// [`CurveError::NotFinite`] if `a` holds a negative number.
-pub(crate) fn sqrt(a: Interval) -> Result<Interval, CurveError> {
+pub fn sqrt(a: Interval) -> Result<Interval, CurveError> {
     if let Some(x) = single(a)
         && x >= 0.0
     {
@@ -108,7 +124,11 @@ pub(crate) fn sqrt(a: Interval) -> Result<Interval, CurveError> {
 
 /// `a²`, tight: the exact square of a point when it is a double, else the interval square (never
 /// negative).
-pub(crate) fn square(a: Interval) -> Result<Interval, CurveError> {
+///
+/// # Errors
+///
+/// [`CurveError::NotFinite`] if a bound overflows (or, for a quotient or root, if the divisor holds zero or the operand holds a negative number).
+pub fn square(a: Interval) -> Result<Interval, CurveError> {
     if let Some(x) = single(a)
         && let Some(p) = exact_product(x, x)
     {
@@ -121,7 +141,11 @@ pub(crate) fn square(a: Interval) -> Result<Interval, CurveError> {
 ///
 /// The sum of squares is never negative, but widening can push its enclosure's lower end below
 /// zero; it is cut at zero, which this function, holding the proof, may do.
-pub(crate) fn norm(v: &[Interval]) -> Result<Interval, CurveError> {
+///
+/// # Errors
+///
+/// [`CurveError::NotFinite`] if a bound overflows (or, for a quotient or root, if the divisor holds zero or the operand holds a negative number).
+pub fn norm(v: &[Interval]) -> Result<Interval, CurveError> {
     let mut s = point(0.0)?;
     for &x in v {
         s = add(s, square(x)?)?;
@@ -134,19 +158,23 @@ pub(crate) fn norm(v: &[Interval]) -> Result<Interval, CurveError> {
 
 /// An upper bound on |x| for every x in `a`.
 #[must_use]
-pub(crate) fn magnitude(a: Interval) -> f64 {
+pub fn magnitude(a: Interval) -> f64 {
     let (lo, hi) = (a.lo().abs(), a.hi().abs());
     if lo > hi { lo } else { hi }
 }
 
 /// The double nearest the middle of `a`: the point itself for a point.
 #[must_use]
-pub(crate) fn middle(a: Interval) -> f64 {
+pub fn middle(a: Interval) -> f64 {
     f64::midpoint(a.lo(), a.hi())
 }
 
 /// An upper bound on the distance between the vectors `a` and `b`, each enclosed.
-pub(crate) fn distance(a: &[Interval], b: &[Interval]) -> Result<f64, CurveError> {
+///
+/// # Errors
+///
+/// [`CurveError::NotFinite`] if a bound overflows (or, for a quotient or root, if the divisor holds zero or the operand holds a negative number).
+pub fn distance(a: &[Interval], b: &[Interval]) -> Result<f64, CurveError> {
     let mut d = alloc::vec::Vec::with_capacity(a.len());
     for (&x, &y) in a.iter().zip(b) {
         d.push(sub(x, y)?);
@@ -155,7 +183,11 @@ pub(crate) fn distance(a: &[Interval], b: &[Interval]) -> Result<f64, CurveError
 }
 
 /// An upper bound on the distance between doubles `a` and the exact vector enclosed by `b`.
-pub(crate) fn distance_to(a: &[f64], b: &[Interval]) -> Result<f64, CurveError> {
+///
+/// # Errors
+///
+/// [`CurveError::NotFinite`] if a bound overflows (or, for a quotient or root, if the divisor holds zero or the operand holds a negative number).
+pub fn distance_to(a: &[f64], b: &[Interval]) -> Result<f64, CurveError> {
     let mut v = alloc::vec::Vec::with_capacity(a.len());
     for &x in a {
         v.push(point(x)?);

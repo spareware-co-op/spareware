@@ -1284,6 +1284,7 @@ dependencies = [
  "geom-nurbs",
  "geom-op",
  "geom-run",
+ "geom-test",
 ]
 
 [[package]]

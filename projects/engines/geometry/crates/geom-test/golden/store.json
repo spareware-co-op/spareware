@@ -195,6 +195,16 @@
             "function": "compound_golden_hash_is_the_same_on_every_target"
           },
           "sha256": "3aadba80ffd582ba2a5f6ab55a12a59c7306e6eaa7dc2a884a5ecc6089d804b2"
+        },
+        {
+          "id": "geom-surface/analytic",
+          "what": "The analytic and swept surface kinds of geom-surface (piece G65): 12 rounds of a plane, cylinder, cone, sphere and torus on random frames and a surface of revolution, an extrusion and a ruled surface on fixed profiles, each enclosed at nine parameter pairs, bounded with both derivative bounds and the normal bound over a box, converted to NURBS (knots, net, weights, both parameter maps and deviation), split and reversed in each direction and transformed (each enclosed, with its deviation); and 5 refusals: 2693 results in the canonical encoding of tests/surface_determinism.rs.",
+          "check": {
+            "crate": "geom-surface",
+            "test": "surface_determinism",
+            "function": "surface_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "2bd33237d0660e08df18570457cf4fd866770a5f14153d34e65e2a0e2864c0bd"
         }
       ]
     }

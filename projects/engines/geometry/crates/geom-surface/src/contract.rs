@@ -26,13 +26,13 @@
 )]
 
 use geom_curve::affine::Entries;
-use geom_curve::{ContractError, CurveError, DerivativeBound, Law};
+use geom_curve::{ContractError, CurveError, DerivativeBound, Law, ParamMap};
 use geom_math::TypedTransform;
 use geom_num::interval::Interval;
 use geom_nurbs::{Bounds, Direction, Limit};
 use geom_run::WorkMeter;
 
-use crate::param::ParamSurface;
+use crate::param::{ParamSurface, SurfaceForm};
 
 /// The relative slack between doubles and the certified enclosure: 2^−30.
 const SLACK: f64 = f64::from_bits(0x3E10_0000_0000_0000);
@@ -155,9 +155,8 @@ pub fn check<K: ParamSurface>(
                 return Err(broken(Law::NormalBoundHoldsDirections, u, None));
             }
         }
-        let ne = ParamSurface::enclose(&nurbs.value, u, v, sides, meter)
-            .map_err(call(Law::NurbsWithinItsError, u))?;
-        if !ne.first().is_some_and(|x| overlap(x, &p, nurbs.deviation)) {
+        let ne = nurbs_at(&nurbs.value, u, v, meter).map_err(call(Law::NurbsWithinItsError, u))?;
+        if !overlap(&ne, &p, nurbs.deviation) {
             return Err(broken(Law::NurbsWithinItsError, u, None));
         }
         let (half, side) = if u <= mid {
@@ -210,4 +209,32 @@ pub fn check<K: ParamSurface>(
         return Err(broken(Law::Deterministic, a, None));
     }
     Ok(())
+}
+
+/// The NURBS form's point at the kind's (u, v), enclosed: at the point itself when both maps are
+/// the identity, else the surface's bound over the box the maps' enclosures make.
+fn nurbs_at(
+    form: &SurfaceForm,
+    u: f64,
+    v: f64,
+    meter: &mut WorkMeter<'_>,
+) -> Result<[Interval; 3], CurveError> {
+    if form.u == ParamMap::Same && form.v == ParamMap::Same {
+        let sides = (Limit::FromRight, Limit::FromRight);
+        let [p, _, _] = ParamSurface::enclose(&form.surface, u, v, sides, meter)?;
+        return Ok(p);
+    }
+    let ((a, b), (c, d)) = ParamSurface::domain(&form.surface);
+    let cut = |x: Interval, (lo, hi): (f64, f64)| -> (f64, f64) {
+        let l = if x.lo() < lo { lo } else { x.lo() };
+        let h = if x.hi() > hi { hi } else { x.hi() };
+        (l, if h < l { l } else { h })
+    };
+    let (iu, iv) = (form.u.enclose(u)?, form.v.enclose(v)?);
+    let bx = ParamSurface::bound(&form.surface, (cut(iu, (a, b)), cut(iv, (c, d))), meter)?;
+    let mut out = [Interval::point(0.0)?; 3];
+    for (o, (&l, &h)) in out.iter_mut().zip(bx.lo.iter().zip(&bx.hi)) {
+        *o = Interval::new(l, h)?;
+    }
+    Ok(out)
 }

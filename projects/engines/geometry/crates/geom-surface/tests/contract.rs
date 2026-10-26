@@ -25,7 +25,7 @@ use geom_num::plane::Plane;
 use geom_nurbs::{Basis, Bounds, Changed, Direction, Limit, Surface};
 use geom_run::{Budget, WorkMeter};
 use geom_surface::contract::check;
-use geom_surface::{ImplicitBound, ParamBox, ParamSurface, SurfaceKind};
+use geom_surface::{ImplicitBound, ParamBox, ParamSurface, SurfaceForm, SurfaceKind};
 
 fn meter() -> WorkMeter<'static> {
     WorkMeter::new(Budget::UNLIMITED)
@@ -192,7 +192,7 @@ impl ParamSurface for FlippedNormals {
             hi: b.lo.map(|x| -x),
         })
     }
-    fn to_nurbs(&self, m: &mut WorkMeter<'_>) -> Result<Changed<Surface<3>>, CurveError> {
+    fn to_nurbs(&self, m: &mut WorkMeter<'_>) -> Result<Changed<SurfaceForm>, CurveError> {
         self.0.to_nurbs(m)
     }
     fn split(

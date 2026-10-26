@@ -37,10 +37,15 @@
 
 extern crate alloc;
 
+pub mod analytic;
 pub mod contract;
 pub mod implicit;
 mod nurbs;
 pub mod param;
+pub mod swept;
+mod terms;
 
+pub use analytic::{AffineSurface, Cone, Cylinder, Plane, Sphere, Torus, TorusForm};
 pub use implicit::{ImplicitBound, ImplicitEnclosure};
-pub use param::{ParamBox, ParamSurface, SurfaceKind};
+pub use param::{ParamBox, ParamSurface, SurfaceForm, SurfaceKind};
+pub use swept::{Extrusion, Revolution, Ruled};

@@ -65,15 +65,15 @@ pub mod involute;
 mod jet;
 pub mod line;
 pub mod map;
-mod moved;
+pub mod moved;
 mod nurbs;
 pub mod offset;
 pub mod on_surface;
 pub mod param;
 pub mod polynomial;
 mod rational;
-mod taylor;
-mod tight;
+pub mod taylor;
+pub mod tight;
 pub mod trimmed;
 
 pub use axes::{Axes, HelixAxes};

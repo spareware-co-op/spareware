@@ -166,7 +166,7 @@ fn derivative_norm<K: ParamCurve<D>, const D: usize>(
 ///
 /// [`CurveError::Unbounded`] if the domain is not finite; [`CurveError::Degenerate`] if it is too
 /// narrow to cut; the kind's own errors; [`CurveError::Stopped`].
-pub(crate) fn same_parameter<K: ParamCurve<D>, const D: usize>(
+pub fn same_parameter<K: ParamCurve<D>, const D: usize>(
     kind: &K,
     degree: usize,
     width: f64,
@@ -183,11 +183,11 @@ pub(crate) fn same_parameter<K: ParamCurve<D>, const D: usize>(
 
 /// The cuts of `domain`: each interval between consecutive `breaks` (sorted, inside the domain)
 /// cut into `per` equal pieces, the breaks kept exactly.
-pub(crate) fn cuts_between(
-    (a, b): (f64, f64),
-    inner: &[f64],
-    per: usize,
-) -> Result<Vec<f64>, CurveError> {
+///
+/// # Errors
+///
+/// As [`same_parameter`].
+pub fn cuts_between((a, b): (f64, f64), inner: &[f64], per: usize) -> Result<Vec<f64>, CurveError> {
     let mut ends = Vec::with_capacity(inner.len().saturating_add(2));
     ends.push(a);
     for &x in inner {
@@ -221,7 +221,7 @@ pub(crate) fn cuts_between(
     clippy::too_many_lines,
     reason = "one construction: each piece's coefficients, remainder and rounding"
 )]
-pub(crate) fn from_cuts<K: ParamCurve<D>, const D: usize>(
+pub fn from_cuts<K: ParamCurve<D>, const D: usize>(
     kind: &K,
     degree: usize,
     cuts: &[f64],
