@@ -1756,11 +1756,11 @@
           "job": "Generator `quadrature-rules`: the Gauss–Legendre and Gauss–Kronrod rules on [−1, 1], computed exactly and each node and weight rounded once to the nearest `f64` (piece G51; chapters 12 and 29.4).",
           "method": {
             "links": [
-              "doi:10.1090/S0025-5718-69-99647-1",
-              "doi:10.1007/BF01448041",
-              "doi:10.1007/978-3-642-61786-7"
+              "https://doi.org/10.1090/S0025-5718-69-99647-1",
+              "https://doi.org/10.1007/BF01448041",
+              "https://doi.org/10.1007/978-3-642-61786-7"
             ],
-            "text": "G. H. Golub and J. H. Welsch, *Calculation of Gauss quadrature rules*, Mathematics of Computation 23 (1969), doi:10.1090/S0025-5718-69-99647-1; G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins (2013), section 8.4.1 (bisection by Sturm count); A. S. Kronrod, *Nodes and Weights of Quadrature Formulas*, Consultants Bureau (1965); G. Szegő, *Über gewisse orthogonale Polynome, die zu einer oszillierenden Belegungsfunktion gehören*, Mathematische Annalen 110 (1935), doi:10.1007/BF01448041 (the interlacing); the rule set is QUADPACK's (R. Piessens et al., *QUADPACK*, Springer (1983), doi:10.1007/978-3-642-61786-7)."
+            "text": "G. H. Golub and J. H. Welsch, *Calculation of Gauss quadrature rules*, Mathematics of Computation 23 (1969), <https://doi.org/10.1090/S0025-5718-69-99647-1>; G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins (2013), section 8.4.1 (bisection by Sturm count); A. S. Kronrod, *Nodes and Weights of Quadrature Formulas*, Consultants Bureau (1965); G. Szegő, *Über gewisse orthogonale Polynome, die zu einer oszillierenden Belegungsfunktion gehören*, Mathematische Annalen 110 (1935), <https://doi.org/10.1007/BF01448041> (the interlacing); the rule set is QUADPACK's (R. Piessens et al., *QUADPACK*, Springer (1983), <https://doi.org/10.1007/978-3-642-61786-7>)."
           },
           "path": "geom_gen::quadrature",
           "provenance": [],

@@ -44,13 +44,13 @@
 //! - **Pure.** No input but the constants here; the same bytes on every target.
 //!
 //! Method: G. H. Golub and J. H. Welsch, *Calculation of Gauss quadrature rules*, Mathematics of
-//! Computation 23 (1969), doi:10.1090/S0025-5718-69-99647-1; G. H. Golub and C. F. Van Loan,
-//! *Matrix Computations*, 4th ed., Johns Hopkins (2013), section 8.4.1 (bisection by Sturm count);
-//! A. S. Kronrod, *Nodes and Weights of Quadrature Formulas*, Consultants Bureau (1965);
-//! G. Szegő, *Über gewisse orthogonale Polynome, die zu einer oszillierenden Belegungsfunktion
-//! gehören*, Mathematische Annalen 110 (1935), doi:10.1007/BF01448041 (the interlacing); the rule
-//! set is QUADPACK's (R. Piessens et al., *QUADPACK*, Springer (1983),
-//! doi:10.1007/978-3-642-61786-7).
+//! Computation 23 (1969), <https://doi.org/10.1090/S0025-5718-69-99647-1>; G. H. Golub and C. F.
+//! Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins (2013), section 8.4.1 (bisection by
+//! Sturm count); A. S. Kronrod, *Nodes and Weights of Quadrature Formulas*, Consultants Bureau
+//! (1965); G. Szegő, *Über gewisse orthogonale Polynome, die zu einer oszillierenden
+//! Belegungsfunktion gehören*, Mathematische Annalen 110 (1935),
+//! <https://doi.org/10.1007/BF01448041> (the interlacing); the rule set is QUADPACK's
+//! (R. Piessens et al., *QUADPACK*, Springer (1983), <https://doi.org/10.1007/978-3-642-61786-7>).
 //!
 //! Cost: a few seconds natively: for every node, a few hundred halvings, each an exact
 //! evaluation of a polynomial of degree at most 2n + 1 ≤ 61 at a dyadic point.
