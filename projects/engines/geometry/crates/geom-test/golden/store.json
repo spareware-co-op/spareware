@@ -165,6 +165,16 @@
             "function": "fit_golden_hash_is_the_same_on_every_target"
           },
           "sha256": "a0bff06b629c6e61aa07b26cae5dbe28f2fbb5ce84876a53e38010321c2eb878"
+        },
+        {
+          "id": "geom-nurbs/bernstein",
+          "what": "The Bernstein toolkit of geom-nurbs (piece G59): 200 surfaces (degrees 1 to 3, one to three spans each way, rational half the time) with every patch's interval coefficients, box, derivative boxes, fat plane and normal patch; 200 pairs of plane curves with every piece's box, derivative box, fat line and clips; 50 scalar, dot and cross products; 20 exact normal patches and plane coefficients of grid patches; and 4 refusals: 5960 results in the canonical encoding of tests/bernstein_determinism.rs.",
+          "check": {
+            "crate": "geom-nurbs",
+            "test": "bernstein_determinism",
+            "function": "bernstein_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "e036ec6fc907153e3ff1960bfac8b52a646e091e9c2e23f4a364efd0ea9e2c12"
         }
       ]
     }

@@ -33,6 +33,10 @@ harness = false
 name = "fit"
 harness = false
 
+[[bench]]
+name = "bernstein"
+harness = false
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"
