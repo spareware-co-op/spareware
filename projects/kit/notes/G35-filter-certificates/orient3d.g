@@ -1,7 +1,7 @@
 # orient3d's filter (geom_num::generated::orient3d::filter), as Gappa states it.
 # Inputs: the nine coordinate differences, whole numbers (|v| <= 2^41 - 2, exact in f64), and the
-# three group maxima m_x, m_y, m_z (each the largest |difference| of its axis, at least 1 here:
-# a zero maximum makes the scale zero, which the filter answers exactly).
+# three axis maxima m_x, m_y, m_z, each the largest |difference| of its axis and at least 1 here
+# (a zero maximum makes the scale zero, which the filter answers exactly).
 
 @rnd = float<ieee_64, ne>;
 
@@ -45,10 +45,22 @@ bound = rnd(C * scale);
   det - Det // S in ? /\ bound -/ C * S in ?
 }
 
-# Products of maxima are the same scale whatever order a step forms them in.
+# The error of a product of an exact difference and a computed value is that difference times the
+# computed value's error.
+ba_x * n_x - ba_x * Nx -> ba_x * (n_x - Nx);
+ba_y * n_y - ba_y * Ny -> ba_y * (n_y - Ny);
+ba_z * n_z - ba_z * Nz -> ba_z * (n_z - Nz);
+
+# Products of maxima are the same scale whatever order a step forms them in, in either direction.
+m_y * m_z -> m_z * m_y;
 m_z * m_y -> m_y * m_z;
+m_x * m_z -> m_z * m_x;
 m_z * m_x -> m_x * m_z;
+m_x * m_y -> m_y * m_x;
 m_y * m_x -> m_x * m_y;
+S -> m_x * (m_y * m_z);
+S -> m_y * (m_x * m_z);
+S -> m_z * (m_x * m_y);
 m_x * (m_y * m_z) -> S;
 m_y * (m_x * m_z) -> S;
 m_z * (m_x * m_y) -> S;

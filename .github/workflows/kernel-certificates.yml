@@ -47,7 +47,7 @@ jobs:
       - name: Prove the filter bounds
         run: |
           docker run --rm -v "$PWD:/work:ro" -w /work "$ROCQ_IMAGE" \
-            bash "$CERTS/gappa.sh" "$CERTS/orient3d.g"
+            bash "$CERTS/gappa.sh" "$CERTS/orient2d.g" "$CERTS/orient3d.g"
 
   fptaylor:
     name: FPTaylor, checked by HOL Light

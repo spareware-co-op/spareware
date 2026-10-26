@@ -1,0 +1,11 @@
+// orient2d's filter (geom_num::generated::orient2d::filter) for FPTaylor, normalised: each
+// coordinate difference divided by its axis's largest magnitude, so every variable lies in
+// [-1, 1] and the scale m_x * m_y is 1. The control problem of the spike.
+Variables
+  float64 ba_x in [-1, 1];
+  float64 ba_y in [-1, 1];
+  float64 ca_x in [-1, 1];
+  float64 ca_y in [-1, 1];
+
+Expressions
+  det2 rnd64= ba_x * ca_y - ba_y * ca_x;

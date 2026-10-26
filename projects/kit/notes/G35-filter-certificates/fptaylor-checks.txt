@@ -1,1 +1,2 @@
+orient2d.fpt det2 #4.440892098500628 * &10 ipow (-- &16)
 orient3d.fpt det #3.10862446895044 * &10 ipow (-- &15)
