@@ -22,10 +22,13 @@
 //!   solve those orthogonality conditions exactly. They interlace with the Gauss nodes (Szegő
 //!   1935), which isolates each one. The 2n + 1 weights are the interpolatory ones,
 //!   w(t) = R(t)/Q′(t) with Q = Pₙ·Eₙ₊₁ and R(t) = ∫ (Q(x) − Q(t))/(x − t) dx, a polynomial in t.
-//!   (Laurie's construction of the Jacobi–Kronrod matrix, which would let Golub and Welsch give
-//!   these too, was not available to read; the interpolatory weights are the definition of the
-//!   rule, exact here, and the tests check that they give the Gauss weights from Golub and
-//!   Welsch's formula when Q = Pₙ.)
+//!   The tests check the nodes against an independent construction: Laurie's Jacobi–Kronrod
+//!   matrix, built in exact rationals from mixed moments, has the Kronrod nodes as its
+//!   eigenvalues, and exact inertia counts place each generated node within half a unit in the
+//!   last place of its eigenvalue (D. P. Laurie, *Mathematics of Computation* 66 (1997),
+//!   1133–1145, <https://doi.org/10.1090/S0025-5718-97-00861-2>). The interpolatory weights are
+//!   the definition of the rule, exact here, and the tests check that they give the Gauss weights
+//!   from Golub and Welsch's formula when Q = Pₙ.
 //! - **Enclosures.** A node is kept as a bracket of two dyadic rationals with a sign change (or as
 //!   an exact zero). A weight is enclosed over the node's bracket from its value at one end and a
 //!   bound on its derivative there (the sum of |j·cⱼ| bounds a polynomial's derivative on
@@ -808,5 +811,130 @@ mod tests {
         assert_eq!(two[0].0, -x);
         assert_eq!((two[0].1, two[1].1), (1.0, 1.0));
         assert_eq!(gauss(3).unwrap()[1], (0.0, nearest(&ratio(8, 9))));
+    }
+
+    /// Laurie's Jacobi–Kronrod matrix for the Legendre weight on [−1, 1], in exact rationals:
+    /// its diagonal â₀ … â₂ₙ and the squares of its off-diagonal b̂₁ … b̂₂ₙ (b̂₀ = 2, the
+    /// weight's mass). The first ⌊3n/2⌋ + 1 diagonal and ⌈3n/2⌉ + 1 off-diagonal entries are
+    /// Legendre's own (aⱼ = 0, bⱼ = j²/(4j² − 1)); the other n come from the mixed moments of
+    /// the leading and trailing n × n blocks, whose characteristic polynomials agree (his lemma
+    /// 1): moments built eastwards from the known coefficients, then southwards using πₙ = pₙ
+    /// (his section 4 and appendix), every step a rational operation.
+    #[allow(
+        clippy::needless_range_loop,
+        clippy::cast_possible_wrap,
+        clippy::doc_markdown,
+        reason = "Laurie's indices and names, as his paper writes them"
+    )]
+    fn jacobi_kronrod(n: usize) -> (Vec<RBig>, Vec<RBig>) {
+        let size = 2 * n + 1;
+        let mut a = vec![RBig::ZERO; size];
+        let mut b = vec![RBig::ZERO; size];
+        b[0] = RBig::from(2);
+        for j in 1..size.min(3 * n / 2 + 3) {
+            b[j] = ratio((j * j) as i64, (4 * j * j - 1) as u64);
+        }
+        // Rows s and t of the moment table, shifted by one so that index 0 holds s₋₁ = 0.
+        let width = n / 2 + 3;
+        let mut s = vec![RBig::ZERO; width];
+        let mut t = vec![RBig::ZERO; width];
+        t[1] = b[n + 1].clone();
+        for m in 0..n.saturating_sub(1) {
+            let mut u = RBig::ZERO;
+            for k in (0..=m.div_ceil(2)).rev() {
+                let l = m - k;
+                u = &u + (&a[k + n + 1] - &a[l]) * &t[k + 1] + &b[k + n + 1] * &s[k]
+                    - &b[l] * &s[k + 1];
+                s[k + 1] = u.clone();
+            }
+            core::mem::swap(&mut s, &mut t);
+        }
+        for j in (1..=n / 2 + 1).rev() {
+            s[j] = s[j - 1].clone();
+        }
+        for m in n - 1..=2 * n - 3 {
+            let mut u = RBig::ZERO;
+            let mut last = 0;
+            for k in (m + 1 - n)..=(m - 1) / 2 {
+                let l = m - k;
+                let j = n - 1 - l;
+                u = &u - (&a[k + n + 1] - &a[l]) * &t[j + 1] - &b[k + n + 1] * &s[j + 1]
+                    + &b[l] * &s[j + 2];
+                s[j + 1] = u.clone();
+                last = j;
+            }
+            if m % 2 == 0 {
+                let k = m / 2;
+                a[k + n + 1] = &a[k] + (&s[last + 1] - &b[k + n + 1] * &s[last + 2]) / &t[last + 2];
+            } else {
+                let k = m.div_ceil(2);
+                b[k + n + 1] = &s[last + 1] / &s[last + 2];
+            }
+            core::mem::swap(&mut s, &mut t);
+        }
+        a[2 * n] = &a[n - 1] - &b[2 * n] * &s[1] / &t[1];
+        (a, b)
+    }
+
+    /// How many eigenvalues of the tridiagonal matrix (a, √b) lie below x: the negative pivots of
+    /// its LDLᵀ factorisation shifted by x (Sylvester's law of inertia), d₀ = a₀ − x and
+    /// dⱼ = aⱼ − x − bⱼ/dⱼ₋₁, exactly.
+    #[allow(
+        clippy::needless_range_loop,
+        clippy::cast_possible_wrap,
+        clippy::doc_markdown,
+        reason = "Laurie's indices and names, as his paper writes them"
+    )]
+    fn below(a: &[RBig], b: &[RBig], x: &RBig) -> usize {
+        let mut count = 0;
+        let mut d = &a[0] - x;
+        for j in 0..a.len() {
+            if j > 0 {
+                d = &a[j] - x - &b[j] / &d;
+            }
+            assert!(d != RBig::ZERO, "a pivot is zero at x = {x}");
+            if d < RBig::ZERO {
+                count += 1;
+            }
+        }
+        count
+    }
+
+    /// Every generated Kronrod node is the nearest double to an eigenvalue of Laurie's
+    /// Jacobi–Kronrod matrix, the i-th node to the i-th eigenvalue: an independent construction
+    /// of the same rule (D. P. Laurie, "Calculation of Gauss-Kronrod quadrature rules",
+    /// Mathematics of Computation 66 (1997), 1133–1145, doi:10.1090/S0025-5718-97-00861-2).
+    /// The rule is real, positive and inside [−1, 1]: every b̂ⱼ is positive and no eigenvalue lies
+    /// outside the interval.
+    #[test]
+    fn kronrod_nodes_are_lauries_eigenvalues() {
+        let exact = |v: f64| RBig::try_from(v).unwrap();
+        for n in KRONROD_N {
+            let (a, b) = jacobi_kronrod(n);
+            assert!(
+                b.iter().all(|x| *x > RBig::ZERO),
+                "G{n} K{}: not positive",
+                2 * n + 1
+            );
+            assert_eq!(below(&a, &b, &RBig::from(-1)), 0);
+            assert_eq!(below(&a, &b, &RBig::ONE), 2 * n + 1);
+            let rule = kronrod(n).unwrap();
+            assert_eq!(rule.nodes.len(), 2 * n + 1);
+            for (i, &x) in rule.nodes.iter().enumerate() {
+                let half = RBig::from_parts(IBig::ONE, UBig::from(2u8));
+                let lo = (exact(x.next_down()) + exact(x)) * &half;
+                let hi = (exact(x) + exact(x.next_up())) * &half;
+                assert!(
+                    below(&a, &b, &hi) > i,
+                    "G{n} K{}: node {i} too low",
+                    2 * n + 1
+                );
+                assert!(
+                    below(&a, &b, &lo) <= i,
+                    "G{n} K{}: node {i} too high",
+                    2 * n + 1
+                );
+            }
+        }
     }
 }
