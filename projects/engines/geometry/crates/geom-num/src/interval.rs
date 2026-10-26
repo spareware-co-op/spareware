@@ -88,6 +88,14 @@
 //! an exact zero. That operation is private, for [`Interval::norm`], which proves its radicand
 //! non-negative itself.
 //!
+//! Bounded proofs, and what is only tested: Kani proves (piece G41, chapter 28.7) that `new`,
+//! `add`, `sub`, `mul` and `square` enclose the rounded result or refuse, never panicking, for
+//! every finite double or pair of them. `div` is proven for every finite dividend over six
+//! divisors: ±0, refused; the smallest subnormal, whose quotients overflow; the largest double,
+//! whose quotients underflow; and 3 and −0.1, inexact of either sign. Over every divisor at once
+//! the solver ran past CI's hour (four corner quotients, each a 53-bit division). Every other
+//! divisor is tested (`tests/attack2_interval.rs`).
+//!
 //! Method: interval arithmetic in round-to-nearest with outward widening, as in Geogram's
 //! `intervalRN` (after Harris) and in CGAL's widening with `nextafter` when it cannot change the
 //! rounding mode. Harris widens each bound by the relative factor 1 ± 2^−52, a second rounded
@@ -778,21 +786,27 @@ mod proofs {
         }
     }
 
+    /// The divisors `div` is proven over (the module header says why those): ±0, the smallest
+    /// subnormal, the largest double, 3 and −0.1.
+    const DIVISORS: [f64; 6] = [0.0, -0.0, f64::from_bits(1), f64::MAX, 3.0, -0.1];
+
     /// `div` encloses the rounded quotient whenever the divisor does not contain zero, and
-    /// refuses when it does.
+    /// refuses when it does, for every finite dividend over [`DIVISORS`].
     #[kani::proof]
     fn div_encloses_or_refuses_a_divisor_with_zero() {
-        let (x, y) = (finite(), finite());
-        let (a, b) = (Interval::point(x).unwrap(), Interval::point(y).unwrap());
-        match a.div(b) {
-            Ok(r) => {
-                assert!(y != 0.0 && r.lo() <= r.hi());
-                let rounded = x / y;
-                if rounded.is_finite() {
-                    assert!(r.contains(rounded));
+        let x = finite();
+        for y in DIVISORS {
+            let (a, b) = (Interval::point(x).unwrap(), Interval::point(y).unwrap());
+            match a.div(b) {
+                Ok(r) => {
+                    assert!(y != 0.0 && r.lo() <= r.hi());
+                    let rounded = x / y;
+                    if rounded.is_finite() {
+                        assert!(r.contains(rounded));
+                    }
                 }
+                Err(e) => assert!(y == 0.0 || e != NumError::DivisorContainsZero),
             }
-            Err(e) => assert!(y == 0.0 || e != NumError::DivisorContainsZero),
         }
     }
 

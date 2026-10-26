@@ -31,6 +31,14 @@
 //!   2^64 terms have been added (a term at most Ω < 2^1024, counted once for every accumulator it
 //!   reaches through merges); should an internal step ever fail, the sum is marked lost and
 //!   [`ExactSum::round_ieee`] gives Neal's report for it, a NaN with every payload bit set.
+//! - **Bounded proofs, and what is only tested.** Kani proves (piece G41, chapter 28.7) that
+//!   adding one term never panics, that a finite term rounds back to itself and a non-finite one
+//!   is reported, and that a finite term and its negation cancel to +0, for every sign and
+//!   fraction at the exponent fields 0, 1, 31, 32, 1023 and 2046 (and 2047, the non-finite
+//!   terms): the subnormals, the smallest binade, the two binades either side of the first chunk
+//!   boundary, one's binade and the largest. Over every exponent field at once the solver ran past
+//!   CI's hour. Every other term, and every sum of more than one, is tested bit for bit against
+//!   the exact oracle.
 //!
 //! Method: R. M. Neal, "Fast exact summation using small and large superaccumulators", arXiv
 //! 1505.05571 (2015), <https://arxiv.org/abs/1505.05571>, and his C code `xsum` (MIT licence,
@@ -737,38 +745,53 @@ mod tests {
     }
 }
 
-/// Bounded proofs (chapter 28.7; piece G41): every double, bit for bit.
+/// Bounded proofs (chapter 28.7; piece G41): every sign and fraction, bit for bit, at the exponent
+/// fields of [`proofs::EXPONENTS`] (the module header says why those).
 #[cfg(kani)]
 mod proofs {
     use super::*;
 
-    /// Adding any double never panics or overflows, and one finite double, rounded back, is that
-    /// double (a zero comes back +0, the sum's one zero).
+    /// The exponent fields the proofs cover, each with every sign and fraction: the subnormals
+    /// (0), the smallest normal binade (1), the binades either side of the first chunk boundary
+    /// (31 and 32, as E = 32·j + k), one's binade (1023) and the largest (2046).
+    pub(super) const EXPONENTS: [u64; 6] = [0, 1, 31, 32, 1023, 2046];
+
+    /// A double with exponent field `e` and any sign and fraction.
+    fn any_with_exponent(e: u64) -> f64 {
+        let sign: u64 = if kani::any() { 1 << 63 } else { 0 };
+        let fraction: u64 = kani::any::<u64>() & ((1 << 52) - 1);
+        f64::from_bits(sign | e << 52 | fraction)
+    }
+
+    /// Adding a double never panics or overflows, and one finite double, rounded back, is that
+    /// double (a zero comes back +0, the sum's one zero); an infinity or a NaN is reported.
     #[kani::proof]
     fn one_term_rounds_back_to_itself() {
-        let x = f64::from_bits(kani::any());
-        let mut sum = ExactSum::new();
-        sum.add(x);
-        if x.is_finite() {
+        for e in EXPONENTS {
+            let x = any_with_exponent(e);
+            let mut sum = ExactSum::new();
+            sum.add(x);
             let back = sum.round().unwrap().get();
             if x == 0.0 {
                 assert!(back.to_bits() == 0);
             } else {
                 assert!(back.to_bits() == x.to_bits());
             }
-        } else {
-            assert!(sum.round().is_err());
         }
+        let mut sum = ExactSum::new();
+        sum.add(any_with_exponent(2047));
+        assert!(sum.round().is_err());
     }
 
     /// A finite double and its negation cancel exactly, to +0.
     #[kani::proof]
     fn a_term_and_its_negation_cancel() {
-        let x = f64::from_bits(kani::any());
-        kani::assume(x.is_finite());
-        let mut sum = ExactSum::new();
-        sum.add(x);
-        sum.add(-x);
-        assert!(sum.round().unwrap().get().to_bits() == 0);
+        for e in EXPONENTS {
+            let x = any_with_exponent(e);
+            let mut sum = ExactSum::new();
+            sum.add(x);
+            sum.add(-x);
+            assert!(sum.round().unwrap().get().to_bits() == 0);
+        }
     }
 }

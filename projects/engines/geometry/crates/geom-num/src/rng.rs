@@ -271,12 +271,30 @@ const fn join_u32(low: u32, high: u32) -> u64 {
 }
 
 /// The low and high 64-bit halves of `x`, x = high · 2^64 + low, read from its little-endian bytes
-/// as [`split_u64`] reads its halves: exact, with no cast and no shift.
+/// as [`split_u64`] reads its halves: exact, with no cast and no shift. Every byte is bound by
+/// name, with no sub-array pattern, which Kani cannot model (its issue 707).
 const fn split_u128(x: u128) -> [u64; 2] {
-    let [b0, b1, b2, b3, b4, b5, b6, b7, high @ ..] = x.to_le_bytes();
+    let [
+        b0,
+        b1,
+        b2,
+        b3,
+        b4,
+        b5,
+        b6,
+        b7,
+        b8,
+        b9,
+        b10,
+        b11,
+        b12,
+        b13,
+        b14,
+        b15,
+    ] = x.to_le_bytes();
     [
         u64::from_le_bytes([b0, b1, b2, b3, b4, b5, b6, b7]),
-        u64::from_le_bytes(high),
+        u64::from_le_bytes([b8, b9, b10, b11, b12, b13, b14, b15]),
     ]
 }
 

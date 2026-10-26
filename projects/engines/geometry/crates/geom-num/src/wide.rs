@@ -21,6 +21,13 @@
 //! beside each), and is split into its two 64-bit halves through its bytes, with no cast and no
 //! shift.
 //!
+//! Bounded proofs, and what is only tested: Kani proves (piece G41, chapter 28.7) that addition,
+//! subtraction, negation, the order and sign, the `i128` conversions and `resize` never panic and
+//! keep the laws their proofs state, for every four-limb value and every `i128`, and that
+//! `checked_mul` never panics for every pair of two-limb values. At four limbs the multiplication
+//! ran past CI's hour; the code is the same for every width, and products of every width are
+//! tested against big integers.
+//!
 //! Method: schoolbook addition, subtraction and multiplication on magnitudes with 128-bit
 //! intermediates (Knuth, *The Art of Computer Programming*, volume 2, section 4.3.1,
 //! <https://www-cs-faculty.stanford.edu/~knuth/taocp.html>). There is no division: predicates
@@ -508,10 +515,10 @@ mod proofs {
     }
 
     /// `from_i128` and `to_i128` are inverse for every `i128`, and `resize` to two limbs and back
-    /// keeps every value it accepts. Unwound at most 17 times: the longest loops are the 16 bytes
-    /// of an `i128`.
+    /// keeps every value it accepts. Unwound at most 33 times: the longest loop is `memcmp`'s over
+    /// the 32 bytes of the two four-limb values `==` compares.
     #[kani::proof]
-    #[kani::unwind(17)]
+    #[kani::unwind(33)]
     fn i128_conversions_and_resize_round_trip() {
         let v: i128 = kani::any();
         let w = I256::from_i128(v);
@@ -523,8 +530,10 @@ mod proofs {
     }
 
     /// The extremes are the limits: one past the largest value and the negation of the smallest
-    /// do not fit, and the largest is the negation of one above the smallest.
+    /// do not fit, and the largest is the negation of one above the smallest. Unwound at most 33
+    /// times, past `memcmp`'s 32 bytes: unbounded, the solver ran past CI's hour.
     #[kani::proof]
+    #[kani::unwind(33)]
     fn extremes_are_the_limits() {
         let (max, min) = (I256::max_value(), I256::min_value());
         assert!(max.checked_add(&I256::one()).is_none());

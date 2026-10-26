@@ -49,6 +49,14 @@
 //!   arithmetic at run time (the compiler alone evaluates the checks on the constants, where an
 //!   overflow would stop the build) and no cast, so nothing here depends on overflow checks being
 //!   on.
+//! - **Bounded proofs, and what is only tested.** Kani proves (piece G41, chapter 28.7) that
+//!   `split` adds back exactly or reports, for every finite double; that `two_sum` and
+//!   `fast_two_sum` agree and give the rounded sum and its error for every finite operand against
+//!   five others, in either order; and that `two_prod` gives the rounded product and its error
+//!   for every finite first factor over six second factors, one for each of its paths (the
+//!   proofs module lists both sets). Over every pair at once the solver ran past CI's hour. Every
+//!   other pair, and everything through the fused multiply-add, is tested against exact
+//!   rationals.
 //!
 //! Method: Dekker 1971 (`fast_two_sum`, Veltkamp's `split`, `two_prod`) and Knuth (`two_sum`), in
 //! the form and with the proofs of Shewchuk 1997: Theorem 6 (fast two-sum), Theorem 7 (two-sum),
@@ -542,7 +550,9 @@ pub const fn two_prod(a: f64, b: f64) -> (f64, f64) {
     (p, scaled_error(a, b, p))
 }
 
-/// Bounded proofs (chapter 28.7; piece G41): every pair of finite doubles, bit for bit. The
+/// Bounded proofs (chapter 28.7; piece G41), bit for bit: `split` for every finite double,
+/// `two_sum` for every finite operand over [`proofs::ADDENDS`] and `two_prod` for every finite
+/// first factor over [`proofs::FACTORS`]. The
 /// transformations through the fused multiply-add (`two_prod_fma` and what calls it) are left out:
 /// Kani cannot model the processor instruction `libm` uses for it, so those are only tested.
 #[cfg(kani)]
@@ -556,38 +566,80 @@ mod proofs {
         x
     }
 
+    /// The second operands `two_sum` is proven over: 3 and −0.1 (inexact sums of either sign),
+    /// 2^53 (sums whose error is a whole number), the smallest subnormal (errors at the bottom
+    /// of the range) and the largest double (overflow). Over every pair at once the solver ran
+    /// past CI's hour.
+    pub(super) const ADDENDS: [f64; 5] = [
+        3.0,
+        -0.1,
+        9_007_199_254_740_992.0,
+        f64::from_bits(1),
+        f64::MAX,
+    ];
+
     /// `two_sum` and `fast_two_sum` agree bit for bit, the sum is the rounded sum, and the error
-    /// is below half a unit of it (adding it back rounds to the sum), for every pair of finite
-    /// doubles whose sum does not overflow.
+    /// is below half a unit of it (adding it back rounds to the sum), for every finite first
+    /// operand over [`ADDENDS`], in either order.
     #[kani::proof]
     fn two_sum_is_the_rounded_sum_and_its_error() {
-        let (a, b) = (finite(), finite());
-        let (s, e) = two_sum(a, b);
-        let (fs, fe) = fast_two_sum(a, b);
-        assert!(s.to_bits() == fs.to_bits() && e.to_bits() == fe.to_bits());
-        assert!(s.to_bits() == (a + b).to_bits());
-        if s.is_finite() {
-            assert!(e.is_finite() && s + e == s);
+        let x = finite();
+        for y in ADDENDS {
+            for (a, b) in [(x, y), (y, x)] {
+                let (s, e) = two_sum(a, b);
+                let (fs, fe) = fast_two_sum(a, b);
+                assert!(s.to_bits() == fs.to_bits() && e.to_bits() == fe.to_bits());
+                assert!(s.to_bits() == (a + b).to_bits());
+                if s.is_finite() {
+                    assert!(e.is_finite() && s + e == s);
+                }
+            }
         }
     }
 
-    /// `split` cuts a double into two halves that add back to it exactly.
+    /// `split` cuts a double into two halves that add back to it exactly, for every finite double
+    /// below 2^1024 − 2^997 in magnitude, and reports every larger one as (±∞, ∓∞), the infinity
+    /// with the sign of `a` first (its documentation).
     #[kani::proof]
     fn split_adds_back_exactly() {
         let a = finite();
         let (hi, lo) = split(a);
-        assert!(hi + lo == a);
+        // 2^1024 − 2^997 = (2 − 2^−26) · 2^1023: exponent field 2046, significand 2^52 − 2^26.
+        let reported = f64::from_bits(0x7fef_ffff_fc00_0000);
+        if abs(a) < reported {
+            assert!(hi + lo == a);
+        } else {
+            assert!(hi.is_infinite() && lo.is_infinite());
+            assert!(hi.is_sign_negative() == a.is_sign_negative());
+            assert!(lo.is_sign_negative() != a.is_sign_negative());
+        }
     }
 
+    /// The second factors `two_prod` is proven over, one for each of its paths: 3 and −0.1
+    /// (inexact products of either sign on the direct path), [`SPLITTER`] (a factor that splits
+    /// exactly), 2^996 (the scaled path for a large factor), the smallest subnormal (the scaled
+    /// path for a tiny product, whose error can be finer than any double) and the largest double
+    /// (overflow). Over every pair at once the solver ran past CI's hour.
+    pub(super) const FACTORS: [f64; 6] = [
+        3.0,
+        -0.1,
+        SPLITTER,
+        TWO_POW_996,
+        f64::from_bits(1),
+        f64::MAX,
+    ];
+
     /// `two_prod` gives the rounded product, and an error that, when finite, adds back to it
-    /// without changing it, for every pair of finite doubles.
+    /// without changing it, for every finite first factor over [`FACTORS`].
     #[kani::proof]
     fn two_prod_is_the_rounded_product_and_its_error() {
-        let (a, b) = (finite(), finite());
-        let (p, e) = two_prod(a, b);
-        assert!(p.to_bits() == (a * b).to_bits());
-        if p.is_finite() && e.is_finite() {
-            assert!(p + e == p);
+        let a = finite();
+        for b in FACTORS {
+            let (p, e) = two_prod(a, b);
+            assert!(p.to_bits() == (a * b).to_bits());
+            if p.is_finite() && e.is_finite() {
+                assert!(p + e == p);
+            }
         }
     }
 }
