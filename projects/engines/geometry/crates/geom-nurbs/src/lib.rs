@@ -23,6 +23,34 @@
 //! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
-//! Status: scaffold only; built by pieces G56, G58, G59, G259.
+//! Modules today (piece G56, The NURBS Book's chapters 2 to 5):
+//!
+//! - [`Basis`], in [`basis`]: a checked degree and knot vector, and its functions and their
+//!   derivatives (A2.1 to A2.5).
+//! - [`Curve`], in [`curve`]: curves of any dimension, their points and derivatives (A3.1 to
+//!   A3.3, A4.1, A4.2).
+//! - [`Surface`], in [`surface`]: surfaces, their points and partial derivatives (A3.5, A3.6,
+//!   A4.3, A4.4).
+//! - [`Point`], in [`point`]: the control points the algorithms take, `geom-math`'s and arrays.
+//! - [`NurbsError`], in [`error`].
+//!
+//! Status: basis, evaluation and knot operations built (G56); interpolation and approximation
+//! (G58), the Bernstein toolkit (G59) and the rest (G259) to come.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
+
+extern crate alloc;
+
+pub mod basis;
+mod budget;
+pub mod curve;
+pub mod error;
+mod index;
+pub mod point;
+pub mod surface;
+
+pub use basis::{Basis, Limit, MAX_DEGREE};
+pub use curve::Curve;
+pub use error::NurbsError;
+pub use point::Point;
+pub use surface::Surface;
