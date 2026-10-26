@@ -22,8 +22,8 @@ $SUDO apt-get update -qq
 $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git gcc make m4 pkg-config libpcre2-dev >/dev/null
 eval "$(opam env)"
 opam update -q >/dev/null
-opam install -y num camlp5 ocamlfind >/dev/null
-opam list --installed | grep -E '^(ocaml|num|camlp5|ocamlfind|pcre2|re) '
+opam install -y num camlp5 camlp-streams ocamlfind >/dev/null
+opam list --installed | grep -E '^(ocaml|num|camlp5|camlp-streams|ocamlfind|pcre2|re) '
 
 fetch() {
   git init -q "$2"
@@ -68,10 +68,11 @@ session="$work/session.ml"
   # camlp5 8.03.06 and later need libraries of their own (PCRE2, Re, camlp-streams' Stream), which
   # HOL Light's loader for OCaml before 4.14 does not load: it loads camlp5o.cma directly. So
   # findlib loads camlp5 with everything it needs first, as HOL Light's own loader for OCaml 4.14
-  # does (load_camlp5_topfind.ml), and hol.ml then loads camlp5o.cma.
+  # does (load_camlp5_topfind.ml), and hol.ml then loads camlp5o.cma. camlp5's findlib package
+  # does not name camlp-streams, whose `Stream` camlp5o.cma needs, so it is loaded by name.
   echo '#use "topfind";;'
   echo 'Topfind.don'"'"'t_load ["compiler-libs.common"];;'
-  echo 'Topfind.load_deeply ["camlp5"];;'
+  echo 'Topfind.load_deeply ["camlp-streams"; "pcre2"; "re"; "camlp5"];;'
   echo "#use \"$work/hol-light/hol.ml\";;"
   echo "let formal_ineqs_path = \"$work/hol-light/Formal_ineqs\";;"
   echo "let fptaylor_path = \"$work/FPTaylor\";;"
