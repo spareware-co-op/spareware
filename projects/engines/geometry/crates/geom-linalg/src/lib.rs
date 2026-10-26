@@ -25,6 +25,23 @@
 //!
 //! Proposed in chapter 27, pending the owner's decision G08.
 //!
-//! Status: scaffold only; built by pieces G49, G50, G215.
+//! Modules today (piece G49, dense decompositions):
+//!
+//! - [`matrix`]: [`Matrix`], dense and finite; [`LinalgError`]; and [`Work`], the budget every
+//!   factorisation charges before it starts.
+//! - [`solve`]: LU with partial pivoting, Cholesky, triangular and tridiagonal solves.
+//! - [`qr`]: Householder QR with column pivoting, the complete orthogonal decomposition, the
+//!   least-norm least-squares solution and the canonical null space.
+//!
+//! Status: dense decompositions built (G49); singular values and eigenvalues (G50) and the sparse
+//! parts (G215) to come.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
+
+pub mod matrix;
+pub mod qr;
+pub mod solve;
+
+pub use matrix::{LinalgError, Matrix, Work};
+pub use qr::{Cod, PivotedQr, canonical_null_space};
+pub use solve::{Cholesky, Lu, solve_lower, solve_tridiagonal, solve_upper};

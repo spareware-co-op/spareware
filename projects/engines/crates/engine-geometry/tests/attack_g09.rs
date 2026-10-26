@@ -1247,7 +1247,6 @@ mod repository {
              G176 G292 G320 G321 G372 G390 G392 G393 G466 G467 G468",
         ),
         ("geom-landxml", "G437"),
-        ("geom-linalg", "G49 G50 G215"),
         ("geom-make", "G101"),
         (
             "geom-mesh",

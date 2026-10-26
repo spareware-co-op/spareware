@@ -1896,7 +1896,52 @@
         29
       ],
       "depends": [],
-      "errors": [],
+      "errors": [
+        {
+          "doc": "Why a factorisation or solve could not give its result.",
+          "file": "projects/engines/geometry/crates/geom-linalg/src/matrix.rs",
+          "kinds": [
+            {
+              "doc": "The shapes do not fit: a non-square matrix where a square one is needed, or a right-hand side of the wrong length.",
+              "name": "Shape",
+              "shape": "unit"
+            },
+            {
+              "doc": "An entry, or a result of the arithmetic, is NaN or infinite.",
+              "name": "NotFinite",
+              "shape": "unit"
+            },
+            {
+              "doc": "The matrix is singular: a zero pivot (LU, triangular, tridiagonal).",
+              "name": "Singular",
+              "shape": "unit"
+            },
+            {
+              "doc": "The matrix is not symmetric positive definite (Cholesky).",
+              "name": "NotPositiveDefinite",
+              "shape": "unit"
+            },
+            {
+              "doc": "The work budget cannot cover the factorisation's cost.",
+              "name": "OutOfWork",
+              "shape": "unit"
+            },
+            {
+              "doc": "An allocation could not be made.",
+              "name": "OutOfMemory",
+              "shape": "unit"
+            },
+            {
+              "doc": "A step its own bounds rule out failed: a defect, reported, never answered.",
+              "name": "Defect",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_linalg::matrix",
+          "name": "LinalgError",
+          "non_exhaustive": false
+        }
+      ],
       "family": [],
       "file": "projects/engines/geometry/crates/geom-linalg/src/lib.rs",
       "folder": "projects/engines/geometry/crates/geom-linalg",
@@ -1910,12 +1955,81 @@
       "job": "Deterministic dense and sparse linear algebra: QR, the complete orthogonal decomposition, triangular solves, column ordering.",
       "kind": "kernel",
       "layer": "1",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "a matrix of r × c entries is one allocation of r · c doubles; access is constant time.",
+          "does": "[`Matrix`] is a dense matrix stored by rows, every entry a finite `f64`, made only by fallible constructors (an allocation that cannot be made is [`LinalgError::OutOfMemory`], never an abort). [`Work`] is a budget in units of one multiply-add: each factorisation knows its cost from its shape, charges it in full before touching a number, and refuses with [`LinalgError::OutOfWork`] when the budget cannot cover it, so a factorisation either finishes or never starts (chapter 15.6: \"budgets in work, not time\").",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-linalg/src/matrix.rs",
+          "guarantees": [
+            "**Finite.** Every entry of every [`Matrix`] is finite; a constructor refuses NaN and infinities with [`LinalgError::NotFinite`], and a factorisation whose arithmetic overflows reports it the same way instead of returning infinities.",
+            "**Charged before it starts.** A factorisation's cost is a function of its shape alone, stated on each function, and is charged before any arithmetic: the same budget gives the same answer, or the same refusal, on every target.",
+            "**No panic, no abort.** Indices are checked; allocations are fallible."
+          ],
+          "job": "Dense matrices of finite doubles, the errors of every factorisation, and the work budget each one charges before it starts.",
+          "method": {
+            "links": [
+              "https://www.netlib.org/lapack/lug/"
+            ],
+            "text": "row-major dense storage, as LAPACK's column-major storage transposed (E. Anderson et al., *LAPACK Users' Guide*, 3rd ed., SIAM (1999), <https://www.netlib.org/lapack/lug/>), with the work model of G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins (2013), section 1.1.15 (flop counts)."
+          },
+          "path": "geom_linalg::matrix",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "as charged above; one copy of A and a few vectors of length n.",
+          "does": "[`PivotedQr::factor`] factors an m × n matrix as A·Π = Q·R, Q a product of Householder reflections, R upper triangular with diagonal magnitudes that never increase, Π the column order chosen by largest remaining norm. [`Cod::factor`] decides the rank r from R's diagonal and a relative tolerance, then removes R's trailing columns by reflections from the right, giving A·Π = Q·[T 0; 0 0]·Zᵀ with T r × r upper triangular: the complete orthogonal decomposition. From it, [`Cod::least_squares`] gives the least-squares solution of A·x = b of least norm (chapter 15.6's full step: the limit of the damped steps, never a pivot-order basic solution), and [`Cod::null_space`] an orthonormal basis of the null space. [`canonical_null_space`] turns that basis into chapter 15.8's canonical one: reduced echelon form over the variable order, each vector 1 at its own leading variable and 0 at the others', so the basis is unique.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-linalg/src/qr.rs",
+          "guarantees": [
+            "**Deterministic.** Plain scalar loops in a fixed order (chapter 15.6). A pivot column is the one of largest remaining norm, the first on a tie; norms are scaled by the column's largest magnitude, so they never overflow for finite entries.",
+            "**Least change, never basic.** In a rank-deficient or under-determined system the solution has the least Euclidean norm among all least-squares solutions; no free variable is set to zero in pivot order.",
+            "**Rank decided once, by the caller's tolerance.** A diagonal entry of R at most `tol` times the first ends the rank; the tolerance is the caller's (chapter 15 derives it from the tolerance ladder). Like every column-pivoted QR, it can miss a near rank deficiency that no column norm shows: Kahan's matrix is the classic case (tested).",
+            "**Charged first.** A factorisation charges 2·m·n·min(m, n) multiply-adds before it starts, the decomposition r²·n more, a solve 2·m·n, a null space n²·(n − r)."
+          ],
+          "job": "Householder QR with column pivoting, the complete orthogonal decomposition, the minimum-norm least-squares solution, and the canonical null space.",
+          "method": {
+            "links": [
+              "doi:10.1145/1377612.1377616",
+              "https://www.netlib.org/lapack/lug/"
+            ],
+            "text": "G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins (2013): algorithm 5.1.1 (the Householder vector), 5.4.1 (QR with column pivoting), section 5.4.2 (the complete orthogonal decomposition) and 5.5 (least squares in the rank-deficient case); the column norms downdated as LAPACK's `xLAQP2` does, recomputed when the downdate loses more than √u of its relative accuracy (Z. Drmač and Z. Bujanović, *On the failure of rank-revealing QR factorization software*, ACM TOMS 35 (2008), doi:10.1145/1377612.1377616); the trailing columns removed as LAPACK's `xTZRZF` does (E. Anderson et al., *LAPACK Users' Guide*, 3rd ed., SIAM (1999), <https://www.netlib.org/lapack/lug/>). Written in our own words from the books and papers (chapter 29.4)."
+          },
+          "path": "geom_linalg::qr",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "as charged above; one allocation of n² doubles for LU or Cholesky, n doubles per solve.",
+          "does": "[`Lu::factor`] factors a square matrix as P·A = L·U by Gaussian elimination with partial pivoting, and [`Lu::solve`] solves A·x = b with it. [`Cholesky::factor`] factors a symmetric positive definite matrix as A = G·Gᵀ, and [`Cholesky::solve`] solves with it. [`solve_lower`] and [`solve_upper`] are forward and back substitution on a triangle, and [`solve_tridiagonal`] solves a tridiagonal system by Gaussian elimination with partial pivoting.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-linalg/src/solve.rs",
+          "guarantees": [
+            "**Deterministic.** Plain scalar loops in a fixed order: no SIMD, no fused multiply-add, no threads (chapter 15.6). A pivot is the largest magnitude in its column, the first such row on a tie, so the same matrix gives the same factors, bit for bit, on every target.",
+            "**Refused, never guessed.** A zero pivot is [`LinalgError::Singular`], a non-positive Cholesky pivot or an asymmetric matrix [`LinalgError::NotPositiveDefinite`], an overflow [`LinalgError::NotFinite`]: no result holds an infinity or a NaN. Tiny pivots are allowed: conditioning is the caller's to judge (the complete orthogonal decomposition in [`crate::qr`] decides rank).",
+            "**Charged first.** Each factorisation charges its cost to the [`Work`] budget before any arithmetic: n³ multiply-adds for LU and Cholesky (an upper bound: n³/3 and n³/6 are the leading terms), n² for a solve with factors, n for a tridiagonal solve."
+          ],
+          "job": "Square systems: LU with partial pivoting, Cholesky, triangular and tridiagonal solves.",
+          "method": {
+            "links": [
+              "https://www.netlib.org/lapack/lug/"
+            ],
+            "text": "G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins (2013): algorithm 3.4.1 (Gaussian elimination with partial pivoting, outer-product form), 3.1.1 and 3.1.2 (row-oriented forward and back substitution), 4.2.2 (Cholesky, gaxpy form) and section 4.3.6 with LAPACK's `dgtsv` (tridiagonal elimination with partial pivoting, which fills one extra superdiagonal; E. Anderson et al., *LAPACK Users' Guide*, 3rd ed., SIAM (1999), <https://www.netlib.org/lapack/lug/>), written in our own words from the books (chapter 29.4's row for LAPACK, Golub and Van Loan and the Thomas algorithm)."
+          },
+          "path": "geom_linalg::solve",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-linalg",
       "provenance": [],
       "sections": "15.6 and 16.6; open questions OQ-15.7, OQ-16.1 and OQ-29.16; chapter 27 (\"Who owns what\"), in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G49, G50, G215.",
+      "status": "dense decompositions built (G49); singular values and eigenvalues (G50) and the sparse parts (G215) to come.",
       "summary": "Spare Kit geometry kernel: deterministic linear algebra."
     },
     {
