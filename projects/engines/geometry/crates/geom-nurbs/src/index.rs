@@ -58,3 +58,16 @@ pub(crate) fn real(k: usize) -> Result<f64, NurbsError> {
         .map(f64::from)
         .map_err(|_| NurbsError::Defect)
 }
+
+/// The end (one past the last index) of the run of values equal to `v[start]` that begins at
+/// `start`; `start` itself if it is past the end.
+pub(crate) fn run_end(v: &[f64], start: usize) -> Result<usize, NurbsError> {
+    let Some(&value) = v.get(start) else {
+        return Ok(start);
+    };
+    let mut end = add(start, 1)?;
+    while v.get(end).is_some_and(|&x| x == value) {
+        end = add(end, 1)?;
+    }
+    Ok(end)
+}

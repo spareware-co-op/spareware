@@ -78,7 +78,7 @@
 use alloc::vec::Vec;
 
 use crate::NurbsError;
-use crate::index::{add, at, get, mul, real, set, sub};
+use crate::index::{add, at, get, mul, real, run_end, set, sub};
 
 /// The highest degree a basis may have. Every binomial coefficient C(n, k) with n ≤ 2 · 28 = 56 is
 /// a whole number below 2^53 (the largest, C(56, 28), is 7 648 690 600 760 440), so it is exact as
@@ -137,14 +137,16 @@ impl Basis {
             return Err(NurbsError::KnotDecreasing { index: add(index, 1)? });
         }
         let mut index = 0;
-        for run in knots.chunk_by(|a, b| a == b) {
-            if run.len() > order {
+        while index < knots.len() {
+            let end = run_end(&knots, index)?;
+            let multiplicity = sub(end, index)?;
+            if multiplicity > order {
                 return Err(NurbsError::Multiplicity {
                     index,
-                    multiplicity: run.len(),
+                    multiplicity,
                 });
             }
-            index = add(index, run.len())?;
+            index = end;
         }
         let first = get(&knots, 0)?;
         let last = get(&knots, sub(knots.len(), 1)?)?;

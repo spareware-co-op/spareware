@@ -53,7 +53,7 @@ use crate::arith::{Hom, Num};
 use crate::basis::{Basis, Limit, WIDTH};
 use crate::budget::vec_for;
 use crate::curve::Curve;
-use crate::index::{add, get, set, sub};
+use crate::index::{add, get, run_end, set, sub};
 use crate::ops::{Changed, charge_op, homs, p_max, rounding, split};
 use crate::NurbsError;
 
@@ -157,11 +157,14 @@ pub(crate) fn check_refinement(basis: &Basis, x: &[f64]) -> Result<(), NurbsErro
     if x.windows(2).any(|w| w.get(1) < w.first()) {
         return Err(NurbsError::KnotOutside);
     }
-    for run in x.chunk_by(|a, b| a == b) {
-        let value = get(run, 0)?;
-        if add(run.len(), basis.multiplicity(value))? > basis.degree() {
+    let mut start = 0;
+    while start < x.len() {
+        let end = run_end(x, start)?;
+        let value = get(x, start)?;
+        if add(sub(end, start)?, basis.multiplicity(value))? > basis.degree() {
             return Err(NurbsError::TooManyKnots);
         }
+        start = end;
     }
     Ok(())
 }

@@ -392,3 +392,77 @@ fn elevation_keeps_the_curve() {
     let unclamped = curves(7, false).into_iter().find(|c| !c.basis().is_clamped()).unwrap();
     assert_eq!(unclamped.elevate(1, &mut meter()).unwrap_err(), NurbsError::NotClamped);
 }
+
+#[test]
+fn removing_an_inserted_knot_gives_the_curve_back() {
+    let mut rng = Lcg(51);
+    for curve in curves(0x0005_1e3a, false) {
+        let (lo, hi) = curve.basis().domain();
+        let u = lo + (hi - lo) * (0.2 + 0.6 * rng.unit());
+        if curve.basis().multiplicity(u) > 0 {
+            continue;
+        }
+        let inserted = curve.insert_knot(u, 1, &mut meter()).unwrap().value;
+        let scale = curve
+            .homogeneous()
+            .iter()
+            .flat_map(|r| r.iter().map(|x| x.abs()))
+            .fold(1.0_f64, |a, b| if b > a { b } else { a });
+        let (out, removed) = inserted.remove_knot(u, 1, 1e-9 * scale, &mut meter()).unwrap();
+        assert_eq!(removed, 1, "degree {}", curve.degree());
+        assert_eq!(out.value.basis().knots(), curve.basis().knots());
+        assert!(out.deviation <= 1e-9 * scale);
+        same_curve(&inserted, &out.value, out.deviation, &mut rng);
+    }
+}
+
+#[test]
+fn removal_keeps_within_the_tolerance() {
+    let mut rng = Lcg(52);
+    for curve in curves(0x0005_2e3b, false) {
+        let p = curve.degree();
+        let (lo, hi) = curve.basis().domain();
+        let Some(&u) = curve.basis().knots().iter().find(|&&k| {
+            lo < k && k < hi && curve.basis().multiplicity(k) <= p
+        }) else {
+            continue;
+        };
+        let s = curve.basis().multiplicity(u);
+        // No tolerance: a generic knot stays, and nothing changes.
+        let (kept, none) = curve.remove_knot(u, s, 0.0, &mut meter()).unwrap();
+        if none == 0 {
+            assert_eq!(kept.value, curve);
+            assert_eq!(kept.deviation, 0.0);
+        } else {
+            same_curve(&curve, &kept.value, kept.deviation, &mut rng);
+        }
+        // A tolerance as large as the curve: every copy goes, within the bound, which is certified.
+        for tol in [1e-3, 1e12] {
+            let (out, removed) = curve.remove_knot(u, s, tol, &mut meter()).unwrap();
+            assert!(out.deviation <= tol);
+            assert_eq!(out.value.basis().multiplicity(u), s - removed);
+            same_curve(&curve, &out.value, out.deviation, &mut rng);
+            if tol > 1.0 && !curve.is_rational() {
+                assert_eq!(removed, s);
+            }
+        }
+    }
+}
+
+#[test]
+fn removal_refuses_what_it_cannot_remove() {
+    let basis = Basis::new(2, vec![0.0, 0.0, 0.0, 1.0, 2.0, 2.0, 2.0]).unwrap();
+    let curve = Curve::new(basis, &[[0.0, 0.0], [1.0, 2.0], [3.0, 1.0], [4.0, 0.0]]).unwrap();
+    let mut m = meter();
+    for tol in [-1.0, f64::NAN, f64::INFINITY] {
+        assert_eq!(curve.remove_knot(1.0, 1, tol, &mut m).unwrap_err(), NurbsError::Tolerance);
+    }
+    for u in [0.0, 2.0, 0.5, f64::NAN] {
+        assert_eq!(curve.remove_knot(u, 1, 1.0, &mut m).unwrap_err(), NurbsError::KnotOutside);
+    }
+    let jump = Basis::new(1, vec![0.0, 0.0, 1.0, 1.0, 2.0, 2.0]).unwrap();
+    let c = Curve::new(jump, &[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [2.0, 1.0]]).unwrap();
+    assert_eq!(c.remove_knot(1.0, 1, 1.0, &mut m).unwrap_err(), NurbsError::Discontinuous);
+    let (same, removed) = curve.remove_knot(1.0, 0, 1.0, &mut m).unwrap();
+    assert_eq!((same.value, removed), (curve, 0));
+}

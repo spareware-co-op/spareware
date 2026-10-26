@@ -53,7 +53,7 @@ use crate::basis::{Basis, MAX_DEGREE, WIDTH};
 use crate::bezier::span_count;
 use crate::budget::vec_for;
 use crate::curve::Curve;
-use crate::index::{add, get, mul, set, sub};
+use crate::index::{add, get, mul, run_end, set, sub};
 use crate::ops::{Changed, charge_op, homs, rounding, split};
 
 impl<const D: usize> Curve<D> {
@@ -108,12 +108,15 @@ pub(crate) fn check_elevation(basis: &Basis) -> Result<(), NurbsError> {
     }
     let (lo, hi) = basis.domain();
     let p = basis.degree();
-    if basis
-        .knots()
-        .chunk_by(|a, b| a == b)
-        .any(|run| run.first().is_some_and(|&k| lo < k && k < hi) && run.len() > p)
-    {
-        return Err(NurbsError::Discontinuous);
+    let knots = basis.knots();
+    let mut start = 0;
+    while start < knots.len() {
+        let end = run_end(knots, start)?;
+        let k = get(knots, start)?;
+        if lo < k && k < hi && sub(end, start)? > p {
+            return Err(NurbsError::Discontinuous);
+        }
+        start = end;
     }
     Ok(())
 }

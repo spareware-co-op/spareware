@@ -107,6 +107,8 @@ pub enum NurbsError {
     Discontinuous,
     /// The operation needs a nonrational curve or surface.
     Rational,
+    /// A tolerance is negative, NaN or infinite.
+    Tolerance,
     /// The operation needs a clamped knot vector (each end knot repeated degree + 1 times), as
     /// Bezier extraction and degree change do.
     NotClamped,
@@ -179,6 +181,7 @@ impl fmt::Display for NurbsError {
                 f.write_str("a lower derivative jumps at a knot, so the derivative curve does not exist")
             }
             NurbsError::Rational => f.write_str("the operation needs a nonrational curve or surface"),
+            NurbsError::Tolerance => f.write_str("the tolerance is negative or not finite"),
             NurbsError::NotClamped => f.write_str("the operation needs a clamped knot vector"),
             NurbsError::KnotOutside => f.write_str(
                 "a knot is outside the domain, or the knots to insert are not in order",
