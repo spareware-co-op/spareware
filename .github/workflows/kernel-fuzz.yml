@@ -14,6 +14,8 @@ name: Kernel fuzzing and proofs
 #   tests/__fuzz__/<target>/crashes and `cargo test` replays it forever (28.16).
 # - Kani: each `<target>_proof` test, bolero's harness unchanged, proven by Kani for every case of
 #   its domain (the target module's header says which).
+# - Kani for geom-num: each `#[kani::proof]` harness beside geom-num's code (piece G41), proven
+#   on its own.
 # - ClusterFuzzLite, on pull requests: .clusterfuzzlite/build.sh builds every `<target>_fuzz` test
 #   with cargo-bolero's build-clusterfuzz command, and ClusterFuzzLite fuzzes them in turn
 #   (code-change mode, address sanitizer). OSS-Fuzz's build check cannot read the start-up
@@ -153,6 +155,58 @@ jobs:
         run: |
           start=$(date +%s)
           cargo kani --tests -p geom-fuzz --harness "${{ matrix.harness }}" --exact
+          echo "Proved in $(( $(date +%s) - start )) seconds."
+      - name: Kani left Cargo.lock as it was
+        run: git diff --exit-code -- Cargo.lock
+
+  # Bounded proofs beside geom-num's own code (chapter 28.7; piece G41): each harness of a module's
+  # `#[cfg(kani)] mod proofs`, proven by Kani for every case of its domain, with Kani's overflow,
+  # bounds and panic checks on. A harness that cannot finish within the hour is narrowed, and its
+  # module header says what is proven and what is only tested. geom-num's tests/kani_harnesses.rs
+  # holds this list to the harnesses in the source.
+  kani-num:
+    name: Kani, geom-num (${{ matrix.proof }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        proof:
+          - grid::proofs::coarsen_is_nearest_and_reported
+          - grid::proofs::coord_from_i128_accepts_exactly_the_frame
+          - grid::proofs::coord_new_accepts_exactly_the_frame
+          - grid::proofs::p3_new_accepts_exactly_three_frame_coordinates
+          - grid::proofs::refine_is_exact_or_refused
+          - grid::proofs::steps_refine_is_exact_or_none
+          - ladder::proofs::quarter_nm_always_answers_exactly
+          - real::proofs::real_new_refuses_exactly_nan_and_the_infinities
+          - real::proofs::total_order_and_its_tie_rules
+          - sign::proofs::signs_follow_the_integers
+          - wide::proofs::add_and_sub_never_panic_and_invert
+          - wide::proofs::i128_conversions_and_resize_round_trip
+          - wide::proofs::mul_never_panics
+          - wide::proofs::neg_refuses_exactly_the_minimum
+          - wide::proofs::order_and_sign_agree
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Install Kani ${{ env.KANI_VERSION }}
+        run: |
+          cargo install kani-verifier --version "$KANI_VERSION" --locked
+          cargo kani setup
+      - name: Cargo.lock is the reviewed one
+        run: cargo metadata --locked --format-version 1 > /dev/null
+      - name: Prove ${{ matrix.proof }}
+        run: |
+          start=$(date +%s)
+          cargo kani -p geom-num --harness "${{ matrix.proof }}" --exact
           echo "Proved in $(( $(date +%s) - start )) seconds."
       - name: Kani left Cargo.lock as it was
         run: git diff --exit-code -- Cargo.lock

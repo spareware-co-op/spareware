@@ -213,3 +213,42 @@ mod tests {
         }
     }
 }
+
+/// Bounded proofs (chapter 28.7; piece G41): Kani checks every double, bit for bit.
+#[cfg(kani)]
+mod proofs {
+    use super::*;
+
+    /// `Real::new` accepts exactly the finite doubles, keeping their bits, and refuses NaN and
+    /// both infinities, for every one of the 2^64 bit patterns: no NaN ever gets through.
+    #[kani::proof]
+    fn real_new_refuses_exactly_nan_and_the_infinities() {
+        let bits: u64 = kani::any();
+        let x = f64::from_bits(bits);
+        // Finite exactly when the exponent field is not all ones (IEEE 754 binary64).
+        let finite = (bits >> 52) & 0x7ff != 0x7ff;
+        match Real::new(x) {
+            Ok(r) => assert!(finite && r.get().to_bits() == bits),
+            Err(e) => assert!(!finite && e == NumError::NotFinite),
+        }
+    }
+
+    /// `total_max` and `total_min` pick by totalOrder, on a tie (the same bits) the first
+    /// argument, and `Ord` agrees with `==`, for every pair of finite doubles.
+    #[kani::proof]
+    fn total_order_and_its_tie_rules() {
+        let (a, b): (u64, u64) = (kani::any(), kani::any());
+        let (Ok(x), Ok(y)) = (Real::new(f64::from_bits(a)), Real::new(f64::from_bits(b))) else {
+            return;
+        };
+        let order = x.cmp(&y);
+        assert!((order == Ordering::Equal) == (a == b));
+        let max = x.total_max(y);
+        let min = x.total_min(y);
+        assert!(max >= x && max >= y && min <= x && min <= y);
+        assert!((max == x || max == y) && (min == x || min == y));
+        if a == b {
+            assert!(max.get().to_bits() == a && min.get().to_bits() == a);
+        }
+    }
+}
