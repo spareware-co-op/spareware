@@ -414,3 +414,50 @@ fn evaluation_errors_are_typed() {
         Err(NurbsError::Stopped(_))
     ));
 }
+
+#[test]
+fn corner_cutting_is_within_its_bound() {
+    let mut rng = Lcg(14);
+    for curve in curves() {
+        let p = curve.degree();
+        let g = gamma(10 * p);
+        for u in parameters(&curve, &mut rng, 6) {
+            for limit in LIMITS {
+                let c = curve.point_by_corner_cutting(u, limit).unwrap();
+                let (e, _) = exact(&curve, u, limit, 0);
+                let basis = curve.basis();
+                let span = basis.span(u, limit).unwrap();
+                let first = span - p;
+                // M: the largest |coordinate| (and weight) over the points used.
+                let used = &curve.homogeneous()[first..=span];
+                let mc: Vec<Q> = (0..3)
+                    .map(|d| {
+                        used.iter()
+                            .map(|r| abs(&q(r[d])))
+                            .fold(zero(), |a, b| if b > a { b } else { a })
+                    })
+                    .collect();
+                if let Some(ws) = curve.weights() {
+                    let mw = ws[first..=span]
+                        .iter()
+                        .map(|&w| q(w))
+                        .fold(zero(), |a, b| if b > a { b } else { a });
+                    let table = common::cox_de_boor(basis.knots(), p, u, limit);
+                    let w: Q = (first..=span).fold(zero(), |acc, i| acc + &table[p][i] * q(ws[i]));
+                    for d in 0..3 {
+                        let bound = (&g * (&mc[d] + abs(&e[0][d]) * &mw)) / (&w - &g * &mw)
+                            + gamma(1) * (abs(&e[0][d]) + qi(1));
+                        assert!(
+                            within(c[d], &e[0][d], &bound),
+                            "rational, degree {p}, u {u}"
+                        );
+                    }
+                } else {
+                    for d in 0..3 {
+                        assert!(within(c[d], &e[0][d], &(&g * &mc[d])), "degree {p}, u {u}");
+                    }
+                }
+            }
+        }
+    }
+}

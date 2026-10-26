@@ -44,8 +44,9 @@ use crate::arith::{Hom, Num};
 use crate::basis::{Basis, Limit};
 use crate::bezier::{decompose, span_count};
 use crate::budget::vec_for;
+use crate::curve::derivative_points;
 use crate::elevate::{check_elevation, elevate_kernel};
-use crate::index::{add, get, mul};
+use crate::index::{add, get, mul, sub};
 use crate::insert::{Insertion, check_refinement, insert_kernel, refine_kernel};
 use crate::ops::{Changed, Direction, charge_op, homs, p_max, rounding, split};
 use crate::surface::Surface;
@@ -358,6 +359,86 @@ impl<const D: usize> Surface<D> {
             value: out,
             deviation,
         })
+    }
+}
+
+impl<const D: usize> Surface<D> {
+    /// The partial derivative ∂^(k+l)S / ∂u^k ∂v^l of this nonrational surface, as a surface of
+    /// degrees (p − k, q − l) on the knots of each basis less k (or l) at each end (A3.7: A3.3 on
+    /// every column, then on every row).
+    ///
+    /// # Errors
+    ///
+    /// [`NurbsError::Rational`] for a rational surface; [`NurbsError::Degree`] if k ≥ p or l ≥ q
+    /// (k = l = 0 gives the surface itself); [`NurbsError::Discontinuous`] if a lower derivative
+    /// jumps at a knot; [`NurbsError::NotFinite`] if a point overflows; [`NurbsError::Stopped`] if
+    /// the meter stops it.
+    pub fn derivative_surface(
+        &self,
+        (k, l): (usize, usize),
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Surface<D>, NurbsError> {
+        if self.is_rational() {
+            return Err(NurbsError::Rational);
+        }
+        let (bu, bv) = (self.basis_u(), self.basis_v());
+        let (p, q) = (bu.degree(), bv.degree());
+        for (order, degree) in [(k, p), (l, q)] {
+            if order > 0 && order >= degree {
+                return Err(NurbsError::Degree {
+                    degree: degree.saturating_sub(order),
+                });
+            }
+        }
+        charge_op(
+            meter,
+            self.homogeneous().len(),
+            D,
+            add(bu.knots().len(), bv.knots().len())?,
+        )?;
+        let (mut rows, cols) = (bu.count(), bv.count());
+        let mut net = vec_for(meter, self.homogeneous().len())?;
+        net.extend_from_slice(self.homogeneous());
+        let mut ku = bu.knots().to_vec();
+        let mut kv = bv.knots().to_vec();
+        if k > 0 {
+            let mut columns = vec_for(meter, cols)?;
+            for j in 0..cols {
+                let mut line = vec_for(meter, rows)?;
+                for i in 0..rows {
+                    line.push(get(&net, add(mul(i, cols)?, j)?)?);
+                }
+                let (knots, pts) = derivative_points(meter, bu.knots(), p, &line, k)?;
+                ku = knots;
+                columns.push(pts);
+            }
+            rows = columns.first().map_or(0, Vec::len);
+            net.clear();
+            for i in 0..rows {
+                for column in &columns {
+                    net.push(get(column, i)?);
+                }
+            }
+        }
+        if l > 0 {
+            let mut out = vec_for(meter, net.len())?;
+            for i in 0..rows {
+                let start = mul(i, cols)?;
+                let line = net
+                    .get(start..add(start, cols)?)
+                    .ok_or(NurbsError::Defect)?;
+                let (knots, pts) = derivative_points(meter, bv.knots(), q, line, l)?;
+                kv = knots;
+                out.extend(pts);
+            }
+            net = out;
+        }
+        Surface::from_homogeneous(
+            Basis::new(sub(p, k)?, ku)?,
+            Basis::new(sub(q, l)?, kv)?,
+            net,
+            None,
+        )
     }
 }
 

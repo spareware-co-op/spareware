@@ -333,38 +333,54 @@ impl<const D: usize> Curve<D> {
             });
         }
         let u_ = self.basis.knots();
-        let count = self.points.len();
         let knots = sub(u_.len(), mul(k, 2)?)?;
-        charge(meter, count, D, false, knots)?;
-        let mut tw = vec_for(meter, count)?;
-        tw.extend_from_slice(&self.points);
-        for level in 1..=k {
-            let factor = real(add(sub(p, level)?, 1)?)?;
-            for i in 0..=sub(sub(count, 1)?, level)? {
-                let den = get(u_, add(add(i, p)?, 1)?)? - get(u_, add(i, level)?)?;
-                if den == 0.0 {
-                    return Err(NurbsError::Discontinuous);
-                }
-                let alf = factor / den;
-                let next = get(&tw, add(i, 1)?)?;
-                let here = at(&mut tw, i)?;
-                for (h, n) in here.iter_mut().zip(next) {
-                    *h = alf * n + -alf * *h;
-                }
-            }
-        }
-        tw.truncate(sub(count, k)?);
-        let mut kv = vec_for(meter, knots)?;
-        kv.extend_from_slice(
-            u_.get(k..k.saturating_add(knots))
-                .ok_or(NurbsError::Defect)?,
-        );
+        charge(meter, self.points.len(), D, false, knots)?;
+        let (kv, tw) = derivative_points(meter, u_, p, &self.points, k)?;
         let basis = Basis::new(sub(p, k)?, kv)?;
-        if !tw.iter().all(|q| q.iter().all(|x| x.is_finite())) {
-            return Err(NurbsError::NotFinite);
-        }
         Curve::from_homogeneous(basis, tw, None)
     }
+}
+
+/// A3.3 on the points `pw` of a nonrational curve of degree `p` on `knots`: the knots
+/// `u_k` to `u_(m−k)` and the points of the k-th derivative curve, by `NLib`'s differences
+/// α·`Q_(i+1)` − α·`Q_i`, α = (p − l + 1) / (`u_(i+p+1)` − `u_(i+l)`), for l from 1 to k.
+pub(crate) fn derivative_points<const D: usize>(
+    meter: &mut WorkMeter<'_>,
+    knots: &[f64],
+    p: usize,
+    pw: &[[f64; D]],
+    k: usize,
+) -> Result<(Vec<f64>, Vec<[f64; D]>), NurbsError> {
+    let count = pw.len();
+    let len = sub(knots.len(), mul(k, 2)?)?;
+    let mut tw = vec_for(meter, count)?;
+    tw.extend_from_slice(pw);
+    for level in 1..=k {
+        let factor = real(add(sub(p, level)?, 1)?)?;
+        for i in 0..=sub(sub(count, 1)?, level)? {
+            let den = get(knots, add(add(i, p)?, 1)?)? - get(knots, add(i, level)?)?;
+            if den == 0.0 {
+                return Err(NurbsError::Discontinuous);
+            }
+            let alf = factor / den;
+            let next = get(&tw, add(i, 1)?)?;
+            let here = at(&mut tw, i)?;
+            for (h, n) in here.iter_mut().zip(next) {
+                *h = alf * n + -alf * *h;
+            }
+        }
+    }
+    tw.truncate(sub(count, k)?);
+    if !tw.iter().all(|q| q.iter().all(|x| x.is_finite())) {
+        return Err(NurbsError::NotFinite);
+    }
+    let mut kv = vec_for(meter, len)?;
+    kv.extend_from_slice(
+        knots
+            .get(k..k.saturating_add(len))
+            .ok_or(NurbsError::Defect)?,
+    );
+    Ok((kv, tw))
 }
 
 /// Rational derivatives from the homogeneous ones (A4.2), in place: on entry `out[k]` holds the

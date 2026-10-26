@@ -28,9 +28,9 @@
 //! - [`Basis`], in [`basis`]: a checked degree and knot vector, and its functions and their
 //!   derivatives (A2.1 to A2.5).
 //! - [`Curve`], in [`curve`]: curves of any dimension, their points and derivatives (A3.1 to
-//!   A3.3, A4.1, A4.2).
+//!   A3.3, A4.1, A4.2), and points by corner cutting, [`Curve::point_by_corner_cutting`] (A5.2).
 //! - [`Surface`], in [`surface`]: surfaces, their points and partial derivatives (A3.5, A3.6,
-//!   A4.3, A4.4).
+//!   A4.3, A4.4), and derivative surfaces, [`Surface::derivative_surface`] (A3.7).
 //! - [`Point`], in [`point`]: the control points the algorithms take, `geom-math`'s and arrays.
 //! - Knot insertion and refinement of curves, [`Curve::insert_knot`] and [`Curve::refine`]
 //!   (A5.1, A5.4), each returning a [`Changed`] value with a certified deviation ([`ops`]).
@@ -55,6 +55,7 @@ pub mod basis;
 mod bezier;
 mod budget;
 pub mod curve;
+mod deboor;
 mod elevate;
 pub mod error;
 mod index;

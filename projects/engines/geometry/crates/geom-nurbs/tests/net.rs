@@ -14,6 +14,7 @@
     clippy::doc_markdown,
     clippy::needless_range_loop,
     clippy::similar_names,
+    clippy::type_complexity,
     reason = "tests written as the formulas read: native arithmetic and indexing, math names, and a failure stops the test"
 )]
 
@@ -234,4 +235,147 @@ fn surface_operations_refuse_as_the_curves_do() {
         NurbsError::Degree { degree: 29 }
     );
     assert!(s.insert_knot(Direction::V, 1.5, 1, &mut m).is_ok());
+}
+
+#[test]
+fn derivative_surfaces_are_the_partial_derivatives() {
+    let mut rng = Lcg(72);
+    for s in surfaces(0x0007_2b2b)
+        .into_iter()
+        .filter(|s| !s.is_rational())
+    {
+        let (p, qd) = (s.basis_u().degree(), s.basis_v().degree());
+        for (k, l) in [(1, 0), (0, 1), (1, 1), (2, 0), (2, 1)] {
+            if (k > 0 && k >= p) || (l > 0 && l >= qd) {
+                assert!(matches!(
+                    s.derivative_surface((k, l), &mut meter()),
+                    Err(NurbsError::Degree { .. })
+                ));
+                continue;
+            }
+            let der = match s.derivative_surface((k, l), &mut meter()) {
+                Ok(d) => d,
+                Err(NurbsError::Discontinuous) => continue,
+                Err(e) => panic!("{e}"),
+            };
+            assert_eq!(
+                (der.basis_u().degree(), der.basis_v().degree()),
+                (p - k, qd - l)
+            );
+            // Exact differences of the exact net, and their magnitudes.
+            let (net, mags) = exact_differences(&s, k, l);
+            let g = common::gamma(4 * (k + l));
+            for (idx, row) in der.homogeneous().iter().enumerate() {
+                for d in 0..3 {
+                    assert!(common::within(row[d], &net[idx][d], &(&g * &mags[idx][d])));
+                }
+            }
+            // Evaluated exactly, the exact differences give the exact partial derivative.
+            let cols = der.basis_v().count();
+            for u in params(der.basis_u(), &mut rng) {
+                for v in params(der.basis_v(), &mut rng) {
+                    let lim = (Limit::FromRight, Limit::FromRight);
+                    let nu = cox_de_boor(der.basis_u().knots(), p - k, u, lim.0);
+                    let nv = cox_de_boor(der.basis_v().knots(), qd - l, v, lim.1);
+                    let du = common::derivatives(s.basis_u().knots(), p, u, lim.0, k);
+                    let dv = common::derivatives(s.basis_v().knots(), qd, v, lim.1, l);
+                    let scols = s.basis_v().count();
+                    for d in 0..3 {
+                        let mut a = zero();
+                        for (idx, row) in net.iter().enumerate() {
+                            a += &nu[p - k][idx / cols] * &nv[qd - l][idx % cols] * &row[d];
+                        }
+                        let mut b = zero();
+                        for (idx, row) in s.homogeneous().iter().enumerate() {
+                            b += &du[k][idx / scols] * &dv[l][idx % scols] * q(row[d]);
+                        }
+                        assert_eq!(a, b, "({k}, {l}) at ({u}, {v})");
+                    }
+                }
+            }
+        }
+    }
+    let rational = surfaces(1).into_iter().find(Surface::is_rational).unwrap();
+    assert_eq!(
+        rational
+            .derivative_surface((1, 0), &mut meter())
+            .unwrap_err(),
+        NurbsError::Rational
+    );
+}
+
+/// A3.7's differences for the (k, l) derivative net, exactly and on magnitudes, row by row.
+fn exact_differences(s: &Surface<3>, k: usize, l: usize) -> (Vec<[Q; 3]>, Vec<[Q; 3]>) {
+    let (bu, bv) = (s.basis_u(), s.basis_v());
+    let (p, qd) = (bu.degree(), bv.degree());
+    let ku: Vec<Q> = bu.knots().iter().map(|&x| q(x)).collect();
+    let kv: Vec<Q> = bv.knots().iter().map(|&x| q(x)).collect();
+    let (mut rows, mut cols) = (bu.count(), bv.count());
+    let mut net: Vec<[Q; 3]> = s
+        .homogeneous()
+        .iter()
+        .map(|r| [q(r[0]), q(r[1]), q(r[2])])
+        .collect();
+    let mut mags: Vec<[Q; 3]> = net
+        .iter()
+        .map(|r| [common::abs(&r[0]), common::abs(&r[1]), common::abs(&r[2])])
+        .collect();
+    let diff =
+        |line: &mut Vec<[Q; 3]>, mag: &mut Vec<[Q; 3]>, knots: &[Q], deg: usize, order: usize| {
+            let n = line.len();
+            for level in 1..=order {
+                for i in 0..n - level {
+                    let alf =
+                        qi((deg - level + 1) as i64) / (&knots[i + deg + 1] - &knots[i + level]);
+                    for d in 0..3 {
+                        line[i][d] = &alf * (&line[i + 1][d] - &line[i][d]);
+                        mag[i][d] = &alf * (&mag[i + 1][d] + &mag[i][d]);
+                    }
+                }
+            }
+            line.truncate(n - order);
+            mag.truncate(n - order);
+        };
+    if k > 0 {
+        let mut cols_out: Vec<(Vec<[Q; 3]>, Vec<[Q; 3]>)> = Vec::new();
+        for j in 0..cols {
+            let mut line: Vec<[Q; 3]> = (0..rows).map(|i| net[i * cols + j].clone()).collect();
+            let mut mag: Vec<[Q; 3]> = (0..rows).map(|i| mags[i * cols + j].clone()).collect();
+            diff(&mut line, &mut mag, &ku, p, k);
+            cols_out.push((line, mag));
+        }
+        rows -= k;
+        net = (0..rows)
+            .flat_map(|i| {
+                cols_out
+                    .iter()
+                    .map(move |(c, _)| c[i].clone())
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        mags = (0..rows)
+            .flat_map(|i| {
+                cols_out
+                    .iter()
+                    .map(move |(_, m)| m[i].clone())
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+    }
+    if l > 0 {
+        let mut n2 = Vec::new();
+        let mut m2 = Vec::new();
+        for i in 0..rows {
+            let mut line: Vec<[Q; 3]> = net[i * cols..(i + 1) * cols].to_vec();
+            let mut mag: Vec<[Q; 3]> = mags[i * cols..(i + 1) * cols].to_vec();
+            diff(&mut line, &mut mag, &kv, qd, l);
+            n2.extend(line);
+            m2.extend(mag);
+        }
+        cols -= l;
+        net = n2;
+        mags = m2;
+    }
+    let _ = cols;
+    (net, mags)
 }

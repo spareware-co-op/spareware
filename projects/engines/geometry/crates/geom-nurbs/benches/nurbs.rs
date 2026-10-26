@@ -126,6 +126,15 @@ fn main() {
             black_box(rational.point(black_box(u), Limit::FromRight).unwrap());
         }
     });
+    time("A5.2 curve point by corner cutting", 1000, 256, || {
+        for &u in &params {
+            black_box(
+                curve
+                    .point_by_corner_cutting(black_box(u), Limit::FromRight)
+                    .unwrap(),
+            );
+        }
+    });
     let mut cd = [[0.0; 3]; 3];
     time("A3.2 curve derivatives, order 2", 1000, 256, || {
         for &u in &params {
@@ -213,6 +222,9 @@ fn main() {
         }
     });
     println!("Per call, on the surface:");
+    time("A3.7 derivative surface, orders (1, 1)", 100, 1, || {
+        black_box(surface.derivative_surface((1, 1), &mut meter()).unwrap());
+    });
     time("A5.3 surface knot insertion in u", 100, 1, || {
         black_box(
             surface
