@@ -40,7 +40,7 @@ The problem is the normalised one: every difference in [−1, 1], so S = 1, with
 
 What the HOL Light certificate covers: the bound for every input in the box, under FPTaylor's error model. What it does not: the link from that model to IEEE rounding. FPTaylor's checker defines its rounding function by choice, as some function satisfying the model (`formal/build_tform2.hl`, "Temporary rounding definitions"; even the identity satisfies it), so the certificate is a theorem about the model, and the normalisation argument above is written, not checked. It is still an independent check of the constant: a different tool, a different method (Taylor forms and branch and bound, against interval rewriting) and a different prover.
 
-Practicalities found: FPTaylor saves certificates as marshalled OCaml `Num` values, and HOL Light uses `Num` below OCaml 4.14 but Zarith from 4.14 on (its Makefile), so both run on OCaml 4.13. camlp5 8.04 needs PCRE2, Re and camlp-streams, which HOL Light's loader for OCaml before 4.14 does not load, so the session loads camlp5 through findlib first, as HOL Light's own loader for 4.14 does. HOL Light now ships the inequality verifier FPTaylor's checker needs (`Formal_ineqs`). Loading HOL Light's multivariate analysis takes about two hours before any certificate is checked.
+Practicalities found: FPTaylor saves certificates as marshalled OCaml `Num` values, and HOL Light uses `Num` below OCaml 4.14 but Zarith from 4.14 on (its Makefile); and FPTaylor's 2020 checker calls `compare` where an opened `List` shadows it with `List.compare`, new in OCaml 4.12, so both run on OCaml 4.11. camlp5 8.04 needs PCRE2, Re and camlp-streams, which HOL Light's loader for OCaml before 4.14 does not load, so the session loads camlp5 through findlib first, as HOL Light's own loader for 4.14 does. HOL Light now ships the inequality verifier FPTaylor's checker needs (`Formal_ineqs`). Loading HOL Light's multivariate analysis takes about two hours before any certificate is checked.
 
 ## 4. Evidence
 
@@ -66,7 +66,7 @@ What the numbers say:
 | --- | --- | --- |
 | What the proof is about | IEEE binary64 rounding (Flocq), the filter's own operations, every scale through `LIN` | FPTaylor's error model on the normalised problem; scale and the link to IEEE by written argument |
 | Tightness | The derivation's bound to second order | Tighter than the derivation (global optimisation) |
-| Maintenance | Gappa 1.8.3 (September 2026), coq-gappa 1.9.0, Rocq 9.1: current | FPTaylor v0.9.3 (2020) for certificates; HOL Light current; needs OCaml 4.13 |
+| Maintenance | Gappa 1.8.3 (September 2026), coq-gappa 1.9.0, Rocq 9.1: current | FPTaylor v0.9.3 (2020) for certificates; HOL Light current; needs OCaml 4.11 |
 | Cost in CI | A few minutes per predicate | About two hours to load HOL Light, then minutes per certificate |
 | Licences | CeCILL or GPL (Gappa), LGPL (Rocq, coq-gappa): run out of process only | MIT (FPTaylor), BSD-style (HOL Light) |
 
@@ -85,4 +85,4 @@ Recommendation: Gappa and Rocq as the proof of record for every filter, run on e
 - Gappa's manual, <https://gappa.gitlabpages.inria.fr/gappa/>; Gappa 1.8.3 (release tarball, SHA-256 `9b3e14e95a5b6aa0ee909b1d1e5c1fac04042024f29b66377cfb9e1923b25f5c`) and coq-gappa 1.9.0, run and used to check proofs only; source not read.
 - A. Solovyev, M. S. Baranowski, I. Briggs, C. Jacobsen, Z. Rakamarić and G. Gopalakrishnan, "Rigorous Estimation of Floating-Point Round-off Errors with Symbolic Taylor Expansions", ACM TOPLAS 41 (2018), [doi:10.1145/3230733](https://doi.org/10.1145/3230733); FPTaylor (MIT) v0.9.3 at [`f85a7a7`](https://github.com/soarlab/FPTaylor/tree/f85a7a7797990fe5fb3436071afaa72c3f05629b), its `formal/` checker read for what it proves.
 - HOL Light at [`d30e823`](https://github.com/jrh13/hol-light/tree/d30e8239887b2348a063f82232a864de1cc2df15), with its bundled Formal_ineqs; its Makefile and loaders read for the OCaml and camlp5 set-up.
-- Containers: `rocq/rocq-prover:9.1` and `ocaml/opam:ubuntu-24.04-ocaml-4.13`, pinned by digest in the workflow.
+- Containers: `rocq/rocq-prover:9.1` and `ocaml/opam:ubuntu-24.04-ocaml-4.11`, pinned by digest in the workflow.
