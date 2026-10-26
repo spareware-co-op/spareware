@@ -117,7 +117,14 @@ fn shape(d: &Derivation, case: Option<usize>) -> Result<Shape<'_>, EmitError> {
     for (g, group) in d.groups.iter().enumerate() {
         for &v in &group.vars {
             match (d.steps.get(v).map(|s| &s.kind), group_of.get_mut(v)) {
-                (Some(StepKind::Translate { .. }), Some(slot)) => *slot = Some(g),
+                (
+                    Some(
+                        StepKind::Translate { .. }
+                        | StepKind::LoadCoord { .. }
+                        | StepKind::LoadRounded { .. },
+                    ),
+                    Some(slot),
+                ) => *slot = Some(g),
                 _ => {
                     return fail(format!(
                         "group `{}`'s scale variable is not a translation of grid points; the \
@@ -130,11 +137,16 @@ fn shape(d: &Derivation, case: Option<usize>) -> Result<Shape<'_>, EmitError> {
     }
     for (step, g) in d.steps.iter().zip(&group_of) {
         match (&step.kind, g) {
-            (StepKind::Op { .. }, None) | (StepKind::Translate { .. }, Some(_)) => {}
+            (StepKind::Op { .. }, None)
+            | (
+                StepKind::Translate { .. }
+                | StepKind::LoadCoord { .. }
+                | StepKind::LoadRounded { .. },
+                Some(_),
+            ) => {}
             _ => {
                 return fail(format!(
-                    "step `{}` is a load or a translation outside every group; the problems state \
-                     translations of grid points and operations only (piece G40 extends them)",
+                    "step `{}` is a load or a translation outside every group, which no filter has",
                     step.name
                 ));
             }
