@@ -24,6 +24,11 @@ on:
       - "projects/engines/geometry/crates/geom-gen/**"
       - "projects/engines/geometry/crates/geom-num/src/generated/**"
       - ".github/workflows/kernel-certificates.yml"
+  # Every night on main, so a proof that stops checking (a tool's image, a dependency) is seen
+  # even when no pull request touches the filters (piece G40).
+  schedule:
+    - cron: "17 14 * * *"
+  workflow_dispatch:
 
 permissions:
   contents: read
