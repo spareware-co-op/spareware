@@ -1450,6 +1450,11 @@ fn generated_digest(name: &str, class: Class) -> Option<Digest> {
                 .into_iter()
                 .map(|[a, b, c]| gp::orient2d::exact(a, b, c)),
         ),
+        "orient3d_avnaim" => fold(
+            i::orient3d_avnaim(class)
+                .into_iter()
+                .map(|[a, b, c, d]| gp::orient3d::exact(a, b, c, d)),
+        ),
         // The width-aware limb variant (piece G42): the shipped value on the variant's inputs,
         // so a variant that returned anything else fails its digest.
         "orient2d_value_limbs" => fold(

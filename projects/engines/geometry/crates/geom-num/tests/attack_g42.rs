@@ -10,8 +10,8 @@
 //! - At every sign combination of the grid's extremes, for every predicate whose inputs are all
 //!   points.
 //! - A rounded input one past its declared range: every variant refuses it.
-//! - Avnaim et al.'s sign of orient2d (`geom_num::avnaim`), the reference chapter 23.3 names,
-//!   gives the shipped exact sign on the same inputs.
+//! - Avnaim et al.'s signs of orient2d and orient3d (`geom_num::avnaim`), the reference
+//!   chapter 23.3 names, give the shipped exact signs on the same inputs.
 //!
 //! The shipped paths are tested against big integers in `generated_predicates.rs` and
 //! `attack_g29.rs`, so agreement with them is agreement with the exact value. Values of different
@@ -159,6 +159,7 @@ fn explicit_point_predicates_agree_on_random_inputs() {
         agree!(ssi_side, ssi_side_value; a, b, c, d, e, f);
         let (a, b, c, d, e) = (g.p3(), g.p3(), g.p3(), g.p3(), g.p3());
         agree!(orient3d, orient3d_value; a, b, c, d);
+        assert_eq!(avnaim::orient3d(a, b, c, d), orient3d::exact(a, b, c, d));
         agree!(insphere, insphere_value; a, b, c, d, e);
     }
 }
@@ -224,6 +225,7 @@ fn explicit_point_predicates_agree_at_every_extreme() {
         agree!(ssi_side, ssi_side_value; a, b, e, f, g, h);
         let [a, b, e, f] = p3s(&c);
         agree!(orient3d, orient3d_value; a, b, e, f);
+        assert_eq!(avnaim::orient3d(a, b, e, f), orient3d::exact(a, b, e, f));
     }
     for c in extremes(15) {
         let [a, b, e, f, g] = p3s(&c);

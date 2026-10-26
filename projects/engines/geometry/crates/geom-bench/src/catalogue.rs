@@ -347,6 +347,7 @@ pub static OPS: &[Op] = &[
     Op { group: "generated", name: "ssi_side_value_plain", measures: "generated::plain::ssi_side_value", classes: TDNE, prepare: |c| bind(inputs::generated::ssi_side_value_plain(c), kernels::plain::ssi_side_value) },
     // Avnaim et al.'s sign of orient2d, chapter 23.3's reference (piece G42).
     Op { group: "generated", name: "orient2d_avnaim", measures: "avnaim::orient2d", classes: TDNE, prepare: |c| bind(inputs::generated::orient2d_avnaim(c), kernels::avnaim::orient2d) },
+    Op { group: "generated", name: "orient3d_avnaim", measures: "avnaim::orient3d", classes: TDNE, prepare: |c| bind(inputs::generated::orient3d_avnaim(c), kernels::avnaim::orient3d) },
     // The width-aware limb variant of each exact path (chapter 23.3; piece G42).
     Op { group: "generated", name: "orient2d_value_limbs", measures: "generated::limbs::orient2d_value", classes: TDNE, prepare: |c| bind(inputs::generated::orient2d_value_limbs(c), kernels::limbs::orient2d_value) },
     Op { group: "generated", name: "orient3d_value_limbs", measures: "generated::limbs::orient3d_value", classes: TDNE, prepare: |c| bind(inputs::generated::orient3d_value_limbs(c), kernels::limbs::orient3d_value) },
@@ -551,6 +552,7 @@ pub static UNMEASURED: &[(&str, &str)] = &[
     ("Wide::is_negative", "one test of the top bit, inside every Wide benchmark"),
     ("Wide::is_zero", "measured inside Wide::signum, whose batch has zeros and values with only the top limb set"),
     ("avnaim::sign_of_det2", "the whole work of avnaim::orient2d, which is measured and adds only the four translations"),
+    ("avnaim::sign_of_det3", "the whole work of avnaim::orient3d, which is measured and adds only the nine translations"),
     ("Wide32::to_le_limbs", "field accessor"),
     ("Wide32::from_le_limbs", "raw constructor"),
     ("Wide32::max_value", "a constant: every limb is fixed"),

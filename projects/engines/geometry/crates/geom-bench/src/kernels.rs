@@ -1399,11 +1399,11 @@ pub mod limbs {
     }
 }
 
-/// Avnaim et al.'s sign of orient2d (piece G42), the reference chapter 23.3 names, on inputs of the
-/// classes of the generated `orient2d`'s.
+/// Avnaim et al.'s signs of orient2d and orient3d (piece G42), the reference chapter 23.3 names, on
+/// inputs of the classes of the generated predicates'.
 pub mod avnaim {
     use geom_num::Sign;
-    use geom_num::grid::P2;
+    use geom_num::grid::{P2, P3};
 
     use super::run;
 
@@ -1411,5 +1411,13 @@ pub mod avnaim {
     #[inline(never)]
     pub fn orient2d(batch: &[[P2; 3]], out: &mut Vec<Option<Sign>>) {
         run(batch, out, |&[a, b, c]| geom_num::avnaim::orient2d(a, b, c));
+    }
+
+    /// `avnaim::orient3d` on each quadruple.
+    #[inline(never)]
+    pub fn orient3d(batch: &[[P3; 4]], out: &mut Vec<Option<Sign>>) {
+        run(batch, out, |&[a, b, c, d]| {
+            geom_num::avnaim::orient3d(a, b, c, d)
+        });
     }
 }

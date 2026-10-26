@@ -7,8 +7,8 @@
 //! random bit length. [`check`] evaluates each registered predicate's description (geom-gen's
 //! `PREDICATES`, read by its `predicate_lang::parse`) on those inputs in big integers, and compares
 //! the shipped `value`, the plain-`i128` variant (`geom_num::generated::plain`) and the width-aware
-//! limb variant (`geom_num::generated::limbs`) with that exact value, and Avnaim et al.'s sign of
-//! orient2d (`geom_num::avnaim`) with its sign. [`harness`] is `decode` then
+//! limb variant (`geom_num::generated::limbs`) with that exact value, and Avnaim et al.'s signs of
+//! orient2d and orient3d (`geom_num::avnaim`) with its sign. [`harness`] is `decode` then
 //! `check`, the function every fuzzing engine drives (the crate README sets out the layout).
 //!
 //! Guarantees:
@@ -380,8 +380,17 @@ pub fn check(inputs: &Inputs) -> Result<(), Finding> {
             .map(|(_, v)| v.clone());
         let args = Args(bound.iter().map(|(_, a)| *a).collect());
         compare(&d.name, &bound, &call(&d.name, &args)?, exact.as_ref())?;
-        if d.name == "orient2d" {
-            let sign = avnaim::orient2d(args.p2(0)?, args.p2(1)?, args.p2(2)?);
+        let reference = match d.name.as_str() {
+            "orient2d" => Some(avnaim::orient2d(args.p2(0)?, args.p2(1)?, args.p2(2)?)),
+            "orient3d" => Some(avnaim::orient3d(
+                args.p3(0)?,
+                args.p3(1)?,
+                args.p3(2)?,
+                args.p3(3)?,
+            )),
+            _ => None,
+        };
+        if let Some(sign) = reference {
             let want = exact.as_ref().map(|v| match v.sign() {
                 num_bigint::Sign::Minus => geom_num::Sign::Negative,
                 num_bigint::Sign::NoSign => geom_num::Sign::Zero,
@@ -389,9 +398,10 @@ pub fn check(inputs: &Inputs) -> Result<(), Finding> {
             });
             if sign != want {
                 return Err(Finding {
-                    law:
-                        "Avnaim et al.'s sign of orient2d is the exact value's sign (chapter 23.3)"
-                            .into(),
+                    law: format!(
+                        "Avnaim et al.'s sign of {} is the exact value's sign (chapter 23.3)",
+                        d.name
+                    ),
                     detail: format!("inputs: {bound:?}\nreturned: {sign:?}\nexact: {exact:?}"),
                 });
             }

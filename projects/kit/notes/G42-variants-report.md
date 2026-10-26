@@ -22,7 +22,7 @@ All three give the same value on every input:
 - geom-fuzz's `variants` target compares all three with each description evaluated in `num-bigint`.
 - Kani proves each kind of limb step (43 kinds) never overflows on any operand its certified bits allow (`kernel-fuzz.yml`'s `kani-limbs` job).
 
-The fourth comparison chapter 23.3 names, Avnaim, Boissonnat, Devillers, Preparata and Yvinec's sign of small determinants in b-bit arithmetic, is not measured yet; see "Open".
+The fourth comparison chapter 23.3 names, Avnaim, Boissonnat, Devillers, Preparata and Yvinec's sign of small determinants in b-bit arithmetic, is a different kind of method: it gives only the sign, of orient2d and orient3d, so it is compared with those two in its own section below.
 
 ## Why the variants differ on WebAssembly
 
@@ -99,20 +99,23 @@ The choice is per predicate and per target, and every variant gives the same val
 
 ## Avnaim et al.'s method, the reference
 
-`geom_num::avnaim` implements the method's two-dimensional case from the paper (section 2), the sign of a 2 × 2 determinant using only comparisons, subtractions and Euclidean divisions on the entries, never a product, as orient2d's reference. Checking the algebra corrected one step of the paper: replacing the second row by the first minus the second negates the determinant, which the paper's equation omits. It agrees with 128-bit products on 1.2 million random, near-degenerate and extreme cases, with the shipped `orient2d` at every sign combination of the grid's extremes (`tests/attack_g42.rs`), and with big integers in geom-fuzz's `variants` target. Measured locally (x86-64 Windows, and Node 24), in nanoseconds per call:
+`geom_num::avnaim` implements both cases of the paper, as orient2d's and orient3d's reference: the sign of a 2 × 2 determinant from comparisons, subtractions and Euclidean divisions on the entries, never a product (section 2), and the sign of a 3 × 3 determinant by a walk in the lattice its first two rows span, every test of which is a 2 × 2 sign (section 3). Checking the algebra corrected two printed steps: in the 2 × 2 case, replacing the second row by the first minus the second negates the determinant, which the paper's equation omits; in the 3 × 3 case, equation 5 puts a cell's reference point two cells off along each negated axis. The module header lists every departure, each decided by the algebra. Both agree with exact arithmetic on random, near-degenerate and extreme cases (128-bit products for the 2 × 2 case; big integers for the 3 × 3 case, including inputs whose lattice walk runs its full depth of 119 doublings), with the shipped `orient2d` and `orient3d` at every sign combination of the grid's extremes (`tests/attack_g42.rs`), and with big integers in geom-fuzz's `variants` target. Measured locally (x86-64 Windows, and Node 24), in nanoseconds per call:
 
-| Inputs | Shipped `orient2d` value, native | Avnaim, native | Shipped, Node | Avnaim, Node |
-| --- | ---: | ---: | ---: | ---: |
-| typical | 4.5 | 13.8 | 22.3 | 29.9 |
-| extreme | – | 15.6 | – | 27.2 |
-| degenerate | – | 79.5 | – | 224 |
-| nearly degenerate | – | 204 | – | 438 |
+| Predicate | Inputs | Shipped value, native | Avnaim, native | Shipped value, Node | Avnaim, Node |
+| --- | --- | ---: | ---: | ---: | ---: |
+| orient2d | typical | 4.5 | 13.8 | 22.3 | 29.9 |
+| orient2d | extreme | 4.5 | 15.6 | 20.9 | 27.2 |
+| orient2d | degenerate | 4.6 | 79.5 | 20.9 | 224 |
+| orient2d | nearly degenerate | 4.5 | 204 | 20.8 | 438 |
+| orient3d | typical | 24.1 | 151 | 109 | 271 |
+| orient3d | extreme | 24.4 | 401 | 119 | 623 |
+| orient3d | degenerate | 24.2 | 14,059 | 109 | 20,780 |
+| orient3d | nearly degenerate | 23.8 | 1,529 | 121 | 2,775 |
 
-The method's cost grows with how close the input is to degenerate: each pass of its Euclidean loop halves one row, and nearly proportional rows take many passes. The shipped path's cost is constant. Buildings are full of exactly those inputs: walls sharing a face, aligned openings (risk R4). The method needs half the bits, but on these targets it is slower on every class, and it is not adopted for any target. `kernel-variants.yml` times it beside orient2d on every engine.
+The method's cost grows with how close the input is to degenerate: the 2 × 2 case halves one row per pass, and the 3 × 3 case halves the largest height at least every three passes, each pass a lattice search of up to a few hundred 2 × 2 signs. The shipped paths' cost is constant. Buildings are full of exactly those inputs: walls sharing a face, aligned openings (risk R4). The method needs a fraction of the bits, but it is slower on every class and every engine measured, by 1.3 to 6.3 times on typical inputs and by up to 190 times on degenerate ones in Node (580 natively), so it is not adopted for any target. `kernel-variants.yml` times both cases beside the shipped paths, on all four input classes, on every engine.
 
 ## Open
 
-- **Avnaim et al.'s three-dimensional case** (the paper's section 3: a walk through a lattice of boxes in (b + 1)-bit arithmetic, with the 2 × 2 method at its leaves) is not ported. Its two-dimensional case, the cheaper of the two, already loses to the shipped paths on every input class, so porting the 3 × 3 case cannot change the choice above, and it is left unported.
 - **Newer browsers.** Playwright 1.52's builds are older than current releases. Rerun with a current Playwright, and with each browser's wide-arithmetic flag where it has one, to learn when the wide build reaches a browser by default.
 - **Budgets above 384 bits** (576 and 768 bits, 13 and 18) are unmeasured; the same variants apply to them once they are generated.
 - **Firefox's factor** of five to six over the other engines is not explained.

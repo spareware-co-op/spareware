@@ -10,7 +10,8 @@ or in Node, with an optional first line `# version <text>`. Each timing line is
 Writes Markdown: for every engine and build, the exact path of every predicate in its three
 variants (the shipped width-aware path, plain i128 and width-aware limbs) on typical and extreme
 inputs, with the fastest marked; a summary of the fastest variant per predicate and engine; and
-the 32-bit and 64-bit limb integers side by side. Python's standard library only.
+the 32-bit and 64-bit limb integers side by side; and Avnaim et al.'s signs of orient2d and
+orient3d beside the shipped values on all four input classes. Python's standard library only.
 """
 
 import json
@@ -19,6 +20,7 @@ import sys
 
 VARIANTS = [("shipped", ""), ("plain", "_plain"), ("limbs", "_limbs")]
 CLASSES = ["typical", "extreme"]
+AVNAIM_CLASSES = ["typical", "degenerate", "nearly_degenerate", "extreme"]
 
 
 def load(folder):
@@ -95,14 +97,15 @@ def main():
                 row = [f"**{fmt(t)}**" if v == fastest else fmt(t) for v, t in cells.items()]
                 out.append(f"| {p} | {c} | {' | '.join(row)} | {fastest} |")
         out.append("")
-        avnaim = [(c, run["times"].get(f"generated/orient2d_avnaim/{c}"),
-                   run["times"].get(f"generated/orient2d_value/{c}")) for c in CLASSES]
-        avnaim = [a for a in avnaim if a[1] is not None]
+        avnaim = [(p, c, run["times"].get(f"generated/{p}_avnaim/{c}"),
+                   run["times"].get(f"generated/{p}_value/{c}"))
+                  for p in ("orient2d", "orient3d") for c in AVNAIM_CLASSES]
+        avnaim = [a for a in avnaim if a[2] is not None]
         if avnaim:
-            out.append("| orient2d | Avnaim et al.'s sign | Shipped value |")
-            out.append("| --- | ---: | ---: |")
-            for c, ta, ts in avnaim:
-                out.append(f"| {c} | {fmt(ta)} | {fmt(ts)} |")
+            out.append("| Predicate | Inputs | Avnaim et al.'s sign | Shipped value |")
+            out.append("| --- | --- | ---: | ---: |")
+            for p, c, ta, ts in avnaim:
+                out.append(f"| {p} | {c} | {fmt(ta)} | {fmt(ts)} |")
             out.append("")
         pairs = [("wide/i256_mul/typical", "wide32/w8_product/typical"),
                  ("wide/i384_mul/typical", "wide32/w12_product/typical"),
