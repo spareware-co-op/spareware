@@ -1,14 +1,15 @@
-//! Attacks on piece G42's plain-`i128` variant of the generated exact paths
-//! (`geom_num::generated::plain`, chapter 23.3): for every registered predicate,
-//! `<predicate>_value` must return exactly what the shipped module's `value` returns, `None`
-//! included.
+//! Attacks on piece G42's variants of the generated exact paths (chapter 23.3): the plain-`i128`
+//! variant (`geom_num::generated::plain`) and the width-aware limb variant
+//! (`geom_num::generated::limbs`, on `geom_num::Wide32`). For every registered predicate, each
+//! variant's `<predicate>_value` must return exactly what the shipped module's `value` returns,
+//! `None` included.
 //!
 //! - On random inputs across the whole domain: grid coordinates and rounded inputs of every bit
 //!   length, mixed with the extremes ±(2^40 − 1) and ±(2^bits − 1), zeros and small values, so
 //!   degenerate inputs (zero results) occur too.
 //! - At every sign combination of the grid's extremes, for every predicate whose inputs are all
 //!   points.
-//! - A rounded input one past its declared range: both refuse it.
+//! - A rounded input one past its declared range: every variant refuses it.
 //!
 //! The shipped paths are tested against big integers in `generated_predicates.rs` and
 //! `attack_g29.rs`, so agreement with them is agreement with the exact value. Values of different
@@ -35,8 +36,8 @@
 )]
 
 use geom_num::generated::{
-    incircle, insphere, lpi_side, lpi_weight, orient2d, orient3d, plain, plane_side, ssi_side,
-    ssi_weight, tpi_side, tpi_weight,
+    incircle, insphere, limbs, lpi_side, lpi_weight, orient2d, orient3d, plain, plane_side,
+    ssi_side, ssi_weight, tpi_side, tpi_weight,
 };
 use geom_num::grid::{COORD_MAX, P2, P3};
 use geom_num::{I512, Wide};
@@ -73,7 +74,7 @@ impl<const L: usize> Exact for Wide<L> {
     }
 }
 
-/// Both results, compared as `I512`s. Every input drawn here is in the domain, so the shipped path
+/// Two results, compared as `I512`s. Every input drawn here is in the domain, so the shipped path
 /// must answer: a `None` from it would make the comparison empty.
 fn same<A: Exact, B: Exact>(shipped: Option<A>, variant: Option<B>) -> bool {
     assert!(
@@ -81,6 +82,15 @@ fn same<A: Exact, B: Exact>(shipped: Option<A>, variant: Option<B>) -> bool {
         "the shipped path refused an input in its domain"
     );
     shipped.map(Exact::i512) == variant.map(Exact::i512)
+}
+
+/// The shipped `value` of module `$m` and both variants' `$v`, on the same arguments, agree.
+macro_rules! agree {
+    ($m:ident, $v:ident; $($arg:expr),+ $(,)?) => {{
+        let shipped = $m::value($($arg),+);
+        assert!(same(shipped, plain::$v($($arg),+)), "plain {}", stringify!($v));
+        assert!(same(shipped, limbs::$v($($arg),+)), "limbs {}", stringify!($v));
+    }};
 }
 
 /// Draws inputs: a value of a random bit length and sign, an extreme, zero or a small value.
@@ -139,31 +149,13 @@ fn explicit_point_predicates_agree_on_random_inputs() {
     let mut g = Draw::new("attack_g42::explicit_point_predicates_agree_on_random_inputs");
     for _ in 0..CASES {
         let (a, b, c, d, e, f) = (g.p2(), g.p2(), g.p2(), g.p2(), g.p2(), g.p2());
-        assert!(same(
-            orient2d::value(a, b, c),
-            plain::orient2d_value(a, b, c)
-        ));
-        assert!(same(
-            incircle::value(a, b, c, d),
-            plain::incircle_value(a, b, c, d)
-        ));
-        assert!(same(
-            ssi_weight::value(a, b, c, d),
-            plain::ssi_weight_value(a, b, c, d)
-        ));
-        assert!(same(
-            ssi_side::value(a, b, c, d, e, f),
-            plain::ssi_side_value(a, b, c, d, e, f)
-        ));
+        agree!(orient2d, orient2d_value; a, b, c);
+        agree!(incircle, incircle_value; a, b, c, d);
+        agree!(ssi_weight, ssi_weight_value; a, b, c, d);
+        agree!(ssi_side, ssi_side_value; a, b, c, d, e, f);
         let (a, b, c, d, e) = (g.p3(), g.p3(), g.p3(), g.p3(), g.p3());
-        assert!(same(
-            orient3d::value(a, b, c, d),
-            plain::orient3d_value(a, b, c, d)
-        ));
-        assert!(same(
-            insphere::value(a, b, c, d, e),
-            plain::insphere_value(a, b, c, d, e)
-        ));
+        agree!(orient3d, orient3d_value; a, b, c, d);
+        agree!(insphere, insphere_value; a, b, c, d, e);
     }
 }
 
@@ -174,34 +166,17 @@ fn plane_predicates_agree_on_random_inputs() {
         let (p, q) = (g.p3(), g.p3());
         let [nx, ny, nz] = [g.n(), g.n(), g.n()];
         let d = g.d();
-        assert!(same(
-            plane_side::value(nx, ny, nz, d, p),
-            plain::plane_side_value(nx, ny, nz, d, p)
-        ));
-        assert!(same(
-            lpi_weight::value(nx, ny, nz, p, q),
-            plain::lpi_weight_value(nx, ny, nz, p, q)
-        ));
+        agree!(plane_side, plane_side_value; nx, ny, nz, d, p);
+        agree!(lpi_weight, lpi_weight_value; nx, ny, nz, p, q);
         let n: [i128; 12] = core::array::from_fn(|_| g.n());
         let o: [i128; 4] = core::array::from_fn(|_| g.d());
-        assert!(same(
-            tpi_weight::value(n[0], n[1], n[2], n[3], n[4], n[5], n[6], n[7], n[8]),
-            plain::tpi_weight_value(n[0], n[1], n[2], n[3], n[4], n[5], n[6], n[7], n[8])
-        ));
-        assert!(same(
-            tpi_side::value(
-                n[0], n[1], n[2], o[0], n[3], n[4], n[5], o[1], n[6], n[7], n[8], o[2], n[9],
-                n[10], n[11], o[3]
-            ),
-            plain::tpi_side_value(
-                n[0], n[1], n[2], o[0], n[3], n[4], n[5], o[1], n[6], n[7], n[8], o[2], n[9],
-                n[10], n[11], o[3]
-            )
-        ));
-        assert!(same(
-            lpi_side::value(n[0], n[1], n[2], o[0], n[3], n[4], n[5], o[1], p, q),
-            plain::lpi_side_value(n[0], n[1], n[2], o[0], n[3], n[4], n[5], o[1], p, q)
-        ));
+        agree!(tpi_weight, tpi_weight_value; n[0], n[1], n[2], n[3], n[4], n[5], n[6], n[7], n[8]);
+        agree!(
+            tpi_side, tpi_side_value;
+            n[0], n[1], n[2], o[0], n[3], n[4], n[5], o[1], n[6], n[7], n[8], o[2], n[9], n[10],
+            n[11], o[3],
+        );
+        agree!(lpi_side, lpi_side_value; n[0], n[1], n[2], o[0], n[3], n[4], n[5], o[1], p, q);
     }
 }
 
@@ -232,52 +207,38 @@ fn p3s<const N: usize>(c: &[i64]) -> [P3; N] {
 fn explicit_point_predicates_agree_at_every_extreme() {
     for c in extremes(6) {
         let [a, b, e] = p2s(&c);
-        assert!(same(
-            orient2d::value(a, b, e),
-            plain::orient2d_value(a, b, e)
-        ));
+        agree!(orient2d, orient2d_value; a, b, e);
     }
     for c in extremes(8) {
         let [a, b, e, f] = p2s(&c);
-        assert!(same(
-            incircle::value(a, b, e, f),
-            plain::incircle_value(a, b, e, f)
-        ));
-        assert!(same(
-            ssi_weight::value(a, b, e, f),
-            plain::ssi_weight_value(a, b, e, f)
-        ));
+        agree!(incircle, incircle_value; a, b, e, f);
+        agree!(ssi_weight, ssi_weight_value; a, b, e, f);
     }
     for c in extremes(12) {
         let [a, b, e, f, g, h] = p2s(&c);
-        assert!(same(
-            ssi_side::value(a, b, e, f, g, h),
-            plain::ssi_side_value(a, b, e, f, g, h)
-        ));
+        agree!(ssi_side, ssi_side_value; a, b, e, f, g, h);
         let [a, b, e, f] = p3s(&c);
-        assert!(same(
-            orient3d::value(a, b, e, f),
-            plain::orient3d_value(a, b, e, f)
-        ));
+        agree!(orient3d, orient3d_value; a, b, e, f);
     }
     for c in extremes(15) {
         let [a, b, e, f, g] = p3s(&c);
-        let shipped = insphere::value(a, b, e, f, g);
-        assert!(shipped.is_some());
-        assert!(same(shipped, plain::insphere_value(a, b, e, f, g)));
+        agree!(insphere, insphere_value; a, b, e, f, g);
     }
 }
 
 #[test]
-fn a_rounded_input_past_its_range_is_refused_by_both() {
+fn a_rounded_input_past_its_range_is_refused_by_every_variant() {
     let p = P3::new(1, 2, 3).unwrap();
     let (n, d) = ((1i128 << 83) - 1, (1i128 << 125) - 1);
     assert!(plane_side::value(n, n, n, d, p).is_some());
     assert!(plain::plane_side_value(n, n, n, d, p).is_some());
+    assert!(limbs::plane_side_value(n, n, n, d, p).is_some());
     for (nx, d) in [(n + 1, d), (-n - 1, d), (n, d + 1), (n, -d - 1)] {
         assert_eq!(plane_side::value(nx, n, n, d, p), None);
         assert_eq!(plain::plane_side_value(nx, n, n, d, p), None);
+        assert_eq!(limbs::plane_side_value(nx, n, n, d, p), None);
     }
     assert_eq!(lpi_weight::value(n + 1, n, n, p, p), None);
     assert_eq!(plain::lpi_weight_value(n + 1, n, n, p, p), None);
+    assert_eq!(limbs::lpi_weight_value(n + 1, n, n, p, p), None);
 }

@@ -28,7 +28,7 @@ use crate::grid_steps;
 use crate::predicates;
 
 /// Every generator, in the order they run.
-pub const GENERATORS: [Generator; 15] = [
+pub const GENERATORS: [Generator; 16] = [
     Generator {
         name: grid_steps::NAME,
         output: grid_steps::OUTPUT,
@@ -112,6 +112,12 @@ pub const GENERATORS: [Generator; 15] = [
         output: predicates::PLAIN_OUTPUT,
         about: "every predicate's exact path in plain i128, the baseline of chapter 23.3's variants",
         generate: Generate::Plain(predicates::generate_plain),
+    },
+    Generator {
+        name: predicates::LIMBS_GENERATOR,
+        output: predicates::LIMBS_OUTPUT,
+        about: "every predicate's exact path in width-aware 32-bit limbs, with its limb proofs",
+        generate: Generate::Plain(predicates::generate_limbs),
     },
     Generator {
         name: predicates::VERUS_ORIENT2D_GENERATOR,

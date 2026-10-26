@@ -1,7 +1,8 @@
 //! Generators `predicate-module`, `predicate-orient2d`, `predicate-orient3d`, `predicate-incircle`,
 //! `predicate-insphere`, `predicate-plane-side`, `predicate-tpi-weight`, `predicate-tpi-side`,
-//! `predicate-lpi-weight`, `predicate-lpi-side`, `predicate-ssi-weight`, `predicate-ssi-side` and
-//! `predicate-variant-plain`: the kernel's predicates, from their descriptions.
+//! `predicate-lpi-weight`, `predicate-lpi-side`, `predicate-ssi-weight`, `predicate-ssi-side`,
+//! `predicate-variant-plain` and `predicate-variant-limbs`: the kernel's predicates, from their
+//! descriptions.
 //!
 //! What it does: holds the description of each predicate on explicit grid points (chapter 6.2:
 //! orientation in 2D and 3D, in-circle and in-sphere), of the side of a plane, whose
@@ -11,9 +12,9 @@
 //! (or, in 2D, of a line) each lies on, in the language of [`crate::predicate_lang`], and the
 //! generators that derive each one ([`crate::predicate_derive`]) and write its module into
 //! `geom-num` ([`crate::predicate_emit`]): [`OUTPUT_DIR`]`/<name>.rs` for each predicate and
-//! [`OUTPUT_DIR`]`/mod.rs` for the module that holds them, and [`PLAIN_OUTPUT`] for every exact
-//! path in plain `i128`, the baseline of chapter 23.3's variants (piece G42), which the
-//! benchmarks compare with the shipped paths. `geom-num`'s `predicate.rs` calls the
+//! [`OUTPUT_DIR`]`/mod.rs` for the module that holds them, and [`PLAIN_OUTPUT`] and
+//! [`LIMBS_OUTPUT`] for every exact path in plain `i128` and in width-aware 32-bit limbs, two of
+//! chapter 23.3's variants (piece G42), which the benchmarks compare with the shipped paths. `geom-num`'s `predicate.rs` calls the
 //! four explicit-point ones, `plane.rs` the side of a plane and the three-plane and line-plane
 //! ones, and `crossing.rs` the 2D crossing ones.
 //!
@@ -46,8 +47,8 @@
 //!   <https://github.com/BrunoLevy/geogram/blob/16843b4804de35f14ef54667950ab4c8acdd0062/src/lib/geogram/numerics/predicates/orient3d.pck>,
 //!   for its one description per predicate. No code copied.
 //!
-//! Cost: each generator derives one predicate, or all eleven for the parent module and the
-//! plain variant: a few hundred exact operations each.
+//! Cost: each generator derives one predicate, or all eleven for the parent module and each
+//! variant: a few hundred exact operations each.
 
 use crate::generator::GenError;
 use crate::predicate_derive::{Derivation, derive};
@@ -683,6 +684,29 @@ pub fn generate_plain() -> Result<Vec<u8>, GenError> {
         .map_err(|e| GenError::generator(PLAIN_GENERATOR, e.0))
 }
 
+/// The name of the generator of the width-aware limb variant (chapter 23.3; piece G42).
+pub const LIMBS_GENERATOR: &str = "predicate-variant-limbs";
+
+/// Where the limb variant is written: beside the predicate modules, whose helpers it shares.
+pub const LIMBS_OUTPUT: &str = "projects/engines/geometry/crates/geom-num/src/generated/limbs.rs";
+
+/// Generator `predicate-variant-limbs`: every predicate's exact path in width-aware 32-bit limbs,
+/// with the bounded proofs of each kind of limb step.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if a derivation or the emission fails.
+pub fn generate_limbs() -> Result<Vec<u8>, GenError> {
+    let mut derivations = Vec::new();
+    for p in &PREDICATES {
+        derivations.push(derivation(p)?);
+    }
+    let refs: Vec<&Derivation> = derivations.iter().collect();
+    variant_module(&refs, LIMBS_GENERATOR, Style::Limbs)
+        .map(String::into_bytes)
+        .map_err(|e| GenError::generator(LIMBS_GENERATOR, e.0))
+}
+
 /// Generator `predicate-module`: the module that declares the predicates and holds their helpers.
 ///
 /// # Errors
@@ -833,6 +857,7 @@ mod tests {
             PREDICATES.iter().map(|p| (p.generator, p.output)).collect();
         expected.push((MODULE_GENERATOR, MODULE_OUTPUT));
         expected.push((PLAIN_GENERATOR, PLAIN_OUTPUT));
+        expected.push((LIMBS_GENERATOR, LIMBS_OUTPUT));
         for (name, output) in &expected {
             let g = REGISTRY.generators.iter().find(|g| g.name == *name);
             assert_eq!(g.map(|g| g.output), Some(*output), "{name}");

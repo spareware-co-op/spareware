@@ -114,6 +114,7 @@
 
 pub mod incircle;
 pub mod insphere;
+pub mod limbs;
 pub mod lpi_side;
 pub mod lpi_weight;
 pub mod orient2d;

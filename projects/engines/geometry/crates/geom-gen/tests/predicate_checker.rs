@@ -22,6 +22,11 @@
 //!   attributes: for each registered predicate, in their order, `<predicate>_value` with the same
 //!   steps, each held in `i128` or in its certificate's wide type, both operands widened to it and
 //!   the general method, so every type it uses is at least as wide as the certificate's;
+//! - the width-aware limb variant `limbs.rs` (piece G42), line for line outside comments and
+//!   attributes: each step in `i64` where the certificate gives `i64`, otherwise in as many 32-bit
+//!   limbs as its operands' certified bits need, by its own rule; the result converted back to the
+//!   shipped type; and one bounded proof for each kind of limb step, running the very expression the
+//!   code writes for it on operands of every value the certified bits allow;
 //! - the parent module `mod.rs`, line for line outside comments and attributes: one `pub mod` per
 //!   registered predicate and per variant, and the helpers the proof relies on, as the checker writes them: `decide`
 //!   with strict comparisons and the zero-scale case, `largest_magnitude` taking absolute values,
@@ -428,6 +433,8 @@ struct Row {
     exact: String,
     /// The exact path's statement in the plain-`i128` variant (piece G42).
     plain: String,
+    /// An operation's operator and operand rows, for the limb variant (piece G42).
+    operands: Option<(char, usize, usize)>,
     bound: Big,
     bits: u32,
     width: &'static str,
@@ -579,6 +586,7 @@ impl Walker<'_> {
                     filter: format!("exact_f64({p}.{a})"),
                     exact: coord_exact(p, *a, w),
                     plain: coord_exact(p, *a, held(w)),
+                    operands: None,
                     bits,
                     width: w,
                     scale: self.unit(&a.to_string()),
@@ -619,6 +627,7 @@ impl Walker<'_> {
                     filter: format!("rounded_f64({n}, {bits})?"),
                     exact,
                     plain: format!("within({n}, {bits})?"),
+                    operands: None,
                     bits: *bits,
                     width: w,
                     scale: self.unit(g),
@@ -655,6 +664,7 @@ impl Walker<'_> {
                                 &coord_exact(q, *qa, held(w)),
                                 held(w),
                             ),
+                            operands: None,
                             bits,
                             width: w,
                             scale: self.unit(&pa.to_string()),
@@ -746,6 +756,7 @@ impl Walker<'_> {
                     filter: format!("{} {op} {}", a.name, b.name),
                     exact,
                     plain,
+                    operands: Some((*op, li, ri)),
                     bound,
                     bits,
                     width: w,
@@ -1215,6 +1226,262 @@ fn settle_wide_import(out: Vec<Expect>, candidates: &[&str]) -> Vec<Expect> {
         .collect()
 }
 
+/// How the limb variant holds a step, by the checker's own rule (piece G42): `None` for an
+/// `i64`, otherwise the number of 32-bit limbs.
+fn limbs_of_row(x: &Derived, i: usize) -> Option<usize> {
+    let r = &x.rows[i];
+    if r.width == "i64" {
+        return None;
+    }
+    // Magnitude below 2^b: a product's b is the sum of its operands' bits, a sum's one more than
+    // the larger; it needs b + 1 bits with the sign, in whole 32-bit limbs, at least two.
+    let b = match r.operands {
+        Some(('*', l, rr)) => x.rows[l].bits + x.rows[rr].bits,
+        Some((_, l, rr)) => x.rows[l].bits.max(x.rows[rr].bits) + 1,
+        None => r.bits,
+    };
+    Some(((b + 1).div_ceil(32) as usize).max(2))
+}
+
+/// `name`, held as `from` limbs (`None` for `i64`), as `n` limbs.
+fn in_limbs(name: &str, from: Option<usize>, n: usize) -> String {
+    match from {
+        None => format!("Wide32::<{n}>::from_i64({name})"),
+        Some(m) if m == n => name.to_owned(),
+        Some(_) => format!("{name}.resize::<{n}>()?"),
+    }
+}
+
+/// The limb variant's expression for an operation in `n` limbs.
+fn limb_expr(op: char, l: &str, lh: Option<usize>, r: &str, rh: Option<usize>, n: usize) -> String {
+    match (op, lh, rh) {
+        ('*', None, None) => format!("Wide32::<{n}>::product_i64({l}, {r})?"),
+        ('*', Some(_), None) => format!("Wide32::<{n}>::product_by_i64(&{l}, {r})?"),
+        ('*', None, Some(_)) => format!("Wide32::<{n}>::product_by_i64(&{r}, {l})?"),
+        ('*', Some(_), Some(_)) => format!("Wide32::<{n}>::product(&{l}, &{r})?"),
+        (op, lh, rh) => {
+            let method = if op == '+' {
+                "checked_add"
+            } else {
+                "checked_sub"
+            };
+            format!("{}.{method}(&{})?", in_limbs(l, lh, n), in_limbs(r, rh, n))
+        }
+    }
+}
+
+/// One kind of limb step, as the checker counts them; ordered as the module lists its proofs.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum LimbKind {
+    Rounded(u32, usize),
+    Operation(char, (Option<usize>, u32), (Option<usize>, u32), usize),
+    Back(usize, u32, usize),
+}
+
+/// A held operand in a proof's name, and as a symbolic value.
+fn kind_name(h: Option<usize>, bits: u32) -> String {
+    match h {
+        None => format!("i64x{bits}"),
+        Some(n) => format!("w{n}x{bits}"),
+    }
+}
+
+fn kind_value(h: Option<usize>, bits: u32) -> String {
+    match h {
+        None => format!("small({bits})"),
+        Some(n) => format!("big::<{n}>({bits})"),
+    }
+}
+
+/// The code lines of the limb variant (piece G42), as the checker writes them from its own
+/// derivation of every registered predicate, in their order: the imports, each predicate's
+/// `<predicate>_value`, and the proof module.
+fn expected_limbs() -> Result<Vec<Expect>, String> {
+    let mut parts = Vec::new();
+    for p in &PREDICATES {
+        parts.push((p.comparison.name, read(p.text)?, derive_again(p.text)?));
+    }
+    let mut points: BTreeSet<&str> = BTreeSet::new();
+    let mut wides: BTreeSet<&str> = BTreeSet::new();
+    for (_, d, x) in &parts {
+        for (_, k) in &d.inputs {
+            match k {
+                Kind::Point(2) => points.insert("P2"),
+                Kind::Point(_) => points.insert("P3"),
+                Kind::Rounded(..) => false,
+            };
+        }
+        let root = x.rows[x.result].width;
+        if is_wide(root) {
+            wides.insert(root);
+        }
+    }
+    let mut out = Vec::new();
+    let mut push = |s: String| out.push(Expect::Line(s));
+    let points: Vec<&str> = points.into_iter().collect();
+    match points.as_slice() {
+        [] => {}
+        [one] => push(format!("use crate::grid::{one};")),
+        many => push(format!("use crate::grid::{{{}}};", many.join(", "))),
+    }
+    push(WIDE_IMPORT.to_owned());
+    push("use crate::wide32::Wide32;".to_owned());
+    if parts
+        .iter()
+        .any(|(_, _, x)| x.rows.iter().any(|r| r.rounded))
+    {
+        push("use super::within;".to_owned());
+    }
+    let mut kinds: BTreeSet<LimbKind> = BTreeSet::new();
+    for (name, d, x) in &parts {
+        let root = &x.rows[x.result];
+        let ret = format!("Option<{}>", root.width);
+        for l in signature_lines(&format!("{name}_value"), &parameters(d), &ret) {
+            push(l);
+        }
+        for (i, r) in x.rows.iter().enumerate() {
+            let h = limbs_of_row(x, i);
+            let statement = match (h, r.operands) {
+                // An i64 step is the shipped statement, whose operands are i64 too.
+                (None, _) => r.exact.clone(),
+                (Some(n), None) => {
+                    kinds.insert(LimbKind::Rounded(r.bits, n));
+                    format!("Wide32::<{n}>::from_i128(within({}, {})?)?", r.name, r.bits)
+                }
+                (Some(n), Some((op, li, ri))) => {
+                    let (lh, rh) = (limbs_of_row(x, li), limbs_of_row(x, ri));
+                    kinds.insert(LimbKind::Operation(
+                        op,
+                        (lh, x.rows[li].bits),
+                        (rh, x.rows[ri].bits),
+                        n,
+                    ));
+                    limb_expr(op, &x.rows[li].name, lh, &x.rows[ri].name, rh, n)
+                }
+            };
+            push(format!("    let {} = {statement};", r.name));
+        }
+        match (limbs_of_row(x, x.result), root.width) {
+            (None, _) => push(format!("    Some({})", root.name)),
+            (Some(n), "i128") => {
+                kinds.insert(LimbKind::Back(n, root.bits, 2));
+                push(format!("    {}.to_i128()", root.name));
+            }
+            (Some(n), w) => {
+                let to = limbs_of(w);
+                kinds.insert(LimbKind::Back(n, root.bits, to));
+                push(format!("    {}.to_wide::<{to}>()", root.name));
+            }
+        }
+        push("}".to_owned());
+    }
+    for l in [
+        "mod proofs {",
+        "    use super::*;",
+        "    fn small(bits: u32) -> i64 {",
+        "        let v: i64 = kani::any();",
+        "        kani::assume(v.unsigned_abs().checked_shr(bits) == Some(0));",
+        "        v",
+        "    }",
+        "    fn wide_input(bits: u32) -> i128 {",
+        "        let v: i128 = kani::any();",
+        "        kani::assume(v.unsigned_abs().checked_shr(bits) == Some(0));",
+        "        v",
+        "    }",
+        "    fn big<const N: usize>(bits: u32) -> Wide32<N> {",
+        "        let v = Wide32::<N>::from_le_limbs(kani::any());",
+        "        let mut limit = [0u32; N];",
+        "        for (k, limb) in limit.iter_mut().enumerate() {",
+        "            let low = u32::try_from(k).ok().and_then(|k| k.checked_mul(32));",
+        "            let shift = low.map(|low| low.saturating_add(32).saturating_sub(bits));",
+        "            *limb = shift.and_then(|s| u32::MAX.checked_shr(s)).unwrap_or(0);",
+        "        }",
+        "        let limit = Wide32::<N>::from_le_limbs(limit);",
+        "        let floor = limit.checked_neg();",
+        "        kani::assume(v <= limit && floor.is_some_and(|f| v >= f));",
+        "        v",
+        "    }",
+    ] {
+        push(l.to_owned());
+    }
+    for kind in &kinds {
+        match kind {
+            LimbKind::Rounded(bits, n) => {
+                push(format!("    fn rounded_{bits}_in_{n}() {{"));
+                push(format!("        let v = wide_input({bits});"));
+                push(format!(
+                    "        assert!(Wide32::<{n}>::from_i128(v).is_some());"
+                ));
+            }
+            LimbKind::Operation(op, (lh, lb), (rh, rb), n) => {
+                let word = match op {
+                    '+' => "add",
+                    '-' => "sub",
+                    _ => "mul",
+                };
+                push(format!(
+                    "    fn {word}_{}_{}_in_{n}() {{",
+                    kind_name(*lh, *lb),
+                    kind_name(*rh, *rb)
+                ));
+                push(format!(
+                    "        let (l, r) = ({}, {});",
+                    kind_value(*lh, *lb),
+                    kind_value(*rh, *rb)
+                ));
+                push(format!(
+                    "        let step = || -> Option<Wide32<{n}>> {{ Some({}) }};",
+                    limb_expr(*op, "l", *lh, "r", *rh, *n)
+                ));
+                push("        assert!(step().is_some());".to_owned());
+            }
+            LimbKind::Back(n, bits, to) => {
+                let target = if *to == 2 {
+                    "i128".to_owned()
+                } else {
+                    to.to_string()
+                };
+                push(format!("    fn back_w{n}x{bits}_to_{target}() {{"));
+                push(format!("        let v = big::<{n}>({bits});"));
+                push(if *to == 2 {
+                    "        assert!(v.to_i128().is_some());".to_owned()
+                } else {
+                    format!("        assert!(v.to_wide::<{to}>().is_some());")
+                });
+            }
+        }
+        push("    }".to_owned());
+    }
+    push("}".to_owned());
+    let wides: Vec<&str> = wides.into_iter().collect();
+    Ok(settle_wide_import(out, &wides))
+}
+
+/// The limb variant's code lines against [`expected_limbs`]'s, line for line (piece G42).
+fn verify_limbs(limbs: &str) -> Vec<String> {
+    let want = match expected_limbs() {
+        Ok(w) => w,
+        Err(e) => return vec![format!("a description: {e}")],
+    };
+    let got = code_lines(limbs);
+    let mut bad = Vec::new();
+    if got.len() != want.len() {
+        bad.push(format!(
+            "{} lines of code in limbs.rs, {} expected",
+            got.len(),
+            want.len()
+        ));
+    }
+    for (g, w) in got.iter().zip(&want) {
+        match w {
+            Expect::Line(w) if g == w => {}
+            Expect::Line(w) => bad.push(format!("limbs.rs: `{g}`, expected `{w}`")),
+            Expect::Scale => bad.push("limbs.rs: a scale where none belongs".to_owned()),
+        }
+    }
+    bad
+}
+
 /// The plain-`i128` variant's code lines against [`expected_plain`]'s, line for line (piece G42).
 fn verify_plain(plain: &str) -> Vec<String> {
     let want = match expected_plain() {
@@ -1500,7 +1767,8 @@ fn verify(text: &str, module: &str) -> Vec<String> {
 /// Checks the committed parent module against the registered predicates; returns what failed.
 fn verify_parent(parent: &str) -> Vec<String> {
     let mut names: Vec<&str> = PREDICATES.iter().map(|p| p.comparison.name).collect();
-    // The one variant module (piece G42).
+    // The variant modules (piece G42).
+    names.push("limbs");
     names.push("plain");
     let mut coordinates = false;
     let mut rounded = false;
@@ -1535,6 +1803,9 @@ fn verify_parent(parent: &str) -> Vec<String> {
 
 /// The parent module, built into the test so it also runs on wasm32.
 const PARENT: &str = include_str!("../../geom-num/src/generated/mod.rs");
+
+/// The limb variant (piece G42), built into the test so it also runs on wasm32.
+const LIMBS: &str = include_str!("../../geom-num/src/generated/limbs.rs");
 
 /// The plain-`i128` variant (piece G42), built into the test so it also runs on wasm32.
 const PLAIN: &str = include_str!("../../geom-num/src/generated/plain.rs");
@@ -1614,6 +1885,8 @@ fn the_checker_agrees_with_every_committed_module() {
     assert!(bad.is_empty(), "mod.rs:\n{}", bad.join("\n"));
     let bad = verify_plain(PLAIN);
     assert!(bad.is_empty(), "plain.rs:\n{}", bad.join("\n"));
+    let bad = verify_limbs(LIMBS);
+    assert!(bad.is_empty(), "limbs.rs:\n{}", bad.join("\n"));
 }
 
 /// The modules read here are exactly the registered predicates, in their order; and, natively,
@@ -1635,6 +1908,7 @@ fn the_committed_list_is_every_registered_predicate() {
     let mut want: Vec<String> = registered.iter().map(|n| format!("{n}.rs")).collect();
     want.push("mod.rs".to_owned());
     want.push("plain.rs".to_owned());
+    want.push("limbs.rs".to_owned());
     want.push(".gitattributes".to_owned());
     want.sort();
     assert_eq!(files, want);
@@ -1894,6 +2168,33 @@ fn plain_edits() -> Vec<(&'static str, &'static str, &'static str)> {
     ]
 }
 
+/// One hand edit of the limb variant each (piece G42): a product in too few limbs, an unchecked
+/// product, a proof over narrower operands than the code's, and a proof dropped.
+fn limbs_edits() -> Vec<(&'static str, &'static str, &'static str)> {
+    vec![
+        (
+            "    let det_1 = Wide32::<3>::product_i64(ba_x, ca_y)?;",
+            "    let det_1 = Wide32::<2>::product_i64(ba_x, ca_y)?;",
+            "a product in two limbs",
+        ),
+        (
+            "    let det_2 = Wide32::<3>::product_i64(ba_y, ca_x)?;",
+            "    let det_2 = Wide32::<3>::from_i64(ba_y.wrapping_mul(ca_x));",
+            "a product that wraps",
+        ),
+        (
+            "        let (l, r) = (small(41), small(41));",
+            "        let (l, r) = (small(40), small(41));",
+            "a proof over a narrower operand",
+        ),
+        (
+            "        assert!(v.to_i128().is_some());\n",
+            "",
+            "a proof's assertion dropped",
+        ),
+    ]
+}
+
 /// One hand edit of the parent module, each breaking what the proof relies on.
 fn parent_edits() -> Vec<(&'static str, &'static str, &'static str)> {
     vec![
@@ -1931,8 +2232,8 @@ fn parent_edits() -> Vec<(&'static str, &'static str, &'static str)> {
 }
 
 /// A hand-edited constant, certificate row, unit error, filter statement, exact-path type,
-/// parameter order or helper in a committed module, or a hand-edited line of the plain-`i128`
-/// variant, is refused by the checker, whatever produced it.
+/// parameter order or helper in a committed module, or a hand-edited line of either variant, is
+/// refused by the checker, whatever produced it.
 #[test]
 fn the_checker_refuses_hand_edited_modules() {
     for (name, module) in COMMITTED {
@@ -1943,6 +2244,14 @@ fn the_checker_refuses_hand_edited_modules() {
             let bad = verify(p.text, &edited);
             assert!(!bad.is_empty(), "{name}: {what}: the checker accepted it");
         }
+    }
+    for (from, to, what) in limbs_edits() {
+        let edited = LIMBS.replacen(from, to, 1);
+        assert_ne!(edited, LIMBS, "limbs.rs: {what}: the edit changed nothing");
+        assert!(
+            !verify_limbs(&edited).is_empty(),
+            "limbs.rs: {what}: the checker accepted it"
+        );
     }
     for (from, to, what) in plain_edits() {
         let edited = PLAIN.replacen(from, to, 1);

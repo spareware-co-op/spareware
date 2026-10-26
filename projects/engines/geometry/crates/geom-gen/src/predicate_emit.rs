@@ -59,6 +59,8 @@
 
 use geom_num::grid::{COORD_BITS, COORD_MAX};
 
+use std::collections::BTreeSet;
+
 use crate::predicate_derive::{Derivation, Monomial, ScaleExpr, StepCert, Width};
 use crate::predicate_lang::{Axis, InputKind, Op, RUST_WORDS, Step, StepKind, max_name};
 
@@ -99,6 +101,10 @@ pub enum Style {
     /// analysis beyond each result's type. On WebAssembly every product then goes through
     /// `__multi3`, the library routine Rust's `i128` multiply becomes there.
     Plain,
+    /// Width-aware limbs: each step in `i64`, or in a `Wide32` of as many 32-bit limbs as its
+    /// operands' certified bits need ([`limbs_held`]), so a limb product is one 32 × 32 → 64-bit
+    /// multiply, native on WebAssembly; the result is returned in the shipped path's type.
+    Limbs,
 }
 
 impl Style {
@@ -1226,6 +1232,7 @@ fn value_fn(
         ""
     };
     let text = match style {
+        Style::Limbs => return fail("the limb variant is written by `limbs_fn`"),
         Style::WidthAware => format!(
             "`{name}`'s exact value: each step in the type its certificate gives it, with checked \
              arithmetic; `None` only if a step overflowed, which the certificate rules out{range}."
@@ -1553,23 +1560,36 @@ pub fn variant_module(
              every product then goes through `__multi3`, the library routine Rust's `i128` \
              multiply becomes there",
         ),
+        Style::Limbs => (
+            "limbs",
+            "the width-aware limb variant: each step in `i64` when its certificate fits 63 bits, \
+             otherwise in a `Wide32` of as many 32-bit limbs as its operands' certified bits need, \
+             so every limb product is one 32 × 32 → 64-bit multiply, native on WebAssembly, and \
+             operands of different widths multiply without being widened first",
+        ),
         Style::WidthAware => {
             return fail("the width-aware exact paths are the predicate modules themselves");
         }
     };
     let mut out = String::new();
-    variant_header(&mut out, generator, what);
+    variant_header(&mut out, generator, what, style);
     let mut points: Vec<&str> = Vec::new();
     let mut wides: Vec<&str> = Vec::new();
     for d in derivations {
         points.extend(point_type(d)?);
-        wides.extend(
-            d.certs
-                .iter()
-                .map(|c| style.held(c.width))
-                .filter(|w| *w > Width::I128)
-                .map(Width::rust),
-        );
+        if style == Style::Limbs {
+            // The limb variant names a wide type only as the shipped path's result.
+            let root = d.certs.get(d.result).map(|c| c.width);
+            wides.extend(root.filter(|w| *w > Width::I128).map(Width::rust));
+        } else {
+            wides.extend(
+                d.certs
+                    .iter()
+                    .map(|c| style.held(c.width))
+                    .filter(|w| *w > Width::I128)
+                    .map(Width::rust),
+            );
+        }
     }
     points.sort_unstable();
     points.dedup();
@@ -1584,6 +1604,9 @@ pub fn variant_module(
         ),
     }
     line(&mut out, WIDE_IMPORTS);
+    if style == Style::Limbs {
+        line(&mut out, "use crate::wide32::Wide32;");
+    }
     if derivations.iter().any(|d| has_rounded(d)) {
         line(&mut out, "");
         line(&mut out, "use super::within;");
@@ -1595,6 +1618,9 @@ pub fn variant_module(
         if has_rounded(d) {
             imports.push("within");
         }
+        if style == Style::Limbs {
+            imports.push("Wide32");
+        }
         check_names(d, &imports)?;
         // Each function ends with an empty line, so only the first needs one before it.
         if !out.ends_with("\n\n") {
@@ -1603,7 +1629,14 @@ pub fn variant_module(
         let ty = point_type(d)?;
         let parameters = params(d, ty)?;
         let name = format!("{}_value", d.description.name);
-        value_fn(&mut out, d, &parameters, false, style, &name)?;
+        if style == Style::Limbs {
+            limbs_fn(&mut out, d, &parameters, &name)?;
+        } else {
+            value_fn(&mut out, d, &parameters, false, style, &name)?;
+        }
+    }
+    if style == Style::Limbs {
+        proofs_module(&mut out, derivations)?;
     }
     // value_fn ends each function with an empty line: the file ends with the last brace.
     while out.ends_with("\n\n") {
@@ -1622,7 +1655,8 @@ pub fn variant_module(
 
 /// The header of a variant module: where it comes from, what `what` (the variant, from its
 /// name to the end of a sentence) computes, and its guarantees, method and cost.
-fn variant_header(out: &mut String, generator: &str, what: &str) {
+fn variant_header(out: &mut String, generator: &str, what: &str, style: Style) {
+    let limbs = style == Style::Limbs;
     doc_para(
         out,
         &format!(
@@ -1640,37 +1674,517 @@ fn variant_header(out: &mut String, generator: &str, what: &str) {
              architecture, `projects/engines/geometry/architecture/23-performance.md`; piece \
              G42). For each predicate, `<predicate>_value` performs the steps of the predicate \
              module's `value`, in their order and with their names, each held in the type above, \
-             so it returns the same value, as an `i128` where the shipped path returns an `i64`. \
-             The benchmarks compare the two on every target, and the tests check that they agree \
-             on every input they draw and at the grid's extremes."
+             so it returns the same value, {returned}. The benchmarks compare the two on every \
+             target, and the tests check that they agree on every input they draw and at the \
+             grid's extremes.",
+            returned = if limbs {
+                "converted back to the shipped path's type"
+            } else {
+                "as an `i128` where the shipped path returns an `i64`"
+            }
         ),
     );
     doc(out, "");
     doc_para(
         out,
-        "Guarantees: as each predicate module's `value`. Every step is a checked method, the \
-         certificate in the predicate module's header bounds every step within the type it is \
-         held in here (a type at least as wide as the one the certificate names), so a step never \
-         returns `None` for an input in the domain; nothing depends on overflow checks being on. \
-         geom-gen's independent checker re-derives every line from its own derivation.",
+        &format!(
+            "Guarantees: as each predicate module's `value`. Every step is a checked method, the \
+             certificate in the predicate module's header bounds every step within the type it is \
+             held in here (a type at least as wide as the one the certificate names), so a step \
+             never returns `None` for an input in the domain; nothing depends on overflow checks \
+             being on. geom-gen's independent checker re-derives every line from its own \
+             derivation{proofs}.",
+            proofs = if limbs {
+                ", and the bounded proofs at the end of the module show, for every kind of limb \
+                 step, that it never returns `None` on any operand its certified bits allow"
+            } else {
+                ""
+            }
+        ),
     );
     doc(out, "");
-    doc_para(
-        out,
-        "Method: each predicate's steps as its module's certificate derives them, held as \
-         chapter 23.3 describes the baseline of its comparison of exact-path variants, \
-         `projects/engines/geometry/architecture/23-performance.md`.",
-    );
-    doc(out, "");
-    doc_para(
-        out,
-        "Cost: the predicate module's `value`, with each product at the width of its result.",
-    );
+    if limbs {
+        doc_para(
+            out,
+            "Method: each predicate's steps as its module's certificate derives them, each held in \
+             as many 32-bit limbs as its operands' certified bits need, chapter 23.3's width-aware \
+             limbs, `projects/engines/geometry/architecture/23-performance.md`, with the \
+             schoolbook limb arithmetic of `crate::wide32`.",
+        );
+        doc(out, "");
+        doc_para(
+            out,
+            "Cost: the predicate module's steps; a product of operands of A and B limbs is A · B \
+             32 × 32 → 64-bit limb multiplies, and the result's conversion back is linear in its \
+             limbs.",
+        );
+    } else {
+        doc_para(
+            out,
+            "Method: each predicate's steps as its module's certificate derives them, held as \
+             chapter 23.3 describes the baseline of its comparison of exact-path variants, \
+             `projects/engines/geometry/architecture/23-performance.md`.",
+        );
+        doc(out, "");
+        doc_para(
+            out,
+            "Cost: the predicate module's `value`, with each product at the width of its result.",
+        );
+    }
     line(out, "");
 }
 
+/// How the limb variant holds a step (piece G42).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Held {
+    /// An `i64`.
+    I64,
+    /// A `Wide32` of this many 32-bit limbs.
+    Limbs(usize),
+}
+
+/// The 32-bit limbs that hold every value of magnitude below 2^`bits`: ⌈(bits + 1)/32⌉, at least
+/// two.
+fn limbs_for(bits: u32) -> Result<usize, EmitError> {
+    let limbs = bits
+        .checked_add(32)
+        .and_then(|b| b.checked_div(32))
+        .and_then(|n| usize::try_from(n).ok())
+        .ok_or_else(|| EmitError(format!("{bits} bits in limbs")))?;
+    Ok(limbs.max(2))
+}
+
+/// The certified bits of step `i`.
+fn bits_of(d: &Derivation, i: usize) -> Result<u32, EmitError> {
+    d.certs
+        .get(i)
+        .map(|c| c.bits)
+        .ok_or_else(|| EmitError("a step's operand is missing".to_owned()))
+}
+
+/// How the limb variant holds each step, in step order (piece G42): in `i64` where the certificate
+/// gives `i64`; otherwise a rounded input of b bits in ⌈(b + 1)/32⌉ limbs, a product of operands of
+/// a and b certified bits in ⌈(a + b + 1)/32⌉, and a sum or difference in ⌈(max(a, b) + 2)/32⌉. A
+/// product's magnitude is below 2^(a + b) and a sum's below 2^(max(a, b) + 1), so each holds the
+/// step's certified bound; sizing from the operands' bits rather than from the step's own bound
+/// lets one proof of each kind of step ([`limb_proofs`]) cover every step of that kind.
+///
+/// # Errors
+///
+/// An [`EmitError`] for a coordinate or translation the certificate does not fit in `i64`, or a
+/// step whose operand is missing.
+pub fn limbs_held(d: &Derivation) -> Result<Vec<Held>, EmitError> {
+    let mut held = Vec::new();
+    for (step, cert) in d.steps.iter().zip(&d.certs) {
+        if cert.width == Width::I64 {
+            held.push(Held::I64);
+            continue;
+        }
+        let bits = match &step.kind {
+            StepKind::LoadRounded { input } => Some(rounded_bits(d, input)?),
+            StepKind::Op {
+                op: Op::Mul,
+                left,
+                right,
+            } => bits_of(d, *left)?.checked_add(bits_of(d, *right)?),
+            StepKind::Op { left, right, .. } => {
+                bits_of(d, *left)?.max(bits_of(d, *right)?).checked_add(1)
+            }
+            _ => return fail("a coordinate or translation wider than i64"),
+        }
+        .ok_or_else(|| EmitError("a step's bits".to_owned()))?;
+        held.push(Held::Limbs(limbs_for(bits)?));
+    }
+    Ok(held)
+}
+
+/// `name`, held as `from`, as a `Wide32<n>`.
+fn as_limbs(name: &str, from: Held, n: usize) -> String {
+    match from {
+        Held::I64 => format!("Wide32::<{n}>::from_i64({name})"),
+        Held::Limbs(m) if m == n => name.to_owned(),
+        Held::Limbs(_) => format!("{name}.resize::<{n}>()?"),
+    }
+}
+
+/// The limb variant's expression for an operation held in `n` limbs, on operands `l` and `r`
+/// held as `lh` and `rh`: a product by [`Wide32`]'s width-aware products, with neither operand
+/// widened; a sum or difference on both operands brought to `n` limbs.
+fn limb_operation(op: Op, l: &str, lh: Held, r: &str, rh: Held, n: usize) -> String {
+    match (op, lh, rh) {
+        (Op::Mul, Held::I64, Held::I64) => format!("Wide32::<{n}>::product_i64({l}, {r})?"),
+        (Op::Mul, Held::Limbs(_), Held::I64) => {
+            format!("Wide32::<{n}>::product_by_i64(&{l}, {r})?")
+        }
+        (Op::Mul, Held::I64, Held::Limbs(_)) => {
+            format!("Wide32::<{n}>::product_by_i64(&{r}, {l})?")
+        }
+        (Op::Mul, Held::Limbs(_), Held::Limbs(_)) => {
+            format!("Wide32::<{n}>::product(&{l}, &{r})?")
+        }
+        (op, lh, rh) => format!(
+            "{}.{}(&{})?",
+            as_limbs(l, lh, n),
+            method(op),
+            as_limbs(r, rh, n)
+        ),
+    }
+}
+
+/// The limb variant's statement for step `i`.
+fn limbs_statement(d: &Derivation, held: &[Held], index: usize) -> Result<String, EmitError> {
+    let (Some(step), Some(&step_held)) = (d.steps.get(index), held.get(index)) else {
+        return fail("a step is missing");
+    };
+    let operand = |at: usize| -> Result<(&str, Held), EmitError> {
+        match (d.steps.get(at), held.get(at)) {
+            (Some(found), Some(&how)) => Ok((found.name.as_str(), how)),
+            _ => fail("a step's operand is missing"),
+        }
+    };
+    let body = match (&step.kind, step_held) {
+        (StepKind::LoadCoord { point, axis }, Held::I64) => coordinate(point, *axis, Width::I64)?,
+        (
+            StepKind::Translate {
+                minuend,
+                subtrahend,
+                axis,
+            },
+            Held::I64,
+        ) => checked(
+            &coordinate(minuend, *axis, Width::I64)?,
+            Op::Sub,
+            &coordinate(subtrahend, *axis, Width::I64)?,
+            Width::I64,
+        ),
+        (StepKind::LoadRounded { input }, Held::I64) => format!(
+            "i64::try_from(within({input}, {})?).ok()?",
+            rounded_bits(d, input)?
+        ),
+        (StepKind::LoadRounded { input }, Held::Limbs(n)) => format!(
+            "Wide32::<{n}>::from_i128(within({input}, {})?)?",
+            rounded_bits(d, input)?
+        ),
+        (StepKind::Op { op, left, right }, Held::I64) => {
+            let ((left_name, left_held), (right_name, right_held)) =
+                (operand(*left)?, operand(*right)?);
+            if left_held != Held::I64 || right_held != Held::I64 {
+                return fail("an i64 step with a wider operand");
+            }
+            checked(left_name, *op, right_name, Width::I64)
+        }
+        (StepKind::Op { op, left, right }, Held::Limbs(n)) => {
+            let ((left_name, left_held), (right_name, right_held)) =
+                (operand(*left)?, operand(*right)?);
+            limb_operation(*op, left_name, left_held, right_name, right_held, n)
+        }
+        _ => return fail("a coordinate or translation wider than i64"),
+    };
+    Ok(format!("    let {} = {body};", step.name))
+}
+
+/// The limb variant's `<predicate>_value` (piece G42): the steps held as [`limbs_held`] says, and
+/// the result returned in the shipped path's type.
+fn limbs_fn(
+    out: &mut String,
+    d: &Derivation,
+    parameters: &[String],
+    fn_name: &str,
+) -> Result<(), EmitError> {
+    let name = &d.description.name;
+    let held = limbs_held(d)?;
+    let (Some(root_step), Some(root), Some(&root_held)) = (
+        d.steps.get(d.result),
+        d.certs.get(d.result),
+        held.get(d.result),
+    ) else {
+        return fail("the result step is missing");
+    };
+    let range = if has_rounded(d) {
+        "; `None` also for a rounded input outside its declared range"
+    } else {
+        ""
+    };
+    item_para(
+        out,
+        &format!(
+            "`{name}`'s exact value in width-aware limbs (chapter 23.3): each step in `i64`, or in \
+             a `Wide32` of as many 32-bit limbs as its operands' certified bits need, with checked \
+             arithmetic, and the result in the shipped path's type; `None` only if a step \
+             overflowed, which the certificate rules out{range}."
+        ),
+    );
+    line(out, "#[inline]");
+    line(out, "#[must_use]");
+    allowances(out, d, true, d.steps.len().saturating_add(1));
+    signature(
+        out,
+        fn_name,
+        parameters,
+        &format!("Option<{}>", root.width.rust()),
+    );
+    for i in 0..d.steps.len() {
+        line(out, &limbs_statement(d, &held, i)?);
+    }
+    let tail = match (root_held, root.width) {
+        (Held::I64, Width::I64) => format!("    Some({})", root_step.name),
+        (Held::Limbs(_), Width::I128) => format!("    {}.to_i128()", root_step.name),
+        (Held::Limbs(_), w) if w > Width::I128 => {
+            format!("    {}.to_wide::<{}>()", root_step.name, w.limbs())
+        }
+        _ => return fail("the result's held type and shipped type disagree"),
+    };
+    line(out, &tail);
+    line(out, "}");
+    line(out, "");
+    Ok(())
+}
+
+/// One kind of limb step, proven once for every step of that kind (piece G42): the operation, how
+/// each operand is held with its certified bits, and the limbs the result is held in.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum LimbProof {
+    /// A rounded input of `bits` bits brought into `limbs` limbs.
+    Rounded {
+        /// The input's declared bits.
+        bits: u32,
+        /// The limbs it is held in.
+        limbs: usize,
+    },
+    /// An operation whose result is held in `limbs` limbs.
+    Operation {
+        /// The operation.
+        op: char,
+        /// The left operand's held type and certified bits.
+        left: (Held, u32),
+        /// The right operand's held type and certified bits.
+        right: (Held, u32),
+        /// The limbs the result is held in.
+        limbs: usize,
+    },
+    /// The result, held in `limbs` limbs with `bits` certified bits, returned as the shipped type
+    /// of `to` 64-bit limbs (2 for `i128`).
+    Back {
+        /// The limbs it is held in.
+        limbs: usize,
+        /// Its certified bits.
+        bits: u32,
+        /// The shipped type's 64-bit limbs.
+        to: usize,
+    },
+}
+
+/// The operator's character, for a proof's name.
+const fn op_char(op: Op) -> char {
+    match op {
+        Op::Add => '+',
+        Op::Sub => '-',
+        Op::Mul => '*',
+    }
+}
+
+/// The kinds of limb step a predicate's limb variant performs (piece G42).
+///
+/// # Errors
+///
+/// As [`limbs_held`].
+pub fn limb_proofs(d: &Derivation) -> Result<BTreeSet<LimbProof>, EmitError> {
+    let held = limbs_held(d)?;
+    let mut proofs = BTreeSet::new();
+    for (i, step) in d.steps.iter().enumerate() {
+        let Some(&Held::Limbs(limbs)) = held.get(i) else {
+            continue;
+        };
+        match &step.kind {
+            StepKind::LoadRounded { input } => {
+                proofs.insert(LimbProof::Rounded {
+                    bits: rounded_bits(d, input)?,
+                    limbs,
+                });
+            }
+            StepKind::Op { op, left, right } => {
+                let side = |j: usize| -> Result<(Held, u32), EmitError> {
+                    match held.get(j) {
+                        Some(&h) => Ok((h, bits_of(d, j)?)),
+                        None => fail("a step's operand is missing"),
+                    }
+                };
+                proofs.insert(LimbProof::Operation {
+                    op: op_char(*op),
+                    left: side(*left)?,
+                    right: side(*right)?,
+                    limbs,
+                });
+            }
+            _ => return fail("a coordinate or translation wider than i64"),
+        }
+    }
+    if let (Some(&Held::Limbs(limbs)), Some(root)) = (held.get(d.result), d.certs.get(d.result)) {
+        proofs.insert(LimbProof::Back {
+            limbs,
+            bits: root.bits,
+            to: root.width.limbs(),
+        });
+    }
+    Ok(proofs)
+}
+
+/// A held operand's part of a proof's name: `i64x41`, or `w3x82` for three limbs.
+fn held_name(h: Held, bits: u32) -> String {
+    match h {
+        Held::I64 => format!("i64x{bits}"),
+        Held::Limbs(n) => format!("w{n}x{bits}"),
+    }
+}
+
+/// A symbolic operand in a proof: an `i64` or a `Wide32` of magnitude below 2^bits.
+fn symbolic(h: Held, bits: u32) -> String {
+    match h {
+        Held::I64 => format!("small({bits})"),
+        Held::Limbs(n) => format!("big::<{n}>({bits})"),
+    }
+}
+
+/// The proofs of the limb variant's steps, one per kind of step: each runs the very expression the
+/// variant's code writes for that kind, on symbolic operands of every value the certified bits
+/// allow, and asserts it never returns `None` (chapter 23.3: "Kani proves each generated limb step
+/// free of overflow within those ranges").
+fn proofs_module(out: &mut String, derivations: &[&Derivation]) -> Result<(), EmitError> {
+    let mut proofs = BTreeSet::new();
+    for d in derivations {
+        proofs.extend(limb_proofs(d)?);
+    }
+    // The last function ends with an empty line.
+    item_para(
+        out,
+        "Bounded proofs (chapter 23.3; piece G42): every kind of limb step the functions above \
+         perform, on every operand its certified bits allow, never returns `None`.",
+    );
+    for l in PROOF_HELPERS {
+        line(out, l);
+    }
+    for proof in &proofs {
+        line(out, "");
+        match proof {
+            LimbProof::Rounded { bits, limbs } => {
+                line(out, "    #[kani::proof]");
+                line(out, &format!("    fn rounded_{bits}_in_{limbs}() {{"));
+                line(out, &format!("        let v = wide_input({bits});"));
+                line(
+                    out,
+                    &format!("        assert!(Wide32::<{limbs}>::from_i128(v).is_some());"),
+                );
+                line(out, "    }");
+            }
+            LimbProof::Operation {
+                op,
+                left,
+                right,
+                limbs,
+            } => {
+                let word = match op {
+                    '+' => "add",
+                    '-' => "sub",
+                    _ => "mul",
+                };
+                let operation = match op {
+                    '+' => Op::Add,
+                    '-' => Op::Sub,
+                    _ => Op::Mul,
+                };
+                line(out, "    #[kani::proof]");
+                line(
+                    out,
+                    &format!(
+                        "    fn {word}_{}_{}_in_{limbs}() {{",
+                        held_name(left.0, left.1),
+                        held_name(right.0, right.1)
+                    ),
+                );
+                line(
+                    out,
+                    &format!(
+                        "        let (l, r) = ({}, {});",
+                        symbolic(left.0, left.1),
+                        symbolic(right.0, right.1)
+                    ),
+                );
+                let expression = limb_operation(operation, "l", left.0, "r", right.0, *limbs);
+                line(
+                    out,
+                    &format!(
+                        "        let step = || -> Option<Wide32<{limbs}>> {{ Some({expression}) }};"
+                    ),
+                );
+                line(out, "        assert!(step().is_some());");
+                line(out, "    }");
+            }
+            LimbProof::Back { limbs, bits, to } => {
+                line(out, "    #[kani::proof]");
+                let target = if *to == 2 {
+                    "i128".to_owned()
+                } else {
+                    format!("{to}")
+                };
+                line(
+                    out,
+                    &format!("    fn back_w{limbs}x{bits}_to_{target}() {{"),
+                );
+                line(out, &format!("        let v = big::<{limbs}>({bits});"));
+                if *to == 2 {
+                    line(out, "        assert!(v.to_i128().is_some());");
+                } else {
+                    line(
+                        out,
+                        &format!("        assert!(v.to_wide::<{to}>().is_some());"),
+                    );
+                }
+                line(out, "    }");
+            }
+        }
+    }
+    line(out, "}");
+    Ok(())
+}
+
+/// The opening of the limb variant's proof module and the symbolic operands its proofs share.
+const PROOF_HELPERS: &[&str] = &[
+    "#[cfg(kani)]",
+    "mod proofs {",
+    "    use super::*;",
+    "",
+    "    /// A symbolic `i64` of magnitude below 2^bits.",
+    "    fn small(bits: u32) -> i64 {",
+    "        let v: i64 = kani::any();",
+    "        kani::assume(v.unsigned_abs().checked_shr(bits) == Some(0));",
+    "        v",
+    "    }",
+    "",
+    "    /// A symbolic `i128` of magnitude below 2^bits.",
+    "    fn wide_input(bits: u32) -> i128 {",
+    "        let v: i128 = kani::any();",
+    "        kani::assume(v.unsigned_abs().checked_shr(bits) == Some(0));",
+    "        v",
+    "    }",
+    "",
+    "    /// A symbolic `Wide32<N>` of magnitude below 2^bits: between −(2^bits − 1) and 2^bits − 1.",
+    "    fn big<const N: usize>(bits: u32) -> Wide32<N> {",
+    "        let v = Wide32::<N>::from_le_limbs(kani::any());",
+    "        let mut limit = [0u32; N];",
+    "        for (k, limb) in limit.iter_mut().enumerate() {",
+    "            let low = u32::try_from(k).ok().and_then(|k| k.checked_mul(32));",
+    "            let shift = low.map(|low| low.saturating_add(32).saturating_sub(bits));",
+    "            *limb = shift.and_then(|s| u32::MAX.checked_shr(s)).unwrap_or(0);",
+    "        }",
+    "        let limit = Wide32::<N>::from_le_limbs(limit);",
+    "        let floor = limit.checked_neg();",
+    "        kani::assume(v <= limit && floor.is_some_and(|f| v >= f));",
+    "        v",
+    "    }",
+];
+
 /// The variant modules the parent module declares beside the predicate modules (piece G42).
-pub const VARIANT_MODULES: [&str; 1] = ["plain"];
+pub const VARIANT_MODULES: [&str; 2] = ["limbs", "plain"];
 
 /// One row of the parent module's table, for one predicate: what its module serves, and
 /// Shewchuk's stage-A bound and FPG's constant for the same predicate, as published.
