@@ -29,13 +29,13 @@
 //! that stores every kind, in [`param`]; the NURBS kind (`nurbs`); typed transforms on control
 //! points with a certified bound ([`affine`]); the kind contract any new kind must pass
 //! ([`contract`]); and [`CurveError`] in [`error`] (piece G60). The analytic kinds (piece G61):
-//! [`Line`] (segment, ray, infinite line) in [`line`]; [`Circle`], [`Ellipse`], [`Hyperbola`] and
-//! [`Parabola`] in [`conic`]; [`Helix`] in [`helix`]; [`Polynomial`] in [`polynomial`];
-//! [`Involute`] in [`involute`]; exact frames ([`frame`]) and their axes ([`axes`]); a kind's NURBS
-//! form and parameter map ([`map`]). Underneath: the shared certified evaluation (`form`),
-//! transforms for the analytic kinds (`moved`), the exact rational conics (`rational`), Taylor
-//! conversion with a certified remainder (`taylor`) and interval arithmetic that stays exact where
-//! it can (`tight`).
+//! [`Line`] (segment, ray, infinite line) in [`line`](mod@line); [`Circle`], [`Ellipse`],
+//! [`Hyperbola`] and [`Parabola`] in [`conic`]; [`Helix`] in [`helix`]; [`Polynomial`] in
+//! [`polynomial`]; [`Involute`] in [`involute`]; exact frames ([`frame`]) and their axes
+//! ([`axes`]); a kind's NURBS form and parameter map ([`map`]). Underneath: the shared certified
+//! evaluation (`form`), transforms for the analytic kinds (`moved`), the exact rational conics
+//! (`rational`), Taylor conversion with a certified remainder (`taylor`) and interval arithmetic
+//! that stays exact where it can (`tight`).
 //!
 //! The kinds that hold curves (piece G62): [`BulgePolyline`] in [`bulge`]; [`Trimmed`] in
 //! [`trimmed`]; [`Composite`] in [`composite`]; [`Offset`] in [`offset`], with interval Taylor
