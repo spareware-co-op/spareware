@@ -296,8 +296,25 @@ Chapter 26.3 asks this file for a playbook for each kind of addition. Each arriv
 | Playbook | Piece | Until then |
 | --- | --- | --- |
 | Add an operation, add a query | G117 | Chapter 26.1's table says what each must come with; chapter 28.2 lists what the completeness gate will require |
-| Add a curve or surface kind | G60, with the kind contract and its test kit | Chapter 26.1 and chapter 7 |
+| Add a curve or surface kind | G60: below, "How to add a curve or surface kind" | Done |
 | Add an exchange format, a representation or a domain toolkit | G480 | Chapter 26.1, and chapter 24 for formats |
+
+### How to add a curve or surface kind
+
+A geometry kind is stored as itself in a closed enum and behaves through a trait (chapter 7). Piece G60 built the traits, the enums, the NURBS kinds and the contract every kind must pass; this is how a new kind (an arc, a cylinder, a clothoid, an offset) joins them. The dry run is the NURBS kind itself: `crates/geom-curve/src/nurbs.rs` and `crates/geom-surface/src/nurbs.rs` follow every step.
+
+1. **Find its crate.** Curves (2D and 3D in one family) go in `geom-curve`, surfaces in `geom-surface`. A kind that needs another crate's machinery (a field, a subdivision net) still lives in its crate and asks through a trait.
+2. **Write the kind as a type** in its own module, `src/<kind>.rs`, holding exactly its defining data (an arc's centre, radius and angles, never a NURBS copy). A procedural kind (offset, sweep, blend, intersection curve) holds its definition and, optionally, a cached approximation with its certified error (chapter 7).
+3. **Implement the trait**: `geom_curve::ParamCurve<D>` for a curve, `geom_surface::ParamSurface` for a surface. Every method is certified or refuses:
+   - `point`, `derivatives` (`partials`): doubles, with the error the module header derives;
+   - `enclose`: interval enclosures of the exact value and derivatives, never sampled;
+   - `bound` and `derivative_bound`: boxes over any span or box; `DerivativeBound::Unbounded` where the derivative is not bounded, never a guess. A surface also gives `normal_bound`, a box of a positive multiple of the normal (chapter 12.1's normal cone);
+   - `to_nurbs`: the NURBS with the same parameter and a certified distance (0 when exact);
+   - `split`, `reversed`, `transformed`: new kinds in the enum, with certified deviations. Reversal maps [a, b] to [−b, −a]. A transform may change the kind (a non-uniform scale turns a circle into an ellipse); use `geom_curve::affine::Entries` for the transform's exact entries, and report 0 only for an image that is exact.
+4. **Add the variant** to `CurveKind<D>` or `SurfaceKind` and its arm to every method of the enum's trait implementation. The enums are closed: every `match` on them is exhaustive, so the compiler names every place a new variant must be handled.
+5. **Run the contract.** In the crate's `tests/`, run `geom_curve::contract::check` (or `geom_surface::contract::check`) on many instances of the kind: random, degenerate (zero radius refused, full circles, poles) and extreme (coordinates near ±(2^40 − 1) steps), under an exact, a rational and a certified transform. Every law of `geom_curve::Law` must hold; a broken law names itself and the parameter. Copy the broken-kind tests in `crates/geom-curve/tests/contract.rs` for any law your kind adds.
+6. **An implicit form** (a plane, quadric, torus or field) also implements `geom_surface::ImplicitBound`, as `geom_num::plane::Plane` does: interval value and gradient over a box, and whether it is smooth there.
+7. **Header, map, gates.** The module header in HEADERS.md's grammar names the method and its source; regenerate `MAP.json` and run every gate in section 3.
 
 ## 10. When something does not fit
 

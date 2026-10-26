@@ -92,6 +92,7 @@ pub mod point;
 pub mod product;
 mod reduce;
 mod remove;
+mod restrict;
 pub mod surface;
 
 pub use approx::NEWTON_STEPS;

@@ -1091,7 +1091,57 @@
         26
       ],
       "depends": [],
-      "errors": [],
+      "errors": [
+        {
+          "doc": "Why a curve operation returned no result.",
+          "file": "projects/engines/geometry/crates/geom-curve/src/error.rs",
+          "kinds": [
+            {
+              "doc": "The NURBS algorithms refused.",
+              "name": "Nurbs",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A parameter is NaN, infinite or outside the curve's domain, or a split is at an end.",
+              "name": "ParameterOutside",
+              "shape": "unit"
+            },
+            {
+              "doc": "A span is not ordered, not finite, or not inside the curve's domain.",
+              "name": "SpanOutside",
+              "shape": "unit"
+            },
+            {
+              "doc": "A transform that moves z, applied to a curve in the plane.",
+              "name": "NotInPlane",
+              "shape": "unit"
+            },
+            {
+              "doc": "The curve's dimension is not 2 or 3, where an operation needs one of them.",
+              "name": "Dimension",
+              "shape": "struct"
+            },
+            {
+              "doc": "A result is not finite.",
+              "name": "NotFinite",
+              "shape": "unit"
+            },
+            {
+              "doc": "The work meter stopped the operation (chapter 23.10).",
+              "name": "Stopped",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A step its own bounds rule out failed: a defect in this crate, reported, never a panic.",
+              "name": "Defect",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_curve::error",
+          "name": "CurveError",
+          "non_exhaustive": false
+        }
+      ],
       "family": [],
       "file": "projects/engines/geometry/crates/geom-curve/src/lib.rs",
       "folder": "projects/engines/geometry/crates/geom-curve",
@@ -1106,12 +1156,119 @@
       "job": "Every curve kind in 2D and 3D, spirals included: evaluation, bounds, projection, conversion.",
       "kind": "kernel",
       "layer": "2",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "twelve products and sums per point in doubles and in intervals; nothing allocates.",
+          "does": "[`Entries::of`] reads a [`TypedTransform`]: an exact grid transform and a rational one through their exact integer entries (m / d), a certified one through its own doubles. [`Entries::image`] maps a homogeneous point w·P (weight w) to M·(w·P) + w·t, once in doubles in a fixed order and once in intervals, and returns the doubles with the distance between them, an upper bound on how far the double image lies from the exact image under the exact transform.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/affine.rs",
+          "guarantees": [
+            "**Exact entries enclosed.** An integer entry whose double is not exact (beyond 2^53) is widened by its rounding; each quotient m / d is an outward-rounded interval division; a certified transform is exact in its own doubles (`geom-math`'s `transform` header).",
+            "**The image's error bounded.** The interval image holds the exact image of the exact point, and the double image is computed from the doubles of the same entries, so the returned distance bounds their difference.",
+            "**Exact images report 0.** When every entry is exactly its double (grid and certified transforms), each coordinate is also summed exactly, as exact products in `geom-num`'s superaccumulator, and an image equal to its double reports an error of 0: interval arithmetic widens every result and could never say so."
+          ],
+          "job": "Typed transforms applied to control points, with a certified bound on the rounding: the entries of each `geom-math` transform variant as doubles and as interval enclosures of their exact values, and the image of a homogeneous point in both.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "affine invariance of B-splines and NURBS under affine maps of their control points (The NURBS Book, 2nd ed., properties P3.10 and P4.10, <https://doi.org/10.1007/978-3-642-59223-2>), with the weights unchanged, and interval arithmetic for the bound."
+          },
+          "path": "geom_curve::affine",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "for each parameter, a few enclosures and bounds of the kind, a split, a reversal and a transform: the kind's own costs, a few dozen times.",
+          "does": "[`check`] runs a kind through every law of [`Law`] at the parameters given and returns the first law broken, with where. The laws compare certified objects with each other: two enclosures of one exact value must overlap, so a bound, an enclosure, a conversion, a split, a reversal or a transform that is wrong by more than its own stated error is caught wherever a sample lands on it. Evaluation in doubles is compared with the certified enclosure within a relative 2^−30, which catches a wrong formula, not rounding.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/contract.rs",
+          "guarantees": [
+            "**Sound.** A law reported broken is broken: two certified enclosures of one exact value that do not overlap (after widening by the stated deviations) prove that one of them is false, and a refusal the law requires that did not come is a broken refusal.",
+            "**Deterministic.** The checks run in the order of the parameters given, each law in the order of [`Law`]; the same kind and parameters give the same verdict."
+          ],
+          "job": "The kind contract: the laws every curve kind must keep, as a check any kind's tests run (`projects/engines/geometry/AGENTS.md`, \"How to add a geometry kind\").",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/1.9780898717716"
+            ],
+            "text": "property checks of the trait's contract (chapter 28.2's contract laws, applied to the behaviour chapter 7 lists): consistency of certified enclosures, as interval methods check inclusion (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), <https://doi.org/10.1137/1.9780898717716>, the inclusion property of chapter 5)."
+          },
+          "path": "geom_curve::contract",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few machine words; nothing allocates.",
+          "does": "[`CurveError`] names the failure of an operation of a curve or surface kind (the surface kinds of `geom-surface` share it, a span there being a box): a parameter or span outside the domain, a transform a 2D curve cannot take, a refusal from the NURBS algorithms underneath, a result that is not finite, or a budget that stopped the work. [`ContractError`] names the law of the kind contract (`crate::contract`) a kind broke, and where.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/error.rs",
+          "guarantees": [
+            "**Typed, never silent.** No operation clamps a parameter into the domain or returns a best-so-far result beside an error (chapter 29.7).",
+            "**Comparable and stable.** Every variant holds plain values, so errors compare with `==` and print the same on every target."
+          ],
+          "job": "The one error type of the curve kinds: what a kind refuses, and why.",
+          "method": {
+            "none": "error enums and their `Display` and `Error` implementations."
+          },
+          "path": "geom_curve::error",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "an enclosure or bound runs Bezier extraction in intervals, O(s·p²·D) for s spans, plus O(p²·D) per piece and derivative order; a split O(n·D); a reversal or transform O(n·D).",
+          "does": "implements [`ParamCurve`] for [`Curve`]. Points and derivatives are A3.1, A3.2 and A4.2 (`geom-nurbs`). Enclosures, bounds and derivative bounds come from the curve's Bernstein forms in interval arithmetic (piece G59): the piece holding the parameter, or each piece meeting the span cut down to it by de Casteljau subdivision at interval parameters, its box from the convex hull; derivatives from hodographs, and for a rational curve by Leibniz's rule on W·C = A, C^(k) = (A^(k) − Σ C(k, i)·W^(i)·C^(k−i)) / W, in interval boxes. Conversion to NURBS is the curve itself, exactly. A split inserts the parameter until its multiplicity is the degree (A5.1) and parts the control points there. Reversal negates and reverses the knots, which is exact. A transform maps the control points (affine invariance) with the weights kept.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/nurbs.rs",
+          "guarantees": [
+            "**Certified.** Every enclosure and bound holds the exact value; a split's deviation is the certified rounding of the knot insertion; a transform's is the largest certified error of a control point's image, which bounds the curve's because a NURBS point is a weighted average of its control points with weights `N_i`·`w_i` ≥ 0 (The NURBS Book, P4.3 and P4.4).",
+            "**Exact where the operation is.** Conversion and reversal change no bit (deviation 0).",
+            "**Refused outside the domain.** A parameter or span outside it is an error, never clamped."
+          ],
+          "job": "The NURBS curve kind: `geom-nurbs`'s [`Curve`] under the kind contract.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "The NURBS Book, 2nd ed. (<https://doi.org/10.1007/978-3-642-59223-2>): A3.1, A3.2, A4.2, A5.1, de Casteljau subdivision (section 1.3), hodographs (section 3.3) and affine invariance (P4.10), on `geom-nurbs` (pieces G56 and G59)."
+          },
+          "path": "geom_curve::nurbs",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "none here; each kind's implementation states its own.",
+          "does": "[`ParamCurve`] is the trait chapter 12.1 names for this behaviour, implemented by each kind and by [`CurveKind`], the storage enum with one variant per kind, which dispatches to it. Operations that make a new curve (split, reverse, transform) return a [`CurveKind`], because a transform may change a kind (a non-uniform scale turns a circle into an ellipse, chapter 7), wrapped in `geom-nurbs`'s [`Changed`]: the result and a certified bound on how far it lies from the exact result of the operation on the exact input, 0 when it is exact.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/param.rs",
+          "guarantees": [
+            "**Certified, or refused.** Every bound and enclosure holds the exact value for the curve the stored data define; every [`Changed`] deviation bounds the distance between the returned curve and the exact result. A kind that cannot bound a derivative over a span says [`DerivativeBound::Unbounded`] rather than guess.",
+            "**One family for 2D and 3D.** The trait is generic over the dimension D, so planar and spatial curves share every kind and every rule (chapter 7, principle 8).",
+            "**Closed and exhaustive.** [`CurveKind`] lists every kind built; matching on it is exhaustive, and adding a kind is a new variant (the playbook in `projects/engines/geometry/AGENTS.md`).",
+            "**Typed transforms.** A transform is a `geom-math` [`TypedTransform`]: exact, rational or certified, and the result's deviation accounts for its entries as the variant holds them."
+          ],
+          "job": "The behaviour every curve kind has (chapter 7): evaluation, derivatives, certified enclosures, conservative bounds on the value and its derivatives over any span, conversion to NURBS with an error, split, reverse and transform; and the closed enum that stores every kind.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "the operations of chapter 7 and the trait names proposed in chapter 12.1 (`projects/engines/geometry/architecture/12-intersections.md`); the storage-enum-and-behaviour- trait split chapter 7 decides (\"Storage uses closed enums ... Behaviour uses traits\")."
+          },
+          "path": "geom_curve::param",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-curve",
       "provenance": [],
       "sections": "7, 12.1, 12.4, 17.8, 19.3 and 26.1, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G60, G61, G62, G63, G64, G67, G68, G175, G361, G371.",
+      "status": "the traits, the enum, the NURBS kind and the contract built (G60); the other kinds to come in G61, G62, G63, G64, G67, G68, G175, G361 and G371.",
       "summary": "Spare Kit geometry kernel: every curve kind."
     },
     {
@@ -4359,6 +4516,28 @@
           "target": "lib"
         },
         {
+          "cost": "O(p²·D) interval operations per subdivision; a patch O(p·q·(p + q)·D); one allocation per row of coefficients.",
+          "does": "[`BernsteinCurve::restrict`] gives the Bernstein form of a piece over a sub-span [lo, hi] of its domain, and [`BernsteinPatch::restrict`] of a patch over a sub-box, by de Casteljau subdivision at the sub-span's ends, each a local parameter (t − a)/(b − a) enclosed in an interval. [`BernsteinCurve::value_at`] and [`BernsteinPatch::value_at`] give the homogeneous value and the weight at a parameter, the last point of a subdivision there.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-nurbs/src/restrict.rs",
+          "guarantees": [
+            "**Enclosures of the exact.** Subdivision is linear in the coefficients with weights 1 − s and s; computed with s an interval holding the exact local parameter, and every operation rounded outward, each new coefficient holds the exact coefficient of the exact sub-piece (inclusion monotonicity), so the convex hull bounds of `crate::bernstein` hold for the sub-span.",
+            "**Homogeneous.** Rational forms are cut with their weights as a last coordinate, so the weights of the result are the exact weights of the sub-piece's homogeneous form.",
+            "**Typed refusals.** A sub-span outside the domain, unordered, or a single value, is [`NurbsError::KnotOutside`]; a parameter outside it [`NurbsError::ParameterOutside`]."
+          ],
+          "job": "Bernstein forms cut down to a sub-span and evaluated at a parameter, in interval arithmetic: the de Casteljau steps the kind contract's bounds and enclosures need (piece G60).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "de Casteljau's algorithm and subdivision (The NURBS Book, 2nd ed., section 1.3 and algorithm A1.5, <https://doi.org/10.1007/978-3-642-59223-2>), in interval arithmetic."
+          },
+          "path": "geom_nurbs::restrict",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "construction is linear in the control points and makes one allocation (two if rational). [`Surface::point`] takes O(p² + q² + p·q·D) operations; [`Surface::derivs`] O(p² + q² + du·dv·(p·q·D + du·dv·D)); neither allocates.",
           "does": "a [`Surface`] holds two bases, one per parameter direction, and a net of (n + 1) × (m + 1) control points stored row by row (row i follows u, column j follows v), with weights if it is rational, in homogeneous form w·P as for curves. [`Surface::point`] sums, for each row of the p + 1 rows that matter, the q + 1 points against the v basis, then the rows against the u basis (A3.5, as `NLib` does it), and divides by the weights summed the same way for a rational surface (A4.3). [`Surface::derivs`] does the same with basis derivatives (A3.6) and applies Leibniz's rule to w·S = A for a rational surface (A4.4), for every order k ≤ du in u and l ≤ dv in v.",
           "family": [],
@@ -5198,12 +5377,100 @@
       "job": "Every surface kind, the subdivision limit surface included (the net, its local rules, Stam evaluation and tables): evaluation, bounds, projection, conversion, extension, frame rules, flat maps of developable kinds, Class-A maths, the `ImplicitBound` trait.",
       "kind": "kernel",
       "layer": "2",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "for each parameter pair, a few enclosures and bounds, a split, a reversal and a transform.",
+          "does": "[`check`] runs a kind through the laws of `geom-curve`'s [`Law`], read for surfaces, at the parameter pairs given, and returns the first law broken. As for curves, the laws compare certified objects: enclosures of one exact value must overlap after widening by the stated deviations; the normal bound must keep the sign of every coordinate it decides; doubles must lie in the certified enclosures within a relative 2^−30 (a wrong formula, not rounding).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-surface/src/contract.rs",
+          "guarantees": [
+            "**Sound.** A law reported broken is broken (two certified enclosures of one value that miss each other, a sign the normal bound decides that the exact normal contradicts, or a refusal that did not come).",
+            "**Deterministic.** Parameters in the order given, laws in a fixed order."
+          ],
+          "job": "The kind contract for surfaces: the laws every surface kind must keep, as a check any kind's tests run (`projects/engines/geometry/AGENTS.md`, \"How to add a geometry kind\").",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/1.9780898717716"
+            ],
+            "text": "as `geom-curve`'s contract (chapter 28.2's contract laws, applied to the behaviour of chapter 7), on the inclusion property of interval arithmetic (Moore, Kearfott and Cloud, <https://doi.org/10.1137/1.9780898717716>)."
+          },
+          "path": "geom_surface::contract",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant for a plane: nine interval operations.",
+          "does": "[`ImplicitBound::enclose_box`] gives enclosures of F and of its gradient over a box of points, and whether F is smooth throughout it. `geom-num`'s exact [`Plane`] implements it, F(x) = n·x + d, its first implementor; quadrics and tori come with their kinds (G65) and fields with `geom-field`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-surface/src/implicit.rs",
+          "guarantees": [
+            "**Enclosures.** For every point x of the box, F(x) lies in `value` and ∇F(x) in `gradient`; computed in interval arithmetic rounded outward. A plane's coefficients are integers below 2^126, each held exactly (an integer whose double is not exact is widened by its rounding).",
+            "**Smoothness stated.** `smooth` is true only where F is continuously differentiable over the whole box; a kind that cannot tell says false."
+          ],
+          "job": "Implicit surfaces F(x) = 0 seen through one trait: the interval value and gradient of F over a 3D box (chapter 12.1), so planes, quadrics, tori and fields take part in intersection without `geom-intersect` depending on them.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/1.9780898717716"
+            ],
+            "text": "interval extensions of F and ∇F (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), <https://doi.org/10.1137/1.9780898717716>), the operand form chapter 12.1 gives implicit surfaces."
+          },
+          "path": "geom_surface::implicit",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a bound or enclosure runs Bezier extraction in intervals, O(`s_u`·`s_v`·(p + q)·p·q) for s spans, plus O(p·q·(p + q)) per patch cut; the normal bound three products per patch; a split O(n·m); a reversal or transform O(n·m).",
+          "does": "implements [`ParamSurface`] for [`Surface`]. Points and partials are A3.5, A3.6 and A4.4 (`geom-nurbs`). Enclosures and bounds come from the surface's Bernstein patches in interval arithmetic (piece G59): the patch holding (u, v), or each patch meeting the box cut down to it, its box from the convex hull; partials from the patch's partial forms, and for a rational surface `S_d` = (`A_d`·W − A·`W_d`) / W². The normal bound is the hull of the normal patches (`Surface::normal_patches`, collapsed edges divided out) cut down to the box. Conversion to NURBS is the surface itself. A split inserts the parameter until its multiplicity is the degree in that direction and parts the net; a reversal negates and reverses one knot vector; a transform maps the control points with the weights kept.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-surface/src/nurbs.rs",
+          "guarantees": [
+            "**Certified.** Every enclosure and bound holds the exact value; a split's deviation is the certified rounding of the knot insertion; a transform's the largest certified error of a control point's image (a surface point is a weighted average of its control points).",
+            "**Exact where the operation is.** Conversion and reversal change no bit; a grid transform of control points whose images are exact reports 0.",
+            "**Refused outside the domain.** Never clamped."
+          ],
+          "job": "The NURBS surface kind: `geom-nurbs`'s [`Surface`] under the kind contract.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/978-3-642-59223-2",
+              "https://doi.org/10.1016/0167-8396(88"
+            ],
+            "text": "The NURBS Book, 2nd ed. (<https://doi.org/10.1007/978-3-642-59223-2>): A3.5, A3.6, A4.4, A5.3, de Casteljau subdivision and affine invariance, on `geom-nurbs` (G56, G59) and the normal patch of Sederberg and Meyers (<https://doi.org/10.1016/0167-8396(88)90029-5>)."
+          },
+          "path": "geom_surface::nurbs",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "none here; each kind's implementation states its own.",
+          "does": "[`ParamSurface`] is the trait chapter 12.1 names: evaluation, first partial derivatives, certified enclosures, conservative bounds on the value and the partials over any parameter box, a bound on the normals' directions (the Gauss map), conversion to NURBS with an error, split, reverse and transform. [`SurfaceKind`] is the storage enum, one variant per kind, which dispatches to it. New surfaces come back as [`SurfaceKind`] inside `geom-nurbs`'s [`Changed`], with a certified bound on their distance from the exact result. Errors are `geom-curve`'s [`CurveError`], shared by every kind (a span there is a box here).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-surface/src/param.rs",
+          "guarantees": [
+            "**Certified, or refused.** Every bound and enclosure holds the exact value for the surface the stored data define; a derivative that cannot be bounded over a box is [`DerivativeBound::Unbounded`], and the normal bound then still bounds the directions.",
+            "**Closed and exhaustive.** Matching on [`SurfaceKind`] is exhaustive; a new kind is a new variant (the playbook in `projects/engines/geometry/AGENTS.md`).",
+            "**Trimming is not here.** A surface kind is a carrier; trimming belongs to the topology's loops (chapter 7)."
+          ],
+          "job": "The behaviour every surface kind has (chapter 7), and the closed enum that stores every kind.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "the operations of chapter 7 and the trait names of chapter 12.1 (`projects/engines/geometry/architecture/12-intersections.md`), with the normal bound in place of an unbounded derivative as chapter 12.1 asks."
+          },
+          "path": "geom_surface::param",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-surface",
       "provenance": [],
       "sections": "7, 12.1, 13 (introduction), 13.9, 16.1, 16.5, 16.6, 19.3 and 26.1, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G60, G65, G66, G67, G68, G253, G254, G260, G264, G315, G316, G317, G318, G470.",
+      "status": "the traits, the enum, the NURBS kind, `ImplicitBound` and the contract built (G60); the other kinds to come in G65, G66, G67, G68, G253, G254, G260, G264, G315, G316, G317, G318 and G470.",
       "summary": "Spare Kit geometry kernel: every surface kind."
     },
     {
