@@ -93,9 +93,10 @@
 //! double or pair of them. `square` is proven for every finite double whose significand has at
 //! most 14 bits: squaring a symbolic 53-bit significand ran past CI's hour. `div` is proven for every finite dividend over six
 //! divisors: ±0, refused; the smallest subnormal, whose quotients overflow; the largest double,
-//! whose quotients underflow; and 3 and −0.1, inexact of either sign. Over every divisor at once
-//! the solver ran past CI's hour (four corner quotients, each a 53-bit division). Every other
-//! divisor is tested (`tests/attack2_interval.rs`).
+//! whose quotients underflow; and 3 and −0.1, inexact of either sign; one harness per divisor,
+//! with kissat as the SAT solver. Over every divisor at once, or the six in one harness, the
+//! solver ran past CI's hour (four corner quotients, each a 53-bit division). Every other divisor
+//! is tested (`tests/attack2_interval.rs`).
 //!
 //! Method: interval arithmetic in round-to-nearest with outward widening, as in Geogram's
 //! `intervalRN` (after Harris) and in CGAL's widening with `nextafter` when it cannot change the
@@ -787,28 +788,64 @@ mod proofs {
         }
     }
 
-    /// The divisors `div` is proven over (the module header says why those): ±0, the smallest
-    /// subnormal, the largest double, 3 and −0.1.
-    const DIVISORS: [f64; 6] = [0.0, -0.0, f64::from_bits(1), f64::MAX, 3.0, -0.1];
-
     /// `div` encloses the rounded quotient whenever the divisor does not contain zero, and
-    /// refuses when it does, for every finite dividend over [`DIVISORS`].
-    #[kani::proof]
-    fn div_encloses_or_refuses_a_divisor_with_zero() {
+    /// refuses when it does, for every finite dividend and the divisor `y`; proven for the six
+    /// divisors the module header names, one harness each (kissat as the SAT solver).
+    fn div_law(y: f64) {
         let x = finite();
-        for y in DIVISORS {
-            let (a, b) = (Interval::point(x).unwrap(), Interval::point(y).unwrap());
-            match a.div(b) {
-                Ok(r) => {
-                    assert!(y != 0.0 && r.lo() <= r.hi());
-                    let rounded = x / y;
-                    if rounded.is_finite() {
-                        assert!(r.contains(rounded));
-                    }
+        let (a, b) = (Interval::point(x).unwrap(), Interval::point(y).unwrap());
+        match a.div(b) {
+            Ok(r) => {
+                assert!(y != 0.0 && r.lo() <= r.hi());
+                let rounded = x / y;
+                if rounded.is_finite() {
+                    assert!(r.contains(rounded));
                 }
-                Err(e) => assert!(y == 0.0 || e != NumError::DivisorContainsZero),
             }
+            Err(e) => assert!(y == 0.0 || e != NumError::DivisorContainsZero),
         }
+    }
+
+    /// [`div_law`] with +0: refused.
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn div_by_zero_is_refused() {
+        div_law(0.0);
+    }
+
+    /// [`div_law`] with −0: refused.
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn div_by_minus_zero_is_refused() {
+        div_law(-0.0);
+    }
+
+    /// [`div_law`] with the smallest subnormal, whose quotients overflow.
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn div_by_the_smallest_subnormal() {
+        div_law(f64::from_bits(1));
+    }
+
+    /// [`div_law`] with the largest double, whose quotients underflow.
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn div_by_the_largest_double() {
+        div_law(f64::MAX);
+    }
+
+    /// [`div_law`] with 3: inexact positive quotients.
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn div_by_three() {
+        div_law(3.0);
+    }
+
+    /// [`div_law`] with −0.1: inexact negative quotients.
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn div_by_minus_a_tenth() {
+        div_law(-0.1);
     }
 
     /// `square` of a point is never negative and encloses the rounded square, for every finite

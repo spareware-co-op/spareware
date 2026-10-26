@@ -173,10 +173,30 @@ jobs:
       matrix:
         proof:
           - eft::proofs::split_adds_back_exactly
-          - eft::proofs::two_prod_is_the_rounded_product_and_its_error
-          - eft::proofs::two_sum_is_the_rounded_sum_and_its_error
-          - exact_sum::proofs::a_term_and_its_negation_cancel
-          - exact_sum::proofs::one_term_rounds_back_to_itself
+          - eft::proofs::two_prod_with_minus_a_tenth
+          - eft::proofs::two_prod_with_the_largest_double
+          - eft::proofs::two_prod_with_the_smallest_subnormal
+          - eft::proofs::two_prod_with_the_splitter
+          - eft::proofs::two_prod_with_three
+          - eft::proofs::two_prod_with_two_pow_996
+          - eft::proofs::two_sum_with_minus_a_tenth
+          - eft::proofs::two_sum_with_the_largest_double
+          - eft::proofs::two_sum_with_the_smallest_subnormal
+          - eft::proofs::two_sum_with_three
+          - eft::proofs::two_sum_with_two_pow_53
+          - exact_sum::proofs::a_non_finite_term_is_reported
+          - exact_sum::proofs::a_term_and_its_negation_cancel_in_binade_31
+          - exact_sum::proofs::a_term_and_its_negation_cancel_in_binade_32
+          - exact_sum::proofs::a_term_and_its_negation_cancel_in_one_s_binade
+          - exact_sum::proofs::a_term_and_its_negation_cancel_in_the_largest_binade
+          - exact_sum::proofs::a_term_and_its_negation_cancel_in_the_smallest_binade
+          - exact_sum::proofs::a_term_and_its_negation_cancel_in_the_subnormals
+          - exact_sum::proofs::one_term_rounds_back_in_binade_31
+          - exact_sum::proofs::one_term_rounds_back_in_binade_32
+          - exact_sum::proofs::one_term_rounds_back_in_one_s_binade
+          - exact_sum::proofs::one_term_rounds_back_in_the_largest_binade
+          - exact_sum::proofs::one_term_rounds_back_in_the_smallest_binade
+          - exact_sum::proofs::one_term_rounds_back_in_the_subnormals
           - exactness::proofs::combine_keeps_the_less_exact_class
           - exactness::proofs::within_never_panics_and_respects_the_ceiling
           - grid::proofs::coarsen_is_nearest_and_reported
@@ -186,7 +206,12 @@ jobs:
           - grid::proofs::refine_is_exact_or_refused
           - grid::proofs::steps_refine_is_exact_or_none
           - interval::proofs::add_sub_mul_enclose_the_rounded_result
-          - interval::proofs::div_encloses_or_refuses_a_divisor_with_zero
+          - interval::proofs::div_by_minus_a_tenth
+          - interval::proofs::div_by_minus_zero_is_refused
+          - interval::proofs::div_by_the_largest_double
+          - interval::proofs::div_by_the_smallest_subnormal
+          - interval::proofs::div_by_three
+          - interval::proofs::div_by_zero_is_refused
           - interval::proofs::new_accepts_exactly_ordered_finite_bounds
           - interval::proofs::square_is_never_negative_and_encloses
           - ladder::proofs::quarter_nm_always_answers_exactly
