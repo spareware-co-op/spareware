@@ -11,6 +11,17 @@ description = "Spare Kit geometry kernel: deterministic dense and sparse linear 
 # in engine-geometry (tests/scaffold).
 geom-num = { path = "../geom-num" }
 
+[dev-dependencies]
+# The exact oracle of the tests (piece G49): big integers and rationals, never linked into the
+# kernel. MIT OR Apache-2.0; the versions geom-num's tests use, without default features.
+dashu-int = { version = "0.6.2", default-features = false, features = ["std"] }
+dashu-ratio = { version = "0.6.1", default-features = false, features = ["std"] }
+
+# The 256-unknown pivoted QR benchmark (piece G49), with the standard library's clock only.
+[[bench]]
+name = "qr"
+harness = false
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"
