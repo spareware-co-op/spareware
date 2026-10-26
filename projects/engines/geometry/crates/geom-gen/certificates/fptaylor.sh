@@ -48,8 +48,10 @@ for problem in "$@"; do
   expression=$(sed -n '/^Expressions/,$ s/^ *\([a-z_0-9]*\) *=.*/\1/p' "$problem" | head -n 1)
   bound=$(sed -n 's|^// hol-light-bound: ||p' "$problem")
   [ -n "$expression" ] && [ -n "$bound" ] || { echo "$problem: no expression or bound"; exit 1; }
+  # The problem's absolute path, found before FPTaylor runs in its own folder.
+  path="$(cd "$(dirname "$problem")" && pwd)/$(basename "$problem")"
   echo "::group::FPTaylor on $name"
-  (cd "$run" && "$work/FPTaylor/fptaylor" -c fptaylor.cfg "$(cd "$(dirname "$problem")" && pwd)/$(basename "$problem")")
+  (cd "$run" && "$work/FPTaylor/fptaylor" -c fptaylor.cfg "$path")
   echo "::endgroup::"
   checks+=("$run/proofs|$expression|$bound|$name")
 done
