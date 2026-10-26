@@ -47,7 +47,9 @@ fn curves() -> Vec<Curve<3>> {
                     })
                     .collect();
                 out.push(Curve::new(basis.clone(), &points).unwrap());
-                let weights: Vec<f64> = (0..basis.count()).map(|_| 0.25 + rng.unit() * 4.0).collect();
+                let weights: Vec<f64> = (0..basis.count())
+                    .map(|_| 0.25 + rng.unit() * 4.0)
+                    .collect();
                 out.push(Curve::new_rational(basis, &points, &weights).unwrap());
             }
         }
@@ -141,14 +143,21 @@ fn points_are_within_their_bound() {
     let mut rng = Lcg(11);
     for curve in curves() {
         let p = curve.degree();
-        let factor = if curve.is_rational() { gamma(14 * p + 3) } else { gamma(7 * p + 1) };
+        let factor = if curve.is_rational() {
+            gamma(14 * p + 3)
+        } else {
+            gamma(7 * p + 1)
+        };
         for u in parameters(&curve, &mut rng, 10) {
             for limit in LIMITS {
                 let c = curve.point(u, limit).unwrap();
                 let (e, m) = exact(&curve, u, limit, 0);
                 for d in 0..3 {
                     let bound = &factor * &m[0][d];
-                    assert!(within(c[d], &e[0][d], &bound), "degree {p}, u {u}, coordinate {d}");
+                    assert!(
+                        within(c[d], &e[0][d], &bound),
+                        "degree {p}, u {u}, coordinate {d}"
+                    );
                 }
             }
         }
@@ -198,8 +207,14 @@ fn clamped_ends_are_the_end_points() {
         let (lo, hi) = curve.basis().domain();
         let last = curve.homogeneous().len() - 1;
         for limit in LIMITS {
-            assert_eq!(curve.point(lo, limit).unwrap(), curve.control_point(0).unwrap());
-            assert_eq!(curve.point(hi, limit).unwrap(), curve.control_point(last).unwrap());
+            assert_eq!(
+                curve.point(lo, limit).unwrap(),
+                curve.control_point(0).unwrap()
+            );
+            assert_eq!(
+                curve.point(hi, limit).unwrap(),
+                curve.control_point(last).unwrap()
+            );
         }
     }
 }
@@ -208,7 +223,10 @@ fn clamped_ends_are_the_end_points() {
 fn derivative_curves_are_the_derivatives() {
     let mut rng = Lcg(13);
     let mut meter = WorkMeter::new(Budget::UNLIMITED);
-    for curve in curves().into_iter().filter(|c| !c.is_rational() && c.degree() >= 2) {
+    for curve in curves()
+        .into_iter()
+        .filter(|c| !c.is_rational() && c.degree() >= 2)
+    {
         let p = curve.degree();
         for k in 1..p {
             let der = match curve.derivative_curve(k, &mut meter) {
@@ -258,7 +276,10 @@ fn difference_points(curve: &Curve<3>, k: usize) -> (Vec<[Q; 3]>, Vec<[Q; 3]>) {
         .iter()
         .map(|r| [q(r[0]), q(r[1]), q(r[2])])
         .collect();
-    let mut mags: Vec<[Q; 3]> = pts.iter().map(|r| [abs(&r[0]), abs(&r[1]), abs(&r[2])]).collect();
+    let mut mags: Vec<[Q; 3]> = pts
+        .iter()
+        .map(|r| [abs(&r[0]), abs(&r[1]), abs(&r[2])])
+        .collect();
     let n = pts.len();
     for level in 1..=k {
         for i in 0..n - level {
@@ -281,7 +302,10 @@ fn construction_refuses_bad_points_and_weights() {
     assert!(Curve::new(basis.clone(), &pts).is_ok());
     assert_eq!(
         Curve::new(basis.clone(), &pts[..3]).unwrap_err(),
-        NurbsError::PointCount { points: 3, expected: 4 }
+        NurbsError::PointCount {
+            points: 3,
+            expected: 4
+        }
     );
     let mut bad = pts;
     bad[2][1] = f64::NAN;
@@ -299,7 +323,10 @@ fn construction_refuses_bad_points_and_weights() {
     );
     assert_eq!(
         Curve::new_rational(basis.clone(), &pts, &[1.0, 1.0, 1.0]).unwrap_err(),
-        NurbsError::PointCount { points: 3, expected: 4 }
+        NurbsError::PointCount {
+            points: 3,
+            expected: 4
+        }
     );
     let huge = [[0.0, 0.0], [1e308, 0.0], [3.0, 1.0], [4.0, 0.0]];
     assert_eq!(
@@ -307,8 +334,12 @@ fn construction_refuses_bad_points_and_weights() {
         NurbsError::PointNotFinite { index: 1 }
     );
     assert_eq!(
-        Curve::from_homogeneous(basis, pts.to_vec(), Some(vec![1.0, 1.0, f64::INFINITY, 1.0]))
-            .unwrap_err(),
+        Curve::from_homogeneous(
+            basis,
+            pts.to_vec(),
+            Some(vec![1.0, 1.0, f64::INFINITY, 1.0])
+        )
+        .unwrap_err(),
         NurbsError::Weight { index: 2 }
     );
 }
@@ -321,7 +352,11 @@ fn geom_math_points_go_in_and_come_out() {
     let curve = Curve::new(basis.clone(), &[a, b]).unwrap();
     let mid = F3::from_coords(curve.point(0.5, Limit::FromRight).unwrap()).unwrap();
     assert_eq!(mid, F3::new(2.0, 2.0, 2.0).unwrap());
-    let flat = Curve::new(basis, &[F2::new(0.0, 1.0).unwrap(), F2::new(2.0, 3.0).unwrap()]).unwrap();
+    let flat = Curve::new(
+        basis,
+        &[F2::new(0.0, 1.0).unwrap(), F2::new(2.0, 3.0).unwrap()],
+    )
+    .unwrap();
     assert_eq!(flat.point(0.25, Limit::FromLeft).unwrap(), [0.5, 1.5]);
 }
 
@@ -330,11 +365,17 @@ fn evaluation_errors_are_typed() {
     let basis = Basis::new(2, vec![0.0, 0.0, 0.0, 1.0, 2.0, 2.0, 2.0]).unwrap();
     let pts = [[0.0, 0.0], [1.0, 2.0], [3.0, 1.0], [4.0, 0.0]];
     let curve = Curve::new(basis.clone(), &pts).unwrap();
-    assert_eq!(curve.point(2.5, Limit::FromRight), Err(NurbsError::ParameterOutside));
-    assert_eq!(curve.derivs(0.5, Limit::FromRight, &mut []), Err(NurbsError::BufferLength {
-        given: 0,
-        needed: 1
-    }));
+    assert_eq!(
+        curve.point(2.5, Limit::FromRight),
+        Err(NurbsError::ParameterOutside)
+    );
+    assert_eq!(
+        curve.derivs(0.5, Limit::FromRight, &mut []),
+        Err(NurbsError::BufferLength {
+            given: 0,
+            needed: 1
+        })
+    );
     let mut long = vec![[0.0; 2]; 30];
     assert_eq!(
         curve.derivs(0.5, Limit::FromRight, &mut long),
@@ -347,12 +388,25 @@ fn evaluation_errors_are_typed() {
     );
     assert_eq!(curve.derivative_curve(0, &mut meter).unwrap(), curve);
     let rational = Curve::new_rational(basis, &pts, &[1.0, 2.0, 1.0, 1.0]).unwrap();
-    assert_eq!(rational.derivative_curve(1, &mut meter).unwrap_err(), NurbsError::Rational);
+    assert_eq!(
+        rational.derivative_curve(1, &mut meter).unwrap_err(),
+        NurbsError::Rational
+    );
     // A derivative curve across a jump of its lower derivative does not exist.
     let c0 = Basis::new(2, vec![0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 2.0, 2.0, 2.0]).unwrap();
-    let pts5 = [[0.0, 0.0], [1.0, 2.0], [3.0, 1.0], [4.0, 0.0], [5.0, 5.0], [6.0, 1.0]];
+    let pts5 = [
+        [0.0, 0.0],
+        [1.0, 2.0],
+        [3.0, 1.0],
+        [4.0, 0.0],
+        [5.0, 5.0],
+        [6.0, 1.0],
+    ];
     let jump = Curve::new(c0, &pts5).unwrap();
-    assert_eq!(jump.derivative_curve(1, &mut meter).unwrap_err(), NurbsError::Discontinuous);
+    assert_eq!(
+        jump.derivative_curve(1, &mut meter).unwrap_err(),
+        NurbsError::Discontinuous
+    );
     // A meter with no work left stops it before it allocates.
     let mut empty = WorkMeter::new(Budget::new(0, u64::MAX));
     assert!(matches!(

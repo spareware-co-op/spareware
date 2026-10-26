@@ -69,11 +69,11 @@ use alloc::vec::Vec;
 
 use geom_run::WorkMeter;
 
+use crate::NurbsError;
 use crate::basis::{Basis, Limit, MAX_DEGREE, WIDTH};
 use crate::budget::{charge, vec_for};
 use crate::index::{add, at, get, mul, real, set, sub};
 use crate::point::Point;
-use crate::NurbsError;
 
 /// A NURBS curve of dimension `D`: a basis and its control points, weighted if rational.
 #[derive(Clone, Debug, PartialEq)]
@@ -160,10 +160,7 @@ impl<const D: usize> Curve<D> {
             }
             check_weights(w)?;
         }
-        if let Some(index) = points
-            .iter()
-            .position(|p| !p.iter().all(|x| x.is_finite()))
-        {
+        if let Some(index) = points.iter().position(|p| !p.iter().all(|x| x.is_finite())) {
             return Err(NurbsError::PointNotFinite { index });
         }
         Ok(Curve {
@@ -358,7 +355,10 @@ impl<const D: usize> Curve<D> {
         }
         tw.truncate(sub(count, k)?);
         let mut kv = vec_for(meter, knots)?;
-        kv.extend_from_slice(u_.get(k..k.saturating_add(knots)).ok_or(NurbsError::Defect)?);
+        kv.extend_from_slice(
+            u_.get(k..k.saturating_add(knots))
+                .ok_or(NurbsError::Defect)?,
+        );
         let basis = Basis::new(sub(p, k)?, kv)?;
         if !tw.iter().all(|q| q.iter().all(|x| x.is_finite())) {
             return Err(NurbsError::NotFinite);

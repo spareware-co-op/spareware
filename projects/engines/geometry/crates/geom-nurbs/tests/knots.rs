@@ -41,7 +41,13 @@ fn curves(seed: u64, clamped_only: bool) -> Vec<Curve<3>> {
                 let n = p + 2 + rng.below(5);
                 let basis = Basis::new(p, knots(&mut rng, p, n, clamped, kind)).unwrap();
                 let points: Vec<[f64; 3]> = (0..basis.count())
-                    .map(|_| [rng.unit() * 20.0 - 10.0, rng.unit() * 1e-3, rng.unit() * 500.0])
+                    .map(|_| {
+                        [
+                            rng.unit() * 20.0 - 10.0,
+                            rng.unit() * 1e-3,
+                            rng.unit() * 500.0,
+                        ]
+                    })
                     .collect();
                 out.push(Curve::new(basis.clone(), &points).unwrap());
                 let w: Vec<f64> = (0..basis.count()).map(|_| 0.3 + rng.unit() * 3.0).collect();
@@ -77,7 +83,13 @@ fn same_curve(old: &Curve<3>, new: &Curve<3>, deviation: f64, rng: &mut Lcg) {
     assert!(deviation.is_finite() && deviation >= 0.0);
     let (lo, hi) = old.basis().domain();
     assert_eq!(new.basis().domain(), (lo, hi));
-    let mut us: Vec<f64> = new.basis().knots().iter().copied().filter(|&k| lo <= k && k <= hi).collect();
+    let mut us: Vec<f64> = new
+        .basis()
+        .knots()
+        .iter()
+        .copied()
+        .filter(|&k| lo <= k && k <= hi)
+        .collect();
     for _ in 0..6 {
         us.push(lo + (hi - lo) * rng.unit());
     }
@@ -90,7 +102,10 @@ fn same_curve(old: &Curve<3>, new: &Curve<3>, deviation: f64, rng: &mut Lcg) {
             let diff = &a[d] - &b[d];
             d2 += &diff * &diff;
         }
-        assert!(d2 <= dev2, "u {u}: the curves differ by more than {deviation}");
+        assert!(
+            d2 <= dev2,
+            "u {u}: the curves differ by more than {deviation}"
+        );
     }
 }
 
@@ -161,7 +176,10 @@ fn a_priori(curve: &Curve<3>, new: &Curve<3>, x: &[f64]) {
             } else {
                 continue;
             };
-            assert!(abs(&(q(value) - &pts[i][d])) <= bound, "point {i}, coordinate {d}");
+            assert!(
+                abs(&(q(value) - &pts[i][d])) <= bound,
+                "point {i}, coordinate {d}"
+            );
         }
     }
 }
@@ -200,7 +218,9 @@ fn refinement_keeps_the_curve() {
     for curve in curves(0x002e_f14e, false) {
         let p = curve.degree();
         let (lo, hi) = curve.basis().domain();
-        let mut x: Vec<f64> = (0..1 + rng.below(6)).map(|_| lo + (hi - lo) * (0.01 + 0.98 * rng.unit())).collect();
+        let mut x: Vec<f64> = (0..1 + rng.below(6))
+            .map(|_| lo + (hi - lo) * (0.01 + 0.98 * rng.unit()))
+            .collect();
         // A repeated new value and the existing interior knots (where they leave room).
         let extra = x[0];
         x.push(extra);
@@ -230,7 +250,12 @@ fn refinement_keeps_the_curve() {
             one = step.value;
         }
         assert_eq!(one.basis().knots(), out.value.basis().knots());
-        same_curve(&out.value, &one, out.deviation + total * 1.000_001, &mut rng);
+        same_curve(
+            &out.value,
+            &one,
+            out.deviation + total * 1.000_001,
+            &mut rng,
+        );
     }
 }
 
@@ -239,16 +264,23 @@ fn deviations_are_rounding_sized() {
     // An exact operation's deviation is a few units in the last place of the coordinates.
     for curve in curves(0x0d0e, false) {
         let (lo, hi) = curve.basis().domain();
-        let out = curve.insert_knot(lo + (hi - lo) * 0.37, 1, &mut meter()).unwrap();
+        let out = curve
+            .insert_knot(lo + (hi - lo) * 0.37, 1, &mut meter())
+            .unwrap();
         let scale = curve
             .homogeneous()
             .iter()
             .flat_map(|r| r.iter().map(|x| x.abs()))
             .fold(0.0_f64, |a, b| if b > a { b } else { a });
         let weights = curve.weights().map_or(1.0, |ws| {
-            ws.iter().fold(f64::INFINITY, |a, &b| if b < a { b } else { a })
+            ws.iter()
+                .fold(f64::INFINITY, |a, &b| if b < a { b } else { a })
         });
-        assert!(out.deviation <= 1e-12 * (1.0 + scale) / weights, "{}", out.deviation);
+        assert!(
+            out.deviation <= 1e-12 * (1.0 + scale) / weights,
+            "{}",
+            out.deviation
+        );
     }
 }
 
@@ -258,16 +290,34 @@ fn knots_outside_or_out_of_order_are_refused() {
     let curve = Curve::new(basis, &[[0.0, 0.0], [1.0, 2.0], [3.0, 1.0], [4.0, 0.0]]).unwrap();
     let mut m = meter();
     for u in [0.0, 2.0, -1.0, 3.0, f64::NAN] {
-        assert_eq!(curve.insert_knot(u, 1, &mut m).unwrap_err(), NurbsError::KnotOutside);
-        assert_eq!(curve.refine(&[u], &mut m).unwrap_err(), NurbsError::KnotOutside);
+        assert_eq!(
+            curve.insert_knot(u, 1, &mut m).unwrap_err(),
+            NurbsError::KnotOutside
+        );
+        assert_eq!(
+            curve.refine(&[u], &mut m).unwrap_err(),
+            NurbsError::KnotOutside
+        );
     }
-    assert_eq!(curve.refine(&[1.5, 0.5], &mut m).unwrap_err(), NurbsError::KnotOutside);
-    assert_eq!(curve.refine(&[1.0, 1.0], &mut m).unwrap_err(), NurbsError::TooManyKnots);
-    assert_eq!(curve.refine(&[0.5, 0.5, 0.5], &mut m).unwrap_err(), NurbsError::TooManyKnots);
+    assert_eq!(
+        curve.refine(&[1.5, 0.5], &mut m).unwrap_err(),
+        NurbsError::KnotOutside
+    );
+    assert_eq!(
+        curve.refine(&[1.0, 1.0], &mut m).unwrap_err(),
+        NurbsError::TooManyKnots
+    );
+    assert_eq!(
+        curve.refine(&[0.5, 0.5, 0.5], &mut m).unwrap_err(),
+        NurbsError::TooManyKnots
+    );
     assert!(curve.refine(&[0.5, 0.5, 1.0], &mut m).is_ok());
     assert_eq!(curve.refine(&[], &mut m).unwrap().value, curve);
     let mut empty = WorkMeter::new(Budget::new(3, u64::MAX));
-    assert!(matches!(curve.insert_knot(0.5, 1, &mut empty), Err(NurbsError::Stopped(_))));
+    assert!(matches!(
+        curve.insert_knot(0.5, 1, &mut empty),
+        Err(NurbsError::Stopped(_))
+    ));
 }
 
 /// Checks that `piece` is `old` on its own domain within `deviation`.
@@ -276,7 +326,11 @@ fn same_on_piece(old: &Curve<3>, piece: &Curve<3>, deviation: f64, rng: &mut Lcg
     let dev2 = q(deviation) * q(deviation);
     for u in [a, b, a + (b - a) * rng.unit(), a + (b - a) * rng.unit()] {
         // At the piece's right end, the old curve is taken from the left.
-        let table_limit = if u == b { Limit::FromLeft } else { Limit::FromRight };
+        let table_limit = if u == b {
+            Limit::FromLeft
+        } else {
+            Limit::FromRight
+        };
         let x = exact_point_limit(old, u, table_limit);
         let y = exact_point(piece, u);
         let mut d2 = zero();
@@ -284,7 +338,10 @@ fn same_on_piece(old: &Curve<3>, piece: &Curve<3>, deviation: f64, rng: &mut Lcg
             let diff = &x[d] - &y[d];
             d2 += &diff * &diff;
         }
-        assert!(d2 <= dev2, "u {u}: the piece differs by more than {deviation}");
+        assert!(
+            d2 <= dev2,
+            "u {u}: the piece differs by more than {deviation}"
+        );
     }
 }
 
@@ -322,7 +379,11 @@ fn bezier_pieces_are_the_curve() {
         // Without interior knots of multiplicity p + 1, the pieces are the exact refinement's
         // points, p apart, within γ_(10t)·M.
         let (lo, hi) = curve.basis().domain();
-        let interior: Vec<f64> = distinct.iter().copied().filter(|&k| lo < k && k < hi).collect();
+        let interior: Vec<f64> = distinct
+            .iter()
+            .copied()
+            .filter(|&k| lo < k && k < hi)
+            .collect();
         if interior.iter().all(|&k| curve.basis().multiplicity(k) <= p) {
             let mut x = Vec::new();
             for &k in &interior {
@@ -346,8 +407,14 @@ fn bezier_pieces_are_the_curve() {
             }
         }
     }
-    let unclamped = curves(7, false).into_iter().find(|c| !c.basis().is_clamped()).unwrap();
-    assert_eq!(unclamped.to_bezier(&mut meter()).unwrap_err(), NurbsError::NotClamped);
+    let unclamped = curves(7, false)
+        .into_iter()
+        .find(|c| !c.basis().is_clamped())
+        .unwrap();
+    assert_eq!(
+        unclamped.to_bezier(&mut meter()).unwrap_err(),
+        NurbsError::NotClamped
+    );
 }
 
 #[test]
@@ -387,10 +454,19 @@ fn elevation_keeps_the_curve() {
     }
     let basis = Basis::new(3, vec![0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0]).unwrap();
     let c = Curve::new(basis, &[[0.0; 2], [1.0, 1.0], [2.0, 1.0], [3.0, 0.0]]).unwrap();
-    assert_eq!(c.elevate(26, &mut meter()).unwrap_err(), NurbsError::Degree { degree: 29 });
+    assert_eq!(
+        c.elevate(26, &mut meter()).unwrap_err(),
+        NurbsError::Degree { degree: 29 }
+    );
     assert_eq!(c.elevate(0, &mut meter()).unwrap().value, c);
-    let unclamped = curves(7, false).into_iter().find(|c| !c.basis().is_clamped()).unwrap();
-    assert_eq!(unclamped.elevate(1, &mut meter()).unwrap_err(), NurbsError::NotClamped);
+    let unclamped = curves(7, false)
+        .into_iter()
+        .find(|c| !c.basis().is_clamped())
+        .unwrap();
+    assert_eq!(
+        unclamped.elevate(1, &mut meter()).unwrap_err(),
+        NurbsError::NotClamped
+    );
 }
 
 #[test]
@@ -408,7 +484,9 @@ fn removing_an_inserted_knot_gives_the_curve_back() {
             .iter()
             .flat_map(|r| r.iter().map(|x| x.abs()))
             .fold(1.0_f64, |a, b| if b > a { b } else { a });
-        let (out, removed) = inserted.remove_knot(u, 1, 1e-9 * scale, &mut meter()).unwrap();
+        let (out, removed) = inserted
+            .remove_knot(u, 1, 1e-9 * scale, &mut meter())
+            .unwrap();
         assert_eq!(removed, 1, "degree {}", curve.degree());
         assert_eq!(out.value.basis().knots(), curve.basis().knots());
         assert!(out.deviation <= 1e-9 * scale);
@@ -422,9 +500,12 @@ fn removal_keeps_within_the_tolerance() {
     for curve in curves(0x0005_2e3b, false) {
         let p = curve.degree();
         let (lo, hi) = curve.basis().domain();
-        let Some(&u) = curve.basis().knots().iter().find(|&&k| {
-            lo < k && k < hi && curve.basis().multiplicity(k) <= p
-        }) else {
+        let Some(&u) = curve
+            .basis()
+            .knots()
+            .iter()
+            .find(|&&k| lo < k && k < hi && curve.basis().multiplicity(k) <= p)
+        else {
             continue;
         };
         let s = curve.basis().multiplicity(u);
@@ -455,14 +536,23 @@ fn removal_refuses_what_it_cannot_remove() {
     let curve = Curve::new(basis, &[[0.0, 0.0], [1.0, 2.0], [3.0, 1.0], [4.0, 0.0]]).unwrap();
     let mut m = meter();
     for tol in [-1.0, f64::NAN, f64::INFINITY] {
-        assert_eq!(curve.remove_knot(1.0, 1, tol, &mut m).unwrap_err(), NurbsError::Tolerance);
+        assert_eq!(
+            curve.remove_knot(1.0, 1, tol, &mut m).unwrap_err(),
+            NurbsError::Tolerance
+        );
     }
     for u in [0.0, 2.0, 0.5, f64::NAN] {
-        assert_eq!(curve.remove_knot(u, 1, 1.0, &mut m).unwrap_err(), NurbsError::KnotOutside);
+        assert_eq!(
+            curve.remove_knot(u, 1, 1.0, &mut m).unwrap_err(),
+            NurbsError::KnotOutside
+        );
     }
     let jump = Basis::new(1, vec![0.0, 0.0, 1.0, 1.0, 2.0, 2.0]).unwrap();
     let c = Curve::new(jump, &[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [2.0, 1.0]]).unwrap();
-    assert_eq!(c.remove_knot(1.0, 1, 1.0, &mut m).unwrap_err(), NurbsError::Discontinuous);
+    assert_eq!(
+        c.remove_knot(1.0, 1, 1.0, &mut m).unwrap_err(),
+        NurbsError::Discontinuous
+    );
     let (same, removed) = curve.remove_knot(1.0, 0, 1.0, &mut m).unwrap();
     assert_eq!((same.value, removed), (curve, 0));
 }
@@ -531,11 +621,26 @@ fn reduction_is_certified_or_refused() {
                 assert_eq!(out.value.degree(), p - 1);
                 same_curve(&curve, &out.value, out.deviation, &mut rng);
             }
-            Err(e) => assert!(curve.is_rational() && e == NurbsError::OutsideTolerance, "{e}"),
+            Err(e) => assert!(
+                curve.is_rational() && e == NurbsError::OutsideTolerance,
+                "{e}"
+            ),
         }
     }
-    let unclamped = curves(7, false).into_iter().find(|c| !c.basis().is_clamped() && c.degree() > 1).unwrap();
-    assert_eq!(unclamped.reduce_degree(1.0, &mut meter()).unwrap_err(), NurbsError::NotClamped);
-    let any = curves(8, true).into_iter().find(|c| c.degree() > 1).unwrap();
-    assert_eq!(any.reduce_degree(f64::NAN, &mut meter()).unwrap_err(), NurbsError::Tolerance);
+    let unclamped = curves(7, false)
+        .into_iter()
+        .find(|c| !c.basis().is_clamped() && c.degree() > 1)
+        .unwrap();
+    assert_eq!(
+        unclamped.reduce_degree(1.0, &mut meter()).unwrap_err(),
+        NurbsError::NotClamped
+    );
+    let any = curves(8, true)
+        .into_iter()
+        .find(|c| c.degree() > 1)
+        .unwrap();
+    assert_eq!(
+        any.reduce_degree(f64::NAN, &mut meter()).unwrap_err(),
+        NurbsError::Tolerance
+    );
 }

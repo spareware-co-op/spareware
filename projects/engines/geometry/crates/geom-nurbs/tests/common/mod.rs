@@ -103,7 +103,11 @@ pub fn knots(rng: &mut Lcg, p: usize, n: usize, clamped: bool, kind: usize) -> V
                 _ => rng.unit() * 2.0 + 1e-3,
             };
             x += step;
-            let repeat = if rng.below(4) == 0 { 1 + rng.below(p + 1) } else { 1 };
+            let repeat = if rng.below(4) == 0 {
+                1 + rng.below(p + 1)
+            } else {
+                1
+            };
             for _ in 0..repeat {
                 if values.len() < interior {
                     values.push(x);
@@ -212,14 +216,22 @@ pub fn derivatives(knots: &[f64], p: usize, u: f64, limit: Limit, order: usize) 
         }
         dtab.push(level);
     }
-    dtab.into_iter().map(|mut level| level.swap_remove(p)).collect()
+    dtab.into_iter()
+        .map(|mut level| level.swap_remove(p))
+        .collect()
 }
 
 /// The magnitudes of A2.3's derivative scheme at `span`: `out[k][r]` is p!/(p − k)! times the sum
 /// over j of A_(k,j) · N_(span−p+r−k+j, p−k), with A_(k,j) the scheme's coefficients run on
 /// absolute values (each difference replaced by a sum) and every value exact.
-pub fn magnitudes_a23(knots: &[f64], p: usize, span: usize, u: f64, limit: Limit, order: usize)
-    -> Vec<Vec<Q>> {
+pub fn magnitudes_a23(
+    knots: &[f64],
+    p: usize,
+    span: usize,
+    u: f64,
+    limit: Limit,
+    order: usize,
+) -> Vec<Vec<Q>> {
     let kq: Vec<Q> = knots.iter().map(|&k| q(k)).collect();
     let values = cox_de_boor(knots, p, u, limit);
     // ndu_val(j, deg): N_(span−deg+j, deg); delta(j, r) = U[span+r+1] − U[span+1−j+r].
@@ -266,8 +278,14 @@ pub fn magnitudes_a23(knots: &[f64], p: usize, span: usize, u: f64, limit: Limit
 
 /// The magnitudes of A2.5's derivative scheme for N_i at `u`: `out[k]` is the scheme's k-th
 /// derivative run on absolute values (each difference replaced by a sum), every value exact.
-pub fn magnitudes_a25(knots: &[f64], p: usize, i: usize, u: f64, limit: Limit, order: usize)
-    -> Vec<Q> {
+pub fn magnitudes_a25(
+    knots: &[f64],
+    p: usize,
+    i: usize,
+    u: f64,
+    limit: Limit,
+    order: usize,
+) -> Vec<Q> {
     let kq: Vec<Q> = knots.iter().map(|&k| q(k)).collect();
     let values = cox_de_boor(knots, p, u, limit);
     // nt[j][k] = N_(i+j, k).
@@ -279,7 +297,11 @@ pub fn magnitudes_a25(knots: &[f64], p: usize, i: usize, u: f64, limit: Limit, o
         for l in 1..=k {
             let factor = qi((p - k + l) as i64);
             let d0 = &kq[i + p - k + l] - &kq[i];
-            let mut saved = if nd[0] == zero() || d0 == zero() { zero() } else { abs(&nd[0]) / &d0 };
+            let mut saved = if nd[0] == zero() || d0 == zero() {
+                zero()
+            } else {
+                abs(&nd[0]) / &d0
+            };
             for j in 0..(k - l + 1) {
                 let ur = &kq[p - k + l + i + j + 1];
                 let ul = &kq[i + j + 1];

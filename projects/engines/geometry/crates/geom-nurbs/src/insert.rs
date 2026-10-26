@@ -49,13 +49,13 @@ use alloc::vec::Vec;
 use geom_num::interval::Interval;
 use geom_run::WorkMeter;
 
+use crate::NurbsError;
 use crate::arith::{Hom, Num};
 use crate::basis::{Basis, Limit, WIDTH};
 use crate::budget::vec_for;
 use crate::curve::Curve;
 use crate::index::{add, get, run_end, set, sub};
 use crate::ops::{Changed, charge_op, homs, p_max, rounding, split};
-use crate::NurbsError;
 
 impl<const D: usize> Curve<D> {
     /// The curve with `u` inserted `times` times (A5.1).
@@ -84,7 +84,12 @@ impl<const D: usize> Curve<D> {
         }
         let span = basis.span(u, Limit::FromRight)?;
         let count = self.homogeneous().len();
-        charge_op(meter, add(count, times)?, D, add(basis.knots().len(), times)?)?;
+        charge_op(
+            meter,
+            add(count, times)?,
+            D,
+            add(basis.knots().len(), times)?,
+        )?;
         let rational = self.is_rational();
         let input_f = homs::<f64, D>(meter, self.homogeneous(), self.weights())?;
         let input_i = homs::<Interval, D>(meter, self.homogeneous(), self.weights())?;
@@ -122,7 +127,12 @@ impl<const D: usize> Curve<D> {
             });
         }
         let count = self.homogeneous().len();
-        charge_op(meter, add(count, x.len())?, D, add(basis.knots().len(), x.len())?)?;
+        charge_op(
+            meter,
+            add(count, x.len())?,
+            D,
+            add(basis.knots().len(), x.len())?,
+        )?;
         let rational = self.is_rational();
         let input_f = homs::<f64, D>(meter, self.homogeneous(), self.weights())?;
         let input_i = homs::<Interval, D>(meter, self.homogeneous(), self.weights())?;

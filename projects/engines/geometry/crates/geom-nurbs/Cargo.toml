@@ -23,6 +23,10 @@ geom-op = { path = "../geom-op" }
 dashu-int = { version = "0.6.2", default-features = false, features = ["std"] }
 dashu-ratio = { version = "0.6.1", default-features = false, features = ["std"] }
 
+[[bench]]
+name = "nurbs"
+harness = false
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"

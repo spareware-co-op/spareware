@@ -29,3 +29,4 @@ Licence text:
 | File | Source |
 | --- | --- |
 | [core-math.txt](core-math.txt) | CORE-MATH (Inria), ported into `geom-num`'s `math` module by piece G05 |
+| [usd-brep.txt](usd-brep.txt) | NLib, in NVIDIA's USD BRep, ported into `geom-nurbs` by piece G56 |

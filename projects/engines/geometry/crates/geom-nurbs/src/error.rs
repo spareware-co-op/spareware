@@ -132,11 +132,9 @@ pub enum NurbsError {
 impl fmt::Display for NurbsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            NurbsError::Degree { degree } => write!(
-                f,
-                "degree {degree} is outside 1 to {}",
-                crate::MAX_DEGREE
-            ),
+            NurbsError::Degree { degree } => {
+                write!(f, "degree {degree} is outside 1 to {}", crate::MAX_DEGREE)
+            }
             NurbsError::KnotCount { knots, needed } => {
                 write!(f, "{knots} knots, but the degree needs at least {needed}")
             }
@@ -168,29 +166,35 @@ impl fmt::Display for NurbsError {
                 f.write_str("the parameter is not finite or is outside the domain")
             }
             NurbsError::Index { index, count } => {
-                write!(f, "basis function {index} asked for, but the basis has {count}")
+                write!(
+                    f,
+                    "basis function {index} asked for, but the basis has {count}"
+                )
             }
             NurbsError::BufferLength { given, needed } => {
-                write!(f, "an output buffer of length {given}, but the call writes {needed}")
+                write!(
+                    f,
+                    "an output buffer of length {given}, but the call writes {needed}"
+                )
             }
             NurbsError::NotFinite => f.write_str("a result is not finite"),
-            NurbsError::DerivativeOrder { order } => write!(
-                f,
-                "derivative order {order} is above {}",
-                crate::MAX_DEGREE
-            ),
-            NurbsError::Discontinuous => {
-                f.write_str("a lower derivative jumps at a knot, so the derivative curve does not exist")
+            NurbsError::DerivativeOrder { order } => {
+                write!(f, "derivative order {order} is above {}", crate::MAX_DEGREE)
             }
-            NurbsError::Rational => f.write_str("the operation needs a nonrational curve or surface"),
+            NurbsError::Discontinuous => f.write_str(
+                "a lower derivative jumps at a knot, so the derivative curve does not exist",
+            ),
+            NurbsError::Rational => {
+                f.write_str("the operation needs a nonrational curve or surface")
+            }
             NurbsError::Tolerance => f.write_str("the tolerance is negative or not finite"),
             NurbsError::OutsideTolerance => {
                 f.write_str("the approximation cannot be certified within the tolerance")
             }
             NurbsError::NotClamped => f.write_str("the operation needs a clamped knot vector"),
-            NurbsError::KnotOutside => f.write_str(
-                "a knot is outside the domain, or the knots to insert are not in order",
-            ),
+            NurbsError::KnotOutside => {
+                f.write_str("a knot is outside the domain, or the knots to insert are not in order")
+            }
             NurbsError::TooManyKnots => {
                 f.write_str("the knot's multiplicity would exceed what the degree allows")
             }

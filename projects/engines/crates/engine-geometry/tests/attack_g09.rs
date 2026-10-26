@@ -1256,7 +1256,6 @@ mod repository {
         ),
         ("geom-meshio", "G354 G434 G435"),
         ("geom-name", "G87 G89 G90 G109 G374"),
-        ("geom-nurbs", "G56 G58 G59 G259"),
         ("geom-offset", "G270 G275 G276 G277 G278 G279"),
         ("geom-op", "G82 G83 G86 G87 G88 G104 G143 G144 G459"),
         ("geom-p21", "G415"),

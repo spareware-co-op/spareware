@@ -37,7 +37,13 @@ fn surfaces() -> Vec<Surface<3>> {
             let bv = Basis::new(qd, knots(&mut rng, qd, nv, kind != 2, kind + 1)).unwrap();
             let count = bu.count() * bv.count();
             let pts: Vec<[f64; 3]> = (0..count)
-                .map(|_| [rng.unit() * 10.0 - 5.0, rng.unit() * 0.1, rng.unit() * 1000.0])
+                .map(|_| {
+                    [
+                        rng.unit() * 10.0 - 5.0,
+                        rng.unit() * 0.1,
+                        rng.unit() * 1000.0,
+                    ]
+                })
                 .collect();
             out.push(Surface::new(bu.clone(), bv.clone(), &pts).unwrap());
             let ws: Vec<f64> = (0..count).map(|_| 0.5 + rng.unit() * 2.0).collect();
@@ -49,7 +55,12 @@ fn surfaces() -> Vec<Surface<3>> {
 
 fn params(b: &Basis, rng: &mut Lcg) -> Vec<f64> {
     let (lo, hi) = b.domain();
-    let mut out: Vec<f64> = b.knots().iter().copied().filter(|&k| lo <= k && k <= hi).collect();
+    let mut out: Vec<f64> = b
+        .knots()
+        .iter()
+        .copied()
+        .filter(|&k| lo <= k && k <= hi)
+        .collect();
     out.dedup();
     out.truncate(3);
     for _ in 0..2 {
@@ -215,16 +226,25 @@ fn errors_are_typed() {
     let pts = [[0.0; 2]; 6];
     assert_eq!(
         Surface::new(bu.clone(), bv.clone(), &pts[..5]).unwrap_err(),
-        NurbsError::PointCount { points: 5, expected: 6 }
+        NurbsError::PointCount {
+            points: 5,
+            expected: 6
+        }
     );
     let s = Surface::new(bu.clone(), bv.clone(), &pts).unwrap();
     let lim = (Limit::FromRight, Limit::FromRight);
     assert_eq!(s.point(0.5, 1.5, lim), Err(NurbsError::ParameterOutside));
-    assert_eq!(s.point(f64::NAN, 0.5, lim), Err(NurbsError::ParameterOutside));
+    assert_eq!(
+        s.point(f64::NAN, 0.5, lim),
+        Err(NurbsError::ParameterOutside)
+    );
     let mut out = vec![[0.0; 2]; 5];
     assert_eq!(
         s.derivs(0.5, 0.5, lim, (1, 1), &mut out),
-        Err(NurbsError::BufferLength { given: 5, needed: 4 })
+        Err(NurbsError::BufferLength {
+            given: 5,
+            needed: 4
+        })
     );
     let mut big = vec![[0.0; 2]; 30];
     assert_eq!(

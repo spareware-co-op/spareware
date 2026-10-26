@@ -134,7 +134,9 @@ impl Basis {
             return Err(NurbsError::KnotNotFinite { index });
         }
         if let Some(index) = knots.windows(2).position(|w| w.get(1) < w.first()) {
-            return Err(NurbsError::KnotDecreasing { index: add(index, 1)? });
+            return Err(NurbsError::KnotDecreasing {
+                index: add(index, 1)?,
+            });
         }
         let mut index = 0;
         while index < knots.len() {
@@ -187,11 +189,7 @@ impl Basis {
     #[must_use]
     pub fn domain(&self) -> (f64, f64) {
         let lo = self.knots.get(self.degree).copied().unwrap_or(f64::NAN);
-        let hi = self
-            .knots
-            .get(self.count())
-            .copied()
-            .unwrap_or(f64::NAN);
+        let hi = self.knots.get(self.count()).copied().unwrap_or(f64::NAN);
         (lo, hi)
     }
 

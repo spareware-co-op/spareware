@@ -110,7 +110,15 @@ impl<const D: usize> Curve<D> {
             if rational && !q2.iter().all(|h| h.w.is_finite() && h.w > 0.0) {
                 break;
             }
-            let Some(dev) = certify(meter, &original, basis.knots(), (&k2, &q2), (p, u, step), (rational, p_max))? else {
+            let Some(dev) = certify(
+                meter,
+                &original,
+                basis.knots(),
+                (&k2, &q2),
+                (p, u, step),
+                (rational, p_max),
+            )?
+            else {
                 break;
             };
             if dev > tol {
@@ -174,7 +182,12 @@ fn remove_once<const D: usize>(
     if j < i {
         // The sweeps crossed: average their two estimates of the middle point (NLib's λ).
         let lam = alf / (alf + bet);
-        let mid = Hom::combine(lam, get(&rw, add(jj, 1)?)?, 1.0 - lam, get(&rw, sub(ii, 1)?)?)?;
+        let mid = Hom::combine(
+            lam,
+            get(&rw, add(jj, 1)?)?,
+            1.0 - lam,
+            get(&rw, sub(ii, 1)?)?,
+        )?;
         set(&mut rw, add(jj, 1)?, mid)?;
     }
     let mut out = vec_for(meter, sub(pts.len(), 1)?)?;
@@ -221,18 +234,17 @@ fn certify<const D: usize>(
     for h in q2 {
         enclosed.push(Hom::<Interval, D>::of(h.c, h.w)?);
     }
-    let job = Insertion {
-        u,
-        span,
-        s,
-        times,
-    };
+    let job = Insertion { u, span, s, times };
     let (back, pw) = insert_kernel(meter, k2, p, &enclosed, &job)?;
     if back.as_slice() != knots || pw.len() != original.len() {
         return Ok(None);
     }
-    let w_min = q2.iter().fold(f64::INFINITY, |m, h| if h.w < m { h.w } else { m });
-    Ok(Some(difference_bound(original, &pw, rational, p_max, w_min)?))
+    let w_min = q2
+        .iter()
+        .fold(f64::INFINITY, |m, h| if h.w < m { h.w } else { m });
+    Ok(Some(difference_bound(
+        original, &pw, rational, p_max, w_min,
+    )?))
 }
 
 /// An upper bound on the distance between two shapes on one basis whose control points differ by
@@ -274,6 +286,7 @@ pub(crate) fn difference_bound<const D: usize>(
     if !(w_min.is_finite() && w_min > 0.0) {
         return Err(NurbsError::NotFinite);
     }
-    let top = Interval::of(point_dev)?.plus(Interval::of(p_max)?.times(Interval::of(weight_dev)?)?)?;
+    let top =
+        Interval::of(point_dev)?.plus(Interval::of(p_max)?.times(Interval::of(weight_dev)?)?)?;
     Ok(top.over(Interval::of(w_min)?)?.hi())
 }

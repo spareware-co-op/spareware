@@ -130,7 +130,11 @@ pub(crate) fn pascal() -> Result<[f64; WIDTH * WIDTH], NurbsError> {
         for k in 1..=n {
             let above = sub(row, WIDTH)?;
             let left = get(&tri, add(above, sub(k, 1)?)?)?;
-            let right = if k < n { get(&tri, add(above, k)?)? } else { 0.0 };
+            let right = if k < n {
+                get(&tri, add(above, k)?)?
+            } else {
+                0.0
+            };
             set(&mut tri, add(row, k)?, left + right)?;
         }
     }
@@ -281,7 +285,13 @@ pub(crate) fn elevate_kernel<N: Num, const D: usize>(
             set(&mut st.dw, i, acc)?;
         }
         if oldr > 1 {
-            remove_shared_knot(&mut qw, &mut st.dw, &uq, (ua, ub), (kind, cind, lbz, q, oldr))?;
+            remove_shared_knot(
+                &mut qw,
+                &mut st.dw,
+                &uq,
+                (ua, ub),
+                (kind, cind, lbz, q, oldr),
+            )?;
         }
         if !first_piece {
             for _ in 0..sub(q, oldr)? {
@@ -330,7 +340,9 @@ fn remove_shared_knot<N: Num, const D: usize>(
     let mut first = sub(kind, 2)?;
     let mut last = kind;
     let den = N::of(ub)?.minus(N::of(ua)?)?;
-    let bet = N::of(ub)?.minus(N::of(get(uq, sub(kind, 1)?)?)?)?.over(den)?;
+    let bet = N::of(ub)?
+        .minus(N::of(get(uq, sub(kind, 1)?)?)?)?
+        .over(den)?;
     let omb = one.minus(bet)?;
     for tr in 1..oldr {
         let mut i = first;
@@ -347,9 +359,7 @@ fn remove_shared_knot<N: Num, const D: usize>(
             }
             if j >= lbz {
                 let next = if sub(j, tr)? <= sub(add(kind, oldr)?, q)? {
-                    let gam = N::of(ub)?
-                        .minus(N::of(get(uq, sub(j, tr)?)?)?)?
-                        .over(den)?;
+                    let gam = N::of(ub)?.minus(N::of(get(uq, sub(j, tr)?)?)?)?.over(den)?;
                     let omg = one.minus(gam)?;
                     Hom::combine(gam, get(dw, kj)?, omg, get(dw, add(kj, 1)?)?)?
                 } else {

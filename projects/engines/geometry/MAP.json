@@ -3317,7 +3317,137 @@
         29
       ],
       "depends": [],
-      "errors": [],
+      "errors": [
+        {
+          "doc": "Why a NURBS algorithm returned no result.",
+          "file": "projects/engines/geometry/crates/geom-nurbs/src/error.rs",
+          "kinds": [
+            {
+              "doc": "The degree is 0 or above [`MAX_DEGREE`](crate::MAX_DEGREE).",
+              "name": "Degree",
+              "shape": "struct"
+            },
+            {
+              "doc": "The knot vector has too few knots for the degree: a basis of degree p needs at least 2p + 2 knots (p + 1 functions).",
+              "name": "KnotCount",
+              "shape": "struct"
+            },
+            {
+              "doc": "A knot is NaN or infinite.",
+              "name": "KnotNotFinite",
+              "shape": "struct"
+            },
+            {
+              "doc": "A knot is smaller than the one before it.",
+              "name": "KnotDecreasing",
+              "shape": "struct"
+            },
+            {
+              "doc": "A knot value is repeated more than degree + 1 times.",
+              "name": "Multiplicity",
+              "shape": "struct"
+            },
+            {
+              "doc": "The parameter domain [`u_p`, `u_(m−p)`] is a single value.",
+              "name": "EmptyDomain",
+              "shape": "unit"
+            },
+            {
+              "doc": "The knots span more than the largest finite double, so a difference of two knots would overflow.",
+              "name": "KnotRange",
+              "shape": "unit"
+            },
+            {
+              "doc": "The number of control points (or of rows or columns of a net) does not match the basis.",
+              "name": "PointCount",
+              "shape": "struct"
+            },
+            {
+              "doc": "A control point coordinate is NaN or infinite, or a weighted coordinate would overflow.",
+              "name": "PointNotFinite",
+              "shape": "struct"
+            },
+            {
+              "doc": "A weight is not a positive finite number.",
+              "name": "Weight",
+              "shape": "struct"
+            },
+            {
+              "doc": "A parameter is NaN, infinite or outside the domain [`u_p`, `u_(m−p)`].",
+              "name": "ParameterOutside",
+              "shape": "unit"
+            },
+            {
+              "doc": "A basis function index is beyond the last function.",
+              "name": "Index",
+              "shape": "struct"
+            },
+            {
+              "doc": "An output buffer's length does not match what the call writes.",
+              "name": "BufferLength",
+              "shape": "struct"
+            },
+            {
+              "doc": "A result is not finite: a derivative over a span so short that its value overflows, or a sum of large coordinates that does.",
+              "name": "NotFinite",
+              "shape": "unit"
+            },
+            {
+              "doc": "A derivative order above [`MAX_DEGREE`](crate::MAX_DEGREE) was asked for.",
+              "name": "DerivativeOrder",
+              "shape": "struct"
+            },
+            {
+              "doc": "The derivative curve asked for does not exist: a lower derivative jumps at a knot repeated more than p − k + 1 times, so the k-th derivative there is not a function.",
+              "name": "Discontinuous",
+              "shape": "unit"
+            },
+            {
+              "doc": "The operation needs a nonrational curve or surface.",
+              "name": "Rational",
+              "shape": "unit"
+            },
+            {
+              "doc": "A tolerance is negative, NaN or infinite.",
+              "name": "Tolerance",
+              "shape": "unit"
+            },
+            {
+              "doc": "An approximation (degree reduction) cannot be certified within the tolerance asked for.",
+              "name": "OutsideTolerance",
+              "shape": "unit"
+            },
+            {
+              "doc": "The operation needs a clamped knot vector (each end knot repeated degree + 1 times), as Bezier extraction and degree change do.",
+              "name": "NotClamped",
+              "shape": "unit"
+            },
+            {
+              "doc": "A knot to insert, refine with or remove is outside the domain, or a refinement's new knots are not in non-decreasing order.",
+              "name": "KnotOutside",
+              "shape": "unit"
+            },
+            {
+              "doc": "Inserting the knot would raise its multiplicity above the degree (or above degree + 1 at an end of the domain).",
+              "name": "TooManyKnots",
+              "shape": "unit"
+            },
+            {
+              "doc": "The work meter stopped the operation: over its budget, cancelled, or a large allocation was refused (chapter 23.10).",
+              "name": "Stopped",
+              "shape": "tuple"
+            },
+            {
+              "doc": "An index computed inside an algorithm fell outside its array. Every index is bounded by the checked sizes of the inputs, so this is a defect in this crate, never a property of the input; it is returned rather than a panic (principle 13).",
+              "name": "Defect",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_nurbs::error",
+          "name": "NurbsError",
+          "non_exhaustive": false
+        }
+      ],
       "family": [],
       "file": "projects/engines/geometry/crates/geom-nurbs/src/lib.rs",
       "folder": "projects/engines/geometry/crates/geom-nurbs",
@@ -3331,12 +3461,473 @@
       "job": "NURBS algorithms: basis, evaluation, knot operations, degree change, fitting, Bernstein bounds, Bezier extraction, symbolic products, skinning, Gordon and Coons combination.",
       "kind": "kernel",
       "layer": "2",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "constant per operation; nothing allocates.",
+          "does": "each knot operation (insertion, refinement, Bezier extraction, removal, degree change) is written once, generic over [`Num`], and run once in `f64` and once in `geom-num`'s [`Interval`]. The two runs make the same operations in the same order on the same data. Every interval operation rounds to nearest and widens by one step, so it contains the exact result of the operation for any operands in its inputs; rounding to nearest is monotone, so it also contains the double the `f64` run computes from operands inside those inputs. By induction over the run, each interval contains both the exact value and the double, and its width bounds their distance. [`Hom`] is a homogeneous control point, w·P with its weight w, combined as `NLib`'s `N_Combine2CPts` combines them.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-nurbs/src/arith.rs",
+          "guarantees": [
+            "**Enclosure.** For a computation written once over [`Num`], each value of the interval run contains the exact value and the value of the `f64` run (the argument above; geom-num's `interval` module proves the inclusion of each operation).",
+            "**The same doubles as a plain computation.** The `f64` implementation is IEEE 754's correctly rounded operation, nothing else: no fused multiply-add, no reordering.",
+            "**Typed failures.** An interval bound that leaves the finite doubles, or a divisor interval that contains zero, is [`NurbsError::NotFinite`]; the `f64` run is checked for finite results where the operations collect them."
+          ],
+          "job": "The arithmetic the knot operations run in twice: doubles for the result, and intervals for a certified bound on that result's rounding.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/1.9780898717716",
+              "https://doi.org/10.1137/1.9780898718027"
+            ],
+            "text": "interval arithmetic with outward rounding by one step (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), <https://doi.org/10.1137/1.9780898717716>) as `geom-num` implements it, used as a running error bound for a floating-point computation that makes the same operations (N. J. Higham, *Accuracy and Stability of Numerical Algorithms*, 2nd ed., SIAM (2002), section 3.3, <https://doi.org/10.1137/1.9780898718027>)."
+          },
+          "path": "geom_nurbs::arith",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "[`Basis::new`] is linear in the number of knots and keeps them (one allocation). [`Basis::span`] is a binary search, O(log m). [`Basis::eval`] and [`Basis::eval_one`] take O(p²) operations, [`Basis::eval_derivs`] O(p² + n·p) for n derivatives, and [`Basis::eval_one_derivs`] O(p² + n²); none of them allocates, and their scratch arrays, sized for [`MAX_DEGREE`], take at most about 14 KiB of stack.",
+          "does": "[`Basis::new`] checks chapter 24.7's rules for a knot vector and keeps it. [`Basis::span`] finds the knot span of a parameter (A2.1); [`Basis::eval`] gives the p + 1 functions that do not vanish there (A2.2) and [`Basis::eval_derivs`] their derivatives (A2.3); [`Basis::eval_one`] and [`Basis::eval_one_derivs`] give one function and its derivatives (A2.4, A2.5). At a knot of reduced continuity a function's derivatives differ from the left and from the right, so every evaluation takes a [`Limit`]; at an end of the domain only the side inside it exists, and that side is used whatever the limit asks.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-nurbs/src/basis.rs",
+          "guarantees": [
+            "**Well formed or refused.** A basis has a degree from 1 to [`MAX_DEGREE`], at least 2p + 2 knots, every knot finite and none smaller than the one before, no value repeated more than p + 1 times, a finite difference between the last knot and the first, and a domain [`u_p`, `u_(m−p)`] that is more than one value (chapter 24.7). Unclamped knot vectors are accepted, so periodic curves can be stored as they are (chapter 7).",
+            "**Parameters inside the domain only.** A parameter that is NaN, infinite or outside the domain is [`NurbsError::ParameterOutside`]; `NLib` clamps it to the nearest span in silence. A domain end is in the last (or first) span with more than one value, found exactly, where `NLib` steps over equal knots within 10^−12.",
+            "**Basis values, near exact.** The values of [`Basis::eval`] and [`Basis::eval_one`] lie in [0, 1], and each is within `γ_(6p)` · N of the exact value N for the knots and parameter given: every step of the scheme adds or multiplies quantities that are not negative, and the knot difference that divides each step is at least the term it divides, so each level adds at most six roundings, all relative. On a clamped knot vector the values at the ends of the domain are exactly 1 and 0. [`Basis::eval_derivs`] gives the same bits for the values as [`Basis::eval`].",
+            "**Derivatives, bounded by their magnitudes.** Each derivative of order k ≥ 1 is within `γ_(6p+2)` · M of the exact derivative, where M is the same scheme run on magnitudes: every difference of two terms replaced by the sum of their absolute values, with the exact knots and parameter. Each level of the derivative scheme adds at most four roundings to the terms it combines and the sums and the final factor p!/(p − k)! at most 2k more, so 6p + 2 covers every order (the tests check this bound against exact rationals). A derivative that overflows, which a span far shorter than its neighbours can cause, is [`NurbsError::NotFinite`]; the functions never return a value that is not finite.",
+            "**Deterministic.** Only IEEE 754 addition, subtraction, multiplication and division in the fixed order written here; no fused multiply-add, no platform maths."
+          ],
+          "job": "B-spline bases: a degree and a knot vector, checked once, and the basis functions and their derivatives at a parameter (The NURBS Book, algorithms A2.1 to A2.5).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1016/0021-9045(72",
+              "https://doi.org/10.1093/imamat/10.2.134",
+              "https://doi.org/10.1007/978-3-642-59223-2",
+              "https://doi.org/10.1137/1.9780898718027"
+            ],
+            "text": "the triangular schemes of de Boor and Cox for the basis functions, and Piegl and Tiller's algorithms A2.1 to A2.5 for spans, values and derivatives, as `NLib` implements them, with `NLib`'s division order: each quotient of a knot difference by the sum it belongs to is taken before it multiplies a basis value, so no quotient exceeds 1. C. de Boor, \"On calculating with B-splines\", *Journal of Approximation Theory* 6 (1972), 50–62, <https://doi.org/10.1016/0021-9045(72)90080-9>. M. G. Cox, \"The numerical evaluation of B-splines\", *IMA Journal of Applied Mathematics* 10 (1972), 134–149, <https://doi.org/10.1093/imamat/10.2.134>. L. Piegl and W. Tiller, *The NURBS Book*, 2nd ed., Springer (1997), sections 2.2 to 2.5, <https://doi.org/10.1007/978-3-642-59223-2>. N. J. Higham, *Accuracy and Stability of Numerical Algorithms*, 2nd ed., SIAM (2002), lemma 3.1 and section 3.4, <https://doi.org/10.1137/1.9780898718027>."
+          },
+          "path": "geom_nurbs::basis",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_BasisBasic.cpp",
+              "method_note": null,
+              "name": "NVIDIA USD `BRep` `NLib`",
+              "notice": [
+                "SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved."
+              ],
+              "pinned": true,
+              "purpose": "translated to safe `no_std` Rust from `N_BasisFindSpan`, `N_BasisEval`, `N_BasisDerivs`, `N_BasisIEval` and `N_BasisIDerivs`; a parameter outside the domain is an error instead of being clamped, and the domain's ends find their span exactly instead of stepping over knots within 10^−12; the span search stops by its loop invariant, without `NLib`'s guard against a repeated midpoint; the end shortcuts of `N_BasisEval` are dropped, because its scheme gives the same exact values there, and those of `N_BasisIEval` apply only to a clamped end, where they are exact; the zero-divisor guard (10^−24) is dropped, because a valid basis never divides by a difference that is not positive; the factor p!/(p − k)! is a double rather than an integer, which overflowed past degree 12; the checks of `N_KnotVectorIsValid` are those of chapter 24.7, which also accept unclamped knots and interior knots repeated p + 1 times; every result that could overflow is checked.",
+              "take": "port"
+            }
+          ],
+          "spdx": "MPL-2.0 AND Apache-2.0",
+          "target": "lib"
+        },
+        {
+          "cost": "O(s·p²) operations for s spans, each twice; one allocation per piece and its enclosure.",
+          "does": "[`Curve::to_bezier`] walks the knot vector from left to right. At the end of each span it inserts the end knot until it is repeated p times, which leaves the span's p + 1 control points as the Bezier points of that piece, and carries the points it shares with the next span forward (`NLib`'s `N_CrvDecomposeBez`, the book's A5.6). Each piece is returned as a curve of degree p on the knots [a, …, a, b, …, b], rational if the input is. The kernel is generic over `crate::arith`'s numbers and runs in doubles and in intervals (`crate::ops`).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-nurbs/src/bezier.rs",
+          "guarantees": [
+            "**The same curve, piece by piece, within the reported deviation.** Piece i equals the input on its span in real arithmetic; the reported deviation bounds, with certainty, how far rounding moved any piece. A priori, each homogeneous coordinate is within `γ_(10t)` · M of its exact value, with t the number of insertions made (at most p − 1 per interior knot) and M the largest absolute value of that coordinate over the input's control points: every new point is a convex combination, as in `crate::insert`.",
+            "**Clamped input only.** Extraction starts from a clamped end, as A5.6 and `NLib` assume; an unclamped curve is [`NurbsError::NotClamped`]. Interior knots repeated p + 1 times (a discontinuous curve) are allowed: the pieces then do not share an end point.",
+            "**Budgeted.** The pieces and the interval run are charged to the meter first."
+          ],
+          "job": "Bezier extraction of NURBS curves (The NURBS Book, algorithm A5.6): a clamped curve as one Bezier curve per knot span.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/978-3-642-59223-2",
+              "https://doi.org/10.1016/0010-4485(80"
+            ],
+            "text": "Piegl and Tiller's algorithm A5.6 (The NURBS Book, 2nd ed., section 5.4, <https://doi.org/10.1007/978-3-642-59223-2>), knot insertion until every knot has multiplicity p (Boehm 1980, <https://doi.org/10.1016/0010-4485(80)90154-2>), as `NLib` implements it."
+          },
+          "path": "geom_nurbs::bezier",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_CrvTool.cpp",
+              "method_note": null,
+              "name": "NVIDIA USD `BRep` `NLib`",
+              "notice": [
+                "SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved."
+              ],
+              "pinned": true,
+              "purpose": "translated to safe `no_std` Rust from `N_CrvDecomposeBez`, generic over the number type so the same steps give the pieces and their interval enclosure; an unclamped curve is refused instead of `NLib`'s skipping of extra end knots as bad data; pieces are returned as curves with their own knots.",
+              "take": "port"
+            }
+          ],
+          "spdx": "MPL-2.0 AND Apache-2.0",
+          "target": "lib"
+        },
+        {
+          "cost": "constant per charge; [`vec_for`] makes one allocation.",
+          "does": "an operation that builds a curve or surface (knot insertion and refinement, Bezier extraction, knot removal, degree change, derivative curves) knows the size of its result before it computes it. [`charge`] charges one work unit per control point and per knot of the result, and reserves their logical bytes: 8 bytes per coordinate and per weight, and 8 per knot. [`vec_for`] then reserves the real memory fallibly, so a refusal is the meter's `OutOfMemory`, never an abort.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-nurbs/src/budget.rs",
+          "guarantees": [
+            "**The same charge on every machine.** The charges are counts of the result's control points and knots and fixed sizes per kind, never pointer widths or allocator sizes, so a budget failure is the same everywhere (chapter 23.10).",
+            "**Charged before the work.** Each operation charges before it allocates or computes, so an operation over its budget does no work."
+          ],
+          "job": "What a NURBS operation that builds new control points charges to the work meter, and how it reserves the memory for them (chapter 23.10).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/23-performance.md",
+              "https://doc.rust-lang.org/alloc/vec/struct.Vec.html#method.try_reserve_exact"
+            ],
+            "text": "the work units and logical bytes of chapter 23.10 (`projects/engines/geometry/architecture/23-performance.md`), through `geom-run`'s [`WorkMeter`]; fallible reservation with `Vec::try_reserve_exact` (<https://doc.rust-lang.org/alloc/vec/struct.Vec.html#method.try_reserve_exact>)."
+          },
+          "path": "geom_nurbs::budget",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "construction is linear in the control points and makes one allocation (two if rational). [`Curve::point`] takes O(p²) operations and [`Curve::derivs`] O(p² + k·p·D + k²·D) for k derivatives; neither allocates. [`Curve::derivative_curve`] takes O(k·n·D) operations and one allocation for the points and one for the knots, charged to the meter first.",
+          "does": "a [`Curve`] holds a [`Basis`] and n + 1 control points of dimension D, with weights if it is rational. A rational curve stores its points in homogeneous form, w·P, as the algorithms of The NURBS Book use them, so a curve built from homogeneous points keeps them exactly and knot operations never divide by a weight. [`Curve::point`] sums the basis functions that do not vanish times their control points (A3.1), and for a rational curve divides by the summed weights (A4.1). [`Curve::derivs`] sums the basis derivatives against the points (A3.2); for a rational curve it applies Leibniz's rule to w·C = A (A4.2). [`Curve::derivative_curve`] builds the k-th derivative of a nonrational curve as a curve of degree p − k by differencing the control points (A3.3).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-nurbs/src/curve.rs",
+          "guarantees": [
+            "**Well formed or refused.** A curve has exactly as many control points (and weights) as its basis has functions, every coordinate finite, every weight positive and finite, and every weighted coordinate w·P finite.",
+            "**Points.** A nonrational point is within `γ_(7p+1)` · Σ `N_j`·|`P_j`| of the exact point: the basis values carry `γ_(6p)` each, and one product and p sums add p + 1 roundings. A rational point is within `γ_(14p+3)` · (Σ `N_j`·|`w_j`·`P_j`|) / (Σ `N_j`·`w_j`): the sums carry `γ_(7p+1)`, the weight sum relative to itself because every term is positive, and the division one more. On a clamped curve the ends are the end control points exactly (for a rational curve, the quotient w·P / w, rounded once).",
+            "**Derivatives.** A nonrational derivative of order k ≥ 1 is within `γ_(7p+3)` · Σ `M_j`·|`P_j`|. A rational derivative of order k is within `γ_e` · `MC_k`, e = (k + 1)(14p + 8 + k), where `MC_k` = (Σ `M_(k,j)`·|`w_j`·`P_j`| + `Σ_(i=1..k)` C(k, i) · (Σ `M_(i,j)`·`w_j`) · `MC_(k−i)`) / Σ `N_j`·`w_j` is Leibniz's recurrence run on magnitudes: each step adds the error of the sums, two products, k subtractions and the division to the error of the lower orders. The value of order 0 has the same bits as [`Curve::point`].",
+            "**Derivative curves.** The k-th derivative curve's control points are each within `γ_(4k)` of the same differences run on magnitudes (each difference of two points replaced by the sum of their absolute values); each level adds a rounded knot difference, a quotient, two products and a sum. Its value at a parameter is the k-th derivative of the curve.",
+            "**Typed failures.** A result that overflows is [`NurbsError::NotFinite`]; a derivative curve across a knot where a lower derivative jumps is [`NurbsError::Discontinuous`], where `NLib` reports a numerical error; derivative curves of rational curves are [`NurbsError::Rational`] (their symbolic form needs products of B-splines, piece G59).",
+            "**Deterministic.** Fixed summation order (by increasing control point index), no fused multiply-add, no platform maths."
+          ],
+          "job": "NURBS curves in two and three dimensions: construction under chapter 24.7's rules, points and derivatives (The NURBS Book, algorithms A3.1, A3.2, A4.1 and A4.2), and the control points of derivative curves (A3.3).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/978-3-642-59223-2",
+              "https://doi.org/10.1137/1.9780898718027"
+            ],
+            "text": "Piegl and Tiller's algorithms A3.1 to A3.3, A4.1 and A4.2 (The NURBS Book, 2nd ed., sections 3.2, 3.3 and 4.2 to 4.3, <https://doi.org/10.1007/978-3-642-59223-2>), as `NLib` implements the points and derivative curves; the error bounds follow Higham's rounding-error analysis (*Accuracy and Stability of Numerical Algorithms*, 2nd ed., SIAM (2002), chapter 3, <https://doi.org/10.1137/1.9780898718027>)."
+          },
+          "path": "geom_nurbs::curve",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_CrvNurb.cpp",
+              "method_note": null,
+              "name": "NVIDIA USD `BRep` `NLib`",
+              "notice": [
+                "<https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_CrvAdv.cpp>",
+                "SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved."
+              ],
+              "pinned": true,
+              "purpose": "translated to safe `no_std` Rust from `N_CrvEval`, `N_CrvDerivs` and `N_CrvNonRatGetDerivCrvsAll`, for any dimension D instead of `NLib`'s homogeneous 4D points with its \"no z\" and \"no w\" markers; rational derivatives by the book's A4.2 on the stored homogeneous points, where `N_CrvDerivs` forms rational basis derivatives against points divided by their weights; a parameter outside the domain and a derivative order above the maximum are typed errors; derivative curves keep the knots `u_k` to `u_(m−k)`, so unclamped curves work too, where `NLib` rebuilds clamped ends; each overflow is checked.",
+              "take": "port"
+            }
+          ],
+          "spdx": "MPL-2.0 AND Apache-2.0",
+          "target": "lib"
+        },
+        {
+          "cost": "O(s·(p + t)·p) operations for s spans, each twice, and O((p + t)·p) for the matrix; the result and its enclosure are allocated once.",
+          "does": "[`Curve::elevate`] walks the knot vector as Bezier extraction does (A5.6), raises each Bezier piece from degree p to p + t with the coefficients C(p, j)·C(t, i − j) / C(p + t, i) (`NLib`'s elevation matrix, filled for the first half of the rows and mirrored), and removes the knots the extraction added, so each distinct knot ends repeated t times more than before (`NLib`'s `N_CrvElevateDegree`, the book's A5.9). The kernel is generic over `crate::arith`'s numbers and runs in doubles and in intervals (`crate::ops`).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-nurbs/src/elevate.rs",
+          "guarantees": [
+            "**The same curve, within the reported deviation.** Elevation does not change the curve in real arithmetic; the reported deviation bounds, with certainty, how far rounding moved it. The removal steps divide by knot differences that can be small, so no a priori bound is stated; the interval run measures the rounding of each case.",
+            "**Exact coefficients.** Every binomial coefficient comes from Pascal's triangle, exact for degrees up to [`MAX_DEGREE`] (`crate::basis`), so only the reciprocal 1 / C(p + t, i) and two products round.",
+            "**Where it applies.** The curve must be clamped ([`NurbsError::NotClamped`]) with no interior knot repeated more than p times ([`NurbsError::Discontinuous`]), as `NLib`'s check requires, and p + t must not exceed [`MAX_DEGREE`] ([`NurbsError::Degree`]). t = 0 returns the curve unchanged.",
+            "**Budgeted.** The result and the interval run are charged to the meter first."
+          ],
+          "job": "Degree elevation of NURBS curves (The NURBS Book, algorithm A5.9): the same curve with degree p + t.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/978-3-642-59223-2",
+              "https://doi.org/10.1016/0010-4485(94"
+            ],
+            "text": "Piegl and Tiller's algorithm A5.9 (The NURBS Book, 2nd ed., section 5.5, <https://doi.org/10.1007/978-3-642-59223-2>; L. Piegl and W. Tiller, \"Software-engineering approach to degree elevation of B-spline curves\", *Computer-Aided Design* 26(1) (1994), 17–28, <https://doi.org/10.1016/0010-4485(94)90004-3>), as `NLib` implements it."
+          },
+          "path": "geom_nurbs::elevate",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_CrvTool.cpp",
+              "method_note": null,
+              "name": "NVIDIA USD `BRep` `NLib`",
+              "notice": [
+                "<https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_Bezier.cpp>",
+                "SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved."
+              ],
+              "pinned": true,
+              "purpose": "translated to safe `no_std` Rust from `N_CrvElevateDegree`, `N_BezGetDegreeElevationMatrix` and `N_BezElevateDegree`, generic over the number type so the same steps give the result and its interval enclosure; Pascal's triangle is computed rather than read from `NLib`'s table of 18 rows; a new curve is returned instead of edited in place; the degree limit is [`MAX_DEGREE`].",
+              "take": "port"
+            }
+          ],
+          "spdx": "MPL-2.0 AND Apache-2.0",
+          "target": "lib"
+        },
+        {
+          "cost": "a few machine words; nothing allocates.",
+          "does": "[`NurbsError`] names the failure and, where one exists, the index of the knot, control point or weight at fault, so a caller can report it or repair the input (chapter 22's errors that say what to do). A construction checks the rules of chapter 24.7 (\"NURBS well formed\") and returns the first rule broken, in the order the constructor's documentation gives.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-nurbs/src/error.rs",
+          "guarantees": [
+            "**Typed, never silent.** Each of `NLib`'s silent fallbacks (a parameter clamped into the domain, a degenerate span stepped over, a best-so-far result returned beside an error flag) is a variant here instead (chapter 29.7).",
+            "**Comparable and stable.** Every variant holds integers only, so errors compare with `==` and print the same on every target."
+          ],
+          "job": "The one error type of the NURBS algorithms: every way an input can be malformed, a parameter can fall outside a domain, a result can fail to be finite, or a budget can stop an operation.",
+          "method": {
+            "none": "an error enum and its `Display` and `Error` implementations."
+          },
+          "path": "geom_nurbs::error",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one comparison per call; nothing allocates.",
+          "does": "the algorithms of The NURBS Book index knots, basis functions and control points by sums and differences of the degree, the span and loop counters. The kernel's lints forbid unchecked indexing and unchecked integer arithmetic (principle 13), so every such index goes through these helpers, which return [`NurbsError::Defect`] instead of panicking.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-nurbs/src/index.rs",
+          "guarantees": [
+            "**No panic, no wrong element.** A read or write out of bounds, or an index sum or difference that would overflow, is `Err(Defect)`; every other call reads or writes exactly the element named.",
+            "**Unreachable for valid inputs.** Each algorithm's indices are bounded by sizes its input checks have established, so `Defect` marks a bug in this crate and the tests treat it as one."
+          ],
+          "job": "Checked reads, writes and index arithmetic for the NURBS algorithms' arrays.",
+          "method": {
+            "links": [
+              "https://doc.rust-lang.org/std/primitive.usize.html#method.checked_add"
+            ],
+            "text": "Rust's checked slice access (`get`, `get_mut`) and checked integer arithmetic (<https://doc.rust-lang.org/std/primitive.usize.html#method.checked_add>)."
+          },
+          "path": "geom_nurbs::index",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "insertion takes O(n + r·p) operations and refinement O(n + (n + k)·p) for k new knots, each twice; each allocates the result's points and knots and its enclosure.",
+          "does": "[`Curve::insert_knot`] inserts one parameter value r times (Boehm's algorithm, A5.1); [`Curve::refine`] inserts a non-decreasing list of values at once (A5.4). Each new control point is a convex combination of two older ones, α·Q + (1 − α)·R with α = (u − `u_i`) / (`u_(i+p)` − `u_i`) in [0, 1], in homogeneous coordinates for a rational curve. The kernels are generic over `crate::arith`'s numbers and run twice, in doubles for the result and in intervals for its certified rounding (`crate::ops`). Surfaces use the same kernels on each row or column of their nets (`crate::net`).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-nurbs/src/insert.rs",
+          "guarantees": [
+            "**The same curve, within the reported deviation.** In real arithmetic insertion does not change the curve; the reported deviation bounds, with certainty, how far rounding moved it. An a priori bound also holds: each new homogeneous coordinate is within `γ_(10t)` · M of its exact value, with t the number of knots inserted and M the largest absolute value of that coordinate over the input's control points, because each pass of one insertion turns every error ε into at most (1 + `γ_10`)·ε + `γ_10`·M (the quotient α carries three roundings, 1 − α four, and the two products and the sum three more).",
+            "**Interior knots only, multiplicity at most p.** A value outside the open domain is [`NurbsError::KnotOutside`], as `NLib` refuses an end parameter; a list that is not finite and non-decreasing is [`NurbsError::KnotOutside`]; a value that would be repeated more than p times is [`NurbsError::TooManyKnots`] (`NLib` checks this for single insertion only).",
+            "**Budgeted.** The result's points and knots, and the interval run, are charged to the meter before anything is computed."
+          ],
+          "job": "Knot insertion and refinement of NURBS curves (The NURBS Book, algorithms A5.1 and A5.4): more knots and control points, the same curve.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/978-3-642-59223-2",
+              "https://doi.org/10.1016/0010-4485(80"
+            ],
+            "text": "Boehm's knot insertion and the Oslo-style refinement of Piegl and Tiller, algorithms A5.1 and A5.4 (The NURBS Book, 2nd ed., section 5.2, <https://doi.org/10.1007/978-3-642-59223-2>; W. Boehm, \"Inserting new knots into B-spline curves\", *Computer-Aided Design* 12(4) (1980), 199–201, <https://doi.org/10.1016/0010-4485(80)90154-2>), as `NLib` implements them."
+          },
+          "path": "geom_nurbs::insert",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_CrvTool.cpp",
+              "method_note": null,
+              "name": "NVIDIA USD `BRep` `NLib`",
+              "notice": [
+                "SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved."
+              ],
+              "pinned": true,
+              "purpose": "translated to safe `no_std` Rust from `N_CrvInsertKnot` and `N_CrvRefine`, generic over the number type so the same steps give the result and its interval enclosure; new curves are returned instead of edited in place; refinement checks that its knots are finite, ordered, interior and leave every multiplicity at most p, which `N_CrvRefine` does not; the zero test of `N_CrvRefine` compares the two knots instead of their computed difference with zero.",
+              "take": "port"
+            }
+          ],
+          "spdx": "MPL-2.0 AND Apache-2.0",
+          "target": "lib"
+        },
+        {
+          "cost": "the curve operation's cost times the number of lines, each twice; the new net and its enclosure are allocated once, and each line's result once.",
+          "does": "each surface algorithm of the book is its curve algorithm applied to every column of the net (direction u) or every row (direction v), with the same coefficients, because the coefficients depend only on the knots of that direction. So [`Surface::insert_knot`], [`Surface::refine`], [`Surface::to_bezier`] and [`Surface::elevate`] run the curve kernels of `crate::insert`, `crate::bezier` and `crate::elevate` on each line of the net, in doubles for the result and in intervals for its certified rounding (`crate::ops`).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-nurbs/src/net.rs",
+          "guarantees": [
+            "**The same surface, within the reported deviation.** In real arithmetic these operations do not change the surface; the reported deviation bounds, with certainty, how far rounding moved it, by the partition of unity of the tensor-product basis.",
+            "**The curve operations' conditions, in the direction asked for.** Each refusal is the curve operation's, for the basis of that direction.",
+            "**Line by line, as the book.** Every line gets exactly the operations its curve would, in the same order, so a surface's line equals the curve operation on that line, bit for bit."
+          ],
+          "job": "Knot insertion, refinement, Bezier extraction and degree elevation of NURBS surfaces (The NURBS Book, algorithms A5.3, A5.5, A5.7 and A5.10).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "Piegl and Tiller's algorithms A5.3, A5.5, A5.7 and A5.10 (The NURBS Book, 2nd ed., sections 5.2 to 5.5, <https://doi.org/10.1007/978-3-642-59223-2>), which apply the curve algorithms A5.1, A5.4, A5.6 and A5.9 to the rows or columns of the net, as `NLib`'s surface tools do with its curve routines."
+          },
+          "path": "geom_nurbs::net",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_SrfTool.cpp",
+              "method_note": null,
+              "name": "NVIDIA USD `BRep` `NLib`",
+              "notice": [
+                "SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved."
+              ],
+              "pinned": true,
+              "purpose": "`NLib`'s surface insertion, refinement, Bezier extraction and elevation are rebuilt on the ported curve kernels applied line by line, in place of its separate surface loops, with the curve kernels' changes; every result carries its certified deviation.",
+              "take": "port"
+            }
+          ],
+          "spdx": "MPL-2.0 AND Apache-2.0",
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the number of control points; [`homs`] and [`split`] make one allocation each.",
+          "does": "a knot operation returns a [`Changed`] value: the new curve, curves or surface, and `deviation`, an upper bound on the distance between the new shape and the old one at every parameter of the domain. For an operation that is exact in real arithmetic (insertion, refinement, Bezier extraction, degree elevation) the deviation is only the rounding of the new control points; for an approximation (knot removal, degree reduction) it also holds the approximation's own error. [`rounding`] turns the interval run of an operation (`crate::arith`) into the rounding part: chapter 7's rule that a conversion \"returns the NURBS, whether it is exact, and its maximum error\".",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-nurbs/src/ops.rs",
+          "guarantees": [
+            "**Certified.** For a nonrational result with control points Q̂ whose exact counterparts are Q, the shapes differ by Σ `N_i`·(`Q̂_i` − `Q_i`), at most `max_i` |`Q̂_i` − `Q_i`| because the basis functions are not negative and sum to 1; the interval run bounds each |`Q̂_i` − `Q_i`| by the Euclidean norm of its interval's widths, rounded up. For a rational result, S = A / W and Ŝ − S = ((Â − A) − S·(Ŵ − W)) / Ŵ, so |Ŝ − S| ≤ (max |Δ(w·Q)| + `P_max`·max |Δw|) / min ŵ, where `P_max` bounds |S| (the largest distance of an input control point from the origin, by the convex hull property) and min ŵ is the smallest weight of the result, which bounds Ŵ below. Every step is computed in interval arithmetic and its upper bound taken.",
+            "**Refused, never weak.** A result with a weight that is not positive is [`NurbsError::Weight`]; a bound that is not finite is [`NurbsError::NotFinite`]."
+          ],
+          "job": "What every knot operation returns, and the certified bound on how far its result lies from the curve or surface it was given.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "the partition of unity and the convex hull property of B-splines (The NURBS Book, 2nd ed., Springer (1997), properties P2.4, P3.4 and P4.4, <https://doi.org/10.1007/978-3-642-59223-2>), with interval arithmetic for every bound (`crate::arith`)."
+          },
+          "path": "geom_nurbs::ops",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant; nothing allocates.",
+          "does": "one algorithm serves 2D and 3D (chapter 7: \"One curve family serves 2D and 3D\"). Curves and surfaces are generic over the dimension D and store coordinates as `[f64; D]`; [`Point`] converts `geom-math`'s [`F2`] and [`F3`], and arrays, to and from those coordinates.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-nurbs/src/point.rs",
+          "guarantees": [
+            "**Exact both ways.** `coords` copies the components, and `from_coords` builds the point from them unchanged.",
+            "**Finite.** `from_coords` refuses a coordinate that is NaN or infinite with [`NurbsError::NotFinite`], as `geom-math`'s constructors do."
+          ],
+          "job": "The control points the NURBS algorithms accept and return: `geom-math`'s finite points in two and three dimensions, and plain coordinate arrays.",
+          "method": {
+            "none": "a trait and its implementations, which only copy components."
+          },
+          "path": "geom_nurbs::point",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(s·p²) operations for s spans to reduce, and an elevation and a refinement of the result in intervals to certify, O(s·p²) more; the candidate and the enclosures are allocated once each.",
+          "does": "[`Curve::reduce_degree`] walks the knot vector as Bezier extraction does (A5.6), reduces each Bezier piece from degree p to p − 1 (the book's equations 5.41 to 5.44: points solved from both ends, the middle one averaged for odd degree), and removes one copy of each knot again, averaging the two estimates where the removal sweeps cross with `NLib`'s weight λ = α / (α + β) (`NLib`'s `N_CrvReduceDegreeOnce`). Every distinct knot loses one copy, so knots of multiplicity 1 disappear. Whether the result is kept is not decided by `NLib`'s error estimate but certified: the candidate is raised back to degree p (A5.9) and the knots it lost are inserted (A5.4), both exact operations run in interval arithmetic, which gives the input's knots and an enclosure of the control points the candidate has on the input's basis; their largest distance from the input's points bounds the distance between the curves (`crate::remove`'s difference bound, with the rational form of `crate::ops`).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-nurbs/src/reduce.rs",
+          "guarantees": [
+            "**Within the tolerance, certified.** A returned curve differs from the input by at most the returned deviation everywhere in the domain, and the deviation is at most `tol`; the bound includes the rounding of every returned control point. Otherwise the result is [`NurbsError::OutsideTolerance`], also when a weight of the candidate is not positive.",
+            "**Where it applies.** The curve has degree 2 or more ([`NurbsError::Degree`]), is clamped ([`NurbsError::NotClamped`]) and has no interior knot repeated p + 1 times ([`NurbsError::Discontinuous`]), as A5.11 and `NLib` assume; the tolerance is finite and not negative ([`NurbsError::Tolerance`]).",
+            "**Budgeted.** The candidate and its certification are charged to the meter first."
+          ],
+          "job": "Degree reduction of NURBS curves (The NURBS Book, algorithm A5.11), certified: the curve of degree p − 1 is returned only when it provably lies within the tolerance of the input.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/978-3-642-59223-2",
+              "https://doi.org/10.1016/0010-4485(95"
+            ],
+            "text": "Piegl and Tiller's algorithm A5.11 with Bezier degree reduction by equations 5.41 to 5.44 (The NURBS Book, 2nd ed., section 5.6, <https://doi.org/10.1007/978-3-642-59223-2>; L. Piegl and W. Tiller, \"Algorithm for degree reduction of B-spline curves\", *Computer-Aided Design* 27(2) (1995), 101–110, <https://doi.org/10.1016/0010-4485(95)92147-K>), as `NLib` implements it, certified by exact elevation and refinement in interval arithmetic (`crate::elevate`, `crate::insert`, `crate::arith`)."
+          },
+          "path": "geom_nurbs::reduce",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_CrvTool.cpp",
+              "method_note": null,
+              "name": "NVIDIA USD `BRep` `NLib`",
+              "notice": [
+                "<https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_Bezier.cpp>",
+                "SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved."
+              ],
+              "pinned": true,
+              "purpose": "translated to safe `no_std` Rust from `N_CrvReduceDegreeOnce`, `N_BezDegreeReduceCoefs` and `N_BezReduceDegree`; `NLib`'s error estimate (Bezier error terms and basis maxima from a numerical search) and its weight range are replaced by the certified bound above, so the square root of its odd-degree estimate is not needed; a new curve is returned with its deviation instead of a flag.",
+              "take": "port"
+            }
+          ],
+          "spdx": "MPL-2.0 AND Apache-2.0",
+          "target": "lib"
+        },
+        {
+          "cost": "each removal takes O(n·D) operations to copy the points, O(p·D) to solve, and O(n + p²) in intervals to certify; at most min(times, multiplicity) removals are tried.",
+          "does": "[`Curve::remove_knot`] removes the knot u up to `times` times. Each removal solves for the new control points from both ends of the affected run, as A5.8 and `NLib`'s `N_CrvRemoveKnot` do (`P_i` = `α_i`·`Q_i` + (1 − `α_i`)·`Q_(i−1)` solved for Q), and where the two sweeps cross it averages their two estimates with `NLib`'s weight λ = α / (α + β). Whether a removal is kept is not decided from those formulas: the candidate curve is re-inserted (u put back as many times as it was removed, Boehm's algorithm) in interval arithmetic, which gives the input's knots and an enclosure of the control points the candidate has in the input's basis; the two curves differ by Σ `N_l`·(`P̃_l` − `P_l`) on that basis, so the largest enclosed |`P̃_l` − `P_l`| bounds their distance (with the rational form of `crate::ops`). A removal is kept only while that certified bound stays within the tolerance; the bound of the last removal kept is the deviation returned.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-nurbs/src/remove.rs",
+          "guarantees": [
+            "**Within the tolerance, certified.** The returned curve differs from the input by at most the returned deviation everywhere in the domain, and the deviation is at most `tol`. The bound covers the removal's own change and the rounding of every new control point, because it is measured on the doubles returned.",
+            "**Never worse than asked.** Where `NLib`'s test can pass a knot whose true change exceeds the tolerance (its basis maxima come from a numerical search, and its rational test uses the input's weights), this one cannot; it may remove fewer knots than an uncertified test.",
+            "**Typed refusals.** A tolerance that is negative or not finite is [`NurbsError::Tolerance`]; u not an interior knot is [`NurbsError::KnotOutside`]; u repeated p + 1 times (where the curve may jump) is [`NurbsError::Discontinuous`]. A removal that would make a weight not positive is not kept.",
+            "**Budgeted.** Each attempt is charged to the meter before it is computed."
+          ],
+          "job": "Knot removal of NURBS curves (The NURBS Book, algorithm A5.8), certified: a knot is removed only while the curve provably stays within the tolerance asked for.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1016/0010-4485(92",
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "Tiller's knot removal (W. Tiller, \"Knot-removal algorithms for NURBS curves and surfaces\", *Computer-Aided Design* 24(8) (1992), 445–453, <https://doi.org/10.1016/0010-4485(92)90012-Y>) as Piegl and Tiller's algorithm A5.8 gives it (The NURBS Book, 2nd ed., section 5.4, <https://doi.org/10.1007/978-3-642-59223-2>) and `NLib` implements it, with the change bounded through re-insertion and the partition of unity (properties P2.4 and P4.4 of the book) in interval arithmetic (`crate::arith`)."
+          },
+          "path": "geom_nurbs::remove",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_CrvTool.cpp",
+              "method_note": null,
+              "name": "NVIDIA USD `BRep` `NLib`",
+              "notice": [
+                "SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved."
+              ],
+              "pinned": true,
+              "purpose": "translated to safe `no_std` Rust from `N_CrvRemoveKnot`, one removal at a time; the decision to keep a removal uses a certified bound from re-insertion in interval arithmetic in place of `NLib`'s distance test with basis maxima from a numerical search, its rescaled tolerance for rational curves and its weight range; a new curve is returned with the deviation instead of being edited in place.",
+              "take": "port"
+            }
+          ],
+          "spdx": "MPL-2.0 AND Apache-2.0",
+          "target": "lib"
+        },
+        {
+          "cost": "construction is linear in the control points and makes one allocation (two if rational). [`Surface::point`] takes O(p² + q² + p·q·D) operations; [`Surface::derivs`] O(p² + q² + du·dv·(p·q·D + du·dv·D)); neither allocates.",
+          "does": "a [`Surface`] holds two bases, one per parameter direction, and a net of (n + 1) × (m + 1) control points stored row by row (row i follows u, column j follows v), with weights if it is rational, in homogeneous form w·P as for curves. [`Surface::point`] sums, for each row of the p + 1 rows that matter, the q + 1 points against the v basis, then the rows against the u basis (A3.5, as `NLib` does it), and divides by the weights summed the same way for a rational surface (A4.3). [`Surface::derivs`] does the same with basis derivatives (A3.6) and applies Leibniz's rule to w·S = A for a rational surface (A4.4), for every order k ≤ du in u and l ≤ dv in v.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-nurbs/src/surface.rs",
+          "guarantees": [
+            "**Well formed or refused.** A surface has exactly one control point (and one weight) per pair of basis functions, every coordinate finite, every weight positive and finite, and every weighted coordinate finite.",
+            "**Points.** A nonrational point is within `γ_(7p+7q+2)` · `Σ_i` `NU_i` `Σ_j` `NV_j`·|`P_ij`|; a rational one within `γ_(14p+14q+5)` times the same sum over |w·P| divided by Σ `NU_i` `NV_j` `w_ij`. Each inner sum carries `γ_(7q+1)`, and each product with a u basis value and the outer sum add `γ_(6p)` and p + 1 roundings.",
+            "**Derivatives.** A nonrational derivative is within `γ_(7p+7q+6)` · `Σ_i` `MU_(k,i)` `Σ_j` `MV_(l,j)`·|`P_ij`|. A rational one is within `γ_e` · `MS_(k,l)`, e = (D + 1)(14p + 14q + 2D + 12), where `MS` is A4.4's recurrence run on magnitudes (every subtraction an addition, with the magnitude sums in place of A and of the weight derivatives); each step of the recurrence adds the error of the sums, two products per term, its sums and subtractions and the division to the largest error of the lower orders, and a chain of steps from order (0, 0) has at most D of them. The value of order (0, 0) has the same bits as [`Surface::point`].",
+            "**Typed failures.** A parameter outside its domain is [`NurbsError::ParameterOutside`], a result that overflows [`NurbsError::NotFinite`], an order above [`MAX_DEGREE`] [`NurbsError::DerivativeOrder`].",
+            "**Deterministic.** Fixed summation order (v inside u, by increasing index), no fused multiply-add, no platform maths."
+          ],
+          "job": "NURBS surfaces in two and three dimensions: construction under chapter 24.7's rules, points and partial derivatives (The NURBS Book, algorithms A3.5, A3.6, A4.3 and A4.4).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/978-3-642-59223-2",
+              "https://doi.org/10.1137/1.9780898718027"
+            ],
+            "text": "Piegl and Tiller's algorithms A3.5, A3.6, A4.3 and A4.4 (The NURBS Book, 2nd ed., sections 3.4, 3.5 and 4.4 to 4.5, <https://doi.org/10.1007/978-3-642-59223-2>), with `NLib`'s order of summation for points; the error bounds follow Higham (*Accuracy and Stability of Numerical Algorithms*, 2nd ed., SIAM (2002), chapter 3, <https://doi.org/10.1137/1.9780898718027>)."
+          },
+          "path": "geom_nurbs::surface",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_SrfNurb.cpp",
+              "method_note": null,
+              "name": "NVIDIA USD `BRep` `NLib`",
+              "notice": [
+                "SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved."
+              ],
+              "pinned": true,
+              "purpose": "translated to safe `no_std` Rust from `N_SrfEvalPtImpl` and `N_SrfDerivs`, for any dimension D instead of `NLib`'s homogeneous 4D points with its \"no z\" and \"no w\" markers; derivatives summed in the same nested order as points (v inside u), where `N_ComputeDerivativeMatrixSpec` sums products of the two bases' derivatives in one double loop, so the value of order (0, 0) equals the point; rational derivatives by the book's A4.4 on the stored homogeneous points, where `NLib` forms rational basis derivatives against points divided by their weights; parameters outside the domains and orders above the maximum are typed errors; each overflow is checked.",
+              "take": "port"
+            }
+          ],
+          "spdx": "MPL-2.0 AND Apache-2.0",
+          "target": "lib"
+        }
+      ],
       "name": "geom-nurbs",
       "provenance": [],
       "sections": "7, 12.3, 12.12, 13 (introduction), 14.1 and 15.6; 29.7, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G56, G58, G59, G259.",
+      "status": "basis, evaluation and knot operations built (G56); interpolation and approximation (G58), the Bernstein toolkit (G59) and the rest (G259) to come.",
       "summary": "Spare Kit geometry kernel: NURBS algorithms."
     },
     {
@@ -5646,6 +6237,65 @@
       "take": "depend",
       "used_by": [
         "projects/engines/geometry/crates/geom-num/Cargo.toml"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_BasisBasic.cpp",
+      "method_note": null,
+      "name": "NVIDIA USD `BRep` `NLib`",
+      "pinned": true,
+      "take": "port",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-nurbs/src/basis.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_CrvNurb.cpp",
+      "method_note": null,
+      "name": "NVIDIA USD `BRep` `NLib`",
+      "pinned": true,
+      "take": "port",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-nurbs/src/curve.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_CrvTool.cpp",
+      "method_note": null,
+      "name": "NVIDIA USD `BRep` `NLib`",
+      "pinned": true,
+      "take": "port",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-nurbs/src/bezier.rs",
+        "projects/engines/geometry/crates/geom-nurbs/src/elevate.rs",
+        "projects/engines/geometry/crates/geom-nurbs/src/insert.rs",
+        "projects/engines/geometry/crates/geom-nurbs/src/reduce.rs",
+        "projects/engines/geometry/crates/geom-nurbs/src/remove.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_SrfNurb.cpp",
+      "method_note": null,
+      "name": "NVIDIA USD `BRep` `NLib`",
+      "pinned": true,
+      "take": "port",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-nurbs/src/surface.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_SrfTool.cpp",
+      "method_note": null,
+      "name": "NVIDIA USD `BRep` `NLib`",
+      "pinned": true,
+      "take": "port",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-nurbs/src/net.rs"
       ]
     },
     {

@@ -20,8 +20,9 @@
 
 mod common;
 
-use common::{Lcg, Q, cox_de_boor, derivatives, gamma, knots, magnitudes_a23, magnitudes_a25, q,
-    within, zero};
+use common::{
+    Lcg, Q, cox_de_boor, derivatives, gamma, knots, magnitudes_a23, magnitudes_a25, q, within, zero,
+};
 use geom_nurbs::{Basis, Limit, NurbsError};
 
 const LIMITS: [Limit; 2] = [Limit::FromRight, Limit::FromLeft];
@@ -217,11 +218,20 @@ fn single_functions_are_within_their_bounds() {
 fn construction_refuses_each_rule_in_order() {
     let ok = vec![0.0, 0.0, 0.0, 1.0, 2.0, 2.0, 2.0];
     assert!(Basis::new(2, ok.clone()).is_ok());
-    assert_eq!(Basis::new(0, ok.clone()), Err(NurbsError::Degree { degree: 0 }));
-    assert_eq!(Basis::new(29, ok.clone()), Err(NurbsError::Degree { degree: 29 }));
+    assert_eq!(
+        Basis::new(0, ok.clone()),
+        Err(NurbsError::Degree { degree: 0 })
+    );
+    assert_eq!(
+        Basis::new(29, ok.clone()),
+        Err(NurbsError::Degree { degree: 29 })
+    );
     assert_eq!(
         Basis::new(3, ok.clone()),
-        Err(NurbsError::KnotCount { knots: 7, needed: 8 })
+        Err(NurbsError::KnotCount {
+            knots: 7,
+            needed: 8
+        })
     );
     assert_eq!(
         Basis::new(2, vec![0.0, 0.0, f64::NAN, 1.0, 2.0, 2.0]),
@@ -237,7 +247,10 @@ fn construction_refuses_each_rule_in_order() {
     );
     assert_eq!(
         Basis::new(1, vec![0.0, 0.0, 1.0, 1.0, 1.0, 2.0]),
-        Err(NurbsError::Multiplicity { index: 2, multiplicity: 3 })
+        Err(NurbsError::Multiplicity {
+            index: 2,
+            multiplicity: 3
+        })
     );
     assert_eq!(
         Basis::new(1, vec![-1e308, -1e308, 1e308, 1e308]),
@@ -254,8 +267,18 @@ fn parameters_outside_the_domain_are_refused() {
     let basis = Basis::new(2, vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
     assert_eq!(basis.domain(), (2.0, 4.0));
     let mut n = [0.0; 3];
-    for u in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, 1.999_999, 4.000_001, 0.0] {
-        assert_eq!(basis.span(u, Limit::FromRight), Err(NurbsError::ParameterOutside));
+    for u in [
+        f64::NAN,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        1.999_999,
+        4.000_001,
+        0.0,
+    ] {
+        assert_eq!(
+            basis.span(u, Limit::FromRight),
+            Err(NurbsError::ParameterOutside)
+        );
         assert_eq!(
             basis.eval(u, Limit::FromLeft, &mut n),
             Err(NurbsError::ParameterOutside)
@@ -274,12 +297,18 @@ fn buffers_and_indices_are_checked() {
     let mut short = [0.0; 2];
     assert_eq!(
         basis.eval(0.5, Limit::FromRight, &mut short),
-        Err(NurbsError::BufferLength { given: 2, needed: 3 })
+        Err(NurbsError::BufferLength {
+            given: 2,
+            needed: 3
+        })
     );
     let mut ders = [0.0; 8];
     assert_eq!(
         basis.eval_derivs(0.5, Limit::FromRight, 2, &mut ders),
-        Err(NurbsError::BufferLength { given: 8, needed: 9 })
+        Err(NurbsError::BufferLength {
+            given: 8,
+            needed: 9
+        })
     );
     assert_eq!(
         basis.eval_one(4, 0.5, Limit::FromRight),
@@ -287,7 +316,10 @@ fn buffers_and_indices_are_checked() {
     );
     assert_eq!(
         basis.eval_one_derivs(0, 0.5, Limit::FromRight, &mut []),
-        Err(NurbsError::BufferLength { given: 0, needed: 1 })
+        Err(NurbsError::BufferLength {
+            given: 0,
+            needed: 1
+        })
     );
 }
 
@@ -317,8 +349,12 @@ fn derivatives_jump_at_a_knot_from_each_side() {
     let basis = Basis::new(2, vec![0.0, 0.0, 0.0, 1.0, 1.0, 2.0, 2.0, 2.0]).unwrap();
     let mut right = vec![0.0; 2 * 3];
     let mut left = vec![0.0; 2 * 3];
-    let sr = basis.eval_derivs(1.0, Limit::FromRight, 1, &mut right).unwrap();
-    let sl = basis.eval_derivs(1.0, Limit::FromLeft, 1, &mut left).unwrap();
+    let sr = basis
+        .eval_derivs(1.0, Limit::FromRight, 1, &mut right)
+        .unwrap();
+    let sl = basis
+        .eval_derivs(1.0, Limit::FromLeft, 1, &mut left)
+        .unwrap();
     assert_eq!((sl, sr), (2, 4));
     let exact_right = derivatives(basis.knots(), 2, 1.0, Limit::FromRight, 1);
     let exact_left = derivatives(basis.knots(), 2, 1.0, Limit::FromLeft, 1);

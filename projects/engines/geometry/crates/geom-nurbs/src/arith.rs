@@ -109,7 +109,10 @@ impl<N: Num, const D: usize> Hom<N, D> {
         for (o, x) in out.iter_mut().zip(c) {
             *o = N::of(x)?;
         }
-        Ok(Hom { c: out, w: N::of(w)? })
+        Ok(Hom {
+            c: out,
+            w: N::of(w)?,
+        })
     }
 
     /// `self + a·x`, coordinate by coordinate and for the weight, each as `self_d + a·x_d`
@@ -127,7 +130,12 @@ impl<N: Num, const D: usize> Hom<N, D> {
 
     /// `a·x + b·y`, coordinate by coordinate and for the weight, each as `a·x_d + b·y_d`
     /// (`NLib`'s `N_Combine2CPts`).
-    pub(crate) fn combine(alpha: N, first: Self, beta: N, second: Self) -> Result<Self, NurbsError> {
+    pub(crate) fn combine(
+        alpha: N,
+        first: Self,
+        beta: N,
+        second: Self,
+    ) -> Result<Self, NurbsError> {
         let mut coords = first.c;
         for (cd, (fd, sd)) in coords.iter_mut().zip(first.c.iter().zip(second.c)) {
             *cd = alpha.times(*fd)?.plus(beta.times(sd)?)?;

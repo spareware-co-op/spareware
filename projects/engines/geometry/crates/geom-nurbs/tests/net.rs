@@ -72,7 +72,12 @@ fn exact_point(s: &Surface<3>, u: f64, v: f64, limits: (Limit, Limit)) -> [Q; 3]
 
 fn params(b: &Basis, rng: &mut Lcg) -> Vec<f64> {
     let (lo, hi) = b.domain();
-    let mut out: Vec<f64> = b.knots().iter().copied().filter(|&k| lo <= k && k <= hi).collect();
+    let mut out: Vec<f64> = b
+        .knots()
+        .iter()
+        .copied()
+        .filter(|&k| lo <= k && k <= hi)
+        .collect();
     out.dedup();
     out.push(lo + (hi - lo) * rng.unit());
     out
@@ -92,7 +97,10 @@ fn same_surface(old: &Surface<3>, new: &Surface<3>, deviation: f64, rng: &mut Lc
                 let diff = &a[d] - &b[d];
                 d2 += &diff * &diff;
             }
-            assert!(d2 <= dev2, "({u}, {v}): the surfaces differ by more than {deviation}");
+            assert!(
+                d2 <= dev2,
+                "({u}, {v}): the surfaces differ by more than {deviation}"
+            );
         }
     }
 }
@@ -101,11 +109,16 @@ fn same_surface(old: &Surface<3>, new: &Surface<3>, deviation: f64, rng: &mut Lc
 fn line(s: &Surface<3>, dir: Direction, index: usize) -> Curve<3> {
     let cols = s.basis_v().count();
     let (basis, idx): (&Basis, Vec<usize>) = match dir {
-        Direction::U => (s.basis_u(), (0..s.basis_u().count()).map(|i| i * cols + index).collect()),
+        Direction::U => (
+            s.basis_u(),
+            (0..s.basis_u().count()).map(|i| i * cols + index).collect(),
+        ),
         Direction::V => (s.basis_v(), (0..cols).map(|j| index * cols + j).collect()),
     };
     let pts: Vec<[f64; 3]> = idx.iter().map(|&k| s.homogeneous()[k]).collect();
-    let w = s.weights().map(|ws| idx.iter().map(|&k| ws[k]).collect::<Vec<f64>>());
+    let w = s
+        .weights()
+        .map(|ws| idx.iter().map(|&k| ws[k]).collect::<Vec<f64>>());
     Curve::from_homogeneous(basis.clone(), pts, w).unwrap()
 }
 
@@ -127,7 +140,11 @@ fn surface_operations_keep_the_surface_and_match_the_curves() {
             };
             let (lo, hi) = basis.domain();
             let u = lo + (hi - lo) * (0.1 + 0.8 * rng.unit());
-            let x = vec![lo + (hi - lo) * 0.3, lo + (hi - lo) * 0.3, lo + (hi - lo) * 0.7];
+            let x = vec![
+                lo + (hi - lo) * 0.3,
+                lo + (hi - lo) * 0.3,
+                lo + (hi - lo) * 0.7,
+            ];
             let ins = s.insert_knot(dir, u, 1, &mut meter()).unwrap();
             let refd = s.refine(dir, &x, &mut meter());
             let up = s.elevate(dir, 1, &mut meter());
@@ -169,8 +186,16 @@ fn surface_operations_keep_the_surface_and_match_the_curves() {
             let (i, j) = (index / (dv.len() - 1), index % (dv.len() - 1));
             assert_eq!(patch.basis_u().domain(), (du[i], du[i + 1]));
             assert_eq!(patch.basis_v().domain(), (dv[j], dv[j + 1]));
-            for (u, lu) in [(du[i], Limit::FromRight), (du[i + 1], Limit::FromLeft), ((du[i] + du[i + 1]) / 2.0, Limit::FromRight)] {
-                for (v, lv) in [(dv[j], Limit::FromRight), (dv[j + 1], Limit::FromLeft), ((dv[j] + dv[j + 1]) / 2.0, Limit::FromRight)] {
+            for (u, lu) in [
+                (du[i], Limit::FromRight),
+                (du[i + 1], Limit::FromLeft),
+                (f64::midpoint(du[i], du[i + 1]), Limit::FromRight),
+            ] {
+                for (v, lv) in [
+                    (dv[j], Limit::FromRight),
+                    (dv[j + 1], Limit::FromLeft),
+                    (f64::midpoint(dv[j], dv[j + 1]), Limit::FromRight),
+                ] {
                     let a = exact_point(&s, u, v, (lu, lv));
                     let b = exact_point(patch, u, v, (Limit::FromRight, Limit::FromRight));
                     let mut d2 = zero();
@@ -191,10 +216,22 @@ fn surface_operations_refuse_as_the_curves_do() {
     let bv = Basis::new(1, vec![0.0, 1.0, 2.0, 3.0]).unwrap();
     let s = Surface::new(bu, bv, &[[0.0; 3]; 8]).unwrap();
     let mut m = meter();
-    assert_eq!(s.insert_knot(Direction::U, 2.0, 1, &mut m).unwrap_err(), NurbsError::KnotOutside);
-    assert_eq!(s.insert_knot(Direction::U, 1.0, 2, &mut m).unwrap_err(), NurbsError::TooManyKnots);
-    assert_eq!(s.elevate(Direction::V, 1, &mut m).unwrap_err(), NurbsError::NotClamped);
+    assert_eq!(
+        s.insert_knot(Direction::U, 2.0, 1, &mut m).unwrap_err(),
+        NurbsError::KnotOutside
+    );
+    assert_eq!(
+        s.insert_knot(Direction::U, 1.0, 2, &mut m).unwrap_err(),
+        NurbsError::TooManyKnots
+    );
+    assert_eq!(
+        s.elevate(Direction::V, 1, &mut m).unwrap_err(),
+        NurbsError::NotClamped
+    );
     assert_eq!(s.to_bezier(&mut m).unwrap_err(), NurbsError::NotClamped);
-    assert_eq!(s.elevate(Direction::U, 27, &mut m).unwrap_err(), NurbsError::Degree { degree: 29 });
+    assert_eq!(
+        s.elevate(Direction::U, 27, &mut m).unwrap_err(),
+        NurbsError::Degree { degree: 29 }
+    );
     assert!(s.insert_knot(Direction::V, 1.5, 1, &mut m).is_ok());
 }

@@ -91,7 +91,10 @@ fn map_lines<N: Num, const D: usize>(
     meter: &mut WorkMeter<'_>,
     net: &Net<N, D>,
     dir: Direction,
-    mut f: impl FnMut(&mut WorkMeter<'_>, &[Hom<N, D>]) -> Result<(Vec<f64>, Vec<Hom<N, D>>), NurbsError>,
+    mut f: impl FnMut(
+        &mut WorkMeter<'_>,
+        &[Hom<N, D>],
+    ) -> Result<(Vec<f64>, Vec<Hom<N, D>>), NurbsError>,
 ) -> Result<(Vec<f64>, Net<N, D>), NurbsError> {
     let count = net.lines(dir);
     let mut knots = Vec::new();
@@ -198,7 +201,12 @@ impl<const D: usize> Surface<D> {
             return Err(NurbsError::TooManyKnots);
         }
         let len = add(basis.count(), times)?;
-        charge_op(meter, self.net_size(dir, len)?, D, add(basis.knots().len(), times)?)?;
+        charge_op(
+            meter,
+            self.net_size(dir, len)?,
+            D,
+            add(basis.knots().len(), times)?,
+        )?;
         let job = Insertion {
             u,
             span: basis.span(u, Limit::FromRight)?,
@@ -237,13 +245,27 @@ impl<const D: usize> Surface<D> {
             });
         }
         let len = add(basis.count(), x.len())?;
-        charge_op(meter, self.net_size(dir, len)?, D, add(basis.knots().len(), x.len())?)?;
+        charge_op(
+            meter,
+            self.net_size(dir, len)?,
+            D,
+            add(basis.knots().len(), x.len())?,
+        )?;
         let net_f = self.net::<f64>(meter)?;
         let net_i = self.net::<Interval>(meter)?;
-        let (uq, result) = map_lines(meter, &net_f, dir, |m, line| refine_kernel(m, basis, line, x))?;
-        let (_, enclosure) =
-            map_lines(meter, &net_i, dir, |m, line| refine_kernel(m, basis, line, x))?;
-        self.rebuild(meter, dir, Basis::new(basis.degree(), uq)?, &result, &enclosure)
+        let (uq, result) = map_lines(meter, &net_f, dir, |m, line| {
+            refine_kernel(m, basis, line, x)
+        })?;
+        let (_, enclosure) = map_lines(meter, &net_i, dir, |m, line| {
+            refine_kernel(m, basis, line, x)
+        })?;
+        self.rebuild(
+            meter,
+            dir,
+            Basis::new(basis.degree(), uq)?,
+            &result,
+            &enclosure,
+        )
     }
 
     /// The surface with its degree in direction `dir` raised by `t` (A5.10).
@@ -275,9 +297,12 @@ impl<const D: usize> Surface<D> {
         charge_op(meter, self.net_size(dir, len)?, D, knots)?;
         let net_f = self.net::<f64>(meter)?;
         let net_i = self.net::<Interval>(meter)?;
-        let (uq, result) = map_lines(meter, &net_f, dir, |m, line| elevate_kernel(m, basis, line, t))?;
-        let (_, enclosure) =
-            map_lines(meter, &net_i, dir, |m, line| elevate_kernel(m, basis, line, t))?;
+        let (uq, result) = map_lines(meter, &net_f, dir, |m, line| {
+            elevate_kernel(m, basis, line, t)
+        })?;
+        let (_, enclosure) = map_lines(meter, &net_i, dir, |m, line| {
+            elevate_kernel(m, basis, line, t)
+        })?;
         self.rebuild(meter, dir, Basis::new(q, uq)?, &result, &enclosure)
     }
 

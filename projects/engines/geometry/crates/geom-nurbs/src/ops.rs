@@ -178,7 +178,8 @@ pub(crate) fn rounding<const D: usize>(
     if !rational {
         return Ok(point_dev);
     }
-    let top = Interval::of(point_dev)?.plus(Interval::of(p_max)?.times(Interval::of(weight_dev)?)?)?;
+    let top =
+        Interval::of(point_dev)?.plus(Interval::of(p_max)?.times(Interval::of(weight_dev)?)?)?;
     let bound = top.over(Interval::of(w_min)?)?.hi();
     if bound.is_finite() {
         Ok(bound)

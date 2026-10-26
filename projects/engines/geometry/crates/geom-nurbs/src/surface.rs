@@ -148,10 +148,7 @@ impl<const D: usize> Surface<D> {
             }
             check_weights(w)?;
         }
-        if let Some(index) = points
-            .iter()
-            .position(|p| !p.iter().all(|x| x.is_finite()))
-        {
+        if let Some(index) = points.iter().position(|p| !p.iter().all(|x| x.is_finite())) {
             return Err(NurbsError::PointNotFinite { index });
         }
         Ok(Surface {
@@ -330,7 +327,8 @@ fn leibniz2<const D: usize>(
     let cols = add(dv, 1)?;
     let w00 = get(wders, 0)?;
     let bins = pascal()?;
-    let bin = |n: usize, k: usize| -> Result<f64, NurbsError> { get(&bins, add(mul(n, WIDTH)?, k)?) };
+    let bin =
+        |n: usize, k: usize| -> Result<f64, NurbsError> { get(&bins, add(mul(n, WIDTH)?, k)?) };
     let wd = |k: usize, l: usize| -> Result<f64, NurbsError> {
         if k > tops.0 || l > tops.1 {
             Ok(0.0)

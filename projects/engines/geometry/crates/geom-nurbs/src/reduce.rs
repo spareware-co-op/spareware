@@ -91,7 +91,12 @@ impl<const D: usize> Curve<D> {
         let rational = self.is_rational();
         // The candidate, then its elevation and refinement in intervals: three curves of about the
         // input's size.
-        charge_op(meter, mul(self.homogeneous().len(), 3)?, D, mul(basis.knots().len(), 3)?)?;
+        charge_op(
+            meter,
+            mul(self.homogeneous().len(), 3)?,
+            D,
+            mul(basis.knots().len(), 3)?,
+        )?;
         let input = homs::<f64, D>(meter, self.homogeneous(), self.weights())?;
         let (uq, candidate) = reduce_kernel(meter, basis, &input)?;
         if rational && !candidate.iter().all(|h| h.w.is_finite() && h.w > 0.0) {
@@ -193,7 +198,12 @@ fn reduce_bezier<const D: usize>(
     let r = sub(p, 1)? / 2;
     let from_left_to = if p % 2 == 1 { r.saturating_sub(1) } else { r };
     for i in 1..=from_left_to {
-        let v = Hom::combine(get(&c.alf, i)?, get(pw, i)?, get(&c.oma, i)?, get(qw, sub(i, 1)?)?)?;
+        let v = Hom::combine(
+            get(&c.alf, i)?,
+            get(pw, i)?,
+            get(&c.oma, i)?,
+            get(qw, sub(i, 1)?)?,
+        )?;
         set(qw, i, v)?;
     }
     for i in (add(r, 1)?..=sub(p, 2)?).rev() {
@@ -207,7 +217,12 @@ fn reduce_bezier<const D: usize>(
     }
     if p % 2 == 1 {
         // The middle point: the average of its estimates from the left and from the right.
-        let pl = Hom::combine(get(&c.alf, r)?, get(pw, r)?, get(&c.oma, r)?, get(qw, sub(r, 1)?)?)?;
+        let pl = Hom::combine(
+            get(&c.alf, r)?,
+            get(pw, r)?,
+            get(&c.oma, r)?,
+            get(qw, sub(r, 1)?)?,
+        )?;
         let pr = Hom::combine(
             get(&c.bet, r)?,
             get(pw, add(r, 1)?)?,

@@ -88,7 +88,11 @@ impl<const D: usize> Curve<D> {
             knots.extend(core::iter::repeat_n(*a, order));
             knots.extend(core::iter::repeat_n(*b, order));
             let (points, weights) = split(meter, pts, rational)?;
-            out.push(Curve::from_homogeneous(Basis::new(p, knots)?, points, weights)?);
+            out.push(Curve::from_homogeneous(
+                Basis::new(p, knots)?,
+                points,
+                weights,
+            )?);
         }
         Ok(Changed {
             value: out,
