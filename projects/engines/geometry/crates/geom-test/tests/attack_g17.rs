@@ -158,7 +158,7 @@ const PLAYBOOK: [(&str, &str, &str); 49] = [
     (
         "`deny-no-std.toml`'s `allow`",
         "deny-no-std.toml",
-        "\nallow = [\"libm\"]\n",
+        "\nallow = [\n  { crate = \"libm@",
     ),
     (
         "`registry` list",

@@ -1,9 +1,9 @@
 //! The merge gate's dependency rules (piece G12): cargo-deny with chapter 29.2's licence
 //! allow-list, security advisories and allowed sources over every crate of the kernel's family;
-//! git dependencies refused; `libm` the only published crate in the `no_std` kernel crates, and
-//! the one from crates.io; rayon only through `geom-pool` in what ships; and the gate's own rules
-//! on the same graphs, where cargo-deny's leave a gap (chapter 28.8; 29.1, 29.2, 29.4; 29.20,
-//! rule 3).
+//! git dependencies refused; in the `no_std` kernel crates, only the crates of the vetted
+//! allow-list (`vetted`; `libm` alone today), each at its pinned version and from crates.io; rayon
+//! only through `geom-pool` in what ships; and the gate's own rules on the same graphs, where
+//! cargo-deny's leave a gap (chapter 28.8; 29.1, 29.2, 29.4; 29.20, rule 3).
 //!
 //! What it does:
 //!
@@ -12,12 +12,13 @@
 //!   every way they say something other than the gate requires: an allow-list that is not exactly
 //!   29.2's, an exception or clarification that widens it, development or build dependencies left
 //!   out, an advisory ignored or downgraded, a registry or git source allowed, a graph narrowed,
-//!   a `no_std` allow-list other than `libm`, or the rayon bans not exactly 29.4's. Fast and
-//!   hermetic.
+//!   a `no_std` allow-list whose entries are not vetted (`vetted::read`: each pinned to one
+//!   version, with its record against the principles), or the rayon bans not exactly 29.4's. Fast
+//!   and hermetic.
 //! - `run::cargo_deny` runs cargo-deny (`cargo deny`, with `--format json`, offline after
-//!   `run::fetch` has fetched the advisory database and the crates) and reads its diagnostics and
-//!   exit code, whose bits say which check failed (`ADVISORIES`, `BANS`, `LICENSES`, `SOURCES`;
-//!   cargo-deny's documentation, "Exit Codes").
+//!   `run::fetch` has fetched the advisory database and the crates) and reads its diagnostics
+//!   (with `serde_json`) and exit code, whose bits say which check failed (`ADVISORIES`, `BANS`,
+//!   `LICENSES`, `SOURCES`; cargo-deny's documentation, "Exit Codes").
 //! - `rules` holds the gate's own rules, run on the same graph as each cargo-deny run, its
 //!   refusals reported under the check they belong to. cargo-deny 0.20.2 leaves three gaps they
 //!   close. Its `private.ignore`, which `deny.toml` sets so our own unpublished crates (the
@@ -30,7 +31,8 @@
 //!   check never reads a path crate: the rules refuse every crate that is neither of this
 //!   workspace nor from crates.io (a `[patch]` to a local folder included), every crate outside
 //!   the workspace that takes the name of a crate of the family (`geom-pool`, through which rayon
-//!   may enter), and, in a `no_std` kernel crate, a `libm` that does not come from crates.io. And
+//!   may enter), and, in a `no_std` kernel crate, every crate that is not on the vetted allow-list
+//!   at its pinned version, from crates.io (a vetted crate patched in from a folder included). And
 //!   it accepts a licence that offers a choice without saying which was taken: the rules require
 //!   every such crate's choice in `licence::LICENCE_CHOICES` (29.20, rule 3: "record the choice
 //!   in the gate"), and `run::every_crate` refuses a row no graph needs.
@@ -86,7 +88,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::manifest::{array_items, settings, string_text, toml_keys};
+use crate::manifest::{Keys, Value, keys, strings};
+use crate::vetted;
 
 /// The configuration for every crate of the kernel's family, relative to the workspace root.
 pub const FAMILY_CONFIG: &str = "projects/engines/geometry/deny.toml";
@@ -123,9 +126,6 @@ pub const ALLOW_LIST_29_2: [&str; 15] = [
 /// crates.io's index, the one registry crates may come from.
 pub const CRATES_IO_INDEX: &str = "https://github.com/rust-lang/crates.io-index";
 
-/// The only published crate a `no_std` kernel crate may build with (29.1).
-pub const NO_STD_ALLOWED: &str = "libm";
-
 /// The rayon bans: each crate, and the only crates that may depend on it directly (29.4, 23.4).
 pub const RAYON_BANS: [(&str, &[&str]); 3] = [
     ("rayon", &["geom-pool", "wasm-bindgen-rayon"]),
@@ -133,45 +133,29 @@ pub const RAYON_BANS: [(&str, &[&str]); 3] = [
     ("rayon-core", &["rayon"]),
 ];
 
-/// The texts of an array of strings, in order; `None` when it is not one.
-fn strings(value: &str) -> Option<Vec<String>> {
-    array_items(value)?.iter().map(|i| string_text(i)).collect()
+/// The value TOML reads from `text` (a string in quotes, `true`, a number), for the values the
+/// gate requires.
+fn toml(text: &str) -> Value {
+    keys(&format!("v = {text}\n")).unwrap()["v"].clone()
 }
 
-/// The text of the string at `key`, if it is one.
-fn text_at(keys: &BTreeMap<String, String>, key: &str) -> Option<String> {
-    keys.get(key).and_then(|v| string_text(v))
-}
-
-/// Reports, into `wrong`, each key of `keys` set other than `want` (as written, canonical).
-fn require(
-    keys: &BTreeMap<String, String>,
-    wrong: &mut Vec<String>,
-    key: &str,
-    want: &str,
-    why: &str,
-) {
+/// Reports, into `wrong`, each key of `keys` set other than `want`, a value as TOML writes it
+/// (`"deny"`, `true`).
+fn require(keys: &Keys, wrong: &mut Vec<String>, key: &str, want: &str, why: &str) {
     match keys.get(key) {
-        Some(got) if got == want => {}
+        Some(got) if *got == toml(want) => {}
         Some(got) => wrong.push(format!("{key} = {got}, not {want}: {why}")),
         None => wrong.push(format!("{key} is not set; it must be {want}: {why}")),
     }
 }
 
-/// Reports, into `wrong`, once each, every one of `prefixes` that some key is, or is a table or
-/// array of tables of.
-fn forbid_keys(
-    keys: &BTreeMap<String, String>,
-    wrong: &mut Vec<String>,
-    prefixes: &[&str],
-    why: &str,
-) {
+/// Reports, into `wrong`, once each, every one of `prefixes` that some key is (an array of tables
+/// included), or is a table of.
+fn forbid_keys(keys: &Keys, wrong: &mut Vec<String>, prefixes: &[&str], why: &str) {
     for prefix in prefixes {
-        let set = keys.keys().any(|key| {
-            key == prefix
-                || key.starts_with(&format!("{prefix}."))
-                || key.starts_with(&format!("{prefix}[]"))
-        });
+        let set = keys
+            .keys()
+            .any(|key| key == prefix || key.starts_with(&format!("{prefix}.")));
         if set {
             wrong.push(format!("{prefix} is set: {why}"));
         }
@@ -179,17 +163,9 @@ fn forbid_keys(
 }
 
 /// What is wrong with an array of strings at `key` that must hold exactly `want`, in words.
-fn exact_list(
-    keys: &BTreeMap<String, String>,
-    wrong: &mut Vec<String>,
-    key: &str,
-    want: &[&str],
-    why: &str,
-) {
-    let Some(list) = keys.get(key).and_then(|v| strings(v)) else {
-        wrong.push(format!(
-            "{key} is not a list of strings this check reads: {why}"
-        ));
+fn exact_list(keys: &Keys, wrong: &mut Vec<String>, key: &str, want: &[&str], why: &str) {
+    let Some(list) = keys.get(key).and_then(strings) else {
+        wrong.push(format!("{key} is not a list of strings: {why}"));
         return;
     };
     let mut seen = BTreeSet::new();
@@ -217,8 +193,8 @@ const NARROWING_GRAPH_KEYS: [&str; 4] = [
 
 /// Everything `deny.toml`, the family's configuration, says other than the gate requires, in words.
 pub fn family_config(text: &str) -> Vec<String> {
-    let Some(keys) = settings(text) else {
-        return vec!["it is not TOML this check reads".to_owned()];
+    let Some(keys) = keys(text) else {
+        return vec!["it is not TOML".to_owned()];
     };
     let mut wrong = Vec::new();
     family_graph_and_licences(&keys, &mut wrong);
@@ -229,7 +205,7 @@ pub fn family_config(text: &str) -> Vec<String> {
 
 /// The graph: every feature, every platform, every crate and dependency kind. Licences: exactly
 /// 29.2's list, for every kind of dependency, widened nowhere.
-fn family_graph_and_licences(keys: &BTreeMap<String, String>, wrong: &mut Vec<String>) {
+fn family_graph_and_licences(keys: &Keys, wrong: &mut Vec<String>) {
     require(
         keys,
         wrong,
@@ -266,7 +242,7 @@ fn family_graph_and_licences(keys: &BTreeMap<String, String>, wrong: &mut Vec<St
     );
     if keys
         .get("licenses.include-build")
-        .is_some_and(|v| v != "true")
+        .is_some_and(|v| v.as_bool() != Some(true))
     {
         wrong.push(
             "licenses.include-build is not true: build dependencies must pass too".to_owned(),
@@ -285,9 +261,13 @@ fn family_graph_and_licences(keys: &BTreeMap<String, String>, wrong: &mut Vec<St
          (29.20)",
     );
     if let Some(threshold) = keys.get("licenses.confidence-threshold") {
-        let ok = threshold
-            .parse::<f64>()
-            .is_ok_and(|t| (0.8..=1.0).contains(&t));
+        // A float, or the integer 1, which TOML writes without a fraction.
+        let value = match threshold {
+            Value::Float(t) => Some(*t),
+            Value::Integer(1) => Some(1.0),
+            _ => None,
+        };
+        let ok = value.is_some_and(|t| (0.8..=1.0).contains(&t));
         if !ok {
             wrong.push(format!(
                 "licenses.confidence-threshold = {threshold}: not a number from cargo-deny's \
@@ -298,7 +278,7 @@ fn family_graph_and_licences(keys: &BTreeMap<String, String>, wrong: &mut Vec<St
 }
 
 /// Advisories: every kind is an error, none ignored. Sources: crates.io only; no git at all.
-fn family_advisories_and_sources(keys: &BTreeMap<String, String>, wrong: &mut Vec<String>) {
+fn family_advisories_and_sources(keys: &Keys, wrong: &mut Vec<String>) {
     for (key, want, why) in [
         (
             "advisories.yanked",
@@ -348,7 +328,7 @@ fn family_advisories_and_sources(keys: &BTreeMap<String, String>, wrong: &mut Ve
     );
     if keys
         .get("sources.allow-git")
-        .and_then(|v| strings(v))
+        .and_then(strings)
         .is_none_or(|l| !l.is_empty())
     {
         wrong.push(
@@ -368,7 +348,7 @@ fn family_advisories_and_sources(keys: &BTreeMap<String, String>, wrong: &mut Ve
 /// use any crate whose licence and source pass (29.1: "Outside the kernel ... a crate may be used
 /// as long as nothing it computes feeds a kernel result"; 29.16 allows criterion, which brings
 /// rayon).
-fn family_bans(keys: &BTreeMap<String, String>, wrong: &mut Vec<String>) {
+fn family_bans(keys: &Keys, wrong: &mut Vec<String>) {
     require(
         keys,
         wrong,
@@ -379,8 +359,8 @@ fn family_bans(keys: &BTreeMap<String, String>, wrong: &mut Vec<String>) {
 }
 
 /// What a `bans.deny` list says about the rayon bans other than 29.4's, into `wrong`.
-fn rayon_bans(keys: &BTreeMap<String, String>, wrong: &mut Vec<String>) {
-    match keys.get("bans.deny").map(|v| bans(v)) {
+fn rayon_bans(keys: &Keys, wrong: &mut Vec<String>) {
+    match keys.get("bans.deny").map(bans) {
         None => wrong.push("bans.deny is not set: the rayon bans are missing".to_owned()),
         Some(None) => wrong.push("bans.deny is not a list this check reads".to_owned()),
         Some(Some(found)) => {
@@ -404,8 +384,8 @@ fn rayon_bans(keys: &BTreeMap<String, String>, wrong: &mut Vec<String>) {
 /// other than the gate requires, in words: every feature, every platform, normal and build
 /// dependencies only, and exactly 29.4's rayon bans.
 pub fn ships_config(text: &str) -> Vec<String> {
-    let Some(keys) = settings(text) else {
-        return vec!["it is not TOML this check reads".to_owned()];
+    let Some(keys) = keys(text) else {
+        return vec!["it is not TOML".to_owned()];
     };
     let mut wrong = Vec::new();
     require(
@@ -439,19 +419,20 @@ pub fn ships_config(text: &str) -> Vec<String> {
 }
 
 /// The crates a `bans.deny` list bans, each with its wrappers; `None` when it cannot be read.
-fn bans(value: &str) -> Option<BTreeMap<String, BTreeSet<String>>> {
+fn bans(value: &Value) -> Option<BTreeMap<String, BTreeSet<String>>> {
     let mut found = BTreeMap::new();
-    for item in array_items(value)? {
-        let (krate, wrappers) = if item.starts_with('{') {
-            let keys = toml_keys(&format!("item = {item}\n"))?;
-            let krate = text_at(&keys, "item.crate").or_else(|| text_at(&keys, "item.name"))?;
-            let wrappers = match keys.get("item.wrappers") {
-                Some(list) => strings(list)?,
-                None => Vec::new(),
-            };
-            (krate, wrappers)
-        } else {
-            (string_text(&item)?, Vec::new())
+    for item in value.as_array()? {
+        let (krate, wrappers) = match item {
+            Value::Table(table) => {
+                let krate = table.get("crate").or_else(|| table.get("name"))?.as_str()?;
+                let wrappers = match table.get("wrappers") {
+                    Some(list) => strings(list)?,
+                    None => Vec::new(),
+                };
+                (krate.to_owned(), wrappers)
+            }
+            Value::String(krate) => (krate.clone(), Vec::new()),
+            _ => return None,
         };
         found.insert(krate, wrappers.into_iter().collect());
     }
@@ -461,8 +442,8 @@ fn bans(value: &str) -> Option<BTreeMap<String, BTreeSet<String>>> {
 /// Everything `deny-no-std.toml`, the `no_std` kernel crates' configuration, says other than the
 /// gate requires, in words.
 pub fn no_std_config(text: &str) -> Vec<String> {
-    let Some(keys) = settings(text) else {
-        return vec!["it is not TOML this check reads".to_owned()];
+    let Some(keys) = keys(text) else {
+        return vec!["it is not TOML".to_owned()];
     };
     let mut wrong = Vec::new();
     require(
@@ -485,13 +466,14 @@ pub fn no_std_config(text: &str) -> Vec<String> {
         &NARROWING_GRAPH_KEYS,
         "the graph must hold every platform's dependencies of the crate",
     );
-    exact_list(
-        &keys,
-        &mut wrong,
-        "bans.allow",
-        &[NO_STD_ALLOWED],
-        "inside kernel crates the only published crate is libm (29.1)",
-    );
+    if let Err(faults) = vetted::read(&keys) {
+        wrong.extend(faults.into_iter().map(|f| {
+            format!(
+                "bans.allow: {f} (29.1: a published crate ships in a kernel crate only from the \
+                 vetted allow-list)"
+            )
+        }));
+    }
     require(
         &keys,
         &mut wrong,
@@ -513,18 +495,20 @@ pub fn no_std_config(text: &str) -> Vec<String> {
 /// they start processes.
 #[cfg(not(target_family = "wasm"))]
 pub mod run {
-    use std::collections::{BTreeMap, BTreeSet};
+    use std::collections::BTreeSet;
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::process::Command;
 
+    use serde_json::{Map, Value};
+
     use super::rules::{self, Choice, Refusal};
     use super::{FAMILY_CONFIG, NO_STD_CONFIG, SHIPS_CONFIG};
     use crate::check::Observed;
-    use crate::json::{self, Json};
     use crate::licence::LICENCE_CHOICES;
     use crate::repo;
     use crate::table::{Kind, TABLE, Table};
+    use crate::vetted;
 
     /// The bit of cargo-deny's exit code set when the advisories check fails.
     pub const ADVISORIES: i32 = 0x1;
@@ -645,23 +629,24 @@ pub mod run {
         let mut diagnostics = Vec::new();
         let mut other = Vec::new();
         for line in text.lines().filter(|l| !l.trim().is_empty()) {
-            let Ok(value) = json::parse(line) else {
+            let Ok(value) = serde_json::from_str::<Value>(line) else {
                 other.push(line.to_owned());
                 continue;
             };
             let fields = value.get("fields");
-            match value.get("type").and_then(Json::as_str) {
+            match value.get("type").and_then(Value::as_str) {
                 Some("diagnostic") => {
                     let field = |key: &str| {
                         fields
                             .and_then(|f| f.get(key))
-                            .and_then(Json::as_str)
+                            .and_then(Value::as_str)
                             .unwrap_or_default()
                             .to_owned()
                     };
                     let krates = fields
                         .and_then(|f| f.get("graphs"))
-                        .and_then(Json::as_array)
+                        .and_then(Value::as_array)
+                        .map(Vec::as_slice)
                         .unwrap_or_default()
                         .iter()
                         .filter_map(|g| g.get("Krate")?.get("name")?.as_str())
@@ -746,7 +731,7 @@ pub mod run {
         root: &Path,
         manifest: &Path,
         config: &str,
-        graph: &Json,
+        graph: &Value,
         metadata: Option<&Path>,
         checks: &[&str],
         choices: &[Choice],
@@ -754,26 +739,47 @@ pub mod run {
         let outcome = cargo_deny(root, manifest, config, metadata, checks);
         let krate = root_name(graph, manifest);
         let family: BTreeSet<&str> = TABLE.rows.iter().map(|r| r.name).collect();
-        let refusals = rules::graph(graph, &krate, config, checks, &family, choices);
+        // The vetted allow-list the rules hold a no_std graph to: the same file cargo-deny reads.
+        let (allowed, unreadable) = if config.ends_with(NO_STD_CONFIG) {
+            match fs::read_to_string(root.join(config))
+                .map_err(|e| vec![format!("cannot read {config}: {e}")])
+                .and_then(|text| vetted::read_text(&text))
+            {
+                Ok(list) => (list, Vec::new()),
+                Err(faults) => (
+                    Vec::new(),
+                    vec![Refusal {
+                        bit: BANS,
+                        krate: krate.clone(),
+                        code: "gate-allow-list",
+                        message: format!(
+                            "the vetted allow-list cannot be read, so nothing outside the \
+                             workspace may ship in this crate: {}",
+                            faults.join("; ")
+                        ),
+                    }],
+                ),
+            }
+        } else {
+            (Vec::new(), Vec::new())
+        };
+        let mut refusals = rules::graph(graph, &krate, config, checks, &family, choices, &allowed);
+        refusals.extend(unreadable);
         outcome.with(refusals)
     }
 
     /// The name of the workspace crate whose manifest is `manifest`, in `graph`.
-    fn root_name(graph: &Json, manifest: &Path) -> String {
+    fn root_name(graph: &Value, manifest: &Path) -> String {
         let canonical = |p: &Path| fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
-        graph
-            .get("packages")
-            .and_then(Json::as_array)
-            .unwrap()
+        let metadata = rules::read(graph).expect("the graph does not fit cargo_metadata's model");
+        metadata
+            .packages
             .iter()
-            .find(|p| {
-                p.get("manifest_path")
-                    .and_then(Json::as_str)
-                    .is_some_and(|m| canonical(Path::new(m)) == canonical(manifest))
-            })
-            .and_then(|p| p.get("name").and_then(Json::as_str))
-            .unwrap_or_else(|| panic!("no package of {} in the graph", manifest.display()))
-            .to_owned()
+            .find(|p| canonical(p.manifest_path.as_std_path()) == canonical(manifest))
+            .map_or_else(
+                || panic!("no package of {} in the graph", manifest.display()),
+                |p| p.name.to_string(),
+            )
     }
 
     /// The record of licence choices, as the rules read it.
@@ -946,18 +952,18 @@ pub mod run {
     }
 
     /// A JSON string.
-    fn text(t: &str) -> Json {
-        Json::Str(t.to_owned())
+    fn text(t: &str) -> Value {
+        Value::String(t.to_owned())
     }
 
     /// A JSON string, or `null`.
-    fn or_null(t: Option<&str>) -> Json {
-        t.map_or(Json::Null, text)
+    fn or_null(t: Option<&str>) -> Value {
+        t.map_or(Value::Null, text)
     }
 
     /// A JSON object of `entries`.
-    fn object(entries: Vec<(&str, Json)>) -> Json {
-        Json::Object(
+    fn object(entries: Vec<(&str, Value)>) -> Value {
+        Value::Object(
             entries
                 .into_iter()
                 .map(|(k, v)| (k.to_owned(), v))
@@ -981,21 +987,21 @@ pub mod run {
 
     /// A seeded package as `cargo metadata` lists one: its folder under the test's temporary
     /// folder, which holds no file, so nothing but its manifest's fields speaks for it.
-    fn seeded_package(seed: &Seed<'_>, id: &str) -> Json {
+    fn seeded_package(seed: &Seed<'_>, id: &str) -> Value {
         let folder = Path::new(env!("CARGO_TARGET_TMPDIR"))
             .join("gate-deny")
             .join("seeded")
             .join(seed.name);
         let path = |p: PathBuf| text(&p.display().to_string());
         let target = object(vec![
-            ("kind", Json::Array(vec![text("lib")])),
-            ("crate_types", Json::Array(vec![text("lib")])),
+            ("kind", Value::Array(vec![text("lib")])),
+            ("crate_types", Value::Array(vec![text("lib")])),
             ("name", text(&seed.name.replace('-', "_"))),
             ("src_path", path(folder.join("src").join("lib.rs"))),
             ("edition", text("2021")),
-            ("doc", Json::Bool(true)),
-            ("doctest", Json::Bool(true)),
-            ("test", Json::Bool(true)),
+            ("doc", Value::Bool(true)),
+            ("doctest", Value::Bool(true)),
+            ("test", Value::Bool(true)),
         ]);
         let mut entries = vec![
             ("name", text(seed.name)),
@@ -1003,14 +1009,14 @@ pub mod run {
             ("id", text(id)),
             ("license", or_null(seed.license)),
             ("source", or_null(seed.source)),
-            ("dependencies", Json::Array(Vec::new())),
-            ("targets", Json::Array(vec![target])),
-            ("features", Json::Object(BTreeMap::new())),
+            ("dependencies", Value::Array(Vec::new())),
+            ("targets", Value::Array(vec![target])),
+            ("features", Value::Object(Map::new())),
             ("manifest_path", path(folder.join("Cargo.toml"))),
             ("edition", text("2021")),
         ];
         for empty in ["authors", "categories", "keywords"] {
-            entries.push((empty, Json::Array(Vec::new())));
+            entries.push((empty, Value::Array(Vec::new())));
         }
         for null in [
             "license_file",
@@ -1025,7 +1031,7 @@ pub mod run {
             "default_run",
             "rust_version",
         ] {
-            entries.push((null, Json::Null));
+            entries.push((null, Value::Null));
         }
         object(entries)
     }
@@ -1038,7 +1044,7 @@ pub mod run {
         /// The crate's manifest, the root of the graph.
         pub manifest: PathBuf,
         /// The metadata.
-        pub json: Json,
+        pub json: Value,
         /// The record of licence choices the rules read: the gate's, unless a test changes it.
         pub choices: Vec<Choice>,
     }
@@ -1050,16 +1056,16 @@ pub mod run {
             let root = repo::workspace_root();
             let observed = repo::observe();
             let manifest = manifest_of(&root, &observed, krate);
-            let output = Command::new(repo::cargo())
-                .args([
-                    "metadata",
-                    "--format-version",
-                    "1",
-                    "--locked",
-                    "--all-features",
-                ])
-                .arg("--manifest-path")
-                .arg(&manifest)
+            // The raw JSON, not `cargo_metadata`'s model: the seeded runs change it as a manifest
+            // would and hand cargo-deny the changed text. `cargo_metadata` builds the command.
+            let mut command = cargo_metadata::MetadataCommand::new();
+            command
+                .cargo_path(repo::cargo())
+                .manifest_path(&manifest)
+                .features(cargo_metadata::CargoOpt::AllFeatures)
+                .other_options(vec!["--locked".to_owned()]);
+            let output = command
+                .cargo_command()
                 .output()
                 .expect("cannot run cargo metadata");
             assert!(
@@ -1067,8 +1073,8 @@ pub mod run {
                 "cargo metadata failed:\n{}",
                 String::from_utf8_lossy(&output.stderr)
             );
-            let text = String::from_utf8(output.stdout).expect("cargo metadata wrote non-UTF-8");
-            let json = json::parse(&text).expect("cargo metadata wrote invalid JSON");
+            let json: Value =
+                serde_json::from_slice(&output.stdout).expect("cargo metadata wrote invalid JSON");
             Graph {
                 root,
                 manifest,
@@ -1081,29 +1087,29 @@ pub mod run {
         fn id_of(&self, name: &str) -> String {
             self.json
                 .get("packages")
-                .and_then(Json::as_array)
+                .and_then(Value::as_array)
                 .unwrap()
                 .iter()
-                .find(|p| p.get("name").and_then(Json::as_str) == Some(name))
+                .find(|p| p.get("name").and_then(Value::as_str) == Some(name))
                 .and_then(|p| p.get("id")?.as_str())
                 .unwrap_or_else(|| panic!("no package {name} in the graph"))
                 .to_owned()
         }
 
         /// The graph's packages, to change.
-        fn packages_mut(&mut self) -> &mut Vec<Json> {
+        fn packages_mut(&mut self) -> &mut Vec<Value> {
             self.json
                 .get_mut("packages")
-                .and_then(Json::as_array_mut)
+                .and_then(Value::as_array_mut)
                 .unwrap()
         }
 
         /// The resolved graph's nodes, to change.
-        fn nodes_mut(&mut self) -> &mut Vec<Json> {
+        fn nodes_mut(&mut self) -> &mut Vec<Value> {
             self.json
                 .get_mut("resolve")
                 .and_then(|r| r.get_mut("nodes"))
-                .and_then(Json::as_array_mut)
+                .and_then(Value::as_array_mut)
                 .unwrap()
         }
 
@@ -1113,60 +1119,60 @@ pub mod run {
             let id = seeded_id(&seed);
             let parent_id = self.id_of(parent);
             let kind = match edge {
-                Edge::Normal => Json::Null,
+                Edge::Normal => Value::Null,
                 Edge::Dev => text("dev"),
                 Edge::Build => text("build"),
             };
-            let has = |items: &[Json]| {
+            let has = |items: &[Value]| {
                 items
                     .iter()
-                    .any(|p| p.get("id").and_then(Json::as_str) == Some(id.as_str()))
+                    .any(|p| p.get("id").and_then(Value::as_str) == Some(id.as_str()))
             };
             if !has(self.packages_mut()) {
                 self.packages_mut().push(seeded_package(&seed, &id));
                 self.nodes_mut().push(object(vec![
                     ("id", text(&id)),
-                    ("dependencies", Json::Array(Vec::new())),
-                    ("deps", Json::Array(Vec::new())),
-                    ("features", Json::Array(Vec::new())),
+                    ("dependencies", Value::Array(Vec::new())),
+                    ("deps", Value::Array(Vec::new())),
+                    ("features", Value::Array(Vec::new())),
                 ]));
             }
             let with_parent_id =
-                |p: &&mut Json| p.get("id").and_then(Json::as_str) == Some(parent_id.as_str());
+                |p: &&mut Value| p.get("id").and_then(Value::as_str) == Some(parent_id.as_str());
             // The parent's declaration, as its manifest would give it.
             self.packages_mut()
                 .iter_mut()
                 .find(with_parent_id)
                 .and_then(|p| p.get_mut("dependencies"))
-                .and_then(Json::as_array_mut)
+                .and_then(Value::as_array_mut)
                 .unwrap()
                 .push(object(vec![
                     ("name", text(seed.name)),
                     ("source", or_null(seed.source)),
                     ("req", text(req)),
                     ("kind", kind.clone()),
-                    ("rename", Json::Null),
-                    ("optional", Json::Bool(false)),
-                    ("uses_default_features", Json::Bool(true)),
-                    ("features", Json::Array(Vec::new())),
-                    ("target", Json::Null),
-                    ("registry", Json::Null),
+                    ("rename", Value::Null),
+                    ("optional", Value::Bool(false)),
+                    ("uses_default_features", Value::Bool(true)),
+                    ("features", Value::Array(Vec::new())),
+                    ("target", Value::Null),
+                    ("registry", Value::Null),
                 ]));
             // The resolved edge.
             let node = self.nodes_mut().iter_mut().find(with_parent_id).unwrap();
             node.get_mut("dependencies")
-                .and_then(Json::as_array_mut)
+                .and_then(Value::as_array_mut)
                 .unwrap()
                 .push(text(&id));
             node.get_mut("deps")
-                .and_then(Json::as_array_mut)
+                .and_then(Value::as_array_mut)
                 .unwrap()
                 .push(object(vec![
                     ("name", text(&seed.name.replace('-', "_"))),
                     ("pkg", text(&id)),
                     (
                         "dep_kinds",
-                        Json::Array(vec![object(vec![("kind", kind), ("target", Json::Null)])]),
+                        Value::Array(vec![object(vec![("kind", kind), ("target", Value::Null)])]),
                     ),
                 ]));
             self
@@ -1180,17 +1186,17 @@ pub mod run {
             let declaration = self
                 .json
                 .get_mut("packages")
-                .and_then(Json::as_array_mut)
+                .and_then(Value::as_array_mut)
                 .unwrap()
                 .iter_mut()
-                .find(|p| p.get("name").and_then(Json::as_str) == Some(package))
+                .find(|p| p.get("name").and_then(Value::as_str) == Some(package))
                 .and_then(|p| p.get_mut("dependencies"))
-                .and_then(Json::as_array_mut)
+                .and_then(Value::as_array_mut)
                 .unwrap()
                 .iter_mut()
-                .find(|d| d.get("name").and_then(Json::as_str) == Some(dep))
+                .find(|d| d.get("name").and_then(Value::as_str) == Some(dep))
                 .unwrap_or_else(|| panic!("{package} declares no {dep}"));
-            *declaration.get_mut("req").unwrap() = Json::Str(req.to_owned());
+            *declaration.get_mut("req").unwrap() = Value::String(req.to_owned());
             self
         }
 
@@ -1198,7 +1204,7 @@ pub mod run {
         /// `name`, and the gate's rules on the same graph: the gate's check (`check_graph`).
         pub fn deny(&self, name: &str, config: &str, checks: &[&str]) -> Outcome {
             let path = scratch().join(format!("{name}.json"));
-            fs::write(&path, self.json.to_text()).unwrap();
+            fs::write(&path, self.json.to_string()).unwrap();
             check_graph(
                 &self.root,
                 &self.manifest,
@@ -1211,11 +1217,11 @@ pub mod run {
         }
 
         /// Sets the field `key` of the package named `name` to `value`, as if its manifest said so.
-        pub fn set_field(&mut self, name: &str, key: &str, value: Json) -> &mut Self {
+        pub fn set_field(&mut self, name: &str, key: &str, value: Value) -> &mut Self {
             let package = self
                 .packages_mut()
                 .iter_mut()
-                .find(|p| p.get("name").and_then(Json::as_str) == Some(name))
+                .find(|p| p.get("name").and_then(Value::as_str) == Some(name))
                 .unwrap_or_else(|| panic!("no package {name} in the graph"));
             *package
                 .get_mut(key)
@@ -1227,15 +1233,20 @@ pub mod run {
 
 /// The gate's own rules on a graph cargo-deny reads (see the module header): where cargo-deny's
 /// licence, source and ban checks leave a gap. Native only, as the graph is `cargo metadata`'s
-/// JSON.
+/// JSON. The graph is read into the `cargo_metadata` crate's typed model, the one cargo-deny's own
+/// graph builder (`krates`) reads, so the rules see the graph cargo-deny sees: a graph that does not
+/// fit that model is refused, never read in part.
 #[cfg(not(target_family = "wasm"))]
 pub mod rules {
     use std::collections::{BTreeMap, BTreeSet};
 
+    use cargo_metadata::{DependencyKind, Metadata, Node, Package};
+    use serde_json::Value;
+
     use super::run::{BANS, LICENSES, SOURCES};
-    use super::{NO_STD_ALLOWED, NO_STD_CONFIG, SHIPS_CONFIG};
-    use crate::json::Json;
+    use super::{NO_STD_CONFIG, SHIPS_CONFIG};
     use crate::licence::{Way, allowed, chosen_way, ways};
+    use crate::vetted::Vetted;
 
     /// The sources `cargo metadata` gives crates.io, by either protocol.
     pub const CRATES_IO_SOURCES: [&str; 2] = [
@@ -1270,57 +1281,67 @@ pub mod rules {
     /// A graph, read: its packages by id, its workspace's members, and the packages reached from
     /// its root.
     struct View<'a> {
-        packages: BTreeMap<&'a str, &'a Json>,
+        packages: BTreeMap<&'a str, &'a Package>,
         members: BTreeSet<&'a str>,
         reached: BTreeSet<&'a str>,
     }
 
-    /// A package's text field `key`, or empty.
-    fn field<'a>(package: &'a Json, key: &str) -> &'a str {
-        package.get(key).and_then(Json::as_str).unwrap_or_default()
+    /// `graph` in `cargo_metadata`'s model; `None` when it does not fit it.
+    pub fn read(graph: &Value) -> Option<Metadata> {
+        serde_json::from_value(graph.clone()).ok()
+    }
+
+    /// A package's name.
+    fn name(package: &Package) -> &str {
+        &package.name
+    }
+
+    /// A package's source as `cargo metadata` writes it, or empty for a path crate.
+    fn source(package: &Package) -> &str {
+        package.source.as_ref().map_or("", |s| s.repr.as_str())
     }
 
     /// Reads `graph` from the workspace crate `root`, following development edges only out of a
-    /// workspace crate, and none when `exclude_dev`; `None` when the graph cannot be read.
-    fn view<'a>(graph: &'a Json, root: &str, exclude_dev: bool) -> Option<View<'a>> {
-        let packages: BTreeMap<&str, &Json> = graph
-            .get("packages")?
-            .as_array()?
+    /// workspace crate, and none when `exclude_dev`; `None` when the graph cannot be read. An edge
+    /// whose every kind is `dev` is a development edge; an edge with no kind given is followed.
+    fn view<'a>(graph: &'a Metadata, root: &str, exclude_dev: bool) -> Option<View<'a>> {
+        let packages: BTreeMap<&str, &Package> = graph
+            .packages
             .iter()
-            .map(|p| Some((p.get("id")?.as_str()?, p)))
-            .collect::<Option<_>>()?;
+            .map(|p| (p.id.repr.as_str(), p))
+            .collect();
         let members: BTreeSet<&str> = graph
-            .get("workspace_members")?
-            .as_array()?
+            .workspace_members
             .iter()
-            .map(Json::as_str)
-            .collect::<Option<_>>()?;
-        let nodes: BTreeMap<&str, &Json> = graph
-            .get("resolve")?
-            .get("nodes")?
-            .as_array()?
+            .map(|id| id.repr.as_str())
+            .collect();
+        let nodes: BTreeMap<&str, &Node> = graph
+            .resolve
+            .as_ref()?
+            .nodes
             .iter()
-            .map(|n| Some((n.get("id")?.as_str()?, n)))
-            .collect::<Option<_>>()?;
+            .map(|n| (n.id.repr.as_str(), n))
+            .collect();
         let start = members
             .iter()
             .copied()
-            .find(|id| packages.get(id).is_some_and(|p| field(p, "name") == root))?;
+            .find(|id| packages.get(id).is_some_and(|p| name(p) == root))?;
         let mut reached = BTreeSet::new();
         let mut work = vec![start];
         while let Some(id) = work.pop() {
             if !reached.insert(id) {
                 continue;
             }
-            for dep in nodes.get(id)?.get("deps")?.as_array()? {
-                let kinds = dep.get("dep_kinds")?.as_array()?;
-                let dev_only = kinds
-                    .iter()
-                    .all(|k| k.get("kind").and_then(Json::as_str) == Some("dev"));
+            for dep in &nodes.get(id)?.deps {
+                let dev_only = !dep.dep_kinds.is_empty()
+                    && dep
+                        .dep_kinds
+                        .iter()
+                        .all(|k| k.kind == DependencyKind::Development);
                 if dev_only && (exclude_dev || !members.contains(id)) {
                     continue;
                 }
-                work.push(dep.get("pkg")?.as_str()?);
+                work.push(dep.pkg.repr.as_str());
             }
         }
         Some(View {
@@ -1331,18 +1352,20 @@ pub mod rules {
     }
 
     /// The gate's rules on `graph`, whose root is the workspace crate `root`, for a run of
-    /// `checks` with `config`; `family` names the crates of the kernel's family and `choices` is
-    /// the record of licence choices.
+    /// `checks` with `config`; `family` names the crates of the kernel's family, `choices` is the
+    /// record of licence choices and `vetted` the allow-list a `no_std` graph is held to.
     pub fn graph(
-        graph: &Json,
+        graph: &Value,
         root: &str,
         config: &str,
         checks: &[&str],
         family: &BTreeSet<&str>,
         choices: &[Choice],
+        vetted: &[Vetted],
     ) -> Vec<Refusal> {
         let exclude_dev = config.ends_with(NO_STD_CONFIG) || config.ends_with(SHIPS_CONFIG);
-        let Some(view) = view(graph, root, exclude_dev) else {
+        let metadata = read(graph);
+        let Some(view) = metadata.as_ref().and_then(|m| view(m, root, exclude_dev)) else {
             return vec![Refusal {
                 bit: LICENSES | SOURCES | BANS,
                 krate: root.to_owned(),
@@ -1358,14 +1381,14 @@ pub mod rules {
             sources(&view, family, &mut found);
         }
         if checks.contains(&"bans") && config.ends_with(NO_STD_CONFIG) {
-            only_libm(&view, &mut found);
+            only_vetted(&view, vetted, &mut found);
         }
         found
     }
 
     /// Whether a package comes from crates.io.
-    fn from_crates_io(package: &Json) -> bool {
-        CRATES_IO_SOURCES.contains(&field(package, "source"))
+    fn from_crates_io(package: &Package) -> bool {
+        CRATES_IO_SOURCES.contains(&source(package))
     }
 
     /// The licence rules: no crate outside the workspace skips the licence check as private; our
@@ -1381,8 +1404,8 @@ pub mod rules {
             let Some(package) = view.packages.get(id) else {
                 continue;
             };
-            let name = field(package, "name");
-            let licence = package.get("license").and_then(Json::as_str);
+            let name = name(package);
+            let licence = package.license.as_deref();
             let mut refuse = |code: &'static str, message: String| {
                 found.push(Refusal {
                     bit: LICENSES,
@@ -1392,10 +1415,7 @@ pub mod rules {
                 });
             };
             let member = view.members.contains(id);
-            let private = package
-                .get("publish")
-                .and_then(Json::as_array)
-                .is_some_and(<[Json]>::is_empty);
+            let private = package.publish.as_ref().is_some_and(Vec::is_empty);
             if private && !member {
                 refuse(
                     "gate-private-outsider",
@@ -1495,7 +1515,7 @@ pub mod rules {
             if view.members.contains(id) {
                 continue;
             }
-            let name = field(package, "name");
+            let name = name(package);
             if !from_crates_io(package) {
                 found.push(Refusal {
                     bit: SOURCES,
@@ -1504,10 +1524,10 @@ pub mod rules {
                     message: format!(
                         "it comes from {}, which is neither this workspace nor crates.io: crates \
                          come from crates.io and nowhere else (29.1, 29.20)",
-                        package.get("source").and_then(Json::as_str).map_or_else(
-                            || field(package, "manifest_path").to_owned(),
-                            str::to_owned
-                        )
+                        package
+                            .source
+                            .as_ref()
+                            .map_or_else(|| package.manifest_path.to_string(), |s| s.repr.clone())
                     ),
                 });
             }
@@ -1525,9 +1545,14 @@ pub mod rules {
         }
     }
 
-    /// The rule of a `no_std` kernel crate's graph: every crate outside the workspace is `libm`
-    /// from crates.io (29.1, 29.4: the audited release `Cargo.lock` pins, not code patched in).
-    fn only_libm(view: &View<'_>, found: &mut Vec<Refusal>) {
+    /// The rule of a `no_std` kernel crate's graph: every crate outside the workspace is on the
+    /// vetted allow-list, at exactly its pinned version, from crates.io (29.1, 29.4, 29.20 rule 3:
+    /// the vetted release `Cargo.lock` pins, not another version and not code patched in).
+    fn only_vetted(view: &View<'_>, vetted: &[Vetted], found: &mut Vec<Refusal>) {
+        let listed: Vec<String> = vetted
+            .iter()
+            .map(|v| format!("{}@{}", v.name, v.version))
+            .collect();
         for id in &view.reached {
             let Some(package) = view.packages.get(id) else {
                 continue;
@@ -1535,19 +1560,29 @@ pub mod rules {
             if view.members.contains(id) {
                 continue;
             }
-            let name = field(package, "name");
-            if name != NO_STD_ALLOWED || !from_crates_io(package) {
+            let name = name(package);
+            let version = package.version.to_string();
+            let on_list = vetted
+                .iter()
+                .any(|v| v.name == name && v.version == version);
+            if !on_list || !from_crates_io(package) {
                 found.push(Refusal {
                     bit: BANS,
                     krate: name.to_owned(),
-                    code: "gate-not-libm",
+                    code: "gate-not-vetted",
                     message: format!(
-                        "inside kernel crates the only published crate is {NO_STD_ALLOWED}, from \
-                         crates.io (29.1, 29.4); this is {name} from {}",
+                        "inside kernel crates a published crate ships only from the vetted \
+                         allow-list ({}), at its pinned version, from crates.io (29.1, 29.20 rule \
+                         3); this is {name} {version} from {}",
+                        if listed.is_empty() {
+                            "empty".to_owned()
+                        } else {
+                            listed.join(", ")
+                        },
                         package
-                            .get("source")
-                            .and_then(Json::as_str)
-                            .unwrap_or("a folder")
+                            .source
+                            .as_ref()
+                            .map_or("a folder", |s| s.repr.as_str())
                     ),
                 });
             }
@@ -1556,8 +1591,11 @@ pub mod rules {
 
     /// Every crate outside the workspace in the graph of `root` (with development edges, as the
     /// family's run reads it) whose licence offers a choice, with its expression.
-    pub fn choices_needed(graph: &Json, root: &str) -> BTreeSet<(String, String)> {
-        let Some(view) = view(graph, root, false) else {
+    pub fn choices_needed(graph: &Value, root: &str) -> BTreeSet<(String, String)> {
+        let Some(metadata) = read(graph) else {
+            return BTreeSet::new();
+        };
+        let Some(view) = view(&metadata, root, false) else {
             return BTreeSet::new();
         };
         view.reached
@@ -1565,9 +1603,8 @@ pub mod rules {
             .filter(|id| !view.members.contains(*id))
             .filter_map(|id| view.packages.get(id))
             .filter_map(|p| {
-                let licence = p.get("license").and_then(Json::as_str)?;
-                (ways(licence)?.len() > 1)
-                    .then(|| (field(p, "name").to_owned(), licence.to_owned()))
+                let licence = p.license.as_deref()?;
+                (ways(licence)?.len() > 1).then(|| (name(p).to_owned(), licence.to_owned()))
             })
             .collect()
     }
@@ -1593,47 +1630,68 @@ pub mod rules {
     #[cfg(test)]
     mod tests {
         use super::*;
-        use crate::json;
+        use serde_json::json;
+
+        /// A package as `cargo metadata` lists one, with the fields `cargo_metadata` requires.
+        fn package(
+            id: &str,
+            name: &str,
+            source: &Value,
+            licence: &Value,
+            publish: &Value,
+        ) -> Value {
+            json!({
+                "id": id,
+                "name": name,
+                "version": "1.0.0",
+                "source": source,
+                "license": licence,
+                "publish": publish,
+                "manifest_path": format!("/o/{name}/Cargo.toml"),
+                "dependencies": [],
+                "targets": [],
+                "features": {},
+            })
+        }
 
         /// A small graph: the workspace crates `geom-a` (MPL-2.0) and `kit-x` (no licence), and
         /// the crates `extra` adds; edges from `geom-a` to every other package, of `kind` each.
-        fn graph(extra: &[(&str, &str, &str, &str)], kinds: &[&str]) -> Json {
+        fn graph(extra: &[(&str, &str, &str, &str)], kinds: &[&str]) -> Value {
             // extra: (name, source or "", licence, publish: "null" or "[]")
             let mut packages = vec![
-                "{\"id\":\"a\",\"name\":\"geom-a\",\"source\":null,\"license\":\"MPL-2.0\",\
-                 \"publish\":[],\"manifest_path\":\"/w/a/Cargo.toml\"}"
-                    .to_owned(),
-                "{\"id\":\"k\",\"name\":\"kit-x\",\"source\":null,\"license\":null,\
-                 \"publish\":[],\"manifest_path\":\"/w/k/Cargo.toml\"}"
-                    .to_owned(),
+                package("a", "geom-a", &Value::Null, &json!("MPL-2.0"), &json!([])),
+                package("k", "kit-x", &Value::Null, &Value::Null, &json!([])),
             ];
-            let mut deps = vec!["{\"pkg\":\"k\",\"dep_kinds\":[{\"kind\":null}]}".to_owned()];
-            let mut nodes = vec!["{\"id\":\"k\",\"deps\":[]}".to_owned()];
+            let mut deps =
+                vec![json!({"name": "kit_x", "pkg": "k", "dep_kinds": [{"kind": null}]})];
+            let mut nodes = vec![json!({"id": "k", "deps": [], "dependencies": []})];
             for (i, (name, source, licence, publish)) in extra.iter().enumerate() {
+                let id = format!("x{i}");
                 let source = if source.is_empty() {
-                    "null".to_owned()
+                    Value::Null
                 } else {
-                    format!("\"{source}\"")
+                    json!(source)
                 };
-                packages.push(format!(
-                    "{{\"id\":\"x{i}\",\"name\":\"{name}\",\"source\":{source},\
-                     \"license\":\"{licence}\",\"publish\":{publish},\
-                     \"manifest_path\":\"/o/{name}/Cargo.toml\"}}"
-                ));
-                let kind = kinds.get(i).copied().unwrap_or("null");
-                deps.push(format!(
-                    "{{\"pkg\":\"x{i}\",\"dep_kinds\":[{{\"kind\":{kind}}}]}}"
-                ));
-                nodes.push(format!("{{\"id\":\"x{i}\",\"deps\":[]}}"));
+                let publish = if *publish == "[]" {
+                    json!([])
+                } else {
+                    Value::Null
+                };
+                packages.push(package(&id, name, &source, &json!(licence), &publish));
+                let kind: Value =
+                    serde_json::from_str(kinds.get(i).copied().unwrap_or("null")).unwrap();
+                deps.push(json!({"name": name, "pkg": id, "dep_kinds": [{"kind": kind}]}));
+                nodes.push(json!({"id": id, "deps": [], "dependencies": []}));
             }
-            nodes.push(format!("{{\"id\":\"a\",\"deps\":[{}]}}", deps.join(",")));
-            json::parse(&format!(
-                "{{\"packages\":[{}],\"workspace_members\":[\"a\",\"k\"],\
-                 \"resolve\":{{\"nodes\":[{}]}}}}",
-                packages.join(","),
-                nodes.join(",")
-            ))
-            .unwrap()
+            nodes.push(json!({"id": "a", "deps": deps, "dependencies": []}));
+            json!({
+                "packages": packages,
+                "workspace_members": ["a", "k"],
+                "resolve": {"nodes": nodes, "root": null},
+                "workspace_root": "/w",
+                "target_directory": "/w/target",
+                "version": 1,
+            })
         }
 
         const IO: &str = "registry+https://github.com/rust-lang/crates.io-index";
@@ -1645,19 +1703,38 @@ pub mod rules {
             codes
         }
 
-        fn run(g: &Json, config: &str, checks: &[&str], choices: &[Choice]) -> Vec<Refusal> {
+        fn run(g: &Value, config: &str, checks: &[&str], choices: &[Choice]) -> Vec<Refusal> {
             let family = BTreeSet::from(["geom-a", "geom-pool"]);
             graph_rules(g, config, checks, &family, choices)
         }
 
         fn graph_rules(
-            g: &Json,
+            g: &Value,
             config: &str,
             checks: &[&str],
             family: &BTreeSet<&str>,
             choices: &[Choice],
         ) -> Vec<Refusal> {
-            super::graph(g, "geom-a", config, checks, family, choices)
+            super::graph(g, "geom-a", config, checks, family, choices, &libm_vetted())
+        }
+
+        /// The allow-list the test graphs are held to: libm at the version they give every crate.
+        fn libm_vetted() -> Vec<Vetted> {
+            crate::vetted::read_text(
+                "[bans]\nallow = [{ crate = \"libm@1.0.0\", reason = \"deterministic: x; \
+                 no_std: y; audited: pending, piece G24; pinned: 1.0.0\" }]\n",
+            )
+            .unwrap()
+        }
+
+        #[test]
+        fn the_test_graphs_fit_cargo_metadatas_model() {
+            assert!(read(&graph(&[("libm", IO, "MIT", "null")], &["\"dev\""])).is_some());
+            // A graph that does not fit the model is unreadable: every check is refused.
+            let mut broken = graph(&[], &[]);
+            broken.as_object_mut().unwrap().remove("workspace_root");
+            let found = run(&broken, "deny.toml", &["licenses"], &[]);
+            assert_eq!(codes(&found), [("geom-a".to_owned(), "gate-unreadable")]);
         }
 
         #[test]
@@ -1719,21 +1796,47 @@ pub mod rules {
                     .all(|r| r.krate != "dual")
             );
             let no_std = run(&g, NO_STD_CONFIG, &["bans"], &[]);
-            assert!(no_std.iter().all(|r| r.code == "gate-not-libm"));
+            assert!(no_std.iter().all(|r| r.code == "gate-not-vetted"));
             assert_eq!(no_std.len(), 5, "{no_std:#?}");
+        }
+
+        #[test]
+        fn a_no_std_graph_holds_only_the_vetted_crates_at_their_versions() {
+            let set_version = |g: &mut Value, name: &str, version: &str| {
+                let packages = g.get_mut("packages").and_then(Value::as_array_mut).unwrap();
+                let p = packages
+                    .iter_mut()
+                    .find(|p| p.get("name").and_then(Value::as_str) == Some(name))
+                    .unwrap();
+                *p.get_mut("version").unwrap() = Value::String(version.to_owned());
+            };
+            let g = graph(&[("libm", IO, "MIT", "null")], &[]);
+            assert_eq!(run(&g, NO_STD_CONFIG, &["bans"], &[]), Vec::new());
+            // Another version of a vetted crate is not vetted.
+            let mut other = g.clone();
+            set_version(&mut other, "libm", "1.0.1");
+            let found = run(&other, NO_STD_CONFIG, &["bans"], &[]);
+            assert_eq!(codes(&found), [("libm".to_owned(), "gate-not-vetted")]);
+            assert!(found[0].message.contains("libm 1.0.1"), "{found:#?}");
+            // With an empty list, nothing outside the workspace ships.
+            let family = BTreeSet::from(["geom-a"]);
+            let empty = super::graph(&g, "geom-a", NO_STD_CONFIG, &["bans"], &family, &[], &[]);
+            assert_eq!(codes(&empty), [("libm".to_owned(), "gate-not-vetted")]);
+            // The other configurations do not read the list.
+            assert_eq!(run(&other, "deny.toml", &["bans"], &[]), Vec::new());
         }
 
         #[test]
         fn our_own_licences_are_read() {
             // geom-a is of the family: GPL, or no MPL-2.0, is refused; kit-x is ours, outside it.
             let g = graph(&[], &[]);
-            let set = |g: &mut Json, id: &str, licence: &str| {
-                let packages = g.get_mut("packages").and_then(Json::as_array_mut).unwrap();
+            let set = |g: &mut Value, id: &str, licence: &str| {
+                let packages = g.get_mut("packages").and_then(Value::as_array_mut).unwrap();
                 let p = packages
                     .iter_mut()
-                    .find(|p| p.get("id").and_then(Json::as_str) == Some(id))
+                    .find(|p| p.get("id").and_then(Value::as_str) == Some(id))
                     .unwrap();
-                *p.get_mut("license").unwrap() = Json::Str(licence.to_owned());
+                *p.get_mut("license").unwrap() = Value::String(licence.to_owned());
             };
             for (id, licence, refused) in [
                 ("a", "GPL-3.0-only", true),
@@ -1773,8 +1876,16 @@ mod tests {
         allow-registry = [\"https://github.com/rust-lang/crates.io-index\"]\nallow-git = []\n\
         [bans]\nwildcards = \"deny\"\nallow-wildcard-paths = true\n";
 
+    /// A `no_std` configuration that holds every rule: one vetted entry, pinned, with its record.
     const NO_STD: &str = "[graph]\nall-features = true\nexclude-dev = true\n\
-        [bans]\nallow = [\"libm\"]\nallow-workspace = true\nwildcards = \"deny\"\n";
+        [bans]\nallow = [\n\
+        { crate = \"libm@0.2.16\", reason = \"deterministic: correctly rounded; no_std: yes; \
+        audited: pending, piece G24; pinned: 0.2.16\" },\n]\n\
+        allow-workspace = true\nwildcards = \"deny\"\n";
+
+    /// The vetted entry of `NO_STD`.
+    const NO_STD_ENTRY: &str = "{ crate = \"libm@0.2.16\", reason = \"deterministic: correctly \
+        rounded; no_std: yes; audited: pending, piece G24; pinned: 0.2.16\" },";
 
     /// A configuration of what ships that holds every rule, a ban written in each of
     /// cargo-deny's forms.
@@ -2011,14 +2122,29 @@ mod tests {
         };
         let cases: Vec<(&str, String, &str)> = vec![
             (
-                "another crate",
-                swap("[\"libm\"]", "[\"libm\", \"hashbrown\"]"),
-                "lists hashbrown",
+                "another crate, not vetted",
+                swap(NO_STD_ENTRY, &format!("{NO_STD_ENTRY}\n\"hashbrown\",")),
+                "\"hashbrown\" is not vetted",
+            ),
+            (
+                "the vetted crate unpinned",
+                swap("libm@0.2.16", "libm"),
+                "libm is not pinned",
+            ),
+            (
+                "its record cut short",
+                swap("; audited: pending, piece G24; pinned: 0.2.16", ""),
+                "audited: clause",
             ),
             (
                 "no allow-list",
-                swap("allow = [\"libm\"]\n", ""),
-                "bans.allow",
+                swap(&format!("allow = [\n{NO_STD_ENTRY}\n]\n"), ""),
+                "bans.allow is not set",
+            ),
+            (
+                "an empty allow-list, which cargo-deny reads as none",
+                swap(&format!("{NO_STD_ENTRY}\n"), ""),
+                "bans.allow is empty",
             ),
             (
                 "dev in",
@@ -2062,7 +2188,8 @@ mod gate {
         ADVISORIES, BANS, CRATES_IO, Edge, Graph, LICENSES, Outcome, SOURCES, Seed, published,
     };
     use super::{ALLOW_LIST_29_2, FAMILY_CONFIG, NO_STD_CONFIG, SHIPS_CONFIG};
-    use crate::json::Json;
+    use serde_json::Value;
+
     use crate::repo;
     use crate::table::TABLE;
 
@@ -2304,10 +2431,10 @@ mod gate {
             allowed
                 .json
                 .get("packages")
-                .and_then(Json::as_array)
+                .and_then(Value::as_array)
                 .unwrap()
                 .iter()
-                .find(|p| p.get("name").and_then(Json::as_str) == Some(name))
+                .find(|p| p.get("name").and_then(Value::as_str) == Some(name))
                 .and_then(|p| p.get("id")?.as_str())
                 .unwrap_or_else(|| panic!("no package {name} in the facade's graph"))
                 .to_owned()
@@ -2317,10 +2444,10 @@ mod gate {
             .json
             .get("resolve")
             .and_then(|r| r.get("nodes"))
-            .and_then(Json::as_array)
+            .and_then(Value::as_array)
             .unwrap()
             .iter()
-            .find(|n| n.get("id").and_then(Json::as_str) == Some(facade.as_str()))
+            .find(|n| n.get("id").and_then(Value::as_str) == Some(facade.as_str()))
             .and_then(|n| n.get("dependencies")?.as_array())
             .is_some_and(|deps| deps.iter().any(|d| d.as_str() == Some(pool.as_str())));
         assert!(
@@ -2398,12 +2525,16 @@ mod gate {
                 "=1.0.0",
                 published("seeded-private-published", "1.0.0", "GPL-3.0-only"),
             )
-            .set_field("geom-num", "license", Json::Str("GPL-3.0-only".to_owned()))
-            .set_field("seeded-private-path", "publish", Json::Array(Vec::new()))
+            .set_field(
+                "geom-num",
+                "license",
+                Value::String("GPL-3.0-only".to_owned()),
+            )
+            .set_field("seeded-private-path", "publish", Value::Array(Vec::new()))
             .set_field(
                 "seeded-private-published",
                 "publish",
-                Json::Array(Vec::new()),
+                Value::Array(Vec::new()),
             );
         let outcome = graph.deny("rules-licences", FAMILY_CONFIG, &["licenses"]);
         let refused = [
@@ -2454,7 +2585,7 @@ mod gate {
 
     #[test]
     #[ignore = "runs cargo-deny, which the merge gate installs; run with --ignored"]
-    fn gate_deny_no_std_kernel_crates_name_only_libm() {
+    fn gate_deny_no_std_kernel_crates_name_only_vetted_crates() {
         super::run::fetch(&repo::workspace_root());
         // geom-num names libm, and its development dependencies (proptest, the oracles) are left
         // out: it passes.
@@ -2515,30 +2646,50 @@ mod gate {
         let old_id = patched
             .json
             .get("packages")
-            .and_then(Json::as_array)
+            .and_then(Value::as_array)
             .unwrap()
             .iter()
-            .find(|p| p.get("name").and_then(Json::as_str) == Some("libm"))
+            .find(|p| p.get("name").and_then(Value::as_str) == Some("libm"))
             .and_then(|p| p.get("id")?.as_str())
             .unwrap()
             .to_owned();
         let version = old_id.rsplit('@').next().unwrap().to_owned();
         let text = patched
             .json
-            .to_text()
+            .to_string()
             .replace(&old_id, &format!("path+file:///vendor/libm#libm@{version}"));
-        patched.json = crate::json::parse(&text).unwrap();
-        patched.set_field("libm", "source", Json::Null);
+        patched.json = serde_json::from_str(&text).unwrap();
+        patched.set_field("libm", "source", Value::Null);
         let no_std = patched.deny("no-std-libm-path", NO_STD_CONFIG, &["bans"]);
         let family = patched.deny("family-libm-path", FAMILY_CONFIG, &["sources"]);
         assert!(
             no_std.failed(BANS)
-                && no_std.codes_for("libm").contains("gate-not-libm")
+                && no_std.codes_for("libm").contains("gate-not-vetted")
                 && family.failed(SOURCES)
                 && family.codes_for("libm").contains("gate-not-crates-io"),
             "a libm from a folder passed:\n{}\n\n{}",
             no_std.show(),
             family.show()
+        );
+        // libm at a version the vetted allow-list does not pin, as `cargo update -p libm` would
+        // lock a release nobody vetted: cargo-deny's `libm@<version>` is exact, so it refuses
+        // it, and so do the gate's rules.
+        let mut bumped = Graph::of("geom-num");
+        let (major_minor, patch) = version.rsplit_once('.').unwrap();
+        let next = format!("{major_minor}.{}", patch.parse::<u64>().unwrap() + 1);
+        let text = bumped.json.to_string().replace(
+            &old_id,
+            &old_id.replace(&format!("@{version}"), &format!("@{next}")),
+        );
+        bumped.json = serde_json::from_str(&text).unwrap();
+        bumped.set_field("libm", "version", Value::String(next.clone()));
+        let outcome = bumped.deny("no-std-libm-bumped", NO_STD_CONFIG, &["bans"]);
+        assert!(
+            outcome.failed(BANS)
+                && outcome.codes_for("libm").contains("not-allowed")
+                && outcome.codes_for("libm").contains("gate-not-vetted"),
+            "libm {next}, which the allow-list does not pin, passed:\n{}",
+            outcome.show()
         );
     }
 

@@ -208,7 +208,7 @@ pub struct Dep {
 pub const CRATES_IO: &str = "registry+https://github.com/rust-lang/crates.io-index";
 
 /// What the check sees of one workspace crate.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Package {
     /// Its directory, relative to the workspace root, one component per entry.
     pub dir: Vec<String>,
@@ -229,7 +229,7 @@ pub struct Package {
 }
 
 /// What the check sees of the whole workspace.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Observed {
     /// Every workspace crate, by name.
     pub packages: BTreeMap<String, Package>,

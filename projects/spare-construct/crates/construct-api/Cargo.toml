@@ -15,3 +15,8 @@ construct-views = { path = "../construct-views" }
 construct-clash = { path = "../construct-clash" }
 construct-versions = { path = "../construct-versions" }
 construct-interop = { path = "../construct-interop" }
+construct-transport = { path = "../construct-transport" }
+engine-sim = { path = "../../../engines/crates/engine-sim" }
+serde = { version = "1", features = ["derive"] }
+# float_roundtrip: numbers are read correctly rounded, as JSON.parse does (the transport engine relies on it)
+serde_json = { version = "1", features = ["float_roundtrip"] }

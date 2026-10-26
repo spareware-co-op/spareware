@@ -34,6 +34,10 @@ dashu-ratio = { version = "0.6.1", default-features = false, features = ["std"] 
 # The golden store, its one SHA-256 and the perturbations every golden runs under (piece G19):
 # the kernel's development crate, a development dependency only (chapter 28.1).
 geom-test = { path = "../geom-test" }
+# TOML 1.0, so the tests of the clippy ban (rng_ban.rs, attack_g32.rs) read clippy.toml as clippy
+# reads it: tests only (chapter 29.1; piece G12a put it in place of a line reader). toml 0.9.6:
+# MIT OR Apache-2.0, the version engine-geometry's scaffold check pins.
+toml = "=0.9.6"
 # The second method of chapter 28.6 (piece G28): Shewchuk's adaptive orient2d, orient3d, incircle
 # and insphere, ported by georust, which tests/attack_g28.rs compares with every explicit-point
 # predicate (its orient3d and insphere negated, chapter 6.2). MIT OR Apache-2.0 (robust 1.2.0's
@@ -43,6 +47,9 @@ robust = "1.2.0"
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"
+# Kani sets `cfg(kani)` when it compiles a proof; proofs and the code they need sit beside the
+# code under it (chapter 28.7).
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(kani)"] }
 
 [lints.clippy]
 # The crate is written to clippy's pedantic idioms; CI denies every warning.

@@ -106,6 +106,8 @@ span.tb-item { display: inline-flex; align-items: center; gap: 6px; }
 .btn.icon:hover { border-color: var(--rule); background: var(--panel); color: var(--ink); }
 .btn.primary { background: var(--app); border-color: var(--app); color: var(--ink); font-weight: 600; }
 .btn.primary:hover { border-color: var(--app-strong); }
+.engine-badge { align-self: center; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; white-space: nowrap; background: var(--sink); color: var(--ink-2); }
+.engine-badge[data-engine="rust"] { background: var(--app-tint, var(--sink)); color: var(--app-strong, var(--ink)); }
 .btn.danger { color: var(--danger); }
 .btn.small { min-height: 24px; padding: 0 8px; font-size: 12px; }
 .btn.on { background: var(--app-tint); border-color: var(--app-strong); color: var(--ink); }

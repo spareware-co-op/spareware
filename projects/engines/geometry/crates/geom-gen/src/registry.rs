@@ -28,7 +28,7 @@ use crate::grid_steps;
 use crate::predicates;
 
 /// Every generator, in the order they run.
-pub const GENERATORS: [Generator; 7] = [
+pub const GENERATORS: [Generator; 8] = [
     Generator {
         name: grid_steps::NAME,
         output: grid_steps::OUTPUT,
@@ -70,6 +70,12 @@ pub const GENERATORS: [Generator; 7] = [
         output: "projects/engines/geometry/crates/geom-num/src/generated/plane_side.rs",
         about: "the side of a plane: its f64 filter on rounded inputs, exact path and certificate",
         generate: Generate::Plain(predicates::generate_plane_side),
+    },
+    Generator {
+        name: predicates::VERUS_ORIENT2D_GENERATOR,
+        output: predicates::VERUS_ORIENT2D_OUTPUT,
+        about: "orient2d's exact path as a Verus-annotated twin, which Verus verifies in CI",
+        generate: Generate::Plain(predicates::generate_verus_orient2d),
     },
 ];
 
