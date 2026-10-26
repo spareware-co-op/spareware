@@ -1379,6 +1379,30 @@
           "provenance": [],
           "spdx": null,
           "target": "lib"
+        },
+        {
+          "cost": "one operation on `Wide` and one on `BigInt` per input, at most O(L²) for a product of L ≤ 12 limbs, plus up to seven `resize` targets; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a width, an operation and two operands of that width (and, for `resize`, a second width). [`check`] runs the operation on `geom_num::wide::Wide` and on `num-bigint`'s `BigInt`, an arbitrary-precision oracle that shares no code with it, and compares: the exact result when it fits the width and `None` exactly when it does not, for `checked_add`, `checked_sub`, `checked_neg` and `checked_mul`; the order (`Ord`, `==`); the sign (`signum`, `is_negative`, `is_zero`); `resize` to every other width; and the `i128` conversions both ways. [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/wide.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case. Each limb is read through a rule byte that makes the values at every width's limits common: 0, 1, −1, the top bit alone, all bits but the top one, a copy of the limb below, or a word read from the input. So the most negative and most positive values, their neighbours, and carries that run the whole length come up all the time, not once in 2^64.",
+            "**Every width the kernel uses, and the two reserved ones.** `I128` as `Wide<2>`, `I256`, `I320`, `I384`, `I512`, and `Wide<9>` and `Wide<12>`, the 576- and 768-bit widths chapter 6.2 reserves for later predicates (the board's G26; whether they are named is an owner's decision, G240), through the same generic code.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a disagreement is a [`Finding`]** naming the operation, the width, the operands and both answers."
+          ],
+          "job": "Fuzz target: `geom-num`'s wide integers agree with a big-integer oracle on every operation.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/29-sources-licences.md",
+              "https://docs.rs/num-bigint/0.4.8/num_bigint/struct.BigInt.html"
+            ],
+            "text": "differential testing against an independent arbitrary-precision implementation, the big-integer oracle chapter 29.3 names for the wide integers (`projects/engines/geometry/architecture/29-sources-licences.md`), here `num-bigint` 0.4.8 (<https://docs.rs/num-bigint/0.4.8/num_bigint/struct.BigInt.html>). Two's complement in `L` limbs holds exactly −2^(64L−1) ..= 2^(64L−1) − 1 (the module header of `geom_num::wide`); the oracle reads a `Wide`'s limbs with `BigInt::from_signed_bytes_le`, the same two's-complement reading, computes exactly, and writes a result that fits back with `to_signed_bytes_le`."
+          },
+          "path": "geom_fuzz::wide",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
         }
       ],
       "name": "geom-fuzz",
