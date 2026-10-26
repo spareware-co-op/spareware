@@ -286,7 +286,9 @@ impl Matrix {
             return Ok(());
         }
         let (a, b) = self.row_pair(i, j)?;
-        a.swap_with_slice(b);
+        for (x, y) in a.iter_mut().zip(b.iter_mut()) {
+            core::mem::swap(x, y);
+        }
         Ok(())
     }
 
