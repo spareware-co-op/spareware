@@ -1127,6 +1127,16 @@
               "shape": "unit"
             },
             {
+              "doc": "The operation needs a finite domain, and the curve is a ray or an infinite line; or its result would drift without bound along one (an inexact transform of its direction).",
+              "name": "Unbounded",
+              "shape": "unit"
+            },
+            {
+              "doc": "The data or a transform collapses the kind: parallel vectors where independent ones are needed, a zero length or direction, or a singular transform.",
+              "name": "Degenerate",
+              "shape": "unit"
+            },
+            {
               "doc": "The work meter stopped the operation (chapter 23.10).",
               "name": "Stopped",
               "shape": "tuple"
@@ -1180,6 +1190,51 @@
           "target": "lib"
         },
         {
+          "cost": "constant.",
+          "does": "[`Axes`] holds the two vectors u and v of an ellipse, hyperbola, parabola or involute, and [`HelixAxes`] the three of a helix. The `Frame` form gives lengths along an exact [`Frame`]: u = a·x̂, v = b·ŷ (and w = (pitch/2)·n̂ for a helix), so the semi-axes, the focal length or the radius are exact numbers of the data. The `Vectors` form stores u, v (and w) directly: it is what a transform that is not a similarity makes of the `Frame` form, with the same parameter, because principal axes found again would shift the parameter by an angle no double holds (chapter 7: \"a non-uniform scale turns a circle into an ellipse\", explicitly).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/axes.rs",
+          "guarantees": [
+            "**Checked.** Lengths are finite and positive; `Vectors` are finite and u and v independent, decided exactly.",
+            "**Exact reversal.** Reversing negates v (and w): on a frame, by negating its normal, which negates ŷ and n̂ exactly.",
+            "**Transforms keep the form when they can.** A similarity maps a `Frame` form to a `Frame` form (lengths times the scale, a helix's pitch negated by a mirror); any other transform gives `Vectors`."
+          ],
+          "job": "How an analytic kind stores its vectors: lengths on an exact orthonormal frame, or the vectors themselves when the kind is the affine image of one.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/07-geometry-types.md"
+            ],
+            "text": "the conjugate-diameter form of an ellipse, c + cos θ·u + sin θ·v, the image of the unit circle under the affine map taking the axes to u and v, of which the principal-axis form is the case u ⟂ v; and its analogues for the other kinds. Chapter 7 asks for the kind change to be explicit (`projects/engines/geometry/architecture/07-geometry-types.md`)."
+          },
+          "path": "geom_curve::axes",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant per evaluation; conversion O(n) in its pieces (at most 5 for a circle or ellipse, 1024 for a hyperbola).",
+          "does": "[`Circle`] is c + r·cos πt·x̂ + r·sin πt·ŷ on an exact [`Frame`], t in half-turns over at most one turn (a full circle is [0, 2]). [`Ellipse`] is c + cos πt·u + sin πt·v, by its parameter (the eccentric angle), not by polar angle (chapter 7), with u and v principal semi-axes on a frame or any conjugate pair ([`Axes`]). [`Hyperbola`] is c + cosh t·u + sinh t·v, one branch. [`Parabola`] is c + t²·u + t·v; on a frame with u = f·x̂ and v = 2f·ŷ it is the parabola of focal length f with its vertex at c, as ISO 10303-42 defines it. Each implements the kind contract through the shared analytic form (`crate::form`).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/conic.rs",
+          "guarantees": [
+            "**Stored as themselves.** An arc stays an arc: its center, radius and frame are the stored doubles, exactly (chapter 7).",
+            "**Exact NURBS forms.** Circles, ellipses and hyperbolas convert to rational quadratics on the tangent half-angle parameter (`crate::rational`), parabolas to a quadratic on the same parameter; each with a certified deviation, 0 when the doubles hold the conversion exactly.",
+            "**Transforms change kinds explicitly.** A similarity keeps a circle a circle (radius times its scale, frame carried); any other transform makes it an [`Ellipse`] with conjugate axes, on the same parameter; principal axes on a frame stay principal under a similarity.",
+            "**Exact split and reversal.** A split changes only the domain; a reversal negates the domain and v (a frame's normal), exactly."
+          ],
+          "job": "The conic kinds: circle and arc, ellipse and elliptical arc, hyperbola and parabola, each stored as itself.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "the parametric conics of ISO 10303-42 (`circle`, `ellipse`, `hyperbola`, `parabola`), with angles in half-turns, the kernel's proven angle form (chapter 6); their conversion from L. Piegl and W. Tiller, *The NURBS Book*, 2nd ed., chapter 7 (<https://doi.org/10.1007/978-3-642-59223-2>)."
+          },
+          "path": "geom_curve::conic",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "for each parameter, a few enclosures and bounds of the kind, a split, a reversal and a transform: the kind's own costs, a few dozen times.",
           "does": "[`check`] runs a kind through every law of [`Law`] at the parameters given and returns the first law broken, with where. The laws compare certified objects with each other: two enclosures of one exact value must overlap, so a bound, an enclosure, a conversion, a split, a reversal or a transform that is wrong by more than its own stated error is caught wherever a sample lands on it. Evaluation in doubles is compared with the certified enclosure within a relative 2^−30, which catches a wrong formula, not rounding.",
           "family": [],
@@ -1214,6 +1269,161 @@
             "none": "error enums and their `Display` and `Error` implementations."
           },
           "path": "geom_curve::error",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few dozen floating-point operations per evaluation and derivative order; a bound evaluates one interval extension per piece, at most 64 pieces.",
+          "does": "[`Shape`] names the scalar functions (f₁, f₂, f₃) of each kind, with angles in half-turns, the kernel's proven angle form (chapter 6):",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/form.rs",
+          "guarantees": [
+            "**Certified.** An enclosure holds the exact value of C⁽ᵏ⁾ at every parameter of the interval: `geom-num`'s proven `sinpi`, `cospi` and `exp` enclosures, π between its two neighbouring doubles, and interval arithmetic that is exact where it can be (`tight`).",
+            "**Derivatives in closed form.** The k-th derivative of each scalar function is its formula, never a finite difference (chapter 7): cos and sin of πt shift by a quarter turn per derivative and gain a factor π, cosh and sinh trade places, and the involute's terms follow d^k(θ·cos θ) = θ·cos⁽ᵏ⁾θ + k·cos⁽ᵏ⁻¹⁾θ.",
+            "**Refused outside.** A parameter or span outside the domain, or not finite, is an error."
+          ],
+          "job": "The certified evaluation the analytic kinds share: every one of them is C(t) = c + f₁(t)·u + f₂(t)·v + f₃(t)·w, fixed vectors times scalar functions of the parameter.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/1.9780898717716"
+            ],
+            "text": "direct evaluation of the closed forms, in interval arithmetic for the enclosures (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), <https://doi.org/10.1137/1.9780898717716>, the natural interval extension); a span is cut into eighths of a turn for the periodic shapes, so the box follows the curve."
+          },
+          "path": "geom_curve::form",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "two cross products and three norms; constant, nothing allocates.",
+          "does": "a [`Frame`] stores a reference vector x and a normal n, any two finite vectors that are not parallel. They define, exactly, the orthonormal frame x̂ = ((n × x) × n) / |(n × x) × n|, ŷ = (n × x) / |n × x|, n̂ = n / |n|: x̂ is the unit vector along the part of x across n, and ŷ = n̂ × x̂ completes a right-handed frame. Because the stored doubles define the frame, rather than approximate one, a circle on it is exactly a circle of exactly its radius, whatever rounding made x and n. A 2D frame has x in the plane and n = (0, 0, k) with k ≠ 0: ŷ is x̂ turned a quarter turn anticlockwise when k > 0 and clockwise when k < 0. [`Frame::reversed`] negates n, which negates ŷ and n̂ exactly and keeps x̂, as reversing a kind needs.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/frame.rs",
+          "guarantees": [
+            "**An exact definition, certified enclosures.** The unit vectors come in doubles and as enclosures of their exact values, exact points wherever the arithmetic is exact (an axis-aligned frame, or one whose lengths are whole, such as 3-4-5).",
+            "**Refused when degenerate.** Parallel x and n (decided exactly), a 2D normal with x or y components, and entries that are not finite are errors."
+          ],
+          "job": "Orthonormal frames defined exactly by two stored vectors: where a kind starts and which way it turns.",
+          "method": {
+            "links": [
+              "https://downloads.steptools.com/docs/stp_aim/html/t_build_axes.html"
+            ],
+            "text": "the derived axes of an axis placement, as ISO 10303-42 builds them for `axis2_placement_3d` (its `build_axes` function, <https://downloads.steptools.com/docs/stp_aim/html/t_build_axes.html>: the axis normalised, the reference direction's projection across it, then their cross product), with the projection taken exactly as (n × x) × n so that no stored vector needs to be of unit length or perpendicular."
+          },
+          "path": "geom_curve::frame",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant per evaluation; conversion O(n·p²) for n eighths of a turn.",
+          "does": "[`Helix`] stores a center on its axis, a frame whose normal is the axis, a radius and a pitch (the rise per full turn, positive for a right-handed helix), or, as the affine image of one, the vectors u, v and w themselves ([`HelixAxes`]). It is a 3D kind; any length of domain, many turns included. Neither STEP nor IFC has a helix (chapter 7), so it is stored as itself here and exchanged as a NURBS approximation with its certified error.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/helix.rs",
+          "guarantees": [
+            "**Exact.** The stored doubles define the helix; evaluation is certified through the shared analytic form (`crate::form`, shape `Helical`).",
+            "**A certified NURBS form.** A helix is not a rational curve, so it converts by Taylor pieces of degree 9, each an eighth of a turn, on the same parameter, with the remainder bounded by its tenth derivative (`crate::taylor`): about 2.4·10⁻¹⁴ times (|u| + |v|) per piece, plus rounding.",
+            "**Transforms change it explicitly.** A similarity keeps it a circular helix (radius and pitch times the scale, the pitch negated by a mirror, which turns a right-handed helix into a left-handed one); any other transform gives the `Vectors` form on the same parameter.",
+            "**Exact split and reversal.** Reversal negates v and w (the frame's normal) and the domain, and keeps the pitch: a helix traversed backwards keeps its hand."
+          ],
+          "job": "The helix kind, exactly: c + r·cos πt·x̂ + r·sin πt·ŷ + t·(pitch/2)·n̂, t in half-turns.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/07-geometry-types.md"
+            ],
+            "text": "the circular helix in its standard parametrisation, with angles in half-turns, stored exactly as chapter 7 asks (`projects/engines/geometry/architecture/07-geometry-types.md`: \"Helix (exact; neither STEP nor IFC has one)\")."
+          },
+          "path": "geom_curve::helix",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant per evaluation; conversion O(n·p²) for n eighths of a turn.",
+          "does": "[`Involute`] stores the base circle's center, radius and frame (the involute leaves the circle at x̂ when t = 0 and unwinds towards ŷ for t > 0, the other way for t < 0), or, as the affine image of one, the vectors u and v themselves ([`Axes`]). The point t = 0 is a cusp: the derivative vanishes there, and the bounds say so. Gear teeth flanks are its common use.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/involute.rs",
+          "guarantees": [
+            "**Exact.** The stored doubles define the involute; evaluation is certified through the shared analytic form (`crate::form`, shape `Involute`), whose derivatives of every order are closed forms.",
+            "**A certified NURBS form.** The involute is not a rational curve; it converts as the helix does, by Taylor pieces of degree 9 an eighth of a turn wide on the same parameter (`crate::taylor`), the remainder bounded by its tenth derivative.",
+            "**Transforms change it explicitly.** A similarity keeps it the involute of a circle (radius times the scale); any other transform gives the `Vectors` form on the same parameter.",
+            "**Exact split and reversal.**"
+          ],
+          "job": "The circular involute kind: the path of the end of a taut string unwound from a circle, c + r·(cos θ + θ·sin θ)·x̂ + r·(sin θ − θ·cos θ)·ŷ with θ = πt, t in half-turns.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1017/CBO9780511547126"
+            ],
+            "text": "the involute of a circle in its standard parametrisation by the unwinding angle (for gears, F. L. Litvin and A. Fuentes, *Gear Geometry and Applied Theory*, 2nd ed., Cambridge (2004), <https://doi.org/10.1017/CBO9780511547126>), with angles in half-turns."
+          },
+          "path": "geom_curve::involute",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant per evaluation; conversion and transforms constant.",
+          "does": "[`Line`] stores an origin o, a direction d (any nonzero vector) and a domain whose ends may be infinite: finite for a segment, one infinite end for a ray, both for an infinite line ([`Extent`]). It implements the kind contract through the shared analytic form (`crate::form`, shape `Linear`). A ray or infinite line has no finite NURBS form and no bound over an infinite span; both are refused, never clamped.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/line.rs",
+          "guarantees": [
+            "**Exact storage.** The doubles o and d define the line; [`Line::segment`] from two points says how far its stored direction is from the exact difference (0 when it is exact, as it is for grid points).",
+            "**Exact operations.** Split and reversal (o kept, d negated, the domain negated) change no bit; conversion of a segment is the degree-1 NURBS curve through its ends.",
+            "**Bounded or refused.** A transform of a ray or infinite line whose direction's image is not exact would drift without bound along it, so it is refused with [`CurveError::Unbounded`]; trim the line to a segment first."
+          ],
+          "job": "The line kind: a segment, a ray or an infinite line, P(t) = o + t·d.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/07-geometry-types.md"
+            ],
+            "text": "the parametric line of ISO 10303-42 (`line`: a point and a vector), with the segment, ray and infinite line distinguished by the domain, as DXF's LINE, RAY and XLINE are; the kinds chapter 7 lists (`projects/engines/geometry/architecture/07-geometry-types.md`)."
+          },
+          "path": "geom_curve::line",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a binary search over the breaks and a few interval operations.",
+          "does": "[`NurbsForm`] is what [`crate::ParamCurve::to_nurbs`] returns: the NURBS curve and the [`ParamMap`] taking a parameter t of the kind to the parameter u of the NURBS curve at the same point. Most kinds convert with the same parameter. The conics cannot: a circle traced uniformly in angle is not a rational curve in its angle, so its exact NURBS form, the rational quadratic, runs on the tangent half-angle substitution instead. [`ParamMap::enclose`] encloses u for any t, so a caller (and the kind contract) can compare the kind and its NURBS form at the same point.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/map.rs",
+          "guarantees": [
+            "**Certified.** The enclosure holds the exact u: τ is enclosed with `geom-num`'s proven `sinpi`, `cospi` and `exp` enclosures, and the result is cut to the piece's span, which holds the exact u because τ is increasing.",
+            "**Refused outside.** A parameter outside the breaks is an error."
+          ],
+          "job": "A kind converted to NURBS, and the map from the kind's parameter to the NURBS curve's.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "the rational quadratic form of a conic and its parametrisation (L. Piegl and W. Tiller, *The NURBS Book*, 2nd ed., sections 7.2 and 7.3, <https://doi.org/10.1007/978-3-642-59223-2>), where u is the stereographic (tangent half-angle) parameter of the circle and, for the hyperbola, of the unit hyperbola."
+          },
+          "path": "geom_curve::map",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the classification (a few dozen interval operations), then twelve products per image.",
+          "does": "[`Motion::of`] reads a [`TypedTransform`] for a kind of dimension D: its entries (`crate::affine`), its certified classification (`geom-math`), which decides whether circles stay circles (a similarity) and whether it mirrors, and the scale factor a similarity applies to lengths (exactly 1 when it keeps lengths). Its images of stored data are doubles; its image of a kind's form encloses the exact image, so a kind compares the curve it builds with the exact image of the curve it had.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/moved.rs",
+          "guarantees": [
+            "**Planar kinds see the plane.** For a 2D kind the classification is of the transform's 2×2 block, so a uniform scale of the plane keeps a circle a circle.",
+            "**Typed.** A degenerate transform (singular, or too close to it to decide) is refused for the analytic kinds, whose definitions need independent vectors; a 2D kind takes only a transform acting in the plane.",
+            "**Normals carried, not reflected.** A normal maps by n ↦ sign(det M)·M·n, so the frame built from the images, x̂′ along M·x and ŷ′ = n̂′ × x̂′, is exactly the image of x̂ and ŷ under a similarity M = s·R: (R·a) × (R·b) = det R · R·(a × b) for an orthogonal R.",
+            "**Exact where the arithmetic is.** The enclosed images use `tight`, so an exact transform of exact data gives exact points."
+          ],
+          "job": "A typed transform as the analytic kinds apply it: its entries, its classification, the images of stored points, vectors and normals, and the exact image of a kind's vectors for the deviation.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/07-geometry-types.md"
+            ],
+            "text": "affine images of points and vectors, and the cross-product identity above for orthogonal matrices; the classification is `geom-math`'s (G03), and the rule that a transform changes a kind explicitly is chapter 7's (`projects/engines/geometry/architecture/07-geometry-types.md`)."
+          },
+          "path": "geom_curve::moved",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -1262,13 +1472,100 @@
           "provenance": [],
           "spdx": null,
           "target": "lib"
+        },
+        {
+          "cost": "O(n·D) per evaluation and derivative order; O(n²·D) per bound.",
+          "does": "[`Polynomial`] stores the coefficients a₀ … aₙ (degree 1 to `geom-nurbs`'s `MAX_DEGREE`) and a finite domain, as IFC 4.3's `IfcPolynomialCurve` stores one per coordinate. It evaluates by Horner's rule, bounds a span by the centred form about its middle, converts to a single Bezier piece of its own degree on the same parameter, and transforms by mapping a₀ as a point and the others as vectors, which is exact for every affine map.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/polynomial.rs",
+          "guarantees": [
+            "**Certified.** Enclosures and bounds hold the exact values, in interval arithmetic that is exact where it can be (`tight`); a derivative of order above the degree is exactly zero.",
+            "**Exact NURBS form up to rounding.** The Bezier form of the same polynomial, with only the rounding of its control points in the deviation (`crate::taylor`, whose remainder is zero for a polynomial).",
+            "**Exact split and reversal.** A split changes the domain only; reversal negates the odd coefficients and the domain."
+          ],
+          "job": "The polynomial curve kind: P(t) = Σⱼ aⱼ·t^j, a vector coefficient per power.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/1.9780898717716"
+            ],
+            "text": "Horner's rule and its derivatives (D. E. Knuth, *The Art of Computer Programming*, vol. 2, 3rd ed., section 4.6.4), and the centred form of a polynomial over an interval (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), <https://doi.org/10.1137/1.9780898717716>, the centred or Taylor form)."
+          },
+          "path": "geom_curve::polynomial",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(n) for n pieces (at most 5 for an ellipse, 1024 for a hyperbola), a few dozen interval operations each.",
+          "does": "[`conic`] cuts the domain into pieces of at most a quarter turn (an ellipse, t in half-turns) or a parameter width of 1 (a hyperbola), and writes piece [t₀, t₁] as the rational quadratic with control points C(t₀), the meeting point of the end tangents, C(t₁), and weights 1, 1, λ, where, with h = (t₁ − t₀)/2 and σ = tan πh (ellipse) or tanh h (hyperbola), λ = 1 + σ² (ellipse) or 1 − σ² (hyperbola) and the middle control point is C(t₀) + σ·C′(t₀)/π (ellipse) or C(t₀) + σ·C′(t₀) (hyperbola). That is the conic exactly, on the tangent half-angle parameter of [`ParamMap`]. Odd pieces run the other way (weights λ, 1, 1, the middle point from the far end), and each piece's weights are scaled so neighbours share their joint's weight: the weights then alternate and stay bounded. A whole quarter turn has σ = 1 and λ = 2, so a circle on an axis-aligned frame with an exact center and radius converts with weights 1, 1, 2, 1, 1, 1, 2, 1, 1 and every control point exact: deviation 0.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/rational.rs",
+          "guarantees": [
+            "**Certified.** Every control point and weight is first enclosed exactly, then stored as a double. The stored piece differs from the exact one by at most max |Pᵢ − Qᵢ| + 2ε/(1 − ε)·max |Qᵢ − Q₀| (stored points P, exact points Q, weights within a relative ε): a rational Bezier point is Σ Rᵢ·Pᵢ with Rᵢ ≥ 0 summing to 1, and a relative change ε in the weights changes each Rᵢ by at most 2ε/(1 − ε) of itself.",
+            "**Exact where the doubles are.** With the enclosures exact points, the deviation is 0."
+          ],
+          "job": "The exact NURBS form of a conic: an ellipse (circles and arcs included) or a hyperbola as rational quadratic pieces, with a certified bound on the rounding of its control points and weights.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "the conic as a rational quadratic Bezier (L. Piegl and W. Tiller, *The NURBS Book*, 2nd ed., sections 7.2 and 7.3, <https://doi.org/10.1007/978-3-642-59223-2>), with the weights in the non-symmetric standard form (1, 1, λ) reached from the symmetric (1, cos α, 1) by a rational reparametrisation (section 7.2's weight invariant w₀w₂/w₁² = λ = 1/cos² α), so a quarter circle's weights are exact doubles."
+          },
+          "path": "geom_curve::rational",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "per piece, one enclosure of p derivatives, one derivative bound of order p + 1 and O(p²·D) interval operations; n pieces.",
+          "does": "[`same_parameter`] cuts a kind's domain into n equal pieces and, on each piece [a, b] with middle m, takes the Taylor polynomial of degree p at m from the kind's certified derivative enclosures, rewrites it in Bernstein form on [a, b] in interval arithmetic, and replaces its two end coefficients by the kind's enclosed points at a and b, so neighbouring pieces share their joint. The pieces become one NURBS curve of degree p with each interior knot repeated p times (a C⁰ join at the exact curve points).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/taylor.rs",
+          "guarantees": [
+            "**Certified.** On each piece the distance from the curve to the stored NURBS is at most R + E + Z: R = M·ρ^{p+1}/(p+1)!, Taylor's remainder, with M the norm of the kind's bound on its (p + 1)-th derivative over the piece and ρ the farthest the piece reaches from m; E the change from replacing the end coefficients (a Bernstein end basis function is at most 1, and the two together at most 1); Z the rounding of the stored coefficients. A kind whose (p + 1)-th derivative bound is exactly zero is a polynomial of degree p at most, and then R and E are 0: the Taylor polynomial is the curve.",
+            "**Same parameter.** The NURBS curve at t is within the deviation of the kind at t."
+          ],
+          "job": "NURBS forms on the same parameter by Taylor polynomials with a certified remainder: the conversion of the kinds that have no exact rational form (helix, involute), and of the polynomial kinds, for which it is exact up to rounding.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1016/j.cagd.2012.03.001",
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "Taylor's theorem with the Lagrange remainder in its vector form (the integral form, whose norm is bounded by the derivative's), the power-to-Bernstein change of basis (R. T. Farouki, \"The Bernstein polynomial basis: a centennial retrospective\", Computer Aided Geometric Design 29 (2012), section 3, <https://doi.org/10.1016/j.cagd.2012.03.001>), and Bezier pieces as a NURBS curve with p-fold knots (L. Piegl and W. Tiller, *The NURBS Book*, 2nd ed., section 2.3, <https://doi.org/10.1007/978-3-642-59223-2>), all in interval arithmetic."
+          },
+          "path": "geom_curve::taylor",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few floating-point operations per call more than the interval operation.",
+          "does": "each function is the `geom-num` interval operation of the same name, except that when both operands are single doubles and the exact result is a double too, it returns that double as a point interval instead of widening it. So a circle of integer radius on a grid center, evaluated at a quarter turn, is enclosed by its exact point, and two constructions of one exact value compare equal: a conversion or transform that is exact reports a deviation of 0, which widened intervals never could.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/tight.rs",
+          "guarantees": [
+            "**Certified.** A point result is the exact value, decided by an error-free transformation (`geom-num`'s `two_sum` and `two_prod`, whose error is finite and zero exactly when the operation was exact); every other result is the widened interval of `geom-num`, which encloses the exact range.",
+            "**Deterministic.** The same operands give the same bits on every target."
+          ],
+          "job": "Interval operations that stay exact when they can: the analytic kinds' arithmetic.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/BF01397083",
+              "https://doi.org/10.1007/PL00009321"
+            ],
+            "text": "error-free transformations (T. J. Dekker, \"A floating-point technique for extending the available precision\", Numerische Mathematik 18 (1971), <https://doi.org/10.1007/BF01397083>; J. R. Shewchuk, \"Adaptive precision floating-point arithmetic and fast robust geometric predicates\", Discrete & Computational Geometry 18 (1997), <https://doi.org/10.1007/PL00009321>) as exactness tests, with `geom-num`'s interval arithmetic otherwise."
+          },
+          "path": "geom_curve::tight",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
         }
       ],
       "name": "geom-curve",
       "provenance": [],
       "sections": "7, 12.1, 12.4, 17.8, 19.3 and 26.1, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the traits, the enum, the NURBS kind and the contract built (G60); the other kinds to come in G61, G62, G63, G64, G67, G68, G175, G361 and G371.",
+      "status": "the traits, the enum, the NURBS kind and the contract (G60) and the analytic kinds (G61) built; the other kinds to come in G62, G63, G64, G67, G68, G175, G361 and G371.",
       "summary": "Spare Kit geometry kernel: every curve kind."
     },
     {

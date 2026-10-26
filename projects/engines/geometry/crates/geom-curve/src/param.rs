@@ -35,7 +35,13 @@ use geom_num::interval::Interval;
 use geom_nurbs::{Bounds, Changed, Limit};
 use geom_run::WorkMeter;
 
+use crate::conic::{Circle, Ellipse, Hyperbola, Parabola};
 use crate::error::CurveError;
+use crate::helix::Helix;
+use crate::involute::Involute;
+use crate::line::Line;
+use crate::map::NurbsForm;
+use crate::polynomial::Polynomial;
 
 /// A bound on a derivative over a span: a box, or none where the derivative is not bounded there.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -102,16 +108,14 @@ pub trait ParamCurve<const D: usize> {
         meter: &mut WorkMeter<'_>,
     ) -> Result<DerivativeBound<D>, CurveError>;
 
-    /// The curve as a NURBS curve with the same parameter, and a certified bound on the distance
-    /// between them at every parameter (0 when exact).
+    /// The curve as a NURBS curve, with the map from the curve's parameter t to the NURBS
+    /// curve's u (the same parameter, or a conic's tangent half-angle map), and a certified bound
+    /// on |C(t) − N(u(t))| over the domain (0 when exact).
     ///
     /// # Errors
     ///
-    /// As [`ParamCurve::bound`].
-    fn to_nurbs(
-        &self,
-        meter: &mut WorkMeter<'_>,
-    ) -> Result<Changed<geom_nurbs::Curve<D>>, CurveError>;
+    /// [`CurveError::Unbounded`] for a ray or infinite line; as [`ParamCurve::bound`].
+    fn to_nurbs(&self, meter: &mut WorkMeter<'_>) -> Result<Changed<NurbsForm<D>>, CurveError>;
 
     /// The curve split at `t`, strictly inside the domain: the part on [a, t] and the part on
     /// [t, b], each with the same parameter as the curve.
@@ -147,30 +151,69 @@ pub trait ParamCurve<const D: usize> {
 }
 
 /// Every curve kind, stored as itself (chapter 7): one variant per kind built. Later pieces add
-/// the analytic kinds (G61), composite, trimmed, bulge, offset and pcurve kinds (G62) and spirals
-/// (G63).
+/// composite, trimmed, bulge, offset and pcurve kinds (G62) and spirals (G63).
 #[derive(Clone, Debug, PartialEq)]
 pub enum CurveKind<const D: usize> {
     /// A NURBS curve, rational or not, clamped or not.
     Nurbs(geom_nurbs::Curve<D>),
+    /// A segment, ray or infinite line.
+    Line(Line<D>),
+    /// A circle or circular arc.
+    Circle(Circle<D>),
+    /// An ellipse or elliptical arc, by parameter.
+    Ellipse(Ellipse<D>),
+    /// One branch of a hyperbola, or an arc of it.
+    Hyperbola(Hyperbola<D>),
+    /// An arc of a parabola.
+    Parabola(Parabola<D>),
+    /// A helix (3D).
+    Helix(Helix<D>),
+    /// A polynomial curve.
+    Polynomial(Polynomial<D>),
+    /// An involute of a circle, or its affine image.
+    Involute(Involute<D>),
 }
 
 impl<const D: usize> ParamCurve<D> for CurveKind<D> {
     fn domain(&self) -> (f64, f64) {
         match self {
             CurveKind::Nurbs(c) => ParamCurve::domain(c),
+            CurveKind::Line(c) => ParamCurve::domain(c),
+            CurveKind::Circle(c) => ParamCurve::domain(c),
+            CurveKind::Ellipse(c) => ParamCurve::domain(c),
+            CurveKind::Hyperbola(c) => ParamCurve::domain(c),
+            CurveKind::Parabola(c) => ParamCurve::domain(c),
+            CurveKind::Helix(c) => ParamCurve::domain(c),
+            CurveKind::Polynomial(c) => ParamCurve::domain(c),
+            CurveKind::Involute(c) => ParamCurve::domain(c),
         }
     }
 
     fn point(&self, t: f64, side: Limit) -> Result<[f64; D], CurveError> {
         match self {
             CurveKind::Nurbs(c) => ParamCurve::point(c, t, side),
+            CurveKind::Line(c) => ParamCurve::point(c, t, side),
+            CurveKind::Circle(c) => ParamCurve::point(c, t, side),
+            CurveKind::Ellipse(c) => ParamCurve::point(c, t, side),
+            CurveKind::Hyperbola(c) => ParamCurve::point(c, t, side),
+            CurveKind::Parabola(c) => ParamCurve::point(c, t, side),
+            CurveKind::Helix(c) => ParamCurve::point(c, t, side),
+            CurveKind::Polynomial(c) => ParamCurve::point(c, t, side),
+            CurveKind::Involute(c) => ParamCurve::point(c, t, side),
         }
     }
 
     fn derivatives(&self, t: f64, side: Limit, out: &mut [[f64; D]]) -> Result<(), CurveError> {
         match self {
             CurveKind::Nurbs(c) => ParamCurve::derivatives(c, t, side, out),
+            CurveKind::Line(c) => ParamCurve::derivatives(c, t, side, out),
+            CurveKind::Circle(c) => ParamCurve::derivatives(c, t, side, out),
+            CurveKind::Ellipse(c) => ParamCurve::derivatives(c, t, side, out),
+            CurveKind::Hyperbola(c) => ParamCurve::derivatives(c, t, side, out),
+            CurveKind::Parabola(c) => ParamCurve::derivatives(c, t, side, out),
+            CurveKind::Helix(c) => ParamCurve::derivatives(c, t, side, out),
+            CurveKind::Polynomial(c) => ParamCurve::derivatives(c, t, side, out),
+            CurveKind::Involute(c) => ParamCurve::derivatives(c, t, side, out),
         }
     }
 
@@ -183,12 +226,28 @@ impl<const D: usize> ParamCurve<D> for CurveKind<D> {
     ) -> Result<Vec<[Interval; D]>, CurveError> {
         match self {
             CurveKind::Nurbs(c) => c.enclose(t, side, order, meter),
+            CurveKind::Line(c) => c.enclose(t, side, order, meter),
+            CurveKind::Circle(c) => c.enclose(t, side, order, meter),
+            CurveKind::Ellipse(c) => c.enclose(t, side, order, meter),
+            CurveKind::Hyperbola(c) => c.enclose(t, side, order, meter),
+            CurveKind::Parabola(c) => c.enclose(t, side, order, meter),
+            CurveKind::Helix(c) => c.enclose(t, side, order, meter),
+            CurveKind::Polynomial(c) => c.enclose(t, side, order, meter),
+            CurveKind::Involute(c) => c.enclose(t, side, order, meter),
         }
     }
 
     fn bound(&self, span: (f64, f64), meter: &mut WorkMeter<'_>) -> Result<Bounds<D>, CurveError> {
         match self {
             CurveKind::Nurbs(c) => ParamCurve::bound(c, span, meter),
+            CurveKind::Line(c) => ParamCurve::bound(c, span, meter),
+            CurveKind::Circle(c) => ParamCurve::bound(c, span, meter),
+            CurveKind::Ellipse(c) => ParamCurve::bound(c, span, meter),
+            CurveKind::Hyperbola(c) => ParamCurve::bound(c, span, meter),
+            CurveKind::Parabola(c) => ParamCurve::bound(c, span, meter),
+            CurveKind::Helix(c) => ParamCurve::bound(c, span, meter),
+            CurveKind::Polynomial(c) => ParamCurve::bound(c, span, meter),
+            CurveKind::Involute(c) => ParamCurve::bound(c, span, meter),
         }
     }
 
@@ -200,15 +259,28 @@ impl<const D: usize> ParamCurve<D> for CurveKind<D> {
     ) -> Result<DerivativeBound<D>, CurveError> {
         match self {
             CurveKind::Nurbs(c) => c.derivative_bound(span, order, meter),
+            CurveKind::Line(c) => c.derivative_bound(span, order, meter),
+            CurveKind::Circle(c) => c.derivative_bound(span, order, meter),
+            CurveKind::Ellipse(c) => c.derivative_bound(span, order, meter),
+            CurveKind::Hyperbola(c) => c.derivative_bound(span, order, meter),
+            CurveKind::Parabola(c) => c.derivative_bound(span, order, meter),
+            CurveKind::Helix(c) => c.derivative_bound(span, order, meter),
+            CurveKind::Polynomial(c) => c.derivative_bound(span, order, meter),
+            CurveKind::Involute(c) => c.derivative_bound(span, order, meter),
         }
     }
 
-    fn to_nurbs(
-        &self,
-        meter: &mut WorkMeter<'_>,
-    ) -> Result<Changed<geom_nurbs::Curve<D>>, CurveError> {
+    fn to_nurbs(&self, meter: &mut WorkMeter<'_>) -> Result<Changed<NurbsForm<D>>, CurveError> {
         match self {
             CurveKind::Nurbs(c) => c.to_nurbs(meter),
+            CurveKind::Line(c) => c.to_nurbs(meter),
+            CurveKind::Circle(c) => c.to_nurbs(meter),
+            CurveKind::Ellipse(c) => c.to_nurbs(meter),
+            CurveKind::Hyperbola(c) => c.to_nurbs(meter),
+            CurveKind::Parabola(c) => c.to_nurbs(meter),
+            CurveKind::Helix(c) => c.to_nurbs(meter),
+            CurveKind::Polynomial(c) => c.to_nurbs(meter),
+            CurveKind::Involute(c) => c.to_nurbs(meter),
         }
     }
 
@@ -219,12 +291,28 @@ impl<const D: usize> ParamCurve<D> for CurveKind<D> {
     ) -> Result<(Changed<CurveKind<D>>, Changed<CurveKind<D>>), CurveError> {
         match self {
             CurveKind::Nurbs(c) => ParamCurve::split(c, t, meter),
+            CurveKind::Line(c) => ParamCurve::split(c, t, meter),
+            CurveKind::Circle(c) => ParamCurve::split(c, t, meter),
+            CurveKind::Ellipse(c) => ParamCurve::split(c, t, meter),
+            CurveKind::Hyperbola(c) => ParamCurve::split(c, t, meter),
+            CurveKind::Parabola(c) => ParamCurve::split(c, t, meter),
+            CurveKind::Helix(c) => ParamCurve::split(c, t, meter),
+            CurveKind::Polynomial(c) => ParamCurve::split(c, t, meter),
+            CurveKind::Involute(c) => ParamCurve::split(c, t, meter),
         }
     }
 
     fn reversed(&self, meter: &mut WorkMeter<'_>) -> Result<Changed<CurveKind<D>>, CurveError> {
         match self {
             CurveKind::Nurbs(c) => c.reversed(meter),
+            CurveKind::Line(c) => c.reversed(meter),
+            CurveKind::Circle(c) => c.reversed(meter),
+            CurveKind::Ellipse(c) => c.reversed(meter),
+            CurveKind::Hyperbola(c) => c.reversed(meter),
+            CurveKind::Parabola(c) => c.reversed(meter),
+            CurveKind::Helix(c) => c.reversed(meter),
+            CurveKind::Polynomial(c) => c.reversed(meter),
+            CurveKind::Involute(c) => c.reversed(meter),
         }
     }
 
@@ -235,6 +323,14 @@ impl<const D: usize> ParamCurve<D> for CurveKind<D> {
     ) -> Result<Changed<CurveKind<D>>, CurveError> {
         match self {
             CurveKind::Nurbs(c) => c.transformed(transform, meter),
+            CurveKind::Line(c) => c.transformed(transform, meter),
+            CurveKind::Circle(c) => c.transformed(transform, meter),
+            CurveKind::Ellipse(c) => c.transformed(transform, meter),
+            CurveKind::Hyperbola(c) => c.transformed(transform, meter),
+            CurveKind::Parabola(c) => c.transformed(transform, meter),
+            CurveKind::Helix(c) => c.transformed(transform, meter),
+            CurveKind::Polynomial(c) => c.transformed(transform, meter),
+            CurveKind::Involute(c) => c.transformed(transform, meter),
         }
     }
 }

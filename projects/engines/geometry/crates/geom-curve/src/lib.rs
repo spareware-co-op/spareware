@@ -25,23 +25,51 @@
 //! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
-//! Modules today (piece G60): [`ParamCurve`], the behaviour every kind has, and [`CurveKind`],
-//! the closed enum that stores every kind, in [`param`]; the NURBS kind (`nurbs`); typed transforms
-//! on control points with a certified bound ([`affine`]); the kind contract any new kind must pass
-//! ([`contract`]); and [`CurveError`] in [`error`].
+//! Modules today: [`ParamCurve`], the behaviour every kind has, and [`CurveKind`], the closed enum
+//! that stores every kind, in [`param`]; the NURBS kind (`nurbs`); typed transforms on control
+//! points with a certified bound ([`affine`]); the kind contract any new kind must pass
+//! ([`contract`]); and [`CurveError`] in [`error`] (piece G60). The analytic kinds (piece G61):
+//! [`Line`] (segment, ray, infinite line) in [`line`]; [`Circle`], [`Ellipse`], [`Hyperbola`] and
+//! [`Parabola`] in [`conic`]; [`Helix`] in [`helix`]; [`Polynomial`] in [`polynomial`];
+//! [`Involute`] in [`involute`]; exact frames ([`frame`]) and their axes ([`axes`]); a kind's NURBS
+//! form and parameter map ([`map`]). Underneath: the shared certified evaluation (`form`),
+//! transforms for the analytic kinds (`moved`), the exact rational conics (`rational`), Taylor
+//! conversion with a certified remainder (`taylor`) and interval arithmetic that stays exact where
+//! it can (`tight`).
 //!
-//! Status: the traits, the enum, the NURBS kind and the contract built (G60); the other kinds to
-//! come in G61, G62, G63, G64, G67, G68, G175, G361 and G371.
+//! Status: the traits, the enum, the NURBS kind and the contract (G60) and the analytic kinds
+//! (G61) built; the other kinds to come in G62, G63, G64, G67, G68, G175, G361 and G371.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 
 extern crate alloc;
 
 pub mod affine;
+pub mod axes;
+pub mod conic;
 pub mod contract;
 pub mod error;
+mod form;
+pub mod frame;
+pub mod helix;
+pub mod involute;
+pub mod line;
+pub mod map;
+mod moved;
 mod nurbs;
 pub mod param;
+pub mod polynomial;
+mod rational;
+mod taylor;
+mod tight;
 
+pub use axes::{Axes, HelixAxes};
+pub use conic::{Circle, Ellipse, HYPERBOLA_REACH, Hyperbola, Parabola};
 pub use error::{ContractError, CurveError, Law};
+pub use frame::Frame;
+pub use helix::Helix;
+pub use involute::Involute;
+pub use line::{Extent, Line};
+pub use map::{NurbsForm, ParamMap};
 pub use param::{CurveKind, DerivativeBound, ParamCurve};
+pub use polynomial::Polynomial;
