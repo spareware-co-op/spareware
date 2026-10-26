@@ -11,12 +11,12 @@
 //! groups' maxima, and asks Gappa to prove that the error is within K · S and the computed bound
 //! within a relative error R of C · S, with K = C · (1 − R): together, |error| ≤ K · S ≤ bound, so
 //! an answer has the exact sign. Where the result's scale has several monomials (the larger of
-//! m_x^3 m_y and m_x m_y^3, say), one problem cannot state it: [`gappa_case_problem`] states one
-//! problem per case ([`gappa_cases`]), the case where one group's maximum is the largest when the
-//! monomials share one degree, and otherwise where one monomial is the largest of the result's,
+//! `m_x^3 m_y` and `m_x m_y^3`, say), one problem cannot state it: [`gappa_case_problem`] states
+//! one problem per case ([`gappa_cases`]), the case where one group's maximum is the largest when
+//! the monomials share one degree, and otherwise where one monomial is the largest of the result's,
 //! each with S that monomial and the hypotheses the case implies. [`fptaylor_problem`] states the
-//! normalised problem for `FPTaylor`, every input in [−1, 1] so that S is 1, with the same K as the
-//! bound HOL Light checks its certificate against; only a scale of one monomial normalises so
+//! normalised problem for `FPTaylor`, every input in [−1, 1] so that S is 1, with the same K, which
+//! HOL Light compares the certificate's bound with; only a scale of one monomial normalises so
 //! (issue #265). [`proof_sentence`] is the label: proven, naming the problems, when the problems
 //! state the filter in every case, and otherwise "checked, not proven" with the open issue
 //! [`UNPROVEN`] gives it. Every problem carries Gappa's hints and HOL Light's bound in its text, so
@@ -48,11 +48,11 @@
 //! Method: Melquiond and Pion's certified semi-static filters, Gappa proofs of a homogeneous
 //! predicate's error as a multiple of the product of its inputs' maxima (*Formally certified
 //! floating-point filters for homogeneous geometric predicates*, RAIRO Theoretical Informatics and
-//! Applications 41 (2007), doi:10.1051/ita:2007005), with Gappa's `LIN` predicate (`a // b`) in
-//! place of their special rounding operators, which current Gappa no longer has, and a case split
-//! for a scale that takes a larger-of; and `FPTaylor`'s symbolic Taylor forms on the normalised
-//! problem (Solovyev et al., *Rigorous Estimation of Floating-Point Round-off Errors with Symbolic
-//! Taylor Expansions*, ACM TOPLAS 41 (2018), doi:10.1145/3230733).
+//! Applications 41 (2007), <https://doi.org/10.1051/ita:2007005>), with Gappa's `LIN` predicate
+//! (`a // b`) in place of their special rounding operators, which current Gappa no longer has, and
+//! a case split for a scale that takes a larger-of; and `FPTaylor`'s symbolic Taylor forms on the
+//! normalised problem (Solovyev et al., *Rigorous Estimation of Floating-Point Round-off Errors
+//! with Symbolic Taylor Expansions*, ACM TOPLAS 41 (2018), <https://doi.org/10.1145/3230733>).
 //!
 //! Cost: linear in the description's steps times the ways its scale's larger-ofs resolve (one per
 //! case); no allocation beyond the text.
@@ -1001,7 +1001,7 @@ fn gappa_hints(out: &mut String, sh: &Shape<'_>) -> Result<(), EmitError> {
 }
 
 /// The `FPTaylor` problem of `d`'s filter (module documentation), as text: the normalised problem
-/// and, in a structured comment, the bound HOL Light checks the certificate against.
+/// and, in a structured comment, the K that HOL Light compares the certificate's bound with.
 ///
 /// # Errors
 ///
@@ -1023,7 +1023,8 @@ pub fn fptaylor_problem(d: &Derivation, generator: &str) -> Result<String, EmitE
             "28.6; piece G35), normalised: each coordinate difference divided by its axis maximum,",
             "so every variable is in [-1, 1] and the scale S is 1. The error model",
             "fl(t) = t(1 + e) is homogeneous, so a bound B here bounds the error by B * S at every",
-            "scale (the method note). HOL Light checks FPTaylor's certificate against K below.",
+            "scale (the method note). HOL Light checks FPTaylor's certificate, and compares its",
+            "bound with K below.",
         ],
     );
     line(

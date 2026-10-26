@@ -1,6 +1,6 @@
 # G35: Machine-checked proofs of the filters' error bounds, with Gappa and FPTaylor
 
-Piece G35 of the kernel's work board (chapter 30), for chapter 28.6 of the [kernel architecture](../../engines/geometry/architecture/28-testing.md). Status: spike done for Gappa and Rocq; HOL Light's check of FPTaylor's certificates in progress (section 4). Piece G40 extends the problems to every generated filter and labels each one (section 7).
+Piece G35 of the kernel's work board (chapter 30), for chapter 28.6 of the [kernel architecture](../../engines/geometry/architecture/28-testing.md). Status: spike done. Gappa and Rocq prove both filters; HOL Light checks both FPTaylor certificates (section 4). Piece G40 extends the problems to every generated filter and labels each one (section 7).
 
 ## The answer in plain words
 
@@ -36,11 +36,11 @@ What the Rocq proof covers: the goal, for binary64 round-to-nearest with Flocq's
 
 FPTaylor bounds the round-off error of an expression over a box of inputs by a symbolic Taylor expansion in the rounding errors, with global optimisation of the first-order term. Its `formal/` directory is a HOL Light procedure that checks the certificate FPTaylor writes when `proof-record = true`. Proof recording exists only up to FPTaylor v0.9.3 (2020); later versions dropped it (FPTaylor's `formal/README.md`).
 
-The problem is the normalised one: every difference in [−1, 1], so S = 1, with the same operations in the same order as definitions. Because the error model without its subnormal term is homogeneous of degree one in each axis, and the filter's values never underflow, a bound B on the normalised problem bounds the error by B · S at every scale. HOL Light checks the certificate against K, the same number as Gappa's goal.
+The problem is the normalised one: every difference in [−1, 1], so S = 1, with the same operations in the same order as definitions. Because the error model without its subnormal term is homogeneous of degree one in each axis, and the filter's values never underflow, a bound B on the normalised problem bounds the error by B · S at every scale. HOL Light checks the certificate, and the job compares the bound it proves with K, the same number as Gappa's goal; a bound above K is reported, not failed, since Gappa's proof is the one of record.
 
 What the HOL Light certificate covers: the bound for every input in the box, under FPTaylor's error model. What it does not: the link from that model to IEEE rounding. FPTaylor's checker defines its rounding function by choice, as some function satisfying the model (`formal/build_tform2.hl`, "Temporary rounding definitions"; even the identity satisfies it), so the certificate is a theorem about the model, and the normalisation argument above is written, not checked. It is still an independent check of the constant: a different tool, a different method (Taylor forms and branch and bound, against interval rewriting) and a different prover.
 
-Practicalities found: FPTaylor saves certificates as marshalled OCaml `Num` values, and HOL Light uses `Num` below OCaml 4.14 but Zarith from 4.14 on (its Makefile); and FPTaylor's 2020 checker calls `compare` where an opened `List` shadows it with `List.compare`, new in OCaml 4.12, so both run on OCaml 4.11. camlp5 8.04 needs PCRE2, Re and camlp-streams, which HOL Light's loader for OCaml before 4.14 does not load, so the session loads camlp5 through findlib first, as HOL Light's own loader for 4.14 does. HOL Light now ships the inequality verifier FPTaylor's checker needs (`Formal_ineqs`). Loading HOL Light's multivariate analysis takes about two hours before any certificate is checked.
+Practicalities found: FPTaylor saves certificates as marshalled OCaml `Num` values, and HOL Light uses `Num` below OCaml 4.14 but Zarith from 4.14 on (its Makefile); and FPTaylor's 2020 checker calls `compare` where an opened `List` shadows it with `List.compare`, new in OCaml 4.12, so both run on OCaml 4.11. camlp5 8.04 needs PCRE2, Re and camlp-streams, which HOL Light's loader for OCaml before 4.14 does not load, so the session loads camlp5 through findlib first, as HOL Light's own loader for 4.14 does. HOL Light now ships the inequality verifier FPTaylor's checker needs (`Formal_ineqs`). That verifier precomputes its multivariate Taylor theorems for at most eight variables (`max_dim` in `Formal_ineqs/taylor/m_taylor.hl`), and orient3d's filter has nine, so the script raises the constant to the most variables any problem has; it only sizes those tables. Loading HOL Light's multivariate analysis takes about two hours before any certificate is checked.
 
 ## 4. Evidence
 
@@ -52,10 +52,14 @@ Runs of `kernel-certificates.yml` on pull request #262.
 | 40306012279 | the same, with `Print Assumptions` | only the four classical-reals axioms | only the four classical-reals axioms |
 | 40308045670 | Gappa and Rocq on the generated problems, with the goals stated: error within K · S, bound within R | proved; Rocq checked | proved; Rocq checked |
 | 40304947857 | FPTaylor v0.9.3, bound only | 4u + 16u² (0x1.0000000000002p-51), certificate written | 22.1u (0x1.617d000000003p-49), certificate written |
+| 40325231942 | FPTaylor v0.9.3 and HOL Light (OCaml 4.11, the verifier's `max_dim` raised to 9) | certificate checked in 1 s; its bound, 4u + 16u², above K = 4u + 12u² | certificate checked in 177 s; its bound within K |
+
+Run 40325231942's job still failed, on its own last step: the HOL Light toplevel prints its prompt, `# `, before some lines, and the step looked for lines starting "checked". It now allows the prompt, and run 40332187133 passed: both certificates checked, orient2d's bound above K and orient3d's within it, as above.
 
 What the numbers say:
 
 - Gappa's error bound equals the derivation's E for orient2d, and exceeds it for orient3d only in the second-order term, by 0.75u², from rounding its intervals outward. The computed bound is at least (28u + 140u²) · S for orient3d, 87.25u² · S above Gappa's error, and (4u + 16u²) · S for orient2d, 14u² · S above (both checked in exact rationals).
+- FPTaylor's own bound for orient2d is 4u + 16u²: its first-order term, 4u, and second-order term, 2u², summed upward in doubles. That is 4u² above K = 4u + 12u², so HOL Light can check FPTaylor's certificate but not, from it, that K bounds the error; Gappa's proof does (4u + 2u²). Run 40316957754 showed this (HOL Light's comparison with K failed for orient2d), and showed orient3d's nine variables beyond the verifier's eight.
 - FPTaylor finds orient3d's worst error near 22.1u · S, not 28u: the derivation adds every operation's worst case at once, and no input reaches them all together. The constant is sound and about 27% larger than it needs to be. Tightening it would change the filter's answers on some inputs, so it would be a new generator version (chapter 26.2), not an edit; it is noted for G40.
 
 Runs on pull request #264 (piece G40, section 7):
@@ -64,8 +68,6 @@ Runs on pull request #264 (piece G40, section 7):
 | --- | --- | --- | --- |
 | 40314782445 | Gappa 1.8.3 and Rocq 9.1.1, as above | orient2d, orient3d; incircle cases x and y; insphere cases x, y and z | every goal proved, every proof checked by Rocq, only the four classical-reals axioms |
 | 40322430267 | the same | the seven above and plane_side's four term cases (d, z-n, y-n, x-n), on rounded inputs | every goal proved, every proof checked by Rocq, only the four classical-reals axioms |
-
-(HOL Light's check of both certificates: to record.)
 
 ## 5. Options and recommendation
 
