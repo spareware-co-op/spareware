@@ -1,0 +1,19 @@
+// orient3d's filter (geom_num::generated::orient3d::filter) for FPTaylor, normalised: each
+// coordinate difference divided by its axis's largest magnitude, so every variable lies in
+// [-1, 1] and the scale m_x * m_y * m_z is 1. The error model fl(t) = t(1 + e) is homogeneous,
+// so a bound B here bounds the error by B * m_x * m_y * m_z at every scale (the method note).
+// The steps are written in the generated code's order: (n_x_1 - n_x_2), then det_1 + det_2,
+// then + det_4.
+Variables
+  float64 ba_x in [-1, 1];
+  float64 ba_y in [-1, 1];
+  float64 ba_z in [-1, 1];
+  float64 ca_x in [-1, 1];
+  float64 ca_y in [-1, 1];
+  float64 ca_z in [-1, 1];
+  float64 da_x in [-1, 1];
+  float64 da_y in [-1, 1];
+  float64 da_z in [-1, 1];
+
+Expressions
+  det rnd64= ba_x * (ca_y * da_z - ca_z * da_y) + ba_y * (ca_z * da_x - ca_x * da_z) + ba_z * (ca_x * da_y - ca_y * da_x);
