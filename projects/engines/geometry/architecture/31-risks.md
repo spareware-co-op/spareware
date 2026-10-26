@@ -125,6 +125,8 @@ Evidence is cited as in the chapters: a bracketed report number such as [03] is 
 - The committed report of piece "Wide-integer variants and WebAssembly benchmark", covering x86-64, aarch64, Wasmtime, Node, Chrome, Firefox and Safari.
 - The filter must settle at least 99% of calls on the EMBER case list (piece "Plane type and arrangement predicates").
 - Step statistics: the share of calls that reach the exact path on scenario models (piece "Predicate step ladder, rounded-input filters and step statistics").
+
+**Measured (piece G42; report `projects/kit/notes/G42-variants-report.md`).** The 384-bit exact path, classifying a three-plane point against a plane (`tpi_side`), takes 691 ns natively on x86-64 and 460 ns on aarch64. As shipped, with 64-bit limbs, it takes 1,697 ns in Node 24, 2,835 ns in Wasmtime 50, and 2,088 ns in Wasmtime with wide arithmetic: 2.5 to 4.1 times native x86-64. In the width-aware 32-bit-limb variant, it takes 1,026 ns in Node and 1,305 ns in Wasmtime with or without wide arithmetic: 1.5 to 1.9 times. The cause is that on `wasm32` every 64-bit-limb product, and every overflow-checked 64-bit product, is a call to `__multi3`, while a 32-bit-limb product is one native multiply. Wide arithmetic makes the 64-bit-limb products single instructions, and halves the smaller predicates' time where an engine has it; V8 (Node, Chrome) does not validate it. The risk stands at Medium in the browser, held there by the limb variant for the deepest predicates; the factor at the 576-bit and wider budgets the chapters propose is still unmeasured.
 - Browser scenario runs against the proposed target of within three times native (17).
 
 ### R5. Exactness costs too much time or memory at building scale
