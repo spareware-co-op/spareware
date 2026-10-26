@@ -147,7 +147,7 @@ impl<const D: usize> Curve<D> {
     clippy::many_single_char_names,
     reason = "the indices are named as in The NURBS Book's algorithm and NLib's port, so the two can be read side by side"
 )]
-fn remove_once<const D: usize>(
+pub(crate) fn remove_once<const D: usize>(
     meter: &mut WorkMeter<'_>,
     knots: &[f64],
     p: usize,

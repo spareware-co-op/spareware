@@ -109,7 +109,8 @@ pub enum NurbsError {
     Rational,
     /// A tolerance is negative, NaN or infinite.
     Tolerance,
-    /// An approximation (degree reduction) cannot be certified within the tolerance asked for.
+    /// An approximation (degree reduction, or a fit to a stated error) cannot be certified within
+    /// the tolerance asked for.
     OutsideTolerance,
     /// The operation needs a clamped knot vector (each end knot repeated degree + 1 times), as
     /// Bezier extraction and degree change do.
@@ -120,6 +121,54 @@ pub enum NurbsError {
     /// Inserting the knot would raise its multiplicity above the degree (or above degree + 1 at an
     /// end of the domain).
     TooManyKnots,
+    /// A fit was given too few data points: interpolation of degree p needs at least p + 1, and
+    /// a least-squares fit at least as many as it has control points.
+    DataCount {
+        /// How many were given.
+        points: usize,
+        /// The fewest the fit allows.
+        needed: usize,
+    },
+    /// A data point coordinate, a derivative or a constraint value given to a fit is NaN or
+    /// infinite.
+    DataNotFinite {
+        /// The data point's index (row-major for a grid), or the constraint's.
+        index: usize,
+    },
+    /// Two neighbouring data points give the same parameter: they coincide, or lie so close
+    /// together, relative to the whole polygon, that their parameters round to one value.
+    CoincidentData {
+        /// The index of the second point (row-major for a grid's rows; the row or column for a
+        /// grid's parameters).
+        index: usize,
+    },
+    /// Parameters given to a fit do not increase: each must be greater than the one before
+    /// (interpolation), or no smaller (least squares).
+    ParameterOrder {
+        /// The index of the parameter that is not.
+        index: usize,
+    },
+    /// A least-squares weight is not a positive finite number.
+    DataWeight {
+        /// The weight's index.
+        index: usize,
+    },
+    /// A fit's number of control points is below degree + 1, or above the number of data points.
+    ControlCount {
+        /// The number asked for.
+        count: usize,
+        /// The fewest allowed.
+        least: usize,
+        /// The most allowed.
+        most: usize,
+    },
+    /// The data do not determine the fit's control points: the parameters break the
+    /// Schoenberg–Whitney condition (some basis function vanishes at every parameter it needs
+    /// one), so the system is singular, or numerically rank-deficient.
+    Undetermined,
+    /// A least-squares fit's constraints cannot all be met: there are more of them than control
+    /// points, or one contradicts the others.
+    Constraints,
     /// The work meter stopped the operation: over its budget, cancelled, or a large allocation was
     /// refused (chapter 23.10).
     Stopped(Stopped),
@@ -198,6 +247,31 @@ impl fmt::Display for NurbsError {
             NurbsError::TooManyKnots => {
                 f.write_str("the knot's multiplicity would exceed what the degree allows")
             }
+            NurbsError::DataCount { points, needed } => {
+                write!(
+                    f,
+                    "{points} data points, but the fit needs at least {needed}"
+                )
+            }
+            NurbsError::DataNotFinite { index } => write!(f, "data value {index} is not finite"),
+            NurbsError::CoincidentData { index } => write!(
+                f,
+                "data point {index} gives the same parameter as the one before it"
+            ),
+            NurbsError::ParameterOrder { index } => {
+                write!(f, "parameter {index} does not increase")
+            }
+            NurbsError::DataWeight { index } => {
+                write!(f, "data weight {index} is not a positive finite number")
+            }
+            NurbsError::ControlCount { count, least, most } => write!(
+                f,
+                "{count} control points asked for, but the fit allows {least} to {most}"
+            ),
+            NurbsError::Undetermined => {
+                f.write_str("the data do not determine the control points of the fit")
+            }
+            NurbsError::Constraints => f.write_str("the fit's constraints cannot all be met"),
             NurbsError::Stopped(stopped) => write!(f, "{stopped}"),
             NurbsError::Defect => {
                 f.write_str("an internal index fell outside its array (a defect in geom-nurbs)")

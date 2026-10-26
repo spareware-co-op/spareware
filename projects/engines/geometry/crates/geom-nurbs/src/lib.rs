@@ -23,7 +23,7 @@
 //! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
-//! Modules today (piece G56, The NURBS Book's chapters 2 to 5):
+//! Modules today (pieces G56 and G58, The NURBS Book's chapters 2 to 5 and 9):
 //!
 //! - [`Basis`], in [`basis`]: a checked degree and knot vector, and its functions and their
 //!   derivatives (A2.1 to A2.5).
@@ -41,25 +41,42 @@
 //! - Knot insertion, refinement, Bezier extraction and degree elevation of surfaces,
 //!   [`Surface::insert_knot`], [`Surface::refine`], [`Surface::to_bezier`] and
 //!   [`Surface::elevate`] (A5.3, A5.5, A5.7, A5.10).
+//! - Fitting (G58), in [`fit`]: the parameters of data points and grids, [`parameters`] and
+//!   [`grid_parameters`] (equations 9.4 to 9.6, A9.3); knot vectors for interpolation and least
+//!   squares, [`averaged_knots`] and [`least_squares_knots`] (equations 9.8, 9.68 and 9.69); and
+//!   what every fit returns, [`CurveFit`] and [`SurfaceFit`], each with its certified error and
+//!   the [`FitVersion`] that made it.
+//! - Interpolation: [`Curve::interpolate`], [`Curve::interpolate_at`],
+//!   [`Curve::interpolate_with_ends`] and [`Surface::interpolate`] (A9.1, section 9.2.2, A9.4).
+//! - Least squares, through `geom-linalg`'s complete orthogonal decomposition:
+//!   [`Curve::least_squares`] (section 9.4.1), [`Curve::least_squares_at`] with weights and
+//!   constraints (A9.6) and [`Surface::least_squares`] (A9.7).
+//! - Approximation to a stated error: [`Curve::approximate`] (section 9.4.4, A9.8).
 //! - [`NurbsError`], in [`error`].
 //!
-//! Status: basis, evaluation and knot operations built (G56); interpolation and approximation
-//! (G58), the Bernstein toolkit (G59) and the rest (G259) to come.
+//! Status: basis, evaluation and knot operations (G56) and fitting (G58) built; the Bernstein
+//! toolkit (G59) and the rest (G259) to come.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 
 extern crate alloc;
 
+mod approx;
 mod arith;
+mod band;
 pub mod basis;
 mod bezier;
 mod budget;
 pub mod curve;
 mod deboor;
 mod elevate;
+mod enclose;
 pub mod error;
+pub mod fit;
 mod index;
 mod insert;
+mod interp;
+mod lsq;
 mod net;
 pub mod ops;
 pub mod point;
@@ -67,9 +84,14 @@ mod reduce;
 mod remove;
 pub mod surface;
 
+pub use approx::NEWTON_STEPS;
 pub use basis::{Basis, Limit, MAX_DEGREE};
 pub use curve::Curve;
 pub use error::NurbsError;
+pub use fit::{
+    Constraint, CurveFit, FitVersion, KnotMode, Parametrization, SurfaceFit, averaged_knots,
+    grid_parameters, least_squares_knots, parameters,
+};
 pub use ops::{Changed, Direction};
 pub use point::Point;
 pub use surface::Surface;

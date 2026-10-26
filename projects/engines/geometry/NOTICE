@@ -120,6 +120,11 @@ Licence:   Apache-2.0
 Ported files, each with the origin files it ports and the origin's copyright lines as its header
 copies them:
 
+  projects/engines/geometry/crates/geom-nurbs/src/approx.rs
+    SPDX-License-Identifier: MPL-2.0 AND Apache-2.0
+    https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_CrvFit.cpp
+      SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+
   projects/engines/geometry/crates/geom-nurbs/src/basis.rs
     SPDX-License-Identifier: MPL-2.0 AND Apache-2.0
     https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_BasisBasic.cpp
@@ -144,9 +149,24 @@ copies them:
     https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_Bezier.cpp
       SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
+  projects/engines/geometry/crates/geom-nurbs/src/fit.rs
+    SPDX-License-Identifier: MPL-2.0 AND Apache-2.0
+    https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_CrvFit.cpp
+      SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+
   projects/engines/geometry/crates/geom-nurbs/src/insert.rs
     SPDX-License-Identifier: MPL-2.0 AND Apache-2.0
     https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_CrvTool.cpp
+      SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+
+  projects/engines/geometry/crates/geom-nurbs/src/interp.rs
+    SPDX-License-Identifier: MPL-2.0 AND Apache-2.0
+    https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_CrvFit.cpp
+      SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+
+  projects/engines/geometry/crates/geom-nurbs/src/lsq.rs
+    SPDX-License-Identifier: MPL-2.0 AND Apache-2.0
+    https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_CrvFit.cpp
       SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   projects/engines/geometry/crates/geom-nurbs/src/net.rs
@@ -517,6 +537,13 @@ npm `hosted-git-info` 10.1.1
   Consulted by:
     projects/engines/geometry/crates/geom-test/src/map/links.rs
       for the address layouts of GitHub, Bitbucket, GitLab, gists and sourcehut and where each puts its revision. No code copied.
+
+NURBS-Python (geomdl)
+  Licence:      MIT
+  Link:         https://github.com/orbingol/NURBS-Python/blob/9d2555ae8217b5480ee83afb526a835ac3cc3c27/geomdl/fitting.py
+  Consulted by:
+    projects/engines/geometry/crates/geom-nurbs/src/fit.rs
+      for the book's equation numbers of the parameter rules and the least-squares knot placement.
 
 PROJ (its copy of the EPSG dataset, whose own terms of use cover the data)
   Licence:      MIT
