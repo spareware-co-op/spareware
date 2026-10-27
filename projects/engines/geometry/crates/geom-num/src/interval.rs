@@ -851,11 +851,16 @@ mod proofs {
         let x = f64::from_bits(kani::any::<u64>() & !((1 << 39) - 1));
         kani::assume(x.is_finite());
         let (a, b) = (Interval::point(x).unwrap(), Interval::point(-0.1).unwrap());
-        let r = a.div(b).unwrap();
-        assert!(r.lo() <= r.hi());
-        let rounded = x / -0.1;
-        if rounded.is_finite() {
-            assert!(r.contains(rounded));
+        // As in div_law: a quotient past the largest double is refused, never for a zero divisor.
+        match a.div(b) {
+            Ok(r) => {
+                assert!(r.lo() <= r.hi());
+                let rounded = x / -0.1;
+                if rounded.is_finite() {
+                    assert!(r.contains(rounded));
+                }
+            }
+            Err(e) => assert!(e != NumError::DivisorContainsZero),
         }
     }
 
