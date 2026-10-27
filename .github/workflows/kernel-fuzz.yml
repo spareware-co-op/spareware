@@ -167,13 +167,16 @@ jobs:
 
   # Bounded proofs beside geom-num's own code (chapter 28.7; piece G41): each harness of a module's
   # `#[cfg(kani)] mod proofs`, proven by Kani for every case of its domain, with Kani's overflow,
-  # bounds and panic checks on. A harness that cannot finish within the hour is narrowed, and its
-  # module header says what is proven and what is only tested. geom-num's tests/kani_harnesses.rs
-  # holds this list to the harnesses in the source.
+  # bounds and panic checks on. A harness that cannot finish within the budget is narrowed, and
+  # its module header says what is proven and what is only tested. geom-num's
+  # tests/kani_harnesses.rs holds this list to the harnesses in the source. The budget, two hours:
+  # the slowest harness, eft's two_prod_with_three_every_significand, took 45 minutes in WSL with
+  # nine other proofs on the same machine (2026-10-28), and exact_sum's 16; 120 minutes is the
+  # margin orient2d_proof's job above keeps.
   kani-num:
     name: Kani, geom-num (${{ matrix.proof }})
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
