@@ -54,6 +54,10 @@ use std::collections::BTreeMap;
 use std::num::NonZeroU64;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+#[allow(
+    clippy::disallowed_types,
+    reason = "a test fixture, not kernel code: the counter only gives each temporary repository its own folder name"
+)]
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use geom_test::coverage::{self, check_log, check_marks, excuse_awaiting, measure};
@@ -74,6 +78,10 @@ const REASON: &str =
 // A repository in a temporary folder
 // ---------------------------------------------------------------------------------------------
 
+#[allow(
+    clippy::disallowed_types,
+    reason = "a test fixture, not kernel code: the counter only gives each temporary repository its own folder name"
+)]
 static NEXT: AtomicU64 = AtomicU64::new(0);
 
 /// A temporary repository, removed when dropped.
