@@ -157,6 +157,38 @@ fn halves(t: u128) -> (u64, u64) {
     ((t & 0xFFFF_FFFF_FFFF_FFFF) as u64, (t >> 64) as u64)
 }
 
+/// The value with magnitude `m` (limbs little-endian, any number of them) and the given sign, or
+/// `None` if it does not fit: the limbs from `L` on must be zero, and the magnitude must be below
+/// 2^(64L−1), or exactly 2^(64L−1) for a negative value (the minimum value), as
+/// [`Wide::checked_mul`] decides it.
+fn from_magnitude<const L: usize>(m: &[u64], negative: bool) -> Option<Wide<L>> {
+    let mut out = [0u64; L];
+    for k in 0..m.len() {
+        let limb = match m.get(k) {
+            Some(v) => *v,
+            None => 0,
+        };
+        if let Some(slot) = out.get_mut(k) {
+            *slot = limb;
+        } else if limb != 0 {
+            // A non-zero limb at or above limb L makes the magnitude at least 2^(64L).
+            return None;
+        }
+    }
+    let v = Wide(out);
+    if !v.is_negative() {
+        return Some(if negative { v.wrapping_neg() } else { v });
+    }
+    // Top bit set: only the magnitude 2^(64L−1) with a negative sign fits (the minimum value), the
+    // one non-zero magnitude that negation leaves unchanged.
+    let n = v.wrapping_neg();
+    if negative && matches!(compare_limbs(&n.0, &v.0), Ordering::Equal) {
+        Some(n)
+    } else {
+        None
+    }
+}
+
 impl<const L: usize> Wide<L> {
     /// Evaluated when a width is used: a `Wide` needs at least two limbs to hold an `i128`.
     const AT_LEAST_TWO_LIMBS: () = assert!(L >= 2, "Wide<L> needs L >= 2");
@@ -432,7 +464,7 @@ impl<const L: usize> Wide<L> {
             .checked_add(u128::from(h10))?
             .checked_add(u128::from(carry))?;
         let (l2, l3) = halves(upper);
-        Self::from_magnitude(&[l0, l1, l2, l3], negative)
+        from_magnitude(&[l0, l1, l2, l3], negative)
     }
 
     /// `self × b` for an `i128` b, or `None` if the true product does not fit.
@@ -476,32 +508,7 @@ impl<const L: usize> Wide<L> {
                 return None;
             }
         }
-        Self::from_magnitude(&out, negative)
-    }
-
-    /// The value with magnitude `m` (limbs little-endian, any number of them) and the given sign,
-    /// or `None` if it does not fit: the limbs from `L` on must be zero, and the magnitude must be
-    /// below 2^(64L−1), or exactly 2^(64L−1) for a negative value (the minimum value), as
-    /// [`Wide::checked_mul`] decides it.
-    fn from_magnitude(m: &[u64], negative: bool) -> Option<Self> {
-        if m.iter().skip(L).any(|&limb| limb != 0) {
-            return None;
-        }
-        let mut out = [0u64; L];
-        for (o, &limb) in out.iter_mut().zip(m.iter()) {
-            *o = limb;
-        }
-        let top_bit_set = out.last().is_some_and(|top| top & TOP_BIT != 0);
-        if !top_bit_set {
-            let v = Self(out);
-            return Some(if negative { v.wrapping_neg() } else { v });
-        }
-        let is_power = out
-            .iter()
-            .rev()
-            .enumerate()
-            .all(|(k, &limb)| if k == 0 { limb == TOP_BIT } else { limb == 0 });
-        (negative && is_power).then(Self::min_value)
+        from_magnitude(&out, negative)
     }
 
     /// The same value in a `Wide<M>`, or `None` if it does not fit.
