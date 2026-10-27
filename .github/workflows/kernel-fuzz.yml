@@ -178,6 +178,7 @@ jobs:
           - eft::proofs::two_prod_with_the_smallest_subnormal
           - eft::proofs::two_prod_with_the_splitter
           - eft::proofs::two_prod_with_three
+          - eft::proofs::two_prod_with_three_every_significand
           - eft::proofs::two_prod_with_two_pow_996
           - eft::proofs::two_sum_with_minus_a_tenth
           - eft::proofs::two_sum_with_the_largest_double
@@ -188,12 +189,14 @@ jobs:
           - exact_sum::proofs::a_term_and_its_negation_cancel_in_binade_31
           - exact_sum::proofs::a_term_and_its_negation_cancel_in_binade_32
           - exact_sum::proofs::a_term_and_its_negation_cancel_in_one_s_binade
+          - exact_sum::proofs::a_term_and_its_negation_cancel_in_one_s_binade_every_fraction
           - exact_sum::proofs::a_term_and_its_negation_cancel_in_the_largest_binade
           - exact_sum::proofs::a_term_and_its_negation_cancel_in_the_smallest_binade
           - exact_sum::proofs::a_term_and_its_negation_cancel_in_the_subnormals
           - exact_sum::proofs::one_term_rounds_back_in_binade_31
           - exact_sum::proofs::one_term_rounds_back_in_binade_32
           - exact_sum::proofs::one_term_rounds_back_in_one_s_binade
+          - exact_sum::proofs::one_term_rounds_back_in_one_s_binade_every_fraction
           - exact_sum::proofs::one_term_rounds_back_in_the_largest_binade
           - exact_sum::proofs::one_term_rounds_back_in_the_smallest_binade
           - exact_sum::proofs::one_term_rounds_back_in_the_subnormals

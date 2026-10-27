@@ -797,14 +797,41 @@ mod proofs {
     /// An infinity or a NaN, every sign and every payload with the [`FREE`] bits at exponent
     /// field 2047, is reported.
     #[kani::proof]
+    #[kani::unwind(68)]
     fn a_non_finite_term_is_reported() {
         let mut sum = ExactSum::new();
         sum.add(any_with_exponent(2047));
         assert!(sum.round().is_err());
     }
 
+    /// [`one_term_law`]'s claim in one's binade with all 52 fraction bits free: whether the
+    /// narrowing to the [`FREE`] bits is still needed once the loops are bounded.
+    #[kani::proof]
+    #[kani::unwind(68)]
+    #[kani::solver(kissat)]
+    fn one_term_rounds_back_in_one_s_binade_every_fraction() {
+        let sign: u64 = if kani::any() { 1 << 63 } else { 0 };
+        let x = f64::from_bits(sign | 1023 << 52 | (kani::any::<u64>() & FRACTION_BITS));
+        let mut sum = ExactSum::new();
+        sum.add(x);
+        assert!(sum.round().unwrap().get().to_bits() == x.to_bits());
+    }
+
+    /// [`cancel_law`]'s claim in one's binade with all 52 fraction bits free, as above.
+    #[kani::proof]
+    #[kani::unwind(68)]
+    #[kani::solver(kissat)]
+    fn a_term_and_its_negation_cancel_in_one_s_binade_every_fraction() {
+        let x = f64::from_bits(1023 << 52 | (kani::any::<u64>() & FRACTION_BITS));
+        let mut sum = ExactSum::new();
+        sum.add(x);
+        sum.add(-x);
+        assert!(sum.round().unwrap().get().to_bits() == 0);
+    }
+
     /// [`one_term_law`] at exponent field 0: the subnormals.
     #[kani::proof]
+    #[kani::unwind(68)]
     #[kani::solver(kissat)]
     fn one_term_rounds_back_in_the_subnormals() {
         one_term_law(0);
@@ -812,6 +839,7 @@ mod proofs {
 
     /// [`one_term_law`] at exponent field 1: the smallest normal binade.
     #[kani::proof]
+    #[kani::unwind(68)]
     #[kani::solver(kissat)]
     fn one_term_rounds_back_in_the_smallest_binade() {
         one_term_law(1);
@@ -819,6 +847,7 @@ mod proofs {
 
     /// [`one_term_law`] at exponent field 31: the binade below the first chunk boundary.
     #[kani::proof]
+    #[kani::unwind(68)]
     #[kani::solver(kissat)]
     fn one_term_rounds_back_in_binade_31() {
         one_term_law(31);
@@ -826,6 +855,7 @@ mod proofs {
 
     /// [`one_term_law`] at exponent field 32: the binade above the first chunk boundary.
     #[kani::proof]
+    #[kani::unwind(68)]
     #[kani::solver(kissat)]
     fn one_term_rounds_back_in_binade_32() {
         one_term_law(32);
@@ -833,6 +863,7 @@ mod proofs {
 
     /// [`one_term_law`] at exponent field 1023: one's binade.
     #[kani::proof]
+    #[kani::unwind(68)]
     #[kani::solver(kissat)]
     fn one_term_rounds_back_in_one_s_binade() {
         one_term_law(1023);
@@ -840,6 +871,7 @@ mod proofs {
 
     /// [`one_term_law`] at exponent field 2046: the largest binade.
     #[kani::proof]
+    #[kani::unwind(68)]
     #[kani::solver(kissat)]
     fn one_term_rounds_back_in_the_largest_binade() {
         one_term_law(2046);
@@ -847,6 +879,7 @@ mod proofs {
 
     /// [`cancel_law`] at exponent field 0: the subnormals.
     #[kani::proof]
+    #[kani::unwind(68)]
     #[kani::solver(kissat)]
     fn a_term_and_its_negation_cancel_in_the_subnormals() {
         cancel_law(0);
@@ -854,6 +887,7 @@ mod proofs {
 
     /// [`cancel_law`] at exponent field 1: the smallest normal binade.
     #[kani::proof]
+    #[kani::unwind(68)]
     #[kani::solver(kissat)]
     fn a_term_and_its_negation_cancel_in_the_smallest_binade() {
         cancel_law(1);
@@ -861,6 +895,7 @@ mod proofs {
 
     /// [`cancel_law`] at exponent field 31: the binade below the first chunk boundary.
     #[kani::proof]
+    #[kani::unwind(68)]
     #[kani::solver(kissat)]
     fn a_term_and_its_negation_cancel_in_binade_31() {
         cancel_law(31);
@@ -868,6 +903,7 @@ mod proofs {
 
     /// [`cancel_law`] at exponent field 32: the binade above the first chunk boundary.
     #[kani::proof]
+    #[kani::unwind(68)]
     #[kani::solver(kissat)]
     fn a_term_and_its_negation_cancel_in_binade_32() {
         cancel_law(32);
@@ -875,6 +911,7 @@ mod proofs {
 
     /// [`cancel_law`] at exponent field 1023: one's binade.
     #[kani::proof]
+    #[kani::unwind(68)]
     #[kani::solver(kissat)]
     fn a_term_and_its_negation_cancel_in_one_s_binade() {
         cancel_law(1023);
@@ -882,6 +919,7 @@ mod proofs {
 
     /// [`cancel_law`] at exponent field 2046: the largest binade.
     #[kani::proof]
+    #[kani::unwind(68)]
     #[kani::solver(kissat)]
     fn a_term_and_its_negation_cancel_in_the_largest_binade() {
         cancel_law(2046);

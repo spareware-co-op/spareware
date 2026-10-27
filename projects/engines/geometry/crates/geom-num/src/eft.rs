@@ -669,6 +669,11 @@ mod proofs {
         // with a symbolic 53-bit significand every factor ran past CI's hour (run 40323412527).
         let a = f64::from_bits(kani::any::<u64>() & !((1 << 39) - 1));
         kani::assume(a.is_finite());
+        two_prod_holds(a, b);
+    }
+
+    /// [`two_prod_law`]'s claim for one pair.
+    fn two_prod_holds(a: f64, b: f64) {
         let (p, e) = two_prod(a, b);
         assert!(p.to_bits() == (a * b).to_bits());
         if p.is_finite() && e.is_finite() {
@@ -679,13 +684,24 @@ mod proofs {
     /// [`two_prod_law`] with 3: an inexact positive product on the direct path.
     #[kani::proof]
     #[kani::solver(kissat)]
+    #[kani::unwind(3)]
     fn two_prod_with_three() {
         two_prod_law(3.0);
+    }
+
+    /// [`two_prod_law`]'s claim with 3, for every finite first factor, all 53 significand bits
+    /// free: whether the narrowing to 14 bits is still needed once `scale`'s loop is bounded.
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    #[kani::unwind(3)]
+    fn two_prod_with_three_every_significand() {
+        two_prod_holds(finite(), 3.0);
     }
 
     /// [`two_prod_law`] with −0.1: an inexact negative product on the direct path.
     #[kani::proof]
     #[kani::solver(kissat)]
+    #[kani::unwind(3)]
     fn two_prod_with_minus_a_tenth() {
         two_prod_law(-0.1);
     }
@@ -693,6 +709,7 @@ mod proofs {
     /// [`two_prod_law`] with [`SPLITTER`]: a factor that splits exactly.
     #[kani::proof]
     #[kani::solver(kissat)]
+    #[kani::unwind(3)]
     fn two_prod_with_the_splitter() {
         two_prod_law(SPLITTER);
     }
@@ -700,6 +717,7 @@ mod proofs {
     /// [`two_prod_law`] with 2^996: the scaled path for a large factor.
     #[kani::proof]
     #[kani::solver(kissat)]
+    #[kani::unwind(3)]
     fn two_prod_with_two_pow_996() {
         two_prod_law(TWO_POW_996);
     }
@@ -707,6 +725,7 @@ mod proofs {
     /// [`two_prod_law`] with the smallest subnormal: the scaled path for a tiny product.
     #[kani::proof]
     #[kani::solver(kissat)]
+    #[kani::unwind(3)]
     fn two_prod_with_the_smallest_subnormal() {
         two_prod_law(f64::from_bits(1));
     }
@@ -714,6 +733,7 @@ mod proofs {
     /// [`two_prod_law`] with the largest double: overflow.
     #[kani::proof]
     #[kani::solver(kissat)]
+    #[kani::unwind(3)]
     fn two_prod_with_the_largest_double() {
         two_prod_law(f64::MAX);
     }
