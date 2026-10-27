@@ -130,7 +130,11 @@ jobs:
   kani:
     name: Kani (${{ matrix.harness }})
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # orient2d_proof is the slowest harness: on G37's rewritten wide integers, which its total
+    # path reaches, kissat proved it in 47 minutes (run 40291338626) and then in 75 (run
+    # 40308963161, which the old 75-minute limit then cut off) on the hosted runners; CaDiCaL ran
+    # past three hours. 120 minutes is about one and a half times the slower run.
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
