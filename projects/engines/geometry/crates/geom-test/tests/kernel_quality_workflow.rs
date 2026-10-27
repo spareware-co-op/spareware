@@ -26,6 +26,9 @@
 //! - **The tools' configuration.** cargo-mutants mutates only kernel crates' sources and judges
 //!   them by integration tests, with `--locked`; nextest's Miri profiles stop a test at its budget
 //!   as a pass and never fail fast, and the profile the workflow names exists.
+//! - **One aliasing exception.** Miri runs geom-pool, the only crate that names rayon, under Tree
+//!   Borrows and every other crate under Stacked Borrows, and only while `Cargo.lock` holds
+//!   crossbeam-epoch 0.9.21, whose `IsElement::element_of` Stacked Borrows refuses.
 
 // The crate denies native arithmetic in kernel code (Cargo.toml); tests may use it.
 #![allow(
@@ -494,6 +497,73 @@ fn every_gate_is_judged_and_tool_failures_are_not_swallowed() {
     ] {
         assert!(miri.contains(needle), "Miri does not run {needle:?}");
     }
+}
+
+/// The one crate Miri runs under Tree Borrows, and the crossbeam-epoch release that is why.
+const TREE_BORROWS_CRATE: &str = "geom-pool";
+const CROSSBEAM_EPOCH_WITH_THE_VIOLATION: &str = "0.9.21";
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn only_geom_pool_runs_under_tree_borrows_and_only_while_crossbeam_needs_it() {
+    let w = workflow();
+    let steps = w["jobs"]["miri"]["steps"].as_vec().unwrap();
+    let with_flags: Vec<(&str, &str)> = steps
+        .iter()
+        .filter_map(|s| Some((s["env"]["MIRIFLAGS"].as_str()?, s["run"].as_str()?)))
+        .collect();
+    // Every Miri run but one keeps Stacked Borrows, and that run's crate leaves the main run.
+    let tree: Vec<&&str> = with_flags
+        .iter()
+        .filter(|(flags, _)| flags.contains("-Zmiri-tree-borrows"))
+        .map(|(_, run)| run)
+        .collect();
+    assert_eq!(tree.len(), 1, "one step runs Tree Borrows");
+    assert!(
+        tree[0].contains(&format!(
+            "cargo miri nextest run --locked -p {TREE_BORROWS_CRATE} "
+        )),
+        "{}",
+        tree[0]
+    );
+    let main = with_flags
+        .iter()
+        .find(|(_, run)| run.contains("cargo miri nextest run --locked $PACKAGES"))
+        .unwrap()
+        .1;
+    assert!(
+        main.contains(&format!("-E 'not package({TREE_BORROWS_CRATE})'")),
+        "{main}"
+    );
+    // The crate is the one that may name rayon, and the exception lasts only while the lock
+    // holds the crossbeam-epoch release whose `element_of` Stacked Borrows refuses
+    // (crossbeam-rs/crossbeam#871 fixes it upstream, for 0.10). Once the lock moves, run
+    // geom-pool under Stacked Borrows again (remove the step and the filter), or record why not.
+    let manifest = toml_file(&format!(
+        "projects/engines/geometry/crates/{TREE_BORROWS_CRATE}/Cargo.toml"
+    ));
+    assert!(
+        manifest["target"]["cfg(not(target_family = \"wasm\"))"]["dependencies"]
+            .get("rayon")
+            .is_some(),
+        "{TREE_BORROWS_CRATE} no longer names rayon"
+    );
+    let lock = toml_file("Cargo.lock");
+    let epochs: Vec<&str> = lock["package"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|p| p["name"].as_str() == Some("crossbeam-epoch"))
+        .map(|p| p["version"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        epochs,
+        [CROSSBEAM_EPOCH_WITH_THE_VIOLATION],
+        "crossbeam-epoch moved: look at kernel-quality.yml's Tree Borrows step again"
+    );
 }
 
 #[cfg_attr(
