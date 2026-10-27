@@ -308,6 +308,113 @@ impl<const L: usize> Wide<L> {
         }
     }
 
+    /// The exact product a · b of two `i128` values as a `Wide<L>`, or `None` if it does not fit:
+    /// from four limbs it always fits, since |a · b| ≤ 2^127 · 2^127 = 2^254 < 2^255.
+    ///
+    /// The width-aware product of the generated exact paths (chapter 23.3): the same value as
+    /// `Wide::from_i128(a).checked_mul(&Wide::from_i128(b))`, in four 64 × 64 → 128-bit limb
+    /// products instead of [`Wide::checked_mul`]'s loops over every limb of two widened operands.
+    ///
+    /// Method and budget: the magnitudes' 64-bit halves |a| = a₁·2^64 + a₀ and |b| = b₁·2^64 + b₀
+    /// multiply pairwise (Knuth, volume 2, section 4.3.1). Each partial product is at most
+    /// (2^64 − 1)², below 2^128, so `checked_mul` on `u128` never fails. Limb 1 sums the high half
+    /// of a₀b₀ and the low halves of a₀b₁ and a₁b₀: at most 3 (2^64 − 1) < 2^66, its carry at most
+    /// 2. Limbs 2 and 3 sum a₁b₁, the high halves of a₀b₁ and a₁b₀ (each at most 2^64 − 2) and that
+    /// carry: at most (2^64 − 1)² + 2 (2^64 − 2) + 2 = 2^128 − 1, so no `checked_add` fails either.
+    /// The sign is applied last, as [`Wide::checked_mul`] applies it.
+    #[must_use]
+    pub(crate) fn product_i128(a: i128, b: i128) -> Option<Self> {
+        let negative = (a < 0) != (b < 0);
+        let (a0, a1) = halves(a.unsigned_abs());
+        let (b0, b1) = halves(b.unsigned_abs());
+        let p00 = u128::from(a0).checked_mul(u128::from(b0))?;
+        let p01 = u128::from(a0).checked_mul(u128::from(b1))?;
+        let p10 = u128::from(a1).checked_mul(u128::from(b0))?;
+        let p11 = u128::from(a1).checked_mul(u128::from(b1))?;
+        let (l0, h00) = halves(p00);
+        let (l01, h01) = halves(p01);
+        let (l10, h10) = halves(p10);
+        let middle = u128::from(h00)
+            .checked_add(u128::from(l01))?
+            .checked_add(u128::from(l10))?;
+        let (l1, carry) = halves(middle);
+        let upper = p11
+            .checked_add(u128::from(h01))?
+            .checked_add(u128::from(h10))?
+            .checked_add(u128::from(carry))?;
+        let (l2, l3) = halves(upper);
+        Self::from_magnitude(&[l0, l1, l2, l3], negative)
+    }
+
+    /// `self × b` for an `i128` b, or `None` if the true product does not fit.
+    ///
+    /// The width-aware product of the generated exact paths (chapter 23.3): the same value as
+    /// `self.checked_mul(&Wide::from_i128(b))`, by schoolbook multiplication of the magnitude's
+    /// `L` limbs by the two 64-bit halves of |b| (Knuth, volume 2, section 4.3.1), with no
+    /// widening of b and no pass over its sign-extension limbs. Each limb step's bound is the one
+    /// [`Wide::checked_mul`] writes beside its own: a product at most (2^64 − 1)², plus a limb and
+    /// a carry, at most 2^128 − 1.
+    #[must_use]
+    pub(crate) fn checked_mul_i128(&self, b: i128) -> Option<Self> {
+        let negative = self.is_negative() != (b < 0);
+        let a = self.magnitude();
+        let (b0, b1) = halves(b.unsigned_abs());
+        let mut out = [0u64; L];
+        for (shift, bj) in [b0, b1].into_iter().enumerate() {
+            if bj == 0 {
+                continue;
+            }
+            let mut carry = 0u64;
+            for (i, &ai) in a.iter().enumerate() {
+                let prod = u128::from(ai).checked_mul(u128::from(bj))?;
+                // Limb indices are below L and the shift at most 1: never fails.
+                match out.get_mut(i.checked_add(shift)?) {
+                    Some(slot) => {
+                        let t = prod
+                            .checked_add(u128::from(*slot))?
+                            .checked_add(u128::from(carry))?;
+                        (*slot, carry) = halves(t);
+                    }
+                    // A non-zero contribution at limb L makes the magnitude at least 2^(64L).
+                    None => {
+                        if prod != 0 || carry != 0 {
+                            return None;
+                        }
+                    }
+                }
+            }
+            if carry != 0 {
+                return None;
+            }
+        }
+        Self::from_magnitude(&out, negative)
+    }
+
+    /// The value with magnitude `m` (limbs little-endian, any number of them) and the given sign,
+    /// or `None` if it does not fit: the limbs from `L` on must be zero, and the magnitude must be
+    /// below 2^(64L−1), or exactly 2^(64L−1) for a negative value (the minimum value), as
+    /// [`Wide::checked_mul`] decides it.
+    fn from_magnitude(m: &[u64], negative: bool) -> Option<Self> {
+        if m.iter().skip(L).any(|&limb| limb != 0) {
+            return None;
+        }
+        let mut out = [0u64; L];
+        for (o, &limb) in out.iter_mut().zip(m.iter()) {
+            *o = limb;
+        }
+        let top_bit_set = out.last().is_some_and(|top| top & TOP_BIT != 0);
+        if !top_bit_set {
+            let v = Self(out);
+            return Some(if negative { v.wrapping_neg() } else { v });
+        }
+        let is_power = out
+            .iter()
+            .rev()
+            .enumerate()
+            .all(|(k, &limb)| if k == 0 { limb == TOP_BIT } else { limb == 0 });
+        (negative && is_power).then(Self::min_value)
+    }
+
     /// The same value in a `Wide<M>`, or `None` if it does not fit.
     #[must_use]
     pub fn resize<const M: usize>(&self) -> Option<Wide<M>> {
@@ -442,6 +549,123 @@ mod tests {
             p127.checked_neg().and_then(|n| n.checked_mul(&p128)),
             Some(min)
         );
+    }
+
+    /// `SplitMix64` (Steele, Lea and Flood, 2014), for the inputs of the width-aware products' tests.
+    struct Mix(u64);
+
+    impl Mix {
+        fn next(&mut self) -> u64 {
+            self.0 = self.0.wrapping_add(0x9e37_79b9_7f4a_7c15);
+            let mut z = self.0;
+            z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+            z ^ (z >> 31)
+        }
+
+        /// An `i128` of a random bit length, sign and pattern, or one of the edge values.
+        fn i128(&mut self) -> i128 {
+            const EDGES: [i128; 9] = [
+                0,
+                1,
+                -1,
+                i128::MAX,
+                i128::MIN,
+                i128::MAX - 1,
+                i128::MIN + 1,
+                1 << 64,
+                -(1 << 64),
+            ];
+            let pick = self.next();
+            if pick % 4 == 0 {
+                return EDGES[(pick / 4 % 9) as usize];
+            }
+            let raw = (u128::from(self.next()) << 64 | u128::from(self.next())) as i128;
+            raw >> (self.next() % 128)
+        }
+
+        /// A `Wide<L>` of a random bit length and sign, or the largest or smallest value.
+        fn wide<const L: usize>(&mut self) -> Wide<L> {
+            match self.next() % 8 {
+                0 => Wide::max_value(),
+                1 => Wide::min_value(),
+                _ => {
+                    let keep = (self.next() % (64 * L as u64)) as usize;
+                    let mut limbs = [0u64; L];
+                    for (k, limb) in limbs.iter_mut().enumerate() {
+                        let low = 64 * k;
+                        *limb = if keep <= low {
+                            0
+                        } else if keep >= low + 64 {
+                            self.next()
+                        } else {
+                            self.next() >> (64 - (keep - low))
+                        };
+                    }
+                    let v = Wide::from_le_limbs(limbs);
+                    let v = if v.is_negative() { v.wrapping_neg() } else { v };
+                    if self.next() % 2 == 0 {
+                        v
+                    } else {
+                        v.wrapping_neg()
+                    }
+                }
+            }
+        }
+    }
+
+    /// `product_i128` and `checked_mul_i128` give exactly what the general product gives (tested
+    /// against big integers in `tests/wide.rs`), `None` included, at every width.
+    fn width_aware_products_agree<const L: usize>(mix: &mut Mix) {
+        for _ in 0..20_000 {
+            let (a, b) = (mix.i128(), mix.i128());
+            let general = Wide::<L>::from_i128(a).checked_mul(&Wide::<L>::from_i128(b));
+            assert_eq!(
+                Wide::<L>::product_i128(a, b),
+                general,
+                "{a} · {b} in {L} limbs"
+            );
+            let w = mix.wide::<L>();
+            let general = w.checked_mul(&Wide::<L>::from_i128(b));
+            assert_eq!(w.checked_mul_i128(b), general, "{w:?} · {b}");
+        }
+    }
+
+    #[test]
+    fn width_aware_products_agree_with_the_general_product() {
+        let mut mix = Mix(0x0629_0000_0000_0001);
+        width_aware_products_agree::<2>(&mut mix);
+        width_aware_products_agree::<3>(&mut mix);
+        width_aware_products_agree::<4>(&mut mix);
+        width_aware_products_agree::<5>(&mut mix);
+        width_aware_products_agree::<6>(&mut mix);
+        width_aware_products_agree::<8>(&mut mix);
+    }
+
+    #[test]
+    fn width_aware_products_at_the_edges() {
+        // 2^127 · 2^127 = 2^254 fits I256; −2^127 · 2^127 too, and never `i128`'s two limbs.
+        let p254 = I256::from_le_limbs([0, 0, 0, 1 << 62]);
+        assert_eq!(I256::product_i128(i128::MIN, i128::MIN), Some(p254));
+        assert_eq!(
+            I256::product_i128(i128::MIN, i128::MAX),
+            I256::from_i128(i128::MIN).checked_mul(&I256::from_i128(i128::MAX))
+        );
+        assert_eq!(
+            Wide::<2>::product_i128(i128::MIN, 1),
+            Some(Wide::min_value())
+        );
+        assert_eq!(Wide::<2>::product_i128(i128::MIN, -1), None);
+        assert_eq!(Wide::<2>::product_i128(1 << 64, 1 << 63), None);
+        // The minimum value is reached by a negative product and refused for a positive one.
+        let min = I256::min_value();
+        let half = I256::from_le_limbs([0, 0, 0, 1 << 62]);
+        assert_eq!(half.checked_mul_i128(-2), Some(min));
+        assert_eq!(half.checked_mul_i128(2), None);
+        assert_eq!(min.checked_mul_i128(1), Some(min));
+        assert_eq!(min.checked_mul_i128(-1), None);
+        assert_eq!(I256::max_value().checked_mul_i128(0), Some(I256::ZERO));
+        assert_eq!(I384::max_value().checked_mul_i128(i128::MIN), None);
     }
 
     #[test]
