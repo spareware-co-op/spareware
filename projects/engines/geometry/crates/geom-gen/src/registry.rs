@@ -28,7 +28,7 @@ use crate::grid_steps;
 use crate::predicates;
 
 /// Every generator, in the order they run.
-pub const GENERATORS: [Generator; 8] = [
+pub const GENERATORS: [Generator; 14] = [
     Generator {
         name: grid_steps::NAME,
         output: grid_steps::OUTPUT,
@@ -70,6 +70,42 @@ pub const GENERATORS: [Generator; 8] = [
         output: "projects/engines/geometry/crates/geom-num/src/generated/plane_side.rs",
         about: "the side of a plane: its f64 filter on rounded inputs, exact path and certificate",
         generate: Generate::Plain(predicates::generate_plane_side),
+    },
+    Generator {
+        name: "predicate-tpi-weight",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/tpi_weight.rs",
+        about: "the weight's sign of a three-plane point: its f64 filter on rounded inputs, exact path and certificate",
+        generate: Generate::Plain(predicates::generate_tpi_weight),
+    },
+    Generator {
+        name: "predicate-tpi-side",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/tpi_side.rs",
+        about: "a three-plane point against a plane: its f64 filter on rounded inputs, exact path and certificate",
+        generate: Generate::Plain(predicates::generate_tpi_side),
+    },
+    Generator {
+        name: "predicate-lpi-weight",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/lpi_weight.rs",
+        about: "the weight's sign of a line-plane point: its f64 filter on rounded inputs, exact path and certificate",
+        generate: Generate::Plain(predicates::generate_lpi_weight),
+    },
+    Generator {
+        name: "predicate-lpi-side",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/lpi_side.rs",
+        about: "a line-plane point against a plane: its f64 filter on rounded inputs, exact path and certificate",
+        generate: Generate::Plain(predicates::generate_lpi_side),
+    },
+    Generator {
+        name: "predicate-ssi-weight",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/ssi_weight.rs",
+        about: "the weight's sign of a 2D crossing point: its f64 filter, exact path and certificate",
+        generate: Generate::Plain(predicates::generate_ssi_weight),
+    },
+    Generator {
+        name: "predicate-ssi-side",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/ssi_side.rs",
+        about: "orient2d with a 2D crossing point: its f64 filter, exact path and certificate",
+        generate: Generate::Plain(predicates::generate_ssi_side),
     },
     Generator {
         name: predicates::VERUS_ORIENT2D_GENERATOR,

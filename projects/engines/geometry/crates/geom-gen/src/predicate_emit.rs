@@ -20,7 +20,10 @@
 //!   narrowest of `i64`, `i128`, `I256`, `I320`, `I384` and `I512` that holds its bound), with
 //!   operands widened to that type and checked arithmetic (`checked_add`, `checked_sub`,
 //!   `checked_mul`, and `resize` between `Wide`s), so a certificate that was wrong would show as
-//!   `None`, never as a wrapped value. The certificate's rows name the same steps.
+//!   `None`, never as a wrapped value. A product in a `Wide` whose operands fit `i128` is
+//!   `product_i128`, and one with one such operand `checked_mul_i128` (piece G29): the same exact
+//!   product or `None`, without widening the narrow operand to every limb. The certificate's rows
+//!   name the same steps.
 //! - **Width-aware, as chapter 23.3 asks.** A step that fits 63 bits is computed in `i64`, so a
 //!   product of two such steps is `i128::from(a).checked_mul(i128::from(b))`: two sign-extended
 //!   64-bit operands, whose product the compiler proves cannot overflow `i128` and emits as one
@@ -228,8 +231,8 @@ fn rounded_bits(d: &Derivation, input: &str) -> Result<u32, EmitError> {
     }
 }
 
-/// The parameter list: `a: P2, b: P2, c: P2`, or `nx: i128, …, p: P3` with rounded inputs.
-fn params(d: &Derivation, ty: Option<&str>) -> Result<String, EmitError> {
+/// The parameters: `a: P2`, `b: P2`, `c: P2`, or `nx: i128`, …, `p: P3` with rounded inputs.
+fn params(d: &Derivation, ty: Option<&str>) -> Result<Vec<String>, EmitError> {
     let mut parts = Vec::new();
     for i in &d.description.inputs {
         let t = match (&i.kind, ty) {
@@ -242,7 +245,127 @@ fn params(d: &Derivation, ty: Option<&str>) -> Result<String, EmitError> {
         };
         parts.push(format!("{}: {t}", i.name));
     }
-    Ok(parts.join(", "))
+    Ok(parts)
+}
+
+/// A generated function's first line, `pub fn <name>(<parameters>) -> <ret> {`, as rustfmt lays
+/// it out: on one line when it fits [`WIDTH`] columns, and otherwise as rustfmt's default
+/// `fn_params_layout`, `Tall`, writes it, one parameter per line, indented four spaces, each
+/// followed by a comma, and the return type after the closing parenthesis.
+fn signature(out: &mut String, name: &str, parameters: &[String], ret: &str) {
+    let one = format!("pub fn {name}({}) -> {ret} {{", parameters.join(", "));
+    if one.chars().count() <= WIDTH {
+        line(out, &one);
+        return;
+    }
+    line(out, &format!("pub fn {name}("));
+    for p in parameters {
+        line(out, &format!("    {p},"));
+    }
+    line(out, &format!(") -> {ret} {{"));
+}
+
+/// The widest argument list rustfmt keeps on one line in a call: its default `fn_call_width`, 60%
+/// of [`WIDTH`].
+const CALL_ARGS_WIDTH: usize = 60;
+
+/// `exact`'s body, `value(<arguments>).map(<sign>)`, as rustfmt lays it out: on one line when the
+/// line fits [`WIDTH`] columns and the arguments [`CALL_ARGS_WIDTH`]; otherwise the call's
+/// arguments on one line of their own, indented eight spaces and followed by a comma, and the
+/// `.map` on the line after the closing parenthesis, as rustfmt breaks a chain whose arguments are
+/// all names. A list of arguments too long for that one line is refused.
+fn value_call(out: &mut String, arguments: &str, sign: &str) -> Result<(), EmitError> {
+    let one = format!("    value({arguments}).map({sign})");
+    if one.chars().count() <= WIDTH && arguments.chars().count() <= CALL_ARGS_WIDTH {
+        line(out, &one);
+        return Ok(());
+    }
+    let inner = format!("        {arguments},");
+    if inner.chars().count() > WIDTH {
+        return fail(format!(
+            "`exact`'s arguments would pass {WIDTH} columns on a line of their own, which rustfmt \
+             lays out over several lines: {arguments}"
+        ));
+    }
+    line(out, "    value(");
+    line(out, &inner);
+    line(out, "    )");
+    line(out, &format!("    .map({sign})"));
+    Ok(())
+}
+
+/// The lines of the filter that compute its scale. On one line, `let scale = <expression>;`, when
+/// that fits [`WIDTH`] columns and the expression is not a `larger` whose arguments pass
+/// [`CALL_ARGS_WIDTH`]. Otherwise the scale is the largest of several terms, times their common
+/// factor if they have one ([`crate::predicate_derive`]'s scale expression), and it is computed one
+/// term per line: the larger of the first two terms, then the larger of the scale so far and each
+/// further term, then the common factor times the scale. Those are the operations the one-line
+/// expression performs, on the same values, so they give the same `f64` and the same roundings;
+/// the header shows the one-line expression they compute. A scale of another form, or a line that
+/// would still be too long, is refused.
+fn scale_lines(e: &ScaleExpr, groups: &[String]) -> Result<Vec<String>, EmitError> {
+    let whole = scale_rust(e, groups)?;
+    let one = format!("    let scale = {whole};");
+    let call_args_fit = match e {
+        ScaleExpr::Larger(l, r) => {
+            let args = format!("{}, {}", scale_rust(l, groups)?, scale_rust(r, groups)?);
+            args.chars().count() <= CALL_ARGS_WIDTH
+        }
+        _ => true,
+    };
+    if one.chars().count() <= WIDTH && call_args_fit {
+        return Ok(vec![one]);
+    }
+    let (common, largest) = match e {
+        ScaleExpr::Mul(c, l) if matches!(**l, ScaleExpr::Larger(..)) => (Some(&**c), &**l),
+        ScaleExpr::Larger(..) => (None, e),
+        _ => {
+            return fail(format!(
+                "the scale `{whole}` passes {WIDTH} columns and is not the largest of several \
+                 terms"
+            ));
+        }
+    };
+    // The terms of the left-nested `larger(larger(t1, t2), t3)`, in order.
+    let mut terms = Vec::new();
+    let mut at = largest;
+    while let ScaleExpr::Larger(l, r) = at {
+        terms.push(scale_rust(r, groups)?);
+        at = l;
+    }
+    terms.push(scale_rust(at, groups)?);
+    terms.reverse();
+    let mut lines = Vec::new();
+    let mut previous: Option<String> = None;
+    for term in terms {
+        lines.push(match previous {
+            None => {
+                previous = Some(term);
+                continue;
+            }
+            Some(p) => {
+                previous = Some("scale".to_owned());
+                format!("    let scale = larger({p}, {term});")
+            }
+        });
+    }
+    if let Some(c) = common {
+        lines.push(format!(
+            "    let scale = {} * scale;",
+            scale_rust(c, groups)?
+        ));
+    }
+    for l in &lines {
+        let args = l
+            .strip_prefix("    let scale = larger(")
+            .and_then(|a| a.strip_suffix(");"));
+        if l.chars().count() > WIDTH || args.is_some_and(|a| a.chars().count() > CALL_ARGS_WIDTH) {
+            return fail(format!(
+                "a line of the scale would still be laid out over several lines by rustfmt: {l}"
+            ));
+        }
+    }
+    Ok(lines)
 }
 
 /// The argument list: `a, b, c`.
@@ -342,6 +465,15 @@ fn exact_statement(step: &Step, cert: &StepCert, d: &Derivation) -> Result<Strin
                 _ => return fail("a rounded input wider than i128"),
             }
         }
+        StepKind::Op {
+            op: Op::Mul,
+            left,
+            right,
+        } if w > Width::I128 => {
+            let (l, lw) = operand(*left)?;
+            let (r, rw) = operand(*right)?;
+            wide_product(l, lw, r, rw, w)?
+        }
         StepKind::Op { op, left, right } => {
             let (l, lw) = operand(*left)?;
             let (r, rw) = operand(*right)?;
@@ -349,6 +481,43 @@ fn exact_statement(step: &Step, cert: &StepCert, d: &Derivation) -> Result<Strin
         }
     };
     Ok(format!("    let {} = {body};", step.name))
+}
+
+/// `name`, of type `from` (`i64` or `i128`), as an `i128`.
+fn as_i128(name: &str, from: Width) -> Result<String, EmitError> {
+    match from {
+        Width::I64 => Ok(format!("i128::from({name})")),
+        Width::I128 => Ok(name.to_owned()),
+        _ => fail(format!("`{name}` is wider than an `i128`")),
+    }
+}
+
+/// A product in a wide type `w`, width-aware (chapter 23.3): two operands that fit `i128` as
+/// `W::product_i128(l, r)`, four 64 × 64 → 128-bit limb products; one operand that fits `i128`
+/// times the other, widened to `w`, as `x.checked_mul_i128(n)`, two limb products per limb; two
+/// wide operands as `checked_mul`. Each gives the exact product or `None`, as `checked_mul` of the
+/// widened operands does, so the value is the same and only the cost differs.
+fn wide_product(l: &str, lw: Width, r: &str, rw: Width, w: Width) -> Result<String, EmitError> {
+    let narrow = |width: Width| width <= Width::I128;
+    Ok(match (narrow(lw), narrow(rw)) {
+        (true, true) => format!(
+            "{}::product_i128({}, {})?",
+            w.rust(),
+            as_i128(l, lw)?,
+            as_i128(r, rw)?
+        ),
+        (true, false) => format!(
+            "{}.checked_mul_i128({})?",
+            widened(r, rw, w)?,
+            as_i128(l, lw)?
+        ),
+        (false, true) => format!(
+            "{}.checked_mul_i128({})?",
+            widened(l, lw, w)?,
+            as_i128(r, rw)?
+        ),
+        (false, false) => checked(&widened(l, lw, w)?, Op::Mul, &widened(r, rw, w)?, w),
+    })
 }
 
 /// The filter's statement for one step.
@@ -437,15 +606,22 @@ fn check_names(d: &Derivation, imports: &[&str]) -> Result<(), EmitError> {
     Ok(())
 }
 
-/// Whether the inputs need the `many_single_char_names` allowance: more than four one-letter
-/// names, clippy's default threshold.
+/// Whether a generated function needs the `many_single_char_names` allowance: more than four
+/// one-letter names in scope, clippy's default threshold, counting the inputs and the steps the
+/// function binds (a one-letter step, such as `ssi_weight`'s `w`, is in scope too).
 fn many_single_char_names(d: &Derivation) -> bool {
-    d.description
+    let inputs = d
+        .description
         .inputs
         .iter()
         .filter(|i| i.name.chars().count() == 1)
-        .count()
-        > 4
+        .count();
+    let steps = d
+        .steps
+        .iter()
+        .filter(|s| s.name.chars().count() == 1)
+        .count();
+    inputs.saturating_add(steps) > 4
 }
 
 /// The allowances a generated function needs: one-letter point names past clippy's threshold,
@@ -822,14 +998,7 @@ pub fn predicate_module_serving(
         line(&mut out, &format!("use crate::grid::{t};"));
     }
     line(&mut out, "use crate::sign::Sign;");
-    match wides.as_slice() {
-        [] => {}
-        [one] => line(&mut out, &format!("use crate::wide::{one};")),
-        many => line(
-            &mut out,
-            &format!("use crate::wide::{{{}}};", many.join(", ")),
-        ),
-    }
+    line(&mut out, WIDE_IMPORTS);
     line(&mut out, "");
     line(&mut out, &format!("use super::{{{}}};", helpers.join(", ")));
     line(&mut out, "");
@@ -876,16 +1045,15 @@ pub fn predicate_module_serving(
     item_para(&mut out, zero);
     line(&mut out, "#[inline]");
     line(&mut out, "#[must_use]");
+    let scale_code = scale_lines(&d.scale_expr, &groups)?;
     let filter_lines = d
         .steps
         .len()
         .saturating_add(d.groups.len())
-        .saturating_add(2);
+        .saturating_add(scale_code.len())
+        .saturating_add(1);
     allowances(&mut out, d, true, filter_lines);
-    line(
-        &mut out,
-        &format!("pub fn filter({parameters}) -> Option<Sign> {{"),
-    );
+    signature(&mut out, "filter", &parameters, "Option<Sign>");
     for step in &d.steps {
         line(&mut out, &filter_statement(step, d)?);
     }
@@ -904,7 +1072,9 @@ pub fn predicate_module_serving(
             ),
         );
     }
-    line(&mut out, &format!("    let scale = {scale};"));
+    for l in &scale_code {
+        line(&mut out, l);
+    }
     line(
         &mut out,
         &format!("    decide({}, ERROR, scale)", root_step.name),
@@ -921,16 +1091,13 @@ pub fn predicate_module_serving(
     line(&mut out, "#[inline]");
     line(&mut out, "#[must_use]");
     allowances(&mut out, d, false, 1);
-    line(
-        &mut out,
-        &format!("pub fn exact({parameters}) -> Option<Sign> {{"),
-    );
+    signature(&mut out, "exact", &parameters, "Option<Sign>");
     let sign = match root.width {
         Width::I64 => "Sign::of_i64",
         Width::I128 => "Sign::of_i128",
         _ => "|v| v.signum()",
     };
-    line(&mut out, &format!("    value({}).map({sign})", args(d)));
+    value_call(&mut out, &args(d), sign)?;
     line(&mut out, "}");
     // rustfmt would rewrap a longer line of code, and the committed file would then fail
     // `cargo fmt --check`: refuse it here, naming the line.
@@ -942,7 +1109,54 @@ pub fn predicate_module_serving(
             "`{name}`: a line of code would pass {WIDTH} columns, which rustfmt rewraps: {long}"
         ));
     }
-    Ok(out)
+    Ok(wide_imports(&out, &wides))
+}
+
+/// The placeholder line [`predicate_module_serving`] writes where the module's wide-integer import
+/// goes, replaced by [`wide_imports`] once the module's code is known.
+const WIDE_IMPORTS: &str = "// geom-gen: wide imports";
+
+/// Replaces the [`WIDE_IMPORTS`] line with an import of exactly the wide-integer types the code
+/// names, so a module imports no type it does not use. A step's certified width can exceed the
+/// type its code names, when the step's value is formed by a method of a narrower type, so the
+/// candidates (every width a step needs) are filtered by whether the code outside doc comments
+/// names them as a whole word.
+fn wide_imports(module: &str, candidates: &[&str]) -> String {
+    let code: Vec<&str> = module
+        .lines()
+        .filter(|l| !l.trim_start().starts_with("//") && *l != WIDE_IMPORTS)
+        .collect();
+    let named = |ty: &str| {
+        code.iter().any(|l| {
+            l.match_indices(ty).any(|(at, _)| {
+                let before = l.get(..at).and_then(|head| head.chars().next_back());
+                let after = l
+                    .get(at..)
+                    .and_then(|tail| tail.strip_prefix(ty))
+                    .and_then(|tail| tail.chars().next());
+                !before.is_some_and(|c| c.is_alphanumeric() || c == '_')
+                    && !after.is_some_and(|c| c.is_alphanumeric() || c == '_')
+            })
+        })
+    };
+    let used: Vec<&str> = candidates.iter().copied().filter(|ty| named(ty)).collect();
+    let import = match used.as_slice() {
+        [] => None,
+        [one] => Some(format!("use crate::wide::{one};")),
+        many => Some(format!("use crate::wide::{{{}}};", many.join(", "))),
+    };
+    let mut out = String::with_capacity(module.len());
+    for l in module.split_inclusive('\n') {
+        if l.trim_end_matches('\n') == WIDE_IMPORTS {
+            if let Some(import) = &import {
+                out.push_str(import);
+                out.push('\n');
+            }
+        } else {
+            out.push_str(l);
+        }
+    }
+    out
 }
 
 /// The exact path's item, `value`, as the module ships it. With `twin`, also its Verus
@@ -954,7 +1168,7 @@ pub fn predicate_module_serving(
 fn value_item(
     out: &mut String,
     d: &Derivation,
-    parameters: &str,
+    parameters: &[String],
     twin: bool,
 ) -> Result<(), EmitError> {
     let name = &d.description.name;
@@ -979,12 +1193,11 @@ fn value_item(
     if twin {
         verus_spec(out, d)?;
     }
-    line(
+    signature(
         out,
-        &format!(
-            "pub fn value({parameters}) -> Option<{}> {{",
-            root.width.rust()
-        ),
+        "value",
+        parameters,
+        &format!("Option<{}>", root.width.rust()),
     );
     for (step, cert) in d.steps.iter().zip(&d.certs) {
         if let (
@@ -1157,6 +1370,10 @@ const TWIN_LEMMA: [&str; 20] = [
 /// An [`EmitError`] for a description the twin does not cover yet: rounded inputs (no model of
 /// their range check), a step wider than `i128` (no Verus model of the wide integers), or no
 /// point inputs.
+#[allow(
+    clippy::too_many_lines,
+    reason = "one straight sequence of the twin's refusals, header and items, in the order they are written"
+)]
 pub fn verus_twin(d: &Derivation, generator: &str, shipped: &str) -> Result<String, EmitError> {
     let name = &d.description.name;
     if has_rounded(d) {
@@ -1239,7 +1456,10 @@ pub fn verus_twin(d: &Derivation, generator: &str, shipped: &str) -> Result<Stri
     );
     line(
         &mut out,
-        &format!("pub open spec fn spec_value({parameters}) -> int {{"),
+        &format!(
+            "pub open spec fn spec_value({}) -> int {{",
+            parameters.join(", ")
+        ),
     );
     for step in &d.steps {
         line(

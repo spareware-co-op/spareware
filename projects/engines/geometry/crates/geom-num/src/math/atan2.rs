@@ -1140,6 +1140,17 @@ mod tests {
     /// Working precision of the exact checks.
     const P: u64 = 256;
 
+    /// `t`, the tables' shorthand, which only the constant tables call (so only the compiler ran
+    /// it): each argument lands in its own field.
+    #[test]
+    fn the_table_shorthand_fills_each_field() {
+        let x = t(0x8000_0000_0000_0001, 2, 3, -4, 1);
+        assert_eq!(
+            (x.h, x.m, x.l, x.ex, x.sgn),
+            (0x8000_0000_0000_0001, 2, 3, -4, 1)
+        );
+    }
+
     /// u = 2^−53.
     fn u() -> Dy {
         p2(-53)
