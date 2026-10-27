@@ -601,8 +601,7 @@ pub fn gappa_cases(d: &Derivation) -> Result<Vec<String>, EmitError> {
 /// plane's normal beside the axes, whose largest maximum makes no monomial the largest) each
 /// monomial is a case of its own.
 fn group_cases(set: &BTreeSet<Monomial>, groups: usize) -> bool {
-    one_degree(set)
-        && (0..groups).all(|g| dominant(set, g).is_some_and(|m| set.contains(&m)))
+    one_degree(set) && (0..groups).all(|g| dominant(set, g).is_some_and(|m| set.contains(&m)))
 }
 
 /// Whether every monomial of `set` has one degree.
@@ -1035,46 +1034,9 @@ fn gappa_hints(out: &mut String, sh: &Shape<'_>) -> Result<(), EmitError> {
 /// name is a step's.
 pub fn fptaylor_problem(d: &Derivation, generator: &str) -> Result<String, EmitError> {
     let group_of = groups_of(d)?;
-    let name = &d.description.name;
     let (numerator, exponent) = dyadic_k(d.constant_bits, d.roundings)?;
     let ratios = ratios(d)?;
-    let mut about = vec![
-        format!("{name}'s f64 filter (geom_num::generated::{name}::filter) for FPTaylor (chapter"),
-        "28.6; pieces G35 and G40), normalised: each step divided by its scale S(v), the largest"
-            .to_owned(),
-        "of its scale's monomials at the group maxima, so every input is in [-1, 1] and the"
-            .to_owned(),
-        "result's scale is 1. The error model fl(t) = t(1 + e) is homogeneous, so a bound B here"
-            .to_owned(),
-        "bounds the error by B * S at every scale (the method note). HOL Light checks FPTaylor's"
-            .to_owned(),
-        "certificate, and compares its bound with K below.".to_owned(),
-    ];
-    if rounded_inputs(d) {
-        about.extend([
-            "A rounded input's exact value e_v is at most its maximum times 1 + 2^-53 (a value"
-                .to_owned(),
-            "beyond m + ulp(m)/2 rounds above the f64 m), and its copy v = rnd64(e_v).".to_owned(),
-        ]);
-    }
-    if !ratios.is_empty() {
-        about.extend([
-            "A sum whose operand's scale is not the sum's takes the operand's normalised value"
-                .to_owned(),
-            "times S(operand) / S(sum), a ratio in [0, 1], exactly; each such ratio of two scale"
-                .to_owned(),
-            "sets is one parameter:".to_owned(),
-        ]);
-        let groups: Vec<String> = d.groups.iter().map(|g| g.name.clone()).collect();
-        for (i, (operand, sum)) in ratios.iter().enumerate() {
-            about.push(format!(
-                "{} = {} / {}",
-                ratio_name(i),
-                scale_text(operand, &groups),
-                scale_text(sum, &groups)
-            ));
-        }
-    }
+    let about = fptaylor_about(d, &ratios);
     let about: Vec<&str> = about.iter().map(String::as_str).collect();
     let mut out = String::new();
     header(&mut out, "//", generator, d, &about);
@@ -1088,10 +1050,7 @@ pub fn fptaylor_problem(d: &Derivation, generator: &str) -> Result<String, EmitE
         match (&step.kind, g) {
             (StepKind::LoadRounded { .. }, Some(_)) => line(
                 &mut out,
-                &format!(
-                    "  real e_{} in [-{ONE_PLUS_U}, {ONE_PLUS_U}];",
-                    step.name
-                ),
+                &format!("  real e_{} in [-{ONE_PLUS_U}, {ONE_PLUS_U}];", step.name),
             ),
             (_, Some(_)) => line(&mut out, &format!("  float64 {} in [-1, 1];", step.name)),
             (_, None) => {}
@@ -1149,6 +1108,50 @@ pub fn fptaylor_problem(d: &Derivation, generator: &str) -> Result<String, EmitE
     Ok(out)
 }
 
+/// The `FPTaylor` problem's description, after the generated-file header: what it states, and
+/// each ratio parameter as the ratio of two scale sets.
+fn fptaylor_about(d: &Derivation, ratios: &[Ratio]) -> Vec<String> {
+    let name = &d.description.name;
+    let mut about = vec![
+        format!("{name}'s f64 filter (geom_num::generated::{name}::filter) for FPTaylor (chapter"),
+        "28.6; pieces G35 and G40), normalised: each step divided by its scale S(v), the largest"
+            .to_owned(),
+        "of its scale's monomials at the group maxima, so every input is in [-1, 1] and the"
+            .to_owned(),
+        "result's scale is 1. The error model fl(t) = t(1 + e) is homogeneous, so a bound B here"
+            .to_owned(),
+        "bounds the error by B * S at every scale (the method note). HOL Light checks FPTaylor's"
+            .to_owned(),
+        "certificate, and compares its bound with K below.".to_owned(),
+    ];
+    if rounded_inputs(d) {
+        about.extend([
+            "A rounded input's exact value e_v is at most its maximum times 1 + 2^-53 (a value"
+                .to_owned(),
+            "beyond m + ulp(m)/2 rounds above the f64 m), and its copy v = rnd64(e_v).".to_owned(),
+        ]);
+    }
+    if !ratios.is_empty() {
+        about.extend([
+            "A sum whose operand's scale is not the sum's takes the operand's normalised value"
+                .to_owned(),
+            "times S(operand) / S(sum), a ratio in [0, 1], exactly; each such ratio of two scale"
+                .to_owned(),
+            "sets is one parameter:".to_owned(),
+        ]);
+        let groups: Vec<String> = d.groups.iter().map(|g| g.name.clone()).collect();
+        for (i, (operand, sum)) in ratios.iter().enumerate() {
+            about.push(format!(
+                "{} = {} / {}",
+                ratio_name(i),
+                scale_text(operand, &groups),
+                scale_text(sum, &groups)
+            ));
+        }
+    }
+    about
+}
+
 /// 1 + 2^−53 as `FPTaylor` reads a rational constant: a rounded input's exact value is at most
 /// its group's maximum times this.
 const ONE_PLUS_U: &str = "9007199254740993/9007199254740992";
@@ -1158,13 +1161,16 @@ fn ratio_name(i: usize) -> String {
     format!("ratio{}", i.saturating_add(1))
 }
 
+/// A ratio parameter of an `FPTaylor` problem: the operand's scale set over the sum's.
+type Ratio = (BTreeSet<Monomial>, BTreeSet<Monomial>);
+
 /// The ratios of scales the normalised problem needs, in order of first use: for each sum or
 /// difference, each operand whose scale set is not the step's, as `(operand's, step's)`, once
 /// each. S(operand) ≤ S(step), the step's set holding the operand's, so each ratio is in [0, 1];
 /// and a product's scale set is its operands' products, whose largest is the product of their
 /// largest, so a product needs none. Refused if a name would clash with a step's.
-fn ratios(d: &Derivation) -> Result<Vec<(BTreeSet<Monomial>, BTreeSet<Monomial>)>, EmitError> {
-    let mut out: Vec<(BTreeSet<Monomial>, BTreeSet<Monomial>)> = Vec::new();
+fn ratios(d: &Derivation) -> Result<Vec<Ratio>, EmitError> {
+    let mut out: Vec<Ratio> = Vec::new();
     for (step, cert) in d.steps.iter().zip(&d.certs) {
         let StepKind::Op {
             op: Op::Add | Op::Sub,
@@ -1195,10 +1201,7 @@ fn ratios(d: &Derivation) -> Result<Vec<(BTreeSet<Monomial>, BTreeSet<Monomial>)
         .iter()
         .find(|s| (0..out.len()).any(|i| s.name == ratio_name(i)))
     {
-        return fail(format!(
-            "step `{}` has a ratio parameter's name",
-            step.name
-        ));
+        return fail(format!("step `{}` has a ratio parameter's name", step.name));
     }
     Ok(out)
 }

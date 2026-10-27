@@ -41,10 +41,10 @@ fetch https://github.com/jrh13/hol-light.git "$work/hol-light" "$HOL_LIGHT_COMMI
 # HOL Light's inequality verifier precomputes its multivariate Taylor theorems for up to
 # `max_dim` = 8 variables (Formal_ineqs/taylor/m_taylor.hl), and orient3d's filter has nine. The
 # constant only sizes those tables (each built for 1 to max_dim variables), so it is raised to the
-# most variables any problem has.
+# most variables any problem has: its inputs and its ratio parameters (piece G40).
 most=8
 for problem in "$@"; do
-  n=$(grep -c '^ *float64 .* in \[-1, 1\];' "$problem" || true)
+  n=$(grep -c '^ *\(float64\|real\) .* in \[.*\];' "$problem" || true)
   [ "$n" -gt "$most" ] && most=$n
 done
 sed -i "s/^let max_dim = 8;;$/let max_dim = $most;;/" "$work/hol-light/Formal_ineqs/taylor/m_taylor.hl"

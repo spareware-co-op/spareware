@@ -55,7 +55,7 @@ Eleven workflows in `.github/workflows/` guard the kernel. [AGENTS.md](AGENTS.md
 | `kernel-golden.yml` | The golden store: every golden is in the store, every pinned file unchanged, and any edit to a golden carries its record and an owner's approval |
 | `kernel-quality.yml` | The mutation and coverage gates (28.8): every mutant in a change caught, or kept in the quality ledger with its reason; every line and branch of the foundation set run, unless the ledger lists it as awaiting its proof; 90% of lines elsewhere; and Miri over the test suites weekly |
 | `kernel-nightly.yml` | Every night, the exact predicates' verification suite and attack tests with a fresh seed, printed so a failure replays |
-| `kernel-certificates.yml` | The filters' error bounds, machine-checked: Gappa's proofs checked by Rocq and FPTaylor's certificates checked by HOL Light, each tool in a container pinned by digest (orient2d and orient3d today) |
+| `kernel-certificates.yml` | The filters' error bounds, machine-checked: Gappa's proofs checked by Rocq and FPTaylor's certificates checked by HOL Light, each tool in a container pinned by digest, on every change and every night |
 
 ### 5. The map (one minute)
 

@@ -4,13 +4,20 @@
 //! the committed problems; these tests hold the problems to the committed filters, reading both as
 //! text, so a proof is about the code that ships, not about a copy of it.
 //!
-//! - `each_problem_states_the_shipped_filter`: every `let x = a op b;` operation of the committed
-//!   `filter`, in order, is `x = rnd(a op b);` in each Gappa problem and `x = rnd64(a op b);` in
-//!   the `FPTaylor` problem, and nothing else is; the filter's inputs are the problems' inputs (a
-//!   rounded input's copy `rndx(e_v)` of a whole number within its bits), each bounded by the
-//!   maximum the filter takes over it, and each maximum by the largest value its inputs reach as
-//!   the filter computes them; the constant has the bits of the module's `ERROR`; and the computed
-//!   scale is the module's `scale`, rounded product by product, with each larger-of resolved.
+//! - `each_gappa_problem_states_the_shipped_filter` and
+//!   `each_fptaylor_problem_states_the_shipped_filter`: every `let x = a op b;` operation of the
+//!   committed `filter`, in order, is `x = rnd(a op b);` in each Gappa problem and
+//!   `x = rnd64(a op b);` in the `FPTaylor` problem, and nothing else is; the filter's inputs are
+//!   the problems' inputs (a rounded input's copy `rndx(e_v)` of a whole number within its bits),
+//!   each bounded by the maximum the filter takes over it, and each maximum by the largest value
+//!   its inputs reach as the filter computes them; the constant has the bits of the module's
+//!   `ERROR`; and the computed scale is the module's `scale`, rounded product by product, with
+//!   each larger-of resolved. In
+//!   the `FPTaylor` problem, a sum's operand is weighted by a ratio parameter exactly when its
+//!   scale set, in the module's error table, is not the sum's; each parameter is that one ratio of
+//!   sets, the operand's monomials among the sum's, so in [0, 1]; and the variables are the
+//!   normalised inputs (a rounded input's exact value within 1 + 2^−53, its copy `rnd64(e_v)`)
+//!   and the parameters, nothing else.
 //! - `the_cases_cover_every_input_and_assume_only_what_holds`: a filter whose scale takes a
 //!   larger-of has one problem for each way its larger-ofs can resolve, so whichever the filter
 //!   takes, a problem states it; and every hypothesis of each problem is one this test can justify
@@ -21,12 +28,16 @@
 //!   from the module's text, and each Gappa problem bounds the computed bound's relative error by
 //!   (k + 1) · 2^−53.
 //! - `the_problems_are_current_and_registered`: the committed problems are what the registered
-//!   generators write now, and the registry generates no other problem.
+//!   generators write now, the registry generates no other problem, and every generated filter is
+//!   held here.
 //! - `each_label_names_its_problems`: each module's guarantees say its filter is proven and name
-//!   exactly the Gappa problems the registry generates for it, and its `FPTaylor` problem or the
-//!   open issue for one.
+//!   exactly the Gappa problems the registry generates for it, or, for a filter
+//!   `predicate_certificates::UNPROVEN` lists, say "checked, not proven" with its open issue; and
+//!   each names its `FPTaylor` problem.
 //! - `a_single_problem_refuses_a_scale_of_several_monomials`: such a filter (`plane_side`,
-//!   `incircle`, `insphere`) gets no single problem, with the reason: one per case.
+//!   `incircle`, `insphere`, `lpi_weight`) gets no single Gappa problem, with the reason: one per
+//!   case; `FPTaylor`'s normalised problem needs none.
+//! - `each_unproven_filter_is_one_gappa_cannot_state`: an unproven filter's issue is not stale.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -47,46 +58,48 @@
 use std::collections::BTreeSet;
 
 use geom_gen::Generate;
-use geom_gen::predicate_certificates::{FPTAYLOR_CASES_ISSUE, fptaylor_problem, gappa_problem};
+use geom_gen::predicate_certificates::{
+    UNPROVEN, fptaylor_problem, gappa_case_problem, gappa_cases, gappa_problem,
+};
 use geom_gen::predicates::{PREDICATES, derivation};
 use geom_gen::registry::REGISTRY;
 
-/// One predicate: its committed module, its Gappa problems (file name and text) and its
-/// `FPTaylor` problem, if it has one.
-struct Proven {
+/// One predicate: its committed module, its Gappa problems (file name and text), none while
+/// [`UNPROVEN`] gives it an open issue, and its `FPTaylor` problem.
+struct Filter {
     name: &'static str,
     module: &'static str,
     gappa: &'static [(&'static str, &'static str)],
-    fptaylor: Option<(&'static str, &'static str)>,
+    fptaylor: (&'static str, &'static str),
 }
 
 /// Every generated predicate, each with every problem committed for it.
-const PROVEN: [Proven; 5] = [
-    Proven {
+const FILTERS: [Filter; 11] = [
+    Filter {
         name: "orient2d",
         module: include_str!("../../geom-num/src/generated/orient2d.rs"),
         gappa: &[(
             "gappa-orient2d.g",
             include_str!("../generated/gappa-orient2d.g"),
         )],
-        fptaylor: Some((
+        fptaylor: (
             "fptaylor-orient2d.fpt",
             include_str!("../generated/fptaylor-orient2d.fpt"),
-        )),
+        ),
     },
-    Proven {
+    Filter {
         name: "orient3d",
         module: include_str!("../../geom-num/src/generated/orient3d.rs"),
         gappa: &[(
             "gappa-orient3d.g",
             include_str!("../generated/gappa-orient3d.g"),
         )],
-        fptaylor: Some((
+        fptaylor: (
             "fptaylor-orient3d.fpt",
             include_str!("../generated/fptaylor-orient3d.fpt"),
-        )),
+        ),
     },
-    Proven {
+    Filter {
         name: "incircle",
         module: include_str!("../../geom-num/src/generated/incircle.rs"),
         gappa: &[
@@ -99,9 +112,12 @@ const PROVEN: [Proven; 5] = [
                 include_str!("../generated/gappa-incircle-y.g"),
             ),
         ],
-        fptaylor: None,
+        fptaylor: (
+            "fptaylor-incircle.fpt",
+            include_str!("../generated/fptaylor-incircle.fpt"),
+        ),
     },
-    Proven {
+    Filter {
         name: "insphere",
         module: include_str!("../../geom-num/src/generated/insphere.rs"),
         gappa: &[
@@ -118,9 +134,12 @@ const PROVEN: [Proven; 5] = [
                 include_str!("../generated/gappa-insphere-z.g"),
             ),
         ],
-        fptaylor: None,
+        fptaylor: (
+            "fptaylor-insphere.fpt",
+            include_str!("../generated/fptaylor-insphere.fpt"),
+        ),
     },
-    Proven {
+    Filter {
         name: "plane_side",
         module: include_str!("../../geom-num/src/generated/plane_side.rs"),
         gappa: &[
@@ -141,7 +160,86 @@ const PROVEN: [Proven; 5] = [
                 include_str!("../generated/gappa-plane-side-x-n.g"),
             ),
         ],
-        fptaylor: None,
+        fptaylor: (
+            "fptaylor-plane-side.fpt",
+            include_str!("../generated/fptaylor-plane-side.fpt"),
+        ),
+    },
+    Filter {
+        name: "tpi_weight",
+        module: include_str!("../../geom-num/src/generated/tpi_weight.rs"),
+        gappa: &[(
+            "gappa-tpi-weight.g",
+            include_str!("../generated/gappa-tpi-weight.g"),
+        )],
+        fptaylor: (
+            "fptaylor-tpi-weight.fpt",
+            include_str!("../generated/fptaylor-tpi-weight.fpt"),
+        ),
+    },
+    Filter {
+        name: "tpi_side",
+        module: include_str!("../../geom-num/src/generated/tpi_side.rs"),
+        gappa: &[],
+        fptaylor: (
+            "fptaylor-tpi-side.fpt",
+            include_str!("../generated/fptaylor-tpi-side.fpt"),
+        ),
+    },
+    Filter {
+        name: "lpi_weight",
+        module: include_str!("../../geom-num/src/generated/lpi_weight.rs"),
+        gappa: &[
+            (
+                "gappa-lpi-weight-z-n.g",
+                include_str!("../generated/gappa-lpi-weight-z-n.g"),
+            ),
+            (
+                "gappa-lpi-weight-y-n.g",
+                include_str!("../generated/gappa-lpi-weight-y-n.g"),
+            ),
+            (
+                "gappa-lpi-weight-x-n.g",
+                include_str!("../generated/gappa-lpi-weight-x-n.g"),
+            ),
+        ],
+        fptaylor: (
+            "fptaylor-lpi-weight.fpt",
+            include_str!("../generated/fptaylor-lpi-weight.fpt"),
+        ),
+    },
+    Filter {
+        name: "lpi_side",
+        module: include_str!("../../geom-num/src/generated/lpi_side.rs"),
+        gappa: &[],
+        fptaylor: (
+            "fptaylor-lpi-side.fpt",
+            include_str!("../generated/fptaylor-lpi-side.fpt"),
+        ),
+    },
+    Filter {
+        name: "ssi_weight",
+        module: include_str!("../../geom-num/src/generated/ssi_weight.rs"),
+        gappa: &[(
+            "gappa-ssi-weight.g",
+            include_str!("../generated/gappa-ssi-weight.g"),
+        )],
+        fptaylor: (
+            "fptaylor-ssi-weight.fpt",
+            include_str!("../generated/fptaylor-ssi-weight.fpt"),
+        ),
+    },
+    Filter {
+        name: "ssi_side",
+        module: include_str!("../../geom-num/src/generated/ssi_side.rs"),
+        gappa: &[(
+            "gappa-ssi-side.g",
+            include_str!("../generated/gappa-ssi-side.g"),
+        )],
+        fptaylor: (
+            "fptaylor-ssi-side.fpt",
+            include_str!("../generated/fptaylor-ssi-side.fpt"),
+        ),
     },
 ];
 
@@ -437,26 +535,114 @@ fn variant_of(module: &str, problem: &str) -> (String, Vec<String>) {
         .unwrap_or_else(|| panic!("`scale = {scale}` is no way the module's scale resolves"))
 }
 
+/// The scale set of a step, as the module's error-analysis table writes it (`x·n1`, or
+/// `max{y·n1, x·n1}`).
+fn table_scale(module: &str, step: &str) -> String {
+    module
+        .lines()
+        .filter(|l| l.starts_with(&format!("//! | `{step}` | ")))
+        .find_map(|l| {
+            let cells: Vec<&str> = l.split(" | ").collect();
+            ["yes", "no"]
+                .contains(cells.get(3)?)
+                .then(|| cells[2].to_owned())
+        })
+        .unwrap_or_else(|| panic!("no error-analysis row for `{step}`"))
+}
+
+/// The monomials of a scale set as the module writes it.
+fn monomials(scale: &str) -> BTreeSet<&str> {
+    match scale.strip_prefix("max{").and_then(|s| s.strip_suffix('}')) {
+        Some(list) => list.split(", ").collect(),
+        None => BTreeSet::from([scale]),
+    }
+}
+
+/// One operation of an `FPTaylor` problem: `(name, left, op, right)` and each operand's ratio
+/// parameter, if it has one (`ratio3 * w1_3`).
+type Weighted = ((String, String, String, String), [Option<String>; 2]);
+
+/// Each `name = rnd64(<operand> op <operand>);` line of an `FPTaylor` problem.
+fn fptaylor_operations(problem: &str) -> Vec<Weighted> {
+    problem
+        .lines()
+        .filter_map(|l| {
+            let (name, expr) = l.trim().split_once(" = ")?;
+            let inner = expr.strip_prefix("rnd64(")?.strip_suffix(");")?;
+            let t: Vec<&str> = inner.split(' ').collect();
+            let operand = |at: usize| -> Option<(Option<String>, String, usize)> {
+                match (t.get(at), t.get(at + 1), t.get(at + 2)) {
+                    (Some(r), Some(&"*"), Some(v)) if r.starts_with("ratio") => {
+                        Some((Some((*r).to_owned()), (*v).to_owned(), at + 3))
+                    }
+                    (Some(v), _, _) => Some((None, (*v).to_owned(), at + 1)),
+                    _ => None,
+                }
+            };
+            let (lr, a, next) = operand(0)?;
+            let op = *t.get(next)?;
+            let (rr, b, end) = operand(next + 1)?;
+            (end == t.len() && ["+", "-", "*"].contains(&op))
+                .then(|| ((name.to_owned(), a, op.to_owned(), b), [lr, rr]))
+        })
+        .collect()
+}
+
+/// The ratio parameters an `FPTaylor` problem's header defines: `(name, operand's scale set,
+/// sum's scale set)` of each `// ratioN = <set> / <set>` line.
+fn ratio_lines(problem: &str) -> Vec<(String, String, String)> {
+    problem
+        .lines()
+        .filter_map(|l| {
+            let (name, ratio) = l.strip_prefix("// ")?.split_once(" = ")?;
+            let (a, b) = ratio.split_once(" / ")?;
+            name.starts_with("ratio")
+                .then(|| (name.to_owned(), a.to_owned(), b.to_owned()))
+        })
+        .collect()
+}
+
+/// The lines of a problem's `Variables` section.
+fn variables(problem: &str) -> Vec<String> {
+    let start = problem.find("\nVariables\n").unwrap() + "\nVariables\n".len();
+    problem[start..]
+        .lines()
+        .take_while(|l| !l.is_empty())
+        .map(|l| l.trim().to_owned())
+        .collect()
+}
+
+/// The value `  name = ...;` binds in an `FPTaylor` problem's definitions.
+fn binding_indented<'p>(problem: &'p str, name: &str) -> &'p str {
+    problem
+        .lines()
+        .find_map(|l| l.strip_prefix(&format!("  {name} = "))?.strip_suffix(';'))
+        .unwrap_or_else(|| panic!("no `{name} =` line"))
+}
+
+/// 1 + 2^−53, as the `FPTaylor` problems write it: a rounded input's exact value over its
+/// maximum is at most this.
+fn one_plus_u() -> String {
+    format!("{}/{}", (1u64 << 53) + 1, 1u64 << 53)
+}
+
 #[test]
-fn each_problem_states_the_shipped_filter() {
-    for p in &PROVEN {
+fn each_gappa_problem_states_the_shipped_filter() {
+    for p in &FILTERS {
         let name = p.name;
         let module = p.module;
         let shipped = filter_operations(module);
         assert!(shipped.len() > 2, "{name}: the filter's operations");
         let ins = inputs(module);
-        let mut problems: Vec<(&str, &str, &str)> =
-            p.gappa.iter().map(|(f, t)| (*f, *t, "rnd")).collect();
-        problems.extend(p.fptaylor.map(|(f, t)| (f, t, "rnd64")));
-        for (file, problem, rounding) in problems {
+        for (file, problem) in p.gappa {
             let at = format!("{name}, {file}");
-            assert_eq!(problem_operations(problem, rounding), shipped, "{at}");
+            assert_eq!(problem_operations(problem, "rnd"), shipped, "{at}");
             for (v, kind) in &ins {
-                match (kind, rounding) {
-                    (Input::Exact, "rnd") => {
+                match kind {
+                    Input::Exact => {
                         assert!(problem.contains(&format!("@FIX({v}, 0)")), "{at}: {v}");
                     }
-                    (Input::Rounded(bits), "rnd") => {
+                    Input::Rounded(bits) => {
                         let b = (1u128 << bits) - 1;
                         assert_eq!(table_bound(module, v), b, "{at}: {v}'s bits");
                         assert_eq!(binding(problem, v), format!("rndx(e_{v})"), "{at}");
@@ -466,14 +652,7 @@ fn each_problem_states_the_shipped_filter() {
                             "{at}: {v}"
                         );
                     }
-                    (_, _) => assert!(
-                        problem.contains(&format!("float64 {v} in [-1, 1];")),
-                        "{at}: {v}"
-                    ),
                 }
-            }
-            if rounding == "rnd64" {
-                continue;
             }
             // Each input bounded by its maximum, and each maximum by the largest value its inputs
             // reach as the filter computes them (a rounded bound rounds to its nearest f64).
@@ -519,9 +698,80 @@ fn each_problem_states_the_shipped_filter() {
     }
 }
 
+/// `FPTaylor`'s normalised problem: the same operations, each sum's operand of a smaller scale set
+/// weighted by the ratio of its set to the sum's, and nothing else.
+#[test]
+fn each_fptaylor_problem_states_the_shipped_filter() {
+    for p in &FILTERS {
+        let name = p.name;
+        let module = p.module;
+        let shipped = filter_operations(module);
+        let ins = inputs(module);
+        let (file, problem) = p.fptaylor;
+        let at = format!("{name}, {file}");
+        let ops = fptaylor_operations(problem);
+        let plain: Vec<_> = ops.iter().map(|(o, _)| o.clone()).collect();
+        assert_eq!(plain, shipped, "{at}");
+        let ratios = ratio_lines(problem);
+        let pairs: BTreeSet<(&str, &str)> = ratios
+            .iter()
+            .map(|(_, a, b)| (a.as_str(), b.as_str()))
+            .collect();
+        assert_eq!(pairs.len(), ratios.len(), "{at}: one parameter per ratio");
+        for (r, a, b) in &ratios {
+            // S(a) ≤ S(b), so the ratio is in [0, 1]: b's monomials hold a's.
+            assert!(
+                monomials(a).is_subset(&monomials(b)) && a != b,
+                "{at}: {r} = {a} / {b}"
+            );
+        }
+        let mut used = BTreeSet::new();
+        for ((step, left, op, right), weights) in &ops {
+            let own = table_scale(module, step);
+            for (operand, weight) in [left, right].into_iter().zip(weights) {
+                let theirs = table_scale(module, operand);
+                let want = if op == "*" || theirs == own {
+                    None
+                } else {
+                    let r = ratios.iter().find(|(_, a, b)| *a == theirs && *b == own);
+                    Some(
+                        r.unwrap_or_else(|| panic!("{at}: `{step}`'s `{operand}` has no ratio"))
+                            .0
+                            .clone(),
+                    )
+                };
+                assert_eq!(*weight, want, "{at}: `{step}`'s operand `{operand}`");
+                used.extend(weight.clone());
+            }
+        }
+        assert_eq!(used.len(), ratios.len(), "{at}: every ratio is used");
+        // The variables: each input, normalised, and each ratio.
+        let mut want: Vec<String> = Vec::new();
+        for (v, kind) in &ins {
+            match kind {
+                Input::Exact => want.push(format!("float64 {v} in [-1, 1];")),
+                Input::Rounded(_) => {
+                    let q = one_plus_u();
+                    want.push(format!("real e_{v} in [-{q}, {q}];"));
+                    assert_eq!(
+                        binding_indented(problem, v),
+                        format!("rnd64(e_{v})"),
+                        "{at}"
+                    );
+                }
+            }
+        }
+        want.extend(ratios.iter().map(|(r, ..)| format!("real {r} in [0, 1];")));
+        let mut have = variables(problem);
+        have.sort();
+        want.sort();
+        assert_eq!(have, want, "{at}: the variables");
+    }
+}
+
 #[test]
 fn the_cases_cover_every_input_and_assume_only_what_holds() {
-    for p in &PROVEN {
+    for p in FILTERS.iter().filter(|p| !p.gappa.is_empty()) {
         let name = p.name;
         let module = p.module;
         let all = module_variants(module);
@@ -617,7 +867,7 @@ fn the_cases_cover_every_input_and_assume_only_what_holds() {
 
 #[test]
 fn the_bounds_are_the_constant_less_its_roundings() {
-    for p in &PROVEN {
+    for p in &FILTERS {
         let name = p.name;
         let module = p.module;
         let bits = error_bits(module);
@@ -626,7 +876,6 @@ fn the_bounds_are_the_constant_less_its_roundings() {
         let m = u128::from((bits & ((1 << 52) - 1)) | (1 << 52));
         let p_exp = 1075 - (bits >> 52) as u32;
         let want = m * ((1u128 << 53) - k - 1); // K · 2^(p + 53)
-        let mut gappa_ks = Vec::new();
         for (file, gappa) in p.gappa {
             // Gappa's K, `<n>b-<e>`.
             let goal = gappa
@@ -651,33 +900,31 @@ fn the_bounds_are_the_constant_less_its_roundings() {
                 )),
                 "{name}, {file}: R"
             );
-            gappa_ks.push((n, e));
         }
-        // FPTaylor's, `&<n> * &2 ipow (-- &<e>)`, is Gappa's.
-        if let Some((file, fptaylor)) = p.fptaylor {
-            let hol = fptaylor
-                .lines()
-                .find_map(|l| l.strip_prefix("// hol-light-bound: &"))
-                .unwrap();
-            let (hn, he) = hol.split_once(" * &2 ipow (-- &").unwrap();
-            let (hn, he): (u128, u32) = (
-                hn.parse().unwrap(),
-                he.trim_end_matches(')').parse().unwrap(),
-            );
-            assert_eq!(
-                (hn, he),
-                gappa_ks[0],
-                "{name}, {file}: HOL Light's K is Gappa's"
-            );
-        }
+        // FPTaylor's, `&<n> * &2 ipow (-- &<e>)`, is the same K.
+        let (file, fptaylor) = p.fptaylor;
+        let hol = fptaylor
+            .lines()
+            .find_map(|l| l.strip_prefix("// hol-light-bound: &"))
+            .unwrap();
+        let (hn, he) = hol.split_once(" * &2 ipow (-- &").unwrap();
+        let (hn, he): (u128, u32) = (
+            hn.parse().unwrap(),
+            he.trim_end_matches(')').parse().unwrap(),
+        );
+        assert_eq!(
+            hn << (p_exp + 53 - he),
+            want,
+            "{name}, {file}: HOL Light's K"
+        );
     }
 }
 
 #[test]
 fn the_problems_are_current_and_registered() {
-    let committed: Vec<(&str, &str)> = PROVEN
+    let committed: Vec<(&str, &str)> = FILTERS
         .iter()
-        .flat_map(|p| p.gappa.iter().copied().chain(p.fptaylor))
+        .flat_map(|p| p.gappa.iter().copied().chain([p.fptaylor]))
         .collect();
     let mut registered = 0;
     for g in REGISTRY.generators {
@@ -705,6 +952,12 @@ fn the_problems_are_current_and_registered() {
         committed.len(),
         "every problem held here is registered"
     );
+    // Every generated predicate is held here.
+    let mut held: Vec<&str> = FILTERS.iter().map(|p| p.name).collect();
+    let mut generated: Vec<&str> = PREDICATES.iter().map(|p| p.comparison.name).collect();
+    held.sort_unstable();
+    generated.sort_unstable();
+    assert_eq!(held, generated, "every generated filter");
 }
 
 /// The module's Guarantees paragraph, as one line.
@@ -720,14 +973,9 @@ fn guarantees(module: &str) -> String {
 
 #[test]
 fn each_label_names_its_problems() {
-    for p in &PROVEN {
+    for p in &FILTERS {
         let name = p.name;
         let label = guarantees(p.module);
-        assert!(
-            label.contains("Its filter's bound is proven (chapter 28.6)"),
-            "{name}: {label}"
-        );
-        assert!(!label.contains("not proven"), "{name}: {label}");
         // The problems it names are those the registry generates for it.
         let named: BTreeSet<&str> = label
             .split('`')
@@ -748,28 +996,68 @@ fn each_label_names_its_problems() {
         let held: BTreeSet<&str> = p.gappa.iter().map(|(f, _)| *f).collect();
         assert_eq!(named, registered, "{name}");
         assert_eq!(named, held, "{name}");
-        match p.fptaylor {
-            Some((file, _)) => assert!(label.contains(&format!("`{file}`")), "{name}"),
-            None => assert!(
-                label.contains(&format!("(issue #{FPTAYLOR_CASES_ISSUE})")),
-                "{name}"
-            ),
+        assert!(
+            label.contains(&format!("`{}`", p.fptaylor.0)),
+            "{name}: {label}"
+        );
+        if let Some((_, issue)) = UNPROVEN.iter().find(|(n, _)| *n == name) {
+            // Checked, not proven: no Gappa problem, and the open issue named.
+            assert!(
+                label.contains("Its filter's bound is checked, not proven (chapter 28.6)"),
+                "{name}: {label}"
+            );
+            assert!(label.contains(&format!("(issue #{issue})")), "{name}");
+            assert!(named.is_empty(), "{name}");
+        } else {
+            assert!(
+                label.contains("Its filter's bound is proven (chapter 28.6)"),
+                "{name}: {label}"
+            );
+            assert!(!label.contains("not proven"), "{name}: {label}");
+            assert!(!named.is_empty(), "{name}");
         }
     }
 }
 
 #[test]
 fn a_single_problem_refuses_a_scale_of_several_monomials() {
-    for name in ["plane_side", "incircle", "insphere"] {
+    for name in ["plane_side", "incircle", "insphere", "lpi_weight"] {
         let p = PREDICATES
             .iter()
             .find(|p| p.comparison.name == name)
             .unwrap();
         let d = derivation(p).unwrap();
         let gappa = gappa_problem(&d, "test").unwrap_err();
-        let fptaylor = fptaylor_problem(&d, "test").unwrap_err();
-        let why = "one problem per case";
-        assert!(gappa.0.contains(why), "{name}: {}", gappa.0);
-        assert_eq!(gappa, fptaylor, "{name}");
+        assert!(
+            gappa.0.contains("one problem per case"),
+            "{name}: {}",
+            gappa.0
+        );
+        // FPTaylor's normalised problem needs no cases.
+        assert!(fptaylor_problem(&d, "test").is_ok(), "{name}");
+    }
+}
+
+/// An unproven filter's issue is still needed: some problem of its cases is refused, with why.
+#[test]
+fn each_unproven_filter_is_one_gappa_cannot_state() {
+    for (name, issue) in UNPROVEN {
+        let p = PREDICATES
+            .iter()
+            .find(|p| p.comparison.name == name)
+            .unwrap();
+        let d = derivation(p).unwrap();
+        let cases = gappa_cases(&d).unwrap();
+        let refused = if cases.is_empty() {
+            gappa_problem(&d, "test").err()
+        } else {
+            cases
+                .iter()
+                .find_map(|c| gappa_case_problem(&d, "test", c).err())
+        };
+        assert!(
+            refused.is_some(),
+            "{name}: Gappa states it; issue #{issue} is stale"
+        );
     }
 }
