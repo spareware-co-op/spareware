@@ -49,7 +49,7 @@
 
 use crate::generator::GenError;
 use crate::predicate_derive::{Derivation, derive};
-use crate::predicate_emit::{Comparison, parent_module, predicate_module_serving};
+use crate::predicate_emit::{Comparison, parent_module, predicate_module_serving, verus_twin};
 
 /// The folder the generated modules are written into, relative to the workspace root.
 pub const OUTPUT_DIR: &str = "projects/engines/geometry/crates/geom-num/src/generated";
@@ -628,6 +628,31 @@ pub fn generate_ssi_weight() -> Result<Vec<u8>, GenError> {
 /// [`GenError::Generator`] if the derivation or the emission fails.
 pub fn generate_ssi_side() -> Result<Vec<u8>, GenError> {
     module_of(named("ssi_side")?)
+}
+
+/// The name of the generator of orient2d's Verus twin.
+pub const VERUS_ORIENT2D_GENERATOR: &str = "verus-orient2d";
+
+/// Where orient2d's Verus twin is written: a Verus file in geom-gen's generated folder, outside
+/// every crate's sources, so Cargo never builds it; `kernel-dev.yml`'s `verus` job verifies it.
+pub const VERUS_ORIENT2D_OUTPUT: &str =
+    "projects/engines/geometry/crates/geom-gen/generated/verus-orient2d.rs";
+
+/// Generator `verus-orient2d`: the Verus-annotated twin of orient2d's exact path (chapter 28.7;
+/// piece G36), whose `value` is the shipped one with its annotations.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_verus_orient2d() -> Result<Vec<u8>, GenError> {
+    let d = derivation(named("orient2d")?)?;
+    verus_twin(
+        &d,
+        VERUS_ORIENT2D_GENERATOR,
+        &format!("{OUTPUT_DIR}/orient2d.rs"),
+    )
+    .map(String::into_bytes)
+    .map_err(|e| GenError::generator(VERUS_ORIENT2D_GENERATOR, e.0))
 }
 
 /// Generator `predicate-module`: the module that declares the predicates and holds their helpers.

@@ -1025,8 +1025,18 @@ mod tests {
 
     use core::cmp::Ordering;
 
-    use super::{BUDGET_LIMBS, TOTAL_LIMBS, divide_half_even};
-    use crate::wide::Wide;
+    use super::{BUDGET_LIMBS, TOTAL_LIMBS, divide_half_even, limbs};
+    use crate::wide::{I256, I320, Wide};
+
+    /// `limbs`, which only the bit-budget constants call (so only the compiler ran it): the limb
+    /// count of each width the module uses.
+    #[test]
+    fn limbs_counts_each_width() {
+        assert_eq!(limbs(&I256::ZERO), 4);
+        assert_eq!(limbs(&I320::ZERO), 5);
+        assert_eq!(limbs(&Wide::<BUDGET_LIMBS>::ZERO), BUDGET_LIMBS);
+        assert_eq!(limbs(&Wide::<TOTAL_LIMBS>::ZERO), TOTAL_LIMBS);
+    }
 
     /// num / den rounded half to even, and whether it was exact, from `u128` floor and remainder.
     fn oracle(num: u128, den: u128) -> (u128, bool) {

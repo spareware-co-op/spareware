@@ -1,0 +1,190 @@
+name: Kernel fuzzing and proofs
+
+# The legs of the geometry kernel's fuzz targets that need Linux (kernel architecture, chapter
+# 28.5 and 28.7; the layout is in projects/engines/geometry/crates/geom-fuzz/README.md). Every
+# target is one law and its oracle, `check`, in a module of geom-fuzz, with a `harness` that
+# decodes a fuzzer's bytes and calls it. kernel.yml and kernel-dev.yml already run each target's
+# tests on every operating system: bolero's test mode (`<target>_fuzz`), the seeded leg
+# (`<target>_seeded`) and the property test of each proof's domain (`<target>_proof`). This
+# workflow adds:
+#
+# - libFuzzer: each `<target>_fuzz` test rebuilt by cargo-bolero with libFuzzer, coverage
+#   instrumentation and the address sanitizer, and fuzzed for a minute, on the pinned nightly
+#   compiler those flags need. A crash fails the job and its input is uploaded; put the file in
+#   tests/__fuzz__/<target>/crashes and `cargo test` replays it forever (28.16).
+# - Kani: each `<target>_proof` test, bolero's harness unchanged, proven by Kani for every case of
+#   its domain (the target module's header says which).
+# - kernel-fuzz-campaign.yml runs a target for hours instead, on demand: the wide integers' 25-hour
+#   campaign (G26).
+# - ClusterFuzzLite, on pull requests: .clusterfuzzlite/build.sh builds every `<target>_fuzz` test
+#   with cargo-bolero's build-clusterfuzz command, and ClusterFuzzLite fuzzes them in turn
+#   (code-change mode, address sanitizer). OSS-Fuzz's build check cannot read the start-up
+#   scripts cargo-bolero packs, so it is turned off here and build.sh makes the same checks on the
+#   binaries they start.
+#
+# Path filters: the workflow runs when the code a target fuzzes or proves changes: geom-fuzz and
+# every crate of the workspace it depends on (geom-num, geom-run and geom-test today; geom-fuzz's
+# tests/attack_g14.rs fails until a new target's crates are listed here), the workspace files that
+# change any build (Cargo.toml, Cargo.lock, .cargo/, the toolchain file), the ClusterFuzzLite files
+# and this workflow.
+#
+# Pins: the compiler in RUST_TOOLCHAIN is the workspace's (the scaffold test checks every
+# workflow that names it); FUZZ_NIGHTLY is the nightly compiler for libFuzzer's flags, a dated
+# nightly so a run never changes because nightly did; cargo-bolero and Kani are exact versions,
+# installed from their published lockfiles (--locked). Every action is pinned to a full commit,
+# checked against its tag when it was pinned, as in kernel.yml. ClusterFuzzLite's actions run
+# OSS-Fuzz's images tagged v1, which the action pins and we cannot; the image the targets are
+# built in is pinned by digest in .clusterfuzzlite/Dockerfile.
+#
+# --locked: every cargo command that resolves dependencies runs with --locked, or after a
+# `cargo metadata --locked`, which fails if Cargo.lock is not the reviewed one, for the tools
+# (cargo-bolero, cargo kani) that take no such flag.
+
+on:
+  pull_request:
+    paths:
+      - "projects/engines/geometry/crates/geom-fuzz/**"
+      - "projects/engines/geometry/crates/geom-num/**"
+      - "projects/engines/geometry/crates/geom-run/**"
+      - "projects/engines/geometry/crates/geom-test/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".cargo/**"
+      - "rust-toolchain.toml"
+      - "rust-toolchain"
+      - ".clusterfuzzlite/**"
+      - ".github/workflows/kernel-fuzz.yml"
+  push:
+    branches: [main]
+    paths:
+      - "projects/engines/geometry/crates/geom-fuzz/**"
+      - "projects/engines/geometry/crates/geom-num/**"
+      - "projects/engines/geometry/crates/geom-run/**"
+      - "projects/engines/geometry/crates/geom-test/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".cargo/**"
+      - "rust-toolchain.toml"
+      - "rust-toolchain"
+      - ".clusterfuzzlite/**"
+      - ".github/workflows/kernel-fuzz.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kernel-fuzz-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # The workspace's pinned compiler (rust-toolchain.toml), for building the tools.
+  RUST_TOOLCHAIN: "1.99.0"
+  # The nightly compiler cargo-bolero builds libFuzzer targets with (sanitizer flags are
+  # nightly-only).
+  FUZZ_NIGHTLY: nightly-2026-10-01
+  CARGO_BOLERO_VERSION: 0.13.5
+  KANI_VERSION: 0.68.0
+
+jobs:
+  libfuzzer:
+    name: libFuzzer under cargo-bolero (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [orient2d_fuzz, predicates_fuzz, wide_fuzz]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Install the pinned nightly compiler
+        run: rustup toolchain install "$FUZZ_NIGHTLY" --profile minimal
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Install cargo-bolero ${{ env.CARGO_BOLERO_VERSION }}
+        run: >-
+          cargo install cargo-bolero --version "$CARGO_BOLERO_VERSION" --locked
+          --no-default-features --features libfuzzer
+      - name: Cargo.lock is the reviewed one
+        run: cargo metadata --locked --format-version 1 > /dev/null
+      - name: Fuzz ${{ matrix.target }} with libFuzzer for a minute
+        run: >-
+          cargo bolero test "${{ matrix.target }}" --package geom-fuzz
+          --toolchain "$FUZZ_NIGHTLY" --engine libfuzzer -T 60s
+      - name: Upload the crashing input
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: libfuzzer-crashes-${{ matrix.target }}
+          path: projects/engines/geometry/crates/geom-fuzz/tests/__fuzz__/*/crashes/
+          if-no-files-found: ignore
+
+  kani:
+    name: Kani (${{ matrix.harness }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        harness:
+          - orient2d_fuzz
+          - orient2d_proof
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Install Kani ${{ env.KANI_VERSION }}
+        run: |
+          cargo install kani-verifier --version "$KANI_VERSION" --locked
+          cargo kani setup
+      - name: Cargo.lock is the reviewed one
+        run: cargo metadata --locked --format-version 1 > /dev/null
+      - name: Prove ${{ matrix.harness }}
+        run: |
+          start=$(date +%s)
+          cargo kani --tests -p geom-fuzz --harness "${{ matrix.harness }}" --exact
+          echo "Proved in $(( $(date +%s) - start )) seconds."
+      - name: Kani left Cargo.lock as it was
+        run: git diff --exit-code -- Cargo.lock
+
+  clusterfuzzlite:
+    name: ClusterFuzzLite (address sanitizer)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Build the fuzz targets
+        id: build
+        uses: google/clusterfuzzlite/actions/build_fuzzers@52ecc61cb587ee99c26825a112a21abf19c7448c # main, 2026-02-12 (v1 and two documentation changes)
+        with:
+          language: rust
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          sanitizer: address
+          bad-build-check: false
+      - name: Fuzz the targets
+        id: run
+        uses: google/clusterfuzzlite/actions/run_fuzzers@52ecc61cb587ee99c26825a112a21abf19c7448c # main, 2026-02-12 (v1 and two documentation changes)
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          fuzz-seconds: 300
+          mode: code-change
+          sanitizer: address
+      - name: Upload the crashing input
+        if: failure() && steps.build.outcome == 'success'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: clusterfuzzlite-artifacts
+          path: ./out/artifacts
+          if-no-files-found: ignore

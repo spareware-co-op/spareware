@@ -474,3 +474,22 @@ fn only_the_keys_order_matters_and_a_shared_key_is_refused() {
         Err(NumError::Degenerate)
     );
 }
+
+/// Two cocircular ties on which the walk's order and the lifted coordinate decide the sign, each
+/// against the ε-oracle. They were found by simulating the walk with each mutant the mutation gate
+/// (G21) found surviving: on the first, skipping the valid masks (and building only from invalid
+/// ones) turns the sign over; on the second, a lifted coordinate of 0, 1 or −1 does.
+#[test]
+fn ties_decided_by_the_walks_order_and_the_lifted_coordinate() {
+    for (points, keys) in [
+        ([[4, 7], [8, 1], [-8, -1], [4, -7]], [44, 41, 31, 20]),
+        ([[-5, -2], [-8, 7], [-1, 14], [-8, 3]], [34, 16, 2, 5]),
+    ] {
+        let keyed: [([i64; 2], u64); 4] = core::array::from_fn(|i| (points[i], keys[i]));
+        assert_eq!(
+            ic(&keyed).unwrap(),
+            oracle(&rows2(&keyed, true), 192),
+            "{keyed:?}"
+        );
+    }
+}

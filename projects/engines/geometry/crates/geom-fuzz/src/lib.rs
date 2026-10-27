@@ -4,19 +4,28 @@
 //! section 28.5): every operation, every reader and the operation-sequence generator get a fuzz
 //! target here. Fuzzing feeds a program huge numbers of machine-made inputs, steered towards code
 //! not yet reached, and watches for anything wrong: a panic, a broken law, an invalid result, a
-//! changed input. This first piece (G11) has one target, [`predicates`]: `geom-num`'s exact
-//! predicates never panic, and swapping two points flips their sign, on arbitrary grid points.
+//! changed input. It has three targets so far: [`predicates`] (G11), `geom-num`'s exact
+//! predicates never panic and swapping two points flips their sign, on arbitrary grid points;
+//! [`orient2d`] (G14), orient2d, its exact path and its `f64` filter agree with the exact
+//! determinant of orient2d's definition, computed from scratch, which is also proven by Kani on a
+//! bounded domain; and [`wide`] (G26), the wide integers agree with `num-bigint` on every
+//! operation at every width. The layout every target follows, and how each engine runs it locally and in CI,
+//! is in this crate's `README.md`.
 //!
 //! Layer: Development, in chapter 27's proposed crate table: a development crate, outside the
 //! thirteen layers of the crates that ship. It never ships, and its dependencies are as needed
 //! (chapter 27) within the licence allow-list of 29.2. No kernel crate may have a normal
 //! dependency on it, only a development dependency (chapter 27; 28.1).
 //!
-//! How a harness is built (28.5, "Tooling"): each harness is a plain function from bytes to
-//! `Result<(), Finding>`, here in the library, so one function serves every engine:
+//! How a target is built (28.5, "Tooling"; the README gives the layout in full): each target module
+//! has a `check` function, the law and its oracle on a decoded case, and a `harness`, a plain
+//! function from bytes to `Result<(), Finding>` that decodes the bytes and calls `check`. The
+//! harness is what every fuzzing engine drives, so their corpus and crash files are interchangeable;
+//! a bounded Kani proof drives `check` itself:
 //!
-//! - **bolero's test mode**, on stable Rust, on Linux, Windows and macOS: `tests/predicates.rs`
-//!   wraps the harness in `bolero::check!`, and `cargo test -p geom-fuzz` runs it. bolero first
+//! - **bolero's test mode**, on stable Rust, on Linux, Windows and macOS: `tests/<target>.rs`
+//!   wraps the harness in `bolero::check!` as `<target>_fuzz`, and `cargo test -p geom-fuzz` runs
+//!   it. bolero first
 //!   replays every file in the target's `corpus` and `crashes` folders (below), so a found crash
 //!   stays a test forever (28.16), then runs a fixed number of random inputs. bolero 0.13 draws one
 //!   seed per random input from the operating system's random source (`lib/bolero/src/test/mod.rs`,
@@ -31,33 +40,38 @@
 //!   `seed: <hex>` and replayed by `SPAREKIT_SEED`. Pull requests run it from the fixed default
 //!   seed, so the same cases run every time on every target (28.17); a nightly run (a later
 //!   piece) that sets `SPAREKIT_SEED` to a fresh value prints it the same way.
-//! - **libFuzzer, coverage-guided, with cargo-bolero, on Linux** (nightly fuzzing; not run by the
-//!   pull-request workflow). Once per machine:
+//! - **libFuzzer, coverage-guided, with cargo-bolero, on Linux.** cargo-bolero 0.13.5 rebuilds
+//!   the same test with libFuzzer, its sanitizer and coverage flags, which need a nightly
+//!   compiler, under the workspace's `fuzz` profile (release optimisation with debug assertions
+//!   and overflow checks on; root `Cargo.toml`). From the repository root:
 //!
 //!   ```text
-//!   sudo apt install binutils-dev libunwind-dev
-//!   cargo install -f cargo-bolero
-//!   ```
-//!
-//!   then, from the repository root, with a nightly toolchain installed (`rustup toolchain install
-//!   nightly`), because the sanitizer flags cargo-bolero passes are nightly-only:
-//!
-//!   ```text
-//!   cargo bolero test predicates_fuzz --package geom-fuzz --toolchain nightly --engine libfuzzer -T 10min
+//!   cargo install cargo-bolero --version 0.13.5 --locked --no-default-features --features libfuzzer
+//!   rustup toolchain install nightly-2026-10-01 --profile minimal
+//!   cargo bolero test orient2d_fuzz --package geom-fuzz --toolchain nightly-2026-10-01 --engine libfuzzer -T 10min
 //!   ```
 //!
 //!   The test name is the `#[test]` function's; `-T` bounds the run (any `humantime` duration);
 //!   `--runs`, `--jobs` and `--max-input-length` are the other limits; `--sanitizer` defaults to
 //!   `address`. Options are those of cargo-bolero 0.13 (`bin/cargo-bolero/src/project.rs` and
-//!   `test.rs`, read 2026-10-21 and credited below). libFuzzer's corpus and crashes are kept in
-//!   `tests/__fuzz__/predicates/corpus` and `tests/__fuzz__/predicates/crashes`, which the test
-//!   mode above replays on every `cargo test`. The same command with `--engine afl`,
-//!   `--engine honggfuzz` or `--engine kani` runs the other engines bolero supports.
+//!   `test.rs`, credited below). libFuzzer keeps its corpus and crashes in
+//!   `tests/__fuzz__/<target>/corpus` and `crashes`, which the test mode above replays on every
+//!   `cargo test`. Every pull request that touches the kernel runs this leg for a minute per
+//!   target (`.github/workflows/kernel-fuzz.yml`).
+//! - **`ClusterFuzzLite`, on every pull request.** `.clusterfuzzlite/build.sh` builds the same
+//!   tests with cargo-bolero's `build-clusterfuzz` command, which packs the libFuzzer-built test
+//!   binary with one start-up script per bolero test; the build keeps the scripts of the
+//!   `<target>_fuzz` tests, and `ClusterFuzzLite` fuzzes each target in turn
+//!   (`kernel-fuzz.yml`). So `ClusterFuzzLite` runs the very binary cargo-bolero runs, and no
+//!   cargo-fuzz wrapper is needed (the README gives the evidence and the one check this replaces).
+//! - **Kani, bounded proofs, on Linux.** A target's `<target>_proof` test wraps `check` in
+//!   `bolero::check!` over a generator of the domain to be proven and is marked `kani::proof`
+//!   under `cfg(kani)`; Kani 0.68.0 makes every generated value symbolic and proves the law for
+//!   all of them: `cargo kani --tests -p geom-fuzz --harness orient2d_proof --exact`, which is
+//!   what `cargo bolero test orient2d_proof --engine kani` runs. Under `cargo test` the same test
+//!   is a property test over that domain.
 //!
-//! What is not here yet: 28.5 also asks for a thin cargo-fuzz wrapper per harness, because
-//! `ClusterFuzzLite` expects the cargo-fuzz layout; it belongs with the piece that sets up
-//! pull-request fuzzing, and calls these same functions. Targets for operations, readers and
-//! operation sequences arrive with them.
+//! Targets for operations, readers and operation sequences arrive with them.
 //!
 //! Invariants this crate keeps:
 //!
@@ -71,15 +85,21 @@
 //!
 //! Sections: chapter 27's `geom-fuzz` row and its rules for the development crates, and 28.5 of
 //! the kernel architecture (`projects/engines/geometry/architecture/`), in part: its tooling (one
-//! plain harness function, bolero's `check!` and the cargo-bolero command) and one target, on the
-//! swap law of 28.6; the seeded leg 28.2 asks for; the replay of every stored crash, 28.16; and the
-//! short fuzz and fixed seeds of 28.17.
+//! plain harness function, bolero's `check!`, libFuzzer under cargo-bolero, and `ClusterFuzzLite`
+//! on pull requests) and two targets, on the swap law and the exact oracle of 28.6; a bounded Kani
+//! proof of 28.7, on bolero's harness unchanged; the seeded leg 28.2 asks for; the replay of every
+//! stored crash, 28.16; and the short fuzz and fixed seeds of 28.17.
 //!
-//! Method: none; this root defines only the [`Finding`] type, its `Display` and `Error`
-//! implementations and the [`Harness`] alias, whose shape 28.5 gives. Each harness module names
-//! the method it follows.
+//! Method: [`Finding::new`] leaves a finding's detail unwritten under Kani, as Kani's own `std`
+//! leaves the messages of `assert!` and `panic!` unformatted during verification
+//! (<https://github.com/model-checking/kani/blob/0d2328a93f0e0ff66132d6bfa1a7d884877cf862/library/std/src/lib.rs>,
+//! credited below): Kani reports a failed proof with a trace of every value, and formatting symbolic values
+//! would only enlarge the problem it solves. The rest of this root is the [`Finding`] type, its
+//! `Display` and `Error` implementations and the [`Harness`] alias, whose shape 28.5 gives. Each
+//! harness module names the method it follows.
 //!
-//! Cost: none at run time for the alias; displaying a [`Finding`] writes its two strings.
+//! Cost: none at run time for the alias; [`Finding::new`] runs its detail closure once, except
+//! under Kani; displaying a [`Finding`] writes its two strings.
 //!
 //! Dependencies, every one permissive (29.1):
 //!
@@ -89,8 +109,12 @@
 //! - `bolero` 0.13.7, a development dependency only: the `check!` front end, with its test-mode
 //!   engine and, under cargo-bolero, the engine chosen (`bolero-libfuzzer`, `bolero-afl`,
 //!   `bolero-honggfuzz` or `bolero-kani`).
+//! - `num-bigint` 0.4.8 (MIT OR Apache-2.0), the [`wide`] target's oracle: exact arbitrary-
+//!   precision integers, the big-integer oracle chapter 29.3 names, sharing no code with
+//!   `geom-num`.
 //!
-//! Licences of every outside package this crate brings into a build, through `bolero`, on every
+//! Licences of every outside package this crate brings into a build, through `bolero` and
+//! `num-bigint`, on every
 //! target (`cargo tree --target all`), each record checked by `geom-test`'s `tests/licences.rs`.
 //! Where a package offers a choice, it is taken under the permissive licences offered (MIT or
 //! Apache-2.0):
@@ -100,7 +124,8 @@
 //! - MIT OR Apache-2.0: `anyhow`, `cfg-if`, `lazy_static`, `either`, `rand`, `rand_core`,
 //!   `rand_chacha`, `rand_xoshiro`, `getrandom`, `libc`, `ppv-lite86`, `proc-macro-crate`,
 //!   `toml_edit`, `toml_datetime`, `indexmap`, `hashbrown`, `equivalent`, `serde`, `serde_core`,
-//!   `serde_derive`, `proc-macro2`, `quote`, `syn`, `cc`, `find-msvc-tools` and `shlex`.
+//!   `serde_derive`, `proc-macro2`, `quote`, `syn`, `cc`, `find-msvc-tools`, `shlex`,
+//!   `num-bigint`, `num-integer`, `num-traits` and `autocfg`.
 //! - (MIT OR Apache-2.0) AND Unicode-3.0: `unicode-ident`.
 //! - BSD-2-Clause OR Apache-2.0 OR MIT: `zerocopy` and `zerocopy-derive`.
 //! - Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT: `wasip2` and `wit-bindgen` (WASI targets
@@ -118,12 +143,18 @@
 //! Consulted: cargo-bolero 0.13.5 `bin/cargo-bolero/src/test.rs`, MIT,
 //!   <https://github.com/camshaft/bolero/blob/7642943b6c1f8a9b5e824dd1cd29b7c8e56068b8/bin/cargo-bolero/src/test.rs>,
 //!   for its run limits above: `-T`, `--runs`, `--jobs` and `--max-input-length`. No code copied.
+//! Consulted: Kani 0.68.0 `library/std/src/lib.rs`, MIT OR Apache-2.0,
+//!   <https://github.com/model-checking/kani/blob/0d2328a93f0e0ff66132d6bfa1a7d884877cf862/library/std/src/lib.rs>, for its
+//!   `assert!` and `panic!`, which leave their messages unformatted during verification, the rule
+//!   [`Finding::new`] follows for a finding's detail. No code copied.
 #![forbid(unsafe_code)]
 
 use core::fmt;
 
+pub mod orient2d;
 pub mod predicates;
 pub mod seeded;
+pub mod wide;
 
 /// A law a harness found broken, with the input that broke it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -134,9 +165,39 @@ pub struct Finding {
     pub detail: String,
 }
 
+impl Finding {
+    /// A finding that `law` is broken, with the detail `detail` writes: the input and the values
+    /// that broke it.
+    ///
+    /// Under Kani (`cfg(kani)`) the detail is left empty and `detail` is never called. Kani
+    /// reports a failed proof with a trace of every value, so the detail adds nothing there, and
+    /// its formatting, on symbolic values, would only enlarge the problem Kani solves: its digit
+    /// loops would have to be unwound or cut. Everywhere else the detail is written in full.
+    #[must_use]
+    pub fn new(law: &str, detail: impl FnOnce() -> String) -> Self {
+        #[cfg(kani)]
+        let detail = {
+            let _ = detail;
+            String::new()
+        };
+        #[cfg(not(kani))]
+        let detail = detail();
+        Self {
+            law: law.to_owned(),
+            detail,
+        }
+    }
+}
+
 impl fmt::Display for Finding {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "broken law: {}\n{}", self.law, self.detail)
+        // Written piece by piece rather than through `write!`, so that no formatting
+        // specification is interpreted: the cheapest form for Kani, which runs this when a proof
+        // fails (bolero's Kani engine turns the error into a string).
+        f.write_str("broken law: ")?;
+        f.write_str(&self.law)?;
+        f.write_str("\n")?;
+        f.write_str(&self.detail)
     }
 }
 

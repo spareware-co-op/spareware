@@ -27,12 +27,13 @@ name: Kernel gate
 #   build and development dependencies on every platform; RustSec advisories (vulnerabilities,
 #   unmaintained, unsound and yanked crates); crates from crates.io only, git refused. Once for
 #   each crate that ships with deny-ships.toml: rayon only through geom-pool. And once for each
-#   no_std kernel crate with deny-no-std.toml: libm is the only published crate it builds with.
-#   The gate's own rules run on each same graph: no crate outside the workspace skips the licence
-#   check as private, our own crates' licence fields hold 29.2's identifiers (and MPL-2.0 for the
-#   family), no crate comes from a folder outside the workspace or takes a family crate's name,
-#   libm comes from crates.io, and every licence choice is recorded. Then each rule fails on
-#   seeded graphs.
+#   no_std kernel crate with deny-no-std.toml, the vetted allow-list: only the published crates
+#   on it (libm today), each at its pinned version, ship in it. The gate's own rules run on each
+#   same graph: no crate outside the workspace skips the licence check as private, our own
+#   crates' licence fields hold 29.2's identifiers (and MPL-2.0 for the family), no crate comes
+#   from a folder outside the workspace or takes a family crate's name, a no_std crate's
+#   published crates are the vetted ones at their versions from crates.io, and every licence
+#   choice is recorded. Then each rule fails on seeded graphs.
 # - clippy: clippy with the kernel's lint settings over every crate that ships, all targets,
 #   warnings denied, once for each feature selection (default, none, each feature, all), failing
 #   also on clippy's "does not refer to a reachable" message; every file the compiler read for
@@ -44,10 +45,16 @@ name: Kernel gate
 #   each feature selection, every file the compiler read held to the same source rules; and probe
 #   crates that link std, assume a 64-bit usize (plainly or behind a feature) or warn, which must
 #   fail, and one whose statics only the compiler's file list shows.
+# - recursion: the recursion check (piece G13): every recursive cycle of the crates that ship,
+#   found on a call graph of the whole program built by geom-test's `recursion` binary, has its
+#   depth bound stated in its module header (HEADERS.md, the Recursion field), true to the code,
+#   and each bound's test in tests/recursion.rs runs for wasm32-wasip1 in debug and release on a
+#   256 KiB shadow stack and a 256 KiB wasmtime stack; probes show both limits in force; and the
+#   check fails on seeded workspaces (a cycle without a statement, a bound that overflows).
 #
 # The checks themselves live beside the crate table they read, in
 # projects/engines/crates/engine-geometry/tests/scaffold (deny.rs, gate.rs, globals.rs,
-# licence.rs, overrides.rs, posture.rs), so the workflow holds no list of crates. kernel.yml and
+# licence.rs, overrides.rs, posture.rs, recursion.rs), so the workflow holds no list of crates. kernel.yml and
 # kernel-build.yml keep running the kernel's tests, golden digests and per-target builds on their
 # own path filters; this workflow runs on every pull request, every push to main and every
 # merge-queue check, with no path filter, so its one required check always reports.
@@ -62,7 +69,8 @@ name: Kernel gate
 # all the kernel workflows together, after reviewing the new commit. cargo-deny is the release
 # named below, from its project's own GitHub releases, checked against GitHub's SHA-256 of that
 # asset (equal to the .sha256 file the release publishes) before it runs; change the version and
-# the checksum together. The workflow can only read the repository.
+# the checksum together. wasmtime is pinned and checked the same way, from its project's own
+# releases. The workflow can only read the repository.
 
 on:
   pull_request:
@@ -88,6 +96,10 @@ env:
   # cargo-deny-0.20.2-x86_64-unknown-linux-musl.tar.gz.
   CARGO_DENY_VERSION: "0.20.2"
   CARGO_DENY_SHA256: "9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f"
+  # wasmtime 49.0.2 (Apache-2.0 WITH LLVM-exception), released 2026-10-02: the x86_64 Linux build's
+  # archive, wasmtime-v49.0.2-x86_64-linux.tar.xz, which runs the recursion check's bound tests.
+  WASMTIME_VERSION: "49.0.2"
+  WASMTIME_SHA256: "a4d6e9e3a5a60f527cf7793d674c48930c80c2e8977995b8a275cad3254b9322"
 
 jobs:
   rules:
@@ -193,9 +205,47 @@ jobs:
       - name: Every kernel crate on its own, for wasm32v1-none and wasm32-unknown-unknown, and the probes
         run: cargo test --locked --package engine-geometry --test scaffold -- --ignored gate_build --nocapture --test-threads 1
 
+  recursion:
+    name: Every recursive cycle bounded, each bound run on a small wasm32 stack
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: wasm32-wasip1
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Install wasmtime ${{ env.WASMTIME_VERSION }}, checked against its SHA-256
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          name="wasmtime-v${WASMTIME_VERSION}-x86_64-linux"
+          curl --proto '=https' --tlsv1.2 -sSfL -o "$name.tar.xz" \
+            "https://github.com/bytecodealliance/wasmtime/releases/download/v${WASMTIME_VERSION}/$name.tar.xz"
+          echo "${WASMTIME_SHA256}  $name.tar.xz" | sha256sum --check --strict
+          tar -xJf "$name.tar.xz"
+          echo "$RUNNER_TEMP/$name" >> "$GITHUB_PATH"
+      - name: The wasmtime in use is the pinned one
+        run: |
+          set -euo pipefail
+          version=$(wasmtime --version)
+          echo "$version"
+          case "$version" in
+            "wasmtime $WASMTIME_VERSION "*) ;;
+            *) echo "::error::wasmtime is not $WASMTIME_VERSION"; exit 1 ;;
+          esac
+      - name: Every cycle of the crates that ship stated and run at its bound, and the seeded failures
+        run: cargo test --locked --package engine-geometry --test scaffold -- --ignored gate_recursion --nocapture --test-threads 1
+
   gate:
     name: Merge gate
-    needs: [rules, deny, clippy, builds]
+    needs: [rules, deny, clippy, builds, recursion]
     # Runs when a job it needs failed or was cancelled too, so the required check always reports;
     # it passes only when every one of them succeeded.
     if: ${{ always() }}

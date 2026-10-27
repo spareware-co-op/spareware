@@ -1064,19 +1064,32 @@ mod tests {
         assert_eq!(scale_pow2(1.5, -1075).unwrap(), f64::from_bits(1));
         assert_eq!(scale_pow2(1.0, -1075).unwrap(), 0.0);
         assert_eq!(scale_pow2(1.5, -1074).unwrap(), f64::from_bits(2));
-        assert_eq!(scale_pow2(1.5 - 2.0f64.powi(-52), -1076).unwrap(), 0.0);
         assert_eq!(
-            scale_pow2(1.0 + 2.0f64.powi(-52), -1075).unwrap(),
+            scale_pow2(1.5 - libm::scalbn(1.0, -52), -1076).unwrap(),
+            0.0
+        );
+        assert_eq!(
+            scale_pow2(1.0 + libm::scalbn(1.0, -52), -1075).unwrap(),
             f64::from_bits(1)
         );
         assert_eq!(scale_pow2(1.5, -2000).unwrap(), 0.0);
         assert_eq!(scale_pow2(1.0, 1024).unwrap(), f64::INFINITY);
         assert_eq!(
             scale_pow2(f64::from_bits(1), 2097).unwrap(),
-            2.0f64.powi(1023)
+            libm::scalbn(1.0, 1023)
         );
-        assert_eq!(whole(2.0f64.powi(100)), Some(1 << 100));
+        assert_eq!(whole(libm::scalbn(1.0, 100)), Some(1 << 100));
         assert_eq!(whole(-3.0), Some(-3));
         assert_eq!(whole(0.5), None);
+        // Inside whole's range of exponents, a value with bits below 1 is not an integer.
+        assert_eq!(whole(1.5), None);
+        assert_eq!(whole(-2.5), None);
+        assert_eq!(whole(libm::scalbn(1.0, 51) + 0.5), None);
+        // scale_pow2 refuses a scale outside ±2400, the range its loops are proved for; no caller
+        // passes one.
+        assert!(scale_pow2(1.0, 2401).is_err() && scale_pow2(1.0, -2401).is_err());
+        assert!(scale_pow2(1.0, i32::MAX).is_err() && scale_pow2(1.0, i32::MIN).is_err());
+        assert_eq!(scale_pow2(1.0, 2400).unwrap(), f64::INFINITY);
+        assert_eq!(scale_pow2(1.0, -2400).unwrap(), 0.0);
     }
 }

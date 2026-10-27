@@ -453,6 +453,27 @@ jobs:
               ;;
           esac
 
+      # When the gate finds a rise, each regressed benchmark's Callgrind output for the merge base
+      # and the pull request, function by function (`callgrind_annotate`, part of Valgrind), so
+      # the rise can be traced to the code that costs it from the job log alone. It measures
+      # nothing and only reads the saved runs; `-e` is off so one missing output cannot end the
+      # tracing of the others.
+      - name: Trace each rise function by function
+        if: failure() && steps.gate.outcome == 'failure'
+        run: |
+          set +e
+          set -uo pipefail
+          sed -n '/^Regressions:/,/^Gungraun result/p' "$RUNNER_TEMP/head.log" \
+            | sed -nE 's/^  instructions::([a-z0-9_]+)::([a-z0-9_]+) ([a-z0-9_]+):$/\1 \2 \3/p' \
+            | while read -r group name id; do
+                echo "=== $group::$name $id"
+                find "$GUNGRAUN_HOME" -path "*/$group/*$name*" -name 'callgrind*.out*' \
+                  | grep -- "$id" | sort | while read -r out; do
+                    echo "--- $out"
+                    callgrind_annotate --inclusive=yes --threshold=100 --auto=no "$out" | head -n 80
+                  done
+              done
+
       # Chapter 23.13 lists every change over 1%. The two saved runs are compared again with 1%
       # limits each way; these runs read the saved results and measure nothing. Their failing exit
       # status only means "something was listed"; a listing that does not complete fails the step.
