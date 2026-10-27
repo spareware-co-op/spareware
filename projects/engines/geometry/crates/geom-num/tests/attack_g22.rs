@@ -498,3 +498,27 @@ fn attack_commit_rounding_ties_to_even() {
         assert_eq!(again, point);
     }
 }
+
+/// `ladder::quarter_nm` gives a length in steps exactly in quarter-nanometres, for every rung and
+/// step, and for the largest count of steps (the arguments pass through `black_box`, so the call
+/// runs when the test does, never folded into a constant).
+#[test]
+fn a_length_in_steps_is_exact_in_quarter_nanometres() {
+    use std::hint::black_box;
+    for step in [GridStep::Q0, GridStep::Q1, GridStep::Q2] {
+        for steps in [
+            FIT,
+            HEAL_DEFAULT,
+            HEAL_CAP,
+            SHORT_EDGE_WARNING,
+            Steps(0),
+            Steps(u64::MAX),
+        ] {
+            let expected = u128::from(steps.0) * u128::from(step.quarter_nm());
+            assert_eq!(
+                geom_num::ladder::quarter_nm(black_box(steps), black_box(step)),
+                Some(expected)
+            );
+        }
+    }
+}
