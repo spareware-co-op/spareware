@@ -41,17 +41,18 @@ Each crate has one job, written at the top of its `lib.rs`. [crates/README.md](c
 
 ### 4. How a change is checked (two minutes)
 
-Seven workflows in `.github/workflows/` guard the kernel. [AGENTS.md](AGENTS.md), section 3, lists the commands to run them yourself.
+Eight workflows in `.github/workflows/` guard the kernel. [AGENTS.md](AGENTS.md), section 3, lists the commands to run them yourself.
 
 | Workflow | What it proves |
 | --- | --- |
-| `kernel.yml` | Formatting, clippy with the kernel's lints, and every test, natively on six runners (Linux, Windows and macOS on x86-64 and arm64) in debug and release, and on 32-bit WebAssembly under wasmtime and Node; the golden digests that prove the same bits everywhere |
+| `kernel.yml` | Formatting, clippy with the kernel's lints, and every test, natively on six runners (Linux, Windows and macOS on x86-64 and arm64) in debug and release, and on 32-bit WebAssembly under wasmtime and Node; the golden digests that prove the same bits everywhere, rerun whenever the toolchain pin or `Cargo.lock` changes, and the proof that a one-bit change to `libm` fails them |
 | `kernel-build.yml` | The crate table, and every kernel crate built on its own with warnings denied, natively, for WebAssembly, and for a target with no `std` |
 | `kernel-gate.yml` | The merge gate: licences, advisories and sources (cargo-deny), chapter 21's bans on platform maths, hash maps, clocks and randomness, no global state, and `no_std` builds, each shown to fail on a seeded violation |
 | `kernel-dev.yml` | The development crates on WebAssembly, every generated file current, and every header complete with `MAP.json` current |
 | `kernel-bench.yml` | The count gates: no benchmark more than 5% more expensive than on the merge base |
 | `kernel-fuzz.yml` | The fuzz targets: each `geom-fuzz` target under libFuzzer for a minute and under ClusterFuzzLite, and its bounded Kani proofs, the same harness under every engine |
 | `kernel-golden.yml` | The golden store: every golden is in the store, every pinned file unchanged, and any edit to a golden carries its record and an owner's approval |
+| `kernel-quality.yml` | The mutation and coverage gates (28.8): every mutant in a change caught, or kept in the quality ledger with its reason; every line and branch of the foundation set run, unless the ledger lists it as awaiting its proof; 90% of lines elsewhere; and Miri over the test suites weekly |
 
 ### 5. The map (one minute)
 

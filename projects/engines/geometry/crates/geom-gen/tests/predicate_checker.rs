@@ -14,8 +14,10 @@
 //!   checker writes for it from its own derivation (the imports, the constant, the three
 //!   signatures with their parameters in the description's order and their types, each `let` of
 //!   `filter` and of `value`, each group maximum, the call to `decide`, the result, and `exact`'s
-//!   body), except the run-time scale, which it reads and evaluates: it must compute exactly the
-//!   result's scale, with the roundings the constant counts;
+//!   body, each laid out as rustfmt lays it out: a signature or a call too long for one line over
+//!   several), except the run-time scale, which it reads and evaluates: it must compute exactly the
+//!   result's scale, with the roundings the constant counts (a scale computed over several lines,
+//!   one term per line, is read as the one expression its lines compute together);
 //! - the parent module `mod.rs`, line for line outside comments and attributes: one `pub mod` per
 //!   registered predicate and the helpers the proof relies on, as the checker writes them: `decide`
 //!   with strict comparisons and the zero-scale case, `largest_magnitude` taking absolute values,
@@ -685,15 +687,35 @@ impl Walker<'_> {
                 };
                 let bits = bound.bits();
                 let w = width(bits);
-                let row = Row {
-                    computes: format!("{} {op} {}", a.name, b.name),
-                    filter: format!("{} {op} {}", a.name, b.name),
-                    exact: checked(
+                // A product in a wide type is width-aware: `product_i128` when both operands fit
+                // an `i128`, `checked_mul_i128` on the wide one when one does.
+                let fits = |x: &str| !is_wide(x);
+                let as_i128 = |name: &str, from: &str| conv(name, from, "i128");
+                let exact = if *op == '*' && is_wide(w) && fits(a.width) && fits(b.width) {
+                    format!(
+                        "{w}::product_i128({}, {})?",
+                        as_i128(&a.name, a.width),
+                        as_i128(&b.name, b.width)
+                    )
+                } else if *op == '*' && is_wide(w) && (fits(a.width) || fits(b.width)) {
+                    let (narrow, wide) = if fits(a.width) { (&a, &b) } else { (&b, &a) };
+                    format!(
+                        "{}.checked_mul_i128({})?",
+                        conv(&wide.name, wide.width, w),
+                        as_i128(&narrow.name, narrow.width)
+                    )
+                } else {
+                    checked(
                         &conv(&a.name, a.width, w),
                         *op,
                         &conv(&b.name, b.width, w),
                         w,
-                    ),
+                    )
+                };
+                let row = Row {
+                    computes: format!("{} {op} {}", a.name, b.name),
+                    filter: format!("{} {op} {}", a.name, b.name),
+                    exact,
                     bound,
                     bits,
                     width: w,
@@ -803,6 +825,29 @@ fn scale_text(s: &BTreeSet<Vec<u32>>, groups: &[String]) -> String {
 // ---------------------------------------------------------------------------------------------
 // The run-time scale expression, read from the committed code.
 // ---------------------------------------------------------------------------------------------
+
+/// The words of a line of code: maximal runs of letters, digits and `_`.
+fn words(s: &str) -> impl Iterator<Item = &str> {
+    s.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+        .filter(|w| !w.is_empty())
+}
+
+/// `s` with every whole word `word` replaced by `with`.
+fn replace_word(s: &str, word: &str, with: &str) -> String {
+    let mut out = String::new();
+    let mut cur = String::new();
+    for ch in s.chars().chain(std::iter::once(' ')) {
+        if ch.is_ascii_alphanumeric() || ch == '_' {
+            cur.push(ch);
+            continue;
+        }
+        out.push_str(if cur == word { with } else { &cur });
+        cur.clear();
+        out.push(ch);
+    }
+    out.pop();
+    out
+}
 
 type Scale = (BTreeSet<Vec<u32>>, u32);
 
@@ -952,11 +997,9 @@ fn expected_module(d: &Desc, x: &Derived, constant: u64, larger: bool) -> Vec<Ex
         .filter(|w| is_wide(w))
         .collect();
     let wides: Vec<&str> = wides.into_iter().collect();
-    match wides.as_slice() {
-        [] => {}
-        [one] => push(format!("use crate::wide::{one};")),
-        many => push(format!("use crate::wide::{{{}}};", many.join(", "))),
-    }
+    // The import names exactly the wide types the code names, so it is settled once the code
+    // lines are known (below).
+    push(WIDE_IMPORT.to_owned());
     let mut helpers = vec!["decide", "largest_magnitude"];
     if x.rows.iter().any(|r| r.coordinates) {
         helpers.push("exact_f64");
@@ -983,10 +1026,23 @@ fn expected_module(d: &Desc, x: &Derived, constant: u64, larger: bool) -> Vec<Ex
             Kind::Rounded(..) => format!("{n}: i128"),
         })
         .collect();
-    let params = params.join(", ");
+    // A signature on one line when it fits 100 columns, otherwise one parameter per line, as
+    // rustfmt's default layout writes it.
+    let signature = |name: &str, ret: &str| -> Vec<String> {
+        let one = format!("pub fn {name}({}) -> {ret} {{", params.join(", "));
+        if one.chars().count() <= 100 {
+            return vec![one];
+        }
+        let mut lines = vec![format!("pub fn {name}(")];
+        lines.extend(params.iter().map(|p| format!("    {p},")));
+        lines.push(format!(") -> {ret} {{"));
+        lines
+    };
     let args: Vec<&str> = d.inputs.iter().map(|(n, _)| n.as_str()).collect();
     let root = &x.rows[x.result];
-    push(format!("pub fn filter({params}) -> Option<Sign> {{"));
+    for l in signature("filter", "Option<Sign>") {
+        push(l);
+    }
     for r in &x.rows {
         push(format!("    let {} = {};", r.name, r.filter));
     }
@@ -1006,24 +1062,70 @@ fn expected_module(d: &Desc, x: &Derived, constant: u64, larger: bool) -> Vec<Ex
     let mut push = |s: String| out.push(Expect::Line(s));
     push(format!("    decide({}, ERROR, scale)", root.name));
     push("}".to_owned());
-    push(format!(
-        "pub fn value({params}) -> Option<{}> {{",
-        root.width
-    ));
+    for l in signature("value", &format!("Option<{}>", root.width)) {
+        push(l);
+    }
     for r in &x.rows {
         push(format!("    let {} = {};", r.name, r.exact));
     }
     push(format!("    Some({})", root.name));
     push("}".to_owned());
-    push(format!("pub fn exact({params}) -> Option<Sign> {{"));
+    for l in signature("exact", "Option<Sign>") {
+        push(l);
+    }
     let sign = match root.width {
         "i64" => "Sign::of_i64",
         "i128" => "Sign::of_i128",
         _ => "|v| v.signum()",
     };
-    push(format!("    value({}).map({sign})", args.join(", ")));
+    // On one line when it fits 100 columns and its arguments 60 (rustfmt's `fn_call_width`),
+    // otherwise the arguments on a line of their own and `.map` after the call, as rustfmt breaks
+    // the chain.
+    let args = args.join(", ");
+    let one = format!("    value({args}).map({sign})");
+    if one.chars().count() <= 100 && args.chars().count() <= 60 {
+        push(one);
+    } else {
+        push("    value(".to_owned());
+        push(format!("        {args},"));
+        push("    )".to_owned());
+        push(format!("    .map({sign})"));
+    }
     push("}".to_owned());
-    out
+    settle_wide_import(out, &wides)
+}
+
+/// Where [`expected_module`] puts the wide-integer import until the code lines are known.
+const WIDE_IMPORT: &str = "<wide import>";
+
+/// Replaces the [`WIDE_IMPORT`] line with an import of the candidate wide types that the code
+/// lines name as a whole word (none, one, or a braced list), or drops it when they name none.
+fn settle_wide_import(out: Vec<Expect>, candidates: &[&str]) -> Vec<Expect> {
+    let code: Vec<&str> = out
+        .iter()
+        .filter_map(|e| match e {
+            Expect::Line(l) if l != WIDE_IMPORT => Some(l.as_str()),
+            _ => None,
+        })
+        .collect();
+    let named = |ty: &str| {
+        code.iter().any(|l| {
+            l.split(|c: char| !(c.is_alphanumeric() || c == '_'))
+                .any(|word| word == ty)
+        })
+    };
+    let used: Vec<&str> = candidates.iter().copied().filter(|ty| named(ty)).collect();
+    let import = match used.as_slice() {
+        [] => None,
+        [one] => Some(format!("use crate::wide::{one};")),
+        many => Some(format!("use crate::wide::{{{}}};", many.join(", "))),
+    };
+    out.into_iter()
+        .filter_map(|e| match e {
+            Expect::Line(l) if l == WIDE_IMPORT => import.clone().map(Expect::Line),
+            other => Some(other),
+        })
+        .collect()
 }
 
 /// The code lines of the parent module, as the checker writes them: one `pub mod` per predicate,
@@ -1165,23 +1267,40 @@ fn verify(text: &str, module: &str) -> Vec<String> {
         }
     }
 
-    // The run-time scale: exactly one line binds `scale`, and it computes the result's scale.
+    // The run-time scale: one line binds `scale`, or several in a row, each after the first
+    // using the one before it; together they compute the result's scale.
     let root = &d.rows[d.result];
     let code = code_lines(module);
-    let scale_lines: Vec<&&str> = code
-        .iter()
-        .filter(|l| l.starts_with("    let scale = "))
-        .collect();
-    let [scale_line] = scale_lines.as_slice() else {
-        bad.push(format!(
-            "{} lines bind `scale`; the filter binds it once",
-            scale_lines.len()
-        ));
+    let binds = |l: &&str| l.starts_with("    let scale = ");
+    let Some(first) = code.iter().position(binds) else {
+        bad.push("no line binds `scale`".to_owned());
         return bad;
     };
-    let scale_src = scale_line
-        .trim_start_matches("    let scale = ")
-        .trim_end_matches(';');
+    let run = code[first..].iter().take_while(|l| binds(l)).count();
+    if code.iter().filter(|l| binds(l)).count() != run {
+        bad.push("the lines that bind `scale` are not in one run".to_owned());
+        return bad;
+    }
+    let mut scale_src = String::new();
+    for (k, l) in code[first..first + run].iter().enumerate() {
+        let rhs = l
+            .trim_start_matches("    let scale = ")
+            .trim_end_matches(';');
+        let uses = words(rhs).filter(|w| *w == "scale").count();
+        if uses != usize::from(k > 0) {
+            bad.push(format!(
+                "scale line {} uses `scale` {uses} time(s): `{l}`",
+                k + 1
+            ));
+            return bad;
+        }
+        scale_src = if k == 0 {
+            rhs.to_owned()
+        } else {
+            replace_word(rhs, "scale", &scale_src)
+        };
+    }
+    let scale_src = scale_src.as_str();
     let (computed, scale_roundings) = match scale_expr(scale_src, groups) {
         Ok(s) => s,
         Err(e) => {
@@ -1205,8 +1324,10 @@ fn verify(text: &str, module: &str) -> Vec<String> {
     }
     let bits = constant.f64_at_least();
 
-    // Every line of code.
+    // Every line of code, the run of scale lines read as one.
     let expected = expected_module(&desc, &d, bits, scale_src.contains("larger("));
+    let mut code = code;
+    code.drain(first + 1..first + run);
     if code.len() != expected.len() {
         bad.push(format!(
             "{} lines of code, {} expected",
@@ -1303,7 +1424,7 @@ const PARENT: &str = include_str!("../../geom-num/src/generated/mod.rs");
 
 /// The committed modules, built into the test so it also runs on wasm32. A test ties this list to
 /// `PREDICATES`.
-const COMMITTED: [(&str, &str); 5] = [
+const COMMITTED: [(&str, &str); 11] = [
     (
         "orient2d",
         include_str!("../../geom-num/src/generated/orient2d.rs"),
@@ -1323,6 +1444,30 @@ const COMMITTED: [(&str, &str); 5] = [
     (
         "plane_side",
         include_str!("../../geom-num/src/generated/plane_side.rs"),
+    ),
+    (
+        "tpi_weight",
+        include_str!("../../geom-num/src/generated/tpi_weight.rs"),
+    ),
+    (
+        "tpi_side",
+        include_str!("../../geom-num/src/generated/tpi_side.rs"),
+    ),
+    (
+        "lpi_weight",
+        include_str!("../../geom-num/src/generated/lpi_weight.rs"),
+    ),
+    (
+        "lpi_side",
+        include_str!("../../geom-num/src/generated/lpi_side.rs"),
+    ),
+    (
+        "ssi_weight",
+        include_str!("../../geom-num/src/generated/ssi_weight.rs"),
+    ),
+    (
+        "ssi_side",
+        include_str!("../../geom-num/src/generated/ssi_side.rs"),
     ),
 ];
 
@@ -1525,33 +1670,52 @@ fn edits(module: &str) -> Vec<(String, String, &'static str)> {
         ));
     }
     // Two parameters swapped in `exact`'s signature, and its body calling `value` in another
-    // order.
-    let sig = module
-        .lines()
-        .find(|l| l.starts_with("pub fn exact("))
+    // order; a signature or a call laid out over several lines has its parameters, or its
+    // arguments, on the lines after its first.
+    let lines: Vec<&str> = module.lines().collect();
+    let at = lines
+        .iter()
+        .position(|l| l.starts_with("pub fn exact("))
         .unwrap();
-    let call = module
-        .lines()
-        .find(|l| l.starts_with("    value("))
+    let sig = lines[at];
+    if sig == "pub fn exact(" {
+        let (first, second) = (lines[at + 1], lines[at + 2]);
+        out.push((
+            format!("{first}\n{second}\n"),
+            format!("{second}\n{first}\n"),
+            "parameters swapped",
+        ));
+    } else {
+        let inside = sig
+            .trim_start_matches("pub fn exact(")
+            .split(") ->")
+            .next()
+            .unwrap();
+        let params: Vec<&str> = inside.split(", ").collect();
+        let mut swapped = params.clone();
+        swapped.swap(0, 1);
+        out.push((
+            sig.to_owned(),
+            sig.replace(inside, &swapped.join(", ")),
+            "parameters swapped",
+        ));
+    }
+    let at = lines
+        .iter()
+        .position(|l| l.starts_with("    value("))
         .unwrap();
-    let inside = sig
-        .trim_start_matches("pub fn exact(")
-        .split(") ->")
-        .next()
-        .unwrap();
-    let params: Vec<&str> = inside.split(", ").collect();
-    let mut swapped = params.clone();
-    swapped.swap(0, 1);
-    out.push((
-        sig.to_owned(),
-        sig.replace(inside, &swapped.join(", ")),
-        "parameters swapped",
-    ));
-    let args = call
-        .trim_start_matches("    value(")
-        .split(')')
-        .next()
-        .unwrap();
+    let (call, args) = if lines[at] == "    value(" {
+        let inner = lines[at + 1];
+        (inner, inner.trim().trim_end_matches(','))
+    } else {
+        let call = lines[at];
+        let args = call
+            .trim_start_matches("    value(")
+            .split(')')
+            .next()
+            .unwrap();
+        (call, args)
+    };
     let names: Vec<&str> = args.split(", ").collect();
     let mut reordered = names.clone();
     reordered.swap(0, 1);
@@ -1560,6 +1724,26 @@ fn edits(module: &str) -> Vec<(String, String, &'static str)> {
         call.replace(args, &reordered.join(", ")),
         "exact calls value in another order",
     ));
+    // A term of a scale computed over several lines dropped: the first line's second term.
+    if let Some(l) = lines
+        .iter()
+        .find(|l| l.starts_with("    let scale = larger(") && !l.contains("(scale"))
+        && lines
+            .iter()
+            .filter(|l| l.starts_with("    let scale = "))
+            .count()
+            > 1
+    {
+        let args = l
+            .trim_start_matches("    let scale = larger(")
+            .trim_end_matches(");");
+        let (left, _) = args.split_once(", ").unwrap();
+        out.push((
+            (*l).to_owned(),
+            format!("    let scale = larger({left}, {left});"),
+            "a scale term dropped",
+        ));
+    }
     out
 }
 
