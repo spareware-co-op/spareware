@@ -755,6 +755,10 @@ mod tests {
 /// G39, where present) proves exactness for every width; these harnesses prove the shipped
 /// machine code free of panics and overflow.
 #[cfg(kani)]
+// cargo-mutants reads this attribute from the source and skips the module (its harnesses are
+// proven by Kani, and no test build compiles them); no build evaluates it, since the module
+// exists only under Kani, where `test` is off.
+#[cfg_attr(test, mutants::skip)]
 mod proofs {
     use super::*;
 

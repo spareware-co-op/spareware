@@ -751,6 +751,10 @@ mod tests {
 /// whose bounds need `libm` (`mul_add`, `sqrt`, `norm`) are left out: Kani cannot model the
 /// processor instructions libm calls, so those are only tested.
 #[cfg(kani)]
+// cargo-mutants reads this attribute from the source and skips the module (its harnesses are
+// proven by Kani, and no test build compiles them); no build evaluates it, since the module
+// exists only under Kani, where `test` is off.
+#[cfg_attr(test, mutants::skip)]
 mod proofs {
     use super::*;
 
