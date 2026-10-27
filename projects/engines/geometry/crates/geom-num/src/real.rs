@@ -28,6 +28,9 @@
 //!   infinities.
 //! - Equality and order are both IEEE 754's `totalOrder`, so they agree, and −0 and +0 are
 //!   different values, on every target.
+//! - [`Real::total_max`] and [`Real::total_min`] have named tie rules: they pick by `totalOrder`,
+//!   so −0 is below +0, and on a tie, which under `totalOrder` is always the same bits, they return
+//!   the first argument.
 //!
 //! Method: IEEE 754-2019's `totalOrder` predicate (section 5.10,
 //! <https://doi.org/10.1109/IEEESTD.2019.8766229>), through `f64::total_cmp`; never producing NaN
@@ -69,7 +72,8 @@ impl Real {
     }
 
     /// The larger of two values in IEEE totalOrder (so +0 is larger than −0); deterministic, unlike
-    /// `f64::max`, which may return either zero.
+    /// `f64::max`, which may return either zero. Tie rule: on a tie, which under totalOrder is the
+    /// same bits, `self`.
     #[must_use]
     pub fn total_max(self, other: Real) -> Real {
         if self.0.total_cmp(&other.0) == Ordering::Less {
@@ -79,7 +83,8 @@ impl Real {
         }
     }
 
-    /// The smaller of two values in IEEE totalOrder.
+    /// The smaller of two values in IEEE totalOrder (so −0 is smaller than +0). Tie rule: on a tie,
+    /// which under totalOrder is the same bits, `self`.
     #[must_use]
     pub fn total_min(self, other: Real) -> Real {
         if self.0.total_cmp(&other.0) == Ordering::Greater {

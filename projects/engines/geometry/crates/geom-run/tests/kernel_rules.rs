@@ -5,10 +5,11 @@
 //! Until this crate took the kernel's one lint posture, its clippy.toml banned the six atomic
 //! integer types a counter would use (of `usize`, `isize`, `u64`, `i64`, `u32` and `i32`) over the
 //! crate's code, tests and benchmark. The posture requires its clippy.toml to hold exactly
-//! geom-num's settings (architecture chapter 27; G09's scaffold check), and geom-num's do not name
-//! those types, so the ban moved here, over the same files, until the kernel's shared settings
-//! hold it (the kernel-wide clippy bans of piece G33). `CancelToken`'s `AtomicBool` is a flag, not
-//! a counter, and stays allowed, as it was.
+//! geom-num's settings (architecture chapter 27; G09's scaffold check), and geom-num's did not name
+//! those types, so the ban moved here, over the same files. Since piece G33 the kernel's shared
+//! settings ban the six types too, in every kernel crate's code and tests; this check stays, since
+//! it also reads comments and holds without clippy. `CancelToken`'s `AtomicBool` is a flag, not a
+//! counter, and stays allowed, as it was.
 //!
 //! What this file proves: no source file of the crate, its tests or its benchmark names one of
 //! the six types, in code or in comments, by whatever path; the check finds each of them and lets
@@ -40,7 +41,7 @@ use std::path::{Path, PathBuf};
 
 /// Every source file of the crate, its tests and its benchmark: its path in the crate's folder,
 /// and its text, read when the test is built, so the check runs on every target.
-const SOURCES: [(&str, &str); 22] = [
+const SOURCES: [(&str, &str); 23] = [
     ("benches/helper.rs", include_str!("../benches/helper.rs")),
     ("src/batch.rs", include_str!("../src/batch.rs")),
     ("src/budget.rs", include_str!("../src/budget.rs")),
@@ -55,6 +56,7 @@ const SOURCES: [(&str, &str); 22] = [
     ("src/scan.rs", include_str!("../src/scan.rs")),
     ("src/sort.rs", include_str!("../src/sort.rs")),
     ("tests/attack_g04.rs", include_str!("attack_g04.rs")),
+    ("tests/attack_g23.rs", include_str!("attack_g23.rs")),
     ("tests/budget_cancel.rs", include_str!("budget_cancel.rs")),
     ("tests/common/mod.rs", include_str!("common/mod.rs")),
     ("tests/determinism.rs", include_str!("determinism.rs")),
@@ -134,6 +136,10 @@ fn relative(root: &Path, file: &Path) -> String {
 #[cfg_attr(
     target_os = "wasi",
     ignore = "reads the crate's folder; wasm32-wasip1 under wasmtime is given no folder to read"
+)]
+#[cfg_attr(
+    miri,
+    ignore = "reads the crate's folder; Miri isolates the test from the file system"
 )]
 fn every_source_file_in_the_crates_folder_is_checked() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));

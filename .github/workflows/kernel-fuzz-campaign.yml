@@ -1,0 +1,93 @@
+name: Kernel fuzz campaign
+
+# A long libFuzzer campaign on one of the geometry kernel's fuzz targets (kernel architecture,
+# chapter 28.5). The board's G26 asks for the wide integers' differential fuzzing against a
+# big-integer oracle "for 24 hours clean": this runs `wide_fuzz` (geom-fuzz's `wide` target, the
+# wide integers against num-bigint at every width) under libFuzzer, with coverage instrumentation
+# and the address sanitizer, in five shards of five hours each, 25 CPU hours in all. Each shard is
+# its own libFuzzer process with its own random seed, the way OSS-Fuzz counts fuzzing time. A
+# crash fails its shard and its input is uploaded; put the file in
+# projects/engines/geometry/crates/geom-fuzz/tests/__fuzz__/wide/crashes and `cargo test`
+# replays it forever (28.16). Each shard also uploads the corpus it grew, the record of what it
+# covered.
+#
+# When it runs: on demand only, never on an ordinary push. On a pull request, when someone adds the
+# label `fuzz-campaign` (a pull request's own copy of this file runs, so a campaign can run before
+# the file reaches main); and by hand from the Actions tab (workflow_dispatch), on any branch, once
+# this file is on main. kernel-fuzz.yml keeps the minute of libFuzzer every pull request gets.
+#
+# Pins: as kernel-fuzz.yml's, which this file repeats: the workspace's compiler, the dated nightly
+# for libFuzzer's flags, cargo-bolero's exact version from its published lockfile, every action
+# pinned to a full commit; Cargo.lock is held to the reviewed one before anything builds.
+
+on:
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kernel-fuzz-campaign-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # The workspace's pinned compiler (rust-toolchain.toml), for building the tools.
+  RUST_TOOLCHAIN: "1.99.0"
+  # The nightly compiler cargo-bolero builds libFuzzer targets with (sanitizer flags are
+  # nightly-only), as in kernel-fuzz.yml.
+  FUZZ_NIGHTLY: nightly-2026-10-01
+  CARGO_BOLERO_VERSION: 0.13.5
+
+jobs:
+  campaign:
+    name: wide_fuzz under libFuzzer for five hours (shard ${{ matrix.shard }} of 5)
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || github.event.label.name == 'fuzz-campaign'
+    runs-on: ubuntu-latest
+    # Five hours of fuzzing, the build before it and the uploads after, inside the six hours a
+    # hosted job may run.
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Install the pinned nightly compiler
+        run: rustup toolchain install "$FUZZ_NIGHTLY" --profile minimal
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Install cargo-bolero ${{ env.CARGO_BOLERO_VERSION }}
+        run: >-
+          cargo install cargo-bolero --version "$CARGO_BOLERO_VERSION" --locked
+          --no-default-features --features libfuzzer
+      - name: Cargo.lock is the reviewed one
+        run: cargo metadata --locked --format-version 1 > /dev/null
+      - name: Fuzz wide_fuzz with libFuzzer for five hours
+        run: >-
+          cargo bolero test wide_fuzz --package geom-fuzz
+          --toolchain "$FUZZ_NIGHTLY" --engine libfuzzer -T 18000s
+      - name: Upload the crashing input
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: campaign-crashes-shard-${{ matrix.shard }}
+          path: projects/engines/geometry/crates/geom-fuzz/tests/__fuzz__/*/crashes/
+          if-no-files-found: ignore
+      - name: Upload the corpus the shard grew
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: campaign-corpus-shard-${{ matrix.shard }}
+          path: projects/engines/geometry/crates/geom-fuzz/tests/__fuzz__/*/corpus/
+          if-no-files-found: ignore

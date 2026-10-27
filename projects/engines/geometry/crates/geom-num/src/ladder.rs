@@ -7,7 +7,7 @@
 //!
 //! | Name | Steps | At Q0 | At Q1 | Used for |
 //! | --- | --- | --- | --- | --- |
-//! | Commit rounding | 1/2 per axis; under 1 in 2D and 3D | 78.125 nm; 110 nm 2D, 135 nm 3D | 3.125 nm; 4.4 nm 2D, 5.4 nm 3D | Making an implicit point explicit |
+//! | Commit rounding | 1/2 per axis, ties to even; under 1 in 2D and 3D | 78.125 nm; 110 nm 2D, 135 nm 3D | 3.125 nm; 4.4 nm 2D, 5.4 nm 3D | Making an implicit point explicit |
 //! | Fit bound | 64 | 0.01 mm | 0.4 µm | The largest certified error of a curved construction that feeds topology |
 //! | Angular bound | 2^-34 rad | about 5.8 × 10^-11 rad | the same | Angles in curved code; equals the fit bound over the frame's range |
 //! | Import healing | 640, capped at 6,400 | 0.1 mm, cap 1 mm | 4 µm, cap 40 µm | Closing gaps in imported data, once |
@@ -16,15 +16,16 @@
 //! Derivations, with q the frame's step (156.25 nm at `Q0`, 6.25 nm at `Q1`):
 //!
 //! - **Commit rounding** ([`COMMIT_PER_AXIS`], [`COMMIT_DISTANCE_2D`], [`COMMIT_DISTANCE_3D`]):
-//!   committing rounds each coordinate to the nearest step
+//!   committing rounds each coordinate to the nearest step, ties to even (chapter 6.3)
 //!   ([`Tpi::to_grid`](crate::plane::Tpi::to_grid)), so it moves each by at most q/2, one half
-//!   step. As a distance in n dimensions that is at most √n · q/2: (√2/2)q ≈ 0.707q in 2D and
-//!   (√3/2)q ≈ 0.866q in 3D, 110 nm and 135 nm at `Q0`. Both are below one step, so one whole
-//!   step is a certified ceiling for each: n · (1/2)² ≤ 1² for n ≤ 4, checked when the crate
-//!   compiles.
+//!   step; a tie moves it by exactly q/2, never more. As a distance in n dimensions that is at
+//!   most √n · q/2: (√2/2)q ≈ 0.707q in 2D and (√3/2)q ≈ 0.866q in 3D, 110 nm and 135 nm at
+//!   `Q0`. Both are below one step, so one whole step is a certified ceiling for each:
+//!   n · (1/2)² ≤ 1² for n ≤ 4, checked when the crate compiles.
 //! - **Fit bound** ([`FIT`]): 64q is 10 µm = 0.01 mm at `Q0` (64 × 156.25 nm) and 0.4 µm at `Q1`.
-//! - **Angular bound** ([`ANGULAR`]): the fit bound over the frame's range, 64q / 2^40 q
-//!   = 2^6 / 2^40 = 2^−34 rad, the same at every step; checked when the crate compiles.
+//! - **Angular bound** ([`ANGULAR`], and its exponent [`ANGULAR_LOG2`]): the fit bound over the
+//!   frame's range, 64q / 2^40 q = 2^6 / 2^40 = 2^−34 rad, the same at every step; checked when
+//!   the crate compiles.
 //! - **Import healing** ([`HEAL_DEFAULT`], [`HEAL_CAP`]): 640q = 0.1 mm and 6,400q = 1 mm at `Q0`
 //!   (6,400 steps of `Q0` are one millimetre, [`crate::grid`]).
 //! - **Short-edge warning** ([`SHORT_EDGE_WARNING`]): 3,200q = 0.5 mm at `Q0`.
@@ -60,7 +61,7 @@ pub const HEAL_CAP: Steps = Steps(6_400);
 pub const SHORT_EDGE_WARNING: Steps = Steps(3_200);
 
 /// Committing an implicit point to the grid moves each coordinate by at most this: one half step
-/// ([`Tpi::to_grid`](crate::plane::Tpi::to_grid) rounds to the nearest step).
+/// ([`Tpi::to_grid`](crate::plane::Tpi::to_grid) rounds to the nearest step, ties to even).
 pub const COMMIT_PER_AXIS: HalfSteps = HalfSteps(1);
 
 /// A certified ceiling, in whole steps, on how far committing moves a 2D point: the exact
