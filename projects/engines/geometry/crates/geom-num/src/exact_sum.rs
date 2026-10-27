@@ -33,15 +33,14 @@
 //!   [`ExactSum::round_ieee`] gives Neal's report for it, a NaN with every payload bit set.
 //! - **Bounded proofs, and what is only tested.** Kani proves (piece G41, chapter 28.7) that
 //!   adding one term never panics, that a finite term rounds back to itself and a non-finite one
-//!   is reported, and that a finite term and its negation cancel to +0, for every sign and for
-//!   every fraction whose free bits are its top seven and bottom seven (the rest zero), at the
-//!   exponent fields 0, 1, 31, 32, 1023 and 2046 (and 2047, the non-finite terms): the
-//!   subnormals, the smallest binade, the two binades either side of the first chunk boundary,
-//!   one's binade and the largest, one harness per field with kissat as the SAT solver. The top
-//!   and bottom bits are the ones that reach both chunks of a term's split and the rounding of
-//!   the sum. With all 52 fraction bits free, each harness ran past CI's hour, even one field at a
-//!   time. Every other term, and every sum of more than one, is tested bit for bit against the
-//!   exact oracle.
+//!   is reported, and that a finite term and its negation cancel to +0, for every sign and every
+//!   fraction at the exponent fields 0, 1, 31, 32, 1023 and 2046 (and 2047, the non-finite
+//!   terms): the subnormals, the smallest binade, the two binades either side of the first chunk
+//!   boundary, one's binade and the largest, one harness per field with kissat as the SAT solver.
+//!   Each unwinds every loop at most 68 times (the 67 chunks, and one more for the loop's exit),
+//!   and Kani checks that bound is enough; without it the slices whose length depends on the term
+//!   unwind without end. Every other exponent field, and every sum of more than one term, is
+//!   tested bit for bit against the exact oracle.
 //!
 //! Method: R. M. Neal, "Fast exact summation using small and large superaccumulators", arXiv
 //! 1505.05571 (2015), <https://arxiv.org/abs/1505.05571>, and his C code `xsum` (MIT licence,
@@ -748,9 +747,8 @@ mod tests {
     }
 }
 
-/// Bounded proofs (chapter 28.7; piece G41): every sign, and every fraction with 14 free bits (its
-/// top seven and bottom seven), bit for bit, at the exponent fields the module header names and
-/// says why.
+/// Bounded proofs (chapter 28.7; piece G41): every sign and every fraction, bit for bit, at the
+/// exponent fields the module header names and says why.
 #[cfg(kani)]
 // cargo-mutants reads this attribute from the source and skips the module (its harnesses are
 // proven by Kani, and no test build compiles them); no build evaluates it, since the module
@@ -759,23 +757,19 @@ mod tests {
 mod proofs {
     use super::*;
 
-    /// The free fraction bits: the top seven and the bottom seven.
-    const FREE: u64 = (0x7f << 45) | 0x7f;
-
-    /// A double with exponent field `e`, any sign, and any fraction whose bits outside [`FREE`]
-    /// are zero.
+    /// A double with exponent field `e`, any sign and any fraction.
     fn any_with_exponent(e: u64) -> f64 {
         let sign: u64 = if kani::any() { 1 << 63 } else { 0 };
-        let fraction: u64 = kani::any::<u64>() & FREE;
+        let fraction: u64 = kani::any::<u64>() & FRACTION_BITS;
         f64::from_bits(sign | e << 52 | fraction)
     }
 
     /// Adding a double never panics or overflows, and one finite double, rounded back, is that
-    /// double (a zero comes back +0, the sum's one zero), for every sign and every fraction with
-    /// the [`FREE`] bits at exponent field `e`. Proven at the fields 0, 1, 31, 32, 1023 and 2046,
-    /// one harness each (kissat as the SAT solver): the subnormals, the smallest normal binade,
-    /// the binades either side of the first chunk boundary (31 and 32, as E = 32·j + k), one's
-    /// binade and the largest. With every fraction bit free, each ran past CI's hour.
+    /// double (a zero comes back +0, the sum's one zero), for every sign and every fraction at
+    /// exponent field `e`. Proven at the fields 0, 1, 31, 32, 1023 and 2046, one harness each
+    /// (kissat as the SAT solver, every loop unwound at most 68 times: the accumulator's 67
+    /// chunks): the subnormals, the smallest normal binade, the binades either side of the first
+    /// chunk boundary (31 and 32, as E = 32·j + k), one's binade and the largest.
     fn one_term_law(e: u64) {
         let x = any_with_exponent(e);
         let mut sum = ExactSum::new();
@@ -789,7 +783,7 @@ mod proofs {
     }
 
     /// A finite double and its negation cancel exactly, to +0, for every sign and every fraction
-    /// with the [`FREE`] bits at exponent field `e`; proven at the fields [`one_term_law`] names, one harness each.
+    /// at exponent field `e`; proven at the fields [`one_term_law`] names, one harness each.
     fn cancel_law(e: u64) {
         let x = any_with_exponent(e);
         let mut sum = ExactSum::new();
@@ -798,39 +792,13 @@ mod proofs {
         assert!(sum.round().unwrap().get().to_bits() == 0);
     }
 
-    /// An infinity or a NaN, every sign and every payload with the [`FREE`] bits at exponent
-    /// field 2047, is reported.
+    /// An infinity or a NaN, every sign and every payload (exponent field 2047), is reported.
     #[kani::proof]
     #[kani::unwind(68)]
     fn a_non_finite_term_is_reported() {
         let mut sum = ExactSum::new();
         sum.add(any_with_exponent(2047));
         assert!(sum.round().is_err());
-    }
-
-    /// [`one_term_law`]'s claim in one's binade with all 52 fraction bits free: whether the
-    /// narrowing to the [`FREE`] bits is still needed once the loops are bounded.
-    #[kani::proof]
-    #[kani::unwind(68)]
-    #[kani::solver(kissat)]
-    fn one_term_rounds_back_in_one_s_binade_every_fraction() {
-        let sign: u64 = if kani::any() { 1 << 63 } else { 0 };
-        let x = f64::from_bits(sign | 1023 << 52 | (kani::any::<u64>() & FRACTION_BITS));
-        let mut sum = ExactSum::new();
-        sum.add(x);
-        assert!(sum.round().unwrap().get().to_bits() == x.to_bits());
-    }
-
-    /// [`cancel_law`]'s claim in one's binade with all 52 fraction bits free, as above.
-    #[kani::proof]
-    #[kani::unwind(68)]
-    #[kani::solver(kissat)]
-    fn a_term_and_its_negation_cancel_in_one_s_binade_every_fraction() {
-        let x = f64::from_bits(1023 << 52 | (kani::any::<u64>() & FRACTION_BITS));
-        let mut sum = ExactSum::new();
-        sum.add(x);
-        sum.add(-x);
-        assert!(sum.round().unwrap().get().to_bits() == 0);
     }
 
     /// [`one_term_law`] at exponent field 0: the subnormals.
