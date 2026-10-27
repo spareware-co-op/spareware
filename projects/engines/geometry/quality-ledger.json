@@ -137,6 +137,46 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The line runs only inside `if high_a != high_b`, where the two limbs differ, and for different values `<` and `<=` give the same answer, so no input can tell the mutant from the original."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
+      "mutant": "replace != with == in from_magnitude",
+      "line_text": "} else if limb != 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The line runs only for a limb at index L or above. The crate reaches from_magnitude only through product_i128 (checked_mul_i128 has no caller outside the tests), always with four limbs and only at widths 4 and 5: crossing.rs's side::<4> and side::<5>, plane.rs's I256 products and lpi_classify::<4> and ::<5>, and the generated I256 paths. So every index is below L, the line never runs, and no input through the public interface can tell the mutant from the original. The unit tests run it at widths 2 and 3, and the Verus twin (verus/wide.rs) proves from_magnitude right at every width."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
+      "mutant": "replace && with || in from_magnitude",
+      "line_text": "if negative && matches!(compare_limbs(&n.0, &v.0), Ordering::Equal) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The line runs only when the magnitude's top bit is set, so the magnitude is at least 2^(64L-1). The crate reaches from_magnitude only through product_i128 (checked_mul_i128 has no caller outside the tests), always with four limbs and only at widths 4 and 5: crossing.rs's side::<4> and side::<5>, plane.rs's I256 products and lpi_classify::<4> and ::<5>, and the generated I256 paths. There the magnitude |a b| is at most 2^254, below 2^255 <= 2^(64L-1), so the line never runs and no input through the public interface can tell the mutant from the original. The unit tests run it, and the Verus twin proves from_magnitude right at every width."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
+      "mutant": "replace < with == in Wide<L>::from_i128",
+      "line_text": "let u = if v < 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "For a negative v the mutant takes the other arm, `v as u128`, which reads v's two's complement as unsigned, v + 2^128: the same u the original builds as (v - i128::MIN) + 2^127 (it only avoids a cast clippy flags as losing the sign). For v = 0 the mutant takes the first arm, where 0 - i128::MIN overflows, so checked_sub gives None and u = 0, as `0 as u128` does. Every v gives the same u, so the same limbs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
+      "mutant": "replace < with <= in Wide<L>::from_i128",
+      "line_text": "let u = if v < 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only at v = 0, where the mutant takes the first arm: 0 - i128::MIN = 2^127 overflows i128, so checked_sub gives None and u = 0, the same u as the original's `0 as u128`."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
+      "mutant": "replace | with ^ in Wide<L>::from_i128",
+      "line_text": "Some(d) => (d as u128) | (1u128 << 127),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "This arm runs for a negative v, where d = v - i128::MIN lies in 0..2^127, so bit 127 of d is clear: setting it with | and flipping it with ^ both give d + 2^127."
     }
   ],
   "coverage_off": [],

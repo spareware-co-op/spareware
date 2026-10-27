@@ -923,7 +923,7 @@ fn halves(t: u128) -> (u64, u64) {
     ((t & 0xFFFF_FFFF_FFFF_FFFF) as u64, (t >> 64) as u64)
 }
 
-/// The value with magnitude `m` (limbs little-endian, any number of them) and the given sign, or
+/// The value with magnitude `m` (`M` limbs, little-endian) and the given sign, or
 /// `None` if it does not fit: the limbs from `L` on must be zero, and the magnitude must be below
 /// 2^(64L−1), or exactly 2^(64L−1) for a negative value (the minimum value), as
 /// [`Wide::checked_mul`] decides it.
@@ -937,7 +937,7 @@ fn halves(t: u128) -> (u64, u64) {
             None => !fits(with_sign(unsigned(m@, m@.len()), negative), L as nat),
         },
 )]
-fn from_magnitude<const L: usize>(m: &[u64], negative: bool) -> Option<Wide<L>> {
+fn from_magnitude<const L: usize, const M: usize>(m: &[u64; M], negative: bool) -> Option<Wide<L>> {
     let mut out = [0u64; L];
     #[verus_spec(
         invariant
@@ -947,7 +947,7 @@ fn from_magnitude<const L: usize>(m: &[u64], negative: bool) -> Option<Wide<L>> 
             forall|j: int| k <= j < L ==> out@[j] == 0u64,
             forall|j: int| L <= j < k ==> m@[j] == 0u64,
     )]
-    for k in 0..m.len() {
+    for k in 0..M {
         let limb = match m.get(k) {
             Some(v) => *v,
             None => 0,
