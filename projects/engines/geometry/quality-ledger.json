@@ -121,6 +121,22 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The mutant also runs the narrowing check when M equals L, a resize to the same width. Then no limb is dropped (skipping M limbs of an L-limb array leaves none, so all() holds) and the copy r has the very limbs of self, so its sign is self's: the check never returns None, and Wide::resize returns the same Some(r) for every value and every pair of widths."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
+      "mutant": "replace > with >= in compare_limbs",
+      "line_text": "while i > 0 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "i is unsigned, so `i >= 0` always holds: once i reaches 0 the loop wraps it to usize::MAX and walks down for ever, both limbs reading 0 past the array (get returns None), so the tests stop it by their timeout. It hangs; it never returns a wrong order."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
+      "mutant": "replace < with <= in compare_limbs",
+      "line_text": "return if high_a < high_b {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The line runs only inside `if high_a != high_b`, where the two limbs differ, and for different values `<` and `<=` give the same answer, so no input can tell the mutant from the original."
     }
   ],
   "coverage_off": [],
@@ -1478,31 +1494,10 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
-      "line_text": "};",
-      "occurrences": 2,
-      "piece": "G41",
-      "reason": "A lookup on a fixed-size limb array whose index is always in range (`get` or `get_mut` on `[u64; L]` with i < L), so its `None` side never runs. G41's wide-integer harnesses prove it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
       "line_text": "if let Some(top) = limbs.last_mut() {",
       "occurrences": 2,
       "piece": "G41",
       "reason": "A lookup on a fixed-size limb array whose index is always in range (`get` or `get_mut` on `[u64; L]` with i < L), so its `None` side never runs. G41's wide-integer harnesses prove it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
-      "line_text": "Self(limbs)",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "A lookup on a fixed-size limb array whose index is always in range (`get` or `get_mut` on `[u64; L]` with i < L), so its `None` side never runs. G41's wide-integer harnesses prove it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
-      "line_text": "#[must_use]",
-      "occurrences": 2,
-      "piece": "G41",
-      "reason": "llvm-cov places branch records of a generic instantiation the tests never build on the attribute line above the function; the function's own lines run. G41 proves its branches for every width, or the instantiation gets a test."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
