@@ -112,8 +112,11 @@ Rules:
   took 3½ minutes, 1 took 19, and 3, 7 and 15 did not finish within the job's hour) and the fuzz
   target was proven on every byte string of at most 4 bytes (8 minutes; 8, 16 and 24 bytes did not
   finish). Once G28 routed orient2d to its exact paths on 64-bit targets, 4 bytes no longer
-  finished within the hour, so the fuzz target's bound is 2. A new target, or a change to the code
-  a proof reaches, repeats the trials before its bounds are set.
+  finished within the hour, so the fuzz target's bound is 2. After G37 rewrote the wide integers
+  the proof reaches, the bound-1 proof took 47 and then 75 minutes with kissat as Kani's SAT
+  solver (runs 40291338626 and 40308963161: the hosted runners' speed varies), and CaDiCaL ran
+  past three hours, so the proof uses kissat and its job has 120 minutes. A new
+  target, or a change to the code a proof reaches, repeats the trials before its bounds are set.
 - The proof test sets Kani's unwind bound above the longest loop a passing case runs (10 for
   orient2d: six coordinates), so a loop Kani cannot bound is cut rather than unwound forever.
   Kani's unwinding assertions, on by default, fail the proof if a cut loop can be reached, so
