@@ -947,6 +947,7 @@ dependencies = [
  "bolero",
  "geom-num",
  "geom-test",
+ "num-bigint",
 ]
 
 [[package]]
