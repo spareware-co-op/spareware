@@ -159,6 +159,14 @@ pub static OPS: &[Op] = &[
     Op { group: "plane", name: "tpi_homogeneous", measures: "Tpi::homogeneous", classes: TE, prepare: |c| bind(inputs::plane::tpi_homogeneous(c), kernels::plane::tpi_homogeneous) },
     Op { group: "plane", name: "side_of_tpi", measures: "Plane::side_of_tpi", classes: TDNE, prepare: |c| bind(inputs::plane::side_of_tpi(c), kernels::plane::side_of_tpi) },
     Op { group: "plane", name: "to_grid", measures: "Tpi::to_grid", classes: &[Typical, OnGrid, Extreme, Overflow], prepare: |c| bind(inputs::plane::to_grid(c), kernels::plane::to_grid) },
+    Op { group: "plane", name: "lpi_new", measures: "Lpi::new", classes: TDE, prepare: |c| bind(inputs::plane::lpi_new(c), kernels::plane::lpi_new) },
+    Op { group: "plane", name: "lpi_homogeneous", measures: "Lpi::homogeneous", classes: TE, prepare: |c| bind(inputs::plane::lpi_homogeneous(c), kernels::plane::lpi_homogeneous) },
+    Op { group: "plane", name: "side_of_lpi", measures: "Plane::side_of_lpi", classes: TDNE, prepare: |c| bind(inputs::plane::side_of_lpi(c), kernels::plane::side_of_lpi) },
+    Op { group: "plane", name: "lpi_to_grid", measures: "Lpi::to_grid", classes: &[Typical, OnGrid, Extreme, Overflow], prepare: |c| bind(inputs::plane::lpi_to_grid(c), kernels::plane::lpi_to_grid) },
+    Op { group: "crossing", name: "ssi_new", measures: "Ssi::new", classes: TDE, prepare: |c| bind(inputs::crossing::ssi_new(c), kernels::crossing::ssi_new) },
+    Op { group: "crossing", name: "ssi_homogeneous", measures: "Ssi::homogeneous", classes: TE, prepare: |c| bind(inputs::crossing::ssi_homogeneous(c), kernels::crossing::ssi_homogeneous) },
+    Op { group: "crossing", name: "ssi_orient2d", measures: "Ssi::orient2d", classes: TDNE, prepare: |c| bind(inputs::crossing::ssi_orient2d(c), kernels::crossing::ssi_orient2d) },
+    Op { group: "crossing", name: "ssi_to_grid", measures: "Ssi::to_grid", classes: &[Typical, OnGrid, Extreme, Overflow], prepare: |c| bind(inputs::crossing::ssi_to_grid(c), kernels::crossing::ssi_to_grid) },
     // Error-free transformations.
     Op { group: "eft", name: "two_sum", measures: "eft::two_sum", classes: TE, prepare: |c| bind(inputs::eft::two_sum(c), kernels::eft::two_sum) },
     Op { group: "eft", name: "fast_two_sum", measures: "eft::fast_two_sum", classes: TE, prepare: |c| bind(inputs::eft::fast_two_sum(c), kernels::eft::fast_two_sum) },
@@ -274,14 +282,27 @@ pub static OPS: &[Op] = &[
     Op { group: "generated", name: "insphere_value", measures: "generated::insphere::value", classes: TDNE, prepare: |c| bind(inputs::generated::insphere_value(c), kernels::generated::insphere_value) },
     Op { group: "generated", name: "plane_side_filter", measures: "generated::plane_side::filter", classes: TDNE, prepare: |c| bind(inputs::generated::plane_side_filter(c), kernels::generated::plane_side_filter) },
     Op { group: "generated", name: "plane_side_value", measures: "generated::plane_side::value", classes: TDNE, prepare: |c| bind(inputs::generated::plane_side_value(c), kernels::generated::plane_side_value) },
+    Op { group: "generated", name: "tpi_weight_filter", measures: "generated::tpi_weight::filter", classes: TDNE, prepare: |c| bind(inputs::generated::tpi_weight_filter(c), kernels::generated::tpi_weight_filter) },
+    Op { group: "generated", name: "tpi_weight_value", measures: "generated::tpi_weight::value", classes: TDNE, prepare: |c| bind(inputs::generated::tpi_weight_value(c), kernels::generated::tpi_weight_value) },
+    Op { group: "generated", name: "tpi_side_filter", measures: "generated::tpi_side::filter", classes: TDNE, prepare: |c| bind(inputs::generated::tpi_side_filter(c), kernels::generated::tpi_side_filter) },
+    Op { group: "generated", name: "tpi_side_value", measures: "generated::tpi_side::value", classes: TDNE, prepare: |c| bind(inputs::generated::tpi_side_value(c), kernels::generated::tpi_side_value) },
+    Op { group: "generated", name: "lpi_weight_filter", measures: "generated::lpi_weight::filter", classes: TDNE, prepare: |c| bind(inputs::generated::lpi_weight_filter(c), kernels::generated::lpi_weight_filter) },
+    Op { group: "generated", name: "lpi_weight_value", measures: "generated::lpi_weight::value", classes: TDNE, prepare: |c| bind(inputs::generated::lpi_weight_value(c), kernels::generated::lpi_weight_value) },
+    Op { group: "generated", name: "lpi_side_filter", measures: "generated::lpi_side::filter", classes: TDNE, prepare: |c| bind(inputs::generated::lpi_side_filter(c), kernels::generated::lpi_side_filter) },
+    Op { group: "generated", name: "lpi_side_value", measures: "generated::lpi_side::value", classes: TDNE, prepare: |c| bind(inputs::generated::lpi_side_value(c), kernels::generated::lpi_side_value) },
+    Op { group: "generated", name: "ssi_weight_filter", measures: "generated::ssi_weight::filter", classes: TDNE, prepare: |c| bind(inputs::generated::ssi_weight_filter(c), kernels::generated::ssi_weight_filter) },
+    Op { group: "generated", name: "ssi_weight_value", measures: "generated::ssi_weight::value", classes: TDNE, prepare: |c| bind(inputs::generated::ssi_weight_value(c), kernels::generated::ssi_weight_value) },
+    Op { group: "generated", name: "ssi_side_filter", measures: "generated::ssi_side::filter", classes: TDNE, prepare: |c| bind(inputs::generated::ssi_side_filter(c), kernels::generated::ssi_side_filter) },
+    Op { group: "generated", name: "ssi_side_value", measures: "generated::ssi_side::value", classes: TDNE, prepare: |c| bind(inputs::generated::ssi_side_value(c), kernels::generated::ssi_side_value) },
 ];
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 15] = [
+pub const GROUPS: [&str; 16] = [
     "predicate",
     "sign",
     "wide",
     "plane",
+    "crossing",
     "eft",
     "interval",
     "grid",
@@ -452,6 +473,9 @@ pub static UNMEASURED: &[(&str, &str)] = &[
     ("Plane::n", "field accessor"),
     ("Plane::d", "field accessor"),
     ("Tpi::planes", "field accessor"),
+    ("Lpi::points", "field accessor"),
+    ("Lpi::plane", "field accessor"),
+    ("Ssi::points", "field accessor"),
     ("Wide::to_le_limbs", "field accessor"),
     ("Wide::from_le_limbs", "raw constructor"),
     ("Wide::max_value", "a constant: every limb is fixed"),
@@ -506,6 +530,12 @@ pub static UNMEASURED: &[(&str, &str)] = &[
     ("generated::incircle::exact", "one call to generated::incircle::value, which is measured, and the sign of the value"),
     ("generated::insphere::exact", "one call to generated::insphere::value, which is measured, and the sign of the value"),
     ("generated::plane_side::exact", "one call to generated::plane_side::value, which is measured, and the sign of the value"),
+    ("generated::tpi_weight::exact", "one call to generated::tpi_weight::value, which is measured, and the sign of the value"),
+    ("generated::tpi_side::exact", "one call to generated::tpi_side::value, which is measured, and the sign of the value"),
+    ("generated::lpi_weight::exact", "one call to generated::lpi_weight::value, which is measured, and the sign of the value"),
+    ("generated::lpi_side::exact", "one call to generated::lpi_side::value, which is measured, and the sign of the value"),
+    ("generated::ssi_weight::exact", "one call to generated::ssi_weight::value, which is measured, and the sign of the value"),
+    ("generated::ssi_side::exact", "one call to generated::ssi_side::value, which is measured, and the sign of the value"),
 ];
 
 #[cfg(test)]

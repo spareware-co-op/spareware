@@ -136,6 +136,10 @@ fn relative(root: &Path, file: &Path) -> String {
     target_os = "wasi",
     ignore = "reads the crate's folder; wasm32-wasip1 under wasmtime is given no folder to read"
 )]
+#[cfg_attr(
+    miri,
+    ignore = "reads the crate's folder; Miri isolates the test from the file system"
+)]
 fn every_source_file_in_the_crates_folder_is_checked() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let mut found = BTreeSet::new();

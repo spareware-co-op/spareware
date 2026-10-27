@@ -116,9 +116,9 @@ fn exact_and_underflowing_quotients() {
     for _ in 0..500 {
         // t with few significant bits times x with few, so that t·x is exact.
         let t_significand = ((rng.next_u64() >> 40) | 1) as f64; // 24 bits
-        let t = t_significand * 2f64.powi(-60 - (rng.next_u64() % 40) as i32);
+        let t = t_significand * libm::scalbn(1.0, -60 - (rng.next_u64() % 40) as i32);
         let x_significand = ((rng.next_u64() >> 44) | 1) as f64; // 20 bits
-        let x = x_significand * 2f64.powi((rng.next_u64() % 200) as i32 - 100);
+        let x = x_significand * libm::scalbn(1.0, (rng.next_u64() % 200) as i32 - 100);
         let y = t * x;
         check(y, x);
         check(-y, x);
@@ -274,8 +274,8 @@ fn special_values() {
         (f64::from_bits(1), f64::MAX),
         (f64::from_bits(1), f64::from_bits(1)),
         (f64::MIN_POSITIVE, f64::MIN_POSITIVE),
-        (1.0, 2f64.powi(-53)),
-        (2f64.powi(-53), 1.0),
+        (1.0, libm::scalbn(1.0, -53)),
+        (libm::scalbn(1.0, -53), 1.0),
         (1e-300, -1e300),
     ] {
         check(y, x);

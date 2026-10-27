@@ -67,7 +67,8 @@ Who has what, at a glance: [checked out](https://github.com/spareware-co-op/spar
 
 ## 5. Stay legal (no exceptions)
 
-- Never copy proprietary code, assets, icons, artwork, documentation or interface designs from any company's software, including from memory.
+- Never copy proprietary code, assets, icons, artwork or documentation from any company's software, including from memory.
+- Interface structure is ours to follow: a program may be laid out and work like the one people already know (the same tools, buttons, panels, commands and workflow), so users feel at home. The look stays our own: icons, artwork, colours and fonts come from [design/DESIGN.md](design/DESIGN.md) and [design/tokens.css](design/tokens.css), and help text is our own writing.
 - Never decompile, disassemble or reverse-engineer proprietary software. Never use leaked or stolen source code.
 - Use open-source code only when its licence allows it. Keep its licence and credit, and list its source in the pull request. No GPL or AGPL code in the core.
 - Our products use their own names. Never use another company's product name for ours.
