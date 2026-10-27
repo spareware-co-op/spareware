@@ -41,7 +41,7 @@ Each crate has one job, written at the top of its `lib.rs`. [crates/README.md](c
 
 ### 4. How a change is checked (two minutes)
 
-Eight workflows in `.github/workflows/` guard the kernel. [AGENTS.md](AGENTS.md), section 3, lists the commands to run them yourself.
+Nine workflows in `.github/workflows/` guard the kernel. [AGENTS.md](AGENTS.md), section 3, lists the commands to run them yourself.
 
 | Workflow | What it proves |
 | --- | --- |
