@@ -49,8 +49,12 @@ fn root() -> PathBuf {
         .to_path_buf()
 }
 
+/// A file's text with LF line ends, however the checkout wrote them, so the seeded edits below,
+/// written with LF, apply.
 fn read(rel: &str) -> String {
-    std::fs::read_to_string(root().join(rel)).unwrap()
+    std::fs::read_to_string(root().join(rel))
+        .unwrap()
+        .replace("\r\n", "\n")
 }
 
 fn parse(text: &str) -> Yaml {
