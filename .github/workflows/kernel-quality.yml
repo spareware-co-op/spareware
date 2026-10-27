@@ -194,6 +194,10 @@ jobs:
           name: mutants-plan
           path: ${{ runner.temp }}/plan
       - name: Mutate the kernel code (shard ${{ matrix.shard }})
+        env:
+          # The judge reads each mutant's log for a compiler error (geom_test::mutants); colour
+          # codes before `error[E...]` would hide it, so the logs are written without colour.
+          CARGO_TERM_COLOR: never
         run: |
           # rust-cache turns incremental compilation off for the whole job; turn it back on here.
           export CARGO_INCREMENTAL=1
