@@ -1342,6 +1342,40 @@ fn a_foundation_line_waits_for_its_proof_only_with_an_exact_entry() {
     );
 }
 
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads and writes files in a temporary folder, which a WebAssembly test run cannot"
+)]
+#[test]
+fn a_line_with_no_code_is_not_counted() {
+    let repo = Repo::new("no-code");
+    let rel = format!("{K}/geom-num/src/lib.rs");
+    repo.write(
+        &rel,
+        "#[must_use]
+pub fn f(x: i64) -> i64 {
+    // a comment
+    if x > 0 { return 1; }
+
+    0
+}
+",
+    );
+    // llvm-cov's zero counts on the attribute, the comment and the blank line are not misses.
+    let lines = [(1, 0), (2, 3), (3, 0), (4, 3), (5, 0), (6, 2), (7, 3)];
+    let branches = [(4, Some(1)), (4, Some(2))];
+    let lcov = lcov_record(&repo, &rel, &lines, &branches, None);
+    let report = measure(&repo.root, "geom-num", &lcov).unwrap();
+    assert_eq!(report.files[0].counts.lines_found, 4);
+    assert_eq!(report.files[0].missed_lines, Vec::<usize>::new());
+    assert_eq!(coverage::judge(&[report]), Vec::<String>::new());
+    // A line of code with a count of 0 is still a miss.
+    let lines = [(1, 0), (2, 3), (3, 0), (4, 3), (5, 0), (6, 0), (7, 3)];
+    let lcov = lcov_record(&repo, &rel, &lines, &branches, None);
+    let report = measure(&repo.root, "geom-num", &lcov).unwrap();
+    assert_eq!(report.files[0].missed_lines, vec![6]);
+}
+
 // ---------------------------------------------------------------------------------------------
 // coverage(off) marks and their proofs
 // ---------------------------------------------------------------------------------------------
