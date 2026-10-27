@@ -58,7 +58,14 @@
 [data-app="market"] { --app: #D8E36A; --app-strong: #66700F; --app-tint: #F7F9DF; }
 [data-app="office"] { --app: #A9B6FF; --app-strong: #3A47A8; --app-tint: #EEF0FF; }
 [data-app="os"]     { --app: #CDD1D6; --app-strong: #4A525C; --app-tint: #F2F3F5; }
+[data-app="music"]  { --app: #EB8EEB; --app-strong: #B82EB8; --app-tint: #FBE9FB; }
+[data-app="movies"] { --app: #EB8E8E; --app-strong: #B82E2E; --app-tint: #FBE9E9; }
+[data-app="research"] { --app: #C2DBB3; --app-strong: #458321; --app-tint: #F0FBE9; }
+[data-app="keys"]   { --app: #70EB70; --app-strong: #228722; --app-tint: #E9FBE9; }
 </style>
+<!-- The shared Spareware ribbon and frame (design/ribbon). This path works in the repository and on the site, where /design/ribbon/ is published. -->
+<link rel="stylesheet" href="../../../design/ribbon/ribbon.css">
+<script src="../../../design/ribbon/ribbon.js"></script>
 <style>
 /* Spare Construct demo: every colour, font and spacing below comes from the tokens above. */
 *,*::before,*::after{box-sizing:border-box}
@@ -84,8 +91,9 @@ a{color:var(--app-strong)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .skip{position:absolute;left:var(--space);top:-48px;z-index:200;padding:4px 8px;background:var(--panel);border:1px solid var(--ink)}
 .skip:focus{top:var(--space)}
-.icon{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
-.icon.sm{width:14px;height:14px}
+.icon{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;--ic-fill:none}
+.icon.sm{width:14px;height:14px;stroke-width:1.7}
+.icon.lg{width:32px;height:32px;stroke-width:1.2;--ic-fill:var(--app)}
 kbd{font-family:var(--font-mono);font-size:11px;padding:0 4px;border:1px solid var(--rule);border-radius:var(--radius);background:var(--panel-alt);color:var(--ink-2)}
 .errlog{margin:0;padding:var(--space);background:var(--danger-tint);border-bottom:1px solid var(--danger);color:var(--ink);font-family:var(--font-mono);font-size:12px;white-space:pre-wrap}
 
@@ -128,10 +136,7 @@ textarea.inp{height:auto;padding:6px 8px}
 .mt2{margin-top:calc(var(--space) * 2)}
 
 /* app shell */
-.app{display:flex;flex-direction:column;height:100vh;min-height:560px}
-.app-h{display:flex;align-items:center;gap:12px;min-height:44px;padding:0 12px;background:var(--panel);border-bottom:1px solid var(--hairline)}
-.brand{display:flex;align-items:center;gap:8px;font-weight:700;white-space:nowrap}
-.brand .mark{width:14px;height:14px;background:var(--app);border-radius:2px}
+.app{display:flex;flex-direction:column;height:100vh;min-height:600px}
 /* Disciplines: each has its own light colour, so the buttons, tabs and selection always show which one you're in. Architecture keeps Spare Construct's own colour. */
 [data-dsw="architecture"]{--app:#8EC5FF;--app-strong:#1F5FA8;--app-tint:#EAF4FF}
 html[data-disc="structure"],[data-dsw="structure"]{--app:#F4A6A0;--app-strong:#9E2F28;--app-tint:#FDEDEB}
@@ -154,38 +159,42 @@ html[data-disc="transport"],[data-dsw="transport"]{--app:#F2D675;--app-strong:#7
 .disc-menu button[aria-checked="true"]{background:var(--app-tint);border-left-color:var(--app-strong);font-weight:600}
 .disc-menu small{display:block;font-size:12px;font-weight:400;color:var(--ink-2)}
 .dsw{width:12px;height:12px;flex:none;margin-top:3px;background:var(--app);border:1px solid var(--app-strong);border-radius:2px}
-.crumb{display:flex;align-items:center;gap:8px;min-width:0;color:var(--ink-2)}
+.crumb{display:flex;align-items:center;gap:8px;flex:0 1 auto;min-width:0;overflow:hidden;color:var(--ink-2)}
+.crumb>*{flex:none}
+.crumb .t{flex:0 1 auto;min-width:0}
 .crumb b{color:var(--ink);font-weight:600;white-space:nowrap}
 .crumb .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .h-act{display:flex;align-items:center;gap:6px;margin-left:auto}
 .saved{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--ink-3);white-space:nowrap}
 .cmdk{min-width:230px;justify-content:flex-start;color:var(--ink-3)}
 .cmdk kbd{margin-left:auto}
-.tabs{display:flex;gap:2px;padding:4px 8px 0;background:var(--panel);border-bottom:1px solid var(--hairline);overflow-x:auto;scrollbar-width:none}
-.tabs::-webkit-scrollbar{display:none}
-.tab{display:flex;align-items:center;gap:6px;padding:6px 10px 7px;border:0;border-radius:var(--radius) var(--radius) 0 0;background:none;color:var(--ink-2);white-space:nowrap}
-.tab:hover{background:var(--panel-alt);color:var(--ink)}
-.tab[aria-selected="true"]{background:var(--app);color:var(--ink);font-weight:600}
-.tools{display:flex;align-items:center;gap:2px;min-height:41px;padding:5px 8px;background:var(--panel-alt);border-bottom:1px solid var(--hairline);overflow-x:auto;scrollbar-width:thin}
-.tools .grp{display:flex;align-items:center;gap:2px;margin-right:4px;padding-right:6px;border-right:1px solid var(--hairline)}
-.tools .grp:last-child{border-right:0}
-.tools .glbl{margin:0 4px 0 2px;font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
-.tool{display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 7px;border:1px solid transparent;border-radius:var(--radius);background:none;color:var(--ink-2);white-space:nowrap}
-.tool:hover{background:var(--panel);border-color:var(--rule);color:var(--ink)}
-.tool[aria-pressed="true"]{background:var(--app);border-color:var(--app);color:var(--ink)}
-.work{flex:1;min-height:0;display:grid;grid-template-columns:220px minmax(0,1fr)}
-.work.nob{grid-template-columns:minmax(0,1fr)}
-.work.nob .browser{display:none}
-.browser{min-height:0;overflow:auto;padding:6px 0 48px;background:var(--panel);border-right:1px solid var(--hairline)}
-main{display:flex;min-width:0;min-height:0;overflow:hidden}
+/* Layout people know from desktop design software: docked palettes either side of the view (properties on the left and the project browser on the right to start; drag a title to move one), open views as tabs, view controls under the view. */
+.work{flex:1;min-height:0;display:grid;grid-template-columns:auto minmax(0,1fr) auto}
+.work>#dock-l{grid-column:1}
+.work>main{grid-column:2}
+.work>#dock-r{grid-column:3}
+.work.nodock .rb-dock{display:none}
+.browser{padding:4px 0 40px}
+.props-host{padding-bottom:24px}
+main{display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden}
+.views{flex:1;display:flex;min-width:0;min-height:0}
 .screen{display:none;flex:1;min-width:0;min-height:0}
 .screen.on{display:grid}
 #sc-transport.on{display:flex}
 .tframe{flex:1;width:100%;min-height:0;border:0}
-.tools[hidden]{display:none}
-.split{grid-template-columns:minmax(0,1fr) 296px}
-.center{display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden}
-.side{min-height:0;overflow:auto;background:var(--panel);border-left:1px solid var(--hairline);padding-bottom:56px}
+.split{grid-template-columns:minmax(0,1fr)}
+.center{position:relative;display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden}
+.side{display:none}
+.side.on{display:block}
+.nav-dir{position:absolute;top:var(--space);right:48px;z-index:5;padding:2px 8px;background:var(--panel);border:1px solid var(--hairline);border-radius:var(--radius);font-size:12px;color:var(--ink-2)}
+/* the type selector at the top of the properties palette */
+.typesel{display:flex;align-items:center;gap:10px;margin:0 8px 6px;padding:6px 8px;border:1px solid var(--rule);border-radius:var(--radius);background:var(--panel)}
+.typesel>div{min-width:0}
+.typesel small{display:block;font-size:12px;color:var(--ink-2)}
+.typesel b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.typesel .inp{margin-top:3px;height:26px}
+.typebar{display:flex;align-items:center;gap:8px;min-height:28px;margin:0 8px 4px;font-size:12px;color:var(--ink-2)}
+.typebar .sp{flex:1}
 .vhead{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-height:38px;padding:4px 12px;background:var(--panel);border-bottom:1px solid var(--hairline)}
 .vhead h2{font-size:13px}
 .vhead select.inp{width:auto;height:26px;padding:0 4px;font-size:12px}
@@ -201,7 +210,9 @@ main{display:flex;min-width:0;min-height:0;overflow:hidden}
 .sec:last-child{border-bottom:0}
 .sec>.lbl{display:block;padding:0 12px 6px}
 .pad{padding:0 12px}
-.status{display:flex;align-items:center;gap:14px;min-height:28px;padding:0 160px 0 12px;overflow-x:auto;background:var(--panel);border-top:1px solid var(--hairline);color:var(--ink-2);font-size:12px;white-space:nowrap}
+.status{padding-right:160px}
+.status .rb-prompt{min-width:min(440px,36vw)}
+#status-r{display:flex;align-items:center;gap:14px}
 .status button{display:inline-flex;align-items:center;gap:4px;padding:2px 4px;border:0;border-radius:var(--radius);background:none;color:var(--ink-2)}
 .status button:hover{background:var(--panel-alt);color:var(--ink)}
 .status .sep{width:1px;height:14px;background:var(--hairline)}
@@ -442,7 +453,7 @@ button.badge:hover{background:var(--hairline);color:var(--ink)}
 .tl .tl-use{font-size:10px;font-weight:600;text-anchor:middle;fill:var(--ink-2)}
 
 /* project files: folders, file list, details */
-.files3{grid-template-columns:210px minmax(0,1fr) 296px}
+.files3{grid-template-columns:210px minmax(0,1fr)}
 .ftree{min-height:0;overflow:auto;padding:8px 0 48px;background:var(--panel);border-right:1px solid var(--hairline)}
 
 /* one dialog for publish, take in, upload, review, issue and compare */
@@ -456,22 +467,25 @@ button.badge:hover{background:var(--hairline);color:var(--ink)}
 @media (max-width:1440px){.hide-l{display:none!important}}
 @media (max-width:1200px){.hide-m{display:none!important}}
 
-@media (max-width:1100px){
-  .split{grid-template-columns:minmax(0,1fr) 260px}
-  .work{grid-template-columns:196px minmax(0,1fr)}
+@media (max-width:1280px){
   .cmdk{min-width:0}
   .cmdk .l{display:none}
-  .files3{grid-template-columns:180px minmax(0,1fr) 260px}
+}
+@media (max-width:1100px){
+  .crumb{display:none}
+  .work{--dock-w:240px}
+  .files3{grid-template-columns:180px minmax(0,1fr)}
 }
 @media (max-width:640px){
   .app{height:auto;min-height:100vh}
-  .app-h{flex-wrap:wrap;gap:8px;padding:6px 12px}
-  .crumb{order:3;width:100%}
+  .crumb{order:4;width:100%}
   .hide-s{display:none!important}
-  .work,.work.nob{grid-template-columns:minmax(0,1fr)}
-  .browser{display:none;max-height:60vh;border-right:0;border-bottom:1px solid var(--hairline)}
-  .work.bopen .browser{display:block}
-  .work.nob .browser{display:none}
+  .work,.work.nodock{grid-template-columns:minmax(0,1fr)}
+  .work>#dock-l,.work>main,.work>#dock-r{grid-column:1}
+  .rb-dock,.rb-dock[hidden]{display:none;order:-1;width:auto;max-height:70vh;overflow:auto;border:0;border-bottom:1px solid var(--hairline)}
+  .rb-dock .rb-split{display:none}
+  .work.bopen .rb-dock.has{display:flex}
+  .work.nodock .rb-dock{display:none}
   main{display:block;overflow:visible}
   .screen.on{display:block}
   .center{overflow:visible}
@@ -502,96 +516,33 @@ button.badge:hover{background:var(--hairline);color:var(--ink)}
   <pattern id="pat-wood" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="8" height="8" style="fill:var(--panel)"/><line x1="0" y1="0" x2="0" y2="8" style="stroke:var(--ink-3);stroke-width:.8"/></pattern>
   <pattern id="pat-earth" width="240" height="240" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)"><rect width="240" height="240" style="fill:var(--panel)"/><line x1="0" y1="0" x2="0" y2="240" style="stroke:var(--ink-3);stroke-width:20"/><line x1="60" y1="0" x2="60" y2="240" style="stroke:var(--ink-3);stroke-width:8"/></pattern>
  </defs>
- <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M16 16l5 5"/></symbol>
- <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></symbol>
- <symbol id="i-redo" viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/></symbol>
- <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
- <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
- <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
- <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
- <symbol id="i-fit" viewBox="0 0 24 24"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></symbol>
- <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
- <symbol id="i-start" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></symbol>
- <symbol id="i-plan" viewBox="0 0 24 24"><path d="M3 4h18v16H3z"/><path d="M11 4v8H3M11 16v4M15 12h6"/></symbol>
- <symbol id="i-cube" viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/></symbol>
- <symbol id="i-sheet" viewBox="0 0 24 24"><path d="M3 5h18v14H3z"/><path d="M16 5v14M16 15h5M5 8h8v8H5z"/></symbol>
- <symbol id="i-table" viewBox="0 0 24 24"><path d="M3 5h18v14H3zM3 10h18M3 14.5h18M9 5v14"/></symbol>
- <symbol id="i-clash" viewBox="0 0 24 24"><circle cx="9" cy="12" r="5.5"/><circle cx="15" cy="12" r="5.5"/></symbol>
- <symbol id="i-compare" viewBox="0 0 24 24"><path d="M8 3v18M16 3v18M3 8h5M16 16h5M3 16h2M19 8h2"/></symbol>
- <symbol id="i-family" viewBox="0 0 24 24"><path d="M6 21V3h12v18"/><path d="M3 21h18M15 12h1"/></symbol>
- <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></symbol>
- <symbol id="i-term" viewBox="0 0 24 24"><path d="M3 5h18v14H3z"/><path d="M7 10l3 2.5L7 15M12 15h5"/></symbol>
- <symbol id="i-wall" viewBox="0 0 24 24"><path d="M3 9h18v6H3z"/><path d="M7 9l-3 6M12 9l-3 6M17 9l-3 6M21 10l-2.5 5"/></symbol>
- <symbol id="i-door" viewBox="0 0 24 24"><path d="M3 20h4M17 20h4M7 20V6"/><path d="M7 6a14 14 0 0 1 14 14"/></symbol>
- <symbol id="i-window" viewBox="0 0 24 24"><path d="M3 9h18v6H3zM3 11h18M3 13h18"/></symbol>
- <symbol id="i-room" viewBox="0 0 24 24"><path d="M4 4h16v16H4z" stroke-dasharray="3 2"/><path d="M8 11h8M9 14h6"/></symbol>
- <symbol id="i-dim" viewBox="0 0 24 24"><path d="M3 7v10M21 7v10M3 12h18M5 10l-2 2 2 2M19 10l2 2-2 2"/></symbol>
- <symbol id="i-tag" viewBox="0 0 24 24"><path d="M3 8h13l5 4-5 4H3z"/><path d="M7 12h5"/></symbol>
- <symbol id="i-num" viewBox="0 0 24 24"><path d="M5 9h15M4 15h15M10 4L8 20M16 4l-2 16"/></symbol>
- <symbol id="i-key" viewBox="0 0 24 24"><path d="M4 4h10v10H4z"/><path d="M14 14l6 6M7 9h4"/></symbol>
- <symbol id="i-move" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></symbol>
- <symbol id="i-copy" viewBox="0 0 24 24"><path d="M8 8h12v12H8z"/><path d="M16 8V4H4v12h4"/></symbol>
- <symbol id="i-rotate" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></symbol>
- <symbol id="i-mirror" viewBox="0 0 24 24"><path d="M12 3v18" stroke-dasharray="2 2"/><path d="M9 7L4 12l5 5zM15 7l5 5-5 5z"/></symbol>
- <symbol id="i-array" viewBox="0 0 24 24"><path d="M3 9h5v6H3zM10 9h4v6h-4zM16 9h5v6h-5z"/></symbol>
- <symbol id="i-align" viewBox="0 0 24 24"><path d="M4 3v18M8 7h12v4H8zM8 14h7v4H8z"/></symbol>
- <symbol id="i-offset" viewBox="0 0 24 24"><path d="M4 7h16M4 17h16M12 9v6M10 13l2 2 2-2"/></symbol>
- <symbol id="i-trim" viewBox="0 0 24 24"><path d="M4 20L20 4M4 12h7M15 12h5"/></symbol>
- <symbol id="i-split" viewBox="0 0 24 24"><path d="M3 12h7M14 12h7M12 6v12"/></symbol>
- <symbol id="i-scale" viewBox="0 0 24 24"><path d="M4 14v6h6M4 20L20 4M14 4h6v6"/></symbol>
- <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></symbol>
- <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="2.5"/></symbol>
- <symbol id="i-box" viewBox="0 0 24 24"><path d="M4 8l8-4 8 4v8l-8 4-8-4z" stroke-dasharray="3 2"/><path d="M4 8l8 4 8-4M12 12v8"/></symbol>
- <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></symbol>
- <symbol id="i-turnl" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.7"/><path d="M4 4v5h5"/></symbol>
- <symbol id="i-turnr" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></symbol>
- <symbol id="i-print" viewBox="0 0 24 24"><path d="M6 9V3h12v6M6 17H3v-8h18v8h-3"/><path d="M6 14h12v7H6z"/></symbol>
- <symbol id="i-send" viewBox="0 0 24 24"><path d="M3 11l18-8-8 18-2-8z"/></symbol>
- <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 20h16"/></symbol>
- <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 15V3M7 8l5-5 5 5M4 20h16"/></symbol>
- <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></symbol>
- <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18v.5"/></symbol>
- <symbol id="i-bot" viewBox="0 0 24 24"><path d="M4 8h16v11H4z"/><path d="M12 4v4M9 13v1M15 13v1M9 17h6"/></symbol>
- <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></symbol>
- <symbol id="i-lock" viewBox="0 0 24 24"><path d="M5 11h14v10H5z"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
- <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 18h10a4 4 0 0 0 0-8 6 6 0 0 0-11.5 1.5A3.3 3.3 0 0 0 7 18z"/></symbol>
- <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></symbol>
- <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 6h7l2 2h9v11H3z"/></symbol>
- <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 4h7a2 2 0 0 1 2 2v14a2 2 0 0 0-2-2H4zM20 4h-7a2 2 0 0 0-2 2v14a2 2 0 0 1 2-2h7z"/></symbol>
- <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/></symbol>
- <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-7-6-7-11a7 7 0 0 1 14 0c0 5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></symbol>
- <symbol id="i-group" viewBox="0 0 24 24"><path d="M3 3h8v8H3zM13 13h8v8h-8z"/><path d="M11 7h6v6" stroke-dasharray="2 2"/></symbol>
- <symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4M5 4h12l-2 4 2 4H5"/></symbol>
- <symbol id="i-screen" viewBox="0 0 24 24"><path d="M3 4h18v12H3z"/><path d="M8 20h8M12 16v4"/></symbol>
- <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></symbol>
- <symbol id="i-timeline" viewBox="0 0 24 24"><path d="M3 7h3M10 7h4M18 7h3M3 17h7M14 17h7"/><circle cx="8" cy="7" r="2"/><circle cx="16" cy="7" r="2"/><circle cx="12" cy="17" r="2"/></symbol>
 </svg>
 
 <div class="app" id="app">
  <pre class="errlog" id="errlog" hidden></pre>
- <header class="app-h">
-  <div class="brand"><span class="mark" aria-hidden="true"></span>Spare Construct</div>
+ <header class="rb-title">
+  <div class="rb-brand brand"><span class="mark" aria-hidden="true"></span>Spare Construct</div>
+  <div id="qat" role="toolbar" aria-label="Quick access"></div>
   <div class="disc-wrap">
    <button class="btn sm disc-btn" data-act="discmenu" id="b-disc" aria-haspopup="true" aria-expanded="false" aria-controls="disc-menu" aria-label="Discipline: Architecture"><span id="disc-name">Architecture</span><svg class="icon sm" aria-hidden="true"><use href="#i-chev"/></svg></button>
    <div class="disc-menu" id="disc-menu" role="menu" aria-label="Discipline" hidden></div>
   </div>
-  <div class="crumb"><b>Kōwhai Lane house</b><span aria-hidden="true">/</span><span class="t" id="h-view">Ground floor plan</span><button class="badge n" data-act="packinfo">Sample data<span class="hide-s"> · example country: New Zealand</span></button></div>
+  <div class="crumb"><b>Kōwhai Lane house</b><span aria-hidden="true">/</span><span class="t" id="h-view">Ground floor plan</span><button class="badge n" data-act="packinfo">Sample data<span class="hide-l"> · example country: New Zealand</span></button></div>
   <div class="h-act">
    <button class="btn cmdk" data-act="palette" aria-label="Search commands">${ic}<span class="l">Search commands</span><kbd class="hide-s">Ctrl K</kbd></button>
-   <button class="ib" data-act="undo" id="b-undo" aria-label="Undo"><svg class="icon" aria-hidden="true"><use href="#i-undo"/></svg></button>
-   <button class="ib" data-act="redo" id="b-redo" aria-label="Redo"><svg class="icon" aria-hidden="true"><use href="#i-redo"/></svg></button>
    <span class="saved hide-s" id="saved" aria-live="polite"><svg class="icon sm" aria-hidden="true"><use href="#i-check"/></svg>Saved</span>
    <button class="btn sm" data-act="team" id="b-team" aria-label="Working together live with Mere Walker and Tom Brown"><span class="avs" aria-hidden="true"><span class="av">MW</span><span class="av">TB</span></span><span class="hide-s">Live with 2 others</span></button>
   </div>
  </header>
- <nav class="tabs" id="tabs" role="tablist" aria-label="Screens"></nav>
- <div class="tools" id="tools" role="toolbar" aria-label="Tools"></div>
+ <div id="ribbon"></div>
  <div class="work" id="work">
-  <aside class="browser" id="browser" aria-label="Project browser"></aside>
+  <aside class="rb-dock" id="dock-l" data-side="left" aria-label="Left dock"></aside>
   <main id="main" tabindex="-1">
+   <nav class="rb-doctabs" id="vtabs" aria-label="Open views"></nav>
+   <div class="views">
    <section class="screen" id="sc-start"></section>
    <section class="screen" id="sc-transport" aria-label="Transport network"></section>
-<section class="screen split" id="sc-plan"></section>
+   <section class="screen split" id="sc-plan"></section>
    <section class="screen split" id="sc-3d"></section>
    <section class="screen split" id="sc-sheet"></section>
    <section class="screen split" id="sc-schedule"></section>
@@ -602,9 +553,15 @@ button.badge:hover{background:var(--hairline);color:var(--ink)}
    <section class="screen split" id="sc-family"></section>
    <section class="screen" id="sc-checks"></section>
    <section class="screen split" id="sc-commands"></section>
+   </div>
+   <div class="rb-vbar" id="vbar" role="toolbar" aria-label="View controls" hidden></div>
   </main>
+  <aside class="rb-dock" id="dock-r" data-side="right" aria-label="Right dock">
+   <section class="rb-pal" id="pal-props" data-pal="props" aria-labelledby="pal-props-h"><div class="rb-pal-h"><span class="t" id="pal-props-h">Properties</span><button class="rb-x" data-act="uipal" data-a="props" aria-label="Close properties" title="Close properties"><svg class="icon sm" aria-hidden="true"><use href="#i-x"/></svg></button></div><div class="rb-pal-b props-host" id="props-host"></div></section>
+   <section class="rb-pal" id="pal-browser" data-pal="browser" aria-labelledby="pal-browser-h"><div class="rb-pal-h"><span class="t" id="pal-browser-h">Project browser <small>· Kōwhai Lane house</small></span><button class="rb-x" data-act="uipal" data-a="browser" aria-label="Close project browser" title="Close project browser"><svg class="icon sm" aria-hidden="true"><use href="#i-x"/></svg></button></div><div class="rb-pal-b browser" id="browser"></div></section>
+  </aside>
  </div>
- <footer class="status" id="status" aria-label="Status"></footer>
+ <footer class="status rb-status" id="status" aria-label="Status"><span class="rb-prompt" id="hint" aria-live="polite"></span><span id="status-r"></span></footer>
 </div>
 
 <button class="assess-btn" data-act="assess" aria-controls="assess"><span class="mark" aria-hidden="true"></span>Assess this demo</button>
@@ -631,6 +588,9 @@ button.badge:hover{background:var(--hairline);color:var(--ink)}
 <script>
 'use strict';
 window.addEventListener('error',e=>{const p=document.getElementById('errlog');if(p){p.hidden=false;p.textContent+=`Demo error: ${e.message} (line ${e.lineno})\n`}});
+if(!window.SpareRibbon)throw new Error('The shared ribbon (design/ribbon) did not load. Open this page from the repository folder or the published site.');
+SpareIcons.install();
+const RB=SpareRibbon.create(document.getElementById('ribbon'),{app:'construct',label:'Spare Construct tools',quick:document.getElementById('qat')});
 /* ---------- helpers ---------- */
 const $=(s,r=document)=>r.querySelector(s);
 const $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
@@ -787,28 +747,57 @@ ACT.redo=()=>{const u=REDO.pop();if(!u){toast('Nothing to redo.');return}UNDO.pu
 
 /* ---------- screens and routing ---------- */
 const SCREENS=[['start','Start','start'],['plan','Plan','plan'],['3d','3D','cube'],['sheet','Sheets','sheet'],['schedule','Schedules','table'],['clash','Clash','clash'],['compare','Team and versions','compare'],['sharing','Sharing','timeline'],['files','Project files','folder'],['family','Components','family'],['checks','Checks','shield'],['commands','Commands and AI','term']];
-const NOBROWSER=['start','family','checks','commands','sharing','files'];
+const NODOCK=['start'];
 const VIEWS={transport:{name:'Transport network',kind:'Live map',sc:'Live map'},framing:{name:'Framing plan',kind:'Floor plan',sc:'1:100'},services:{name:'Services plan',kind:'Floor plan',sc:'1:100'},coord:{name:'Coordination plan',kind:'Floor plan',sc:'1:100'},ground:{name:'Ground floor plan',kind:'Floor plan',sc:'1:100'},found:{name:'Foundation plan',kind:'Floor plan',sc:'1:100'},bracing:{name:'Bracing plan',kind:'Floor plan',sc:'1:100'},drain:{name:'Drainage plan',kind:'Floor plan',sc:'1:100'},site:{name:'Site plan',kind:'Site plan',sc:'1:200'},elev:{name:'North elevation',kind:'Elevation',sc:'1:100'},secA:{name:'Section A',kind:'Section',sc:'1:100'}};
 function go(h){if(location.hash==='#'+h)route();else location.hash=h}
 function route(){
  const h=decodeURIComponent(location.hash.slice(1)||'plan');let[scr,arg]=h.split(':');
  if(!SCREENS.some(s=>s[0]===scr))scr='plan';
  if(arg){if(scr==='plan'&&VIEWS[arg])S.view=arg;if(scr==='sheet')S.sheet=arg;if(scr==='schedule')S.sched=arg}
- if(S.screen!==scr){S.tool='select';S.pend=null}
+ if(S.screen!==scr&&S.keepTool!==scr){S.tool='select';S.pend=null}
+ S.keepTool=null;
  S.screen=scr;
  if(scr==='plan'&&S.view==='transport'&&DISC!=='transport'){DISC='transport';renderDisc()}
  else if(scr==='plan'&&S.view!=='transport'&&DISC==='transport'){DISC='architecture';renderDisc()}
  const sid=scr==='plan'&&S.view==='transport'?'transport':scr;
  $$('.screen').forEach(s=>s.classList.toggle('on',s.id==='sc-'+sid));
- $('#work').classList.toggle('nob',NOBROWSER.includes(scr)||sid==='transport');
+ openView(curView());
  refresh();
  const m=$('#main');if(m)m.scrollTop=0;
 }
 window.addEventListener('hashchange',route);
-function refresh(){renderTabs();renderTools();renderBrowser();(R[S.screen]||(()=>{}))();statusBar();headerView();$('#b-undo').disabled=!UNDO.length;$('#b-redo').disabled=!REDO.length;if(!$('#assess').hidden&&typeof renderAssess==='function')renderAssess()}
+function refresh(){renderViewTabs();renderBrowser();renderDock();(R[S.screen]||(()=>{}))();dockSide();renderRibbon();renderVbar();setPrompt();statusBar();headerView();if(!$('#assess').hidden&&typeof renderAssess==='function')renderAssess()}
 function headerView(){const t={start:'Start',plan:VIEWS[S.view].name,'3d':'3D view','sheet':'Sheet '+S.sheet,schedule:'Schedules',clash:'Clash results',compare:'Team and versions',sharing:'Sharing timeline',files:'Project files',family:'Component: Single swing door',checks:'Checks',commands:'Commands and AI agents'}[S.screen];$('#h-view').textContent=t;document.title='Spare Construct demo: '+t}
-function renderTabs(){$('#tabs').innerHTML=SCREENS.map(([k,l,i])=>`<button class="tab" role="tab" aria-selected="${S.screen===k}" data-act="go" data-a="${k}">${ic(i,'sm')}${l}</button>`).join('')}
 ACT.go=b=>go(b.dataset.a);
+/* Some commands live on their own page: open that page, then run the command there. data-a is "page|command|value". */
+ACT.on=b=>{const[h,act,a]=b.dataset.a.split('|');const run=()=>{if(ACT[act])ACT[act]({dataset:{a:a||''}})};if(S.screen===h.split(':')[0])run();else{go(h);later(run)}};
+
+/* ---------- open views, as tabs over the drawing area ---------- */
+const OPEN=[];
+function curView(){const s=S.screen;return s==='plan'?'plan:'+S.view:s==='sheet'?'sheet:'+S.sheet:s==='schedule'?'schedule:'+S.sched:s}
+function viewName(h){const[s,a]=h.split(':');if(s==='plan')return VIEWS[a]?VIEWS[a].name:a;if(s==='sheet'){const sh=SHEETS().find(x=>x.id===a);return sh?sh.id+' '+sh.name:'Sheet '+a}if(s==='schedule'){const k=SCHEDS.find(x=>x[0]===a);return k?k[1]:'Schedule'}return{start:'Start','3d':'Default 3D',clash:'Clash results',compare:'Team and versions',sharing:'Sharing timeline',files:'Project files',family:'Single swing door',checks:'Checks',commands:'Commands and AI'}[s]||s}
+function viewIcon(h){const[s,a]=h.split(':');if(s==='plan')return{site:'pin',elev:'elev',secA:'section',transport:'road',found:'foundation',bracing:'bracing',drain:'drain'}[a]||'plan';return(SCREENS.find(x=>x[0]===s)||[0,0,'file'])[2]}
+function openView(h){if(OPEN.includes(h))return;OPEN.push(h);while(OPEN.length>10)OPEN.splice(OPEN.findIndex(x=>x!==h),1)}
+function renderViewTabs(){const cur=curView();$('#vtabs').innerHTML=`<button class="btn sm bt-browser" data-act="browser" aria-expanded="${!!S.bopen}">${ic('tree','sm')}Browser</button>`+OPEN.map(h=>`<div class="rb-doc"${h===cur?' aria-current="true"':''}><button data-act="vtab" data-a="${esc(h)}"${h===cur?' aria-current="page"':''}>${ic(viewIcon(h),'sm')}<span>${esc(viewName(h))}</span></button><button class="rb-x" data-act="vclose" data-a="${esc(h)}" aria-label="Close ${esc(viewName(h))}" title="Close">${ic('x','sm')}</button></div>`).join('')}
+ACT.vtab=b=>go(b.dataset.a);
+ACT.vclose=b=>{const h=b.dataset.a,i=OPEN.indexOf(h);if(i<0)return;OPEN.splice(i,1);if(h===curView())go(OPEN[Math.min(i,OPEN.length-1)]||'start');else refresh()};
+ACT.vcloseothers=()=>{const c=curView();OPEN.splice(0,OPEN.length,c);refresh();toast('Closed the other views. They are all still in the project browser.')};
+
+/* ---------- the dock: properties above the project browser ---------- */
+S.ui={props:true,browser:true};
+function renderDock(){$('#pal-props').hidden=!S.ui.props;$('#pal-browser').hidden=!S.ui.browser;DOCK.layout();$$('.rb-dock').forEach(d=>d.classList.toggle('has',!d.hidden));$('#work').classList.toggle('nodock',NODOCK.includes(S.screen)||(S.screen==='plan'&&S.view==='transport')||!(S.ui.props||S.ui.browser))}
+ACT.uipal=b=>{const k=b.dataset.a;S.ui[k]=!S.ui[k];refresh();if(!S.ui[k])toast((k==='props'?'Properties':'Project browser')+' closed. Open it again from View, User interface.')};
+/* Each page builds its properties in its own aside; they all show in the one properties palette. */
+function dockSide(){const host=$('#props-host'),sid=S.screen,sc=$('#sc-'+sid);
+ if(sc){const fresh=sc.querySelector(':scope>.side');if(fresh){$$('.side',host).filter(a=>a.dataset.for===sid).forEach(a=>a.remove());fresh.dataset.for=sid;host.appendChild(fresh)}}
+ let on=false;$$('.side',host).forEach(a=>{const y=a.dataset.for===sid;a.classList.toggle('on',y);if(y)on=true});
+ let e=$('#props-empty');if(!e){e=document.createElement('p');e.id='props-empty';e.className='pad faint';e.style.marginTop='12px';e.textContent='This page has no properties of its own. Select an element in a view to see its data.';host.appendChild(e)}e.hidden=on}
+/* Properties start on the left and the project browser on the right. People drag a title, or use its move button, to dock either one on either side; the layout is remembered. */
+const DOCK=SpareRibbon.dock($('#work'),{app:'construct',ribbon:RB,sides:{props:'left',browser:'right'},grow:{props:1.3}});
+
+/* ---------- the status bar prompt: what to do next on this page ---------- */
+const HINTS={start:'Open a project, start a new one, or learn as you go.','3d':'Click any face to select it.',sheet:'Every view on this sheet is live from the model.',schedule:'Edit a cell and the model changes. Undo works here too.',clash:'Hits are grouped into issues, each with an owner and a saved view.',compare:'<b>+</b> added · <b>−</b> removed · <b>~</b> changed, shown in colour and by symbol.',family:'Change a value and the door flexes. Load it into the project when it is right.',commands:'People, scripts, add-ins and agents all run these.',sharing:'Each team publishes when it is ready, and takes in other teams’ packages when it chooses.',files:'Every file in one versioned store with the model.',checks:'Problems, code checks and clean up for the whole model. Nothing here stops your work.'};
+function setPrompt(){if(S.screen==='plan'&&S.view!=='transport')return;$('#hint').innerHTML=S.screen==='plan'?'Traffic and public transport, modelled on a live map.':HINTS[S.screen]||''}
 ACT.view=b=>{S.view=b.dataset.a;S.zoom=1;S.zc=null;go('plan:'+b.dataset.a)};
 ACT.browser=()=>{S.bopen=!S.bopen;$('#work').classList.toggle('bopen',S.bopen)};
 
@@ -816,9 +805,11 @@ ACT.browser=()=>{S.bopen=!S.bopen;$('#work').classList.toggle('bopen',S.bopen)};
 /* In the order a project runs: survey first, the contractor on site last. Survey and Construction are mapped but not in this demo yet. */
 const DISCS=[['survey','Survey','Ground, boundaries and what is already there','01',0],['civil','Civil','Ground, roads and pipe networks','02',1],['transport','Transport','Roads, public transport, walking and traffic simulation on a live map','03',1],['architecture','Architecture','Walls, doors, windows, rooms and sheets','04',1],['structure','Structure','Framing, bracing and foundations','05',1],['mep','MEP','Ducts, pipes, drainage and electrical','06',1],['coord','Coordination','Linked models, clash and issues','07',1],['construction','Construction','Stages, set-out, site and as-builts','08',0]];
 let DISC='architecture';
+/* The ribbon tab that holds each discipline's tools */
+const DTAB={architecture:'arch',structure:'str',mep:'sys',civil:'site',transport:'site',coord:'col'};
 // Which tools run on their Rust engine; the rest are prototypes until their engine is ported and proven against them
 const ENGINE={transport:'Rust engine'};
-function renderDisc(){const d=DISCS.find(x=>x[0]===DISC);document.documentElement.dataset.disc=DISC;$('#disc-name').textContent=d[1];$('#b-disc').setAttribute('aria-label','Discipline: '+d[1]);$('#disc-menu').innerHTML=DISCS.map(([k,l,w,no,ok])=>`<button type="button" role="menuitemradio" aria-checked="${k===DISC}"${ok?` data-act="disc"`:' aria-disabled="true"'} data-a="${k}" data-dsw="${k}"><span class="dsw" aria-hidden="true"></span><span class="dno">${no}</span><span>${l}${ok?`<span class="badge${ENGINE[k]?'':' n'}">${ENGINE[k]||'Prototype'}</span>`:''}<small>${ok?w:w+'. Not in this demo yet.'}</small></span></button>`).join('')}
+function renderDisc(){const d=DISCS.find(x=>x[0]===DISC);document.documentElement.dataset.disc=DISC;if(DTAB[DISC])RB.select(DTAB[DISC]);$('#disc-name').textContent=d[1];$('#b-disc').setAttribute('aria-label','Discipline: '+d[1]);$('#disc-menu').innerHTML=DISCS.map(([k,l,w,no,ok])=>`<button type="button" role="menuitemradio" aria-checked="${k===DISC}"${ok?` data-act="disc"`:' aria-disabled="true"'} data-a="${k}" data-dsw="${k}"><span class="dsw" aria-hidden="true"></span><span class="dno">${no}</span><span>${l}${ok?`<span class="badge${ENGINE[k]?'':' n'}">${ENGINE[k]||'Prototype'}</span>`:''}<small>${ok?w:w+'. Not in this demo yet.'}</small></span></button>`).join('')}
 function discMenu(open){const m=$('#disc-menu');m.hidden=!open;$('#b-disc').setAttribute('aria-expanded',String(open));if(open){const c=m.querySelector('[aria-checked="true"]');if(c)c.focus()}}
 ACT.discmenu=()=>discMenu($('#disc-menu').hidden);
 ACT.disc=b=>{DISC=b.dataset.a;renderDisc();discMenu(false);S.tool='select';S.pend=null;S.sel=null;S.zoom=1;S.zc=null;const hv=homeView();S.view=hv;go('plan:'+hv);$('#b-disc').focus()};
@@ -850,14 +841,139 @@ ACT.famlib=b=>{go('family');setTimeout(()=>{const i=$('#lib-q');if(i){i.value=b.
 ACT.selgo=b=>{S.sel=b.dataset.a;S.view='ground';go('plan:ground');toast('Selected the group <b>Wet area fit-out</b>: 2 instances, edit one and both change.')};
 ACT.linkgo=b=>{const a=b.dataset.a;if(a==='str'){S.iso.xray=true;go('3d');toast('Structure (IFC v4) shown as x-ray over the model.')}else if(a==='svc')go('clash');else{S.view='site';go('plan:site')}};
 
-/* ---------- tool strip ---------- */
-const TB=(act,label,icon,a='',pressed)=>`<button class="tool" data-act="${act}"${a?` data-a="${a}"`:''}${pressed!=null?` aria-pressed="${!!pressed}"`:''}>${ic(icon,'sm')}${label}</button>`;
-const TOOLS={};
-function renderTools(){const f=TOOLS[S.screen];const h=f?f():'';$('#tools').innerHTML=h;$('#tools').hidden=!h;}
-const archTools=()=>{const t=S.tool;const plan=FLOORV.includes(S.view);
- return `<div class="grp"><span class="glbl">Create</span>${TB('tool','Wall','wall','wall',t==='wall')}${TB('tool','Door','door','door',t==='door')}${TB('tool','Window','window','window',t==='window')}${TB('tool','Room','room','room',t==='room')}${TB('tool','Dimension','dim','dim',t==='dim')}</div>
- <div class="grp"><span class="glbl">Annotate</span>${TB('tagall','Tag all','tag','',S.cats.tags)}${TB('renumber','Number doors','num')}${TB('keynotes','Keynotes','key','',S.cats.keys)}</div>
- <div class="grp"><span class="glbl">Modify</span>${['move','copy','rotate','mirror','array','align','offset','trim','split','scale'].map(m=>TB('modify',m[0].toUpperCase()+m.slice(1),m,m)).join('')}</div>`+(plan?'':'');};
+/* ---------- the ribbon: tabs of panels, the way desktop design software lays them out, with our own icons and words ---------- */
+const TOOLS={};   // each page's own tools, shown on a contextual tab while that page is open
+const P=(label,items,icon)=>({label,items,icon});
+const TB=(act,label,icon,a='',pressed)=>({act,label,icon,a:a===''?null:a,pressed:pressed==null?null:!!pressed});
+const STACKS=L=>{const o=[];for(let i=0;i<L.length;i+=3)o.push({stack:L.slice(i,i+3)});return o};
+const cap=w=>w[0].toUpperCase()+w.slice(1);
+/* Drawing tools by discipline. A tool from another discipline's tab switches to that discipline first. */
+const DTOOLS={architecture:[['wall','Wall','wall','Draw a wall from point to point. Snaps to ends, middles and crossings.'],['door','Door','door','Click on a wall to place a door.'],['window','Window','window','Click on an exterior wall to place a window.'],['room','Room','room','Click inside walls. The room finds its own boundary.'],['dim','Dimension','dim','Pick two points to measure between them.']],
+ structure:[['post','Post','column','Click to place a post. Snaps to wall ends and crossings.'],['beam','Beam','beam','Pick both ends. The size follows the span.'],['lintel','Lintel','lintel','Click a door or a window. The size follows the opening.']],
+ mep:[['pipe','Pipe','pipe','Pick the start and end of a waste pipe.'],['duct','Duct','duct','Pick the start and end of a duct.'],['light','Light','light','Click inside a room to place a light.'],['power','Power point','power','Click on a wall to place a power point.']],
+ civil:[['spot','Spot level','spot','Click on the site. The level comes from the ground surface.'],['pad','Pad','pad','Pick two corners of a building platform. Cut and fill balance.'],['sw','Stormwater','storm','Pick two manholes. The grade comes from the ground levels.'],['al','Alignment','alignment','Pick the start and end of a centreline.']],
+ coord:[['issue','Issue','issue','Click where the problem is. Every firm in the shared project sees it.']]};
+const DT_=(d,t)=>{const x=DTOOLS[d].find(y=>y[0]===t);return{act:'dtool',a:d+':'+t,label:x[1],icon:x[2],tip:x[3],pressed:DISC===d&&S.screen==='plan'&&S.tool===t}};
+const MODIFY=()=>STACKS(['align','offset','mirror','move','copy','rotate','trim','split','array','scale'].map(m=>({act:'modify',a:m,label:cap(m),icon:m})));
+const TMPL=[['consent','Consent plan 1:100'],['present','Presentation'],['coord','Coordination']];
+const CATS=[['furn','Furniture and fittings'],['tags','Tags'],['dims','Dimensions'],['grids','Grids'],['keys','Keynotes']];
+const TOOLNAME={wall:'wall',door:'door',window:'window',room:'room',dim:'dimension',post:'post',beam:'beam',lintel:'lintel',pipe:'pipe',duct:'duct',light:'light',power:'power point',spot:'spot level',pad:'pad',sw:'stormwater line',al:'alignment',issue:'issue'};
+const VCTX={'3d':'3D view',sheet:'Sheet',schedule:'Schedule',clash:'Clash',compare:'Versions',start:'Start',family:'Component editor',checks:'Checks',commands:'Commands and AI',sharing:'Sharing',files:'Project files'};
+function selCat(id){const k=kindOf(id),e=byId(id);return{wall:'Walls',door:'Doors',window:'Windows',room:'Rooms',opening:'Openings'}[k]||(e&&e.cat)||'Element'}
+/* The contextual Modify tab for what is selected: the same actions as the properties palette, plus the modify tools. */
+function selPanels(id){const k=kindOf(id),e=byId(id),own=elDisc(id),L=[];
+ if(CLAIMS[id])return[P('Working live',[{label:'Ask to hand it over',icon:'team',act:'askclaim',a:id,tip:'Someone else is editing this now. Ask them for it.'}]),P('Selection',[{label:'Deselect',icon:'x',act:'deselect'}])];
+ if(own&&own!==DISC)return[P('Discipline',[{label:'Switch to '+DNAME[own],icon:'layers',act:'disc',a:own,tip:'This belongs to '+DNAME[own]+'. Switch to change it.'}]),P('Selection',[{label:'Deselect',icon:'x',act:'deselect'}])];
+ if(k==='door'){const sw=M.dt[e.type].kind==='swing';L.push(P('Door',[...(sw?[{label:'Flip swing',icon:'mirror',act:'flip',a:'s'},{label:'Flip hinge',icon:'turnr',act:'flip',a:'h'}]:[]),{stack:[{label:'Move −100',icon:'move',act:'nudgeo',a:'-100'},{label:'Move +100',icon:'move',act:'nudgeo',a:'100'}]}]),P('Mode',[{label:'Edit component',icon:'family',act:'go',a:'family',tip:'Open this door type in the component editor.'}]))}
+ if(k==='window')L.push(P('Window',[{stack:[{label:'Move −100',icon:'move',act:'nudgeo',a:'-100'},{label:'Move +100',icon:'move',act:'nudgeo',a:'100'}]}]));
+ if(k==='wall'&&e.move){const ew=e.ax==='v';L.push(P('Wall',[{stack:[{label:ew?'Move 100 west':'Move 100 north',icon:'move',act:'nudge',a:'-100'},{label:ew?'Move 100 east':'Move 100 south',icon:'move',act:'nudge',a:'100'}]}]))}
+ if(k==='dx'){const f=dxFind(id);L.push(P(dxEl(id).cat,[{label:f[0]==='issue'?'Close issue':'Delete',icon:f[0]==='issue'?'check':'del',act:'dxdel'}]))}
+ if(['wall','door','window','room','opening'].includes(k))L.push(P('Modify',MODIFY()));
+ L.push(P('Selection',[{label:'Deselect',icon:'x',act:'deselect'}]));
+ return L}
+function ribbonCfg(){
+ const sc=S.screen,t=S.tool,pref=a=>document.documentElement.hasAttribute('data-'+a);
+ const V=(v,label,icon)=>({act:'view',a:v,label,icon:icon||'plan',pressed:sc==='plan'&&S.view===v});
+ const tabs=[
+  {id:'arch',label:'Architecture',panels:[
+   P('Build',[DT_('architecture','wall'),DT_('architecture','door'),DT_('architecture','window'),{label:'Component',icon:'family',act:'go',a:'family',split:true,tip:'Open the door component, or load another from the library.',menu:[{label:'Doors: Single swing',icon:'door',act:'go',a:'family'},{label:'Windows: Awning',icon:'window',act:'famlib',a:'win'},{label:'Furniture and fittings',icon:'family',act:'famlib',a:'furn'}]}]),
+   P('Room and area',[DT_('architecture','room'),{stack:[{label:'Room schedule',icon:'table',act:'schedgo',a:'rooms'},{label:'Grids',icon:'grid',act:'vcat',a:'grids',pressed:S.cats.grids,tip:'Show or hide the grids in this view.'}]}]),
+   P('Views',[{stack:[V('ground','Ground floor plan'),V('site','Site plan','pin'),V('elev','North elevation','elev')]}])]},
+  {id:'str',label:'Structure',panels:[
+   P('Structure',[DT_('structure','post'),DT_('structure','beam'),DT_('structure','lintel')]),
+   P('Views',[{stack:[V('framing','Framing plan'),V('found','Foundation plan','foundation'),V('bracing','Bracing plan','bracing')]}]),
+   P('Check',[{label:'Bracing check',icon:'shield',act:'go',a:'checks'}])]},
+  {id:'sys',label:'Systems',panels:[
+   P('Plumbing',[DT_('mep','pipe')]),P('Air',[DT_('mep','duct')]),P('Electrical',[DT_('mep','light'),DT_('mep','power')]),
+   P('Views',[{stack:[V('services','Services plan'),V('drain','Drainage plan','drain')]}]),
+   P('Check',[{label:'Clash',icon:'clash',act:'go',a:'clash'}])]},
+  {id:'ins',label:'Insert',panels:[
+   P('Link',[{label:'Link model',icon:'link',tip:'Consultant models stay linked, with every version kept.',menu:[{label:'Structure (IFC v4)',icon:'link',act:'linkgo',a:'str'},{label:'Services (IFC v4)',icon:'link',act:'linkgo',a:'svc'},{label:'Survey (DXF)',icon:'link',act:'linkgo',a:'survey'}]}]),
+   P('Import',[{label:'IFC',icon:'down',act:'imp',a:'ifc',tip:'IFC 4.3 and 2x3, opened in a sealed reader first.'},{stack:[{label:'CAD drawing',icon:'down',act:'imp',a:'dxf'},{label:'From other programs',icon:'down',act:'imp',a:'rvt'},{label:'Spreadsheet',icon:'table',act:'imp',a:'csv'}]}]),
+   P('Load from library',[{label:'Load component',icon:'family',act:'on',a:'family|libfocus|',tip:'Search the component library.'},{stack:[{label:'Windows',icon:'window',act:'famlib',a:'win'},{label:'Furniture and fittings',icon:'family',act:'famlib',a:'furn'}]}]),
+   P('Exchange',[{stack:[{label:'Bring schedule changes back',icon:'up',act:'on',a:'schedule|importxl|'},{label:'Import BCF issues',icon:'up',act:'on',a:'clash|bcf|in'}]}])]},
+  {id:'ann',label:'Annotate',panels:[
+   P('Dimension',[DT_('architecture','dim')]),
+   P('Tag',[{label:'Tag all',icon:'tag',act:'tagall',pressed:S.cats.tags,tip:'Tag every door and window in the view.'},{label:'Number doors',icon:'num',act:'renumber',tip:'Number doors by room number, then along the wall.'}]),
+   P('Detail',[{label:'Keynotes',icon:'key',act:'keynotes',pressed:S.cats.keys,tip:'Each keynote reads its text from the specification clause it links to.'},{label:'Revision cloud',icon:'cloud',act:'go',a:'compare',tip:'Compare versions, then cloud the changes.'}])]},
+  {id:'anl',label:'Analyze',panels:[
+   P('Review',[{label:'Warnings',icon:'warn',act:'warnlist'},{label:'Run checks',icon:'shield',act:'on',a:'checks|ckrun|'},{stack:[{label:'Clean up unused',icon:'del',act:'on',a:'checks|ckto|ck-audit'},{label:'Weathertightness',icon:'drain',act:'on',a:'checks|ckto|ck-eaves'}]}]),
+   P('Coordinate',[{label:'Run clash',icon:'clash',act:'clrungo'},{label:'Live clash',icon:'clash',act:'cllivet',pressed:S.clash.live,tip:'Check for clashes as you edit.'}]),
+   P('Sun',[{label:'Shadow study',icon:'sun',act:'on',a:'3d|shadowstudy|',tip:'Shadows at 9 am, 12 pm and 3 pm, placed on sheet A801.'},{stack:[{label:'Shadows in 3D',icon:'shadow',act:'isot3',a:'sun',pressed:S.iso.sun}]}])]},
+  {id:'site',label:'Site and civil',panels:[
+   P('Ground',[DT_('civil','spot'),DT_('civil','pad')]),
+   P('Networks',[DT_('civil','sw'),DT_('civil','al')]),
+   P('Transport',[{label:'Transport network',icon:'road',act:'view',a:'transport',pressed:sc==='plan'&&S.view==='transport',tip:'Roads, public transport, walking and traffic simulation on a live map.'}]),
+   P('Views',[{stack:[V('site','Site plan','pin'),{label:'3D view',icon:'cube',act:'go',a:'3d',pressed:sc==='3d'}]}])]},
+  {id:'col',label:'Collaborate',panels:[
+   P('Work together',[{label:'Live with others',icon:'team',act:'team',tip:'See who is working and what they are editing. There is no central file.'}]),
+   P('Versions',[{label:'Save version',icon:'flag',act:'on',a:'compare|focusVer|'},{label:'Compare versions',icon:'compare',act:'go',a:'compare'}]),
+   P('Share with other firms',[{label:'Sharing timeline',icon:'timeline',act:'go',a:'sharing'},{stack:[{label:'Publish a package',icon:'up',act:'on',a:'sharing|tlpub|'},{label:'Take in',icon:'down',act:'on',a:'sharing|tltake|'},{label:'Who can see',icon:'lock',act:'on',a:'sharing|tlpermgo|'}]}]),
+   P('Coordinate',[DT_('coord','issue'),{stack:[V('coord','Coordination plan'),{label:'Export BCF issues',icon:'down',act:'on',a:'clash|bcf|out'}]}]),
+   P('Project files',[{label:'Project files',icon:'folder',act:'go',a:'files'},{stack:[{label:'Upload',icon:'up',act:'on',a:'files|fsup|'},{label:'Send for review',icon:'check',act:'on',a:'files|fsreview|'},{label:'Issue set',icon:'send',act:'on',a:'files|fsissue|'}]}])]},
+  {id:'view',label:'View',panels:[
+   P('Graphics',[{label:'View template',icon:'template',menu:TMPL.map(([k,l])=>({label:l,act:'tmplset',a:k,pressed:S.tmpl===k}))},{label:'Visibility',icon:'eye',menu:CATS.map(([k,l])=>({label:l,act:'vcat',a:k,pressed:!!S.cats[k]}))}]),
+   P('Create',[{label:'3D view',icon:'cube',act:'go',a:'3d',pressed:sc==='3d'},{label:'Section',icon:'section',act:'view',a:'secA',pressed:sc==='plan'&&S.view==='secA'},{label:'Elevation',icon:'elev',act:'view',a:'elev',pressed:sc==='plan'&&S.view==='elev'},{stack:[{label:'Plan views',icon:'plan',menu:FLOORV.concat(['site']).map(v=>({label:VIEWS[v].name,act:'view',a:v,pressed:sc==='plan'&&S.view===v}))},{label:'Schedules',icon:'table',menu:SCHEDS.map(([k,l])=>({label:l,act:'schedgo',a:k,pressed:sc==='schedule'&&S.sched===k}))},{label:'Sheets',icon:'sheet',menu:SHEETS().map(x=>({label:x.id+' '+x.name,act:'sheetgo',a:x.id,pressed:sc==='sheet'&&S.sheet===x.id}))}]}]),
+   P('Sheet composition',[{label:'Print set',icon:'print',act:'on',a:'sheet|print|'},{stack:[{label:'Issue set',icon:'send',act:'on',a:'sheet|issueTool|'},{label:'Approval pack',icon:'flag',act:'on',a:'sheet|packTool|'}]}]),
+   P('Windows',[{label:'Switch views',icon:'windows',menu:OPEN.map(h=>({label:viewName(h),act:'vtab',a:h,pressed:h===curView()}))},{stack:[{label:'Close other views',icon:'closeviews',act:'vcloseothers'},{label:'User interface',icon:'ui',menu:[{label:'Properties',act:'uipal',a:'props',pressed:S.ui.props},{label:'Project browser',act:'uipal',a:'browser',pressed:S.ui.browser},{label:'Put the palettes back',act:'dockreset'},{sep:1},{label:'Larger text',act:'pref',a:'large',pressed:pref('large')},{label:'High contrast',act:'pref',a:'contrast',pressed:pref('contrast')}]}]}])]},
+  {id:'man',label:'Manage',panels:[
+   P('Settings',[{label:'Project information',icon:'info',act:'packinfo'},{stack:[{label:'Units: '+unitLbl(),icon:'measure',menu:[['mm','Millimetres'],['m','Metres'],['ft','Feet and inches']].map(([k,l])=>({label:l,act:'unitset',a:k,pressed:S.units===k}))},{label:'Country pack',icon:'flag',act:'packinfo'}]}]),
+   P('Phasing',[{label:'Phases',icon:'phase',menu:[['all','Show all phases'],['new','New construction'],['demo','Demolition']].map(([k,l])=>({label:l,act:'phaseset',a:k,pressed:S.phase===k}))}]),
+   P('Design options',[{label:'Option '+S.opt,icon:'option',menu:[['A','A: open deck (primary)'],['B','B: covered deck']].map(([k,l])=>({label:l,act:'optset',a:k,pressed:S.opt===k}))}]),
+   P('Inquiry',[{stack:[{label:'Warnings',icon:'warn',act:'warnlist'},{label:'Clean up unused',icon:'del',act:'on',a:'checks|ckto|ck-audit'}]}])]},
+  {id:'add',label:'Add-ins',panels:[
+   P('Commands and AI',[{label:'Command console',icon:'term',act:'go',a:'commands'},{label:'AI agent',icon:'bot',act:'on',a:'commands|aitask|light',tip:'Ask the agent to check natural light in every habitable room, and fix any below 10%.'},{label:'Search commands',icon:'search',act:'palette',kbd:'Ctrl K'}]),
+   P('Installed add-ins',STACKS(ADDINS.map(([n],i)=>[{label:n,icon:'clash',act:'go',a:'clash'},{label:n,icon:'shield',act:'go',a:'checks'},{label:n,icon:'table',act:'go',a:'schedule'},{label:n,icon:'bracing',act:'view',a:'bracing'},{label:n,icon:'sun',act:'on',a:'3d|shadowstudy|'}][i]||{label:n,icon:'gear',act:'go',a:'commands'})))]},
+  {id:'mod',label:'Modify',panels:[
+   P('Select',[{label:'Modify',icon:'select',act:'seltool',pressed:t==='select',tip:'Stop the current tool and select elements. Esc does the same.'}]),
+   P('Properties',[{label:'Properties',icon:'props',act:'uipal',a:'props',pressed:S.ui.props}]),
+   P('Modify',MODIFY()),
+   P('Measure',[{stack:[DT_('architecture','dim')]}])]}];
+ const ctx=[];
+ if(TOOLS[sc])ctx.push({id:'v-'+sc,key:'v-'+sc,label:VCTX[sc],panels:TOOLS[sc]()});
+ if(sc==='plan'&&t!=='select'&&S.view!=='transport'){const d=Object.keys(DTOOLS).find(k=>DTOOLS[k].some(x=>x[0]===t))||DISC;
+  ctx.push({id:'tool',key:'tool:'+t,group:'Modify',label:'Place '+TOOLNAME[t],panels:[P('Select',[{label:'Modify',icon:'select',act:'seltool',tip:'Stop placing. Esc does the same.'}]),P('Draw',DTOOLS[d].map(x=>DT_(d,x[0]))),...(d==='architecture'?[P('Tag',[{label:'Tag all',icon:'tag',act:'tagall',pressed:S.cats.tags}])]:[])]})}
+ else if(S.sel&&byId(S.sel)&&((sc==='plan'&&S.view!=='transport')||sc==='3d'))ctx.push({id:'sel',key:'sel:'+S.sel,group:'Modify',label:selCat(S.sel),panels:selPanels(S.sel)});
+ return{tabs,contextual:ctx,
+  quick:[{label:'Start',icon:'start',act:'go',a:'start'},{label:'Open',icon:'open',act:'go',a:'start',tip:'Open a project from the start page.'},{label:'Save',icon:'save',act:'save',kbd:'Ctrl S'},{label:'Undo',icon:'undo',act:'undo',kbd:'Ctrl Z',disabled:!UNDO.length,tip:UNDO.length?UNDO[UNDO.length-1].label:'Nothing to undo'},{label:'Redo',icon:'redo',act:'redo',kbd:'Ctrl Y',disabled:!REDO.length,tip:REDO.length?REDO[REDO.length-1].label:'Nothing to redo'},{sep:1},{label:'Print set',icon:'print',act:'on',a:'sheet|print|'},{label:'Dimension',icon:'dim',act:'dtool',a:'architecture:dim'},{label:'Tag all',icon:'tag',act:'tagall'},{label:'Default 3D',icon:'cube',act:'go',a:'3d'},{label:'Section A',icon:'section',act:'view',a:'secA'},{label:'Close other views',icon:'closeviews',act:'vcloseothers'}],
+  file:{label:'File',items:[{label:'New project',icon:'plus',act:'on',a:'start|startto|np'},{label:'Open',icon:'open',act:'go',a:'start',sub:'From this computer, the cloud or a link'},{label:'Save',icon:'save',act:'save',kbd:'Ctrl S'},{label:'Save a version',icon:'flag',act:'on',a:'compare|focusVer|'},{sep:1},{label:'Print set',icon:'print',act:'on',a:'sheet|print|'},{label:'Issue set',icon:'send',act:'on',a:'sheet|issueTool|'},{label:'Export a schedule to a spreadsheet',icon:'down',act:'on',a:'schedule|export|XLSX'},{label:'Export clash issues (BCF)',icon:'down',act:'on',a:'clash|bcf|out'},{sep:1},{label:'Project files',icon:'folder',act:'go',a:'files'},{label:'Close the project',icon:'lock',act:'on',a:'files|fsclose|'},{sep:1},{label:'Install',icon:'down',act:'on',a:'start|startto|plat'},{label:'Learn',icon:'book',act:'on',a:'start|startto|learn'},{label:'Account',icon:'user',act:'account'}],
+   side:{head:'Recent projects',items:RECENT.map((r,i)=>({label:r[0],sub:r[1],icon:i?'book':'start',act:'openrecent',a:String(i)}))}}}}
+function renderRibbon(){RB.update(ribbonCfg())}
+const renderTools=renderRibbon;
+ACT.dtool=b=>{const[d,t]=b.dataset.a.split(':');if(DISC!==d){DISC=d;renderDisc();S.sel=null;S.zoom=1;S.zc=null;S.tool='select'}ACT.tool({dataset:{a:t}})};
+ACT.seltool=()=>{if(S.tool!=='select'){S.tool='select';S.pend=null;refresh()}};
+ACT.deselect=()=>select(null);
+ACT.vcat=b=>{const k=b.dataset.a;S.cats[k]=!S.cats[k];refresh()};
+ACT.tmplset=b=>applyTmpl(b.dataset.a);
+ACT.unitset=b=>CHG.units({value:b.dataset.a});
+ACT.phaseset=b=>CHG.phase({value:b.dataset.a});
+ACT.optset=b=>CHG.opt({value:b.dataset.a});
+ACT.isot3=b=>{const a=b.dataset.a;S.iso[a]=!S.iso[a];if(a==='iso'&&S.iso.iso&&!S.sel)toast('Select an element first, then isolate it.');refresh()};
+ACT.pref=b=>{document.documentElement.toggleAttribute('data-'+b.dataset.a);refresh()};
+ACT.save=()=>{saving();toast('Every change is saved as you make it. To mark a point to come back to, save a version.')};
+
+/* ---------- the view control bar under each drawing ---------- */
+const DETAIL={coarse:'Coarse',medium:'Medium',fine:'Fine'};
+function renderVbar(){const vb=$('#vbar'),sc=S.screen,sep='<span class="rb-vsep" aria-hidden="true"></span>';let h='';
+ const B=(act,a,label,icon,on,dis,txt)=>`<button class="rb-vb" ${dis?'aria-disabled="true"':`data-act="${act}"${a!=null?` data-a="${a}"`:''}`}${on!=null?` aria-pressed="${!!on}"`:''} aria-label="${esc(label)}" data-tl="${esc(label)}">${ic(icon,'sm')}${txt?`<span>${txt}</span>`:''}</button>`;
+ if(sc==='plan'&&S.view!=='transport'){const v=VIEWS[S.view],fl=FLOORV.includes(S.view);
+  h=`<span>${esc(v.kind)}</span>${sep}`+(fl?`<label class="sr" for="pv-scale">View scale</label><select id="pv-scale" data-chg="scale" data-tl="View scale">${['1:50','1:100','1:200'].map(o=>`<option${o===S.scale?' selected':''}>${o}</option>`).join('')}</select>`:`<span data-tl="View scale">${v.sc}</span>`)
+   +B('vbmenu','detail','Detail level: '+DETAIL[S.detail],'detail',null,false,DETAIL[S.detail])
+   +B('','','Visual style: plans are drawn in hidden line','vstyle',null,true)
+   +B('','','Sun and shadows: in the 3D view','sun',null,true)
+   +B('vcrop',null,S.crop?'Hide the crop region':'Show the crop region','crop',!!S.crop)
+   +B('','','Hide and isolate: in the 3D view','eyeoff',null,true)
+   +sep+`<span>${S.zoom>1?Math.round(S.zoom*100)+'%':'Zoomed to fit'}</span>`}
+ else if(sc==='3d'){const v=S.iso;
+  h=`<span>3D view</span>${sep}<span data-tl="View scale">1:100</span>`+B('','','Visual style: hidden line','vstyle',null,true)+B('sunset',null,'Sun settings','sun')+B('isot3','sun',v.sun?'Turn shadows off':'Turn shadows on','shadow',v.sun)+B('isot3','box','Section box','crop',v.box)+B('isot3','iso',v.iso?'End isolate':'Isolate the selected element','eyeoff',v.iso)+B('isot3','xray','Linked models as x-ray','link',v.xray)}
+ else if(sc==='sheet')h=`<span>Sheet</span>${sep}<span>A3 landscape</span>${sep}<span>Revision ${esc(curRev())}</span>`;
+ vb.hidden=!h;vb.innerHTML=h}
+RB.tipOn($('#main'));
+ACT.vbmenu=b=>{if(b.dataset.a==='detail')RB.openMenu(b,Object.entries(DETAIL).map(([k,l])=>({label:l,act:'detailset',a:k,pressed:S.detail===k})))};
+ACT.detailset=b=>{S.detail=b.dataset.a;refresh()};
+ACT.dockreset=()=>{DOCK.reset();refresh()};
+ACT.vcrop=()=>{S.crop=!S.crop;refresh()};
+ACT.sunset=()=>{const e=$('#sun-date');if(e){e.scrollIntoView({block:'center'});e.focus()}};
 
 /* ---------- discipline tools: each discipline has its own home view, tools and elements, in the same model ---------- */
 const HOMEV={architecture:'ground',structure:'framing',mep:'services',civil:'site',transport:'transport',coord:'coord'};
@@ -937,25 +1053,18 @@ const DT={
  issue:(x,y)=>{const n=(M.iss||[]).reduce((m,e)=>Math.max(m,e.n),0)+1;const r=roomAt(x,y);place('issue',`Raised issue ${n}`,{n,x:r50(x),y:r50(y),title:'Check this area'+(r?' in '+r.name:''),to:'Architecture'},`Issue ${n} raised. Every firm in the shared project sees it on the model.`)}
 };
 const DTH={post:()=>'<b>Post:</b> click to place a 90×90 post. Snaps to wall ends and crossings.',beam:()=>S.pend?'<b>Beam:</b> pick the other end. The size follows the span.':'<b>Beam:</b> pick one end.',lintel:()=>'<b>Lintel:</b> click a door or a window. The size follows the opening width.',pipe:()=>S.pend?'<b>Pipe:</b> pick the end.':'<b>Pipe:</b> pick the start of a waste pipe.',duct:()=>S.pend?'<b>Duct:</b> pick the end.':'<b>Duct:</b> pick the start of a duct.',light:()=>'<b>Light:</b> click inside a room.',power:()=>'<b>Power point:</b> click on a wall.',spot:()=>'<b>Spot level:</b> click on the site. The level comes from the ground surface.',pad:()=>S.pend?'<b>Pad:</b> pick the opposite corner.':'<b>Pad:</b> pick one corner of a building platform.',sw:()=>S.pend?'<b>Stormwater:</b> pick the next manhole.':'<b>Stormwater:</b> pick the first manhole.',al:()=>S.pend?'<b>Alignment:</b> pick the end. Chainage marks every 5 m.':'<b>Alignment:</b> pick the start of a centreline.',issue:()=>'<b>Issue:</b> click where the problem is.'};
-function discTools(){const t=S.tool;const T=(a,l,i)=>TB('tool',l,i,a,t===a);const V=(a,l,i)=>TB('view',l,i,a,S.screen==='plan'&&S.view===a);
- if(DISC==='transport')return'';
- if(DISC==='structure')return`<div class="grp"><span class="glbl">Create</span>${T('post','Post','box')}${T('beam','Beam','align')}${T('lintel','Lintel','window')}</div><div class="grp"><span class="glbl">Views</span>${V('framing','Framing plan','plan')}${V('found','Foundation plan','plan')}${V('bracing','Bracing plan','plan')}</div><div class="grp"><span class="glbl">Check</span>${TB('go','Bracing check','shield','checks')}</div>`;
- if(DISC==='mep')return`<div class="grp"><span class="glbl">Create</span>${T('pipe','Pipe','offset')}${T('duct','Duct','layers')}${T('light','Light','sun')}${T('power','Power point','plus')}</div><div class="grp"><span class="glbl">Views</span>${V('services','Services plan','plan')}${V('drain','Drainage plan','plan')}</div><div class="grp"><span class="glbl">Check</span>${TB('go','Clash','clash','clash')}</div>`;
- if(DISC==='civil')return`<div class="grp"><span class="glbl">Create</span>${T('spot','Spot level','pin')}${T('pad','Pad','room')}${T('sw','Stormwater','offset')}${T('al','Alignment','align')}</div><div class="grp"><span class="glbl">Views</span>${V('site','Site plan','pin')}${TB('go','3D','cube','3d')}</div>`;
- return`<div class="grp"><span class="glbl">Create</span>${T('issue','Issue','flag')}</div><div class="grp"><span class="glbl">Views</span>${V('coord','Coordination plan','plan')}${TB('go','3D','cube','3d')}</div><div class="grp"><span class="glbl">Check</span>${TB('clrungo','Run clash','clash')}${TB('go','Compare versions','compare','compare')}</div>`}
-TOOLS.plan=()=>DISC==='architecture'?archTools():discTools();
 function discSide(v){const st=M.str,me=M.mep,cv=M.civ,iss=M.iss||[];let h='';const ctx=`<p class="pad small muted mt">Other disciplines show in grey, or in their own colour, as context. Select anything to see its data; switch discipline to change it.</p>`;
  if(v==='framing')h+=`<div class="sec"><span class="lbl">Framing plan</span><table class="props">${prow('Posts',String(st.posts.length))}${prow('Beams',String(st.beams.length))}${prow('Lintels',String(st.lintels.length))}</table><p class="pad small muted">Sizes come from spans and opening widths, using sample tables until the NZS 3604 tables are cleared for use.</p>${ctx}</div>`;
  if(v==='services')h+=`<div class="sec"><span class="lbl">Services plan</span><table class="props">${prow('Waste pipes',String(me.pipes.length+FIX.length),'Including the drainage runs from each fixture')}${prow('Ducts',String(me.ducts.length))}${prow('Lights',String(me.lights.length))}${prow('Power points',String(me.power.length))}</table>${ctx}</div>`;
  if(v==='coord')h+=`<div class="sec"><span class="lbl">Coordination plan</span><div class="pad"><p>Every discipline in its own colour, from the one model.</p><div class="mt">${DISCS.filter(d=>d[0]!=='coord').map(d=>`<div class="row small" data-dsw="${d[0]}"><span class="dsw" aria-hidden="true" style="margin-top:0"></span>${d[1]}</div>`).join('')}</div></div></div><div class="sec"><span class="lbl">Open issues</span>${iss.length?`<ul class="list">${iss.map(e=>`<li class="click${S.sel===e.id?' sel':''}" data-act="selgo2" data-a="${e.id}"><b>${e.n}.</b> ${esc(e.title)}<div class="small muted">Assigned to ${esc(e.to)}</div></li>`).join('')}</ul>`:'<p class="pad faint">No open issues.</p>'}</div>`;
  if(v==='site'&&cv){const pads=cv.pads.map(padCalc);const cut=pads.reduce((a,c)=>a+c.cut,0),fill=pads.reduce((a,c)=>a+c.fill,0);h+=`<div class="sec"><span class="lbl">Civil</span><table class="props">${prow('Spot levels',String(cv.spots.length))}${prow('Pads',String(cv.pads.length),pads.length?`Cut ${cut.toFixed(1)} m³ · fill ${fill.toFixed(1)} m³`:'')}${prow('Stormwater',cv.sw.reduce((a,e)=>a+swCalc(e).len,0).toFixed(1)+' m')}${prow('Alignments',cv.al.map(e=>`${e.mark} ${(dlen(e.a,e.b)/1000).toFixed(1)} m`).join(', ')||'None')}</table><p class="pad small muted">Levels come from the ground surface, built from the survey link (sample contours).</p></div>`}
  return h}
-ACT.selgo2=b=>{S.sel=b.dataset.a;R.plan()};
+ACT.selgo2=b=>select(b.dataset.a);
 
 /* ---------- status bar ---------- */
 function statusBar(){
  const w=warnings().filter(x=>x.sev==='bad').length;const lb=S.lastBuild;
- $('#status').innerHTML=`<button data-act="warnlist">${ic('warn','sm')}${w} warning${w===1?'':'s'}</button><span class="sep"></span><span class="hide-m">Phases: ${{all:'all',new:'new only',demo:'demolition'}[S.phase]} · Option ${S.opt}</span><span class="sep hide-l"></span><span id="st-xy" class="mono hide-l" title="Survey coordinates from the country pack (example: NZTM2000)">E ${nz(PROJ.E,3)} N ${nz(PROJ.N+10.2,3)}</span><span class="sep"></span><span>${lb?`Rebuilt ${lb.n} dependent elements in ${lb.ms.toFixed(1)} ms on 16 cores`:'1,284 elements, opened in 0.9 s'}</span><span class="sep"></span><span>Units: ${unitLbl()}</span><button data-act="packinfo">${ic('flag','sm')}Pack: New Zealand (example)</button><button data-act="team">${ic('user','sm')}Live with 2 others, no central file</button>`;
+ $('#status-r').innerHTML=`<button data-act="warnlist">${ic('warn','sm')}${w} warning${w===1?'':'s'}</button><span class="sep"></span><span class="hide-m">Phases: ${{all:'all',new:'new only',demo:'demolition'}[S.phase]} · Option ${S.opt}</span><span class="sep hide-l"></span><span id="st-xy" class="mono hide-l" title="Survey coordinates from the country pack (example: NZTM2000)">E ${nz(PROJ.E,3)} N ${nz(PROJ.N+10.2,3)}</span><span class="sep"></span><span>${lb?`Rebuilt ${lb.n} dependent elements in ${lb.ms.toFixed(1)} ms on 16 cores`:'1,284 elements, opened in 0.9 s'}</span><span class="sep"></span><span>Units: ${unitLbl()}</span><button data-act="packinfo">${ic('flag','sm')}Pack: New Zealand (example)</button><button data-act="team">${ic('user','sm')}Live with 2 others, no central file</button>`;
 }
 ACT.warnlist=()=>{go('checks');setTimeout(()=>{const e=$('#ck-warn');if(e)e.scrollIntoView({block:'start'})},60)};
 ACT.packinfo=()=>toast('This sample uses New Zealand as its example country pack. Every country gets its own pack of units, paper, codes, approval steps, money and tax. <a href="#start">See the packs</a>');
@@ -1155,16 +1264,15 @@ function viewBox(view){const b=VB[view]||VB.ground;const z=S.zoom||1;const cx=S.
 R.plan=()=>{
  if(S.view==='transport'){const t=$('#sc-transport');if(!t.firstChild)t.innerHTML='<iframe class="tframe" src="transport/" title="Transport network: traffic and public transport model"></iframe>';return}
  const sc=$('#sc-plan');const v=VIEWS[S.view];
- if(!sc.dataset.built){sc.innerHTML=`<div class="center"><div class="vhead"><button class="btn sm bt-browser" data-act="browser">${ic('folder','sm')}Browser</button><h2 id="pv-name"></h2><span class="badge n" id="pv-kind"></span><span class="hint" id="hint"></span><label class="sr" for="pv-scale">Scale</label><select class="inp" id="pv-scale" data-chg="scale"><option>1:50</option><option>1:100</option><option>1:200</option></select><label class="sr" for="pv-detail">Detail</label><select class="inp" id="pv-detail" data-chg="detail"><option value="coarse">Coarse</option><option value="medium">Medium</option><option value="fine">Fine</option></select><button class="ib" data-act="zoom" data-a="in" aria-label="Zoom in">${ic('plus')}</button><button class="ib" data-act="zoom" data-a="out" aria-label="Zoom out">${ic('minus')}</button><button class="ib" data-act="zoom" data-a="fit" aria-label="Zoom to fit">${ic('fit')}</button></div><div class="canvas" id="pv-canvas"></div></div><aside class="side" id="pv-side" aria-label="Properties"></aside>`;sc.dataset.built=1;bindPlanCanvas()}
- $('#pv-name').textContent=v.name;$('#pv-kind').textContent=v.kind+' · '+(FLOORV.includes(S.view)?S.scale:v.sc);
- $('#pv-scale').value=S.scale;$('#pv-detail').value=S.detail;
+ if(!sc.dataset.built){sc.innerHTML=`<div class="center"><div class="canvas" id="pv-canvas"></div><div class="rb-nav" role="toolbar" aria-label="Zoom"><button data-act="zoom" data-a="in" aria-label="Zoom in" data-tl="Zoom in">${ic('zoomin')}</button><button data-act="zoom" data-a="out" aria-label="Zoom out" data-tl="Zoom out">${ic('zoomout')}</button><button data-act="zoom" data-a="fit" aria-label="Zoom to fit" data-tl="Zoom to fit">${ic('fit')}</button></div></div><aside class="side" id="pv-side" aria-label="Properties"></aside>`;sc.dataset.built=1;bindPlanCanvas()}
  $('#hint').innerHTML=toolHint();
  const t0=performance.now();
- $('#pv-canvas').innerHTML=`<svg class="dw pan${S.tool!=='select'?' press':''}" viewBox="${viewBox(S.view)}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${esc(v.name)}"><rect class="paper" x="-20000" y="-20000" width="80000" height="80000"/>${planBody(S.view)}<g id="snapL"></g></svg>`;
+ $('#pv-canvas').innerHTML=`<svg class="dw pan${S.tool!=='select'?' press':''}" viewBox="${viewBox(S.view)}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${esc(v.name)}"><rect class="paper" x="-20000" y="-20000" width="80000" height="80000"/>${planBody(S.view)}${S.crop?cropRect(S.view):''}<g id="snapL"></g></svg>`;
  S.drawMs=performance.now()-t0;
  $('#pv-side').innerHTML=planSide();
 };
-ACT.zoom=b=>{const a=b.dataset.a;if(a==='fit'){S.zoom=1;S.zc=null}else S.zoom=Math.max(1,Math.min(6,S.zoom*(a==='in'?1.4:1/1.4)));if(S.zoom===1)S.zc=null;R.plan()};
+function cropRect(v){const b=VB[v]||VB.ground,i=b[2]*.03;return RC(b[0]+i,b[1]+i,b[2]-2*i,b[3]-2*i,'ln fn dsh')}
+ACT.zoom=b=>{const a=b.dataset.a;if(a==='fit'){S.zoom=1;S.zc=null}else S.zoom=Math.max(1,Math.min(6,S.zoom*(a==='in'?1.4:1/1.4)));if(S.zoom===1)S.zc=null;R.plan();renderVbar()};
 CHG.scale=el=>{S.scale=el.value;R.plan();toast(`View scale ${S.scale}: tags, text and dimensions resize to suit, the model does not change.`)};
 CHG.detail=el=>{S.detail=el.value;R.plan()};
 function toolHint(){const t=S.tool;if(t==='select')return S.view==='ground'?'Click an element to see its data. Hover near walls to see snaps.':'This view is drawn from the same model as the ground floor plan.';
@@ -1187,7 +1295,7 @@ function snapPts(){const pts=[];for(const w of allWalls()){const a=endp(w.a),b=e
  for(const h of allWalls().filter(w=>w.ax==='h'))for(const v of allWalls().filter(w=>w.ax==='v')){const ha=endp(h.a),hb=endp(h.b),va=endp(v.a),vb=endp(v.b);if(v.pos>=ha-200&&v.pos<=hb+200&&h.pos>=va-200&&h.pos<=vb+200)pts.push([v.pos,h.pos,'Crossing'])}
  for(const o of[...M.doors,...M.wins]){const w=W(o.wall);pts.push([...PT(w,o.at,0),'Centre'])}return pts}
 function snapAt(x,y,tol){let best=null,bd=tol;const pr={Crossing:0,End:1,Centre:2,Middle:3};for(const[px,py,k]of snapPts()){const d=Math.hypot(px-x,py-y)-(4-pr[k])*tol*.05;if(d<bd){bd=d;best={x:px,y:py,k}}}return best}
-function select(id){S.sel=id||null;if(S.screen==='plan')R.plan();else refresh();}
+function select(id){S.sel=id||null;refresh()}
 
 function nearestWall(x,y,ext){let best=null,bd=420;for(const w of allWalls()){if(ext&&w.type!=='ext')continue;const q=wr(w);const u=w.ax==='h'?x:y,v=w.ax==='h'?y:x;if(u<q.a||u>q.b)continue;const d=Math.abs(v-w.pos);if(d<bd){bd=d;best={w,u}}}return best}
 function planToolClick(x,y){const t=S.tool;if(DT[t]){DT[t](x,y);return}
@@ -1201,9 +1309,10 @@ function planToolClick(x,y){const t=S.tool;if(DT[t]){DT[t](x,y);return}
  const[a,b]=S.pend;S.pend=null;const dx=sn.x-a,dy=sn.y-b;const hz=Math.abs(dx)>=Math.abs(dy);
  if(t==='wall'){const len=hz?Math.abs(dx):Math.abs(dy);if(len<300){toast('That wall is too short. Pick two points at least 300 mm apart.');R.plan();return}const id='w'+(++M.nextId);commit(`Drew an interior wall, ${fmtLen(len)} long`,()=>{M.added.push(hz?{id,ax:'h',pos:b,a:Math.min(a,sn.x),b:Math.max(a,sn.x),t:110,type:'int'}:{id,ax:'v',pos:a,a:Math.min(b,sn.y),b:Math.max(b,sn.y),t:110,type:'int'});S.sel=id})}
  if(t==='dim'){commit('Added a dimension',()=>{M.dims.push(hz?{ax:'h',a:Math.min(a,sn.x),b:Math.max(a,sn.x),at:Math.min(b,sn.y)-600}:{ax:'v',a:Math.min(b,sn.y),b:Math.max(b,sn.y),at:Math.min(a,sn.x)-600})})}}
-ACT.tool=b=>{const t=b.dataset.a;S.tool=S.tool===t?'select':t;S.pend=null;const hv=homeView();if(S.screen!=='plan'||S.view!==hv){S.view=hv;go('plan:'+hv)}else{renderTools();R.plan()}};
+ACT.tool=b=>{const t=b.dataset.a;S.tool=S.tool===t?'select':t;S.pend=null;const hv=homeView();if(S.screen!=='plan'||S.view!==hv){S.view=hv;S.keepTool='plan';go('plan:'+hv)}else refresh()};
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(!$('#palette').hidden){closePalette();return}if(!$('#assess').hidden){$('#assess').hidden=true;return}if(S.tool!=='select'){S.tool='select';S.pend=null;refresh()}}
  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openPalette()}
+ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){e.preventDefault();ACT.save()}
  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&!e.target.closest('input,textarea')){e.preventDefault();ACT.undo()}
  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'&&!e.target.closest('input,textarea')){e.preventDefault();ACT.redo()}});
 ACT.tagall=()=>{S.cats.tags=!S.cats.tags;if(S.screen!=='plan')go('plan:ground');else refresh();toast(S.cats.tags?`Tagged ${M.doors.length} doors and ${M.wins.length} windows in this view.`:'Tags hidden in this view.')};
@@ -1219,27 +1328,31 @@ ACT.modify=b=>{const m=b.dataset.a,k=kindOf(S.sel),e=byId(S.sel);
 
 /* ---------- properties ---------- */
 const prow=(k,v,f)=>`<tr><th>${k}</th><td>${v}${f?`<div class="f">${f}</div>`:''}</td></tr>`;
+const grp=t=>`<tr class="g"><th colspan="2">${t}</th></tr>`;
+/* The type selector sits at the top of the palette: what is selected, and its type. With nothing selected it shows the open view. */
+const typeSel=(icon,cat,sel,note)=>`<div class="typesel">${ic(icon,'lg')}<div style="flex:1"><small>${cat}</small>${sel}${note?`<div class="small faint">${note}</div>`:''}</div></div>`;
 function propsHTML(id){
  const k=kindOf(id),e=byId(id);
- if(!e)return`<span class="lbl">Properties</span><p class="pad faint">Nothing selected. Click an element in the view to see and change its data.</p>`;
+ if(!e){if(S.screen==='3d')return typeSel('cube','3D view','<b>Default 3D</b>')+`<p class="pad small faint">Nothing selected. Click any face to see its data.</p>`;const v=VIEWS[S.view]||VIEWS.ground;return typeSel(viewIcon('plan:'+S.view),esc(v.kind),`<b>${esc(v.name)}</b>`)+`<p class="pad small faint">Nothing selected. Click an element in the view to see and change its data.</p>`}
  let h='',acts='';
+ const bar=(n,edit)=>`<div class="typebar"><span>${n} (1)</span><span class="sp"></span>${edit||''}</div>`;
  if(k==='wall'){const q=wr(e),len=q.b-q.a,ops=[...M.doors.filter(d=>d.wall===e.id).map(d=>dW(d)*M.dt[d.type].h),...M.wins.filter(n=>n.wall===e.id).map(n=>n.w*n.h)].reduce((a,b)=>a+b,0)/1e6;const area=len*2.7/1e6-ops;
-  h=`<div class="selname">${ic('wall')}<b>${wallName(e)}</b><span class="badge n">Walls</span></div><table class="props">${prow('Type',`<select class="inp" data-chg="walltype">${Object.entries(WT).map(([kk,t])=>`<option value="${kk}"${kk===e.type?' selected':''}>${esc(t.name)}</option>`).join('')}</select>`)}${prow('Thickness',fmtLen(e.t))}${prow('Length',fmtLen(len),'Worked out from its joins')}${prow('Height','2700','Base: Ground floor. Top: unconnected +2700')}${prow('Area',area.toFixed(2)+' m²','Length × height, less openings')}${prow('Volume',(area*e.t/1000).toFixed(2)+' m³')}${prow('Location line','Wall centre')}${prow('Structural',BRACE.some(b=>b[0]===e.id)?'Yes, bracing element':'No')}${prow('Phase created','New construction')}${prow('Permanent ID',`<span class="mono small">${pid(e.id)}</span>`)}</table>`;
+  h=typeSel('wall','Walls · '+wallName(e),`<select class="inp" data-chg="walltype" aria-label="Wall type">${Object.entries(WT).map(([kk,t])=>`<option value="${kk}"${kk===e.type?' selected':''}>${esc(t.name)}</option>`).join('')}</select>`)+bar('Walls')+`<table class="props">${grp('Constraints')}${prow('Location line','Wall centre')}${prow('Height','2700','Base: Ground floor. Top: unconnected +2700')}${grp('Construction')}${prow('Structural',BRACE.some(b=>b[0]===e.id)?'Yes, bracing element':'No')}${grp('Dimensions')}${prow('Thickness',fmtLen(e.t))}${prow('Length',fmtLen(len),'Worked out from its joins')}${prow('Area',area.toFixed(2)+' m²','Length × height, less openings')}${prow('Volume',(area*e.t/1000).toFixed(2)+' m³')}${grp('Identity')}${prow('Permanent ID',`<span class="mono small">${pid(e.id)}</span>`)}${grp('Phasing')}${prow('Phase created','New construction')}</table>`;
   if(e.move){const ew=e.ax==='v';acts=`<button class="btn sm" data-act="nudge" data-a="-100">${ew?'Move 100 west':'Move 100 north'}</button><button class="btn sm" data-act="nudge" data-a="100">${ew?'Move 100 east':'Move 100 south'}</button>`}}
  else if(k==='door'){const t=M.dt[e.type],r=doorRoom(e);
-  h=`<div class="selname">${ic('door')}<b>Door ${esc(e.mark)}</b><span class="badge n">Doors</span></div><table class="props">${prow('Type',`<select class="inp" data-chg="doortype">${Object.entries(M.dt).filter(([,x])=>x.kind===t.kind).map(([kk,x])=>`<option value="${kk}"${kk===e.type?' selected':''}>${esc(x.name)}</option>`).join('')}</select>`,'Changing the type changes every door of that type')}<tr class="g"><th colspan="2">Type data</th></tr>${prow('Width',fmtLen(t.w))}${prow('Height',fmtLen(t.h))}${prow('Rough opening width',fmtLen(t.w+2*45+10),'= Width + 2 × Frame (45) + 10')}<tr class="g"><th colspan="2">This door</th></tr>${prow('Mark',`<input class="inp" value="${esc(e.mark)}" data-chg="mark">`)}${prow('Host',wallName(W(e.wall)))}${prow('Opens into',r?esc(r.name):'Outside')}${prow('Fire rating',`<select class="inp" data-chg="fire">${['','-/30/30','30/30/30'].map(v=>`<option value="${v}"${v===e.fire?' selected':''}>${v||'None'}</option>`).join('')}</select>`)}${prow('Hardware',`<input class="inp" value="${esc(e.hw)}" data-chg="hw">`)}${prow('Finish',esc(e.fin))}${prow('Phase created','New construction')}${prow('Permanent ID',`<span class="mono small">${pid(e.id)}</span>`)}</table>`;
+  h=typeSel('door','Doors · Door '+esc(e.mark),`<select class="inp" data-chg="doortype" aria-label="Door type">${Object.entries(M.dt).filter(([,x])=>x.kind===t.kind).map(([kk,x])=>`<option value="${kk}"${kk===e.type?' selected':''}>${esc(x.name)}</option>`).join('')}</select>`,'Changing the type changes every door of that type')+bar('Doors',`<button class="btn sm" data-act="go" data-a="family">Edit type</button>`)+`<table class="props">${grp('Constraints')}${prow('Host',wallName(W(e.wall)))}${prow('Opens into',r?esc(r.name):'Outside')}${grp('Construction')}${prow('Fire rating',`<select class="inp" data-chg="fire">${['','-/30/30','30/30/30'].map(v=>`<option value="${v}"${v===e.fire?' selected':''}>${v||'None'}</option>`).join('')}</select>`)}${prow('Hardware',`<input class="inp" value="${esc(e.hw)}" data-chg="hw">`)}${prow('Finish',esc(e.fin))}${grp('Dimensions (type)')}${prow('Width',fmtLen(t.w))}${prow('Height',fmtLen(t.h))}${prow('Rough opening width',fmtLen(t.w+2*45+10),'= Width + 2 × Frame (45) + 10')}${grp('Identity')}${prow('Mark',`<input class="inp" value="${esc(e.mark)}" data-chg="mark">`)}${prow('Permanent ID',`<span class="mono small">${pid(e.id)}</span>`)}${grp('Phasing')}${prow('Phase created','New construction')}</table>`;
   acts=(t.kind==='swing'?`<button class="btn sm" data-act="flip" data-a="s">Flip swing</button><button class="btn sm" data-act="flip" data-a="h">Flip hinge</button>`:'')+`<button class="btn sm" data-act="nudgeo" data-a="-100">Move −100</button><button class="btn sm" data-act="nudgeo" data-a="100">Move +100</button><button class="btn sm sec" data-act="go" data-a="family">Edit component</button>`}
  else if(k==='window'){const r=winRoom(e);const ra=r?roomArea(r):0,g=r?roomGlazing(r):0;
-  h=`<div class="selname">${ic('window')}<b>Window ${esc(e.mark)}</b><span class="badge n">Windows</span></div><table class="props">${prow('Type','Aluminium awning, double glazed')}${prow('Mark',`<input class="inp" value="${esc(e.mark)}" data-chg="mark">`)}${prow('Width',`<input class="inp" type="number" step="100" min="400" max="4000" value="${e.w}" data-chg="winw">`,unitLbl()==='mm'?'Instance value, in mm':'Entered in mm')}${prow('Height',fmtLen(e.h))}${prow('Sill height',fmtLen(e.sill))}${prow('Glass area',(e.w*e.h/1e6).toFixed(2)+' m²')}${prow('Room',r?esc(r.name):'None')}${r&&r.hab?prow('Room glazing',`${(g/ra*100).toFixed(1)}% of floor`,(g/ra*100>=10?'Meets':'Below')+' the 10% the pack’s natural light rule asks for'):''}${prow('Frame R-value','R0.50 (sample)')}${prow('Permanent ID',`<span class="mono small">${pid(e.id)}</span>`)}</table>`;
+  h=typeSel('window','Windows · Window '+esc(e.mark),'<b>Aluminium awning, double glazed</b>')+bar('Windows')+`<table class="props">${grp('Constraints')}${prow('Sill height',fmtLen(e.sill))}${prow('Room',r?esc(r.name):'None')}${grp('Dimensions')}${prow('Width',`<input class="inp" type="number" step="100" min="400" max="4000" value="${e.w}" data-chg="winw">`,unitLbl()==='mm'?'Instance value, in mm':'Entered in mm')}${prow('Height',fmtLen(e.h))}${prow('Glass area',(e.w*e.h/1e6).toFixed(2)+' m²')}${grp('Analysis')}${r&&r.hab?prow('Room glazing',`${(g/ra*100).toFixed(1)}% of floor`,(g/ra*100>=10?'Meets':'Below')+' the 10% the pack’s natural light rule asks for'):''}${prow('Frame R-value','R0.50 (sample)')}${grp('Identity')}${prow('Mark',`<input class="inp" value="${esc(e.mark)}" data-chg="mark">`)}${prow('Permanent ID',`<span class="mono small">${pid(e.id)}</span>`)}</table>`;
   acts=`<button class="btn sm" data-act="nudgeo" data-a="-100">Move −100</button><button class="btn sm" data-act="nudgeo" data-a="100">Move +100</button>`}
  else if(k==='room'){const q=roomRect(e),a=roomArea(e);
-  h=`<div class="selname">${ic('room')}<b>Room ${esc(e.no)}</b><span class="badge n">Rooms</span></div><table class="props">${prow('Name',`<input class="inp" value="${esc(e.name)}" data-chg="rname">`)}${prow('Number',esc(e.no))}${prow('Area',fmtArea(a),'Inside finished walls, as the country pack says')}${prow('Perimeter',fmtLen(2*(q.w+q.h)))}${prow('Ceiling height','2400')}${prow('Volume',(a*2.4).toFixed(1)+' m³')}${prow('Floor finish',`<select class="inp" data-chg="rfin">${['Timber','Carpet','Tiles','Vinyl'].map(v=>`<option${v===e.fin?' selected':''}>${v}</option>`).join('')}</select>`)}${prow('Habitable',e.hab?'Yes':'No')}${prow('Level','Ground floor')}</table>`}
- else if(k==='opening'){h=`<div class="selname">${ic('split')}<b>${esc(e.mark)}</b><span class="badge n">Openings</span></div><table class="props">${prow('Width',fmtLen(e.w))}${prow('Height','2400, to ceiling')}${prow('Host',wallName(W(e.wall)))}</table>`}
- else{h=`<div class="selname">${ic('cube')}<b>${esc(e.name)}</b><span class="badge n">${esc(e.cat)}</span></div><table class="props">${e.p.map(([a,b])=>prow(a,esc(b))).join('')}${prow('Permanent ID',`<span class="mono small">${pid(id)}</span>`)}</table>`}
+  h=typeSel('room','Rooms · Room '+esc(e.no),`<b>${esc(e.name)}</b>`)+bar('Rooms')+`<table class="props">${grp('Constraints')}${prow('Level','Ground floor')}${prow('Ceiling height','2400')}${grp('Dimensions')}${prow('Area',fmtArea(a),'Inside finished walls, as the country pack says')}${prow('Perimeter',fmtLen(2*(q.w+q.h)))}${prow('Volume',(a*2.4).toFixed(1)+' m³')}${grp('Identity')}${prow('Name',`<input class="inp" value="${esc(e.name)}" data-chg="rname">`)}${prow('Number',esc(e.no))}${grp('Other')}${prow('Floor finish',`<select class="inp" data-chg="rfin">${['Timber','Carpet','Tiles','Vinyl'].map(v=>`<option${v===e.fin?' selected':''}>${v}</option>`).join('')}</select>`)}${prow('Habitable',e.hab?'Yes':'No')}</table>`}
+ else if(k==='opening'){h=typeSel('split','Openings',`<b>${esc(e.mark)}</b>`)+`<table class="props">${grp('Constraints')}${prow('Host',wallName(W(e.wall)))}${grp('Dimensions')}${prow('Width',fmtLen(e.w))}${prow('Height','2400, to ceiling')}</table>`}
+ else{h=typeSel(k==='dx'?{post:'column',beam:'beam',lintel:'lintel',pipe:'pipe',duct:'duct',light:'light',power:'power',spot:'spot',pad:'pad',sw:'storm',al:'alignment',issue:'issue'}[dxFind(id)[0]]:'cube',esc(e.cat),`<b>${esc(e.name)}</b>`)+`<table class="props">${grp('Data')}${e.p.map(([a,b])=>prow(a,esc(b))).join('')}${grp('Identity')}${prow('Permanent ID',`<span class="mono small">${pid(id)}</span>`)}</table>`}
  if(kindOf(id)==='dx')acts=dxActs(id);
  const own=elDisc(id);if(own&&own!==DISC){h=h.replace(/<(input|select)/g,'<$1 disabled');acts='';h=`<div class="note small" style="margin:0 12px 8px">This belongs to ${DNAME[own]}. It shows here as context; switch to ${DNAME[own]} to change it.</div>`+h}
  const cl=CLAIMS[id];if(cl){h=h.replace(/<(input|select)/g,'<$1 disabled');acts=`<button class="btn sm sec" data-act="askclaim" data-a="${id}">Ask ${esc(cl.who.split(' ')[0])} to hand it over</button>`;h=`<div class="note info small" style="margin:0 12px 8px"><b>${esc(cl.who)}</b> is editing this now, ${esc(cl.doing)}. You see each change as it happens. Claims are per element, so the rest of the model is yours to edit.</div>`+h}
- return`<span class="lbl">Properties</span>${h}${acts?`<div class="acts">${acts}</div>`:''}`}
+ return h+(acts?`<div class="acts">${acts}</div>`:'')}
 function editSel(label,fn){const k=kindOf(S.sel);commit(label,()=>fn(byIdRaw(S.sel),k))}
 function byIdRaw(id){return allWalls().find(w=>w.id===id)||M.doors.find(d=>d.id===id)||M.wins.find(w=>w.id===id)||M.rooms.find(r=>r.id===id)}
 CHG.doortype=el=>editSel(`Changed ${byId(S.sel).mark} to ${M.dt[el.value].name}`,d=>{d.type=el.value});
@@ -1270,7 +1383,8 @@ function planSide(){
  h+=discSide(v);const hv=homeView();if(v!==hv)h+=`<div class="sec"><div class="pad"><button class="btn sm" data-act="view" data-a="${hv}">${ic('plan','sm')}Back to the ${VIEWS[hv].name.toLowerCase()}</button></div></div>`;
  setTimeout(()=>{$$('#pv-side select[data-chg="tmpl"]').forEach(s=>s.value=S.tmpl);$$('#pv-side select[data-chg="phase"]').forEach(s=>s.value=S.phase);$$('#pv-side select[data-chg="opt"]').forEach(s=>s.value=S.opt);$$('#pv-side select[data-chg="underlay"]').forEach(s=>s.value=S.underlay);$$('#pv-side select[data-chg="units"]').forEach(s=>s.value=S.units)});
  return h}
-CHG.tmpl=el=>{S.tmpl=el.value;if(el.value==='coord'){S.disc.str=true;S.disc.svc=true;S.cats.furn=false}else{S.disc.str=false;S.disc.svc=false;S.cats.furn=true}refresh();toast('View template applied: '+esc(el.options[el.selectedIndex].text)+'.')};
+function applyTmpl(v){S.tmpl=v;if(v==='coord'){S.disc.str=true;S.disc.svc=true;S.cats.furn=false}else{S.disc.str=false;S.disc.svc=false;S.cats.furn=true}refresh();toast('View template applied: '+esc((TMPL.find(x=>x[0]===v)||[0,v])[1])+'.')}
+CHG.tmpl=el=>applyTmpl(el.value);
 CHG.phase=el=>{S.phase=el.value;refresh();if(S.view==='ground')toast('Phases show on the site plan: the existing shed and retaining wall.')};
 CHG.opt=el=>{S.opt=el.value;refresh();toast(el.value==='B'?'Showing Option B: covered deck with a pergola.':'Showing Option A: open deck.')};
 CHG.underlay=el=>{S.underlay=el.value;refresh()};
@@ -1352,8 +1466,8 @@ function iso3d(o={}){
  const pad=500;return{vb:[x0-pad,y0-pad,x1-x0+2*pad,y1-y0+2*pad].map(n0).join(' '),body,n:polys.length,sun,sh}}
 
 R['3d']=()=>{const sc=$('#sc-3d');
- if(!sc.dataset.built){sc.innerHTML=`<div class="center"><div class="vhead"><button class="btn sm bt-browser" data-act="browser">${ic('folder','sm')}Browser</button><h2>Default 3D</h2><span class="badge n" id="iso-dir"></span><span class="hint">Click any face to select it.</span><button class="ib" data-act="turn" data-a="1" aria-label="Turn left">${ic('turnl')}</button><button class="ib" data-act="turn" data-a="-1" aria-label="Turn right">${ic('turnr')}</button></div><div class="canvas fitc" id="iso-canvas"></div></div><aside class="side" id="iso-side" aria-label="3D view settings"></aside>`;sc.dataset.built=1;
-  $('#iso-canvas').addEventListener('click',e=>{const el=e.target.closest('[data-id]');S.sel=el?el.dataset.id:null;R['3d']()})}
+ if(!sc.dataset.built){sc.innerHTML=`<div class="center"><div class="canvas fitc" id="iso-canvas"></div><span class="nav-dir" id="iso-dir" aria-live="polite"></span><div class="rb-nav" role="toolbar" aria-label="Turn the view"><button data-act="turn" data-a="1" aria-label="Turn left" data-tl="Turn left">${ic('turnl')}</button><button data-act="turn" data-a="-1" aria-label="Turn right" data-tl="Turn right">${ic('turnr')}</button></div></div><aside class="side" id="iso-side" aria-label="3D view settings"></aside>`;sc.dataset.built=1;
+  $('#iso-canvas').addEventListener('click',e=>{const el=e.target.closest('[data-id]');select(el?el.dataset.id:null)})}
  drawIso();$('#iso-side').innerHTML=isoSide()};
 function drawIso(){const t0=performance.now();const r=iso3d();S.isoMs=performance.now()-t0;S.isoN=r.n;S.isoSun=r.sun;
  $('#iso-canvas').innerHTML=`<svg class="iso" viewBox="${r.vb}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="3D view of the house, looking from the ${['south-east','north-east','north-west','south-west'][S.iso.rot]}">${r.body}</svg>`;
@@ -1368,13 +1482,13 @@ function isoSide(){const v=S.iso;const tg=(a,l,on,icon)=>`<button class="btn sm"
  <div class="sec"><span class="lbl">Speed</span><p class="pad small" id="iso-perf">${perfText()}</p></div>
  <div class="sec"><span class="lbl">Placed from other tools</span><div class="pad small">The heat pump came from a supplier's IFC file. It is kept as a real element with a category and data. <button class="btn sm mt" data-act="selhp">Select it</button></div></div>`}
 ACT.turn=b=>{S.iso.rot=(S.iso.rot+(+b.dataset.a)+4)%4;drawIso()};
-ACT.isot=b=>{const a=b.dataset.a;S.iso[a]=!S.iso[a];if(a==='iso'&&S.iso.iso&&!S.sel)toast('Select an element first, then isolate it.');R['3d']()};
-ACT.selhp=()=>{S.sel='hp';R['3d']()};
+ACT.isot=b=>{const a=b.dataset.a;S.iso[a]=!S.iso[a];if(a==='iso'&&S.iso.iso&&!S.sel)toast('Select an element first, then isolate it.');refresh()};
+ACT.selhp=()=>select('hp');
 CHG.sun=el=>{S.iso.sun=el.checked;drawIso()};
 CHG.sundate=el=>{S.iso.date=el.value;drawIso()};
 INP.suntime=el=>{S.iso.time=+el.value;drawIso()};
 ACT.shadowstudy=()=>{S.shadowDate=S.iso.date;toast(`Shadow study made for ${DATES[S.iso.date]} at 9 am, 12 pm and 3 pm, placed on sheet <b>A801</b>. <a href="#sheet:A801">Open it</a>`)};
-TOOLS['3d']=()=>`<div class="grp"><span class="glbl">Orbit</span>${TB('turn','Turn left','turnl','1')}${TB('turn','Turn right','turnr','-1')}</div><div class="grp"><span class="glbl">Show</span>${TB('isot','Section box','box','box',S.iso.box)}${TB('isot','Isolate','eye','iso',S.iso.iso)}${TB('isot','Linked models','link','xray',S.iso.xray)}${TB('isot','Shadows','sun','sun',S.iso.sun)}</div><div class="grp"><span class="glbl">Study</span>${TB('shadowstudy','Shadow study','sun')}</div>`;
+TOOLS['3d']=()=>[P('Orbit',[TB('turn','Turn left','turnl','1'),TB('turn','Turn right','turnr','-1')]),P('Show',[TB('isot','Section box','box','box',S.iso.box),TB('isot','Isolate','eye','iso',S.iso.iso),TB('isot','Linked models','link','xray',S.iso.xray),TB('isot','Shadows','sun','sun',S.iso.sun)]),P('Study',[TB('shadowstudy','Shadow study','sun')])];
 
 /* ---------- sheets ---------- */
 function withState(o,fn){const keep={};for(const k in o){keep[k]=S[k];S[k]=o[k]}try{return fn()}finally{Object.assign(S,keep)}}
@@ -1425,10 +1539,9 @@ function siteBlock(){const st=siteStats();return RC(240,236,86,40,'ln pf')+TX(24
 function sheetSVG(id){const sh=SHEETS().find(s=>s.id===id)||SHEETS()[2];return`<svg class="dw sheet" viewBox="0 0 420 297" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Sheet ${sh.id} ${esc(sh.name)}"><rect class="paper" x="0" y="0" width="420" height="297"/>${RC(10,10,400,277,'ln')}${titleBlock(sh)}${sheetContent(sh)}</svg>`}
 
 R.sheet=()=>{const sc=$('#sc-sheet');
- if(!sc.dataset.built){sc.innerHTML=`<div class="center"><div class="vhead"><button class="btn sm bt-browser" data-act="browser">${ic('folder','sm')}Browser</button><h2 id="sh-name"></h2><span class="badge n" id="sh-meta"></span><span class="hint">Every view on this sheet is live from the model.</span><div class="seg" role="group" aria-label="Sheet zoom"><button data-act="shz" data-a="fit">Fit</button><button data-act="shz" data-a="1">100%</button><button data-act="shz" data-a="2">200%</button></div></div><div class="canvas paper fitc" id="sh-canvas"></div></div><aside class="side" id="sh-side" aria-label="Sheet actions"></aside>`;sc.dataset.built=1}
+ if(!sc.dataset.built){sc.innerHTML=`<div class="center"><div class="canvas paper fitc" id="sh-canvas"></div><div class="rb-nav" role="group" aria-label="Sheet zoom"><button data-act="shz" data-a="fit" aria-label="Fit the sheet" data-tl="Fit the sheet">${ic('fit')}</button><button data-act="shz" data-a="1" aria-label="Zoom to 100%" data-tl="100%"><b class="small">1×</b></button><button data-act="shz" data-a="2" aria-label="Zoom to 200%" data-tl="200%"><b class="small">2×</b></button></div></div><aside class="side" id="sh-side" aria-label="Sheet actions"></aside>`;sc.dataset.built=1}
  const sh=SHEETS().find(s=>s.id===S.sheet)||SHEETS()[2];S.sheet=sh.id;
- $('#sh-name').textContent=sh.id+' '+sh.name;$('#sh-meta').textContent='A3 · Rev '+curRev();
- $$('#sc-sheet .seg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.a===S.shz));
+  $$('#sc-sheet [data-act="shz"]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.a===S.shz));
  const wpx={fit:'',1:'1100px',2:'2000px'}[S.shz];
  $('#sh-canvas').innerHTML=`<div style="padding:16px;${S.shz==='fit'?'height:100%':''}">${sheetSVG(sh.id).replace('<svg class="dw sheet"',`<svg class="dw sheet" style="display:block;margin:0 auto;border:1px solid var(--rule);${wpx?`width:${wpx};height:auto`:'width:100%;height:100%;max-height:100%'}"`)}</div>`;
  $('#sh-side').innerHTML=sheetSide(sh)};
@@ -1446,7 +1559,7 @@ ACT.print=()=>{const all=$('#pr-set').value==='all';const total=all?SHEETS().len
 ACT.issue=()=>{const why=$('#is-why').value;const to=$$('.is-to').filter(i=>i.checked).map(i=>i.value);if(!to.length){toast('Pick at least one person to send the set to.');return}const n=S.issues.length+1;const t='T-0'+(11+n);const last=S.revs[S.revs.length-1];let rev=last.r;if(last.d!=='19.10.26'){rev=String.fromCharCode(last.r.charCodeAt(0)+1);S.revs.push({r:rev,d:'19.10.26',t:why})}S.issues.push({t,d:'19.10.26',set:why,rev,to:to.join(', '),n:SHEETS().length});R.sheet();renderBrowser();toast(`Issued ${SHEETS().length} sheets at revision ${rev}. Transmittal ${t} and the drawing register are written.`)};
 ACT.attach=b=>{S.cons[b.dataset.a]=true;R.sheet();toast('Attached. It will go into the pack in the checklist order.')};
 ACT.pack=()=>{S.packed=true;R.sheet();toast('Consent pack built in MBIE\'s order.')};
-TOOLS.sheet=()=>`<div class="grp"><span class="glbl">Sheets</span>${TB('print','Print set','print')}${TB('issueTool','Issue set','send')}${TB('packTool','Approval pack','flag')}</div><div class="grp"><span class="glbl">Revisions</span>${TB('go','Compare and cloud','compare','compare')}</div>`;
+TOOLS.sheet=()=>[P('Sheets',[TB('print','Print set','print'),TB('issueTool','Issue set','send'),TB('packTool','Approval pack','flag')]),P('Revisions',[TB('go','Compare and cloud','compare','compare')])];
 ACT.issueTool=()=>{const e=$('#is-why');if(e){e.scrollIntoView({block:'center'});e.focus()}};
 ACT.packTool=()=>{const e=$('#sh-side .list');if(e){e.scrollIntoView({block:'center'})}};
 
@@ -1472,7 +1585,7 @@ function schedRows(){const k=S.sched;
  for(const[n,qv,u,f]of ms){tk+=qv*f;h+=`<tr><td>${n}</td><td class="r m">${qv.toFixed(2)}</td><td>${u}</td><td class="r m">${f}</td><td class="r m">${nz(qv*f)}</td></tr>`}
  return h+`<tr class="t"><td colspan="4">Total for the house · ${(tk/171.4).toFixed(0)} kgCO₂e per m² of floor</td><td class="r m">${nz(tk)}</td></tr></tbody>`}
 R.schedule=()=>{const sc=$('#sc-schedule');
- if(!sc.dataset.built){sc.innerHTML=`<div class="center"><div class="vhead"><button class="btn sm bt-browser" data-act="browser">${ic('folder','sm')}Browser</button><h2 id="sd-name"></h2><span class="badge n">Live from the model</span><span class="hint">Edit a cell and the model changes. Undo works here too.</span></div><div class="scroll" id="sd-body"></div></div><aside class="side" id="sd-side" aria-label="Schedule settings"></aside>`;sc.dataset.built=1}
+ if(!sc.dataset.built){sc.innerHTML=`<div class="center"><div class="vhead"><button class="btn sm bt-browser" data-act="browser">${ic('folder','sm')}Browser</button><h2 id="sd-name"></h2><span class="badge n">Live from the model</span></div><div class="scroll" id="sd-body"></div></div><aside class="side" id="sd-side" aria-label="Schedule settings"></aside>`;sc.dataset.built=1}
  $('#sd-name').textContent=SCHEDS.find(s=>s[0]===S.sched)[1];
  const keep=$('#sd-body').scrollTop;$('#sd-body').innerHTML=`<table class="tbl">${schedRows()}</table>`;$('#sd-body').scrollTop=keep;
  $('#sd-side').innerHTML=schedSide()};
@@ -1497,7 +1610,7 @@ ACT.export=b=>{const f=b.dataset.a;const tb=$('#sd-body table');const rows=$$('t
 ACT.importxl=()=>{const d2=M.doors.find(d=>d.mark==='D02'),d8=M.doors.find(d=>d.mark==='D08'),w7=M.wins.find(n=>n.mark==='W07');S.imp=[d2&&{id:d2.id,mark:'D02',f:'Hardware',k:'hw',a:d2.hw,b:'Privacy set'},d8&&{id:d8.id,mark:'D08',f:'Finish',k:'fin',a:d8.fin,b:'Stain, clear'},w7&&{id:w7.id,mark:'W07',f:'Width',k:'w',a:String(w7.w),b:'1800',win:1}].filter(Boolean);$('#sd-side').innerHTML=schedSide()};
 ACT.applyimp=()=>{const ch=S.imp;S.imp=null;commit(`Brought ${ch.length} changes back from kowhai-doors.xlsx`,()=>{ch.forEach(c=>{const e=c.win?M.wins.find(n=>n.id===c.id):M.doors.find(d=>d.id===c.id);e[c.k]=c.win?+c.b:c.b})});toast('Changes applied from the spreadsheet. The plan and schedules are updated.')};
 ACT.dropimp=()=>{S.imp=null;$('#sd-side').innerHTML=schedSide()};
-TOOLS.schedule=()=>`<div class="grp"><span class="glbl">Schedules</span>${SCHEDS.map(([k,l])=>TB('schedgo',l,'table',k,S.sched===k)).join('')}</div><div class="grp"><span class="glbl">Spreadsheet</span>${TB('export','Export XLSX','down','XLSX')}${TB('importxl','Bring changes back','up')}</div>`;
+TOOLS.schedule=()=>[P('Schedules',[...STACKS(SCHEDS.map(([k,l])=>TB('schedgo',l,'table',k,S.sched===k)))]),P('Spreadsheet',[TB('export','Export XLSX','down','XLSX'),TB('importxl','Bring changes back','up')])];
 
 /* ---------- clash ---------- */
 const CL={tests:[{id:'t1',name:'Services v Structure',hits:10},{id:'t2',name:'Services v Architecture',hits:3},{id:'t3',name:'Structure v Architecture',hits:6},{id:'t4',name:'Clearance around plant',hits:1}],
@@ -1515,7 +1628,7 @@ function clashView(v){const pr=(x,y,z)=>[(x-y)*K30,(x+y)*.5-z];const pts=a=>a.ma
  else{const z=v===1?2500:-300;o+=bx(-1800,1800,-70,70,z-200,z+70,'wall');o+=bx(-60,60,-1500,1500,z-140,z-20,'deck');o+=`<polygon points="${pts([[-60,-70,z+70],[60,-70,z+70],[60,70,z+70],[-60,70,z+70]])}" style="fill:var(--danger-tint);stroke:var(--danger);stroke-width:2px;vector-effect:non-scaling-stroke"/>`;o+=`<circle cx="${pr(0,0,z)[0]}" cy="${pr(0,0,z)[1]}" r="260" style="fill:none;stroke:var(--danger);stroke-width:2px;vector-effect:non-scaling-stroke"/>`;o+=`<text x="${pr(1700,0,z+150)[0]}" y="${pr(1700,0,z+150)[1]}" style="font-size:150px;font-weight:600">B</text><text x="${pr(0,1400,z+50)[0]}" y="${pr(0,1400,z+50)[1]}" style="font-size:150px;font-weight:600">A</text>`}
  return`<svg class="iso" viewBox="-2000 ${v===1?-3300:-900} 4000 ${v===1?2300:2000}" style="width:100%;max-height:220px;display:block;background:var(--panel-alt)">${o}</svg>`}
 R.clash=()=>{const sc=$('#sc-clash');const C=S.clash;
- if(!sc.dataset.built){sc.innerHTML=`<div class="center"><div class="vhead"><button class="btn sm bt-browser" data-act="browser">${ic('folder','sm')}Browser</button><h2>Clash results</h2><span class="badge n" id="cl-sum"></span><span class="hint">Hits are grouped into issues, each with an owner and a saved view.</span></div><div class="scroll" id="cl-body"></div></div><aside class="side" id="cl-side" aria-label="Clash tests"></aside>`;sc.dataset.built=1}
+ if(!sc.dataset.built){sc.innerHTML=`<div class="center"><div class="vhead"><button class="btn sm bt-browser" data-act="browser">${ic('folder','sm')}Browser</button><h2>Clash results</h2><span class="badge n" id="cl-sum"></span></div><div class="scroll" id="cl-body"></div></div><aside class="side" id="cl-side" aria-label="Clash tests"></aside>`;sc.dataset.built=1}
  const list=CL.issues.filter(i=>C.test==='all'||i.t===C.test);const open=CL.issues.filter(i=>i.status!=='Resolved');
  $('#cl-sum').textContent=`${CL.issues.reduce((a,i)=>a+i.hits,0)} hits · ${CL.issues.length} issues · ${open.length} open`;
  const it=CL.issues.find(i=>i.id===C.sel)||list[0];
@@ -1543,7 +1656,7 @@ CHG.clign=el=>{S.clash.ign[el.value]=el.checked;toast('Rule saved. It applies on
 CHG.clgroup=el=>{S.clash.group=el.value;toast('Hits will be grouped by '+el.value+'.')};
 CHG.cllive=el=>{S.clash.live=el.checked;R.clash()};
 ACT.bcf=b=>toast(b.dataset.a==='out'?`Wrote kowhai-clash.bcf with ${CL.issues.filter(i=>i.status!=='Resolved').length} open issues, their views and comments.`:'Read 2 issues from engineer.bcf: both match existing issues, comments merged.');
-TOOLS.clash=()=>`<div class="grp"><span class="glbl">Clash</span>${TB('clrun','Run tests','play')}${TB('cllivet','Live clash','clash','',S.clash.live)}</div><div class="grp"><span class="glbl">Exchange</span>${TB('bcf','Export BCF','down','out')}${TB('bcf','Import BCF','up','in')}</div>`;
+TOOLS.clash=()=>[P('Clash',[TB('clrun','Run tests','play'),TB('cllivet','Live clash','clash','',S.clash.live)]),P('Exchange',[TB('bcf','Export BCF','down','out'),TB('bcf','Import BCF','up','in')])];
 ACT.cllivet=()=>{S.clash.live=!S.clash.live;refresh()};
 
 /* ---------- versions and compare ---------- */
@@ -1564,7 +1677,7 @@ function compareSVG(A,B,D){let g=withModel(B,()=>withState({sel:null},()=>archSV
  for(const c of D){if(c.room)continue;const m=c.k==='rem'?A:B;const b=elBounds(c.id,m);if(!b)continue;const cls=c.k==='add'?'d-add':c.k==='rem'?'d-rem':'d-chg';g+=RC(b[0]-60,b[1]-60,b[2]+120,b[3]+120,cls+(S.cmp.sel===c.id?'':''));const sym=c.k==='add'?'+':c.k==='rem'?'−':'~';g+=TX(b[0]+b[2]/2,b[1]-260,1,sym+' '+esc(c.label),c.k==='add'?'t-add':c.k==='rem'?'t-rem':'t-chg',300);if(S.cmp.sel===c.id)g+=`<rect class="ln ap hv" style="fill:none" x="${b[0]-300}" y="${b[1]-700}" width="${b[2]+600}" height="${b[3]+1000}"/>`}
  return`<svg class="dw pan" viewBox="${VB.ground.join(' ')}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Plan comparing two versions"><rect class="paper" x="-20000" y="-20000" width="80000" height="80000"/>${g}${northArrow(18250,-4700,1)}</svg>`}
 R.compare=()=>{const sc=$('#sc-compare');const C=S.cmp;
- if(!sc.dataset.built){sc.innerHTML=`<div class="center"><div class="vhead"><button class="btn sm bt-browser" data-act="browser">${ic('folder','sm')}Browser</button><h2>Compare versions</h2><span class="badge n" id="cp-sum"></span><span class="hint"><span class="t-add">+</span> added · − removed · ~ changed, shown in colour and by symbol</span></div><div class="canvas" id="cp-canvas"></div></div><aside class="side" id="cp-side" aria-label="Versions"></aside>`;sc.dataset.built=1;$('#cp-canvas').addEventListener('click',e=>{})}
+ if(!sc.dataset.built){sc.innerHTML=`<div class="center"><div class="vhead"><button class="btn sm bt-browser" data-act="browser">${ic('folder','sm')}Browser</button><h2>Compare versions</h2><span class="badge n" id="cp-sum"></span></div><div class="canvas" id="cp-canvas"></div></div><aside class="side" id="cp-side" aria-label="Versions"></aside>`;sc.dataset.built=1;$('#cp-canvas').addEventListener('click',e=>{})}
  const A=getVer(C.a),B=getVer(C.b);const D=diffModels(A,B);
  $('#cp-sum').textContent=`${D.filter(d=>d.k==='add').length} added · ${D.filter(d=>d.k==='rem').length} removed · ${D.filter(d=>d.k==='chg').length} changed`;
  $('#cp-canvas').innerHTML=compareSVG(A,B,D);
@@ -1582,7 +1695,7 @@ CHG.cpb=el=>{S.cmp.b=el.value;S.cmp.sel=null;R.compare()};
 ACT.cpsel=b=>{S.cmp.sel=S.cmp.sel===b.dataset.a?null:b.dataset.a;R.compare()};
 ACT.clouds=()=>{const D=diffModels(getVer('v3'),M).filter(d=>!d.room&&d.k!=='rem');const rev=String.fromCharCode(curRev().charCodeAt(0)+1);S.revs.push({r:rev,d:'19.10.26',t:'Changes since building consent'});S.clouds=D.map(d=>({id:d.id,rev}));R.compare();toast(`Revision ${rev} added with ${D.length} clouds on A102.`)};
 ACT.saveVer=()=>{const n=$('#ver-n').value.trim()||'Saved version '+(VERS.length+1);VERS.push({id:'u'+VERS.length,name:n,date:'19 Oct 2026',by:'You',snap:JSON.stringify(M)});HIST.unshift({who:'You',when:'Just now',what:'Saved version: '+n});R.compare();toast(`Saved “${esc(n)}”. It costs almost nothing: a pointer into the change log.`)};
-TOOLS.compare=()=>`<div class="grp"><span class="glbl">Versions</span>${TB('focusVer','Save version','flag')}${TB('clouds','Accept clouds','cloud')}${TB('team','Who is working','user')}</div>`;
+TOOLS.compare=()=>[P('Versions',[TB('focusVer','Save version','flag'),TB('clouds','Accept clouds','cloud'),TB('team','Who is working','user')])];
 ACT.focusVer=()=>{const e=$('#ver-n');if(e){e.scrollIntoView({block:'center'});e.focus()}};
 
 /* ---------- working together live, per element ---------- */
@@ -1651,7 +1764,7 @@ CHG.a11y=el=>{document.documentElement.toggleAttribute('data-'+el.value,el.check
 CHG.psync=el=>toast(el.checked?'Your preferences follow you to every computer you sign in on.':'Preferences stay on this computer only.');
 ACT.keys=()=>toast('Any command can take a key or a two-key sequence. Find every command with Ctrl K.');
 ACT.startto=b=>{const e=$('#'+b.dataset.a);if(e){e.scrollIntoView({block:'start'});const i=e.querySelector('input,select');if(i)i.focus()}};
-TOOLS.start=()=>`<div class="grp"><span class="glbl">Start</span>${TB('startto','New project','plus','np')}${TB('openrecent','Open the sample','start','0')}${TB('startto','Install','down','plat')}${TB('startto','Learn','book','learn')}</div>`;
+TOOLS.start=()=>[P('Start',[TB('startto','New project','plus','np'),TB('openrecent','Open the sample','start','0'),TB('startto','Install','down','plat'),TB('startto','Learn','book','learn')])];
 
 /* ---------- components ---------- */
 S.fam={w:810,h:1980,hand:'a'};
@@ -1669,7 +1782,7 @@ function famSVGs(){const{w,h,hand}=S.fam,F=45,T=110,W2=w+2*F,hx=hand==='a'?F:W2-
  return`<div class="grid2"><div class="panel"><div class="ph"><h3>Plan</h3><span class="small faint">Symbol at every scale</span></div><svg class="dw" viewBox="-650 -560 ${W2+1300} ${w+900}" preserveAspectRatio="xMidYMid meet" style="display:block;width:100%;height:260px" role="img" aria-label="Door plan symbol">${p}</svg></div><div class="panel"><div class="ph"><h3>Front</h3><span class="small faint">Leaf, frame and handle</span></div><svg class="dw" viewBox="-500 ${-(h+F)-350} ${W2+1100} ${h+F+650}" preserveAspectRatio="xMidYMid meet" style="display:block;width:100%;height:260px" role="img" aria-label="Door front view">${e}</svg></div></div>`}
 function famParams(){const{w,h}=S.fam,F=45;return`<table class="props">${prow('Width',fmtLen(w),'Type value')}${prow('Height',fmtLen(h),'Type value')}${prow('Frame width','45','Type value, locked')}${prow('Leaf thickness','40','Type value')}${prow('Rough opening width',fmtLen(w+2*F+10),'= Width + 2 × Frame width + 10')}${prow('Rough opening height',fmtLen(h+F+5),'= Height + Frame width + 5')}${prow('Swing','90°, '+(S.fam.hand==='a'?'hinged left':'hinged right'))}${prow('Hardware','Follows each door’s Hardware value','Nested component')}</table>`}
 R.family=()=>{const q=$('#lib-q')?$('#lib-q').value:'';const{w,h}=S.fam;const sw=Object.entries(M.dt).filter(([,t])=>t.kind==='swing');
- $('#sc-family').innerHTML=`<div class="center"><div class="vhead"><h2>Component: Single swing door</h2><span class="badge n">Doors · ${sw.length} types</span><span class="hint">Change a value and the door flexes. Load it into the project when it is right.</span><button class="btn pri sm" data-act="famload">${ic('up','sm')}Load into project</button></div>
+ $('#sc-family').innerHTML=`<div class="center"><div class="vhead"><h2>Component: Single swing door</h2><span class="badge n">Doors · ${sw.length} types</span><button class="btn pri sm" data-act="famload">${ic('up','sm')}Load into project</button></div>
  <div class="scroll"><div class="pagepad"><div id="fam-pv">${famSVGs()}</div>
   <div class="panel mt"><div class="pb"><div class="grid2" style="gap:0 16px"><label class="fld"><span>Width: <b id="fw-v">${fmtLen(w)}</b></span><input type="range" min="600" max="1200" step="10" value="${w}" data-inp="flexw" style="width:100%"></label><label class="fld"><span>Height: <b id="fh-v">${fmtLen(h)}</b></span><input type="range" min="1980" max="2400" step="10" value="${h}" data-inp="flexh" style="width:100%"></label></div><div class="row"><span class="small muted">Hinge</span><div class="seg" role="group" aria-label="Hinge side"><button data-act="famhand" data-a="a" aria-pressed="${S.fam.hand==='a'}">Left</button><button data-act="famhand" data-a="b" aria-pressed="${S.fam.hand==='b'}">Right</button></div><span class="sp"></span><button class="btn sm" data-act="famreset">Reset</button></div></div></div>
   <div class="panel mt2"><div class="ph"><h3>Types in the project</h3></div><table class="tbl"><thead><tr><th>Type</th><th class="r">Width</th><th class="r">Height</th><th class="r">Doors</th><th></th></tr></thead><tbody>${sw.map(([k,t])=>`<tr><td>${esc(t.name)}</td><td class="r m">${fmtLen(t.w)}</td><td class="r m">${fmtLen(t.h)}</td><td class="r m">${M.doors.filter(d=>d.type===k).length}</td><td class="r"><button class="btn sm" data-act="famtype" data-a="${k}">Flex</button></td></tr>`).join('')}</tbody></table></div>
@@ -1693,7 +1806,7 @@ ACT.famreset=()=>{S.fam={w:810,h:1980,hand:'a'};refresh()};
 ACT.famtype=b=>{const t=M.dt[b.dataset.a];S.fam.w=t.w;S.fam.h=t.h;R.family();toast(`Flexing ${esc(t.name)}.`)};
 ACT.libload=b=>{const l=LIB[+b.dataset.a];toast(`Loaded “${esc(l[1])}” from the ${l[2].toLowerCase()} library. A local copy means it loads offline too.`)};
 ACT.libfocus=()=>{const i=$('#lib-q');if(i){i.scrollIntoView({block:'center'});i.focus()}};
-TOOLS.family=()=>`<div class="grp"><span class="glbl">Component</span>${TB('famload','Load into project','up')}${TB('famhand','Hinge left','turnl','a',S.fam.hand==='a')}${TB('famhand','Hinge right','turnr','b',S.fam.hand==='b')}${TB('famreset','Reset','undo')}</div><div class="grp"><span class="glbl">Library</span>${TB('libfocus','Search library','search')}</div>`;
+TOOLS.family=()=>[P('Component',[TB('famload','Load into project','up'),TB('famhand','Hinge left','turnl','a',S.fam.hand==='a'),TB('famhand','Hinge right','turnr','b',S.fam.hand==='b'),TB('famreset','Reset','undo')]),P('Library',[TB('libfocus','Search library','search')])];
 
 /* ---------- checks ---------- */
 S.wind='High';S.h1='schedule';
@@ -1732,7 +1845,7 @@ CHG.wind=el=>{S.wind=el.value;refresh();toast(`Wind zone ${esc(S.wind)}: the bra
 ACT.purge=()=>doPurge();
 ACT.ckrun=()=>{R.checks();const n=warnings().filter(w=>w.sev==='bad').length;toast(`All checks run in 0.2 s: ${n} problem${n===1?'':'s'} to fix.`)};
 ACT.ckto=b=>{const e=$('#'+b.dataset.a);if(e)e.scrollIntoView({block:'start'})};
-TOOLS.checks=()=>`<div class="grp"><span class="glbl">Checks</span>${TB('ckrun','Run all checks','play')}${TB('ckto','Warnings','warn','ck-warn')}${TB('ckto','Clean up','shield','ck-audit')}</div>`;
+TOOLS.checks=()=>[P('Checks',[TB('ckrun','Run all checks','play'),TB('ckto','Warnings','warn','ck-warn'),TB('ckto','Clean up','shield','ck-audit')])];
 
 /* ---------- commands and AI ---------- */
 S.con=['# The same commands run from here, a script, the command line or an AI agent.','# Type help to see a few.'];S.ai=null;S.aiWait=false;
@@ -1740,7 +1853,7 @@ const ADDINS=[['Clash and coordination',1],['Model checks',1],['Spreadsheet roun
 const AITASKS=[['light','Check natural light in every habitable room, and fix any room below 10%'],['tags','Tag every door and window on the ground floor plan'],['purge','Clean up unused types and materials'],['issue','Issue the drawing set to the council']];
 const conLine=l=>l.startsWith('#')?`<span class="c">${esc(l)}</span>`:l.startsWith('> ')||l.startsWith('→ ')?`<span class="p">${esc(l)}</span>`:esc(l);
 R.commands=()=>{
- $('#sc-commands').innerHTML=`<div class="center"><div class="vhead"><h2>Commands and AI agents</h2><span class="badge n">Same commands everywhere</span><span class="hint">People, scripts, add-ins and agents all run these.</span></div>
+ $('#sc-commands').innerHTML=`<div class="center"><div class="vhead"><h2>Commands and AI agents</h2><span class="badge n">Same commands everywhere</span></div>
  <div class="scroll"><div class="pagepad">
   <section class="panel"><div class="ph"><h2>Command console</h2><span class="small faint">Every action in the app is a command</span></div><div class="pb"><pre class="console" id="con-out" aria-live="polite">${S.con.map(conLine).join('\n')}</pre><div class="row mt"><input class="inp mono" id="con-in" placeholder="Type a command, for example: list warnings" aria-label="Command" autocomplete="off" style="flex:1;min-width:160px"><button class="btn sm sec" data-act="conrun">Run</button></div><div class="row mt">${['list warnings','list doors','number doors','tag all','print set','export ifc'].map(c=>`<button class="btn sm mono" data-act="conex" data-a="${c}">${c}</button>`).join('')}</div></div></section>
   <section class="panel mt2"><div class="ph"><h2>AI agent</h2><span class="badge n">Through the MCP server</span></div><div class="pb"><p class="small muted">Any AI agent that speaks MCP can use the same commands you do. This one has the edit scope on this project.</p><div class="lbl" style="margin:8px 0 4px">Ask it to</div><ul class="list" style="border:1px solid var(--hairline);border-radius:var(--radius)">${AITASKS.map(([k,t])=>`<li class="click" data-act="aitask" data-a="${k}">${ic('bot','sm')}<span class="grow">${esc(t)}</span>${ic('chev','sm')}</li>`).join('')}</ul>${S.ai?`<pre class="console mt" aria-live="polite">${S.ai.map(conLine).join('\n')}</pre>`:''}${S.aiWait?`<div class="note info mt"><b>Waiting for you.</b> The agent wants to purge ${auditItems().n} unused items. Purging is a binding command, so a person approves it.<div class="row mt"><button class="btn sm pri" data-act="aiok">Approve</button><button class="btn sm" data-act="aino">Decline</button></div></div>`:''}<p class="small muted mt">Every agent edit is marked as the agent’s in the history and undoes in one step. Binding commands wait for a person. Issuing for approval is for people only.</p></div></section>
@@ -1780,7 +1893,7 @@ ACT.aiok=()=>{S.aiWait=false;doPurge('AI agent, approved by you');S.ai=(S.ai||[]
 ACT.aino=()=>{S.aiWait=false;S.ai=(S.ai||[]).concat('← Declined by you. Nothing changed.');R.commands()};
 CHG.addin=el=>{const a=ADDINS[+el.value];a[1]=el.checked?1:0;toast(el.checked?`${esc(a[0])} is on.`:`${esc(a[0])} is off. Its commands leave the search.`)};
 ACT.addintpl=()=>toast('The template has a command, a panel and a check, ready to build. Add-ins run sandboxed, with only the permissions they declare.');
-TOOLS.commands=()=>`<div class="grp"><span class="glbl">Commands</span>${TB('palette','Search commands','search')}${TB('conex','List warnings','term','list warnings')}${TB('conex','Number doors','num','number doors')}</div><div class="grp"><span class="glbl">AI</span>${TB('aitask','Fix natural light','bot','light')}</div>`;
+TOOLS.commands=()=>[P('Commands',[TB('palette','Search commands','search'),TB('conex','List warnings','term','list warnings'),TB('conex','Number doors','num','number doors')]),P('AI',[TB('aitask','Fix natural light','bot','light')])];
 
 /* ---------- a dialog shared by the sharing and project file screens ---------- */
 let DLG_RET=null;
@@ -1861,7 +1974,7 @@ function tlSide(){const p=pkById(S.sh.sel)||PK[PK.length-1],t=TM(p.t),own=p.t===
  h+=`<div class="sec"><span class="lbl">Architecture team rights</span><table class="props">${prow('Publish','Mere Walker, You')}${prow('Take in','Everyone in the team')}${prow('See work in progress','Only the team')}</table><div class="pad mt"><div class="note small">Harakeke Architects’ policy: design options and work in progress never leave the firm.</div></div></div>`;
  return h}
 R.sharing=()=>{const sc=$('#sc-sharing');
- if(!sc.dataset.built){sc.innerHTML=`<div class="center"><div class="vhead"><h2>Sharing timeline</h2><span class="badge n" id="tl-sum"></span><span class="hint">Each team publishes when it is ready, and takes in other teams’ packages when it chooses.</span><button class="btn pri sm" data-act="tlpub">${ic('up','sm')}Publish a package</button></div><div class="scroll"><div class="pagepad" id="tl-body"></div></div></div><aside class="side" id="tl-side" aria-label="Package"></aside>`;sc.dataset.built=1}
+ if(!sc.dataset.built){sc.innerHTML=`<div class="center"><div class="vhead"><h2>Sharing timeline</h2><span class="badge n" id="tl-sum"></span><button class="btn pri sm" data-act="tlpub">${ic('up','sm')}Publish a package</button></div><div class="scroll"><div class="pagepad" id="tl-body"></div></div></div><aside class="side" id="tl-side" aria-label="Package"></aside>`;sc.dataset.built=1}
  const nw=PK.filter(isNew).length;$('#tl-sum').textContent=`${TEAMS.length} teams · ${PK.length} packages${nw?` · ${nw} new for you`:''}`;
  $('#tl-body').innerHTML=`<section class="panel"><div class="ph"><h2>Packages by team</h2></div>${tlTimeline()}<p class="small muted" style="padding:6px 12px 10px">Filled mark: your team has taken it in. Empty mark: new, not taken in yet. Dots under a mark: the teams it is shared with, filled once each takes it in.</p></section>
  <section class="panel mt2"><div class="ph"><h2>Who has taken what</h2></div>${tlTaken()}</section>
@@ -1870,7 +1983,7 @@ R.sharing=()=>{const sc=$('#sc-sharing');
  $('#tl-side').innerHTML=tlSide();
  const w=$('#sc-sharing .tl-wrap');if(w)w.scrollLeft=w.scrollWidth};
 window.addEventListener('resize',()=>{if(S.screen==='sharing'){clearTimeout(tlTimeline.h);tlTimeline.h=setTimeout(()=>R.sharing(),150)}});
-TOOLS.sharing=()=>`<div class="grp"><span class="glbl">Share</span>${TB('tlpub','Publish a package','up')}${TB('tltake','Take in','down')}${TB('tlcmpgo','Compare packages','compare')}</div><div class="grp"><span class="glbl">Record</span>${TB('tlrecgo','Sharing record','book')}${TB('tlpermgo','Who can see','lock')}</div>`;
+TOOLS.sharing=()=>[P('Share',[TB('tlpub','Publish a package','up'),TB('tltake','Take in','down'),TB('tlcmpgo','Compare packages','compare')]),P('Record',[TB('tlrecgo','Sharing record','book'),TB('tlpermgo','Who can see','lock')])];
 ACT.tlsel=b=>{S.sh.sel=b.dataset.a;R.sharing();if(innerWidth<=640){const s=$('#tl-pk');if(s)s.scrollIntoView({block:'start'})}};
 CHG.tlca=el=>{S.sh.cA=el.value;R.sharing()};
 CHG.tlcb=el=>{S.sh.cB=el.value;R.sharing()};
@@ -1974,7 +2087,7 @@ R.files=()=>{const sc=$('#sc-files');
  $('#fs-banner').innerHTML=S.fs.closed?`<div class="note" style="margin:8px 12px">This project is closed. Every file is archived and read-only, and an archive copy in open formats was written. <button class="btn sm" data-act="fsreopen">Reopen (demo only)</button></div>`:'';
  const vw=S.fs.view;$('#fs-body').innerHTML=vw==='files'?fsTable():vw==='reviews'?fsReviews():vw==='register'?fsRegister():fsActivity();
  $('#fs-side').innerHTML=fsSide()};
-TOOLS.files=()=>`<div class="grp"><span class="glbl">Files</span>${TB('fsup','Upload','up')}${TB('fsissue','Issue set','send')}${TB('fsreview','Send for review','check')}</div><div class="grp"><span class="glbl">Project</span>${TB('fssynctool','Keep on this computer','down','',S.fs.sync.has(S.fs.folder))}${TB('fsclose','Close the project','lock')}</div>`;
+TOOLS.files=()=>[P('Files',[TB('fsup','Upload','up'),TB('fsissue','Issue set','send'),TB('fsreview','Send for review','check')]),P('Project',[TB('fssynctool','Keep on this computer','down','',S.fs.sync.has(S.fs.folder)),TB('fsclose','Close the project','lock')])];
 INP.fsq=el=>{S.fs.q=el.value;S.fs.view='files';$$('#sc-files .seg button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.a==='files')));$('#fs-tree').innerHTML=fsTree();$('#fs-body').innerHTML=fsTable()};
 ACT.fsview=b=>{S.fs.view=b.dataset.a;R.files()};
 ACT.fsfolder=b=>{S.fs.folder=b.dataset.a;S.fs.q='';S.fs.view='files';const f=fsFile(S.fs.sel);if(!f||f.f!==S.fs.folder)S.fs.sel=null;renderTools();R.files()};
@@ -2106,6 +2219,7 @@ ACT.assessGo=b=>{$('#assess').hidden=true;go(b.dataset.r)};
 
 /* ---------- start ---------- */
 route();
+if(S.screen==='plan')RB.select(DTAB[DISC]);   // a plan opens on its discipline's tab; the selection's Modify tab waits beside it
 </script>
 </body>
 </html>
