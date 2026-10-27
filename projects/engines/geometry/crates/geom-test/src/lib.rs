@@ -42,6 +42,9 @@
 //!   The binary `golden` lists the
 //!   store, checks it against the repository (`-- check`), runs every golden in one CI leg's
 //!   configuration (`-- run`) and holds a pull request's edits to the approval rule (`-- diff`).
+//! - [`guard`]: the proof that the toolchain and dependency guard of 28.13 trips: `libm`'s `sin`
+//!   changed by one bit must fail the golden `geom-num/determinism`. The binary `guard` patches
+//!   that change in and runs the golden (`-- prove`); `kernel.yml` runs it.
 //! - [`ledger`]: the kernel's source ledger and notices (29.20, rules 4 to 6):
 //!   `projects/engines/geometry/PROVENANCE.md` and `projects/engines/geometry/NOTICE`, generated
 //!   from the map's `Source:` and `Consulted:` records, the hand-kept licence texts of ported
@@ -148,6 +151,7 @@
 pub mod deps;
 pub mod golden;
 pub mod grid;
+pub mod guard;
 pub mod ledger;
 pub mod licence;
 pub mod map;

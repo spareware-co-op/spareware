@@ -4402,6 +4402,23 @@
           "target": "bin"
         },
         {
+          "cost": "one `cargo metadata`, a copy of `libm`'s crate, and one build and run of `geom-num`'s determinism test against the changed copy.",
+          "does": "`prove` finds the `libm` the workspace resolves (`cargo metadata --locked`), copies its crate into `<dir>/guard/libm-<version>`, applies [`geom_test::guard::perturb_sin`] (`sin`'s last bit flipped), and runs `cargo test --release -p geom-num --test determinism` with that copy patched in for `libm` (`--config patch.crates-io.libm.path=...`), building in `<dir>/guard/target` so the workspace's own build is untouched. It prints the run's output and then [`geom_test::guard::verdict`]'s answer: the golden `geom-num/determinism` must report a digest that differs from the store's. `<dir>` defaults to the workspace's `target` folder.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/bin/guard.rs",
+          "guarantees": [
+            "the workspace's `Cargo.lock`, which Cargo rewrites while a patch is in force, is restored byte for byte after the run, whether the run passed, failed or could not start; the copy of `libm` lives under the target folder, never in the source tree. Exit codes: 0 when the guard tripped as it must; 1 when it did not (the change moved no golden, the patch went unused, or the run failed for another reason); 2 for a usage error or a step that cannot be done."
+          ],
+          "job": "`guard`: proves the toolchain and dependency guard trips (chapter 28.13; piece G20).",
+          "method": {
+            "none": "it runs Cargo and calls [`geom_test::guard`], whose module header carries the method."
+          },
+          "path": "guard",
+          "provenance": [],
+          "spdx": null,
+          "target": "bin"
+        },
+        {
           "cost": "one build of the map ([`geom_test::map::build`]) and one read or write of `MAP.json`.",
           "does": null,
           "family": [],
@@ -4754,6 +4771,29 @@
             "text": "the generators of section 28.5 of the kernel architecture, \"aimed at the hard cases\" (`projects/engines/geometry/architecture/28-testing.md`), after `SolidCraft`'s fuzzer (evidence report 11, `projects/kit/notes/G01-evidence/11-vetting-suggested-projects.md`, `SolidCraft`), with Manifold's fuzzer as the counter-example whose coordinates stay between 0.1 and 10 (evidence report 01, `projects/kit/notes/G01-evidence/01-manifold-mesh-booleans.md`, section 4). Each coordinate is one of: full range (2 in 8 draws); small, in −16..=16; one of the extremes ±(2^40 − 1), ±(2^40 − 2), 0 and ±1; snapped to a coarse sub-grid (1 mm, 2.5 mm, 0.01 mm at the building step, 1 mm at the mechanical step, 2^20 steps, 625 steps) so coincident faces and shared edges are common; snapped and then moved by exactly one step, so near-coincidences are common; a repeat of an earlier coordinate; or an earlier coordinate moved by one step. Each point is fresh (half the draws), a repeat of an earlier point, an earlier point moved one step along one axis, a point on the line through the two latest points (so the next point of a triangle is often collinear with the first two), or a point on the line through two earlier points. A point on a line is exactly on it while it stays in the frame."
           },
           "path": "geom_test::grid",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the length of the source and of the run's output.",
+          "does": "the guard itself is `kernel.yml`, which runs every golden on every target and build mode whenever `rust-toolchain.toml`, `Cargo.lock`, the workspace manifest or anything under the kernel changes, so a toolchain or dependency change that moves a result fails there. This module proves that the guard trips. [`perturb_sin`] rewrites `libm`'s `sin` so that every result has its last bit flipped, a one-ulp change no test of a tolerance would see; the binary `guard` builds `geom-num`'s determinism golden against that copy of `libm` (Cargo's `[patch.crates-io]`, given with `--config`) and [`verdict`] reads the run: the golden `geom-num/determinism`, which hashes every function of `geom_num::math::unproven` and so `libm::sin`, must report a digest that differs from the store's.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/guard.rs",
+          "guarantees": [
+            "**The change is one bit, in one function.** [`perturb_sin`] renames `libm`'s one `pub fn sin(x: f64) -> f64` and puts a function of that name beside it that returns the same result with bit 0 flipped. It refuses a source with no such function or with two, so a new `libm` that moves the function fails the proof loudly instead of proving nothing.",
+            "**A trip counts only for the right reason.** [`verdict`] accepts a run only when it failed, Cargo used the patch (it warns when a patch is not used, and that warning is refused), and the golden printed its line saying its digest differs from the store's. A run that failed to build, or failed for any other reason, proves nothing and is refused.",
+            "**Deterministic.** Both functions are pure: the same text gives the same answer."
+          ],
+          "job": "The toolchain and dependency guard's proof (chapter 28.13, \"The toolchain guard\"; piece G20): a deliberate change to the numeric code the kernel depends on must fail a golden.",
+          "method": {
+            "links": [
+              "https://doc.rust-lang.org/cargo/reference/overriding-dependencies.html",
+              "https://doc.rust-lang.org/cargo/reference/config.html#command-line-overrides"
+            ],
+            "text": "Cargo's documented `[patch]` table for overriding a dependency with a local copy (<https://doc.rust-lang.org/cargo/reference/overriding-dependencies.html>), set from the command line (<https://doc.rust-lang.org/cargo/reference/config.html#command-line-overrides>), and the seeded-violation pattern of the kernel's merge gate (G12): each gate is shown to fail on a violation planted on purpose."
+          },
+          "path": "geom_test::guard",
           "provenance": [],
           "spdx": null,
           "target": "lib"
