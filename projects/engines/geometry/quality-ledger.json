@@ -1457,17 +1457,59 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
-      "line_text": "if let Some(top) = limbs.last_mut() {",
-      "occurrences": 2,
+      "line_text": "None => 0,",
+      "occurrences": 9,
       "piece": "G41",
-      "reason": "The `if let Some(top)` on a fixed-size limb array always matches, so the else side of its branch never runs. G41's wide-integer harnesses prove it."
+      "reason": "A lookup on a fixed-size limb array whose index is always in range (`get` or `get_mut` on `[u64; L]` with i < L), so its `None` side never runs. G41's wide-integer harnesses prove it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
+      "line_text": "if let Some(o) = out.get_mut(i) {",
+      "occurrences": 3,
+      "piece": "G41",
+      "reason": "A lookup on a fixed-size limb array whose index is always in range (`get` or `get_mut` on `[u64; L]` with i < L), so its `None` side never runs. G41's wide-integer harnesses prove it."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
       "line_text": "}",
+      "occurrences": 6,
+      "piece": "G41",
+      "reason": "A lookup on a fixed-size limb array whose index is always in range (`get` or `get_mut` on `[u64; L]` with i < L), so its `None` side never runs. G41's wide-integer harnesses prove it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
+      "line_text": "};",
       "occurrences": 2,
       "piece": "G41",
-      "reason": "The `if let Some(top)` on a fixed-size limb array always matches, so the else side of its branch never runs. G41's wide-integer harnesses prove it."
+      "reason": "A lookup on a fixed-size limb array whose index is always in range (`get` or `get_mut` on `[u64; L]` with i < L), so its `None` side never runs. G41's wide-integer harnesses prove it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
+      "line_text": "if let Some(top) = limbs.last_mut() {",
+      "occurrences": 2,
+      "piece": "G41",
+      "reason": "A lookup on a fixed-size limb array whose index is always in range (`get` or `get_mut` on `[u64; L]` with i < L), so its `None` side never runs. G41's wide-integer harnesses prove it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
+      "line_text": "Self(limbs)",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "A lookup on a fixed-size limb array whose index is always in range (`get` or `get_mut` on `[u64; L]` with i < L), so its `None` side never runs. G41's wide-integer harnesses prove it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
+      "line_text": "#[must_use]",
+      "occurrences": 2,
+      "piece": "G41",
+      "reason": "llvm-cov places branch records of a generic instantiation the tests never build on the attribute line above the function; the function's own lines run. G41 proves its branches for every width, or the instantiation gets a test."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
+      "line_text": "if let Some(slot) = out.get_mut(k) {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "A lookup on a fixed-size limb array whose index is always in range (`get` or `get_mut` on `[u64; L]` with i < L), so its `None` side never runs. G41's wide-integer harnesses prove it."
     }
   ]
 }
