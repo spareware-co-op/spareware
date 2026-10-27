@@ -48,6 +48,7 @@ use std::collections::BTreeSet;
 use geom_num::math::{self, unproven};
 use geom_num::{NumError, Real};
 use geom_test::rng::SplitMix64;
+use geom_test::rust_source::scan;
 use geom_test::seed::{Seed, resolve};
 
 /// The 21 `libm` functions the audit's section 2 lists.
@@ -80,7 +81,9 @@ fn libm_calls(text: &str) -> BTreeSet<String> {
         .collect()
 }
 
-/// Every `libm` function `geom-num`'s source calls is audited, and the audit lists each.
+/// Every `libm` function `geom-num`'s kernel code calls is audited, and the audit lists each. Test
+/// code (`#[cfg(test)]` modules, found by `geom_test::rust_source`) may call others, which never
+/// ship.
 #[test]
 #[cfg_attr(
     target_os = "wasi",
@@ -96,7 +99,18 @@ fn attack_the_audit_covers_every_libm_function_the_kernel_calls() {
             if path.is_dir() {
                 folders.push(path);
             } else if path.extension().is_some_and(|e| e == "rs") {
-                called.extend(libm_calls(&std::fs::read_to_string(&path).unwrap()));
+                let text = std::fs::read_to_string(&path).unwrap();
+                let scanned = scan(&text).unwrap();
+                let kernel: Vec<&str> = text
+                    .lines()
+                    .enumerate()
+                    .filter(|(i, _)| !scanned.is_test_line(i + 1))
+                    .map(|(_, line)| line)
+                    .collect();
+                called.extend(libm_calls(&kernel.join(
+                    "
+",
+                )));
             }
         }
     }
