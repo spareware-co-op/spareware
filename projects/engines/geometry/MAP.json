@@ -4577,6 +4577,7 @@
           "file": "projects/engines/geometry/crates/geom-test/src/coverage.rs",
           "guarantees": [
             "**Test code is not counted.** Lines of items behind `#[cfg(test)]` are left out of both the lines found and the lines run, so tests cannot pad a crate's numbers.",
+            "**A line with no code is not counted.** llvm-cov can give a line holding only a comment or an attribute (`#[must_use]` above a `const fn`) a count of 0 though the function runs ([`no_code_lines`]); such a line has nothing to run, so it is left out of both counts.",
             "**Nothing is skipped silently.** A source file that defines a function but has no coverage data was never compiled into the measured tests, and fails; so does a crate with no LCOV file at all, and a foundation crate whose code has `if` or `while` but whose data holds no branch record (the run was made without `--branch`).",
             "**A missing foundation module fails.** A crate of [`crate::foundation::FOUNDATION_MODULES`] with code but no file of its foundation module fails, so moving the module cannot drop it from the foundation bar.",
             "**Every mark cites a checked proof.** A `coverage(off)` mark must have a comment right above it citing `proof: <path>::<name>`, the same proof as its ledger entry, and the cited file must define that function as a Kani harness (`#[kani::proof]`) or a Verus `proof fn`. A ledger entry with no mark is stale and fails.",

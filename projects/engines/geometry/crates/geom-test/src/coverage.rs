@@ -13,6 +13,9 @@
 //!
 //! - **Test code is not counted.** Lines of items behind `#[cfg(test)]` are left out of both the
 //!   lines found and the lines run, so tests cannot pad a crate's numbers.
+//! - **A line with no code is not counted.** llvm-cov can give a line holding only a comment or an
+//!   attribute (`#[must_use]` above a `const fn`) a count of 0 though the function runs
+//!   ([`no_code_lines`]); such a line has nothing to run, so it is left out of both counts.
 //! - **Nothing is skipped silently.** A source file that defines a function but has no coverage
 //!   data was never compiled into the measured tests, and fails; so does a crate with no LCOV file
 //!   at all, and a foundation crate whose code has `if` or `while` but whose data holds no branch
@@ -433,6 +436,21 @@ fn branch_counts(rel: &str, d: &FileData, scanned: &Scan) -> Result<Branches, Co
     })
 }
 
+/// The lines of `text` that hold no code: blank, a line comment, or one attribute alone
+/// (`#[...]` on a line of its own). Numbered from 1.
+#[must_use]
+pub fn no_code_lines(text: &str) -> BTreeSet<usize> {
+    let mut out = BTreeSet::new();
+    for (i, line) in text.lines().enumerate() {
+        let t = line.trim();
+        let attribute = t.starts_with("#[") && t.ends_with(']');
+        if t.is_empty() || t.starts_with("//") || attribute {
+            out.insert(i.saturating_add(1));
+        }
+    }
+    out
+}
+
 /// Measures crate `krate` from the LCOV text of a run of its own tests. `repo` must be the
 /// canonical repository root.
 ///
@@ -471,7 +489,14 @@ pub fn measure(repo: &Path, krate: &str, lcov: &str) -> Result<CrateReport, Cove
         let mut counts = Counts::default();
         let mut missed_lines = Vec::new();
         let mut missed_branches = Vec::new();
-        for (&line, &count) in d.lines.iter().filter(|(l, _)| !scanned.is_test_line(**l)) {
+        let text = std::fs::read_to_string(repo.join(&rel))
+            .map_err(|e| cov_err(format!("{rel} cannot be read: {e}")))?;
+        let silent = no_code_lines(&text);
+        for (&line, &count) in d
+            .lines
+            .iter()
+            .filter(|(l, _)| !scanned.is_test_line(**l) && !silent.contains(*l))
+        {
             counts.lines_found = counts.lines_found.saturating_add(1);
             if count > 0 {
                 counts.lines_hit = counts.lines_hit.saturating_add(1);
