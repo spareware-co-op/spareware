@@ -187,9 +187,10 @@ pub fn chosen_way(chosen: &str) -> Option<Way> {
 /// The gate's record of licence choices (29.20, rule 3): every crate in the kernel family's graph
 /// whose licence offers a choice, its expression exactly as its manifest gives it, and the licence
 /// (or licences, joined by `AND`) taken: the first of 29.2's identifiers, in its order, offered.
-pub const LICENCE_CHOICES: [(&str, &str, &str); 101] = [
+pub const LICENCE_CHOICES: [(&str, &str, &str); 107] = [
     ("anstyle", "MIT OR Apache-2.0", "MIT"),
     ("anyhow", "MIT OR Apache-2.0", "MIT"),
+    ("arraydeque", "MIT/Apache-2.0", "MIT"),
     ("autocfg", "Apache-2.0 OR MIT", "MIT"),
     ("bit-set", "Apache-2.0 OR MIT", "MIT"),
     ("bit-vec", "Apache-2.0 OR MIT", "MIT"),
@@ -203,6 +204,7 @@ pub const LICENCE_CHOICES: [(&str, &str, &str); 101] = [
     ("chacha20", "MIT OR Apache-2.0", "MIT"),
     ("clap", "MIT OR Apache-2.0", "MIT"),
     ("clap_builder", "MIT OR Apache-2.0", "MIT"),
+    ("clap_derive", "MIT OR Apache-2.0", "MIT"),
     ("clap_lex", "MIT OR Apache-2.0", "MIT"),
     ("condtype", "MIT OR Apache-2.0", "MIT"),
     ("core_detect", "MIT/Apache-2.0", "MIT"),
@@ -226,11 +228,14 @@ pub const LICENCE_CHOICES: [(&str, &str, &str); 101] = [
     ("gungraun-macros", "Apache-2.0 OR MIT", "MIT"),
     ("gungraun-runner", "Apache-2.0 OR MIT", "MIT"),
     ("hashbrown", "MIT OR Apache-2.0", "MIT"),
+    ("hashlink", "MIT OR Apache-2.0", "MIT"),
+    ("heck", "MIT OR Apache-2.0", "MIT"),
     ("hex", "MIT OR Apache-2.0", "MIT"),
     ("hybrid-array", "MIT OR Apache-2.0", "MIT"),
     ("indexmap", "Apache-2.0 OR MIT", "MIT"),
     ("itoa", "MIT OR Apache-2.0", "MIT"),
     ("lazy_static", "MIT OR Apache-2.0", "MIT"),
+    ("lcov", "MIT/Apache-2.0", "MIT"),
     ("libc", "MIT OR Apache-2.0", "MIT"),
     (
         "linux-raw-sys",
@@ -311,6 +316,7 @@ pub const LICENCE_CHOICES: [(&str, &str, &str); 101] = [
         "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
         "MIT",
     ),
+    ("yaml-rust2", "MIT OR Apache-2.0", "MIT"),
     ("zerocopy", "BSD-2-Clause OR Apache-2.0 OR MIT", "MIT"),
     (
         "zerocopy-derive",

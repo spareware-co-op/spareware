@@ -115,7 +115,7 @@ fn ln_random_arguments() {
         check_ln(1.0 + rng.uniform(-0.01, 0.01));
         check_ln(1.0 + rng.log_uniform(-60, -10));
         // Near √2, where the reduction switches.
-        check_ln(rng.uniform(1.40, 1.43) * 2f64.powi((rng.next_u64() % 64) as i32 - 32));
+        check_ln(rng.uniform(1.40, 1.43) * libm::scalbn(1.0, (rng.next_u64() % 64) as i32 - 32));
         // Subnormals.
         let sub = f64::from_bits(rng.next_u64() >> 12);
         if sub > 0.0 {
@@ -131,10 +131,10 @@ fn ln_random_arguments() {
 #[test]
 fn ln_just_below_one() {
     let mut rng = Rng(0x10_0002);
-    let lo = 1.0 - 2f64.powi(-8);
+    let lo = 1.0 - libm::scalbn(1.0, -8);
     for _ in 0..4000 {
         check_ln(rng.uniform(lo, 1.0));
-        check_ln(lo + rng.uniform(0.0, 2f64.powi(-16)));
+        check_ln(lo + rng.uniform(0.0, libm::scalbn(1.0, -16)));
         check_ln(1.0 - rng.log_uniform(-53, -9).abs());
     }
     for k in 1..=2000u64 {
