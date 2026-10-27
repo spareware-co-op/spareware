@@ -210,14 +210,15 @@ fn the_twin_refuses_what_it_does_not_model() {
         let d = derivation(p).unwrap();
         let twin = verus_twin(&d, "test", "shipped.rs");
         match p.comparison.name {
-            "orient2d" | "orient3d" => {
+            // ssi_weight's exact path is in i64 and i128 only (piece G29).
+            "orient2d" | "orient3d" | "ssi_weight" => {
                 assert!(twin.is_ok(), "{}: {twin:?}", p.comparison.name);
             }
-            "plane_side" => {
+            "plane_side" | "tpi_weight" | "tpi_side" | "lpi_weight" | "lpi_side" => {
                 let e = twin.unwrap_err().0;
                 assert!(e.contains("rounded input"), "{e}");
             }
-            "incircle" | "insphere" => {
+            "incircle" | "insphere" | "ssi_side" => {
                 let e = twin.unwrap_err().0;
                 assert!(e.contains("wider") || e.contains("wide integers"), "{e}");
             }
