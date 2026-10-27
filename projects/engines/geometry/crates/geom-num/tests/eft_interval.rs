@@ -1545,7 +1545,7 @@ mod interval_tests {
         let max = Interval::new(0.0, f64::MAX).unwrap().sqrt().unwrap();
         assert!(max.lo() == 0.0 && max.hi().is_finite());
         let tiny = Interval::point(f64::from_bits(1)).unwrap().sqrt().unwrap();
-        assert!(tiny.lo() > 0.0 && tiny.contains(2.0f64.powi(-537)));
+        assert!(tiny.lo() > 0.0 && tiny.contains(libm::scalbn(1.0, -537)));
         // The root of a root stays defined: the lower bound never goes below zero.
         let r = Interval::new(0.0, 2.0)
             .unwrap()
@@ -1561,12 +1561,12 @@ mod interval_tests {
     fn overflow_gives_not_finite() {
         let max = Interval::point(f64::MAX).unwrap();
         let zero = Interval::point(0.0).unwrap();
-        let big = Interval::point(2.0f64.powi(600)).unwrap();
+        let big = Interval::point(libm::scalbn(1.0, 600)).unwrap();
         assert_eq!(max.add(max), Err(NumError::NotFinite));
         assert_eq!(max.neg().sub(max), Err(NumError::NotFinite));
         assert_eq!(big.mul(big), Err(NumError::NotFinite));
         assert_eq!(
-            big.div(Interval::point(2.0f64.powi(-600)).unwrap()),
+            big.div(Interval::point(libm::scalbn(1.0, -600)).unwrap()),
             Err(NumError::NotFinite)
         );
         // The exact sum Ω is finite, but no finite double lies above it to widen to.
