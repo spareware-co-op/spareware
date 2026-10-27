@@ -163,7 +163,9 @@ const store = {
   get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* private window: the choice lasts for this visit */ } }
 };
-const keyOf = it => it.id || [it.act || 'run', it.a == null ? '' : it.a, it.label].join('|');
+const keyOf = it => it.id || it.domId || [it.act || 'run', it.a == null ? '' : it.a, it.label].join('|');
+/* Extra data attributes a page's own handlers read, for example {cmd: 'bold'} becomes data-cmd="bold". */
+const dataAttrs = d => Object.entries(d).map(([k, v]) => ` data-${k.replace(/[A-Z]/g, c => '-' + c.toLowerCase())}="${esc(v)}"`).join('');
 const focusables = el => Array.from(el.querySelectorAll('button:not([disabled]),[tabindex="0"]')).filter(b => b.offsetParent !== null);
 
 /* ---------- the ribbon ---------- */
@@ -179,6 +181,7 @@ class Ribbon {
     this.peek = false;
     this.pop = null;              // the open menu, flyout or File menu: {el, trigger}
     this.items = [];              // items of the last render, by index
+    this.uid = 'rb' + (++Ribbon.n);
     host.classList.add('rb');
     host.addEventListener('click', e => this.onClick(e));
     host.addEventListener('keydown', e => this.onKey(e));
@@ -216,7 +219,7 @@ class Ribbon {
   }
   allTabs() { return (this.cfg.tabs || []).concat(this.cfg.contextual || []); }
   /* Brings a tab to the front, for example the discipline the page just switched to. */
-  select(id) { if (this.allTabs().some(t => t.id === id)) { if (!(this.ctxIds || []).includes(id)) this.lastStd = id; this.active = id; this.render(); } }
+  select(id) { if (this.allTabs().some(t => t.id === id)) { if (!(this.ctxIds || []).includes(id)) this.lastStd = id; this.show(id); } }
 
   render() {
     const fa = document.activeElement, fk = fa && (this.host.contains(fa) || (this.o.quick && this.o.quick.contains(fa))) ? fa.dataset.rk : null;
@@ -224,24 +227,37 @@ class Ribbon {
     this.hideTip();
     this.items = [];
     const tabs = this.allTabs(), cur = tabs.find(t => t.id === this.active) || tabs[0];
-    const ctxIds = this.ctxIds || [];
+    if (cur) this.active = cur.id;
+    const ctxIds = this.ctxIds || [], u = this.uid;
     const tabBtn = t => {
       const on = cur && t.id === cur.id, c = ctxIds.includes(t.id);
-      return `<button type="button" class="rb-tab${c ? ' ctx' : ''}" role="tab" id="rbt-${esc(t.id)}" data-tab="${esc(t.id)}" data-rk="tab:${esc(t.id)}" aria-selected="${on}" aria-controls="rb-body" tabindex="${on ? 0 : -1}">${c && t.group ? `<span class="rb-ctxg">${esc(t.group)}</span>` : ''}<span class="rb-tl">${esc(t.label)}</span></button>`;
+      return `<button type="button" class="rb-tab${c ? ' ctx' : ''}" role="tab" id="${u}-t-${esc(t.id)}" data-rb-tab="${esc(t.id)}" data-rk="tab:${esc(t.id)}" aria-selected="${on}" aria-controls="${u}-b-${esc(t.id)}" tabindex="${on ? 0 : -1}">${c && t.group ? `<span class="rb-ctxg">${esc(t.group)}</span>` : ''}<span class="rb-tl">${esc(t.label)}</span></button>`;
     };
-    const file = this.cfg.file;
+    const file = this.cfg.file, fdata = file && file.data ? dataAttrs(file.data) : ' data-rb-file="1" aria-haspopup="menu" aria-expanded="false"';
     this.host.dataset.min = String(this.min);
     this.host.classList.toggle('peek', this.peek);
-    this.host.innerHTML = `<div class="rb-bar">${file ? `<button type="button" class="rb-file" data-rb-file="1" data-rk="file" aria-haspopup="menu" aria-expanded="false">${esc(file.label || 'File')}</button>` : ''}<div class="rb-tabs" role="tablist" aria-label="${esc(this.o.label || 'Ribbon')}">${tabs.map(tabBtn).join('')}</div><span class="rb-sp"></span><button type="button" class="rb-mini" data-rb-min="1" data-rk="min" aria-pressed="${this.min}" data-tip="${this.min ? 'Show the whole ribbon' : 'Show tabs only'}" aria-label="${this.min ? 'Show the whole ribbon' : 'Show tabs only'}">${icon(this.min ? 'chevd' : 'chevu')}</button></div>`
-      + `<div class="rb-body${cur && ctxIds.includes(cur.id) ? ' ctx' : ''}" id="rb-body" role="tabpanel" aria-labelledby="rbt-${esc(cur ? cur.id : '')}">${cur ? (cur.panels || []).map((p, i) => this.panelHTML(p, i)).join('') : ''}</div>`;
-    this.body = this.host.querySelector('.rb-body');
+    this.host.innerHTML = `<div class="rb-bar">${file ? `<button type="button" class="rb-file"${fdata} data-rk="file">${esc(file.label || 'File')}</button>` : ''}<div class="rb-tabs" role="tablist" aria-label="${esc(this.o.label || 'Ribbon')}">${tabs.map(tabBtn).join('')}</div><span class="rb-sp"></span>${this.cfg.end ? `<div class="rb-end">${this.cfg.end}</div>` : ''}<button type="button" class="rb-mini" data-rb-min="1" data-rk="min" aria-pressed="${this.min}" data-tl="${this.min ? 'Show the whole ribbon' : 'Show tabs only'}" aria-label="${this.min ? 'Show the whole ribbon' : 'Show tabs only'}">${icon(this.min ? 'chevd' : 'chevu')}</button></div>`
+      + tabs.map(t => `<div class="rb-body${ctxIds.includes(t.id) ? ' ctx' : ''}" id="${u}-b-${esc(t.id)}" data-rb-body="${esc(t.id)}" role="tabpanel" aria-labelledby="${u}-t-${esc(t.id)}"${cur && t.id === cur.id ? '' : ' hidden'}>${(t.panels || []).map((p, i) => this.panelHTML(p, i)).join('')}</div>`).join('');
+    this.body = cur ? this.host.querySelector(`[data-rb-body="${CSS.escape(cur.id)}"]`) : null;
     if (this.o.quick) this.o.quick.innerHTML = (this.cfg.quick || []).map(it => this.btn(it, 'q')).join('');
     this.fit();
     if (fk) { const el = this.find(fk); if (el) el.focus(); }
   }
+  /* Shows one tab's panels without rebuilding anything. */
+  show(id) {
+    const tabs = this.allTabs();
+    if (!tabs.some(t => t.id === id)) return;
+    this.closePop(true);
+    this.hideTip();
+    this.active = id;
+    this.host.querySelectorAll('.rb-tab').forEach(b => { const on = b.dataset.rbTab === id; b.setAttribute('aria-selected', String(on)); b.tabIndex = on ? 0 : -1; });
+    this.host.querySelectorAll('.rb-body').forEach(b => { b.hidden = b.dataset.rbBody !== id; });
+    this.body = this.host.querySelector(`[data-rb-body="${CSS.escape(id)}"]`);
+    this.fit();
+  }
   find(rk) {
     const sel = `[data-rk="${CSS.escape(rk)}"]`;
-    return this.host.querySelector(sel) || (this.o.quick && this.o.quick.querySelector(sel));
+    return (this.body && this.body.querySelector(sel)) || this.host.querySelector('.rb-bar ' + sel) || this.host.querySelector(sel) || (this.o.quick && this.o.quick.querySelector(sel));
   }
 
   panelHTML(p, i, open) {
@@ -257,12 +273,16 @@ class Ribbon {
     const k = this.items.push(it) - 1;
     const rk = keyOf(it);
     const dis = it.disabled ? ' aria-disabled="true"' : '';
-    const act = it.disabled ? '' : it.act ? ` data-act="${esc(it.act)}"${it.a != null ? ` data-a="${esc(it.a)}"` : ''}` : it.run ? ` data-rb-run="${k}"` : '';
-    const tip = ` data-tip="${esc(it.tip || '')}" data-tl="${esc(it.label)}"${it.kbd ? ` data-kbd="${esc(it.kbd)}"` : ''}`;
+    const act = (it.disabled ? '' : it.act ? ` data-act="${esc(it.act)}"${it.a != null ? ` data-a="${esc(it.a)}"` : ''}` : it.run ? ` data-rb-run="${k}"` : '') + (it.data && !it.disabled ? dataAttrs(it.data) : '');
+    const tip = ` data-rb-tip="${esc(it.tip || '')}" data-tl="${esc(it.label)}"${it.kbd ? ` data-rb-kbd="${esc(it.kbd)}"` : ''}`;
     const pressed = it.pressed != null && size !== 'm' ? ` aria-pressed="${!!it.pressed}"` : '';
     const ic = it.icon ? icon(it.icon, size === 'lg' ? 'lg' : '') : '';
     const lbl = size === 'q' ? '' : `<span class="rb-l">${esc(it.label)}${it.menu && !it.split ? icon('chevd', 'dd') : ''}</span>`;
     const id = it.domId ? ` id="${esc(it.domId)}"` : '';
+    if (it.options) {
+      const sel = `<select${id}${act}${dis ? ' disabled' : ''} aria-label="${esc(it.label)}"${tip}>${it.options.map(o => { const [v, l] = Array.isArray(o) ? o : [o, o]; return `<option value="${esc(v)}"${String(v) === String(it.value) ? ' selected' : ''}>${esc(l)}</option>`; }).join('')}</select>`;
+      return `<label class="rb-sel ${size === 'lg' ? 'rb-sel-lg' : ''}">${it.icon ? icon(it.icon) : ''}${it.show ? `<span class="rb-l">${esc(it.label)}</span>` : ''}${sel}</label>`;
+    }
     if (size === 'm') {
       const role = it.pressed != null ? `menuitemcheckbox" aria-checked="${!!it.pressed}` : 'menuitem';
       return `<button type="button" class="rb-mi" role="${role}" data-rk="${esc(rk)}"${act}${dis}${it.tip ? ` title="${esc(it.tip)}"` : ''}>${it.pressed != null ? `<span class="rb-mck">${it.pressed ? icon('check') : ''}</span>` : ''}${ic}<span class="rb-l">${esc(it.label)}${it.sub ? `<small>${esc(it.sub)}</small>` : ''}</span>${it.kbd ? `<kbd>${esc(it.kbd)}</kbd>` : ''}</button>`;
@@ -291,20 +311,19 @@ class Ribbon {
     const t = e.target.closest('button');
     if (!t) return;
     if (t.getAttribute('aria-disabled') === 'true') { e.preventDefault(); e.stopPropagation(); return; }
-    if (t.dataset.tab) { this.tabClick(t.dataset.tab); return; }
+    if (t.dataset.rbTab) { this.tabClick(t.dataset.rbTab); return; }
     if (t.dataset.rbMin) { this.setMin(!this.min); return; }
     if (t.dataset.rbFile) { this.toggleFile(t); return; }
     if (t.dataset.rbPanel != null) { this.toggleFlyout(t); return; }
     if (t.dataset.rbMenu != null) { this.toggleMenu(t, this.items[+t.dataset.rbMenu].menu); return; }
     if (t.dataset.rbRun != null) { const it = this.items[+t.dataset.rbRun]; this.done(); if (it && it.run) it.run(t, e); return; }
-    if (t.dataset.act) this.done();   // the page's own click handler runs it
+    if (this.host.contains(t) || (this.pop && this.pop.el.contains(t))) this.done();   // the page's own click handler runs it
   }
   done() { this.closePop(); this.hideTip(); if (this.peek) this.setPeek(false); }
   tabClick(id) {
-    if (this.min) { if (this.peek && id === this.active) { this.setPeek(false); return; } this.active = id; this.peek = true; }
-    else this.active = id;
     if (!(this.ctxIds || []).includes(id)) this.lastStd = id;
-    this.render();
+    if (this.min) { if (this.peek && id === this.active) { this.setPeek(false); return; } this.show(id); this.setPeek(true); }
+    else this.show(id);
   }
   setMin(v) { this.min = v; this.peek = false; store.set('sw-ribbon-min:' + (this.o.app || ''), v ? '1' : '0'); this.render(); }
   setPeek(v) { if (this.peek === v) return; this.peek = v; this.host.classList.toggle('peek', v); this.fit(); }
@@ -315,10 +334,9 @@ class Ribbon {
       const L = Array.from(this.host.querySelectorAll('.rb-tab')), i = L.indexOf(t);
       const j = e.key === 'Home' ? 0 : e.key === 'End' ? L.length - 1 : (i + (e.key === 'ArrowRight' ? 1 : -1) + L.length) % L.length;
       e.preventDefault();
-      this.active = L[j].dataset.tab;
-      if (!(this.ctxIds || []).includes(this.active)) this.lastStd = this.active;
-      this.render();
-      const n = this.find('tab:' + this.active); if (n) n.focus();
+      if (!(this.ctxIds || []).includes(L[j].dataset.rbTab)) this.lastStd = L[j].dataset.rbTab;
+      this.show(L[j].dataset.rbTab);
+      L[j].focus();
       return;
     }
     if (t.classList && t.classList.contains('rb-tab') && e.key === 'ArrowDown' && !(this.min && !this.peek)) {
@@ -408,14 +426,14 @@ class Ribbon {
 
   /* ---------- tooltips: instant, white, with a 1px ink border ---------- */
   tipOn(root) {
-    root.addEventListener('mouseover', e => { const b = e.target.closest('[data-tl],[data-tip]'); if (b && root.contains(b)) this.showTip(b); });
-    root.addEventListener('mouseout', e => { const b = e.target.closest('[data-tl],[data-tip]'); if (b && !b.contains(e.relatedTarget)) this.hideTip(); });
-    root.addEventListener('focusin', e => { const b = e.target.closest('[data-tl],[data-tip]'); if (b && b.matches(':focus-visible')) this.showTip(b); });
+    root.addEventListener('mouseover', e => { const b = e.target.closest('[data-tl]'); if (b && root.contains(b)) this.showTip(b); });
+    root.addEventListener('mouseout', e => { const b = e.target.closest('[data-tl]'); if (b && !b.contains(e.relatedTarget)) this.hideTip(); });
+    root.addEventListener('focusin', e => { const b = e.target.closest('[data-tl]'); if (b && b.matches(':focus-visible')) this.showTip(b); });
     root.addEventListener('focusout', () => this.hideTip());
   }
   showTip(b) {
     if (this.pop && this.pop.el.contains(b)) return;
-    const label = b.dataset.tl || '', tip = b.dataset.tip || '', kbd = b.dataset.kbd || '';
+    const label = b.dataset.tl || '', tip = b.dataset.rbTip || '', kbd = b.dataset.rbKbd || '';
     if (!tip && !kbd && b.querySelector('.rb-l') && b.offsetWidth > 0 && getComputedStyle(b.querySelector('.rb-l')).display !== 'none') return;
     let t = this.tip;
     if (!t) { t = this.tip = document.createElement('div'); t.className = 'rb-tip'; t.setAttribute('role', 'tooltip'); document.body.appendChild(t); }
@@ -469,7 +487,7 @@ class Dock {
     mv.setAttribute('aria-label', 'Move ' + name);
     mv.setAttribute('aria-haspopup', 'menu');
     mv.dataset.tl = 'Move ' + name;
-    mv.dataset.tip = 'Drag the title to dock it on either side, or pick a place here.';
+    mv.dataset.rbTip = 'Drag the title to dock it on either side, or pick a place here.';
     mv.innerHTML = icon('move');
     h.insertBefore(mv, h.querySelector('.rb-x'));
     mv.addEventListener('click', () => this.menu(mv, p.dataset.pal));
@@ -579,6 +597,8 @@ class Dock {
     return {side, i: at, rect: {left: side === 'left' ? w.left : w.right - W, top, width: W, height: h}};
   }
 }
+
+Ribbon.n = 0;
 
 global.SpareIcons = {install, icon, names: () => Object.keys(Object.assign({}, ICONS, EXTRA))};
 global.SpareRibbon = {create: (host, opts) => new Ribbon(host, opts), dock: (work, opts) => new Dock(work, opts), icon};

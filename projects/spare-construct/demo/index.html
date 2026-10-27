@@ -763,6 +763,7 @@ function route(){
  $$('.screen').forEach(s=>s.classList.toggle('on',s.id==='sc-'+sid));
  openView(curView());
  refresh();
+ if(S.after){const f=S.after;S.after=null;f()}   // a command waiting for this page (see ACT.on)
  const m=$('#main');if(m)m.scrollTop=0;
 }
 window.addEventListener('hashchange',route);
@@ -770,7 +771,7 @@ function refresh(){renderViewTabs();renderBrowser();renderDock();(R[S.screen]||(
 function headerView(){const t={start:'Start',plan:VIEWS[S.view].name,'3d':'3D view','sheet':'Sheet '+S.sheet,schedule:'Schedules',clash:'Clash results',compare:'Team and versions',sharing:'Sharing timeline',files:'Project files',family:'Component: Single swing door',checks:'Checks',commands:'Commands and AI agents'}[S.screen];$('#h-view').textContent=t;document.title='Spare Construct demo: '+t}
 ACT.go=b=>go(b.dataset.a);
 /* Some commands live on their own page: open that page, then run the command there. data-a is "page|command|value". */
-ACT.on=b=>{const[h,act,a]=b.dataset.a.split('|');const run=()=>{if(ACT[act])ACT[act]({dataset:{a:a||''}})};if(S.screen===h.split(':')[0])run();else{go(h);later(run)}};
+ACT.on=b=>{const[h,act,a]=b.dataset.a.split('|');const run=()=>{if(ACT[act])ACT[act]({dataset:{a:a||''}})};if(S.screen===h.split(':')[0])run();else{S.after=run;go(h)}};
 
 /* ---------- open views, as tabs over the drawing area ---------- */
 const OPEN=[];
