@@ -7,7 +7,10 @@ harnesses. Nothing here ships, and no kernel crate depends on it.
 This page is the layout every target follows, chosen by piece G14 (the fuzz toolchain spike), and
 how each engine runs a target, on your machine and in CI. The first target built to it is
 `orient2d` (`src/orient2d.rs`): `geom-num`'s orient2d, its exact path and its `f64` filter must
-agree with the exact determinant of orient2d's definition, computed from scratch.
+agree with the exact determinant of orient2d's definition, computed from scratch. The others:
+`predicates` (`src/predicates.rs`, G11), every exact predicate answers and swapping two points
+flips its sign; and `wide` (`src/wide.rs`, G26), the wide integers agree with `num-bigint` on
+every operation at every width, `I128` to the reserved 768 bits.
 
 ## One law, four engines
 
@@ -150,6 +153,11 @@ cargo bolero test orient2d_fuzz --package geom-fuzz --toolchain nightly-2026-10-
 
 `-T` bounds the run; `--runs`, `--jobs` and `--max-input-length` are the other limits. A crash is
 written to `tests/__fuzz__/orient2d/crashes`, where `cargo test` replays it.
+
+**Campaigns.** `.github/workflows/kernel-fuzz-campaign.yml` runs `wide_fuzz` under libFuzzer in
+five shards of five hours, 25 CPU hours, for G26's "24 hours clean". It runs only on demand: when
+the label `fuzz-campaign` is added to a pull request, or by hand from the Actions tab once the file
+is on `main`. Each shard uploads any crash and the corpus it grew.
 
 **Kani**, on Linux or macOS:
 
