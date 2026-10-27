@@ -941,6 +941,27 @@
       "reason": "In sinpi and cospi's port: the empty-table arm, and the nudge and hard-case branches that only inputs of the exceptional list reach. G47 proves them unreachable, or tests them."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-num/src/perturb.rs",
+      "line_text": "if let Some(row) = m.get_mut(arg) {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The perturbed determinant's defensive arms: `arg` always indexes a row of the matrix, so `get_mut` never misses, and the search always finds a nonzero term for distinct keys (choosing, in key order, column k for the argument of rank k leaves a coefficient of ±1), so its fallback never runs. G41 proves them unreachable."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/perturb.rs",
+      "line_text": "}",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The perturbed determinant's defensive arms: `arg` always indexes a row of the matrix, so `get_mut` never misses, and the search always finds a nonzero term for distinct keys (choosing, in key order, column k for the argument of rank k leaves a coefficient of ±1), so its fallback never runs. G41 proves them unreachable."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/perturb.rs",
+      "line_text": "Err(NumError::BudgetExceeded)",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The perturbed determinant's defensive arms: `arg` always indexes a row of the matrix, so `get_mut` never misses, and the search always finds a nonzero term for distinct keys (choosing, in key order, column k for the argument of rank k leaves a coefficient of ±1), so its fallback never runs. G41 proves them unreachable."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
       "line_text": "Some((n, d)) if within_budget(&n, d) => Ok(Plane { n, d }),",
       "occurrences": 1,
