@@ -50,6 +50,14 @@ name: Kernel development crates
 #   WebAssembly job leaves the development crates out. A seed must draw the same test data and a
 #   generator give the same bytes there as natively, and the golden hashes and committed-output
 #   tests fail on a target that differs.
+# - Verus on orient2d's twin (chapter 28.7, "Predicates, by generated twins"; piece G36): geom-gen
+#   writes a Verus-annotated twin of orient2d's exact path
+#   (projects/engines/geometry/crates/geom-gen/generated/verus-orient2d.rs), whose `value` is the
+#   shipped one with its annotations; this job verifies it with a pinned Verus release, proving the
+#   path never overflows and returns the description's value for every input on the grid.
+#   geom-gen's tests/verus_twin.rs, which kernel.yml runs, holds the twin to the shipped code token
+#   for token. Verus checks with its own pinned Rust compiler, which builds nothing that ships, so
+#   it is not the kernel's compiler; it runs on Linux only.
 #
 # The dependency rule, the fuzz target, the generator check, the map check, the ledger check and the
 # banned-source scan run natively on every operating system kernel.yml tests, the same six runners,
@@ -80,7 +88,7 @@ name: Kernel development crates
 # Supply chain: every action is pinned to the same full commit as in kernel.yml, checked against
 # its tag when it was pinned there (the tag beside each); update a pin in both files together, and
 # only after reviewing the new commit. wasmtime is a pinned release checked against its SHA-256
-# before it runs. The workflow can only read the repository.
+# before it runs, and so is the Verus release. The workflow can only read the repository.
 
 on:
   pull_request:
@@ -194,3 +202,35 @@ jobs:
           echo "$RUNNER_TEMP/$name" >> "$GITHUB_PATH"
       - name: geom-test, geom-fuzz (the seeded leg) and geom-gen on a 32-bit target
         run: cargo test --locked -p geom-test -p geom-fuzz -p geom-gen --target wasm32-wasip1
+
+  verus:
+    name: Verus proves orient2d's twin
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # The Verus release the twins are verified with, by its tag, its Linux archive and the
+      # SHA-256 GitHub publishes for that archive, and the Rust release it names (its
+      # version.json); change all four together.
+      VERUS_RELEASE: "release/0.2026.10.18.7d82994"
+      VERUS_ARCHIVE: "verus-0.2026.10.18.7d82994-x86-linux.zip"
+      VERUS_SHA256: "e9af03732d4bdd32b93a8fcf471706739c24c1473fa5086618d96c47237845dd"
+      VERUS_RUST: "1.99.1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the pinned Verus release, checked against its SHA-256
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release download "$VERUS_RELEASE" --repo verus-lang/verus \
+            --pattern "$VERUS_ARCHIVE" --dir "$RUNNER_TEMP"
+          echo "$VERUS_SHA256  $RUNNER_TEMP/$VERUS_ARCHIVE" | sha256sum --check
+          unzip -q "$RUNNER_TEMP/$VERUS_ARCHIVE" -d "$RUNNER_TEMP/verus"
+          verus=$(find "$RUNNER_TEMP/verus" -type f -name verus -perm -u+x | head -n 1)
+          test -n "$verus"
+          rustup toolchain install "$VERUS_RUST" --profile minimal
+          dirname "$verus" >> "$GITHUB_PATH"
+      - name: Verus verifies orient2d's twin
+        run: verus --crate-type=lib projects/engines/geometry/crates/geom-gen/generated/verus-orient2d.rs

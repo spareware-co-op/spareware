@@ -70,11 +70,18 @@
 //!
 //! Dependencies: `geom-num` (MPL-2.0, ours), whose constants the generators tabulate, and
 //! `geom-test` (MPL-2.0, ours), for the seed type and `SplitMix64`. Their own dependencies are
-//! recorded in their headers.
+//! recorded in their headers. Its tests also use `proc-macro2` 1.0 (a development dependency,
+//! without its default `proc-macro` feature), to compare the Verus twin's tokens with the shipped
+//! code's; `geom-test` already brings it.
 //!
-//! Licences of every outside package this crate brings into a build itself, checked by
-//! `geom-test`'s `tests/licences.rs`: none. Every outside package in its build comes through
-//! `geom-num` or `geom-test`.
+//! Licences of every outside package this crate brings into a build itself, on every target
+//! (`cargo tree --target all`), each record checked by `geom-test`'s `tests/licences.rs`: only its
+//! tests' `proc-macro2` and what that brings. Every other outside package in its build comes
+//! through `geom-num` or `geom-test`. Where a package offers a choice, it is taken under the
+//! permissive licences offered (MIT or Apache-2.0):
+//!
+//! - MIT OR Apache-2.0: `proc-macro2`.
+//! - (MIT OR Apache-2.0) AND Unicode-3.0: `unicode-ident`.
 #![forbid(unsafe_code)]
 
 pub mod bignum;

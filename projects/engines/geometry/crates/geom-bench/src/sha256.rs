@@ -1,27 +1,34 @@
-//! SHA-256, the hash of every benchmark's golden digests.
+//! SHA-256, the hash of every benchmark's golden digests: the `sha2` crate's, with the golden
+//! digest type the gates compare and the hexadecimal form `golden.txt` stores.
 //!
 //! The kernel's golden hashes are SHA-256 (chapters 21 and 28.13), so the benchmarks' output hashes
-//! are too (chapter 23.13, "Output hash"). The hashing is RustCrypto's `sha2` crate, the one
-//! SHA-256 implementation of every golden in the kernel (piece G19; `geom_test::golden` uses it
-//! too); this module keeps the benchmark harnesses' interface to it: [`Sha256`], fed with
-//! [`Sha256::update`] and finished into a [`Digest`]. It replaced a hand-written implementation of
-//! the standard; every golden digest in `golden.txt` is unchanged, since SHA-256 is one function
-//! whoever computes it.
+//! are too (chapter 23.13, "Output hash"). The hash is the standard `sha2` crate's (MIT
+//! OR Apache-2.0), and the hexadecimal form the standard `hex` crate's (MIT OR Apache-2.0): chapter
+//! 29.1's rule since the owner's direction of 2026-10-22 (piece G12a) is to use well-known
+//! permissive crates rather than hand-roll what they already do, and nothing here is kernel code
+//! (this is a development crate, chapter 27). This module adds only what the gates need on top:
+//! [`Digest`], a 32-byte value that is `Copy`, ordered and hashable so the tests can key maps by it,
+//! and [`Sha256`], which feeds bytes in and gives a [`Digest`] out.
 //!
-//! Method: the Secure Hash Standard, NIST FIPS 180-4,
-//! <https://csrc.nist.gov/pubs/fips/180-4/upd1/final>, computed by the `sha2` crate (MIT OR
-//! Apache-2.0, a dependency, not a port). The tests check the standard's own examples
+//! Guarantees:
+//!
+//! - **The digest FIPS 180-4 defines**, whatever pieces the message is fed in: `sha2`'s, which the
+//!   tests check against the standard's own examples, a million bytes in uneven pieces and every
+//!   padding length.
+//! - **The same digest on every target**: SHA-256 is fully specified integer arithmetic, and
+//!   `sha2`'s portable and processor-specific back ends compute the same function (the tests run on
+//!   every target the gates run on, wasm32 included).
+//! - **A hexadecimal digest reads back as itself**: [`Digest::from_hex`] takes exactly 64 digits,
+//!   either case, and refuses anything else; [`Digest`]'s `Display` writes 64 lowercase digits.
+//! - No method panics.
+//!
+//! Method: the Secure Hash Standard, NIST FIPS 180-4
+//! (<https://csrc.nist.gov/pubs/fips/180-4/upd1/final>), as the `sha2` crate implements it
+//! (<https://docs.rs/sha2/0.11.0/sha2/>), checked against the standard's example values
 //! (<https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values>).
 //!
-//! Guarantees: the digest of every message below 2^61 bytes (2^64 bits, the standard's limit) is
-//! the one FIPS 180-4 defines, whatever pieces the message is fed in (the tests check the
-//! standard's examples, a million bytes in uneven pieces, and every padding length), on every
-//! target: `sha2` uses a processor's SHA instructions where it finds them and portable code
-//! elsewhere, WebAssembly included, and each computes the one function the standard defines; and
-//! no method panics.
-//!
-//! Cost: one compression (64 rounds of 32-bit operations) per 64-byte block, so linear in the
-//! message; the state is a fixed few hundred bytes, and nothing is allocated.
+//! Cost: one compression of 64 rounds per 64-byte block, so linear in the message; the state is
+//! `sha2`'s fixed block buffer, and nothing is allocated except the string `Display` writes.
 
 use core::fmt;
 
@@ -35,33 +42,15 @@ impl Digest {
     /// The digest from 64 hexadecimal digits (either case), or `None` if `hex` is anything else.
     #[must_use]
     pub fn from_hex(hex: &str) -> Option<Digest> {
-        let digits = hex.as_bytes();
-        if digits.len() != 64 {
-            return None;
-        }
-        // 64 digits make exactly 32 pairs, so nothing is left over.
-        let (pairs, _) = digits.as_chunks::<2>();
         let mut out = [0u8; 32];
-        for (byte, &[hi, lo]) in out.iter_mut().zip(pairs) {
-            *byte = (nibble(hi)? << 4) | nibble(lo)?;
-        }
+        hex::decode_to_slice(hex, &mut out).ok()?;
         Some(Digest(out))
-    }
-}
-
-/// The value of one hexadecimal digit.
-fn nibble(digit: u8) -> Option<u8> {
-    match digit {
-        b'0'..=b'9' => Some(digit - b'0'),
-        b'a'..=b'f' => Some(digit - b'a' + 10),
-        b'A'..=b'F' => Some(digit - b'A' + 10),
-        _ => None,
     }
 }
 
 impl fmt::Display for Digest {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.iter().try_for_each(|byte| write!(f, "{byte:02x}"))
+        f.write_str(&hex::encode(self.0))
     }
 }
 
@@ -97,9 +86,7 @@ impl Sha256 {
     /// The digest of `bytes`, in one call.
     #[must_use]
     pub fn digest(bytes: &[u8]) -> Digest {
-        let mut h = Sha256::new();
-        h.update(bytes);
-        h.finish()
+        Digest(sha2::Sha256::digest(bytes).into())
     }
 }
 
@@ -174,5 +161,7 @@ mod tests {
         assert_eq!(Digest::from_hex(&d.to_string().to_uppercase()), Some(d));
         assert_eq!(Digest::from_hex("abc"), None);
         assert_eq!(Digest::from_hex(&"g".repeat(64)), None);
+        assert_eq!(Digest::from_hex(&"0".repeat(66)), None);
+        assert_eq!(Digest::from_hex(&"0".repeat(62)), None);
     }
 }

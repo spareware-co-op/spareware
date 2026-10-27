@@ -19,10 +19,19 @@
 //! name is reused.
 //!
 //! Method: a traceability check (<https://en.wikipedia.org/wiki/Traceability_matrix>): each check
-//! reads the files it compares as text (line by line, so a checkout with either line ending reads
-//! the same) and requires the sets they list to be equal.
+//! reads the files it compares and requires the sets they list to be equal. `geom-num`'s source is
+//! parsed by the `syn` crate, so a public function is found wherever and however it is written,
+//! and the manifests and `Cargo.lock` by the `toml` crate (both MIT OR Apache-2.0, development
+//! dependencies; piece G12a put them in place of a line scanner, which found `pub fn` only at the
+//! indents rustfmt gives, and of text searches; chapter 29.1). The gate's source and the workflows
+//! are read as text, line by line, so a checkout with either line ending reads the same.
 //!
-//! Cost: a linear scan of a few thousand lines of source.
+//! Cost: a linear parse of a few thousand lines of source.
+
+// Helpers outside `#[test]` functions are not covered by clippy.toml's allow-*-in-tests settings;
+// clippy.toml says tests may use these, and a source, manifest or lock file the readers cannot read
+// must stop the test loudly.
+#![allow(clippy::expect_used, clippy::panic)]
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -46,7 +55,7 @@ const LOCK: &str = include_str!("../../../../../../Cargo.lock");
 const KERNEL_WORKFLOW: &str = include_str!("../../../../../../.github/workflows/kernel.yml");
 
 /// The source of every module of `geom-num`, by module name.
-const GEOM_NUM: [(&str, &str); 18] = [
+const GEOM_NUM: [(&str, &str); 19] = [
     ("dd", include_str!("../../geom-num/src/dd.rs")),
     ("eft", include_str!("../../geom-num/src/eft.rs")),
     ("error", include_str!("../../geom-num/src/error.rs")),
@@ -63,6 +72,7 @@ const GEOM_NUM: [(&str, &str); 18] = [
     ("math", include_str!("../../geom-num/src/math.rs")),
     ("perturb", include_str!("../../geom-num/src/perturb.rs")),
     ("plane", include_str!("../../geom-num/src/plane.rs")),
+    ("crossing", include_str!("../../geom-num/src/crossing.rs")),
     ("predicate", include_str!("../../geom-num/src/predicate.rs")),
     ("real", include_str!("../../geom-num/src/real.rs")),
     ("rng", include_str!("../../geom-num/src/rng.rs")),
@@ -91,7 +101,7 @@ const MATH_PRIVATE: [&str; 6] = ["atan2", "exp", "hexf", "log", "sincospi", "sup
 
 /// The modules of `geom-num`'s `generated`, one per predicate (piece G27), by path; their free
 /// functions are `generated::<predicate>::<function>`.
-const GENERATED_PARTS: [(&str, &str); 5] = [
+const GENERATED_PARTS: [(&str, &str); 11] = [
     (
         "generated::orient2d",
         include_str!("../../geom-num/src/generated/orient2d.rs"),
@@ -111,6 +121,30 @@ const GENERATED_PARTS: [(&str, &str); 5] = [
     (
         "generated::plane_side",
         include_str!("../../geom-num/src/generated/plane_side.rs"),
+    ),
+    (
+        "generated::tpi_weight",
+        include_str!("../../geom-num/src/generated/tpi_weight.rs"),
+    ),
+    (
+        "generated::tpi_side",
+        include_str!("../../geom-num/src/generated/tpi_side.rs"),
+    ),
+    (
+        "generated::lpi_weight",
+        include_str!("../../geom-num/src/generated/lpi_weight.rs"),
+    ),
+    (
+        "generated::lpi_side",
+        include_str!("../../geom-num/src/generated/lpi_side.rs"),
+    ),
+    (
+        "generated::ssi_weight",
+        include_str!("../../geom-num/src/generated/ssi_weight.rs"),
+    ),
+    (
+        "generated::ssi_side",
+        include_str!("../../geom-num/src/generated/ssi_side.rs"),
     ),
 ];
 
@@ -302,84 +336,130 @@ fn catalogue_names_are_unique_and_grouped() {
     }
 }
 
-/// The public functions a `geom-num` source file defines: `module::function` for free functions,
-/// `Type::method` for methods, and `Type::cmp` for an `Ord` implementation. Test modules are
-/// skipped.
+/// A `geom-num` source file, parsed by `syn`.
+fn parse(module: &str, source: &str) -> syn::File {
+    syn::parse_file(source).unwrap_or_else(|e| panic!("geom-num's {module} does not parse: {e}"))
+}
+
+/// Whether an item's attributes make it test code: `#[cfg(test)]`.
+fn is_test(attrs: &[syn::Attribute]) -> bool {
+    attrs.iter().any(|a| {
+        a.path().is_ident("cfg")
+            && a.parse_args::<syn::Ident>()
+                .is_ok_and(|word| word == "test")
+    })
+}
+
+/// Whether an item is `pub` (not `pub(crate)` or narrower, which the crate's users cannot call).
+fn is_pub(vis: &syn::Visibility) -> bool {
+    matches!(vis, syn::Visibility::Public(_))
+}
+
+/// The modules a file declares, outside test code: its `pub` ones, or all of them.
+fn modules(file: &syn::File, public_only: bool) -> BTreeSet<String> {
+    file.items
+        .iter()
+        .filter_map(|item| match item {
+            syn::Item::Mod(m) if !is_test(&m.attrs) && (!public_only || is_pub(&m.vis)) => {
+                Some(m.ident.to_string())
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+/// The name of the type an `impl` block is for: the last segment of its path, without generic
+/// arguments (`Wide<L>` is `Wide`); `None` for any other kind of type.
+fn type_name(ty: &syn::Type) -> Option<String> {
+    match ty {
+        syn::Type::Path(path) => path.path.segments.last().map(|s| s.ident.to_string()),
+        _ => None,
+    }
+}
+
+/// The public functions a `geom-num` source file defines: `module::function` for free functions
+/// (`module::inner::function` inside a `pub mod inner { ... }`), `Type::method` for public
+/// methods, and `Type::cmp` for an `Ord` implementation. Test code is skipped. Explicit work list,
+/// no recursion.
 fn public_functions(module: &str, source: &str) -> Vec<String> {
+    let file = parse(module, source);
     let mut out = Vec::new();
-    // The type of the `impl` block being read, and whether it implements `Ord`.
-    let mut current: Option<(String, bool)> = None;
-    // After a `#[cfg(test)]`: a one-line module declaration (`mod x;`) is skipped, and a module
-    // with a body (`mod tests {`) ends the public code.
-    let mut test_item = false;
-    for line in source.lines() {
-        if line.starts_with("#[cfg(test)]") {
-            test_item = true;
-            continue;
-        }
-        if test_item && !line.starts_with("#[") && !line.starts_with(' ') && !line.starts_with(')')
-        {
-            if line.contains("mod ") && line.trim_end().ends_with('{') {
-                break;
-            }
-            test_item = false;
-            continue;
-        }
-        if let Some(rest) = line.strip_prefix("impl") {
-            // Skip generic parameters, then read `Trait for Type` or `Type`.
-            let mut depth = 0;
-            let rest: String = rest
-                .chars()
-                .filter(|&c| {
-                    match c {
-                        '<' => depth += 1,
-                        '>' => depth -= 1,
-                        _ => return depth == 0,
+    let mut work: Vec<(String, &[syn::Item])> = vec![(module.to_owned(), &file.items)];
+    while let Some((path, items)) = work.pop() {
+        for item in items {
+            match item {
+                syn::Item::Fn(f) if !is_test(&f.attrs) && is_pub(&f.vis) => {
+                    out.push(format!("{path}::{}", f.sig.ident));
+                }
+                syn::Item::Impl(block) if !is_test(&block.attrs) => {
+                    let Some(ty) = type_name(&block.self_ty) else {
+                        continue;
+                    };
+                    let ord = block.trait_.as_ref().is_some_and(|(tr, _)| {
+                        tr.segments.last().is_some_and(|s| s.ident == "Ord")
+                    });
+                    for inner in &block.items {
+                        let syn::ImplItem::Fn(f) = inner else {
+                            continue;
+                        };
+                        if is_test(&f.attrs) {
+                            continue;
+                        }
+                        if is_pub(&f.vis) || (ord && f.sig.ident == "cmp") {
+                            out.push(format!("{ty}::{}", f.sig.ident));
+                        }
                     }
-                    false
-                })
-                .collect();
-            let rest = rest.trim();
-            current = Some(match rest.split_once(" for ") {
-                Some((tr, ty)) => (
-                    ident(ty.trim()),
-                    tr.trim().rsplit("::").next() == Some("Ord"),
-                ),
-                None => (ident(rest), false),
-            });
-            continue;
-        }
-        if line.starts_with('}') {
-            current = None;
-            continue;
-        }
-        let trimmed = line.trim_start();
-        let indent = line.len() - trimmed.len();
-        let name = trimmed
-            .strip_prefix("pub const fn ")
-            .or_else(|| trimmed.strip_prefix("pub fn "))
-            .map(ident);
-        match (&current, indent, name) {
-            (None, 0, Some(name)) => out.push(format!("{module}::{name}")),
-            (Some((ty, _)), 4, Some(name)) => out.push(format!("{ty}::{name}")),
-            (Some((ty, true)), 4, None) if trimmed.starts_with("fn cmp(") => {
-                out.push(format!("{ty}::cmp"));
+                }
+                syn::Item::Mod(m) if !is_test(&m.attrs) && is_pub(&m.vis) => {
+                    if let Some((_, inner)) = &m.content {
+                        work.push((format!("{path}::{}", m.ident), inner));
+                    }
+                }
+                _ => {}
             }
-            _ => {}
         }
     }
     out
 }
 
 #[test]
+fn the_parser_finds_every_public_function_however_it_is_written() {
+    // What the line scanner it replaced missed: a function on one line with its block, `pub fn`
+    // written at another indent, a public function in a public inline module, attributes and doc
+    // comments between, and an `impl` whose header spans lines.
+    let source = "//! A module.\n\
+        pub fn one() {}\n\
+        #[inline]\n/// Two.\npub const fn two() -> u8 { 2 }\n\
+        fn private() {}\n\
+        pub(crate) fn crate_only() {}\n\
+        pub mod inner { pub fn three() {} fn hidden() {} }\n\
+        impl<const L: usize>\n    Wide<L>\n{\n        pub fn four(&self) {}\n    fn five() {}\n}\n\
+        impl core::cmp::Ord for Sign { fn cmp(&self, o: &Self) -> Ordering { todo!() } }\n\
+        impl Clone for Sign { fn clone(&self) -> Self { *self } }\n\
+        #[cfg(test)]\nmod tests { pub fn test_only() {} }\n\
+        #[cfg(test)]\npub fn also_test_only() {}\n";
+    let mut found = public_functions("m", source);
+    found.sort();
+    assert_eq!(
+        found,
+        [
+            "Sign::cmp",
+            "Wide::four",
+            "m::inner::three",
+            "m::one",
+            "m::two"
+        ]
+    );
+    let file = parse("m", source);
+    assert_eq!(modules(&file, true), BTreeSet::from(["inner".to_owned()]));
+    assert_eq!(modules(&file, false), BTreeSet::from(["inner".to_owned()]));
+}
+
+#[test]
 fn every_public_function_of_geom_num_is_measured_or_says_why_not() {
     // Principle 12: every operation ships with a benchmark.
     let (_, lib) = GEOM_NUM.iter().find(|(m, _)| *m == "lib").unwrap();
-    let declared: BTreeSet<String> = lib
-        .lines()
-        .filter_map(|l| l.strip_prefix("pub mod "))
-        .map(ident)
-        .collect();
+    let declared = modules(&parse("lib", lib), true);
     let read: BTreeSet<String> = GEOM_NUM
         .iter()
         .map(|(m, _)| (*m).to_owned())
@@ -388,15 +468,7 @@ fn every_public_function_of_geom_num_is_measured_or_says_why_not() {
     assert_eq!(declared, read, "a geom-num module this test does not read");
     // Every module the maths module declares is read or listed as crate-internal.
     let (_, math) = GEOM_NUM.iter().find(|(m, _)| *m == "math").unwrap();
-    let math_modules: BTreeSet<String> = math
-        .lines()
-        .filter_map(|l| {
-            l.strip_prefix("pub mod ")
-                .or_else(|| l.strip_prefix("mod "))
-        })
-        .map(ident)
-        .filter(|m| m != "tests")
-        .collect();
+    let math_modules = modules(&parse("math", math), false);
     let classified: BTreeSet<String> = MATH_PARTS
         .iter()
         .map(|(m, _)| *m)
@@ -409,10 +481,9 @@ fn every_public_function_of_geom_num_is_measured_or_says_why_not() {
     );
     // Every module of `generated` is read.
     let (_, generated) = GEOM_NUM.iter().find(|(m, _)| *m == "generated").unwrap();
-    let generated_modules: BTreeSet<String> = generated
-        .lines()
-        .filter_map(|l| l.strip_prefix("pub mod "))
-        .map(|m| format!("generated::{}", ident(m)))
+    let generated_modules: BTreeSet<String> = modules(&parse("generated", generated), true)
+        .into_iter()
+        .map(|m| format!("generated::{m}"))
         .collect();
     let generated_read: BTreeSet<String> = GENERATED_PARTS
         .iter()
@@ -640,36 +711,77 @@ fn the_pins_are_exact_and_agree() {
     );
     // Gungraun: the runner binary must match the library exactly; the manifest pins it, the
     // documentation and the lock file must agree.
-    assert!(MANIFEST.contains(&format!("gungraun = \"={GUNGRAUN_VERSION}\"")));
+    let exact = format!("={GUNGRAUN_VERSION}");
+    assert_eq!(requirements(MANIFEST, "gungraun"), [exact.as_str()]);
+    assert_eq!(locked_versions("gungraun"), [GUNGRAUN_VERSION]);
     // The summary model the miss-count judge reads (geom_bench::callgrind) is the runner's own, at
     // exactly the runner's version, so the schema read is the one written.
     assert!(MANIFEST.contains(&format!(
         "gungraun-runner = {{ version = \"={GUNGRAUN_VERSION}\", default-features = false, \
          features = [\"summary\"], optional = true }}"
     )));
-    // Each `[[package]]` entry's lines; the gungraun entry's `version`.
-    let locked = LOCK
-        .split("[[package]]")
-        .find(|entry| entry.lines().any(|line| line == "name = \"gungraun\""))
-        .and_then(|entry| {
-            entry
-                .lines()
-                .find_map(|line| line.strip_prefix("version = \""))
-        })
-        .and_then(|rest| rest.split('"').next());
-    assert_eq!(locked, Some(GUNGRAUN_VERSION));
+    assert_eq!(requirements(MANIFEST, "gungraun-runner"), [exact.as_str()]);
+    assert_eq!(locked_versions("gungraun-runner"), [GUNGRAUN_VERSION]);
     let docs = include_str!("../src/lib.rs");
     assert!(docs.contains(&format!("gungraun-runner --version {GUNGRAUN_VERSION}")));
     // Wasmtime: its fuel model defines the counts, so its version is pinned in one place.
-    assert!(FUEL_MANIFEST.contains(&format!("version = \"={WASMTIME_VERSION}\"")));
+    let exact = format!("={WASMTIME_VERSION}");
+    assert_eq!(requirements(FUEL_MANIFEST, "wasmtime"), [exact]);
     assert!(FUEL_MAIN.contains(&format!(
         "const WASMTIME_VERSION: &str = \"{WASMTIME_VERSION}\";"
     )));
+    let fuel: toml::Table = FUEL_MANIFEST.parse().expect("fuel/Cargo.toml is not TOML");
     assert!(
-        FUEL_MANIFEST.lines().any(|line| line == "[workspace]"),
+        fuel.get("workspace").is_some_and(toml::Value::is_table),
         "the fuel host must be its own workspace"
     );
-    assert!(MANIFEST.contains("exclude = [\"fuel\"]"));
+    let manifest: toml::Table = MANIFEST.parse().expect("Cargo.toml is not TOML");
+    let excluded = manifest
+        .get("package")
+        .and_then(|p| p.get("exclude"))
+        .and_then(toml::Value::as_array);
+    assert!(
+        excluded.is_some_and(|list| list.iter().any(|item| item.as_str() == Some("fuel"))),
+        "geom-bench's package must exclude the fuel host"
+    );
+}
+
+/// Every version requirement a manifest gives the dependency `name`, in any dependency table:
+/// `[dependencies]`, `[dev-dependencies]` and `[build-dependencies]`, each also under any
+/// `[target.'...']`; in either form, a string or a table with `version`. Read by the `toml` crate.
+fn requirements(manifest: &str, name: &str) -> Vec<String> {
+    let table: toml::Table = manifest.parse().expect("a manifest that is not TOML");
+    let mut tables: Vec<&toml::Table> = vec![&table];
+    if let Some(targets) = table.get("target").and_then(toml::Value::as_table) {
+        tables.extend(targets.values().filter_map(toml::Value::as_table));
+    }
+    let mut found: Vec<String> = Vec::new();
+    for t in tables {
+        for kind in ["dependencies", "dev-dependencies", "build-dependencies"] {
+            let Some(dep) = t.get(kind).and_then(|d| d.get(name)) else {
+                continue;
+            };
+            let req = dep
+                .as_str()
+                .or_else(|| dep.get("version").and_then(toml::Value::as_str))
+                .unwrap_or_else(|| panic!("{name} has no version requirement: {dep}"));
+            found.push(req.to_owned());
+        }
+    }
+    found
+}
+
+/// Every version of the package `name` that `Cargo.lock` holds, read by the `toml` crate.
+fn locked_versions(name: &str) -> Vec<String> {
+    let lock: toml::Table = LOCK.parse().expect("Cargo.lock is not TOML");
+    lock.get("package")
+        .and_then(toml::Value::as_array)
+        .expect("Cargo.lock has no [[package]] tables")
+        .iter()
+        .filter(|p| p.get("name").and_then(toml::Value::as_str) == Some(name))
+        .filter_map(|p| p.get("version").and_then(toml::Value::as_str))
+        .map(str::to_owned)
+        .collect()
 }
 
 #[test]

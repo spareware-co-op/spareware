@@ -11,9 +11,18 @@ description = "Spare Kit geometry kernel, development only: every generator whos
 geom-num = { path = "../geom-num" }
 geom-test = { path = "../geom-test" }
 
+[dev-dependencies]
+# Rust's tokens, so tests/verus_twin.rs compares the Verus twin's `value` with the shipped one
+# token for token (piece G36). MIT OR Apache-2.0. Without its default `proc-macro` feature: a test,
+# not a procedural macro.
+proc-macro2 = { version = "1.0.107", default-features = false }
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"
+# Kani sets `cfg(kani)` when it compiles a proof; proofs and the code they need sit beside the
+# code under it (chapter 28.7).
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(kani)"] }
 
 [lints.clippy]
 # The crate is written to clippy's pedantic idioms; CI denies every warning.
