@@ -255,6 +255,11 @@ jobs:
         run: |
           shopt -s nullglob
           outs=("$RUNNER_TEMP"/shards/mutants-*/mutants.out)
+          # download-artifact gives each artifact a folder of its own when a pattern matches several,
+          # and extracts a single match straight into the path: read either layout.
+          if [ -d "$RUNNER_TEMP/shards/mutants.out" ]; then
+            outs+=("$RUNNER_TEMP/shards/mutants.out")
+          fi
           args=(--expected "$RUNNER_TEMP/plan/list.json")
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
             args+=(--mode diff)
