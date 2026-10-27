@@ -141,6 +141,13 @@ fn compare_limbs<const L: usize>(a: &[u64; L], b: &[u64; L]) -> Ordering {
     Ordering::Equal
 }
 
+/// The limb that sign-extends a value with this sign.
+const fn fill(negative: bool) -> u64 {
+    // 0 − 1 wraps to all ones; written without a branch, so a caller's sign fill compiles to a
+    // shift of the sign bit rather than a branch on it.
+    0u64.wrapping_sub(negative as u64)
+}
+
 /// The low and high 64-bit halves of `t`, t = high · 2^64 + low.
 #[allow(
     clippy::cast_possible_truncation,
@@ -150,17 +157,44 @@ fn halves(t: u128) -> (u64, u64) {
     ((t & 0xFFFF_FFFF_FFFF_FFFF) as u64, (t >> 64) as u64)
 }
 
+/// The value with magnitude `m` (`M` limbs, little-endian) and the given sign, or
+/// `None` if it does not fit: the limbs from `L` on must be zero, and the magnitude must be below
+/// 2^(64L−1), or exactly 2^(64L−1) for a negative value (the minimum value), as
+/// [`Wide::checked_mul`] decides it.
+fn from_magnitude<const L: usize, const M: usize>(m: &[u64; M], negative: bool) -> Option<Wide<L>> {
+    let mut out = [0u64; L];
+    for k in 0..M {
+        let limb = match m.get(k) {
+            Some(v) => *v,
+            None => 0,
+        };
+        if let Some(slot) = out.get_mut(k) {
+            *slot = limb;
+        } else if limb != 0 {
+            // A non-zero limb at or above limb L makes the magnitude at least 2^(64L).
+            return None;
+        }
+    }
+    let v = Wide(out);
+    if !v.is_negative() {
+        return Some(if negative { v.wrapping_neg() } else { v });
+    }
+    // Top bit set: only the magnitude 2^(64L−1) with a negative sign fits (the minimum value), the
+    // one non-zero magnitude that negation leaves unchanged.
+    let n = v.wrapping_neg();
+    if negative && matches!(compare_limbs(&n.0, &v.0), Ordering::Equal) {
+        Some(n)
+    } else {
+        None
+    }
+}
+
 impl<const L: usize> Wide<L> {
     /// Evaluated when a width is used: a `Wide` needs at least two limbs to hold an `i128`.
     const AT_LEAST_TWO_LIMBS: () = assert!(L >= 2, "Wide<L> needs L >= 2");
 
     /// Zero.
     pub const ZERO: Self = Self([0; L]);
-
-    /// The limb that sign-extends a value with this sign.
-    const fn fill(negative: bool) -> u64 {
-        if negative { u64::MAX } else { 0 }
-    }
 
     /// The value one.
     #[must_use]
@@ -193,13 +227,24 @@ impl<const L: usize> Wide<L> {
     /// From an `i128`, exactly.
     #[must_use]
     pub fn from_i128(v: i128) -> Self {
-        let () = Self::AT_LEAST_TWO_LIMBS;
-        let mut limbs = [Self::fill(v < 0); L];
-        // The low and high 64 bits of v's two's complement, read from its bytes; the limbs above
-        // them are the sign fill.
-        let (low, high) = halves(u128::from_le_bytes(v.to_le_bytes()));
-        for (limb, part) in limbs.iter_mut().zip([low, high]) {
-            *limb = part;
+        let mut limbs = [fill(v < 0); L];
+        // v's two's complement in 128 bits, read as unsigned: v itself when v is not negative, and
+        // v + 2^128 when it is, made as (v − i128::MIN) + 2^127 so that no cast loses a value.
+        #[allow(clippy::cast_sign_loss, reason = "each cast value is at least zero")]
+        let u = if v < 0 {
+            match v.checked_sub(i128::MIN) {
+                Some(d) => (d as u128) | (1u128 << 127),
+                None => 0,
+            }
+        } else {
+            v as u128
+        };
+        let (low, high) = halves(u);
+        if let Some(limb) = limbs.get_mut(0) {
+            *limb = low;
+        }
+        if let Some(limb) = limbs.get_mut(1) {
+            *limb = high;
         }
         Self(limbs)
     }
@@ -419,7 +464,7 @@ impl<const L: usize> Wide<L> {
             .checked_add(u128::from(h10))?
             .checked_add(u128::from(carry))?;
         let (l2, l3) = halves(upper);
-        Self::from_magnitude(&[l0, l1, l2, l3], negative)
+        from_magnitude(&[l0, l1, l2, l3], negative)
     }
 
     /// `self × b` for an `i128` b, or `None` if the true product does not fit.
@@ -463,39 +508,14 @@ impl<const L: usize> Wide<L> {
                 return None;
             }
         }
-        Self::from_magnitude(&out, negative)
-    }
-
-    /// The value with magnitude `m` (limbs little-endian, any number of them) and the given sign,
-    /// or `None` if it does not fit: the limbs from `L` on must be zero, and the magnitude must be
-    /// below 2^(64L−1), or exactly 2^(64L−1) for a negative value (the minimum value), as
-    /// [`Wide::checked_mul`] decides it.
-    fn from_magnitude(m: &[u64], negative: bool) -> Option<Self> {
-        if m.iter().skip(L).any(|&limb| limb != 0) {
-            return None;
-        }
-        let mut out = [0u64; L];
-        for (o, &limb) in out.iter_mut().zip(m.iter()) {
-            *o = limb;
-        }
-        let top_bit_set = out.last().is_some_and(|top| top & TOP_BIT != 0);
-        if !top_bit_set {
-            let v = Self(out);
-            return Some(if negative { v.wrapping_neg() } else { v });
-        }
-        let is_power = out
-            .iter()
-            .rev()
-            .enumerate()
-            .all(|(k, &limb)| if k == 0 { limb == TOP_BIT } else { limb == 0 });
-        (negative && is_power).then(Self::min_value)
+        from_magnitude(&out, negative)
     }
 
     /// The same value in a `Wide<M>`, or `None` if it does not fit.
     #[must_use]
     pub fn resize<const M: usize>(&self) -> Option<Wide<M>> {
         let () = Wide::<M>::AT_LEAST_TWO_LIMBS;
-        let fill = Self::fill(self.is_negative());
+        let fill = fill(self.is_negative());
         let mut out = [fill; M];
         for (o, &x) in out.iter_mut().zip(self.0.iter()) {
             *o = x;
@@ -514,7 +534,7 @@ impl<const L: usize> Wide<L> {
     /// The value as an `i128`, if it fits.
     #[must_use]
     pub fn to_i128(&self) -> Option<i128> {
-        let fill = Self::fill(self.is_negative());
+        let fill = fill(self.is_negative());
         if !self.0.iter().skip(2).all(|&x| x == fill) {
             return None;
         }
