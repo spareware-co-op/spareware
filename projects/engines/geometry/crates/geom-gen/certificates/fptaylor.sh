@@ -115,7 +115,7 @@ cat "$session"
 
 export HOLLIGHT_DIR="$work/hol-light"
 "$work/hol-light/ocaml-hol" -I "$(camlp5 -where)" -safe-string -I "$work/hol-light" \
-  <"$session" | tee "$work/hol.log" | grep -v '^val \|^- : ' || true
+  <"$session" | tee "$work/hol.log" | grep --line-buffered -v '^val \|^- : ' || true
 # Every problem's certificate must have checked; whether each bound is within K is reported. The
 # toplevel may print its prompt, "# ", before a line.
 for check in "${checks[@]}"; do
