@@ -315,3 +315,14 @@ fn attack_rayon_pools_give_the_serial_answer_at_every_thread_count_and_chunk_siz
         assert_eq!(got, Err(RunError::Cancelled), "{threads} threads");
     }
 }
+
+/// A failure to start the pool's threads reads as itself and is a standard error, so a caller can
+/// report it.
+#[test]
+fn a_failure_to_start_threads_says_so() {
+    let e = geom_pool::native::PoolError::CannotStartThreads;
+    assert_eq!(e.to_string(), "the pool's threads could not be started");
+    let boxed: Box<dyn std::error::Error> = Box::new(e);
+    assert_eq!(boxed.to_string(), e.to_string());
+    assert!(boxed.source().is_none());
+}
