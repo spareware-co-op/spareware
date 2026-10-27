@@ -5,10 +5,11 @@
 //! Until this crate took the kernel's one lint posture, its clippy.toml banned the six atomic
 //! integer types a counter would use (of `usize`, `isize`, `u64`, `i64`, `u32` and `i32`) over the
 //! crate's code, tests and benchmark. The posture requires its clippy.toml to hold exactly
-//! geom-num's settings (architecture chapter 27; G09's scaffold check), and geom-num's do not name
-//! those types, so the ban moved here, over the same files, until the kernel's shared settings
-//! hold it (the kernel-wide clippy bans of piece G33). `CancelToken`'s `AtomicBool` is a flag, not
-//! a counter, and stays allowed, as it was.
+//! geom-num's settings (architecture chapter 27; G09's scaffold check), and geom-num's did not name
+//! those types, so the ban moved here, over the same files. Since piece G33 the kernel's shared
+//! settings ban the six types too, in every kernel crate's code and tests; this check stays, since
+//! it also reads comments and holds without clippy. `CancelToken`'s `AtomicBool` is a flag, not a
+//! counter, and stays allowed, as it was.
 //!
 //! What this file proves: no source file of the crate, its tests or its benchmark names one of
 //! the six types, in code or in comments, by whatever path; the check finds each of them and lets

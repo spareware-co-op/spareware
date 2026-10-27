@@ -1,0 +1,53 @@
+// The recursion check's model of the `rayon` crate (MIT OR Apache-2.0,
+// https://github.com/rayon-rs/rayon), read in place of its source (src/recursion/stdlib.rs): the
+// part geom-pool calls, written from its documentation (https://docs.rs/rayon/1.12.0/rayon/). A
+// function handed work runs it (`in_place_scope` runs its closure, `Scope::spawn` its body); every
+// other body is `loop {}`. Never compiled.
+
+fn any<T>() -> T {
+    loop {}
+}
+
+pub struct ThreadPoolBuilder;
+
+pub struct ThreadPoolBuildError;
+
+pub struct ThreadPool;
+
+pub struct Scope<'scope> {
+    marker: &'scope (),
+}
+
+impl ThreadPoolBuilder {
+    pub fn new() -> ThreadPoolBuilder {
+        loop {}
+    }
+    pub fn num_threads(self, num_threads: usize) -> ThreadPoolBuilder {
+        loop {}
+    }
+    pub fn build(self) -> core::result::Result<ThreadPool, ThreadPoolBuildError> {
+        loop {}
+    }
+}
+
+impl ThreadPool {
+    pub fn current_num_threads(&self) -> usize {
+        loop {}
+    }
+    pub fn in_place_scope<'scope, OP, R>(&self, op: OP) -> R
+    where
+        OP: FnOnce(&Scope<'scope>) -> R,
+    {
+        let scope: &Scope<'scope> = any();
+        op(scope)
+    }
+}
+
+impl<'scope> Scope<'scope> {
+    pub fn spawn<BODY>(&self, body: BODY)
+    where
+        BODY: FnOnce(&Scope<'scope>) + Send + 'scope,
+    {
+        body(self);
+    }
+}
