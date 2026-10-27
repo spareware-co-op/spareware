@@ -1,27 +1,36 @@
 //! Generators `predicate-module`, `predicate-orient2d`, `predicate-orient3d`, `predicate-incircle`,
-//! `predicate-insphere` and `predicate-plane-side`: the kernel's predicates, from their
-//! descriptions; `verus-orient2d`, orient2d's Verus twin; and `gappa-orient2d`, `gappa-orient3d`,
-//! `fptaylor-orient2d` and `fptaylor-orient3d`, the problems that machine-check those filters'
-//! error bounds ([`crate::predicate_certificates`]).
+//! `predicate-insphere`, `predicate-plane-side`, `predicate-tpi-weight`, `predicate-tpi-side`,
+//! `predicate-lpi-weight`, `predicate-lpi-side`, `predicate-ssi-weight` and
+//! `predicate-ssi-side`: the kernel's predicates, from their descriptions; `verus-orient2d`,
+//! `verus-orient3d`, `verus-incircle` and `verus-insphere`, the Verus twins of those four exact
+//! paths; and `gappa-orient2d`, `gappa-orient3d`, `fptaylor-orient2d` and `fptaylor-orient3d`, the
+//! problems that machine-check those filters' error bounds ([`crate::predicate_certificates`]).
 //!
 //! What it does: holds the description of each predicate on explicit grid points (chapter 6.2:
-//! orientation in 2D and 3D, in-circle and in-sphere), and of the side of a plane, whose
-//! coefficients are wider integers whose `f64` copies are rounded (chapter 23.2), in the language
-//! of [`crate::predicate_lang`], and the generators that derive each one
-//! ([`crate::predicate_derive`]) and write its module into `geom-num`
-//! ([`crate::predicate_emit`]): [`OUTPUT_DIR`]`/<name>.rs` for each predicate and
+//! orientation in 2D and 3D, in-circle and in-sphere), of the side of a plane, whose
+//! coefficients are wider integers whose `f64` copies are rounded (chapter 23.2), and of the
+//! predicates on implicit points (chapter 6.3, piece G29): the sign of the weight of a
+//! three-plane point, of a line-plane point and of a 2D crossing point, and which side of a plane
+//! (or, in 2D, of a line) each lies on, in the language of [`crate::predicate_lang`], and the
+//! generators that derive each one ([`crate::predicate_derive`]) and write its module into
+//! `geom-num` ([`crate::predicate_emit`]): [`OUTPUT_DIR`]`/<name>.rs` for each predicate and
 //! [`OUTPUT_DIR`]`/mod.rs` for the module that holds them. `geom-num`'s `predicate.rs` calls the
-//! four explicit-point ones; `plane.rs`, outside this generator's piece, does not call
-//! `plane_side` yet.
+//! four explicit-point ones, `plane.rs` the side of a plane and the three-plane and line-plane
+//! ones, and `crossing.rs` the 2D crossing ones.
 //!
 //! Guarantees:
 //!
-//! - **The same formulas as `predicate.rs`.** Each description evaluates the determinant that
-//!   `geom-num`'s hand-written fast path evaluates, term for term and with the same signs, so the
-//!   generated exact value equals the hand-written one (tested in `geom-num`), and the generated
-//!   filter's sign, when it gives one, is that value's sign. In-sphere shares the three cross
-//!   products its four 3 × 3 determinants need instead of recomputing them; the values are the
-//!   same. `plane_side` evaluates n · p + d as `geom-num`'s `Plane::side` does, term for term.
+//! - **The same formulas as `predicate.rs`, `plane.rs` and `crossing.rs`.** Each description
+//!   evaluates the determinant that `geom-num`'s hand-written fast path evaluates, term for term
+//!   and with the same signs, so the generated exact value equals the hand-written one (tested in
+//!   `geom-num`), and the generated filter's sign, when it gives one, is that value's sign.
+//!   In-sphere shares the three cross products its four 3 × 3 determinants need instead of
+//!   recomputing them; the values are the same. `plane_side` evaluates n · p + d as `geom-num`'s
+//!   `Plane::side` does, term for term; `tpi_weight` and `tpi_side` evaluate the three-plane
+//!   point's weight and its classification as `Tpi::homogeneous` and `Plane::side_of_tpi` do,
+//!   except that the classification subtracts n · (−X) where `plane.rs` adds n · X, the same
+//!   value; and the line-plane and crossing descriptions evaluate what `plane.rs` and
+//!   `crossing.rs` document for them, step for step.
 //! - **Pure.** No input but the descriptions and `geom-num`'s constants; the same bytes on every
 //!   target.
 //!
@@ -38,7 +47,7 @@
 //!   <https://github.com/BrunoLevy/geogram/blob/16843b4804de35f14ef54667950ab4c8acdd0062/src/lib/geogram/numerics/predicates/orient3d.pck>,
 //!   for its one description per predicate. No code copied.
 //!
-//! Cost: each generator derives one predicate, or all five for the parent module: a few hundred
+//! Cost: each generator derives one predicate, or all eleven for the parent module: a few hundred
 //! exact operations each.
 
 use crate::generator::GenError;
@@ -167,6 +176,152 @@ let s = nx * p.x + ny * p.y + nz * p.z + d
 sign s
 ";
 
+/// `tpi_weight`: the sign of the weight w of the point where three planes meet.
+pub const TPI_WEIGHT: &str = "\
+# tpi_weight: the sign of the weight w = n1 . (n2 x n3) of the point where the planes
+# (n1, d1), (n2, d2), (n3, d3) meet, the determinant of their normals, as
+# geom_num::plane::Tpi::homogeneous computes it. Its sign corrects the sign of every
+# classification of the point (geom_num::plane::Plane::side_of_tpi). Each normal is a group of
+# its own: w is homogeneous of degree 1 in each.
+predicate tpi_weight
+input n1x n1y n1z: rounded 83 in n1
+input n2x n2y n2z: rounded 83 in n2
+input n3x n3y n3z: rounded 83 in n3
+# n2 x n3
+let c23_x = n2y * n3z - n2z * n3y
+let c23_y = n2z * n3x - n2x * n3z
+let c23_z = n2x * n3y - n2y * n3x
+let w = n1x * c23_x + n1y * c23_y + n1z * c23_z
+sign w
+";
+
+/// `tpi_side`: which side of a fourth plane the point where three planes meet lies on, before the
+/// weight's sign corrects it.
+pub const TPI_SIDE: &str = "\
+# tpi_side: the sign of n4 . X + d4 w for the point X / w where the planes (n1, d1), (n2, d2) and
+# (n3, d3) meet, against the plane (n4, d4): the 4 x 4 determinant of the four planes'
+# coefficients, as geom_num::plane::Plane::side_of_tpi computes it from Tpi::homogeneous, with
+# X = -mx, mx = d1 (n2 x n3) + d2 (n3 x n1) + d3 (n1 x n2), and w = n1 . (n2 x n3). Times the sign
+# of w (tpi_weight) it is the side the point lies on. Each plane's normal and offset are groups
+# of their own: every term is the product of one offset and three normals of different planes.
+predicate tpi_side
+input n1x n1y n1z: rounded 83 in n1
+input d1: rounded 125 in d1
+input n2x n2y n2z: rounded 83 in n2
+input d2: rounded 125 in d2
+input n3x n3y n3z: rounded 83 in n3
+input d3: rounded 125 in d3
+input n4x n4y n4z: rounded 83 in n4
+input d4: rounded 125 in d4
+# n2 x n3, n3 x n1 and n1 x n2
+let c23_x = n2y * n3z - n2z * n3y
+let c23_y = n2z * n3x - n2x * n3z
+let c23_z = n2x * n3y - n2y * n3x
+let c31_x = n3y * n1z - n3z * n1y
+let c31_y = n3z * n1x - n3x * n1z
+let c31_z = n3x * n1y - n3y * n1x
+let c12_x = n1y * n2z - n1z * n2y
+let c12_y = n1z * n2x - n1x * n2z
+let c12_z = n1x * n2y - n1y * n2x
+let w = n1x * c23_x + n1y * c23_y + n1z * c23_z
+# minus the numerators X
+let mx_x = d1 * c23_x + d2 * c31_x + d3 * c12_x
+let mx_y = d1 * c23_y + d2 * c31_y + d3 * c12_y
+let mx_z = d1 * c23_z + d2 * c31_z + d3 * c12_z
+let s = d4 * w - n4x * mx_x - n4y * mx_y - n4z * mx_z
+sign s
+";
+
+/// `lpi_weight`: the sign of the weight w of the point where the line through two grid points
+/// meets a plane.
+pub const LPI_WEIGHT: &str = "\
+# lpi_weight: the sign of the weight w = n . (q - p) of the point where the line from p to q
+# meets the plane (n, d), as geom_num::plane::Lpi::homogeneous computes it: zero when the line is
+# parallel to the plane. Its sign corrects the sign of every classification of the point
+# (geom_num::plane::Plane::side_of_lpi).
+predicate lpi_weight
+input nx ny nz: rounded 83 in n
+input p q: point3
+let qp_x = q.x - p.x
+let qp_y = q.y - p.y
+let qp_z = q.z - p.z
+let w = nx * qp_x + ny * qp_y + nz * qp_z
+sign w
+";
+
+/// `lpi_side`: which side of a second plane the point where a line meets a plane lies on, before
+/// the weight's sign corrects it.
+pub const LPI_SIDE: &str = "\
+# lpi_side: the sign of w1 s2p - w2 s1p for the point where the line from p to q meets the plane
+# (n1, d1), against the plane (n2, d2), with wk = nk . (q - p) and skp = nk . p + dk, as
+# geom_num::plane::Plane::side_of_lpi computes it. It equals n2 . X + d2 w1 for the point's
+# homogeneous coordinates X = s1q p - s1p q, w1 (s1q = s1p + w1); times the sign of w1
+# (lpi_weight) it is the side the point lies on. Each plane's normal and offset are groups of
+# their own.
+predicate lpi_side
+input n1x n1y n1z: rounded 83 in n1
+input d1: rounded 125 in d1
+input n2x n2y n2z: rounded 83 in n2
+input d2: rounded 125 in d2
+input p q: point3
+let qp_x = q.x - p.x
+let qp_y = q.y - p.y
+let qp_z = q.z - p.z
+let w1 = n1x * qp_x + n1y * qp_y + n1z * qp_z
+let w2 = n2x * qp_x + n2y * qp_y + n2z * qp_z
+let s1p = n1x * p.x + n1y * p.y + n1z * p.z + d1
+let s2p = n2x * p.x + n2y * p.y + n2z * p.z + d2
+let s = w1 * s2p - w2 * s1p
+sign s
+";
+
+/// `ssi_weight`: the sign of the weight w of the point where the lines through two pairs of grid
+/// points cross.
+pub const SSI_WEIGHT: &str = "\
+# ssi_weight: the sign of the weight w = (b - a) x (d - c) of the point where the line from a to b
+# crosses the line from c to d, as geom_num::crossing::Ssi::homogeneous computes it: zero when
+# the lines are parallel. Its sign corrects the sign of every classification of the point
+# (geom_num::crossing::Ssi::orient2d).
+predicate ssi_weight
+input a b c d: point2
+let ba_x = b.x - a.x
+let ba_y = b.y - a.y
+let dc_x = d.x - c.x
+let dc_y = d.y - c.y
+let w = ba_x * dc_y - ba_y * dc_x
+sign w
+";
+
+/// `ssi_side`: which way two grid points and the point where two lines cross turn, before the
+/// weight's sign corrects it.
+pub const SSI_SIDE: &str = "\
+# ssi_side: the sign of oa ob2 - ob oa2 for the point where the line from a to b crosses the line
+# from c to d, against the line from p to q, with oa = orient2d(c, d, a), ob = orient2d(c, d, b),
+# oa2 = orient2d(p, q, a) and ob2 = orient2d(p, q, b), as geom_num::crossing::Ssi::orient2d
+# computes it. It equals (q - p) x (X - w p) for the point's homogeneous coordinates
+# X = oa b - ob a, w = oa - ob; times the sign of w (ssi_weight) it is orient2d(p, q, x).
+predicate ssi_side
+input a b c d p q: point2
+let dc_x = d.x - c.x
+let dc_y = d.y - c.y
+let ac_x = a.x - c.x
+let ac_y = a.y - c.y
+let bc_x = b.x - c.x
+let bc_y = b.y - c.y
+let qp_x = q.x - p.x
+let qp_y = q.y - p.y
+let ap_x = a.x - p.x
+let ap_y = a.y - p.y
+let bp_x = b.x - p.x
+let bp_y = b.y - p.y
+let oa = dc_x * ac_y - dc_y * ac_x
+let ob = dc_x * bc_y - dc_y * bc_x
+let oa2 = qp_x * ap_y - qp_y * ap_x
+let ob2 = qp_x * bp_y - qp_y * bp_x
+let s = oa * ob2 - ob * oa2
+sign s
+";
+
 /// One predicate: its generator's name, the description's constant name, the description, its
 /// output file, and the comparison row of the parent module.
 pub struct Predicate {
@@ -183,7 +338,7 @@ pub struct Predicate {
 }
 
 /// The predicates, in the order the registry runs them.
-pub const PREDICATES: [Predicate; 5] = [
+pub const PREDICATES: [Predicate; 11] = [
     Predicate {
         generator: "predicate-orient2d",
         constant: "ORIENT2D",
@@ -252,6 +407,101 @@ pub const PREDICATES: [Predicate; 5] = [
                      generated and tested so that rounded inputs are carried into an emitted bound",
             shewchuk: "— (not in predicates.c)",
             fpg: "— (Geogram has no side of an integer plane)",
+        },
+    },
+    Predicate {
+        generator: "predicate-tpi-weight",
+        constant: "TPI_WEIGHT",
+        text: TPI_WEIGHT,
+        output: "projects/engines/geometry/crates/geom-num/src/generated/tpi_weight.rs",
+        comparison: Comparison {
+            name: "tpi_weight",
+            serves: "the sign of the weight w of a three-plane point, the determinant of its planes' normals, \
+                     integers wider than an `f64` holds, so their `f64` copies are rounded \
+                     (chapter 23.2). [`crate::plane::Plane::side_of_tpi`] calls it, filter first, \
+                     to correct the sign of `tpi_side`; [`crate::plane::Tpi`] documents the point \
+                     and its degenerate cases",
+            shewchuk: "— (not in predicates.c)",
+            fpg: "— (Geogram has no three-plane point)",
+        },
+    },
+    Predicate {
+        generator: "predicate-tpi-side",
+        constant: "TPI_SIDE",
+        text: TPI_SIDE,
+        output: "projects/engines/geometry/crates/geom-num/src/generated/tpi_side.rs",
+        comparison: Comparison {
+            name: "tpi_side",
+            serves: "the classification of a three-plane point against a fourth plane, the determinant of the \
+                     four planes' coefficients, which are rounded as `f64`s (chapter 23.2), up to \
+                     the sign of the point's weight. [`crate::plane::Plane::side_of_tpi`] calls it, \
+                     filter first, and multiplies its sign by `tpi_weight`'s; its documentation \
+                     states the predicate and its bit budget",
+            shewchuk: "— (not in predicates.c)",
+            fpg: "— (Geogram has no three-plane point)",
+        },
+    },
+    Predicate {
+        generator: "predicate-lpi-weight",
+        constant: "LPI_WEIGHT",
+        text: LPI_WEIGHT,
+        output: "projects/engines/geometry/crates/geom-num/src/generated/lpi_weight.rs",
+        comparison: Comparison {
+            name: "lpi_weight",
+            serves: "the sign of the weight w = n · (q − p) of a line-plane point, zero when the line is \
+                     parallel to the plane, with the plane's normal rounded as `f64`s (chapter \
+                     23.2). [`crate::plane::Plane::side_of_lpi`] calls it to correct the sign of \
+                     `lpi_side`, filter first where the filter pays (its documentation, routing); \
+                     [`crate::plane::Lpi`] documents the point and its degenerate cases",
+            shewchuk: "— (not in predicates.c)",
+            fpg: "— (Geogram has no line-plane point)",
+        },
+    },
+    Predicate {
+        generator: "predicate-lpi-side",
+        constant: "LPI_SIDE",
+        text: LPI_SIDE,
+        output: "projects/engines/geometry/crates/geom-num/src/generated/lpi_side.rs",
+        comparison: Comparison {
+            name: "lpi_side",
+            serves: "the classification of a line-plane point against a second plane, with both planes' \
+                     coefficients rounded as `f64`s (chapter 23.2), up to the sign of the point's \
+                     weight. [`crate::plane::Plane::side_of_lpi`] calls it, filter first, and \
+                     multiplies its sign by `lpi_weight`'s; its documentation states the \
+                     predicate and its bit budget",
+            shewchuk: "— (not in predicates.c)",
+            fpg: "— (Geogram has no line-plane point)",
+        },
+    },
+    Predicate {
+        generator: "predicate-ssi-weight",
+        constant: "SSI_WEIGHT",
+        text: SSI_WEIGHT,
+        output: "projects/engines/geometry/crates/geom-num/src/generated/ssi_weight.rs",
+        comparison: Comparison {
+            name: "ssi_weight",
+            serves: "the sign of the weight w = (b − a) × (d − c) of the point where two lines through grid \
+                     points cross, zero when they are parallel. \
+                     [`crate::crossing::Ssi::orient2d`] calls it to correct the sign of \
+                     `ssi_side`, filter first where the filter pays (its documentation, routing); \
+                     [`crate::crossing::Ssi`] documents the point and its degenerate cases",
+            shewchuk: "— (not in predicates.c)",
+            fpg: "— (Geogram has no implicit crossing point)",
+        },
+    },
+    Predicate {
+        generator: "predicate-ssi-side",
+        constant: "SSI_SIDE",
+        text: SSI_SIDE,
+        output: "projects/engines/geometry/crates/geom-num/src/generated/ssi_side.rs",
+        comparison: Comparison {
+            name: "ssi_side",
+            serves: "orient2d of two grid points and the point where two lines through grid points cross, up \
+                     to the sign of the point's weight. [`crate::crossing::Ssi::orient2d`] calls \
+                     it, filter first, and multiplies its sign by `ssi_weight`'s; its \
+                     documentation states the predicate and its bit budget",
+            shewchuk: "— (not in predicates.c)",
+            fpg: "— (Geogram has no implicit crossing point)",
         },
     },
 ];
@@ -332,29 +582,111 @@ pub fn generate_plane_side() -> Result<Vec<u8>, GenError> {
     module_of(named("plane_side")?)
 }
 
-/// The name of the generator of orient2d's Verus twin.
-pub const VERUS_ORIENT2D_GENERATOR: &str = "verus-orient2d";
+/// The folder of `geom-num`'s Verus crate that the predicate twins are generated into: modules of
+/// `verus/lib.rs`, outside every crate's sources, so Cargo never builds them;
+/// `kernel-dev.yml`'s `verus` job verifies the crate.
+pub const VERUS_DIR: &str = "projects/engines/geometry/crates/geom-num/verus/generated";
 
-/// Where orient2d's Verus twin is written: a Verus file in geom-gen's generated folder, outside
-/// every crate's sources, so Cargo never builds it; `kernel-dev.yml`'s `verus` job verifies it.
-pub const VERUS_ORIENT2D_OUTPUT: &str =
-    "projects/engines/geometry/crates/geom-gen/generated/verus-orient2d.rs";
+/// Generator `predicate-tpi-weight`.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_tpi_weight() -> Result<Vec<u8>, GenError> {
+    module_of(named("tpi_weight")?)
+}
 
-/// Generator `verus-orient2d`: the Verus-annotated twin of orient2d's exact path (chapter 28.7;
-/// piece G36), whose `value` is the shipped one with its annotations.
+/// Generator `predicate-tpi-side`.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_tpi_side() -> Result<Vec<u8>, GenError> {
+    module_of(named("tpi_side")?)
+}
+
+/// Generator `predicate-lpi-weight`.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_lpi_weight() -> Result<Vec<u8>, GenError> {
+    module_of(named("lpi_weight")?)
+}
+
+/// Generator `predicate-lpi-side`.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_lpi_side() -> Result<Vec<u8>, GenError> {
+    module_of(named("lpi_side")?)
+}
+
+/// Generator `predicate-ssi-weight`.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_ssi_weight() -> Result<Vec<u8>, GenError> {
+    module_of(named("ssi_weight")?)
+}
+
+/// Generator `predicate-ssi-side`.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_ssi_side() -> Result<Vec<u8>, GenError> {
+    module_of(named("ssi_side")?)
+}
+
+/// The predicates with a Verus twin (pieces G36 and G38), by name.
+pub const VERUS_TWINS: [&str; 4] = ["orient2d", "orient3d", "incircle", "insphere"];
+
+/// The twin of the predicate called `name`, as bytes.
+fn twin_of(name: &str) -> Result<Vec<u8>, GenError> {
+    let generator = format!("verus-{name}");
+    let d = derivation(named(name)?)?;
+    verus_twin(&d, &generator, &format!("{OUTPUT_DIR}/{name}.rs"))
+        .map(String::into_bytes)
+        .map_err(|e| GenError::generator(&generator, e.0))
+}
+
+/// Generator `verus-orient2d`: orient2d's exact path as a Verus-annotated twin (piece G36).
 ///
 /// # Errors
 ///
 /// [`GenError::Generator`] if the derivation or the emission fails.
 pub fn generate_verus_orient2d() -> Result<Vec<u8>, GenError> {
-    let d = derivation(named("orient2d")?)?;
-    verus_twin(
-        &d,
-        VERUS_ORIENT2D_GENERATOR,
-        &format!("{OUTPUT_DIR}/orient2d.rs"),
-    )
-    .map(String::into_bytes)
-    .map_err(|e| GenError::generator(VERUS_ORIENT2D_GENERATOR, e.0))
+    twin_of("orient2d")
+}
+
+/// Generator `verus-orient3d`: orient3d's exact path as a Verus-annotated twin (piece G38).
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_verus_orient3d() -> Result<Vec<u8>, GenError> {
+    twin_of("orient3d")
+}
+
+/// Generator `verus-incircle`: incircle's exact path as a Verus-annotated twin (piece G38).
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_verus_incircle() -> Result<Vec<u8>, GenError> {
+    twin_of("incircle")
+}
+
+/// Generator `verus-insphere`: insphere's exact path as a Verus-annotated twin (piece G38).
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_verus_insphere() -> Result<Vec<u8>, GenError> {
+    twin_of("insphere")
 }
 
 /// The folder the certificates' problems are written into: geom-gen's generated folder, outside
@@ -447,7 +779,7 @@ mod tests {
     type Generate = fn() -> Result<Vec<u8>, GenError>;
 
     /// Each generator with its committed output, built into the test.
-    const COMMITTED: [(&str, Generate, &[u8]); 6] = [
+    const COMMITTED: [(&str, Generate, &[u8]); 12] = [
         (
             "mod.rs",
             generate_module,
@@ -477,6 +809,36 @@ mod tests {
             "plane_side.rs",
             generate_plane_side,
             include_bytes!("../../geom-num/src/generated/plane_side.rs"),
+        ),
+        (
+            "tpi_weight.rs",
+            generate_tpi_weight,
+            include_bytes!("../../geom-num/src/generated/tpi_weight.rs"),
+        ),
+        (
+            "tpi_side.rs",
+            generate_tpi_side,
+            include_bytes!("../../geom-num/src/generated/tpi_side.rs"),
+        ),
+        (
+            "lpi_weight.rs",
+            generate_lpi_weight,
+            include_bytes!("../../geom-num/src/generated/lpi_weight.rs"),
+        ),
+        (
+            "lpi_side.rs",
+            generate_lpi_side,
+            include_bytes!("../../geom-num/src/generated/lpi_side.rs"),
+        ),
+        (
+            "ssi_weight.rs",
+            generate_ssi_weight,
+            include_bytes!("../../geom-num/src/generated/ssi_weight.rs"),
+        ),
+        (
+            "ssi_side.rs",
+            generate_ssi_side,
+            include_bytes!("../../geom-num/src/generated/ssi_side.rs"),
         ),
     ];
 

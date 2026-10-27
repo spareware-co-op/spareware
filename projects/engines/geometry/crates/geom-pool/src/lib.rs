@@ -20,7 +20,8 @@
 //!   development crates use it too, and never ship); it still forbids unsafe code and carries
 //!   `geom-num`'s lint posture (27).
 //! - The only published crates it may name are rayon and, for Web Workers, wasm-bindgen-rayon, each
-//!   by its row of section 29.4; it names neither yet.
+//!   by its row of section 29.4. It names rayon, on native targets only ([`native`], piece G33);
+//!   wasm-bindgen-rayon waits for piece G456, and until then WebAssembly runs serially.
 //!
 //! Sections: 23.4 and 29.4; open question OQ-23.4; chapters 21 and 27 ("Proposed rule changes"), in
 //! the kernel architecture (`projects/engines/geometry/architecture/`).
@@ -28,10 +29,15 @@
 //! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
+//! Licences of the published crates it names, each record checked by the map (`depends`):
+//!
+//! - MIT OR Apache-2.0: `rayon`.
+//!
 //! Proposed in chapter 27, pending the owner's decision G08. Its name, folder and the facade's edge
 //! to it are open (31.7): 23.4 proposes instead `engine-geometry-pool`, beside the facade in
 //! `projects/engines/crates/`, with a `no_std` facade that re-exports only the `Pool` trait. This
 //! crate follows chapter 27's table, as the board and `geom-run` (G04) do.
-//!
-//! Status: scaffold only; built by pieces G33, G456.
 #![forbid(unsafe_code)]
+
+#[cfg(not(target_family = "wasm"))]
+pub mod native;

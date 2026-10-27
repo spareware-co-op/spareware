@@ -90,6 +90,7 @@
 use core::cmp::Ordering;
 
 use crate::error::NumError;
+use crate::generated;
 use crate::grid::{COORD_BITS, COORD_MAX, Coord, P3, Rounded};
 use crate::sign::Sign;
 use crate::wide::{I256, I320, Wide};
@@ -210,11 +211,11 @@ const ROUNDS_INSIDE: i64 = 2 * COORD_MAX + 1;
 const TWO_POW_126: i128 = 1 << 126;
 
 /// Limbs of [`I384`], the width every wide budget here fits (limit 2^383).
-const BUDGET_LIMBS: usize = 6;
+pub(crate) const BUDGET_LIMBS: usize = 6;
 
 /// Limbs of [`I512`] (limit 2^511), the width of the total path, where no step of
 /// [`Plane::side_of_tpi`] or [`Tpi::to_grid`] can overflow for any value the types hold.
-const TOTAL_LIMBS: usize = 8;
+pub(crate) const TOTAL_LIMBS: usize = 8;
 
 /// A plane: the points p with n · p + d = 0, with integer coefficients.
 ///
@@ -349,10 +350,74 @@ impl Plane {
     /// could only if the checked wide arithmetic itself were wrong (module docs, "No answer is
     /// silently wrong"), and then this reports it rather than answering.
     pub fn side_of_tpi(&self, t: &Tpi) -> Result<Sign, NumError> {
+        tpi_routed(t, self).map_or_else(|| self.side_of_tpi_hand(t), Ok)
+    }
+
+    /// [`Plane::side_of_tpi`] after the generated paths: the hand-written budgeted path in
+    /// [`I384`], then the total path in [`I512`].
+    #[inline(never)]
+    fn side_of_tpi_hand(&self, t: &Tpi) -> Result<Sign, NumError> {
         let (x, w) = t.homogeneous()?;
         classify::<BUDGET_LIMBS>(&self.n, self.d, &x, &w)
             .or_else(|| classify::<TOTAL_LIMBS>(&self.n, self.d, &x, &w))
             .ok_or(NumError::BudgetExceeded)
+    }
+
+    /// Which side of this plane the point where a line meets another plane is on, exactly.
+    /// `Zero` means the point lies exactly on this plane; `Positive` means on the side the normal
+    /// points to.
+    ///
+    /// For the line from p to q meeting plane 1, with wₖ = nₖ · (q − p) and sₖₚ = nₖ · p + dₖ for
+    /// plane k (plane 2 is this one), the point is X / w₁ with X = s₁q p − s₁ₚ q ([`Lpi::homogeneous`]),
+    /// so n₂ · (X / w₁) + d₂ = (n₂ · X + d₂ w₁) / w₁, and n₂ · X + d₂ w₁ = w₁ s₂ₚ − w₂ s₁ₚ. The side
+    /// is the sign of w₁ s₂ₚ − w₂ s₁ₚ times the sign of w₁. Nothing is divided or rounded.
+    ///
+    /// Routing (chapter 6.2): the generated `lpi_side` and `lpi_weight` predicates, each filter
+    /// first and its exact path when the filter cannot decide; then the hand-written path below.
+    ///
+    /// Bit budget: for planes made by [`Plane::through`] from grid points (coordinates within
+    /// ±M, M = 2^40 − 1), the extremes lie at corners of the box (each quantity is multilinear in
+    /// the coordinates), where |w| ≤ 24M³ and |s| ≤ 16M³, both below 2^126, and |w₁ s₂ₚ − w₂ s₁ₚ| ≤
+    /// 256M^6 < 2^253, in [`I256`] (limit 2^255).
+    ///
+    /// Total path, unreachable: should a step in [`I256`] not fit anyway, the same expression is
+    /// computed in [`I320`], where nothing the types can hold overflows: each wₖ and sₖₚ is an
+    /// `i128`, so each product is at most 2^254 and the difference at most 2^255.
+    ///
+    /// # Errors
+    ///
+    /// [`NumError::BudgetExceeded`] if w₁, w₂ or an sₖₚ does not fit an `i128`, which no planes
+    /// made by [`Plane::through`] cause (the budget above), or if the total path failed, which
+    /// nothing the types hold can cause.
+    pub fn side_of_lpi(&self, l: &Lpi) -> Result<Sign, NumError> {
+        lpi_routed(l, self).map_or_else(|| self.side_of_lpi_hand(l), Ok)
+    }
+
+    /// [`Plane::side_of_lpi`] after the generated paths: w₁ s₂ₚ − w₂ s₁ₚ in [`I256`], then in
+    /// [`I320`], times the sign of w₁.
+    #[inline(never)]
+    fn side_of_lpi_hand(&self, l: &Lpi) -> Result<Sign, NumError> {
+        let (w1, s1p) = l
+            .plane
+            .weight_and_offset(l.p, l.q)
+            .ok_or(NumError::BudgetExceeded)?;
+        let (w2, s2p) = self
+            .weight_and_offset(l.p, l.q)
+            .ok_or(NumError::BudgetExceeded)?;
+        let side = |w1: i128, s2p: i128, w2: i128, s1p: i128| {
+            lpi_classify::<4>(w1, s2p, w2, s1p).or_else(|| lpi_classify::<5>(w1, s2p, w2, s1p))
+        };
+        side(w1, s2p, w2, s1p)
+            .map(|s| s.mul(Sign::of_i128(w1)))
+            .ok_or(NumError::BudgetExceeded)
+    }
+
+    /// w = n · (q − p) and sₚ = n · p + d for the line from p to q, in `i128`: `None` if either
+    /// does not fit.
+    fn weight_and_offset(&self, p: P3, q: P3) -> Option<(i128, i128)> {
+        let sp = dot_point(&self.n, p)?.checked_add(self.d)?;
+        let sq = dot_point(&self.n, q)?.checked_add(self.d)?;
+        Some((sq.checked_sub(sp)?, sp))
     }
 }
 
@@ -439,16 +504,20 @@ const fn within_budget(n: &[i128; 3], d: i128) -> bool {
 /// is never zero. Equality is equality of the three planes in order, not of the points: the same
 /// point made from other planes compares unequal.
 ///
-/// Cost: only the planes are stored, so [`Plane::side_of_tpi`] and [`Tpi::to_grid`] recompute the
-/// homogeneous coordinates on every call (three [`I256`] cross products, a dot product and nine
-/// [`I320`] products), and [`Tpi::new`] computes them once to check them and keeps nothing.
-/// Classifying one point against k planes repeats that work k times. Storing (X, w) in the `Tpi`
-/// would save it for 152 more bytes per point; that trade is for chapter 23's cost model to
+/// Cost: the planes are stored, and the sign of w, which [`Tpi::new`] computes exactly while it
+/// checks the point, so [`Plane::side_of_tpi`] never decides it again. [`Tpi::to_grid`], and
+/// [`Plane::side_of_tpi`] when its filter cannot decide, recompute the homogeneous coordinates on
+/// every call (three [`I256`] cross products, a dot product and nine [`I320`] products).
+/// Classifying one point against k planes repeats that work up to k times. Storing (X, w) in the
+/// `Tpi` would save it for 152 more bytes per point; that trade is for chapter 23's cost model to
 /// decide, and is not made here.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Tpi {
     /// The three planes, in the order given.
     planes: [Plane; 3],
+    /// The sign of the point's weight w = det(`n_p`, `n_q`, `n_r`), exact, from [`Tpi::new`]:
+    /// never `Zero`. A function of the planes, so equality and hashing are still the planes'.
+    weight: Sign,
 }
 
 impl Tpi {
@@ -469,10 +538,16 @@ impl Tpi {
         reason = "p, q and r are the planes, and t, w and x the point, as in the formulas"
     )]
     pub fn new(p: Plane, q: Plane, r: Plane) -> Result<Tpi, NumError> {
-        let t = Tpi { planes: [p, q, r] };
+        let mut t = Tpi {
+            planes: [p, q, r],
+            weight: Sign::Zero,
+        };
         match t.homogeneous_checked() {
             Some((_, w)) if w.is_zero() => Err(NumError::Degenerate),
-            Some(_) => Ok(t),
+            Some((_, w)) => {
+                t.weight = w.signum();
+                Ok(t)
+            }
             None => Err(NumError::BudgetExceeded),
         }
     }
@@ -637,6 +712,153 @@ fn dot(a: &[i128; 3], c: &[I256; 3]) -> Option<I256> {
 /// The sign of n · X + d · w times the sign of w, in `Wide<L>`: [`I384`] on the budgeted path,
 /// [`I512`] on the total path. `None` if a step does not fit. Budgets for both on
 /// [`Plane::side_of_tpi`].
+/// The point where the line through two grid points meets a plane: an implicit point, kept as its
+/// definition and never rounded inside an operation (chapter 6.3), like a [`Tpi`]. An edge of a
+/// flat-faced solid cut by a plane meets it at such a point.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Lpi {
+    /// The line's first point.
+    p: P3,
+    /// The line's second point.
+    q: P3,
+    /// The plane the line meets.
+    plane: Plane,
+}
+
+impl Lpi {
+    /// The point where the line from `p` to `q` meets `plane`.
+    ///
+    /// # Errors
+    ///
+    /// [`NumError::Degenerate`] when the line meets the plane in no point or in the whole line:
+    /// p = q, or the line is parallel to the plane or lies in it. Decided exactly: w = n · (q − p)
+    /// = 0. [`NumError::BudgetExceeded`] if w or n · p + d does not fit an `i128`, which no plane
+    /// made by [`Plane::through`] causes ([`Plane::side_of_lpi`]'s budget).
+    pub fn new(p: P3, q: P3, plane: Plane) -> Result<Lpi, NumError> {
+        match plane.weight_and_offset(p, q) {
+            Some((0, _)) => Err(NumError::Degenerate),
+            Some(_) => Ok(Lpi { p, q, plane }),
+            None => Err(NumError::BudgetExceeded),
+        }
+    }
+
+    /// The line's two points, in the order given to [`Lpi::new`].
+    #[must_use]
+    pub const fn points(&self) -> [P3; 2] {
+        [self.p, self.q]
+    }
+
+    /// The plane the line meets.
+    #[must_use]
+    pub const fn plane(&self) -> &Plane {
+        &self.plane
+    }
+
+    /// The point's homogeneous coordinates: numerators X and denominator w, with the point at
+    /// X / w. With `s_p` = n · p + d and `s_q` = n · q + d, the point p + t (q − p) lies on the plane
+    /// for t = −`s_p` / (`s_q` − `s_p`), so X = `s_q` p − `s_p` q and w = `s_q` − `s_p` = n · (q − p), never zero.
+    /// Swapping p and q negates both.
+    ///
+    /// Bit budget: |s| < 2^126 ([`Plane::side_of_lpi`]) and |`p_i`|, |`q_i`| ≤ M < 2^40, so each `X_i`
+    /// is below 2^167, in [`I256`]; w is below 2^126, an `i128`.
+    ///
+    /// # Errors
+    ///
+    /// [`NumError::BudgetExceeded`] if a step does not fit, which [`Lpi::new`] already ruled out
+    /// for the same line and plane, and the products cannot exceed [`I256`] for any `i128`
+    /// offsets and grid coordinates (at most 2^127 · 2^40 each).
+    pub fn homogeneous(&self) -> Result<([I256; 3], i128), NumError> {
+        let (w, sp) = self
+            .plane
+            .weight_and_offset(self.p, self.q)
+            .ok_or(NumError::BudgetExceeded)?;
+        let sq = sp.checked_add(w).ok_or(NumError::BudgetExceeded)?;
+        let axis = |pc: Coord, qc: Coord| {
+            I256::product_i128(sq, i128::from(pc.get()))?
+                .checked_sub(&I256::product_i128(sp, i128::from(qc.get()))?)
+        };
+        let (Some(x), Some(y), Some(z)) = (
+            axis(self.p.x, self.q.x),
+            axis(self.p.y, self.q.y),
+            axis(self.p.z, self.q.z),
+        ) else {
+            return Err(NumError::BudgetExceeded);
+        };
+        Ok(([x, y, z], w))
+    }
+
+    /// The point committed to the grid: each coordinate `X_i` / w rounded half to even, exactly as
+    /// [`Tpi::to_grid`] commits, by the same code, with whether every coordinate was exact.
+    ///
+    /// # Errors
+    ///
+    /// [`NumError::OutOfRange`] for the first coordinate outside the frame, and
+    /// [`NumError::BudgetExceeded`] as for [`Lpi::homogeneous`].
+    pub fn to_grid(&self) -> Result<Rounded<P3>, NumError> {
+        let (x, w) = self.homogeneous()?;
+        let [x0, x1, x2] = x;
+        let (Some(r0), Some(r1), Some(r2)) = (x0.resize(), x1.resize(), x2.resize()) else {
+            return Err(NumError::BudgetExceeded);
+        };
+        let x: [I320; 3] = [r0, r1, r2];
+        let w = I256::from_i128(w);
+        commit::<BUDGET_LIMBS>(&x, &w)
+            .or_else(|| commit::<TOTAL_LIMBS>(&x, &w))
+            .unwrap_or(Err(NumError::BudgetExceeded))
+    }
+}
+
+/// The side of plane `s` that the point where `l`'s line meets its plane is on, through the
+/// generated predicates (chapter 6.2): the sign of w₁ s₂ₚ − w₂ s₁ₚ (`lpi_side`) times the sign of
+/// w₁ (`lpi_weight`), each filter first and its generated exact path otherwise. `None` only when a
+/// generated exact path does not fit its certified types; the caller then takes the hand-written
+/// path.
+fn lpi_routed(l: &Lpi, s: &Plane) -> Option<Sign> {
+    let ([ax, ay, az], ad) = (l.plane.n, l.plane.d);
+    let ([bx, by, bz], bd) = (s.n, s.d);
+    let (p, q) = (l.p, l.q);
+    let weight = generated::lpi_weight::filter(ax, ay, az, p, q)
+        .or_else(|| generated::lpi_weight::exact(ax, ay, az, p, q))?;
+    let side = generated::lpi_side::filter(ax, ay, az, ad, bx, by, bz, bd, p, q)
+        .or_else(|| generated::lpi_side::exact(ax, ay, az, ad, bx, by, bz, bd, p, q))?;
+    Some(side.mul(weight))
+}
+
+/// The sign of w₁ s₂ₚ − w₂ s₁ₚ in `Wide<L>`: `None` if a step does not fit.
+fn lpi_classify<const L: usize>(w1: i128, s2p: i128, w2: i128, s1p: i128) -> Option<Sign> {
+    let a = Wide::<L>::product_i128(w1, s2p)?;
+    let b = Wide::<L>::product_i128(w2, s1p)?;
+    Some(a.checked_sub(&b)?.signum())
+}
+
+/// The side of plane `s` that the point where `t`'s planes meet is on, through the generated
+/// predicates (chapter 6.2): the sign of the 4 × 4 determinant of the four planes' coefficients
+/// (`tpi_side`, which equals n · X + d · w), from its `f64` filter when the filter can decide and
+/// from its generated exact path otherwise, times the sign of the point's weight w, which
+/// [`Tpi::new`] stored exactly (so the generated `tpi_weight` is never needed here). `None` only
+/// when the generated exact path does not fit its certified types, which no planes made by
+/// [`Plane::through`] cause; the caller then takes the hand-written paths.
+#[allow(
+    clippy::many_single_char_names,
+    reason = "p, q and r are the three planes and s the fourth, as in the formulas above"
+)]
+fn tpi_routed(t: &Tpi, s: &Plane) -> Option<Sign> {
+    let [p, q, r] = t.planes;
+    let ([ax, ay, az], ad) = (p.n, p.d);
+    let ([bx, by, bz], bd) = (q.n, q.d);
+    let ([cx, cy, cz], cd) = (r.n, r.d);
+    let ([sx, sy, sz], sd) = (s.n, s.d);
+    let side = generated::tpi_side::filter(
+        ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
+    )
+    .or_else(|| {
+        generated::tpi_side::exact(
+            ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
+        )
+    })?;
+    Some(side.mul(t.weight))
+}
+
 fn classify<const L: usize>(n: &[i128; 3], d: i128, x: &[I320; 3], w: &I256) -> Option<Sign> {
     let mut acc = Wide::<L>::from_i128(d).checked_mul(&w.resize::<L>()?)?;
     for (&ni, xi) in n.iter().zip(x.iter()) {
@@ -651,13 +873,25 @@ fn classify<const L: usize>(n: &[i128; 3], d: i128, x: &[I320; 3], w: &I256) -> 
 /// `None` if a step does not fit `Wide<L>`, or if w = 0, which no [`Tpi`] has; the inner `Result`
 /// is the commit, or `OutOfRange` for the first coordinate outside the frame.
 fn commit<const L: usize>(x: &[I320; 3], w: &I256) -> Option<Result<Rounded<P3>, NumError>> {
+    Some(commit_axes::<L, 3>(x, w)?.map(|([x, y, z], exact)| Rounded::new(P3 { x, y, z }, exact)))
+}
+
+/// Each of N homogeneous numerators `x` over the denominator `w` committed to the grid, half to
+/// even, in `Wide<L>`, with whether every coordinate was exact: the rounding of [`commit`], shared
+/// by every implicit point, in two dimensions and three. The outer `Option` is `None` if a step
+/// does not fit `Wide<L>`, or if w = 0; the inner `Result` is the coordinates, or `OutOfRange` for
+/// the first one outside the frame.
+pub(crate) fn commit_axes<const L: usize, const N: usize>(
+    x: &[I320; N],
+    w: &I256,
+) -> Option<Result<([Coord; N], bool), NumError>> {
     if w.is_zero() {
         return None;
     }
     let w_negative = w.is_negative();
     let w = w.resize::<L>()?;
     let w = if w_negative { w.checked_neg()? } else { w };
-    let mut coords = [Coord::ZERO; 3];
+    let mut coords = [Coord::ZERO; N];
     let mut exact = true;
     for (coord, xi) in coords.iter_mut().zip(x.iter()) {
         match round_axis(xi, &w, w_negative)? {
@@ -668,8 +902,7 @@ fn commit<const L: usize>(x: &[I320; 3], w: &I256) -> Option<Result<Rounded<P3>,
             Err(e) => return Some(Err(e)),
         }
     }
-    let [x, y, z] = coords;
-    Some(Ok(Rounded::new(P3 { x, y, z }, exact)))
+    Some(Ok((coords, exact)))
 }
 
 /// 2^127 in `Wide<L>`, made as 2^126 + 2^126 so that no step leaves `i128`, or `None` if it does
@@ -792,8 +1025,18 @@ mod tests {
 
     use core::cmp::Ordering;
 
-    use super::{BUDGET_LIMBS, TOTAL_LIMBS, divide_half_even};
-    use crate::wide::Wide;
+    use super::{BUDGET_LIMBS, TOTAL_LIMBS, divide_half_even, limbs};
+    use crate::wide::{I256, I320, Wide};
+
+    /// `limbs`, which only the bit-budget constants call (so only the compiler ran it): the limb
+    /// count of each width the module uses.
+    #[test]
+    fn limbs_counts_each_width() {
+        assert_eq!(limbs(&I256::ZERO), 4);
+        assert_eq!(limbs(&I320::ZERO), 5);
+        assert_eq!(limbs(&Wide::<BUDGET_LIMBS>::ZERO), BUDGET_LIMBS);
+        assert_eq!(limbs(&Wide::<TOTAL_LIMBS>::ZERO), TOTAL_LIMBS);
+    }
 
     /// num / den rounded half to even, and whether it was exact, from `u128` floor and remainder.
     fn oracle(num: u128, den: u128) -> (u128, bool) {

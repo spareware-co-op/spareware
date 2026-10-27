@@ -51,13 +51,17 @@ name: Kernel development crates
 #   generator give the same bytes there as natively, and the golden hashes and committed-output
 #   tests fail on a target that differs.
 # - Verus on orient2d's twin (chapter 28.7, "Predicates, by generated twins"; piece G36): geom-gen
-#   writes a Verus-annotated twin of orient2d's exact path
-#   (projects/engines/geometry/crates/geom-gen/generated/verus-orient2d.rs), whose `value` is the
+#   writes a Verus-annotated twin of orient2d's exact path (since G38 a module of geom-num's
+#   Verus crate, projects/engines/geometry/crates/geom-num/verus/lib.rs, with orient3d's,
+#   incircle's and insphere's beside it), whose `value` is the
 #   shipped one with its annotations; this job verifies it with a pinned Verus release, proving the
 #   path never overflows and returns the description's value for every input on the grid.
 #   geom-gen's tests/verus_twin.rs, which kernel.yml runs, holds the twin to the shipped code token
 #   for token. Verus checks with its own pinned Rust compiler, which builds nothing that ships, so
-#   it is not the kernel's compiler; it runs on Linux only.
+#   it is not the kernel's compiler; it runs on Linux only. The same job verifies geom-num's
+#   verus/wide.rs (piece G37), the twin of src/wide.rs's arithmetic, which proves add, subtract,
+#   negate, multiply and compare exact for every width; tests/verus_twin.rs holds it to the code
+#   token for token too.
 #
 # The dependency rule, the fuzz target, the generator check, the map check, the ledger check and the
 # banned-source scan run natively on every operating system kernel.yml tests, the same six runners,
@@ -204,7 +208,7 @@ jobs:
         run: cargo test --locked -p geom-test -p geom-fuzz -p geom-gen --target wasm32-wasip1
 
   verus:
-    name: Verus proves orient2d's twin
+    name: Verus proves the twins
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -232,5 +236,5 @@ jobs:
           test -n "$verus"
           rustup toolchain install "$VERUS_RUST" --profile minimal
           dirname "$verus" >> "$GITHUB_PATH"
-      - name: Verus verifies orient2d's twin
-        run: verus --crate-type=lib projects/engines/geometry/crates/geom-gen/generated/verus-orient2d.rs
+      - name: Verus verifies geom-num's twins (the wide integers and the four explicit-point predicates)
+        run: verus --crate-type=lib projects/engines/geometry/crates/geom-num/verus/lib.rs

@@ -28,7 +28,7 @@ use crate::grid_steps;
 use crate::predicates;
 
 /// Every generator, in the order they run.
-pub const GENERATORS: [Generator; 12] = [
+pub const GENERATORS: [Generator; 21] = [
     Generator {
         name: grid_steps::NAME,
         output: grid_steps::OUTPUT,
@@ -72,10 +72,64 @@ pub const GENERATORS: [Generator; 12] = [
         generate: Generate::Plain(predicates::generate_plane_side),
     },
     Generator {
-        name: predicates::VERUS_ORIENT2D_GENERATOR,
-        output: predicates::VERUS_ORIENT2D_OUTPUT,
+        name: "predicate-tpi-weight",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/tpi_weight.rs",
+        about: "the weight's sign of a three-plane point: its f64 filter on rounded inputs, exact path and certificate",
+        generate: Generate::Plain(predicates::generate_tpi_weight),
+    },
+    Generator {
+        name: "predicate-tpi-side",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/tpi_side.rs",
+        about: "a three-plane point against a plane: its f64 filter on rounded inputs, exact path and certificate",
+        generate: Generate::Plain(predicates::generate_tpi_side),
+    },
+    Generator {
+        name: "predicate-lpi-weight",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/lpi_weight.rs",
+        about: "the weight's sign of a line-plane point: its f64 filter on rounded inputs, exact path and certificate",
+        generate: Generate::Plain(predicates::generate_lpi_weight),
+    },
+    Generator {
+        name: "predicate-lpi-side",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/lpi_side.rs",
+        about: "a line-plane point against a plane: its f64 filter on rounded inputs, exact path and certificate",
+        generate: Generate::Plain(predicates::generate_lpi_side),
+    },
+    Generator {
+        name: "predicate-ssi-weight",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/ssi_weight.rs",
+        about: "the weight's sign of a 2D crossing point: its f64 filter, exact path and certificate",
+        generate: Generate::Plain(predicates::generate_ssi_weight),
+    },
+    Generator {
+        name: "predicate-ssi-side",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/ssi_side.rs",
+        about: "orient2d with a 2D crossing point: its f64 filter, exact path and certificate",
+        generate: Generate::Plain(predicates::generate_ssi_side),
+    },
+    Generator {
+        name: "verus-orient2d",
+        output: "projects/engines/geometry/crates/geom-num/verus/generated/orient2d.rs",
         about: "orient2d's exact path as a Verus-annotated twin, which Verus verifies in CI",
         generate: Generate::Plain(predicates::generate_verus_orient2d),
+    },
+    Generator {
+        name: "verus-orient3d",
+        output: "projects/engines/geometry/crates/geom-num/verus/generated/orient3d.rs",
+        about: "orient3d's exact path as a Verus-annotated twin, which Verus verifies in CI",
+        generate: Generate::Plain(predicates::generate_verus_orient3d),
+    },
+    Generator {
+        name: "verus-incircle",
+        output: "projects/engines/geometry/crates/geom-num/verus/generated/incircle.rs",
+        about: "incircle's exact path as a Verus-annotated twin, which Verus verifies in CI",
+        generate: Generate::Plain(predicates::generate_verus_incircle),
+    },
+    Generator {
+        name: "verus-insphere",
+        output: "projects/engines/geometry/crates/geom-num/verus/generated/insphere.rs",
+        about: "insphere's exact path as a Verus-annotated twin, which Verus verifies in CI",
+        generate: Generate::Plain(predicates::generate_verus_insphere),
     },
     Generator {
         name: "gappa-orient2d",
@@ -105,7 +159,7 @@ pub const GENERATORS: [Generator; 12] = [
 
 /// Every folder only generators write into. A folder stays listed while any file in it remains,
 /// so an orphan left by a removed generator is reported, not forgotten.
-pub const FOLDERS: [Folder; 2] = [
+pub const FOLDERS: [Folder; 3] = [
     Folder {
         path: "projects/engines/geometry/crates/geom-gen/generated",
         // Turns off git's line-ending conversion for the outputs, which `check` compares byte for
@@ -115,6 +169,11 @@ pub const FOLDERS: [Folder; 2] = [
     Folder {
         path: predicates::OUTPUT_DIR,
         // The same, for geom-num's generated predicate modules.
+        keep: &[".gitattributes"],
+    },
+    Folder {
+        path: predicates::VERUS_DIR,
+        // The same, for the predicates' Verus twins in geom-num's Verus crate.
         keep: &[".gitattributes"],
     },
 ];

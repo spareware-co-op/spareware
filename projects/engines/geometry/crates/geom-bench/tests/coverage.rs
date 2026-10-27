@@ -55,7 +55,7 @@ const LOCK: &str = include_str!("../../../../../../Cargo.lock");
 const KERNEL_WORKFLOW: &str = include_str!("../../../../../../.github/workflows/kernel.yml");
 
 /// The source of every module of `geom-num`, by module name.
-const GEOM_NUM: [(&str, &str); 17] = [
+const GEOM_NUM: [(&str, &str); 19] = [
     ("dd", include_str!("../../geom-num/src/dd.rs")),
     ("eft", include_str!("../../geom-num/src/eft.rs")),
     ("error", include_str!("../../geom-num/src/error.rs")),
@@ -70,7 +70,9 @@ const GEOM_NUM: [(&str, &str); 17] = [
     ("ladder", include_str!("../../geom-num/src/ladder.rs")),
     ("lib", include_str!("../../geom-num/src/lib.rs")),
     ("math", include_str!("../../geom-num/src/math.rs")),
+    ("perturb", include_str!("../../geom-num/src/perturb.rs")),
     ("plane", include_str!("../../geom-num/src/plane.rs")),
+    ("crossing", include_str!("../../geom-num/src/crossing.rs")),
     ("predicate", include_str!("../../geom-num/src/predicate.rs")),
     ("real", include_str!("../../geom-num/src/real.rs")),
     ("rng", include_str!("../../geom-num/src/rng.rs")),
@@ -99,7 +101,7 @@ const MATH_PRIVATE: [&str; 6] = ["atan2", "exp", "hexf", "log", "sincospi", "sup
 
 /// The modules of `geom-num`'s `generated`, one per predicate (piece G27), by path; their free
 /// functions are `generated::<predicate>::<function>`.
-const GENERATED_PARTS: [(&str, &str); 5] = [
+const GENERATED_PARTS: [(&str, &str); 11] = [
     (
         "generated::orient2d",
         include_str!("../../geom-num/src/generated/orient2d.rs"),
@@ -119,6 +121,30 @@ const GENERATED_PARTS: [(&str, &str); 5] = [
     (
         "generated::plane_side",
         include_str!("../../geom-num/src/generated/plane_side.rs"),
+    ),
+    (
+        "generated::tpi_weight",
+        include_str!("../../geom-num/src/generated/tpi_weight.rs"),
+    ),
+    (
+        "generated::tpi_side",
+        include_str!("../../geom-num/src/generated/tpi_side.rs"),
+    ),
+    (
+        "generated::lpi_weight",
+        include_str!("../../geom-num/src/generated/lpi_weight.rs"),
+    ),
+    (
+        "generated::lpi_side",
+        include_str!("../../geom-num/src/generated/lpi_side.rs"),
+    ),
+    (
+        "generated::ssi_weight",
+        include_str!("../../geom-num/src/generated/ssi_weight.rs"),
+    ),
+    (
+        "generated::ssi_side",
+        include_str!("../../geom-num/src/generated/ssi_side.rs"),
     ),
 ];
 

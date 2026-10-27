@@ -7,7 +7,10 @@ harnesses. Nothing here ships, and no kernel crate depends on it.
 This page is the layout every target follows, chosen by piece G14 (the fuzz toolchain spike), and
 how each engine runs a target, on your machine and in CI. The first target built to it is
 `orient2d` (`src/orient2d.rs`): `geom-num`'s orient2d, its exact path and its `f64` filter must
-agree with the exact determinant of orient2d's definition, computed from scratch.
+agree with the exact determinant of orient2d's definition, computed from scratch. The others:
+`predicates` (`src/predicates.rs`, G11), every exact predicate answers and swapping two points
+flips its sign; and `wide` (`src/wide.rs`, G26), the wide integers agree with `num-bigint` on
+every operation at every width, `I128` to the reserved 768 bits.
 
 ## One law, four engines
 
@@ -109,8 +112,11 @@ Rules:
   took 3½ minutes, 1 took 19, and 3, 7 and 15 did not finish within the job's hour) and the fuzz
   target was proven on every byte string of at most 4 bytes (8 minutes; 8, 16 and 24 bytes did not
   finish). Once G28 routed orient2d to its exact paths on 64-bit targets, 4 bytes no longer
-  finished within the hour, so the fuzz target's bound is 2. A new target, or a change to the code
-  a proof reaches, repeats the trials before its bounds are set.
+  finished within the hour, so the fuzz target's bound is 2. After G37 rewrote the wide integers
+  the proof reaches, the bound-1 proof took 47 and then 75 minutes with kissat as Kani's SAT
+  solver (runs 40291338626 and 40308963161: the hosted runners' speed varies), and CaDiCaL ran
+  past three hours, so the proof uses kissat and its job has 120 minutes. A new
+  target, or a change to the code a proof reaches, repeats the trials before its bounds are set.
 - The proof test sets Kani's unwind bound above the longest loop a passing case runs (10 for
   orient2d: six coordinates), so a loop Kani cannot bound is cut rather than unwound forever.
   Kani's unwinding assertions, on by default, fail the proof if a cut loop can be reached, so
@@ -148,6 +154,11 @@ cargo bolero test orient2d_fuzz --package geom-fuzz --toolchain nightly-2026-10-
 
 `-T` bounds the run; `--runs`, `--jobs` and `--max-input-length` are the other limits. A crash is
 written to `tests/__fuzz__/orient2d/crashes`, where `cargo test` replays it.
+
+**Campaigns.** `.github/workflows/kernel-fuzz-campaign.yml` runs `wide_fuzz` under libFuzzer in
+five shards of five hours, 25 CPU hours, for G26's "24 hours clean". It runs only on demand: when
+the label `fuzz-campaign` is added to a pull request, or by hand from the Actions tab once the file
+is on `main`. Each shard uploads any crash and the corpus it grew.
 
 **Kani**, on Linux or macOS:
 
