@@ -77,6 +77,12 @@
 //! | [`incircle`] | 29 | `I256` | 8.881784197001265e-15 · max{x·y^3, x^3·y} | (10 + 96ε)ε | — (Geogram lifts in-circle with heights passed in) |
 //! | [`insphere`] | 86 | `I256` | 8.459899447643709e-14 · max{x·y·z^3, x·y^3·z, x^3·y·z} | (16 + 224ε)ε | — (Geogram lifts in-sphere with heights passed in) |
 //! | [`plane_side`] | 13 | `i128` | 1.7763568394002516e-15 · max{d, z·n, y·n, x·n} | — (not in predicates.c) | — (Geogram has no side of an integer plane) |
+//! | [`tpi_weight`] | 23 | `I256` | 5.107025913275725e-15 · n1·n2·n3 | — (not in predicates.c) | — (Geogram has no three-plane point) |
+//! | [`tpi_side`] | 70 | `I384` | 3.175237850427952e-14 · max{d1·n2·n3·n4, n1·d2·n3·n4, n1·n2·d3·n4, n1·n2·n3·d4} | — (not in predicates.c) | — (Geogram has no three-plane point) |
+//! | [`lpi_weight`] | 11 | `i128` | 1.221245327087673e-15 · max{z·n, y·n, x·n} | — (not in predicates.c) | — (Geogram has no line-plane point) |
+//! | [`lpi_side`] | 39 | `I256` | 2.5757174171303673e-14 · max{z·d1·n2, z·n1·d2, z^2·n1·n2, y·d1·n2, y·n1·d2, y·z·n1·n2, y^2·n1·n2, x·d1·n2, x·n1·d2, x·z·n1·n2, x·y·n1·n2, x^2·n1·n2} | — (not in predicates.c) | — (Geogram has no line-plane point) |
+//! | [`ssi_weight`] | 7 | `i128` | 4.440892098500629e-16 · x·y | — (not in predicates.c) | — (Geogram has no implicit crossing point) |
+//! | [`ssi_side`] | 27 | `I256` | 5.3290705182007585e-15 · x^2·y^2 | — (not in predicates.c) | — (Geogram has no implicit crossing point) |
 //!
 //! Method: Meyer and Pion's almost-static filters, which chapter 6.2 calls semi-static (*FPG: A
 //! code generator for fast and certified geometric predicates*, Real Numbers and Computers 2008,
@@ -108,9 +114,15 @@
 
 pub mod incircle;
 pub mod insphere;
+pub mod lpi_side;
+pub mod lpi_weight;
 pub mod orient2d;
 pub mod orient3d;
 pub mod plane_side;
+pub mod ssi_side;
+pub mod ssi_weight;
+pub mod tpi_side;
+pub mod tpi_weight;
 
 use crate::grid::Coord;
 use crate::sign::Sign;
