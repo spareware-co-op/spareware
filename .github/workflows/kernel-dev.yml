@@ -51,8 +51,9 @@ name: Kernel development crates
 #   generator give the same bytes there as natively, and the golden hashes and committed-output
 #   tests fail on a target that differs.
 # - Verus on orient2d's twin (chapter 28.7, "Predicates, by generated twins"; piece G36): geom-gen
-#   writes a Verus-annotated twin of orient2d's exact path
-#   (projects/engines/geometry/crates/geom-gen/generated/verus-orient2d.rs), whose `value` is the
+#   writes a Verus-annotated twin of orient2d's exact path (since G38 a module of geom-num's
+#   Verus crate, projects/engines/geometry/crates/geom-num/verus/lib.rs, with orient3d's,
+#   incircle's and insphere's beside it), whose `value` is the
 #   shipped one with its annotations; this job verifies it with a pinned Verus release, proving the
 #   path never overflows and returns the description's value for every input on the grid.
 #   geom-gen's tests/verus_twin.rs, which kernel.yml runs, holds the twin to the shipped code token
@@ -235,7 +236,5 @@ jobs:
           test -n "$verus"
           rustup toolchain install "$VERUS_RUST" --profile minimal
           dirname "$verus" >> "$GITHUB_PATH"
-      - name: Verus verifies orient2d's twin
-        run: verus --crate-type=lib projects/engines/geometry/crates/geom-gen/generated/verus-orient2d.rs
-      - name: Verus verifies the wide integers' twin
-        run: verus --crate-type=lib projects/engines/geometry/crates/geom-num/verus/wide.rs
+      - name: Verus verifies geom-num's twins (the wide integers and the four explicit-point predicates)
+        run: verus --crate-type=lib projects/engines/geometry/crates/geom-num/verus/lib.rs

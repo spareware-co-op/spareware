@@ -1199,7 +1199,12 @@ fn value_item(
         parameters,
         &format!("Option<{}>", root.width.rust()),
     );
+    let mut wide_seen = false;
     for (step, cert) in d.steps.iter().zip(&d.certs) {
+        if twin && cert.width > Width::I128 && !wide_seen {
+            wide_seen = true;
+            line(out, "    proof! { lemma_half_base_4(); }");
+        }
         if let (
             true,
             StepKind::Op {
@@ -1241,11 +1246,19 @@ fn verus_spec(out: &mut String, d: &Derivation) -> Result<(), EmitError> {
             line(out, &format!("        {}.{axis}.on_grid(),", input.name));
         }
     }
+    let Some(root) = d.certs.get(d.result) else {
+        return fail("the result step is missing");
+    };
+    let result = if root.width > Width::I128 {
+        "v.value()"
+    } else {
+        "v as int"
+    };
     line(out, "    ensures");
     line(
         out,
         &format!(
-            "        r matches Some(v) && v as int == spec_value({}),",
+            "        r matches Some(v) && {result} == spec_value({}),",
             args(d)
         ),
     );
@@ -1257,10 +1270,14 @@ fn verus_spec(out: &mut String, d: &Derivation) -> Result<(), EmitError> {
 /// the product of their certified bounds (`lemma_product_bound`), which Verus's linear arithmetic
 /// cannot see alone.
 fn product_proof(d: &Derivation, left: usize, right: usize) -> Result<String, EmitError> {
-    let operand = |i: usize| -> Result<(&str, String), EmitError> {
+    let operand = |i: usize| -> Result<(String, String), EmitError> {
         match (d.steps.get(i), d.certs.get(i)) {
             (Some(s), Some(c)) => Ok((
-                s.name.as_str(),
+                if c.width > Width::I128 {
+                    format!("{}.value()", s.name)
+                } else {
+                    format!("{} as int", s.name)
+                },
                 c.bound
                     .to_decimal()
                     .ok_or_else(|| EmitError("a bound's decimal".to_owned()))?,
@@ -1271,7 +1288,7 @@ fn product_proof(d: &Derivation, left: usize, right: usize) -> Result<String, Em
     let (l, lb) = operand(left)?;
     let (r, rb) = operand(right)?;
     Ok(format!(
-        "    proof! {{ lemma_product_bound({l} as int, {r} as int, {lb}, {rb}); }}"
+        "    proof! {{ lemma_product_bound({l}, {r}, {lb}, {rb}); }}"
     ))
 }
 
@@ -1298,78 +1315,17 @@ fn spec_expression(step: &Step, d: &Derivation) -> Result<String, EmitError> {
     })
 }
 
-/// The Verus model the twin verifies against: the grid's bound, and `geom_num::grid`'s coordinate
-/// type, as Verus code inside the twin's `verus!` block.
-const TWIN_MODEL: [&str; 33] = [
-    "/// The grid's bound, `geom_num::grid::COORD_MAX`: every coordinate has magnitude at most this.",
-    "pub const COORD_MAX: i64 = {COORD_MAX};",
-    "",
-    "/// A model of `geom_num::grid::Coord`: an `i64` that its type keeps on the grid.",
-    "#[derive(Clone, Copy)]",
-    "pub struct Coord {",
-    "    v: i64,",
-    "}",
-    "",
-    "impl Coord {",
-    "    /// Its value, as an integer.",
-    "    pub closed spec fn view(self) -> int {",
-    "        self.v as int",
-    "    }",
-    "",
-    "    /// Whether it is on the grid, as every `geom_num::grid::Coord` is.",
-    "    pub closed spec fn on_grid(self) -> bool {",
-    "        -COORD_MAX <= self.v <= COORD_MAX",
-    "    }",
-    "",
-    "    /// `geom_num::grid::Coord::get`: its value.",
-    "    pub fn get(self) -> (r: i64)",
-    "        ensures",
-    "            r == self.view(),",
-    "    {",
-    "        self.v",
-    "    }",
-    "}",
-    "",
-    "/// A model of `geom_num::grid::{ty}`.",
-    "#[derive(Clone, Copy)]",
-    "pub struct {ty} {",
-    "{fields}",
-];
-
-/// The lemma the twin's `proof!` blocks call, which closes the twin's `verus!` block.
-const TWIN_LEMMA: [&str; 20] = [
-    "/// Two factors of magnitude at most mx and my have a product of magnitude at most mx · my.",
-    "pub proof fn lemma_product_bound(x: int, y: int, mx: int, my: int)",
-    "    requires",
-    "        0 <= mx,",
-    "        0 <= my,",
-    "        -mx <= x <= mx,",
-    "        -my <= y <= my,",
-    "    ensures",
-    "        -(mx * my) <= x * y <= mx * my,",
-    "{",
-    "    assert(-(mx * my) <= x * y <= mx * my) by (nonlinear_arith)",
-    "        requires",
-    "            0 <= mx,",
-    "            0 <= my,",
-    "            -mx <= x <= mx,",
-    "            -my <= y <= my,",
-    "    ;",
-    "}",
-    "",
-    "} // verus!",
-];
-
-/// A Verus-annotated twin of a predicate's exact path (chapter 28.7; piece G36), for `verus` to
-/// verify: a model of the grid's coordinate and point types, the description's value over the
-/// integers (`spec_value`), the lemma that bounds a product, and `value` exactly as the shipped
-/// module (`shipped`, a repository path) writes it, with its annotations ([`value_item`]).
+/// A Verus-annotated twin of a predicate's exact path (chapter 28.7; pieces G36 and G38): a module
+/// of `geom-num`'s Verus crate (`verus/lib.rs`), which holds the model of the grid's types
+/// (`model`) and the wide integers' own twin (`wide`). The module holds the description's value
+/// over the integers (`spec_value`) and `value` exactly as the shipped module (`shipped`, a
+/// repository path) writes it, with its annotations ([`value_item`]).
 ///
 /// # Errors
 ///
 /// An [`EmitError`] for a description the twin does not cover yet: rounded inputs (no model of
-/// their range check), a step wider than `i128` (no Verus model of the wide integers), or no
-/// point inputs.
+/// their range check), a step wider than `I256`, or a 256-bit step made from an `i64` operand
+/// (`from_i64` has no proof yet), or no point inputs.
 #[allow(
     clippy::too_many_lines,
     reason = "one straight sequence of the twin's refusals, header and items, in the order they are written"
@@ -1382,11 +1338,25 @@ pub fn verus_twin(d: &Derivation, generator: &str, shipped: &str) -> Result<Stri
              model yet"
         ));
     }
-    if d.certs.iter().any(|c| c.width > Width::I128) {
+    if d.certs.iter().any(|c| c.width > Width::I256) {
         return fail(format!(
-            "`{name}`: the twin covers exact paths in i64 and i128 only; the wide integers have no \
-             Verus model yet"
+            "`{name}`: the twin covers exact paths in i64, i128 and I256 only; the wider integers \
+             have no proven conversions yet"
         ));
+    }
+    for (step, cert) in d.steps.iter().zip(&d.certs) {
+        if let StepKind::Op { left, right, .. } = &step.kind {
+            for i in [*left, *right] {
+                if cert.width > Width::I128 && d.certs.get(i).is_some_and(|c| c.width == Width::I64)
+                {
+                    return fail(format!(
+                        "`{name}`: the step `{}` widens an i64 to I256, and `from_i64` has no \
+                         proof yet",
+                        step.name
+                    ));
+                }
+            }
+        }
     }
     let Some(ty) = point_type(d)? else {
         return fail(format!("`{name}`: the twin covers point inputs only"));
@@ -1394,6 +1364,7 @@ pub fn verus_twin(d: &Derivation, generator: &str, shipped: &str) -> Result<Stri
     let Some(root_step) = d.steps.get(d.result) else {
         return fail("the result step is missing");
     };
+    let wide = d.certs.iter().any(|c| c.width > Width::I128);
     let parameters = params(d, Some(ty))?;
     let mut out = String::new();
     let paragraphs = [
@@ -1406,20 +1377,21 @@ pub fn verus_twin(d: &Derivation, generator: &str, shipped: &str) -> Result<Stri
         ),
         format!(
             "A Verus-annotated twin of `{name}`'s exact path, `value` in `{shipped}` (chapter 28.7 \
-             of the kernel architecture, \"Predicates, by generated twins\"; piece G36). It proves \
-             that for every input whose coordinates are on the grid (|v| ≤ 2^{COORD_BITS} − 1), \
-             `value` returns `Some` of the description's value over the mathematical integers: no \
-             checked step overflows, and the result is the value the description defines."
+             of the kernel architecture, \"Predicates, by generated twins\"; pieces G36 and G38). \
+             It proves that for every input whose coordinates are on the grid (|v| ≤ \
+             2^{COORD_BITS} − 1), `value` returns `Some` of the description's value over the \
+             mathematical integers: no checked step overflows, and the result is the value the \
+             description defines."
         ),
-        format!(
-            "The twin's `value`, with its `#[verus_spec]` attribute and its `proof!` blocks \
-             removed, is token for token the shipped one: the same emitter code writes both, and \
-             geom-gen's `tests/verus_twin.rs` compares the committed files. Above it, `Coord` and \
-             `{ty}` model `geom_num::grid`'s types: a coordinate is an `i64` its type keeps on the \
-             grid, which the twin's `requires` states for its inputs, and `get` returns it."
-        ),
-        "Verify: `verus --crate-type=lib <this file>`, with the Verus release `kernel-dev.yml` \
-         pins; its `verus` job does this on every pull request."
+        "The twin's `value`, with its `#[verus_spec]` attribute and its `proof!` blocks removed, \
+         is token for token the shipped one: the same emitter code writes both, and geom-gen's \
+         `tests/verus_twin.rs` compares the committed files. It is a module of `geom-num`'s \
+         Verus crate, `verus/lib.rs`, whose `model` module models `geom_num::grid`'s types and \
+         whose `wide` module is the wide integers' own proven twin."
+            .to_owned(),
+        "Verify: `verus --crate-type=lib projects/engines/geometry/crates/geom-num/verus/lib.rs`, \
+         with the Verus release `kernel-dev.yml` pins; its `verus` job does this on every pull \
+         request."
             .to_owned(),
     ];
     for (k, text) in paragraphs.iter().enumerate() {
@@ -1431,22 +1403,12 @@ pub fn verus_twin(d: &Derivation, generator: &str, shipped: &str) -> Result<Stri
     line(&mut out, "");
     line(&mut out, "use vstd::prelude::*;");
     line(&mut out, "");
-    line(&mut out, "verus! {");
-    line(&mut out, "");
-    let fields: Vec<String> = axes_of(ty)
-        .iter()
-        .map(|axis| format!("    pub {axis}: Coord,"))
-        .collect();
-    for text in TWIN_MODEL {
-        line(
-            &mut out,
-            &text
-                .replace("{COORD_MAX}", &COORD_MAX.to_string())
-                .replace("{ty}", ty)
-                .replace("{fields}", &fields.join("\n")),
-        );
+    line(&mut out, "use crate::model::*;");
+    if wide {
+        line(&mut out, "use crate::wide::*;");
     }
-    line(&mut out, "}");
+    line(&mut out, "");
+    line(&mut out, "verus! {");
     line(&mut out, "");
     line(
         &mut out,
@@ -1470,9 +1432,7 @@ pub fn verus_twin(d: &Derivation, generator: &str, shipped: &str) -> Result<Stri
     line(&mut out, &format!("    {}", root_step.name));
     line(&mut out, "}");
     line(&mut out, "");
-    for text in TWIN_LEMMA {
-        line(&mut out, text);
-    }
+    line(&mut out, "} // verus!");
     line(&mut out, "");
     value_item(&mut out, d, &parameters, true)?;
     out.truncate(out.trim_end().len());
