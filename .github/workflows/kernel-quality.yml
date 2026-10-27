@@ -469,13 +469,18 @@ jobs:
       # crossbeam-rs/crossbeam#871 (commit 02fb08a6c, "epoch: Fix stacked borrows violations"),
       # which changes a public trait, so only a 0.10 release carries it. geom-test's
       # kernel_quality_workflow test fails once Cargo.lock moves off 0.9.21, so the exception is
-      # looked at again then. Every other check of Miri stays on: data races, leaks,
-      # use-after-free, uninitialised and out-of-bounds reads, and Tree Borrows' own aliasing rules.
+      # looked at again then. The leak check is off for this step only: rayon's `ThreadPool::drop`
+      # signals its threads to stop (`registry.terminate()`) and does not join them, so when a test
+      # ends each worker's crossbeam-epoch registration is still alive, and Miri reports it as
+      # leaked (run 40593080811). rayon's own CI runs Miri the same way, `-Zmiri-tree-borrows
+      # -Zmiri-ignore-leaks` (rayon-rs/rayon, .github/workflows/ci.yaml). Every other check of
+      # Miri stays on: data races, use-after-free, uninitialised and out-of-bounds reads, and Tree
+      # Borrows' own aliasing rules.
       - name: geom-pool's tests under Miri with Tree Borrows
         if: env.NEEDED == 'true' && matrix.partition == 1
         env:
           RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
-          MIRIFLAGS: -Zmiri-isolation-error=warn-nobacktrace -Zmiri-tree-borrows
+          MIRIFLAGS: -Zmiri-isolation-error=warn-nobacktrace -Zmiri-tree-borrows -Zmiri-ignore-leaks
         run: |
           profile=()
           dir=target/nextest/default-miri

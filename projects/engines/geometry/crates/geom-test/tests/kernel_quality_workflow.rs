@@ -522,6 +522,13 @@ fn only_geom_pool_runs_under_tree_borrows_and_only_while_crossbeam_needs_it() {
         .map(|(_, run)| run)
         .collect();
     assert_eq!(tree.len(), 1, "one step runs Tree Borrows");
+    // Only that step turns Miri's leak check off (rayon's pools stop their threads without
+    // joining them); every other run keeps it.
+    for (flags, run) in &with_flags {
+        if flags.contains("-Zmiri-ignore-leaks") {
+            assert!(flags.contains("-Zmiri-tree-borrows"), "{run}");
+        }
+    }
     assert!(
         tree[0].contains(&format!(
             "cargo miri nextest run --locked -p {TREE_BORROWS_CRATE} "
