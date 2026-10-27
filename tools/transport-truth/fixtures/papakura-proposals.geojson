@@ -1,0 +1,63 @@
+{
+ "type": "FeatureCollection",
+ "name": "Papakura proposals (made-up test data)",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": { "name": "New Link Road", "cls": "collector", "speed": 60, "lanesAB": 1, "lanesBA": 1, "status": "proposed" },
+   "geometry": { "type": "LineString", "coordinates": [[174.9416887, -37.0647649], [174.9420, -37.0640], [174.9425, -37.0631], [174.9431, -37.0622]] }
+  },
+  {
+   "type": "Feature",
+   "properties": { "name": "Wood Street Extension", "cls": "arterial", "speed": "70", "lanesAB": 2, "lanesBA": 0, "status": "proposed" },
+   "geometry": { "type": "LineString", "coordinates": [[174.9388842, -37.0648282], [174.9388, -37.0643], [174.9388742, -37.0637339]] }
+  },
+  {
+   "type": "Feature",
+   "properties": { "name": "Southern Bypass", "cls": "motorway", "status": "proposed" },
+   "geometry": { "type": "MultiLineString", "coordinates": [
+    [[174.9354969, -37.0668087], [174.9371856, -37.0668992], [174.9388742, -37.066854]],
+    [[174.9388742, -37.066854], [174.94, -37.0668087], [174.9411258, -37.0667183], [174.9428144, -37.0666731]]
+   ] }
+  },
+  {
+   "type": "Feature",
+   "properties": { "name": "Not a road" },
+   "geometry": { "type": "Point", "coordinates": [174.9416887, -37.0647649] }
+  },
+  {
+   "type": "Feature",
+   "properties": { "name": "One point only" },
+   "geometry": { "type": "LineString", "coordinates": [[174.944, -37.063]] }
+  },
+  {
+   "type": "Feature",
+   "properties": { "name": "Loop" },
+   "geometry": { "type": "LineString", "coordinates": [[174.9450, -37.0690], [174.9455, -37.0690], [174.9455, -37.0695], [174.9450, -37.0690]] }
+  },
+  {
+   "type": "Feature",
+   "properties": { "name": "No geometry" },
+   "geometry": null
+  },
+  {
+   "type": "Feature",
+   "geometry": { "type": "LineString", "coordinates": [[174.9439402, -37.0659044], [174.9447282, -37.0657235]] }
+  },
+  {
+   "type": "Feature",
+   "properties": { "name": "Odd values", "cls": "bridleway", "speed": 0, "lanesAB": null, "lanesBA": "3", "status": "planned" },
+   "geometry": { "type": "LineString", "coordinates": [[174.9460, -37.0670, 12.5], [174.9466, -37.0672, 13.1], [174.9470, -37.0676, 14.0]] }
+  },
+  {
+   "type": "Feature",
+   "properties": { "name": "Three metres off", "cls": "local", "speed": 30, "lanesAB": 1, "lanesBA": 1, "status": "existing" },
+   "geometry": { "type": "LineString", "coordinates": [[174.94169, -37.06500], [174.9420, -37.0652], [174.9443342, -37.0645478]] }
+  },
+  {
+   "type": "Feature",
+   "properties": { "name": "Closed link", "cls": "local", "status": "closed", "lanesAB": 1, "lanesBA": 1 },
+   "geometry": { "type": "LineString", "coordinates": [[174.9463043, -37.0642765], [174.9468, -37.0638]] }
+  }
+ ]
+}

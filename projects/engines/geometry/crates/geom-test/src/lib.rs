@@ -42,12 +42,22 @@
 //!   The binary `golden` lists the
 //!   store, checks it against the repository (`-- check`), runs every golden in one CI leg's
 //!   configuration (`-- run`) and holds a pull request's edits to the approval rule (`-- diff`).
+//! - [`guard`]: the proof that the toolchain and dependency guard of 28.13 trips: `libm`'s `sin`
+//!   changed by one bit must fail the golden `geom-num/determinism`. The binary `guard` patches
+//!   that change in and runs the golden (`-- prove`); `kernel.yml` runs it.
 //! - [`ledger`]: the kernel's source ledger and notices (29.20, rules 4 to 6):
 //!   `projects/engines/geometry/PROVENANCE.md` and `projects/engines/geometry/NOTICE`, generated
 //!   from the map's `Source:` and `Consulted:` records, the hand-kept licence texts of ported
 //!   sources (`projects/engines/geometry/notices/`) and the method notes of the method-only
 //!   procedure (`projects/engines/geometry/methods/`), each note held to its template. The binary
 //!   `provenance` writes both files (`-- write`) and checks them in CI (`-- check`).
+//! - [`recursion`]: the recursion check (piece G13; 28.8). Every recursive cycle of the crates that
+//!   ship, found on a whole-program call graph that type-checks every body as rustc does, with a
+//!   model of the standard library; each cycle must have its depth bound stated in its module
+//!   header (the `Recursion:` field of `projects/engines/geometry/HEADERS.md`) and a test at the
+//!   bound, which runs on a small WebAssembly stack. The binary `recursion` lists the cycles
+//!   (`cargo run -p geom-test --bin recursion -- list`), checks them (`-- check`) and runs the
+//!   bounds' tests on the small stack (`-- gate`, the merge gate's recursion job).
 //! - [`scan`]: the banned-source scanner (29.20, rules 2 and 7): the routine names, macros and
 //!   constants of the numerical book chapter 29.4 bans, copyleft licence notices, statements of
 //!   origin that name a copyleft project, and Autodesk hatch pattern and linetype names, in every
@@ -55,9 +65,22 @@
 //!   (`-- check`). This crate's own description must pass it too, so it names the markers only
 //!   by kind; [`scan::markers`] lists them.
 //!
-//! Fixtures, reference implementations, oracle clients and the CI tools arrive with the pieces that
-//! need them. The sister development crates are `geom-fuzz` (fuzz harnesses), `geom-gen` (every
-//! generator whose output is committed) and `geom-bench` (benchmarks). `geom-bench` is built by
+//! Piece G21 adds the mutation and coverage gates of section 28.8, and the binary
+//! `kernel-quality` that runs them in CI (`.github/workflows/kernel-quality.yml`):
+//!
+//! - [`foundation`]: the foundation set, the kernel crates the gates cover, and their bars.
+//! - [`quality_ledger`]: the quality ledger (`projects/engines/geometry/quality-ledger.json`):
+//!   every surviving mutant the kernel keeps, with why, and every `coverage(off)` mark, with its
+//!   proof.
+//! - [`mutants`]: judges cargo-mutants' results against the ledger.
+//! - [`coverage`]: judges cargo-llvm-cov's LCOV data against the bars, and checks every
+//!   `coverage(off)` mark's proof.
+//! - [`rust_source`]: reads Rust source for them: test code, functions, branch sites and marks.
+//! - [`miri`]: the plan of the weekly Miri run, one job per kernel test suite.
+//!
+//! Fixtures, reference implementations, oracle clients and the other CI tools arrive with the
+//! pieces that need them. The sister development crates are `geom-fuzz` (fuzz harnesses),
+//! `geom-gen` (every generator whose output is committed) and `geom-bench` (benchmarks). `geom-bench` is built by
 //! piece G06 in its own worktree, so this piece leaves the benchmark to it.
 //!
 //! Invariants this crate keeps:
@@ -94,11 +117,21 @@
 //! - `geom-num` (MPL-2.0, ours), the numbers layer under test.
 //! - `proptest` 1.12, without its default `fork` and `timeout` features, as in `geom-num`. [`prop`]
 //!   always runs it from a fixed seed, so its operating-system random path is never taken.
-//! - `serde_json` 1.0, to read `cargo metadata` and the golden store, and `serde` 1.0 with its
-//!   derive, to read the store into typed records.
+//! - `serde_json` 1.0, to read the golden store, cargo-mutants' output and the quality ledger, and
+//!   `serde` 1.0 with its derive, to read the store into typed records; `cargo_metadata` 0.23.1,
+//!   `cargo metadata`'s typed model and the command that runs it (piece G12a put it in place of a
+//!   field-by-field reading; 29.1).
+//! - `toml` 0.9.6, so the map reads each crate's `Cargo.toml` as cargo does, and `proc-macro2`
+//!   1.0.107, Rust's lexer, so it reads source as rustc does (piece G12a put both in place of
+//!   readers written here; 29.1).
 //! - `sha2` 0.11, the SHA-256 of every golden digest (FIPS 180-4).
 //! - `rand` 0.10, without its default features, for its Fisher-Yates shuffle, which the shuffle
 //!   hook drives from `SplitMix64`; it has no generator of its own here.
+//! - `syn` 3.0, `proc-macro2` 1.0 (with span locations) and `quote` 1.0: Rust's grammar for the
+//!   golden store's repository check and the recursion check's parser, their line numbers and the
+//!   recursion check's token printing.
+//! - `petgraph` 0.8, without default features: the recursion check's strongly connected
+//!   components (Tarjan's algorithm).
 //! - `pulldown-cmark` 0.13.5, a development dependency without its default features (the HTML
 //!   writer and the command line), so `tests/attack_g17.rs` reads the kernel's README.md,
 //!   AGENTS.md and GLOSSARY.md as Markdown.
@@ -107,6 +140,11 @@
 //! - `num-rational` 0.4, a development dependency only: the exact oracle of the scanner's cited
 //!   Cash-Karp fixture, whose tableau its tests check against the order conditions in rational
 //!   arithmetic.
+//! - `clap` 4.6 (G21), the command line of the `kernel-quality` binary, without colour or terminal
+//!   detection.
+//! - `lcov` 0.8 (G21), to read the LCOV tracefiles cargo-llvm-cov writes ([`coverage`]).
+//! - `yaml-rust2` 0.13, a development dependency (G21), which reads
+//!   `.github/workflows/kernel-quality.yml` as YAML.
 //!
 //! Licences of every outside package this crate brings into a build, its own and its dependencies'
 //! on every target (`cargo tree --target all`), each record checked by `tests/licences.rs`. Where a
@@ -115,24 +153,38 @@
 //! - MIT OR Apache-2.0: `proptest`, `bit-set`, `bit-vec`, `bitflags`, `chacha20`, `cfg-if`,
 //!   `cpufeatures`, `libc`, `rand`, `rand_core`, `rand_xorshift`, `getrandom`, `core_detect`,
 //!   `num-traits`, `autocfg`, `regex-syntax`, `unarray`, `serde_json`, `serde`, `serde_core`,
-//!   `serde_derive`, `itoa`, `proc-macro2`, `quote`, `syn`, `sha2`, `digest`, `block-buffer`,
-//!   `crypto-common`, `hybrid-array`, `typenum`, `num-rational`, `num-bigint` and `num-integer`.
+//!   `serde_derive`, `itoa`, `proc-macro2`, `quote`, `syn`, `toml`, `toml_datetime`, `toml_parser`,
+//!   `toml_writer`, `serde_spanned`, `camino`, `cargo-platform`, `semver`, `thiserror`,
+//!   `thiserror-impl`, `clap`, `clap_builder`, `clap_derive`, `clap_lex`, `anstyle`, `heck`,
+//!   `yaml-rust2`, `hashlink`, `sha2`, `digest`, `block-buffer`, `crypto-common`, `hybrid-array`,
+//!   `typenum`, `petgraph`, `fixedbitset`, `hashbrown`, `indexmap`, `equivalent`, `num-rational`,
+//!   `num-bigint` and `num-integer`.
+//! - MIT/Apache-2.0: `lcov` and `arraydeque` (the older spelling of MIT OR Apache-2.0).
 //! - MIT OR Apache-2.0 OR LGPL-2.1-or-later: `r-efi` (UEFI targets only).
 //! - (MIT OR Apache-2.0) AND Unicode-3.0: `unicode-ident` and `unicode-normalization`.
 //! - Zlib OR Apache-2.0 OR MIT: `tinyvec`, which `unicode-normalization` brings in.
 //! - MIT OR Apache-2.0: `unicase`, which `pulldown-cmark` brings in.
 //! - Unlicense OR MIT: `memchr`.
-//! - MIT: `zmij` and `pulldown-cmark`.
+//! - MIT: `zmij`, `winnow`, `cargo_metadata` and `pulldown-cmark`.
+//! - Zlib: `foldhash`.
 #![forbid(unsafe_code)]
 
+pub mod coverage;
 pub mod deps;
+pub mod foundation;
 pub mod golden;
 pub mod grid;
+pub mod guard;
 pub mod ledger;
 pub mod licence;
 pub mod map;
+pub mod miri;
+pub mod mutants;
 pub mod prop;
+pub mod quality_ledger;
+pub mod recursion;
 pub mod rng;
+pub mod rust_source;
 pub mod scan;
 pub mod seed;
 

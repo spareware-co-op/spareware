@@ -54,9 +54,6 @@ mod check;
 #[path = "scaffold/header.rs"]
 mod header;
 #[allow(dead_code)]
-#[path = "scaffold/json.rs"]
-mod json;
-#[allow(dead_code)]
 #[path = "scaffold/lints.rs"]
 mod lints;
 #[cfg(not(target_family = "wasm"))]
@@ -269,19 +266,39 @@ fn a_lint_table_inside_a_string_is_not_a_lint_table() {
 
 // ------------------------------------------------------------------ the JSON reader's depth bound
 
+/// The scaffold reads `cargo metadata` and cargo-deny's output with `serde_json` (piece G12a put it
+/// in place of G09's reader): `serde_json::from_str`, `from_slice` and `cargo_metadata`'s
+/// `MetadataCommand::exec` all keep its recursion limit, which `cargo_metadata`'s use of the
+/// crate's `unbounded_depth` feature leaves on (the feature only adds a way to switch it off). JSON
+/// nested one level deeper than the limit is an error, not a stack overflow. Cargo's build
+/// messages are the one input read without the limit: `cargo_metadata`'s `Message::parse_stream`
+/// switches it off on purpose, because rustc nests the spans of macro expansions deeper than 128
+/// levels, and that input is the pinned compiler's own output (gate.rs, `cargo_messages`).
 #[test]
-fn nesting_one_deeper_than_max_depth_is_refused() {
-    let depth = json::MAX_DEPTH + 1;
-    let text = "[".repeat(depth) + &"]".repeat(depth);
-    let got = json::parse(&text);
+fn nesting_one_deeper_than_the_json_readers_limit_is_refused() {
+    // serde_json's limit: `remaining_depth` starts at 128 in its de.rs and each array or object
+    // takes one before it is read, refusing the one that reaches 0, so 127 levels read and 128 do
+    // not.
+    let parse = |depth: usize| {
+        let text = "[".repeat(depth) + &"]".repeat(depth);
+        serde_json::from_str::<serde_json::Value>(&text)
+    };
+    assert!(
+        parse(127).is_ok(),
+        "127 nested arrays are within serde_json's limit"
+    );
+    let got = parse(128);
     assert!(
         got.is_err(),
-        "json::parse of {depth} nested arrays = {got:?}; expected Err: json.rs promises \
-         \"Nesting deeper than MAX_DEPTH ({}) is an error\", and {depth} levels is deeper. The \
-         depth counter starts at 0 for the outer array, so MAX_DEPTH + 1 levels are accepted; \
-         its own test checks MAX_DEPTH (accepted) and MAX_DEPTH + 2 (refused) and skips this \
-         boundary.",
-        json::MAX_DEPTH
+        "serde_json read 128 nested arrays: {got:?}; its recursion limit is off"
+    );
+    let objects = "{\"a\":".repeat(128) + "1" + &"}".repeat(128);
+    assert!(serde_json::from_str::<serde_json::Value>(&objects).is_err());
+    assert!(
+        serde_json::from_slice::<serde_json::Value>(
+            ("[".repeat(128) + &"]".repeat(128)).as_bytes()
+        )
+        .is_err()
     );
 }
 
@@ -972,7 +989,7 @@ mod repository {
         assert!(wrong.is_empty(), "{wrong:#?}");
     }
 
-    fn tables_of<'o>(observed: &'o mut Observed, name: &str) -> &'o mut BTreeMap<String, String> {
+    fn tables_of<'o>(observed: &'o mut Observed, name: &str) -> &'o mut crate::manifest::Keys {
         observed
             .packages
             .get_mut(name)
@@ -983,7 +1000,7 @@ mod repository {
             .unwrap()
     }
 
-    fn clippy_of<'o>(observed: &'o mut Observed, name: &str) -> &'o mut BTreeMap<String, String> {
+    fn clippy_of<'o>(observed: &'o mut Observed, name: &str) -> &'o mut crate::manifest::Keys {
         observed
             .packages
             .get_mut(name)
@@ -1014,20 +1031,20 @@ mod repository {
                 .is_some()
         );
         tables_of(&mut observed, "geom-bool")
-            .insert("lints.clippy.float_cmp".to_owned(), "\"deny\"".to_owned());
+            .insert("lints.clippy.float_cmp".to_owned(), "deny".into());
         tables_of(&mut observed, "engine-geometry").insert(
             "lints.clippy.arithmetic_side_effects".to_owned(),
-            "\"warn\"".to_owned(),
+            "warn".into(),
         );
         let methods = clippy_of(&mut observed, "geom-op")
             .get_mut("disallowed-methods")
             .unwrap();
-        let hypot =
-            "{path=\"f64::hypot\",reason=\"platform maths; use geom_num::math (chapter 21)\"}";
-        assert!(methods.contains(hypot), "{methods}");
-        *methods = methods.replace(hypot, "");
+        let list = methods.as_array_mut().unwrap();
+        let before = list.len();
+        list.retain(|item| item.get("path").and_then(|p| p.as_str()) != Some("f64::hypot"));
+        assert_eq!(list.len() + 1, before, "f64::hypot is listed once");
         clippy_of(&mut observed, "geom-ifc")
-            .insert("too-many-lines-threshold".to_owned(), "50".to_owned());
+            .insert("too-many-lines-threshold".to_owned(), 50.into());
         observed.packages.get_mut("geom-make").unwrap().lints.clippy = None;
         observed.packages.get_mut("geom-p21").unwrap().lints.tables = None;
         let expected: BTreeSet<(String, Rule)> = [
@@ -1052,8 +1069,9 @@ mod repository {
     #[test]
     fn layout_and_comments_are_not_settings() {
         // geom-num's real files, laid out again: comments dropped or reworded, spacing changed,
-        // a table written as dotted keys and an inline table as its own table. The settings read
-        // the same; a changed quote does not.
+        // a table written as dotted keys and an inline table as its own table, a string requoted.
+        // The settings read the same, as TOML values (piece G12a: the `toml` crate reads them, and
+        // `'deny'` is the same value to cargo as `"deny"`); a changed value does not.
         let manifest = read(&format!("{NUM}/Cargo.toml"));
         let clippy = read(&format!("{NUM}/clippy.toml"));
         let relaid_manifest = manifest
@@ -1077,13 +1095,19 @@ mod repository {
             crate::manifest::lint_settings(&manifest)
         );
         assert_eq!(
-            crate::manifest::settings(&relaid_clippy),
-            crate::manifest::settings(&clippy)
+            crate::manifest::keys(&relaid_clippy),
+            crate::manifest::keys(&clippy)
         );
         assert!(crate::manifest::lint_settings(&manifest).is_some_and(|s| s.len() > 10));
         let requoted = manifest.replace("panic = \"deny\"", "panic = 'deny'");
-        assert_ne!(
+        assert_ne!(requoted, manifest, "geom-num's manifest denies panic");
+        assert_eq!(
             crate::manifest::lint_settings(&requoted),
+            crate::manifest::lint_settings(&manifest)
+        );
+        let loosened = manifest.replace("panic = \"deny\"", "panic = 'warn'");
+        assert_ne!(
+            crate::manifest::lint_settings(&loosened),
             crate::manifest::lint_settings(&manifest)
         );
     }
@@ -1115,7 +1139,7 @@ mod repository {
         write(&base.join("clippy.toml"), "a = 1\n");
         let found = |dir: &Path| -> Option<(Vec<String>, String)> {
             repo::clippy_config(dir, &base).map(|c| {
-                let a = c.settings.unwrap()["a"].clone();
+                let a = c.settings.unwrap()["a"].to_string();
                 (c.file, a)
             })
         };
@@ -1238,7 +1262,6 @@ mod repository {
         ("geom-p21", "G415"),
         ("geom-panel", "G342 G343 G344 G345"),
         ("geom-poly", "G123 G124 G125 G126 G127 G128 G142"),
-        ("geom-pool", "G33 G456"),
         ("geom-profile", "G229 G230"),
         ("geom-skeleton", "G271 G272 G274 G471"),
         (

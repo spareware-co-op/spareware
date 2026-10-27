@@ -1,9 +1,11 @@
 //! Fuzz target: `geom-num`'s exact predicates never panic, and swapping two points flips their sign.
 //!
 //! What it does: [`decode`] turns a fuzzer's bytes into grid points with `geom-test`'s
-//! [`GridSampler`] (four 2D points, then five 3D points). [`harness`] calls every exact predicate on
+//! [`GridSampler`] (four 2D points, then five 3D points). [`check`] calls every exact predicate on
 //! them: `orient2d`, `incircle`, `orient3d` and `insphere`. For each, it checks that the predicate
 //! answers, then swaps every pair of points and checks that the sign flips, `Zero` staying `Zero`.
+//! [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate
+//! README sets out the layout).
 //!
 //! Guarantees:
 //!
@@ -97,7 +99,16 @@ pub fn decode(data: &[u8]) -> (Points, usize) {
     (Points { p2, p3 }, read)
 }
 
-/// The harness: decode `data` into grid points, call every exact predicate, check every swap law.
+/// The harness every fuzzing engine drives: decode `data` into grid points, then [`check`].
+///
+/// # Errors
+///
+/// As for [`check`].
+pub fn harness(data: &[u8]) -> Result<(), Finding> {
+    check(&decode(data).0)
+}
+
+/// Calls every exact predicate on `points` and checks every swap law.
 ///
 /// # Errors
 ///
@@ -107,8 +118,7 @@ pub fn decode(data: &[u8]) -> (Points, usize) {
     clippy::many_single_char_names,
     reason = "a to e name the points as the predicates' parameters do"
 )]
-pub fn harness(data: &[u8]) -> Result<(), Finding> {
-    let (points, _) = decode(data);
+pub fn check(points: &Points) -> Result<(), Finding> {
     let [a, b, c, d] = points.p2;
     swap_law("orient2d", [a, b, c], |&[a, b, c]| orient2d(a, b, c))?;
     swap_law("incircle", [a, b, c, d], |&[a, b, c, d]| {
