@@ -14,6 +14,8 @@ name: Kernel fuzzing and proofs
 #   tests/__fuzz__/<target>/crashes and `cargo test` replays it forever (28.16).
 # - Kani: each `<target>_proof` test, bolero's harness unchanged, proven by Kani for every case of
 #   its domain (the target module's header says which).
+# - kernel-fuzz-campaign.yml runs a target for hours instead, on demand: the wide integers' 25-hour
+#   campaign (G26).
 # - ClusterFuzzLite, on pull requests: .clusterfuzzlite/build.sh builds every `<target>_fuzz` test
 #   with cargo-bolero's build-clusterfuzz command, and ClusterFuzzLite fuzzes them in turn
 #   (code-change mode, address sanitizer). OSS-Fuzz's build check cannot read the start-up
@@ -91,7 +93,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [orient2d_fuzz, predicates_fuzz]
+        target: [orient2d_fuzz, predicates_fuzz, wide_fuzz]
     defaults:
       run:
         shell: bash
