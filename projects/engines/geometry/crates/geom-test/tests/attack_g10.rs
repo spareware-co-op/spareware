@@ -16,6 +16,10 @@
 //! - `the_matrix_has_every_runner_in_both_modes`: `kernel.yml` tests on the six native runners
 //!   G10's done-when names (x86-64 and arm64 Linux, Windows and macOS) in debug and release, with
 //!   a `target-cpu=native` leg in release, and on wasm32 under wasmtime and Node.
+//! - `one_pinned_cargo_deny_runs_the_facade_tests`: `kernel-build.yml`'s scaffold job, which runs
+//!   every test file of the facade (`attack_g12`'s licence-gate attacks start cargo-deny), installs
+//!   cargo-deny checked against its SHA-256 first, and every kernel workflow that pins cargo-deny
+//!   pins `kernel-gate.yml`'s version and SHA-256.
 //!
 //! Each check is also shown to fail on a seeded violation.
 
@@ -446,6 +450,104 @@ fn matrix_violations(kernel: &str) -> Vec<String> {
         found.push("no wasm32 job runs under wasmtime and Node".to_owned());
     }
     found
+}
+
+/// What breaks "one pinned cargo-deny": a kernel workflow that names cargo-deny's version or its
+/// archive's SHA-256 without both, or with values other than `kernel-gate.yml`'s; and the scaffold
+/// job of `kernel-build.yml`, which runs `attack_g12`'s cargo-deny tests, not installing it before
+/// it runs the facade's tests.
+fn deny_pin_violations(workflows: &BTreeMap<String, String>) -> Vec<String> {
+    const PINS: [&str; 2] = ["CARGO_DENY_VERSION", "CARGO_DENY_SHA256"];
+    let mut found = Vec::new();
+    let pins_of = |text: &str| -> Vec<Option<String>> {
+        let w = parse(text);
+        PINS.iter()
+            .map(|p| w["env"][*p].as_str().map(str::to_owned))
+            .collect()
+    };
+    let Some(gate) = workflows.get("kernel-gate.yml") else {
+        return vec!["kernel-gate.yml is missing".to_owned()];
+    };
+    let wanted = pins_of(gate);
+    if wanted.iter().any(Option::is_none) {
+        found.push("kernel-gate.yml does not pin cargo-deny's version and SHA-256".to_owned());
+    }
+    for (name, text) in workflows {
+        let pins = pins_of(text);
+        if pins.iter().any(Option::is_some) && pins != wanted {
+            found.push(format!(
+                "{name} pins cargo-deny as {pins:?}, not kernel-gate.yml's {wanted:?}"
+            ));
+        }
+    }
+    let Some(build) = workflows.get("kernel-build.yml") else {
+        found.push("kernel-build.yml is missing".to_owned());
+        return found;
+    };
+    let steps = parse(build)["jobs"]["scaffold"]["steps"]
+        .as_vec()
+        .cloned()
+        .unwrap_or_default();
+    let runs: Vec<&str> = steps.iter().filter_map(|s| s["run"].as_str()).collect();
+    let install = runs
+        .iter()
+        .position(|r| r.contains("sha256sum --check --strict") && r.contains("cargo-deny-"));
+    let facade = runs
+        .iter()
+        .position(|r| r.contains("engine-geometry/tests/*.rs"));
+    match (install, facade) {
+        (Some(i), Some(f)) if i < f => {}
+        _ => found.push(
+            "kernel-build.yml's scaffold job does not install the pinned cargo-deny before it runs \
+             the facade's tests"
+                .to_owned(),
+        ),
+    }
+    if !pins_of(build).iter().all(Option::is_some) {
+        found.push("kernel-build.yml does not pin cargo-deny".to_owned());
+    }
+    found
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn one_pinned_cargo_deny_runs_the_facade_tests() {
+    let workflows = kernel_workflows();
+    assert_eq!(deny_pin_violations(&workflows), Vec::<String>::new());
+
+    // Seeded violations: each must be reported.
+    let build = &workflows["kernel-build.yml"];
+    let seeded = |text: String| {
+        assert_ne!(&text, build);
+        let mut w = workflows.clone();
+        w.insert("kernel-build.yml".to_owned(), text);
+        deny_pin_violations(&w)
+    };
+    let other_version = build.replacen(
+        "CARGO_DENY_VERSION: \"0.20.2\"",
+        "CARGO_DENY_VERSION: \"0.20.3\"",
+        1,
+    );
+    assert!(
+        seeded(other_version)
+            .iter()
+            .any(|v| v.contains("not kernel-gate.yml's"))
+    );
+    let unchecked = build.replacen(
+        "echo \"${CARGO_DENY_SHA256}  $name.tar.gz\" | sha256sum --check --strict\n",
+        "",
+        1,
+    );
+    assert!(
+        seeded(unchecked)
+            .iter()
+            .any(|v| v.contains("before it runs"))
+    );
+    let no_pin = build.replacen("  CARGO_DENY_SHA256:", "  NOT_THE_PIN:", 1);
+    assert!(seeded(no_pin).iter().any(|v| v.contains("not kernel-gate")));
 }
 
 #[cfg_attr(
