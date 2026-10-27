@@ -2454,6 +2454,16 @@
           "pinned": false,
           "purpose": "0.2.16",
           "take": "depend"
+        },
+        {
+          "licence": "MIT",
+          "link": "https://crates.io/crates/libm/0.2.16",
+          "manifest": "projects/engines/geometry/crates/geom-num/Cargo.toml",
+          "method_note": null,
+          "name": "libm",
+          "pinned": false,
+          "purpose": "0.2.16",
+          "take": "depend"
         }
       ],
       "errors": [
@@ -4475,6 +4485,24 @@
           "target": "bin"
         },
         {
+          "cost": "what each gate costs (see its module), plus one `cargo metadata` run for `affected --changed` and `miri-packages`.",
+          "does": "one subcommand per step of the workflow, each a thin front to a module of `geom_test`; `kernel-quality --help` lists them and `kernel-quality <command> --help` gives each one's options.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/bin/kernel-quality.rs",
+          "guarantees": [
+            "**Exit status says what happened.** 0 when the gate passes, 1 when it fails, 2 when the input cannot be used (a missing or malformed file, a bad argument, which clap reports with exit status 2). Every failure is printed, one per line.",
+            "**Nothing judged twice by different rules.** The binary holds no rule of its own; the foundation set, the bars and the ledger's rules live in the library, where the tests reach them."
+          ],
+          "job": "`kernel-quality`: the CI tool behind the geometry kernel's mutation and coverage gates and its weekly Miri run (section 28.8; `.github/workflows/kernel-quality.yml`).",
+          "method": {
+            "none": "a command-line front end, parsed by clap's derive API (<https://docs.rs/clap/4.6.7/clap/_derive/index.html>), over the library's gates."
+          },
+          "path": "kernel-quality",
+          "provenance": [],
+          "spdx": null,
+          "target": "bin"
+        },
+        {
           "cost": "one build of the map ([`geom_test::map::build`]) and one read or write of `MAP.json`.",
           "does": null,
           "family": [],
@@ -4543,6 +4571,34 @@
           "target": "bin"
         },
         {
+          "cost": "linear in the size of the LCOV files and the crates' sources.",
+          "does": "[`parse_lcov`] reads the LCOV file cargo-llvm-cov writes for one crate (`cargo llvm-cov -p <crate> --branch --lcov`). [`measure`] counts, for every file under the crate's `src/`, the lines and branches outside test code (found by [`crate::rust_source`]) and how many of them the crate's tests ran. [`judge`] applies the bars of [`crate::foundation`]: in the foundation set every line run and every branch taken both ways; elsewhere at least 90% of lines. [`check_marks`] checks every `coverage(off)` mark in the kernel's crates against [`crate::quality_ledger::Ledger::coverage_off`].",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/coverage.rs",
+          "guarantees": [
+            "**Test code is not counted.** Lines of items behind `#[cfg(test)]` are left out of both the lines found and the lines run, so tests cannot pad a crate's numbers.",
+            "**Nothing is skipped silently.** A source file that defines a function but has no coverage data was never compiled into the measured tests, and fails; so does a crate with no LCOV file at all, and a foundation crate whose code has `if` or `while` but whose data holds no branch record (the run was made without `--branch`).",
+            "**A missing foundation module fails.** A crate of [`crate::foundation::FOUNDATION_MODULES`] with code but no file of its foundation module fails, so moving the module cannot drop it from the foundation bar.",
+            "**Every mark cites a checked proof.** A `coverage(off)` mark must have a comment right above it citing `proof: <path>::<name>`, the same proof as its ledger entry, and the cited file must define that function as a Kani harness (`#[kani::proof]`) or a Verus `proof fn`. A ledger entry with no mark is stale and fails.",
+            "**Waiting lines are named, and can only go.** A foundation line the tests do not run passes only while the ledger's `awaiting_proof` names it, with the piece that proves it unreachable or tests it ([`excuse_awaiting`]); an entry that matches more or fewer missed lines than it says fails. When every kernel branch outcome of a file with a count of 0 waits so, which of them llvm-cov folded no longer matters, and the file's folding note is not a failure.",
+            "**Exact arithmetic.** Percentages are compared as integers: hit × 100 ≥ found × bar."
+          ],
+          "job": "The coverage gate: line and branch coverage of each kernel crate by its own tests, against the bars of section 28.8, and every `coverage(off)` mark against the proof it cites.",
+          "method": {
+            "links": [
+              "https://llvm.org/docs/CommandGuide/llvm-cov.html#llvm-cov-export",
+              "https://docs.rs/lcov/0.8.2/lcov/",
+              "https://docs.rs/crate/cargo-llvm-cov/0.9.1",
+              "https://doc.rust-lang.org/rustc/instrument-coverage.html"
+            ],
+            "text": "the LCOV tracefile records (`SF`, `DA`, `BRDA`, `BRF`, `end_of_record`) that `llvm-cov export -format=lcov` writes (<https://llvm.org/docs/CommandGuide/llvm-cov.html#llvm-cov-export>), each read by the `lcov` crate 0.8 (MIT OR Apache-2.0, <https://docs.rs/lcov/0.8.2/lcov/>); cargo-llvm-cov 0.9.1 (<https://docs.rs/crate/cargo-llvm-cov/0.9.1>) runs it. Branch coverage is rustc's `-Z coverage-options=branch`, nightly only (<https://doc.rust-lang.org/rustc/instrument-coverage.html>), which cargo-llvm-cov's `--branch` turns on."
+          },
+          "path": "geom_test::coverage",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "O(K × (P + D)) for K kernel crates, P packages in the graph and D dependency entries, declared and resolved, with a logarithmic factor for the ordered maps; plus one `cargo metadata` run, which resolves the workspace from `Cargo.lock`.",
           "does": "[`check`] reads the output of `cargo metadata` (which [`cargo_metadata`] runs with every feature of every workspace member on and every platform's dependencies in) and follows every kernel crate's normal and build dependencies through the whole dependency graph, reporting every chain that reaches `geom-test`, `geom-fuzz`, `geom-gen` or `geom-bench`. It also lists every manifest of this repository the answer depends on ([`Report::manifests`]), so CI can check that a change to any of them reruns the rule.",
           "family": [],
@@ -4562,6 +4618,29 @@
             "text": "breadth-first search (Cormen, Leiserson, Rivest and Stein, *Introduction to Algorithms*, 3rd edition, section 22.2) over the union of the declared and resolved graphs from each kernel crate, on the JSON format documented at <https://doc.rust-lang.org/cargo/commands/cargo-metadata.html>. Breadth-first search finds a shortest chain to each development crate. The metadata is read into the typed model of the `cargo_metadata` crate (MIT, <https://docs.rs/cargo_metadata/0.23.1/>), which also builds the `cargo metadata` command: piece G12a put it in place of the field-by-field reading of the JSON that was written here (chapter 29.1). [`check`] takes the JSON itself, not the model, so the tests can seed a violation into real metadata as a manifest would and hand it over."
           },
           "path": "geom_test::deps",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the length of the path; [`kernel_crates`] reads one directory.",
+          "does": "[`place`] says, for a path relative to the repository root, which kernel crate it belongs to and whether it is in the foundation set, a development crate, or outside the kernel. [`kernel_crates`] lists the kernel crates in the kernel's folder. The mutation gate ([`crate::mutants`]) and the coverage gate ([`crate::coverage`]) both classify with these, so the two gates can never disagree about what the foundation set is.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/foundation.rs",
+          "guarantees": [
+            "**One classification for both gates.** The mutation gate and the coverage gate place every path with [`place`], so they cannot disagree about which code is in the foundation set.",
+            "**Nothing leaves the foundation bar silently.** A crate of [`FOUNDATION_MODULES`] with code but no file of its module is reported ([`missing_foundation_module`]), and the bars are the integers of 28.8, compared exactly by the gates.",
+            "**Development crates are never judged as kernel code**, and a path outside the kernel's crates folder is [`Place::Outside`]."
+          ],
+          "job": "The foundation set of section 28.8, the kernel crates the quality gates cover, and their bars.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/27-crates-folders.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 27's rule \"one folder per crate, folder name = crate name\" (`projects/engines/geometry/architecture/27-crates-folders.md`) makes a crate's name its folder's name, so a path classifies by its components alone; the set and the bars are 28.8's (`projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_test::foundation",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -5309,6 +5388,65 @@
           "target": "lib"
         },
         {
+          "cost": "linear in the size of the metadata.",
+          "does": "[`packages`] reads `cargo metadata` and returns the package of every kernel crate, in name order, and [`cargo_args`] writes them as the `-p` arguments the workflow (`.github/workflows/kernel-quality.yml`) gives `cargo miri nextest run` and `cargo miri test --doc`. nextest runs each test in its own Miri process, splits the tests into partitions, one CI job each, and stops a test that reaches its budget (the `default-miri` profile in `.config/nextest.toml`): such a test passed every step Miri interpreted, and the job's report names it.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/miri.rs",
+          "guarantees": [
+            "**Every kernel test suite, with nothing to keep in step.** The scope is every kernel crate in the metadata, so a new crate or test file runs under Miri the week it lands, and no list of test names or files is kept anywhere. A test that cannot run under Miri at all (one that starts a process or reads the repository) says so where it is written, with `#[cfg_attr(miri, ignore = \"<why>\")]`.",
+            "**The development crates are left out** (`geom-test`, `geom-fuzz`, `geom-gen`, `geom-bench`): they never ship, and their tests start processes and read files, which Miri's isolation refuses.",
+            "**A plan that runs nothing does not pass.** Metadata without any kernel crate, or with a package that has no name or manifest path, is an error."
+          ],
+          "job": "The weekly Miri run's scope: every kernel crate, whose test suites Miri interprets.",
+          "method": {
+            "links": [
+              "https://doc.rust-lang.org/cargo/commands/cargo-metadata.html",
+              "https://nexte.st/docs/integrations/miri/",
+              "https://nexte.st/docs/ci-features/partitioning/"
+            ],
+            "text": "the `packages[]` of `cargo metadata --format-version 1` (<https://doc.rust-lang.org/cargo/commands/cargo-metadata.html>); a kernel crate is a package whose manifest is in the kernel's crates folder, as [`crate::deps`] defines it. nextest's Miri support and partitions are documented at <https://nexte.st/docs/integrations/miri/> and <https://nexte.st/docs/ci-features/partitioning/>."
+          },
+          "path": "geom_test::miri",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the size of the output files, plus one read of each mutated source file and of each unviable mutant's log.",
+          "does": "[`read_run`] reads one cargo-mutants output directory (`mutants.out`, or one shard's), checking that the run is whole; [`judge`] puts the runs of one gate together and decides, mutant by mutant, under the rules of section 28.8:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/mutants.rs",
+          "guarantees": [
+            "**A gate that cannot see everything fails.** A run that did not finish, a failed or missing baseline, a mutant with no outcome or two, totals that disagree with the outcomes, a shard missing from the full run or two shards that overlap are each a failure or a [`RunError`], never a smaller set of mutants judged.",
+            "**Untested is never caught.** An unviable mutant counts only when its log shows a compiler error at a source location; any other failed build fails the gate.",
+            "**28.8's rules, exactly.** In the foundation set a missed mutant passes only as `equivalent`; elsewhere also as `harmless`, or as `known` when the base branch's ledger already kept it; a timeout only as `hangs`. A ledger entry that matches more mutants than it counts, or a caught or unviable one, or (in the full run) fewer, fails as stale.",
+            "**Reasons follow the code.** Entries are keyed by the mutated line's text, so editing that line puts the mutant before the gate again."
+          ],
+          "job": "The mutation gate: judges cargo-mutants' results against the quality ledger.",
+          "method": {
+            "links": [
+              "https://mutants.rs/shards.html",
+              "https://mutants.rs/in-diff.html"
+            ],
+            "text": "the files cargo-mutants 27.1 writes, as its book documents them (`book/src/mutants-out.md`) and its source serialises them (`src/outcome.rs`, `src/mutant.rs`, `src/output.rs`), read at the commit of its v27.1.0 tag (record below), with its manual's sharding and diff options (<https://mutants.rs/shards.html>, <https://mutants.rs/in-diff.html>): an outcome's `summary` is one of `Success`, `CaughtMutant`, `MissedMutant`, `Unviable`, `Failure` and `Timeout`; a scenario is `\"Baseline\"` or `{\"Mutant\": {...}}`; a mutant's `name` is `<file>:<line>:<column>: <description>`."
+          },
+          "path": "geom_test::mutants",
+          "provenance": [
+            {
+              "licence": "MIT",
+              "link": "https://github.com/sourcefrog/cargo-mutants/tree/8ab1dc786a1f61a4e370416cc6c68b81a704e917",
+              "method_note": null,
+              "name": "cargo-mutants",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for the format of the output files this module reads (`book/src/mutants-out.md`, `src/outcome.rs`, `src/mutant.rs` and `src/output.rs` at its v27.1.0 tag). No code copied.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "one run of the property per case, plus shrinking after a failure, at most about 41 property runs per coordinate (a binary search over at most 2^40 magnitudes). One read of proptest's process-wide configuration per [`run`] or [`first_value`].",
           "does": "[`run`] runs a proptest property from a [`Seed`] resolved and printed by [`crate::seed::resolve`], so a property test has the same seed rules as every other seeded test. [`config`] builds the proptest configuration it uses. [`first_value`] draws one case from a seed. [`coord`], [`p2`] and [`p3`] are proptest strategies for grid coordinates and points.",
           "family": [],
@@ -5329,6 +5467,26 @@
             "text": "proptest (MIT OR Apache-2.0, <https://github.com/proptest-rs/proptest>), the Hypothesis-style property tester the kernel's tests use (28.2). Its runner draws each case from a `ChaCha20` stream seeded by `RngSeed::Fixed`, and shrinks a failure to a minimal case. A coordinate shrinks with proptest's own `num::i64::BinarySearch`, which halves the distance towards zero while the property still fails and backs off when it passes: bisection, as in Knuth, *The Art of Computer Programming*, volume 3, section 6.2.1 (<https://www-cs-faculty.stanford.edu/~knuth/taocp.html>)."
           },
           "path": "geom_test::prop",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the size of the file.",
+          "does": "[`Ledger::parse`] reads the ledger file (`projects/engines/geometry/quality-ledger.json`, [`LEDGER_PATH`]) strictly. The mutation gate ([`crate::mutants`]) matches every surviving mutant against [`Ledger::survivors`]; the coverage gate ([`crate::coverage`]) matches every `coverage(off)` mark against [`Ledger::coverage_off`].",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/quality_ledger.rs",
+          "guarantees": [
+            "the file is read strictly, so a typo cannot drop an entry silently. An unknown or missing field, a wrong type, an empty or short reason, an unknown kind or tool, an absolute or backslashed path, a zero occurrence count and two entries with one key are all [`LedgerError`]s, never a smaller ledger."
+          ],
+          "job": "The quality ledger: every surviving mutant the kernel keeps, with why, every `coverage(off)` mark, with the proof it cites, and every foundation line still waiting for its proof.",
+          "method": {
+            "links": [
+              "https://www.rfc-editor.org/rfc/rfc8259"
+            ],
+            "text": "JSON (RFC 8259, <https://www.rfc-editor.org/rfc/rfc8259>) read with `serde_json` into its value tree and checked field by field."
+          },
+          "path": "geom_test::quality_ledger",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -5737,6 +5895,32 @@
               "take": "port-method"
             }
           ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the file's length: one parse, one walk of the tree and one of the tokens. The span locations `proc-macro2` keeps for the file are released when the scan returns.",
+          "does": "[`scan`] parses a Rust file with `syn`, the parser Rust's procedural macros use, and reads every token's line from `proc-macro2`'s span locations. From the syntax tree and the tokens it finds:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/rust_source.rs",
+          "guarantees": [
+            "**The language's own grammar.** Comments, strings, raw strings, character literals and nested block comments are told apart by `proc-macro2`'s lexer, and items by `syn`'s parser, so a brace or a word inside a string or a comment is never read as code.",
+            "**An error, never a partial answer.** A file that does not parse as Rust is a [`ScanError`] naming the line, because a gate must not pass on a file it could not read.",
+            "**A comment is a comment.** A citation is read only from a line that starts with `//` and is not inside a string literal that spans lines; the walk up from a mark passes only over such lines and over the lines of other attributes, and stops at anything else."
+          ],
+          "job": "Rust source, read for the quality gates: which lines are test code, whether a file has code that runs, where its branches are, every `coverage(off)` mark with the proof it cites, and whether a file defines a cited proof.",
+          "method": {
+            "links": [
+              "https://docs.rs/syn/3.0.9/syn/",
+              "https://docs.rs/proc-macro2/1.0.107/proc_macro2/",
+              "https://doc.rust-lang.org/reference/attributes.html",
+              "https://doc.rust-lang.org/reference/conditional-compilation.html",
+              "https://doc.rust-lang.org/unstable-book/language-features/coverage-attribute.html"
+            ],
+            "text": "`syn` 3 (MIT OR Apache-2.0, <https://docs.rs/syn/3.0.9/syn/>) parses the file into its syntax tree, walked with `syn::visit`; `proc-macro2` 1 (MIT OR Apache-2.0, <https://docs.rs/proc-macro2/1.0.107/proc_macro2/>) with its `span-locations` feature gives each token's lines outside a procedural macro. The attribute forms are the Rust Reference's (<https://doc.rust-lang.org/reference/attributes.html>, conditional compilation at <https://doc.rust-lang.org/reference/conditional-compilation.html>); `coverage(off)` is the unstable `coverage` attribute (<https://doc.rust-lang.org/unstable-book/language-features/coverage-attribute.html>)."
+          },
+          "path": "geom_test::rust_source",
+          "provenance": [],
           "spdx": null,
           "target": "lib"
         },
@@ -6236,6 +6420,17 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-test/src/golden/shuffle.rs"
+      ]
+    },
+    {
+      "licence": "MIT",
+      "link": "https://github.com/sourcefrog/cargo-mutants/tree/8ab1dc786a1f61a4e370416cc6c68b81a704e917",
+      "method_note": null,
+      "name": "cargo-mutants",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-test/src/mutants.rs"
       ]
     },
     {
