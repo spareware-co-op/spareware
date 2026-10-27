@@ -101,6 +101,8 @@ const TE: &[Class] = &[Typical, Extreme];
 /// Classes of conversions that can fail, and of a stream range's stream by index: in range, and
 /// out of range.
 const TO: &[Class] = &[Typical, Overflow];
+/// Classes of the perturbed predicates: the exact path, and an exact tie the perturbation decides.
+const TD: &[Class] = &[Typical, Degenerate];
 /// The class of operations with a single path, or whose paths one batch covers in rotation.
 const T: &[Class] = &[Typical];
 
@@ -294,10 +296,14 @@ pub static OPS: &[Op] = &[
     Op { group: "generated", name: "ssi_weight_value", measures: "generated::ssi_weight::value", classes: TDNE, prepare: |c| bind(inputs::generated::ssi_weight_value(c), kernels::generated::ssi_weight_value) },
     Op { group: "generated", name: "ssi_side_filter", measures: "generated::ssi_side::filter", classes: TDNE, prepare: |c| bind(inputs::generated::ssi_side_filter(c), kernels::generated::ssi_side_filter) },
     Op { group: "generated", name: "ssi_side_value", measures: "generated::ssi_side::value", classes: TDNE, prepare: |c| bind(inputs::generated::ssi_side_value(c), kernels::generated::ssi_side_value) },
+    Op { group: "perturb", name: "orient2d", measures: "perturb::orient2d", classes: TD, prepare: |c| bind(inputs::perturb::orient2d(c), kernels::perturb::orient2d) },
+    Op { group: "perturb", name: "orient3d", measures: "perturb::orient3d", classes: TD, prepare: |c| bind(inputs::perturb::orient3d(c), kernels::perturb::orient3d) },
+    Op { group: "perturb", name: "incircle", measures: "perturb::incircle", classes: TD, prepare: |c| bind(inputs::perturb::incircle(c), kernels::perturb::incircle) },
+    Op { group: "perturb", name: "insphere", measures: "perturb::insphere", classes: TD, prepare: |c| bind(inputs::perturb::insphere(c), kernels::perturb::insphere) },
 ];
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 16] = [
+pub const GROUPS: [&str; 17] = [
     "predicate",
     "sign",
     "wide",
@@ -314,6 +320,7 @@ pub const GROUPS: [&str; 16] = [
     "dd",
     "exact_sum",
     "generated",
+    "perturb",
 ];
 
 /// The group of the growth checks.

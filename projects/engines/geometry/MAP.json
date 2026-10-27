@@ -635,6 +635,26 @@
           "target": "lib"
         },
         {
+          "cost": "the exact predicates' inputs and N keys per input, once per batch.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/perturb.rs",
+          "guarantees": [
+            "every batch is full, the same on every target, and its classes are what they claim (`tests/inputs.rs`); the keys within an input are distinct and their order rotates from input to input, so every argument position holds the smallest key in turn."
+          ],
+          "job": "Inputs for the perturbed predicates (G30): [`orient2d`], [`orient3d`], [`incircle`] and [`insphere`] of `geom_num::perturb`, each point with a distinct key.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/PL00009321"
+            ],
+            "text": "the exact predicates' own input classes ([`super::predicate`], after Shewchuk, <https://doi.org/10.1007/PL00009321>, section 6), drawn with this operation's seed, with keys attached."
+          },
+          "path": "geom_bench::inputs::perturb",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a few draws of [`crate::rng::SplitMix64`] per input, once per batch, outside every measured run.",
           "does": null,
           "family": [],
@@ -3320,6 +3340,42 @@
           },
           "path": "geom_num::math::unproven",
           "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "on the exact path, the predicate itself. Only on an exact tie, a walk over the masks of the N·(N − 1) perturbed entries (6 for orient2d, 12 for orient3d and incircle, 20 for insphere) until a coefficient is not zero, each candidate an exact N × N determinant by cofactors (at most 120 products in [`I256`]); for points in general position but for the tie, the first few masks decide, and even five coincident points with distinct keys are decided within 2^16 masks.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/perturb.rs",
+          "guarantees": [
+            "Never zero, never a guess: every answer is `Positive` or `Negative`, decided by exact integer arithmetic, or an error. Points that share a key cannot be told apart by any perturbation, so they are refused with [`NumError::Degenerate`].",
+            "The exact sign wins: where [`crate::predicate`]'s predicate is not zero, the perturbed one returns its sign unchanged.",
+            "Consistent: the answers are the signs of one perturbed configuration of points, so every predicate agrees with every other on the same keyed points; swapping two arguments flips the sign, and every permutation multiplies it by its parity, as for the exact predicates.",
+            "Keys, never addresses: the order is the keys' order alone, so the answers are the same on every run and every target, whatever the points' places in memory (Geogram's default, ordering by address, is exactly what chapter 6.2 rules out).",
+            "Deterministic: integers only, no floating point, no allocation, no recursion."
+          ],
+          "job": "Symbolic perturbation, ordered by persistent keys: orient2d, orient3d, incircle and insphere with no zero answer, for the algorithms that need every sign to be non-zero (Delaunay and constrained triangulations, ray parity; chapter 6.2).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/77635.77639",
+              "https://doi.org/10.1016/j.comgeo.2010.09.010"
+            ],
+            "text": "Simulation of Simplicity (Edelsbrunner and Mücke 1990, <https://doi.org/10.1145/77635.77639>), entry j of point i moved by ε^(2^e) with e increasing along a global order of the points, with the lifted coordinate perturbed as an entry of its own (as Devillers and Teillaud perturb the lift for Delaunay, <https://doi.org/10.1016/j.comgeo.2010.09.010>), so the lifted predicates always reach a non-zero term. The perturbed determinant is a polynomial in ε. By multilinearity in the rows, each term chooses, in each row, either the row itself or one of its perturbed entries, so it belongs to a set S of perturbed entries in distinct rows and distinct columns, with degree Σ 2^e over S and coefficient the determinant with the rows of S replaced by the unit vectors of their columns. Degrees are sums of distinct powers of two, so they order the sets S exactly as the sets' bit masks order them: the first non-zero coefficient, walking the masks upwards from 1, decides the sign as ε goes to 0. Mask 0 is the unperturbed determinant. Consulted for the cascade's shape: Geogram's `_SOS` predicates (BSD-3-Clause), no code copied."
+          },
+          "path": "geom_num::perturb",
+          "provenance": [
+            {
+              "licence": "BSD-3-Clause",
+              "link": "https://github.com/BrunoLevy/geogram/blob/40d72165ceeeb0a61977d6fdf74d929bfdd77b7b/src/lib/geogram/numerics/PCK.h#L143-L172",
+              "method_note": null,
+              "name": "Geogram's PCK `_SOS` predicates",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for the shape of a cascade over keyed points, and its address ordering as the trap to avoid. No code copied.",
+              "take": "port-method"
+            }
+          ],
           "spdx": null,
           "target": "lib"
         },
@@ -6140,6 +6196,17 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-gen/src/predicate_emit.rs"
+      ]
+    },
+    {
+      "licence": "BSD-3-Clause",
+      "link": "https://github.com/BrunoLevy/geogram/blob/40d72165ceeeb0a61977d6fdf74d929bfdd77b7b/src/lib/geogram/numerics/PCK.h",
+      "method_note": null,
+      "name": "Geogram's PCK `_SOS` predicates",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-num/src/perturb.rs"
       ]
     },
     {
