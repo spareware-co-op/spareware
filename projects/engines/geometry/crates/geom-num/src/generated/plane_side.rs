@@ -19,8 +19,9 @@
 //! (chapter 28.6): Gappa proves it for binary64 in one problem per case, which together cover every
 //! input (`gappa-plane-side-d.g`, `gappa-plane-side-z-n.g`, `gappa-plane-side-y-n.g`,
 //! `gappa-plane-side-x-n.g`, in `projects/engines/geometry/crates/geom-gen/generated`), and Rocq
-//! checks each proof; `FPTaylor`'s independent bound is not stated for a scale of several monomials
-//! yet (issue #265); `kernel-certificates.yml` runs them on every change and every night.
+//! checks each proof; `FPTaylor` bounds it independently, and HOL Light checks its certificate
+//! (`fptaylor-plane-side.fpt`); `kernel-certificates.yml` runs them on every change and every
+//! night.
 //!
 //! Method: Meyer and Pion's semi-static filters (FPG, <https://inria.hal.science/inria-00344297>),
 //! with the error analysis derived exactly, as [`super`] sets out, and the exact path in integers.

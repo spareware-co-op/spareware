@@ -4,11 +4,11 @@
 // Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`.
 //
 // orient3d's f64 filter (geom_num::generated::orient3d::filter) for FPTaylor (chapter
-// 28.6; piece G35), normalised: each coordinate difference divided by its axis maximum,
-// so every variable is in [-1, 1] and the scale S is 1. The error model
-// fl(t) = t(1 + e) is homogeneous, so a bound B here bounds the error by B * S at every
-// scale (the method note). HOL Light checks FPTaylor's certificate, and compares its
-// bound with K below.
+// 28.6; pieces G35 and G40), normalised: each step divided by its scale S(v), the largest
+// of its scale's monomials at the group maxima, so every input is in [-1, 1] and the
+// result's scale is 1. The error model fl(t) = t(1 + e) is homogeneous, so a bound B here
+// bounds the error by B * S at every scale (the method note). HOL Light checks FPTaylor's
+// certificate, and compares its bound with K below.
 // hol-light-bound: &17747108403195219502253192773625 * &2 ipow (-- &152)
 
 Variables

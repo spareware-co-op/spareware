@@ -121,7 +121,8 @@ Stages run Idea, Mapping, Design, Build, Harden, Live. [STATUS.md](STATUS.md) sh
 
 Every line of Spareware is our own work or used under a licence that allows it. This is strict and has no exceptions:
 
-- **Never copy anyone's proprietary code, assets, icons, artwork, documentation or interface designs.** Not from another company's software, not from memory, not "just as a starting point".
+- **Never copy anyone's proprietary code, assets, icons, artwork or documentation.** Not from another company's software, not from memory, not "just as a starting point".
+- **Follow familiar structure, keep our own look.** A program may be laid out and work like the one people already know: the same tools, buttons, panels, commands and workflow. Its icons, artwork, colours, fonts and help text are our own.
 - **Never decompile, disassemble or reverse-engineer proprietary software, and never use leaked or stolen source code.** If a piece of work needs knowledge that only comes from inside someone else's product, it does not get done.
 - **Only use open-source code whose licence allows it**, keep its licence and credit, and record where it came from. No GPL or AGPL code in the core.
 - **Respect trademarks.** Our products have their own names. Other companies' product names appear only to say what we replace.

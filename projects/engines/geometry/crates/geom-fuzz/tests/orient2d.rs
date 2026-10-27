@@ -117,7 +117,9 @@ fn orient2d_fuzz() {
         .for_each(|data: &[u8]| holds(harness(data)));
 }
 
-/// Under Kani, loops are unwound at most 10 times. Every loop a passing case runs is shorter:
+/// Under Kani, the SAT solver is kissat: on the wide integers piece G37 rewrote, which the proof's
+/// exact path reaches, kissat proves it in 47 minutes on the hosted runner and `CaDiCaL` ran past
+/// three hours. Loops are unwound at most 10 times. Every loop a passing case runs is shorter:
 /// the six coordinates, drawn, mapped and checked one by one. The loops the bound cuts are in the
 /// formatting of a [`Finding`], whose digit loops run on symbolic values and would otherwise
 /// unwind forever; only a broken claim reaches them, and Kani's unwinding assertions fail the
@@ -129,7 +131,7 @@ fn orient2d_fuzz() {
 )]
 #[test]
 #[cfg_attr(kani, kani::proof)]
-#[cfg_attr(kani, kani::solver(cadical))]
+#[cfg_attr(kani, kani::solver(kissat))]
 #[cfg_attr(kani, kani::unwind(10))]
 fn orient2d_proof() {
     check!()

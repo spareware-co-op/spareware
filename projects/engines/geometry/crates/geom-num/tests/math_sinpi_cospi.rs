@@ -94,7 +94,7 @@ fn sinpi_worst_cases_scaled_near_zero() {
     for &x in &first_binade {
         for _ in 0..4 {
             let k = 1 + (rng.next_u64() % 968) as i32;
-            let y = x * 2f64.powi(k);
+            let y = x * libm::scalbn(1.0, k);
             check_sinpi(y);
             check_sinpi(-y);
         }
@@ -148,13 +148,13 @@ fn quarter_turns_are_exact() {
     let mut ns: Vec<f64> = (-40..=40).map(f64::from).collect();
     for _ in 0..2000 {
         let e = (rng.next_u64() % 60) as i32;
-        ns.push(((rng.next_u64() >> 11) as f64 * 2f64.powi(e - 53)).floor());
+        ns.push(((rng.next_u64() >> 11) as f64 * libm::scalbn(1.0, e - 53)).floor());
     }
     ns.extend([
-        2f64.powi(52),
-        2f64.powi(52) + 1.0,
-        2f64.powi(53),
-        2f64.powi(53) + 2.0,
+        libm::scalbn(1.0, 52),
+        libm::scalbn(1.0, 52) + 1.0,
+        libm::scalbn(1.0, 53),
+        libm::scalbn(1.0, 53) + 2.0,
         1e300,
         f64::MAX,
     ]);
@@ -164,7 +164,7 @@ fn quarter_turns_are_exact() {
                 continue;
             }
             // integers
-            let odd = n.abs() < 2f64.powi(53) && (n.abs() % 2.0) == 1.0;
+            let odd = n.abs() < libm::scalbn(1.0, 53) && (n.abs() % 2.0) == 1.0;
             assert_owed(outcome(sinpi(n)), Owed::Value(0.0), &format!("sinpi({n})"));
             assert_owed(
                 outcome(cospi(n)),
@@ -173,7 +173,7 @@ fn quarter_turns_are_exact() {
             );
             // half-integers, where representable
             let h = n + 0.5f64.copysign(n);
-            if h.abs() < 2f64.powi(52) {
+            if h.abs() < libm::scalbn(1.0, 52) {
                 // h = n ± ½ with |h| mod 2 = |n| mod 2 + ½
                 let q = (h.abs() * 2.0) % 4.0; // 1 or 3
                 let s = if q == 1.0 { 1.0 } else { -1.0 };
@@ -217,8 +217,8 @@ fn special_values() {
         f64::MIN_POSITIVE,
         f64::MAX,
         -f64::MAX,
-        2f64.powi(-54),
-        2f64.powi(-960),
+        libm::scalbn(1.0, -54),
+        libm::scalbn(1.0, -960),
         hx_thresholds::SMALL_SIN,
         hx_thresholds::SMALL_COS,
         hx_thresholds::TINY_COS,
@@ -226,9 +226,9 @@ fn special_values() {
         -0.25,
         0.75,
         1.0 / 3.0,
-        2f64.powi(41),
-        2f64.powi(41) - 0.25,
-        2f64.powi(52) - 0.5,
+        libm::scalbn(1.0, 41),
+        libm::scalbn(1.0, 41) - 0.25,
+        libm::scalbn(1.0, 52) - 0.5,
     ] {
         check_sinpi(x);
         check_cospi(x);

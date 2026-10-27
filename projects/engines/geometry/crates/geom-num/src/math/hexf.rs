@@ -273,5 +273,24 @@ mod tests {
         // The reader called at run time, which only these tests do.
         assert_eq!(parse("-0x1.5555555555555p-3"), -1.0 / 6.0);
         assert_eq!(parse("0x1.0p0"), 1.0);
+        // Every literal above read at run time as well, so each reachable step of the reader runs
+        // where the coverage gate (28.8) sees it: lower- and upper-case digits, a sign, a zero,
+        // subnormals and the largest double.
+        for (text, value) in [
+            ("0x1.921fb54442d18p+1", PI),
+            ("-0x0p+0", NEG_ZERO),
+            ("0x1p-1074", TINY),
+            ("0x0.8p-1022", SUB),
+            ("0x1.fffffffffffffp+1023", MAX),
+            ("0X1.FFFFFFFFFFFFFP+1023", MAX),
+            ("0x1p-1022", MIN_NORMAL),
+            ("0xc.90fdaa22168cp-2", UNNORMALISED),
+            ("0x1p+0", SHORT),
+            ("0X1.8P-1", UPPER),
+            ("0x.8p1", LEADING_POINT),
+            ("+0x1.ABCDEFp-3", hf!("0x1.abcdefp-3")),
+        ] {
+            assert_eq!(parse(text).to_bits(), value.to_bits(), "{text}");
+        }
     }
 }

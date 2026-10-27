@@ -15,12 +15,14 @@
 //! one problem per case ([`gappa_cases`]), the case where one group's maximum is the largest when
 //! the monomials share one degree, and otherwise where one monomial is the largest of the result's,
 //! each with S that monomial and the hypotheses the case implies. [`fptaylor_problem`] states the
-//! normalised problem for `FPTaylor`, every input in [−1, 1] so that S is 1, with the same K, which
-//! HOL Light compares the certificate's bound with; only a scale of one monomial normalises so
-//! (issue #265). [`proof_sentence`] is the label: proven, naming the problems, when the problems
-//! state the filter in every case, and otherwise "checked, not proven" with the open issue
-//! [`UNPROVEN`] gives it. Every problem carries Gappa's hints and HOL Light's bound in its text, so
-//! the tools' runs need nothing else.
+//! normalised problem for `FPTaylor`, each step divided by its scale S(v), the largest of its
+//! monomials at the group maxima, so every input is in [−1, 1] and the result's scale is 1, with
+//! a ratio parameter in [0, 1] where a sum's operand has a smaller scale set; one problem covers
+//! every input, with the same K, which HOL Light compares the certificate's bound with.
+//! [`proof_sentence`] is the label: proven, naming the problems, when the Gappa problems state the
+//! filter in every case, and otherwise "checked, not proven" with the open issue [`UNPROVEN`]
+//! gives it. Every problem carries Gappa's hints and HOL Light's bound in its text, so the tools'
+//! runs need nothing else.
 //!
 //! Guarantees:
 //!
@@ -35,15 +37,20 @@
 //!   the bound's relative error ((1 + u)^k − 1 < (k + 1)u for u = 2^−53), and K = C · (1 − R) is
 //!   computed exactly from the constant's bits: both are dyadic, written exactly. A rounded input's
 //!   largest copy is its bound rounded to the nearest `f64`, exactly ([`crate::bignum::Nat`]).
-//! - **Refused, never approximated.** A filter the problems cannot state (a scale term formed from
-//!   more than two inputs, say) is refused with the reason, and its label says "checked, not
+//! - **Refused, never approximated.** A filter the Gappa problems cannot state (a scale term formed
+//!   from more than two inputs, say) is refused with the reason, and its label says "checked, not
 //!   proven" with its issue; with no issue in [`UNPROVEN`] its module cannot be generated.
+//! - **Ratios, never more.** Each ratio parameter of an `FPTaylor` problem is S(operand) / S(sum)
+//!   for one pair of scale sets, named in the problem's header, and every use of it is that pair:
+//!   the problem's box holds every input's normalised values, never fewer.
 //!
 //! What the problems leave to the written argument (the method note,
 //! `projects/kit/notes/G35-filter-certificates.md`): that the translations are exact (the bit-range
 //! certificate bounds them by 2^41 − 2 < 2^53), that no value overflows (it bounds every step
-//! below 2^127), that a zero S makes the exact value zero, and that a rounded input's copy, written
-//! `rndx` (53 bits, no exponent bounds), is binary64's rounding of a whole number below 2^1024.
+//! below 2^127), that a zero S makes the exact value zero, that a rounded input's copy, written
+//! `rndx` (53 bits, no exponent bounds), is binary64's rounding of a whole number below 2^1024,
+//! and that `FPTaylor`'s normalised problem bounds the filter's error at every scale (each step's
+//! value over its scale is the problem's value, at the ratios the maxima give).
 //!
 //! Method: Melquiond and Pion's certified semi-static filters, Gappa proofs of a homogeneous
 //! predicate's error as a multiple of the product of its inputs' maxima (*Formally certified
@@ -60,7 +67,7 @@
 use std::collections::BTreeSet;
 
 use crate::predicate_derive::{Derivation, Monomial, ScaleExpr};
-use crate::predicate_emit::{DESCRIPTIONS_PATH, EmitError};
+use crate::predicate_emit::{DESCRIPTIONS_PATH, EmitError, scale_text};
 use crate::predicate_lang::{Op, StepKind, max_name};
 
 /// The path of this module, for the headers.
@@ -70,13 +77,13 @@ pub const CERTIFICATES_PATH: &str =
 /// The folder the problems are written into, as the headers name it.
 pub const PROBLEMS_DIR: &str = "projects/engines/geometry/crates/geom-gen/generated";
 
-/// The open issue for the second, independent tool on filters whose scale has several monomials:
-/// `FPTaylor`'s normalised problem cannot state them (issue #265 says why and how it could).
-pub const FPTAYLOR_CASES_ISSUE: u32 = 265;
-
-/// Each filter the problems cannot state yet, by predicate name, with its open issue: its module
-/// says "checked, not proven" and names the issue. Empty while every filter is proven.
-pub const UNPROVEN: [(&str, u32); 0] = [];
+/// Each filter the Gappa problems cannot state yet, by predicate name, with its open issue: its
+/// module says "checked, not proven" and names the issue. A term of these filters' scales is
+/// formed from more than two inputs beside terms of other groups (`d4 * w` against
+/// `n4x * mx_x`), so no hypothesis on the inputs, or on products of two, bounds it by the case's
+/// S; Gappa's `LIN` rules relate scales only through products of maxima, and the ratio of two
+/// such terms needs a division by a maximum that may be zero. The issue sets out the way through.
+pub const UNPROVEN: [(&str, u32); 2] = [("tpi_side", 292), ("lpi_side", 292)];
 
 fn fail<T>(message: impl Into<String>) -> Result<T, EmitError> {
     Err(EmitError(message.into()))
@@ -153,9 +160,9 @@ fn dominant(set: &BTreeSet<Monomial>, g: usize) -> Option<Monomial> {
     Some(top)
 }
 
-/// The shape of `d` (in `case`, for a scale of several monomials), or why the problems cannot
-/// state its filter yet.
-fn shape(d: &Derivation, case: Option<Case>) -> Result<Shape<'_>, EmitError> {
+/// For each step, the group of a scale variable (a coordinate, a translation of grid points or a
+/// rounded input), or `None` for an operation; or why the problems cannot state the filter.
+fn groups_of(d: &Derivation) -> Result<Vec<Option<usize>>, EmitError> {
     let mut group_of = vec![None; d.steps.len()];
     for (g, group) in d.groups.iter().enumerate() {
         for &v in &group.vars {
@@ -195,6 +202,13 @@ fn shape(d: &Derivation, case: Option<Case>) -> Result<Shape<'_>, EmitError> {
             }
         }
     }
+    Ok(group_of)
+}
+
+/// The shape of `d` (in `case`, for a scale of several monomials), or why the problems cannot
+/// state its filter yet.
+fn shape(d: &Derivation, case: Option<Case>) -> Result<Shape<'_>, EmitError> {
+    let group_of = groups_of(d)?;
     let Some(result_set) = d.certs.get(d.result).map(|c| &c.scale) else {
         return fail("the result step is missing");
     };
@@ -218,7 +232,8 @@ fn shape(d: &Derivation, case: Option<Case>) -> Result<Shape<'_>, EmitError> {
             }
             (Some(_), Some(_), Some(Case::Term(_))) => {
                 return fail(format!(
-                    "step `{}` has a scale monomial the result's scale does not have, which a                      case of the result's monomials does not bound",
+                    "step `{}` has a scale monomial the result's scale does not have, which a \
+                     case of the result's monomials does not bound",
                     step.name
                 ));
             }
@@ -487,15 +502,21 @@ pub fn gappa_files(d: &Derivation) -> Result<Vec<String>, EmitError> {
 
 /// The sentence a generated module's guarantees end with: whether its filter's bound is proven,
 /// and by what, or "checked, not proven" with its open issue (chapter 28.6). Proven means the
-/// problems state the filter, every case of it, so `kernel-certificates.yml` proves them on every
-/// change and every night, and fails if a proof does not go through; `tests/certificate_problems.rs`
+/// Gappa problems, the proof of record, state the filter, every case of it, so
+/// `kernel-certificates.yml` proves them on every change and every night, and fails if a proof
+/// does not go through. `FPTaylor`'s problem, checked by HOL Light, is the independent second
+/// check, and alone it does not make a filter proven: its certificate is about `FPTaylor`'s error
+/// model, and the step to binary64 is written (the method note). `tests/certificate_problems.rs`
 /// holds the registered problems to these files.
 ///
 /// # Errors
 ///
-/// [`EmitError`] if the problems cannot state the filter and [`UNPROVEN`] gives it no issue.
+/// [`EmitError`] if the Gappa problems cannot state the filter and [`UNPROVEN`] gives it no issue,
+/// or `FPTaylor`'s problem cannot state it.
 pub fn proof_sentence(d: &Derivation) -> Result<String, EmitError> {
     let name = &d.description.name;
+    let fptaylor = format!("fptaylor-{}.fpt", name.replace('_', "-"));
+    fptaylor_problem(d, "")?;
     let cases = gappa_cases(d)?;
     let stated = if cases.is_empty() {
         gappa_problem(d, "").map(|_| ())
@@ -513,9 +534,12 @@ pub fn proof_sentence(d: &Derivation) -> Result<String, EmitError> {
             ));
         };
         return Ok(format!(
-            "Its filter's bound is checked, not proven (chapter 28.6): derived exactly and \
-             re-derived by geom-gen's independent checker, and tested, but no machine-checked \
-             proof covers it yet (issue #{issue})."
+            "Its filter's bound is checked, not proven (chapter 28.6): derived exactly, \
+             re-derived by geom-gen's independent checker, and tested; `FPTaylor` bounds it and \
+             HOL Light checks its certificate (`{fptaylor}`, in `{PROBLEMS_DIR}`), but that \
+             certificate is about `FPTaylor`'s error model, and Gappa's problems, the proof of \
+             record, cannot state this filter yet (issue #{issue}); `kernel-certificates.yml` \
+             runs the check on every change and every night."
         ));
     }
     let files: Vec<String> = gappa_files(d)?.iter().map(|f| format!("`{f}`")).collect();
@@ -528,18 +552,6 @@ pub fn proof_sentence(d: &Derivation) -> Result<String, EmitError> {
             files.join(", ")
         )
     };
-    let second = if fptaylor_problem(d, "").is_ok() {
-        format!(
-            "; `FPTaylor` bounds it independently, and HOL Light checks its certificate \
-             (`fptaylor-{}.fpt`)",
-            name.replace('_', "-")
-        )
-    } else {
-        format!(
-            "; `FPTaylor`'s independent bound is not stated for a scale of several monomials yet \
-             (issue #{FPTAYLOR_CASES_ISSUE})"
-        )
-    };
     let proofs = if cases.is_empty() {
         "the proof"
     } else {
@@ -547,8 +559,9 @@ pub fn proof_sentence(d: &Derivation) -> Result<String, EmitError> {
     };
     Ok(format!(
         "Its filter's bound is proven (chapter 28.6): {gappa}, in `{PROBLEMS_DIR}`), and Rocq \
-         checks {proofs}{second}; `kernel-certificates.yml` runs them on every change and every \
-         night."
+         checks {proofs}; `FPTaylor` bounds it independently, and HOL Light checks its \
+         certificate (`{fptaylor}`); `kernel-certificates.yml` runs them on every change and \
+         every night."
     ))
 }
 
@@ -562,9 +575,10 @@ pub fn gappa_problem(d: &Derivation, generator: &str) -> Result<String, EmitErro
 }
 
 /// The cases `d`'s Gappa problems split into, by name, in order: none when the result's scale has
-/// one monomial (one problem covers every input); each group's name when its monomials all have
-/// one degree; and otherwise each of the result's monomials, its groups' names joined by `-`
-/// (`x-n` for the maximum of x times that of n).
+/// one monomial (one problem covers every input); each group's name when the result's monomials
+/// all have one degree and, whichever group's maximum is the largest, one of them dominates the
+/// rest (in-circle's axes); and otherwise each of the result's monomials, its groups' names joined
+/// by `-` (`x-n` for the maximum of x times that of n).
 ///
 /// # Errors
 ///
@@ -576,10 +590,19 @@ pub fn gappa_cases(d: &Derivation) -> Result<Vec<String>, EmitError> {
     if set.len() < 2 {
         return Ok(Vec::new());
     }
-    if one_degree(set) {
+    if group_cases(set, d.groups.len()) {
         return Ok(d.groups.iter().map(|g| g.name.clone()).collect());
     }
     Ok(set.iter().map(|m| term_name(m, d)).collect())
+}
+
+/// Whether the cases of the largest group maximum state a scale set: its monomials have one
+/// degree, and for each group the monomial [`dominant`] gives is one of them. Otherwise (a
+/// plane's normal beside the axes, whose largest maximum makes no monomial the largest) each
+/// monomial is a case of its own.
+fn group_cases(set: &BTreeSet<Monomial>, groups: usize) -> bool {
+    one_degree(set)
+        && (0..groups).all(|g| dominant(set, g).is_some_and(|m| set.contains(&m)))
 }
 
 /// Whether every monomial of `set` has one degree.
@@ -618,7 +641,7 @@ pub fn gappa_case_problem(
     };
     let found = if set.len() < 2 {
         None
-    } else if one_degree(set) {
+    } else if group_cases(set, d.groups.len()) {
         d.groups
             .iter()
             .position(|group| group.name == case)
@@ -1000,91 +1023,183 @@ fn gappa_hints(out: &mut String, sh: &Shape<'_>) -> Result<(), EmitError> {
     Ok(())
 }
 
-/// The `FPTaylor` problem of `d`'s filter (module documentation), as text: the normalised problem
-/// and, in a structured comment, the K that HOL Light compares the certificate's bound with.
+/// The `FPTaylor` problem of `d`'s filter (module documentation), as text: the normalised problem,
+/// each step divided by its scale S(v), with a ratio parameter in [0, 1] for each sum's operand
+/// whose scale set is not the sum's, and, in a structured comment, the K that HOL Light compares
+/// the certificate's bound with. One problem covers every input: it is the derivation's own
+/// induction (S(v) the largest of its monomials), so it needs no cases.
 ///
 /// # Errors
 ///
-/// [`EmitError`] if the filter is not one the problems state yet (module documentation).
+/// [`EmitError`] if a scale variable is not an input the problems state, or a ratio parameter's
+/// name is a step's.
 pub fn fptaylor_problem(d: &Derivation, generator: &str) -> Result<String, EmitError> {
-    let sh = shape(d, None)?;
+    let group_of = groups_of(d)?;
     let name = &d.description.name;
-    let (numerator, exponent) = sh.k;
+    let (numerator, exponent) = dyadic_k(d.constant_bits, d.roundings)?;
+    let ratios = ratios(d)?;
+    let mut about = vec![
+        format!("{name}'s f64 filter (geom_num::generated::{name}::filter) for FPTaylor (chapter"),
+        "28.6; pieces G35 and G40), normalised: each step divided by its scale S(v), the largest"
+            .to_owned(),
+        "of its scale's monomials at the group maxima, so every input is in [-1, 1] and the"
+            .to_owned(),
+        "result's scale is 1. The error model fl(t) = t(1 + e) is homogeneous, so a bound B here"
+            .to_owned(),
+        "bounds the error by B * S at every scale (the method note). HOL Light checks FPTaylor's"
+            .to_owned(),
+        "certificate, and compares its bound with K below.".to_owned(),
+    ];
+    if rounded_inputs(d) {
+        about.extend([
+            "A rounded input's exact value e_v is at most its maximum times 1 + 2^-53 (a value"
+                .to_owned(),
+            "beyond m + ulp(m)/2 rounds above the f64 m), and its copy v = rnd64(e_v).".to_owned(),
+        ]);
+    }
+    if !ratios.is_empty() {
+        about.extend([
+            "A sum whose operand's scale is not the sum's takes the operand's normalised value"
+                .to_owned(),
+            "times S(operand) / S(sum), a ratio in [0, 1], exactly; each such ratio of two scale"
+                .to_owned(),
+            "sets is one parameter:".to_owned(),
+        ]);
+        let groups: Vec<String> = d.groups.iter().map(|g| g.name.clone()).collect();
+        for (i, (operand, sum)) in ratios.iter().enumerate() {
+            about.push(format!(
+                "{} = {} / {}",
+                ratio_name(i),
+                scale_text(operand, &groups),
+                scale_text(sum, &groups)
+            ));
+        }
+    }
+    let about: Vec<&str> = about.iter().map(String::as_str).collect();
     let mut out = String::new();
-    header(
-        &mut out,
-        "//",
-        generator,
-        d,
-        &[
-            &format!(
-                "{name}'s f64 filter (geom_num::generated::{name}::filter) for FPTaylor (chapter"
-            ),
-            "28.6; piece G35), normalised: each coordinate difference divided by its axis maximum,",
-            "so every variable is in [-1, 1] and the scale S is 1. The error model",
-            "fl(t) = t(1 + e) is homogeneous, so a bound B here bounds the error by B * S at every",
-            "scale (the method note). HOL Light checks FPTaylor's certificate, and compares its",
-            "bound with K below.",
-        ],
-    );
+    header(&mut out, "//", generator, d, &about);
     line(
         &mut out,
         &format!("// hol-light-bound: &{numerator} * &2 ipow (-- &{exponent})"),
     );
     line(&mut out, "");
     line(&mut out, "Variables");
-    for (step, g) in d.steps.iter().zip(&sh.group_of) {
-        if g.is_some() {
-            line(&mut out, &format!("  float64 {} in [-1, 1];", step.name));
+    for (step, g) in d.steps.iter().zip(&group_of) {
+        match (&step.kind, g) {
+            (StepKind::LoadRounded { .. }, Some(_)) => line(
+                &mut out,
+                &format!(
+                    "  real e_{} in [-{ONE_PLUS_U}, {ONE_PLUS_U}];",
+                    step.name
+                ),
+            ),
+            (_, Some(_)) => line(&mut out, &format!("  float64 {} in [-1, 1];", step.name)),
+            (_, None) => {}
         }
+    }
+    for i in 0..ratios.len() {
+        line(&mut out, &format!("  real {} in [0, 1];", ratio_name(i)));
     }
     line(&mut out, "");
     line(&mut out, "Definitions");
-    let ops: Vec<_> = d
-        .steps
-        .iter()
-        .enumerate()
-        .filter_map(|(i, step)| match &step.kind {
-            StepKind::Op { op, left, right } => Some((i, step, *op, *left, *right)),
-            _ => None,
-        })
-        .collect();
-    for &(i, step, op, left, right) in &ops {
-        if i == d.result {
-            continue;
+    for step in &d.steps {
+        if matches!(step.kind, StepKind::LoadRounded { .. }) {
+            line(&mut out, &format!("  {0} = rnd64(e_{0});", step.name));
         }
-        let (Some(lhs), Some(rhs)) = (d.steps.get(left), d.steps.get(right)) else {
-            return fail("an operand is missing");
-        };
-        line(
-            &mut out,
-            &format!(
-                "  {} = rnd64({} {} {});",
-                step.name,
-                lhs.name,
-                op.symbol(),
-                rhs.name
-            ),
-        );
     }
-    line(&mut out, "");
-    line(&mut out, "Expressions");
-    let Some(&(_, step, op, left, right)) = ops.iter().find(|(i, ..)| *i == d.result) else {
-        return fail("the result is not an operation");
-    };
-    let (Some(lhs), Some(rhs)) = (d.steps.get(left), d.steps.get(right)) else {
-        return fail("an operand is missing");
-    };
-    line(
-        &mut out,
-        &format!(
+    let mut result = None;
+    for (i, (step, cert)) in d.steps.iter().zip(&d.certs).enumerate() {
+        let StepKind::Op { op, left, right } = &step.kind else {
+            continue;
+        };
+        let operand = |o: &usize| -> Result<String, EmitError> {
+            let (Some(s), Some(c)) = (d.steps.get(*o), d.certs.get(*o)) else {
+                return fail("an operand is missing");
+            };
+            if matches!(op, Op::Mul) || c.scale == cert.scale {
+                return Ok(s.name.clone());
+            }
+            match ratios
+                .iter()
+                .position(|(a, b)| *a == c.scale && *b == cert.scale)
+            {
+                Some(r) => Ok(format!("{} * {}", ratio_name(r), s.name)),
+                None => fail("a sum's operand has no ratio"),
+            }
+        };
+        let text = format!(
             "  {} = rnd64({} {} {});",
             step.name,
-            lhs.name,
+            operand(left)?,
             op.symbol(),
-            rhs.name
-        ),
-    );
+            operand(right)?
+        );
+        if i == d.result {
+            result = Some(text);
+        } else {
+            line(&mut out, &text);
+        }
+    }
+    let Some(result) = result else {
+        return fail("the result is not an operation");
+    };
+    line(&mut out, "");
+    line(&mut out, "Expressions");
+    line(&mut out, &result);
+    Ok(out)
+}
+
+/// 1 + 2^−53 as `FPTaylor` reads a rational constant: a rounded input's exact value is at most
+/// its group's maximum times this.
+const ONE_PLUS_U: &str = "9007199254740993/9007199254740992";
+
+/// The name of the `i`-th ratio parameter (from 0): `ratio1`, `ratio2`, and so on.
+fn ratio_name(i: usize) -> String {
+    format!("ratio{}", i.saturating_add(1))
+}
+
+/// The ratios of scales the normalised problem needs, in order of first use: for each sum or
+/// difference, each operand whose scale set is not the step's, as `(operand's, step's)`, once
+/// each. S(operand) ≤ S(step), the step's set holding the operand's, so each ratio is in [0, 1];
+/// and a product's scale set is its operands' products, whose largest is the product of their
+/// largest, so a product needs none. Refused if a name would clash with a step's.
+fn ratios(d: &Derivation) -> Result<Vec<(BTreeSet<Monomial>, BTreeSet<Monomial>)>, EmitError> {
+    let mut out: Vec<(BTreeSet<Monomial>, BTreeSet<Monomial>)> = Vec::new();
+    for (step, cert) in d.steps.iter().zip(&d.certs) {
+        let StepKind::Op {
+            op: Op::Add | Op::Sub,
+            left,
+            right,
+        } = &step.kind
+        else {
+            continue;
+        };
+        for o in [left, right] {
+            let Some(c) = d.certs.get(*o) else {
+                return fail("an operand is missing");
+            };
+            if !c.scale.is_subset(&cert.scale) {
+                return fail(format!(
+                    "step `{}`'s scale does not hold its operand's",
+                    step.name
+                ));
+            }
+            let pair = (c.scale.clone(), cert.scale.clone());
+            if c.scale != cert.scale && !out.contains(&pair) {
+                out.push(pair);
+            }
+        }
+    }
+    if let Some(step) = d
+        .steps
+        .iter()
+        .find(|s| (0..out.len()).any(|i| s.name == ratio_name(i)))
+    {
+        return fail(format!(
+            "step `{}` has a ratio parameter's name",
+            step.name
+        ));
+    }
     Ok(out)
 }
 
