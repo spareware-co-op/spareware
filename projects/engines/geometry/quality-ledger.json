@@ -83,6 +83,38 @@
       "reason": "The mutant differs only when the lower bound equals zero, and then passes the literal 0.0 on to Interval::sqrt where the original passes self.lo. Every Interval stores a zero bound as +0 (its invariant: Interval::new, widened() and square apply zero_to_plus or write 0.0), so both are +0 and Interval::norm returns the same bits."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-num/src/perturb.rs",
+      "mutant": "replace || with && in tie",
+      "line_text": "if rows_used & row_bit != 0 || cols_used & col_bit != 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The validity check only skips masks whose matrix has a zero determinant, so weakening it changes no result. A mask that picks two entries of one column sets two rows to the same unit vector, a zero determinant. A mask that picks two entries of one row builds the matrix of a smaller mask (the row keeps one unit vector), which the walk visited earlier and found zero, or which itself repeats a column. Checked by simulating the walk with and without the check on 4,000 random orient2d and incircle ties: every sign agreed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/perturb.rs",
+      "mutant": "replace |= with &= in tie",
+      "line_text": "rows_used |= row_bit;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The validity check only skips masks whose matrix has a zero determinant, so weakening it changes no result. A mask that picks two entries of one column sets two rows to the same unit vector, a zero determinant. A mask that picks two entries of one row builds the matrix of a smaller mask (the row keeps one unit vector), which the walk visited earlier and found zero, or which itself repeats a column. Checked by simulating the walk with and without the check on 4,000 random orient2d and incircle ties: every sign agreed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/perturb.rs",
+      "mutant": "replace |= with &= in tie",
+      "line_text": "cols_used |= col_bit;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The validity check only skips masks whose matrix has a zero determinant, so weakening it changes no result. A mask that picks two entries of one column sets two rows to the same unit vector, a zero determinant. A mask that picks two entries of one row builds the matrix of a smaller mask (the row keeps one unit vector), which the walk visited earlier and found zero, or which itself repeats a column. Checked by simulating the walk with and without the check on 4,000 random orient2d and incircle ties: every sign agreed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/perturb.rs",
+      "mutant": "replace bit_of -> Result<u32, NumError> with Ok(0)",
+      "line_text": "u32::try_from(i)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The validity check only skips masks whose matrix has a zero determinant, so weakening it changes no result. A mask that picks two entries of one column sets two rows to the same unit vector, a zero determinant. A mask that picks two entries of one row builds the matrix of a smaller mask (the row keeps one unit vector), which the walk visited earlier and found zero, or which itself repeats a column. Checked by simulating the walk with and without the check on 4,000 random orient2d and incircle ties: every sign agreed."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
       "mutant": "replace < with <= in Wide<L>::resize",
       "line_text": "if M < L {",
@@ -939,6 +971,27 @@
       "occurrences": 1,
       "piece": "G47",
       "reason": "In sinpi and cospi's port: the empty-table arm, and the nudge and hard-case branches that only inputs of the exceptional list reach. G47 proves them unreachable, or tests them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/perturb.rs",
+      "line_text": "if let Some(row) = m.get_mut(arg) {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The perturbed determinant's defensive arms: `arg` always indexes a row of the matrix, so `get_mut` never misses, and the search always finds a nonzero term for distinct keys (choosing, in key order, column k for the argument of rank k leaves a coefficient of ±1), so its fallback never runs. G41 proves them unreachable."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/perturb.rs",
+      "line_text": "}",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The perturbed determinant's defensive arms: `arg` always indexes a row of the matrix, so `get_mut` never misses, and the search always finds a nonzero term for distinct keys (choosing, in key order, column k for the argument of rank k leaves a coefficient of ±1), so its fallback never runs. G41 proves them unreachable."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/perturb.rs",
+      "line_text": "Err(NumError::BudgetExceeded)",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The perturbed determinant's defensive arms: `arg` always indexes a row of the matrix, so `get_mut` never misses, and the search always finds a nonzero term for distinct keys (choosing, in key order, column k for the argument of rank k leaves a coefficient of ±1), so its fallback never runs. G41 proves them unreachable."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
