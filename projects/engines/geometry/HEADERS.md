@@ -102,6 +102,7 @@ The families of chapter 10.2's catalogue, as the `Family` field writes them: `Ma
 | Cost | Yes | A paragraph opening `Cost: `, followed by the cost (time, memory, allocation, recursion), which states something | `cost` |
 | Family | No | As for crates | `family` |
 | Provenance | When the module took or consulted an outside source | Below | `provenance`, `spdx` |
+| Recursion | When the module holds a function of a recursive cycle, or defines a recursive type | [The `Recursion` field](#the-recursion-field) below | Not in the map: the recursion check reads it |
 
 Each module field is written once; a second `Guarantees`, `Method`, `Cost` or `Family` paragraph is a problem rather than a silent choice. Other paragraphs (`Why: `, derivations, tables, notation) are prose: the map leaves them out.
 
@@ -122,6 +123,33 @@ Each module field is written once; a second `Guarantees`, `Method`, `Cost` or `F
 //!
 //! Cost: constant time and no allocation.
 ```
+
+## The `Recursion` field
+
+WebAssembly has no guard page, so recursion that runs too deep corrupts memory instead of trapping; every recursive cycle in a crate that ships therefore states its depth bound (chapter 28.8; the rule follows solidcore's, G01 evidence 13). The recursion check (`geom-test`'s `src/recursion`, piece G13) finds every cycle on the program's call graph and reads this field from the headers of the modules that hold them.
+
+```rust
+//! Recursion:
+//!
+//! - Cycle: `Tree::walk`, `walk_children`.
+//!   Bound: 64 (`MAX_DEPTH`).
+//!   Why: each call goes one level down the tree, and `Tree::walk` refuses past `MAX_DEPTH`.
+//!   Test: `walk_at_its_bound`.
+//! - Types: `Expr`.
+//!   Bound: 32 (`MAX_NESTING`).
+//!   Why: the parser refuses an expression nested deeper than `MAX_NESTING`.
+//!   Test: `deepest_expr_drops_and_clones`.
+```
+
+| Part | Exact syntax |
+| --- | --- |
+| `Cycle:` | Every function of the cycle, in backticks, as the module names them (relative to it, from `crate::`, or through its `use` declarations); a closure is named by the function it is written in, an implementation's method as `Type::method` or `<Type as Trait>::method`. Exactly the cycle's members: `recursion list` prints them |
+| `Types:` | Instead of `Cycle:`, the structs, enums or unions that contain themselves through their fields: their drop glue and derived implementations recurse over their nesting, so one statement covers those derived cycles too |
+| `Bound:` | The most frames of the cycle that are ever on the stack at once (for types, the deepest nesting of their values): a positive whole number, then the constant that enforces it in backticks when there is one (`const NAME: T = <integer literal>;` in the crate, whose value must be the bound) |
+| `Why:` | Why the bound holds, as a sentence that states something |
+| `Test:` | A `#[test]` function of the crate's `tests/recursion.rs`, not ignored, that runs the cycle at its bound; the check requires its call graph to reach the cycle |
+
+Each item starts with `- Cycle: ` or `- Types: ` and each other part opens a line of its own; the field is written once per file, in the header of a module that holds one of the cycle's functions (or defines one of the types). `cargo run -p geom-test --bin recursion -- list` prints every cycle and recursive type with a path round it and the line of each call; `-- check` fails on a cycle without a statement (`Unbounded`), a statement that is not exactly one cycle's members (`Stale`), a statement in the wrong file or malformed (`Statement`), a bound constant that disagrees (`Bound`), a missing, ignored or unreaching test (`Test`), and code the check cannot read (`Unread`); `-- gate`, which the merge gate's recursion job runs, also runs every crate's `tests/recursion.rs` for `wasm32-wasip1` in debug and in release on a 256 KiB shadow stack and a 256 KiB engine stack (`Stack`).
 
 ## Provenance lines
 

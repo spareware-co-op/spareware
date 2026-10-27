@@ -299,7 +299,6 @@ pub proof fn lemma_zero_limbs(s: Seq<u64>, n: nat)
     }
 }
 
-
 /// The magnitudes' product is at least what the rows so far and the current row up to limb j
 /// account for, plus the current product at position i + j.
 pub proof fn lemma_product_lower_bound(a: Seq<u64>, b: Seq<u64>, n: nat, i: nat, j: nat, ai: u64, bj: u64)
@@ -419,7 +418,6 @@ pub proof fn lemma_row_done(a: Seq<u64>, b: Seq<u64>, i: nat, ai: u64)
         == (unsigned(a, i) + ai as int * base(i)) * unsigned(b, b.len())) by (nonlinear_arith);
 }
 
-
 /// One step of a row: writing the low half of prod + old + carry at position k = i + j moves the
 /// value of the limbs by (low − old) · base(k), and the high half carries to position k + 1, so the
 /// limbs and the carry account for prod · base(k) more.
@@ -443,7 +441,6 @@ pub proof fn lemma_slot_step(
         requires low as int + high as int * 0x1_0000_0000_0000_0000 == prod + old as int + carry as int;
 }
 
-
 /// Where the product lands: with tot = |x| · |y| below the base b and h = b / 2, a magnitude below
 /// h fits with either sign, and a magnitude of h or more fits only as −h.
 pub proof fn lemma_mul_result(tot: int, b: int, x: int, y: int, negative: bool)
@@ -465,7 +462,6 @@ pub proof fn lemma_mul_result(tot: int, b: int, x: int, y: int, negative: bool)
     assert(tot == 0 ==> x == 0 || y == 0) by (nonlinear_arith)
         requires tot == (if x < 0 { -x } else { x }) * (if y < 0 { -y } else { y });
 }
-
 
 /// Limbs holding v's two's complement in their low two and its sign fill above have v's value.
 pub proof fn lemma_from_i128(s: Seq<u64>, v: i128, low: u64, high: u64)
@@ -518,6 +514,38 @@ pub proof fn lemma_fill_prefix(s: Seq<u64>, v: i128, low: u64, high: u64, m: nat
         } else {
             assert(s[k as int] as int * base(k) == 0) by (nonlinear_arith) requires s[k as int] as int == 0;
         }
+    }
+}
+
+/// A magnitude with a sign: −mag when negative (−0 is 0), mag otherwise.
+pub open spec fn with_sign(mag: int, negative: bool) -> int {
+    if negative { -mag } else { mag }
+}
+
+/// One limb's share bounds the value from below: s[k] · base(k) ≤ unsigned(s, n) for k < n.
+pub proof fn lemma_limb_lower_bound(s: Seq<u64>, n: nat, k: nat)
+    requires
+        k < n <= s.len(),
+    ensures
+        s[k as int] as int * base(k) <= unsigned(s, n),
+{
+    lemma_unsigned_bound(s, k);
+    lemma_unsigned_prefix_le(s, k + 1, n);
+}
+
+/// Zero limbs from n up to m add nothing to the value.
+pub proof fn lemma_zero_tail(s: Seq<u64>, n: nat, m: nat)
+    requires
+        n <= m <= s.len(),
+        forall|j: int| n <= j < m ==> s[j] == 0,
+    ensures
+        unsigned(s, m) == unsigned(s, n),
+    decreases m - n,
+{
+    if n < m {
+        let k = (m - 1) as nat;
+        lemma_zero_tail(s, n, k);
+        assert(s[k as int] as int * base(k) == 0) by (nonlinear_arith) requires s[k as int] == 0;
     }
 }
 
@@ -730,30 +758,6 @@ pub proof fn lemma_limb_too_big(s: Seq<u64>, k: nat, l: nat)
     lemma_base_step(k);
     assert(s[k as int] as int * base(k) >= base(k)) by (nonlinear_arith)
         requires s[k as int] as int >= 1, base(k) > 0;
-}
-
-/// Limbs copied from m into l limbs, zero above the end of m, with every limb of m from l on zero,
-/// have the value of m.
-pub proof fn lemma_copied_value(m: Seq<u64>, out: Seq<u64>, l: nat)
-    requires
-        out.len() == l,
-        forall|j: int| 0 <= j < l ==> out[j] == (if j < m.len() { m[j] } else { 0u64 }),
-        forall|j: int| l <= j < m.len() ==> m[j] == 0,
-    ensures
-        unsigned(out, l) == unsigned(m, m.len()),
-{
-    if m.len() <= l {
-        lemma_split(out, m.len(), l);
-        lemma_part_fill(out, m.len(), l, 0);
-        assert(forall|j: int| m.len() <= j < l ==> out[j] == 0u64);
-        lemma_prefix_eq(out, m, m.len());
-        assert(base(m.len()) * 0 == 0) by (nonlinear_arith);
-    } else {
-        lemma_split(m, l, m.len());
-        lemma_part_fill(m, l, m.len(), 0);
-        lemma_prefix_eq(out, m, l);
-        assert(base(l) * 0 == 0) by (nonlinear_arith);
-    }
 }
 
 /// The sign rule of a product of magnitudes: with tot = |x| · |y|, x · y is −tot when exactly one
@@ -1012,7 +1016,6 @@ pub proof fn lemma_value_bound<const L: usize>(w: Wide<L>)
     lemma_unsigned_bound(w.0@, L as nat);
     lemma_top_bit(w.0@, L as nat);
 }
-
 
 impl<const L: usize> Wide<L> {
     /// From an `i128`, exactly.
@@ -1338,7 +1341,7 @@ const fn fill(negative: bool) -> u64 {
     0u64.wrapping_sub(negative as u64)
 }
 
-/// The value with magnitude `m` (limbs little-endian, any number of them) and the given sign, or
+/// The value with magnitude `m` (`M` limbs, little-endian) and the given sign, or
 /// `None` if it does not fit: the limbs from `L` on must be zero, and the magnitude must be below
 /// 2^(64L−1), or exactly 2^(64L−1) for a negative value (the minimum value), as
 /// [`Wide::checked_mul`] decides it.
@@ -1346,67 +1349,72 @@ const fn fill(negative: bool) -> u64 {
     requires
         1 <= L <= 4096,
     ensures
-        ({
-            let v = if negative { -unsigned(m@, m@.len()) } else { unsigned(m@, m@.len()) };
-            match r {
-                Some(w) => fits(v, L as nat) && w.value() == v,
-                None => !fits(v, L as nat),
-            }
-        }),
+        match r {
+            Some(w) => fits(with_sign(unsigned(m@, m@.len()), negative), L as nat)
+                && w.value() == with_sign(unsigned(m@, m@.len()), negative),
+            None => !fits(with_sign(unsigned(m@, m@.len()), negative), L as nat),
+        },
 )]
-fn from_magnitude<const L: usize>(m: &[u64], negative: bool) -> Option<Wide<L>> {
+fn from_magnitude<const L: usize, const M: usize>(m: &[u64; M], negative: bool) -> Option<Wide<L>> {
     let mut out = [0u64; L];
     #[verus_spec(
         invariant
             1 <= L <= 4096,
             out@.len() == L,
-            forall|j: int| 0 <= j < L ==> out@[j] == (if j < k && j < m@.len() { m@[j] } else { 0u64 }),
-            forall|j: int| L <= j < k ==> m@[j] == 0,
+            forall|j: int| 0 <= j < L && j < k ==> out@[j] == m@[j],
+            forall|j: int| k <= j < L ==> out@[j] == 0u64,
+            forall|j: int| L <= j < k ==> m@[j] == 0u64,
     )]
-    for k in 0..m.len() {
+    for k in 0..M {
         let limb = match m.get(k) {
             Some(v) => *v,
             None => 0,
         };
-        if k < L {
-            if let Some(o) = out.get_mut(k) {
-                *o = limb;
-            }
+        if let Some(slot) = out.get_mut(k) {
+            *slot = limb;
         } else if limb != 0 {
             proof! {
-                lemma_limb_too_big(m@, k as nat, L as nat);
+                // Here k ≥ L, so the magnitude is at least base(k) ≥ base(L): no sign makes it fit.
+                lemma_limb_lower_bound(m@, m@.len(), k as nat);
+                lemma_base_monotone(L as nat, k as nat);
                 lemma_base_step(L as nat);
-                lemma_unsigned_bound(m@, m@.len());
+                assert(limb as int * base(k as nat) >= base(k as nat)) by (nonlinear_arith)
+                    requires limb as int >= 1, base(k as nat) > 0;
             }
+            // A non-zero limb at or above limb L makes the magnitude at least 2^(64L).
             return None;
         }
     }
     proof! {
-        lemma_copied_value(m@, out@, L as nat);
+        let len = m@.len();
+        if len <= L {
+            lemma_zero_tail(out@, len, L as nat);
+            lemma_prefix_eq(out@, m@, len);
+        } else {
+            lemma_zero_tail(m@, L as nat, len);
+            lemma_prefix_eq(out@, m@, L as nat);
+        }
     }
-    let v = Wide::<L>(out);
+    let v = Wide(out);
     proof! {
         lemma_top_bit(v.limbs(), L as nat);
         lemma_unsigned_bound(v.limbs(), L as nat);
+        lemma_base_step(L as nat);
+        assert(unsigned(v.limbs(), L as nat) == unsigned(m@, m@.len()));
     }
     if !v.is_negative() {
         return Some(if negative { v.wrapping_neg() } else { v });
     }
-    // Top bit set: only the exact magnitude 2^(64L−1) with a negative sign fits (the minimum
-    // value), the one non-zero magnitude that negation leaves unchanged.
+    // Top bit set: only the magnitude 2^(64L−1) with a negative sign fits (the minimum value), the
+    // one non-zero magnitude that negation leaves unchanged.
     let n = v.wrapping_neg();
     proof! {
         let tot = unsigned(v.limbs(), L as nat);
-        assert(tot >= base(L as nat) / 2);
         assert(tot > 0);
         assert(unsigned(n.limbs(), L as nat) == base(L as nat) - tot);
         assert((base(L as nat) - tot == tot) == (tot == base(L as nat) / 2));
-        assert(tot == base(L as nat) / 2 ==> n.value() == -(base(L as nat) / 2));
     }
     if negative && matches!(compare_limbs(&n.0, &v.0), Ordering::Equal) {
-        proof! {
-            assert(unsigned(n.limbs(), L as nat) == unsigned(v.limbs(), L as nat));
-        }
         Some(n)
     } else {
         None

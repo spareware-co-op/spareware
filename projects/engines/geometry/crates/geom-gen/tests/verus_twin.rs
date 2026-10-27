@@ -407,7 +407,7 @@ fn is_verus_block(trees: &[TokenTree], k: usize) -> bool {
 }
 
 /// The item `fn name` in `trees`, at any depth outside the `verus!` block, with its attributes and
-/// visibility.
+/// visibility (`pub` or `pub(...)`).
 fn find_fn(trees: &[TokenTree], name: &str) -> Option<Vec<TokenTree>> {
     find_fns(trees, name).into_iter().next()
 }
@@ -439,7 +439,12 @@ fn item_at(trees: &[TokenTree], at: usize) -> Option<Vec<TokenTree>> {
         if start > 0 && is_ident(&trees[start - 1], "const") {
             start -= 1;
         }
-        if start > 0 && is_ident(&trees[start - 1], "pub") {
+        if start > 1
+            && is_ident(&trees[start - 2], "pub")
+            && matches!(&trees[start - 1], TokenTree::Group(g) if g.delimiter() == proc_macro2::Delimiter::Parenthesis)
+        {
+            start -= 2;
+        } else if start > 0 && is_ident(&trees[start - 1], "pub") {
             start -= 1;
         } else if start >= 2
             && is_ident(&trees[start - 2], "pub")
@@ -537,6 +542,10 @@ fn any_change_to_the_wide_arithmetic_is_seen() {
     assert!(same_functions(WIDE_TWIN, WIDE));
     for (from, to) in [
         ("let b = other.magnitude();", "let b = self.magnitude();"),
+        (
+            ".checked_add(u128::from(old))?",
+            ".wrapping_add(u128::from(old))",
+        ),
         ("carry = c1 || c2;", "carry = c1 && c2;"),
         ("i = i.wrapping_sub(1);", "i = i.wrapping_sub(2);"),
         ("let k = i.checked_add(shift)?;", "let k = i;"),
@@ -639,14 +648,15 @@ fn product_i128_is_the_shipped_one_in_doc_attributes_parameters_and_body() {
         "{text}"
     );
     // A change on either side is seen.
-    let changed = WIDE.replacen(
-        "let (l2, l3) = halves(upper);",
-        "let (l3, l2) = halves(upper);",
-        1,
-    );
-    assert!(changed != WIDE);
+    let from = "let (l2, l3) = halves(upper);";
+    let to = "let (l3, l2) = halves(upper);";
+    assert!(WIDE.contains(from) && WIDE_TWIN.contains(from));
+    let changed = WIDE.replacen(from, to, 1);
     let changed = find_fn(&tokens(&changed), "product_i128").unwrap();
     assert_ne!(shared_parts(&twin), shared_parts(&changed));
+    let changed = WIDE_TWIN.replacen(from, to, 1);
+    let changed = find_fn_in_verus(&tokens(&changed), "product_i128").unwrap();
+    assert_ne!(shared_parts(&changed), shared_parts(&shipped));
 }
 
 // ---------------------------------------------------------------------------------------------

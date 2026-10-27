@@ -160,31 +160,30 @@ fn halves(t: u128) -> (u64, u64) {
     ((t & 0xFFFF_FFFF_FFFF_FFFF) as u64, (t >> 64) as u64)
 }
 
-/// The value with magnitude `m` (limbs little-endian, any number of them) and the given sign, or
+/// The value with magnitude `m` (`M` limbs, little-endian) and the given sign, or
 /// `None` if it does not fit: the limbs from `L` on must be zero, and the magnitude must be below
 /// 2^(64L−1), or exactly 2^(64L−1) for a negative value (the minimum value), as
 /// [`Wide::checked_mul`] decides it.
-fn from_magnitude<const L: usize>(m: &[u64], negative: bool) -> Option<Wide<L>> {
+fn from_magnitude<const L: usize, const M: usize>(m: &[u64; M], negative: bool) -> Option<Wide<L>> {
     let mut out = [0u64; L];
-    for k in 0..m.len() {
+    for k in 0..M {
         let limb = match m.get(k) {
             Some(v) => *v,
             None => 0,
         };
-        if k < L {
-            if let Some(o) = out.get_mut(k) {
-                *o = limb;
-            }
+        if let Some(slot) = out.get_mut(k) {
+            *slot = limb;
         } else if limb != 0 {
+            // A non-zero limb at or above limb L makes the magnitude at least 2^(64L).
             return None;
         }
     }
-    let v = Wide::<L>(out);
+    let v = Wide(out);
     if !v.is_negative() {
         return Some(if negative { v.wrapping_neg() } else { v });
     }
-    // Top bit set: only the exact magnitude 2^(64L−1) with a negative sign fits (the minimum
-    // value), the one non-zero magnitude that negation leaves unchanged.
+    // Top bit set: only the magnitude 2^(64L−1) with a negative sign fits (the minimum value), the
+    // one non-zero magnitude that negation leaves unchanged.
     let n = v.wrapping_neg();
     if negative && matches!(compare_limbs(&n.0, &v.0), Ordering::Equal) {
         Some(n)
