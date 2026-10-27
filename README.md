@@ -1,1 +1,1 @@
-Screenshots for the pull request that moves the Spare Construct demo onto the shared ribbon. Not for merging; delete this branch once the pull request is closed.
+Screenshots for the pull requests that move the Spare Construct demo, and then the Spare Office editors and Construct's Transport page, onto the shared ribbon. Not for merging; delete this branch once those pull requests are closed.
