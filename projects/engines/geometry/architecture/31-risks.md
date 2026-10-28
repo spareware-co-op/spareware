@@ -622,6 +622,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | The default and the cap of `close_near_contacts` | 6, 11 | 32.30 (owner action G241) |
 | The licence of Wang et al.'s 2021 contact benchmark | 19, 29 | 32.31 (owner action G285) |
 | Which crate owns USD subdivision exchange, and how Chaikin creasing is carried | 16, 24 | 32.32 (owner action G312) |
+| Alignment transitions as kinds or compositions, and their names | 7, 17, 26 | 32.33 (owner action G357) |
 
 ### Answered by the pieces built so far
 
@@ -670,7 +671,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | Where the IntersectionCurve variant lives: geom-curve with opaque pool references (chapter 12's choice), or geom-surface | 12 | Decision note to 7 and 27; piece "Procedural intersection curve with certified cached fit" |
 | Subdivision limit surface: the local rules and evaluator sit in geom-surface, only the net is stored, and the patch tree is a cache (16's choice, against the review's stored hierarchy). geom-intersect and geom-draw reach contours through the surface trait | 12, 16, 18 | Piece "SubD limit surface kind" |
 | The surface trait gains an Unbounded derivative-bound result and a normal-cone query, because Stam's derivatives are unbounded from valence 5 | 16 | Piece "SubD limit surface kind" |
-| Alignment curve kinds: named kinds or compositions for Helmert, Bloss, the Viennese bend, the cubic variant, and IFC's gradient curve and segmented reference curve; the four LandXML-only spirals; our LandXML-to-IFC mapping | 17 | Decision note to 7 before piece "Spiral evaluation with certified bounds" |
+| Alignment curve kinds: named kinds or compositions for Helmert, Bloss, the Viennese bend, the cubic variant, and IFC's gradient curve and segmented reference curve; the four LandXML-only spirals; our LandXML-to-IFC mapping | 17 | 32.33 (owner action G357): one transition kind with laws; gradient and segmented reference curves are compositions; the four LandXML-only spirals stay data until published |
 | A conical helix (tapered springs, scrolls) as an exact curve kind | 13 | 32.28 (owner action G239): the helix kind gains a radius rate; piece "Helical sweeps and geom-thread" |
 | What the Sweep kind stores: the full FrameRule, twist and scale laws, bit-exact station frames and the cylindrical profile morph; draft surfaces as Sweep and Ruled kinds | 13 | 32.28 (owner action G239): all of it; piece "Frame rules and laws"; encoding in "geom-format: body records" |
 | A procedural 2D projected-curve kind (a 3D curve plus a view, with a cached certified fit) | 18 | Decision note under 26.1; piece "Projected curve kinds and the canonical drawing form" |

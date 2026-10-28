@@ -4868,7 +4868,7 @@
   "phase": "Phase 10",
   "crate": "geom-curve",
   "size": "Medium",
-  "done_when": "The kinds or compositions the owner's decision names (Helmert, Bloss, Viennese bend, the cubic spiral variant, IFC's gradient curve and segmented reference curve), each passing the kind contract with certified evaluation, conversion and transforms; Clothoids compared out of process.",
+  "done_when": "The transition kind with 32.33's laws (Helmert, Bloss, cosine, sine, the cant-coupled transition, IFC's polynomial spirals, the cubic spiral variant) and IFC's gradient curve and segmented reference curve as compositions in geom-align, each passing the kind contract with certified evaluation, conversion and transforms; Clothoids compared out of process.",
   "depends_on": [
    "G357",
    "G284"

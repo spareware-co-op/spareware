@@ -50,6 +50,7 @@ The board (30.5) also turns into a piece every narrower question that chapters 6
 | 32.30 | G241: the close_near_contacts cap | ε_heal's values as a second meaning: default 640q, at most 6,400q; larger requests refused | 6, 11 | G249, the close_near_contacts repair |
 | 32.31 | G285: the contact benchmark's licence | Wang et al.'s 2021 benchmark has no licence (all rights reserved), so it is not stored or run until the authors clear it, on a request the owner sends; G297 tests meanwhile on the authors' Apache-2.0 time-of-impact sample and our own exact cases | 19, 29 | G297, time of first contact |
 | 32.32 | G312: USD exchange home | `geom-meshio` owns USD subdivision exchange; Chaikin creasing travels as `uniform token spareware:creaseMethod = "chaikin"` on the Mesh prim, absent meaning uniform | 16, 24 | G354, SubD exchange |
+| 32.33 | G357: alignment curve kinds | One transition kind with a closed set of curvature laws (Helmert, Bloss, cosine, sine, the cant-coupled transition, IFC's polynomial spirals, the cubic spiral); the cubic parabola a polynomial curve; gradient and segmented reference curves compositions in `geom-align`; descriptive names, file enumerators kept as data | 7, 17, 26 | G371, transition kinds |
 
 ## 32.1 The grid ladder (decision 1)
 
@@ -629,3 +630,18 @@ Why: the method is permissive and the promise is the same; only the data waits, 
 Why: one crate for subdivision exchange keeps OBJ and USD on one mapping of `geom-subd`'s options; a namespaced attribute is the smallest addition that round-trips through USD tools and degrades safely in readers that do not know it.
 
 **Changes:** 16.1, 24.11, 31.7, and pieces G354 and G439.
+
+## 32.33 Alignment curve kinds (owner action G357)
+
+**What it is.** Road and rail alignments use transition curves beyond the clothoid: Helmert (two quadratic halves), Bloss, cosine and sine transitions, the curve IFC calls VIENNESEBEND, IFC's polynomial spirals and a cubic spiral variant (17.8). IFC 4.3 also builds 3D alignment curves from others: the gradient curve (a vertical profile over a horizontal alignment) and the segmented reference curve (cant over a gradient curve). LandXML 1.2 names sixteen spiral types without formulas. Section 26.1 asks a decision note for each new curve kind; chapter 17 asks which of these are named kinds and which compositions (its open question 5; 31.7). The trade-mark status of the VIENNESEBEND name is to be checked first.
+
+**Decided 2026-10-28 (owner action G357).** Read with 7, 17.8, 17.13, 24.11, 26.1, IFC 4.3's `IfcAlignmentHorizontalSegmentTypeEnum` as 17.8 cites it, and LandXML 1.2's schema. This section is the decision note 26.1 requires.
+- **One transition kind with a closed set of curvature laws,** in `geom-curve`: clothoid, Helmert, Bloss, cosine, sine, the cant-coupled transition (IFC's VIENNESEBEND), IFC's second-, third- and seventh-order polynomial spirals, and the cubic spiral variant. Each law is a variant of one closed enum, so every law shares one evaluation (heading as the exact integral of curvature, position by certified Gauss–Legendre quadrature), one bound and one kind contract, and a new law is a new variant with its own decision note. Results are Certified, as 17.8's table says.
+- **The cubic parabola** (IFC's CUBIC, y = x³/6RL) is not a transition kind: it is a polynomial curve, exact in its own parameter, so it is stored as one; its length stays certified.
+- **The gradient curve and the segmented reference curve are compositions, not kinds:** `geom-align` stores the horizontal alignment, the vertical profile and the cant as their own segment lists, and the 3D curve is evaluated from them by station, so a change to the profile never rewrites a stored curve. `geom-ifc` maps IFC's two entities onto them and back.
+- **The name.** "Wiener Bogen" (the Viennese bend) is reported to be a registered trade mark; that is unverified, but the kernel needs no brand. The law is named for what it is, the cant-coupled transition, and only IFC's VIENNESEBEND and railML's and LandXML's own enumerator values are read and written, as the files' data. As 17.8 says, it takes Δψ and h from its cant segment and becomes a seventh-order polynomial spiral that needs no cant to evaluate.
+- **LandXML's spirals** map as 17.13 reads them: clothoid, bloss, cosine, sinusoid, biquadratic, weinerBogen, cubic and cubicParabola to the laws above, the `rev` types run from the other end. sineHalfWave, biquadraticParabola, japaneseCubic and radioid have no published formula, so they stay LandXML data, and an operation that must evaluate one fails with an error naming it, never a guess. A published definition, with its own decision note, makes one a law.
+
+Why: one kind with a closed set of laws keeps every transition on one proven evaluator and one test kit; compositions keep IFC's layered alignment model editable; and a descriptive name keeps a possible trade mark out of the kernel.
+
+**Changes:** 7's curve list, 17.8, 17.13, 31.7, and piece G371.
