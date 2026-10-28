@@ -61,7 +61,7 @@ The bytes are a pure function of the stored value, on every machine and for any 
 | Any other real | The exact `f64` value in CBOR's preferred form, the shortest float that keeps the value (RFC 8949, section 4.1), so it reads back bit for bit; columns as `f64` typed arrays (tag 86). NaN and infinities are refused both ways; −0.0 is kept as itself |
 | Counts, positions, kinds | Unsigned integers in shortest form; kinds from the registry |
 | Persistent names | The 128-bit `NameId` as 16 bytes, and the canonical encoding of its `TopoName` (section 20) |
-| Text | UTF-8. Text hashed into a name must be in Unicode Normalization Form C; the writer refuses other text |
+| Text | UTF-8. Text hashed into a name must be in Unicode Normalization Form C under the scheme's Unicode version, 18.0.0 for `NameScheme v1` (32.19); the writer refuses other text |
 | Sets and maps | Arrays sorted by key; never hash-map order |
 
 **Positions inside a body record.** A body's tables are written in its arena order (section 8.2), which is persistent-name order (owner action G76, 32.17), and refer to each other by position. These record positions are defined by the specification, valid only inside that body record, and never used as references: everything outside a body names its entities by `NameId`, as section 20.1 requires. Keeping arena order means a reloaded body equals the in-memory one index for index, so the next operation gives the same bits on a replica that built the body and on one that opened it.
