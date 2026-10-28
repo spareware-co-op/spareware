@@ -20,15 +20,15 @@ The native format must be readable forever without any Spareware program, give t
 | SQLite | No: page layout depends on history | Any SQLite tool | A container, not an encoding (24.5) |
 | Protocol Buffers | No: "Deterministic serialization is not canonical" ([protobuf.dev](https://protobuf.dev/programming-guides/serialization-not-canonical/)) | Many | No |
 
-So SKG (Spare Kit Geometry; name and `.skg` extension proposed) is deterministic CBOR, an IETF Internet Standard (STD 94), with a record layer on top. CBOR brings what a format of our own would not: anyone can decode its structure with an off-the-shelf tool; every item is self-delimiting, so any unknown part can be skipped; typed arrays ([RFC 8746](https://www.rfc-editor.org/rfc/rfc8746)) hold coordinate columns as raw little-endian numbers; and the canonical rules are already written. The record layer adds a registry of record types, required and optional records, checksums, content IDs, chunks and fallbacks.
+So SKG (Spare Kit Geometry; standalone files end `.skgf`, owner action G77, 32.18) is deterministic CBOR, an IETF Internet Standard (STD 94), with a record layer on top. CBOR brings what a format of our own would not: anyone can decode its structure with an off-the-shelf tool; every item is self-delimiting, so any unknown part can be skipped; typed arrays ([RFC 8746](https://www.rfc-editor.org/rfc/rfc8746)) hold coordinate columns as raw little-endian numbers; and the canonical rules are already written. The record layer adds a registry of record types, required and optional records, checksums, content IDs, chunks and fallbacks.
 
 Two ideas come from Rhino's 3dm format, not its format: skippable typed chunks with a checksum, and geometry pools that topology refers to by index ([04](../../../kit/notes/G01-evidence/04-nurbs-surfaces.md), section 1; [opennurbs_3dm.h L17-52](https://github.com/mcneel/opennurbs/blob/eb92af3ba1806b0a34a99aba0d3bda83e3d46083/opennurbs_3dm.h#L17-L52)). 3dm's specification is effectively its C++ code, its type codes are McNeel's, and it has no exact ellipse, cone or clothoid.
 
-`geom-format` reads and writes SKG. How a program packs records into its project file is the program's choice (24.5). Standalone `.skg` files carry test corpora, bug reports, examples for AI agents, and geometry passed between Spareware programs.
+`geom-format` reads and writes SKG. How a program packs records into its project file is the program's choice (24.5). Standalone `.skgf` files carry test corpora, bug reports, examples for AI agents, and geometry passed between Spareware programs.
 
 ## 24.2 Records
 
-A standalone file is a labelled CBOR Sequence: the 12-byte label of [RFC 9277](https://www.rfc-editor.org/rfc/rfc9277) (`d9 d9 f8 da`, a four-byte protocol tag, `43 42 4f 52`; proposed tag `0x534B4746`, "SKGF", to be registered with IANA), a header record, the records, and an END record.
+A standalone file is a labelled CBOR Sequence: the 12-byte label of [RFC 9277](https://www.rfc-editor.org/rfc/rfc9277) (`d9 d9 f8 da`, a four-byte protocol tag, `43 42 4f 52`; tag `0x534B4746`, 1397442374, "SKGF", requested from IANA's first-come-first-served range, 32.18), a header record, the records, and an END record.
 
 ```cddl
 record = [
@@ -45,7 +45,7 @@ content-id = [alg: uint, digest: bstr]   ; alg 1: SHA-256 of the payload bytes
 - **The registry**, `geometry/format/REGISTRY.md`, gives every tag's name, schema versions, CDDL and the part of `SPEC.md` that defines it.
 - **Criticality.** An unknown *required* record stops the reader with `UnsupportedRecord` (tag, schema, byte offset). An unknown *optional* record is skipped and listed in the read report.
 - **Copy policy**, for a program rewriting a file it only partly understands. PNG copies an unknown safe-to-copy chunk whatever changed, and an unsafe one only if no critical chunk changed ([PNG, section 5.4](https://www.w3.org/TR/png-3/#5Chunk-naming-conventions)). SKG makes the test exact: a *copy-always* record is kept byte for byte; a *copy-if-unchanged* record is kept only while every record in its `depends` list is present with the same content ID, and is otherwise dropped with a diagnostic.
-- **Checksums and content IDs.** CRC-32C (Castagnoli polynomial, [RFC 7143](https://www.rfc-editor.org/rfc/rfc7143)) finds damage cheaply. The content ID is the SHA-256 ([FIPS 180-4](https://csrc.nist.gov/pubs/fips/180-4/upd1/final)) of the payload behind an algorithm code, so a stronger hash can join within section 2's fifty-year horizon. The END record holds the record count and the SHA-256 of everything before it. A salvage read keeps every intact record and names the damaged ones.
+- **Checksums and content IDs.** CRC-32C (Castagnoli polynomial, [RFC 7143](https://www.rfc-editor.org/rfc/rfc7143)) finds damage cheaply. The content ID is the SHA-256 ([FIPS 180-4](https://csrc.nist.gov/pubs/fips/180-4/upd1/final)) of the payload behind an algorithm code, so a stronger hash can join within section 2's fifty-year horizon. The owner chose SHA-256 and RustCrypto's `sha2` crate for it (owner action G79, 32.20). The END record holds the record count and the SHA-256 of everything before it. A salvage read keeps every intact record and names the damaged ones.
 - **Chunks.** A payload is at most 64 MiB (proposed). A body is an index record plus chunk records: each table (points, planes, curves, faces and so on) is cut into fixed runs of 4,096 rows (proposed, fixed by the specification and versioned). Chunk boundaries are thus a pure function of the body, never of how memory was shared. The index lists its chunks' content IDs, so a body's content ID is the root of a hash tree, and saving a new version writes only changed chunks.
 - **Compression sits outside the canonical form.** A container may compress records (for example zstd, [RFC 8878](https://www.rfc-editor.org/rfc/rfc8878)); content IDs and section 21's golden hashes are always over uncompressed bytes. Standalone files are uncompressed.
 
@@ -61,10 +61,10 @@ The bytes are a pure function of the stored value, on every machine and for any 
 | Any other real | The exact `f64` value in CBOR's preferred form, the shortest float that keeps the value (RFC 8949, section 4.1), so it reads back bit for bit; columns as `f64` typed arrays (tag 86). NaN and infinities are refused both ways; −0.0 is kept as itself |
 | Counts, positions, kinds | Unsigned integers in shortest form; kinds from the registry |
 | Persistent names | The 128-bit `NameId` as 16 bytes, and the canonical encoding of its `TopoName` (section 20) |
-| Text | UTF-8. Text hashed into a name must be in Unicode Normalization Form C; the writer refuses other text |
+| Text | UTF-8. Text hashed into a name must be in Unicode Normalization Form C under the scheme's Unicode version, 18.0.0 for `NameScheme v1` (32.19); the writer refuses other text |
 | Sets and maps | Arrays sorted by key; never hash-map order |
 
-**Positions inside a body record.** A body's tables are written in its arena order (section 8.2) and refer to each other by position. These record positions are defined by the specification, valid only inside that body record, and never used as references: everything outside a body names its entities by `NameId`, as section 20.1 requires. Keeping arena order means a reloaded body equals the in-memory one index for index, so the next operation gives the same bits on a replica that built the body and on one that opened it.
+**Positions inside a body record.** A body's tables are written in its arena order (section 8.2), which is persistent-name order (owner action G76, 32.17), and refer to each other by position. These record positions are defined by the specification, valid only inside that body record, and never used as references: everything outside a body names its entities by `NameId`, as section 20.1 requires. Keeping arena order means a reloaded body equals the in-memory one index for index, so the next operation gives the same bits on a replica that built the body and on one that opened it.
 
 **Growing inside a record**, so a new kind or field needs only a minor version:
 
@@ -125,7 +125,7 @@ A project file is a container of SKG records. For Spare Construct's proposed SQL
 - Header and frames live in one blob per document; every body index names its frame by content ID and carries its own kernel edition.
 - The label and END record exist only in standalone files. Inside a container, integrity is each record's CRC plus its content ID.
 - Damage stays local: a failing record opens its body read-only with a structured error, and a bad chunk never stops the file (section 23). Salvage writes intact records out as a standalone file.
-- Container to `.skg` and back gives the same records, byte for byte.
+- Container to `.skgf` and back gives the same records, byte for byte.
 
 ## 24.6 Versions, and reading forever
 
@@ -136,7 +136,7 @@ A project file is a container of SKG records. For Spare Construct's proposed SQL
 - **The naming scheme** is recorded. Each `NameId` is recomputed from its encoding under that scheme, and a mismatch is damage. A new scheme is a new version, adopted by an operation that records the mapping.
 - **Writing.** A writer writes the current version, or an older minor version when the content fits, and otherwise refuses with a typed error listing the records that need the newer one. We may stop writing a version; we never stop reading it.
 - **The archive corpus** in `geom-test` keeps files from every released version, plus real files contributors give. Every pull request reads all of them on every target, and again through a simulated older reader that exercises every fallback. None is ever deleted.
-- **The specification is the source of truth.** `SPEC.md`, the registry and the CDDL describe every record; field tables are generated from code annotations. A second reader in Python, written from the specification alone, lives in `tools/` and must produce the same text dump of the whole archive. Two independent interoperating implementations is the IETF's bar for a full Internet Standard ([RFC 6410, section 2.2](https://www.rfc-editor.org/rfc/rfc6410#section-2.2)); we hold our format to it.
+- **The specification is the source of truth.** `SPEC.md`, the registry and the CDDL describe every record; field tables are generated from code annotations. A second reader in Python, written from the specification alone, lives in `geometry/tools/format-reader/` (27, accepted in 32.13) and must produce the same text dump of the whole archive. Two independent interoperating implementations is the IETF's bar for a full Internet Standard ([RFC 6410, section 2.2](https://www.rfc-editor.org/rfc/rfc6410#section-2.2)); we hold our format to it.
 - **A lossless text form**: CBOR's extended diagnostic notation with every float as a hexadecimal float (RFC 8610, Appendix G.5), converting both ways bit for bit. For diffs, fixtures and AI agents; never for storage.
 
 ## 24.7 Reading untrusted bytes, and trust on open
@@ -380,7 +380,7 @@ None of these crates is a kernel dependency: laz-rs uses `unsafe` (for example [
 | IGES 5.3, DGN, X3D, PRC | None | Availability and terms *unverified* |
 | IFC5 | Watched | buildingSMART's |
 
-**Subdivision exchange is a gap today**: OBJ has no creases, 3dm is blocked, DXF MESH is unverified. No crate owns USD yet. Mapping USD's Catmull-Clark scheme, with creases, corners and the options section 16.1 leaves to this chapter, onto `geom-subd` at OpenSubdiv parity ([09](../../../kit/notes/G01-evidence/09-freeform-subd-implicit.md), section 1) waits for USD's decision note and its TOST-1.0 check.
+**Subdivision exchange is a gap today**: OBJ has no creases, 3dm is blocked, DXF MESH is unverified. `geom-meshio` owns USD subdivision exchange, with Chaikin creasing in a namespaced attribute (owner action G312, 32.32). Mapping USD's Catmull-Clark scheme, with creases, corners and the options section 16.1 leaves to this chapter, onto `geom-subd` at OpenSubdiv parity ([09](../../../kit/notes/G01-evidence/09-freeform-subd-implicit.md), section 1) waits for USD's decision note and its TOST-1.0 check.
 
 ## 24.12 Testing exchange
 

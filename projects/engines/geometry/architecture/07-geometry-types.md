@@ -7,8 +7,8 @@ One curve family serves 2D and 3D. Each kind is stored as itself, exactly, never
 **Curves (2D and 3D)**
 
 - Line, ray, infinite line
-- Circle and arc; ellipse and elliptical arc (by parameter, not polar angle); parabola; hyperbola
-- Helix (exact; neither STEP nor IFC has one)
+- Circle and arc; ellipse and elliptical arc (by parameter, not polar angle; centre and major axis on the grid and a bounded axis ratio p/q, owner action G185, 32.25); parabola; hyperbola
+- Helix (exact; neither STEP nor IFC has one), cylindrical or conical: it stores a radius rate, so tapered springs and threads are exact too (owner action G239, 32.28)
 - Clothoid, and IFC 4.3's cosine, sine and second-, third- and seventh-order polynomial spirals, for road and rail alignments
 - Polynomial curve; circular involute
 - NURBS, rational or not, periodic or clamped
@@ -28,4 +28,4 @@ One curve family serves 2D and 3D. Each kind is stored as itself, exactly, never
 
 **How they are written in code.** Storage uses closed enums, one variant per kind: exhaustive matching, stable serialisation, and easy to read for people and AI. Behaviour uses traits: a curve can evaluate, give derivatives, give a conservative bound over any parameter interval, give derivative bounds, convert to NURBS with an error, split, reverse and transform. Procedural kinds carry their definition plus an optional cached approximation and its error. Trimming belongs to the topology's loops, not to a surface kind. Every algorithm's doc comment names its source: a NURBS Book algorithm number or a paper's DOI.
 
-**Transforms can change a kind.** A non-uniform scale turns a circle into an ellipse, and a mirror reverses an arc. Transforms are typed so that this is explicit. A floating-point transform counts as Rigid, or as a uniform scale, only when every length is kept, or scaled by one factor, within a relative ε_ang, certified in interval arithmetic (G03; a proposed second meaning of ε_ang, 6.5). Translations by whole grid steps, rotations by multiples of 90 degrees and mirrors stay exact; other rotations round to the grid and the result says so.
+**Transforms can change a kind.** A non-uniform scale turns a circle into an ellipse, and a mirror reverses an arc. Transforms are typed so that this is explicit. A floating-point transform counts as Rigid, or as a uniform scale, only when every length is kept, or scaled by one factor, within a relative ε_ang, certified in interval arithmetic (G03; a proposed second meaning of ε_ang, 6.5). Translations by whole grid steps, rotations by multiples of 90 degrees and mirrors stay exact. Every other rotation is a rational rotation, one type in 2D and 3D held as an integer quaternion: exact as given, or the closest within the requested angle, ε_ang by default, and then Certified in angle. Where it can, the kernel keeps a rotation as a frame or instance transform and leaves the geometry in its own frame. Applied to geometry, a rotated grid point rounds to the grid once and the result says so, unless rounding would flip a decision (6.3); a rotated plane stays exact only within 6.2's plane budget and is otherwise committed (13.2). Owner action G44 settled this (32.14).

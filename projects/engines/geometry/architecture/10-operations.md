@@ -10,7 +10,7 @@ Every operation, from "make a box" to "fillet these 40 edges", has the same shap
 fn operation(ctx: &OpContext, input: &OpInput) -> Result<OpOutput, OpError>
 ```
 
-- **`OpContext`** carries the operation's permanent ID from the operation log, its budgets (work units, memory, time), a cancellation token, and the precision level (final, or a coarser preview the caller asked for). It holds no randomness and no clock that can affect the result.
+- **`OpContext`** carries the operation's permanent ID from the operation log, its budgets (work units and logical memory), a cancellation token, and the precision level (final, or a coarser preview the caller asked for). It holds no randomness and no clock that can affect the result. A time limit is not a budget: it is the caller's deadline, which its cancellation token turns into a cancellation, and a cancelled run is never logged as the operation's result (owner action G71, 32.15).
 - **`OpOutput`** carries:
   - the new bodies, immutable;
   - the **history**: for every output face, edge and vertex, whether it is unchanged, modified, generated, split from, or merged from which inputs, and which inputs were deleted (section 20);
