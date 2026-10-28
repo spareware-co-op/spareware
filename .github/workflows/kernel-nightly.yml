@@ -1,0 +1,57 @@
+name: Kernel nightly
+
+# The geometry kernel's nightly checks (chapter 28.17 of the kernel architecture, "Nightly"):
+# what pull requests run with fixed seeds, run again every night with fresh ones. Piece G34 starts
+# it with the exact predicates (28.6): geom-num's predicate verification suite
+# (tests/verification.rs) and the predicates' attack tests (tests/attack_g28.rs, attack_g29.rs and
+# attack_g30.rs), with SPAREKIT_SEED set to the run's number in hexadecimal and printed first, so
+# each night draws new cases and a failure replays exactly: rerun the job, or set SPAREKIT_SEED to
+# the printed value. A failed property prints its shrunk input as a fixture line (`fixture[...]`),
+# to add to geom-num's tests/verification/fixtures.txt once the bug is fixed (28.16). Later pieces
+# add the rest of 28.17's nightly list (hours of fuzzing, slow fixtures, outside oracles).
+#
+# --locked: Cargo.lock is committed and must already list every dependency (28.13, the toolchain
+# guard).
+#
+# Supply chain: every action is pinned to the same full commit as in kernel.yml, checked against
+# its tag when it was pinned there (the tag beside each); update a pin in all the kernel workflows
+# together, and only after reviewing the new commit. The workflow can only read the repository.
+
+on:
+  schedule:
+    # 13:17 UTC every day: early morning in New Zealand, outside the busiest hours elsewhere.
+    - cron: "17 13 * * *"
+  # By hand, from the Actions tab, to test a change to this workflow or rerun a night.
+  workflow_dispatch:
+  # Run whole by kernel-release.yml on a release tag, with every other kernel workflow (28.17).
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  # The same pinned compiler as kernel.yml (chapter 28.13, the toolchain guard).
+  RUST_TOOLCHAIN: "1.99.0"
+
+jobs:
+  predicates:
+    name: Predicates with a fresh seed
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Tonight's seed, printed
+        run: |
+          set -euo pipefail
+          seed=$(printf '%016x' "$GITHUB_RUN_ID")
+          echo "SPAREKIT_SEED=$seed" >> "$GITHUB_ENV"
+          echo "seed: $seed (replay with SPAREKIT_SEED=$seed)"
+      - name: The predicate verification suite and the predicates' attack tests
+        run: >-
+          cargo test --locked --release -p geom-num
+          --test verification --test attack_g28 --test attack_g29 --test attack_g30

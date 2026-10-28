@@ -1,14 +1,17 @@
-//! The recursion check's model of the standard library and of `libm`: Rust source the check
-//! reads in place of theirs, so a call into them is checked as any other call is.
+//! The recursion check's model of the standard library, of `libm` and of the part of `rayon`
+//! that `geom-pool` calls: Rust source the check reads in place of theirs, so a call into them is
+//! checked as any other call is.
 //!
 //! What it does: the kernel's crates call `core`, `alloc` (and `std` in tests) and `libm`
 //! constantly, and the standard library calls kernel code back through what it is handed:
 //! closures (`Option::map`, `Iterator::fold`, `sort_by`) and trait implementations of kernel types
 //! (`sort` runs `Ord::cmp`, `Vec::clone` runs `Clone::clone`, formatting runs `Display::fmt`).
-//! Their real source is not read; instead [`CORE`] and [`LIBM`] are Rust written from their
-//! documented signatures, which [`sources`] gives the loader as two crates of role
+//! Their real source is not read; instead [`CORE`], [`LIBM`] and [`RAYON`] are Rust written from
+//! their documented signatures, which [`sources`] gives the loader as three crates of role
 //! [`Role::Model`]: `core` (also answering to `alloc` and `std`,
-//! [`crate::recursion::resolve::MODEL_ALIASES`]) and `libm`. A function of the model that calls
+//! [`crate::recursion::resolve::MODEL_ALIASES`]), `libm` and `rayon` (`geom-pool`, the one
+//! kernel crate that depends on it, runs its tasks on a rayon pool: `in_place_scope` runs its
+//! closure and `Scope::spawn` its body). A function of the model that calls
 //! back has a body that makes exactly those calls (`Option::map` calls `f`; `Map`'s `next` calls
 //! its closure; `[T]::sort` calls `T::cmp`); one that calls nothing back has the body `loop {}`.
 //! The type checker reads the model's bodies as it reads the kernel's, instance by instance, so a
@@ -30,10 +33,10 @@
 //!
 //! Method: the standard library's documented signatures and behaviour
 //! (<https://doc.rust-lang.org/std/>, <https://doc.rust-lang.org/core/>,
-//! <https://docs.rs/libm/0.2.16/libm/>), written as stubs: a library model, which the type
+//! <https://docs.rs/libm/0.2.16/libm/>, <https://docs.rs/rayon/1.12.0/rayon/>), written as stubs: a library model, which the type
 //! checker reads as ordinary code, under parametricity as above.
 //!
-//! Cost: two more crates for the loader to parse, about 5 000 lines; their instances are checked
+//! Cost: three more crates for the loader to parse, about 5 000 lines; their instances are checked
 //! only when kernel code calls them.
 
 use crate::recursion::model::{CrateSource, Role};
@@ -44,6 +47,9 @@ pub const CORE: &str = include_str!("stdlib/core.rs.txt");
 /// The model of `libm`.
 pub const LIBM: &str = include_str!("stdlib/libm.rs.txt");
 
+/// The model of the part of `rayon` that `geom-pool` calls.
+pub const RAYON: &str = include_str!("stdlib/rayon.rs.txt");
+
 /// Where the model of `core` is, relative to the workspace root (its text is [`CORE`]).
 pub const CORE_PATH: &str =
     "projects/engines/geometry/crates/geom-test/src/recursion/stdlib/core.rs.txt";
@@ -52,10 +58,14 @@ pub const CORE_PATH: &str =
 pub const LIBM_PATH: &str =
     "projects/engines/geometry/crates/geom-test/src/recursion/stdlib/libm.rs.txt";
 
+/// Where the model of `rayon` is, relative to the workspace root (its text is [`RAYON`]).
+pub const RAYON_PATH: &str =
+    "projects/engines/geometry/crates/geom-test/src/recursion/stdlib/rayon.rs.txt";
+
 /// The folder of the model's files.
 pub const FOLDER: &str = "projects/engines/geometry/crates/geom-test/src/recursion/stdlib";
 
-/// The model's crates, for the loader: `core` and `libm`.
+/// The model's crates, for the loader: `core`, `libm` and `rayon`.
 #[must_use]
 pub fn sources() -> Vec<CrateSource> {
     vec![
@@ -73,6 +83,13 @@ pub fn sources() -> Vec<CrateSource> {
             root: LIBM_PATH.to_owned(),
             role: Role::Model,
         },
+        CrateSource {
+            package: "rayon".to_owned(),
+            lib: "rayon".to_owned(),
+            folder: FOLDER.to_owned(),
+            root: RAYON_PATH.to_owned(),
+            role: Role::Model,
+        },
     ]
 }
 
@@ -82,6 +99,7 @@ pub fn read_model(path: &str) -> Option<String> {
     match path {
         CORE_PATH => Some(CORE.to_owned()),
         LIBM_PATH => Some(LIBM.to_owned()),
+        RAYON_PATH => Some(RAYON.to_owned()),
         _ => None,
     }
 }
@@ -123,7 +141,11 @@ mod tests {
 
     #[test]
     fn model_paths_are_the_files_on_disk() {
-        assert!(CORE_PATH.starts_with(FOLDER) && LIBM_PATH.starts_with(FOLDER));
+        assert!(
+            CORE_PATH.starts_with(FOLDER)
+                && LIBM_PATH.starts_with(FOLDER)
+                && RAYON_PATH.starts_with(FOLDER)
+        );
         assert_eq!(read_model(CORE_PATH).as_deref(), Some(CORE));
         assert!(read_model("elsewhere.rs").is_none());
     }

@@ -1,4 +1,4 @@
-//! The 87-item regulatory checklist (features/compliance.js section 14): which items apply to the pathway, what Spare Construct finds for the
+//! The 87-item regulatory checklist (packs/nz/compliance.js section 14): which items apply to the pathway, what Spare Construct finds for the
 //! items it computes, and the author's own record for the rest.
 
 use super::access::{access_check, operators, sh_check};

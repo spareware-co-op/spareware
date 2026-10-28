@@ -1,4 +1,4 @@
-//! Compliance checks against transport rules and standards (port of features/compliance.js and features/compliance-extra.js).
+//! Compliance checks against transport rules and standards (port of packs/nz/compliance.js and packs/nz/compliance-extra.js).
 //! Spare Construct: transport model.
 //!
 //! The first country pack: New Zealand's rules and guidance as versioned data and the checks that read a project against
