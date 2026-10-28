@@ -266,10 +266,10 @@
 
 #![forbid(unsafe_code)]
 
+pub mod avnaim;
 // Unix and Windows only, with the `judge` feature (on by default): Gungraun's summary model does not
 // build for WebAssembly, and the gate's measured runs leave it out (Cargo.toml).
 #[cfg(all(feature = "judge", any(unix, windows)))]
-pub mod avnaim;
 pub mod callgrind;
 pub mod canonical;
 pub mod catalogue;
