@@ -293,3 +293,28 @@ fn a_tolerance_equal_to_the_deviation_is_met() {
         .unwrap();
     assert_eq!((exact.deviation, again), (loose.deviation, removed));
 }
+
+#[test]
+fn a_candidate_weight_of_exactly_zero_is_refused() {
+    // Removal: in a quadratic with knots 0, 0, 0, 1/2, 1, 1, 1, removing 1/2 sweeps with α = β = 2
+    // (exact), so the new middle point's weight is ((2w1 − w0) + (2w2 − w3))/2, zero for weights
+    // 2, 1, 1, 2. The removal stops there, with nothing removed.
+    let basis = Basis::new(2, vec![0.0, 0.0, 0.0, 0.5, 1.0, 1.0, 1.0]).unwrap();
+    let pts = [
+        [0.0, 0.0, 0.0],
+        [1.0, 2.0, 0.0],
+        [2.0, 2.0, 1.0],
+        [3.0, 0.0, 1.0],
+    ];
+    let c = Curve::new_rational(basis, &pts, &[2.0, 1.0, 1.0, 2.0]).unwrap();
+    let (kept, removed) = c.remove_knot(0.5, 1, f64::MAX, &mut meter()).unwrap();
+    assert_eq!(removed, 0);
+    assert_eq!(kept.value, c);
+    // Reduction: a cubic Bezier piece reduces with α = β = 3/2, so the middle weight is
+    // ((3w1 − w0) + (3w2 − w3))/4, zero for weights 3, 1, 1, 3: refused, as outside any tolerance.
+    let cubic = Curve::new_rational(bezier(3), &pts, &[3.0, 1.0, 1.0, 3.0]).unwrap();
+    assert_eq!(
+        cubic.reduce_degree(f64::MAX, &mut meter()).unwrap_err(),
+        NurbsError::OutsideTolerance
+    );
+}

@@ -196,8 +196,9 @@ fn reduce_bezier<const D: usize>(
     set(qw, 0, get(pw, 0)?)?;
     set(qw, sub(p, 1)?, get(pw, p)?)?;
     let r = sub(p, 1)? / 2;
-    let from_left_to = if p % 2 == 1 { r.saturating_sub(1) } else { r };
-    for i in 1..=from_left_to {
+    // For odd p the step at i = r is overwritten by the middle point's average below, so the left
+    // sweep may run to r either way.
+    for i in 1..=r {
         let v = Hom::combine(
             get(&c.alf, i)?,
             get(pw, i)?,
