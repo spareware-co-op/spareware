@@ -801,6 +801,7 @@ dependencies = [
  "geom-math",
  "geom-num",
  "geom-run",
+ "geom-test",
 ]
 
 [[package]]

@@ -25,6 +25,28 @@
 //!
 //! Proposed in chapter 27, pending the owner's decision G08.
 //!
-//! Status: scaffold only; built by pieces G54, G55.
+//! Modules today (piece G54, the box tree):
+//!
+//! - [`bound`]: [`Aabb`], boxes of whole grid steps in 2D and 3D, from `geom-math`'s boxes exactly
+//!   or from float boxes rounded outward, padded by [`Inflation`].
+//! - [`tree`]: [`BoxTree`], built from [`Entry`]s, refitted and rebuilt, with its [`Node`]s and
+//!   canonical bytes.
+//! - [`build`]: the binned surface-area build, its limits ([`MAX_DEPTH`], [`LEAF_MAX`]) and its
+//!   parallel subtree phase.
+//! - [`query`]: the boxes that meet a box, the pairs within a tree and the pairs between two.
+//! - [`BvhError`], in [`error`]: why the tree could not build, change or answer.
+//!
+//! Status: the box tree built (G54); the Morton-sorted cell index to come (G55).
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
+
+pub mod bound;
+pub mod build;
+pub mod error;
+pub mod query;
+pub mod tree;
+
+pub use bound::{Aabb, Inflation, LIMIT};
+pub use build::{LEAF_MAX, MAX_DEPTH};
+pub use error::BvhError;
+pub use tree::{BoxTree, Entry, Node, NodeKind, REBUILD_FACTOR, Refitted};
