@@ -89,6 +89,11 @@ struct Arc {
 
 impl Arc {
     /// The arc of `[lo, hi]`, for finite `lo ≤ hi`.
+    ///
+    /// Inline: its two callers are [`periodic`]'s copies for sinpi and cospi, and out of line it
+    /// costs each call a call (on aarch64, where LLVM left it out of line once `periodic` became
+    /// generic: G41's count gate measured sinpi and cospi 6% and 7% more instructions).
+    #[inline]
     fn new(lo: f64, hi: f64) -> Arc {
         let (ds, de) = two_sum(hi, -lo);
         let full = at_least(ds, de, 2.0);
