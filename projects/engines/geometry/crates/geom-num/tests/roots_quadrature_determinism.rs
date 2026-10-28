@@ -98,7 +98,7 @@ type Integrand = fn(Real) -> Result<Real, NumError>;
 /// A function family with a zero at its second argument.
 type Family = fn(f64, f64) -> f64;
 
-fn integrands() -> [(Integrand, f64, f64); 5] {
+fn integrands() -> [(Integrand, f64, f64); 6] {
     [
         (|x| math::exp(x.get()), 0.0, 1.0),
         (
@@ -114,6 +114,9 @@ fn integrands() -> [(Integrand, f64, f64); 5] {
             0.0,
             3.0,
         ),
+        // Large values and a kink, so the error falls step by step through the gap between an
+        // absolute and a relative goal.
+        (|x| Real::new(100.0 * (x.get() - 0.3).abs()), 0.0, 1.0),
     ]
 }
 
