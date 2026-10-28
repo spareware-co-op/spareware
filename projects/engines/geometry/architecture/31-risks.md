@@ -612,6 +612,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | The content hash and the NameId hash, and their implementation | 20, 23, 24 | 32.20 (owner action G79) |
 | Committed planes and points as Exact or Certified; how bounds add up through a history; ε_step | 6, 9, 11, 13 | 32.21 (owner action G120) |
 | The predicate step ladder and rounded-input filters, as an addition to 6.2 | 6, 23 | 32.22 (owner action G121) |
+| SMLib's NLib layers as a CI oracle, with its Numerical Recipes routines stubbed out | 12, 29 | 32.23 (owner action G157) |
 
 ### Answered by the pieces built so far
 
@@ -916,7 +917,7 @@ Proposed in 31.5 (R23) and 32.5: one consolidated crate-list note settles all of
 | Can Kani prove whole 384-bit predicates in reasonable time? If not: per-step proofs, bit-range certificates, extreme values and fuzzing | 23 | Pieces "Wide-integer variants and WebAssembly benchmark" and "Kani harnesses: foundation" |
 | Thresholds: 100% of lines and branches and zero unexplained mutants in the foundation set; 90% elsewhere; the 5% gates; the 1,000-times loose-bound report; the scoreboard rule | 28 | Kernel owners; piece "Mutation and coverage gates" |
 | Wall clock: a nightly target miss blocks further merges until it is fixed (proposed), because per-pull-request wall clock varies by more than 5%; work units stay out of the speed gate | 23 | Pieces "Benchmark harness and merge gates (geom-bench)" and "Wall-clock and scaling gates" |
-| SMLib's limits as an oracle: booleans, fillets and offsets cannot be automated (they are nondeterministic), and the NLib routines solidcore lacks need new FFI shims and their own audit. Under 32.6's recommendation its Numerical Recipes routines are stubbed out | 29 | Piece "Oracles: SMLib NLib and geomdl" |
+| SMLib's limits as an oracle: booleans, fillets and offsets cannot be automated (they are nondeterministic), and the NLib routines solidcore lacks need new FFI shims and their own audit. Its Numerical Recipes routines are stubbed out, as owner action G157 decided (32.23) | 29 | Piece "Oracles: SMLib NLib and geomdl" |
 | Revit's tolerance values (VertexTolerance, ShortCurveTolerance, AngleTolerance), and whether its triangulation states an error bound | 28 | Piece "Revit truth-test harness" |
 | One call's stack budget on WebAssembly, which has no guard page: the predicate tests allow 32 KiB per call, a thirty-second of the default 1 MiB, and `ExactSum` puts 41 KB on the stack for one call (23.4). Set the stack the recursion check tests on, and each call's share | G02 and G25 builds; 19, 23 | Piece "Recursion check" |
 | Whether the full unit and property suites must also run in debug on wasm32, where they take over an hour, and at which tier; `target-cpu=native` has no wasm32 meaning | G02 build | Piece "CI matrix and check tiers" |

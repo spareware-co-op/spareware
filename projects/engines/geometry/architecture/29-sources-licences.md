@@ -602,7 +602,7 @@ These rules apply to people and AI agents alike. They add detail to AGENTS.md se
 8. **Oracles stay outside.**
    - Copyleft, C++ and other non-Rust oracles run as separate programs, each in its own CI container, and exchange only files with our code. Kernel crates never link them and releases never contain them. The owner confirmed this for GPL and LGPL programs (owner action G75, 32.6).
    - Oracle images are built in CI from pinned source and are never published. CI checks that no oracle image is pushed anywhere. If an owner later decides to publish one, the corresponding source of every GPL and LGPL component is published with it, and no image containing Numerical Recipes-derived code is ever distributed.
-   - The SMLib and solidcore oracle builds compile Numerical Recipes-derived routines. They are built and run only after an owner's yes.
+   - The SMLib and solidcore oracle builds contain Numerical Recipes-derived routines. Those routines are stubbed out and never compiled, and the builds run on that condition only (owner action G157, 32.23, which also answers 32.6's third question).
    - An oracle is used only where it is deterministic. For SMLib that means evaluation, knot operations, degree change, and fitting without random sampling. NLib's point-cloud fitting uses a hidden random generator whose sequence differs by platform, so it is excluded.
    - Disagreements are settled by exact or interval ground truth, then triaged.
    - Proprietary programs are never oracles for kernel behaviour. Whether to check that our exported files open in proprietary programs is an owner decision.

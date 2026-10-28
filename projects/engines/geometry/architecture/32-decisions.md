@@ -40,6 +40,7 @@ The board (30.5) also turns into a piece every narrower question that chapters 6
 | 32.20 | G79: hash functions | SHA-256 for content and, cut to 16 bytes, for NameIds; RustCrypto's `sha2` 0.11 approved, added to the no_std allow-list with its audit by G86 | 20, 23, 24 | G86, the canonical encoder and safe hash |
 | 32.21 | G120: committed planes and how bounds add up | Committed planes and points stay Certified; 32.3's option B: bounds per entity, added along its own history, against each step's stored inputs; ε_step = 16q joins the ladder | 6, 9, 11, 13 | G142 and G143 |
 | 32.22 | G121: the predicate step ladder | Identity, narrow exact and axis steps before the filter join 6.2; each step checked against the exact path; a filter switched off per target only where the count benchmarks show it loses | 6, 23 | G124, the predicate step ladder |
+| 32.23 | G157: SMLib as a CI oracle | Yes, NLib's evaluation, knot operations and degree elevation only, out of process; its Numerical Recipes routines stubbed out, never compiled (32.6's third question: no) | 12, 29 | G161, the SMLib and geomdl oracles |
 
 ## 32.1 The grid ladder (decision 1)
 
@@ -174,7 +175,7 @@ Why: without names, every approval falls to the owner, which is the bottleneck i
 - **What it never allows.** No kernel crate, test crate or release links, compiles in or ships any of it. Its container images are built from pinned source and never pushed to any registry, private ones included (rule 8; owner action G07 keeps them in the oracle repository's Actions cache). GPL test data is fetched at test time and never stored. An oracle is never the truth: where it disagrees with exact or interval ground truth, ground truth decides (29.1).
 - **Why yes.** Running a program is not copying it, so the kernel's licence line (principle 11, no GPL or AGPL code) is untouched. No exact outside check exists for curved booleans, and these tools catch bugs no permissive tool can: OpenCascade's `checkshape` and `bopargcheck`, CGAL's exact Nef polyhedra and arrangements, IfcConvert on our IFC output. Refusing them would shrink the outside checks to the permissive tools alone.
 
-The other four questions of this section stay as they are: reading GPL source still needs an owner's recorded yes per method; the Numerical Recipes routines in oracle builds are owner action G157's for SMLib; the method-only procedure and the Unlicense and CC0-1.0 rows are not part of this action.
+The other four questions of this section stay as they are: reading GPL source still needs an owner's recorded yes per method; the Numerical Recipes routines in oracle builds are answered by owner action G157 (32.23): stubbed out, never compiled; the method-only procedure and the Unlicense and CC0-1.0 rows are not part of this action.
 
 **Changes:** chapters 28 and 29, and the oracle pieces of chapters 11, 12, 15, 16, 18 and 24.
 
@@ -477,3 +478,17 @@ Why: one meaning of Exact is worth more than a few more results labelled Exact, 
 Why: an exact zero is the commonest case in a building, and the cheapest exact answer is the one the data already holds. The conditions keep the speed-up from ever costing a sign: every step is proven against the exact path, and a filter is dropped only where a reproducible count says it loses.
 
 **Changes:** 6.2 (the ladder joins it), 23.2, 31.7, and piece G124, which builds the three steps and the step statistics.
+
+## 32.23 SMLib as a CI oracle (owner action G157)
+
+**What it is.** SMLib's NURBS library, NLib, is the most complete permissive NURBS code outside our own (32.8, [13](../../../kit/notes/G01-evidence/13-vetting-smlib.md)). Run as a separate program, it can check our NURBS evaluation, knot insertion and removal and degree elevation on every change (28.10). But SMLib and NLib contain routines derived from Numerical Recipes, whose licence forbids copies (29.6), and 29.20's rule 8 lets its oracle build run only after an owner's yes. Section 32.6's third question asks whether such unpublished test builds may compile those routines.
+
+**Decided 2026-10-28 (owner action G157): yes to the oracle, no to compiling the Numerical Recipes routines.** Read with 12.17, 28.10, 29.5, 29.6, 29.20's rule 8, 32.6, 32.8 and evidence report 13.
+- **What runs.** SMLib's reference build, limited to NLib's evaluation, knot insertion and removal and degree elevation, built from pinned usd-brep and solidcore source in the oracle repository's own isolated container, never from the prebuilt `cpp-ref`, run out of process in fresh processes, and never authoritative: exact truth settles every disagreement (12.17, 28.10).
+- **What is never compiled.** The routines 29.6 names as derived from Numerical Recipes, in SMLib's core and in NLib (`N_SingleValueDecomposeSolve`, `N_RealMatrixSingleValueDecompose`, `N_FuncFindMinima`, `N_RealMatrixEigenValuesVectors` and its pythag helper, `M_TridiagonalSystem`, `M_CorneredTridiagonalSystem`, and SMLib's matrix, integrator and Brent routines), are replaced in the oracle build by stubs that stop the program with a message. A comparison that reaches a stub is reported as not covered, never as passed. This is 32.6's answer to its third question: copies of that code are not made, published or not.
+- **What never counts.** Fitting (NLib's point-cloud fitting draws from a hidden, platform-dependent random generator), booleans, fillets, offsets, validity and the intersector, which is nondeterministic on some paths, stay out (rule 8). A class of comparison is used only while repeated runs of it agree bit for bit. 12.17's proposals to run SMLib's best SSI classes and NLib projection are not part of this yes.
+- **Its image stays private** in the oracle repository's Actions cache, like every oracle image (rule 8; owner action G07).
+
+Why: an independent NURBS implementation catches errors in our evaluation and knot algorithms that our own tests share blind spots with (R24), at no licence cost once the excluded routines are stubbed. Compiling those routines, even privately, makes the copies their licence forbids; stubbing them loses nothing the NLib-layer comparisons need, since evaluation, knot operations and degree change do not call them.
+
+**Changes:** 12.17, 28.10, 29.20's rule 8, 32.6's third question, 31.7, and piece G161, which builds the SMLib and geomdl oracles.
