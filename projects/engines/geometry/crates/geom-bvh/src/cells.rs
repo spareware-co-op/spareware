@@ -486,16 +486,20 @@ impl CellIndex {
             };
             g.unsigned_abs().saturating_mul(g.unsigned_abs())
         };
-        // The cells the box meets on one axis: at most three, from the one holding its low end.
-        let cells = |l: u64, h: u64| -> [Option<u64>; 3] {
-            let (first, last) = (l >> level, h >> level);
-            [0, 1, 2].map(|k| first.checked_add(k).filter(|c| *c <= last))
+        // The cells on one axis from the one holding the box's low end: three, the box being
+        // narrower than two cells, kept inside the frame (the last cell of side 2^L holds offset
+        // 2^41 − 1). A cell past the box's high end lies farther than the radius, so the ball test
+        // below skips it.
+        let top = 0x1ff_ffff_ffffu64 >> level;
+        let cells = |l: u64| -> [Option<u64>; 3] {
+            let first = l >> level;
+            [0, 1, 2].map(|k| first.checked_add(k).filter(|c| *c <= top))
         };
-        let ([lx, ly, lz], [hx, hy, hz]) = (lo, hi);
+        let [lx, ly, lz] = lo;
         let [ox, oy, oz] = centre;
-        for cx in cells(lx, hx).into_iter().flatten() {
-            for cy in cells(ly, hy).into_iter().flatten() {
-                for cz in cells(lz, hz).into_iter().flatten() {
+        for cx in cells(lx).into_iter().flatten() {
+            for cy in cells(ly).into_iter().flatten() {
+                for cz in cells(lz).into_iter().flatten() {
                     // A cell the ball does not reach holds no answer.
                     let near = gap(cx, ox)
                         .saturating_add(gap(cy, oy))

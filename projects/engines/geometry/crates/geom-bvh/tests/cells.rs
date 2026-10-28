@@ -391,6 +391,21 @@ fn the_same_index_for_any_order_and_any_pool() {
 }
 
 #[test]
+fn many_runs_merge_into_one_order() {
+    // Five runs of the code sort, so the merges go round three times, an odd run passing through.
+    let seed = resolve("cell runs", Seed::DEFAULT).unwrap();
+    let mut rng = SplitMix64::new(seed);
+    let pts = points(&mut rng, 140_000, [0, 0, 0], 1 << 30);
+    let idx = CellIndex::build(&pts, &Exec::serial(), &mut meter()).unwrap();
+    check_order(&idx, &pts);
+    let pool = Threads(3);
+    assert_eq!(
+        CellIndex::build(&pts, &Exec::with_pool(&pool), &mut meter()).unwrap(),
+        idx
+    );
+}
+
+#[test]
 fn a_repeated_key_is_refused() {
     let pts = [
         Point {
