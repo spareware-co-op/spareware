@@ -48,6 +48,7 @@ The board (30.5) also turns into a piece every narrower question that chapters 6
 | 32.28 | G239: what the Sweep kind stores | The whole definition: profile, path, the full frame rule, twist and scale laws, bit-exact station frames, a tapered revolve's profile morph; the helix kind gains a radius rate, so conical helices are exact | 7, 13, 24 | G254, frame rules and laws |
 | 32.29 | G240: 576- and 768-bit predicates | Accepted into 6.2 for skeleton (`I576`) and mitre-offset (`I768`) event order only, each with a written derivation, a certificate, extreme tests and a filter, and measured; `I512` and `geom-math`'s wide stages accepted as built | 6, 13 | G251, the exact straight skeleton |
 | 32.30 | G241: the close_near_contacts cap | ε_heal's values as a second meaning: default 640q, at most 6,400q; larger requests refused | 6, 11 | G249, the close_near_contacts repair |
+| 32.31 | G285: the contact benchmark's licence | Wang et al.'s 2021 benchmark has no licence (all rights reserved), so it is not stored or run until the authors clear it, on a request the owner sends; G297 tests meanwhile on the authors' Apache-2.0 time-of-impact sample and our own exact cases | 19, 29 | G297, time of first contact |
 
 ## 32.1 The grid ladder (decision 1)
 
@@ -600,3 +601,17 @@ Why: exact roof and offset events are what make 13's skeleton exact once its pla
 Why: a separate rung would be a second number for the same judgement; reusing ε_heal's values keeps one answer to "how big a gap is a mistake".
 
 **Changes:** 6.5 (ε_heal's row and the proposed rungs), 11.5 and OQ-11.7, 31.7, and piece G249.
+
+## 32.31 The contact benchmark's licence (owner action G285)
+
+**What it is.** Piece G297 builds time of first contact by the Tight Inclusion method (MIT) and promises no false negative on Wang et al.'s 2021 benchmark for continuous collision detection: about 12,000 point-triangle and 15,000 edge-edge handcrafted queries and tens of millions from simulations ([doi:10.1145/3460775](https://doi.org/10.1145/3460775)). 19 asks an owner to check the benchmark's licence before it is used in tests, and 31.7 lists it among unverified licence facts.
+
+**Checked 2026-10-28.** The benchmark is published on NYU's Faculty Digital Archive ([collection](https://archive.nyu.edu/handle/2451/61518): the handcrafted, simulation, rounded and full-scene datasets). The [handcrafted record](https://archive.nyu.edu/handle/2451/61519) states no licence, only the archive's default: "protected by copyright, with all rights reserved, unless otherwise indicated". The authors' [Sample-Scalable-CCD-Data](https://github.com/Continuous-Collision-Detection/Sample-Scalable-CCD-Data/tree/d1de594b017d98b37be67f02f74e541e74804109) repository, a sample of their later time-of-impact dataset with exact ground truth (six simulation scenes, symbolic roots), is under Apache-2.0. Tight Inclusion's code is MIT (29.3).
+
+**Decided 2026-10-28 (owner action G285).** Read with 19.12, 28.4, 29.20 and 32.11's rule (i).
+- **The 2021 benchmark is not stored and not run in CI** until its terms are cleared: all rights reserved is neither permissive nor CC, so 32.11's rule (i) makes it at most fetch-only once cleared. Clearing means the authors putting it under a licence 29.2 allows, or granting the co-op written permission to use it in tests; a request to them is drafted in this piece's pull request, and the owner sends it, since it goes to outside people in the co-op's name.
+- **Meanwhile G297 tests on what is cleared:** the Apache-2.0 time-of-impact sample, stored with its notice (29.20, rule 4), Tight Inclusion's own MIT tests, and our own degenerate cases (parallel edges, touching at the start or end of the step, contacts at grid extremes), each with exact truth computed with `dashu` or `num-rational`. G297's done-when says so; the 2021 benchmark joins as a fetch-only corpus (G114) the day it is cleared.
+
+Why: the method is permissive and the promise is the same; only the data waits, and data with no licence cannot sit in a co-op's public CI (32.11).
+
+**Changes:** 19.12, 29.3's Tight Inclusion row, 31.7, and G297's done-when.

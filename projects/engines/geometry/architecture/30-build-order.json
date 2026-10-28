@@ -3858,7 +3858,7 @@
   "phase": "Phase 8",
   "crate": "geom-spatial",
   "size": "Medium",
-  "done_when": "The Tight Inclusion method (MIT) for linear motions with outward rounding and a certified earliest time; no false negative on Wang et al.'s benchmark.",
+  "done_when": "The Tight Inclusion method (MIT) for linear motions with outward rounding and a certified earliest time; no false negative on the authors' Apache-2.0 time-of-impact sample and our own exact degenerate cases, and on Wang et al.'s 2021 benchmark, fetch-only, once its authors clear its terms (32.31).",
   "depends_on": [
    "G151",
    "G54",
