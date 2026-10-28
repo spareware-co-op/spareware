@@ -64,7 +64,7 @@ The bytes are a pure function of the stored value, on every machine and for any 
 | Text | UTF-8. Text hashed into a name must be in Unicode Normalization Form C; the writer refuses other text |
 | Sets and maps | Arrays sorted by key; never hash-map order |
 
-**Positions inside a body record.** A body's tables are written in its arena order (section 8.2) and refer to each other by position. These record positions are defined by the specification, valid only inside that body record, and never used as references: everything outside a body names its entities by `NameId`, as section 20.1 requires. Keeping arena order means a reloaded body equals the in-memory one index for index, so the next operation gives the same bits on a replica that built the body and on one that opened it.
+**Positions inside a body record.** A body's tables are written in its arena order (section 8.2), which is persistent-name order (owner action G76, 32.17), and refer to each other by position. These record positions are defined by the specification, valid only inside that body record, and never used as references: everything outside a body names its entities by `NameId`, as section 20.1 requires. Keeping arena order means a reloaded body equals the in-memory one index for index, so the next operation gives the same bits on a replica that built the body and on one that opened it.
 
 **Growing inside a record**, so a new kind or field needs only a minor version:
 

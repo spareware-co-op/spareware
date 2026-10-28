@@ -606,6 +606,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | Rotations: section 7's rounding or chapter 14's rational rotations; one type for 2D and 3D; rotated planes against 6.2's budget | 7, 14 | 32.14 (owner action G44) |
 | Time budgets: a deadline only through the caller's cancellation, never a replayable outcome | 10, 23, 28 | 32.15 (owner action G71) |
 | The reference machine, and the kernel's shares of Spare Construct's targets | 23, 28 | 32.16 (owner action G72) |
+| Arena indices assigned in persistent-name order in every operation (8.2's amendment) | 8, 23, 24 | 32.17 (owner action G76) |
 
 ### Answered by the pieces built so far
 
@@ -854,7 +855,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 
 | Question | Raised in | Decided in |
 | --- | --- | --- |
-| Canonical body encoding: arena order with fixed 4,096-row chunks (24), or name order (23's draft). Name order first needs an "outputs independent of input arena order" invariant, with a shuffle test | 23, 24 | Piece "geom-format: body records" |
+| Canonical body encoding: arena order with fixed 4,096-row chunks (24), or name order (23's draft). Name order first needs an "outputs independent of input arena order" invariant, with a shuffle test | 23, 24 | 32.17 (owner action G76): arena order is name order, so both hold; the shuffle test is the builder's (G81); piece "geom-format: body records" writes it |
 | The content hash: SHA-256 or BLAKE3, in a safe portable implementation or an audited exception crate (both common crates use unsafe SIMD); and whether to adopt the name-ordered bucket-tree hash | 23 | Piece "Content hashes and cache keys", by benchmark |
 | Sign chunks written by a released kernel edition, or rely on per-chunk checker versions and lazy re-checks | 23 | Piece "Container mapping and trust on open" |
 | Bodies opened with fallbacks stay read-only until an acknowledgement is logged | 24 | Piece "Container mapping and trust on open" |
