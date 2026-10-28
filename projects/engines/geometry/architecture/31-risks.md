@@ -623,6 +623,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | The licence of Wang et al.'s 2021 contact benchmark | 19, 29 | 32.31 (owner action G285) |
 | Which crate owns USD subdivision exchange, and how Chaikin creasing is carried | 16, 24 | 32.32 (owner action G312) |
 | Alignment transitions as kinds or compositions, and their names | 7, 17, 26 | 32.33 (owner action G357) |
+| TIN ties in plan-coordinate order rather than by persistent name | 6, 17, 21 | 32.34 (owner action G358) |
 
 ### Answered by the pieces built so far
 
@@ -654,7 +655,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | Commit rounding is q/2 per coordinate, about 135 nm as a distance at q0. 6.5 should say so | 19 | Editorial fix to 6.5 |
 | A named import angle on the ladder for marking imported edges smooth, or no kernel default (chapter 18's choice) | 18 | Piece "Line classes, bands and continuity records" |
 | Designed tangency travels as a recorded intent, and downstream code never compares angles with epsilon_ang. Committed lines tilt by about q/L, and subdivision G1 leaves kinks of about 1e-5 rad | 15, 16, 18 | Decision note to 6.5; pieces "Local-operation driver and topology-change taxonomy" and "Line classes, bands and continuity records" |
-| Break TIN ties in plan-coordinate order (x, then y) rather than by persistent name, so identical points give identical surfaces whatever they are called | 17 | Decision note to 6.2 and 21; piece "Exact Delaunay core with name-ordered tie-breaks" |
+| Break TIN ties in plan-coordinate order (x, then y) rather than by persistent name, so identical points give identical surfaces whatever they are called | 17 | 32.34 (owner action G358): yes, for TIN ties only; piece "Exact Delaunay core" |
 | A stricter rule for local operations near tolerant edges of imported STEP models than 6.5's "work within, never raise" | 13 | Note to 6.5; piece "Local-operation driver and topology-change taxonomy" |
 | May a file's declared precision below 640q lower epsilon_heal's default? Today it can only raise it, up to the cap | 24 | Piece "geom-exchange basics: units, numbers to grid, frames, reports" |
 | Wider integers already in code: `geom-num`'s `I512`, the total path of the plane classification and commit (G02), and `geom-math`'s exact stages in `Wide<4>`, `Wide<10>`, `Wide<20>`, `Wide<34>` and `Wide<40>`, up to 2,560 bits (G03). Accept each into 6.2's list, 23's cost model, 28.7's proofs and 29.3, or remove it | G02 and G03 builds | 32.29 (owner action G240): accepted as built, each with its derivation and extreme tests; 23's cost model adds them when measured |
