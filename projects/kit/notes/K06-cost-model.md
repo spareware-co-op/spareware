@@ -124,11 +124,11 @@ The geometry kernel's checks (decision 32.4, recorded by kernel pieces G07 and G
 | GitHub Enterprise for the organisation, one seat (from 2026-10-28) | US$21 | It runs 500 jobs at once, 50 of them on macOS, where the free plan runs 20 and 5 ([Actions limits](https://docs.github.com/en/actions/reference/limits); [pricing](https://github.com/pricing), both read 2026-10-28). One push to a kernel pull request starts about 125 jobs, which queued for hours on the free plan. It covers every Spareware repository, not only the kernel's. Each further seat, for a member who needs one, adds US$21 |
 | Test runners for every pull request, nightly, weekly and release run (Linux, Windows and macOS on x86-64 and Arm, WebAssembly) | US$0 | GitHub's standard hosted runners; minutes are free for public repositories ([runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners), read 2026-10-22; [pricing](https://github.com/pricing), read 2026-10-28) |
 | Nightly fuzzing | US$0 | On the same runners; OSS-Fuzz, also free, if it accepts the project |
-| Store for the outside oracles' container images | US$0 | Private `ghcr.io` packages, inside the Enterprise plan's included 50 GB of storage and 100 GB of transfer a month ([GitHub Packages billing](https://docs.github.com/en/billing/concepts/product-billing/github-packages), read 2026-10-28) |
+| Store for the outside oracles' container images | US$0 | The oracle repository's GitHub Actions cache, free up to 10 GB; an evicted image is rebuilt from its pinned source. The kernel's rule 8 (chapter 29.20) keeps the images out of every registry, so the Enterprise plan's included package storage is not used for them |
 | Reference benchmark machine | US$0 | An owner's spare tower, lent every night from 19:00 to 08:00; its power is the owner's |
 | Licensed Revit machine | US$0 | An owner's workstation and Revit licence, lent; its power is the owner's |
 
-These cost more when GitHub ends its Intel macOS images (2027, so that leg needs a machine), when the organisation needs more seats, when the oracle images outgrow 50 GB, or when a lent machine is no longer lent.
+These cost more when GitHub ends its Intel macOS images (2027, so that leg needs a machine), when the organisation needs more seats, or when a lent machine is no longer lent.
 
 The team row is the reason the fee keeps falling past 10,000 a month. It is too low there: a bigger app needs a bigger team, which this model does not yet cost.
 
