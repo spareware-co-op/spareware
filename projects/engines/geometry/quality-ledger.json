@@ -1559,6 +1559,27 @@
       "occurrences": 1,
       "piece": "G41",
       "reason": "A lookup on a limb array or slice whose index is always in range (`get` or `get_mut` with i below the length), or from_i128's v − i128::MIN for a negative v, which never overflows: its `None` side never runs. The Verus twin (verus/wide.rs, token for token this code) proves each function exact for every width, which rules these arms out; G41's wide-integer harnesses prove it again on the shipped build."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/avnaim.rs",
+      "line_text": "None",
+      "occurrences": 2,
+      "piece": "G41",
+      "reason": "sign_of_det2's and sign_of_det3's refusals after their pass limits (ITERATIONS, DET3_PASSES), which no input reaches: a sign_of_det2 pass answers or leaves a second row below half the first at least every two passes, and a sign_of_det3 pass at least halves the largest height (the module header's argument). avnaim is chapter 23.3's reference, not a shipped path; a bounded proof of the pass limits, by G41's method, removes these."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/wide32.rs",
+      "line_text": "if let Some(top) = limbs.last_mut() {",
+      "occurrences": 2,
+      "piece": "G41",
+      "reason": "Wide32's extremes set their top limb through last_mut, which always finds one: L >= 2 is checked when the width is used (AT_LEAST_TWO_LIMBS), so the None arm and the end of the if let never run. As for Wide's same lines, G41's bounded proof of no panic in geom-num removes them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/wide32.rs",
+      "line_text": "}",
+      "occurrences": 2,
+      "piece": "G41",
+      "reason": "Wide32's extremes set their top limb through last_mut, which always finds one: L >= 2 is checked when the width is used (AT_LEAST_TWO_LIMBS), so the None arm and the end of the if let never run. As for Wide's same lines, G41's bounded proof of no panic in geom-num removes them."
     }
   ]
 }

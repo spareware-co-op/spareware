@@ -138,18 +138,11 @@ pub fn sign_of_det2(x1: i64, y1: i64, x2: i64, y2: i64) -> Option<Sign> {
         (false, false) => {}
     }
     for _ in 0..ITERATIONS {
-        // Every entry is positive here, except a second row that has reached zero.
-        if x2 == 0 || y2 == 0 {
-            return Some(flipped(
-                if x2 == 0 && y2 == 0 {
-                    Sign::Zero
-                } else if x2 == 0 {
-                    Sign::Positive
-                } else {
-                    Sign::Negative
-                },
-                flip,
-            ));
+        // Every entry is positive here except y2, which a pass can bring to zero. x2 never
+        // reaches zero: a pass that goes on leaves xr > 0 (xr = 0 answers) or x1 − xr > 0 there.
+        if y2 == 0 {
+            // D = −y1·x2 with y1, x2 > 0.
+            return Some(flipped(Sign::Negative, flip));
         }
         // Order the rows so that x2 ≥ x1 and y2 ≥ y1, or settle the sign.
         if x2 < x1 && y2 < y1 {
@@ -158,8 +151,8 @@ pub fn sign_of_det2(x1: i64, y1: i64, x2: i64, y2: i64) -> Option<Sign> {
         } else if x1 <= x2 && y2 < y1 {
             // x1·y2 < x2·y1.
             return Some(flipped(Sign::Negative, flip));
-        } else if x1 > x2 && y2 >= y1 {
-            // x1·y2 > x2·y1.
+        } else if x1 > x2 {
+            // y2 ≥ y1 here (the two tests before take every y2 < y1), so x1·y2 > x2·y1.
             return Some(flipped(Sign::Positive, flip));
         }
         // x2 = k·x1 + xr, 0 ≤ xr < x1, and yr = y2 − k·y1, without forming k·y1 when it would

@@ -12,6 +12,7 @@
 //! - A rounded input one past its declared range: every variant refuses it.
 //! - Avnaim et al.'s signs of orient2d and orient3d (`geom_num::avnaim`), the reference
 //!   chapter 23.3 names, give the shipped exact signs on the same inputs.
+//! - `Wide32`'s extremes, order and `Debug` form, worked by hand.
 //!
 //! The shipped paths are tested against big integers in `generated_predicates.rs` and
 //! `attack_g29.rs`, so agreement with them is agreement with the exact value. Values of different
@@ -43,7 +44,7 @@ use geom_num::generated::{
     ssi_side, ssi_weight, tpi_side, tpi_weight,
 };
 use geom_num::grid::{COORD_MAX, P2, P3};
-use geom_num::{I512, Wide};
+use geom_num::{I512, Wide, Wide32};
 use geom_test::rng::SplitMix64;
 use geom_test::seed::{self, Seed};
 
@@ -248,4 +249,33 @@ fn a_rounded_input_past_its_range_is_refused_by_every_variant() {
     assert_eq!(lpi_weight::value(n + 1, n, n, p, p), None);
     assert_eq!(plain::lpi_weight_value(n + 1, n, n, p, p), None);
     assert_eq!(limbs::lpi_weight_value(n + 1, n, n, p, p), None);
+}
+
+/// `Wide32`'s extremes, its order and its `Debug` form (the two's-complement bits, most significant
+/// limb first), worked by hand at 128 and 64 bits.
+#[test]
+fn wide32_extremes_order_and_debug_by_hand() {
+    let (max, min) = (Wide32::<4>::max_value(), Wide32::<4>::min_value());
+    assert_eq!(max.to_i128(), Some(i128::MAX));
+    assert_eq!(min.to_i128(), Some(i128::MIN));
+    assert_eq!(
+        Wide32::<2>::max_value().to_i128(),
+        Some(i128::from(i64::MAX))
+    );
+    assert_eq!(
+        Wide32::<2>::min_value().to_i128(),
+        Some(i128::from(i64::MIN))
+    );
+    let zero = Wide32::<4>::ZERO;
+    assert!(min < zero && zero < max && min < max);
+    assert_eq!(max.partial_cmp(&min), Some(std::cmp::Ordering::Greater));
+    assert_eq!(zero.partial_cmp(&zero), Some(std::cmp::Ordering::Equal));
+    assert_eq!(
+        format!("{:?}", Wide32::<4>::from_i64(-2)),
+        "Wide32<4>(0xfffffffffffffffffffffffffffffffe)"
+    );
+    assert_eq!(
+        format!("{:?}", Wide32::<2>::from_i64(1)),
+        "Wide32<2>(0x0000000000000001)"
+    );
 }
