@@ -20,10 +20,8 @@
 //! Sections: 14.8, 19.9 and 23.7; open questions OQ-11.2 and OQ-19.1; chapter 27 ("Who owns what"),
 //! in the kernel architecture (`projects/engines/geometry/architecture/`).
 //!
-//! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
+//! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
-//!
-//! Proposed in chapter 27, pending the owner's decision G08.
 //!
 //! Status: scaffold only; built by pieces G54, G55.
 #![cfg_attr(not(test), no_std)]

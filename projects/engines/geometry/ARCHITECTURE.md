@@ -65,7 +65,25 @@ flowchart TB
 | Operations | Everything that makes or changes shapes, each a pure function with a typed result | The core |
 | Facade | `engine-geometry`: the one stable interface programs and bindings use | Operations and core |
 
-Dependencies go down only. Programs depend only on the facade. The kernel knows nothing about walls, doors or programs: each program turns its own elements into kernel calls.
+The diagram and table group the kernel's crates. In the crate table they sit in thirteen numbered layers, accepted by the owner on 2026-10-28 ([32.13](architecture/32-decisions.md#3213-the-crate-table-and-layers-owner-action-g08)); each crate's layer and dependencies are in [chapter 27](architecture/27-crates-folders.md):
+
+| Layer | Crates |
+| --- | --- |
+| 1. Numbers and the contract | `geom-run`, `geom-num`, `geom-linalg`, `geom-op` |
+| 2. Geometry | `geom-math`, `geom-bvh`, `geom-nurbs`, `geom-curve`, `geom-surface` |
+| 3. Topology | `geom-topo`, `geom-name` |
+| 4. Intersections | `geom-intersect` |
+| 5. Checker | `geom-check` |
+| 6. Arrangements | `geom-poly`, `geom-bool`, `geom-2d` |
+| 7. Meshes and spatial | `geom-mesh`, `geom-spatial` |
+| 8. Other representations | `geom-subd`, `geom-field`, `geom-cloud` |
+| 9. Shared operation services | `geom-skeleton`, `geom-sweep`, `geom-make` |
+| 10. Operations | `geom-blend`, `geom-offset`, `geom-sketch`, `geom-profile`, `geom-terrain`, `geom-align`, `geom-draw`, `geom-convert`, `geom-combine`, `geom-panel`, `geom-analysis` |
+| 11. Domain toolkits | `geom-sheet`, `geom-thread`, `geom-board`, `geom-stair`, `geom-civil`, `geom-assembly`, each when a second program needs it |
+| 12. Format and exchange | `geom-format`, `geom-exchange`, `geom-p21`, `geom-heal`, and the format crates |
+| 13. Facade | `engine-geometry`, `geom-pool` and the binding crates |
+
+Dependencies go down only, or along an edge chapter 27 allows inside one layer, and only to a crate's public interface. Programs depend only on the facade. The kernel knows nothing about walls, doors or programs: each program turns its own elements into kernel calls.
 
 ## The chapters
 

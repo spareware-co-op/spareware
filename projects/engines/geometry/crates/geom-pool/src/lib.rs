@@ -26,17 +26,16 @@
 //! Sections: 23.4 and 29.4; open question OQ-23.4; chapters 21 and 27 ("Proposed rule changes"), in
 //! the kernel architecture (`projects/engines/geometry/architecture/`).
 //!
-//! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
+//! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
 //! Licences of the published crates it names, each record checked by the map (`depends`):
 //!
 //! - MIT OR Apache-2.0: `rayon`.
 //!
-//! Proposed in chapter 27, pending the owner's decision G08. Its name, folder and the facade's edge
-//! to it are open (31.7): 23.4 proposes instead `engine-geometry-pool`, beside the facade in
-//! `projects/engines/crates/`, with a `no_std` facade that re-exports only the `Pool` trait. This
-//! crate follows chapter 27's table, as the board and `geom-run` (G04) do.
+//! Its name, folder and the facade's edge to it are chapter 27's, accepted by owner action G08
+//! (section 32.13) in place of 23.4's `engine-geometry-pool` beside the facade in
+//! `projects/engines/crates/`.
 #![forbid(unsafe_code)]
 
 #[cfg(not(target_family = "wasm"))]

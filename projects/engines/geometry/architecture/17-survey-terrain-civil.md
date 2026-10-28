@@ -261,7 +261,7 @@ Point clouds are reference only (section 9): never part of a solid, never stored
 
 ## 17.12 References onto terrain and alignments (`geom-name`, with `geom-terrain` and `geom-align`)
 
-Section 20.4 resolves references to named entities and carriers. Civil work needs two more reference forms and one more target, under the same rules: resolve exactly, follow history, or fail with a reason; never guess. The types, and the step that follows names through history, live in `geom-name`. Turning a resolved reference into a position needs the surface or the alignment, so it lives in the crate that owns each: `geom-terrain` for `OnSurface`, `geom-align` for `Station`. `geom-name` depends on neither, so the layers hold. Section 27's job lines for these three crates should say so (open question 3).
+Section 20.4 resolves references to named entities and carriers. Civil work needs two more reference forms and one more target, under the same rules: resolve exactly, follow history, or fail with a reason; never guess. The types, and the step that follows names through history, live in `geom-name`. Turning a resolved reference into a position needs the surface or the alignment, so it lives in the crate that owns each: `geom-terrain` for `OnSurface`, `geom-align` for `Station`. `geom-name` depends on neither, so the layers hold. Chapter 27's job lines for these three crates say so (accepted in 32.13), which answers open question 3.
 
 ```rust
 enum PlacementRef {
