@@ -1550,7 +1550,7 @@
   "phase": "Phase 4",
   "crate": "geom-num, geom-poly",
   "size": "Medium",
-  "done_when": "Index checks for coplanarity, the narrow exact i64 path and axis steps before the filter; every step agrees with the exact path; step shares measured on three corpora.",
+  "done_when": "Index checks for coplanarity, the narrow exact i64 path and axis steps before the filter; every step agrees with the exact path; a filter skipped per target only where the count benchmarks show it loses, chosen at build time (32.22); step shares measured on three corpora.",
   "depends_on": [
    "G123",
    "G42",
