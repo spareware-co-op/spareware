@@ -619,6 +619,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | `geom-thread`, `geom-stair` and `geom-civil` in the kernel now, or in Spare Construct under 26.1 | 17, 26, 27 | 32.27 (owner action G238) |
 | What the Sweep kind stores, and the conical helix | 7, 13, 24 | 32.28 (owner action G239) |
 | Predicates of 576 and 768 bits for skeleton and mitre-offset events; the wide integers already in code | 6, 13 | 32.29 (owner action G240) |
+| The default and the cap of `close_near_contacts` | 6, 11 | 32.30 (owner action G241) |
 
 ### Answered by the pieces built so far
 
