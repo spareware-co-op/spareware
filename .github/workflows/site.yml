@@ -34,6 +34,9 @@ jobs:
           mkdir -p _site
           cp -r site/. _site/
           cp design/tokens.css _site/tokens.css
+          # the shared ribbon the desktop-style demos load as ../../../design/ribbon/ (from a demo page that resolves to /design/ribbon/)
+          mkdir -p _site/design
+          cp -r design/ribbon _site/design/ribbon
           for dir in projects/*/; do
             slug=$(basename "$dir")
             case "$slug" in _template) continue ;; esac
