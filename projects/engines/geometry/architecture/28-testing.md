@@ -343,7 +343,7 @@ As built (G10): the workflows of each tier, and what no workflow runs yet. `geom
 
 | Tier | Workflows | Not run yet, and the piece that adds it |
 | --- | --- | --- |
-| Every pull request | `kernel.yml`, `kernel-build.yml`, `kernel-gate.yml`, `kernel-dev.yml`, `kernel-golden.yml`, `kernel-bench.yml`, `kernel-fuzz.yml`, `kernel-quality.yml` | The checker after every operation (G84); fixtures and the fails-on-base check (G97); reference implementations, with the operations they check; the completeness gate (G103) |
+| Every pull request | `kernel.yml`, `kernel-build.yml`, `kernel-gate.yml`, `kernel-dev.yml`, `kernel-golden.yml`, `kernel-bench.yml`, `kernel-fuzz.yml`, `kernel-quality.yml`, `kernel-certificates.yml` (on a change to the generator or its filters) | The checker after every operation (G84); fixtures and the fails-on-base check (G97); reference implementations, with the operations they check; the completeness gate (G103) |
 | Nightly | `kernel-nightly.yml`, `kernel-fuzz-campaign.yml` | Fresh seeds beyond the predicates' suite (the law catalogues, G69 and G155); slow fixtures (G97); outside oracles (G113); fetched corpora (G114); all proofs, once each has its budget (G41, G43); filter-bound certificates (G40); wall-clock and scaling benchmarks on the reference machine (G107, G452) |
 | Weekly | `kernel-quality.yml` | Nothing |
 | Toolchain or dependency change | `kernel.yml` | The format museum (G99) |
