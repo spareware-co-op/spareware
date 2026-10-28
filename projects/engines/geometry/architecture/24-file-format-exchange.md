@@ -20,15 +20,15 @@ The native format must be readable forever without any Spareware program, give t
 | SQLite | No: page layout depends on history | Any SQLite tool | A container, not an encoding (24.5) |
 | Protocol Buffers | No: "Deterministic serialization is not canonical" ([protobuf.dev](https://protobuf.dev/programming-guides/serialization-not-canonical/)) | Many | No |
 
-So SKG (Spare Kit Geometry; name and `.skg` extension proposed) is deterministic CBOR, an IETF Internet Standard (STD 94), with a record layer on top. CBOR brings what a format of our own would not: anyone can decode its structure with an off-the-shelf tool; every item is self-delimiting, so any unknown part can be skipped; typed arrays ([RFC 8746](https://www.rfc-editor.org/rfc/rfc8746)) hold coordinate columns as raw little-endian numbers; and the canonical rules are already written. The record layer adds a registry of record types, required and optional records, checksums, content IDs, chunks and fallbacks.
+So SKG (Spare Kit Geometry; standalone files end `.skgf`, owner action G77, 32.18) is deterministic CBOR, an IETF Internet Standard (STD 94), with a record layer on top. CBOR brings what a format of our own would not: anyone can decode its structure with an off-the-shelf tool; every item is self-delimiting, so any unknown part can be skipped; typed arrays ([RFC 8746](https://www.rfc-editor.org/rfc/rfc8746)) hold coordinate columns as raw little-endian numbers; and the canonical rules are already written. The record layer adds a registry of record types, required and optional records, checksums, content IDs, chunks and fallbacks.
 
 Two ideas come from Rhino's 3dm format, not its format: skippable typed chunks with a checksum, and geometry pools that topology refers to by index ([04](../../../kit/notes/G01-evidence/04-nurbs-surfaces.md), section 1; [opennurbs_3dm.h L17-52](https://github.com/mcneel/opennurbs/blob/eb92af3ba1806b0a34a99aba0d3bda83e3d46083/opennurbs_3dm.h#L17-L52)). 3dm's specification is effectively its C++ code, its type codes are McNeel's, and it has no exact ellipse, cone or clothoid.
 
-`geom-format` reads and writes SKG. How a program packs records into its project file is the program's choice (24.5). Standalone `.skg` files carry test corpora, bug reports, examples for AI agents, and geometry passed between Spareware programs.
+`geom-format` reads and writes SKG. How a program packs records into its project file is the program's choice (24.5). Standalone `.skgf` files carry test corpora, bug reports, examples for AI agents, and geometry passed between Spareware programs.
 
 ## 24.2 Records
 
-A standalone file is a labelled CBOR Sequence: the 12-byte label of [RFC 9277](https://www.rfc-editor.org/rfc/rfc9277) (`d9 d9 f8 da`, a four-byte protocol tag, `43 42 4f 52`; proposed tag `0x534B4746`, "SKGF", to be registered with IANA), a header record, the records, and an END record.
+A standalone file is a labelled CBOR Sequence: the 12-byte label of [RFC 9277](https://www.rfc-editor.org/rfc/rfc9277) (`d9 d9 f8 da`, a four-byte protocol tag, `43 42 4f 52`; tag `0x534B4746`, 1397442374, "SKGF", requested from IANA's first-come-first-served range, 32.18), a header record, the records, and an END record.
 
 ```cddl
 record = [
@@ -125,7 +125,7 @@ A project file is a container of SKG records. For Spare Construct's proposed SQL
 - Header and frames live in one blob per document; every body index names its frame by content ID and carries its own kernel edition.
 - The label and END record exist only in standalone files. Inside a container, integrity is each record's CRC plus its content ID.
 - Damage stays local: a failing record opens its body read-only with a structured error, and a bad chunk never stops the file (section 23). Salvage writes intact records out as a standalone file.
-- Container to `.skg` and back gives the same records, byte for byte.
+- Container to `.skgf` and back gives the same records, byte for byte.
 
 ## 24.6 Versions, and reading forever
 

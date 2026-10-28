@@ -35,6 +35,7 @@ The board (30.5) also turns into a piece every narrower question that chapters 6
 | 32.16 | G72: the reference machine and the kernel's shares | The owner's spare tower, timed on its 8 performance cores; 23.1's shares, browser estimates and 5 µs overhead accepted until the scenario benchmarks measure them | 23, 28 | G107, the reference runner |
 | 32.6 | G75: copyleft tools as CI oracles | Yes, as 32.6 recommends: CGAL, OpenCascade, IfcConvert and the others run in CI as separate programs only, from a separate repository, never linked, shipped or pushed to a registry | 24, 28, 29 | G113, the oracle runner |
 | 32.17 | G76: arena indices in name order | Accepted as 8.2 proposes: the builder assigns indices in persistent-name order in every operation, so arena order, tie order and hash order are one; a shuffle test holds every operation to it | 8, 23, 24 | G81, the builder |
+| 32.18 | G77: the CBOR tag and the file name | Tag 0x534B4746 ("SKGF"), unassigned, requested from IANA by the owner; the name SKG stays; the extension becomes `.skgf`, because Skrooge already uses `.skg` | 24 | G93, the native format specification |
 
 ## 32.1 The grid ladder (decision 1)
 
@@ -396,3 +397,14 @@ Why: the machine exists, is lent at no cost, and is an 8-performance-core x86-64
 - **It is enforced, not hoped for.** The builder (G81) sorts by name before a body is published, whatever order a parallel builder's `count_then_fill` filled its scratch arrays in. Its tests include the invariant 31.7 asks for: every operation's output is the same when its inputs' arenas are shuffled, checked by a shuffle test on every operation's fixtures.
 
 **Changes:** 8.2 (the amendment is accepted), 24.2 (positions are name order), 31.7, and piece G81's done-when.
+
+## 32.18 The CBOR tag and the file name (owner action G77)
+
+**What it is.** A standalone native file opens with the 12-byte label of [RFC 9277](https://www.rfc-editor.org/rfc/rfc9277): the CBOR Sequence tag 55800, a four-byte protocol tag of our own, and the byte string `BOR` (24.2). Chapter 24 proposes the tag `0x534B4746`, the ASCII letters "SKGF", the format's name SKG (Spare Kit Geometry) and the extension `.skg`, and asks an owner to register the tag with IANA and check the name and the extension for clashes.
+
+**Decided 2026-10-28 (owner action G77).** Checked against IANA's CBOR tags registry, RFC 9277 and RFC 8949 section 9.2 (all read 2026-10-28), and a search for other uses of the name and the extension.
+- **The tag is `0x534B4746` (1397442374), "SKGF".** It is unassigned: IANA's registry lists 1347571543 to 1398229315 as one unassigned block. It lies in the first-come-first-served range (32768 and up), in RFC 9277's four-byte range for protocol tags (0x01000000 to 0xFFFFFFFF), with no zero byte, as RFC 9277 advises, and its four bytes spell a mnemonic, as RFC 9277 encourages. A first-come-first-served tag needs only a request to IANA using RFC 8949's template; the request is drafted in this piece's pull request, and the owner sends it, because it is a request to an outside body made in the co-op's name. Until IANA confirms it, the specification (G93) names the tag as requested.
+- **The name SKG stays.** No file format, geometry program or CAD tool by that name was found. The letters are also a brand of massage devices and Thessaloniki airport's code, neither in software. A trade-mark search was not made; the name is the format's, inside the kernel, not a product name.
+- **The extension changes from `.skg` to `.skgf`.** `.skg` is already taken: it is the native document format of Skrooge, KDE's personal finance manager ([skrooge.org](https://skrooge.org/features/)), packaged by the main Linux distributions, so on a Linux desktop a `.skg` file would open in a finance program. No use of `.skgf` was found, and it matches the four letters of the file's own label, so the name on the file and the bytes inside it say the same thing.
+
+**Changes:** 24.1, 24.2, 24.5's container check, 31.7 and the glossary. Piece G93 writes the tag and the extension into SPEC.md and REGISTRY.md.
