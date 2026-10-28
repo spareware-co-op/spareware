@@ -278,7 +278,7 @@ impl<const D: usize> Surface<D> {
             });
         }
         let (p, q) = (self.u.degree(), self.v.degree());
-        let (tu, tv) = (if du < p { du } else { p }, if dv < q { dv } else { q });
+        let (tu, tv) = (du.min(p), dv.min(q));
         let su = self.u.span(u, limits.0)?;
         let sv = self.v.span(v, limits.1)?;
         let mut ndu = [0.0_f64; WIDTH * WIDTH];
@@ -305,7 +305,7 @@ impl<const D: usize> Surface<D> {
             }
         }
         if self.weights.is_some() {
-            leibniz2(out, &wders, (du, dv), (tu, tv))?;
+            leibniz2(out, &wders, (du, dv))?;
         }
         for row in out.iter() {
             finite(*row)?;
@@ -321,7 +321,6 @@ fn leibniz2<const D: usize>(
     out: &mut [[f64; D]],
     wders: &[f64],
     orders: (usize, usize),
-    tops: (usize, usize),
 ) -> Result<(), NurbsError> {
     let (du, dv) = orders;
     let cols = add(dv, 1)?;
@@ -329,13 +328,9 @@ fn leibniz2<const D: usize>(
     let bins = pascal()?;
     let bin =
         |n: usize, k: usize| -> Result<f64, NurbsError> { get(&bins, add(mul(n, WIDTH)?, k)?) };
-    let wd = |k: usize, l: usize| -> Result<f64, NurbsError> {
-        if k > tops.0 || l > tops.1 {
-            Ok(0.0)
-        } else {
-            get(wders, add(mul(k, WIDTH)?, l)?)
-        }
-    };
+    // Zero above (tu, tv), where `derivs` wrote nothing: the weight function's degree.
+    let wd =
+        |k: usize, l: usize| -> Result<f64, NurbsError> { get(wders, add(mul(k, WIDTH)?, l)?) };
     let at_ = |k: usize, l: usize| -> Result<usize, NurbsError> { add(mul(k, cols)?, l) };
     for k in 0..=du {
         for l in 0..=dv {
@@ -385,7 +380,8 @@ fn pascal() -> Result<[f64; WIDTH * WIDTH], NurbsError> {
         for k in 1..=n {
             let above = sub(row, WIDTH)?;
             let left = get(&t, add(above, sub(k, 1)?)?)?;
-            let right = if k < n { get(&t, add(above, k)?)? } else { 0.0 };
+            // Entry n of the row above was never set: it is still 0.
+            let right = get(&t, add(above, k)?)?;
             set(&mut t, add(row, k)?, left + right)?;
         }
     }

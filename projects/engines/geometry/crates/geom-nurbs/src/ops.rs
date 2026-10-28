@@ -127,15 +127,30 @@ pub(crate) fn p_max<const D: usize>(
         let norm = Interval::norm(&coords)
             .map_err(|_| NurbsError::NotFinite)?
             .hi();
-        if norm > best {
-            best = norm;
-        }
+        best = larger(best, norm);
     }
     Ok(best)
 }
 
 /// The certified rounding of a result: how far the shape with control points `result` can lie
 /// from the shape with the exact points that `enclosure` holds (see the module's guarantees).
+/// Whether `w` can be a weight: finite and above zero. The one test of a weight in the crate.
+pub(crate) fn usable_weight(w: f64) -> bool {
+    w.is_finite() && w > 0.0
+}
+
+/// The larger of two bounds, neither NaN. At a tie either is the same number: every bound here is
+/// an interval's upper end, a width or a weight, never −0 (intervals keep a zero end as +0).
+pub(crate) fn larger(a: f64, b: f64) -> f64 {
+    if b > a { b } else { a }
+}
+
+/// The smaller of two weights or bounds, neither NaN; at a tie either is the same number, as for
+/// [`larger`].
+pub(crate) fn smaller(a: f64, b: f64) -> f64 {
+    if b < a { b } else { a }
+}
+
 pub(crate) fn rounding<const D: usize>(
     result: &[Hom<f64, D>],
     enclosure: &[Hom<Interval, D>],
@@ -159,20 +174,13 @@ pub(crate) fn rounding<const D: usize>(
         let norm = Interval::norm(&widths)
             .map_err(|_| NurbsError::NotFinite)?
             .hi();
-        if norm > point_dev {
-            point_dev = norm;
-        }
+        point_dev = larger(point_dev, norm);
         if rational {
-            let ww = width(e.w)?.hi();
-            if ww > weight_dev {
-                weight_dev = ww;
-            }
-            if !(r.w.is_finite() && r.w > 0.0) {
+            weight_dev = larger(weight_dev, width(e.w)?.hi());
+            if !usable_weight(r.w) {
                 return Err(NurbsError::Weight { index });
             }
-            if r.w < w_min {
-                w_min = r.w;
-            }
+            w_min = smaller(w_min, r.w);
         }
     }
     if !rational {
