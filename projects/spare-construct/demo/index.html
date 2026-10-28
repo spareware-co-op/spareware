@@ -962,7 +962,9 @@ const TRF=()=>{const f=$('#sc-transport iframe');try{return(f&&f.contentWindow&&
 const TRICON={select:'select',road:'road',zone:'zone',gateway:'gateway',bus:'bus','junctions-merge':'merge','onboarding-area':'area',path:'route',iso:'iso',measure:'measure','calibration-screenline':'screenline'};
 const TREXTRA={};
 function trIcon(d){if(TRICON[d.id])return TRICON[d.id];if(!d.svg)return'gear';const n='tr-'+d.id;if(!TREXTRA[n]){TREXTRA[n]=d.svg;SpareIcons.install(TREXTRA)}return n}   // a plug-in's own tool icon
-function trSig(){try{const F=TRF();return F?JSON.stringify([F.state(),F.tools().map(d=>d.id),F.topbar().map(d=>d.id),F.menu().map(d=>d.id+d.disabled)]):''}catch(e){return''}}
+function trSig(){try{const F=TRF();return F?JSON.stringify([F.state(),F.pack(),F.tools().map(d=>d.id),F.topbar().map(d=>d.id),F.menu().map(d=>d.id+d.disabled)]):''}catch(e){return''}}
+// A pack's commands carry no icon of their own, so one is picked from the words
+const trCmdIcon=l=>/report/i.test(l)?'report':/complian|check|rule/i.test(l)?'shield':/land use|zon|census/i.test(l)?'layers':/download|pack|export/i.test(l)?'down':/data|feed|count/i.test(l)?'table':'file';
 let TRSIG='';
 function trChanged(){if(DISC==='transport'&&trSig()!==TRSIG)renderRibbon()}
 function trFrame(t,e){if(e&&e.detail){const f=$('#sc-transport iframe');if(f)f.focus()}}   // after a mouse click the keys go to the map (Esc, Enter, Backspace)
@@ -971,29 +973,38 @@ function transportCfg(){
  const F=TRF(),quick=[{label:'Start',icon:'start',act:'go',a:'start'},{label:'Open',icon:'open',act:'go',a:'start',tip:'Open a project from the start page.'}];
  let st;try{st=F&&F.state()}catch(e){st=null}
  if(!st)return{tabs:[{id:'tr-home',label:'Home',panels:[P('Model',[{label:'Loading the map',icon:'road',disabled:true,tip:'The Transport map is still loading.'}])]}],contextual:[],quick,file:{label:'File',items:[{label:'Start',icon:'start',act:'go',a:'start'}]}};
- const tools=F.tools(),menu=F.menu(),top=F.topbar(),used=new Set();
- const mi=(id,icon,o)=>{const d=menu.find(x=>x.id===id);if(!d)return null;return Object.assign({label:d.label.replace(/…$/,''),icon,run:d.run,disabled:d.disabled,kbd:d.keys||undefined},o)};
- const tb=(id,icon,o)=>{const d=top.find(x=>x.id===id);if(!d)return null;used.add(id);return Object.assign({label:d.label.replace(/…$/,''),icon,tip:d.tip,run:d.run},o)};
+ // What the project's country pack registers goes on a tab of its own (js/packs/README.md); the rest is the core, the same in every country
+ const pk=F.pack(),own=d=>!!pk&&d.pack===pk.id,core=d=>!d.pack;
+ const tools=F.tools(),menu=F.menu(),top=F.topbar(),xs=F.exports(),used=new Set();
+ const mi=(id,icon,o)=>{const d=menu.find(x=>x.id===id&&core(x));if(!d)return null;return Object.assign({label:d.label.replace(/…$/,''),icon,run:d.run,disabled:d.disabled,kbd:d.keys||undefined},o)};
+ const tb=(id,icon,o)=>{const d=top.find(x=>x.id===id&&core(x));if(!d)return null;used.add(id);return Object.assign({label:d.label.replace(/…$/,''),icon,tip:d.tip,run:d.run},o)};
  const tool=d=>({id:'tr-tool-'+d.id,label:d.short,icon:trIcon(d),pressed:st.tool===d.id,tip:d.label,kbd:d.key||undefined,run:(t,e)=>{F.setTool(d.id);trFrame(t,e)}});
- const grp=g=>tools.filter(d=>d.group===g).map(tool),other=tools.filter(d=>d.group!=='edit'&&d.group!=='analyse').map(tool);
+ const grp=g=>tools.filter(d=>core(d)&&d.group===g).map(tool),other=tools.filter(d=>core(d)&&d.group!=='edit'&&d.group!=='analyse').map(tool);
+ const xmenu=L=>L.map(x=>({label:x.label,disabled:x.disabled,run:x.run}));
  const ok=L=>L.filter(Boolean),stack=L=>{L=ok(L);return L.length?[{stack:L}]:[]},pan=(label,L)=>{L=ok(L);return L.length?P(label,L):null};
  const run={id:'tr-run',label:'Run model',icon:'run',split:true,kbd:'Ctrl Enter',tip:st.stale?`${st.stale} result${st.stale===1?' is':'s are'} out of date. Runs this scenario for the AM and PM peaks.`:'Runs this scenario for the AM and PM peaks.',run:()=>F.run(),menu:F.runChoices().map(c=>({label:c.label,kbd:c.keys,disabled:c.disabled,run:c.run}))};
  const sim={id:'tr-sim',label:st.sim?'Stop':'Simulate',icon:st.sim?'stop':'sim',pressed:st.sim,kbd:'Space',tip:st.sim?'Stop the simulation.':'Watch vehicles move through the network.',run:(t,e)=>{F.simulate();trFrame(t,e)}};
  const home={id:'tr-home',label:'Home',panels:ok([P('Model',[run,sim]),pan('Draw',grp('edit')),
   pan('Place',stack([tb('onboarding-search','search'),mi('onboarding-setup','area')])),
-  P('Data',[{id:'tr-osm',label:'Import roads',icon:'down',tip:'Download existing roads from OpenStreetMap.',run:()=>F.importRoads()},...stack([mi('calibration-import-turns','table',{label:'Turning counts'}),mi('landuse-open','layers',{label:'Existing land use'})])])])};
- const anl={id:'tr-anl',label:'Analyse',panels:ok([pan('Analyse',grp('analyse')),pan('Check',[mi('onboarding-check','shield')]),pan('More tools',other)])};
- const rep={id:'tr-rep',label:'Report',panels:ok([pan('Report',[tb('report-btn','report',{label:'Report'}),...stack([mi('report-open','open',{label:'Open the report'}),mi('report-download','down',{label:'Download the report'}),mi('report-pack','folder',{label:'Download the data pack'})]),...stack([mi('report-setup','check',{label:'Set-up and checklist'})])]),
-  P('Export',[{id:'tr-export',label:'Export',icon:'down',menu:F.exports().map(x=>({label:x.label,disabled:x.disabled,run:x.run}))}])])};
- const more=top.filter(d=>!used.has(d.id)).map(d=>({label:d.label.replace(/…$/,''),icon:'gear',tip:d.tip,run:d.run}));   // a plug-in's own top-bar buttons
+  P('Data',[{id:'tr-osm',label:'Import roads',icon:'down',tip:'Download existing roads from OpenStreetMap.',run:()=>F.importRoads()},...stack([mi('calibration-import-turns','table',{label:'Turning counts'})])])])};
+ const anl={id:'tr-anl',label:'Analyse',panels:ok([pan('Analyse',grp('analyse')),pan('Check',[mi('onboarding-check','shield')]),pan('More tools',other),
+  P('Export',[{id:'tr-export',label:'Export',icon:'down',tip:'Results, counts and inputs as files.',menu:xmenu(xs.filter(core))}])])};
+ // The country pack's tab, named for the country: its workspaces, tools, commands and exports, whatever the pack registers
+ let packTab=null;
+ if(pk){const trim=l=>l.replace(/…$/,''),cmds=[...top.filter(own).map(d=>({label:trim(d.label),icon:trCmdIcon(d.label),tip:d.tip,run:d.run})),...menu.filter(own).map(d=>({label:trim(d.label),icon:trCmdIcon(d.label),run:d.run,disabled:d.disabled,kbd:d.keys||undefined}))];
+  const opens=F.tabs().filter(own),seen=new Set(opens.map(d=>d.label));   // a command that only opens one of these is left out
+  packTab={id:'tr-pack',label:pk.name,panels:ok([pan('Open',opens.map(d=>({id:'tr-pk-tab-'+d.id,label:d.label,icon:trCmdIcon(d.label+' '+d.id),tip:d.tip||'Opens '+d.label+' under the map.',run:d.open}))),
+   pan('Tools',tools.filter(own).map(tool)),pan('Commands',STACKS(cmds.filter(c=>!seen.has(c.label)))),
+   xs.some(own)?P('Export',[{id:'tr-pk-export',label:'Export',icon:'down',tip:`${pk.name}'s own files and hand-over packs.`,menu:xmenu(xs.filter(own))}]):null])}}
+ const more=top.filter(d=>core(d)&&!used.has(d.id)).map(d=>({label:d.label.replace(/…$/,''),icon:'gear',tip:d.tip,run:d.run}));   // a plug-in's own top-bar buttons
  if(more.length)home.panels.push(P('More',more));
  // File: the Transport page's own menu, with Open recent as the list beside it
  const items=[],side=[];let sep=false;
  for(const m of F.mainMenu()){if(!m){sep=items.length>0;continue}
   if(m.sub){if(/recent/i.test(m.label)){for(const r of m.sub)if(r)side.push({label:r.label,sub:r.title||'',icon:'book',run:r.run,disabled:r.disabled});continue}
-   if(sep){items.push({sep:1});sep=false}items.push({label:m.label,sub:'Every choice is on the Report tab',icon:'down',run:()=>{RB.select('tr-rep');const b=RB.find('tr-export');if(b)b.click()}});continue}   // Export: too long a list for this menu
+   if(sep){items.push({sep:1});sep=false}items.push({label:m.label,sub:'Every choice is on the Analyse tab'+(pk?' and the '+pk.name+' tab':''),icon:'down',run:()=>{RB.select('tr-anl');const b=RB.find('tr-export');if(b)b.click()}});continue}   // Export: too long a list for this menu
   if(sep){items.push({sep:1});sep=false}items.push({label:m.label,run:m.run,disabled:m.disabled,kbd:m.keys||undefined})}
- return{tabs:[home,anl,rep],contextual:[],
+ return{tabs:ok([home,anl,packTab]),contextual:[],
   quick:[...quick,{label:'Undo',icon:'undo',kbd:'Ctrl Z',disabled:!st.undo,tip:st.undo?'Undo '+st.undo:'Nothing to undo',run:()=>F.undo()},{label:'Redo',icon:'redo',kbd:'Ctrl Y',disabled:!st.redo,run:()=>F.redo()},{sep:1},{label:'Close other views',icon:'closeviews',act:'vcloseothers'}],
   file:{label:'File',items,side:side.length?{head:'Recent',items:side}:null}}}
 let RBDISC=null;

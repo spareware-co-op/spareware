@@ -7,7 +7,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const JS = join(here, '..', '..', 'projects', 'spare-construct', 'demo', 'transport', 'js', 'features', 'compliance-extra.js');
+const JS = join(here, '..', '..', 'projects', 'spare-construct', 'demo', 'transport', 'js', 'packs', 'nz', 'compliance-extra.js');
 
 // the random ids the prototype makes (U.uid) cannot be reproduced: they are recorded as '<uid>' and the Rust test normalises the same way
 const UID = /^(mit|cond)[0-9a-z]{6,}$/;

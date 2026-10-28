@@ -113,11 +113,15 @@ if (new URLSearchParams(location.search).has('ribbon')) document.documentElement
 <!-- Feature files: each registers its parts with Registry (docs/EXTENDING.md). Keep them after ui.js and before sample.js. -->
 <script src="js/features/junctions.js"></script>
 <script src="js/features/calibration.js"></script>
-<script src="js/features/feeds.js"></script>
-<script src="js/features/landuse-plus.js"></script>
-<script src="js/features/report.js"></script>
-<script src="js/features/compliance.js"></script>
-<script src="js/features/compliance-extra.js"></script>
+<!-- Country packs (js/packs/README.md): each pack's files load between its pack.js and Registry.endPack(), and show only on
+     that country's projects. New Zealand is the only pack so far; another country's pack loads the same way, here. -->
+<script src="js/packs/nz/pack.js"></script>
+<script src="js/packs/nz/feeds.js"></script>
+<script src="js/packs/nz/landuse-plus.js"></script>
+<script src="js/packs/nz/report.js"></script>
+<script src="js/packs/nz/compliance.js"></script>
+<script src="js/packs/nz/compliance-extra.js"></script>
+<script>Registry.endPack();</script>
 <script src="js/features/onboarding.js"></script>
 <script src="js/frame-ribbon.js"></script>
 <script src="js/sample.js"></script>
