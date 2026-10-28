@@ -115,6 +115,14 @@
       "reason": "The validity check only skips masks whose matrix has a zero determinant, so weakening it changes no result. A mask that picks two entries of one column sets two rows to the same unit vector, a zero determinant. A mask that picks two entries of one row builds the matrix of a smaller mask (the row keeps one unit vector), which the walk visited earlier and found zero, or which itself repeats a column. Checked by simulating the walk with and without the check on 4,000 random orient2d and incircle ties: every sign agreed."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace classify -> Option<Sign> with None",
+      "line_text": "let ([nx, ny, nz], [xx, xy, xz]) = (*n, x);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "classify runs only in side_of_tpi_hand, which Plane::side_of_tpi calls only when the generated tpi_side path returns None. That path checks its rounded inputs against their certified widths on entry, and every plane a user can make comes from Plane::through on grid points, whose coefficients lie inside those widths (G29's budget); inside them its steps cannot overflow (the certificate; G39's Verus twin of tpi_side). So no public input reaches classify, and returning None from it changes no result a user can see."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
       "mutant": "replace < with <= in Wide<L>::resize",
       "line_text": "if M < L {",
@@ -177,6 +185,38 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "This arm runs for a negative v, where d = v - i128::MIN lies in 0..2^127, so bit 127 of d is clear: setting it with | and flipping it with ^ both give d + 2^127."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
+      "mutant": "replace || with && in Wide<L>::checked_mul_i128",
+      "line_text": "if prod != 0 || carry != 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The line is the arm for a contribution at limb L, past the result's limbs: it returns None on overflow. checked_mul_i128 is pub(crate), and its only callers are the generated exact paths (tpi_side, tpi_weight and the like), which check their inputs against the certified widths on entry; inside those widths every product fits its limbs (the certificate; G39's Verus twin proves checked_mul_i128 exact), so prod and carry are both 0 whenever this arm runs, and || and && give the same answer for every public input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
+      "mutant": "replace < with == in Wide<L>::resize",
+      "line_text": "let shared = if M < L { M } else { L };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant makes shared L when M < L (and when M == L, where L is M anyway); widening is unchanged (shared is L either way). Narrowing then runs the copy loop over L indices instead of M: the extra ones, M to L − 1, read limbs of self but find no slot in out (get_mut returns None for i >= M), so they write nothing, and out is the same array. Every value resizes to the same result."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
+      "mutant": "replace < with <= in Wide<L>::resize",
+      "line_text": "let shared = if M < L { M } else { L };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two comparisons differ only when M equals L, and then both branches give the same number (M is L), so shared, the copy and the result are the same for every value and every pair of widths."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
+      "mutant": "replace < with <= in Wide<L>::resize",
+      "line_text": "if M < L && r.is_negative() != negative {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant also tests the sign when M equals L, a resize to the same width. Then r has the very limbs of self, so its sign is self's and the test is false: resize returns the same Some(r) for every value."
     }
   ],
   "coverage_off": [],
