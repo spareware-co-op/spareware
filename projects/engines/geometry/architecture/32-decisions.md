@@ -42,6 +42,7 @@ The board (30.5) also turns into a piece every narrower question that chapters 6
 | 32.22 | G121: the predicate step ladder | Identity, narrow exact and axis steps before the filter join 6.2; each step checked against the exact path; a filter switched off per target only where the count benchmarks show it loses | 6, 23 | G124, the predicate step ladder |
 | 32.23 | G157: SMLib as a CI oracle | Yes, NLib's evaluation, knot operations and degree elevation only, out of process; its Numerical Recipes routines stubbed out, never compiled (32.6's third question: no) | 12, 29 | G161, the SMLib and geomdl oracles |
 | 32.24 | G184: the pattern and linetype library process | Authored from written rules (ISO 128, standards, textbooks) or own design, never from vendor or CADCraft files; our own names; a provenance log per entry; a kernel owner's review in each pull request | 14, 29 | G211, our own library |
+| 32.25 | G185: ellipses in 2D | A curve kind stored by centre and major axis on the grid and a reduced axis ratio p/q, q at most about 2^21; file ratios become the nearest such fraction, Certified unless exact | 7, 14, 26 | G190, exact conic predicates |
 
 ## 32.1 The grid ladder (decision 1)
 
@@ -509,3 +510,18 @@ Why: an independent NURBS implementation catches errors in our evaluation and kn
 Why: patterns and linetypes are short lists of numbers, so the risk is not one value but a whole library's selection, names and values copied together. Authoring from written rules, naming our own way and logging every derivation is the evidence that ours is independent, and it costs only the log.
 
 **Changes:** 14.6's library bullet, 29.19's drafting row, 31.7, and piece G211.
+
+## 32.25 Ellipses in 2D (owner action G185)
+
+**What it is.** Section 7 lists the ellipse and elliptical arc among the curve kinds, by parameter rather than polar angle, and 26.1 says a curve kind enters with a decision note. Chapter 14 stores an ellipse so that its decisions can be exact: centre and major-axis vector on the grid, and the axis ratio as a fraction p/q of bounded size, so the ellipse's equation has whole-number coefficients and piece G190 can decide crossings, tangency and order exactly. DXF stores the ratio as a double, so an import must choose a fraction (31.7).
+
+**Decided 2026-10-28 (owner action G185): the ellipse is a curve kind stored by a bounded axis ratio, as chapter 14 says; this section is its decision note under 26.1.** Read with 7, 14.1, 14.2, 24.11, 26.1, 32.2 and evidence report [06](../../../kit/notes/G01-evidence/06-2d-drafting.md).
+- **Stored:** the centre and the major-axis vector in whole grid steps, the axis ratio as a reduced fraction p/q with 0 < p ≤ q, and an elliptical arc's ends as parameters on the ellipse, never polar angles. The same kind serves 2D and 3D, a 3D ellipse being one in a plane's frame (principle 8).
+- **The bound on q** is the one chapter 14 derives: about √(2a/q_step) for a semi-major axis of a steps, at most about 2^21, which keeps the minor axis within a step of any ratio while keeping the equation's coefficients inside G190's fixed widths.
+- **A ratio from a file** (DXF's double, IFC's two radii as reals) becomes the nearest fraction within that bound, found by continued fractions; the result is Exact when the file's value is already such a fraction, otherwise Certified with the recorded deviation of the minor axis, and the import report says so (24.8).
+- **A non-uniform scale** of a circle or ellipse makes an ellipse of this kind where the principal axes come out on the grid; otherwise the result is a rational choice and Certified (14.10).
+- **If G190's benchmark fails** for ellipse pairs, 32.2's fallback B1 applies to them alone: decisions between two ellipses become certified, lines and arcs stay exact.
+
+Why: one exact form for the conics drafting draws most, so snaps, offsets and crossings on ellipses are as trustworthy as on arcs, and the bound keeps every predicate fixed-width.
+
+**Changes:** 7's kind list, 14.2, 31.7, and pieces G190 and 2D-04.

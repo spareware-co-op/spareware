@@ -614,6 +614,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | The predicate step ladder and rounded-input filters, as an addition to 6.2 | 6, 23 | 32.22 (owner action G121) |
 | SMLib's NLib layers as a CI oracle, with its Numerical Recipes routines stubbed out | 12, 29 | 32.23 (owner action G157) |
 | How our own hatch patterns and linetypes are authored and reviewed | 14, 29 | 32.24 (owner action G184) |
+| The ellipse as a curve kind stored by a bounded axis ratio | 7, 14, 26 | 32.25 (owner action G185) |
 
 ### Answered by the pieces built so far
 
@@ -657,7 +658,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | Question | Raised in | Decided in |
 | --- | --- | --- |
 | Let an arc be stored by three points, or by two end points and a bulge, so IfcArcIndex and DXF bulge arcs with rational centres stay exact | 14, 24 | After 32.2: decision note to 7; piece "2D-04" |
-| Ellipse axis ratio as a bounded fraction (denominator about sqrt(2a/q), at most about 2^21), and the rule for converting DXF's floating-point ratio | 14 | Pieces "2D-04" and "2D-07 DXF import commit and healing" |
+| Ellipse axis ratio as a bounded fraction (denominator about sqrt(2a/q), at most about 2^21), and the rule for converting DXF's floating-point ratio | 14 | 32.25 (owner action G185): the bounded fraction, and the nearest such fraction by continued fractions, Certified unless exact; pieces "2D-04" and "2D-07 DXF import commit and healing" build them |
 | NURBS knot and weight storage: f64, or dyadic knots with bounded denominators and small rational weights, which would make many more curved decisions Exact | 12, 14 | Decision note to 7 before piece "Bernstein toolkit in geom-nurbs" |
 | Where the IntersectionCurve variant lives: geom-curve with opaque pool references (chapter 12's choice), or geom-surface | 12 | Decision note to 7 and 27; piece "Procedural intersection curve with certified cached fit" |
 | Subdivision limit surface: the local rules and evaluator sit in geom-surface, only the net is stored, and the patch tree is a cache (16's choice, against the review's stored hierarchy). geom-intersect and geom-draw reach contours through the surface trait | 12, 16, 18 | Piece "SubD limit surface kind" |

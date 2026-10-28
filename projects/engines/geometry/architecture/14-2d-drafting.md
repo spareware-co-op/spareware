@@ -59,7 +59,7 @@ enum Pt2 {
 
 - **Lines** have whole-number coefficients. For a line through two grid points |a| and |b| are below 2^41 and |c| below 2^82; constructed lines are larger, within 14.3's construction budget.
 - **Circles** have an exact squared radius, a fraction. A drawn or imported circle has its centre on the grid; a circle made by a construction keeps an implicit rational centre (14.3). This is the model of CGAL's circle-segment traits, as its authors describe it ([Fogel, Halperin and Wein 2012](https://doi.org/10.1007/978-3-642-17283-0); for conic arcs, [Wein 2002](https://doi.org/10.1007/3-540-45749-6_76)). CGAL is GPL: papers and public documentation only; source not read (29.2).
-- **Ellipses** have their centre and major-axis vector on the grid and an axis ratio p/q of bounded size, so their equations have whole-number coefficients.
+- **Ellipses** have their centre and major-axis vector on the grid and an axis ratio p/q of bounded size, so their equations have whole-number coefficients. The owner accepted this as the ellipse kind (owner action G185, 32.25); a ratio read from a file becomes the nearest such fraction, Certified unless it already is one.
 - **Splines, spirals and procedural offsets** are section 7's kinds, evaluated with certified bounds.
 
 | Point class | Made by | Coordinates |
