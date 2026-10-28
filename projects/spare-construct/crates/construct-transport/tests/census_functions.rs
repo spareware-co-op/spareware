@@ -1,4 +1,4 @@
-//! Land use truth tests: the constants and the pure functions of features/landuse-plus.js against the prototype (tools/transport-truth/gen-census.mjs).
+//! Land use truth tests: the constants and the pure functions of packs/nz/landuse-plus.js against the prototype (tools/transport-truth/gen-census.mjs).
 
 mod census_support;
 mod edit_support;

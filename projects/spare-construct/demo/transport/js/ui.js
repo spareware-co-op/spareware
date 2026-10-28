@@ -111,9 +111,13 @@ const UI = (() => {
     }
     if (kind === 'meta') refreshRecentSoon();
     if (/^(net|undo|demand)$/.test(kind)) { View.path = null; View.pathEnds = null; if (View.iso) View.iso = null; }
+    // a project from another country (settings.country) brings its own pack's tools and top-bar items (js/packs/README.md)
+    const pack = (Registry.country() || {}).id;
+    if (pack !== shownPack) { shownPack = pack; buildTools(); buildTopbarItems(); }
     refresh();
     Registry.fire('store', kind);
   }
+  let shownPack = null;
   function refresh() { renderTop(); Inspector.render(); Drawer.render(); renderLegend(); renderStale(); renderBanners(); renderTemplate(); Render.redraw(); }
 
   // The LINZ key used to be a project setting, so it went into every saved file; it now stays in this browser

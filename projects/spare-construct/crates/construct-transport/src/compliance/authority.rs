@@ -1,4 +1,4 @@
-//! Who controls a road, who decides on it, and what the site is (features/compliance.js sections 4 and 5): the authority table from the
+//! Who controls a road, who decides on it, and what the site is (packs/nz/compliance.js sections 4 and 5): the authority table from the
 //! lodgement date (Auckland Council became the road controlling authority on 7 May 2026), the state highway status of a link, the
 //! decision-maker for each road, and the site's zone, precinct and Future Development Strategy area from the lookup or the author's
 //! entries.

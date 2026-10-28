@@ -1,4 +1,4 @@
-// Records the prototype's land use feature (features/landuse-plus.js: Census, employees, schools, zoning, trip generation, yield and development
+// Records the prototype's land use feature (packs/nz/landuse-plus.js: Census, employees, schools, zoning, trip generation, yield and development
 // traffic) for the Rust port's census module (projects/spare-construct/crates/construct-transport/src/census, tests/census_*.rs).
 //
 // No network is used. The downloaded answers are made up here (hand-written layouts, deterministic): Stats NZ Census 2023 layers by SA1 with the
@@ -21,7 +21,7 @@ import { JS_DIR } from './js-core.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const NOW = Date.UTC(2026, 9, 21);
-const CORE = ['util', 'model', 'registry', 'engine', 'data', 'landuse', 'turns', 'calibrate', 'sim', 'sample', 'kit', 'features/landuse-plus'];
+const CORE = ['util', 'model', 'registry', 'engine', 'data', 'landuse', 'turns', 'calibrate', 'sim', 'sample', 'kit', 'packs/nz/landuse-plus'];
 const inert = () => new Proxy(function () {}, { get: (t, k) => (k === Symbol.toPrimitive ? () => '' : inert()), apply: () => undefined });
 mkdirSync(join(here, 'fixtures', 'data'), { recursive: true });
 mkdirSync(join(here, 'expected'), { recursive: true });
@@ -32,7 +32,7 @@ const writeExpected = (name, data) => { const t = JSON.stringify(data); writeFil
 // JSON as the saved project and the report would hold it: undefined left out, non-finite numbers null
 export const jsonSafe = v => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
 
-// js-core.mjs's loader with kit.js and features/landuse-plus.js after the core; fetchImpl stands in for the network
+// js-core.mjs's loader with kit.js and packs/nz/landuse-plus.js after the core; fetchImpl stands in for the network
 export function load({ seed = 1, now = NOW, fetchImpl = null } = {}) {
   let s = seed >>> 0;
   const rand = () => { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
