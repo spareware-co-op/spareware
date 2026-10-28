@@ -53,9 +53,10 @@
 //! **The certificate.** The angle of the rotation between q and a target quaternion t is 2∠, where
 //! ∠ ∈ [0, π/2) is their angle as vectors in R⁴ when ⟨q, t⟩ > 0, and sin ∠ = |q ∧ t|/(|q|·|t|),
 //! with |q ∧ t|² = Σᵢ<ⱼ (qᵢtⱼ − qⱼtᵢ)² (Lagrange's identity). It is evaluated in interval
-//! arithmetic over an enclosure of t, giving S ≥ sin ∠, and 2·asin(S) ≤ 2S + S³/2 for S ≤ 1/2:
-//! (asin S − S)/S³ has positive Taylor coefficients, so it grows with S, and at S = 1/2 it is
-//! (π/6 − 1/2)·8 < 0.19 < 1/4. A candidate that does not certify (⟨q, t⟩ not certainly positive,
+//! arithmetic over an enclosure of t, giving S ≥ sin ∠, and 2·asin(S) ≤ 2S + S³/3 + S⁵/5 for
+//! S ≤ 1/2: (asin S − S − S³/6)/S⁵ has positive Taylor coefficients, so it grows with S, and at
+//! S = 1/2 it is (π/6 − 1/2 − 1/48)·32 < 0.09 < 1/10. The bound exceeds 2·asin(S) by less than
+//! S⁵/20, under 2^−12 of it for every allowed δ, so it certifies what the searches aim for. A candidate that does not certify (⟨q, t⟩ not certainly positive,
 //! or S above 1/2) is not taken.
 //!
 //! Guarantees: a [`RationalRotation`] is exact and canonical, its image of a grid point is the
@@ -269,11 +270,14 @@ fn certify(q: [i64; 4], t: &[Interval; 4]) -> Result<Option<f64>, NumError> {
     if s > 0.5 {
         return Ok(None);
     }
-    // 2·asin(s) ≤ 2s + s³/2 for 0 ≤ s ≤ 1/2.
+    // 2·asin(s) ≤ 2s + s³/3 + s⁵/5 for 0 ≤ s ≤ 1/2.
     let si = iv(Interval::point(s))?;
-    let cube = iv(iv(si.square())?.mul(si))?;
-    let half_cube = iv(cube.mul(iv(Interval::point(0.5))?))?;
-    Ok(Some(iv(iv(si.add(si))?.add(half_cube))?.hi()))
+    let s2 = iv(si.square())?;
+    let s3 = iv(s2.mul(si))?;
+    let s5 = iv(s3.mul(s2))?;
+    let third = iv(s3.div(iv(Interval::point(3.0))?))?;
+    let fifth = iv(s5.div(iv(Interval::point(5.0))?))?;
+    Ok(Some(iv(iv(iv(si.add(si))?.add(third))?.add(fifth))?.hi()))
 }
 
 /// The canonical rotation of an integer quaternion: in lowest terms, first nonzero component
