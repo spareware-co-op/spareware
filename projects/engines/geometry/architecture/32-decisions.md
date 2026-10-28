@@ -41,6 +41,7 @@ The board (30.5) also turns into a piece every narrower question that chapters 6
 | 32.21 | G120: committed planes and how bounds add up | Committed planes and points stay Certified; 32.3's option B: bounds per entity, added along its own history, against each step's stored inputs; ε_step = 16q joins the ladder | 6, 9, 11, 13 | G142 and G143 |
 | 32.22 | G121: the predicate step ladder | Identity, narrow exact and axis steps before the filter join 6.2; each step checked against the exact path; a filter switched off per target only where the count benchmarks show it loses | 6, 23 | G124, the predicate step ladder |
 | 32.23 | G157: SMLib as a CI oracle | Yes, NLib's evaluation, knot operations and degree elevation only, out of process; its Numerical Recipes routines stubbed out, never compiled (32.6's third question: no) | 12, 29 | G161, the SMLib and geomdl oracles |
+| 32.24 | G184: the pattern and linetype library process | Authored from written rules (ISO 128, standards, textbooks) or own design, never from vendor or CADCraft files; our own names; a provenance log per entry; a kernel owner's review in each pull request | 14, 29 | G211, our own library |
 
 ## 32.1 The grid ladder (decision 1)
 
@@ -492,3 +493,19 @@ Why: an exact zero is the commonest case in a building, and the cheapest exact a
 Why: an independent NURBS implementation catches errors in our evaluation and knot algorithms that our own tests share blind spots with (R24), at no licence cost once the excluded routines are stubbed. Compiling those routines, even privately, makes the copies their licence forbids; stubbing them loses nothing the NLib-layer comparisons need, since evaluation, knot operations and degree change do not call them.
 
 **Changes:** 12.17, 28.10, 29.20's rule 8, 32.6's third question, 31.7, and piece G161, which builds the SMLib and geomdl oracles.
+
+## 32.24 How our hatch patterns and linetypes are authored (owner action G184)
+
+**What it is.** Drafting needs a library of hatch patterns and linetypes. The well-known libraries are a CAD vendor's files, and CADCraft's library, labelled its own, was found to match them in names, descriptions and values ([12](../../../kit/notes/G01-evidence/12-vetting-cadcraft.md), formats-legal), so it is rejected (29.5). Chapter 14 says ours is our own, with a provenance log for every entry, and 29.19 names no clean source yet. The owner sets how entries are authored and reviewed.
+
+**Decided 2026-10-28 (owner action G184): a clean-authoring process, reviewed in each pull request.**
+- **Sources an author may use:** a published rule implemented, never a file copied: the line rules of ISO 128 (dash and gap lengths as multiples of the line width) and its conventions for cut sections, national drawing standards and textbooks that state a convention in words or dimensions, and our own designs. The standard's text is never reproduced, only the rule applied.
+- **Sources an author may not open while authoring:** any vendor's pattern or linetype files (`.pat`, `.lin` and their equivalents), CADCraft's library, and any other library without a row in chapter 29. An imported DXF hatch carries its own pattern lines (14), so reading files never needs a library.
+- **Names are our own and descriptive** (for example `cut-45-single` or `insulation-batt`), never a vendor's pattern or linetype name. An import keeps whatever name its file gives, as data.
+- **Each entry's provenance log** records: who authored it and when; the rule it implements, by clause or page, or "own design"; how each value was derived from that rule; and a statement that no excluded source was opened. The log is committed beside the entry and the library's map lists it.
+- **Legal review** is a kernel owner's review of each entry's log in its pull request against these rules, recorded there; no lawyer is engaged and nothing is bought. An entry whose log is incomplete, or that cites an excluded source, does not merge. If anyone shows an entry matches a vendor's file, it is removed and re-authored by someone who has not seen that file.
+- **Licence:** the library is part of the kernel's data and carries the kernel's licence, MPL-2.0 (32.11 decides test cases separately).
+
+Why: patterns and linetypes are short lists of numbers, so the risk is not one value but a whole library's selection, names and values copied together. Authoring from written rules, naming our own way and logging every derivation is the evidence that ours is independent, and it costs only the log.
+
+**Changes:** 14.6's library bullet, 29.19's drafting row, 31.7, and piece G211.

@@ -613,6 +613,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | Committed planes and points as Exact or Certified; how bounds add up through a history; ε_step | 6, 9, 11, 13 | 32.21 (owner action G120) |
 | The predicate step ladder and rounded-input filters, as an addition to 6.2 | 6, 23 | 32.22 (owner action G121) |
 | SMLib's NLib layers as a CI oracle, with its Numerical Recipes routines stubbed out | 12, 29 | 32.23 (owner action G157) |
+| How our own hatch patterns and linetypes are authored and reviewed | 14, 29 | 32.24 (owner action G184) |
 
 ### Answered by the pieces built so far
 
@@ -940,7 +941,7 @@ Proposed in 31.5 (R23) and 32.5: one consolidated crate-list note settles all of
 | Standards and format terms: Gerber section 1.4 (confirm the quotes from the PDF), job files, XNC and Excellon, IPC-2581C, ODB++, IDX, IDF 3.0; IGES 5.3; USD (TOST and AOUSD terms), Alembic, FBX; Parasolid XT, ACIS, JT; OpenCascade .brep (NVIDIA's reader mirrors OpenCascade's LGPL one) | 24, 29 | Each format's piece waits for its check |
 | ISO's EXPRESS schemas: where they may be obtained, what may be generated from them, and which edition of ISO 10303-42 is current | 24, 29 | Piece "EXPRESS code generation and schema validator (development tool)" |
 | Thread and gear tables are copyrighted standards, so geom-thread takes them as supplied or licensed data | 13 | Piece "Helical sweeps and geom-thread" |
-| How entries in our own pattern and linetype library are authored | 14 | Piece "2D-22 Our own pattern and linetype library" |
+| How entries in our own pattern and linetype library are authored | 14 | 32.24 (owner action G184); piece "2D-22 Our own pattern and linetype library" builds it |
 | SMLib's .smp and .smb fixtures: the stricter reading applies, so they are not copied and the configurations are rebuilt | 12 | Answered; ledger row |
 | Unverified licence facts: EISPACK, the LAPACK text, ShapeOp, NIST SFA and MBE PMI, BRL-CAD's LGPL version, linesweeper, laz-rs's history, Geogram's other third_party folders, OpenMesh, the 3MF and glTF terms, Lacewell-Burley and Biermann-Levin-Zorin reference code, and the Wang et al. 2021 collision dataset | 16, 19, 29 | Before each source is used; pieces "Licence and dependency gate for the kernel workspace" and "Dependency audit" |
 | The JTS conformance files are no longer unverified: chapter 14 settles them as EDL-1.0, reusable with their notice | 14, 29 | Editorial fix to chapter 29's list of unverified licence facts |
