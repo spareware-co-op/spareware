@@ -1117,12 +1117,12 @@
         },
         {
           "cost": "O(nodes visited + answers·log answers); memory: the answer.",
-          "does": "each query walks the tree from the root with an explicit stack of fixed size, skipping every node whose box misses, and charges one unit of its meter per node, or pair of nodes, it visits. It collects the keys it finds and sorts them.",
+          "does": "each query walks the tree from the root with an explicit stack, skipping every node whose box misses, and charges one unit of its meter per node, or pair of nodes, it visits. It collects the keys it finds and sorts them.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-bvh/src/query.rs",
           "guarantees": [
             "**The answer of brute force.** A query returns exactly the keys (or key pairs) whose boxes meet, as testing every entry (or every pair) would, sorted ascending: a pair within one tree as (smaller key, larger key), a pair between trees as (this tree's key, the other's). So the answer does not depend on the tree's shape, a refit, a rebuild or the thread count it was built with.",
-            "**No recursion, bounded stacks.** A tree is at most [`MAX_DEPTH`] deep, so a walk of one tree needs at most `MAX_DEPTH + 1` slots, of two trees at most `2·MAX_DEPTH + 1` (each step descends one side, pushing two), and of one tree against itself at most `4·MAX_DEPTH + 1` (a node against itself pushes three). The stacks are arrays of those sizes.",
+            "**No recursion, bounded stacks.** A tree is at most [`MAX_DEPTH`] deep, so a walk of one tree holds at most `MAX_DEPTH + 1` nodes on its stack, of two trees at most `2·MAX_DEPTH + 1` pairs (each step descends one side, pushing two), and of one tree against itself at most `4·MAX_DEPTH + 1` (a node against itself pushes three). The stacks are vectors with room for [`MAX_DEPTH`] reserved, grown fallibly beyond it.",
             "**Cancellable, never partial.** The meter polls the caller's cancellation at fixed charges; a stopped query returns [`BvhError::Stopped`] and no keys."
           ],
           "job": "The box tree's queries: the entries whose boxes meet a box, the pairs of entries whose boxes meet within one tree, and the pairs between two trees.",
