@@ -1098,6 +1098,29 @@
           "target": "lib"
         },
         {
+          "cost": "building is O(n log n): a sort by key when the input is not in key order, n codes, the runs' sorts and ⌈log₂(n/32,768)⌉ rounds of merges, with a copy of the points in key order and two buffers of n slots (24 bytes each) at the peak of a round. A search is two binary searches per cell (at most 27 cells) and one exact test per point in those cells. The pairs are one search per point.",
+          "does": "",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bvh/src/cells.rs",
+          "guarantees": [
+            "**The same answer everywhere.** The order (code, key) is unique for distinct keys, so the index, its bytes and every answer are the same for any input order, pool and target; every answer is sorted by key.",
+            "**Exact.** Distances are compared as squared integer distances in `i128` (each coordinate difference below 2^41 + 2^42, so the sum of squares stays below 2^88), never in floating point.",
+            "**Bounded and cancellable.** No recursion; the meter is charged one unit per point a search scans, so a cancelled or over-budget search returns an error and no keys.",
+            "**Safe.** No `unsafe`, no panics, no unchecked indexing; allocations are fallible."
+          ],
+          "job": "The Morton-sorted cell index (piece G55): grid points in a linear octree, for point searches such as welding and envelopes (chapter 19.9).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/358728.358741"
+            ],
+            "text": "the Morton order (G. M. Morton, \"A computer oriented geodetic data base and a new technique in file sequencing\", IBM Ltd., Ottawa (1966)) and the linear octree, the leaves of an octree kept as a sorted list of location codes (I. Gargantini, \"An effective way to represent quadtrees\", Communications of the ACM 25(12) (1982), 905–910, <https://doi.org/10.1145/358728.358741>). The bits are spread by the mask-and-shift sequence for 21-bit coordinates, applied to the low 21 and the high 20 bits of each."
+          },
+          "path": "geom_bvh::cells",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "constant.",
           "does": "[`BvhError`] names each failure of the tree's construction, refit and queries, and maps `geom-run`'s stops and phase errors onto them, so a caller sees one error type.",
           "family": [],
@@ -1165,7 +1188,7 @@
       "provenance": [],
       "sections": "14.8, 19.9 and 23.7; open questions OQ-11.2 and OQ-19.1; chapter 27 (\"Who owns what\"), in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the box tree built (G54); the Morton-sorted cell index to come (G55).",
+      "status": "the box tree (G54) and the Morton-sorted cell index (G55) built.",
       "summary": "Spare Kit geometry kernel: the one box tree."
     },
     {
