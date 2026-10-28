@@ -13,6 +13,10 @@
 //! - Avnaim et al.'s signs of orient2d and orient3d (`geom_num::avnaim`), the reference
 //!   chapter 23.3 names, give the shipped exact signs on the same inputs.
 //! - `Wide32`'s extremes, order and `Debug` form, worked by hand.
+//! - `avnaim` against exact determinants: every 2 × 2 with entries in −7..=7 and every 3 × 3
+//!   with entries in −2..=2, entries at and one past its bounds, and random entries near them.
+//! - `Wide32` against `i128` at every limb boundary and on random values: conversions at each
+//!   width, limbs, sign and zero tests, negation, order, sums, differences and products.
 //!
 //! The shipped paths are tested against big integers in `generated_predicates.rs` and
 //! `attack_g29.rs`, so agreement with them is agreement with the exact value. Values of different
@@ -44,9 +48,10 @@ use geom_num::generated::{
     ssi_side, ssi_weight, tpi_side, tpi_weight,
 };
 use geom_num::grid::{COORD_MAX, P2, P3};
-use geom_num::{I512, Wide, Wide32};
+use geom_num::{I512, Sign, Wide, Wide32};
 use geom_test::rng::SplitMix64;
 use geom_test::seed::{self, Seed};
+use std::cmp::Ordering;
 
 /// Random cases per predicate.
 const CASES: usize = 20_000;
@@ -268,8 +273,8 @@ fn wide32_extremes_order_and_debug_by_hand() {
     );
     let zero = Wide32::<4>::ZERO;
     assert!(min < zero && zero < max && min < max);
-    assert_eq!(max.partial_cmp(&min), Some(std::cmp::Ordering::Greater));
-    assert_eq!(zero.partial_cmp(&zero), Some(std::cmp::Ordering::Equal));
+    assert_eq!(max.partial_cmp(&min), Some(Ordering::Greater));
+    assert_eq!(zero.partial_cmp(&zero), Some(Ordering::Equal));
     assert_eq!(
         format!("{:?}", Wide32::<4>::from_i64(-2)),
         "Wide32<4>(0xfffffffffffffffffffffffffffffffe)"
@@ -278,4 +283,274 @@ fn wide32_extremes_order_and_debug_by_hand() {
         format!("{:?}", Wide32::<2>::from_i64(1)),
         "Wide32<2>(0x0000000000000001)"
     );
+}
+
+/// The sign of an `i128`.
+fn sign_of(v: i128) -> Sign {
+    match v.cmp(&0) {
+        Ordering::Less => Sign::Negative,
+        Ordering::Equal => Sign::Zero,
+        Ordering::Greater => Sign::Positive,
+    }
+}
+
+/// The exact sign of x1·y2 − y1·x2: entries of at most 2^62 make products below 2^124 and their
+/// difference below 2^125, so `i128` holds them.
+fn det2_sign(x1: i64, y1: i64, x2: i64, y2: i64) -> Sign {
+    let p = |a: i64, b: i64| i128::from(a) * i128::from(b);
+    sign_of(p(x1, y2) - p(y1, x2))
+}
+
+/// The exact sign of the 3 × 3 determinant with rows `u1`, `u2`, `u3`, in `I512`, which holds
+/// every product of three `i64` entries.
+fn det3_sign(u1: [i64; 3], u2: [i64; 3], u3: [i64; 3]) -> Sign {
+    let w = I512::from_i64;
+    let mul = |a: I512, b: I512| a.checked_mul(&b).unwrap();
+    let minor = |a: [i64; 3], b: [i64; 3], i: usize, j: usize| {
+        mul(w(a[i]), w(b[j]))
+            .checked_sub(&mul(w(a[j]), w(b[i])))
+            .unwrap()
+    };
+    let t0 = mul(w(u1[0]), minor(u2, u3, 1, 2));
+    let t1 = mul(w(u1[1]), minor(u2, u3, 0, 2));
+    let t2 = mul(w(u1[2]), minor(u2, u3, 0, 1));
+    t0.checked_sub(&t1)
+        .unwrap()
+        .checked_add(&t2)
+        .unwrap()
+        .signum()
+}
+
+/// `avnaim`'s signs against exact determinants on every 2 × 2 with entries in −7..=7 and every
+/// 3 × 3 with entries in −2..=2: every equality its tests separate occurs there (equal entries,
+/// equal or opposite rows, a zero row or column, collinear first rows, a halving landing exactly
+/// on a half).
+#[test]
+fn avnaim_signs_are_exact_on_every_small_matrix() {
+    for x1 in -7..=7 {
+        for y1 in -7..=7 {
+            for x2 in -7..=7 {
+                for y2 in -7..=7 {
+                    assert_eq!(
+                        avnaim::sign_of_det2(x1, y1, x2, y2),
+                        Some(det2_sign(x1, y1, x2, y2)),
+                        "|{x1} {y1}; {x2} {y2}|"
+                    );
+                }
+            }
+        }
+    }
+    let entries = [-2i64, -1, 0, 1, 2];
+    for i in 0..5usize.pow(9) {
+        let mut k = i;
+        let mut m = [0i64; 9];
+        for v in &mut m {
+            *v = entries[k % 5];
+            k /= 5;
+        }
+        let (u1, u2, u3) = ([m[0], m[1], m[2]], [m[3], m[4], m[5]], [m[6], m[7], m[8]]);
+        let small = |a: [i64; 3], b: [i64; 3], i: usize, j: usize| {
+            i128::from(a[i]) * i128::from(b[j]) - i128::from(a[j]) * i128::from(b[i])
+        };
+        let d = i128::from(u1[0]) * small(u2, u3, 1, 2) - i128::from(u1[1]) * small(u2, u3, 0, 2)
+            + i128::from(u1[2]) * small(u2, u3, 0, 1);
+        assert_eq!(avnaim::sign_of_det3(u1, u2, u3), Some(sign_of(d)), "{m:?}");
+    }
+}
+
+/// `avnaim` takes entries up to its bounds, in every position and with either sign, and refuses
+/// one past them; at and near the bounds its signs are exact.
+#[test]
+fn avnaim_entries_at_and_past_their_bounds() {
+    let m = avnaim::ENTRY_MAX;
+    for pos in 0..4 {
+        for s in [1i64, -1] {
+            let mut at = [3i64, 5, 7, 11];
+            at[pos] = s * m;
+            let [x1, y1, x2, y2] = at;
+            assert_eq!(
+                avnaim::sign_of_det2(x1, y1, x2, y2),
+                Some(det2_sign(x1, y1, x2, y2))
+            );
+            let mut past = at;
+            past[pos] = s * (m + 1);
+            let [x1, y1, x2, y2] = past;
+            assert_eq!(avnaim::sign_of_det2(x1, y1, x2, y2), None, "{past:?}");
+        }
+    }
+    let big = [
+        0,
+        1,
+        -1,
+        2,
+        m,
+        -m,
+        m - 1,
+        -(m - 1),
+        m / 2,
+        -(m / 2),
+        m / 2 + 1,
+        -(m / 2 + 1),
+    ];
+    for &x1 in &big {
+        for &y1 in &big {
+            for &x2 in &big {
+                for &y2 in &big {
+                    assert_eq!(
+                        avnaim::sign_of_det2(x1, y1, x2, y2),
+                        Some(det2_sign(x1, y1, x2, y2)),
+                        "|{x1} {y1}; {x2} {y2}|"
+                    );
+                }
+            }
+        }
+    }
+    let d = avnaim::DET3_ENTRY_MAX;
+    for pos in 0..9 {
+        for s in [1i64, -1] {
+            let mut at = [2i64, 3, 5, 7, 11, 13, 17, 19, 23];
+            at[pos] = s * d;
+            let rows = |e: [i64; 9]| ([e[0], e[1], e[2]], [e[3], e[4], e[5]], [e[6], e[7], e[8]]);
+            let (u1, u2, u3) = rows(at);
+            assert_eq!(
+                avnaim::sign_of_det3(u1, u2, u3),
+                Some(det3_sign(u1, u2, u3))
+            );
+            let mut past = at;
+            past[pos] = s * (d + 1);
+            let (u1, u2, u3) = rows(past);
+            assert_eq!(avnaim::sign_of_det3(u1, u2, u3), None, "{past:?}");
+        }
+    }
+    let mut draw = Draw::new("avnaim_entries_at_and_past_their_bounds");
+    let near = [0, 1, -1, d, -d, d - 1, -(d - 1), d / 2, -(d / 2)];
+    for _ in 0..300 {
+        let mut e = [0i64; 9];
+        for v in &mut e {
+            *v = if draw.0.coin() {
+                near[usize::try_from(draw.0.next_u64() % 9).unwrap()]
+            } else {
+                i64::try_from(draw.value(59)).unwrap()
+            };
+        }
+        let (u1, u2, u3) = ([e[0], e[1], e[2]], [e[3], e[4], e[5]], [e[6], e[7], e[8]]);
+        assert_eq!(
+            avnaim::sign_of_det3(u1, u2, u3),
+            Some(det3_sign(u1, u2, u3)),
+            "{e:?}"
+        );
+    }
+}
+
+/// Values at and beside every 32-bit limb boundary of 128 bits, both signs, and the extremes.
+fn wide32_values() -> Vec<i128> {
+    let mut v = vec![
+        0,
+        1,
+        -1,
+        2,
+        -2,
+        i128::MAX,
+        i128::MIN,
+        i128::MAX - 1,
+        i128::MIN + 1,
+    ];
+    for bit in [31, 32, 33, 63, 64, 65, 95, 96, 97, 126] {
+        let p = 1i128 << bit;
+        v.extend([p, -p, p - 1, -(p - 1), p + 1, -(p + 1)]);
+    }
+    v
+}
+
+/// Whether `v` fits a signed integer of `bits` bits.
+fn fits(v: i128, bits: u32) -> bool {
+    bits >= 128 || (-(1i128 << (bits - 1)) <= v && v < 1i128 << (bits - 1))
+}
+
+/// `Wide32` against `i128`: every conversion, its limbs, sign and zero tests, negation, order, sum,
+/// difference and products, at each width that holds a value or must refuse it, on the limb
+/// boundaries and on random values.
+#[test]
+fn wide32_matches_i128() {
+    let edges = wide32_values();
+    let mut draw = Draw::new("wide32_matches_i128");
+    let mut values = edges.clone();
+    values.extend((0..300).map(|_| draw.value(126)));
+    let back = |w: Wide32<4>| w.to_i128().unwrap();
+    for &v in &values {
+        let w = Wide32::<4>::from_i128(v).unwrap();
+        assert_eq!(w.to_i128(), Some(v));
+        let words: [u32; 4] = core::array::from_fn(|k| (v >> (32 * k)) as u32);
+        assert_eq!(w.to_le_limbs(), words);
+        assert_eq!(Wide32::<4>::from_le_limbs(words), w);
+        assert_eq!(w.is_zero(), v == 0);
+        assert_eq!(w.is_negative(), v < 0);
+        assert_eq!(w.signum(), sign_of(v));
+        assert_eq!(w.checked_neg().map(back), v.checked_neg());
+        for (bits, narrow) in [
+            (64, Wide32::<2>::from_i128(v).and_then(|n| n.to_i128())),
+            (96, Wide32::<3>::from_i128(v).and_then(|n| n.to_i128())),
+            (64, w.resize::<2>().and_then(|n| n.to_i128())),
+            (96, w.resize::<3>().and_then(|n| n.to_i128())),
+        ] {
+            assert_eq!(narrow, fits(v, bits).then_some(v), "{v} in {bits} bits");
+        }
+        let six = w.resize::<6>().unwrap();
+        assert_eq!(six.to_i128(), Some(v));
+        assert_eq!(six.resize::<4>(), Some(w));
+        assert_eq!(six.to_wide::<2>(), Some(Wide::<2>::from_i128(v)));
+        assert_eq!(w.to_wide::<2>(), Some(Wide::<2>::from_i128(v)));
+        if let Ok(s) = i64::try_from(v) {
+            assert_eq!(Wide32::<2>::from_i64(s).to_i128(), Some(v));
+            assert_eq!(Wide32::<3>::from_i64(s), Wide32::<3>::from_i128(v).unwrap());
+            assert_eq!(Wide32::<4>::from_i64(s), w);
+        }
+    }
+    for &a in &edges {
+        for &b in &values {
+            let (wa, wb) = (
+                Wide32::<4>::from_i128(a).unwrap(),
+                Wide32::<4>::from_i128(b).unwrap(),
+            );
+            assert_eq!(wa.cmp(&wb), a.cmp(&b), "{a} against {b}");
+            assert_eq!(wa.checked_add(&wb).map(back), a.checked_add(b), "{a} + {b}");
+            assert_eq!(wa.checked_sub(&wb).map(back), a.checked_sub(b), "{a} - {b}");
+            assert_eq!(
+                Wide32::<4>::product(&wa, &wb).map(back),
+                a.checked_mul(b),
+                "{a} * {b}"
+            );
+            // Every product of two 128-bit values fits 256 bits: the same product in eight limbs,
+            // against `Wide<4>`, and read back at 192 and 128 bits.
+            let exact = Wide::<4>::from_i128(a)
+                .checked_mul(&Wide::<4>::from_i128(b))
+                .unwrap();
+            let eight = Wide32::<8>::product(&wa, &wb).unwrap();
+            assert_eq!(eight.to_wide::<4>(), Some(exact));
+            assert_eq!(eight.to_i128(), a.checked_mul(b));
+            assert_eq!(
+                eight.to_wide::<2>(),
+                a.checked_mul(b).map(Wide::<2>::from_i128)
+            );
+            assert_eq!(
+                Wide32::<6>::product(&wa, &wb).and_then(|p| p.to_wide::<3>()),
+                exact.resize::<3>(),
+                "{a} * {b} in 192 bits"
+            );
+            if let Ok(n) = i64::try_from(b) {
+                assert_eq!(
+                    Wide32::<4>::product_by_i64(&wa, n).map(back),
+                    a.checked_mul(b)
+                );
+            }
+            if let (Ok(x), Ok(y)) = (i64::try_from(a), i64::try_from(b)) {
+                let p = a * b;
+                assert_eq!(Wide32::<4>::product_i64(x, y).map(back), Some(p));
+                assert_eq!(
+                    Wide32::<3>::product_i64(x, y).and_then(|n| n.to_i128()),
+                    fits(p, 96).then_some(p)
+                );
+            }
+        }
+    }
 }
