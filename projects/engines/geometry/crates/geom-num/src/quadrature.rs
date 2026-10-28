@@ -158,22 +158,27 @@ struct Panel {
     error: f64,
 }
 
-/// The Kronrod and Gauss estimates over [a, b], and the panel they make.
+/// The most nodes a Kronrod rule has: G30K61's 61.
+const MAX_NODES: usize = 61;
+
+/// The Kronrod and Gauss estimates over [a, b], and the panel they make. The function is
+/// evaluated once per Kronrod node; the Gauss rule reads the values at the odd positions, its own
+/// nodes.
 fn panel<F>(f: &mut F, rule: &KronrodRule, a: f64, b: f64) -> Result<Panel, QuadError>
 where
     F: FnMut(Real) -> Result<Real, NumError>,
 {
     let (centre, half) = (0.5 * a + 0.5 * b, 0.5 * b - 0.5 * a);
+    let mut values = [0.0f64; MAX_NODES];
+    for (v, t) in values.iter_mut().zip(rule.nodes) {
+        *v = value_at(f, centre, half, *t)?;
+    }
     let (mut kronrod, mut gauss) = (ExactSum::new(), ExactSum::new());
-    let mut gauss_weights = rule.gauss.iter();
-    for (i, (t, k)) in rule.nodes.iter().zip(rule.kronrod).enumerate() {
-        let v = value_at(f, centre, half, *t)?;
+    for (k, v) in rule.kronrod.iter().zip(&values) {
         kronrod.add(k * v);
-        if i % 2 == 1 {
-            if let Some(g) = gauss_weights.next() {
-                gauss.add(g * v);
-            }
-        }
+    }
+    for (g, v) in rule.gauss.iter().zip(values.iter().skip(1).step_by(2)) {
+        gauss.add(g * v);
     }
     let kronrod = half * kronrod.round()?.get();
     let gauss = half * gauss.round()?.get();
@@ -212,74 +217,60 @@ where
         return Err(QuadError::BadInterval);
     }
     let rule = GAUSS_KRONROD.get(rule).ok_or(QuadError::NoSuchRule)?;
-    let per_panel = u32::try_from(rule.nodes.len()).map_err(|_| QuadError::NoSuchRule)?;
-    let mut panels = [Panel {
-        a,
-        b,
-        value: 0.0,
-        error: 0.0,
-    }; MAX_PANELS];
+    // At most 61 nodes a panel.
+    let per_panel = u32::try_from(rule.nodes.len()).unwrap_or(u32::MAX);
     let first = panel(&mut f, rule, a, b)?;
-    if let Some(slot) = panels.first_mut() {
-        *slot = first;
-    }
+    let mut panels = [first; MAX_PANELS];
     let mut count = 1usize;
     let mut bisections = 0u32;
     loop {
-        let live = panels.get(..count).unwrap_or(&[]);
         let (mut value, mut error) = (ExactSum::new(), ExactSum::new());
-        for p in live {
+        for p in panels.iter().take(count) {
             value.add(p.value);
             error.add(p.error);
         }
         let (value, error) = (value.round()?, error.round()?);
-        let evaluations = per_panel
-            .checked_mul(
-                bisections
-                    .checked_mul(2)
-                    .and_then(|n| n.checked_add(1))
-                    .ok_or(QuadError::CapReached)?,
-            )
-            .ok_or(QuadError::CapReached)?;
         let goal = if tol > rel * value.get().abs() {
             tol
         } else {
             rel * value.get().abs()
         };
         if error.get() <= goal {
+            // count ≤ MAX_PANELS and bisections < MAX_PANELS, so neither the count nor
+            // per_panel · (2·bisections + 1) ≤ 61 · 255 comes near u32::MAX.
             return Ok(Integral {
                 value,
                 error,
-                panels: u32::try_from(count).map_err(|_| QuadError::CapReached)?,
-                evaluations,
+                panels: u32::try_from(count).unwrap_or(u32::MAX),
+                evaluations: per_panel
+                    .saturating_mul(bisections.saturating_mul(2).saturating_add(1)),
             });
         }
         if bisections >= cap || count >= MAX_PANELS {
             return Err(QuadError::CapReached);
         }
-        // The first panel with the largest estimate.
-        let mut worst = 0usize;
-        let mut largest = -1.0f64;
-        for (i, p) in live.iter().enumerate() {
-            if p.error > largest {
-                largest = p.error;
-                worst = i;
-            }
-        }
-        let Some(&chosen) = panels.get(worst) else {
-            return Err(QuadError::CapReached);
-        };
+        // The first panel with the largest estimate: the last maximum of the panels taken in
+        // reverse.
+        let (worst, chosen) = panels
+            .iter()
+            .take(count)
+            .enumerate()
+            .rev()
+            .max_by(|x, y| x.1.error.total_cmp(&y.1.error))
+            .map_or((0, first), |(i, p)| (i, *p));
         let mid = 0.5 * chosen.a + 0.5 * chosen.b;
         if mid <= chosen.a || mid >= chosen.b {
             return Err(QuadError::TooNarrow);
         }
         let left = panel(&mut f, rule, chosen.a, mid)?;
         let right = panel(&mut f, rule, mid, chosen.b)?;
-        if let Some(slot) = panels.get_mut(worst) {
-            *slot = left;
-        }
-        if let Some(slot) = panels.get_mut(count) {
-            *slot = right;
+        // The left half takes the chosen panel's place, the right half the next free one.
+        for (i, slot) in panels.iter_mut().enumerate() {
+            if i == worst {
+                *slot = left;
+            } else if i == count {
+                *slot = right;
+            }
         }
         count = count.saturating_add(1);
         bisections = bisections.saturating_add(1);

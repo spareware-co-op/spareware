@@ -226,26 +226,23 @@ where
                 q = -q;
             }
             p = p.abs();
-            // Accept it only if it is finite, falls well inside the bracket and is less than half
-            // the step before last.
-            if p.is_finite()
-                && q.is_finite()
-                && q != 0.0
-                && 2.0 * p < 3.0 * xm * q - (tol1 * q).abs()
-                && p < (0.5 * e * q).abs()
-            {
+            // Accept it only if it falls well inside the bracket and is less than half the step
+            // before last. Those two tests also refuse every interpolation whose arithmetic failed,
+            // with no test of their own: p ≥ 0 here (or NaN). If q is ±0 the first right-hand side
+            // is ±0, and 2p < ±0 is false. If q is infinite, |tol1·q| is infinite or NaN, so the
+            // first right-hand side is NaN or −∞ (never +∞: +∞ − ∞ is NaN), and the test is false.
+            // If p is +∞ or NaN, or q NaN, every comparison is false. When both tests pass,
+            // 2p < 3|xm||q| makes |p/q| < 1.5|xm|, a finite step.
+            if 2.0 * p < 3.0 * xm * q - (tol1 * q).abs() && p < (0.5 * e * q).abs() {
                 step = Some(p / q);
             }
         }
-        match step {
-            Some(s) if s.is_finite() => {
-                e = d;
-                d = s;
-            }
-            _ => {
-                d = xm;
-                e = d;
-            }
+        if let Some(s) = step {
+            e = d;
+            d = s;
+        } else {
+            d = xm;
+            e = d;
         }
         a = b;
         fa = fb;
@@ -310,11 +307,13 @@ where
             q = q.abs();
             let previous = e;
             e = d;
-            // Accept the vertex only if it is finite, inside (a, b) and less than half the step
-            // before last.
-            if p.is_finite()
-                && q.is_finite()
-                && q != 0.0
+            // Accept the vertex only if q is finite, the vertex lies inside (a, b) and the step is
+            // less than half the step before last. An infinite q must be refused by name: it would
+            // pass the three comparisons below with a zero step. The comparisons refuse the rest
+            // with no test of their own: q ≥ 0 here, so for q = 0 the first is |p| < 0, false; a p
+            // that is ±∞ or NaN fails it against a finite right-hand side. When all pass,
+            // |p/q| < |previous|/2, a finite step.
+            if q.is_finite()
                 && p.abs() < (0.5 * q * previous).abs()
                 && p > q * (a - x)
                 && p < q * (b - x)
@@ -329,13 +328,12 @@ where
                 });
             }
         }
-        d = match parabolic {
-            Some(s) if s.is_finite() => s,
-            _ => {
-                // A golden-section step into the larger part.
-                e = if x >= xm { a - x } else { b - x };
-                GOLDEN * e
-            }
+        d = if let Some(s) = parabolic {
+            s
+        } else {
+            // A golden-section step into the larger part.
+            e = if x >= xm { a - x } else { b - x };
+            GOLDEN * e
         };
         // Never evaluate f closer than tol1 to x.
         let u = if d.abs() >= tol1 {
