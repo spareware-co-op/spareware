@@ -234,14 +234,6 @@ impl<const D: usize> Aabb<D> {
         measure(&self.lo, &self.hi)
     }
 
-    /// Twice the centre on `axis`: `lo + hi`, a whole number (|lo + hi| ≤ 2^44).
-    pub(crate) fn centre2(&self, axis: usize) -> i64 {
-        match (self.lo.get(axis), self.hi.get(axis)) {
-            (Some(l), Some(h)) => l.saturating_add(*h),
-            _ => 0,
-        }
-    }
-
     /// The box with these corners, which the caller has from boxes of this type (a union of
     /// them), so they are already within the limits and ordered.
     pub(crate) const fn from_corners(lo: [i64; D], hi: [i64; D]) -> Aabb<D> {

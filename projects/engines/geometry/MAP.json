@@ -972,7 +972,72 @@
         27
       ],
       "depends": [],
-      "errors": [],
+      "errors": [
+        {
+          "doc": "Why the box tree could not build, change or answer.",
+          "file": "projects/engines/geometry/crates/geom-bvh/src/error.rs",
+          "kinds": [
+            {
+              "doc": "The meter stopped: its budget ran out, the caller cancelled, or memory was refused.",
+              "name": "Stopped",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A build phase went over its budget, by `geom-run`'s phase rule.",
+              "name": "BudgetExceeded",
+              "shape": "tuple"
+            },
+            {
+              "doc": "Two entries, or two updates of one refit, share this key.",
+              "name": "DuplicateKey",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A refit names a key the tree does not hold.",
+              "name": "UnknownKey",
+              "shape": "tuple"
+            },
+            {
+              "doc": "More entries than a tree indexes (`u32::MAX`).",
+              "name": "TooManyEntries",
+              "shape": "unit"
+            },
+            {
+              "doc": "A box is not two- or three-dimensional.",
+              "name": "Dimension",
+              "shape": "unit"
+            },
+            {
+              "doc": "A box's lower corner is above its upper corner on some axis.",
+              "name": "Empty",
+              "shape": "unit"
+            },
+            {
+              "doc": "A coordinate, or a coordinate padded by its bound, lies beyond ±[`crate::LIMIT`].",
+              "name": "OutOfRange",
+              "shape": "unit"
+            },
+            {
+              "doc": "A padding bound is negative, or a float box's coordinate is not finite.",
+              "name": "BadBound",
+              "shape": "unit"
+            },
+            {
+              "doc": "An allocation was refused.",
+              "name": "OutOfMemory",
+              "shape": "unit"
+            },
+            {
+              "doc": "A step the tree's own bounds rule out failed: a defect, reported, never answered.",
+              "name": "Defect",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_bvh::error",
+          "name": "BvhError",
+          "non_exhaustive": false
+        }
+      ],
       "family": [],
       "file": "projects/engines/geometry/crates/geom-bvh/src/lib.rs",
       "folder": "projects/engines/geometry/crates/geom-bvh",
@@ -986,12 +1051,121 @@
       "job": "The one tree of integer boxes, 2D and 3D.",
       "kind": "kernel",
       "layer": "2",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "constant per box; no allocation.",
+          "does": "an [`Aabb`] holds a lower and an upper corner of whole grid steps. It comes from `geom-math`'s grid boxes exactly ([`Box2`], [`Box3`]), or from a box of doubles in grid units rounded outward ([`Aabb::from_float`], [`FBox2`], [`FBox3`]), and [`Aabb::inflated`] pads it by its holder's class (chapter 23.7): nothing for Exact geometry, the bound ε for Certified(ε), the tolerance for a Tolerant import, each rounded up to whole steps. The tree measures a box by [`Aabb::area`], the surface-area heuristic's measure in whole numbers.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bvh/src/bound.rs",
+          "guarantees": [
+            "**Never misses what it holds.** Grid boxes convert exactly. A float box's lower corner is rounded down and its upper corner up, each to a whole step, and a padding is the bound rounded up, so the result holds every point within the bound of the float box.",
+            "**Bounded, so every cost is exact.** Every coordinate lies within ±[`LIMIT`] = 2^43 (the 2^40 frame of chapter 6 with room for padding), so an extent plus one is at most 2^44 + 1 < 2^45, a 3D area (three products of two) is below 3·2^90 < 2^92, and an area times an entry count (below 2^32) is below 2^124: the tree's costs are exact in `u128`.",
+            "**Closed.** Boxes that touch overlap, as `geom-math`'s do."
+          ],
+          "job": "The box tree's boxes: closed boxes of whole grid steps in two or three dimensions, padded by the exactness of what they hold.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1109/RT.2007.4342588"
+            ],
+            "text": "chapter 23.7 of the kernel architecture (\"Boxes that never miss\", padding by exactness) and section 19.9 (\"Boxes are whole grid steps\"); the area measure is the surface area of I. Wald, \"On fast construction of SAH-based bounding volume hierarchies\", IEEE Symposium on Interactive Ray Tracing (2007), <https://doi.org/10.1109/RT.2007.4342588>, counted in grid points so a point's box has a positive measure, and in two dimensions the perimeter, the plane's analogue (the chance a random line meets a convex region is proportional to its perimeter)."
+          },
+          "path": "geom_bvh::bound",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(n·D) per level of the tree, about log₂ n levels for spread boxes and at most [`MAX_DEPTH`]; memory: the nodes, the order, one centre per entry, and per subtree task a copy of its range's order. No recursion.",
+          "does": "[`build`] takes the entries sorted by key and returns the tree's nodes and the order of the entries along its leaves. Each node's entries are split by the plane, among b − 1 planes per axis between b bins of their boxes' centres (b = min(entries, [`BINS`])), that minimises area(left)·count(left) + area(right)·count(right), or kept as a leaf once there are at most [`LEAF_MAX`]. The top of the tree is built on the calling thread until every unbuilt range holds at most [`GRAIN`] entries; those subtrees are then built as one phase of the helper, one task each, and spliced in task order.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bvh/src/build.rs",
+          "guarantees": [
+            "**One tree for one set of entries.** Every split is a pure function of the range's entries: the bins and the costs are whole numbers ([`crate::bound`] bounds them), ties between planes go to the lower axis and then the lower plane, and the partition is stable, so each range keeps its entries in key order. Which ranges become subtree tasks depends on their sizes alone. So the nodes, their order and the entries' order are the same for any thread count, pool and chunking, and for any input order of the same entries.",
+            "**Depth at most [`MAX_DEPTH`].** From depth [`MEDIAN_DEPTH`] = 32 on, every split is at the median in key order. A range there holds fewer than 2^32 entries, and halving reaches at most [`LEAF_MAX`] entries within 31 more levels, so no leaf is deeper than 63.",
+            "**No recursion.** Ranges wait on an explicit stack; ranges where all centres coincide are split at the median in key order.",
+            "**Charged.** Each node charges its entry count to the meter before its work, so a build stops at the same node for the same budget on every machine."
+          ],
+          "job": "The box tree's construction: top-down, by the binned surface-area heuristic with whole-number costs, in parallel only through `geom-run`'s helper.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1109/RT.2007.4342588"
+            ],
+            "text": "I. Wald, \"On fast construction of SAH-based bounding volume hierarchies\", IEEE Symposium on Interactive Ray Tracing (2007), <https://doi.org/10.1109/RT.2007.4342588> (binning centroids into a fixed number of bins per axis and sweeping the bin boundaries), with costs counted in whole grid points and ties broken by axis, plane and key (section 19.9 and chapter 27's `geom-bvh` row); the subtree phase follows chapter 23.4's helper."
+          },
+          "path": "geom_bvh::build",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant.",
+          "does": "[`BvhError`] names each failure of the tree's construction, refit and queries, and maps `geom-run`'s stops and phase errors onto them, so a caller sees one error type.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bvh/src/error.rs",
+          "guarantees": [
+            "**Typed, never partial.** Every failure is one of these kinds and returns no tree or answer; a tree that fails to refit is left exactly as it was before the call.",
+            "**Stops keep their reason.** A meter's stop (budget, cancellation, memory) and a phase's budget failure keep `geom-run`'s own record of it."
+          ],
+          "job": "Why the box tree could not build, change or answer.",
+          "method": {
+            "none": "an error enum and its conversions, with `geom-run`'s stops (chapter 23.10)."
+          },
+          "path": "geom_bvh::error",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(nodes visited + answers·log answers); memory: the answer.",
+          "does": "each query walks the tree from the root with an explicit stack of fixed size, skipping every node whose box misses, and charges one unit of its meter per node, or pair of nodes, it visits. It collects the keys it finds and sorts them.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bvh/src/query.rs",
+          "guarantees": [
+            "**The answer of brute force.** A query returns exactly the keys (or key pairs) whose boxes meet, as testing every entry (or every pair) would, sorted ascending: a pair within one tree as (smaller key, larger key), a pair between trees as (this tree's key, the other's). So the answer does not depend on the tree's shape, a refit, a rebuild or the thread count it was built with.",
+            "**No recursion, bounded stacks.** A tree is at most [`MAX_DEPTH`] deep, so a walk of one tree needs at most `MAX_DEPTH + 1` slots, of two trees at most `2·MAX_DEPTH + 1` (each step descends one side, pushing two), and of one tree against itself at most `4·MAX_DEPTH + 1` (a node against itself pushes three). The stacks are arrays of those sizes.",
+            "**Cancellable, never partial.** The meter polls the caller's cancellation at fixed charges; a stopped query returns [`BvhError::Stopped`] and no keys."
+          ],
+          "job": "The box tree's queries: the entries whose boxes meet a box, the pairs of entries whose boxes meet within one tree, and the pairs between two trees.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1080/10867651.1997.10487480"
+            ],
+            "text": "depth-first traversal of a bounding-volume hierarchy, and the simultaneous traversal of two hierarchies for overlapping pairs, as in G. van den Bergen, \"Efficient collision detection of complex deformable models using AABB trees\", *Journal of Graphics Tools* 2(4) (1997), 1–13, <https://doi.org/10.1080/10867651.1997.10487480>, with the larger node descended first; answers sorted by key (section 19.9 and chapter 23.7)."
+          },
+          "path": "geom_bvh::query",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "building as [`crate::build`], plus a stable sort by key; a refit O(updates·log n + nodes); the bytes O(entries + nodes). Memory: the entries, the nodes and the key index.",
+          "does": "[`BoxTree::build`] sorts the entries by key, refuses a repeated key, and builds the nodes ([`crate::build`]). The entries are then stored in leaf order, each leaf a range of them, beside an index from key to position. [`BoxTree::refit`] gives entries new boxes and passes the change up to every node. When the tree's cost ([`BoxTree::cost`], the surface-area heuristic summed over its nodes) passes [`REBUILD_FACTOR`] times the cost it was built with, the refit rebuilds the tree from its entries instead. [`BoxTree::to_bytes`] writes the tree in a canonical form, for goldens and caches.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bvh/src/tree.rs",
+          "guarantees": [
+            "**A function of its entries.** A tree is built from the set of its entries alone: their input order, the pool, the thread count and the chunking change nothing, down to the last byte of [`BoxTree::to_bytes`]. A rebuild equals a fresh build of the same entries.",
+            "**Every node holds what is below it.** A node's box is the union of its children's, a leaf's the union of its entries', after a build and after a refit.",
+            "**All or nothing.** A refit checks every update before it changes anything, so a refused refit, or one stopped by its meter while rebuilding, leaves the tree as it was.",
+            "**Children after parents.** A node's children have larger indices than it has, so one pass from the last node to the first refits the tree."
+          ],
+          "job": "The box tree: its entries, its nodes, how it is built, refitted and rebuilt, and its canonical bytes.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1109/RT.2007.4342588"
+            ],
+            "text": "section 19.9 of the kernel architecture (\"Refit or rebuild\"; \"Answers do not depend on the tree\"), with the tree's cost the surface-area heuristic of I. Wald, \"On fast construction of SAH-based bounding volume hierarchies\", IEEE Symposium on Interactive Ray Tracing (2007), <https://doi.org/10.1109/RT.2007.4342588>, one unit per inner node and one per entry in a leaf."
+          },
+          "path": "geom_bvh::tree",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-bvh",
       "provenance": [],
       "sections": "14.8, 19.9 and 23.7; open questions OQ-11.2 and OQ-19.1; chapter 27 (\"Who owns what\"), in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G54, G55.",
+      "status": "the box tree built (G54); the Morton-sorted cell index to come (G55).",
       "summary": "Spare Kit geometry kernel: the one box tree."
     },
     {
