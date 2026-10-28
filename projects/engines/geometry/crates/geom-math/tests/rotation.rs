@@ -94,7 +94,10 @@ fn sin_upper(z: &BigRational) -> BigRational {
 fn half_angle_sin2(q: [i64; 4], t: &[BigRational; 4]) -> BigRational {
     let q: Vec<BigRational> = q.iter().map(|&v| int(i128::from(v))).collect();
     let dot: BigRational = q.iter().zip(t).map(|(a, b)| a * b).sum();
-    assert!(!dot.is_zero(), "the result is a half turn away from the target");
+    assert!(
+        !dot.is_zero(),
+        "the result is a half turn away from the target"
+    );
     let mut wedge = BigRational::zero();
     for i in 0..4 {
         for j in i + 1..4 {
@@ -108,7 +111,8 @@ fn half_angle_sin2(q: [i64; 4], t: &[BigRational; 4]) -> BigRational {
 }
 
 /// The reported bound holds and is tight, for a true angle 2∠ with sin²∠ = `s2`: 2∠ ≤ reported,
-/// and reported ≤ 2·sin∠·(1 + 2^−10) + 2^−40.
+/// and reported ≤ 2·sin∠·(1 + 2^−10)·(1 + reported²) + 2^−40 (the certificate's 2S + S³/2 is
+/// above 2·asin(S) by about S³/6).
 fn check_half_angle(s2: &BigRational, reported: f64) {
     let r = exact(reported);
     let y = sin_lower(&(&r / int(2)));
@@ -116,7 +120,7 @@ fn check_half_angle(s2: &BigRational, reported: f64) {
         y.is_positive() && s2 <= &(&y * &y),
         "the true angle exceeds the bound {reported:e}"
     );
-    let z = (&r - pow2(-40)) / (int(2) * (int(1) + pow2(-10)));
+    let z = (&r - pow2(-40)) / (int(2) * (int(1) + pow2(-10)) * (int(1) + &r * &r));
     if z.is_positive() {
         assert!(&z * &z <= *s2, "the bound {reported:e} is not tight");
     }
@@ -364,7 +368,7 @@ fn canonical_form_budget_and_matrix() {
         Err(NumError::OutOfRange { value: 1 << 36 })
     );
     // Every component below 2^36, but |q|² past 2^72.
-    let wide = RationalRotation::new([big, big, 0, 0]);
+    let wide = RationalRotation::new([big, big - 2, 0, 0]);
     assert!(matches!(wide, Err(NumError::OutOfRange { value }) if value >= 1 << 72));
     // The same multiple of a small rotation reduces into the budget.
     assert_eq!(

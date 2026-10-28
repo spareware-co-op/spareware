@@ -15,11 +15,12 @@
 //! Every [`TypedTransform::apply`] returns a [`Rounded`] point: chapter 7's "other rotations round
 //! to the grid and the result says so". Composition keeps the most exact variant both operands
 //! allow: exact with exact stays exact, exact or rational with rational stays rational (and is
-//! simplified back to exact when it is a grid transform), rotations compose as rotations, exactly,
-//! while the product fits the rotation budget (decision 32.14), and anything else, a certified
-//! transform or a rotation that outgrows its budget or meets a translation, scale or mirror,
-//! becomes certified, rounding the exact entries to doubles: a change of variant the result
-//! records. A rotation re-approximated within an angle instead is [`RationalRotation::compose`]. Classification is exact for the exact and rational variants and certified for the
+//! simplified back to exact when it is a grid transform, and refused when it outgrows the rational
+//! budget), rotations compose as rotations, exactly, while the product fits the rotation budget
+//! (decision 32.14), two rational rotations included where their product outgrows the rational
+//! budget, and anything else, a certified transform or a rotation that outgrows its budget or
+//! meets a translation, scale or mirror, becomes certified, rounding the exact entries to doubles:
+//! a change of variant the result records. A rotation re-approximated within an angle instead is [`RationalRotation::compose`]. Classification is exact for the exact and rational variants and certified for the
 //! certified one (see [`crate::transform`]).
 //!
 //! Guarantees: every [`TypedTransform::apply`] returns a [`Rounded`] point, the exact image rounded
@@ -319,11 +320,23 @@ impl TypedTransform {
                 _ => certified(),
             },
             _ => match (rational(self), rational(first)) {
-                (Some(a), Some(b)) => Ok(TypedTransform::from(a.compose(&b)?)),
+                (Some(a), Some(b)) => match a.compose(&b) {
+                    Ok(r) => Ok(TypedTransform::from(r)),
+                    // Two rotations past the rational budget compose as rotations (32.14);
+                    // anything else past it is refused, as before.
+                    Err(e @ NumError::OutOfRange { .. }) => {
+                        match (rotation(self), rotation(first)) {
+                            (Some(a), Some(b)) => match a.compose_exact(&b)? {
+                                Some(r) => Ok(TypedTransform::from(r)),
+                                None => certified(),
+                            },
+                            _ => Err(e.into()),
+                        }
+                    }
+                    Err(e) => Err(e.into()),
+                },
                 // Unreachable: both are exact or rational here.
-                _ => Ok(TypedTransform::from(
-                    self.to_transform()?.compose(&first.to_transform()?)?,
-                )),
+                _ => certified(),
             },
         }
     }
