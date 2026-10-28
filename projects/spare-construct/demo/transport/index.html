@@ -4,6 +4,8 @@
 <script>
 /* Transport is a discipline inside Spare Construct: opened on its own, it goes to the Spare Construct frame. */
 if (window.parent === window) location.replace('../#plan:transport');
+/* transport/?ribbon: Spare Construct's ribbon carries the tools (js/frame-ribbon.js), so the page's own strip hides. */
+if (new URLSearchParams(location.search).has('ribbon')) document.documentElement.classList.add('in-ribbon');
 </script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -117,6 +119,7 @@ if (window.parent === window) location.replace('../#plan:transport');
 <script src="js/features/compliance.js"></script>
 <script src="js/features/compliance-extra.js"></script>
 <script src="js/features/onboarding.js"></script>
+<script src="js/frame-ribbon.js"></script>
 <script src="js/sample.js"></script>
 <script type="module" src="js/rust-engine.js"></script>
 <script>UI.init();</script>

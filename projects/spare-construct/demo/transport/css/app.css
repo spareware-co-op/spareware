@@ -53,6 +53,10 @@ button { cursor: pointer; }
 .badge { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px; background: var(--app-tint); color: var(--app-strong); font-size: 11px; font-weight: 600; white-space: nowrap; }
 .badge.n { background: var(--sink); color: var(--ink-2); }
 
+/* Inside Spare Construct the tools sit on its ribbon (js/frame-ribbon.js), so the strip and its row go */
+html.in-ribbon body { grid-template-rows: minmax(0, 1fr) auto; }
+html.in-ribbon #top { display: none; }
+
 /* ---------- tool strip ---------- */
 /* One line: ui.js fitTop() moves data-prio items into the Menu while the strip overflows */
 #top {
