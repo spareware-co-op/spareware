@@ -8,7 +8,7 @@ One curve family serves 2D and 3D. Each kind is stored as itself, exactly, never
 
 - Line, ray, infinite line
 - Circle and arc; ellipse and elliptical arc (by parameter, not polar angle; centre and major axis on the grid and a bounded axis ratio p/q, owner action G185, 32.25); parabola; hyperbola
-- Helix (exact; neither STEP nor IFC has one)
+- Helix (exact; neither STEP nor IFC has one), cylindrical or conical: it stores a radius rate, so tapered springs and threads are exact too (owner action G239, 32.28)
 - Clothoid, and IFC 4.3's cosine, sine and second-, third- and seventh-order polynomial spirals, for road and rail alignments
 - Polynomial curve; circular involute
 - NURBS, rational or not, periodic or clamped

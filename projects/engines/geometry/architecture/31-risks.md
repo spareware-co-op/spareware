@@ -617,6 +617,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | The ellipse as a curve kind stored by a bounded axis ratio | 7, 14, 26 | 32.25 (owner action G185) |
 | Integer 2D carriers, depth-one points and rational-centre arcs as an addition to 6.2; and 32.2, exact arcs from the start | 6, 14, 15 | 32.26 (owner action G186) |
 | `geom-thread`, `geom-stair` and `geom-civil` in the kernel now, or in Spare Construct under 26.1 | 17, 26, 27 | 32.27 (owner action G238) |
+| What the Sweep kind stores, and the conical helix | 7, 13, 24 | 32.28 (owner action G239) |
 
 ### Answered by the pieces built so far
 
@@ -666,8 +667,8 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | Subdivision limit surface: the local rules and evaluator sit in geom-surface, only the net is stored, and the patch tree is a cache (16's choice, against the review's stored hierarchy). geom-intersect and geom-draw reach contours through the surface trait | 12, 16, 18 | Piece "SubD limit surface kind" |
 | The surface trait gains an Unbounded derivative-bound result and a normal-cone query, because Stam's derivatives are unbounded from valence 5 | 16 | Piece "SubD limit surface kind" |
 | Alignment curve kinds: named kinds or compositions for Helmert, Bloss, the Viennese bend, the cubic variant, and IFC's gradient curve and segmented reference curve; the four LandXML-only spirals; our LandXML-to-IFC mapping | 17 | Decision note to 7 before piece "Spiral evaluation with certified bounds" |
-| A conical helix (tapered springs, scrolls) as an exact curve kind | 13 | Decision note to 7; piece "Helical sweeps and geom-thread" |
-| What the Sweep kind stores: the full FrameRule, twist and scale laws, bit-exact station frames and the cylindrical profile morph; draft surfaces as Sweep and Ruled kinds | 13 | Piece "Frame rules and laws"; encoding in "geom-format: body records" |
+| A conical helix (tapered springs, scrolls) as an exact curve kind | 13 | 32.28 (owner action G239): the helix kind gains a radius rate; piece "Helical sweeps and geom-thread" |
+| What the Sweep kind stores: the full FrameRule, twist and scale laws, bit-exact station frames and the cylindrical profile morph; draft surfaces as Sweep and Ruled kinds | 13 | 32.28 (owner action G239): all of it; piece "Frame rules and laws"; encoding in "geom-format: body records" |
 | A procedural 2D projected-curve kind (a 3D curve plus a view, with a cached certified fit) | 18 | Decision note under 26.1; piece "Projected curve kinds and the canonical drawing form" |
 | The TIN as the carrier of toposolid top faces, rather than a new piecewise-flat surface kind | 17 | Piece "Toposolid" |
 | STEP B-spline volumes and locally refined splines: add them as kinds, leave them unsupported, or convert them with a bound | 24 | Decision note under 26.1 |
