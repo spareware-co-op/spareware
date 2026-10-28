@@ -505,6 +505,22 @@
       "occurrences": 3,
       "kind": "equivalent",
       "reason": "A defect check whose operands are all false for every caller: curve_parameters refuses fewer than two points, every caller builds b with rows x width values, a basis has at least p + 1 >= 2 functions, and count <= rows is checked first (least_squares_knots refuses more, approximate returns before fitting more). So any && among them is false as the || is."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/approx.rs",
+      "mutant": "replace > with >= in project",
+      "line_text": "if !(g > 0.0 && f.is_finite()) {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when g is exactly 0. Then f/g is NaN when f is 0, which the next test stops on as this one would, or an infinity, which the clamp takes to an end of the domain, and that step is kept only if it brings the curve point nearer. So the mutant's parameter is one the method's rule allows (never farther), the fit is certified at the parameters it ends with and stays deterministic; 4000 random approximations never met g = 0."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/approx.rs",
+      "mutant": "replace || with && in project",
+      "line_text": "if !next.is_finite() || next == u {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "next is always finite here: the test above lets only g > 0 and a finite f through, so u - f/g is finite or an infinity, and the clamp brings an infinity to an end of the domain. So || gives next == u, and && gives false; when next == u the mutant evaluates the curve at u again, finds the distance not smaller and stops with the same parameter, charging nothing more (the step was charged before)."
     }
   ],
   "coverage_off": [],

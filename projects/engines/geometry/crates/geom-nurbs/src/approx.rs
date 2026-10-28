@@ -214,6 +214,12 @@ fn replaced<T: Copy>(
     Ok(out)
 }
 
+/// Whether the bound `e` is beyond the tolerance `tol`: a bound equal to it is within. The one test
+/// of a bound against the tolerance, for every step of the approximation.
+fn beyond(e: f64, tol: f64) -> bool {
+    e > tol
+}
+
 /// a + b rounded up.
 fn add_up(a: f64, b: f64) -> Result<f64, NurbsError> {
     Ok(Interval::of(a)?.plus(Interval::of(b)?)?.hi())
@@ -354,7 +360,7 @@ fn remove_knots<const D: usize>(
                 let span = get(&points.spans, k)?;
                 let upper = points.upper.get(k).ok_or(NurbsError::Defect)?;
                 let t = add_up(get(er, k)?, moved_at(rm, span, p, upper)?)?;
-                if t > tol {
+                if beyond(t, tol) {
                     keep = false;
                     break;
                 }
@@ -457,10 +463,8 @@ fn project<const D: usize>(
         if !(g > 0.0 && f.is_finite()) {
             break;
         }
-        // Finite: with g > 0 and f finite, u − f/g is finite or infinite, and the clamp brings an
-        // infinity to an end of the domain.
         let next = (u - f / g).clamp(a, b);
-        if next == u {
+        if !next.is_finite() || next == u {
             break;
         }
         let mut dn = [[0.0; D]; 3];
@@ -547,7 +551,7 @@ fn attempt<const D: usize>(
     };
     let curve = Curve::from_homogeneous(basis, pts, None)?;
     let mut er = curve_errors(meter, &curve, q, &u)?;
-    if er.iter().any(|&e| e > tol) {
+    if er.iter().any(|&e| beyond(e, tol)) {
         return Ok(None);
     }
     let mut w = Work::of(meter, &curve)?;
@@ -582,7 +586,7 @@ fn attempt<const D: usize>(
             }
         }
         er = curve_errors(meter, &curve, q, &u)?;
-        if er.iter().any(|&e| e > tol) {
+        if er.iter().any(|&e| beyond(e, tol)) {
             return Ok(None);
         }
         w = Work::of(meter, &curve)?;
@@ -594,7 +598,7 @@ fn attempt<const D: usize>(
         .iter()
         .zip(&direct)
         .fold(0.0_f64, |m, (&a, &b)| larger(m, smaller(a, b)));
-    if error > tol {
+    if beyond(error, tol) {
         return Ok(None);
     }
     Ok(Some(CurveFit {

@@ -631,3 +631,49 @@ fn two_points_give_the_line_through_them() {
     .unwrap();
     assert_eq!(fit.surface.homogeneous(), &grid);
 }
+
+/// The polyline on the unit grid from the origin that takes `steps`, one unit each: E, N, W or S.
+fn walk(steps: &str) -> Vec<[f64; 2]> {
+    let mut p = [0.0, 0.0];
+    let mut out = vec![p];
+    for s in steps.chars() {
+        let [dx, dy] = match s {
+            'E' => [1.0, 0.0],
+            'N' => [0.0, 1.0],
+            'W' => [-1.0, 0.0],
+            _ => [0.0, -1.0],
+        };
+        p = [p[0] + dx, p[1] + dy];
+        out.push(p);
+    }
+    out
+}
+
+/// Claim: a removal widens the bound of exactly the data points whose parameters lie in its
+/// window, from its first knot to its last. On this polyline the straight runs are removed
+/// exactly, so the certified error is the rounding those widenings add, and it is pinned to the
+/// bit: widening one point more, or one fewer, changes it.
+#[test]
+fn a_removal_widens_the_bounds_in_its_window_and_no_others() {
+    let data = walk("EEEEENNNNWWNNWWWSEESWWW");
+    let fit = Curve::approximate(&data, 1, 0.1, KnotMode::Multiple, V, &mut meter()).unwrap();
+    holds(&fit, &data);
+    assert_eq!(
+        fit.error.to_bits(),
+        0x3d08_98c4_75f0_f06e,
+        "{:e}",
+        fit.error
+    );
+}
+
+/// Claim: Newton's method steps only where the distance is convex along the curve (g > 0), so a
+/// projection that meets a concave point stops there. The work of this fit, whose projections meet
+/// such points, is pinned: stepping on from them charges more.
+#[test]
+fn newton_steps_stop_where_the_distance_is_not_convex() {
+    let data = walk("EEEEEENWWWNNNNEENWWSWW");
+    let mut m = meter();
+    let fit = Curve::approximate(&data, 5, 2.0, KnotMode::Multiple, V, &mut m).unwrap();
+    holds(&fit, &data);
+    assert_eq!(m.used().work, 55_148);
+}
