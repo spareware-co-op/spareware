@@ -618,6 +618,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | Integer 2D carriers, depth-one points and rational-centre arcs as an addition to 6.2; and 32.2, exact arcs from the start | 6, 14, 15 | 32.26 (owner action G186) |
 | `geom-thread`, `geom-stair` and `geom-civil` in the kernel now, or in Spare Construct under 26.1 | 17, 26, 27 | 32.27 (owner action G238) |
 | What the Sweep kind stores, and the conical helix | 7, 13, 24 | 32.28 (owner action G239) |
+| Predicates of 576 and 768 bits for skeleton and mitre-offset events; the wide integers already in code | 6, 13 | 32.29 (owner action G240) |
 
 ### Answered by the pieces built so far
 
@@ -634,7 +635,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 
 | Question | Raised in | Decided in |
 | --- | --- | --- |
-| Extend 6.2's fixed-width predicates past 384 bits for straight-skeleton events: 576 bits for 2D event order and about 768 bits for 3D mitre offsets (our derivations, to be written out) | 13 | Decision note to 6.2; pieces "Exact weighted straight skeleton" and "3D weighted straight skeleton for mitre offsets" |
+| Extend 6.2's fixed-width predicates past 384 bits for straight-skeleton events: 576 bits for 2D event order and about 768 bits for 3D mitre offsets (our derivations, to be written out) | 13 | 32.29 (owner action G240): accepted with 6.2's conditions; pieces "Exact weighted straight skeleton" and "3D weighted straight skeleton for mitre offsets" write the derivations |
 | The same for exact hidden lines: about 547 bits on grid-axis views and 633 bits for any direction or perspective (576- and 640-bit types), or exact visibility on grid-axis views only | 18 | Decision note to 6.2; piece "Exact view predicates" |
 | Fixed-width integers of several thousand bits on a cold path for general quadric pairs (Dupont, Lazard, Lazard and Petitjean), rather than arbitrary precision | 12 | Piece "Bit budgets for the exact algebraic decisions in intersections" |
 | The real widths of 2D construction predicates: rational directions of about 44 bits, tangency positions about 70 bits finer than a step, the deepest possibly thousands of bits | 14 | Piece "2D-01", with its width generator and benchmark |
@@ -652,7 +653,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | Break TIN ties in plan-coordinate order (x, then y) rather than by persistent name, so identical points give identical surfaces whatever they are called | 17 | Decision note to 6.2 and 21; piece "Exact Delaunay core with name-ordered tie-breaks" |
 | A stricter rule for local operations near tolerant edges of imported STEP models than 6.5's "work within, never raise" | 13 | Note to 6.5; piece "Local-operation driver and topology-change taxonomy" |
 | May a file's declared precision below 640q lower epsilon_heal's default? Today it can only raise it, up to the cap | 24 | Piece "geom-exchange basics: units, numbers to grid, frames, reports" |
-| Wider integers already in code: `geom-num`'s `I512`, the total path of the plane classification and commit (G02), and `geom-math`'s exact stages in `Wide<4>`, `Wide<10>`, `Wide<20>`, `Wide<34>` and `Wide<40>`, up to 2,560 bits (G03). Accept each into 6.2's list, 23's cost model, 28.7's proofs and 29.3, or remove it | G02 and G03 builds | Decision note to 6.2, with piece "Wide integers I128 to I384" and owner action "576- and 768-bit predicates" |
+| Wider integers already in code: `geom-num`'s `I512`, the total path of the plane classification and commit (G02), and `geom-math`'s exact stages in `Wide<4>`, `Wide<10>`, `Wide<20>`, `Wide<34>` and `Wide<40>`, up to 2,560 bits (G03). Accept each into 6.2's list, 23's cost model, 28.7's proofs and 29.3, or remove it | G02 and G03 builds | 32.29 (owner action G240): accepted as built, each with its derivation and extreme tests; 23's cost model adds them when measured |
 | The commit's tie rule: half to even, chosen by G02 after 6.1's rule for angles, so a coordinate at 2^40 − 1/2 leaves the frame (6.3) | G02 build | Decision note to 6.3 and 6.5, with the ladder (32.5) |
 | ε_ang as the relative length bound that classifies floating-point transforms as Rigid or UniformScale (G03), a second meaning of the rung (6.5's proposed rungs) | G03 build | Decision note to 6.5 and 7; piece "Points, vectors, boxes, frames and typed transforms" |
 
