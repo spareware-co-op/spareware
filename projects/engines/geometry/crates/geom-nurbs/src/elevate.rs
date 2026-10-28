@@ -130,11 +130,8 @@ pub(crate) fn pascal() -> Result<[f64; WIDTH * WIDTH], NurbsError> {
         for k in 1..=n {
             let above = sub(row, WIDTH)?;
             let left = get(&tri, add(above, sub(k, 1)?)?)?;
-            let right = if k < n {
-                get(&tri, add(above, k)?)?
-            } else {
-                0.0
-            };
+            // Entry n of the row above was never set: it is still 0.
+            let right = get(&tri, add(above, k)?)?;
             set(&mut tri, add(row, k)?, left + right)?;
         }
     }
@@ -161,7 +158,7 @@ fn elevation_matrix<N: Num>(p: usize, t: usize) -> Result<[N; WIDTH * WIDTH], Nu
     for i in 1..=half {
         let inv = N::of(1.0)?.over(N::of(binomial(&tri, q, i)?)?)?;
         let lo = i.saturating_sub(t);
-        let hi = if i > p { p } else { i };
+        let hi = i.min(p);
         for j in lo..=hi {
             let v = inv
                 .times(N::of(binomial(&tri, p, j)?)?)?
@@ -171,7 +168,7 @@ fn elevation_matrix<N: Num>(p: usize, t: usize) -> Result<[N; WIDTH * WIDTH], Nu
     }
     for i in add(half, 1)?..q {
         let lo = i.saturating_sub(t);
-        let hi = if i > p { p } else { i };
+        let hi = i.min(p);
         for j in lo..=hi {
             let v = get(&rm, at_(sub(q, i)?, sub(p, j)?)?)?;
             set(&mut rm, at_(i, j)?, v)?;
@@ -246,8 +243,10 @@ pub(crate) fn elevate_kernel<N: Num, const D: usize>(
         let oldr = if first_piece { 0 } else { r };
         // The last run, the end knots, has p + 1 knots and r = −1, which behaves as 0 here.
         r = p.saturating_sub(mlt);
-        let lbz = if oldr > 0 { add(oldr, 2)? / 2 } else { 1 };
-        let rbz = if r > 0 { sub(q, add(r, 1)? / 2)? } else { q };
+        // (oldr + 2)/2 is 1 at oldr = 0.
+        let lbz = add(oldr, 2)? / 2;
+        // (r + 1)/2 is 0 at r = 0.
+        let rbz = sub(q, add(r, 1)? / 2)?;
         let (ua, ub) = (get(up, a)?, get(up, b)?);
         if r > 0 {
             let num = N::of(ub)?.minus(N::of(ua)?)?;
@@ -276,7 +275,7 @@ pub(crate) fn elevate_kernel<N: Num, const D: usize>(
         // Raise the piece: dw[i] = Σ_j rm[i][j]·bw[j], from lbz to q.
         for i in lbz..=q {
             let lo = i.saturating_sub(t);
-            let hi = if i > p { p } else { i };
+            let hi = i.min(p);
             let mut acc = zero;
             for j in lo..=hi {
                 let coef = get(&rm, add(mul(i, WIDTH)?, j)?)?;

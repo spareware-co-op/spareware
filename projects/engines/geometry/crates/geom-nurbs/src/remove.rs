@@ -60,7 +60,7 @@ use crate::budget::vec_for;
 use crate::curve::Curve;
 use crate::index::{add, get, mul, set, sub};
 use crate::insert::{Insertion, insert_kernel};
-use crate::ops::{Changed, charge_op, homs, split};
+use crate::ops::{Changed, charge_op, homs, larger, smaller, split, usable_weight};
 
 impl<const D: usize> Curve<D> {
     /// The curve with the knot `u` removed as many times as possible, up to `times`, while it
@@ -98,7 +98,7 @@ impl<const D: usize> Curve<D> {
         let mut points = original.clone();
         let mut removed = 0;
         let mut deviation = 0.0;
-        let tries = if times < s { times } else { s };
+        let tries = times.min(s);
         for step in 1..=tries {
             charge_op(meter, points.len(), D, knots.len())?;
             let r = knots
@@ -107,7 +107,7 @@ impl<const D: usize> Curve<D> {
                 .ok_or(NurbsError::Defect)?;
             let here = sub(s, removed)?;
             let (k2, q2) = remove_once(meter, &knots, p, &points, u, (r, here))?;
-            if rational && !q2.iter().all(|h| h.w.is_finite() && h.w > 0.0) {
+            if rational && !q2.iter().all(|h| usable_weight(h.w)) {
                 break;
             }
             let Some(dev) = certify(
@@ -239,9 +239,7 @@ fn certify<const D: usize>(
     if back.as_slice() != knots || pw.len() != original.len() {
         return Ok(None);
     }
-    let w_min = q2
-        .iter()
-        .fold(f64::INFINITY, |m, h| if h.w < m { h.w } else { m });
+    let w_min = q2.iter().fold(f64::INFINITY, |m, h| smaller(m, h.w));
     Ok(Some(difference_bound(
         original, &pw, rational, p_max, w_min,
     )?))
@@ -261,7 +259,7 @@ pub(crate) fn difference_bound<const D: usize>(
     let magnitude = |e: Interval, x: f64| -> Result<f64, NurbsError> {
         let d = e.minus(Interval::of(x)?)?;
         let (a, b) = (-d.lo(), d.hi());
-        Ok(if a > b { a } else { b })
+        Ok(larger(a, b))
     };
     let (mut point_dev, mut weight_dev) = (0.0, 0.0);
     for (x, e) in exact.iter().zip(enclosure) {
@@ -272,18 +270,14 @@ pub(crate) fn difference_bound<const D: usize>(
         let norm = Interval::norm(&mags)
             .map_err(|_| NurbsError::NotFinite)?
             .hi();
-        if norm > point_dev {
-            point_dev = norm;
-        }
+        point_dev = larger(point_dev, norm);
         let wd = magnitude(e.w, x.w)?;
-        if wd > weight_dev {
-            weight_dev = wd;
-        }
+        weight_dev = larger(weight_dev, wd);
     }
     if !rational {
         return Ok(point_dev);
     }
-    if !(w_min.is_finite() && w_min > 0.0) {
+    if !usable_weight(w_min) {
         return Err(NurbsError::NotFinite);
     }
     let top =
