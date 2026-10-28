@@ -1,4 +1,4 @@
-//! Future Development Strategy consistency (features/compliance.js section 10).
+//! Future Development Strategy consistency (packs/nz/compliance.js section 10).
 
 use super::authority::site_info;
 use super::data::{c as table, m as model};

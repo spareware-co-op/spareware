@@ -12,7 +12,7 @@ export const JS_DIR = join(here, '..', '..', 'projects', 'spare-construct', 'dem
 export const RUST_DATA = join(here, '..', '..', 'projects', 'spare-construct', 'crates', 'construct-transport', 'src', 'compliance', 'data');
 export const NOW = Date.UTC(2026, 9, 21);
 const CORE = ['util', 'model', 'registry', 'kit', 'engine', 'data', 'landuse', 'turns', 'calibrate', 'sim', 'sample'];
-const FEATURES = ['features/compliance', 'features/compliance-extra'];
+const FEATURES = ['packs/nz/compliance', 'packs/nz/compliance-extra'];
 
 const inert = () => new Proxy(function () {}, { get: (t, k) => (k === Symbol.toPrimitive ? () => '' : inert()), apply: () => undefined });
 

@@ -12,7 +12,7 @@
 # Timings are statistics for that report, never a gate: nothing here can fail a pull request, and
 # a step that cannot run on an engine (a build the engine does not validate) records "unsupported".
 # It runs when a pull request is labelled `variant-bench` (workflow_dispatch runs only from the
-# default branch), or by hand once on main.
+# default branch), by hand once on main, and whole on every release (kernel-release.yml calls it).
 
 name: Kernel variant timings
 
@@ -20,6 +20,7 @@ on:
   pull_request:
     types: [labeled]
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -44,7 +45,7 @@ env:
 jobs:
   native:
     name: Native (${{ matrix.engine }})
-    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'variant-bench'
+    if: github.event_name != 'pull_request' || github.event.label.name == 'variant-bench'
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     strategy:
@@ -84,7 +85,7 @@ jobs:
 
   wasm:
     name: WebAssembly (Wasmtime and Node)
-    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'variant-bench'
+    if: github.event_name != 'pull_request' || github.event.label.name == 'variant-bench'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     defaults:
@@ -229,7 +230,7 @@ jobs:
   report:
     name: Report
     needs: [native, wasm, browsers]
-    if: always() && (github.event_name == 'workflow_dispatch' || github.event.label.name == 'variant-bench')
+    if: always() && (github.event_name != 'pull_request' || github.event.label.name == 'variant-bench')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:

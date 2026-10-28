@@ -56,14 +56,15 @@
 //!   step overflows; the overflow fallback is only tested, because its NaN intermediate trips
 //!   Kani's NaN check; over every pair of operands at once the solver ran past CI's hour); and
 //!   that `two_prod` gives the rounded product and its error for every finite first factor
-//!   against 3, and for every finite first factor whose significand has at most 14 bits (every
-//!   sign and exponent) against six second factors, one for each of its paths. The proofs module
-//!   has one harness per value, with kissat as the SAT solver; the `two_prod` harnesses unwind
-//!   `scale`'s loop at most three times (its callers pass at most 1074, so it steps at most
-//!   twice), and Kani checks that bound is enough. In WSL (2026-10-28) the 14-bit harnesses took
-//!   1 to 26 minutes and the 53-bit one 45; the 53-bit form against the other five factors is
-//!   not proven yet. Every other pair, and everything through the fused multiply-add, is tested
-//!   against exact rationals.
+//!   against 3, the splitter, 2^996 and the smallest subnormal, and for every first factor whose
+//!   significand has at most 14 bits (every sign and exponent) against −0.1 and the largest
+//!   double: one factor for each of its paths. The proofs module has one harness per value, with
+//!   kissat as the SAT solver; the `two_prod` harnesses unwind `scale`'s loop at most three times
+//!   (its callers pass at most 1074, so it steps at most twice), and Kani checks that bound is
+//!   enough. In WSL (2026-10-28, sharing the machine) the full-width harnesses took 4 to 54
+//!   minutes and the 14-bit ones up to 26; with all 53 bits free, −0.1 and the largest double
+//!   ran past four hours. Every other pair, and everything through the fused multiply-add, is
+//!   tested against exact rationals.
 //!
 //! Method: Dekker 1971 (`fast_two_sum`, Veltkamp's `split`, `two_prod`) and Knuth (`two_sum`), in
 //! the form and with the proofs of Shewchuk 1997: Theorem 6 (fast two-sum), Theorem 7 (two-sum),
@@ -664,23 +665,17 @@ mod proofs {
     }
 
     /// `two_prod` gives the rounded product, and an error that, when finite, adds back to it
-    /// without changing it, for every finite first factor and the second factor `b`. It is proven
-    /// for six second factors, one for each of its paths, one harness each (kissat as the SAT
-    /// solver): 3 and −0.1 (inexact products of either sign on the direct path), [`SPLITTER`] (a
-    /// factor that splits exactly), 2^996 (the scaled path for a large factor), the smallest
-    /// subnormal (the scaled path for a tiny product, whose error can be finer than any double)
-    /// and the largest double (overflow). Each harness unwinds `scale`'s loop at most three times.
-    fn two_prod_law(b: f64) {
-        // Significands of at most 14 bits (the low 39 fraction bits zero), every sign and exponent.
-        // The 53-bit form is proven against 3 (`two_prod_with_three_every_significand`), not yet
-        // against the other five factors.
-        let a = f64::from_bits(kani::any::<u64>() & !((1 << 39) - 1));
-        kani::assume(a.is_finite());
-        two_prod_holds(a, b);
-    }
-
-    /// [`two_prod_law`]'s claim for one pair.
-    fn two_prod_holds(a: f64, b: f64) {
+    /// without changing it, for every finite first factor `a` and the second factor `b`. It is
+    /// proven for six second factors, one for each of `two_prod`'s paths, one harness each (kissat
+    /// as the SAT solver, `scale`'s loop unwound at most three times): 3 and −0.1 (inexact
+    /// products of either sign on the direct path), [`SPLITTER`] (a factor that splits exactly),
+    /// 2^996 (the scaled path for a large factor), the smallest subnormal (the scaled path for a
+    /// tiny product, whose error can be finer than any double) and the largest double (overflow).
+    /// Against 3, the splitter, 2^996 and the smallest subnormal every finite `a` is proven (in WSL
+    /// on 2026-10-28, with up to ten proofs sharing twelve cores: 45, 54, 4 and 11 minutes);
+    /// against −0.1 and the largest double, every `a` whose significand has at most 14 bits
+    /// ([`two_prod_law_narrow`]), because with all 53 free each ran past four hours there.
+    fn two_prod_law(a: f64, b: f64) {
         let (p, e) = two_prod(a, b);
         assert!(p.to_bits() == (a * b).to_bits());
         if p.is_finite() && e.is_finite() {
@@ -688,60 +683,68 @@ mod proofs {
         }
     }
 
-    /// [`two_prod_law`] with 3: an inexact positive product on the direct path.
+    /// A symbolic finite double whose significand has at most 14 bits (the low 39 fraction bits
+    /// zero), every sign and exponent, for the two factors whose 53-bit proofs do not finish.
+    fn fourteen_bits() -> f64 {
+        let a = f64::from_bits(kani::any::<u64>() & !((1 << 39) - 1));
+        kani::assume(a.is_finite());
+        a
+    }
+
+    /// [`two_prod_law`] for every 14-bit first factor ([`fourteen_bits`]) and the factor `b`.
+    fn two_prod_law_narrow(b: f64) {
+        two_prod_law(fourteen_bits(), b);
+    }
+
+    /// [`two_prod_law`] with 3, for every finite first factor: an inexact positive product on
+    /// the direct path.
     #[kani::proof]
     #[kani::solver(kissat)]
     #[kani::unwind(3)]
     fn two_prod_with_three() {
-        two_prod_law(3.0);
+        two_prod_law(finite(), 3.0);
     }
 
-    /// [`two_prod_law`]'s claim with 3, for every finite first factor, all 53 significand bits
-    /// free: 45 minutes in WSL (2026-10-28), within CI's two-hour budget for these jobs.
-    #[kani::proof]
-    #[kani::solver(kissat)]
-    #[kani::unwind(3)]
-    fn two_prod_with_three_every_significand() {
-        two_prod_holds(finite(), 3.0);
-    }
-
-    /// [`two_prod_law`] with −0.1: an inexact negative product on the direct path.
+    /// [`two_prod_law_narrow`] with −0.1: an inexact negative product on the direct path.
     #[kani::proof]
     #[kani::solver(kissat)]
     #[kani::unwind(3)]
     fn two_prod_with_minus_a_tenth() {
-        two_prod_law(-0.1);
+        two_prod_law_narrow(-0.1);
     }
 
-    /// [`two_prod_law`] with [`SPLITTER`]: a factor that splits exactly.
+    /// [`two_prod_law`] with [`SPLITTER`], for every finite first factor: a factor that splits
+    /// exactly.
     #[kani::proof]
     #[kani::solver(kissat)]
     #[kani::unwind(3)]
     fn two_prod_with_the_splitter() {
-        two_prod_law(SPLITTER);
+        two_prod_law(finite(), SPLITTER);
     }
 
-    /// [`two_prod_law`] with 2^996: the scaled path for a large factor.
+    /// [`two_prod_law`] with 2^996, for every finite first factor: the scaled path for a large
+    /// factor.
     #[kani::proof]
     #[kani::solver(kissat)]
     #[kani::unwind(3)]
     fn two_prod_with_two_pow_996() {
-        two_prod_law(TWO_POW_996);
+        two_prod_law(finite(), TWO_POW_996);
     }
 
-    /// [`two_prod_law`] with the smallest subnormal: the scaled path for a tiny product.
+    /// [`two_prod_law`] with the smallest subnormal, for every finite first factor: the scaled
+    /// path for a tiny product.
     #[kani::proof]
     #[kani::solver(kissat)]
     #[kani::unwind(3)]
     fn two_prod_with_the_smallest_subnormal() {
-        two_prod_law(f64::from_bits(1));
+        two_prod_law(finite(), f64::from_bits(1));
     }
 
-    /// [`two_prod_law`] with the largest double: overflow.
+    /// [`two_prod_law_narrow`] with the largest double: overflow.
     #[kani::proof]
     #[kani::solver(kissat)]
     #[kani::unwind(3)]
     fn two_prod_with_the_largest_double() {
-        two_prod_law(f64::MAX);
+        two_prod_law_narrow(f64::MAX);
     }
 }

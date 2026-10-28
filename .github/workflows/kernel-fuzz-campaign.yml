@@ -1,20 +1,29 @@
 name: Kernel fuzz campaign
 
-# A long libFuzzer campaign on one of the geometry kernel's fuzz targets (kernel architecture,
-# chapter 28.5). The board's G26 asks for the wide integers' differential fuzzing against a
-# big-integer oracle "for 24 hours clean": this runs `wide_fuzz` (geom-fuzz's `wide` target, the
-# wide integers against num-bigint at every width) under libFuzzer, with coverage instrumentation
-# and the address sanitizer, in five shards of five hours each, 25 CPU hours in all. Each shard is
-# its own libFuzzer process with its own random seed, the way OSS-Fuzz counts fuzzing time. A
-# crash fails its shard and its input is uploaded; put the file in
-# projects/engines/geometry/crates/geom-fuzz/tests/__fuzz__/wide/crashes and `cargo test`
+# Long libFuzzer campaigns on the geometry kernel's fuzz targets (kernel architecture, chapter
+# 28.5), each target under libFuzzer with coverage instrumentation and the address sanitizer. Each
+# shard is its own libFuzzer process with its own random seed, the way OSS-Fuzz counts fuzzing
+# time. A crash fails its shard and its input is uploaded; put the file in
+# projects/engines/geometry/crates/geom-fuzz/tests/__fuzz__/<target>/crashes and `cargo test`
 # replays it forever (28.16). Each shard also uploads the corpus it grew, the record of what it
 # covered.
 #
-# When it runs: on demand only, never on an ordinary push. On a pull request, when someone adds the
-# label `fuzz-campaign` (a pull request's own copy of this file runs, so a campaign can run before
-# the file reaches main); and by hand from the Actions tab (workflow_dispatch), on any branch, once
-# this file is on main. kernel-fuzz.yml keeps the minute of libFuzzer every pull request gets.
+# When it runs, and what:
+#
+# - Every night (28.17, "hours of fuzzing per target"; piece G10): every target for five hours,
+#   one shard each. The targets are kernel-fuzz.yml's libFuzzer matrix (geom-test's
+#   tests/attack_g10.rs holds the two lists equal).
+# - On a release tag, called by kernel-release.yml: the same as a night.
+# - On demand: the board's G26 asks for the wide integers' differential fuzzing against a
+#   big-integer oracle "for 24 hours clean", so `wide_fuzz` (geom-fuzz's `wide` target, the wide
+#   integers against num-bigint at every width) runs in five shards of five hours each, 25 CPU
+#   hours in all: on a pull request when someone adds the label `fuzz-campaign` (a pull request's
+#   own copy of this file runs, so a campaign can run before the file reaches main), and by hand
+#   from the Actions tab (workflow_dispatch), on any branch, once this file is on main.
+#
+# Never on an ordinary push. kernel-fuzz.yml keeps the minute of libFuzzer every pull request gets.
+# The machines are GitHub's hosted runners, free for a public repository (decision 32.4), until
+# OSS-Fuzz accepts the project.
 #
 # Pins: as kernel-fuzz.yml's, which this file repeats: the workspace's compiler, the dated nightly
 # for libFuzzer's flags, cargo-bolero's exact version from its published lockfile, every action
@@ -24,6 +33,11 @@ on:
   pull_request:
     types: [labeled]
   workflow_dispatch:
+  schedule:
+    # Every night at 12:47 UTC, before the nightly predicate suite (kernel-nightly.yml).
+    - cron: "47 12 * * *"
+  # Run whole by kernel-release.yml on a release tag, with every other kernel workflow (28.17).
+  workflow_call:
 
 permissions:
   contents: read
@@ -42,10 +56,12 @@ env:
 
 jobs:
   campaign:
-    name: wide_fuzz under libFuzzer for five hours (shard ${{ matrix.shard }} of 5)
+    name: ${{ matrix.target }} under libFuzzer for five hours (shard ${{ matrix.shard }})
     if: >-
       github.event_name == 'workflow_dispatch'
+      || github.event_name == 'schedule'
       || github.event.label.name == 'fuzz-campaign'
+      || startsWith(github.ref, 'refs/tags/geom-v')
     runs-on: ubuntu-latest
     # Five hours of fuzzing, the build before it and the uploads after, inside the six hours a
     # hosted job may run.
@@ -53,7 +69,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5]
+        # Nightly and on a release: every target, one shard each. On demand: wide_fuzz in five.
+        target: ${{ fromJSON((github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/geom-v')) && '["orient2d_fuzz", "predicates_fuzz", "variants_fuzz", "wide_fuzz"]' || '["wide_fuzz"]') }}
+        shard: ${{ fromJSON((github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/geom-v')) && '[1]' || '[1, 2, 3, 4, 5]') }}
     defaults:
       run:
         shell: bash
@@ -73,21 +91,21 @@ jobs:
           --no-default-features --features libfuzzer
       - name: Cargo.lock is the reviewed one
         run: cargo metadata --locked --format-version 1 > /dev/null
-      - name: Fuzz wide_fuzz with libFuzzer for five hours
+      - name: Fuzz ${{ matrix.target }} with libFuzzer for five hours
         run: >-
-          cargo bolero test wide_fuzz --package geom-fuzz
+          cargo bolero test "${{ matrix.target }}" --package geom-fuzz
           --toolchain "$FUZZ_NIGHTLY" --engine libfuzzer -T 18000s
       - name: Upload the crashing input
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: campaign-crashes-shard-${{ matrix.shard }}
+          name: campaign-crashes-${{ matrix.target }}-shard-${{ matrix.shard }}
           path: projects/engines/geometry/crates/geom-fuzz/tests/__fuzz__/*/crashes/
           if-no-files-found: ignore
       - name: Upload the corpus the shard grew
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: campaign-corpus-shard-${{ matrix.shard }}
+          name: campaign-corpus-${{ matrix.target }}-shard-${{ matrix.shard }}
           path: projects/engines/geometry/crates/geom-fuzz/tests/__fuzz__/*/corpus/
           if-no-files-found: ignore
