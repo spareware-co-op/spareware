@@ -49,6 +49,7 @@ The board (30.5) also turns into a piece every narrower question that chapters 6
 | 32.29 | G240: 576- and 768-bit predicates | Accepted into 6.2 for skeleton (`I576`) and mitre-offset (`I768`) event order only, each with a written derivation, a certificate, extreme tests and a filter, and measured; `I512` and `geom-math`'s wide stages accepted as built | 6, 13 | G251, the exact straight skeleton |
 | 32.30 | G241: the close_near_contacts cap | ε_heal's values as a second meaning: default 640q, at most 6,400q; larger requests refused | 6, 11 | G249, the close_near_contacts repair |
 | 32.31 | G285: the contact benchmark's licence | Wang et al.'s 2021 benchmark has no licence (all rights reserved), so it is not stored or run until the authors clear it, on a request the owner sends; G297 tests meanwhile on the authors' Apache-2.0 time-of-impact sample and our own exact cases | 19, 29 | G297, time of first contact |
+| 32.32 | G312: USD exchange home | `geom-meshio` owns USD subdivision exchange; Chaikin creasing travels as `uniform token spareware:creaseMethod = "chaikin"` on the Mesh prim, absent meaning uniform | 16, 24 | G354, SubD exchange |
 
 ## 32.1 The grid ladder (decision 1)
 
@@ -615,3 +616,16 @@ Why: a separate rung would be a second number for the same judgement; reusing ε
 Why: the method is permissive and the promise is the same; only the data waits, and data with no licence cannot sit in a co-op's public CI (32.11).
 
 **Changes:** 19.12, 29.3's Tight Inclusion row, 31.7, and G297's done-when.
+
+## 32.32 USD exchange home (owner action G312)
+
+**What it is.** Subdivision nets need an exchange format that keeps creases, corners and OpenSubdiv's options: OBJ has no creases, 3dm waits on McNeel (32.9), and DXF's MESH is unverified (24.11). USD's Catmull-Clark meshes carry all of them except the creasing method, so Chaikin creasing, which 16.1 stores, has nowhere to go. No crate owns USD (16, questions 14 and 19; 31.7).
+
+**Decided 2026-10-28 (owner action G312).** Read with 16.1, 24.8, 24.11, 27's crate table, 32.9, evidence report [09](../../../kit/notes/G01-evidence/09-freeform-subd-implicit.md) section 1, and OpenUSD's `UsdGeomMesh` schema as 16.1 cites it.
+- **`geom-meshio` owns USD subdivision exchange**, beside OBJ's subdivision nets, as board piece G354 already places it. USD's other content (scene graphs, materials, animation) stays with programs; the kernel maps only geometry, as for every format (24).
+- **Chaikin creasing travels as one namespaced attribute on the Mesh prim:** `uniform token spareware:creaseMethod = "chaikin"`, written only when the net uses Chaikin. Absent, or `"uniform"`, means OpenSubdiv's uniform creasing, USD's own behaviour, so every other USD reader sees a valid mesh and loses only the creasing method, which it could not use anyway. A namespaced attribute rather than `customData` is chosen because USD composes and round-trips attributes through every layer operation, and the namespace keeps it clear of USD's own names.
+- **How it reads and writes USD is G354's and G439's**, with the terms check 24.11 asks for (OpenUSD's TOST-1.0 licence and the AOUSD specification's terms) done before any USD source or schema text is used. A pure-Rust reader under a permissive licence, such as the MIT `openusd` crate, is checked there against 29's rules before anything is written by hand.
+
+Why: one crate for subdivision exchange keeps OBJ and USD on one mapping of `geom-subd`'s options; a namespaced attribute is the smallest addition that round-trips through USD tools and degrades safely in readers that do not know it.
+
+**Changes:** 16.1, 24.11, 31.7, and pieces G354 and G439.
