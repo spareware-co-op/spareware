@@ -351,12 +351,13 @@ fn parse(module: &str, source: &str) -> syn::File {
     syn::parse_file(source).unwrap_or_else(|e| panic!("geom-num's {module} does not parse: {e}"))
 }
 
-/// Whether an item's attributes make it test code: `#[cfg(test)]`.
+/// Whether an item's attributes make it test or proof code: `#[cfg(test)]`, or `#[cfg(kani)]`
+/// (the Kani harnesses beside the code, chapter 28.7), which no user can call.
 fn is_test(attrs: &[syn::Attribute]) -> bool {
     attrs.iter().any(|a| {
         a.path().is_ident("cfg")
             && a.parse_args::<syn::Ident>()
-                .is_ok_and(|word| word == "test")
+                .is_ok_and(|word| word == "test" || word == "kani")
     })
 }
 
@@ -447,7 +448,8 @@ fn the_parser_finds_every_public_function_however_it_is_written() {
         impl core::cmp::Ord for Sign { fn cmp(&self, o: &Self) -> Ordering { todo!() } }\n\
         impl Clone for Sign { fn clone(&self) -> Self { *self } }\n\
         #[cfg(test)]\nmod tests { pub fn test_only() {} }\n\
-        #[cfg(test)]\npub fn also_test_only() {}\n";
+        #[cfg(test)]\npub fn also_test_only() {}\n\
+        #[cfg(kani)]\nmod proofs { pub fn proof_only() {} }\n";
     let mut found = public_functions("m", source);
     found.sort();
     assert_eq!(
