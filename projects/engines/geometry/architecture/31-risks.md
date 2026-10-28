@@ -620,6 +620,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | What the Sweep kind stores, and the conical helix | 7, 13, 24 | 32.28 (owner action G239) |
 | Predicates of 576 and 768 bits for skeleton and mitre-offset events; the wide integers already in code | 6, 13 | 32.29 (owner action G240) |
 | The default and the cap of `close_near_contacts` | 6, 11 | 32.30 (owner action G241) |
+| The licence of Wang et al.'s 2021 contact benchmark | 19, 29 | 32.31 (owner action G285) |
 
 ### Answered by the pieces built so far
 
@@ -949,7 +950,7 @@ Proposed in 31.5 (R23) and 32.5: one consolidated crate-list note settles all of
 | Thread and gear tables are copyrighted standards, so geom-thread takes them as supplied or licensed data | 13 | Piece "Helical sweeps and geom-thread" |
 | How entries in our own pattern and linetype library are authored | 14 | 32.24 (owner action G184); piece "2D-22 Our own pattern and linetype library" builds it |
 | SMLib's .smp and .smb fixtures: the stricter reading applies, so they are not copied and the configurations are rebuilt | 12 | Answered; ledger row |
-| Unverified licence facts: EISPACK, the LAPACK text, ShapeOp, NIST SFA and MBE PMI, BRL-CAD's LGPL version, linesweeper, laz-rs's history, Geogram's other third_party folders, OpenMesh, the 3MF and glTF terms, Lacewell-Burley and Biermann-Levin-Zorin reference code, and the Wang et al. 2021 collision dataset | 16, 19, 29 | Before each source is used; pieces "Licence and dependency gate for the kernel workspace" and "Dependency audit" |
+| Unverified licence facts: EISPACK, the LAPACK text, ShapeOp, NIST SFA and MBE PMI, BRL-CAD's LGPL version, linesweeper, laz-rs's history, Geogram's other third_party folders, OpenMesh, the 3MF and glTF terms, Lacewell-Burley and Biermann-Levin-Zorin reference code, and the Wang et al. 2021 collision dataset (checked: no licence, waits for the authors, 32.31) | 16, 19, 29 | Before each source is used; pieces "Licence and dependency gate for the kernel workspace" and "Dependency audit" |
 | The JTS conformance files are no longer unverified: chapter 14 settles them as EDL-1.0, reusable with their notice | 14, 29 | Editorial fix to chapter 29's list of unverified licence facts |
 | Sample data licences: KiCad boards and Gerber reference files, ezdxf examples, PDAL and las-rs clouds, rhino3dm files, LINZ LandXML examples, the buildingSMART alignment set (fetch only), and the LandXML 1.2 schema (which cannot be pinned) | 17, 28 | Piece "Test-corpus register and fetcher"; fetch-only until checked |
 | Copyright in largely AI-generated code (solidcore, CADCraft, csgrs) matters only if one of them is promoted to PORT | 29 | Risk R20 |
