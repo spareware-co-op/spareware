@@ -1,0 +1,511 @@
+name: Kernel quality
+
+# The geometry kernel's mutation and coverage gates and its weekly Miri run (chapter 28 of the
+# kernel architecture, projects/engines/geometry/architecture/28-testing.md, section 28.8; when
+# each runs is 28.17). geom-test's `kernel-quality` binary plans and judges every run, so this file
+# holds no copy of the foundation set, the bars or the shard sizes (geom_test::foundation,
+# geom_test::mutants):
+#
+# - Mutants in the diff, on every pull request that touches the kernel: cargo-mutants mutates the
+#   lines the pull request changes (`--in-diff`), and each mutant is judged by the mutated crate's
+#   integration tests, which reach only its public interface (.cargo/mutants.toml). A mutant that
+#   survives or times out fails the gate unless the quality ledger
+#   (projects/engines/geometry/quality-ledger.json) keeps it: in the foundation set only as
+#   equivalent, with a written reason; elsewhere also as harmless, with a reason, or as known, an
+#   older survivor the base branch's ledger already holds, so no new unexplained one merges.
+# - The full run, weekly and on demand: every mutant of every kernel crate, judged against the
+#   ledger as a whole; the judge also fails on any ledger entry that no survivor matches any more.
+#   Both runs are sharded across runners: the plan job lists the mutants and asks the judge how
+#   many shards they need, and the judge proves the shards together tested exactly that list.
+# - Coverage, on every pull request that touches the kernel and weekly and on demand: each crate
+#   measured by its own tests with cargo-llvm-cov, lines and branches, on the pinned nightly that
+#   branch coverage needs. The foundation set needs 100% of lines and branches, every other kernel
+#   crate 90% of lines, and every `coverage(off)` mark must cite a Kani or Verus proof that the
+#   ledger records. A foundation line the tests do not run yet passes only while the ledger's
+#   awaiting_proof list names it, with the piece that proves it unreachable or tests it. A pull request measures the crates it changes and every kernel crate that
+#   depends on one of them; the weekly run measures all.
+# - The gates' own proof, on every pull request that touches the kernel and weekly: geom-test's
+#   seeded_gates test runs the real cargo-mutants and cargo-llvm-cov on a seeded crate and shows
+#   each gate fails on a seeded survivor, an uncovered line, an untaken branch and an uncited
+#   coverage(off) mark.
+# - Miri over every kernel crate's test suites, weekly and on demand (28.8: to catch undefined
+#   behaviour inside dependencies, which `forbid(unsafe_code)` does not reach). nextest runs each
+#   test in its own Miri process, in partitions, and stops a test at its budget, the default-miri
+#   profile in .config/nextest.toml: such a test passed every step Miri interpreted, and the
+#   report names it. A pull request that changes how Miri runs gets one partition at a short
+#   budget, the miri-smoke profile. geom-pool's tests run under Tree Borrows, every other
+#   crate's under Stacked Borrows, while crossbeam-epoch 0.9.21 is in the lock (the step says why).
+#
+# Only geom-test's judges decide: a cargo-mutants run that finds survivors (exit 2) or timeouts
+# (exit 3) passes its step and leaves the verdict to the ledger; any other failure of a tool fails
+# its step, and a judge fails when a job it needs did not succeed.
+#
+# Toolchains: the same pinned compiler as kernel.yml (28.13, the toolchain guard), and for branch
+# coverage and Miri one dated nightly, installed with rustup by its date and used only through
+# RUSTUP_TOOLCHAIN in the steps that need it; an instrumented or interpreted build never ships. The
+# nightly is at least two weeks old when pinned; change it in its own pull request.
+#
+# Tools: cargo-mutants (MIT), cargo-llvm-cov (Apache-2.0 OR MIT) and cargo-nextest (Apache-2.0 OR
+# MIT), each built from crates.io at a pinned version with --locked. Miri (MIT OR Apache-2.0) is a
+# component of the pinned nightly.
+#
+# Supply chain: every action is pinned to a full commit; checkout, rust-toolchain and rust-cache to
+# the same commits as kernel.yml, and upload-artifact and download-artifact to the commits of their
+# tags (beside each), checked when they were pinned. The workflow can only read the repository.
+#
+# If any job becomes a required check, note that a pull request outside the paths below never runs
+# this workflow, so it would never report (see kernel.yml).
+
+on:
+  pull_request:
+    paths:
+      - "projects/engines/geometry/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".cargo/**"
+      - ".config/nextest.toml"
+      - "rust-toolchain.toml"
+      - "rust-toolchain"
+      - ".github/workflows/kernel-quality.yml"
+  schedule:
+    # Weekly, Saturdays at 02:17 UTC.
+    - cron: "17 2 * * 6"
+  workflow_dispatch:
+  # Run whole by kernel-release.yml on a release tag, with every other kernel workflow (28.17).
+  workflow_call:
+
+permissions:
+  contents: read
+
+# A newer push to the same pull request cancels the runs it supersedes; scheduled runs all run.
+concurrency:
+  group: kernel-quality-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # The same pinned compiler as kernel.yml (28.13, the toolchain guard).
+  RUST_TOOLCHAIN: "1.99.0"
+  # The pinned nightly for branch coverage (28.8) and Miri, by date: rustc 1.101.0-nightly
+  # (21b707e3f 2026-09-30), LLVM 23.1.1, with llvm-tools-preview and miri.
+  RUST_NIGHTLY: "nightly-2026-10-01"
+  CARGO_MUTANTS_VERSION: "27.1.0"
+  CARGO_LLVM_COV_VERSION: "0.9.1"
+  CARGO_NEXTEST_VERSION: "0.9.146"
+  CARGO_TERM_COLOR: always
+  # The release profile, as the mutation and coverage builds use it: overflow checks and debug
+  # assertions on, so tests that use native arithmetic still stop where a mutant overflows and code
+  # behind debug assertions is built, tested and measured.
+  CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS: "true"
+  CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: "true"
+
+jobs:
+  mutants-plan:
+    name: Mutants, the plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      count: ${{ steps.plan.outputs.count }}
+      shards: ${{ steps.plan.outputs.shards }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # A pull request's merge commit and its parents: the first parent is the base branch.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: quality-tools
+      - name: Install cargo-mutants ${{ env.CARGO_MUTANTS_VERSION }}
+        run: cargo install --locked cargo-mutants --version "$CARGO_MUTANTS_VERSION"
+      - name: Every mutant this run must test
+        run: |
+          mkdir -p "$RUNNER_TEMP/plan"
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            # actions/checkout checks out the merge commit of a pull request; its first parent is
+            # the base, so this is exactly the change as it would merge. Only Rust files can hold
+            # mutants, and a rename is written as a deletion and an addition, so cargo-mutants
+            # reads nothing but plain hunks. With a diff that touches no mutant, cargo-mutants
+            # prints no list and exits 0: the judge reads the empty file as no mutants.
+            test "$(git rev-list --parents -n 1 HEAD | wc -w)" -eq 3
+            git diff --no-ext-diff --no-color --no-renames HEAD^1 HEAD -- '*.rs' > "$RUNNER_TEMP/plan/pr.diff"
+            cargo mutants --in-diff "$RUNNER_TEMP/plan/pr.diff" --list --json > "$RUNNER_TEMP/plan/list.json"
+            # The base branch's ledger: the only source of the known entries a pull request may
+            # use (geom_test::mutants). A base without a ledger has none.
+            git show "HEAD^1:projects/engines/geometry/quality-ledger.json" > "$RUNNER_TEMP/plan/base-ledger.json" \
+              || rm -f "$RUNNER_TEMP/plan/base-ledger.json"
+          else
+            cargo mutants --list --json > "$RUNNER_TEMP/plan/list.json"
+          fi
+      - name: How many shards the mutants need
+        id: plan
+        run: |
+          plan=$(cargo run --locked -p geom-test --bin kernel-quality -- mutants-plan \
+            --list "$RUNNER_TEMP/plan/list.json")
+          echo "$plan"
+          echo "count=$(jq -r .count <<<"$plan")" >> "$GITHUB_OUTPUT"
+          echo "shards=$(jq -c .shards <<<"$plan")" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mutants-plan
+          path: ${{ runner.temp }}/plan
+          if-no-files-found: error
+
+  mutants:
+    name: Mutants (shard ${{ matrix.shard }})
+    needs: mutants-plan
+    # A plan of no shard (a diff that touches no mutant) runs none; its matrix still lists shard 0,
+    # because a matrix may not be empty.
+    if: needs.mutants-plan.outputs.count != '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    strategy:
+      # Every shard reports, so the judge sees every survivor.
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.mutants-plan.outputs.shards) }}
+    env:
+      SHARDS: ${{ needs.mutants-plan.outputs.count }}
+      # Mutated builds are tests only: optimise lightly and build incrementally, so each mutant
+      # rebuilds in seconds rather than minutes.
+      CARGO_PROFILE_RELEASE_OPT_LEVEL: "1"
+      CARGO_PROFILE_RELEASE_INCREMENTAL: "true"
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "256"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: mutants
+      - name: Install cargo-mutants ${{ env.CARGO_MUTANTS_VERSION }}
+        run: cargo install --locked cargo-mutants --version "$CARGO_MUTANTS_VERSION"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: mutants-plan
+          path: ${{ runner.temp }}/plan
+      - name: Mutate the kernel code (shard ${{ matrix.shard }})
+        env:
+          # The judge reads each mutant's log for a compiler error (geom_test::mutants); colour
+          # codes before `error[E...]` would hide it, so the logs are written without colour.
+          CARGO_TERM_COLOR: never
+        run: |
+          # rust-cache turns incremental compilation off for the whole job; turn it back on here.
+          export CARGO_INCREMENTAL=1
+          diff=()
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            diff=(--in-diff "$RUNNER_TEMP/plan/pr.diff")
+          fi
+          set +e
+          cargo mutants "${diff[@]}" --shard "${{ matrix.shard }}/$SHARDS" --no-shuffle --in-place \
+            -vV --output "$RUNNER_TEMP/out"
+          code=$?
+          set -e
+          # 0: every mutant caught; 2: survivors; 3: timeouts. The judge decides those. Any other
+          # code (a usage error, a failing baseline, a diff that does not match the tree, an
+          # internal error) means the run itself failed.
+          case "$code" in 0|2|3) ;; *) exit "$code" ;; esac
+          test -f "$RUNNER_TEMP/out/mutants.out/mutants.json"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: mutants-${{ matrix.shard }}
+          path: ${{ runner.temp }}/out
+          if-no-files-found: error
+
+  mutants-judge:
+    name: Mutants, judged against the ledger
+    needs: [mutants-plan, mutants]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Every job the judge reads succeeded
+        run: |
+          echo "plan: ${{ needs.mutants-plan.result }}; shards: ${{ needs.mutants.result }}"
+          test "${{ needs.mutants-plan.result }}" = success
+          case "${{ needs.mutants.result }}" in success) ;; skipped) test "${{ needs.mutants-plan.outputs.count }}" = 0 ;; *) exit 1 ;; esac
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: quality-tools
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: mutants-plan
+          path: ${{ runner.temp }}/plan
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: needs.mutants-plan.outputs.count != '0'
+        with:
+          pattern: mutants-[0-9]*
+          path: ${{ runner.temp }}/shards
+      - name: Judge every mutant against the ledger
+        run: |
+          shopt -s nullglob
+          outs=("$RUNNER_TEMP"/shards/mutants-*/mutants.out)
+          # download-artifact gives each artifact a folder of its own when a pattern matches several,
+          # and extracts a single match straight into the path: read either layout.
+          if [ -d "$RUNNER_TEMP/shards/mutants.out" ]; then
+            outs+=("$RUNNER_TEMP/shards/mutants.out")
+          fi
+          args=(--expected "$RUNNER_TEMP/plan/list.json")
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            args+=(--mode diff)
+            if [ -f "$RUNNER_TEMP/plan/base-ledger.json" ]; then
+              args+=(--base-ledger "$RUNNER_TEMP/plan/base-ledger.json")
+            fi
+          else
+            args+=(--mode full)
+          fi
+          cargo run --locked -p geom-test --bin kernel-quality -- mutants "${args[@]}" "${outs[@]}"
+
+  coverage:
+    name: Coverage (lines, and branches on the pinned nightly)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Install the pinned nightly with llvm-tools
+        run: |
+          rustup toolchain install "$RUST_NIGHTLY" --profile minimal --component llvm-tools-preview
+          rustc "+$RUST_NIGHTLY" -vV
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: coverage
+      - name: Install cargo-llvm-cov ${{ env.CARGO_LLVM_COV_VERSION }}
+        run: cargo install --locked cargo-llvm-cov --version "$CARGO_LLVM_COV_VERSION"
+      - name: The crates to measure
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            test "$(git rev-list --parents -n 1 HEAD | wc -w)" -eq 3
+            git diff --no-ext-diff --no-renames --name-only HEAD^1 HEAD > "$RUNNER_TEMP/changed.txt"
+            echo "SCOPE=--changed $RUNNER_TEMP/changed.txt" >> "$GITHUB_ENV"
+          else
+            echo "SCOPE=--all" >> "$GITHUB_ENV"
+          fi
+      - name: Measure each crate with its own tests
+        env:
+          RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
+          # llvm-cov keeps the first coverage record of each function name it reads, across every
+          # test binary, and drops the rest. Two things would give a function a first record that
+          # is not its real count:
+          # - Optimised builds let rustc inline small functions into other crates, where the copy
+          #   has different coverage data (llvm-cov's "mismatched data"); the threshold stops that
+          #   (geom_test::coverage::check_log fails a run where it did not work).
+          # - A function the crate itself never calls is not compiled into its library, and rustc
+          #   records it there with every count zero; an `#[inline]` function that only another
+          #   test binary calls is then reported as never run whenever a binary holding that zero
+          #   record is read first. -C link-dead-code compiles every function into the library,
+          #   so every record of a function reads the same counters, which llvm-profdata merge
+          #   adds up over every test process (https://llvm.org/docs/CommandGuide/llvm-profdata.html).
+          #   geom-test's seeded_gates test proves it on an `#[inline]` function.
+          RUSTFLAGS: -Z cross-crate-inline-threshold=never -C link-dead-code
+        run: |
+          # The list comes from the judge itself, so it measures what it will judge.
+          # shellcheck disable=SC2086 # SCOPE holds an option and its value.
+          RUSTUP_TOOLCHAIN="$RUST_TOOLCHAIN" RUSTFLAGS= cargo run --locked -p geom-test \
+            --bin kernel-quality -- affected $SCOPE > "$RUNNER_TEMP/crates.txt"
+          cat "$RUNNER_TEMP/crates.txt"
+          mkdir -p "$RUNNER_TEMP/cov"
+          while read -r crate; do
+            echo "::group::$crate"
+            cargo llvm-cov --locked -p "$crate" --release --branch \
+              --lcov --output-path "$RUNNER_TEMP/cov/$crate.lcov" 2>&1 | tee "$RUNNER_TEMP/cov/$crate.log"
+            echo "::endgroup::"
+          done < "$RUNNER_TEMP/crates.txt"
+      - name: Judge the coverage against 28.8's bars, and every coverage(off) mark against its proof
+        run: |
+          # shellcheck disable=SC2086 # SCOPE holds an option and its value.
+          cargo run --locked -p geom-test --bin kernel-quality -- coverage $SCOPE \
+            --lcov-dir "$RUNNER_TEMP/cov"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: coverage
+          path: ${{ runner.temp }}/cov
+          if-no-files-found: ignore
+
+  gates-seeded:
+    name: The gates fail on seeded faults
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Install the pinned nightly with llvm-tools
+        run: rustup toolchain install "$RUST_NIGHTLY" --profile minimal --component llvm-tools-preview
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: quality-tools
+      - name: Install cargo-mutants ${{ env.CARGO_MUTANTS_VERSION }} and cargo-llvm-cov ${{ env.CARGO_LLVM_COV_VERSION }}
+        run: |
+          cargo install --locked cargo-mutants --version "$CARGO_MUTANTS_VERSION"
+          cargo install --locked cargo-llvm-cov --version "$CARGO_LLVM_COV_VERSION"
+      - name: Each gate fails on its seeded fault and passes on the fixed crate
+        env:
+          # The seeded test runs cargo-llvm-cov on this nightly, as the coverage job does.
+          SPAREKIT_COVERAGE_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
+        run: cargo test --locked -p geom-test --test seeded_gates -- --ignored --test-threads 1
+
+  miri:
+    name: Miri (partition ${{ matrix.partition }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    strategy:
+      fail-fast: false
+      matrix:
+        # Weekly: every partition. A pull request: partition 1, and only when it changes how Miri
+        # runs (the step "Whether this run is needed" below).
+        partition: ${{ fromJSON(github.event_name == 'pull_request' && '[1]' || '[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]') }}
+    env:
+      # The number of partitions: the length of the weekly matrix above. Each test has a budget
+      # of 10 minutes under Miri (.config/nextest.toml), and a runner runs four at once, so a
+      # partition of n tests takes at most n × 10 / 4 minutes: with 16 partitions, up to about
+      # 1,900 kernel tests fit in the job's time.
+      PARTITIONS: 16
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Whether this run is needed
+        run: |
+          # Weekly and on demand, always. On a pull request, only when it changes the Miri run:
+          # this workflow, nextest's profiles or the module that names the crates.
+          needed=true
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            test "$(git rev-list --parents -n 1 HEAD | wc -w)" -eq 3
+            if ! git diff --name-only HEAD^1 HEAD | grep -qxE \
+              '\.github/workflows/kernel-quality\.yml|\.config/nextest\.toml|projects/engines/geometry/crates/geom-test/src/miri\.rs'; then
+              needed=false
+            fi
+          fi
+          echo "NEEDED=$needed" >> "$GITHUB_ENV"
+          echo "Miri run needed: $needed"
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        if: env.NEEDED == 'true'
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Install the pinned nightly with Miri
+        if: env.NEEDED == 'true'
+        run: |
+          rustup toolchain install "$RUST_NIGHTLY" --profile minimal --component miri,rust-src
+          cargo "+$RUST_NIGHTLY" miri setup
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        if: env.NEEDED == 'true'
+        with:
+          key: miri
+      - name: Install cargo-nextest ${{ env.CARGO_NEXTEST_VERSION }}
+        if: env.NEEDED == 'true'
+        run: cargo install --locked cargo-nextest --version "$CARGO_NEXTEST_VERSION"
+      - name: The kernel crates
+        if: env.NEEDED == 'true'
+        run: |
+          packages=$(cargo run --locked -p geom-test --bin kernel-quality -- miri-packages)
+          echo "$packages"
+          echo "PACKAGES=$packages" >> "$GITHUB_ENV"
+      - name: Every kernel test under Miri (partition ${{ matrix.partition }})
+        if: env.NEEDED == 'true'
+        env:
+          RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
+          # Miri's defaults stay: isolation from the host (no clock but Miri's own, no outside
+          # entropy, environment variables hidden), so a seeded test runs its fixed default seed;
+          # and extra rounding error on the float operations whose precision Rust does not
+          # guarantee, so a golden hash that rests on one of them fails here. One change: an
+          # operation isolation refuses returns an error with a warning instead of stopping the
+          # run, because proptest's failure persistence asks for the working directory before
+          # every property and carries on without it.
+          MIRIFLAGS: -Zmiri-isolation-error=warn-nobacktrace
+        run: |
+          # A pull request runs the miri-smoke profile: the same run at a short budget per test.
+          profile=()
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            profile=(--profile miri-smoke)
+          fi
+          # shellcheck disable=SC2086 # PACKAGES holds several -p arguments, none with a space.
+          cargo miri nextest run --locked $PACKAGES "${profile[@]}" \
+            -E 'not package(geom-pool)' \
+            --partition "hash:${{ matrix.partition }}/$PARTITIONS"
+      # geom-pool, the one crate that may name rayon (29.4), under Tree Borrows instead of Stacked
+      # Borrows. crossbeam-epoch 0.9.21, which rayon's queues use, turns a reference to a list
+      # entry into one to the whole thread record around it (`IsElement::element_of`); Stacked
+      # Borrows reports that, Tree Borrows allows it. crossbeam fixed it upstream in
+      # crossbeam-rs/crossbeam#871 (commit 02fb08a6c, "epoch: Fix stacked borrows violations"),
+      # which changes a public trait, so only a 0.10 release carries it. geom-test's
+      # kernel_quality_workflow test fails once Cargo.lock moves off 0.9.21, so the exception is
+      # looked at again then. The leak check is off for this step only: rayon's `ThreadPool::drop`
+      # signals its threads to stop (`registry.terminate()`) and does not join them, so when a test
+      # ends each worker's crossbeam-epoch registration is still alive, and Miri reports it as
+      # leaked (run 40593080811). rayon's own CI runs Miri the same way, `-Zmiri-tree-borrows
+      # -Zmiri-ignore-leaks` (rayon-rs/rayon, .github/workflows/ci.yaml). Every other check of
+      # Miri stays on: data races, use-after-free, uninitialised and out-of-bounds reads, and Tree
+      # Borrows' own aliasing rules.
+      - name: geom-pool's tests under Miri with Tree Borrows
+        if: env.NEEDED == 'true' && matrix.partition == 1
+        env:
+          RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
+          MIRIFLAGS: -Zmiri-isolation-error=warn-nobacktrace -Zmiri-tree-borrows -Zmiri-ignore-leaks
+        run: |
+          profile=()
+          dir=target/nextest/default-miri
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            profile=(--profile miri-smoke)
+            dir=target/nextest/miri-smoke
+          fi
+          # The run above wrote its report to the same file: keep it beside this one.
+          if [ -f "$dir/junit.xml" ]; then mv "$dir/junit.xml" "$dir/junit-stacked-borrows.xml"; fi
+          cargo miri nextest run --locked -p geom-pool "${profile[@]}"
+          mv "$dir/junit.xml" "$dir/junit-tree-borrows.xml"
+      - name: The kernel's doctests under Miri
+        if: env.NEEDED == 'true' && matrix.partition == 1
+        env:
+          RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
+          MIRIFLAGS: -Zmiri-isolation-error=warn-nobacktrace
+        run: |
+          # nextest does not run doctests, so partition 1 runs them, every one.
+          # shellcheck disable=SC2086 # PACKAGES holds several -p arguments, none with a space.
+          cargo miri test --locked $PACKAGES --doc
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() && env.NEEDED == 'true' }}
+        with:
+          name: miri-${{ matrix.partition }}
+          path: target/nextest/*/junit*.xml
+          if-no-files-found: ignore

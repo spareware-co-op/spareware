@@ -706,10 +706,10 @@ mod tests {
     #[test]
     fn small_sums_round_like_ieee() {
         let cases: [(f64, f64); 6] = [
-            (1.0, 2.0f64.powi(-53)),
-            (1.0, 2.0f64.powi(-53) + 2.0f64.powi(-105)),
-            (-f64::MAX, -2.0f64.powi(970)),
-            (f64::MAX, 2.0f64.powi(969)),
+            (1.0, libm::scalbn(1.0, -53)),
+            (1.0, libm::scalbn(1.0, -53) + libm::scalbn(1.0, -105)),
+            (-f64::MAX, -libm::scalbn(1.0, 970)),
+            (f64::MAX, libm::scalbn(1.0, 969)),
             (f64::from_bits(1), f64::from_bits(3)),
             (0.1, -0.1),
         ];

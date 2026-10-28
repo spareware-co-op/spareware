@@ -42,7 +42,7 @@ abbr[title] { text-decoration: underline dotted; text-underline-offset: 2px; cur
 html, body { height: 100%; }
 body {
   margin: 0; background: var(--page); color: var(--ink); font: var(--text)/1.45 var(--f-ui); -webkit-font-smoothing: antialiased;
-  display: grid; grid-template-rows: 41px minmax(0, 1fr) auto; overflow: hidden;
+  display: grid; grid-template-rows: 60px minmax(0, 1fr) auto; overflow: hidden;   /* 60px: the tool strip's panels, each named along the bottom */
 }
 button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
@@ -52,6 +52,10 @@ button { cursor: pointer; }
 .slbl { display: block; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
 .badge { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px; background: var(--app-tint); color: var(--app-strong); font-size: 11px; font-weight: 600; white-space: nowrap; }
 .badge.n { background: var(--sink); color: var(--ink-2); }
+
+/* Inside Spare Construct the tools sit on its ribbon (js/frame-ribbon.js), so the strip and its row go */
+html.in-ribbon body { grid-template-rows: minmax(0, 1fr) auto; }
+html.in-ribbon #top { display: none; }
 
 /* ---------- tool strip ---------- */
 /* One line: ui.js fitTop() moves data-prio items into the Menu while the strip overflows */
@@ -68,6 +72,11 @@ span.tb-item { display: inline-flex; align-items: center; gap: 6px; }
 .tb-over { display: none !important; }
 #top .grp { display: flex; align-items: center; gap: 2px; margin-right: 4px; padding-right: 6px; border-right: 1px solid var(--hairline); }
 .glbl { margin: 0 4px 0 2px; font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+/* The strip reads as the Transport tab of the Spare Construct ribbon (design/ribbon): each group is a panel with its name along the bottom. */
+#top { align-items: stretch; min-height: 60px; padding: 0 8px 0 0; background: var(--panel); }
+#top .grp { position: relative; align-self: stretch; margin-right: 0; padding: 4px 8px 21px; }
+#top .grp > .glbl { position: absolute; left: 0; right: 0; bottom: 0; margin: 0; padding: 2px 8px 3px; background: var(--panel-alt); border-top: 1px solid var(--hairline); font-size: 11px; line-height: 14px; text-align: center; white-space: nowrap; }
+#top > .tb-zone, #top > .spacer { align-self: center; }
 /* buttons on the strip read as tools: no box until pointed at, the app colour when on */
 #top .btn:not(.primary) { border-color: transparent; background: none; }
 #top .btn:not(.primary):hover { background: var(--panel); border-color: var(--rule); color: var(--ink); }

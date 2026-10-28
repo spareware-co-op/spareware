@@ -685,7 +685,7 @@ mod tests {
     /// +0 (`the_public_functions_are_the_ports`).
     #[test]
     fn the_ports_keep_ieee_values_and_signs_at_multiples_of_a_half() {
-        let p2 = |k: i32| 2f64.powi(k);
+        let p2 = |k: i32| libm::scalbn(1.0, k);
         let (two40, two41, two51) = (p2(40), p2(41), p2(51));
         let sin_cases = [
             (0.0, 0.0),

@@ -1,0 +1,12 @@
+# The predicate fixtures of chapter 28.16: each failure the predicate verification suite
+# (tests/verification.rs, piece G34) or any other test finds, minimised, with its oracle's sign,
+# replayed on every run against the predicate and the oracle. Never delete a line.
+#
+# One fixture per line: <predicate> | <points> | <sign>
+#   predicate: orient2d, orient3d, incircle, insphere, plane_side, side_of_tpi, side_of_lpi or
+#     ssi_orient2d (the points, in the order verification.rs's `evaluate` reads them)
+#   points: grid points separated by `;`, coordinates by `,`
+#   sign: Negative, Zero or Positive, the oracle's
+# A failed property prints its shrunk input as `fixture[...]`, in this form. Add it here, with a
+# comment line above it naming where it came from (issue, seed, or pull request), once the bug is
+# fixed: the fixture must fail on the code before the fix and pass after it.

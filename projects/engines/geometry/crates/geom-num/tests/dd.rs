@@ -390,7 +390,10 @@ fn two_prod_fma_matches_dekker_bit_for_bit() {
     }
     // A zero error is +0 whatever the signs.
     assert_eq!(two_prod_fma(-3.0, 5.0).1.to_bits(), 0);
-    assert_eq!(two_prod_fma(2.0 - 2.0f64.powi(-52), -1.0).1.to_bits(), 0);
+    assert_eq!(
+        two_prod_fma(2.0 - libm::scalbn(1.0, -52), -1.0).1.to_bits(),
+        0
+    );
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -611,7 +614,11 @@ fn operations_near_overflow_and_underflow() {
     assert_eq!(omega.mul_f64(2.0), Err(NumError::NotFinite));
     assert_eq!(omega.div_f64(0.5), Err(NumError::NotFinite));
     // The largest DD: Ω plus the largest trailing part below its half unit.
-    let top = DD::from_sum(f64::MAX, 2.0f64.powi(969) * (1.0 - 2.0f64.powi(-53))).unwrap();
+    let top = DD::from_sum(
+        f64::MAX,
+        libm::scalbn(1.0, 969) * (1.0 - libm::scalbn(1.0, -53)),
+    )
+    .unwrap();
     check_all(top, DD::ONE, &b);
     check_all(top, top.negate(), &b);
 }
@@ -788,7 +795,8 @@ fn published_worst_cases_are_reproduced() {
         -frac(9_003_265_529_542_491, 1) * p2(-54),
     );
     for k in [-900, -500, 500, 900] {
-        let xs = DD::from_sum(x.hi() * 2.0f64.powi(k), x.lo() * 2.0f64.powi(k)).unwrap();
+        let xs =
+            DD::from_sum(x.hi() * libm::scalbn(1.0, k), x.lo() * libm::scalbn(1.0, k)).unwrap();
         let r = error_in_u2(
             xs.mul_f64(4_511_413_997_183_120.0).unwrap(),
             &(value(xs) * rat(4_511_413_997_183_120.0)),
@@ -1072,9 +1080,9 @@ fn round_shifted_rounds_the_exact_value() {
         (-2.5, 0.0),
         (4.0, 0.5),
         (5.0, -0.5),
-        (2f64.powi(60), 0.5),
-        (2f64.powi(60), -0.5),
-        (2f64.powi(60), 1.5),
+        (libm::scalbn(1.0, 60), 0.5),
+        (libm::scalbn(1.0, 60), -0.5),
+        (libm::scalbn(1.0, 60), 1.5),
     ] {
         let x = DD::from_sum(h, l).unwrap();
         let got = x.round_shifted(7).unwrap();
@@ -1083,13 +1091,13 @@ fn round_shifted_rounds_the_exact_value() {
         assert_eq!(got.is_exact(), exact);
     }
     assert!(
-        DD::from_f64(2f64.powi(101))
+        DD::from_f64(libm::scalbn(1.0, 101))
             .unwrap()
             .round_shifted(0)
             .is_none()
     );
     assert!(
-        DD::from_f64(2f64.powi(100))
+        DD::from_f64(libm::scalbn(1.0, 100))
             .unwrap()
             .round_shifted(i128::MIN)
             .is_none()
