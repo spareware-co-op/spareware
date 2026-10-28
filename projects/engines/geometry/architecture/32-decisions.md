@@ -30,6 +30,7 @@ The board (30.5) also turns into a piece every narrower question that chapters 6
 | | Owner action | Decision | Chapters | Needed by |
 | --- | --- | --- | --- | --- |
 | 32.13 | G08: the crate table and layers | Chapter 27's proposed crate table, thirteen layers and rules, and 30.5's four amendments, all as proposed | 5, 27, 30 | G09, the scaffold |
+| 32.14 | G44: rotations | One rational rotation type for 2D and 3D, integer quaternions; general angles the closest within ε_ang, Certified; kept as a transform where possible; applied with one rounding, planes committed, so 6.2's 384 bits stand | 6, 7, 14 | G46, rational directions and rotations |
 
 ## 32.1 The grid ladder (decision 1)
 
@@ -314,3 +315,23 @@ Not settled here: whether `geom-civil`, `geom-thread` and `geom-stair` enter the
 **What changed with it.** Chapter 27's tables now read as accepted; 30.5 and G01 sections 5 and 27 point here; the kernel's `ARCHITECTURE.md` lists the thirteen layers; every crate header that said "Proposed in chapter 27, pending the owner's decision G08" (or chapter 30) no longer does, and the scaffold check now refuses a header that still carries that mark; the chapters chapter 27 lists under "Changes elsewhere" state the accepted homes.
 
 **Changes:** chapter 27, 30.5, 31.7, G01 sections 5 and 27, the kernel's `ARCHITECTURE.md`, `engine-geometry`'s scaffold test and every crate header, and chapters 12 to 19 and 23 to 28 where chapter 27 lists them.
+
+## 32.14 Rotations (owner action G44)
+
+**What it is.** Section 7 says a rotation other than a quarter turn "rounds to the grid and the result says so". Chapter 14 says any other rotation uses the closest rational rotation within ε_ang, keeps rotated points as rational implicit points wherever rounding would flip a decision, and proposes one rotation type for 2D and 3D: rational rotations from Pythagorean triples, as quaternions in 3D (31.7, chapter 6). Its own note warns that rotated planes then exceed 6.2's 384-bit budget, so 6.2 and 11 must agree. G03 built `geom-math`'s typed transforms to section 7's reading: an exact, a rational (`RationalTransform`, entries and denominator at most 2^40) and a certified variant, each applied by rounding the exact image once.
+
+| Option | What it means |
+| --- | --- |
+| A. Round every rotation to the grid | Section 7 as written. Simple, but a rotated building loses exact square corners and parallel walls, which chapter 14 and the plane-based core rely on |
+| B. Rational rotations everywhere, carried exactly | Chapter 14 read to the end: rotated points and planes stay rational. Planes then pass 6.2's 83-bit normal and 125-bit offset, so every boolean on rotated geometry needs predicates wider than 384 bits |
+| C. One rational rotation type, kept as a transform where possible, applied with section 7's single rounding and 6.3's re-check | Rotations are exact in fractions; a rotated body keeps its own frame; geometry is rotated only when it must be, and then rounds or commits like any other construction |
+
+**Decided 2026-10-28 (owner action G44): C.** Read with chapters 6, 7, 13 and 14, G03's `rational.rs` and `typed.rs`, and Canny, Donald and Ressler's rational rotation method ([doi:10.1145/142675.142726](https://doi.org/10.1145/142675.142726)); the 3D form is the Euler–Rodrigues parametrisation, under which a rotation matrix is rational exactly when it comes from an integer quaternion.
+- **One type, in 2D and 3D: a rational rotation held as an integer quaternion q = (w, x, y, z).** Its matrix is M(q)/|q|², with M(q) the integer Euler–Rodrigues matrix, so it is exact in fractions and composes exactly by quaternion product. A 2D rotation is the case (w, 0, 0, z): the Pythagorean direction (w² − z², 2wz)/(w² + z²). Quarter turns stay exact grid transforms.
+- **A general angle uses the closest rational rotation within the requested bound, by default ε_ang (2^-34 rad), and is Certified in angle.** In 2D, Canny, Donald and Ressler's best approximations of tan(θ/2) give a Pythagorean direction with w² + z² near 2^35, inside `RationalTransform`'s 2^40 budget (14.3 says about log₂(1/δ) bits). In 3D, rounding 2^35 times the unit quaternion to integers moves it by at most 1, so the rotation angle moves by at most about 2^-34; components stay below 2^36, |q|² below 2^72, and a grid point's image, Σ M(q)ᵢⱼ pⱼ, stays below 3·2^112, inside `i128`. G46 builds both, may shrink the 3D numbers with a better simultaneous approximation, and proves each angle bound against an oracle. Where |q|² passes 2^40, the rotation is its own variant of the typed transform rather than a `RationalTransform`. A composition that outgrows the components' budget is re-approximated once to the requested bound, as 14.10 says.
+- **A rotation stays a transform wherever it can.** A frame record, an insert or an instance holds the rotation, and the geometry stays exact in its own frame (6.1, 14.10, 19.12). Most rotated work in buildings is a plan rotation about the vertical axis, which this keeps exact end to end.
+- **When a rotation must be applied, it follows the rules every construction follows.** A grid point's exact image is rounded to the grid once, ties to even, and the result says whether it moved (section 7, as G03 built); where rounding would flip a decision, the operation keeps the rational implicit point instead (6.3, as 14.10 asks). A rotated plane stays exact only if its coefficients fit 6.2's plane budget; any other is committed by 13.2's plane commit (G142, under owner action G120's ruling). So 6.2's 384-bit budget stands, and no boolean needs wider predicates because of a rotation. That answers chapter 14's note: 6.2 and 11 agree because rotated planes never enter the exact core uncommitted.
+
+Why: exact rotations where they cost nothing, and an honest Certified label where they cannot be exact, without widening the predicates every boolean pays for. Option A throws away square corners a rational rotation keeps for free; option B makes every boolean on rotated geometry wider and slower for a precision the commit already proves within q/2.
+
+**Changes:** sections 6.2 and 7, 14.10, 31.7, and piece G46's scope (both forms, the 3D bound and the wider variant).
