@@ -32,6 +32,7 @@ The board (30.5) also turns into a piece every narrower question that chapters 6
 | 32.13 | G08: the crate table and layers | Chapter 27's proposed crate table, thirteen layers and rules, and 30.5's four amendments, all as proposed | 5, 27, 30 | G09, the scaffold |
 | 32.14 | G44: rotations | One rational rotation type for 2D and 3D, integer quaternions; general angles the closest within ε_ang, Certified; kept as a transform where possible; applied with one rounding, planes committed, so 6.2's 384 bits stand | 6, 7, 14 | G46, rational directions and rotations |
 | 32.15 | G71: time budgets | Chapter 28's reading: only work units and logical memory are budgets; a time limit is the caller's deadline through cancellation, never a replayable outcome | 10, 23, 28 | G83, budgets in the operation contract |
+| 32.16 | G72: the reference machine and the kernel's shares | The owner's spare tower, timed on its 8 performance cores; 23.1's shares, browser estimates and 5 µs overhead accepted until the scenario benchmarks measure them | 23, 28 | G107, the reference runner |
 
 ## 32.1 The grid ladder (decision 1)
 
@@ -354,3 +355,17 @@ Why: exact rotations where they cost nothing, and an honest Certified label wher
 Why: a result that depends on how fast a machine was is not a result the kernel can promise to replay. B would make every budgeted operation's outcome a property of the hardware.
 
 **Changes:** 10.1 (`OpContext` carries work and memory budgets, and a deadline only through its cancellation token), 28.13 and 31.7. Piece G83 builds the budgets into the operation contract to this rule.
+
+## 32.16 The reference machine and the kernel's shares (owner action G72)
+
+**What it is.** Section 23.1 gives the kernel a share of each of Spare Construct's ten targets: 1 s of the 3 s open, 4 ms of the 16 ms door move, 600 ms of the 1 s level change, and so on, plus browser estimates and at most 5 µs of overhead for a trivial operation. The shares are for native builds on a reference machine of 8 cores, which 31.7 proposes as an x86-64 desktop with 32 GB and NVMe, with an aarch64 laptop nightly. Piece G107 times every benchmark on it nightly and G452 turns those timings into a gate, so both wait for the machine and the shares. Section 32.5 has the kernel's owners and Spare Construct's owners set the shares together.
+
+**Decided 2026-10-28 (owner action G72).** Read with 23.1, 23.13, 28.17 and R5.
+- **The reference machine is the owner's spare tower**, which G10 documented and owner action G07 placed (28.17): an Intel Core Ultra 7 265 with 8 performance and 12 efficient cores, 64 GB of DDR5-5600 and a 1 TB NVMe drive, free for the kernel every night from 19:00 to 08:00. It meets 31.7's proposal and costs nothing (K06).
+- **"8 cores" means its 8 performance cores.** The 8-thread timings run on those cores only and the 1-thread timings on one of them, so a run never lands half on the slower cores. WSL 2's virtual processors are not tied to host cores (28.17), so G107 takes the timed runs from the native Windows build of each benchmark, pinned to the performance cores with a processor affinity mask, or shows that WSL 2 runs give the same figures. The build workstation stays the build machine and is not a timing reference.
+- **No aarch64 reference yet.** The co-op owns no Arm laptop and buys none (32.4). aarch64 keeps its instruction-count gate on GitHub's hosted Arm runners on every pull request (28.17); an Arm timing reference is added when the co-op has such a machine to lend.
+- **The shares are accepted as proposed**: the ten targets' kernel shares of 23.1, its browser estimates and the 5 µs overhead per trivial operation, for native builds on this machine. They stand until the scenario benchmarks measure them; then the measured figures replace them by a decision note, which the kernel's and Spare Construct's owners accept together (32.5). The owner holds both roles today, so accepting them here is that joint decision.
+
+Why: the machine exists, is lent at no cost, and is an 8-performance-core x86-64 desktop as 23.1 asked, so nothing better is waiting to be bought. The shares were derived from the targets and the cost of the work behind each (23.1), and the first measurements will test them; holding G107 and G452 back for a better guess would only delay those measurements. One caution is recorded with the choice: this is a fast 2025 desktop, so a share it meets can be missed on an older laptop, which is what 23.1's browser estimates and Spare Construct's own targets per device are for.
+
+**Changes:** 23.1, 28.17, R5 and 31.7. Pieces G107 and G452 build to this machine and these shares.

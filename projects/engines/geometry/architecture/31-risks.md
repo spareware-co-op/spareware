@@ -145,7 +145,7 @@ Evidence is cited as in the chapters: a bracketed report number such as [03] is 
 - Piece "Arena layout and plane memory benchmarks" on the generated 230,000-element building.
 - Piece "Local re-cut": CI equality of local and full re-cuts, and door moves at 3, 50 and 300 openings, natively and in wasm32.
 - The corridor benchmark (proposed: 50 km in 60 s and 4 GB) before ε_fit is confirmed for earthworks.
-- Nightly scenario runs against each kernel share once the reference machine is chosen.
+- Nightly scenario runs against each kernel share on the reference machine (32.16).
 
 ### R6. Error bounds pile up until curved work refuses
 
@@ -605,6 +605,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | The crate table, its thirteen layers and rules, `geom-make` and 30.5's three edges in layer 12 | 27, 30 | 32.13 (owner action G08) |
 | Rotations: section 7's rounding or chapter 14's rational rotations; one type for 2D and 3D; rotated planes against 6.2's budget | 7, 14 | 32.14 (owner action G44) |
 | Time budgets: a deadline only through the caller's cancellation, never a replayable outcome | 10, 23, 28 | 32.15 (owner action G71) |
+| The reference machine, and the kernel's shares of Spare Construct's targets | 23, 28 | 32.16 (owner action G72) |
 
 ### Answered by the pieces built so far
 
@@ -828,8 +829,8 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 
 | Question | Raised in | Decided in |
 | --- | --- | --- |
-| The reference machine for all targets: proposed an 8-core x86-64 desktop with 32 GB and NVMe for gates, plus an aarch64 laptop nightly | 23, 28 | With Spare Construct's owners; piece "Benchmark harness and merge gates (geom-bench)" |
-| Accept the proposed kernel shares of Spare Construct's ten targets, the browser estimates and the 5 µs overhead per trivial operation until scenarios measure them. Who sets the split is settled in 32.5 | 23, 28 | Piece "Spare Construct scenario generator, calibration and target benchmarks" |
+| The reference machine for all targets: proposed an 8-core x86-64 desktop with 32 GB and NVMe for gates, plus an aarch64 laptop nightly | 23, 28 | 32.16 (owner action G72): the owner's spare tower, on its 8 performance cores; no Arm timing reference until one is lent |
+| Accept the proposed kernel shares of Spare Construct's ten targets, the browser estimates and the 5 µs overhead per trivial operation until scenarios measure them. Who sets the split is settled in 32.5 | 23, 28 | 32.16 (owner action G72): accepted; piece "Spare Construct scenario generator, calibration and target benchmarks" measures them |
 | Benchmark targets in other chapters are proposals to replace with first measurements: drawing targets (a full plan, every open view after a door move, a 50 km corridor plan); gridded LiDAR at 40 s per 10 million points; wasm within three times native; a 1 ms live clash re-test; 30 s to tessellate the reference model | 17, 18, 19 | Each chapter's benchmark piece, gathered in the scenario pieces |
 | Instance records: 56 bytes with the box in the tree leaf (19), or up to 88 bytes (23); f64 or integer boxes | 19, 23 | Piece "Placed instances", aligned with "Instance tree for huge and nested assemblies" |
 | I320 and I384 arithmetic on wasm32 is unmeasured; a double-double filter stage is the reserve if the section 23 gates fail | 11 | Piece "Wide-integer variants and WebAssembly benchmark" |
