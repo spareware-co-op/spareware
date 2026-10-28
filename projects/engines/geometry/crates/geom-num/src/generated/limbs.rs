@@ -572,6 +572,10 @@ pub fn ssi_side_value(a: P2, b: P2, c: P2, d: P2, p: P2, q: P2) -> Option<I256> 
 /// Bounded proofs (chapter 23.3; piece G42): every kind of limb step the functions above perform,
 /// on every operand its certified bits allow, never returns `None`.
 #[cfg(kani)]
+// cargo-mutants reads this attribute from the source and skips the module (its harnesses are
+// proven by Kani, and no test build compiles them); no build evaluates it, since the module
+// exists only under Kani, where `test` is off.
+#[cfg_attr(test, mutants::skip)]
 mod proofs {
     use super::*;
 

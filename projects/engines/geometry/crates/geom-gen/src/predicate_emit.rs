@@ -2110,6 +2110,10 @@ fn proofs_module(out: &mut String, derivations: &[&Derivation]) -> Result<(), Em
 /// The opening of the limb variant's proof module and the symbolic operands its proofs share.
 const PROOF_HELPERS: &[&str] = &[
     "#[cfg(kani)]",
+    "// cargo-mutants reads this attribute from the source and skips the module (its harnesses are",
+    "// proven by Kani, and no test build compiles them); no build evaluates it, since the module",
+    "// exists only under Kani, where `test` is off.",
+    "#[cfg_attr(test, mutants::skip)]",
     "mod proofs {",
     "    use super::*;",
     "",
