@@ -11,7 +11,8 @@
 // certificate, and compares its bound with K below.
 // A sum whose operand's scale is not the sum's takes the operand's normalised value
 // times S(operand) / S(sum), a ratio in [0, 1], exactly; each such ratio of two scale
-// sets is one parameter:
+// sets is one parameter, shared by the ratios equal to it once their common factor is
+// cancelled (where that factor is 0, the sum is 0 whatever the parameter):
 // ratio1 = x^2 / max{y^2, x^2}
 // ratio2 = y^2 / max{y^2, x^2}
 // hol-light-bound: &6338253001141152496245561884667 * &2 ipow (-- &149)

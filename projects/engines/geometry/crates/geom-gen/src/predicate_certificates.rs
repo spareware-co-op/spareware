@@ -41,8 +41,9 @@
 //!   from more than two inputs, say) is refused with the reason, and its label says "checked, not
 //!   proven" with its issue; with no issue in [`UNPROVEN`] its module cannot be generated.
 //! - **Ratios, never more.** Each ratio parameter of an `FPTaylor` problem is S(operand) / S(sum)
-//!   for one pair of scale sets, named in the problem's header, and every use of it is that pair:
-//!   the problem's box holds every input's normalised values, never fewer.
+//!   for the pairs of scale sets named in the problem's header, each the same ratio once their
+//!   common factor is cancelled, and every use of it is one of those pairs: the problem's box
+//!   holds every input's normalised values, never fewer.
 //!
 //! What the problems leave to the written argument (the method note,
 //! `projects/kit/notes/G35-filter-certificates.md`): that the translations are exact (the bit-range
@@ -50,7 +51,9 @@
 //! below 2^127), that a zero S makes the exact value zero, that a rounded input's copy, written
 //! `rndx` (53 bits, no exponent bounds), is binary64's rounding of a whole number below 2^1024,
 //! and that `FPTaylor`'s normalised problem bounds the filter's error at every scale (each step's
-//! value over its scale is the problem's value, at the ratios the maxima give).
+//! value over its scale is the problem's value, at the ratios the maxima give; a parameter two
+//! pairs share has one value, since a common factor cancels unless it is zero, and then that
+//! pair's sum is zero, whatever the parameter).
 //!
 //! Method: Melquiond and Pion's certified semi-static filters, Gappa proofs of a homogeneous
 //! predicate's error as a multiple of the product of its inputs' maxima (*Formally certified
@@ -1080,7 +1083,7 @@ pub fn fptaylor_problem(d: &Derivation, generator: &str) -> Result<String, EmitE
             }
             match ratios
                 .iter()
-                .position(|(a, b)| *a == c.scale && *b == cert.scale)
+                .position(|r| r.iter().any(|(a, b)| *a == c.scale && *b == cert.scale))
             {
                 Some(r) => Ok(format!("{} * {}", ratio_name(r), s.name)),
                 None => fail("a sum's operand has no ratio"),
@@ -1109,7 +1112,7 @@ pub fn fptaylor_problem(d: &Derivation, generator: &str) -> Result<String, EmitE
 }
 
 /// The `FPTaylor` problem's description, after the generated-file header: what it states, and
-/// each ratio parameter as the ratio of two scale sets.
+/// each ratio parameter as the ratios of scale sets it stands for.
 fn fptaylor_about(d: &Derivation, ratios: &[Ratio]) -> Vec<String> {
     let name = &d.description.name;
     let mut about = vec![
@@ -1137,16 +1140,23 @@ fn fptaylor_about(d: &Derivation, ratios: &[Ratio]) -> Vec<String> {
                 .to_owned(),
             "times S(operand) / S(sum), a ratio in [0, 1], exactly; each such ratio of two scale"
                 .to_owned(),
-            "sets is one parameter:".to_owned(),
+            "sets is one parameter, shared by the ratios equal to it once their common factor is"
+                .to_owned(),
+            "cancelled (where that factor is 0, the sum is 0 whatever the parameter):".to_owned(),
         ]);
         let groups: Vec<String> = d.groups.iter().map(|g| g.name.clone()).collect();
-        for (i, (operand, sum)) in ratios.iter().enumerate() {
-            about.push(format!(
-                "{} = {} / {}",
-                ratio_name(i),
-                scale_text(operand, &groups),
-                scale_text(sum, &groups)
-            ));
+        for (i, pairs) in ratios.iter().enumerate() {
+            let texts: Vec<String> = pairs
+                .iter()
+                .map(|(operand, sum)| {
+                    format!(
+                        "{} / {}",
+                        scale_text(operand, &groups),
+                        scale_text(sum, &groups)
+                    )
+                })
+                .collect();
+            about.push(format!("{} = {}", ratio_name(i), texts.join(" = ")));
         }
     }
     about
@@ -1161,14 +1171,42 @@ fn ratio_name(i: usize) -> String {
     format!("ratio{}", i.saturating_add(1))
 }
 
-/// A ratio parameter of an `FPTaylor` problem: the operand's scale set over the sum's.
-type Ratio = (BTreeSet<Monomial>, BTreeSet<Monomial>);
+/// A sum's operand's scale set and the sum's.
+type Sets = (BTreeSet<Monomial>, BTreeSet<Monomial>);
+
+/// A ratio parameter of an `FPTaylor` problem: the pairs of scale sets it stands for, the
+/// operand's over the sum's, each the same ratio once their common factor is cancelled.
+type Ratio = Vec<Sets>;
+
+/// Both sets of `pair` divided by the largest monomial that divides every one of the sum's (and
+/// so the operand's, which the sum's holds): S(a) / S(b) = S(a / g) / S(b / g) when g's maxima
+/// are not zero, since S multiplies through by a common factor.
+fn cancelled((operand, sum): &Sets) -> Sets {
+    let mut monomials = sum.iter();
+    let first = monomials.next().cloned().unwrap_or_default();
+    let common: Monomial = monomials.fold(first, |g, m| {
+        g.iter().zip(m).map(|(a, b)| *a.min(b)).collect()
+    });
+    let less = |set: &BTreeSet<Monomial>| -> BTreeSet<Monomial> {
+        set.iter()
+            .map(|m| {
+                m.iter()
+                    .zip(&common)
+                    .map(|(e, c)| e.saturating_sub(*c))
+                    .collect()
+            })
+            .collect()
+    };
+    (less(operand), less(sum))
+}
 
 /// The ratios of scales the normalised problem needs, in order of first use: for each sum or
 /// difference, each operand whose scale set is not the step's, as `(operand's, step's)`, once
-/// each. S(operand) ≤ S(step), the step's set holding the operand's, so each ratio is in [0, 1];
-/// and a product's scale set is its operands' products, whose largest is the product of their
-/// largest, so a product needs none. Refused if a name would clash with a step's.
+/// each, and pairs that are the same ratio once their common factor is cancelled
+/// ([`cancelled`]) as one parameter. S(operand) ≤ S(step), the step's set holding the operand's,
+/// so each ratio is in [0, 1]; and a product's scale set is its operands' products, whose largest
+/// is the product of their largest, so a product needs none. Refused if a name would clash with
+/// a step's.
 fn ratios(d: &Derivation) -> Result<Vec<Ratio>, EmitError> {
     let mut out: Vec<Ratio> = Vec::new();
     for (step, cert) in d.steps.iter().zip(&d.certs) {
@@ -1191,8 +1229,16 @@ fn ratios(d: &Derivation) -> Result<Vec<Ratio>, EmitError> {
                 ));
             }
             let pair = (c.scale.clone(), cert.scale.clone());
-            if c.scale != cert.scale && !out.contains(&pair) {
-                out.push(pair);
+            if c.scale == cert.scale || out.iter().any(|r| r.contains(&pair)) {
+                continue;
+            }
+            let key = cancelled(&pair);
+            match out
+                .iter_mut()
+                .find(|r| r.first().is_some_and(|p| cancelled(p) == key))
+            {
+                Some(r) => r.push(pair),
+                None => out.push(vec![pair]),
             }
         }
     }

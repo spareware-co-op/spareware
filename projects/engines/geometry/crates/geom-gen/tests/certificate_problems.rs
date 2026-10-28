@@ -14,10 +14,11 @@
 //!   `ERROR`; and the computed scale is the module's `scale`, rounded product by product, with
 //!   each larger-of resolved. In
 //!   the `FPTaylor` problem, a sum's operand is weighted by a ratio parameter exactly when its
-//!   scale set, in the module's error table, is not the sum's; each parameter is that one ratio of
-//!   sets, the operand's monomials among the sum's, so in [0, 1]; and the variables are the
-//!   normalised inputs (a rounded input's exact value within 1 + 2^−53, its copy `rnd64(e_v)`)
-//!   and the parameters, nothing else.
+//!   scale set, in the module's error table, is not the sum's; each parameter is ratios of sets,
+//!   the operand's monomials among the sum's, so in [0, 1], all one ratio once their common
+//!   factor is cancelled (worked out here from the sets' text), and no two parameters are; and
+//!   the variables are the normalised inputs (a rounded input's exact value within 1 + 2^−53, its
+//!   copy `rnd64(e_v)`) and the parameters, nothing else.
 //! - `the_cases_cover_every_input_and_assume_only_what_holds`: a filter whose scale takes a
 //!   larger-of has one problem for each way its larger-ofs can resolve, so whichever the filter
 //!   takes, a problem states it; and every hypothesis of each problem is one this test can justify
@@ -55,7 +56,7 @@
     clippy::many_single_char_names
 )]
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use geom_gen::Generate;
 use geom_gen::predicate_certificates::{
@@ -588,18 +589,73 @@ fn fptaylor_operations(problem: &str) -> Vec<Weighted> {
         .collect()
 }
 
-/// The ratio parameters an `FPTaylor` problem's header defines: `(name, operand's scale set,
-/// sum's scale set)` of each `// ratioN = <set> / <set>` line.
-fn ratio_lines(problem: &str) -> Vec<(String, String, String)> {
+/// The ratio parameters an `FPTaylor` problem's header defines: the name and the
+/// `(operand's scale set, sum's scale set)` pairs of each `// ratioN = <set> / <set> = ...` line.
+fn ratio_lines(problem: &str) -> Vec<(String, Vec<(String, String)>)> {
     problem
         .lines()
         .filter_map(|l| {
-            let (name, ratio) = l.strip_prefix("// ")?.split_once(" = ")?;
-            let (a, b) = ratio.split_once(" / ")?;
-            name.starts_with("ratio")
-                .then(|| (name.to_owned(), a.to_owned(), b.to_owned()))
+            let (name, ratios) = l.strip_prefix("// ")?.split_once(" = ")?;
+            let pairs = ratios
+                .split(" = ")
+                .map(|r| {
+                    r.split_once(" / ")
+                        .map(|(a, b)| (a.to_owned(), b.to_owned()))
+                })
+                .collect::<Option<Vec<_>>>()?;
+            name.starts_with("ratio").then(|| (name.to_owned(), pairs))
         })
         .collect()
+}
+
+/// A monomial as the module writes it (`x^2·n1`, or `1`), as each maximum's power.
+fn powers(monomial: &str) -> BTreeMap<String, u32> {
+    monomial
+        .split('·')
+        .filter(|f| *f != "1")
+        .map(|f| match f.split_once('^') {
+            Some((m, e)) => (m.to_owned(), e.parse().unwrap()),
+            None => (f.to_owned(), 1),
+        })
+        .collect()
+}
+
+/// A scale set as each monomial's powers, in order.
+type Powers = BTreeSet<Vec<(String, u32)>>;
+
+/// A ratio of two scale sets with their common factor cancelled: each monomial's powers less the
+/// least power of each maximum over the sum's set, which holds the operand's.
+fn cancelled(operand: &str, sum: &str) -> (Powers, Powers) {
+    let all: Vec<BTreeMap<String, u32>> = monomials(sum).into_iter().map(powers).collect();
+    let names: BTreeSet<&String> = all.iter().flat_map(BTreeMap::keys).collect();
+    let common: BTreeMap<&String, u32> = names
+        .into_iter()
+        .map(|m| {
+            (
+                m,
+                all.iter()
+                    .map(|p| p.get(m).copied().unwrap_or(0))
+                    .min()
+                    .unwrap(),
+            )
+        })
+        .collect();
+    let less = |set: &str| {
+        monomials(set)
+            .into_iter()
+            .map(|m| {
+                powers(m)
+                    .into_iter()
+                    .map(|(f, e)| {
+                        let c = common.get(&f).copied().unwrap_or(0);
+                        (f, e - c)
+                    })
+                    .filter(|(_, e)| *e > 0)
+                    .collect()
+            })
+            .collect()
+    };
+    (less(operand), less(sum))
 }
 
 /// The lines of a problem's `Variables` section.
@@ -713,16 +769,24 @@ fn each_fptaylor_problem_states_the_shipped_filter() {
         let plain: Vec<_> = ops.iter().map(|(o, _)| o.clone()).collect();
         assert_eq!(plain, shipped, "{at}");
         let ratios = ratio_lines(problem);
-        let pairs: BTreeSet<(&str, &str)> = ratios
-            .iter()
-            .map(|(_, a, b)| (a.as_str(), b.as_str()))
-            .collect();
-        assert_eq!(pairs.len(), ratios.len(), "{at}: one parameter per ratio");
-        for (r, a, b) in &ratios {
-            // S(a) ≤ S(b), so the ratio is in [0, 1]: b's monomials hold a's.
+        let mut distinct = BTreeSet::new();
+        for (r, pairs) in &ratios {
+            for (a, b) in pairs {
+                // S(a) ≤ S(b), so the ratio is in [0, 1]: b's monomials hold a's.
+                assert!(
+                    monomials(a).is_subset(&monomials(b)) && a != b,
+                    "{at}: {r} = {a} / {b}"
+                );
+                // A parameter's pairs are one ratio once their common factor is cancelled.
+                assert_eq!(
+                    cancelled(a, b),
+                    cancelled(&pairs[0].0, &pairs[0].1),
+                    "{at}: {r}"
+                );
+            }
             assert!(
-                monomials(a).is_subset(&monomials(b)) && a != b,
-                "{at}: {r} = {a} / {b}"
+                distinct.insert(cancelled(&pairs[0].0, &pairs[0].1)),
+                "{at}: {r} twice"
             );
         }
         let mut used = BTreeSet::new();
@@ -733,7 +797,9 @@ fn each_fptaylor_problem_states_the_shipped_filter() {
                 let want = if op == "*" || theirs == own {
                     None
                 } else {
-                    let r = ratios.iter().find(|(_, a, b)| *a == theirs && *b == own);
+                    let r = ratios
+                        .iter()
+                        .find(|(_, pairs)| pairs.iter().any(|(a, b)| *a == theirs && *b == own));
                     Some(
                         r.unwrap_or_else(|| panic!("{at}: `{step}`'s `{operand}` has no ratio"))
                             .0

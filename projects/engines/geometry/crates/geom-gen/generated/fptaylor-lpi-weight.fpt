@@ -13,7 +13,8 @@
 // beyond m + ulp(m)/2 rounds above the f64 m), and its copy v = rnd64(e_v).
 // A sum whose operand's scale is not the sum's takes the operand's normalised value
 // times S(operand) / S(sum), a ratio in [0, 1], exactly; each such ratio of two scale
-// sets is one parameter:
+// sets is one parameter, shared by the ratios equal to it once their common factor is
+// cancelled (where that factor is 0, the sum is 0 whatever the parameter):
 // ratio1 = x·n / max{y·n, x·n}
 // ratio2 = y·n / max{y·n, x·n}
 // ratio3 = max{y·n, x·n} / max{z·n, y·n, x·n}
