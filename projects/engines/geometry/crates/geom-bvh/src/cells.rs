@@ -234,7 +234,12 @@ fn sorted_slots(
             Ok(run)
         })
         .map_err(|e: RunError<BvhError>| BvhError::from(e))?;
-    while runs.len() > 1 {
+    // Each round halves the number of runs, so as many rounds as there were runs is more than
+    // enough; the bound keeps the loop finite whatever happens inside it.
+    for _ in 0..ranges.len() {
+        if runs.len() < 2 {
+            break;
+        }
         let mut firsts = Vec::new();
         firsts
             .try_reserve_exact(runs.len().div_ceil(2))
@@ -481,11 +486,16 @@ impl CellIndex {
             };
             g.unsigned_abs().saturating_mul(g.unsigned_abs())
         };
+        // The cells the box meets on one axis: at most three, from the one holding its low end.
+        let cells = |l: u64, h: u64| -> [Option<u64>; 3] {
+            let (first, last) = (l >> level, h >> level);
+            [0, 1, 2].map(|k| first.checked_add(k).filter(|c| *c <= last))
+        };
         let ([lx, ly, lz], [hx, hy, hz]) = (lo, hi);
         let [ox, oy, oz] = centre;
-        for cx in (lx >> level)..=(hx >> level) {
-            for cy in (ly >> level)..=(hy >> level) {
-                for cz in (lz >> level)..=(hz >> level) {
+        for cx in cells(lx, hx).into_iter().flatten() {
+            for cy in cells(ly, hy).into_iter().flatten() {
+                for cz in cells(lz, hz).into_iter().flatten() {
                     // A cell the ball does not reach holds no answer.
                     let near = gap(cx, ox)
                         .saturating_add(gap(cy, oy))

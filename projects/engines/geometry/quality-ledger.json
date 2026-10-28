@@ -107,6 +107,14 @@
       "reason": "The two differ only when b == a, and no two slots are equal: each holds its point's position in key order, and positions are distinct. So the merge takes the same slot first for every input."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-bvh/src/cells.rs",
+      "mutant": "replace < with <= in CellIndex::search",
+      "line_text": "let g = if at < first {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when at == first, the cell's first coordinate. There the original's other branch gives (at - last).max(0) = 0, as last >= first, and the mutant's gives first - at = 0: the same gap, so the same cells are scanned for every input."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-num/src/eft.rs",
       "mutant": "replace < with <= in abs",
       "line_text": "if x < 0.0 { -x } else { x }",

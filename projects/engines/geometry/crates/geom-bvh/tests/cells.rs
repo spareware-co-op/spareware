@@ -341,6 +341,14 @@ fn the_same_index_for_any_order_and_any_pool() {
     // Several runs of the code sort, so their merges are checked too.
     assert!(pts.len() > 32_768);
     check_order(&reference, &pts);
+    // A few searches against brute force before the pairs, so that a broken search fails here
+    // rather than in a pair search it would make slow.
+    for p in pts.iter().step_by(5_000) {
+        assert_eq!(
+            reference.within(p.at, 2, &mut meter()).unwrap(),
+            brute_within(&pts, p.at, 2)
+        );
+    }
     let bytes = reference.to_bytes().unwrap();
     let pairs = reference
         .pairs_within(2, &Exec::serial(), &mut meter())
