@@ -209,7 +209,17 @@ fn corpus() -> Recorder {
             }
         }
         for rule in 0..=GAUSS_KRONROD.len() {
-            for (tol, rel) in [(1e-6, 0.0), (1e-13, 0.0), (0.0, 1e-10), (0.0, 0.0)] {
+            for (tol, rel) in [
+                (1e-6, 0.0),
+                (1e-13, 0.0),
+                (0.0, 1e-10),
+                (0.0, 0.0),
+                // Both, so that which of the two is the goal matters.
+                (1e-3, 1e-2),
+                (1e-4, 1e-3),
+                (1e-2, 1e-1),
+                (0.5, 1e-1),
+            ] {
                 let mut seen = Vec::new();
                 let g = |x: Real| {
                     seen.push(x.get());
