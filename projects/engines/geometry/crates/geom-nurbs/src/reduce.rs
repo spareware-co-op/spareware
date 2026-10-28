@@ -61,7 +61,7 @@ use crate::curve::Curve;
 use crate::elevate::{check_elevation, elevate_kernel};
 use crate::index::{add, get, mul, real, set, sub};
 use crate::insert::refine_kernel;
-use crate::ops::{Changed, charge_op, homs, split};
+use crate::ops::{Changed, charge_op, homs, smaller, split, usable_weight};
 use crate::remove::difference_bound;
 
 impl<const D: usize> Curve<D> {
@@ -99,7 +99,7 @@ impl<const D: usize> Curve<D> {
         )?;
         let input = homs::<f64, D>(meter, self.homogeneous(), self.weights())?;
         let (uq, candidate) = reduce_kernel(meter, basis, &input)?;
-        if rational && !candidate.iter().all(|h| h.w.is_finite() && h.w > 0.0) {
+        if rational && !candidate.iter().all(|h| usable_weight(h.w)) {
             return Err(NurbsError::OutsideTolerance);
         }
         let reduced = Basis::new(q, uq)?;
@@ -119,9 +119,7 @@ impl<const D: usize> Curve<D> {
         if back_knots.as_slice() != basis.knots() || back.len() != input.len() {
             return Err(NurbsError::Defect);
         }
-        let w_min = candidate
-            .iter()
-            .fold(f64::INFINITY, |m, h| if h.w < m { h.w } else { m });
+        let w_min = candidate.iter().fold(f64::INFINITY, |m, h| smaller(m, h.w));
         let deviation = difference_bound(&input, &back, rational, self.p_max_if(rational)?, w_min)?;
         if deviation > tol {
             return Err(NurbsError::OutsideTolerance);
@@ -196,8 +194,9 @@ fn reduce_bezier<const D: usize>(
     set(qw, 0, get(pw, 0)?)?;
     set(qw, sub(p, 1)?, get(pw, p)?)?;
     let r = sub(p, 1)? / 2;
-    let from_left_to = if p % 2 == 1 { r.saturating_sub(1) } else { r };
-    for i in 1..=from_left_to {
+    // For odd p the step at i = r is overwritten by the middle point's average below, so the left
+    // sweep may run to r either way.
+    for i in 1..=r {
         let v = Hom::combine(
             get(&c.alf, i)?,
             get(pw, i)?,
@@ -300,7 +299,8 @@ fn reduce_kernel<const D: usize>(
         let oldr = if first_piece { 0 } else { r };
         // The end knots have p + 1 copies, r = −1, which behaves as 0 here.
         r = p.saturating_sub(mlt);
-        let lbz = if oldr > 0 { add(oldr, 2)? / 2 } else { 1 };
+        // (oldr + 2)/2 is 1 at oldr = 0.
+        let lbz = add(oldr, 2)? / 2;
         let (ua, ub) = (get(up, a)?, get(up, b)?);
         if r > 0 {
             let num = ub - ua;

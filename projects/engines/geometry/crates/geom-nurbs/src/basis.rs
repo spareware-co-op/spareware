@@ -372,7 +372,7 @@ impl Basis {
         for j in 0..=p {
             set(out, j, get(&ndu, at_(j, p)?)?)?;
         }
-        let top = if order < p { order } else { p };
+        let top = order.min(p);
         for r in 0..=p {
             derivative_column(&ndu, p, r, top, w, out)?;
         }
@@ -506,7 +506,7 @@ impl Basis {
         }
         set(out, 0, get(&nt, at_(0, p)?)?)?;
         let top = sub(out.len(), 1)?;
-        let top = if top < p { top } else { p };
+        let top = top.min(p);
         let mut nd = [0.0_f64; WIDTH];
         for k in 1..=top {
             for j in 0..=k {
