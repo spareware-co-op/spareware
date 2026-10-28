@@ -1,4 +1,4 @@
-//! What every part of Compliance+ shares (features/compliance-extra.js sections 1 to 4 and the helpers of section 4): the user's
+//! What every part of Compliance+ shares (packs/nz/compliance-extra.js sections 1 to 4 and the helpers of section 4): the user's
 //! assumptions, the project record, the dates, the regulatory context read from the Compliance tab, the authority of a road, and the
 //! small model helpers (the do-minimum and option scenarios, roads, zones, stamping and the label of a road).
 

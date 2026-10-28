@@ -87,6 +87,8 @@ on:
       - "rust-toolchain.toml"
       - ".cargo/**"
       - ".github/workflows/kernel-bench.yml"
+  # Run whole by kernel-release.yml on a release tag, with every other kernel workflow (28.17).
+  workflow_call:
 
 permissions:
   contents: read
@@ -143,8 +145,8 @@ jobs:
           set -euo pipefail
           base=$BASE_SHA
           if ! git cat-file -e "$base^{commit}" 2>/dev/null; then
-            # A push whose previous tip is not in the history (main's first push, or a force push):
-            # compare with the first parent instead.
+            # A push whose previous tip is not in the history (main's first push, a force push, or a
+            # release tag's, which kernel-release.yml runs this for): compare with the first parent.
             if ! base=$(git rev-parse --verify --quiet "$HEAD_SHA^"); then
               echo "::error::$HEAD_SHA has no parent and the previous tip $BASE_SHA is unknown: there is nothing to compare with."
               exit 1

@@ -1,4 +1,4 @@
-// Records the prototype's ITA report (js/features/report.js `Report`) for the Rust port's report module
+// Records the prototype's ITA report (js/packs/nz/report.js `Report`) for the Rust port's report module
 // (projects/spare-construct/crates/construct-transport/src/report, tests/report_truth.rs). Writes
 //   fixtures/data/report-<variant>.json   { name, project, results, host, foreign }: the saved project of the variant (settings, network,
 //                                         the author's report inputs and every dataset the report reads), the engine's results for every

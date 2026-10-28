@@ -1,4 +1,4 @@
-//! Helpers several parts of Compliance+ call (features/compliance-extra.js sections 7 and 8): the change between two scenarios, per-peak
+//! Helpers several parts of Compliance+ call (packs/nz/compliance-extra.js sections 7 and 8): the change between two scenarios, per-peak
 //! differences, what an option changes, crash counts on changed roads and the economics of an option.
 
 use super::ctx::{class_of, link_name, node_name, periods_of, res_of};

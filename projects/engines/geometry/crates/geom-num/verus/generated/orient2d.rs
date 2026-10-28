@@ -5,59 +5,25 @@
 //!
 //! A Verus-annotated twin of `orient2d`'s exact path, `value` in
 //! `projects/engines/geometry/crates/geom-num/src/generated/orient2d.rs` (chapter 28.7 of the
-//! kernel architecture, "Predicates, by generated twins"; piece G36). It proves that for every
-//! input whose coordinates are on the grid (|v| ≤ 2^40 − 1), `value` returns `Some` of the
+//! kernel architecture, "Predicates, by generated twins"; pieces G36 and G38). It proves that for
+//! every input whose coordinates are on the grid (|v| ≤ 2^40 − 1), `value` returns `Some` of the
 //! description's value over the mathematical integers: no checked step overflows, and the result is
 //! the value the description defines.
 //!
 //! The twin's `value`, with its `#[verus_spec]` attribute and its `proof!` blocks removed, is token
 //! for token the shipped one: the same emitter code writes both, and geom-gen's
-//! `tests/verus_twin.rs` compares the committed files. Above it, `Coord` and `P2` model
-//! `geom_num::grid`'s types: a coordinate is an `i64` its type keeps on the grid, which the twin's
-//! `requires` states for its inputs, and `get` returns it.
+//! `tests/verus_twin.rs` compares the committed files. It is a module of `geom-num`'s Verus crate,
+//! `verus/lib.rs`, whose `model` module models `geom_num::grid`'s types and whose `wide` module is
+//! the wide integers' own proven twin.
 //!
-//! Verify: `verus --crate-type=lib <this file>`, with the Verus release `kernel-dev.yml` pins; its
-//! `verus` job does this on every pull request.
+//! Verify: `verus --crate-type=lib projects/engines/geometry/crates/geom-num/verus/lib.rs`, with
+//! the Verus release `kernel-dev.yml` pins; its `verus` job does this on every pull request.
 
 use vstd::prelude::*;
 
+use crate::model::*;
+
 verus! {
-
-/// The grid's bound, `geom_num::grid::COORD_MAX`: every coordinate has magnitude at most this.
-pub const COORD_MAX: i64 = 1099511627775;
-
-/// A model of `geom_num::grid::Coord`: an `i64` that its type keeps on the grid.
-#[derive(Clone, Copy)]
-pub struct Coord {
-    v: i64,
-}
-
-impl Coord {
-    /// Its value, as an integer.
-    pub closed spec fn view(self) -> int {
-        self.v as int
-    }
-
-    /// Whether it is on the grid, as every `geom_num::grid::Coord` is.
-    pub closed spec fn on_grid(self) -> bool {
-        -COORD_MAX <= self.v <= COORD_MAX
-    }
-
-    /// `geom_num::grid::Coord::get`: its value.
-    pub fn get(self) -> (r: i64)
-        ensures
-            r == self.view(),
-    {
-        self.v
-    }
-}
-
-/// A model of `geom_num::grid::P2`.
-#[derive(Clone, Copy)]
-pub struct P2 {
-    pub x: Coord,
-    pub y: Coord,
-}
 
 /// `orient2d`'s value over the integers, step by step as its description defines it.
 pub open spec fn spec_value(a: P2, b: P2, c: P2) -> int {
@@ -69,25 +35,6 @@ pub open spec fn spec_value(a: P2, b: P2, c: P2) -> int {
     let det_2 = ba_y * ca_x;
     let det = det_1 - det_2;
     det
-}
-
-/// Two factors of magnitude at most mx and my have a product of magnitude at most mx · my.
-pub proof fn lemma_product_bound(x: int, y: int, mx: int, my: int)
-    requires
-        0 <= mx,
-        0 <= my,
-        -mx <= x <= mx,
-        -my <= y <= my,
-    ensures
-        -(mx * my) <= x * y <= mx * my,
-{
-    assert(-(mx * my) <= x * y <= mx * my) by (nonlinear_arith)
-        requires
-            0 <= mx,
-            0 <= my,
-            -mx <= x <= mx,
-            -my <= y <= my,
-    ;
 }
 
 } // verus!

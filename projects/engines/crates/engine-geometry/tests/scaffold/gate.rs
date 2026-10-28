@@ -1029,10 +1029,19 @@ fn workflow_triggers_and_pins(
     wrong: &mut Vec<String>,
 ) {
     let on = block(lines, "on");
-    if on != ["pull_request:", "push:", "branches: [main]", "merge_group:"] {
+    if on
+        != [
+            "pull_request:",
+            "push:",
+            "branches: [main]",
+            "merge_group:",
+            "workflow_call:",
+        ]
+    {
         wrong.push(format!(
-            "its triggers are {on:?}; the gate runs on every pull request, every push to main and \
-             every merge-queue check, with no path or branch filter"
+            "its triggers are {on:?}; the gate runs on every pull request, every push to main, \
+             every merge-queue check and every release (kernel-release.yml calls it), with no \
+             path or branch filter"
         ));
     }
     if block(lines, "permissions") != ["contents: read"] || yml.contains(": write") {
