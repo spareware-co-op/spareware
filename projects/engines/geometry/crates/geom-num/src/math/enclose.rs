@@ -89,6 +89,16 @@ struct Arc {
 
 impl Arc {
     /// The arc of `[lo, hi]`, for finite `lo ≤ hi`.
+    ///
+    /// Always inline: its two callers are [`periodic`]'s copies for sinpi and cospi, and left out
+    /// of line it costs every call a call. G41's count gates caught LLVM leaving it out of line on
+    /// aarch64, then (with `#[inline]`) on x86-64 after an unrelated merge: sinpi and cospi 4% to
+    /// 7% more instructions each time. A hint is a size margin; this is not.
+    #[allow(
+        clippy::inline_always,
+        reason = "measured: the hint alone left it out of line on one target or the other"
+    )]
+    #[inline(always)]
     fn new(lo: f64, hi: f64) -> Arc {
         let (ds, de) = two_sum(hi, -lo);
         let full = at_least(ds, de, 2.0);
@@ -141,14 +151,13 @@ fn around(r: f64, exact: bool) -> (f64, f64) {
 /// [`min2`] and [`max2`], comparisons that may return either zero, which [`Interval::new`] makes
 /// +0.
 ///
-/// Generic over the point function, and only as far as calling it: each of [`Interval::sinpi`]
-/// and [`Interval::cospi`] calls its point function directly at both ends, then hands the rest to
-/// [`periodic_from`], one function for both. G41's count gates measured both earlier shapes: with
-/// a `fn` pointer, the whole function had two callers and was left out of line, the pointer calls
-/// indirect, on aarch64 after an unrelated edit; generic throughout, its copies left
-/// [`Arc::new`], now with two callers, out of line on aarch64 and then on x86-64 (sinpi and cospi
-/// 5% to 7% more instructions or cycles each time). Split here, nothing turns on LLVM's size
-/// margins: the point function's calls are direct, and `Arc::new` has one caller.
+/// Generic over the point function, so [`Interval::sinpi`] and [`Interval::cospi`] each get their
+/// own copy with one caller and a direct call to it. Taking a `fn` pointer, it was one function
+/// with two callers, and whether LLVM inlined it (and so made the pointer a direct call) turned on
+/// size margins: an unrelated edit elsewhere in the crate (G41's) left it out of line on aarch64,
+/// where sinpi and cospi on extreme inputs then cost 5.4% and 6.2% more instructions (G41's count
+/// gate), and `#[inline]` did not bring it back. (Splitting it so the generic part only called the
+/// point function cost each call about 25 instructions more on x86-64: the count gate again.)
 fn periodic(
     x: Interval,
     f: impl Fn(f64) -> f64,
@@ -156,21 +165,8 @@ fn periodic(
     minima: &[f64],
 ) -> Result<Interval, NumError> {
     let (lo, hi) = (x.lo(), x.hi());
-    periodic_from(lo, hi, f(lo), f(hi), maxima, minima)
-}
-
-/// [`periodic`] once the point function is evaluated: `f_lo` and `f_hi` are its correctly rounded
-/// values at `lo` and `hi`.
-fn periodic_from(
-    lo: f64,
-    hi: f64,
-    f_lo: f64,
-    f_hi: f64,
-    maxima: &[f64],
-    minima: &[f64],
-) -> Result<Interval, NumError> {
-    let (a_low, a_high) = around(f_lo, quarter_turn(lo));
-    let (b_low, b_high) = around(f_hi, quarter_turn(hi));
+    let (a_low, a_high) = around(f(lo), quarter_turn(lo));
+    let (b_low, b_high) = around(f(hi), quarter_turn(hi));
     let arc = Arc::new(lo, hi);
     let low = if arc.contains_any(minima) {
         -1.0
