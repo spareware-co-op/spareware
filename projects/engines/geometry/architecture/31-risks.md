@@ -615,6 +615,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | SMLib's NLib layers as a CI oracle, with its Numerical Recipes routines stubbed out | 12, 29 | 32.23 (owner action G157) |
 | How our own hatch patterns and linetypes are authored and reviewed | 14, 29 | 32.24 (owner action G184) |
 | The ellipse as a curve kind stored by a bounded axis ratio | 7, 14, 26 | 32.25 (owner action G185) |
+| Integer 2D carriers, depth-one points and rational-centre arcs as an addition to 6.2; and 32.2, exact arcs from the start | 6, 14, 15 | 32.26 (owner action G186) |
 
 ### Answered by the pieces built so far
 
@@ -637,7 +638,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | The real widths of 2D construction predicates: rational directions of about 44 bits, tangency positions about 70 bits finer than a step, the deepest possibly thousands of bits | 14 | Piece "2D-01", with its width generator and benchmark |
 | Exact incircle on implicit TIN crossings would need about 1,024 bits (an estimate). Not planned; recorded as a limit | 17 | No piece; chapter 17 text |
 | A predicate step ladder: identity, narrow i64 and axis checks before the filter, with a filter switched off on a target where it measures slower | 23 | 32.22 (owner action G121): accepted into 6.2 with two conditions; piece "Predicate step ladder, rounded-input filters and step statistics" |
-| Integer 2D carriers (n below 2^41, c below 2^82), depth-one 2D points and arcs with rational centres, as an exception to "every stored coordinate is whole grid steps", like 6.3's exception for planes | 14, 15 | After 32.2: pieces "2D carrier, depth-one point and rational-centre arc predicates in geom-num" and "2D-04" |
+| Integer 2D carriers (n below 2^41, c below 2^82), depth-one 2D points and arcs with rational centres, as an exception to "every stored coordinate is whole grid steps", like 6.3's exception for planes | 14, 15 | 32.26 (owner action G186), with 32.2 decided A; pieces "2D carrier, depth-one point and rational-centre arc predicates in geom-num" and "2D-04" build them |
 | One rotation type for 2D and 3D: rational rotations from Pythagorean triples, as quaternions in 3D. Rotated planes then exceed 6.2's 384-bit assumption, so 6.2 and 11 must agree | 14 | 32.14 (owner action G44): one type, integer quaternions; rotated planes outside 6.2's budget are committed, so 384 bits stand; piece G46 builds it |
 | Sketch-plane frames: lattice frames only where cells are at most 16 steps, rotated frames elsewhere. Should section 13 build swept bodies on rotated planes from the exact carrier now? | 15 | Piece "Sketch planes and the 2D-3D maps" |
 | A committed plane whose proven deviation over its face is within q/2 counts as Exact, as a committed point does | 13 | 32.21 (owner action G120): no, committed planes and points stay Certified; piece "Plane commit routine" |
