@@ -117,6 +117,18 @@ Running costs per unit (servers and services, maps, messages, checks and the tea
 
 Add the card or bank fee for transaction apps (middle case, Stripe NZ example): ride US$0.57, order US$0.84, booking US$8.27, job US$13.67, sale US$1.25, rent US$9.82 a month by direct debit. Total middle at-cost fee at 10,000 a month: ride US$0.75, order US$1.02, booking US$8.95, job US$14.35, sale US$1.56, tenancy month US$10.09, listing US$1.59.
 
+The geometry kernel's checks (decision 32.4, recorded by kernel pieces G07 and G10; the machines are in the kernel's chapter 28.17): nothing is bought, so each line is US$0 a month in every case.
+
+| Item | Cost a month | Why it costs nothing |
+| --- | --- | --- |
+| Test runners for every pull request, nightly, weekly and release run (Linux, Windows and macOS on x86-64 and Arm, WebAssembly) | US$0 | GitHub's standard hosted runners are free and unlimited for public repositories ([runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners), read 2026-10-22) |
+| Nightly fuzzing | US$0 | On the same runners; OSS-Fuzz, also free, if it accepts the project |
+| Store for the outside oracles' container images | US$0 | The oracle repository's GitHub Actions cache, free up to 10 GB; a private package registry would cost US$0.25 a GB a month past its free 500 MB ([GitHub Packages billing](https://docs.github.com/en/billing/concepts/product-billing/github-packages), read 2026-10-28) |
+| Reference benchmark machine | US$0 | An owner's spare tower, lent every night from 19:00 to 08:00; its power is the owner's |
+| Licensed Revit machine | US$0 | An owner's workstation and Revit licence, lent; its power is the owner's |
+
+These become costs when GitHub ends its Intel macOS images (2027, so that leg needs a machine), or when a lent machine is no longer lent.
+
 The team row is the reason the fee keeps falling past 10,000 a month. It is too low there: a bigger app needs a bigger team, which this model does not yet cost.
 
 ## What the open cost ledger publishes each month

@@ -1,0 +1,45 @@
+# cargo-mutants configuration for the geometry kernel's mutation gate (kernel architecture,
+# section 28.8; .github/workflows/kernel-quality.yml runs it, and geom-test's `kernel-quality`
+# binary judges what survives against projects/engines/geometry/quality-ledger.json).
+#
+# cargo-mutants 27.1.0 reads this file from the workspace root whenever it runs here (its book,
+# book/src/config-file.md, and src/options.rs at the v27.1.0 tag, commit
+# 8ab1dc786a1f61a4e370416cc6c68b81a704e917). Scalar options given on the command line replace the
+# ones below; list options, the file globs included, are added to them, so a command-line --file
+# widens the run rather than narrowing it. The CI jobs give none. To narrow a local run, match the
+# mutants' names with --re (for example --re 'geom-num/src/grid\.rs:'), which this file leaves
+# empty.
+
+# Mutate only the kernel crates' own source, never their tests (cargo-mutants skips #[test]
+# functions and #[cfg(test)] modules by itself) and never the development crates, which do not ship
+# (chapter 27) and which neither 28.8 bar covers.
+examine_globs = ["projects/engines/geometry/crates/*/src/**/*.rs"]
+exclude_globs = [
+  "projects/engines/geometry/crates/geom-test/**",
+  "projects/engines/geometry/crates/geom-fuzz/**",
+  "projects/engines/geometry/crates/geom-gen/**",
+  "projects/engines/geometry/crates/geom-bench/**",
+]
+
+# Judge each mutant by the mutated crate's integration tests only, the files in its tests/ folder:
+# they are compiled as separate crates, so they can reach nothing but its public interface (28.8:
+# "mutants are judged by tests through each crate's public interface ... so the suite keeps its
+# strength when internals are rewritten"). `--test *` selects every integration test target and
+# leaves out the unit tests in src/ (which can call private items) and the doctests. A crate with
+# code but no integration test fails the baseline, which fails the gate.
+additional_cargo_test_args = ["--test", "*"]
+
+# Cargo.lock is committed and CI never resolves a different version (28.13, the toolchain guard).
+additional_cargo_args = ["--locked"]
+
+# Build optimised: geom-num's integration tests take about 90 s optimised and far longer
+# unoptimised, and every mutant runs them. The workflow turns overflow checks and debug assertions
+# on for this profile (CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS and _DEBUG_ASSERTIONS), so tests that
+# use native arithmetic still stop on an overflow a mutant causes, and for its mutation jobs builds
+# it lightly optimised and incrementally (CARGO_PROFILE_RELEASE_OPT_LEVEL=1, _INCREMENTAL=true,
+# _CODEGEN_UNITS=256), so a mutant rebuilds in seconds. Set the same variables for a local run.
+profile = "release"
+
+# Only the mutated crate's tests run against each of its mutants; this is cargo-mutants' default,
+# written out because the gate's meaning depends on it.
+test_workspace = false

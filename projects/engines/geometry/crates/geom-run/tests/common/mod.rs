@@ -10,6 +10,10 @@
     dead_code,
     reason = "every test file includes this module and uses only some of its helpers"
 )]
+#![allow(
+    clippy::disallowed_methods,
+    reason = "the test pools start threads, which clippy.toml bans in kernel code (chapter 23.4)"
+)]
 
 use std::any::Any;
 use std::fmt::Debug;

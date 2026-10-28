@@ -1,4 +1,4 @@
-// Records the prototype's official data feeds (features/feeds.js) and the data hub's count and live-traffic loaders (data.js) for the
+// Records the prototype's official data feeds (packs/nz/feeds.js) and the data hub's count and live-traffic loaders (data.js) for the
 // Rust port's feeds module (projects/spare-construct/crates/construct-transport/src/feeds, tests/feeds_*.rs).
 //
 // Nothing is downloaded. Every answer is made up in the shape the real service gives (ArcGIS feature queries, an Overpass answer, the
@@ -18,11 +18,11 @@ import zlib from 'node:zlib';
 import { JS_DIR } from './js-core.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const CORE = ['util', 'model', 'registry', 'engine', 'data', 'landuse', 'turns', 'calibrate', 'sim', 'sample', 'kit', 'features/feeds'];
+const CORE = ['util', 'model', 'registry', 'engine', 'data', 'landuse', 'turns', 'calibrate', 'sim', 'sample', 'kit', 'packs/nz/feeds'];
 const NOW = Date.UTC(2026, 9, 21);
 const inert = () => new Proxy(function () {}, { get: (t, k) => (k === Symbol.toPrimitive ? () => '' : inert()), apply: () => undefined });
 
-// js-core.mjs's loader with kit.js and features/feeds.js after the core, the clock and fetch as arguments, and a Worker stand-in that
+// js-core.mjs's loader with kit.js and packs/nz/feeds.js after the core, the clock and fetch as arguments, and a Worker stand-in that
 // records what the GTFS reader is given and fails, so the reader runs inline (feeds.js falls back to that when a worker fails)
 function loadCtx({ seed = 1, now = NOW, fetchImpl = null, workerLog = null } = {}) {
   let s = seed >>> 0;
