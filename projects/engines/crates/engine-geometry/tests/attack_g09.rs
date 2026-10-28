@@ -1261,7 +1261,6 @@ mod repository {
         ("geom-p21", "G415"),
         ("geom-panel", "G342 G343 G344 G345"),
         ("geom-poly", "G123 G124 G125 G126 G127 G128 G142"),
-        ("geom-pool", "G33 G456"),
         ("geom-profile", "G229 G230"),
         ("geom-skeleton", "G271 G272 G274 G471"),
         (
@@ -1637,8 +1636,9 @@ mod repository {
             wrong.push("a checkout keeps its credentials".to_owned());
         }
         // None of kernel.yml's tests or lints is run again: no list of the kernel's folder, no test
-        // but the scaffold check, and formatting and clippy only for the table's crates outside
-        // the kernel's folder.
+        // but the facade's own (the scaffold check and the pieces' attack tests, which kernel.yml's
+        // list of the kernel's folder never names; G10), and formatting and clippy only for the
+        // table's crates outside the kernel's folder.
         if yml.contains("KERNEL_CRATES") {
             wrong.push("repeats kernel.yml's list of the kernel's folder".to_owned());
         }
@@ -1647,12 +1647,12 @@ mod repository {
             wrong.push("a per-crate build job does not deny warnings".to_owned());
         }
         let tests = yml.matches("cargo test ").count();
-        let scaffold_tests = yml
-            .matches("cargo test --locked --package engine-geometry --test scaffold")
+        let facade_tests = yml
+            .matches("cargo test --locked --package engine-geometry ")
             .count();
-        if tests != scaffold_tests {
+        if tests != facade_tests {
             wrong.push(format!(
-                "{tests} cargo test runs, {scaffold_tests} of the scaffold"
+                "{tests} cargo test runs, {facade_tests} of the facade"
             ));
         }
         for needle in [

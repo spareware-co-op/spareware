@@ -1,4 +1,4 @@
-//! The requests of features/feeds.js, one at a time, for a host to send.
+//! The requests of packs/nz/feeds.js, one at a time, for a host to send.
 //!
 //! feeds.js fetches with its own `get` (a time limit, errors that say what to do), caches layer descriptions for the
 //! session (`layerMeta`) and pages ArcGIS queries (`arcQuery`). Here each of those is a small state machine: ask for

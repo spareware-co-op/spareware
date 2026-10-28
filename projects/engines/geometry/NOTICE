@@ -420,6 +420,13 @@ cargo-bolero 0.13.5 `bin/cargo-bolero/src/test.rs`
     projects/engines/geometry/crates/geom-fuzz/src/lib.rs
       for its run limits above: `-T`, `--runs`, `--jobs` and `--max-input-length`. No code copied.
 
+cargo-mutants
+  Licence:      MIT
+  Link:         https://github.com/sourcefrog/cargo-mutants/tree/8ab1dc786a1f61a4e370416cc6c68b81a704e917
+  Consulted by:
+    projects/engines/geometry/crates/geom-test/src/mutants.rs
+      for the format of the output files this module reads (`book/src/mutants-out.md`, `src/outcome.rs`, `src/mutant.rs` and `src/output.rs` at its v27.1.0 tag). No code copied.
+
 CGAL `FPU.h`
   Licence:      LGPL-3.0-or-later OR LicenseRef-Commercial
   Link:         https://github.com/CGAL/cgal/blob/cbc3b81d4607c6f3a9d1f3a47d8709a2be3e6bfa/Number_types/include/CGAL/FPU.h
@@ -469,6 +476,13 @@ Geogram PCK
   Consulted by:
     projects/engines/geometry/crates/geom-gen/src/predicate_emit.rs
       for how PCK runs FPG over one description per predicate. No code copied.
+
+Geogram's PCK `_SOS` predicates
+  Licence:      BSD-3-Clause
+  Link:         https://github.com/BrunoLevy/geogram/blob/40d72165ceeeb0a61977d6fdf74d929bfdd77b7b/src/lib/geogram/numerics/PCK.h
+  Consulted by:
+    projects/engines/geometry/crates/geom-num/src/perturb.rs
+      for the shape of a cascade over keyed points, and its address ordering as the trap to avoid. No code copied.
 
 `GeometricTools`' `BSPrecision.h`
   Licence:      BSL-1.0
@@ -629,3 +643,5 @@ The published crates the kernel crates depend on (DEPEND, section 29.1). Their n
 every other crate compiled into a shipped binary, go in the generated third-party notices file.
 
   libm 0.2.16 (MIT), https://crates.io/crates/libm/0.2.16, named by projects/engines/geometry/crates/geom-num/Cargo.toml
+  libm 0.2.16 (MIT), https://crates.io/crates/libm/0.2.16, named by projects/engines/geometry/crates/geom-num/Cargo.toml
+  rayon 1.12.0 (Apache-2.0 OR MIT), https://crates.io/crates/rayon/1.12.0, named by projects/engines/geometry/crates/geom-pool/Cargo.toml

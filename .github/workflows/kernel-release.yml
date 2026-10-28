@@ -1,0 +1,116 @@
+name: Kernel release
+
+# Every check of the geometry kernel, on a release (kernel architecture, chapter 28.17: "Each
+# release and edition: everything; the format museum; the edition's goldens frozen"; piece G10).
+#
+# A tag `geom-v<version>` pushed to a commit runs every other kernel workflow on that commit, each
+# called whole (workflow_call) and each in the configuration its main-branch or scheduled runs use:
+# every test on every target and build mode with the golden digests (kernel.yml); the builds, the
+# merge gate and the development crates with the Verus twins (kernel-build.yml, kernel-gate.yml,
+# kernel-dev.yml); the golden store (kernel-golden.yml); the count gates against the commit's first
+# parent (kernel-bench.yml); fuzzing and the bounded proofs (kernel-fuzz.yml), and five hours of
+# libFuzzer on every target (kernel-fuzz-campaign.yml); the full mutation run, coverage and Miri
+# over every partition (kernel-quality.yml, which runs its full scope on any event but a pull
+# request); and the predicates' verification suite with a fresh seed (kernel-nightly.yml). The
+# tag's run takes as long as its longest workflow, the five-hour campaign or the mutation run.
+#
+# When all of them pass, `freeze` checks the golden store once more and attaches it, with its
+# SHA-256, to a draft GitHub release for the tag: the record of every digest the release was
+# checked against. An owner reads the run and publishes the release. A rerun of the same tag
+# compares the store with the one already attached and fails if they differ, so a release's record
+# never changes.
+#
+# Not here yet, and why: the format museum (28.13) has no files before the native format's first
+# version (chapter 24), and a tag cannot yet name a frozen edition of the store, because editions
+# begin with the first Stable release (board piece G482; chapter 32.12): until then the store has
+# one open edition, `pre-edition`, and a tag records it as it stands.
+#
+# Permissions: read for every check; the freeze job alone may write, to create the draft release
+# and attach the store. Every action is pinned to a full commit, kernel.yml's.
+
+on:
+  push:
+    tags: ["geom-v*"]
+
+permissions:
+  contents: read
+  # kernel-golden.yml reads a pull request's reviews; called here it reads none, but a called
+  # workflow may not ask for more than its caller grants.
+  pull-requests: read
+
+concurrency:
+  group: kernel-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # The workspace's pinned compiler (rust-toolchain.toml), as in kernel.yml.
+  RUST_TOOLCHAIN: "1.99.0"
+
+jobs:
+  kernel:
+    uses: ./.github/workflows/kernel.yml
+  build:
+    uses: ./.github/workflows/kernel-build.yml
+  gate:
+    uses: ./.github/workflows/kernel-gate.yml
+  dev:
+    uses: ./.github/workflows/kernel-dev.yml
+  golden:
+    uses: ./.github/workflows/kernel-golden.yml
+  bench:
+    uses: ./.github/workflows/kernel-bench.yml
+  fuzz:
+    uses: ./.github/workflows/kernel-fuzz.yml
+  fuzz-campaign:
+    uses: ./.github/workflows/kernel-fuzz-campaign.yml
+  quality:
+    uses: ./.github/workflows/kernel-quality.yml
+  nightly:
+    uses: ./.github/workflows/kernel-nightly.yml
+
+  freeze:
+    name: The golden store, recorded with the release
+    needs: [kernel, build, gate, dev, golden, bench, fuzz, fuzz-campaign, quality, nightly]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: The store against the repository
+        run: cargo run --locked -p geom-test --bin golden -- check
+      - name: Attach the store to the tag's draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/record"
+          mkdir -p "$out"
+          cp projects/engines/geometry/crates/geom-test/golden/store.json "$out/golden-store.json"
+          (cd "$out" && sha256sum golden-store.json > golden-store.json.sha256)
+          cat "$out/golden-store.json.sha256"
+          if ! gh release view "$TAG" > /dev/null 2>&1; then
+            gh release create "$TAG" --verify-tag --draft --title "$TAG" \
+              --notes "Every kernel check passed on $GITHUB_SHA: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID. golden-store.json is the golden store the release was checked against."
+          fi
+          mkdir -p "$RUNNER_TEMP/attached"
+          if gh release download "$TAG" --pattern golden-store.json --dir "$RUNNER_TEMP/attached"; then
+            if ! cmp -s "$RUNNER_TEMP/attached/golden-store.json" "$out/golden-store.json"; then
+              echo "::error::$TAG already records a different golden store; a release's record never changes."
+              exit 1
+            fi
+            echo "$TAG already records this golden store."
+          else
+            gh release upload "$TAG" "$out/golden-store.json" "$out/golden-store.json.sha256"
+          fi

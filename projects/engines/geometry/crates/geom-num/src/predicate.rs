@@ -1014,6 +1014,7 @@ mod tests {
     use proptest::prelude::*;
 
     use super::bounded::{TOTAL_BITS, declarable, product_bits, sum_bits};
+    use super::exponent_sum;
     use super::{
         Bounded, Diff, Total, fast_else_total, incircle_fast, incircle_terms, incircle_total,
         insphere_fast, insphere_terms, insphere_total, orient2d_fast, orient2d_total,
@@ -1021,6 +1022,17 @@ mod tests {
     };
     use crate::grid::COORD_MAX;
     use crate::sign::Sign;
+
+    /// `exponent_sum`, which only the budget constants call (so only the compiler ran it): the sum,
+    /// or `u32::MAX` when the sum overflows, which no budget fits.
+    #[test]
+    fn exponent_sums_add_or_saturate_to_the_impossible_budget() {
+        assert_eq!(exponent_sum(40, 1), 41);
+        assert_eq!(exponent_sum(0, 0), 0);
+        assert_eq!(exponent_sum(u32::MAX - 1, 1), u32::MAX);
+        assert_eq!(exponent_sum(u32::MAX, 1), u32::MAX);
+        assert_eq!(exponent_sum(1, u32::MAX), u32::MAX);
+    }
     use crate::wide::{I256, Wide};
 
     const M: i64 = COORD_MAX;
