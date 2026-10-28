@@ -631,6 +631,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | Generating code from IFC and STEP EXPRESS schemas, and ISO 10303-42's current edition | 24, 29 | 32.39 (owner action G409) |
 | Gerber's and IPC-2581's terms, and whether a second program needs board exchange | 24, 26, 29 | 32.40 (owner action G447) |
 | Running AutoCAD for comparison, and its seat | 14, 28, 32 | 32.41 (owner action G448) |
+| A nightly wall-clock miss blocks merges to `main` except the fix or a revert | 23, 28 | 32.42 (owner action G449) |
 
 ### Answered by the pieces built so far
 
