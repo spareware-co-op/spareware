@@ -45,6 +45,15 @@
 //!   three-plane points built from the corners of the frame's cube reach every one of these
 //!   exactly (tested).
 //! - Deterministic: integers only, no floating point, no platform maths, no allocation.
+//! - **Bounded proofs, and what is only tested** (chapter 28.7; piece G41 collects them here).
+//!   Verus proves that the generated exact paths of `plane_side`, `tpi_weight`, `tpi_side`,
+//!   `lpi_weight` and `lpi_side`, which every answer here rests on, compute their values exactly
+//!   and never overflow for every input in their declared ranges (piece G39: the twins in
+//!   `verus/generated/`, token for token the shipped modules), on [`crate::wide`] arithmetic that
+//!   is itself proven exact (G37). The budgets in the table above are asserted when the crate
+//!   compiles; the constructors' checks, the routing between filter and exact path and the
+//!   rounding to the grid are tested against exact oracles, not proven (`tests/plane.rs`,
+//!   `tests/attack_plane.rs`), and the filters' error bounds are checked until G40 certifies them.
 //!
 //! Methods followed: plane-based geometry with vertices as three-plane intersections in
 //! homogeneous integer coordinates, as in Campen and Kobbelt 2010
