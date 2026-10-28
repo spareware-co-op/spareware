@@ -8,7 +8,7 @@ The kernel is fast for the same reasons it is exact: whole-number coordinates, i
 
 ## 23.1 The targets, and the kernel's share
 
-Spare Construct's ten targets are for the whole program: kernel, regeneration engine, renderer and interface together. The kernel gets a share of each. Meeting its share keeps the kernel from being the reason a target is missed. The shares are proposed (section 32), are for native builds on the reference machine (8 cores; the machine itself is an open question), and are replaced by measured figures once the scenario benchmarks run.
+Spare Construct's ten targets are for the whole program: kernel, regeneration engine, renderer and interface together. The kernel gets a share of each. Meeting its share keeps the kernel from being the reason a target is missed. The owner accepted the shares (owner action G72, 32.16). They are for native builds on the reference machine, the owner's spare tower timed on its 8 performance cores (28.17), and are replaced by measured figures once the scenario benchmarks run.
 
 | Target (whole program) | Kernel's share | What the kernel does in that time |
 | --- | --- | --- |
