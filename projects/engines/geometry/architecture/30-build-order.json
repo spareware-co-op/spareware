@@ -4746,7 +4746,7 @@
   "phase": "Phase 10",
   "crate": "geom-terrain",
   "size": "Large",
-  "done_when": "Incremental integer Delaunay with name-ordered perturbation, duplicate rules, loose-point deletion; identical bytes for 1,000 insertion orders; 10M random points in 20 s on one core (to confirm).",
+  "done_when": "Incremental integer Delaunay with perturbation ordered by plan position (32.34), duplicate rules, loose-point deletion; identical bytes for 1,000 insertion orders; 10M random points in 20 s on one core (to confirm).",
   "depends_on": [
    "G153",
    "G30",

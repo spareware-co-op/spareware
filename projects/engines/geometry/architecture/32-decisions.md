@@ -51,6 +51,7 @@ The board (30.5) also turns into a piece every narrower question that chapters 6
 | 32.31 | G285: the contact benchmark's licence | Wang et al.'s 2021 benchmark has no licence (all rights reserved), so it is not stored or run until the authors clear it, on a request the owner sends; G297 tests meanwhile on the authors' Apache-2.0 time-of-impact sample and our own exact cases | 19, 29 | G297, time of first contact |
 | 32.32 | G312: USD exchange home | `geom-meshio` owns USD subdivision exchange; Chaikin creasing travels as `uniform token spareware:creaseMethod = "chaikin"` on the Mesh prim, absent meaning uniform | 16, 24 | G354, SubD exchange |
 | 32.33 | G357: alignment curve kinds | One transition kind with a closed set of curvature laws (Helmert, Bloss, cosine, sine, the cant-coupled transition, IFC's polynomial spirals, the cubic spiral); the cubic parabola a polynomial curve; gradient and segmented reference curves compositions in `geom-align`; descriptive names, file enumerators kept as data | 7, 17, 26 | G371, transition kinds |
+| 32.34 | G358: TIN tie order | Plan position, x then y, for a TIN's Delaunay ties, as chapter 17 asks; name order everywhere else | 6, 17, 21 | G362, the exact Delaunay core |
 
 ## 32.1 The grid ladder (decision 1)
 
@@ -645,3 +646,16 @@ Why: one crate for subdivision exchange keeps OBJ and USD on one mapping of `geo
 Why: one kind with a closed set of laws keeps every transition on one proven evaluator and one test kit; compositions keep IFC's layered alignment model editable; and a descriptive name keeps a possible trade mark out of the kernel.
 
 **Changes:** 7's curve list, 17.8, 17.13, 31.7, and piece G371.
+
+## 32.34 TIN tie order (owner action G358)
+
+**What it is.** When four or more survey points lie exactly on one circle, a Delaunay triangulation has more than one valid set of triangles, and the kernel must choose one deterministically. Section 6.2 breaks every tie by symbolic perturbation ordered by persistent names (21). Chapter 17 objects for terrain: two separate imports of the same points get different names and may choose different diagonals, so identical surveys can give different surfaces. It asks to order these ties by plan position instead, x then y (17.3; 31.7).
+
+**Decided 2026-10-28 (owner action G358): plan position, for TIN vertices.** Read with 6.2, 17.2, 17.3, 21 and Devillers and Teillaud's perturbation for Delaunay ([doi:10.1016/j.comgeo.2010.09.010](https://doi.org/10.1016/j.comgeo.2010.09.010)).
+- **A TIN's ties are broken by the vertices' plan coordinates, x then y,** in Devillers and Teillaud's symbolic perturbation. A TIN has at most one vertex at a plan position (17.3's duplicate rules merge or refuse the rest), so plan position is a total order on its vertices, and a persistent key in 6.2's sense: it is the data the surface is built from, and it changes only when the point itself moves.
+- **What it gives:** the same points give the same surface whatever they are called and however they were imported, so two surveys, a re-import or another program's TIN of the same points compare triangle for triangle. A renamed point still changes nothing, as before.
+- **Everything else keeps name order.** The exception is for the Delaunay ties of TINs only, where the vertices are survey points whose positions are the identity; 6.2's rule stands for every other tie, where the same geometry under different names should stay distinct (20.2).
+
+Why: for terrain the point set is the model; a surface that depends on point names makes identical surveys disagree, which the name rule exists to prevent elsewhere.
+
+**Changes:** 6.2 (the exception), 17.3, 31.7 and piece G362.
