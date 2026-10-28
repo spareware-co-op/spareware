@@ -498,9 +498,10 @@ impl RationalRotation {
     /// |q|², below 2^72: the denominator of M(q)/|q|².
     #[must_use]
     pub fn norm2(&self) -> u128 {
-        // Each square is below 2^72 and the sum below 2^72: saturating never saturates.
+        // Each square is below 2^72 and the sum below 2^72, in u128: saturating never saturates.
         self.q.iter().fold(0u128, |acc, v| {
-            acc.saturating_add(v.unsigned_abs().saturating_mul(v.unsigned_abs()).into())
+            let m = u128::from(v.unsigned_abs());
+            acc.saturating_add(m.saturating_mul(m))
         })
     }
 

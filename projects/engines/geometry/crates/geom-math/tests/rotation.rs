@@ -88,12 +88,13 @@ fn sin_upper(z: &BigRational) -> BigRational {
     z - z * &z2 / int(6) + z * &z2 * &z2 / int(120)
 }
 
-/// The exact sin² of the half-angle between the integer quaternion `q` and the target `t`, which
-/// must have a positive dot product with it.
+/// The exact sin² of the half-angle between the integer quaternion `q` and the target `t`, as
+/// rotations: q and −q are the same rotation, so the sign that makes their dot product positive
+/// is taken (a zero dot product is a half-angle of π/2, never within a bound).
 fn half_angle_sin2(q: [i64; 4], t: &[BigRational; 4]) -> BigRational {
     let q: Vec<BigRational> = q.iter().map(|&v| int(i128::from(v))).collect();
     let dot: BigRational = q.iter().zip(t).map(|(a, b)| a * b).sum();
-    assert!(dot.is_positive(), "the result is not on the target's side");
+    assert!(!dot.is_zero(), "the result is a half turn away from the target");
     let mut wedge = BigRational::zero();
     for i in 0..4 {
         for j in i + 1..4 {
