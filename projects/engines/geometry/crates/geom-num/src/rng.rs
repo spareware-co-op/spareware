@@ -271,12 +271,30 @@ const fn join_u32(low: u32, high: u32) -> u64 {
 }
 
 /// The low and high 64-bit halves of `x`, x = high · 2^64 + low, read from its little-endian bytes
-/// as [`split_u64`] reads its halves: exact, with no cast and no shift.
+/// as [`split_u64`] reads its halves: exact, with no cast and no shift. Every byte is bound by
+/// name, with no sub-array pattern, which Kani cannot model (its issue 707).
 const fn split_u128(x: u128) -> [u64; 2] {
-    let [b0, b1, b2, b3, b4, b5, b6, b7, high @ ..] = x.to_le_bytes();
+    let [
+        b0,
+        b1,
+        b2,
+        b3,
+        b4,
+        b5,
+        b6,
+        b7,
+        b8,
+        b9,
+        b10,
+        b11,
+        b12,
+        b13,
+        b14,
+        b15,
+    ] = x.to_le_bytes();
     [
         u64::from_le_bytes([b0, b1, b2, b3, b4, b5, b6, b7]),
-        u64::from_le_bytes(high),
+        u64::from_le_bytes([b8, b9, b10, b11, b12, b13, b14, b15]),
     ]
 }
 
@@ -993,5 +1011,66 @@ mod tests {
     fn two_pow_minus_53_is_exact() {
         assert_eq!(TWO_POW_MINUS_53.to_bits(), 0x3ca0_0000_0000_0000);
         assert_eq!(TWO_POW_MINUS_53 * 9_007_199_254_740_992.0, 1.0);
+    }
+}
+
+/// Bounded proofs (chapter 28.7; piece G41): every key, counter, seed and stream.
+#[cfg(kani)]
+// cargo-mutants reads this attribute from the source and skips the module (its harnesses are
+// proven by Kani, and no test build compiles them); no build evaluates it, since the module
+// exists only under Kani, where `test` is off.
+#[cfg_attr(test, mutants::skip)]
+mod proofs {
+    use super::*;
+
+    /// Philox4x32-10 never panics or overflows, for every counter and key.
+    #[kani::proof]
+    fn philox_never_panics() {
+        let counter: [u32; 4] = [kani::any(), kani::any(), kani::any(), kani::any()];
+        let key: [u32; 2] = [kani::any(), kani::any()];
+        let _ = philox4x32_10(counter, key);
+    }
+
+    /// A stream's draws never panic or overflow, from any block of any stream of any seed: each
+    /// answers or reports that the stream ran out, and a draw that answers moves the position on.
+    #[kani::proof]
+    fn draws_never_panic() {
+        let philox = Philox::new(Seed(kani::any()), StreamId(kani::any()));
+        let mut stream = philox.stream_from(kani::any());
+        let before = stream.position();
+        if stream.next_u32().is_ok() {
+            assert!(stream.position() > before);
+        }
+        let _ = stream.next_u64();
+        // A double is drawn whenever the stream has words left, never refused as a defect: the
+        // `Real::new` check after the draw cannot fail.
+        assert!(!matches!(stream.next_f64(), Err(RngError::Defect)));
+    }
+
+    /// Lemire's method never reports a defect, for every word and every bound: the 128-bit
+    /// product cannot overflow and the bound is never zero, so both defensive arms are unreachable.
+    #[kani::proof]
+    fn lemire_never_reports_a_defect() {
+        let word: u64 = kani::any();
+        let bound: u64 = kani::any();
+        kani::assume(bound != 0);
+        let mut threshold = None;
+        let first = lemire(word, NonZeroU64::new(bound).unwrap(), &mut threshold);
+        assert!(!matches!(first, Err(RngError::Defect)));
+        // With the threshold cached, a second word is judged the same way.
+        let second = lemire(kani::any(), NonZeroU64::new(bound).unwrap(), &mut threshold);
+        assert!(!matches!(second, Err(RngError::Defect)));
+    }
+
+    /// Cutting a seed's streams into chunks never panics or overflows, and a chunk that is made
+    /// lies inside the range it was cut from.
+    #[kani::proof]
+    fn stream_ranges_cut_without_overflow() {
+        let all = StreamRange::all(Seed(kani::any()));
+        let (index, size): (u64, u64) = (kani::any(), kani::any());
+        if let Ok(chunk) = all.chunk(index, size) {
+            assert!(chunk.first().0 >= all.first().0 && chunk.last().0 <= all.last().0);
+            let _ = chunk.philox(kani::any());
+        }
     }
 }
