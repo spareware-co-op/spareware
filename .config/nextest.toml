@@ -1,0 +1,30 @@
+# nextest profiles for the geometry kernel's weekly Miri run (kernel architecture, section 28.8;
+# .github/workflows/kernel-quality.yml runs them). Nothing else in the repository uses nextest, and
+# the default profile is left as nextest ships it.
+#
+# cargo-nextest 0.9.146 (Apache-2.0 OR MIT) is pinned in the workflow. `on-timeout = "pass"` needs
+# 0.9.115 (https://nexte.st/docs/features/slow-tests/), so older versions are refused.
+nextest-version = { required = "0.9.115" }
+
+# `cargo miri nextest run` picks this profile by itself. Every kernel test runs under Miri, each in
+# its own process, four at once on a GitHub-hosted runner. Miri interprets a test thousands of times
+# slower than it runs, and some of the kernel's exhaustive tests would take weeks, so each test has
+# a budget of 10 minutes (two periods of five): a test still running then is stopped and counted as
+# passing (TMPASS), because every operation Miri interpreted up to that point was free of undefined
+# behaviour, and the run's report and its JUnit file name each one. Any undefined behaviour, panic
+# or failed assertion fails the test, and every test runs (no fail-fast), so one run finds them all.
+[profile.default-miri]
+slow-timeout = { period = "300s", terminate-after = 2, on-timeout = "pass" }
+fail-fast = false
+
+[profile.default-miri.junit]
+path = "junit.xml"
+
+# The same run at a budget of one minute a test, for a pull request that changes how Miri runs: it
+# proves the run works without spending the weekly run's hours.
+[profile.miri-smoke]
+slow-timeout = { period = "30s", terminate-after = 2, on-timeout = "pass" }
+fail-fast = false
+
+[profile.miri-smoke.junit]
+path = "junit.xml"

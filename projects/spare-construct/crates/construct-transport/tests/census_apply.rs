@@ -1,5 +1,5 @@
 //! Land use truth tests: putting the Census, employees, schools, early learning and Unitary Plan zones in a project's zones (`apply` of
-//! features/landuse-plus.js) against the prototype (tools/transport-truth/gen-census.mjs): the report and every zone afterwards.
+//! packs/nz/landuse-plus.js) against the prototype (tools/transport-truth/gen-census.mjs): the report and every zone afterwards.
 
 mod census_support;
 mod edit_support;

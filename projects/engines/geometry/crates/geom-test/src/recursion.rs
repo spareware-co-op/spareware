@@ -198,6 +198,11 @@ pub type OwnedReader = Box<dyn Fn(&str) -> Result<String, String> + Send + Sync>
 pub fn analyse(sources: Vec<CrateSource>, read: OwnedReader) -> Report {
     let shared = std::sync::Arc::new((sources, read));
     let inner = std::sync::Arc::clone(&shared);
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "a development tool, not kernel code: the thread only gives the analysis a bigger \
+                  stack, and its result does not depend on scheduling"
+    )]
     let spawned = std::thread::Builder::new()
         .name("recursion-check".to_owned())
         .stack_size(ANALYSIS_STACK)

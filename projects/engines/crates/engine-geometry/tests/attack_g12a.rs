@@ -65,12 +65,14 @@ fn attack_the_real_allow_list_is_vetted_and_pinned_to_the_lock() {
     assert_eq!(names, ["libm"], "the list holds libm alone today");
     let lock = fs::read_to_string(root().join("Cargo.lock")).unwrap();
     assert_eq!(vetted::against_lock(&list, &lock), Vec::<String>::new());
-    // The audit is owed by the piece the board gives it (G24: "the committed libm audit").
+    // The audit is the one the board gave G24 ("the committed libm audit"), and it is committed.
+    let audit = "projects/kit/notes/G24-libm-audit.md";
     assert!(
-        matches!(&list[0].audited, vetted::Audit::Pending { piece, .. } if piece == "G24"),
+        matches!(&list[0].audited, vetted::Audit::File(path) if path == audit),
         "{:?}",
         list[0].audited
     );
+    assert!(root().join(audit).is_file(), "{audit} is not committed");
 }
 
 #[test]
@@ -115,13 +117,18 @@ fn attack_records_that_are_not_whole_are_refused() {
         ("unspaced", "no_std: yes", "no_std:yes"),
         (
             "emptied",
-            "audited: pending, piece G24 commits",
-            "audited: commits",
+            "audited: projects/kit/notes/G24-libm-audit.md, the written audit",
+            "audited: the written audit",
         ),
         (
             "an audit with no owner",
-            "pending, piece G24",
-            "pending, piece",
+            "audited: projects/kit/notes/G24-libm-audit.md,",
+            "audited: pending, piece,",
+        ),
+        (
+            "an audit outside the repository",
+            "audited: projects/kit/notes/",
+            "audited: /projects/kit/notes/",
         ),
         ("the pin left out", "; \\\npinned: 0.2.16,", "; \\\n0.2.16,"),
     ] {

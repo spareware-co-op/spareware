@@ -1,4 +1,4 @@
-//! The project's compliance record, the regulatory regime and the version stamp (features/compliance.js sections 2 and 3).
+//! The project's compliance record, the regulatory regime and the version stamp (packs/nz/compliance.js sections 2 and 3).
 //!
 //! The record lives in the project as `compliance` (see [`blank`]); [`state`] gives it with the defaults filled in, and the
 //! functions that remember something ([`record_outputs`]) change the project. Everything here reads the project the way the
