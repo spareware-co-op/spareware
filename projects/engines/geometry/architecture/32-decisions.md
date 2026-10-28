@@ -45,6 +45,7 @@ The board (30.5) also turns into a piece every narrower question that chapters 6
 | 32.25 | G185: ellipses in 2D | A curve kind stored by centre and major axis on the grid and a reduced axis ratio p/q, q at most about 2^21; file ratios become the nearest such fraction, Certified unless exact | 7, 14, 26 | G190, exact conic predicates |
 | 32.26 | G186: depth-one 2D numbers | Integer carriers, depth-one points and rational-centre arcs accepted into 6.2, at most 337 bits; 32.2 decided A with its fallbacks | 6, 14, 15 | G187, the 2D predicates |
 | 32.27 | G238: toolkit homes before a second program | No exception: `geom-thread`, `geom-stair` and `geom-civil` start in Spare Construct on the facade, and enter the kernel under 26.1 when a second program needs them | 17, 26, 27 | G258, G281 and G378 |
+| 32.28 | G239: what the Sweep kind stores | The whole definition: profile, path, the full frame rule, twist and scale laws, bit-exact station frames, a tapered revolve's profile morph; the helix kind gains a radius rate, so conical helices are exact | 7, 13, 24 | G254, frame rules and laws |
 
 ## 32.1 The grid ladder (decision 1)
 
@@ -557,3 +558,16 @@ Why: rounding a T-junction or a fillet centre to the grid leaves gaps that every
 Why: the two-program rule is what keeps the kernel finishable (R1), and none of the three needs anything the facade does not give a program.
 
 **Changes:** 17's introduction, 27's toolkit rule, 30.5's not-gating list and 31.7.
+
+## 32.28 What the Sweep kind stores (owner action G239)
+
+**What it is.** A swept surface is a procedural kind: its stored definition is the shape, and any NURBS is only a cached approximation with its bound (7, 13.3). Chapter 13 asks what that definition holds, its fifth question: the frame rule, the twist and scale laws, the station frames, and for a tapered revolve the profile morph IFC defines, and whether a conical helix (tapered springs, scrolls, tapered pipe threads) becomes a curve kind of its own.
+
+**Decided 2026-10-28 (owner action G239): the Sweep kind stores its whole definition, and the helix kind gains a radius rate.** Read with 7, 13.3, 13.4, 13.6, 13.9, 24.3 and 32.3.
+- **The Sweep kind stores:** its profile and path by reference; the `FrameRule` in full (its kind and every parameter it was given, never a name alone); the twist and scale laws as law curves of their own, exact where given exactly; for a rotation-minimising frame, the station frames F_0 … F_n bit for bit, as the `f64` rotations the double-reflection steps produced, because the stored definition is the shape and its closeness to the ideal frame is measured and labelled (32.3); and for a tapered revolve, IFC's profile morph, each pair of corresponding points moving with radius and height linear in the angle. 24.3's canonical bytes encode each field, and piece "geom-format: body records" writes it.
+- **Draft surfaces** are Sweep or Ruled faces, whichever their construction is, never fitted NURBS.
+- **The helix kind gains a radius rate:** a helix stores its axis frame, start radius, radius change per turn, pitch, handedness and parameter range, so a conical helix is exact like a cylindrical one (radius rate zero), and conical springs, scrolls and tapered pipe threads are Exact helices swept, not Certified Sweep faces. Section 7's helix entry becomes this one kind; its decision note under 26.1 is this section.
+
+Why: a procedural face is only as replayable as its stored definition is complete, so every rule and law that shaped it is stored, and nothing is left to recompute differently later (26.2). Tapered threads are common enough in manufacturing that an exact form pays for itself.
+
+**Changes:** 7's helix entry, 13.4, 13.6, 31.7, and pieces G254 (frame rules and laws) and "Helical sweeps and geom-thread".
