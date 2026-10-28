@@ -47,6 +47,7 @@ The board (30.5) also turns into a piece every narrower question that chapters 6
 | 32.27 | G238: toolkit homes before a second program | No exception: `geom-thread`, `geom-stair` and `geom-civil` start in Spare Construct on the facade, and enter the kernel under 26.1 when a second program needs them | 17, 26, 27 | G258, G281 and G378 |
 | 32.28 | G239: what the Sweep kind stores | The whole definition: profile, path, the full frame rule, twist and scale laws, bit-exact station frames, a tapered revolve's profile morph; the helix kind gains a radius rate, so conical helices are exact | 7, 13, 24 | G254, frame rules and laws |
 | 32.29 | G240: 576- and 768-bit predicates | Accepted into 6.2 for skeleton (`I576`) and mitre-offset (`I768`) event order only, each with a written derivation, a certificate, extreme tests and a filter, and measured; `I512` and `geom-math`'s wide stages accepted as built | 6, 13 | G251, the exact straight skeleton |
+| 32.30 | G241: the close_near_contacts cap | ε_heal's values as a second meaning: default 640q, at most 6,400q; larger requests refused | 6, 11 | G249, the close_near_contacts repair |
 
 ## 32.1 The grid ladder (decision 1)
 
@@ -586,3 +587,16 @@ Why: a procedural face is only as replayable as its stored definition is complet
 Why: exact roof and offset events are what make 13's skeleton exact once its planes are committed; without them those decisions would need tolerances. Fixed widths keep each predicate allocation-free and provable, and the filter keeps the wide path rare.
 
 **Changes:** 6.2's list, 13.11 and 13.15, 31.7, and pieces G251 and G26's successors.
+
+## 32.30 The close_near_contacts cap (owner action G241)
+
+**What it is.** Booleans never treat near-coincident faces as coincident beyond the contact radius (11.5). A caller who wants two nearly touching operands to touch runs `close_near_contacts(d)` first: an explicit, logged repair that adopts one carrier for each pair within d and returns Certified with the movement it measured. Its largest d needs a default and a cap (OQ-11.7): reuse import healing's values, 640q by default and at most 6,400q, or add a rung of its own.
+
+**Decided 2026-10-28 (owner action G241): ε_heal's values, as a second meaning of that rung.** The default d is 640q (0.1 mm at q0, 4 µm at q1) and no call may pass 6,400q (1 mm at q0, 40 µm at q1); a larger request is refused with `ExactnessNotAccepted`, naming the cap. Read with 6.5, 11.5, 24.9 and OQ-11.7.
+- **It is the same act as healing.** Both close gaps that should not be there by moving geometry onto one carrier, explicitly, once, on record, and both are bounded by what a person would call a modelling gap rather than design intent. One rung for both keeps the ladder small (principle 10) and means a gap import would heal is a gap the repair can close.
+- **The operation's own guarantees stay:** it measures and reports the actual movement, the result is Certified by that movement, and the operation's tolerance ceiling still applies when it is smaller. A caller who passes a smaller d gets a smaller repair.
+- In code it uses `geom-num`'s `ladder::HEAL_DEFAULT` and `ladder::HEAL_CAP`; no new constant.
+
+Why: a separate rung would be a second number for the same judgement; reusing ε_heal's values keeps one answer to "how big a gap is a mistake".
+
+**Changes:** 6.5 (ε_heal's row and the proposed rungs), 11.5 and OQ-11.7, 31.7, and piece G249.
