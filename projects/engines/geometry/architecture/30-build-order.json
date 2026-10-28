@@ -977,7 +977,7 @@
   "phase": "Phase 3",
   "crate": "geom-topo",
   "size": "Large",
-  "done_when": "Immutable bodies made only through the builder (Solid, Sheet, Wire, Acorn, General), regions and cells, radial fin order, attributes with split and merge classes; model-based tests drive it for 100,000 random steps.",
+  "done_when": "Immutable bodies made only through the builder (Solid, Sheet, Wire, Acorn, General), regions and cells, radial fin order, attributes with split and merge classes; arena indices assigned in persistent-name order before a body is published, with a shuffle test that an output does not depend on its inputs' arena order (32.17); model-based tests drive it for 100,000 random steps.",
   "depends_on": [
    "G80",
    "G76"

@@ -34,6 +34,7 @@ The board (30.5) also turns into a piece every narrower question that chapters 6
 | 32.15 | G71: time budgets | Chapter 28's reading: only work units and logical memory are budgets; a time limit is the caller's deadline through cancellation, never a replayable outcome | 10, 23, 28 | G83, budgets in the operation contract |
 | 32.16 | G72: the reference machine and the kernel's shares | The owner's spare tower, timed on its 8 performance cores; 23.1's shares, browser estimates and 5 µs overhead accepted until the scenario benchmarks measure them | 23, 28 | G107, the reference runner |
 | 32.6 | G75: copyleft tools as CI oracles | Yes, as 32.6 recommends: CGAL, OpenCascade, IfcConvert and the others run in CI as separate programs only, from a separate repository, never linked, shipped or pushed to a registry | 24, 28, 29 | G113, the oracle runner |
+| 32.17 | G76: arena indices in name order | Accepted as 8.2 proposes: the builder assigns indices in persistent-name order in every operation, so arena order, tie order and hash order are one; a shuffle test holds every operation to it | 8, 23, 24 | G81, the builder |
 
 ## 32.1 The grid ladder (decision 1)
 
@@ -377,3 +378,21 @@ Why: a result that depends on how fast a machine was is not a result the kernel 
 Why: the machine exists, is lent at no cost, and is an 8-performance-core x86-64 desktop as 23.1 asked, so nothing better is waiting to be bought. The shares were derived from the targets and the cost of the work behind each (23.1), and the first measurements will test them; holding G107 and G452 back for a better guess would only delay those measurements. One caution is recorded with the choice: this is a fast 2025 desktop, so a share it meets can be missed on an older laptop, which is what 23.1's browser estimates and Spare Construct's own targets per device are for.
 
 **Changes:** 23.1, 28.17, R5 and 31.7. Pieces G107 and G452 build to this machine and these shares.
+
+## 32.17 Arena indices in name order (owner action G76)
+
+**What it is.** A body stores each kind of entity in an arena addressed by a 32-bit index. G01's decision note says indices are "assigned in operation order", which leaves the order to how each operation happens to run. Section 8.2 proposes an amendment: the builder assigns indices in persistent-name order (20.2), as the boolean rebuild already does (11.3), with fins, loops and shells, which have no names, following a fixed rule from the names of what they join. Then index order is name order, so a tie broken by index is broken by name (23.7), and the tables a body record writes in arena order (24.2) are in the name order 23.8's content hash needs. 31.7 asks the same question from chapters 23 and 24: canonical body encoding in arena order or in name order.
+
+| Option | What it means |
+| --- | --- |
+| A. Accept: indices in name order, in every operation | A body's arenas depend only on what it contains. A full re-cut, a local re-cut and a cached re-cut give the same indices on any number of threads, so the same bytes and the same content hash |
+| B. Keep operation order, and sort by name only when writing | Indices follow how each operation ran; the encoder sorts every table by name and rewrites every position reference. Indices then differ from the record's positions, and two build paths to the same body differ in memory |
+| C. Keep operation order everywhere | The content hash depends on how a body was built, so the same shape made two ways has two hashes and replay from a cache can differ from replay without it |
+
+**Decided 2026-10-28 (owner action G76): A, as proposed.** Read with 8.2, 11.3, 20.2, 23.4, 23.5, 23.7, 23.8, 24.2 and 24.3, and evidence report [03](../../../kit/notes/G01-evidence/03-rust-kernels-crates.md) on how Truck, Fornjot and OpenCascade lost determinism through identity by address or build order.
+- **It makes one order the order of everything.** Arena order, the order ties are broken in, and the order tables are written and hashed in are all name order. A reloaded body equals the in-memory one index for index (24.2), and the local re-cut of 23.5 and the arrangement cache of 11.6 can only be exact if their results equal a full rebuild's, which A makes true by construction rather than by care in each operation.
+- **B costs as much and proves less.** Sorting at write time is the same sort, done later, with every position reference rewritten, and it still leaves two build paths to one body unequal in memory, which the replay and cache tests would then have to tolerate.
+- **The cost is known and bounded.** Names are hashes, so entities near each other in space are not near each other in memory, and adding or removing an entity shifts the indices after it, so a new version shares fewer chunks with the one before. 23.9's benchmarks measure both. If the cost matters, the remedy is a canonical key placed before the name, such as a spatial cell, as 17.3 chunks terrain; never a return to build order.
+- **It is enforced, not hoped for.** The builder (G81) sorts by name before a body is published, whatever order a parallel builder's `count_then_fill` filled its scratch arrays in. Its tests include the invariant 31.7 asks for: every operation's output is the same when its inputs' arenas are shuffled, checked by a shuffle test on every operation's fixtures.
+
+**Changes:** 8.2 (the amendment is accepted), 24.2 (positions are name order), 31.7, and piece G81's done-when.
