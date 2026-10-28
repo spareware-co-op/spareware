@@ -1053,7 +1053,8 @@ fn crossing_laws() {
 /// The perturbed predicates at every sign corner of their unperturbed predicates (coordinates
 /// ±M: 256 inputs for orient2d and incircle, 4,096 for orient3d and 32,768 for insphere), where
 /// points repeat and ties abound: never `Zero`, the exact sign wherever it is not `Zero`, and
-/// swapping two points with their keys flips the answer.
+/// swapping two points with their keys flips the answer. Debug builds take every twentieth corner
+/// of orient3d and insphere, as the suite's case counts do.
 #[test]
 fn perturbed_predicates_at_the_sign_corners() {
     let m = COORD_MAX;
@@ -1062,7 +1063,8 @@ fn perturbed_predicates_at_the_sign_corners() {
     let corner3 = |code: u32, i: u32| -> Pt3 {
         [bit(code, 3 * i), bit(code, 3 * i + 1), bit(code, 3 * i + 2)]
     };
-    for code in 0..1u32 << 12 {
+    let step = if cfg!(debug_assertions) { 20 } else { 1 };
+    for code in (0..1u32 << 12).step_by(step) {
         let pts: [Pt3; 4] = [0, 1, 2, 3].map(|i| corner3(code, i));
         let keyed = |i: usize| (p3(pts[i]), i as u64);
         let exact = oracle_orient3d(pts[0], pts[1], pts[2], pts[3]);
@@ -1076,7 +1078,7 @@ fn perturbed_predicates_at_the_sign_corners() {
             s.negate()
         );
     }
-    for code in 0..1u32 << 15 {
+    for code in (0..1u32 << 15).step_by(step) {
         let pts: [Pt3; 5] = [0, 1, 2, 3, 4].map(|i| corner3(code, i));
         let keyed = |i: usize| (p3(pts[i]), i as u64);
         let exact = oracle_insphere(pts[0], pts[1], pts[2], pts[3], pts[4]);
