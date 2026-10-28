@@ -216,7 +216,12 @@ fn codes_interleave_the_offset_bits() {
         let side = 1i64 << level;
         // Aligned corners in offset coordinates (k·2^level − 2^40), inside the frame.
         let corner = [-(1i64 << 40) + side, -(1i64 << 40), (1i64 << 40) - 2 * side];
-        let lo = morton(p3(corner[0].clamp(-m, m), corner[1].clamp(-m, m), corner[2].clamp(-m, m))).unwrap();
+        let lo = morton(p3(
+            corner[0].clamp(-m, m),
+            corner[1].clamp(-m, m),
+            corner[2].clamp(-m, m),
+        ))
+        .unwrap();
         let top = morton(p3(
             (corner[0] + side - 1).clamp(-m, m),
             (corner[1] + side - 1).clamp(-m, m),
