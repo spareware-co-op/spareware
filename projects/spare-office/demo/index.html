@@ -58,7 +58,14 @@
 [data-app="market"] { --app: #D8E36A; --app-strong: #66700F; --app-tint: #F7F9DF; }
 [data-app="office"] { --app: #A9B6FF; --app-strong: #3A47A8; --app-tint: #EEF0FF; }
 [data-app="os"]     { --app: #CDD1D6; --app-strong: #4A525C; --app-tint: #F2F3F5; }
+[data-app="music"]  { --app: #EB8EEB; --app-strong: #B82EB8; --app-tint: #FBE9FB; }
+[data-app="movies"] { --app: #EB8E8E; --app-strong: #B82E2E; --app-tint: #FBE9E9; }
+[data-app="research"] { --app: #C2DBB3; --app-strong: #458321; --app-tint: #F0FBE9; }
+[data-app="keys"]   { --app: #70EB70; --app-strong: #228722; --app-tint: #E9FBE9; }
 </style>
+<!-- The shared Spareware ribbon (design/ribbon), used by Write, Sheets and Slides. This path works in the repository and on the site, where /design/ribbon/ is published. -->
+<link rel="stylesheet" href="../../../design/ribbon/ribbon.css">
+<script src="../../../design/ribbon/ribbon.js"></script>
 <style>
 /* Spare Office demo styles. Only the tokens above set colour, type and spacing. */
 html.hc { --ink-2: var(--ink); --ink-3: var(--ink); --hairline: var(--rule); --rule: var(--ink); }
@@ -972,34 +979,12 @@ mark.hit { background: var(--app); color: var(--ink); }
 
 <!-- ===================== WRITE ===================== -->
 <section class="screen" id="s-write" aria-label="Spare Write">
-  <div class="tb" id="w-tb">
-    <button class="btn tool" data-menu="m-wfile">File <svg class="ic"><use href="#i-down"/></svg></button>
-    <button class="btn tool" data-act="wcmd" data-cmd="undo" data-tip="Undo (Ctrl+Z)" aria-label="Undo"><svg class="ic"><use href="#i-undo"/></svg></button>
-    <button class="btn tool" data-act="wcmd" data-cmd="redo" data-tip="Redo (Ctrl+Y)" aria-label="Redo"><svg class="ic"><use href="#i-redo"/></svg></button>
-    <span class="sepv"></span>
-    <select class="field" id="w-style" aria-label="Paragraph style" data-tip="Styles come from the shared theme">
-      <option value="P">Body text</option><option value="H1">Title</option><option value="H2">Heading 1</option><option value="H3">Heading 2</option><option value="BLOCKQUOTE">Quote</option>
-    </select>
-    <button class="btn tool" data-act="wcmd" data-cmd="bold" data-tip="Bold (Ctrl+B)" aria-label="Bold"><svg class="ic"><use href="#i-bold"/></svg></button>
-    <button class="btn tool" data-act="wcmd" data-cmd="italic" data-tip="Italic (Ctrl+I)" aria-label="Italic"><svg class="ic"><use href="#i-italic"/></svg></button>
-    <button class="btn tool" data-act="wcmd" data-cmd="underline" data-tip="Underline (Ctrl+U)" aria-label="Underline"><svg class="ic"><use href="#i-under"/></svg></button>
-    <button class="btn tool" data-act="whl" data-tip="Highlight" aria-label="Highlight"><svg class="ic"><use href="#i-hl"/></svg></button>
-    <button class="btn tool" data-act="wcmd" data-cmd="justifyLeft" data-tip="Align left" aria-label="Align left"><svg class="ic"><use href="#i-al"/></svg></button>
-    <button class="btn tool" data-act="wcmd" data-cmd="justifyCenter" data-tip="Centre" aria-label="Centre"><svg class="ic"><use href="#i-ac"/></svg></button>
-    <button class="btn tool" data-act="wcmd" data-cmd="insertUnorderedList" data-tip="Bullets" aria-label="Bullets"><svg class="ic"><use href="#i-ul"/></svg></button>
-    <button class="btn tool" data-act="wcmd" data-cmd="insertOrderedList" data-tip="Numbering" aria-label="Numbering"><svg class="ic"><use href="#i-ol"/></svg></button>
-    <span class="sepv"></span>
-    <button class="btn tool" data-menu="m-winsert">Insert <svg class="ic"><use href="#i-down"/></svg></button>
-    <button class="btn tool" data-act="wAddComment"><svg class="ic"><use href="#i-comment"/></svg>Comment</button>
-    <button class="btn" id="w-suggest" data-act="wSuggest" aria-pressed="false" data-tip="Suggest edits instead of making them">Suggesting</button>
-    <button class="btn tool" data-drawer="d-find" data-tip="Find and replace (Ctrl+H)"><svg class="ic"><use href="#i-search"/></svg>Find</button>
-    <button class="btn tool" data-drawer="d-check" data-tip="Check spelling and accessibility"><svg class="ic"><use href="#i-a11y"/></svg>Check</button>
-    <div class="right">
-      <span class="presence" data-tip="Sam is editing. Hana is viewing as a guest."><span class="stack"><span class="avatar b">SP</span><span class="avatar d">HK</span></span><span class="small hide-sm">2 others here</span></span>
+  <div class="o-rb" id="w-tb"></div>
+  <template id="w-tb-end">      <span class="presence" data-tip="Sam is editing. Hana is viewing as a guest."><span class="stack"><span class="avatar b">SP</span><span class="avatar d">HK</span></span><span class="small hide-sm">2 others here</span></span>
       <button class="btn tool" data-drawer="d-versions" data-tip="Version history" aria-label="Version history"><svg class="ic"><use href="#i-clock"/></svg></button>
       <button class="btn pri" data-drawer="d-share" data-share="Native planting proposal: Maitai riverbank"><svg class="ic"><use href="#i-share"/></svg>Share</button>
-    </div>
-  </div>
+    
+  </template>
   <div class="w-body v-page" id="w-body">
     <nav class="w-nav" aria-label="Headings">
       <p class="label">Headings</p>
@@ -1089,30 +1074,12 @@ mark.hit { background: var(--app); color: var(--ink); }
 
 <!-- ===================== SHEETS ===================== -->
 <section class="screen" id="s-sheets" aria-label="Spare Sheets">
-  <div class="tb">
-    <button class="btn tool" data-menu="m-sfile">File <svg class="ic"><use href="#i-down"/></svg></button>
-    <button class="btn tool" data-act="sUndo" data-tip="Undo (Ctrl+Z)" aria-label="Undo"><svg class="ic"><use href="#i-undo"/></svg></button>
-    <button class="btn tool" data-act="sRedo" data-tip="Redo (Ctrl+Y)" aria-label="Redo"><svg class="ic"><use href="#i-redo"/></svg></button>
-    <span class="sepv"></span>
-    <button class="btn tool" data-act="sFmt" data-f="nzd" data-tip="Format as money in your region's currency (here NZ dollars)">NZ$</button>
-    <button class="btn tool" data-act="sFmt" data-f="pct" data-tip="Format as per cent">%</button>
-    <button class="btn tool" data-act="sFmt" data-f="int" data-tip="Whole number">0</button>
-    <button class="btn tool" data-act="sBold" data-tip="Bold" aria-label="Bold"><svg class="ic"><use href="#i-bold"/></svg></button>
-    <button class="btn" id="s-rule" data-act="sRule" aria-pressed="true" data-tip="Colour cells by rule">Rule: line over $450</button>
-    <span class="sepv"></span>
-    <button class="btn tool" data-act="sSort" data-tip="Sort rows by the selected column"><svg class="ic"><use href="#i-sort"/></svg>Sort A to Z</button>
-    <select class="field" id="s-filter" aria-label="Filter by supplier" data-tip="Filter rows"><option value="">All suppliers</option><option>Tōtara Nursery</option><option>Moutere Natives</option></select>
-    <button class="btn tool" data-act="sFill" data-tip="Copy the top cell of the selection down, adjusting references">Fill down</button>
-    <button class="btn" id="s-freeze" data-act="sFreeze" aria-pressed="true" data-tip="Keep the first row and column in view">Freeze</button>
-    <span class="sepv"></span>
-    <button class="btn tool" data-act="sChart"><svg class="ic"><use href="#i-chart"/></svg>Chart</button>
-    <button class="btn tool" data-act="sTab" data-t="pivot">Pivot table</button>
-    <div class="right">
-      <span class="presence small" id="s-peer"><span class="avatar c">MW</span><span class="hide-sm">Mere is on C5</span></span>
+  <div class="o-rb" id="s-tb"></div>
+  <template id="s-tb-end">      <span class="presence small" id="s-peer"><span class="avatar c">MW</span><span class="hide-sm">Mere is on C5</span></span>
       <button class="btn tool" data-drawer="d-versions" data-tip="Version history" aria-label="Version history"><svg class="ic"><use href="#i-clock"/></svg></button>
       <button class="btn pri" data-drawer="d-share" data-share="Plant order 2026-27"><svg class="ic"><use href="#i-share"/></svg>Share</button>
-    </div>
-  </div>
+    
+  </template>
   <div class="fbar" id="s-fbar">
     <input class="field namebox" id="s-name" value="E13" aria-label="Cell name">
     <span class="fxlabel">fx</span>
@@ -1145,26 +1112,13 @@ mark.hit { background: var(--app); color: var(--ink); }
 
 <!-- ===================== SLIDES ===================== -->
 <section class="screen" id="s-slides" aria-label="Spare Slides">
-  <div class="tb" id="sl-tb">
-    <button class="btn tool" data-menu="m-slfile">File <svg class="ic"><use href="#i-down"/></svg></button>
-    <button class="btn tool" data-act="slUndo" data-tip="Undo (Ctrl+Z)" aria-label="Undo"><svg class="ic"><use href="#i-undo"/></svg></button>
-    <span class="sepv"></span>
-    <button class="btn tool" data-menu="m-slnew"><svg class="ic"><use href="#i-plus"/></svg>New slide</button>
-    <select class="field" id="sl-theme" data-act="slTheme" aria-label="Theme" data-tip="One theme for Write, Sheets and Slides">
-      <option value="kowhai">Theme: Kōwhai Gardens</option><option value="tint">Theme: Calm</option><option value="plain">Theme: Plain</option>
-    </select>
-    <button class="btn tool" data-menu="m-slins">Insert <svg class="ic"><use href="#i-down"/></svg></button>
-    <select class="field" id="sl-trans" data-act="slTrans" aria-label="Transition into this slide" data-tip="Transition into this slide">
-      <option value="none">Transition: none</option><option value="fade">Transition: fade</option><option value="push">Transition: push</option>
-    </select>
-    <button class="btn tool" data-act="slPlay" data-tip="Preview this slide's animations"><svg class="ic"><use href="#i-play"/></svg>Preview</button>
-    <div class="right">
-      <span class="presence" data-tip="Mere is editing slide 3"><span class="avatar c">MW</span><span class="small hide-sm">Mere is on slide 3</span></span>
+  <div class="o-rb" id="sl-tb"></div>
+  <template id="sl-tb-end">      <span class="presence" data-tip="Mere is editing slide 3"><span class="avatar c">MW</span><span class="small hide-sm">Mere is on slide 3</span></span>
       <button class="btn tool" data-drawer="d-versions" data-tip="Version history" aria-label="Version history"><svg class="ic"><use href="#i-clock"/></svg></button>
       <button class="btn" data-drawer="d-share" data-share="Kōwhai Gardens: the 2027 plan"><svg class="ic"><use href="#i-share"/></svg><span class="hide-sm">Share</span></button>
       <button class="btn pri" data-act="slPresent"><svg class="ic"><use href="#i-play"/></svg>Present</button>
-    </div>
-  </div>
+    
+  </template>
   <div class="sl-body" id="sl-body">
     <nav class="sl-sorter" id="sl-sorter" aria-label="Slides"></nav>
     <div class="sl-stage" id="sl-stage">
@@ -2118,6 +2072,62 @@ const ASSESS = ["Walk through a normal working day (read mail on a phone, join a
 /* ---------- Helpers ---------- */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+
+/* ---------- the shared Spareware ribbon (design/ribbon) for Write, Sheets and Slides ----------
+   Tabs of labelled panels in the layout people know from desktop office software, with Spareware's own icons and words.
+   Each control keeps the id and data attributes the code below already uses, so every command works as before. */
+if (!window.SpareRibbon) throw new Error('The shared ribbon (design/ribbon) did not load. Open this page from the repository folder or the published site.');
+SpareIcons.install({}, {prefix: 'rbi-'});   // the rest of the page keeps its own i- icons
+const OP = (label, items) => ({label, items});
+const OSTACK = L => { const o = []; for (let i = 0; i < L.length; i += 3) o.push({stack: L.slice(i, i + 3)}); return o; };
+const ORB = {};
+function officeRibbon(id, app, label, fileMenu, tabs) {
+  const end = document.getElementById(id + '-end');
+  ORB[app] = SpareRibbon.create(document.getElementById(id), {app: 'office-' + app, label});
+  ORB[app].update({file: {label: 'File', data: {menu: fileMenu}}, end: end ? end.innerHTML : '', tabs});
+}
+officeRibbon('w-tb', 'write', 'Write tools', 'm-wfile', [
+  {id: 'home', label: 'Home', panels: [
+    OP('Undo', [{stack: [{label: 'Undo', icon: 'undo', act: 'wcmd', data: {cmd: 'undo'}, kbd: 'Ctrl Z'}, {label: 'Redo', icon: 'redo', act: 'wcmd', data: {cmd: 'redo'}, kbd: 'Ctrl Y'}]}]),
+    OP('Style', [{stack: [{label: 'Paragraph style', domId: 'w-style', options: [['P', 'Body text'], ['H1', 'Title'], ['H2', 'Heading 1'], ['H3', 'Heading 2'], ['BLOCKQUOTE', 'Quote']], tip: 'Styles come from the shared theme'}]}]),
+    OP('Text', [{stack: [{label: 'Bold', icon: 'bold', act: 'wcmd', data: {cmd: 'bold'}, kbd: 'Ctrl B'}, {label: 'Italic', icon: 'italic', act: 'wcmd', data: {cmd: 'italic'}, kbd: 'Ctrl I'}, {label: 'Underline', icon: 'underline', act: 'wcmd', data: {cmd: 'underline'}, kbd: 'Ctrl U'}]}, {stack: [{label: 'Highlight', icon: 'highlight', act: 'whl'}]}]),
+    OP('Paragraph', [{stack: [{label: 'Align left', icon: 'alignl', act: 'wcmd', data: {cmd: 'justifyLeft'}}, {label: 'Centre', icon: 'alignc', act: 'wcmd', data: {cmd: 'justifyCenter'}}]}, {stack: [{label: 'Bullets', icon: 'bullets', act: 'wcmd', data: {cmd: 'insertUnorderedList'}}, {label: 'Numbering', icon: 'numbering', act: 'wcmd', data: {cmd: 'insertOrderedList'}}]}]),
+    OP('Editing', [{label: 'Find', icon: 'search', data: {drawer: 'd-find'}, tip: 'Find and replace (Ctrl+H)'}])]},
+  {id: 'insert', label: 'Insert', panels: [
+    OP('Tables and pictures', [{label: 'Table', icon: 'table', act: 'wInsert', data: {what: 'table'}}, {label: 'Picture', icon: 'image', act: 'wInsert', data: {what: 'picture'}}, {label: 'Shape or diagram', icon: 'shape', act: 'wInsert', data: {what: 'shape'}}]),
+    OP('Links and notes', [{label: 'Link', icon: 'link', act: 'wInsert', data: {what: 'link'}, tip: 'Link to a file or web page'}, {stack: [{label: 'Footnote', icon: 'footnote', act: 'wInsert', data: {what: 'footnote'}}, {label: 'Page break', icon: 'pagebreak', act: 'wInsert', data: {what: 'pagebreak'}}, {label: 'Update contents', icon: 'toc', act: 'wInsert', data: {what: 'toc'}, tip: 'Update the table of contents'}]}]),
+    OP('Symbols', OSTACK(['ā', 'ē', 'ī', 'ō', 'ū', '°', '½'].map(c => ({label: c, act: 'wSym', tip: 'Insert ' + c})))),
+    OP('Saved blocks', [{label: 'Kōwhai Gardens sign-off', icon: 'file', act: 'wInsert', data: {what: 'block'}}])]},
+  {id: 'review', label: 'Review', panels: [
+    OP('Comments', [{label: 'Comment', icon: 'comment', act: 'wAddComment'}]),
+    OP('Tracking', [{label: 'Suggesting', icon: 'suggest', act: 'wSuggest', domId: 'w-suggest', pressed: false, tip: 'Suggest edits instead of making them'}]),
+    OP('Proofing', [{label: 'Check', icon: 'spell', data: {drawer: 'd-check'}, tip: 'Check spelling and accessibility'}]),
+    OP('History', [{label: 'Version history', icon: 'history', data: {drawer: 'd-versions'}}])]}]);
+officeRibbon('s-tb', 'sheets', 'Sheets tools', 'm-sfile', [
+  {id: 'home', label: 'Home', panels: [
+    OP('Undo', [{stack: [{label: 'Undo', icon: 'undo', act: 'sUndo', kbd: 'Ctrl Z'}, {label: 'Redo', icon: 'redo', act: 'sRedo', kbd: 'Ctrl Y'}]}]),
+    OP('Number', [{stack: [{label: 'Money', icon: 'money', act: 'sFmt', data: {f: 'nzd'}, tip: "Format as money in your region's currency (here NZ dollars)"}, {label: 'Per cent', icon: 'percent', act: 'sFmt', data: {f: 'pct'}}, {label: 'Whole number', icon: 'num', act: 'sFmt', data: {f: 'int'}}]}]),
+    OP('Font', [{stack: [{label: 'Bold', icon: 'bold', act: 'sBold'}]}]),
+    OP('Styles', [{label: 'Rule: line over $450', icon: 'highlight', act: 'sRule', domId: 's-rule', pressed: true, tip: 'Colour cells by rule'}])]},
+  {id: 'insert', label: 'Insert', panels: [
+    OP('Charts', [{label: 'Chart', icon: 'chart', act: 'sChart'}]),
+    OP('Tables', [{label: 'Pivot table', icon: 'pivot', act: 'sTab', data: {t: 'pivot'}}])]},
+  {id: 'data', label: 'Data', panels: [
+    OP('Sort and filter', [{label: 'Sort A to Z', icon: 'sort', act: 'sSort', tip: 'Sort rows by the selected column'}, {stack: [{label: 'Filter by supplier', icon: 'filter', domId: 's-filter', options: [['', 'All suppliers'], 'Tōtara Nursery', 'Moutere Natives'], tip: 'Filter rows'}]}]),
+    OP('Fill', [{label: 'Fill down', icon: 'filldown', act: 'sFill', tip: 'Copy the top cell of the selection down, adjusting references'}])]},
+  {id: 'view', label: 'View', panels: [
+    OP('Window', [{label: 'Freeze', icon: 'freeze', act: 'sFreeze', domId: 's-freeze', pressed: true, tip: 'Keep the first row and column in view'}])]}]);
+officeRibbon('sl-tb', 'slides', 'Slides tools', 'm-slfile', [
+  {id: 'home', label: 'Home', panels: [
+    OP('Undo', [{label: 'Undo', icon: 'undo', act: 'slUndo', kbd: 'Ctrl Z'}]),
+    OP('Slides', [{label: 'New slide', icon: 'slide', data: {menu: 'm-slnew'}, tip: 'Pick a layout, or duplicate this slide'}]),
+    OP('Design', [{stack: [{label: 'Theme', icon: 'theme', domId: 'sl-theme', act: 'slTheme', options: [['kowhai', 'Theme: Kōwhai Gardens'], ['tint', 'Theme: Calm'], ['plain', 'Theme: Plain']], tip: 'One theme for Write, Sheets and Slides'}]}])]},
+  {id: 'insert', label: 'Insert', panels: [
+    OP('Insert', [{label: 'Text box', icon: 'textbox', act: 'slIns', data: {w: 'text'}}, {label: 'Shape', icon: 'shape', act: 'slIns', data: {w: 'shape'}}, {label: 'Picture', icon: 'image', act: 'slIns', data: {w: 'pic'}}, {label: 'Chart from Sheets', icon: 'chart', act: 'slAdd', data: {k: 'chart'}, tip: 'A chart linked from Sheets'}])]},
+  {id: 'trans', label: 'Transitions', panels: [
+    OP('Into this slide', [{stack: [{label: 'Transition into this slide', icon: 'transition', domId: 'sl-trans', act: 'slTrans', options: [['none', 'Transition: none'], ['fade', 'Transition: fade'], ['push', 'Transition: push']]}]}, {label: 'Preview', icon: 'play', act: 'slPlay', tip: "Preview this slide's animations"}])]},
+  {id: 'present', label: 'Present', panels: [
+    OP('Start', [{label: 'Present', icon: 'present', act: 'slPresent'}])]}]);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const nzd = new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD' });
 const nzd0 = new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD', maximumFractionDigits: 0 });
@@ -2440,7 +2450,7 @@ ACTS.wAddComment = () => {
   const inp = $('input[data-cid="' + id + '"]', $('#w-cards')); if (inp) { inp.placeholder = 'Write your comment, @mention to tell someone'; inp.focus(); }
   toast(anchored ? 'Comment added to the selected text.' : 'Comment added. Tip: select some text first to anchor it.');
 };
-ACTS.wSuggest = el => { W.suggest = !W.suggest; el.setAttribute('aria-pressed', W.suggest); el.textContent = W.suggest ? 'Suggesting: on' : 'Suggesting'; toast(W.suggest ? 'Suggesting is on. What you type shows as a suggestion others can accept or reject.' : 'Editing directly.'); };
+ACTS.wSuggest = el => { W.suggest = !W.suggest; el.setAttribute('aria-pressed', W.suggest); (el.querySelector('.rb-l') || el).textContent = W.suggest ? 'Suggesting: on' : 'Suggesting'; toast(W.suggest ? 'Suggesting is on. What you type shows as a suggestion others can accept or reject.' : 'Editing directly.'); };
 doc.addEventListener('beforeinput', e => {
   if (W.offline && e.inputType.startsWith('insert')) { W.pending++; $('#w-save').innerHTML = '<span class="dot off"></span> <span class="offline-on">Offline</span>: ' + W.pending + ' edits kept on this device'; }
   if (!W.suggest || e.inputType !== 'insertText') return;

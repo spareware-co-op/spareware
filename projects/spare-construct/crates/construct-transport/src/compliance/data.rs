@@ -12,12 +12,12 @@ static CORE: OnceLock<V> = OnceLock::new();
 static EXTRA: OnceLock<V> = OnceLock::new();
 static MODEL: OnceLock<V> = OnceLock::new();
 
-/// The tables of features/compliance.js (SRC, REGIME, PATHWAYS, E27, ACCESS, SH, CLOCKS, DISCLAIMERS, STANDARDS, CHECKLIST ...).
+/// The tables of packs/nz/compliance.js (SRC, REGIME, PATHWAYS, E27, ACCESS, SH, CLOCKS, DISCLAIMERS, STANDARDS, CHECKLIST ...).
 pub fn core() -> &'static V {
     CORE.get_or_init(|| V::parse(include_str!("data/compliance.json")).expect("compliance.json"))
 }
 
-/// The tables of features/compliance-extra.js (STD, SRC, D, ASSUME, LINT, PRECINCTS, PARK_ACT, PREF ...).
+/// The tables of packs/nz/compliance-extra.js (STD, SRC, D, ASSUME, LINT, PRECINCTS, PARK_ACT, PREF ...).
 pub fn extra() -> &'static V {
     EXTRA.get_or_init(|| V::parse(include_str!("data/extra.json")).expect("extra.json"))
 }

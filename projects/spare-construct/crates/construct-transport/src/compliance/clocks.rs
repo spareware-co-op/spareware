@@ -1,4 +1,4 @@
-//! Working days, public holidays and the statutory clocks (features/compliance.js section 11, working days and clocks).
+//! Working days, public holidays and the statutory clocks (packs/nz/compliance.js section 11, working days and clocks).
 //!
 //! Working days exclude weekends, Waitangi Day, Good Friday, Easter Monday, Anzac Day, the Sovereign's birthday, Matariki and Labour
 //! Day (Waitangi and Anzac Mondayised), and the Christmas period: 20 Dec to 10 Jan for the RMA (s2) or 25 Dec to 2 Jan for the

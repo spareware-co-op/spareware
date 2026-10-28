@@ -8,6 +8,16 @@ description = "Spare Kit geometry kernel: threads for geom-run's parallel helper
 
 [dependencies]
 geom-run = { path = "../geom-run" }
+
+# Native threads: rayon's work-stealing pool, behind geom-run's Pool trait (23.4). Only geom-pool may
+# name it (29.4; deny-ships.toml's bans). Its audit is projects/kit/notes/G33-rayon-audit.md.
+# MIT OR Apache-2.0. Not on WebAssembly, which has no threads here: the kernel runs serially there.
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+rayon = "1.12.0"
+
+[dev-dependencies]
+# Seeds and SplitMix64 for the tests' inputs (chapter 28.17): the kernel's development crate.
+geom-test = { path = "../geom-test" }
 # Exactly this crate's row of chapter 27's proposed crate table, checked by the scaffold test
 # in engine-geometry (tests/scaffold).
 

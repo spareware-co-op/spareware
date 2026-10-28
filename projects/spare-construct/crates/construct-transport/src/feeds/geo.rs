@@ -1,4 +1,4 @@
-//! Geometry helpers of features/feeds.js: polygons from downloaded layers, point in polygon with a grid of boxes, centroids, and the study area's box.
+//! Geometry helpers of packs/nz/feeds.js: polygons from downloaded layers, point in polygon with a grid of boxes, centroids, and the study area's box.
 
 use crate::edit::json::JsonValue;
 use crate::jsmath;

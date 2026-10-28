@@ -1,4 +1,4 @@
-//! Data feeds: traffic counts, GTFS public transport and other downloaded sources, turned into project data (port of features/feeds.js and the parsing side of data.js loaders).
+//! Data feeds: traffic counts, GTFS public transport and other downloaded sources, turned into project data (port of packs/nz/feeds.js and the parsing side of data.js loaders).
 //! There is no network here: each source has a function that builds the request (address, query, body) for the host to send, and a function that takes the answer as input.
 
 mod ags;

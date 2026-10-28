@@ -53,8 +53,9 @@ and aarch64 and, where present, its fused multiply-add, which IEEE 754 rounds co
 bits agree with its own routines on wasm32; the functions with no proven bound are kept apart in \
 geom_num::math::unproven (6.4, 21, 29.4); \
 no_std: yes, the crate is #![no_std] and builds for wasm32v1-none in the gate's build of geom-num; \
-audited: pending, piece G24 commits the written audit (notices, unsafe, panics, allocation) with \
-vendored libm (29.20, rule 3); \
+audited: projects/kit/notes/G24-libm-audit.md, the written audit (notices, unsafe, panics, \
+allocation) of the release this entry pins (29.20, rule 3); what vendoring it should mean is open \
+(31.7); \
 pinned: 0.2.16, by Cargo.lock and this entry: geom-num asks for ^0.2.16, so a lock that moves past \
 it fails the gate until a new record is written""" },
 ]

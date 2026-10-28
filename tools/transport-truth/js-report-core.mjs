@@ -1,5 +1,5 @@
 // Loads the transport prototype's calculation scripts plus the two feature scripts the junction tools and the ITA report
-// port covers (js/kit.js, js/features/junctions.js, js/features/report.js) into Node, with no browser. A copy of js-core.mjs
+// port covers (js/kit.js, js/features/junctions.js, js/packs/nz/report.js) into Node, with no browser. A copy of js-core.mjs
 // with a longer script list: the interface objects (UI, Render, Inspector ...) are inert stand-ins, the clock is fixed and Math.random
 // is seeded, so every output is repeatable. The compliance, calibration, land-use and data-feed feature scripts are not loaded
 // (the report treats them as not installed); a generator may define stand-ins for their globals through `globals`.
@@ -10,7 +10,7 @@ import vm from 'node:vm';
 
 const here = dirname(fileURLToPath(import.meta.url));
 export const JS_DIR = join(here, '..', '..', 'projects', 'spare-construct', 'demo', 'transport', 'js');
-const SCRIPTS = ['util', 'model', 'registry', 'engine', 'data', 'landuse', 'turns', 'calibrate', 'sim', 'kit', 'features/junctions', 'features/report'];
+const SCRIPTS = ['util', 'model', 'registry', 'engine', 'data', 'landuse', 'turns', 'calibrate', 'sim', 'kit', 'features/junctions', 'packs/nz/report'];
 
 const inert = () => new Proxy(function () {}, { get: (t, k) => (k === Symbol.toPrimitive ? () => '' : inert()), apply: () => undefined });
 

@@ -5,8 +5,26 @@ allow-expect-in-tests = true
 allow-panic-in-tests = true
 allow-indexing-slicing-in-tests = true
 
-# Two bans share the one disallowed-types list and the one disallowed-methods list clippy reads;
+# Three bans share the one disallowed-types list and the one disallowed-methods list clippy reads;
 # a comment inside each list says which ban the entries below it belong to.
+#
+# Threads only through the helper (chapters 21 and 23.4; piece G33). Kernel crates never start
+# threads, never reach rayon, and never count with an atomic integer: parallel work goes only
+# through geom-run's helper, which takes the caller's Pool, and an index or id taken from a shared
+# counter depends on scheduling (23.4), so the helper gives indices through count_then_fill
+# instead. Banned here: std's thread-starting functions and the thread count
+# (available_parallelism, which no chunk size may depend on); rayon's entry points that run work on
+# its global pool or schedule it themselves (join, scope, spawn, broadcast, the parallel iterators,
+# and the same on a ThreadPool); and the six atomic integer types a counter would use. geom-pool,
+# the one std crate that adapts rayon to the Pool trait, is built with this same file, so what it
+# needs stays allowed: ThreadPoolBuilder, ThreadPool::in_place_scope, Scope::spawn and
+# ThreadPool::current_num_threads. AtomicBool, a flag and not a counter (geom-run's CancelToken),
+# stays allowed. Tests may start threads (a test pool does), so a test file that does allows
+# clippy::disallowed_methods. The std and core paths carry no allow-invalid; the rayon paths do,
+# since no kernel crate but geom-pool depends on rayon (deny-ships.toml). Checked: under clippy
+# 0.1.99, in a scratch crate outside the repository, every entry was shown to resolve and fire on a
+# call or a use, against rayon 1.12.0 and std, on x86_64-pc-windows-gnu, and the four calls
+# geom-pool needs were shown not to fire.
 #
 # Chapter 21's determinism hazards, enforced by clippy as chapter 21's "Enforced by" column and
 # section 28's merge gate require. Each reason names what the kernel uses instead.
@@ -57,6 +75,13 @@ disallowed-types = [
     # from the operating system's entropy (randomised-method rule 1).
     { path = "std::collections::HashMap", reason = "every default construction (new, default, from, collect) seeds its hasher from the operating system's entropy, so iteration order differs run to run; use BTreeMap (chapter 21)" },
     { path = "std::collections::HashSet", reason = "every default construction (new, default, from, collect) seeds its hasher from the operating system's entropy, so iteration order differs run to run; use BTreeSet (chapter 21)" },
+    # Atomic counters: an index or id taken from a shared counter depends on scheduling (23.4).
+    { path = "core::sync::atomic::AtomicUsize", reason = "an index or id from a shared counter depends on scheduling; geom-run's count_then_fill gives indices (chapter 23.4)" },
+    { path = "core::sync::atomic::AtomicIsize", reason = "an index or id from a shared counter depends on scheduling; geom-run's count_then_fill gives indices (chapter 23.4)" },
+    { path = "core::sync::atomic::AtomicU64", reason = "an index or id from a shared counter depends on scheduling; geom-run's count_then_fill gives indices (chapter 23.4)" },
+    { path = "core::sync::atomic::AtomicI64", reason = "an index or id from a shared counter depends on scheduling; geom-run's count_then_fill gives indices (chapter 23.4)" },
+    { path = "core::sync::atomic::AtomicU32", reason = "an index or id from a shared counter depends on scheduling; geom-run's count_then_fill gives indices (chapter 23.4)" },
+    { path = "core::sync::atomic::AtomicI32", reason = "an index or id from a shared counter depends on scheduling; geom-run's count_then_fill gives indices (chapter 23.4)" },
     # Other sources of randomness and entropy (randomised-method rule 1).
     { path = "std::hash::RandomState", reason = "seeded from the operating system's entropy; the kernel's random numbers come only from geom_num::rng" },
     { path = "std::thread::ThreadId", reason = "which thread runs a piece of work differs run to run; no result or stream id may depend on it (randomised-method rule 3)" },
@@ -157,6 +182,32 @@ disallowed-methods = [
     { path = "f32::algebraic_mul", reason = "relaxed float operation; forbidden (chapter 21)" },
     { path = "f32::algebraic_div", reason = "relaxed float operation; forbidden (chapter 21)" },
     { path = "f32::algebraic_rem", reason = "relaxed float operation; forbidden (chapter 21)" },
+    # Threads only through geom-run's helper with the caller's Pool (chapters 21 and 23.4).
+    { path = "std::thread::spawn", reason = "kernel crates never start threads: parallel work goes through geom-run's helper with the caller's Pool (chapter 23.4)" },
+    { path = "std::thread::scope", reason = "kernel crates never start threads: parallel work goes through geom-run's helper with the caller's Pool (chapter 23.4)" },
+    { path = "std::thread::Builder::spawn", reason = "kernel crates never start threads: parallel work goes through geom-run's helper with the caller's Pool (chapter 23.4)" },
+    { path = "std::thread::Builder::spawn_scoped", reason = "kernel crates never start threads: parallel work goes through geom-run's helper with the caller's Pool (chapter 23.4)" },
+    { path = "std::thread::Scope::spawn", reason = "kernel crates never start threads: parallel work goes through geom-run's helper with the caller's Pool (chapter 23.4)" },
+    { path = "std::thread::available_parallelism", reason = "no chunk size or result may depend on the thread count (chapter 23.4)" },
+    { path = "rayon::join", reason = "rayon only through geom-pool's Pool, under geom-run's helper (chapter 23.4; 29.4)", allow-invalid = true },
+    { path = "rayon::join_context", reason = "rayon only through geom-pool's Pool, under geom-run's helper (chapter 23.4; 29.4)", allow-invalid = true },
+    { path = "rayon::scope", reason = "rayon only through geom-pool's Pool, under geom-run's helper (chapter 23.4; 29.4)", allow-invalid = true },
+    { path = "rayon::scope_fifo", reason = "rayon only through geom-pool's Pool, under geom-run's helper (chapter 23.4; 29.4)", allow-invalid = true },
+    { path = "rayon::in_place_scope", reason = "rayon only through geom-pool's Pool, under geom-run's helper (chapter 23.4; 29.4)", allow-invalid = true },
+    { path = "rayon::in_place_scope_fifo", reason = "rayon only through geom-pool's Pool, under geom-run's helper (chapter 23.4; 29.4)", allow-invalid = true },
+    { path = "rayon::spawn", reason = "rayon only through geom-pool's Pool, under geom-run's helper (chapter 23.4; 29.4)", allow-invalid = true },
+    { path = "rayon::spawn_fifo", reason = "rayon only through geom-pool's Pool, under geom-run's helper (chapter 23.4; 29.4)", allow-invalid = true },
+    { path = "rayon::broadcast", reason = "rayon only through geom-pool's Pool, under geom-run's helper (chapter 23.4; 29.4)", allow-invalid = true },
+    { path = "rayon::spawn_broadcast", reason = "rayon only through geom-pool's Pool, under geom-run's helper (chapter 23.4; 29.4)", allow-invalid = true },
+    { path = "rayon::current_num_threads", reason = "no chunk size or result may depend on the thread count (chapter 23.4)", allow-invalid = true },
+    { path = "rayon::iter::IntoParallelIterator::into_par_iter", reason = "rayon's parallel iterators reduce in an unstated order; use geom-run's helper (chapter 23.4)", allow-invalid = true },
+    { path = "rayon::iter::IntoParallelRefIterator::par_iter", reason = "rayon's parallel iterators reduce in an unstated order; use geom-run's helper (chapter 23.4)", allow-invalid = true },
+    { path = "rayon::iter::IntoParallelRefMutIterator::par_iter_mut", reason = "rayon's parallel iterators reduce in an unstated order; use geom-run's helper (chapter 23.4)", allow-invalid = true },
+    { path = "rayon::ThreadPool::install", reason = "rayon only through geom-pool's Pool, under geom-run's helper (chapter 23.4; 29.4)", allow-invalid = true },
+    { path = "rayon::ThreadPool::join", reason = "rayon only through geom-pool's Pool, under geom-run's helper (chapter 23.4; 29.4)", allow-invalid = true },
+    { path = "rayon::ThreadPool::scope", reason = "rayon only through geom-pool's Pool, under geom-run's helper (chapter 23.4; 29.4)", allow-invalid = true },
+    { path = "rayon::ThreadPool::spawn", reason = "rayon only through geom-pool's Pool, under geom-run's helper (chapter 23.4; 29.4)", allow-invalid = true },
+    { path = "rayon::ThreadPool::broadcast", reason = "rayon only through geom-pool's Pool, under geom-run's helper (chapter 23.4; 29.4)", allow-invalid = true },
     # Randomness and entropy (randomised-method rule 1).
     { path = "std::hash::RandomState::new", reason = "seeded from the operating system's entropy; the kernel's random numbers come only from geom_num::rng" },
     { path = "std::collections::HashMap::new", reason = "seeds its hasher from the operating system's entropy, so iteration order differs run to run" },

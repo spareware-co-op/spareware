@@ -2244,6 +2244,10 @@ mod stack {
     /// Every predicate, by every route, needs at most `BUDGET` bytes of stack in this build
     /// profile, the total path included.
     #[test]
+    #[cfg_attr(
+        miri,
+        ignore = "starts child processes and measures native stack frames; Miri runs neither"
+    )]
     fn every_predicate_runs_in_a_small_fixed_stack() {
         let [outer, inner] = burn(16, &|| {});
         let frame = outer.abs_diff(inner) / 16;
