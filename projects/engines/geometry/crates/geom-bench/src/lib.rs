@@ -16,7 +16,8 @@
 //! stream's draws, and stream ranges); double-double arithmetic; the exact sum of doubles; and
 //! chapter 23.3's comparison of exact-path variants (piece G42): every generated exact path in
 //! plain `i128` and in width-aware 32-bit limbs beside the shipped one, and the 32-bit-limb
-//! integers `Wide32` at the bit widths `Wide` is measured at.
+//! integers `Wide32` at the bit widths `Wide` is measured at; with them, [`avnaim`], the reference
+//! chapter 23.3 names (Avnaim et al.'s signs), which lives here because no kernel crate ships it.
 //! Public functions of `geom-num` without a benchmark of their own
 //! are listed with the reason in [`catalogue::UNMEASURED`], and a test keeps that list complete.
 //!
@@ -268,6 +269,7 @@
 // Unix and Windows only, with the `judge` feature (on by default): Gungraun's summary model does not
 // build for WebAssembly, and the gate's measured runs leave it out (Cargo.toml).
 #[cfg(all(feature = "judge", any(unix, windows)))]
+pub mod avnaim;
 pub mod callgrind;
 pub mod canonical;
 pub mod catalogue;

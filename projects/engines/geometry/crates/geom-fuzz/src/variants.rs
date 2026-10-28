@@ -8,7 +8,7 @@
 //! `PREDICATES`, read by its `predicate_lang::parse`) on those inputs in big integers, and compares
 //! the shipped `value`, the plain-`i128` variant (`geom_num::generated::plain`) and the width-aware
 //! limb variant (`geom_num::generated::limbs`) with that exact value, and Avnaim et al.'s signs of
-//! orient2d and orient3d (`geom_num::avnaim`) with its sign. [`harness`] is `decode` then
+//! orient2d and orient3d (`geom_bench::avnaim`) with its sign. [`harness`] is `decode` then
 //! `check`, the function every fuzzing engine drives (the crate README sets out the layout).
 //!
 //! Guarantees:
@@ -35,9 +35,9 @@
 
 use core::fmt::Debug;
 
+use geom_bench::avnaim;
 use geom_gen::predicate_lang::{Axis, Expr, InputKind, Op, parse};
 use geom_gen::predicates::PREDICATES;
-use geom_num::avnaim;
 use geom_num::generated::{
     incircle, insphere, limbs, lpi_side, lpi_weight, orient2d, orient3d, plain, plane_side,
     ssi_side, ssi_weight, tpi_side, tpi_weight,

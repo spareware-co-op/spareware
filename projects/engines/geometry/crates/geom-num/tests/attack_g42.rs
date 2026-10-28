@@ -10,13 +10,12 @@
 //! - At every sign combination of the grid's extremes, for every predicate whose inputs are all
 //!   points.
 //! - A rounded input one past its declared range: every variant refuses it.
-//! - Avnaim et al.'s signs of orient2d and orient3d (`geom_num::avnaim`), the reference
-//!   chapter 23.3 names, give the shipped exact signs on the same inputs.
 //! - `Wide32`'s extremes, order and `Debug` form, worked by hand.
-//! - `avnaim` against exact determinants: every 2 × 2 with entries in −7..=7 and every 3 × 3
-//!   with entries in −2..=2, entries at and one past its bounds, and random entries near them.
 //! - `Wide32` against `i128` at every limb boundary and on random values: conversions at each
 //!   width, limbs, sign and zero tests, negation, order, sums, differences and products.
+//!
+//! Avnaim et al.'s reference signs, which G42 measured and did not adopt, live in geom-bench and
+//! are tested there (`geom-bench/tests/avnaim.rs`).
 //!
 //! The shipped paths are tested against big integers in `generated_predicates.rs` and
 //! `attack_g29.rs`, so agreement with them is agreement with the exact value. Values of different
@@ -42,7 +41,6 @@
     clippy::similar_names
 )]
 
-use geom_num::avnaim;
 use geom_num::generated::{
     incircle, insphere, limbs, lpi_side, lpi_weight, orient2d, orient3d, plain, plane_side,
     ssi_side, ssi_weight, tpi_side, tpi_weight,
@@ -159,13 +157,11 @@ fn explicit_point_predicates_agree_on_random_inputs() {
     for _ in 0..CASES {
         let (a, b, c, d, e, f) = (g.p2(), g.p2(), g.p2(), g.p2(), g.p2(), g.p2());
         agree!(orient2d, orient2d_value; a, b, c);
-        assert_eq!(avnaim::orient2d(a, b, c), orient2d::exact(a, b, c));
         agree!(incircle, incircle_value; a, b, c, d);
         agree!(ssi_weight, ssi_weight_value; a, b, c, d);
         agree!(ssi_side, ssi_side_value; a, b, c, d, e, f);
         let (a, b, c, d, e) = (g.p3(), g.p3(), g.p3(), g.p3(), g.p3());
         agree!(orient3d, orient3d_value; a, b, c, d);
-        assert_eq!(avnaim::orient3d(a, b, c, d), orient3d::exact(a, b, c, d));
         agree!(insphere, insphere_value; a, b, c, d, e);
     }
 }
@@ -219,7 +215,6 @@ fn explicit_point_predicates_agree_at_every_extreme() {
     for c in extremes(6) {
         let [a, b, e] = p2s(&c);
         agree!(orient2d, orient2d_value; a, b, e);
-        assert_eq!(avnaim::orient2d(a, b, e), orient2d::exact(a, b, e));
     }
     for c in extremes(8) {
         let [a, b, e, f] = p2s(&c);
@@ -231,7 +226,6 @@ fn explicit_point_predicates_agree_at_every_extreme() {
         agree!(ssi_side, ssi_side_value; a, b, e, f, g, h);
         let [a, b, e, f] = p3s(&c);
         agree!(orient3d, orient3d_value; a, b, e, f);
-        assert_eq!(avnaim::orient3d(a, b, e, f), orient3d::exact(a, b, e, f));
     }
     for c in extremes(15) {
         let [a, b, e, f, g] = p3s(&c);
@@ -291,162 +285,6 @@ fn sign_of(v: i128) -> Sign {
         Ordering::Less => Sign::Negative,
         Ordering::Equal => Sign::Zero,
         Ordering::Greater => Sign::Positive,
-    }
-}
-
-/// The exact sign of x1·y2 − y1·x2: entries of at most 2^62 make products below 2^124 and their
-/// difference below 2^125, so `i128` holds them.
-fn det2_sign(x1: i64, y1: i64, x2: i64, y2: i64) -> Sign {
-    let p = |a: i64, b: i64| i128::from(a) * i128::from(b);
-    sign_of(p(x1, y2) - p(y1, x2))
-}
-
-/// The exact sign of the 3 × 3 determinant with rows `u1`, `u2`, `u3`, in `I512`, which holds
-/// every product of three `i64` entries.
-fn det3_sign(u1: [i64; 3], u2: [i64; 3], u3: [i64; 3]) -> Sign {
-    let w = I512::from_i64;
-    let mul = |a: I512, b: I512| a.checked_mul(&b).unwrap();
-    let minor = |a: [i64; 3], b: [i64; 3], i: usize, j: usize| {
-        mul(w(a[i]), w(b[j]))
-            .checked_sub(&mul(w(a[j]), w(b[i])))
-            .unwrap()
-    };
-    let t0 = mul(w(u1[0]), minor(u2, u3, 1, 2));
-    let t1 = mul(w(u1[1]), minor(u2, u3, 0, 2));
-    let t2 = mul(w(u1[2]), minor(u2, u3, 0, 1));
-    t0.checked_sub(&t1)
-        .unwrap()
-        .checked_add(&t2)
-        .unwrap()
-        .signum()
-}
-
-/// `avnaim`'s signs against exact determinants on every 2 × 2 with entries in −7..=7 and every
-/// 3 × 3 with entries in −2..=2: every equality its tests separate occurs there (equal entries,
-/// equal or opposite rows, a zero row or column, collinear first rows, a halving landing exactly
-/// on a half).
-#[test]
-fn avnaim_signs_are_exact_on_every_small_matrix() {
-    for x1 in -7..=7 {
-        for y1 in -7..=7 {
-            for x2 in -7..=7 {
-                for y2 in -7..=7 {
-                    assert_eq!(
-                        avnaim::sign_of_det2(x1, y1, x2, y2),
-                        Some(det2_sign(x1, y1, x2, y2)),
-                        "|{x1} {y1}; {x2} {y2}|"
-                    );
-                }
-            }
-        }
-    }
-    let entries = [-2i64, -1, 0, 1, 2];
-    for i in 0..5usize.pow(9) {
-        let mut k = i;
-        let mut m = [0i64; 9];
-        for v in &mut m {
-            *v = entries[k % 5];
-            k /= 5;
-        }
-        let (u1, u2, u3) = ([m[0], m[1], m[2]], [m[3], m[4], m[5]], [m[6], m[7], m[8]]);
-        let small = |a: [i64; 3], b: [i64; 3], i: usize, j: usize| {
-            i128::from(a[i]) * i128::from(b[j]) - i128::from(a[j]) * i128::from(b[i])
-        };
-        let d = i128::from(u1[0]) * small(u2, u3, 1, 2) - i128::from(u1[1]) * small(u2, u3, 0, 2)
-            + i128::from(u1[2]) * small(u2, u3, 0, 1);
-        assert_eq!(avnaim::sign_of_det3(u1, u2, u3), Some(sign_of(d)), "{m:?}");
-    }
-}
-
-/// `avnaim` takes entries up to its bounds, in every position and with either sign, and refuses
-/// one past them; at and near the bounds its signs are exact.
-#[test]
-fn avnaim_entries_at_and_past_their_bounds() {
-    // The bounds the module documents, 2^62 − 1 and 2^59 − 1, as numbers.
-    assert!(avnaim::sign_of_det2((1 << 62) - 1, 1, 1, 1).is_some());
-    assert_eq!(avnaim::sign_of_det2(1 << 62, 1, 1, 1), None);
-    assert!(avnaim::sign_of_det3([(1 << 59) - 1, 1, 1], [1, 2, 3], [4, 5, 7]).is_some());
-    assert_eq!(
-        avnaim::sign_of_det3([1 << 59, 1, 1], [1, 2, 3], [4, 5, 7]),
-        None
-    );
-    let m = avnaim::ENTRY_MAX;
-    for pos in 0..4 {
-        for s in [1i64, -1] {
-            let mut at = [3i64, 5, 7, 11];
-            at[pos] = s * m;
-            let [x1, y1, x2, y2] = at;
-            assert_eq!(
-                avnaim::sign_of_det2(x1, y1, x2, y2),
-                Some(det2_sign(x1, y1, x2, y2))
-            );
-            let mut past = at;
-            past[pos] = s * (m + 1);
-            let [x1, y1, x2, y2] = past;
-            assert_eq!(avnaim::sign_of_det2(x1, y1, x2, y2), None, "{past:?}");
-        }
-    }
-    let big = [
-        0,
-        1,
-        -1,
-        2,
-        m,
-        -m,
-        m - 1,
-        -(m - 1),
-        m / 2,
-        -(m / 2),
-        m / 2 + 1,
-        -(m / 2 + 1),
-    ];
-    for &x1 in &big {
-        for &y1 in &big {
-            for &x2 in &big {
-                for &y2 in &big {
-                    assert_eq!(
-                        avnaim::sign_of_det2(x1, y1, x2, y2),
-                        Some(det2_sign(x1, y1, x2, y2)),
-                        "|{x1} {y1}; {x2} {y2}|"
-                    );
-                }
-            }
-        }
-    }
-    let d = avnaim::DET3_ENTRY_MAX;
-    for pos in 0..9 {
-        for s in [1i64, -1] {
-            let mut at = [2i64, 3, 5, 7, 11, 13, 17, 19, 23];
-            at[pos] = s * d;
-            let rows = |e: [i64; 9]| ([e[0], e[1], e[2]], [e[3], e[4], e[5]], [e[6], e[7], e[8]]);
-            let (u1, u2, u3) = rows(at);
-            assert_eq!(
-                avnaim::sign_of_det3(u1, u2, u3),
-                Some(det3_sign(u1, u2, u3))
-            );
-            let mut past = at;
-            past[pos] = s * (d + 1);
-            let (u1, u2, u3) = rows(past);
-            assert_eq!(avnaim::sign_of_det3(u1, u2, u3), None, "{past:?}");
-        }
-    }
-    let mut draw = Draw::new("avnaim_entries_at_and_past_their_bounds");
-    let near = [0, 1, -1, d, -d, d - 1, -(d - 1), d / 2, -(d / 2)];
-    for _ in 0..300 {
-        let mut e = [0i64; 9];
-        for v in &mut e {
-            *v = if draw.0.coin() {
-                near[usize::try_from(draw.0.next_u64() % 9).unwrap()]
-            } else {
-                i64::try_from(draw.value(59)).unwrap()
-            };
-        }
-        let (u1, u2, u3) = ([e[0], e[1], e[2]], [e[3], e[4], e[5]], [e[6], e[7], e[8]]);
-        assert_eq!(
-            avnaim::sign_of_det3(u1, u2, u3),
-            Some(det3_sign(u1, u2, u3)),
-            "{e:?}"
-        );
     }
 }
 
@@ -560,63 +398,5 @@ fn wide32_matches_i128() {
                 );
             }
         }
-    }
-}
-
-/// The exact 3 × 3 determinant in `i128`, for entries below 2^40 (products below 2^120).
-fn det3_small(u1: [i64; 3], u2: [i64; 3], u3: [i64; 3]) -> i128 {
-    let w = i128::from;
-    let minor =
-        |a: [i64; 3], b: [i64; 3], i: usize, j: usize| w(a[i]) * w(b[j]) - w(a[j]) * w(b[i]);
-    w(u1[0]) * minor(u2, u3, 1, 2) - w(u1[1]) * minor(u2, u3, 0, 2) + w(u1[2]) * minor(u2, u3, 0, 1)
-}
-
-/// `avnaim::sign_of_det3` on random rows of every size up to 2^20, and on rows near and on the
-/// plane of the first two (u3 = a·u1 + b·u2 plus a small offset, or none), where the lattice
-/// walk's and the second step's comparisons meet equality: a third row on a lattice point, at a
-/// cell's corner or on its diagonals, and at the corners' heights.
-#[test]
-fn avnaim_det3_on_random_and_near_plane_rows() {
-    let mut draw = Draw::new("avnaim_det3_on_random_and_near_plane_rows");
-    let check = |u1: [i64; 3], u2: [i64; 3], u3: [i64; 3]| {
-        assert_eq!(
-            avnaim::sign_of_det3(u1, u2, u3),
-            Some(sign_of(det3_small(u1, u2, u3))),
-            "{u1:?} {u2:?} {u3:?}"
-        );
-    };
-    for _ in 0..20_000 {
-        let bits = 1 + u32::try_from(draw.0.next_u64() % 20).unwrap();
-        let mut e = [0i64; 9];
-        for v in &mut e {
-            *v = i64::try_from(draw.value(bits)).unwrap();
-        }
-        check([e[0], e[1], e[2]], [e[3], e[4], e[5]], [e[6], e[7], e[8]]);
-    }
-    let small = |draw: &mut Draw, n: u64| {
-        i64::try_from(draw.0.next_u64() % (2 * n + 1)).unwrap() - i64::try_from(n).unwrap()
-    };
-    for _ in 0..40_000 {
-        let bits = 1 + u32::try_from(draw.0.next_u64() % 12).unwrap();
-        let mut row = || {
-            [
-                i64::try_from(draw.value(bits)).unwrap(),
-                i64::try_from(draw.value(bits)).unwrap(),
-                i64::try_from(draw.value(bits)).unwrap(),
-            ]
-        };
-        let (u1, u2) = (row(), row());
-        let (a, b) = (small(&mut draw, 6), small(&mut draw, 6));
-        let off = if draw.0.coin() {
-            [0; 3]
-        } else {
-            [
-                small(&mut draw, 2),
-                small(&mut draw, 2),
-                small(&mut draw, 2),
-            ]
-        };
-        let u3: [i64; 3] = core::array::from_fn(|k| a * u1[k] + b * u2[k] + off[k]);
-        check(u1, u2, u3);
     }
 }

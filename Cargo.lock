@@ -756,9 +756,11 @@ version = "0.0.0"
 dependencies = [
  "divan",
  "geom-num",
+ "geom-test",
  "gungraun",
  "gungraun-runner",
  "hex",
+ "num-bigint",
  "serde_json",
  "sha2",
  "syn 3.0.9",
@@ -970,6 +972,7 @@ name = "geom-fuzz"
 version = "0.0.0"
 dependencies = [
  "bolero",
+ "geom-bench",
  "geom-gen",
  "geom-num",
  "geom-test",
