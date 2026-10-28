@@ -39,6 +39,7 @@ The board (30.5) also turns into a piece every narrower question that chapters 6
 | 32.19 | G78: NameScheme v1 | SHA-256 cut to 16 bytes over a domain prefix and the name's deterministic CBOR; fixed variant numbers; NFC under Unicode 18.0.0; `Bounded` gains `ends`, collisions stay `Weak` | 11, 20, 24 | G87, persistent names |
 | 32.20 | G79: hash functions | SHA-256 for content and, cut to 16 bytes, for NameIds; RustCrypto's `sha2` 0.11 approved, added to the no_std allow-list with its audit by G86 | 20, 23, 24 | G86, the canonical encoder and safe hash |
 | 32.21 | G120: committed planes and how bounds add up | Committed planes and points stay Certified; 32.3's option B: bounds per entity, added along its own history, against each step's stored inputs; ε_step = 16q joins the ladder | 6, 9, 11, 13 | G142 and G143 |
+| 32.22 | G121: the predicate step ladder | Identity, narrow exact and axis steps before the filter join 6.2; each step checked against the exact path; a filter switched off per target only where the count benchmarks show it loses | 6, 23 | G124, the predicate step ladder |
 
 ## 32.1 The grid ladder (decision 1)
 
@@ -462,3 +463,17 @@ Why: one well-known function for names, content and goldens, already in the form
 Why: one meaning of Exact is worth more than a few more results labelled Exact, and R11's risk, a kernel too strict to use, is met by `Accept`'s default, not by relabelling. Counting bounds per entity against stored inputs is what makes 32.3's promise true: geometry stays within ε_fit of each step's exact result however long the boolean history, and refuses honestly when fits use up the budget.
 
 **Changes:** 6.5 (ε_step accepted), 11.4 and OQ-11.1, 13.2 (both questions settled; ε_step adopted, so "ε_fit until adopted" no longer applies), 31.7, and `geom-num`'s ladder module with `geom-gen`'s grid-steps table. Pieces G142 (plane commit) and G143 (per-entity bounds) build to it.
+
+## 32.22 The predicate step ladder (owner action G121)
+
+**What it is.** Section 6.2 says every predicate runs its `f64` filter first and falls through to the exact integer path only when the filter cannot certify a sign. In a building many calls are exactly zero, which no filter can certify, so they all pay for the exact path. Section 23.2 proposes, as an addition to 6.2, three cheaper steps before the filter: identity (faces on one canonical plane share its entry, so "is this face on that plane" is an index comparison), narrow exact (a magnitude check proves every intermediate fits in 63 bits and the predicate runs in `i64`), and axis (classifying against a plane square to a frame axis is one comparison). It also proposes switching a filter off on a target where it measures slower than the exact path it saves, as G28 found for orient2d on 64-bit targets other than WebAssembly, and filters whose inputs are rounded copies of wider integers carrying that rounding in their error bound.
+
+**Decided 2026-10-28 (owner action G121): accepted as an addition to 6.2, with two conditions.** Read with 6.2, 23.2, 23.3, 28.6 and 28.7, evidence report [05](../../../kit/notes/G01-evidence/05-exact-arithmetic-determinism.md) and G28's measurement of orient2d.
+- **The ladder.** Each predicate takes the first step that settles it: identity, narrow exact, axis, filter, exact. Every step returns the sign the exact path returns, so the ladder changes only speed, never an answer, and principle 1 is untouched.
+- **Condition 1: each step is checked against the exact path.** A step that answers is tested against the exact integer evaluation at the extremes, on degenerate inputs and one step from them, and on random inputs (28.6), as the filters already are; the narrow step's magnitude check is integer arithmetic, never a floating-point estimate. A step that cannot show this is not used.
+- **Condition 2: a filter is switched off only by measurement, per target, at build time.** Where the instruction-count benchmarks (23.3, the count gate) show on all four input classes that a predicate's exact path costs no more than its filter plus the fall-through, that predicate skips its filter on that target, chosen by `target_arch` when the crate is built, never at run time. The choice is recorded beside the benchmark that justifies it, and the count gate re-checks it on every pull request. Since every step returns the same sign, the switch cannot change a result on any target.
+- **Rounded-input filters are accepted as built.** A filter whose `f64` inputs are rounded copies of wider integers carries |x̃ − x| ≤ 2^-53·|x| per input in its error bound (`geom-gen`'s `rounded` inputs, G27 and G29), and tests put coefficients at their full widths with results near zero.
+
+Why: an exact zero is the commonest case in a building, and the cheapest exact answer is the one the data already holds. The conditions keep the speed-up from ever costing a sign: every step is proven against the exact path, and a filter is dropped only where a reproducible count says it loses.
+
+**Changes:** 6.2 (the ladder joins it), 23.2, 31.7, and piece G124, which builds the three steps and the step statistics.

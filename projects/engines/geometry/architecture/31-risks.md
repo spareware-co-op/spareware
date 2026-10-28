@@ -611,6 +611,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | NameScheme v1: the hash and its truncation, the bytes hashed, text rules, and the `TopoName` variants | 11, 20, 24 | 32.19 (owner action G78) |
 | The content hash and the NameId hash, and their implementation | 20, 23, 24 | 32.20 (owner action G79) |
 | Committed planes and points as Exact or Certified; how bounds add up through a history; ε_step | 6, 9, 11, 13 | 32.21 (owner action G120) |
+| The predicate step ladder and rounded-input filters, as an addition to 6.2 | 6, 23 | 32.22 (owner action G121) |
 
 ### Answered by the pieces built so far
 
@@ -632,7 +633,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | Fixed-width integers of several thousand bits on a cold path for general quadric pairs (Dupont, Lazard, Lazard and Petitjean), rather than arbitrary precision | 12 | Piece "Bit budgets for the exact algebraic decisions in intersections" |
 | The real widths of 2D construction predicates: rational directions of about 44 bits, tangency positions about 70 bits finer than a step, the deepest possibly thousands of bits | 14 | Piece "2D-01", with its width generator and benchmark |
 | Exact incircle on implicit TIN crossings would need about 1,024 bits (an estimate). Not planned; recorded as a limit | 17 | No piece; chapter 17 text |
-| A predicate step ladder: identity, narrow i64 and axis checks before the filter, with a filter switched off on a target where it measures slower | 23 | Decision note to 6.2; piece "Predicate step ladder, rounded-input filters and step statistics" |
+| A predicate step ladder: identity, narrow i64 and axis checks before the filter, with a filter switched off on a target where it measures slower | 23 | 32.22 (owner action G121): accepted into 6.2 with two conditions; piece "Predicate step ladder, rounded-input filters and step statistics" |
 | Integer 2D carriers (n below 2^41, c below 2^82), depth-one 2D points and arcs with rational centres, as an exception to "every stored coordinate is whole grid steps", like 6.3's exception for planes | 14, 15 | After 32.2: pieces "2D carrier, depth-one point and rational-centre arc predicates in geom-num" and "2D-04" |
 | One rotation type for 2D and 3D: rational rotations from Pythagorean triples, as quaternions in 3D. Rotated planes then exceed 6.2's 384-bit assumption, so 6.2 and 11 must agree | 14 | 32.14 (owner action G44): one type, integer quaternions; rotated planes outside 6.2's budget are committed, so 384 bits stand; piece G46 builds it |
 | Sketch-plane frames: lattice frames only where cells are at most 16 steps, rotated frames elsewhere. Should section 13 build swept bodies on rotated planes from the exact carrier now? | 15 | Piece "Sketch planes and the 2D-3D maps" |
