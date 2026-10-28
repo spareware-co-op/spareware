@@ -54,6 +54,7 @@ The board (30.5) also turns into a piece every narrower question that chapters 6
 | 32.34 | G358: TIN tie order | Plan position, x then y, for a TIN's Delaunay ties, as chapter 17 asks; name order everywhere else | 6, 17, 21 | G362, the exact Delaunay core |
 | 32.35 | G384: smooth-edge marking | An explicit, logged operation marks edges Smooth below an angle θ the caller passes and the log records; no kernel default, no ladder rung | 6, 18 | G398, line classes and continuity records |
 | 32.36 | G385: view predicates beyond 384 bits | `I576` for grid-axis views and `I640` for any direction and perspective, accepted on 32.29's conditions (derivation, certificate, extreme tests, filter, measured) | 6, 18 | G388, exact view predicates |
+| 32.37 | G407: openNURBS licence confirmation | Ask McNeel in writing (request drafted, the owner sends it); nothing ported until the reply; open until then | 16, 24, 29 | G438, Rhino .3dm |
 
 ## 32.1 The grid ladder (decision 1)
 
@@ -687,3 +688,16 @@ Why: a hidden import angle would be a tolerance no one chose and that differs fr
 Why: drawings are a contract document; exact visibility makes every view the same on every machine and every replay, and the filter keeps the cost to the rare near-degenerate events.
 
 **Changes:** 6.2's list, 18.6, 31.7 and piece G388.
+
+## 32.37 openNURBS licence confirmation (owner action G407)
+
+**What it is.** Reading and writing Rhino's `.3dm` files (G438) means porting openNURBS, McNeel's toolkit for them. Its terms contradict each other: the repository's [LICENSE](https://github.com/mcneel/opennurbs/blob/eb92af3ba1806b0a34a99aba0d3bda83e3d46083/LICENSE) says "All Rights Reserved" and grants nothing, while McNeel's [developer page](https://developer.rhino3d.com/guides/opennurbs/what-is-opennurbs/) says "There are no restrictions. Neither copyright nor copyleft restrictions apply" and "Commercial use is encouraged" (both read 2026-10-28). 29.20's first rule stops on such a conflict, and 32.9 recommends writing to McNeel now for written confirmation that the grant covers the repository at a named commit, including use inside MPL-2.0 work.
+
+**Decided 2026-10-28 (owner action G407): ask McNeel for written confirmation; port nothing until it arrives.**
+- **The request** is drafted in this piece's pull request. It names the commit, the use (porting the reader and writer into an MPL-2.0 kernel, with McNeel's notice kept) and the two texts that disagree. The owner sends it, since it is a letter to an outside company in the co-op's name; nothing has been sent.
+- **Until the reply,** openNURBS stays as 29 lists it: read for the format only, run out of process as an oracle, never ported. G438 does not start, and it does not gate its phase (30.5).
+- **When the reply comes,** it is recorded here, in 29's openNURBS row and in `geometry/NOTICE`, word for word with its date; a yes lets G438 port with McNeel's notice kept, and a no or a narrower grant is recorded and G438 is re-planned from the published format description alone.
+
+This action stays open until McNeel answers.
+
+**Changes:** 29's openNURBS row, 31.7, and piece G438.
