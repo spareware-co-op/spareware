@@ -644,6 +644,14 @@ impl Recorder {
                 self.note("Certified");
                 self.rows(c);
             }
+            // Piece G46's variant; this corpus never makes one, so its digest is unchanged.
+            TypedTransform::Rotation(r) => {
+                self.put_u8(3);
+                self.note("Rotation");
+                for v in r.quaternion() {
+                    self.put_i64(v);
+                }
+            }
         }
     }
 
