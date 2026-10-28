@@ -137,13 +137,21 @@ fn sorted_by_key<const D: usize>(
     if u32::try_from(entries.len()).is_err() || entries.len() == usize::MAX {
         return Err(BvhError::TooManyEntries);
     }
-    let order = exec
-        .sort_stable(meter, SORT, SORT_PLAN, entries, |e: &Entry<D>| e.key)
-        .map_err(|e: RunError<BvhError>| BvhError::from(e))?;
     let mut sorted = Vec::new();
     sorted
         .try_reserve_exact(entries.len())
         .map_err(|_| BvhError::OutOfMemory)?;
+    if entries
+        .windows(2)
+        .all(|w| matches!(w, [a, b] if a.key < b.key))
+    {
+        // Already in key order with no key repeated: the sort would change nothing.
+        sorted.extend_from_slice(entries);
+        return Ok(sorted);
+    }
+    let order = exec
+        .sort_stable(meter, SORT, SORT_PLAN, entries, |e: &Entry<D>| e.key)
+        .map_err(|e: RunError<BvhError>| BvhError::from(e))?;
     for i in order {
         sorted.push(*entries.get(i).ok_or(BvhError::Defect)?);
     }

@@ -76,12 +76,23 @@ const BIN_SHIFT: u32 = 48;
 /// offset · scale < b·2^48 ≤ 2^52: the product never overflows a `u64`, and the bin is below b.
 const BIN_UNIT: u64 = 1 << BIN_SHIFT;
 
-/// An entry as the builder reads it: its box and twice its centre.
+/// An entry as the builder moves it: its box and its position in key order.
 #[derive(Clone, Copy)]
 struct Item<const D: usize> {
     lo: [i64; D],
     hi: [i64; D],
-    centre: [i64; D],
+    id: u32,
+}
+
+impl<const D: usize> Item<D> {
+    /// Twice the centre on `axis`, lo + hi (|lo + hi| ≤ 2^44, so it never wraps).
+    #[inline]
+    fn centre(&self, axis: usize) -> i64 {
+        match (self.lo.get(axis), self.hi.get(axis)) {
+            (Some(l), Some(h)) => l.wrapping_add(*h),
+            _ => 0,
+        }
+    }
 }
 
 /// A running box: empty until something is added.
@@ -97,17 +108,17 @@ impl<const D: usize> Bounds<D> {
         hi: [i64::MIN; D],
     };
 
+    #[inline]
     fn add(&mut self, lo: &[i64; D], hi: &[i64; D]) {
-        for (((l, h), x), y) in self.lo.iter_mut().zip(self.hi.iter_mut()).zip(lo).zip(hi) {
-            if x < l {
-                *l = *x;
-            }
-            if y > h {
-                *h = *y;
-            }
+        for (l, x) in self.lo.iter_mut().zip(lo) {
+            *l = (*l).min(*x);
+        }
+        for (h, y) in self.hi.iter_mut().zip(hi) {
+            *h = (*h).max(*y);
         }
     }
 
+    #[inline]
     fn join(&mut self, other: &Bounds<D>) {
         self.add(&other.lo, &other.hi);
     }
@@ -134,9 +145,19 @@ impl<const D: usize> Cover<D> {
         centres: Bounds::EMPTY,
     };
 
+    #[inline]
     fn add(&mut self, item: &Item<D>) {
         self.bbox.add(&item.lo, &item.hi);
-        self.centres.add(&item.centre, &item.centre);
+        let c: [i64; D] = core::array::from_fn(|axis| item.centre(axis));
+        self.centres.add(&c, &c);
+    }
+
+    fn of(items: &[Item<D>]) -> Cover<D> {
+        let mut c = Cover::EMPTY;
+        for item in items {
+            c.add(item);
+        }
+        c
     }
 }
 
@@ -167,7 +188,7 @@ enum Slot {
     Right(usize),
 }
 
-/// A range of the order waiting to be built, with what it covers.
+/// A range of the items waiting to be built, with what it covers.
 #[derive(Clone, Copy)]
 struct Frame<const D: usize> {
     lo: usize,
@@ -192,15 +213,8 @@ fn index(i: usize) -> Result<u32, BvhError> {
     u32::try_from(i).map_err(|_| BvhError::TooManyEntries)
 }
 
-fn at<T: Copy>(items: &[T], i: usize) -> Result<T, BvhError> {
-    items.get(i).copied().ok_or(BvhError::Defect)
-}
-
-fn at_u32<T: Copy>(items: &[T], i: u32) -> Result<T, BvhError> {
-    at(items, usize::try_from(i).map_err(|_| BvhError::Defect)?)
-}
-
-/// The nodes and the leaf order of the tree over `sorted` (entries in key order, keys distinct).
+/// The nodes and the leaf order of the tree over `sorted` (entries in key order, keys distinct):
+/// `order[p]` is the position in `sorted` of the entry at leaf position p.
 pub(crate) fn build<const D: usize>(
     sorted: &[Entry<D>],
     exec: &Exec<'_>,
@@ -212,23 +226,16 @@ pub(crate) fn build<const D: usize>(
     if n == 0 {
         return Ok((nodes, order));
     }
-    order
-        .try_reserve_exact(n)
-        .map_err(|_| BvhError::OutOfMemory)?;
     let mut items = Vec::new();
     items
         .try_reserve_exact(n)
         .map_err(|_| BvhError::OutOfMemory)?;
-    let mut cover = Cover::EMPTY;
     for (i, e) in sorted.iter().enumerate() {
-        order.push(index(i)?);
-        let item = Item {
+        items.push(Item {
             lo: e.bbox.lo(),
             hi: e.bbox.hi(),
-            centre: core::array::from_fn(|axis| e.bbox.centre2(axis)),
-        };
-        cover.add(&item);
-        items.push(item);
+            id: index(i)?,
+        });
     }
     let mut tasks = Vec::new();
     let mut scratch = Vec::new();
@@ -237,11 +244,10 @@ pub(crate) fn build<const D: usize>(
         hi: n,
         depth: 0,
         node: 0,
-        cover,
+        cover: Cover::of(&items),
     };
     grow(
-        &items,
-        &mut order,
+        &mut items,
         root,
         Some(GRAIN),
         &mut nodes,
@@ -250,18 +256,18 @@ pub(crate) fn build<const D: usize>(
         meter,
     )?;
     let subtrees = {
-        let shared: &[u32] = &order;
+        let shared: &[Item<D>] = &items;
         exec.try_map(meter, SUBTREES, PLAN, &tasks, |_, task: &Task<D>, meter| {
-            let mut ids = Vec::new();
             let range = shared.get(task.lo..task.hi).ok_or(BvhError::Defect)?;
-            ids.try_reserve_exact(range.len())
+            let mut local = Vec::new();
+            local
+                .try_reserve_exact(range.len())
                 .map_err(|_| BvhError::OutOfMemory)?;
-            ids.extend_from_slice(range);
+            local.extend_from_slice(range);
             let mut sub = Vec::new();
             let (mut none, mut scratch) = (Vec::new(), Vec::new());
             grow(
-                &items,
-                &mut ids,
+                &mut local,
                 *task,
                 None,
                 &mut sub,
@@ -269,16 +275,20 @@ pub(crate) fn build<const D: usize>(
                 &mut scratch,
                 meter,
             )?;
-            Ok((sub, ids))
+            Ok((sub, local))
         })?
     };
-    for (task, (sub, ids)) in tasks.iter().zip(subtrees) {
-        order
+    for (task, (sub, local)) in tasks.iter().zip(subtrees) {
+        items
             .get_mut(task.lo..task.hi)
             .ok_or(BvhError::Defect)?
-            .copy_from_slice(&ids);
+            .copy_from_slice(&local);
         splice(&mut nodes, task.node, &sub)?;
     }
+    order
+        .try_reserve_exact(n)
+        .map_err(|_| BvhError::OutOfMemory)?;
+    order.extend(items.iter().map(|item| item.id));
     Ok((nodes, order))
 }
 
@@ -322,21 +332,16 @@ fn splice<const D: usize>(
     Ok(())
 }
 
-/// Builds `top`'s range of the order (`ids` holds positions `top.lo..top.hi`) into `nodes`. With a
+/// Builds `top`'s range (`items` holds the leaf positions `top.lo..top.hi`) into `nodes`. With a
 /// grain, a range of at most that many entries (and more than a leaf's) becomes a placeholder node
 /// and a task instead.
-#[allow(
-    clippy::too_many_arguments,
-    reason = "the builder's state, passed rather than bundled so the subtree tasks share the read-only parts"
-)]
 fn grow<const D: usize>(
-    items: &[Item<D>],
-    ids: &mut [u32],
+    items: &mut [Item<D>],
     top: Task<D>,
     grain: Option<usize>,
     nodes: &mut Vec<Node<D>>,
     tasks: &mut Vec<Task<D>>,
-    scratch: &mut Vec<u32>,
+    scratch: &mut Vec<Item<D>>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<(), BvhError> {
     let base = top.lo;
@@ -346,7 +351,7 @@ fn grow<const D: usize>(
         .map_err(|_| BvhError::OutOfMemory)?;
     stack.push(Frame {
         lo: 0,
-        hi: ids.len(),
+        hi: items.len(),
         depth: top.depth,
         slot: Slot::Root,
         cover: top.cover,
@@ -359,8 +364,8 @@ fn grow<const D: usize>(
         meter.charge(u64::try_from(count).map_err(|_| BvhError::Defect)?)?;
         let idx = nodes.len();
         let start = base.checked_add(f.lo).ok_or(BvhError::Defect)?;
-        nodes.try_reserve(1).map_err(|_| BvhError::OutOfMemory)?;
         let bbox = f.cover.bbox.aabb();
+        nodes.try_reserve(1).map_err(|_| BvhError::OutOfMemory)?;
         nodes.push(Node::new(
             bbox,
             NodeKind::Leaf {
@@ -397,8 +402,8 @@ fn grow<const D: usize>(
             });
             continue;
         }
-        let range = ids.get_mut(f.lo..f.hi).ok_or(BvhError::Defect)?;
-        let (mid, left, right) = split(items, range, f.depth, &f.cover.centres, scratch)?;
+        let range = items.get_mut(f.lo..f.hi).ok_or(BvhError::Defect)?;
+        let (mid, left, right) = split(range, f.depth, &f.cover.centres, scratch)?;
         *nodes.get_mut(idx).ok_or(BvhError::Defect)? =
             Node::new(bbox, NodeKind::Inner { left: 0, right: 0 });
         let cut = f.lo.checked_add(mid).ok_or(BvhError::Defect)?;
@@ -423,6 +428,7 @@ fn grow<const D: usize>(
 
 /// The bin of a centre `offset` above the range's lowest, for a bin scale of `scale` and `used`
 /// bins: ⌊offset · scale / 2^48⌋, at most `used − 1` (the product: see `BIN_UNIT`).
+#[inline]
 fn bin(offset: i64, scale: u64, used: usize) -> usize {
     let o = u64::try_from(offset).unwrap_or(0);
     let b = o.wrapping_mul(scale).wrapping_shr(BIN_SHIFT);
@@ -431,115 +437,91 @@ fn bin(offset: i64, scale: u64, used: usize) -> usize {
         .min(used.saturating_sub(1))
 }
 
-/// The covers of `ids[..mid]` and `ids[mid..]`.
-fn covers<const D: usize>(
-    items: &[Item<D>],
-    ids: &[u32],
-    mid: usize,
-) -> Result<(Cover<D>, Cover<D>), BvhError> {
-    let (mut left, mut right) = (Cover::EMPTY, Cover::EMPTY);
-    for (i, &id) in ids.iter().enumerate() {
-        let item = at_u32(items, id)?;
-        if i < mid {
-            left.add(&item);
-        } else {
-            right.add(&item);
-        }
-    }
-    Ok((left, right))
-}
-
-/// Splits `ids` (more than a leaf's entries, in key order, their centres within `centres`) stably
-/// into a left and a right part, and returns the left part's length (at least 1 and below
-/// `ids.len()`) and what each part covers.
+/// Splits `items` (more than a leaf's entries, in key order, their centres within `centres`)
+/// stably into a left and a right part, and returns the left part's length (at least 1 and below
+/// `items.len()`) and what each part covers.
 fn split<const D: usize>(
-    items: &[Item<D>],
-    ids: &mut [u32],
+    items: &mut [Item<D>],
     depth: usize,
     centres: &Bounds<D>,
-    scratch: &mut Vec<u32>,
+    scratch: &mut Vec<Item<D>>,
 ) -> Result<(usize, Cover<D>, Cover<D>), BvhError> {
-    let count = ids.len();
+    let count = items.len();
     let half = count / 2;
+    let median = |items: &[Item<D>]| -> Result<(usize, Cover<D>, Cover<D>), BvhError> {
+        let (l, r) = items.split_at_checked(half).ok_or(BvhError::Defect)?;
+        Ok((half, Cover::of(l), Cover::of(r)))
+    };
     if depth >= MEDIAN_DEPTH {
-        let (l, r) = covers(items, ids, half)?;
-        return Ok((half, l, r));
+        return median(items);
     }
-    // A small range gets fewer bins: as many as it has entries, up to BINS.
-    let used = BINS.min(count);
-    let unit = BIN_UNIT.saturating_mul(u64::try_from(used).map_err(|_| BvhError::Defect)?);
-    // Each axis whose centres differ, with its bin scale; 0 marks an axis with no spread.
-    let mut scales = [0u64; D];
-    for ((s, lo), hi) in scales.iter_mut().zip(&centres.lo).zip(&centres.hi) {
-        if hi > lo {
-            // hi − lo ≤ 2^45: centres are sums of two coordinates within ±2^43.
-            let extent = u64::try_from(hi.saturating_sub(*lo)).map_err(|_| BvhError::Defect)?;
-            *s = unit
-                .checked_div(extent.saturating_add(1))
-                .ok_or(BvhError::Defect)?;
+    // The axis along which the centres spread most, the lowest on a tie (Wald 2007 bins along
+    // that axis alone); a range whose centres all coincide is split at the median.
+    let mut axis = 0usize;
+    let mut spread = 0i64;
+    for (a, (lo, hi)) in centres.lo.iter().zip(&centres.hi).enumerate() {
+        let s = hi.wrapping_sub(*lo);
+        if s > spread {
+            spread = s;
+            axis = a;
         }
     }
-    let mut bins = [[Bin::<D>::EMPTY; BINS]; D];
-    for &id in ids.iter() {
-        let item = at_u32(items, id)?;
-        for (((axis_bins, scale), c), lo) in bins
-            .iter_mut()
-            .zip(&scales)
-            .zip(&item.centre)
-            .zip(&centres.lo)
-        {
-            if *scale == 0 {
-                continue;
-            }
-            let slot = axis_bins
-                .get_mut(bin(c.saturating_sub(*lo), *scale, used))
-                .ok_or(BvhError::Defect)?;
-            slot.n = slot.n.saturating_add(1);
+    if spread <= 0 {
+        return median(items);
+    }
+    // A small range gets fewer bins: as many as it has entries, up to BINS. The spread is at most
+    // 2^45 (centres are sums of two coordinates within ±2^43).
+    let used = BINS.min(count);
+    let unit = BIN_UNIT.saturating_mul(u64::try_from(used).map_err(|_| BvhError::Defect)?);
+    let scale = unit
+        .checked_div(
+            u64::try_from(spread)
+                .map_err(|_| BvhError::Defect)?
+                .saturating_add(1),
+        )
+        .ok_or(BvhError::Defect)?;
+    let lo = centres.lo.get(axis).copied().ok_or(BvhError::Defect)?;
+    let mut bins = [Bin::<D>::EMPTY; BINS];
+    for item in items.iter() {
+        if let Some(slot) = bins.get_mut(bin(item.centre(axis).wrapping_sub(lo), scale, used)) {
+            slot.n = slot.n.wrapping_add(1);
             slot.bbox.add(&item.lo, &item.hi);
         }
     }
-    // (cost, axis, plane) of the best plane so far; the lower axis, then plane, on a tie.
-    let mut best: Option<(u128, usize, usize)> = None;
-    for (axis, (axis_bins, scale)) in bins.iter().zip(&scales).enumerate() {
-        if *scale == 0 {
+    // right[i]: the bins i..used together, and that side's cost, measure · count (below 2^124: a
+    // measure below 2^92 times fewer than 2^32 entries).
+    let mut right = [(0u32, 0u128); BINS];
+    let mut acc = Bin::EMPTY;
+    for (r, b) in right.iter_mut().zip(&bins).take(used).rev() {
+        acc.join(b);
+        *r = (
+            acc.n,
+            measure(&acc.bbox.lo, &acc.bbox.hi).wrapping_mul(u128::from(acc.n)),
+        );
+    }
+    // The plane of least cost, the lower plane on a tie.
+    let mut best: Option<(u128, usize)> = None;
+    let mut left = Bin::EMPTY;
+    for (plane, (b, &(rn, rcost))) in bins
+        .iter()
+        .zip(right.iter().skip(1))
+        .take(used.saturating_sub(1))
+        .enumerate()
+    {
+        left.join(b);
+        if left.n == 0 || rn == 0 {
             continue;
         }
-        // right[i]: the bins i..used together, and that side's cost, measure · count (below 2^124:
-        // a measure below 2^92 times fewer than 2^32 entries).
-        let mut right = [(0u32, 0u128); BINS];
-        let mut acc = Bin::EMPTY;
-        for (r, b) in right.iter_mut().zip(axis_bins).take(used).rev() {
-            acc.join(b);
-            *r = (
-                acc.n,
-                measure(&acc.bbox.lo, &acc.bbox.hi).wrapping_mul(u128::from(acc.n)),
-            );
-        }
-        let mut left = Bin::EMPTY;
-        for (plane, (b, &(rn, rcost))) in axis_bins
-            .iter()
-            .zip(right.iter().skip(1))
-            .take(used.saturating_sub(1))
-            .enumerate()
-        {
-            left.join(b);
-            if left.n == 0 || rn == 0 {
-                continue;
-            }
-            let cost = measure(&left.bbox.lo, &left.bbox.hi)
-                .wrapping_mul(u128::from(left.n))
-                .wrapping_add(rcost);
-            if best.is_none_or(|(c, ..)| cost < c) {
-                best = Some((cost, axis, plane));
-            }
+        let cost = measure(&left.bbox.lo, &left.bbox.hi)
+            .wrapping_mul(u128::from(left.n))
+            .wrapping_add(rcost);
+        if best.is_none_or(|(c, _)| cost < c) {
+            best = Some((cost, plane));
         }
     }
-    let Some((_, axis, plane)) = best else {
-        let (l, r) = covers(items, ids, half)?;
-        return Ok((half, l, r));
+    let Some((_, plane)) = best else {
+        return median(items);
     };
-    let scale = at(&scales, axis)?;
-    let lo = at(&centres.lo, axis)?;
     scratch.clear();
     scratch
         .try_reserve(count)
@@ -547,18 +529,18 @@ fn split<const D: usize>(
     let (mut left, mut right) = (Cover::EMPTY, Cover::EMPTY);
     let mut kept = 0usize;
     for i in 0..count {
-        let id = at(ids, i)?;
-        let item = at_u32(items, id)?;
-        if bin(at(&item.centre, axis)?.saturating_sub(lo), scale, used) <= plane {
-            *ids.get_mut(kept).ok_or(BvhError::Defect)? = id;
-            kept = kept.saturating_add(1);
+        let item = *items.get(i).ok_or(BvhError::Defect)?;
+        if bin(item.centre(axis).wrapping_sub(lo), scale, used) <= plane {
+            *items.get_mut(kept).ok_or(BvhError::Defect)? = item;
+            kept = kept.wrapping_add(1);
             left.add(&item);
         } else {
-            scratch.push(id);
+            scratch.push(item);
             right.add(&item);
         }
     }
-    ids.get_mut(kept..)
+    items
+        .get_mut(kept..)
         .ok_or(BvhError::Defect)?
         .copy_from_slice(scratch);
     if kept == 0 || kept == count {
