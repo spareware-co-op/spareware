@@ -2277,6 +2277,27 @@
           "target": "lib"
         },
         {
+          "cost": "constant time, no allocation. Applying is ten `i128` products for M(q) and nine for the image, and three Euclidean divisions; composing is sixteen products and a reduction (four greatest common divisors); a 2D search is about twenty interval operations, at most 200 steps of the simplest-rational loop and one certificate (about 60 interval operations); a 3D search is at most 36 roundings and certificates.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+          "guarantees": [
+            "a [`RationalRotation`] is exact and canonical, its image of a grid point is the exact image rounded once, ties to even, with whether it was exact; composition is exact while the product fits the budget and otherwise re-approximated once, saying by how much; every [`WithinAngle`] bound is a certified upper bound on the true angle and at most the bound asked for; and a step the budget proves fits that fails all the same is reported as [`NumError::BudgetExceeded`], never answered."
+          ],
+          "job": "Rational rotations: one exact rotation type for 2D and 3D, held as an integer quaternion, and the closest such rotation, or Pythagorean direction, within a requested angle (decision 32.14).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/142675.142726",
+              "https://global.oup.com/academic/product/9780199219865"
+            ],
+            "text": "J. Canny, B. Donald and E. K. Ressler, \"A rational rotation method for robust geometric algorithms\", Proceedings of the 8th Symposium on Computational Geometry (1992), 251–260, <https://doi.org/10.1145/142675.142726>, for the 2D directions; the Euler–Rodrigues parametrisation of rotations by quaternions for the 3D type (decision 32.14); the simplest rational in an interval from the continued fractions of its ends (G. H. Hardy and E. M. Wright, *An Introduction to the Theory of Numbers*, 6th ed., Oxford University Press (2008), chapter 10, <https://global.oup.com/academic/product/9780199219865>); interval arithmetic as in [`geom_num::interval`]. The quaternion of a rational rotation matrix ([`RationalRotation::from_rational`]) is read from the identity d·(1 + tr R) = 4w²·d/|q|² and its companions, derived in that function's comment."
+          },
+          "path": "geom_math::rotation",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a value and one flag; reading either is a copy.",
           "does": null,
           "family": [],
