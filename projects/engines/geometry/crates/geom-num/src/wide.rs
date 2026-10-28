@@ -540,16 +540,16 @@ impl<const L: usize> Wide<L> {
         let negative = self.is_negative();
         let sign = fill(negative);
         let mut out = [sign; M];
-        // The limbs both widths hold, copied; above them, the sign fill.
-        for i in 0..M {
-            if i < L {
-                let x = match self.0.get(i) {
-                    Some(v) => *v,
-                    None => 0,
-                };
-                if let Some(slot) = out.get_mut(i) {
-                    *slot = x;
-                }
+        // The limbs both widths hold, copied; above them, the sign fill. The loop runs over exactly
+        // those limbs, a constant for each pair of widths, so it unrolls with no bounds checks.
+        let shared = if M < L { M } else { L };
+        for i in 0..shared {
+            let x = match self.0.get(i) {
+                Some(v) => *v,
+                None => 0,
+            };
+            if let Some(slot) = out.get_mut(i) {
+                *slot = x;
             }
         }
         if M < L {

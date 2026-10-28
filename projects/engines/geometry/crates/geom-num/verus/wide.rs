@@ -1936,24 +1936,28 @@ impl<const L: usize> Wide<L> {
         let negative = self.is_negative();
         let sign = fill(negative);
         let mut out = [sign; M];
-        // The limbs both widths hold, copied; above them, the sign fill.
+        // The limbs both widths hold, copied; above them, the sign fill. The loop runs over exactly
+        // those limbs, a constant for each pair of widths, so it unrolls with no bounds checks.
+        let shared = if M < L { M } else { L };
         #[verus_spec(
             invariant
                 out@.len() == M,
                 self.limbs().len() == L,
-                forall|j: int| 0 <= j < i ==> out@[j] == (if j < L { self.limbs()[j] } else { sign }),
+                shared == (if M < L { M } else { L }),
+                forall|j: int| 0 <= j < i ==> out@[j] == self.limbs()[j],
                 forall|j: int| i <= j < M ==> out@[j] == sign,
         )]
-        for i in 0..M {
-            if i < L {
-                let x = match self.0.get(i) {
-                    Some(v) => *v,
-                    None => 0,
-                };
-                if let Some(slot) = out.get_mut(i) {
-                    *slot = x;
-                }
+        for i in 0..shared {
+            let x = match self.0.get(i) {
+                Some(v) => *v,
+                None => 0,
+            };
+            if let Some(slot) = out.get_mut(i) {
+                *slot = x;
             }
+        }
+        proof! {
+            assert(forall|j: int| 0 <= j < M ==> out@[j] == (if j < L { self.limbs()[j] } else { sign }));
         }
         if M < L {
             // Narrowing: every dropped limb must be pure sign extension.
