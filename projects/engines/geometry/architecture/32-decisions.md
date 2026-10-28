@@ -37,6 +37,7 @@ The board (30.5) also turns into a piece every narrower question that chapters 6
 | 32.17 | G76: arena indices in name order | Accepted as 8.2 proposes: the builder assigns indices in persistent-name order in every operation, so arena order, tie order and hash order are one; a shuffle test holds every operation to it | 8, 23, 24 | G81, the builder |
 | 32.18 | G77: the CBOR tag and the file name | Tag 0x534B4746 ("SKGF"), unassigned, requested from IANA by the owner; the name SKG stays; the extension becomes `.skgf`, because Skrooge already uses `.skg` | 24 | G93, the native format specification |
 | 32.19 | G78: NameScheme v1 | SHA-256 cut to 16 bytes over a domain prefix and the name's deterministic CBOR; fixed variant numbers; NFC under Unicode 18.0.0; `Bounded` gains `ends`, collisions stay `Weak` | 11, 20, 24 | G87, persistent names |
+| 32.20 | G79: hash functions | SHA-256 for content and, cut to 16 bytes, for NameIds; RustCrypto's `sha2` 0.11 approved, added to the no_std allow-list with its audit by G86 | 20, 23, 24 | G86, the canonical encoder and safe hash |
 
 ## 32.1 The grid ladder (decision 1)
 
@@ -424,3 +425,22 @@ Why: the machine exists, is lent at no cost, and is an 8-performance-core x86-64
 Why: SHA-256 is the hash the format and every golden already use, so names add no second algorithm; truncation keeps names at the 16 bytes 20.1 promises. Fixing the variant numbers, the prefix and the Unicode version now is what lets a name written today resolve in fifty years (26.2).
 
 **Changes:** 11.9 and OQ-11.3, 20.1 and 20.2, 24.3, 31.7, and pieces G86, G87 and G93.
+
+## 32.20 Hash functions (owner action G79)
+
+**What it is.** The kernel hashes in two places. Content IDs and cache keys hash a body's canonical bytes (23.8, 24.2), and `NameId`s hash a name's canonical encoding (20.1). Chapter 23 left the content hash open between SHA-256 and BLAKE3, and noted that both common Rust crates use unsafe SIMD code, so the choice is also which implementation a `no_std` kernel crate may depend on (31.7). Owner action G78 has already cut the `NameId` from the same function (32.19).
+
+| Option | For | Against |
+| --- | --- | --- |
+| A. SHA-256 for both, from RustCrypto's `sha2` | A FIPS standard with fifty years of tools behind it; already 24.2's algorithm 1, every golden digest in the repository and Python's built-in `hashlib`, which the second reader of 24.6 uses; one function to approve | Slower than BLAKE3 in software, about 200 to 400 MB/s against several GB/s; fast where the processor has SHA instructions |
+| B. BLAKE3 for both, from the `blake3` crate | Several times faster; a tree hash, so chunks hash in parallel | A second algorithm beside every existing golden; not in Python's standard library; its `pure` build is the safe one, and its SIMD paths are larger to audit |
+| C. Hand-written SHA-256 in safe Rust | No dependency | The owner's rule forbids home-made hashes (29.1, AGENTS.md section 4), and the repository already removed one |
+
+**Decided 2026-10-28 (owner action G79): A.** Read with 20.1, 23.8, 24.2, 24.6, 28.13, 29.1 and 29.20's rule 3, the `sha2` 0.11.0 source that `Cargo.lock` already holds, and the `blake3` crate's features.
+- **The content hash is SHA-256**, as 24.2's algorithm 1 already says, and **the `NameId` hash is SHA-256 cut to 16 bytes** (32.19). The content ID keeps its algorithm code, so a faster or stronger hash can join later as algorithm 2 without breaking a stored file.
+- **The approved implementation is RustCrypto's `sha2`**, at the 0.11 release `Cargo.lock` pins (0.11.0 today; MIT OR Apache-2.0), with `default-features = false`, `no_std`, and its `digest` dependency chain. It is pure Rust, written to FIPS 180-4, and the most used SHA-2 crate in Rust. Its `unsafe` code is confined to the processor-specific backends (x86 SHA extensions, AArch64 SHA2), each behind a runtime check of the processor's features, and to its unrolled software path's table read; its compact software path has none. Every backend computes the same function, so the bits never depend on the machine; the tests check the NIST test vectors on every target, natively and in WebAssembly, where it runs its software path. The kernel's own code stays free of `unsafe`; the crate's is read in its audit, as `libm`'s was (G24).
+- **How it enters the kernel.** Piece G86, which builds the canonical encoder and the safe hash, adds `sha2` and the crates it brings to `deny-no-std.toml` with the four-clause record that file asks for, its audit committed beside `libm`'s, and the scaffold table's `registry` naming the kernel crates that may use it (`geom-op` for names, `geom-format` for content). BLAKE3 is not used now.
+
+Why: one well-known function for names, content and goldens, already in the format and in every tool that might ever check a file, beats a faster hash that would add a second algorithm everywhere. The speed difference matters little where these hashes run: names are short, and content hashing runs in background compaction, on SHA instructions where the processor has them.
+
+**Changes:** 24.2, 31.7 and the board's G86. Piece "Content hashes and cache keys" still decides the name-ordered bucket tree.

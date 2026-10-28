@@ -1041,7 +1041,7 @@
   "phase": "Phase 3",
   "crate": "geom-op",
   "size": "Medium",
-  "done_when": "A no_std deterministic CBOR encoder for SKG's subset with one encoding per value (canonical map order, shortest integers and floats); the chosen hashes in safe Rust, passing their published test vectors; cross-checked with cbor2. NameIds and geom-format's decoder (G91) build on it.",
+  "done_when": "A no_std deterministic CBOR encoder for SKG's subset with one encoding per value (canonical map order, shortest integers and floats); SHA-256 from RustCrypto's sha2 (32.20), added to deny-no-std.toml with its audit, passing the NIST test vectors on every target; cross-checked with cbor2. NameIds and geom-format's decoder (G91) build on it.",
   "depends_on": [
    "G79",
    "G70"
