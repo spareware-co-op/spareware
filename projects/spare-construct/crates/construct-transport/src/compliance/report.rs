@@ -1,4 +1,4 @@
-//! The Compliance report sections, exports and CSV stamping rules (features/compliance.js section 16), and the dispatch over both modules'
+//! The Compliance report sections, exports and CSV stamping rules (packs/nz/compliance.js section 16), and the dispatch over both modules'
 //! sections and exports.
 
 use super::access::{access_check, operators, sh_check};

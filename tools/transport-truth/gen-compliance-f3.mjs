@@ -35,7 +35,7 @@ function loadF3({ seed = 1, now = NOW } = {}) {
     return src.slice(0, i) + `\n  const __f = {};\n  ${fns}\n  return { __fn: __f,` + src.slice(i + '\n  return {'.length);
   };
   const CORE = ['util', 'model', 'registry', 'kit', 'engine', 'data', 'landuse', 'turns', 'calibrate', 'sim', 'sample'];
-  const src = CORE.map(n => `/* ${n}.js */\n` + read(n)).concat(['features/compliance', 'features/compliance-extra'].map(n => `/* ${n}.js */\n` + (n.endsWith('extra') ? expose(read(n)) : read(n)))).join('\n;\n');
+  const src = CORE.map(n => `/* ${n}.js */\n` + read(n)).concat(['packs/nz/compliance', 'packs/nz/compliance-extra'].map(n => `/* ${n}.js */\n` + (n.endsWith('extra') ? expose(read(n)) : read(n)))).join('\n;\n');
   vm.runInContext(src + `\n;globalThis.__core = { U, Store, Net, Importers, Scenarios, Sites, Engine, DataHub, Register, Kit, Registry, Calibrate, Turns, Compliance, ComplianceExtra,
     newProject, newScenario, defaultSettings, migrate, CLASSES, LANDUSES, CONTROLS, STATUS, CYCLE, SCENARIO_ROLES, FUNDING, REGISTER_TYPES };`, ctx, { filename: 'compliance-core.js' });
   return ctx.__core;
