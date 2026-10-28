@@ -610,6 +610,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | The native format's CBOR tag, its name and its file extension | 24 | 32.18 (owner action G77) |
 | NameScheme v1: the hash and its truncation, the bytes hashed, text rules, and the `TopoName` variants | 11, 20, 24 | 32.19 (owner action G78) |
 | The content hash and the NameId hash, and their implementation | 20, 23, 24 | 32.20 (owner action G79) |
+| Committed planes and points as Exact or Certified; how bounds add up through a history; ε_step | 6, 9, 11, 13 | 32.21 (owner action G120) |
 
 ### Answered by the pieces built so far
 
@@ -635,7 +636,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | Integer 2D carriers (n below 2^41, c below 2^82), depth-one 2D points and arcs with rational centres, as an exception to "every stored coordinate is whole grid steps", like 6.3's exception for planes | 14, 15 | After 32.2: pieces "2D carrier, depth-one point and rational-centre arc predicates in geom-num" and "2D-04" |
 | One rotation type for 2D and 3D: rational rotations from Pythagorean triples, as quaternions in 3D. Rotated planes then exceed 6.2's 384-bit assumption, so 6.2 and 11 must agree | 14 | 32.14 (owner action G44): one type, integer quaternions; rotated planes outside 6.2's budget are committed, so 384 bits stand; piece G46 builds it |
 | Sketch-plane frames: lattice frames only where cells are at most 16 steps, rotated frames elsewhere. Should section 13 build swept bodies on rotated planes from the exact carrier now? | 15 | Piece "Sketch planes and the 2D-3D maps" |
-| A committed plane whose proven deviation over its face is within q/2 counts as Exact, as a committed point does | 13 | Decision note to 6 and 9; piece "Plane commit routine" |
+| A committed plane whose proven deviation over its face is within q/2 counts as Exact, as a committed point does | 13 | 32.21 (owner action G120): no, committed planes and points stay Certified; piece "Plane commit routine" |
 | A designed irrational tie (four roof planes meeting at one apex) keeps the committed sign and reports a short edge, rather than failing | 13 | Piece "Plane commit routine" |
 | Derived values to name on the ladder: a resolution floor of 1q; epsilon_step = epsilon_fit/4; the solver block (tau = q/64, sigma_ind = 2^-12, sigma_dep = 1/(64S) and the rest); h_min = 8q; a default cap for close_near_contacts | 11, 12, 13, 15, 19 | Ladder module in geom-num, after 32.3 |
 | Commit rounding is q/2 per coordinate, about 135 nm as a distance at q0. 6.5 should say so | 19 | Editorial fix to 6.5 |
