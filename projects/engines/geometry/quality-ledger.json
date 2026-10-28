@@ -35,6 +35,78 @@
       "reason": "A defect guard: the plane comes from a sweep that skips planes with an empty side, and the partition puts each entry on the side of its bin, so both sides hold at least one entry and neither condition, alone or together, is ever true."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-bvh/src/cells.rs",
+      "mutant": "replace | with ^ in spread21",
+      "line_text": "x = (x | (x << 32)) & 0x001f_0000_0000_ffff;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two operands have no set bit in common: x holds bits 0 to 20 only, and x << 32 bits 32 to 52. Where no bit is set in both, a | b and a ^ b are the same number, so the code is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bvh/src/cells.rs",
+      "mutant": "replace | with ^ in spread21",
+      "line_text": "x = (x | (x << 16)) & 0x001f_0000_ff00_00ff;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two operands have no set bit in common: after the last mask x holds bits 0 to 15 and 48 to 52, and x << 16 bits 16 to 31 (the rest leave the word). Where no bit is set in both, a | b and a ^ b are the same number, so the code is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bvh/src/cells.rs",
+      "mutant": "replace | with ^ in spread21",
+      "line_text": "x = (x | (x << 8)) & 0x100f_00f0_0f00_f00f;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two operands have no set bit in common: after the last mask x holds bits 0 to 7, 24 to 31 and 48 to 52, and x << 8 bits 8 to 15, 32 to 39 and 56 to 60. Where no bit is set in both, a | b and a ^ b are the same number, so the code is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bvh/src/cells.rs",
+      "mutant": "replace | with ^ in spread21",
+      "line_text": "x = (x | (x << 4)) & 0x10c3_0c30_c30c_30c3;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two operands have no set bit in common: after the last mask x holds bits 0 to 3, 12 to 15, 24 to 27, 36 to 39, 48 to 51 and 60, and x << 4 bits 4 to 7, 16 to 19, 28 to 31, 40 to 43 and 52 to 55. Where no bit is set in both, a | b and a ^ b are the same number, so the code is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bvh/src/cells.rs",
+      "mutant": "replace | with ^ in spread21",
+      "line_text": "(x | (x << 2)) & 0x1249_2492_4924_9249",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two operands have no set bit in common: after the last mask x holds bits 6k and 6k + 1 (and 60), and x << 2 bits 6k + 2 and 6k + 3. Where no bit is set in both, a | b and a ^ b are the same number, so the code is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bvh/src/cells.rs",
+      "mutant": "replace | with ^ in spread",
+      "line_text": "u128::from(spread21(v)) | (u128::from(spread21(v >> 21)) << 63)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two operands have no set bit in common: spread21 fills bits 0 to 62 at most, and the shift by 63 moves the other half to bits 63 and up. Where no bit is set in both, a | b and a ^ b are the same number, so the code is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bvh/src/cells.rs",
+      "mutant": "replace | with ^ in interleave",
+      "line_text": "spread(x) | (spread(y) << 1) | (spread(z) << 2)",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "The two operands have no set bit in common: spread sets only bits whose index is a multiple of three, so x's bits are 0 mod 3, y's 1 mod 3 and z's 2 mod 3. Where no bit is set in both, a | b and a ^ b are the same number, so the code is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bvh/src/cells.rs",
+      "mutant": "replace | with ^ in CellIndex::build",
+      "line_text": "codes.push((u128::from(hi) << 64) | u128::from(lo));",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two operands have no set bit in common: lo is below 2^64 and hi << 64 has no bit below 64. Where no bit is set in both, a | b and a ^ b are the same number, so the code is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bvh/src/cells.rs",
+      "mutant": "replace < with <= in merge",
+      "line_text": "if b < a {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when b == a, and no two slots are equal: each holds its point's position in key order, and positions are distinct. So the merge takes the same slot first for every input."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-num/src/eft.rs",
       "mutant": "replace < with <= in abs",
       "line_text": "if x < 0.0 { -x } else { x }",
