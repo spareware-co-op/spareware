@@ -140,6 +140,12 @@ fn around(r: f64, exact: bool) -> (f64, f64) {
 /// representatives in `[−1, 3)` of its maxima and minima. The bounds are compared with
 /// [`min2`] and [`max2`], comparisons that may return either zero, which [`Interval::new`] makes
 /// +0.
+///
+/// `#[inline]`: whether rustc inlines it into [`Interval::sinpi`] and [`Interval::cospi`] must not
+/// depend on how the crate falls into codegen units. Unmarked, an unrelated edit elsewhere in the
+/// crate (G41's `rng::split_u128`) moved it into another unit, and the call cost aarch64's
+/// sinpi and cospi on extreme inputs 5.4% and 6.2% more instructions (G41's count gate).
+#[inline]
 fn periodic(
     x: Interval,
     f: fn(f64) -> f64,
