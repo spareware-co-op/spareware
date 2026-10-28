@@ -1054,7 +1054,7 @@
   "phase": "Phase 3",
   "crate": "geom-op, geom-name",
   "size": "Medium",
-  "done_when": "The 128-bit NameId value, its hashing under NameScheme v1 and the TopoName, Role, PieceKey and Ordinal types in geom-op; the hash-consed name graph in geom-name; everything sorted by name; the Weak ordinal order of 20.2 with UndecidedOrder; a duplicate-name detector in all test builds. Tests: hashes equal on every target; property tests of the ordinal rule.",
+  "done_when": "The 128-bit NameId value, its hashing under NameScheme v1 and the TopoName, Role, PieceKey and Ordinal types in geom-op; the hash-consed name graph in geom-name, which keeps each node's canonical bytes and refuses a second encoding under one NameId (32.19); everything sorted by name; the Weak ordinal order of 20.2 with UndecidedOrder; a duplicate-name detector in all test builds. Tests: hashes equal on every target; property tests of the ordinal rule.",
   "depends_on": [
    "G81",
    "G86",

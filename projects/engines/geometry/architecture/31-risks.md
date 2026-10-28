@@ -608,6 +608,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | The reference machine, and the kernel's shares of Spare Construct's targets | 23, 28 | 32.16 (owner action G72) |
 | Arena indices assigned in persistent-name order in every operation (8.2's amendment) | 8, 23, 24 | 32.17 (owner action G76) |
 | The native format's CBOR tag, its name and its file extension | 24 | 32.18 (owner action G77) |
+| NameScheme v1: the hash and its truncation, the bytes hashed, text rules, and the `TopoName` variants | 11, 20, 24 | 32.19 (owner action G78) |
 
 ### Answered by the pieces built so far
 
@@ -804,11 +805,11 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 
 | Question | Raised in | Decided in |
 | --- | --- | --- |
-| Bounded names become Bounded { kind, by, ends, ord: u16 }, because ord: u8 overflows at 256 edges between the same two faces | 11 | Decision note to 20.2; piece "Boolean names and history" |
+| Bounded names become Bounded { kind, by, ends, ord: u16 }, because ord: u8 overflows at 256 edges between the same two faces | 11 | 32.19 (owner action G78): `ends` taken, `ord` not, remaining collisions are `Weak`; piece "Boolean names and history" |
 | A regenerated step keeps its OpId. Re-importing a revised file is a new version of the same import operation, so Spare Construct's log treats an import as an editable operation with its source file as an input | 17, 24 | Note to 20.1; Spare Construct's operation log |
 | Reword "indices are never persisted" to "never used as a reference outside its body record", because arena positions are record-local in the file | 24 | Editorial fix to 20.1 |
 | A new resolution result, HistoryPruned, distinct from Deleted | 24 | Piece "PruneHistory operation and HistoryPruned resolution" |
-| The name scheme fixes NFC normalisation of hashed text, and its Unicode version | 24 | NameScheme v1 note; piece "geom-format: names, history, recipe envelope, attributes and provenance records" |
+| The name scheme fixes NFC normalisation of hashed text, and its Unicode version | 24 | 32.19 (owner action G78): NFC under Unicode 18.0.0 for v1; piece "geom-format: names, history, recipe envelope, attributes and provenance records" |
 | The 128-bit NameId value and the history record types live in geom-topo, so geom-mesh can use them; geom-name keeps the naming graph and resolution | 19 | 32.13: in geom-op, below every crate that names or records history; geom-name keeps the graph and resolution |
 
 ### Chapter 21: Determinism
