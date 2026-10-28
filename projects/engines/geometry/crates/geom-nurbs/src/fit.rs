@@ -71,6 +71,7 @@ use crate::basis::{Basis, MAX_DEGREE};
 use crate::budget::{charge, vec_for};
 use crate::curve::Curve;
 use crate::index::{add, get, mul, real, sub};
+use crate::ops::larger;
 use crate::point::Point;
 use crate::surface::Surface;
 
@@ -198,9 +199,7 @@ pub(crate) fn distance<const D: usize>(a: [f64; D], b: [f64; D]) -> Result<f64, 
         if !x.is_finite() {
             return Err(NurbsError::NotFinite);
         }
-        if x.abs() > scale {
-            scale = x.abs();
-        }
+        scale = larger(scale, x.abs());
     }
     if scale == 0.0 {
         return Ok(0.0);
@@ -362,7 +361,7 @@ pub(crate) fn surface_parameters<const D: usize>(
             expected,
         });
     }
-    let fewest = if rows < cols { rows } else { cols };
+    let fewest = rows.min(cols);
     if fewest < 2 {
         return Err(NurbsError::DataCount {
             points: fewest,
@@ -445,7 +444,7 @@ pub fn averaged_knots(
     meter: &mut WorkMeter<'_>,
 ) -> Result<Basis, NurbsError> {
     check_degree(degree)?;
-    check_increasing(parameters, true)?;
+    check_increasing(parameters)?;
     let count = parameters.len();
     if count <= degree {
         return Err(NurbsError::DataCount {
@@ -518,7 +517,7 @@ pub fn least_squares_knots(
     meter: &mut WorkMeter<'_>,
 ) -> Result<Basis, NurbsError> {
     check_degree(degree)?;
-    check_increasing(parameters, true)?;
+    check_increasing(parameters)?;
     let least = add(degree, 1)?;
     if count < least || count > parameters.len() {
         return Err(NurbsError::ControlCount {
@@ -551,16 +550,15 @@ pub fn least_squares_knots(
     Basis::new(degree, knots)
 }
 
-/// Checks that parameters are finite and increase: strictly if `strict`, otherwise never
-/// decrease.
-pub(crate) fn check_increasing(u: &[f64], strict: bool) -> Result<(), NurbsError> {
+/// Checks that parameters are finite and strictly increase.
+pub(crate) fn check_increasing(u: &[f64]) -> Result<(), NurbsError> {
     let mut previous: Option<f64> = None;
     for (index, &x) in u.iter().enumerate() {
         if !x.is_finite() {
             return Err(NurbsError::ParameterOrder { index });
         }
         if let Some(p) = previous
-            && (x < p || (strict && x == p))
+            && x <= p
         {
             return Err(NurbsError::ParameterOrder { index });
         }

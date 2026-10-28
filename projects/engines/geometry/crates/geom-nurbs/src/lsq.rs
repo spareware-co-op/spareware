@@ -73,6 +73,7 @@ use crate::fit::{
     data, least_squares_knots, surface_parameters,
 };
 use crate::index::{add, get, mul, real, sub};
+use crate::ops::larger;
 use crate::point::Point;
 use crate::surface::Surface;
 
@@ -237,10 +238,10 @@ fn finish<const D: usize>(
     let error = largest(&curve_errors(meter, &curve, q, &u)?);
     let mut constraint_error = 0.0_f64;
     for c in constraints {
-        let e = distance_bound(c.value, curve_derivative(&curve, c.parameter, c.order)?)?;
-        if e > constraint_error {
-            constraint_error = e;
-        }
+        constraint_error = larger(
+            constraint_error,
+            distance_bound(c.value, curve_derivative(&curve, c.parameter, c.order)?)?,
+        );
     }
     Ok(CurveFit {
         curve,
