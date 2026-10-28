@@ -19,9 +19,9 @@
 //!   sort sorts each run, in place: `geom-run`'s general stable sort calls a key function per
 //!   comparison and was five times slower on ten million points.
 //! - [`CellIndex::within`] answers the keys of the points at most a radius r from a grid point,
-//!   decided exactly on squared integer distances, ascending. Its search box [c − r, c + r] fits a
-//!   cell of side 2^L for the smallest L with 2^L > 2r, so it meets at most two such cells on each
-//!   axis: at most eight runs are scanned.
+//!   decided exactly on squared integer distances, ascending. Its search box [c − r, c + r] meets
+//!   at most three cells of side 2^L on each axis for the smallest L with 2^L > r, and the cells
+//!   the ball does not reach are skipped: at most 27 runs are scanned.
 //! - [`CellIndex::pairs_within`] answers every pair of points at most r apart, as (smaller key,
 //!   larger key), ascending, the points' searches run as one `geom-run` phase.
 //!
@@ -46,7 +46,7 @@
 //! Cost: building is O(n log n): a sort by key when the input is not in key order, n codes, the
 //! runs' sorts and ⌈log₂(n/32,768)⌉ rounds of merges, with a copy of the points in key order and
 //! two buffers of n slots (24 bytes each) at the peak of a round. A search is two binary searches per
-//! cell (at most eight cells) and one exact test per point in those cells. The pairs are one search
+//! cell (at most 27 cells) and one exact test per point in those cells. The pairs are one search
 //! per point.
 
 #![allow(
@@ -90,6 +90,7 @@ const ONE: ChunkPlan = ChunkPlan::fixed::<1>();
 const SORT: Phase = Phase::new("cell index: sort by key");
 const RUNS: Phase = Phase::new("cell index: code and sort runs");
 const MERGES: Phase = Phase::new("cell index: merge runs");
+const GATHER: Phase = Phase::new("cell index: gather");
 const PAIRS: Phase = Phase::new("cell index: pairs");
 
 /// A point's place in the order: its code, as its high and low 64 bits, and its position in key
@@ -188,6 +189,18 @@ fn sorted_by_key(
     Ok(sorted)
 }
 
+/// The ranges of runs of [`RUN`] items among `n`.
+fn runs_of(n: usize) -> Result<Vec<(usize, usize)>, BvhError> {
+    let mut ranges = Vec::new();
+    ranges
+        .try_reserve_exact(n.div_ceil(RUN))
+        .map_err(|_| BvhError::OutOfMemory)?;
+    for start in (0..n).step_by(RUN) {
+        ranges.push((start, start.saturating_add(RUN).min(n)));
+    }
+    Ok(ranges)
+}
+
 /// The slots of `by_key` (at most `u32::MAX` points), sorted: runs of [`RUN`] points coded and
 /// sorted as one `geom-run` phase, then merged in pairs, a phase per round, until one run is left.
 /// A run is sorted by `core`'s unstable sort, which allocates nothing and, the slots being
@@ -198,13 +211,7 @@ fn sorted_slots(
     exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<Slot>, BvhError> {
-    let mut ranges = Vec::new();
-    ranges
-        .try_reserve_exact(by_key.len().div_ceil(RUN))
-        .map_err(|_| BvhError::OutOfMemory)?;
-    for start in (0..by_key.len()).step_by(RUN) {
-        ranges.push((start, start.saturating_add(RUN).min(by_key.len())));
-    }
+    let ranges = runs_of(by_key.len())?;
     let mut runs = exec
         .try_map(meter, RUNS, ONE, &ranges, |_, &(start, end), m| {
             let points = by_key.get(start..end).ok_or(BvhError::Defect)?;
@@ -290,6 +297,27 @@ impl CellIndex {
         }
         let by_key = sorted_by_key(points, exec, meter)?;
         let slots = sorted_slots(&by_key, exec, meter)?;
+        // The codes and points in slot order, gathered in runs as one phase, then joined.
+        let ranges = runs_of(slots.len())?;
+        let parts = exec
+            .try_map(meter, GATHER, ONE, &ranges, |_, &(start, end), _| {
+                let part = slots.get(start..end).ok_or(BvhError::Defect)?;
+                let mut codes = Vec::new();
+                codes
+                    .try_reserve_exact(part.len())
+                    .map_err(|_| BvhError::OutOfMemory)?;
+                let mut sorted = Vec::new();
+                sorted
+                    .try_reserve_exact(part.len())
+                    .map_err(|_| BvhError::OutOfMemory)?;
+                for &(hi, lo, at) in part {
+                    codes.push((u128::from(hi) << 64) | u128::from(lo));
+                    let i = usize::try_from(at).map_err(|_| BvhError::Defect)?;
+                    sorted.push(*by_key.get(i).ok_or(BvhError::Defect)?);
+                }
+                Ok((codes, sorted))
+            })
+            .map_err(|e: RunError<BvhError>| BvhError::from(e))?;
         let mut codes = Vec::new();
         codes
             .try_reserve_exact(slots.len())
@@ -298,10 +326,9 @@ impl CellIndex {
         sorted
             .try_reserve_exact(slots.len())
             .map_err(|_| BvhError::OutOfMemory)?;
-        for (hi, lo, at) in slots {
-            codes.push((u128::from(hi) << 64) | u128::from(lo));
-            let i = usize::try_from(at).map_err(|_| BvhError::Defect)?;
-            sorted.push(*by_key.get(i).ok_or(BvhError::Defect)?);
+        for (c, s) in parts {
+            codes.extend_from_slice(&c);
+            sorted.extend_from_slice(&s);
         }
         Ok(CellIndex {
             codes,
@@ -429,8 +456,8 @@ impl CellIndex {
             *l = u64::try_from(a).map_err(|_| BvhError::Defect)?;
             *h = u64::try_from(b).map_err(|_| BvhError::Defect)?;
         }
-        // The smallest level L with 2^L above every side of the box: the box meets at most two
-        // cells of side 2^L on each axis. Sides are at most 2^41 − 1, so L ≤ 41.
+        // The smallest level L with 2^L above half of every side of the box: the box meets at
+        // most three cells of side 2^L on each axis. Sides are at most 2^41 − 1, so L ≤ 41.
         let side = lo
             .iter()
             .zip(hi.iter())
@@ -438,17 +465,34 @@ impl CellIndex {
             .max()
             .unwrap_or(0);
         let level = u64::BITS
-            .saturating_sub(side.leading_zeros())
+            .saturating_sub((side >> 1).leading_zeros())
             .min(AXIS_BITS);
-        let cells = |l: u64, h: u64| -> [Option<u64>; 2] {
-            let (a, b) = (l >> level, h >> level);
-            [Some(a), (b != a).then_some(b)]
-        };
         let span = 1u128 << level.saturating_mul(3);
+        let width = (1u64 << level).saturating_sub(1);
+        // The centre in offset coordinates, and its squared distance from a cell along one axis.
+        let centre = c.map(|v| v.saturating_add(i128::from(OFFSET)));
+        let gap = |cell: u64, at: i128| -> u128 {
+            let first = i128::from(cell << level);
+            let last = first.saturating_add(i128::from(width));
+            let g = if at < first {
+                first.saturating_sub(at)
+            } else {
+                at.saturating_sub(last).max(0)
+            };
+            g.unsigned_abs().saturating_mul(g.unsigned_abs())
+        };
         let ([lx, ly, lz], [hx, hy, hz]) = (lo, hi);
-        for cx in cells(lx, hx).into_iter().flatten() {
-            for cy in cells(ly, hy).into_iter().flatten() {
-                for cz in cells(lz, hz).into_iter().flatten() {
+        let [ox, oy, oz] = centre;
+        for cx in (lx >> level)..=(hx >> level) {
+            for cy in (ly >> level)..=(hy >> level) {
+                for cz in (lz >> level)..=(hz >> level) {
+                    // A cell the ball does not reach holds no answer.
+                    let near = gap(cx, ox)
+                        .saturating_add(gap(cy, oy))
+                        .saturating_add(gap(cz, oz));
+                    if near > r2 {
+                        continue;
+                    }
                     let base = interleave(cx << level, cy << level, cz << level);
                     let end = base.checked_add(span).ok_or(BvhError::Defect)?;
                     let start = self.codes.partition_point(|&k| k < base);
