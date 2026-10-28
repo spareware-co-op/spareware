@@ -128,6 +128,21 @@ fn naive(p: P3) -> u128 {
     code
 }
 
+/// The index's order against a brute-force sort of (code, key): every point once, in order.
+fn check_order(idx: &CellIndex, pts: &[Point]) {
+    let mut want: Vec<(u128, u64)> = pts.iter().map(|p| (naive(p.at), p.key)).collect();
+    want.sort_unstable();
+    let got: Vec<(u128, u64)> = idx
+        .codes()
+        .iter()
+        .zip(idx.points())
+        .map(|(c, p)| (*c, p.key))
+        .collect();
+    assert_eq!(idx.codes().len(), pts.len());
+    assert_eq!(idx.points().len(), pts.len());
+    assert_eq!(got, want);
+}
+
 /// The sets: sparse over the frame, dense in a small cube, clustered, at the corners, all equal.
 fn sets(label: &str) -> Vec<(Vec<Point>, Vec<u64>)> {
     let seed = resolve(label, Seed::DEFAULT).unwrap();
@@ -248,6 +263,7 @@ fn searches_equal_brute_force() {
             assert_eq!(morton(p.at).unwrap(), naive(p.at));
         }
         let idx = CellIndex::build(&pts, &Exec::serial(), &mut meter()).unwrap();
+        check_order(&idx, &pts);
         assert_eq!(idx.len(), pts.len());
         assert!(!idx.is_empty());
         assert!(idx.codes().windows(2).all(|w| w[0] <= w[1]));
@@ -322,6 +338,9 @@ fn the_same_index_for_any_order_and_any_pool() {
         assert_eq!(morton(p.at).unwrap(), naive(p.at));
     }
     let reference = CellIndex::build(&pts, &Exec::serial(), &mut meter()).unwrap();
+    // Several runs of the code sort, so their merges are checked too.
+    assert!(pts.len() > 32_768);
+    check_order(&reference, &pts);
     let bytes = reference.to_bytes().unwrap();
     let pairs = reference
         .pairs_within(2, &Exec::serial(), &mut meter())
