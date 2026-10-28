@@ -7,7 +7,7 @@ One curve family serves 2D and 3D. Each kind is stored as itself, exactly, never
 **Curves (2D and 3D)**
 
 - Line, ray, infinite line
-- Circle and arc; ellipse and elliptical arc (by parameter, not polar angle); parabola; hyperbola
+- Circle and arc; ellipse and elliptical arc (by parameter, not polar angle; centre and major axis on the grid and a bounded axis ratio p/q, owner action G185, 32.25); parabola; hyperbola
 - Helix (exact; neither STEP nor IFC has one)
 - Clothoid, and IFC 4.3's cosine, sine and second-, third- and seventh-order polynomial spirals, for road and rail alignments
 - Polynomial curve; circular involute
