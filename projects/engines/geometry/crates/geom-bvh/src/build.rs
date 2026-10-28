@@ -123,10 +123,6 @@ impl<const D: usize> Bounds<D> {
         self.add(&other.lo, &other.hi);
     }
 
-    fn is_empty(&self) -> bool {
-        self.lo.iter().zip(&self.hi).any(|(l, h)| l > h)
-    }
-
     fn aabb(&self) -> Aabb<D> {
         Aabb::from_corners(self.lo, self.hi)
     }
@@ -357,7 +353,7 @@ fn grow<const D: usize>(
         cover: top.cover,
     });
     while let Some(f) = stack.pop() {
-        if f.depth > MAX_DEPTH || f.cover.bbox.is_empty() {
+        if f.depth > MAX_DEPTH {
             return Err(BvhError::Defect);
         }
         let count = f.hi.checked_sub(f.lo).ok_or(BvhError::Defect)?;

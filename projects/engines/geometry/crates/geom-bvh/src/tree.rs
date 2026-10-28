@@ -134,7 +134,7 @@ fn sorted_by_key<const D: usize>(
     exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<Entry<D>>, BvhError> {
-    if u32::try_from(entries.len()).is_err() || entries.len() == usize::MAX {
+    if u32::try_from(entries.len()).is_err() {
         return Err(BvhError::TooManyEntries);
     }
     let mut sorted = Vec::new();
@@ -254,27 +254,25 @@ impl<const D: usize> BoxTree<D> {
     ///
     /// # Errors
     ///
-    /// [`BvhError::Defect`] if the nodes are not a tree of depth at most
-    /// [`build::MAX_DEPTH`], which construction rules out.
+    /// [`BvhError::Defect`] if a child index is not a node of the tree, which construction rules
+    /// out; [`BvhError::OutOfMemory`].
     pub fn depth(&self) -> Result<usize, BvhError> {
         if self.nodes.is_empty() {
             return Ok(0);
         }
         let mut deepest = 0;
-        let mut stack = [(0u32, 0usize); MAX_DEPTH + 2];
-        let mut top = 1usize;
-        while let Some(t) = top.checked_sub(1) {
-            top = t;
-            let (node, depth) = *stack.get(t).ok_or(BvhError::Defect)?;
-            if depth > deepest {
-                deepest = depth;
-            }
+        let mut stack = Vec::new();
+        stack
+            .try_reserve(MAX_DEPTH)
+            .map_err(|_| BvhError::OutOfMemory)?;
+        stack.push((0u32, 0usize));
+        while let Some((node, depth)) = stack.pop() {
+            deepest = deepest.max(depth);
             if let NodeKind::Inner { left, right } = at(&self.nodes, node)?.kind {
                 let next = depth.checked_add(1).ok_or(BvhError::Defect)?;
-                for child in [right, left] {
-                    *stack.get_mut(top).ok_or(BvhError::Defect)? = (child, next);
-                    top = top.checked_add(1).ok_or(BvhError::Defect)?;
-                }
+                stack.try_reserve(2).map_err(|_| BvhError::OutOfMemory)?;
+                stack.push((right, next));
+                stack.push((left, next));
             }
         }
         Ok(deepest)

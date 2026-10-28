@@ -76,6 +76,10 @@ impl Recorder {
             self.bytes.extend_from_slice(&k.to_le_bytes());
         }
     }
+    fn work(&mut self, meter: &WorkMeter<'_>) {
+        self.bytes
+            .extend_from_slice(&meter.used().work.to_le_bytes());
+    }
     fn pairs(&mut self, pairs: &[(u64, u64)]) {
         self.bytes
             .extend_from_slice(&(pairs.len() as u64).to_le_bytes());
@@ -88,14 +92,24 @@ impl Recorder {
         let mut t = BoxTree::build(a, &Exec::serial(), &mut meter()).unwrap();
         let u = BoxTree::build(b, &Exec::serial(), &mut meter()).unwrap();
         self.bytes.extend_from_slice(&t.to_bytes().unwrap());
+        // Each answer, and the work its walk charged, which pins the walk itself.
         for _ in 0..8 {
             let q = set::<D>(rng, 1, 1 << 30, 1 << 28)[0].bbox;
-            self.keys(&t.overlapping(&q, &mut meter()).unwrap());
+            let mut m = meter();
+            self.keys(&t.overlapping(&q, &mut m).unwrap());
+            self.work(&m);
         }
         if a.len() <= 3000 {
-            self.pairs(&t.pairs(&mut meter()).unwrap());
+            let mut m = meter();
+            self.pairs(&t.pairs(&mut m).unwrap());
+            self.work(&m);
         }
-        self.pairs(&t.pairs_with(&u, &mut meter()).unwrap());
+        let mut m = meter();
+        self.pairs(&t.pairs_with(&u, &mut m).unwrap());
+        self.work(&m);
+        let mut m = meter();
+        self.pairs(&u.pairs_with(&t, &mut m).unwrap());
+        self.work(&m);
         let moved: Vec<Entry<D>> = a
             .iter()
             .step_by(3)

@@ -158,13 +158,13 @@
         },
         {
           "id": "geom-bvh/tree",
-          "what": "The box tree of geom-bvh (piece G54): 2D and 3D trees over 22 fixed sets of 1 to 9,000 boxes (sparse, dense, nested and all equal, the largest built with the parallel subtree phase), each tree's canonical bytes, the keys meeting eight query boxes, its pairs, its pairs with another tree, and one refit of each, 3,677,031 bytes in the encoding of tests/tree_determinism.rs.",
+          "what": "The box tree of geom-bvh (piece G54): 2D and 3D trees over 22 fixed sets of 1 to 9,000 boxes (sparse, dense, nested and all equal, the largest built with the parallel subtree phase), each tree's canonical bytes, the keys meeting eight query boxes, its pairs and its pairs with another tree both ways, the work each of those walks charged, and one refit of each, 3,970,021 bytes in the encoding of tests/tree_determinism.rs.",
           "check": {
             "crate": "geom-bvh",
             "test": "tree_determinism",
             "function": "tree_golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "ecd8228cf81b41c9f8ace8cf47833b3878ec7c3f85185e2c44dc8bec0df9af35"
+          "sha256": "9286771316237554822844bb7bebfe4dfb2ba38b8f8f1ebdee5e23100e383ee8"
         }
       ]
     }

@@ -196,12 +196,8 @@ impl<const D: usize> Aabb<D> {
             .zip(&other.lo)
             .zip(&other.hi)
         {
-            if ol < l {
-                *l = *ol;
-            }
-            if oh > h {
-                *h = *oh;
-            }
+            *l = (*l).min(*ol);
+            *h = (*h).max(*oh);
         }
         out
     }

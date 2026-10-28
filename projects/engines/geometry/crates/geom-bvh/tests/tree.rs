@@ -463,6 +463,11 @@ fn boxes_convert_round_and_pad_by_class() {
     let g = FBox2::new(F2::new(-2.5, 7.0).unwrap(), F2::new(-2.0, 7.5).unwrap()).unwrap();
     let flat = Aabb::from_fbox2(&g, Inflation::Exact).unwrap();
     assert_eq!((flat.lo(), flat.hi()), ([-3, 7], [-2, 8]));
+    // A zero bound pads nothing, as Exact does.
+    assert_eq!(
+        exact.inflated(Inflation::Certified(Real::new(0.0).unwrap())),
+        Ok(exact)
+    );
     // Refusals.
     let neg = Inflation::Certified(Real::new(-0.5).unwrap());
     assert_eq!(exact.inflated(neg), Err(BvhError::BadBound));
@@ -527,4 +532,27 @@ fn errors_read_as_they_say() {
     unique.sort();
     unique.dedup();
     assert_eq!(unique.len(), texts.len());
+}
+
+#[test]
+fn a_refit_rebuilds_only_past_twice_the_built_cost() {
+    // One 2D box of 2 × 2 grid points: cost 2 + 2 = 4. Grown to 6 × 2 the cost is 8, exactly
+    // twice: not past the limit, so a refit. Grown to 7 × 2 it is 9, past it: a rebuild.
+    let key = 7;
+    let entry = |hi: [i64; 2]| Entry {
+        key,
+        bbox: Aabb::new([0, 0], hi).unwrap(),
+    };
+    let mut t = BoxTree::build(&[entry([1, 1])], &Exec::serial(), &mut meter()).unwrap();
+    assert_eq!(t.built_cost(), 4);
+    assert_eq!(
+        t.refit(&[entry([5, 1])], &Exec::serial(), &mut meter()),
+        Ok(Refitted::Refit)
+    );
+    assert_eq!((t.cost(), t.built_cost()), (8, 4));
+    assert_eq!(
+        t.refit(&[entry([6, 1])], &Exec::serial(), &mut meter()),
+        Ok(Refitted::Rebuilt)
+    );
+    assert_eq!((t.cost(), t.built_cost()), (9, 9));
 }

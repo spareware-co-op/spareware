@@ -1,7 +1,7 @@
 //! The box tree's queries: the entries whose boxes meet a box, the pairs of entries whose boxes
 //! meet within one tree, and the pairs between two trees.
 //!
-//! What it does: each query walks the tree from the root with an explicit stack of fixed size,
+//! What it does: each query walks the tree from the root with an explicit stack,
 //! skipping every node whose box misses, and charges one unit of its meter per node, or pair of
 //! nodes, it visits. It collects the keys it finds and sorts them.
 //!
@@ -13,9 +13,10 @@
 //!   answer does not depend on the tree's shape, a refit, a rebuild or the thread count it was
 //!   built with.
 //! - **No recursion, bounded stacks.** A tree is at most [`MAX_DEPTH`] deep, so a walk of one tree
-//!   needs at most `MAX_DEPTH + 1` slots, of two trees at most `2·MAX_DEPTH + 1` (each step
-//!   descends one side, pushing two), and of one tree against itself at most `4·MAX_DEPTH + 1`
-//!   (a node against itself pushes three). The stacks are arrays of those sizes.
+//!   holds at most `MAX_DEPTH + 1` nodes on its stack, of two trees at most `2·MAX_DEPTH + 1` pairs
+//!   (each step descends one side, pushing two), and of one tree against itself at most
+//!   `4·MAX_DEPTH + 1` (a node against itself pushes three). The stacks are vectors with room for
+//!   [`MAX_DEPTH`] reserved, grown fallibly beyond it.
 //! - **Cancellable, never partial.** The meter polls the caller's cancellation at fixed charges;
 //!   a stopped query returns [`BvhError::Stopped`] and no keys.
 //!
@@ -38,38 +39,17 @@ use crate::build::MAX_DEPTH;
 use crate::error::BvhError;
 use crate::tree::{BoxTree, Entry, NodeKind, at};
 
-/// A stack of fixed size.
-struct Stack<T, const N: usize> {
-    items: [T; N],
-    top: usize,
-}
-
-impl<T: Copy + Default, const N: usize> Stack<T, N> {
-    fn new() -> Self {
-        Stack {
-            items: [T::default(); N],
-            top: 0,
-        }
-    }
-
-    fn push(&mut self, item: T) -> Result<(), BvhError> {
-        *self.items.get_mut(self.top).ok_or(BvhError::Defect)? = item;
-        self.top = self.top.checked_add(1).ok_or(BvhError::Defect)?;
-        Ok(())
-    }
-
-    fn pop(&mut self) -> Option<T> {
-        self.top = self.top.checked_sub(1)?;
-        self.items.get(self.top).copied()
-    }
+/// An empty explicit stack, with room reserved for a walk of one tree's depth.
+fn new_stack<T>() -> Result<Vec<T>, BvhError> {
+    let mut s = Vec::new();
+    s.try_reserve(MAX_DEPTH)
+        .map_err(|_| BvhError::OutOfMemory)?;
+    Ok(s)
 }
 
 /// Appends `item`, reserving fallibly.
 fn put<T>(out: &mut Vec<T>, item: T) -> Result<(), BvhError> {
-    if out.len() == out.capacity() {
-        out.try_reserve(out.len().max(16))
-            .map_err(|_| BvhError::OutOfMemory)?;
-    }
+    out.try_reserve(1).map_err(|_| BvhError::OutOfMemory)?;
     out.push(item);
     Ok(())
 }
@@ -98,8 +78,8 @@ impl<const D: usize> BoxTree<D> {
         if self.nodes().is_empty() {
             return Ok(out);
         }
-        let mut stack: Stack<u32, { MAX_DEPTH + 1 }> = Stack::new();
-        stack.push(0)?;
+        let mut stack: Vec<u32> = new_stack()?;
+        put(&mut stack, 0)?;
         while let Some(n) = stack.pop() {
             meter.charge(1)?;
             let node = at(self.nodes(), n)?;
@@ -115,8 +95,8 @@ impl<const D: usize> BoxTree<D> {
                     }
                 }
                 NodeKind::Inner { left, right } => {
-                    stack.push(right)?;
-                    stack.push(left)?;
+                    put(&mut stack, right)?;
+                    put(&mut stack, left)?;
                 }
             }
         }
@@ -134,8 +114,8 @@ impl<const D: usize> BoxTree<D> {
         if self.nodes().is_empty() {
             return Ok(out);
         }
-        let mut stack: Stack<(u32, u32), { 4 * MAX_DEPTH + 1 }> = Stack::new();
-        stack.push((0, 0))?;
+        let mut stack: Vec<(u32, u32)> = new_stack()?;
+        put(&mut stack, (0, 0))?;
         while let Some((a, b)) = stack.pop() {
             meter.charge(1)?;
             let (na, nb) = (at(self.nodes(), a)?, at(self.nodes(), b)?);
@@ -152,9 +132,9 @@ impl<const D: usize> BoxTree<D> {
                         }
                     }
                     NodeKind::Inner { left, right } => {
-                        stack.push((left, right))?;
-                        stack.push((right, right))?;
-                        stack.push((left, left))?;
+                        put(&mut stack, (left, right))?;
+                        put(&mut stack, (right, right))?;
+                        put(&mut stack, (left, left))?;
                     }
                 }
                 continue;
@@ -183,8 +163,8 @@ impl<const D: usize> BoxTree<D> {
         if self.nodes().is_empty() || other.nodes().is_empty() {
             return Ok(out);
         }
-        let mut stack: Stack<(u32, u32), { 2 * MAX_DEPTH + 1 }> = Stack::new();
-        stack.push((0, 0))?;
+        let mut stack: Vec<(u32, u32)> = new_stack()?;
+        put(&mut stack, (0, 0))?;
         while let Some((a, b)) = stack.pop() {
             meter.charge(1)?;
             let (na, nb) = (at(self.nodes(), a)?, at(other.nodes(), b)?);
@@ -204,9 +184,9 @@ impl<const D: usize> BoxTree<D> {
 
 /// One step of a walk of two nodes whose boxes meet: their leaves' pairs if both are leaves,
 /// otherwise the larger inner node (the left one on a tie, or the inner one) split in two.
-fn descend<const D: usize, const N: usize>(
+fn descend<const D: usize>(
     pair: &Pair<'_, D>,
-    stack: &mut Stack<(u32, u32), N>,
+    stack: &mut Vec<(u32, u32)>,
     out: &mut Vec<(u64, u64)>,
     key: impl Fn(u64, u64) -> (u64, u64),
 ) -> Result<(), BvhError> {
@@ -224,12 +204,12 @@ fn descend<const D: usize, const N: usize>(
             }
         }
         (NodeKind::Inner { left, right }, NodeKind::Leaf { .. }) => {
-            stack.push((right, b))?;
-            stack.push((left, b))?;
+            put(stack, (right, b))?;
+            put(stack, (left, b))?;
         }
         (NodeKind::Leaf { .. }, NodeKind::Inner { left, right }) => {
-            stack.push((a, right))?;
-            stack.push((a, left))?;
+            put(stack, (a, right))?;
+            put(stack, (a, left))?;
         }
         (
             NodeKind::Inner { left, right },
@@ -239,11 +219,11 @@ fn descend<const D: usize, const N: usize>(
             },
         ) => {
             if na.bbox().area() >= nb.bbox().area() {
-                stack.push((right, b))?;
-                stack.push((left, b))?;
+                put(stack, (right, b))?;
+                put(stack, (left, b))?;
             } else {
-                stack.push((a, br))?;
-                stack.push((a, bl))?;
+                put(stack, (a, br))?;
+                put(stack, (a, bl))?;
             }
         }
     }
