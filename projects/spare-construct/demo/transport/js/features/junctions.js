@@ -1365,7 +1365,7 @@ ${parts || '<p>No turning volumes. Run the model first.</p>'}
         ['SIDRA hand-off', a(STANDARDS.sidra.url, STANDARDS.sidra.edition), `${v(STANDARDS.sidra)} Leg and turn codes follow SIDRA drive-on-left conventions; the loader is untested against a live install.`]];
     } });
 
-  // Report sections (js/features/report.js builds the document from Registry.list('report'))
+  // Report sections (js/packs/nz/report.js builds the document from Registry.list('report'))
   /* The scenarios a report section covers: the report's assessed set (ctx.sel, else Report.pick: existing, without,
      with, mitigation), so a sensitivity or option run the author did not choose stays out. Comparisons run without →
      with and with → mitigation (existing → with when there is no same-year without). ctx.scenarios, when given, and a
@@ -1393,7 +1393,7 @@ ${parts || '<p>No turning volumes. Run the model first.</p>'}
     const es = entries(sc, res);
     return (ext ? es.filter(e => ext.includes(e.id) || e.nodes.some(x => ext.includes(x))) : es.slice().sort((a, b) => (b.nr.delay || 0) - (a.nr.delay || 0))).slice(0, n).map(e => e.id);
   }
-  /* The report's own section 4.2.3 (report-junctions, js/features/report.js) prints Table J2 per scenario, Table J3
+  /* The report's own section 4.2.3 (report-junctions, js/packs/nz/report.js) prints Table J2 per scenario, Table J3
      without → with, the queue storage check, the level of service definitions and D3. These sections add only what it
      does not: the TTOC-06 flow-scale test, the turn-level movement summaries (Appendix C, after its approach-level
      tables), the comparisons J3 leaves out (existing → with, with → mitigation) and the turning diagrams. */

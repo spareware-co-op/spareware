@@ -1,4 +1,4 @@
-//! E27 trigger screening, the ITA scope and proportionality (features/compliance.js sections 6 and 7).
+//! E27 trigger screening, the ITA scope and proportionality (packs/nz/compliance.js sections 6 and 7).
 
 use super::access::access_geo;
 use super::authority::{authorities, site_info, site_point};

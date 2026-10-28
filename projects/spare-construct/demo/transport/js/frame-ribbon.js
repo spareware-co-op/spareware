@@ -27,7 +27,10 @@ const FrameRibbon = (() => {
       return { tool: View.tool, sim: !!View.sim, stale: UI.staleRuns().length, undo: u.length ? (last && last.label) || 'the last change' : '', redo: Store.redoStack.length > 0,
         engine: eb ? eb.textContent.trim() : '', period: Store.S.period, scenario: Store.sc ? Store.sc.name : '' };
     },
-    tools: () => UI.tools().map(d => ({ id: d.id, label: d.label, short: d.short || d.label, key: d.key || '', group: d.group || 'analyse', svg: d.iconSvgPath || '' })),
+    // The project's country pack (js/packs/README.md): what a pack registers carries its id in pack, and the frame gives the pack a tab of its own
+    pack() { const p = Registry.country(); return p ? { id: p.id, name: p.name, summary: p.summary || '' } : null; },
+    tools: () => UI.tools().map(d => ({ id: d.id, label: d.label, short: d.short || d.label, key: d.key || '', group: d.group || 'analyse', svg: d.iconSvgPath || '', pack: d.pack || '' })),
+    tabs: () => Registry.list('tabs', d => !(d.hidden && Registry.call(d, 'hidden'))).map(d => ({ id: d.id, label: d.label, tip: d.title || '', pack: d.pack || '', open: () => UI.openTab(d.id) })),
     setTool: id => UI.setTool(id, true),
     run: () => UI.runModel(),
     // The same choices as the ▾ beside Run model
@@ -44,11 +47,11 @@ const FrameRibbon = (() => {
     importRoads: () => Dialogs.importRoads(),
     undo: () => UI.undo(),
     redo: () => UI.undo(true),
-    topbar: () => Registry.list('topbar', d => !!d.run).map(d => ({ id: d.id, label: d.label || d.title || d.id, tip: d.title || '', run: () => Registry.call(d, 'run') })),
-    menu: () => Registry.list('menu').map(d => ({ id: d.id, label: label(d), keys: d.keys || '', danger: !!d.danger, disabled: !enabled(d), run: () => Registry.call(d, 'run') })),
+    topbar: () => Registry.list('topbar', d => !!d.run).map(d => ({ id: d.id, label: d.label || d.title || d.id, tip: d.title || '', pack: d.pack || '', run: () => Registry.call(d, 'run') })),
+    menu: () => Registry.list('menu').map(d => ({ id: d.id, label: label(d), keys: d.keys || '', danger: !!d.danger, disabled: !enabled(d), pack: d.pack || '', run: () => Registry.call(d, 'run') })),
     // The whole ☰ Menu, as the strip shows it: separators are null, and Open recent and Export have sub-lists
     mainMenu: () => UI.mainMenu(),
-    exports: () => UI.exportItems(),
+    exports() { const defs = Registry.list('exports'); return UI.exportItems().map((x, i) => ({ ...x, pack: (defs[i] && defs[i].pack) || '' })); },   // the same order
     refreshRecent: () => UI.refreshRecent(),
   };
 })();
