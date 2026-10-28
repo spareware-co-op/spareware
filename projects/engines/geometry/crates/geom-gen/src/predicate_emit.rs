@@ -61,6 +61,7 @@ use geom_num::grid::{COORD_BITS, COORD_MAX};
 
 use std::collections::BTreeSet;
 
+use crate::bignum::Nat;
 use crate::predicate_derive::{Derivation, Monomial, ScaleExpr, StepCert, Width};
 use crate::predicate_lang::{Axis, InputKind, Op, RUST_WORDS, Step, StepKind, max_name};
 
@@ -1256,11 +1257,26 @@ fn value_fn(
         parameters,
         &format!("Option<{}>", style.held(root.width).rust()),
     );
-    let mut wide_seen = false;
+    let mut widths_seen = Vec::new();
     for (step, cert) in d.steps.iter().zip(&d.certs) {
-        if twin && cert.width > Width::I128 && !wide_seen {
-            wide_seen = true;
-            line(out, "    proof! { lemma_half_base_4(); }");
+        if twin && cert.width > Width::I128 && !widths_seen.contains(&cert.width) {
+            widths_seen.push(cert.width);
+            line(
+                out,
+                &format!("    proof! {{ lemma_half_base_{}(); }}", cert.width.limbs()),
+            );
+        }
+        if let (true, StepKind::LoadRounded { input }) = (twin, &step.kind) {
+            let bits = rounded_bits(d, input)?;
+            let limit = Nat::pow2(bits)
+                .and_then(|p| p.to_decimal())
+                .ok_or_else(|| EmitError("a range's decimal".to_owned()))?;
+            line(
+                out,
+                &format!(
+                    "    proof! {{ assert(1u128 << {bits}u32 == {limit}u128) by (bit_vector); }}"
+                ),
+            );
         }
         if let (
             true,
@@ -1274,6 +1290,20 @@ fn value_fn(
             line(out, &product_proof(d, *left, *right)?);
         }
         line(out, &exact_statement(step, cert, d, style)?);
+        if twin && matches!(step.kind, StepKind::Op { .. }) {
+            let v = if cert.width > Width::I128 {
+                format!("{}.value()", step.name)
+            } else {
+                format!("{} as int", step.name)
+            };
+            line(
+                out,
+                &format!(
+                    "    proof! {{ assert(-bound_of_{n}() <= {v} <= bound_of_{n}()); }}",
+                    n = step.name
+                ),
+            );
+        }
     }
     line(out, &format!("    Some({})", root_step.name));
     line(out, "}");
@@ -1290,17 +1320,34 @@ fn axes_of(ty: &str) -> &'static [&'static str] {
     }
 }
 
-/// The twin's `#[verus_spec]`: every coordinate of every input on the grid, and the result
-/// `Some` of the description's value over the integers (`spec_value`).
+/// The twin's `#[verus_spec]`: every coordinate of every point input on the grid, and the
+/// result `Some` of the description's value over the integers (`spec_value`). With rounded inputs,
+/// the result is `Some` of that value exactly when every rounded input is within its declared
+/// range (`in_range`, the specification of the twin of `within`), and `None` otherwise.
 fn verus_spec(out: &mut String, d: &Derivation) -> Result<(), EmitError> {
-    let Some(ty) = point_type(d)? else {
-        return fail("the twin covers point inputs only");
-    };
-    line(out, "#[verus_spec(r =>");
-    line(out, "    requires");
+    let ty = point_type(d)?;
+    let mut grid = Vec::new();
+    let mut ranges = Vec::new();
     for input in &d.description.inputs {
-        for axis in axes_of(ty) {
-            line(out, &format!("        {}.{axis}.on_grid(),", input.name));
+        match (&input.kind, ty) {
+            (InputKind::Point { .. }, Some(t)) => {
+                for axis in axes_of(t) {
+                    grid.push(format!("{}.{axis}.on_grid()", input.name));
+                }
+            }
+            (InputKind::Point { .. }, None) => return fail("a point input without a point type"),
+            (InputKind::Rounded { .. }, _) => ranges.push(format!(
+                "in_range({}, {})",
+                input.name,
+                rounded_bits(d, &input.name)?
+            )),
+        }
+    }
+    line(out, "#[verus_spec(r =>");
+    if !grid.is_empty() {
+        line(out, "    requires");
+        for g in &grid {
+            line(out, &format!("        {g},"));
         }
     }
     let Some(root) = d.certs.get(d.result) else {
@@ -1312,20 +1359,44 @@ fn verus_spec(out: &mut String, d: &Derivation) -> Result<(), EmitError> {
         "v as int"
     };
     line(out, "    ensures");
-    line(
-        out,
-        &format!(
-            "        r matches Some(v) && {result} == spec_value({}),",
-            args(d)
-        ),
-    );
+    if ranges.is_empty() {
+        line(
+            out,
+            &format!(
+                "        r matches Some(v) && {result} == spec_value({}),",
+                args(d)
+            ),
+        );
+    } else {
+        let all = ranges.join(" && ");
+        line(out, "        match r {");
+        line(
+            out,
+            &format!(
+                "            Some(v) => {all} && {result} == spec_value({}),",
+                args(d)
+            ),
+        );
+        line(out, &format!("            None => !({all}),"));
+        line(out, "        },");
+    }
     line(out, ")]");
     Ok(())
 }
 
+/// Whether the twin states step `i`'s certified bound right after computing it: every operation
+/// does, so that each later step reasons from its operands' bounds alone, not back through the
+/// whole computation (a long exact path otherwise defeats the solver).
+fn bounded(d: &Derivation, i: usize) -> bool {
+    d.steps
+        .get(i)
+        .is_some_and(|s| matches!(s.kind, StepKind::Op { .. }))
+}
+
 /// The twin's hint before a product: the product of the steps `left` and `right` is bounded by
 /// the product of their certified bounds (`lemma_product_bound`), which Verus's linear arithmetic
-/// cannot see alone.
+/// cannot see alone. Each bound is the twin's spec function `bound_of_<step>` ([`bound_specs`]),
+/// since a bound can be wider than any Rust integer literal outside the `verus!` block.
 fn product_proof(d: &Derivation, left: usize, right: usize) -> Result<String, EmitError> {
     let operand = |i: usize| -> Result<(String, String), EmitError> {
         match (d.steps.get(i), d.certs.get(i)) {
@@ -1335,18 +1406,65 @@ fn product_proof(d: &Derivation, left: usize, right: usize) -> Result<String, Em
                 } else {
                     format!("{} as int", s.name)
                 },
-                c.bound
-                    .to_decimal()
-                    .ok_or_else(|| EmitError("a bound's decimal".to_owned()))?,
+                format!("bound_of_{}()", s.name),
             )),
             _ => fail("a step's operand is missing"),
         }
     };
     let (l, lb) = operand(left)?;
     let (r, rb) = operand(right)?;
+    // In the order the code multiplies: a narrow left factor times a wide right one is written
+    // `right.checked_mul_i128(left)` ([`wide_product`]), whose value is right · left.
+    let narrow = |i: usize| d.certs.get(i).is_some_and(|c| c.width <= Width::I128);
+    if narrow(left) && !narrow(right) {
+        return Ok(format!(
+            "    proof! {{ lemma_product_bound({r}, {l}, {rb}, {lb}); }}"
+        ));
+    }
     Ok(format!(
         "    proof! {{ lemma_product_bound({l}, {r}, {lb}, {rb}); }}"
     ))
+}
+
+/// The twin's spec functions `bound_of_<step>`, one for each step that is a factor of a product or
+/// an operation ([`bounded`]), in the order the steps come: the step's certified bound,
+/// |value| ≤ it, in decimal.
+fn bound_specs(d: &Derivation) -> Result<Vec<String>, EmitError> {
+    let mut factors: Vec<usize> = (0..d.steps.len()).filter(|&i| bounded(d, i)).collect();
+    for step in &d.steps {
+        if let StepKind::Op {
+            op: Op::Mul,
+            left,
+            right,
+        } = &step.kind
+        {
+            for i in [*left, *right] {
+                if !factors.contains(&i) {
+                    factors.push(i);
+                }
+            }
+        }
+    }
+    factors.sort_unstable();
+    let mut out = Vec::new();
+    for i in factors {
+        let (Some(step), Some(cert)) = (d.steps.get(i), d.certs.get(i)) else {
+            return fail("a step's operand is missing");
+        };
+        let bound = cert
+            .bound
+            .to_decimal()
+            .ok_or_else(|| EmitError("a bound's decimal".to_owned()))?;
+        out.push(format!("/// `{}`'s certified bound.", step.name));
+        out.push(format!(
+            "pub open spec fn bound_of_{}() -> int {{",
+            step.name
+        ));
+        out.push(format!("    {bound}int"));
+        out.push("}".to_owned());
+        out.push(String::new());
+    }
+    Ok(out)
 }
 
 /// The twin's integer value of one step, as Verus's `spec_value` computes it: the description's
@@ -1365,40 +1483,47 @@ fn spec_expression(step: &Step, d: &Derivation) -> Result<String, EmitError> {
             subtrahend,
             axis,
         } => format!("{minuend}.{a}@ - {subtrahend}.{a}@", a = axis.letter()),
-        StepKind::LoadRounded { .. } => return fail("the twin covers point inputs only"),
+        StepKind::LoadRounded { input } => format!("{input} as int"),
+        // A narrow left factor times a wide right one in the order the code multiplies them
+        // (`product_proof`), so the solver need not reorder a product.
+        StepKind::Op {
+            op: Op::Mul,
+            left,
+            right,
+        } if d.certs.get(*left).is_some_and(|c| c.width <= Width::I128)
+            && d.certs.get(*right).is_some_and(|c| c.width > Width::I128) =>
+        {
+            format!("{} * {}", name(*right)?, name(*left)?)
+        }
         StepKind::Op { op, left, right } => {
             format!("{} {} {}", name(*left)?, op.symbol(), name(*right)?)
         }
     })
 }
 
-/// A Verus-annotated twin of a predicate's exact path (chapter 28.7; pieces G36 and G38): a module
-/// of `geom-num`'s Verus crate (`verus/lib.rs`), which holds the model of the grid's types
-/// (`model`) and the wide integers' own twin (`wide`). The module holds the description's value
-/// over the integers (`spec_value`) and `value` exactly as the shipped module (`shipped`, a
-/// repository path) writes it, with its annotations ([`value_item`]).
+/// A Verus-annotated twin of a predicate's exact path (chapter 28.7; pieces G36, G38 and G39): a
+/// module of `geom-num`'s Verus crate (`verus/lib.rs`), which holds the model of the grid's types
+/// (`model`), the twin of a rounded input's range check (`rounded`) and the wide integers' own
+/// twin (`wide`). The module holds the description's value over the integers (`spec_value`), each
+/// factor's and operation's certified bound (`bound_of_<step>`), and `value` exactly as the
+/// shipped module (`shipped`, a repository path) writes it, with its annotations
+/// ([`value_item`]).
 ///
 /// # Errors
 ///
-/// An [`EmitError`] for a description the twin does not cover yet: rounded inputs (no model of
-/// their range check), a step wider than `I256`, or a 256-bit step made from an `i64` operand
-/// (`from_i64` has no proof yet), or no point inputs.
+/// An [`EmitError`] for a description the twin does not cover: a step wider than `I384` (the
+/// widest budgeted width), a wide step made from an `i64` operand (`from_i64` has no proof yet),
+/// or no inputs.
 #[allow(
     clippy::too_many_lines,
     reason = "one straight sequence of the twin's refusals, header and items, in the order they are written"
 )]
 pub fn verus_twin(d: &Derivation, generator: &str, shipped: &str) -> Result<String, EmitError> {
     let name = &d.description.name;
-    if has_rounded(d) {
+    if d.certs.iter().any(|c| c.width > Width::I384) {
         return fail(format!(
-            "`{name}`: the twin covers point inputs only; a rounded input's range check has no \
-             model yet"
-        ));
-    }
-    if d.certs.iter().any(|c| c.width > Width::I256) {
-        return fail(format!(
-            "`{name}`: the twin covers exact paths in i64, i128 and I256 only; the wider integers \
-             have no proven conversions yet"
+            "`{name}`: the twin covers exact paths up to I384, the widest budgeted width (chapter \
+             6.2); the wide twin states the half base of 4, 5 and 6 limbs only"
         ));
     }
     for (step, cert) in d.steps.iter().zip(&d.certs) {
@@ -1415,14 +1540,31 @@ pub fn verus_twin(d: &Derivation, generator: &str, shipped: &str) -> Result<Stri
             }
         }
     }
-    let Some(ty) = point_type(d)? else {
-        return fail(format!("`{name}`: the twin covers point inputs only"));
-    };
+    let ty = point_type(d)?;
+    if ty.is_none() && !has_rounded(d) {
+        return fail(format!("`{name}`: a predicate with no inputs"));
+    }
     let Some(root_step) = d.steps.get(d.result) else {
         return fail("the result step is missing");
     };
     let wide = d.certs.iter().any(|c| c.width > Width::I128);
-    let parameters = params(d, Some(ty))?;
+    let parameters = params(d, ty)?;
+    let proves = if has_rounded(d) {
+        format!(
+            "It proves that for every input whose coordinates are on the grid (|v| ≤ \
+             2^{COORD_BITS} − 1), `value` returns `Some` of the description's value over the \
+             mathematical integers exactly when every rounded input is within its declared range, \
+             and `None` otherwise: no checked step overflows, and the result is the value the \
+             description defines."
+        )
+    } else {
+        format!(
+            "It proves that for every input whose coordinates are on the grid (|v| ≤ \
+             2^{COORD_BITS} − 1), `value` returns `Some` of the description's value over the \
+             mathematical integers: no checked step overflows, and the result is the value the \
+             description defines."
+        )
+    };
     let mut out = String::new();
     let paragraphs = [
         format!(
@@ -1434,11 +1576,8 @@ pub fn verus_twin(d: &Derivation, generator: &str, shipped: &str) -> Result<Stri
         ),
         format!(
             "A Verus-annotated twin of `{name}`'s exact path, `value` in `{shipped}` (chapter 28.7 \
-             of the kernel architecture, \"Predicates, by generated twins\"; pieces G36 and G38). \
-             It proves that for every input whose coordinates are on the grid (|v| ≤ \
-             2^{COORD_BITS} − 1), `value` returns `Some` of the description's value over the \
-             mathematical integers: no checked step overflows, and the result is the value the \
-             description defines."
+             of the kernel architecture, \"Predicates, by generated twins\"; pieces G36, G38 and \
+             G39). {proves}"
         ),
         "The twin's `value`, with its `#[verus_spec]` attribute and its `proof!` blocks removed, \
          is token for token the shipped one: the same emitter code writes both, and geom-gen's \
@@ -1461,6 +1600,9 @@ pub fn verus_twin(d: &Derivation, generator: &str, shipped: &str) -> Result<Stri
     line(&mut out, "use vstd::prelude::*;");
     line(&mut out, "");
     line(&mut out, "use crate::model::*;");
+    if has_rounded(d) {
+        line(&mut out, "use crate::rounded::*;");
+    }
     if wide {
         line(&mut out, "use crate::wide::*;");
     }
@@ -1489,6 +1631,9 @@ pub fn verus_twin(d: &Derivation, generator: &str, shipped: &str) -> Result<Stri
     line(&mut out, &format!("    {}", root_step.name));
     line(&mut out, "}");
     line(&mut out, "");
+    for l in bound_specs(d)? {
+        line(&mut out, &l);
+    }
     line(&mut out, "} // verus!");
     line(&mut out, "");
     value_item(&mut out, d, &parameters, true)?;
@@ -2444,7 +2589,11 @@ const ROUNDED_HELPERS: &[&str] = &[
     "#[inline]",
     "fn within(v: i128, bits: u32) -> Option<i128> {",
     "    let limit = 1u128.checked_shl(bits)?.checked_sub(1)?;",
-    "    (v.unsigned_abs() <= limit).then_some(v)",
+    "    if v.unsigned_abs() <= limit {",
+    "        Some(v)",
+    "    } else {",
+    "        None",
+    "    }",
     "}",
     "",
     "/// A rounded input's nearest `f64`, ties to even, the same on every target (the Rust",
