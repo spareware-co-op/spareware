@@ -78,6 +78,8 @@ on:
     branches: [main]
   # A merge queue, if main ever uses one, checks each queued merge with this same required check.
   merge_group:
+  # Run whole by kernel-release.yml on a release tag, with every other kernel workflow (28.17).
+  workflow_call:
 
 permissions:
   contents: read

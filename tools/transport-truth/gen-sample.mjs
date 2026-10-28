@@ -21,7 +21,7 @@ import { JS_DIR } from './js-core.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const NOW = Date.UTC(2026, 9, 21);
-const FILES = ['util', 'model', 'registry', 'engine', 'data', 'landuse', 'turns', 'calibrate', 'sim', 'sample', 'kit', 'features/junctions', 'features/landuse-plus', 'features/calibration'];
+const FILES = ['util', 'model', 'registry', 'engine', 'data', 'landuse', 'turns', 'calibrate', 'sim', 'sample', 'kit', 'features/junctions', 'packs/nz/landuse-plus', 'features/calibration'];
 const CORE_ONLY = ['util', 'model', 'registry', 'engine', 'data', 'landuse', 'turns', 'calibrate', 'sim', 'sample'];
 const inert = () => new Proxy(function () {}, { get: (t, k) => (k === Symbol.toPrimitive ? () => '' : inert()), apply: () => undefined });
 mkdirSync(join(here, 'fixtures', 'data'), { recursive: true });
