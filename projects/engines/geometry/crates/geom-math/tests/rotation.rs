@@ -77,9 +77,15 @@ impl Mix {
     }
 }
 
-/// A lower bound on sin z for z ≥ 0: z − z³/6.
+/// A lower bound on sin z for z ≥ 0: z − z³/6 + z⁵/120 − z⁷/5040 (the series alternates with
+/// falling terms, so stopping after a subtracted term gives a lower bound). It is below sin z by
+/// less than z⁹/362880, far less than the certificate's own excess over the true angle.
 fn sin_lower(z: &BigRational) -> BigRational {
-    z - z * z * z / int(6)
+    let z2 = z * z;
+    let z3 = z * &z2;
+    let z5 = &z3 * &z2;
+    let z7 = &z5 * &z2;
+    z - z3 / int(6) + z5 / int(120) - z7 / int(5040)
 }
 
 /// An upper bound on sin z for z ≥ 0: z − z³/6 + z⁵/120.
