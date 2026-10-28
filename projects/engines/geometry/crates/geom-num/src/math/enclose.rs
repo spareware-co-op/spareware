@@ -141,14 +141,15 @@ fn around(r: f64, exact: bool) -> (f64, f64) {
 /// [`min2`] and [`max2`], comparisons that may return either zero, which [`Interval::new`] makes
 /// +0.
 ///
-/// `#[inline]`: whether rustc inlines it into [`Interval::sinpi`] and [`Interval::cospi`] must not
-/// depend on how the crate falls into codegen units. Unmarked, an unrelated edit elsewhere in the
-/// crate (G41's `rng::split_u128`) moved it into another unit, and the call cost aarch64's
-/// sinpi and cospi on extreme inputs 5.4% and 6.2% more instructions (G41's count gate).
-#[inline]
+/// Generic over the point function, so [`Interval::sinpi`] and [`Interval::cospi`] each get their
+/// own copy with one caller and a direct call to it. Taking a `fn` pointer, it was one function
+/// with two callers, and whether LLVM inlined it (and so made the pointer a direct call) turned on
+/// size margins: an unrelated edit elsewhere in the crate (G41's) left it out of line on aarch64,
+/// where sinpi and cospi on extreme inputs then cost 5.4% and 6.2% more instructions (G41's count
+/// gate), and `#[inline]` did not bring it back.
 fn periodic(
     x: Interval,
-    f: fn(f64) -> f64,
+    f: impl Fn(f64) -> f64,
     maxima: &[f64],
     minima: &[f64],
 ) -> Result<Interval, NumError> {
