@@ -22,7 +22,9 @@ name: Kernel fuzzing and proofs
 #   with cargo-bolero's build-clusterfuzz command, and ClusterFuzzLite fuzzes them in turn
 #   (code-change mode, address sanitizer). OSS-Fuzz's build check cannot read the start-up
 #   scripts cargo-bolero packs, so it is turned off here and build.sh makes the same checks on the
-#   binaries they start.
+#   binaries they start. A second job, clusterfuzzlite-seeded, runs ClusterFuzzLite's own images on
+#   the checkout with a crash planted (gate 1, G43; .clusterfuzzlite/seeded.sh), and must see it
+#   found.
 #
 # Path filters: the workflow runs when the code a target fuzzes or proves changes: geom-fuzz and
 # every crate of the workspace it depends on (geom-gen, geom-num, geom-run and geom-test today;
@@ -367,3 +369,27 @@ jobs:
           name: clusterfuzzlite-artifacts
           path: ./out/artifacts
           if-no-files-found: ignore
+
+  # Gate 1 (G43): the job above must fail on a planted crash. Its actions build a fresh clone of
+  # the pull request, which a planted line never reaches, so this job runs the images those actions
+  # run, with the inputs given above, on this checkout with the libFuzzer leg's planted violation
+  # (.clusterfuzzlite/seeded.sh says what differs and why). run_fuzzers must report the crash.
+  clusterfuzzlite-seeded:
+    name: ClusterFuzzLite finds a planted violation
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      # The trip binary builds outside the checkout, which ClusterFuzzLite copies into its image.
+      - name: ClusterFuzzLite's build and run fail on a planted violation
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/target
+        run: >-
+          cargo run --locked -q -p geom-test --bin trip -- clusterfuzzlite --
+          bash .clusterfuzzlite/seeded.sh

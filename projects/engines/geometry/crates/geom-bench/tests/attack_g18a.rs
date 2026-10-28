@@ -814,13 +814,14 @@ fn both_legs_judge_the_summaries_by_the_same_rule() {
         assert!(!WORKFLOW.contains(&format!("CALLGRIND_LIMITS: \"{miss}")));
     }
     // Every measured run builds without the judge, so the benchmark binary does not change with
-    // the tool that judges it: Gungraun's runner crate is in both.
+    // the tool that judges it: Gungraun's runner crate is in both. The seventh is gate 1's planted
+    // slowdown (piece G43), run through geom-test's `trip`.
     let job_lines: Vec<&str> = job.lines().map(str::trim).collect();
     let runs: Vec<&&str> = job_lines
         .iter()
         .filter(|l| l.starts_with("cargo \"+$") && l.contains(" bench "))
         .collect();
-    assert_eq!(runs.len(), 6, "{runs:#?}");
+    assert_eq!(runs.len(), 7, "{runs:#?}");
     for run in runs {
         assert!(
             run.contains(" bench --no-default-features --locked -p geom-bench "),

@@ -255,6 +255,11 @@ jobs:
           exit(wasi.start(instance));
           EOF
           echo "CARGO_TARGET_WASM32_WASIP1_RUNNER=node --no-warnings $RUNNER_TEMP/wasi-run.mjs" >> "$GITHUB_ENV"
+      # Gate 1 (piece G43): the job `guard`'s proof, through this leg's own tool and runtime.
+      # `libm`'s `sin` changed by one bit must make `golden run` fail on wasm32 too, with the golden
+      # geom-num/determinism reporting a digest that differs from the store's (geom-test's `guard`).
+      - name: A one-bit change to libm's sin fails a golden on wasm32
+        run: cargo run --locked --release -p geom-test --bin guard -- prove --golden-run --target wasm32-wasip1 --release
       # Every golden of the store, geom-test's included (its library's goldens are pure
       # computation, which WASI runs); the golden tool itself runs natively and builds and runs the
       # tests for wasm32-wasip1 through the runner set above.

@@ -12,9 +12,15 @@
 //!   violation (`trip <name>`), the row of another job of its workflow ("The tests of `<job>`"),
 //!   or says why it is not a gate ("Not a gate:") or that it is open, with its issue.
 //! - `every_planted_violation_runs_in_its_own_job`: each of `geom_test::trip`'s violations is found
-//!   once in the tree, and the job it names runs it with the command of one of its own steps: the
-//!   same words, a matrix value where the step has the matrix's variable, or a harness filter
-//!   narrowed.
+//!   once in the tree, and the job it names runs it with the command of one of its own steps,
+//!   compared as shell commands (continued lines joined, redirections and pipes set aside; a
+//!   script's last command when it runs one): the same words, a matrix value where the step has
+//!   the matrix's variable, a harness filter narrowed, and the step's `--save-…` options left out.
+//!   `ClusterFuzzLite`'s violation runs through `.clusterfuzzlite/seeded.sh` instead, which must run
+//!   the image of each of the `clusterfuzzlite` job's actions, at the commit it was read against,
+//!   with every input the job gives it.
+//! - `the_wasm_legs_prove_the_guard_through_golden_run`: `kernel.yml`'s `wasm` job runs `guard
+//!   prove --golden-run` with the arguments of one of its own `golden run` steps.
 //! - `a_passed_gate_has_nothing_open`: while the result is not "passed" anything may be pending;
 //!   once it is, no CI run may be pending and no row open.
 //! - `the_thread_counts_are_the_boards`: `geom_test::golden::THREAD_COUNTS` is the done-when's
@@ -371,6 +377,65 @@ fn words(command: &str) -> Vec<String> {
         .collect()
 }
 
+/// The commands a shell script runs, each as its words: lines continued with `\` joined, comment
+/// lines left out, split at `&&`, `||`, `;`, `|` and line ends, with output redirections (`>`,
+/// `>>` and the file each names, `2>&1`) and a subshell's parentheses set aside.
+fn commands(script: &str) -> Vec<Vec<String>> {
+    let joined = script.replace("\\\r\n", " ").replace("\\\n", " ");
+    let mut found = Vec::new();
+    for line in joined.lines() {
+        if line.trim_start().starts_with('#') {
+            continue;
+        }
+        let parts = line
+            .split("&&")
+            .flat_map(|p| p.split("||"))
+            .flat_map(|p| p.split(';'))
+            .flat_map(|p| p.split('|'));
+        for part in parts {
+            let mut command = Vec::new();
+            let mut skip = false;
+            for word in words(part) {
+                let word = word
+                    .trim_start_matches('(')
+                    .trim_end_matches(')')
+                    .trim_matches(['"', '\''])
+                    .to_owned();
+                if std::mem::take(&mut skip) {
+                    continue;
+                }
+                if word == ">" || word == ">>" {
+                    skip = true;
+                } else if !(word.is_empty() || word.starts_with('>') || word.starts_with("2>")) {
+                    command.push(word);
+                }
+            }
+            if !command.is_empty() {
+                found.push(command);
+            }
+        }
+    }
+    found
+}
+
+/// The command whose failure a trip step's verdict reads, from the text after its marker: the
+/// first command of that line, or, when it runs a script with `bash ... -c '<script>'`, the
+/// script's last command.
+fn planted_command(text: &str) -> Vec<String> {
+    let line = text.lines().next().unwrap_or_default();
+    let script = line
+        .trim_start()
+        .starts_with("bash ")
+        .then(|| line.split_once(" -c '"))
+        .flatten()
+        .and_then(|(_, script)| script.rsplit_once('\''))
+        .map(|(script, _)| script);
+    match script {
+        Some(script) => commands(script).pop().unwrap_or_default(),
+        None => commands(line).into_iter().next().unwrap_or_default(),
+    }
+}
+
 /// The values a job's matrix gives the variable `name`.
 fn matrix_values(job: &Yaml, name: &str) -> Vec<String> {
     let matrix = &job["strategy"]["matrix"];
@@ -392,8 +457,10 @@ fn matrix_values(job: &Yaml, name: &str) -> Vec<String> {
 
 /// Whether `planted`, the command a trip step runs, is `step`, a command of the job's own steps:
 /// word for word, where a `${{ matrix.<name> }}` word is one of the matrix's values and a harness
-/// filter may be narrowed (the planted word extends the step's).
+/// filter may be narrowed (the planted word extends the step's), and where the step's options
+/// that save what it measured (`--save-…`) are left out: a planted run is never saved.
 fn same_command(planted: &[String], step: &[String], job: &Yaml) -> bool {
+    let step: Vec<&String> = step.iter().filter(|w| !w.starts_with("--save-")).collect();
     planted.len() == step.len()
         && planted.iter().zip(step).all(|(p, s)| {
             if let Some(name) = s
@@ -435,12 +502,9 @@ fn trip_problems(
             .filter_map(|s| s["run"].as_str().map(str::to_owned))
             .collect();
         let marker = format!("--bin trip -- {} --", v.name);
-        let planted: Vec<Vec<String>> = runs
+        let planted: Vec<&str> = runs
             .iter()
-            .filter_map(|r| {
-                r.split_once(&marker)
-                    .map(|(_, cmd)| words(cmd.lines().next().unwrap_or_default()))
-            })
+            .filter_map(|r| r.split_once(&marker).map(|(_, cmd)| cmd))
             .collect();
         let [planted] = planted.as_slice() else {
             found.push(format!(
@@ -451,16 +515,30 @@ fn trip_problems(
             ));
             continue;
         };
+        if let Some(&(_, script, proved)) = ACTION_SEEDS.iter().find(|s| s.0 == v.name) {
+            let run = words(planted.lines().next().unwrap_or_default());
+            if run != ["bash", script] {
+                found.push(format!(
+                    "{}: {file} {job} plants it under {run:?}, not `bash {script}`",
+                    v.name
+                ));
+            }
+            match files(script) {
+                None => found.push(format!("{}: {script} does not exist", v.name)),
+                Some(text) => found.extend(
+                    action_seed_problems(&text, &w["jobs"][proved])
+                        .into_iter()
+                        .map(|p| format!("{}: {script}: {p}", v.name)),
+                ),
+            }
+            continue;
+        }
+        let planted = planted_command(planted);
         let own = runs
             .iter()
             .filter(|r| !r.contains("--bin trip"))
-            .flat_map(|r| r.lines().map(str::to_owned).collect::<Vec<_>>())
-            .chain(
-                runs.iter()
-                    .filter(|r| !r.contains("--bin trip"))
-                    .map(|r| r.replace('\n', " ")),
-            )
-            .any(|line| same_command(planted, &words(&line), j));
+            .flat_map(|r| commands(r))
+            .any(|command| same_command(&planted, &command, j));
         if !own {
             found.push(format!(
                 "{}: {file} {job} plants it under {planted:?}, which is none of its own steps' \
@@ -550,8 +628,137 @@ fn thread_problems(
     found
 }
 
+/// The violations a job runs through a script that stands in for another job's actions, because
+/// those actions build a fresh clone, which a planted line never reaches: the violation, the
+/// script, and the job (of the same workflow) whose actions it stands in for.
+const ACTION_SEEDS: [(&str, &str, &str); 1] = [(
+    "clusterfuzzlite",
+    ".clusterfuzzlite/seeded.sh",
+    "clusterfuzzlite",
+)];
+
+/// `ClusterFuzzLite`'s actions, the commit whose `action.yml` files the script was read against,
+/// and the image each runs there (`runs.image`, `docker://` set aside).
+const CLUSTERFUZZLITE: &str = "google/clusterfuzzlite/actions/";
+const CLUSTERFUZZLITE_COMMIT: &str = "52ecc61cb587ee99c26825a112a21abf19c7448c";
+const CLUSTERFUZZLITE_IMAGES: [(&str, &str); 2] = [
+    (
+        "build_fuzzers",
+        "gcr.io/oss-fuzz-base/clusterfuzzlite-build-fuzzers:v1",
+    ),
+    (
+        "run_fuzzers",
+        "gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers:v1",
+    ),
+];
+
+/// What is wrong with a script that stands in for `job`'s `ClusterFuzzLite` actions: each action
+/// must be pinned to the commit the script was read against, and the script must run its image
+/// once, passing every input the job gives it (but the token) as its `action.yml` does, an
+/// environment variable of the input's name in capitals with `_` for `-`.
+fn action_seed_problems(script: &str, job: &Yaml) -> Vec<String> {
+    let runs = commands(script);
+    let mut found = Vec::new();
+    let mut actions = 0;
+    for step in job["steps"].as_vec().into_iter().flatten() {
+        let Some(action) = step["uses"]
+            .as_str()
+            .and_then(|u| u.strip_prefix(CLUSTERFUZZLITE))
+        else {
+            continue;
+        };
+        actions += 1;
+        let (name, commit) = action.split_once('@').unwrap_or((action, ""));
+        if commit != CLUSTERFUZZLITE_COMMIT {
+            found.push(format!(
+                "{name} is pinned to {commit:?}, not {CLUSTERFUZZLITE_COMMIT}, whose image the \
+                 script runs: read the new action.yml and update both"
+            ));
+            continue;
+        }
+        let Some(&(_, image)) = CLUSTERFUZZLITE_IMAGES.iter().find(|i| i.0 == name) else {
+            found.push(format!("no image is known for the action {name}"));
+            continue;
+        };
+        let docker: Vec<&Vec<String>> = runs
+            .iter()
+            .filter(|c| c.starts_with(&["docker".to_owned(), "run".to_owned()]))
+            .filter(|c| c.last().is_some_and(|last| last == image))
+            .collect();
+        let [run] = docker.as_slice() else {
+            found.push(format!("it runs {image} {} times, not once", docker.len()));
+            continue;
+        };
+        for (key, value) in step["with"].as_hash().into_iter().flatten() {
+            let Some(key) = key.as_str() else { continue };
+            if key == "github-token" {
+                continue;
+            }
+            let value = match value {
+                Yaml::String(s) => s.clone(),
+                Yaml::Integer(i) => i.to_string(),
+                Yaml::Boolean(b) => b.to_string(),
+                other => format!("{other:?}"),
+            };
+            let pair = format!("{}={value}", key.to_uppercase().replace('-', "_"));
+            if !run.windows(2).any(|w| w[0] == "-e" && w[1] == pair) {
+                found.push(format!(
+                    "{name}'s input {key}: {value} is not passed to {image} as `-e {pair}`"
+                ));
+            }
+        }
+    }
+    if actions == 0 {
+        found.push("the job it stands in for runs no ClusterFuzzLite action".to_owned());
+    }
+    found
+}
+
 fn tree(path: &str) -> Option<String> {
     read_opt(path)
+}
+
+/// What is wrong with the WebAssembly legs' proof of the toolchain guard: `kernel.yml`'s `wasm`
+/// job must run `guard prove --golden-run` once, with the arguments of one of its own `golden run`
+/// steps.
+fn guard_problems(workflows: &BTreeMap<String, String>) -> Vec<String> {
+    let w = parse(&workflows["kernel.yml"]);
+    let job = &w["jobs"]["wasm"];
+    let runs: Vec<String> = job["steps"]
+        .as_vec()
+        .into_iter()
+        .flatten()
+        .filter_map(|s| s["run"].as_str().map(str::to_owned))
+        .collect();
+    let marker = "--bin guard -- prove --golden-run";
+    let proved: Vec<Vec<String>> = runs
+        .iter()
+        .filter_map(|r| {
+            r.split_once(marker)
+                .map(|(_, rest)| words(rest.lines().next().unwrap_or_default()))
+        })
+        .collect();
+    let [proved] = proved.as_slice() else {
+        return vec![format!(
+            "kernel.yml wasm runs `guard prove --golden-run` {} times, not once",
+            proved.len()
+        )];
+    };
+    let golden = ["--bin", "golden", "--", "run"].map(str::to_owned);
+    let own = runs.iter().flat_map(|r| commands(r)).any(|c| {
+        c.windows(4)
+            .position(|w| w == golden)
+            .is_some_and(|at| c[at + 4..] == proved[..])
+    });
+    if own {
+        Vec::new()
+    } else {
+        vec![format!(
+            "kernel.yml wasm proves the guard with `golden run {}`, which none of its own golden \
+             runs is",
+            proved.join(" ")
+        )]
+    }
 }
 
 #[test]
@@ -654,6 +861,91 @@ fn every_planted_violation_runs_in_its_own_job() {
         trip_problems(&workflows, &moved)
             .iter()
             .any(|p| p.starts_with("kani-num:") && p.contains("0 times"))
+    );
+
+    // Seeded: a count gate's seed under a looser limit than its gate, and a fuel seed comparing
+    // other files than the gate does.
+    let mut looser = workflows.clone();
+    let bench = looser.get_mut("kernel-bench.yml").unwrap();
+    *bench = bench.replacen(
+        "\"${compare[@]}\" --callgrind-limits=\"$CALLGRIND_LIMITS\" --dhat",
+        "\"${compare[@]}\" --callgrind-limits=ir=50% --dhat",
+        1,
+    );
+    assert_ne!(&looser, &workflows, "the seeded edit applies");
+    assert!(
+        trip_problems(&looser, &tree)
+            .iter()
+            .any(|p| p.starts_with("gungraun:") && p.contains("none of its own steps' commands"))
+    );
+    let mut other = workflows.clone();
+    let bench = other.get_mut("kernel-bench.yml").unwrap();
+    *bench = bench.replacen(
+        "&& \"$COUNTS\" compare \"$RUNNER_TEMP/base-fuel.txt\"",
+        "&& \"$COUNTS\" compare \"$RUNNER_TEMP/head-fuel.txt\"",
+        1,
+    );
+    assert_ne!(&other, &workflows, "the seeded edit applies");
+    assert!(
+        trip_problems(&other, &tree)
+            .iter()
+            .any(|p| p.starts_with("fuel:") && p.contains("none of its own steps' commands"))
+    );
+
+    // Seeded: `ClusterFuzzLite`'s script fuzzing in another mode than the job's, and the job's
+    // action moved to a commit the script was not read against.
+    let batch = |path: &str| {
+        let text = tree(path)?;
+        Some(if path == ".clusterfuzzlite/seeded.sh" {
+            text.replace("-e MODE=code-change", "-e MODE=batch")
+        } else {
+            text
+        })
+    };
+    assert!(
+        trip_problems(&workflows, &batch)
+            .iter()
+            .any(|p| p.contains("input mode: code-change is not passed"))
+    );
+    let mut moved_action = workflows.clone();
+    let fuzz = moved_action.get_mut("kernel-fuzz.yml").unwrap();
+    *fuzz = fuzz.replacen(
+        "run_fuzzers@52ecc61cb587ee99c26825a112a21abf19c7448c",
+        "run_fuzzers@0000000000000000000000000000000000000000",
+        1,
+    );
+    assert!(
+        trip_problems(&moved_action, &tree)
+            .iter()
+            .any(|p| p.contains("run_fuzzers is pinned to"))
+    );
+}
+
+#[test]
+fn the_wasm_legs_prove_the_guard_through_golden_run() {
+    let workflows = kernel_workflows();
+    let found = guard_problems(&workflows);
+    assert!(found.is_empty(), "{found:#?}");
+
+    // Seeded: the proof dropped, and the proof run with arguments no golden step uses.
+    let mut dropped = workflows.clone();
+    let kernel = dropped.get_mut("kernel.yml").unwrap();
+    *kernel = kernel.replace("--bin guard -- prove --golden-run", "--bin guard -- prove");
+    assert!(
+        guard_problems(&dropped)
+            .iter()
+            .any(|p| p.contains("0 times"))
+    );
+    let mut other = workflows.clone();
+    let kernel = other.get_mut("kernel.yml").unwrap();
+    *kernel = kernel.replace(
+        "prove --golden-run --target wasm32-wasip1 --release",
+        "prove --golden-run --target wasm32-wasip1 --profile guard",
+    );
+    assert!(
+        guard_problems(&other)
+            .iter()
+            .any(|p| p.contains("none of its own golden runs"))
     );
 }
 
