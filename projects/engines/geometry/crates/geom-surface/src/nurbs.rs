@@ -38,6 +38,7 @@ use geom_curve::affine::Entries;
 use geom_curve::{CurveError, DerivativeBound};
 use geom_math::TypedTransform;
 use geom_num::interval::Interval;
+use geom_num::real::Real;
 use geom_nurbs::{Basis, BernsteinPatch, Bounds, Changed, Direction, Limit, Surface};
 use geom_run::WorkMeter;
 
@@ -69,7 +70,7 @@ fn clip((lo, hi): (f64, f64), (a, b): (f64, f64)) -> (f64, f64) {
     if lo == hi {
         return (a, b);
     }
-    (if lo > a { lo } else { a }, if hi < b { hi } else { b })
+    (lo.clamp(a, b), hi.clamp(a, b))
 }
 
 /// The patch cut down to the part of `region` it covers.
@@ -88,23 +89,11 @@ fn restrict<const D: usize>(
 /// Control points and their weights, if any.
 type Net = (Vec<[f64; 3]>, Option<Vec<f64>>);
 
-/// The union of two boxes.
-fn union(a: Option<Bounds<3>>, b: Bounds<3>) -> Bounds<3> {
+/// The union of two boxes, the first absent before any.
+fn union(a: Option<Bounds<3>>, b: Bounds<3>) -> Result<Bounds<3>, CurveError> {
     match a {
-        None => b,
-        Some(mut a) => {
-            for (x, y) in a.lo.iter_mut().zip(&b.lo) {
-                if *y < *x {
-                    *x = *y;
-                }
-            }
-            for (x, y) in a.hi.iter_mut().zip(&b.hi) {
-                if *y > *x {
-                    *x = *y;
-                }
-            }
-            a
-        }
+        None => Ok(b),
+        Some(a) => Ok(a.union(&b)?),
     }
 }
 
@@ -190,7 +179,7 @@ impl ParamSurface for Surface<3> {
         for p in self.bernstein(meter)? {
             let (pu, pv) = p.domain();
             if meets(region.0, pu) && meets(region.1, pv) {
-                out = Some(union(out, restrict(&p, region)?.bound(meter)?));
+                out = Some(union(out, restrict(&p, region)?.bound(meter)?)?);
             }
         }
         out.ok_or(CurveError::Defect)
@@ -208,7 +197,7 @@ impl ParamSurface for Surface<3> {
             let (pu, pv) = p.domain();
             if meets(region.0, pu) && meets(region.1, pv) {
                 let part = restrict(&p, region)?;
-                out = Some(union(out, part.derivative_bound(dir, meter)?));
+                out = Some(union(out, part.derivative_bound(dir, meter)?)?);
             }
         }
         out.map(DerivativeBound::Bounded).ok_or(CurveError::Defect)
@@ -224,7 +213,7 @@ impl ParamSurface for Surface<3> {
         for n in self.normal_patches(meter)? {
             let (pu, pv) = n.domain();
             if meets(region.0, pu) && meets(region.1, pv) {
-                out = Some(union(out, restrict(&n, region)?.bound(meter)?));
+                out = Some(union(out, restrict(&n, region)?.bound(meter)?)?);
             }
         }
         out.ok_or(CurveError::Defect)
@@ -390,9 +379,7 @@ impl ParamSurface for Surface<3> {
             };
             let (img, err) = e.image(*h, w)?;
             pts.push(img);
-            if err > deviation {
-                deviation = err;
-            }
+            deviation = Real::new(deviation)?.total_max(Real::new(err)?).get();
         }
         let s = Surface::from_homogeneous(
             self.basis_u().clone(),

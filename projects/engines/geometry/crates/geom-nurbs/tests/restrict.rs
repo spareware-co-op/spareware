@@ -345,3 +345,31 @@ fn spans_and_parameters_outside_the_domain_are_refused() {
         );
     }
 }
+
+/// Claim: the union of two boxes holds both, side by side, and has the same bits in either order;
+/// a side that is not finite is refused.
+#[test]
+fn a_union_of_boxes_holds_both_in_either_order() {
+    use geom_nurbs::Bounds;
+    let a = Bounds {
+        lo: [0.0, -1.0, 2.0],
+        hi: [1.0, 3.0, 2.5],
+    };
+    let b = Bounds {
+        lo: [-0.5, 0.0, 2.0],
+        hi: [0.5, 4.0, 2.25],
+    };
+    let both = Bounds {
+        lo: [-0.5, -1.0, 2.0],
+        hi: [1.0, 4.0, 2.5],
+    };
+    assert_eq!(a.union(&b).unwrap(), both);
+    assert_eq!(b.union(&a).unwrap(), both);
+    assert_eq!(a.union(&a).unwrap(), a);
+    let open = Bounds {
+        lo: [f64::NEG_INFINITY, 0.0, 0.0],
+        hi: [0.0, 0.0, 0.0],
+    };
+    assert_eq!(a.union(&open), Err(NurbsError::NotFinite));
+    assert_eq!(open.union(&a), Err(NurbsError::NotFinite));
+}

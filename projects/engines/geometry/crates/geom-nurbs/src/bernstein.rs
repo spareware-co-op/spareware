@@ -58,6 +58,7 @@
 use alloc::vec::Vec;
 
 use geom_num::interval::Interval;
+use geom_num::real::Real;
 use geom_run::WorkMeter;
 
 use crate::NurbsError;
@@ -76,6 +77,25 @@ pub struct Bounds<const D: usize> {
     pub lo: [f64; D],
     /// The largest value of each coordinate.
     pub hi: [f64; D],
+}
+
+impl<const D: usize> Bounds<D> {
+    /// The smallest box holding both, each side chosen in IEEE totalOrder (`Real::total_min` and
+    /// `Real::total_max`), so the result has the same bits whichever box comes first.
+    ///
+    /// # Errors
+    ///
+    /// [`NurbsError::NotFinite`] if a side of either box is not finite.
+    pub fn union(&self, other: &Bounds<D>) -> Result<Bounds<D>, NurbsError> {
+        let mut out = *self;
+        for (x, &y) in out.lo.iter_mut().zip(&other.lo) {
+            *x = Real::new(*x)?.total_min(Real::new(y)?).get();
+        }
+        for (x, &y) in out.hi.iter_mut().zip(&other.hi) {
+            *x = Real::new(*x)?.total_max(Real::new(y)?).get();
+        }
+        Ok(out)
+    }
 }
 
 /// A slab: the points x with `lo` ≤ `normal`·(x − `origin`) ≤ `hi`. In the plane, a fat line.
