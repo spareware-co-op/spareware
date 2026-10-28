@@ -530,7 +530,7 @@
   "phase": "Phase 2",
   "crate": "geom-math",
   "size": "Medium",
-  "done_when": "Closest Pythagorean unit vector within a requested angle; rational rotations (Canny, Donald and Ressler); exact composition with one re-approximation; angle bounds checked against an oracle.",
+  "done_when": "Closest Pythagorean unit vector within a requested angle; rational rotations (Canny, Donald and Ressler) in 2D and integer-quaternion rotations in 3D within the requested angle, components below 2^36, with a typed-transform variant where |q|^2 passes 2^40 (32.14); exact composition with one re-approximation; angle bounds checked against an oracle.",
   "depends_on": [
    "G45",
    "G44"
