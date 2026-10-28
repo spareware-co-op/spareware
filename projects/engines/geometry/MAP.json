@@ -4804,6 +4804,23 @@
           "target": "bin"
         },
         {
+          "cost": "one read and two writes of the file, and one run of the command.",
+          "does": "finds the violation `<violation>` in [`geom_test::trip::VIOLATIONS`], plants it in the working tree ([`geom_test::trip::apply`]: one line of one kernel file changed), runs the gate's command from the repository root, prints its output, restores the file, and prints [`geom_test::trip::verdict`]'s answer: the command must fail, printing the tool's own report of the violation.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/bin/trip.rs",
+          "guarantees": [
+            "the file is restored byte for byte after the run, whether the run passed, failed or could not start; `RUSTUP_TOOLCHAIN`, which a `cargo run` passes down, is removed from the command's environment, so the command picks its toolchain as the job would (Verus names its own). Exit codes: 0 when the gate tripped as it must; 1 when it did not (the run passed, or failed for another reason); 2 for a usage error or a step that cannot be done."
+          ],
+          "job": "`trip`: proves a gate that runs an outside tool fails on a planted violation (gate 1, piece G43).",
+          "method": {
+            "none": "it runs the command and calls [`geom_test::trip`], whose module header carries the method."
+          },
+          "path": "trip",
+          "provenance": [],
+          "spdx": null,
+          "target": "bin"
+        },
+        {
           "cost": "linear in the size of the LCOV files and the crates' sources.",
           "does": "[`parse_lcov`] reads the LCOV file cargo-llvm-cov writes for one crate (`cargo llvm-cov -p <crate> --branch --lcov`). [`measure`] counts, for every file under the crate's `src/`, the lines and branches outside test code (found by [`crate::rust_source`]) and how many of them the crate's tests ran. [`judge`] applies the bars of [`crate::foundation`]: in the foundation set every line run and every branch taken both ways; elsewhere at least 90% of lines. [`check_marks`] checks every `coverage(off)` mark in the kernel's crates against [`crate::quality_ledger::Ledger::coverage_off`].",
           "family": [],
@@ -6141,9 +6158,10 @@
           "guarantees": [
             "**The language's own grammar.** Comments, strings, raw strings, character literals and nested block comments are told apart by `proc-macro2`'s lexer, and items by `syn`'s parser, so a brace or a word inside a string or a comment is never read as code.",
             "**An error, never a partial answer.** A file that does not parse as Rust is a [`ScanError`] naming the line, because a gate must not pass on a file it could not read.",
+            "**What a test reaches is read from its tokens.** [`references`] walks token trees, not expressions, so code inside any macro's arguments is read as the compiler will expand it in the common case; it follows only the file's own items, by name, and when two items in different modules share a name it follows both, which can only find more.",
             "**A comment is a comment.** A citation is read only from a line that starts with `//` and is not inside a string literal that spans lines; the walk up from a mark passes only over such lines and over the lines of other attributes, and stops at anything else."
           ],
-          "job": "Rust source, read for the quality gates: which lines are test code, whether a file has code that runs, where its branches are, every `coverage(off)` mark with the proof it cites, and whether a file defines a cited proof.",
+          "job": "Rust source, read for the quality gates: which lines are test code, whether a file has code that runs, where its branches are, every `coverage(off)` mark with the proof it cites, whether a file defines a cited proof, and what a test reaches in its own file.",
           "method": {
             "links": [
               "https://docs.rs/syn/3.0.9/syn/",
@@ -6254,6 +6272,30 @@
             "text": "the replay discipline of sections 28.5 and 28.17 of the kernel architecture (`projects/engines/geometry/architecture/28-testing.md`): \"Every generator prints its seed, so any failure replays exactly\", and \"Seeds belong to test generators only, and every one is printed\". The environment variable mirrors the seed variables of proptest (`PROPTEST_RNG_SEED`, <https://github.com/proptest-rs/proptest>) and bolero (`BOLERO_RANDOM_SEED`, <https://github.com/camshaft/bolero>), with one name for every Spare Kit test, so one value replays any of them."
           },
           "path": "geom_test::seed",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the file's length and the run's output.",
+          "does": "gate 1 (chapter 30.3) asks that every merge gate fail on a seeded violation, the pattern of the kernel's merge gate (G12) and of the toolchain guard (G20, [`crate::guard`]). Most gates already meet it in their own tests (gate 1's record in chapter 32 lists each). The gates here are the ones whose verdict is an outside tool's: rustfmt, Verus, Kani and libFuzzer. [`VIOLATIONS`] holds one planted violation for each: a file of the kernel, one line in it found exactly once ([`Violation::anchor`]), the line it becomes, and the text the tool prints when it catches it. The binary `trip` writes the changed line into the working tree, runs the gate's own command, restores the file byte for byte, and asks [`verdict`] whether the run failed for that reason. Each workflow job runs it before its real check, so a job that could no longer fail (a tool that stopped checking, a command that checks nothing) fails instead.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/trip.rs",
+          "guarantees": [
+            "**Each violation is real and small.** One line changes, and the change breaks exactly the property the gate checks: a line rustfmt would format differently; a sign the Kani harness for signs asserts; a carry the Verus twin's proof of addition asserts; a bound the limb proofs assert; orient2d's exact path answering `Positive` whatever its points, which breaks the antisymmetry every orient2d harness checks (a sign flipped everywhere would not: the fuzz target holds orient2d to its laws, not to an oracle); the carry the wide-integer fuzz target compares with big integers.",
+            "**An anchor found once, or no run.** [`apply`] refuses a file that holds the anchor line other than exactly once, so a refactor that moves it fails `tests/attack_g43.rs` (which checks every anchor in the repository) and the job, loudly, instead of planting nothing.",
+            "**A trip counts only for the right reason.** [`verdict`] accepts a run only when the command failed and printed every line [`Violation::caught`] names: the tool's own words for a found violation. A build error, a missing tool or any other failure proves nothing and is refused.",
+            "**Line ends kept.** The anchor is matched on a line with its line end set aside, so a Windows checkout's CRLF files work the same, and the line end is kept."
+          ],
+          "job": "Seeded violations for the gates that run an outside tool on the kernel's own code (gate 1, piece G43): each such gate is shown to fail when a violation is planted on purpose.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md",
+              "projects/engines/geometry/architecture/30-build-order.md"
+            ],
+            "text": "the seeded-violation pattern of the kernel's merge gate (chapter 28.8, `projects/engines/geometry/architecture/28-testing.md`; pieces G12 and G20, `guard`): plant one violation, run the real tool as the gate runs it, and require the tool's own report of that violation. Gate 1's condition is chapter 30.3's (`projects/engines/geometry/architecture/30-build-order.md`)."
+          },
+          "path": "geom_test::trip",
           "provenance": [],
           "spdx": null,
           "target": "lib"

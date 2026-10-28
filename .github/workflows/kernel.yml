@@ -302,6 +302,10 @@ jobs:
       # lands (chapter 27: one folder per crate, folder name = crate name).
       - name: List the kernel's crates
         run: echo "KERNEL_CRATES=$(for d in projects/engines/geometry/crates/*/; do printf -- '-p %s ' "$(basename "$d")"; done)" >> "$GITHUB_ENV"
+      # Gate 1 (G43): the format check must first fail on a planted violation, a line of
+      # geom-num that rustfmt would format differently (geom-test's trip module and binary).
+      - name: Formatting fails on a planted violation
+        run: cargo run --locked -q -p geom-test --bin trip -- fmt -- cargo fmt --check $KERNEL_CRATES
       - name: Formatting
         run: cargo fmt --check $KERNEL_CRATES
       # The crate's [lints] table enables clippy's pedantic group and denies native arithmetic,

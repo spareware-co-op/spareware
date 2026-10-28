@@ -119,6 +119,15 @@ jobs:
           --no-default-features --features libfuzzer
       - name: Cargo.lock is the reviewed one
         run: cargo metadata --locked --format-version 1 > /dev/null
+      # Gate 1 (G43): on the first leg, libFuzzer must first find a planted violation, a carry
+      # dropped from geom-num's wide integers, which wide_fuzz compares with big integers
+      # (geom-test's trip module and binary). The corpus and crash that run leaves are removed,
+      # so a later failure uploads only its own.
+      - name: libFuzzer finds a planted violation
+        if: strategy.job-index == 0
+        run: |
+          cargo run --locked -q -p geom-test --bin trip -- libfuzzer -- cargo bolero test wide_fuzz --package geom-fuzz --toolchain "$FUZZ_NIGHTLY" --engine libfuzzer -T 60s
+          rm -rf projects/engines/geometry/crates/geom-fuzz/tests/__fuzz__/wide
       - name: Fuzz ${{ matrix.target }} with libFuzzer for a minute
         run: >-
           cargo bolero test "${{ matrix.target }}" --package geom-fuzz
@@ -161,6 +170,13 @@ jobs:
           cargo kani setup
       - name: Cargo.lock is the reviewed one
         run: cargo metadata --locked --format-version 1 > /dev/null
+      # Gate 1 (G43): on the first leg, Kani must first fail on a planted violation, orient2d's
+      # exact path answering Positive whatever its points (geom-test's trip module and binary).
+      - name: Kani fails on a planted violation
+        if: strategy.job-index == 0
+        run: >-
+          cargo run --locked -q -p geom-test --bin trip -- kani-fuzz --
+          cargo kani --tests -p geom-fuzz --harness orient2d_fuzz --exact
       - name: Prove ${{ matrix.harness }}
         run: |
           start=$(date +%s)
@@ -269,6 +285,13 @@ jobs:
           cargo kani setup
       - name: Cargo.lock is the reviewed one
         run: cargo metadata --locked --format-version 1 > /dev/null
+      # Gate 1 (G43): on the first leg, Kani must first fail on a planted violation, Sign::of_i128
+      # calling 1 zero (geom-test's trip module and binary).
+      - name: Kani fails on a planted violation
+        if: strategy.job-index == 0
+        run: >-
+          cargo run --locked -q -p geom-test --bin trip -- kani-num --
+          cargo kani -p geom-num --harness sign::proofs::signs_follow_the_integers --exact
       - name: Prove ${{ matrix.proof }}
         run: |
           start=$(date +%s)
@@ -301,6 +324,12 @@ jobs:
           cargo kani setup
       - name: Cargo.lock is the reviewed one
         run: cargo metadata --locked --format-version 1 > /dev/null
+      # Gate 1 (G43): Kani must first fail on a planted violation, Wide32::from_i128 refusing an
+      # 83-bit value the three-limb step must hold (geom-test's trip module and binary).
+      - name: Kani fails on a planted violation
+        run: >-
+          cargo run --locked -q -p geom-test --bin trip -- kani-limbs --
+          cargo kani -p geom-num --harness generated::limbs::proofs::rounded_83_in_3
       - name: Prove every limb step
         run: |
           start=$(date +%s)
