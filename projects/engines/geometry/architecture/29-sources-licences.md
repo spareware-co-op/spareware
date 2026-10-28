@@ -518,7 +518,7 @@ The ledger covers what the evidence examined. Programs the kernel serves need mo
 | Slicing for 3D printing | Manufacturing | CuraEngine and PrusaSlicer (AGPL-3.0 labels: not read) |
 | Machining (CAM) | Manufacturing | OpenCAMLib (LGPL-2.1 label: method only) |
 | Exchange formats | Every program | glTF (Khronos specification; label NOASSERTION); 3MF (lib3mf BSD-2-Clause label; the specification's terms unknown); OpenUSD (TOST, label NOASSERTION); IGES (an old public specification, status unknown); JT (ISO 14306) |
-| Fonts, line types and hatch patterns for drafting | 2D drafting (section 14) | ISO 128 (implement, never copy); Hershey fonts (believed public domain with a usage notice). CADCraft's library is rejected (29.5), so no clean source is named yet |
+| Fonts, line types and hatch patterns for drafting | 2D drafting (section 14) | ISO 128 (implement, never copy); Hershey fonts (believed public domain with a usage notice). CADCraft's library is rejected (29.5). Line types and hatch patterns are authored by 32.24's process (owner action G184) |
 | Thread, gear and fastener standards | Mechanical design (`geom-thread`) | ISO and ASME thread standards, ISO and AGMA gear standards. Implement from licensed copies; how tabulated values may be used is an owner question |
 
 Rows are added under the approval rules at the end of 29.20.
