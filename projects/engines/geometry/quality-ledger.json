@@ -336,7 +336,7 @@
       "line_text": "if b > a { b } else { a }",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The two differ only when b == a, where either is the same number: every caller passes an interval's upper end, a width, a weight or an absolute value, none NaN and none -0 (intervals keep a zero end as +0, and abs gives +0), so equal values have equal bits."
+      "reason": "The two differ only when b == a, where either is the same number: every caller passes an interval's end, a width, a weight, an absolute value or a parameter clamped to [0, 1], none NaN and none -0 (intervals keep a zero end as +0, abs and clamp give +0), so equal values have equal bits."
     },
     {
       "file": "projects/engines/geometry/crates/geom-nurbs/src/ops.rs",
@@ -344,7 +344,7 @@
       "line_text": "if b < a { b } else { a }",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The two differ only when b == a, where either is the same number: every caller passes weights, which are positive, error bounds, which are interval upper ends and never -0, or the starting infinity, so equal values have equal bits."
+      "reason": "The two differ only when b == a, where either is the same number: every caller passes weights, which are positive, interval ends or parameters clamped to [0, 1], never -0, or a starting infinity, so equal values have equal bits."
     },
     {
       "file": "projects/engines/geometry/crates/geom-nurbs/src/elevate.rs",
@@ -521,6 +521,38 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "next is always finite here: the test above lets only g > 0 and a finite f through, so u - f/g is finite or an infinity, and the clamp brings an infinity to an end of the domain. So || gives next == u, and && gives false; when next == u the mutant evaluates the curve at u again, finds the distance not smaller and stops with the same parameter, charging nothing more (the step was charged before)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/bernstein.rs",
+      "mutant": "replace || with && in BernsteinCurve<D>::minus",
+      "line_text": "if self.degree() != other.degree() || self.domain != other.domain {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A defect check no caller reaches: derivative_bound subtracts A·W' from A'·W, two products of one piece's own forms, both of degree 2p - 1 (p - 1 + p and p + p - 1; 0 for a constant) on the piece's domain. Both operands are false, so && gives false as || does."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/bernstein.rs",
+      "mutant": "replace || with && in BernsteinPatch<D>::minus",
+      "line_text": "if self.degrees != other.degrees || self.u != other.u || self.v != other.v {",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "A defect check no caller reaches: derivative_bound and normal subtract products of one patch's own forms whose degrees add up alike in each direction (2p - 1 or 3p - 1 with the q's, as the products' degree sums show), all on the patch's domain. Every operand is false, so any && among them is false as the || is."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/product.rs",
+      "mutant": "replace && with || in BernsteinPatch<3>::divide",
+      "line_text": "if !c.iter().all(|x| x.lo() <= 0.0 && x.hi() >= 0.0) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A defect check no caller reaches: normal_patches divides only along edges collapsed_edges proved to be one point, where the exact normal patch's row is exactly 0 and its interval enclosure therefore holds 0, so lo <= 0 and hi >= 0 both hold: the test is false with || as with &&."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/bernstein.rs",
+      "mutant": "replace > with >= in BernsteinCurve<D>::clip",
+      "line_text": "if t0 > t1 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only at t0 == t1. Every range end is an outward-rounded interval end strictly beyond the exact one, or the exact 0 or 1 of a clamp or a constant, so a tie is a lower end of one side's range meeting an upper end of the other's: then the exact ranges are disjoint, the piece misses the slab, and the mutant's None is right where the original keeps a range of zero width; 3,120 probe clips against thin and zero-width slabs never met one."
     }
   ],
   "coverage_off": [],
