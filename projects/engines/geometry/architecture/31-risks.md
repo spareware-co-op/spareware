@@ -607,6 +607,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | Time budgets: a deadline only through the caller's cancellation, never a replayable outcome | 10, 23, 28 | 32.15 (owner action G71) |
 | The reference machine, and the kernel's shares of Spare Construct's targets | 23, 28 | 32.16 (owner action G72) |
 | Arena indices assigned in persistent-name order in every operation (8.2's amendment) | 8, 23, 24 | 32.17 (owner action G76) |
+| The native format's CBOR tag, its name and its file extension | 24 | 32.18 (owner action G77) |
 
 ### Answered by the pieces built so far
 
@@ -859,7 +860,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | The content hash: SHA-256 or BLAKE3, in a safe portable implementation or an audited exception crate (both common crates use unsafe SIMD); and whether to adopt the name-ordered bucket-tree hash | 23 | Piece "Content hashes and cache keys", by benchmark |
 | Sign chunks written by a released kernel edition, or rely on per-chunk checker versions and lazy re-checks | 23 | Piece "Container mapping and trust on open" |
 | Bodies opened with fallbacks stay read-only until an acknowledgement is logged | 24 | Piece "Container mapping and trust on open" |
-| Register CBOR tag 0x534B4746 with IANA, and check the SKG name and the .skg extension for clashes | 24 | Piece "Native format specification: SPEC.md, REGISTRY.md and CDDL"; name check under name-protection |
+| Register CBOR tag 0x534B4746 with IANA, and check the SKG name and the .skg extension for clashes | 24 | 32.18 (owner action G77): the tag is unassigned and the owner sends the request; SKG is clear; the extension becomes `.skgf`, because Skrooge uses `.skg` |
 | Proposed figures to replace with measurements: the 64 MiB payload cap, 4,096-row chunks, 500 MB/s CBOR decoding, 100 MB/s Part 21 parsing | 24 | The geom-format and geom-p21 pieces |
 | One shared hardened XML and zip crate for the kernel and Spare Office would change section 5's "no other Kit crate" rule | 24 | Spare Kit's owners, by decision note |
 | 3D vertex rounding has no open implementation and a steep worst case: apply it only to flagged regions within a budget (chosen), or default imported meshes to q1 frames | 24 | Piece "Rounding imported polyhedra" |
