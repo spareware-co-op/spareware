@@ -565,8 +565,9 @@ impl<const L: usize> Wide<L> {
             }
         }
         let r = Wide::<M>(out);
-        // The sign must survive.
-        if r.is_negative() != negative {
+        // Narrowing, the sign must survive. Widening keeps it always, and the test is left out
+        // there (a constant for each pair of widths), as it costs every widening a branch.
+        if M < L && r.is_negative() != negative {
             return None;
         }
         Some(r)

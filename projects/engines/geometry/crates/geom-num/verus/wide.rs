@@ -710,6 +710,7 @@ pub proof fn lemma_resize_result(s: Seq<u64>, t: Seq<u64>, l: nat, m: nat, negat
     ensures
         ((unsigned(t, m) >= base(m) / 2) == negative) ==> fits(signed(s, l), m) && signed(t, m) == signed(s, l),
         ((unsigned(t, m) >= base(m) / 2) != negative) ==> !fits(signed(s, l), m),
+        m >= l ==> (unsigned(t, m) >= base(m) / 2) == negative,
 {
     let f: u64 = if negative { 0xFFFF_FFFF_FFFF_FFFFu64 } else { 0u64 };
     lemma_top_bit(s, l);
@@ -727,6 +728,15 @@ pub proof fn lemma_resize_result(s: Seq<u64>, t: Seq<u64>, l: nat, m: nat, negat
         let bk = base((m - l) as nat);
         assert(bl * (if negative { bk - 1 } else { 0 }) == (if negative { base(m) - bl } else { 0 })) by (nonlinear_arith)
             requires base(m) == bl * bk;
+        // Widening keeps the sign: the value grows by base(m) − base(l) exactly when negative.
+        let (us, ut, bm) = (unsigned(s, l), unsigned(t, m), base(m));
+        assert(ut == us + (if negative { bm - bl } else { 0 }));
+        assert((ut >= bm / 2) == negative) by (nonlinear_arith)
+            requires
+                ut == us + (if negative { bm - bl } else { 0 }),
+                negative == (us >= bl / 2),
+                0 <= us < bl,
+                0 < bl <= bm;
     } else {
         lemma_prefix_eq(t, s, m);
         lemma_split(s, m, l);
@@ -1987,8 +1997,9 @@ impl<const L: usize> Wide<L> {
         proof! {
             lemma_resize_result(self.limbs(), r.limbs(), L as nat, M as nat, negative);
         }
-        // The sign must survive.
-        if r.is_negative() != negative {
+        // Narrowing, the sign must survive. Widening keeps it always, and the test is left out
+        // there (a constant for each pair of widths), as it costs every widening a branch.
+        if M < L && r.is_negative() != negative {
             return None;
         }
         Some(r)
