@@ -52,22 +52,53 @@ const Registry = (() => {
     if (kind === 'inspectorSections' && !def.types.every(t => typeof t === 'string')) throw new TypeError(`${who}: types must be strings such as 'link', 'node', 'zone', 'gateway', 'route', 'count', 'overview'`);
   }
 
-  // Register (or replace, by id) one definition of a kind
+  // Register (or replace, by id) one definition of a kind. A country pack's version of a core entry (the same id) sits
+  // beside it instead: the pack's shows on that country's projects and the core one everywhere else.
   function add(kind, def) {
     check(kind, def);
-    const K = KINDS[kind], L = lists[kind], id = def[K.key];
-    const i = L.findIndex(d => d[K.key] === id);
-    const entry = { order: 1000, ...def, _seq: i >= 0 ? L[i]._seq : seq++ };
-    if (i >= 0) { if (def.order === undefined) entry.order = L[i].order; L[i] = entry; } else L.push(entry);
+    const K = KINDS[kind], L = lists[kind], id = def[K.key], pack = def.pack || loading || '';
+    const i = L.findIndex(d => d[K.key] === id && (d.pack || '') === pack);
+    const base = i >= 0 ? L[i] : L.find(d => d[K.key] === id && !d.pack);
+    const entry = { order: 1000, ...def, _seq: base ? base._seq : seq++ };
+    if (pack) entry.pack = pack;   // registered by a country pack's file
+    if (base && def.order === undefined) entry.order = base.order;
+    if (i >= 0) L[i] = entry; else L.push(entry);
     return entry;
   }
+  /* Country packs (js/packs/<id>/, see js/packs/README.md). A pack's files load between beginPack and endPack, and
+     everything they register, hooks included, carries the pack's id and takes part only while the project's country
+     is that pack. Everything registered outside a pack is the core and works in every country. */
+  const packs = [];
+  let loading = null;
+  function beginPack(def) {
+    if (!def || !/^[a-z][a-z0-9-]*$/.test(def.id || '') || typeof def.name !== 'string' || !def.name) throw new TypeError('Registry.beginPack: give an id (a lower-case code such as nz) and a name');
+    if (loading) throw new TypeError(`Registry.beginPack(${def.id}): pack '${loading}' is still loading; end it with Registry.endPack() first`);
+    const i = packs.findIndex(p => p.id === def.id);
+    if (i >= 0) packs[i] = { ...def }; else packs.push({ ...def });
+    loading = def.id;
+    return def;
+  }
+  function endPack() { loading = null; }
+  // The project's pack: settings.country when it names an installed pack, else the first one installed
+  function country() {
+    let c = null;
+    try { c = Store.P && Store.P.settings && Store.P.settings.country; } catch { /* the registry loaded without the store */ }
+    return packs.find(p => p.id === c) || packs[0] || null;
+  }
+  const live = d => !d.pack || (country() || {}).id === d.pack;
+  // A kind's entries for this project: the core's, with the pack's own versions in place of the ones it replaces
+  function current(kind) {
+    const on = (country() || {}).id, key = KINDS[kind].key, mine = new Set(lists[kind].filter(d => d.pack && d.pack === on).map(d => d[key]));
+    return lists[kind].filter(d => d.pack ? d.pack === on : !mine.has(d[key]));
+  }
+
   const byOrder = (a, b) => a.order - b.order || a._seq - b._seq;
   function list(kind, filter) {
     if (!lists[kind]) throw new TypeError(`Registry.list: unknown kind '${kind}'. Kinds: ${Object.keys(KINDS).join(', ')}`);
-    const out = lists[kind].slice().sort(byOrder);
+    const out = current(kind).sort(byOrder);
     return filter ? out.filter(filter) : out;
   }
-  const get = (kind, id) => (lists[kind] || []).find(d => d[KINDS[kind].key] === id) || null;
+  const get = (kind, id) => (lists[kind] ? current(kind) : []).find(d => d[KINDS[kind].key] === id) || (lists[kind] || []).find(d => d[KINDS[kind].key] === id) || null;
   function remove(kind, id) { const L = lists[kind], i = L ? L.findIndex(d => d[KINDS[kind].key] === id) : -1; if (i >= 0) L.splice(i, 1); return i >= 0; }
 
   // Run a feature callback without letting it break the app; errors go to the console and Registry.errors
@@ -86,7 +117,12 @@ const Registry = (() => {
     catch (e) { report(`${def.id || def.type}.${fn}`, e); return `<p class="note warn">${U.esc(def.title || def.label || def.id || def.type)} could not be shown: ${U.esc(e.message)}. Other results are unaffected.</p>`; }
   }
 
-  function on(h, fn) { if (typeof fn !== 'function') throw new TypeError(`Registry.on${h[0].toUpperCase() + h.slice(1)}: pass a function`); hooks[h].push(fn); return fn; }
+  function on(h, fn) {
+    if (typeof fn !== 'function') throw new TypeError(`Registry.on${h[0].toUpperCase() + h.slice(1)}: pass a function`);
+    const pack = loading;
+    hooks[h].push(pack ? (...a) => live({ pack }) ? fn(...a) : undefined : fn);
+    return fn;
+  }
   function fire(h, ...args) { for (const fn of hooks[h] || []) { try { fn(...args); } catch (e) { report('hook ' + h, e); } } }
 
   // Settings defaults from registered features: fill missing keys only, never overwrite saved values
@@ -117,6 +153,7 @@ const Registry = (() => {
   const api = {
     KINDS, HOOKS, errors, version: 1,
     list, get, remove, call, html, fire, applyDefaults, matchKeys,
+    beginPack, endPack, country, packs: () => packs.slice(),
     onInit: fn => on('init', fn), onStore: fn => on('store', fn), onSelect: fn => on('select', fn), onResults: fn => on('results', fn),
   };
   for (const k of Object.keys(KINDS)) api[k] = def => add(k, def);

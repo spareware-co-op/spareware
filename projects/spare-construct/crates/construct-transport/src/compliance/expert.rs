@@ -1,4 +1,4 @@
-//! Expert disclosure, sign-off, the assumption diff and the model status badge (features/compliance.js sections 12 and 13).
+//! Expert disclosure, sign-off, the assumption diff and the model status badge (packs/nz/compliance.js sections 12 and 13).
 //!
 //! The sign-off covers the inputs by their fingerprint ([`super::docs::fingerprint`]): changing an input clears it. The assumption diff
 //! compares this project's parameters with another party's file, which is untrusted: only the parameters Spare Construct compares are

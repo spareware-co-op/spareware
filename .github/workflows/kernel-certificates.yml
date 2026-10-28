@@ -30,6 +30,8 @@ on:
   schedule:
     - cron: "17 14 * * *"
   workflow_dispatch:
+  # Run whole by kernel-release.yml on a release tag, with every other kernel workflow (28.17).
+  workflow_call:
 
 permissions:
   contents: read

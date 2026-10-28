@@ -1,0 +1,182 @@
+/* Spareware ribbon and desktop frame. Read design/ribbon/README.md first.
+   Every colour, font, size, radius and space here is a token from design/tokens.css, which the page defines first.
+   Text is ink; the app colour (--app) fills only the current tab, pressed buttons and the large icons' one accent. */
+
+/* ---------- icons ---------- */
+.rb-ic{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;--ic-fill:none}
+.rb-ic.lg{width:32px;height:32px;stroke-width:1.2;--ic-fill:var(--app)}
+.rb-ic.dd{width:10px;height:10px;stroke-width:2.2}
+
+/* ---------- title bar: the app, the quick access bar, what is open, actions ---------- */
+.rb-title{display:flex;align-items:center;gap:var(--space);min-height:40px;padding:0 var(--space) 0 12px;background:var(--panel);border-bottom:1px solid var(--hairline)}
+.rb-brand{display:flex;align-items:center;gap:var(--space);font-weight:700;white-space:nowrap}
+.rb-brand .mark{width:14px;height:14px;background:var(--app);border-radius:2px}
+.rb-qat{display:flex;flex:0 1 auto;min-width:0;overflow:hidden;align-items:center;gap:1px;padding:0 6px;border-left:1px solid var(--hairline);border-right:1px solid var(--hairline)}
+.rb-q{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border:1px solid transparent;border-radius:var(--radius);background:none;color:var(--ink-2)}
+.rb-q:hover{border-color:var(--rule);background:var(--panel-alt);color:var(--ink)}
+.rb-q[aria-pressed="true"]{background:var(--app);color:var(--ink)}
+.rb-q[aria-disabled="true"]{opacity:.4;cursor:default}
+.rb-q[aria-disabled="true"]:hover{border-color:transparent;background:none}
+.rb-ttl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink-2)}
+
+/* ---------- ribbon: the tab row ---------- */
+.rb{position:relative;z-index:40;background:var(--panel);border-bottom:1px solid var(--hairline)}
+.rb-bar{display:flex;align-items:flex-end;gap:2px;min-height:30px;padding:3px var(--space) 0}
+.rb-tabs{display:flex;flex:0 1 auto;align-items:flex-end;gap:2px;min-width:0;overflow-x:auto;scrollbar-width:none}
+.rb-tabs::-webkit-scrollbar{display:none}
+.rb-file{align-self:center;height:24px;margin:0 6px 2px 0;padding:0 12px;border:1px solid var(--ink);border-radius:var(--radius);background:var(--panel);color:var(--ink);font-weight:600;white-space:nowrap}
+.rb-file:hover,.rb-file[aria-expanded="true"]{background:var(--app-tint)}
+.rb-tab{display:flex;flex:0 1 auto;align-items:center;gap:6px;min-width:3.2em;padding:5px 10px 6px;border:0;border-top:2px solid transparent;border-radius:var(--radius) var(--radius) 0 0;background:none;color:var(--ink-2);white-space:nowrap}
+.rb-tab:hover{background:var(--panel-alt);color:var(--ink)}
+.rb-tab[aria-selected="true"]{background:var(--app);color:var(--ink);font-weight:600}
+.rb-tl{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.rb-tab.ctx{flex:none;margin-left:6px;border-top-color:var(--app-strong);background:var(--app-tint);color:var(--ink)}
+.rb-tab.ctx+.rb-tab.ctx{margin-left:0}
+.rb-tab.ctx[aria-selected="true"]{background:var(--app)}
+.rb-ctxg{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2)}
+.rb-ctxg::after{content:"|";margin-left:6px;color:var(--ink-3)}
+.rb-sp{flex:1}
+.rb-end{display:flex;align-items:center;gap:6px;align-self:center;margin:0 6px 2px;white-space:nowrap}
+.rb-mini{align-self:center;display:inline-flex;align-items:center;justify-content:center;width:26px;height:24px;margin-bottom:2px;padding:0;border:1px solid transparent;border-radius:var(--radius);background:none;color:var(--ink-2)}
+.rb-mini:hover{border-color:var(--rule);color:var(--ink)}
+
+/* ---------- ribbon: panels of buttons ---------- */
+.rb-body{display:flex;align-items:stretch;height:94px;overflow-x:auto;overflow-y:hidden;background:var(--panel);border-top:1px solid var(--hairline);scrollbar-width:thin}
+.rb-body.ctx{border-top-color:var(--app-strong)}
+.rb-body[hidden]{display:none}
+.rb[data-min="true"] .rb-body{display:none}
+.rb[data-min="true"].peek .rb-body:not([hidden]){display:flex;position:absolute;left:0;right:0;top:100%;border-bottom:1px solid var(--ink)}
+.rb-panel{position:relative;display:flex;flex-direction:column;flex:none;border-right:1px solid var(--hairline)}
+.rb-pc{display:flex;flex:1;align-items:flex-start;gap:2px;padding:3px 4px 0}
+.rb-pl{padding:2px 8px 3px;background:var(--panel-alt);border-top:1px solid var(--hairline);font-size:11px;font-weight:600;letter-spacing:.08em;line-height:14px;text-align:center;text-transform:uppercase;color:var(--ink-3);white-space:nowrap}
+.rb-body.ctx .rb-pl{background:var(--app-tint);color:var(--app-strong)}
+.rb-lg,.rb-sm,.rb-pbtn{border:1px solid transparent;border-radius:var(--radius);background:none;color:var(--ink);text-align:center}
+.rb-lg{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:48px;max-width:78px;height:70px;padding:3px 4px 2px;font-size:12px;line-height:1.2}
+.rb-lg .rb-l{display:block;max-height:2.4em;overflow:hidden;text-wrap:balance}
+.rb-stack{display:flex;flex-direction:column;gap:1px}
+.rb-sm{display:flex;align-items:center;gap:6px;height:22px;padding:0 6px 0 4px;font-size:12px;white-space:nowrap;text-align:left}
+.rb-lg:hover,.rb-sm:hover,.rb-pbtn:hover{background:var(--panel-alt);border-color:var(--rule)}
+.rb-lg[aria-pressed="true"],.rb-sm[aria-pressed="true"]{background:var(--app);border-color:var(--app-strong)}
+.rb-lg[aria-pressed="true"] .rb-ic{--ic-fill:var(--panel)}
+.rb-lg[aria-disabled="true"],.rb-sm[aria-disabled="true"],.rb-sb [aria-disabled="true"]{opacity:.45;cursor:default}
+.rb-lg[aria-disabled="true"]:hover,.rb-sm[aria-disabled="true"]:hover{background:none;border-color:transparent}
+.rb-l .dd{margin-left:3px;vertical-align:middle}
+/* select boxes in a panel, with or without words beside them */
+.rb-sel{display:flex;align-items:center;gap:6px;height:22px;padding:0 4px;font-size:12px;color:var(--ink);white-space:nowrap}
+.rb-sel select{height:22px;max-width:190px;padding:0 4px;border:1px solid var(--rule);border-radius:var(--radius);background:var(--panel);color:var(--ink);font:inherit}
+.rb-sel-lg{flex-direction:column;align-items:flex-start;justify-content:center;height:70px}
+.rb-panel.s1 .rb-sel .rb-l{display:none}
+/* split buttons: the top runs the command, the arrow opens its menu */
+.rb-sb{display:flex;border-radius:var(--radius)}
+.rb-sb.rb-lg{flex-direction:column;gap:0;padding:0;height:70px}
+.rb-sb.rb-lg .rb-main{flex:1;height:auto;padding-bottom:0;border-bottom:0;border-radius:var(--radius) var(--radius) 0 0}
+.rb-sb.rb-lg .rb-arrow{height:14px;border-radius:0 0 var(--radius) var(--radius)}
+.rb-sb.rb-sm{gap:0;height:22px;padding:0}
+.rb-sb.rb-sm .rb-main{border-radius:var(--radius) 0 0 var(--radius)}
+.rb-arrow{display:flex;align-items:center;justify-content:center;min-width:14px;padding:0;border:1px solid transparent;background:none;color:var(--ink-2)}
+.rb-sb:hover .rb-main,.rb-sb:hover .rb-arrow{border-color:var(--rule)}
+.rb-arrow:hover,.rb-main:hover{background:var(--panel-alt)}
+.rb-sb>.rb-main{width:100%}
+/* folding for narrow windows: s1 drops the words from small buttons, s2 folds the panel into one button */
+.rb-pbtn{display:none}
+.rb-panel.s1 .rb-sm .rb-l{display:none}
+.rb-panel.s1 .rb-sm{padding:0 3px}
+.rb-panel.s2 .rb-pc,.rb-panel.s2 .rb-pl{display:none}
+.rb-panel.s2 .rb-pbtn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;height:100%;min-width:60px;max-width:84px;margin:0;padding:4px;font-size:12px;line-height:1.2}
+.rb-pbtn[aria-expanded="true"]{background:var(--app-tint);border-color:var(--app-strong)}
+
+/* ---------- menus, flyouts, the File menu and tooltips ---------- */
+.rb-menu,.rb-flyout,.rb-filemenu{position:fixed;z-index:89;background:var(--panel);border:1px solid var(--ink);border-radius:var(--radius);color:var(--ink);font-family:var(--font-ui);font-size:var(--text)}
+.rb-menu[hidden],.rb-flyout[hidden],.rb-filemenu[hidden]{display:none}
+.rb-menu{min-width:200px;max-width:340px;max-height:70vh;overflow:auto;padding:4px 0}
+.rb-flyout{padding:0}
+.rb-flyout .rb-panel{border-right:0}
+.rb-flyout .rb-pc{padding:4px}
+.rb-filemenu{display:flex;width:600px;max-width:calc(100vw - 16px);max-height:80vh;overflow:auto}
+.rb-fmain{flex:1;min-width:0;padding:6px 0;border-right:1px solid var(--hairline)}
+.rb-fmain .rb-mi{min-height:34px}
+.rb-fside{flex:1;min-width:0;padding:6px 0;background:var(--panel-alt)}
+.rb-mi{display:flex;align-items:center;gap:var(--space);width:100%;min-height:28px;padding:4px 12px 4px 9px;border:0;border-left:3px solid transparent;background:none;color:var(--ink);text-align:left}
+.rb-mi:hover,.rb-mi:focus-visible{background:var(--app-tint)}
+.rb-mi[aria-checked="true"]{border-left-color:var(--app-strong);font-weight:600}
+.rb-mi[aria-disabled="true"]{color:var(--ink-3);cursor:default}
+.rb-mi[aria-disabled="true"]:hover{background:none}
+.rb-mi .rb-l{flex:1;min-width:0}
+.rb-mi small{display:block;font-size:12px;font-weight:400;color:var(--ink-2)}
+.rb-mi kbd{margin-left:auto;font-family:var(--font-mono);font-size:11px;padding:0 4px;border:1px solid var(--rule);border-radius:var(--radius);color:var(--ink-2)}
+.rb-mck{display:inline-flex;width:16px;flex:none}
+.rb-mh{padding:6px 12px 4px;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+.rb-msep{height:1px;margin:4px 0;background:var(--hairline)}
+.rb-vsep{align-self:stretch;width:1px;margin:2px 4px;background:var(--hairline)}
+.rb-tip{position:fixed;z-index:99;max-width:300px;padding:6px 8px;background:var(--panel);border:1px solid var(--ink);border-radius:var(--radius);color:var(--ink);font-family:var(--font-ui);font-size:12px;line-height:1.4;pointer-events:none}
+.rb-tip[hidden]{display:none}
+.rb-tip div{margin-top:2px;color:var(--ink-2)}
+.rb-tip kbd{font-family:var(--font-mono);font-size:11px;padding:0 4px;border:1px solid var(--rule);border-radius:var(--radius);color:var(--ink-2)}
+
+/* ---------- docked palettes (properties, browsers): docks either side of the view; drag a title to move a palette ---------- */
+.rb-dock{display:flex;flex-direction:column;width:var(--dock-w,280px);min-height:0;overflow:hidden;background:var(--panel)}
+.rb-dock[hidden]{display:none}
+.rb-dock[data-side="left"]{border-right:1px solid var(--hairline)}
+.rb-dock[data-side="right"]{border-left:1px solid var(--hairline)}
+.rb-pal{display:flex;flex:1 1 0;flex-direction:column;min-height:0;overflow:hidden}
+.rb-pal[hidden]{display:none}
+.rb-pal.dragging{opacity:.5}
+.rb-pal-h{display:flex;align-items:center;gap:2px;min-height:28px;padding:0 2px 0 10px;background:var(--panel-alt);border-bottom:1px solid var(--hairline);font-size:12px;font-weight:600;white-space:nowrap;cursor:grab;user-select:none;touch-action:none}
+.rb-pal-h .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.rb-pal-h small{font-weight:400;color:var(--ink-2)}
+.rb-pal-b{flex:1;min-height:0;overflow:auto}
+.rb-split+.rb-pal .rb-pal-h{border-top:1px solid var(--hairline)}
+.rb-split{flex:none;height:5px;cursor:row-resize;background:var(--panel)}
+.rb-split:hover,.rb-split:focus-visible{background:var(--app-tint)}
+.rb-drop{position:fixed;z-index:95;background:var(--app-tint);border:2px dashed var(--app-strong);border-radius:var(--radius);opacity:.85;pointer-events:none}
+.rb-x{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;padding:0;border:1px solid transparent;border-radius:var(--radius);background:none;color:var(--ink-2)}
+.rb-x:hover{border-color:var(--rule);color:var(--ink)}
+
+/* ---------- open documents or views, as tabs over the work area ---------- */
+.rb-doctabs{display:flex;align-items:flex-end;gap:2px;min-height:30px;padding:3px 6px 0;overflow-x:auto;background:var(--panel-alt);border-bottom:1px solid var(--hairline);scrollbar-width:none}
+.rb-doctabs::-webkit-scrollbar{display:none}
+.rb-doc{display:flex;align-items:center;flex:none;max-width:230px;border:1px solid var(--hairline);border-bottom:0;border-top:2px solid transparent;border-radius:var(--radius) var(--radius) 0 0;background:var(--sink);color:var(--ink-2)}
+.rb-doc>button:first-child{display:flex;align-items:center;gap:6px;min-width:0;padding:3px 4px 4px 9px;border:0;background:none;color:inherit;white-space:nowrap}
+.rb-doc>button:first-child span{overflow:hidden;text-overflow:ellipsis}
+.rb-doc:hover{color:var(--ink)}
+.rb-doc[aria-current="true"]{border-top-color:var(--app-strong);background:var(--panel);color:var(--ink);font-weight:600}
+.rb-doc .rb-x{width:18px;height:18px;margin-right:3px}
+
+/* ---------- the bar under a view: scale, detail level, visual style, sun, crop, hide ---------- */
+.rb-vbar{display:flex;align-items:center;gap:2px;min-height:28px;padding:1px var(--space);overflow-x:auto;background:var(--panel);border-top:1px solid var(--hairline);font-size:12px;color:var(--ink-2);white-space:nowrap;scrollbar-width:none}
+.rb-vbar[hidden]{display:none}
+.rb-vb{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:24px;height:24px;padding:0 4px;border:1px solid transparent;border-radius:var(--radius);background:none;color:var(--ink-2);font-size:12px}
+.rb-vb:hover{border-color:var(--rule);color:var(--ink)}
+.rb-vb[aria-pressed="true"]{background:var(--app);color:var(--ink)}
+.rb-vb[aria-disabled="true"]{opacity:.4;cursor:default}
+.rb-vb[aria-disabled="true"]:hover{border-color:transparent}
+.rb-vbar select{height:22px;padding:0 4px;border:1px solid var(--rule);border-radius:var(--radius);background:var(--panel);color:var(--ink);font-size:12px}
+
+/* ---------- navigation buttons over the drawing: zoom and turn ---------- */
+.rb-nav{position:absolute;top:var(--space);right:var(--space);z-index:5;display:flex;flex-direction:column;gap:1px;padding:2px;background:var(--panel);border:1px solid var(--hairline);border-radius:var(--radius)}
+.rb-nav button{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border:1px solid transparent;border-radius:var(--radius);background:none;color:var(--ink-2)}
+.rb-nav button:hover{border-color:var(--rule);color:var(--ink)}
+.rb-nav button[aria-pressed="true"]{background:var(--app);color:var(--ink)}
+.rb-nav .sep{height:1px;margin:2px;background:var(--hairline)}
+
+/* ---------- status bar ---------- */
+.rb-status{display:flex;align-items:center;gap:14px;min-height:26px;padding:0 12px;overflow-x:auto;background:var(--panel);border-top:1px solid var(--hairline);color:var(--ink-2);font-size:12px;white-space:nowrap;scrollbar-width:none}
+.rb-status::-webkit-scrollbar{display:none}
+.rb-prompt{flex:1;min-width:160px;overflow:hidden;text-overflow:ellipsis}
+.rb-prompt b{color:var(--ink)}
+
+.rb :focus-visible,.rb-qat :focus-visible,.rb-menu :focus-visible,.rb-flyout :focus-visible,.rb-filemenu :focus-visible,.rb-doctabs :focus-visible,.rb-vbar :focus-visible,.rb-nav :focus-visible,.rb-dock :focus-visible{outline:2px solid var(--app-strong);outline-offset:-1px}
+
+@media (max-width:1200px){
+  .rb-tab{padding:5px 7px 6px}
+}
+@media (max-width:900px){
+  .rb-qat .rb-vsep,.rb-qat .rb-vsep~*{display:none}
+}
+@media (max-width:640px){
+  .rb-title{flex-wrap:wrap;gap:6px;padding:4px var(--space)}
+  .rb-qat{order:3;width:100%;border:0;padding:0;overflow-x:auto}
+  .rb-file{padding:0 8px}
+  .rb-filemenu{flex-direction:column}
+  .rb-fmain{border-right:0;border-bottom:1px solid var(--hairline)}
+}

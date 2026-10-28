@@ -1,6 +1,6 @@
 // Makes the ITA report's test projects: the saved test projects with every input the report reads filled in (report settings,
 // author text, registers, counts, crashes, journey times, stops, feeds, zone and link attributes, scenario roles), so each section
-// and option of features/report.js is reached. Used by gen-report.mjs. Everything here is deterministic.
+// and option of packs/nz/report.js is reached. Used by gen-report.mjs. Everything here is deterministic.
 import { clone } from './js-report-core.mjs';
 
 // A small seeded generator (Mulberry32), so the made-up crash records are the same every run

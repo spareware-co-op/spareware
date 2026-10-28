@@ -1,4 +1,4 @@
-//! Land use truth tests: development traffic of features/landuse-plus.js (where it goes by gateway, junctions without and with the development, the "without"
+//! Land use truth tests: development traffic of packs/nz/landuse-plus.js (where it goes by gateway, junctions without and with the development, the "without"
 //! scenario, the text naming a gateway's count and setting a gateway from one chosen count) against the prototype (tools/transport-truth/gen-census.mjs).
 //! The results come from this crate's own assignment, which the assignment truth tests hold to the prototype's.
 
