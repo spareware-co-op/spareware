@@ -602,6 +602,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | Writing to EMBER's authors, the csgrs and Hyper author, CADCraft, tangency-labs, McNeel (openNURBS, and so Rhino subdivision exchange) and Pixar (OpenSubdiv's TOST licence); the order of contacts | 11, 14, 16, 24, 29 | 32.9 |
 | Revit exports in a public repository; anonymised real projects; an AutoCAD seat and terms check; the ruling on black-box observation of proprietary programs, and so CADCraft's test scenarios; checking our exports in proprietary programs | 14, 28, 29 | 32.10 |
 | The licence of our own fixtures; ABC, IFC4.x-IF, Thingi10K, NIST STEP files, the CC BY-ND IFC samples, and step-conformance's exported parts | 28, 29 | 32.11 |
+| The crate table, its thirteen layers and rules, `geom-make` and 30.5's three edges in layer 12 | 27, 30 | 32.13 (owner action G08) |
 
 ### Answered by the pieces built so far
 
@@ -803,7 +804,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | Reword "indices are never persisted" to "never used as a reference outside its body record", because arena positions are record-local in the file | 24 | Editorial fix to 20.1 |
 | A new resolution result, HistoryPruned, distinct from Deleted | 24 | Piece "PruneHistory operation and HistoryPruned resolution" |
 | The name scheme fixes NFC normalisation of hashed text, and its Unicode version | 24 | NameScheme v1 note; piece "geom-format: names, history, recipe envelope, attributes and provenance records" |
-| The 128-bit NameId value and the history record types live in geom-topo, so geom-mesh can use them; geom-name keeps the naming graph and resolution | 19 | Crate-list note (27) |
+| The 128-bit NameId value and the history record types live in geom-topo, so geom-mesh can use them; geom-name keeps the naming graph and resolution | 19 | 32.13: in geom-op, below every crate that names or records history; geom-name keeps the graph and resolution |
 
 ### Chapter 21: Determinism
 
@@ -868,35 +869,36 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 
 ### Chapter 27: Crates and folders
 
-Proposed in 31.5 (R23) and 32.5: one consolidated crate-list note settles all of these, accepted with G01 before the first kernel code merges.
+Proposed in 31.5 (R23) and 32.5: one consolidated crate-list note settles all of these. The owner accepted chapter 27's proposed table, layers and rules as that note on 2026-10-28 (owner action G08, 32.13); a row that names 32.13 is settled by it, and its piece builds to it.
 
 | Question | Raised in | Decided in |
 | --- | --- | --- |
-| A home below the facade for the cross-representation boolean: a new geom-combine, or bool added to geom-convert's dependencies | 11 | Crate-list note; piece "Cross-representation boolean entry point (geom-combine)" |
-| One deterministic box tree below geom-bool, geom-mesh, geom-2d and geom-terrain: in geom-math (11, 23), or in a new geom-bvh (19) | 11, 19, 23 | Crate-list note; piece "Deterministic integer box tree and culling" |
-| geom-run (a no_std parallel helper, budgets and cancellation) and geom-pool (rayon and Web Workers behind a threads feature). The adapter's name, folder and dependency disagree: `engine-geometry-pool` in `projects/engines/crates/`, with a `no_std` facade that re-exports only the `Pool` trait (23.4), or `geom-pool` in layer 13, with `engine-geometry` on it behind a `threads` feature and allowed `std` (27, 29.4, the board, G04's `pool.rs`, G09's crate table) | 23; G04 and G09 builds | Crate-list note; piece "Deterministic parallel helper (geom-run, geom-pool)" |
-| Deterministic linear algebra inside geom-num (15, 29), in a new geom-linalg (16), or in geom-math | 15, 16, 29 | Crate-list note; one of the pieces "Deterministic dense linear algebra in geom-num" and "Deterministic linear algebra (geom-linalg)" is dropped |
+| A home below the facade for the cross-representation boolean: a new geom-combine, or bool added to geom-convert's dependencies | 11 | 32.13: geom-combine; piece "Cross-representation boolean entry point (geom-combine)" |
+| One deterministic box tree below geom-bool, geom-mesh, geom-2d and geom-terrain: in geom-math (11, 23), or in a new geom-bvh (19) | 11, 19, 23 | 32.13: geom-bvh; piece "Deterministic integer box tree and culling" |
+| geom-run (a no_std parallel helper, budgets and cancellation) and geom-pool (rayon and Web Workers behind a threads feature). The adapter's name, folder and dependency disagree: `engine-geometry-pool` in `projects/engines/crates/`, with a `no_std` facade that re-exports only the `Pool` trait (23.4), or `geom-pool` in layer 13, with `engine-geometry` on it behind a `threads` feature and allowed `std` (27, 29.4, the board, G04's `pool.rs`, G09's crate table) | 23; G04 and G09 builds | 32.13: geom-pool in layer 13, as built; piece "Deterministic parallel helper (geom-run, geom-pool)" |
+| Deterministic linear algebra inside geom-num (15, 29), in a new geom-linalg (16), or in geom-math | 15, 16, 29 | 32.13: geom-linalg; nothing of linear algebra is built in geom-num |
 | geom-profile, to carry geometry between sketches and the model | 15 | Piece "geom-profile: references in, profiles out" |
-| geom-panel and geom-analysis, with chapter 16's dependency additions | 16 | Crate-list note; pieces "Panelisation and rationalisation" and "Class-A analysis" |
-| geom-civil in the kernel, so terrain and alignments stay independent, or inside Spare Construct under a strict reading of 26.1; and geom-landxml | 17 | Crate-list note; piece "geom-civil compositions" |
-| geom-exchange, geom-p21, geom-heal and a development-only EXPRESS generator (geom-express); geom-cloudio withdrawn | 24 | Crate-list note |
+| geom-panel and geom-analysis, with chapter 16's dependency additions | 16 | 32.13: accepted; pieces "Panelisation and rationalisation" and "Class-A analysis" |
+| geom-civil in the kernel, so terrain and alignments stay independent, or inside Spare Construct under a strict reading of 26.1; and geom-landxml | 17 | geom-landxml: 32.13. geom-civil: owner action G238; piece "geom-civil compositions" |
+| geom-exchange, geom-p21, geom-heal and a development-only EXPRESS generator (geom-express); geom-cloudio withdrawn | 24 | 32.13: the three crates with 30.5's edges; the EXPRESS generator is a module of geom-gen; geom-cloudio withdrawn |
 | A development-only geom-proof crate for the predicate generator's proofs, or keep them in geom-num and geom-test. The cargo-verus fallback makes vstd a build dependency of geom-num | 28 | After piece "Verus twin spike" |
-| geom-2d also depends on topo, name and intersect; line and arc predicates sit where both crates reach them; conic predicates in geom-num; the 2D R-tree in geom-2d or shared | 12, 14 | Crate-list note; piece "2D-09 Arrangement of lines, arcs and conics" |
-| geom-intersect also depends on geom-nurbs, and an ImplicitBound trait in geom-surface lets fields be traced without upward dependencies | 12 | Crate-list note; piece "Implicit-parametric tracer and level curves" |
-| geom-mesh also depends on curve, surface and intersect | 19 | Crate-list note; piece "Edge-first certified tessellation" |
-| geom-poly's job line names indicators and piece selection (decided in 11). Still open: whether the maximal-face merge, with T-junction insertion, moves out of geom-bool's rebuild into geom-poly so geom-mesh can share it (19), or stays in geom-bool (11) | 11, 19 | Crate-list note; editorial fix to 27 |
-| Chapter 13's placements: frame rules, station frames and surface extension in geom-surface; skinning, Gordon, Coons and N-sided fills in geom-nurbs and geom-surface; plane commit in geom-poly; the local-operation arrangement step and change classification in geom-bool; TopologyChange records in geom-name; isoclines in geom-intersect. Its additions: sweep on poly, intersect, bool and skeleton; offset on skeleton, name and topo; skeleton on poly; blend on name, topo and check. Its reading of section 5: an operation may use another operation's public interface (geom-offset using geom-skeleton's skeleton), never its internals | 13 | Crate-list note |
-| Chapter 17's additions: terrain on poly, bool, skeleton, curve, surface and name; sweep on poly; align on name; cloud on nurbs and surface. The corridor solid goes in geom-sweep and the corridor model in geom-align | 17 | Crate-list note |
-| geom-draw's row adds mesh, and every row lists all its direct dependencies | 18 | Crate-list note |
-| Swept volumes: routes 1 and 2 as a module of geom-sweep, route 3 as a space-time module of geom-field, with no new crate | 13 | Crate-list note; pieces "Swept volumes: exact routes" and "Swept volumes as fields" |
-| Closed-form distances as a geom-intersect module reached through a trait the facade implements, or geom-spatial depending on geom-intersect | 19 | Crate-list note; piece "Analytic closed-form distances" |
+| geom-2d also depends on topo, name and intersect; line and arc predicates sit where both crates reach them; conic predicates in geom-num; the 2D R-tree in geom-2d or shared | 12, 14 | 32.13: geom-2d's edges, and the R-tree becomes geom-bvh; where line, arc and conic predicates sit, piece "2D-09 Arrangement of lines, arcs and conics" |
+| geom-intersect also depends on geom-nurbs, and an ImplicitBound trait in geom-surface lets fields be traced without upward dependencies | 12 | 32.13: accepted; piece "Implicit-parametric tracer and level curves" |
+| geom-mesh also depends on curve, surface and intersect | 19 | 32.13: accepted; piece "Edge-first certified tessellation" |
+| geom-poly's job line names indicators and piece selection (decided in 11). Still open: whether the maximal-face merge, with T-junction insertion, moves out of geom-bool's rebuild into geom-poly so geom-mesh can share it (19), or stays in geom-bool (11) | 11, 19 | 32.13: the merge moves into geom-poly, as 27's job line says |
+| Chapter 13's placements: frame rules, station frames and surface extension in geom-surface; skinning, Gordon, Coons and N-sided fills in geom-nurbs and geom-surface; plane commit in geom-poly; the local-operation arrangement step and change classification in geom-bool; TopologyChange records in geom-name; isoclines in geom-intersect. Its additions: sweep on poly, intersect, bool and skeleton; offset on skeleton, name and topo; skeleton on poly; blend on name, topo and check. Its reading of section 5: an operation may use another operation's public interface (geom-offset using geom-skeleton's skeleton), never its internals | 13 | 32.13: accepted |
+| Chapter 17's additions: terrain on poly, bool, skeleton, curve, surface and name; sweep on poly; align on name; cloud on nurbs and surface. The corridor solid goes in geom-sweep and the corridor model in geom-align | 17 | 32.13: accepted |
+| geom-draw's row adds mesh, and every row lists all its direct dependencies | 18 | 32.13: accepted |
+| Swept volumes: routes 1 and 2 as a module of geom-sweep, route 3 as a space-time module of geom-field, with no new crate | 13 | 32.13: no new crate; pieces "Swept volumes: exact routes" and "Swept volumes as fields" |
+| Closed-form distances as a geom-intersect module reached through a trait the facade implements, or geom-spatial depending on geom-intersect | 19 | 32.13: geom-spatial on geom-intersect; piece "Analytic closed-form distances" |
 | The drawing checker in geom-draw (chosen), or one checker crate moved above geom-draw | 18 | Piece "Drawing checker" |
 | Continuous collision detection lives in geom-spatial | 19 | Piece "Time of first contact (Tight Inclusion method)" |
 | Sheet metal reuses geom-panel's unroll, or unrolling moves to a shared crate; subdivision displacement belongs to a content-creation toolkit | 16 | Decision note under 26.1 when a second program needs it |
 | Add geometry/PROVENANCE.md, NOTICE, methods/ and PATENTS.md to 26.3's file table and 27's folder tree | 29 | Editorial fix; piece "Provenance records" |
 | Chapter 27's table and the scaffold's `table.rs` (G09) are two copies of the crate graph that nothing compares | G09 build | Piece "MAP.json generator and module-header grammar", or the merge gate |
 | The header grammar: G09's interim grammar (job, layer, invariants, sections), its Status and "dependencies still to add" lines, which name board pieces and go stale when a piece splits (30.7), and which chapters a Sections line lists. `geom-num` has no Layer line, which G09's table records as a known gap. G11's development crates state their job but no layer, invariants or sections in that grammar, so the scaffold check fails on them when G09 and G11 have both merged | G09 and G11 builds; 26, 27 | Piece "MAP.json generator and module-header grammar" |
-| One lint posture: which crates carry `geom-num`'s `[lints]` table and `clippy.toml` (G09's check says the crates that ship; G11's test holds the development crates to it word for word); whether `float_cmp = "allow"` and its reason hold everywhere; and which `clippy.toml` bans the binding crates carry | G09 and G11 builds | Crate-list note; piece "Merge gate: licences, lints and builds" |
+| Content hashes for reuse below `geom-format`: 23.8 puts hashing, `CacheKey` and the memo store in `geom-format` (27, accepted in 32.13), but `geom-bool`'s arrangement cache (11.6), `geom-draw`'s per-element caches (18.9) and `geom-spatial`'s instances (19.11, 19.12) key by content hash and sit below it. Either the caller passes the hash in as a key, or the hash of canonical bytes moves into `geom-op`'s canonical encoder, as NameId hashing already does (30.6) | 11, 18, 19, 23; G08 | Piece "Canonical encoder and safe hash" (G86) |
+| One lint posture: which crates carry `geom-num`'s `[lints]` table and `clippy.toml` (G09's check says the crates that ship; G11's test holds the development crates to it word for word); whether `float_cmp = "allow"` and its reason hold everywhere; and which `clippy.toml` bans the binding crates carry | G09 and G11 builds | 32.13: every crate that ships, development crates by G11's test, and the binding crates with `unsafe_code = "deny"`; `float_cmp`, piece "Merge gate: licences, lints and builds" |
 
 ### Chapter 28: Testing
 

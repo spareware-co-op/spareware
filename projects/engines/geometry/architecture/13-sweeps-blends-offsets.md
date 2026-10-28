@@ -6,7 +6,7 @@ Evidence: [02](../../../kit/notes/G01-evidence/02-occt-parasolid-acis.md) sectio
 
 This chapter covers every operation that makes a solid from profiles or edits a solid locally: extrude, revolve, sweeps along paths and rails, helical sweeps, lofts, network and developable surfaces, the IFC sweeps, fillets, chamfers and blends, offsets, shells, thickening, draft, face edits, straight-skeleton roofs, sheet metal and the swept volumes of moving tools. The operations live in `geom-sweep`, `geom-blend`, `geom-offset` and `geom-skeleton`, with the domain toolkits `geom-stair`, `geom-thread` and `geom-sheet` on top (section 27).
 
-Pieces that several of these crates need live in the core, so no operation depends on another's internals (section 5):
+Pieces that several of these crates need live in lower layers (27, accepted in 32.13), so no operation depends on another's internals (section 5):
 
 | Shared piece | Crate |
 | --- | --- |
@@ -15,10 +15,10 @@ Pieces that several of these crates need live in the core, so no operation depen
 | Skinning, Gordon combination, Coons patches, N-sided fills | `geom-nurbs` and `geom-surface` |
 | Plane commit (13.2) | `geom-poly`, with its predicates in `geom-num` |
 | The arrangement step of a local operation and the classification of topology changes | `geom-bool` |
-| Records of topology changes in the history | `geom-name` |
+| Records of topology changes in the history | `geom-op` |
 | Isoclines and other level curves | `geom-intersect` (section 12) |
 
-Open question 3 lists the dependency changes this needs in section 27.
+Open question 3 listed the dependency changes this needs in section 27. It is answered: chapter 27's crate table, accepted in 32.13, takes these placements and edges, and the `name` edges added only for naming are `geom-op` edges.
 
 Building elements are Spare Construct's compositions: the kernel knows nothing about walls (section 5). So that every discipline can see what it stands on, this table lists each building element family with the kernel operations it uses and who owns them:
 
@@ -346,7 +346,7 @@ Local operations can change which faces, edges and vertices exist. Parasolid doc
 | Body splits | One solid becomes several | A shell thicker than a narrow waist | Only when allowed |
 
 ```rust
-// Recorded by geom-name; classified from the arrangement by geom-bool.
+// A history record owned by geom-op; classified from the arrangement by geom-bool.
 enum TopologyChange {
     VertexSplit      { vertex: NameId, edges: SortedVec<NameId> },
     FaceVanished     { face: NameId, why: Vanish },              // collapsed, or turned inside out
@@ -391,7 +391,7 @@ A sheet-metal part is flat flanges joined by bends, all of one thickness T.
 
 ## 13.17 Swept volumes of moving tools
 
-A swept volume is the space a body passes through as it moves: a cutter's material removal, a door's swing, a robot's reach. The caller states the least exactness class they accept (`Accept`, 13.2), and the most exact route that applies runs. Routes 1 and 2 live in `geom-sweep`; route 3 is a space-time field in `geom-field`. This chapter proposes one owner for the whole operation, `geom-sweep`: its entry point picks the route and calls `geom-field` for route 3, on a tool the caller has already turned into an exact distance field (13.18), because `geom-convert` depends on `geom-sweep` and cannot be called from it. Section 27 should name this owner and the added dependency, and section 16.2's swept volumes should point here (open question 3).
+A swept volume is the space a body passes through as it moves: a cutter's material removal, a door's swing, a robot's reach. The caller states the least exactness class they accept (`Accept`, 13.2), and the most exact route that applies runs. Routes 1 and 2 live in `geom-sweep`; route 3 is a space-time field in `geom-field`. This chapter proposes one owner for the whole operation, `geom-sweep`: its entry point picks the route and calls `geom-field` for route 3, on a tool the caller has already turned into an exact distance field (13.18), because `geom-convert` depends on `geom-sweep` and cannot be called from it. 27's crate table names this owner and the added dependency (accepted in 32.13), and section 16.2's swept volumes point here.
 
 1. **A flat-faced body moving in straight segments**: the Minkowski sum of the body with each segment, united by the arrangement engine. Its planes are the body's own, moved by integer vectors, and planes spanned by its edges and the segment, so it is plane-based and Exact.
 2. **Round tools and turning bodies** (flat, ball, bull-nose and tapered cutters, and bodies turning about a fixed axis):

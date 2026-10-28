@@ -648,7 +648,7 @@ mod repository {
 
     // -------------------------------------------------------------- chapter 27, row by row
 
-    /// Chapter 27's proposed crate table typed in again from the chapter (layer, direct
+    /// Chapter 27's crate table (accepted in 32.13) typed in again from the chapter (layer, direct
     /// dependencies in its notation), with chapter 30.5's four amendments applied, and
     /// `geom-format`'s "everything stored" as section 24.4's list.
     const CHAPTER_27: &[(&str, u8, &str)] = &[

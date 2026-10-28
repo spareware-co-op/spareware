@@ -21,7 +21,7 @@
 //!
 //! Family: Free-form.
 //!
-//! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
+//! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
 //! Status: scaffold only; built by pieces G322, G323, G333, G334, G335, G340, G350, G351, G425.

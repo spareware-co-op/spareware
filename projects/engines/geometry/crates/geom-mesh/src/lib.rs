@@ -23,7 +23,7 @@
 //!
 //! Family: Mesh.
 //!
-//! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
+//! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
 //! Status: scaffold only; built by pieces G146, G147, G148, G149, G150, G151, G152, G153, G288,

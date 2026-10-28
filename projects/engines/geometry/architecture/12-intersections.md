@@ -15,7 +15,7 @@ Two terms carry the whole chapter. An **enclosure** is a box, in parameter space
 ## 12.1 What the crate does, and what it leaves to others
 
 - **Operands.** A curve, a surface, or an implicit function (one given by an equation F(x) = 0), each restricted to a box of its parameter space. The crate works on carriers (the underlying curve or surface), not on faces. Trimming a result to a face's loops is section 11's job, which uses this crate's 2D curve-curve intersection in parameter space to do it.
-- **Kinds are reached through behaviour traits.** Section 7 lists what a kind can do but names no traits, so the trait names here are a proposed amendment to section 7. `ParamCurve` and `ParamSurface` give evaluation, derivatives, and conservative bounds on the value and derivatives over any parameter box. A derivative bound may be `Unbounded`, as section 16.1's subdivision limit surface reports for any box that touches an extraordinary vertex; the kind then gives a normal cone in its place. `ImplicitBound` gives the interval value and gradient of F over a 3D box, and whether F is smooth there. `ImplicitBound` is defined in `geom-surface`, and planes, quadrics, tori and `geom-field`'s fields implement it. So subdivision surfaces (section 16) and fields take part without `geom-intersect` depending upwards. This makes `geom-field` depend on `geom-surface`, which neither section 16.6 nor section 27 lists yet. That dependency is a proposed amendment to both, and it makes no cycle. The closed-form routes of 12.7 ask each operand for its analytic data when it has some.
+- **Kinds are reached through behaviour traits.** Section 7 lists what a kind can do but names no traits, so the trait names here are a proposed amendment to section 7. `ParamCurve` and `ParamSurface` give evaluation, derivatives, and conservative bounds on the value and derivatives over any parameter box. A derivative bound may be `Unbounded`, as section 16.1's subdivision limit surface reports for any box that touches an extraordinary vertex; the kind then gives a normal cone in its place. `ImplicitBound` gives the interval value and gradient of F over a 3D box, and whether F is smooth there. `ImplicitBound` is defined in `geom-surface`, and planes, quadrics, tori and `geom-field`'s fields implement it. So subdivision surfaces (section 16) and fields take part without `geom-intersect` depending upwards. This makes `geom-field` depend on `geom-surface`, which 27's crate table lists (accepted in 32.13), and it makes no cycle. The closed-form routes of 12.7 ask each operand for its analytic data when it has some.
 - **Pairs come from the caller**, found with bounding-volume hierarchies (sections 11 and 19). They usually arrive as a batch with one result per pair, so one hard pair does not fail the batch.
 - **Frames.** Operands in different frames are first converted into the finer frame: a factor of 25 per rung (section 6.1). That is exact only when the frames differ by an exact transform (whole-step shifts, quarter turns and mirrors, section 7) and the operands fit the finer frame's range (within 2^40 of its steps: ±6.87 km at q1). Otherwise the pair fails with `FrameRange` (12.16), or, on request, is converted to the coarser frame instead; its items are then Certified, with that rounding in their bound (as in 19.12). Every threshold below uses the grid step q of the frame the pair runs in.
 - **Intersections known by construction** (a fillet's contact curves, a sweep's seams, an extrusion's side edges) are passed in. They are excluded from the search only where 12.11 proves nothing else is there.
@@ -45,13 +45,12 @@ Where each program meets intersections:
 ## 12.2 The call and its result
 
 ```rust
-pub fn intersect(ctx: &IntersectCtx, a: &Operand, b: &Operand, opts: &IntersectOpts)
+pub fn intersect(ctx: &mut IntersectCtx, a: &Operand, b: &Operand, opts: &IntersectOpts)
     -> Result<Intersection, IntersectError>;
 
-pub struct IntersectCtx<'a> {
+pub struct IntersectCtx<'a, 'c> {
     pub step: GridStep,          // q of the frame the pair runs in (12.1)
-    pub budget: WorkUnits,       // this pair's own budget (12.15)
-    pub cancel: &'a CancelToken,
+    pub meter: &'a mut WorkMeter<'c>, // geom-run's (23.10): this pair's own budget (12.15); polls the caller's Cancel
     pub mode: Mode,              // Default, or Certify (12.14)
     pub ceiling: Steps,          // the largest bound the caller accepts: ε_fit unless raised
 }
@@ -67,7 +66,7 @@ pub struct Intersection {
     pub items: Vec<Item>,        // in canonical order (12.15)
     pub coverage: Coverage,      // CompleteOutsideFlagged, or TopologyCertified
     pub diagnostics: Vec<Diag>,  // route changes, ties broken, escalations
-    pub work: WorkUnits,         // deterministic count of the work done
+    pub work: Usage,             // geom-run's: deterministic count of the work done
 }
 pub enum Item {
     Point   { at: ParamBox, xyz: GridBox, contact: PointContact, class: Exactness },

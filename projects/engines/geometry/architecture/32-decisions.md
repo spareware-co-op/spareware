@@ -25,6 +25,12 @@ No agent acts on any of these, writes to anyone, or signs anything. The owner de
 | 32.11 | The licence of our test cases | CC0 if the vote confirms test cases are not "core", otherwise MPL-2.0; strict rules for outside data | 28, 29 | G97, the fixture format |
 | 32.12 | Pieces built ahead of the board: merge order, cost rises for correctness, goldens before the first edition | Merge in the board's order; accept a recorded rise; kernel owners approve goldens until the first Stable release | 23, 28, 30 | The next merge after G02 |
 
+The board (30.5) also turns into a piece every narrower question that chapters 6 to 29 leave to an owner. Each is decided in its own section below, under the owner's standing rule of 2026-10-27: "Research and choose the best options or use the research we have". The stored research comes first (`projects/kit/notes/G01-evidence/`, chapter 29), then the chapters the piece names, and fresh reading only where those are not enough; each section says which.
+
+| | Owner action | Decision | Chapters | Needed by |
+| --- | --- | --- | --- | --- |
+| 32.13 | G08: the crate table and layers | Chapter 27's proposed crate table, thirteen layers and rules, and 30.5's four amendments, all as proposed | 5, 27, 30 | G09, the scaffold |
+
 ## 32.1 The grid ladder (decision 1)
 
 **What it is.** Every point the kernel stores sits on an invisible grid of tiny steps. The step size decides which measurements are stored exactly, and how large an area one coordinate frame can cover. A finer step makes more units exact but shrinks the area.
@@ -282,3 +288,29 @@ Why: shared hard cases make every kernel better, ours included, but not at the c
 | Goldens before the first edition | A. A kernel owner approves each change in its pull request, which says what moved and why and replaces the constant; editions and operation versions start with the first Stable release (G482). B. Treat every change now as a new edition | A. Nobody depends on a released result yet, and 26.2's edition promise is made to users of released versions |
 
 **Changes:** chapters 23 (23.13), 28 (28.13) and 30 (30.0), and AGENTS.md if cross-piece edits are allowed.
+
+## 32.13 The crate table and layers (owner action G08)
+
+**What it is.** Chapter 27 copies G01's crate table and then proposes amendments to it. They add about twenty crates, give every crate one of thirteen layers with the edges allowed inside each, make every dependency list complete, name one owner for each thing that had two or none, and change four rules. Chapter 30.5 adds four more: a new crate, `geom-make`, for primitives, transforms and patterns, and three edges in layer 12 (`geom-p21` on `geom-format`; `geom-exchange` on `geom-format`, `geom-p21`, `geom-intersect` and `geom-check`; `geom-heal` on `geom-exchange`). The board and G09's scaffold were built to all of them while this decision waited (30.0, 32.12).
+
+| Option | What it means |
+| --- | --- |
+| A. Accept every item as proposed | Chapter 27's proposed tables and rules, with 30.5's amendments, become the crate table. The scaffold already builds exactly this |
+| B. Accept with changes | Take the alternatives the chapters raised: the box tree as a module of `geom-math`, linear algebra inside `geom-num`, the thread adapter as `engine-geometry-pool` beside a `no_std` facade, or no `geom-combine` |
+| C. Keep G01's table | Reject the amendments; the twenty crates fold back into G01's rows |
+
+**Decided 2026-10-28 (owner action G08): A, every item as proposed.** Read with 31.7's chapter 27 questions, chapters 11, 19 and 23 on the box tree, 15, 16 and 29 on linear algebra, 23.4 on the thread adapter, and 32.5 and R23 on why one crate list matters.
+- **Each amendment closes a gap the chapters found, and no alternative closes it better.** No crate owned the types every operation returns, and they must sit below every crate that uses them, so `geom-op`. The box tree had five homes with different tie rules, and putting it in `geom-math` would hang `geom-run` under geometry, so one tree in `geom-bvh`. Linear algebra was placed twice, and inside `geom-num` it would break that crate's one job, so `geom-linalg`. Primitives had no home below the checker, so `geom-make`. The foreign-function bindings need `unsafe`, which every kernel crate and the facade forbid, so three binding crates hold it, audited, outside the kernel.
+- **The thread adapter stays `geom-pool`**, in layer 13 beside the facade, with `engine-geometry` on it behind a `threads` feature. 23.4's `engine-geometry-pool` with a `no_std` facade was the alternative. `geom-pool` keeps `std` and rayon out of every kernel crate just as well, and it is what G04 and G33 built, merged and tested; renaming it now would change working code for no gain.
+- **It is already proven.** G09's scaffold check reads every `Cargo.toml` on every pull request and fails on any edge the table does not list, any edge that breaks the layer rule, and any cycle. It has passed on main since G09 merged. Every new crate is scaffolded, `geom-run`, `geom-pool` and `geom-gen` hold merged code, and pieces under way build into `geom-linalg` (G49, G50). Option C would undo that work and leave the gaps open.
+- **The rules are accepted as written:** a crate depends only on lower layers or along an allowed same-layer edge, and only on public interfaces; `unsafe` only in the binding crates, at the foreign-function boundary; every `geom-*` crate `no_std` except `geom-pool`, with the facade, the bindings and the development crates allowed `std`; checked arithmetic and one lint posture on every crate that ships; a toolkit enters the kernel when a second program needs it; and one development crate, `geom-gen`, for every generator whose output is committed.
+
+What the accepted table settles among 31.7's chapter 27 questions: `geom-combine` for the cross-representation boolean, the dispatch and the validity query; one box tree in `geom-bvh`, which withdraws the Morton cell index in `geom-mesh` and the R-tree in `geom-2d`; `geom-linalg`, so the board's linear algebra is built there and nowhere in `geom-num`; `geom-profile`; `geom-panel` and `geom-analysis`; `geom-landxml`; `geom-exchange`, `geom-p21` and `geom-heal`, with OQ-24.6's EXPRESS generator as a module of `geom-gen` and `geom-cloudio` withdrawn; every row's complete dependency list, chapters 12, 13, 17, 18 and 19's additions among them; the maximal-face merge in `geom-poly`, shared by `geom-bool` and `geom-mesh`; `geom-spatial` on `geom-intersect` directly for closed-form distances, with no trait in the facade; swept volumes with no new crate; and the drawing checker in `geom-draw`.
+
+One question the proposal left open is settled here too: **which lint posture the binding crates carry.** They carry `geom-num`'s `clippy.toml` and `[lints]` tables like every crate that ships, because those bans are about determinism and panics, which a binding must not bring in either, with one change: `unsafe_code = "deny"` in place of `"forbid"`, so each audited block can lift it with an `#[allow(unsafe_code)]` on the narrowest item, a `// SAFETY:` comment saying why it is sound, and clippy's `undocumented_unsafe_blocks` denied. The scaffold check gains that row when G453 builds the first binding crate.
+
+Not settled here: whether `geom-civil`, `geom-thread` and `geom-stair` enter the kernel now as exceptions to 26.1's two-program rule (owner action G238); and 31.7's questions this choice does not touch, such as a `geom-proof` crate (after the Verus spike) and the check that chapter 27 and `table.rs` agree (G15 or the merge gate).
+
+**What changed with it.** Chapter 27's tables now read as accepted; 30.5 and G01 sections 5 and 27 point here; the kernel's `ARCHITECTURE.md` lists the thirteen layers; every crate header that said "Proposed in chapter 27, pending the owner's decision G08" (or chapter 30) no longer does, and the scaffold check now refuses a header that still carries that mark; the chapters chapter 27 lists under "Changes elsewhere" state the accepted homes.
+
+**Changes:** chapter 27, 30.5, 31.7, G01 sections 5 and 27, the kernel's `ARCHITECTURE.md`, `engine-geometry`'s scaffold test and every crate header, and chapters 12 to 19 and 23 to 28 where chapter 27 lists them.

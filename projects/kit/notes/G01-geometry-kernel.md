@@ -292,6 +292,8 @@ The full chapter: [26-how-it-grows.md](../../engines/geometry/architecture/26-ho
 
 The kernel lives in its own folder in Spare Kit's engines layer, so programs that do not use 3D never build it. The chapter lists every crate, its one job and what it may depend on, and the rules that keep the code readable: small modules, stated and checked invariants, and the published method named in every algorithm.
 
+The owner accepted the chapter's amended crate table, its thirteen layers and its rules on 2026-10-28 (owner action G08, section 32.13); section 5's three layers are now the summary of those thirteen.
+
 The full chapter: [27-crates-folders.md](../../engines/geometry/architecture/27-crates-folders.md).
 
 ## 28. Testing and verification
@@ -336,6 +338,8 @@ Twelve choices need the owner, because each fixes a promise to users, spends mon
 | 32.10 | Revit truth data, and watching proprietary programs | Co-op models only; watching only checks our results against our own rules | 14, 28, 29 | G460, the Revit harness |
 | 32.11 | The licence of our test cases | CC0 if the vote confirms test cases are not "core", otherwise MPL-2.0; strict rules for outside data | 28, 29 | G97, the fixture format |
 | 32.12 | Pieces built ahead of the board: merge order, cost rises for correctness, goldens before the first edition | Merge in the board's order; accept a recorded rise; kernel owners approve goldens until the first Stable release | 23, 28, 30 | The next merge after G02 |
+
+The board's owner actions are decided in their own sections from 32.13 on, beginning with the crate table and layers (G08, 32.13).
 
 Each decision, with its options, reasons and the chapters it changes: [32-decisions.md](../../engines/geometry/architecture/32-decisions.md).
 

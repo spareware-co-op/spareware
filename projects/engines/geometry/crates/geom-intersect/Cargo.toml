@@ -9,7 +9,7 @@ description = "Spare Kit geometry kernel: certified curve and surface intersecti
 [dependencies]
 geom-math = { path = "../geom-math", default-features = false }
 geom-run = { path = "../geom-run", default-features = false }
-# Exactly this crate's row of chapter 27's proposed crate table, checked by the scaffold test
+# Exactly this crate's row of chapter 27's crate table, checked by the scaffold test
 # in engine-geometry (tests/scaffold).
 
 geom-bvh = { path = "../geom-bvh" }

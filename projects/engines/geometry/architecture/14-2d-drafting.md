@@ -15,7 +15,7 @@ The 2D layer is the drafting kernel under every flat drawing Spareware makes. It
 | Manufacturing | Profiles to cut, tool-radius offsets, pocketing, region booleans for nesting |
 | Drawings and sketches | Visibility merge, cut-region hatching and dimensions on section 18's drawing curves; the curves section 15 constrains |
 
-Beyond the `num`, `math` and `curve` that section 27 lists, `geom-2d` needs `topo`, `name` and `intersect`; section 32 raises this.
+Beyond the `num`, `math` and `curve` that G01's section 27 listed, `geom-2d` needs `topo`, `name`, `intersect` and the box tree `bvh`; chapter 27's crate table, accepted in 32.13, records them.
 
 ## 14.1 Frames and entities
 
@@ -77,7 +77,7 @@ enum Pt2 {
 - **Spline and spiral crossings are certified**, by section 12's curve-curve intersection, and each contact is `Crossing`, `Touching` or `Undecided` with its interval and place. `Undecided` is never treated as either (14.4).
 - **Widths are derived, never typed.** Each predicate's bit budget is generated from its expression, as GeometricTools' BSPrecision does ([BSPrecision.h](https://github.com/davideberly/GeometricTools/blob/e09f5b39a33da6b4bfd0ff8dbb64ddcb7fdfc763/GTE/Mathematics/BSPrecision.h#L10-L11)), and checked by section 6.2's extreme-value tests. Drafting is full of near-tangencies no filter can certify, so the exact paths are benchmarked on native and WebAssembly targets.
 
-**One representation, below every user.** These carriers and point classes are not private to `geom-2d`. They live in `geom-curve`, beside the other curve kinds, and their predicates (side, orientation, order, one-root and conic-root signs) live in `geom-num` with section 6.2's. So `geom-intersect` (12.1, 12.5), `geom-sketch` (15.10), `geom-profile` and `geom-2d` all decide on one form. Section 15.10's commit forms are these types: its integer carrier is a `Line2`; its depth-one point is a `Rational` point defined by two carriers and held as homogeneous integers (X, Y, W), meaning (X/W, Y/W); and its arc, with a rational centre on the chord's bisector, lies on a `Circle2`. Section 27's crate table is to record this placement.
+**One representation, below every user.** These carriers and point classes are not private to `geom-2d`. They live in `geom-curve`, beside the other curve kinds, and their predicates (side, orientation, order, one-root and conic-root signs) live in `geom-num` with section 6.2's. So `geom-intersect` (12.1, 12.5), `geom-sketch` (15.10), `geom-profile` and `geom-2d` all decide on one form. Section 15.10's commit forms are these types: its integer carrier is a `Line2`; its depth-one point is a `Rational` point defined by two carriers and held as homogeneous integers (X, Y, W), meaning (X/W, Y/W); and its arc, with a rational centre on the chord's bisector, lies on a `Circle2`. 27's crate table records this placement (accepted in 32.13).
 
 ## 14.3 Constructions
 
@@ -130,7 +130,7 @@ An **arrangement** is the division of the plane by a set of curves into vertices
 
 - **Plane sweep** builds it from many curves at once: a vertical line sweeps across, stopping at every end point and crossing ([Bentley and Ottmann 1979](https://doi.org/10.1109/TC.1979.1675432), generalised to curves). Curves are first split into **x-monotone** pieces, which no vertical line crosses twice. Stops are ordered by exact x, then y, then name.
 - **Zone insertion** adds one curve by walking the faces it crosses, making a new version that shares every unchanged chunk. **Overlay** combines two arrangements and merges their face labels; booleans, clipping and section 18's visibility merge are overlays.
-- **Point location** in a batch-built arrangement uses [Sarnak and Tarjan's](https://doi.org/10.1145/6138.6151) structure, a search tree whose earlier versions stay queryable, built once along the sweep, with a guaranteed logarithmic query. After edits, a query walks from the nearest landmark vertex, found through 14.8's R-tree ([Haran and Halperin 2009](https://doi.org/10.1145/1412228.1412237)). CGAL's randomised trapezoid map is not used: its bounds hold only for a random insertion order, which determinism would replace by an order derived from names.
+- **Point location** in a batch-built arrangement uses [Sarnak and Tarjan's](https://doi.org/10.1145/6138.6151) structure, a search tree whose earlier versions stay queryable, built once along the sweep, with a guaranteed logarithmic query. After edits, a query walks from the nearest landmark vertex, found through 14.8's box tree ([Haran and Halperin 2009](https://doi.org/10.1145/1412228.1412237)). CGAL's randomised trapezoid map is not used: its bounds hold only for a random insertion order, which determinism would replace by an order derived from names.
 - **Degeneracies are handled on purpose.** Pieces on one carrier merge into one edge that keeps every source; tangencies are touching vertices; any number of curves through one point make one vertex. There is no symbolic perturbation, because in drafting these ties mean something (section 6.2).
 - **Edges around a vertex are ordered exactly**: by tangent direction, then signed curvature, then higher derivatives. Two different conics differ by the fourth derivative at the latest, because they meet with multiplicity at most four. A spline contact that cannot be ordered is `Undecided` and reported.
 - **Unbounded faces** from rays and infinite lines end on a symbolic frame at infinity that is never committed, as CGAL's fictitious edges do. Implicit points beyond ±2^40 steps are valid; committing one returns `OutOfRange`.
@@ -205,7 +205,7 @@ struct SnapRef {
 
 - **Every snap resolves to an exact point.** End points, centres, nodes, quadrants, intersections, insertion points, a line's midpoint, perpendicular feet (on an ellipse, where it meets a conic through the point) and tangent points on circles and ellipses (where the curve meets the point's polar line, a rational line) are 14.2's implicit points. Other snaps, such as an arc's midpoint or a nearest point on a spline, are found with certified bounds, then made exact on the carrier: a point at a dyadic parameter (a fraction with a power-of-two denominator) on a line or a spline, whose data are fractions, so it lies exactly on it; or, on a circle or ellipse, the crossing with a ray from its centre in a rational direction. An apparent intersection is the crossing of section 18's projections of two 3D curves.
 - **Dimensions use carrier references by default** (section 20.4's `want`), so trimming a line does not break a dimension to it.
-- **A cursor is just an input:** a point and an aperture in grid units. Candidates come from a bulk-loaded R-tree over integer boxes; the closest wins and ties break by name. There is no linear scan and no cap on candidates; CADCraft tests at most 200.
+- **A cursor is just an input:** a point and an aperture in grid units. Candidates come from the kernel's one tree of integer boxes, `geom-bvh`, over 2D boxes (19.9; 27, accepted in 32.13); the closest wins and ties break by name. There is no linear scan and no cap on candidates; CADCraft tests at most 200.
 - **An AI agent needs no cursor.** It asks for "the intersection of wall W-12's exterior line and grid line C" by names and gets the same reference.
 - Dimensions, leaders, hatches and section 15's constraints bind to these references, which resolve as section 20.4 describes.
 
@@ -215,7 +215,7 @@ Board design rules and clash in plan need yes-or-no answers that are never wrong
 
 - **Exact for lines, arcs, and ellipses against lines.** "Is the gap between A and B at least c?" is an exact sign. For a segment and a circle of squared radius ρ it compares the squared distance from the centre to the line with (c + √ρ)², a one-root test. An ellipse against a line uses the ellipse's support function, its extent in a given direction, which adds one square root. Pairs of arcs need a few square roots, still decided by repeated squaring.
 - **Three-way for other pairs** (an ellipse against a circle or ellipse, anything against a spline): the distance is a certified interval and the answer is `Pass`, `Fail` or `Undecided` with the interval and place. Design-rule checks and clash report `Undecided` as a possible violation, never as a pass.
-- **Batched:** every pair closer than c is found through the R-tree and reported sorted by name.
+- **Batched:** every pair closer than c is found through the box tree and reported sorted by name.
 
 On a board these check copper against other nets' copper, the board edge and holes, **annular rings** (the copper ring around a drilled hole; exact, since pad and hole are concentric) and minimum width (the clearance between a shape's opposite sides). In plan they check footprint overlap and clearance zones such as door swings and turning circles. The rule sets belong to `geom-board` and to programs (section 26); 3D distance and clash are section 19's, in `geom-spatial`.
 

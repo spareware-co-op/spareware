@@ -1,8 +1,8 @@
-//! The crate table: chapter 27's proposed crate table and layer table, in one place.
+//! The crate table: chapter 27's crate table and layer table (accepted in 32.13), in one place.
 //!
 //! What it holds: every crate of the kernel's family with its layer, its kind, where its row comes
-//! from (G01's accepted table, chapter 27's proposed amendments or chapter 30.5's), which piece
-//! writes it, and exactly its direct kernel dependencies; the dependencies still waiting for a
+//! from (G01's table, or the amendments of chapter 27 or chapter 30.5 that owner action G08
+//! accepted, section 32.13), which piece writes it, and exactly its direct kernel dependencies; the dependencies still waiting for a
 //! crate that another piece is building; the edges the layer table allows inside one layer; the
 //! dependencies behind a feature; the registry crates a `no_std` kernel crate may name; the header
 //! lines missing from crates written before this check existed; and the crate whose lint settings
@@ -24,8 +24,9 @@
 //!
 //! How the table changes:
 //!
-//! - When an owner settles G08, accepted rows keep their place and refused ones move as the owner
-//!   says; chapter 27, this table and the crates change in one pull request.
+//! - Owner action G08 accepted every row (section 32.13). A new crate, or a change to a row's
+//!   layer or job, needs an owner's change to chapter 27 first; chapter 27, this table and the
+//!   crates then change in one pull request.
 //! - When a crate under way merges (`geom-math`, `geom-run`), the same pull request adds its path
 //!   dependency to every crate its `PENDING` entry names, deletes the entry, and deletes the
 //!   "Direct dependencies still to add" line from each of those crates' headers. The check fails
@@ -71,15 +72,16 @@ pub enum Kind {
     Development,
 }
 
-/// Where a crate's row comes from.
+/// Where a crate's row comes from. Every row is accepted: G01's table, and the amendments owner
+/// action G08 accepted (section 32.13).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Origin {
     /// G01's crate table (chapter 27's first table).
     Accepted,
-    /// Only chapter 27's proposed amendments; pending the owner's decision G08.
-    Proposed27,
-    /// Only chapter 30.5's amendments; pending the owner's decision G08.
-    Proposed30,
+    /// Chapter 27's amendments, accepted by owner action G08.
+    Amended27,
+    /// Chapter 30.5's amendments, accepted by owner action G08.
+    Amended30,
 }
 
 /// Who writes the crate, and so whether it must exist yet.
@@ -235,7 +237,7 @@ const fn binding<'a>(name: &'a str, piece: &'a str) -> Row<'a> {
         name,
         layer: Layer::N(13),
         kind: Kind::Binding,
-        origin: Origin::Proposed27,
+        origin: Origin::Amended27,
         state: State::Deferred(piece),
         deps: Deps::Exact("engine-geometry"),
         external: "",
@@ -254,22 +256,22 @@ const fn development<'a>(name: &'a str, origin: Origin, piece: &'a str) -> Row<'
     }
 }
 
-use Origin::{Accepted, Proposed27, Proposed30};
+use Origin::{Accepted, Amended27, Amended30};
 use State::{Deferred, Elsewhere, Here};
 
-/// Every crate of the family, layer by layer (chapter 27, "Proposed crate table", with `geom-make`
-/// and the dependency amendments of chapter 30.5). One row per line, as chapter 27 prints it, so
-/// rustfmt is told to leave the rows as they are.
+/// Every crate of the family, layer by layer (chapter 27's crate table, with `geom-make` and the
+/// dependency amendments of chapter 30.5, all accepted in section 32.13). One row per line, as
+/// chapter 27 prints it, so rustfmt is told to leave the rows as they are.
 #[rustfmt::skip]
 const ROWS: &[Row<'static>] = &[
     // 1. Numbers and the contract.
-    kernel("geom-run",       1, Proposed27, Elsewhere("G04"), ""),
+    kernel("geom-run",       1, Amended27, Elsewhere("G04"), ""),
     kernel("geom-num",       1, Accepted,   Elsewhere("G02"), "run"),
-    kernel("geom-linalg",    1, Proposed27, Here, "num"),
-    kernel("geom-op",        1, Proposed27, Here, "run num"),
+    kernel("geom-linalg",    1, Amended27, Here, "num"),
+    kernel("geom-op",        1, Amended27, Here, "run num"),
     // 2. Geometry.
     kernel("geom-math",      2, Accepted,   Elsewhere("G03"), "num op"),
-    kernel("geom-bvh",       2, Proposed27, Here, "run num math"),
+    kernel("geom-bvh",       2, Amended27, Here, "run num math"),
     kernel("geom-nurbs",     2, Accepted,   Here, "base math linalg"),
     kernel("geom-curve",     2, Accepted,   Here, "base math nurbs"),
     kernel("geom-surface",   2, Accepted,   Here, "base math nurbs curve"),
@@ -296,12 +298,12 @@ const ROWS: &[Row<'static>] = &[
     kernel("geom-skeleton",  9, Accepted,   Here, "base math 2d topo poly"),
     kernel("geom-sweep",     9, Accepted,   Here,
         "base topo surface name check poly intersect bool skeleton"),
-    kernel("geom-make",      9, Proposed30, Here, "base math curve surface topo check"),
+    kernel("geom-make",      9, Amended30, Here, "base math curve surface topo check"),
     // 10. Operations.
     kernel("geom-blend",    10, Accepted,   Here, "base bool intersect surface topo check"),
     kernel("geom-offset",   10, Accepted,   Here, "base bool intersect surface skeleton topo"),
     kernel("geom-sketch",   10, Accepted,   Here, "base math curve linalg"),
-    kernel("geom-profile",  10, Proposed27, Here, "base sketch 2d topo name check intersect"),
+    kernel("geom-profile",  10, Amended27, Here, "base sketch 2d topo name check intersect"),
     kernel("geom-terrain",  10, Accepted,   Here,
         "base math 2d mesh topo poly bool skeleton curve surface name bvh"),
     kernel("geom-align",    10, Accepted,   Here, "base math curve sweep name"),
@@ -309,28 +311,29 @@ const ROWS: &[Row<'static>] = &[
         "base topo name 2d intersect spatial math curve surface mesh bvh"),
     kernel("geom-convert",  10, Accepted,   Here,
         "base topo mesh subd field nurbs check bool cloud spatial intersect sweep"),
-    kernel("geom-combine",  10, Proposed27, Here, "base bool mesh field convert check subd"),
-    kernel("geom-panel",    10, Proposed27, Here,
+    kernel("geom-combine",  10, Amended27, Here, "base bool mesh field convert check subd"),
+    kernel("geom-panel",    10, Amended27, Here,
         "base topo check surface intersect poly mesh 2d linalg"),
-    kernel("geom-analysis", 10, Proposed27, Here, "base surface topo intersect spatial"),
+    kernel("geom-analysis", 10, Amended27, Here, "base surface topo intersect spatial"),
     // 11. Domain toolkits: a toolkit enters the kernel when a second program needs it (26.1),
-    // so none is built yet. Chapter 27 gives the sheet, thread and stair toolkits "base and the
+    // so none is built yet; owner action G238 decides whether geom-civil, geom-thread and
+    // geom-stair enter as exceptions. Chapter 27 gives the sheet, thread and stair toolkits "base and the
     // operation crates they compose": their design notes settle the rest.
     toolkit("geom-sheet",    Accepted,   "G472", Deps::Partial("base")),
     toolkit("geom-thread",   Accepted,   "G258", Deps::Partial("base")),
     toolkit("geom-board",    Accepted,   "G473", Deps::Partial("base sheet")),
     toolkit("geom-stair",    Accepted,   "G281", Deps::Partial("base")),
-    toolkit("geom-civil",    Proposed27, "G378", Deps::Exact("base terrain align")),
-    toolkit("geom-assembly", Proposed27, "G479", Deps::Exact("base sketch spatial")),
+    toolkit("geom-civil",    Amended27, "G378", Deps::Exact("base terrain align")),
+    toolkit("geom-assembly", Amended27, "G479", Deps::Exact("base sketch spatial")),
     // 12. Format and exchange. geom-format's "everything stored" is section 24.4's list; the
     // format crates' "kinds they map" are section 24.11's; p21, exchange and heal carry chapter
     // 30.5's amendments.
     kernel("geom-format",   12, Accepted,   Here,
         "base math curve surface topo poly name mesh subd field 2d cloud draw sketch"),
-    kernel("geom-exchange", 12, Proposed27, Here,
+    kernel("geom-exchange", 12, Amended27, Here,
         "base math curve surface topo format p21 intersect check"),
-    kernel("geom-p21",      12, Proposed27, Here, "base format"),
-    kernel("geom-heal",     12, Proposed27, Here, "base topo check mesh exchange"),
+    kernel("geom-p21",      12, Amended27, Here, "base format"),
+    kernel("geom-heal",     12, Amended27, Here, "base topo check mesh exchange"),
     kernel("geom-ifc",      12, Accepted,   Here, concat!(
         "base format exchange heal p21 ",
         "math curve surface topo poly mesh 2d sweep bool align terrain cloud")),
@@ -341,16 +344,16 @@ const ROWS: &[Row<'static>] = &[
     kernel("geom-3dm",      12, Accepted,   Here,
         "base format exchange heal math curve surface topo mesh subd"),
     kernel("geom-meshio",   12, Accepted,   Here, "base format exchange heal math mesh subd"),
-    kernel("geom-landxml",  12, Proposed27, Here, "base format exchange 2d terrain align"),
+    kernel("geom-landxml",  12, Amended27, Here, "base format exchange 2d terrain align"),
     // Board exchange follows the two-program rule too (24.11), so it waits with the toolkits.
-    kernel("geom-gerber",   12, Proposed27, Deferred("G474"), "base format exchange 2d"),
-    kernel("geom-ipc2581",  12, Proposed27, Deferred("G475"), "base format exchange 2d"),
+    kernel("geom-gerber",   12, Amended27, Deferred("G474"), "base format exchange 2d"),
+    kernel("geom-ipc2581",  12, Amended27, Deferred("G475"), "base format exchange 2d"),
     // 13. Facade. engine-geometry's row: every kernel crate it re-exports (none yet: G100 adds
     // them), and geom-pool behind its `threads` feature. geom-pool was scaffolded here: G04 built
     // only geom-run; G33 wrote its native pool (rayon), and G456 adds Web Workers.
     Row { name: "engine-geometry", layer: Layer::N(13), kind: Kind::Facade, origin: Accepted,
           state: Here, deps: Deps::Exact("pool"), external: "kit-core" },
-    Row { name: "geom-pool", layer: Layer::N(13), kind: Kind::KernelStd, origin: Proposed27,
+    Row { name: "geom-pool", layer: Layer::N(13), kind: Kind::KernelStd, origin: Amended27,
           state: Elsewhere("G33"), deps: Deps::Exact("run"), external: "" },
     binding("engine-geometry-c",    "G453"),
     binding("engine-geometry-wasm", "G454"),
@@ -359,7 +362,7 @@ const ROWS: &[Row<'static>] = &[
     development("geom-test",  Accepted,   "G11"),
     development("geom-fuzz",  Accepted,   "G11"),
     development("geom-bench", Accepted,   "G06"),
-    development("geom-gen",   Proposed27, "G11"),
+    development("geom-gen",   Amended27, "G11"),
 ];
 
 /// Edges allowed inside one layer (chapter 27's layer table, with chapter 30.5's amendments in
