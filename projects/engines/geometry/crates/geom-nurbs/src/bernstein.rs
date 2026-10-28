@@ -66,7 +66,7 @@ use crate::bezier::decompose;
 use crate::budget::vec_for;
 use crate::curve::Curve;
 use crate::index::{add, get, mul, real, sub};
-use crate::ops::{Direction, charge_op, homs};
+use crate::ops::{Direction, charge_op, homs, larger, smaller};
 use crate::surface::Surface;
 
 /// A box: every point it bounds has coordinate d between `lo[d]` and `hi[d]`.
@@ -172,12 +172,8 @@ fn hull<const D: usize>(points: &[[Interval; D]]) -> Result<Bounds<D>, NurbsErro
     let mut hi = [f64::NEG_INFINITY; D];
     for p in points {
         for ((l, h), x) in lo.iter_mut().zip(hi.iter_mut()).zip(p) {
-            if x.lo() < *l {
-                *l = x.lo();
-            }
-            if x.hi() > *h {
-                *h = x.hi();
-            }
+            *l = smaller(*l, x.lo());
+            *h = larger(*h, x.hi());
         }
     }
     if lo.iter().chain(&hi).all(|x| x.is_finite()) {
@@ -187,22 +183,12 @@ fn hull<const D: usize>(points: &[[Interval; D]]) -> Result<Bounds<D>, NurbsErro
     }
 }
 
-/// The range [lo, hi] of the interval values `x`.
-fn range(x: impl Iterator<Item = Interval>) -> Result<(f64, f64), NurbsError> {
-    let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
-    for v in x {
-        if v.lo() < lo {
-            lo = v.lo();
-        }
-        if v.hi() > hi {
-            hi = v.hi();
-        }
-    }
-    if lo.is_finite() && hi.is_finite() {
-        Ok((lo, hi))
-    } else {
-        Err(NurbsError::Defect)
-    }
+/// The range [lo, hi] of the interval values `x`, at least one.
+fn range(mut x: impl Iterator<Item = Interval>) -> Result<(f64, f64), NurbsError> {
+    let first = x.next().ok_or(NurbsError::Defect)?;
+    Ok(x.fold((first.lo(), first.hi()), |(lo, hi), v| {
+        (smaller(lo, v.lo()), larger(hi, v.hi()))
+    }))
 }
 
 /// n·(x − o) for an enclosed point x.
@@ -443,7 +429,7 @@ impl<const D: usize> BernsteinCurve<D> {
         let (Some(a), Some(b)) = (nonnegative_range(&above)?, nonnegative_range(&below)?) else {
             return Ok(None);
         };
-        let (t0, t1) = (a.0.max_total(b.0), a.1.min_total(b.1));
+        let (t0, t1) = (larger(a.0, b.0), smaller(a.1, b.1));
         if t0 > t1 {
             return Ok(None);
         }
@@ -451,7 +437,8 @@ impl<const D: usize> BernsteinCurve<D> {
         let width = iv(hi)?.minus(iv(lo)?)?;
         let start = iv(lo)?.plus(iv(t0)?.times(width)?)?.lo();
         let end = iv(lo)?.plus(iv(t1)?.times(width)?)?.hi();
-        Ok(Some((start.max_total(lo), end.min_total(hi))))
+        // Outward rounding may step past the domain; the clip never does.
+        Ok(Some((start.clamp(lo, hi), end.clamp(lo, hi))))
     }
 
     /// `self` − `other`, two nonrational pieces of one degree and domain.
@@ -479,56 +466,42 @@ impl<const D: usize> BernsteinCurve<D> {
     }
 }
 
-/// Total-order max and min of finite doubles, for clip ranges.
-trait TotalMinMax {
-    fn max_total(self, other: f64) -> f64;
-    fn min_total(self, other: f64) -> f64;
-}
-
-impl TotalMinMax for f64 {
-    fn max_total(self, other: f64) -> f64 {
-        if other > self { other } else { self }
-    }
-    fn min_total(self, other: f64) -> f64 {
-        if other < self { other } else { self }
-    }
-}
-
 /// The range [t0, t1] ⊂ [0, 1] outside which the Bernstein polynomial with coefficients at most
 /// `c` (at t = i/p) is negative: the projection onto t of the part of its control polygon's hull
 /// with value ≥ 0, from every coefficient ≥ 0 and every crossing of zero between two of them,
-/// rounded outward. `None` if every coefficient is negative.
+/// rounded outward. `None` if every coefficient is negative. A constant (degree 0) has one
+/// coefficient, standing for all of [0, 1].
 fn nonnegative_range(c: &[f64]) -> Result<Option<(f64, f64)>, NurbsError> {
     let p = sub(c.len(), 1)?;
     let at = |i: usize| -> Result<Interval, NurbsError> {
         if p == 0 {
-            iv(0.0)
+            Ok(Interval::new(0.0, 1.0)?)
         } else {
             iv(real(i)?)?.over(iv(real(p)?)?)
         }
     };
-    let (mut t0, mut t1) = (f64::INFINITY, f64::NEG_INFINITY);
+    let mut found: Option<(f64, f64)> = None;
+    let mut take = |t: Interval| {
+        found = Some(match found {
+            None => (t.lo(), t.hi()),
+            Some((t0, t1)) => (smaller(t0, t.lo()), larger(t1, t.hi())),
+        });
+    };
     for (i, &ci) in c.iter().enumerate() {
         if ci >= 0.0 {
-            let t = at(i)?;
-            t0 = t0.min_total(t.lo());
-            t1 = t1.max_total(t.hi());
+            take(at(i)?);
         }
         for (j, &cj) in c.iter().enumerate() {
             if ci < 0.0 && cj >= 0.0 {
                 // Where the segment from (t_i, c_i) to (t_j, c_j) crosses zero.
                 let (ti, tj) = (at(i)?, at(j)?);
                 let frac = iv(-ci)?.over(iv(cj)?.minus(iv(ci)?)?)?;
-                let t = ti.plus(frac.times(tj.minus(ti)?)?)?;
-                t0 = t0.min_total(t.lo());
-                t1 = t1.max_total(t.hi());
+                take(ti.plus(frac.times(tj.minus(ti)?)?)?);
             }
         }
     }
-    if t0 > t1 {
-        return Ok(None);
-    }
-    Ok(Some((t0.max_total(0.0), t1.min_total(1.0))))
+    // Outward rounding may step past [0, 1]; the polynomial lives on it.
+    Ok(found.map(|(t0, t1)| (t0.clamp(0.0, 1.0), t1.clamp(0.0, 1.0))))
 }
 
 impl BernsteinCurve<2> {
@@ -715,13 +688,13 @@ impl<const D: usize> BernsteinPatch<D> {
         }
         let (p, q) = self.degrees;
         let zero = iv(0.0)?;
-        let (degrees, factor) = match dir {
-            Direction::U => ((p.saturating_sub(1), q), chain_factor(p, self.u)?),
-            Direction::V => ((p, q.saturating_sub(1)), chain_factor(q, self.v)?),
+        // A direction of degree 0: the patch is constant along it, and the partial is zero.
+        let (degrees, factor, flat) = match dir {
+            Direction::U => ((p.saturating_sub(1), q), chain_factor(p, self.u)?, p == 0),
+            Direction::V => ((p, q.saturating_sub(1)), chain_factor(q, self.v)?, q == 0),
         };
         let count = mul(add(degrees.0, 1)?, add(degrees.1, 1)?)?;
         let mut out = vec_for(meter, count)?;
-        let flat = (dir == Direction::U && p == 0) || (dir == Direction::V && q == 0);
         for i in 0..=degrees.0 {
             for j in 0..=degrees.1 {
                 if flat {
