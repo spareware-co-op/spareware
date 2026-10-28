@@ -144,6 +144,8 @@ pub(crate) fn decompose<N: Num, const D: usize>(
             ie = add(ie, 1)?;
         }
         let mlt = add(sub(ie, i0)?, 1)?;
+        // Whether another piece follows this one.
+        let more = ie < m;
         if mlt < p {
             let r = sub(p, mlt)?;
             let num = N::of(get(up, ie)?)?.minus(N::of(get(up, is)?)?)?;
@@ -166,7 +168,7 @@ pub(crate) fn decompose<N: Num, const D: usize>(
                     )?;
                     set(&mut qw, k, next)?;
                 }
-                if ie < m {
+                if more {
                     set(&mut nqw, save, get(&qw, p)?)?;
                 }
             }
@@ -174,7 +176,7 @@ pub(crate) fn decompose<N: Num, const D: usize>(
         let mut piece = vec_for(meter, add(p, 1)?)?;
         piece.extend_from_slice(qw.get(..=p).ok_or(NurbsError::Defect)?);
         out.push((get(up, is)?, get(up, ie)?, piece));
-        if ie < m {
+        if more {
             // Points the insertions did not set come from the input.
             let start = sub(p, mlt).unwrap_or(0);
             for i in start..=p {

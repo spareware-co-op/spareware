@@ -180,70 +180,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-nurbs/src/basis.rs",
-      "mutant": "replace Basis::count -> usize with 0",
-      "line_text": "self.knots",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "The tests' knot-vector generator (tests/common, knots) draws until Basis::new accepts one; with a count of 0 the domain's upper end is knot 0, at or below knot p, so the domain is empty, so Basis::new refuses every vector and the generator's draw never ends."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-nurbs/src/basis.rs",
-      "mutant": "replace Basis::count -> usize with 1",
-      "line_text": "self.knots",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "The tests' knot-vector generator (tests/common, knots) draws until Basis::new accepts one; with a count of 1 the domain's upper end is knot 1, at or below knot p, so the domain is empty, so Basis::new refuses every vector and the generator's draw never ends."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-nurbs/src/basis.rs",
-      "mutant": "replace Basis::domain -> (f64, f64) with (0.0, 0.0)",
-      "line_text": "let lo = self.knots.get(self.degree).copied().unwrap_or(f64::NAN);",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "The tests' knot-vector generator (tests/common, knots) draws until Basis::new accepts one; a domain of (0.0, 0.0) has no upper end above its lower one, so Basis::new refuses every vector and the generator's draw never ends."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-nurbs/src/basis.rs",
-      "mutant": "replace Basis::domain -> (f64, f64) with (0.0, -1.0)",
-      "line_text": "let lo = self.knots.get(self.degree).copied().unwrap_or(f64::NAN);",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "The tests' knot-vector generator (tests/common, knots) draws until Basis::new accepts one; a domain of (0.0, -1.0) has no upper end above its lower one, so Basis::new refuses every vector and the generator's draw never ends."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-nurbs/src/basis.rs",
-      "mutant": "replace Basis::domain -> (f64, f64) with (1.0, 0.0)",
-      "line_text": "let lo = self.knots.get(self.degree).copied().unwrap_or(f64::NAN);",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "The tests' knot-vector generator (tests/common, knots) draws until Basis::new accepts one; a domain of (1.0, 0.0) has no upper end above its lower one, so Basis::new refuses every vector and the generator's draw never ends."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-nurbs/src/basis.rs",
-      "mutant": "replace Basis::domain -> (f64, f64) with (1.0, 1.0)",
-      "line_text": "let lo = self.knots.get(self.degree).copied().unwrap_or(f64::NAN);",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "The tests' knot-vector generator (tests/common, knots) draws until Basis::new accepts one; a domain of (1.0, 1.0) has no upper end above its lower one, so Basis::new refuses every vector and the generator's draw never ends."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-nurbs/src/basis.rs",
-      "mutant": "replace Basis::domain -> (f64, f64) with (1.0, -1.0)",
-      "line_text": "let lo = self.knots.get(self.degree).copied().unwrap_or(f64::NAN);",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "The tests' knot-vector generator (tests/common, knots) draws until Basis::new accepts one; a domain of (1.0, -1.0) has no upper end above its lower one, so Basis::new refuses every vector and the generator's draw never ends."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-nurbs/src/basis.rs",
-      "mutant": "replace Basis::domain -> (f64, f64) with (-1.0, -1.0)",
-      "line_text": "let lo = self.knots.get(self.degree).copied().unwrap_or(f64::NAN);",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "The tests' knot-vector generator (tests/common, knots) draws until Basis::new accepts one; a domain of (-1.0, -1.0) has no upper end above its lower one, so Basis::new refuses every vector and the generator's draw never ends."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-nurbs/src/basis.rs",
       "mutant": "replace > with >= in Basis::span",
       "line_text": "while sub(high, low)? > 1 {",
       "occurrences": 1,
@@ -305,14 +241,6 @@
       "occurrences": 1,
       "kind": "hangs",
       "reason": "Basis::new steps through the runs of equal knots with index = run_end(index); with every run ending at 1 the index never reaches the vector's end, and the loop never ends."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-nurbs/src/index.rs",
-      "mutant": "replace == with != in run_end",
-      "line_text": "while v.get(end).is_some_and(|&x| x == value) {",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "The tests' knot-vector generator (tests/common, knots) draws until Basis::new accepts one; a run then extends over every following knot unequal to its first, so the end knots of a clamped vector count as one run longer than p + 1 (Multiplicity), so Basis::new refuses every vector and the generator's draw never ends."
     },
     {
       "file": "projects/engines/geometry/crates/geom-nurbs/src/reduce.rs",
@@ -393,14 +321,6 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "At mlt == p, r = p - mlt = 0: the loop over mlt + 1..=p and the loop over 1..=r are both empty, and num, an exact difference of two finite knots, cannot fail. Nothing changes."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-nurbs/src/bezier.rs",
-      "mutant": "replace < with <= in decompose",
-      "line_text": "if ie < m {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Inside the insertion loop the two differ only at ie == m, the last piece, where the mutant also saves a point into the next piece's buffer; the loop then ends without starting another piece, so the buffer is never read."
     },
     {
       "file": "projects/engines/geometry/crates/geom-nurbs/src/net.rs",
