@@ -286,15 +286,19 @@ fn descending(s: &[f64]) -> Result<Vec<usize>, LinalgError> {
 }
 
 /// Gives each column of `w` whose singular value is zero a unit vector orthogonal to the columns
-/// before it in `order`: the first unit vector eᵢ that keeps more than half its length after two
-/// passes of Gram–Schmidt against them.
+/// before it in `order`: of the unit vectors eᵢ after two passes of Gram–Schmidt against them
+/// ("twice is enough", Parlett's *The Symmetric Eigenvalue Problem*, section 6.9), the one that
+/// keeps the most length, the first of equal ones. With r orthonormal columns in m dimensions
+/// (r < m), the squared lengths left sum to m − r ≥ 1, so the longest keeps at least 1/√m: a fixed
+/// threshold such as 1/2 can be missed by every eᵢ (three columns of a 4 × 4 Hadamard matrix leave
+/// each exactly 1/2).
 fn complete(w: &mut Cols, s: &[f64], order: &[usize]) -> Result<(), LinalgError> {
     let m = w.len();
     for (rank, &j) in order.iter().enumerate() {
         if at(s, j)? != 0.0 {
             continue;
         }
-        let mut chosen = false;
+        let mut best: Option<(f64, Vec<f64>)> = None;
         for i in 0..m {
             let mut x = zeros(m)?;
             *at_mut(&mut x, i)? = 1.0;
@@ -308,16 +312,17 @@ fn complete(w: &mut Cols, s: &[f64], order: &[usize]) -> Result<(), LinalgError>
                 }
             }
             let len = norm(x.iter().copied())?;
-            if len > 0.5 {
-                for (dst, &src) in w.col_mut(j)?.iter_mut().zip(&x) {
-                    *dst = src / len;
-                }
-                chosen = true;
-                break;
+            if best.as_ref().is_none_or(|(longest, _)| len > *longest) {
+                best = Some((len, x));
             }
         }
-        if !chosen {
+        let (len, x) = best.ok_or(LinalgError::Defect)?;
+        if len == 0.0 {
+            // At least 1/√m is left (above): a defect, reported, never divided by.
             return Err(LinalgError::Defect);
+        }
+        for (dst, &src) in w.col_mut(j)?.iter_mut().zip(&x) {
+            *dst = src / len;
         }
     }
     Ok(())
