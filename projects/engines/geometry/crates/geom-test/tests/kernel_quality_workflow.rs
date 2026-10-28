@@ -7,8 +7,9 @@
 //! configuration files as TOML (toml), so a check sees the structure GitHub and the tools see, not
 //! a line that looks right:
 //!
-//! - **Triggers.** Pull requests that touch the kernel, the schedule (weekly) and on demand, never
-//!   a push; and the path filters cover everything the gates read.
+//! - **Triggers.** Pull requests that touch the kernel, the schedule (weekly), on demand, and when
+//!   kernel-release.yml calls it on a release tag, never an ordinary push; and the path filters
+//!   cover everything the gates read.
 //! - **Jobs and when they run.** The mutation plan, shards and judge on every event (the plan picks
 //!   the diff or the full run), the shards only when the plan has mutants, the judge even when a
 //!   shard failed; coverage and the seeded gates on every event; Miri weekly and on demand, and on
@@ -132,8 +133,13 @@ fn it_runs_on_kernel_pull_requests_weekly_and_on_demand() {
     let on = &w["on"];
     assert_eq!(
         keys(on),
-        ["pull_request", "schedule", "workflow_dispatch"],
-        "pushes run kernel.yml, not the quality gates"
+        [
+            "pull_request",
+            "schedule",
+            "workflow_dispatch",
+            "workflow_call"
+        ],
+        "pushes run kernel.yml, not the quality gates; kernel-release.yml calls them on a release"
     );
     let cron = text(&on["schedule"][0]["cron"]);
     let fields: Vec<&str> = cron.split_whitespace().collect();

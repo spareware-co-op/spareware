@@ -71,6 +71,8 @@ on:
     # Weekly, Saturdays at 02:17 UTC.
     - cron: "17 2 * * 6"
   workflow_dispatch:
+  # Run whole by kernel-release.yml on a release tag, with every other kernel workflow (28.17).
+  workflow_call:
 
 permissions:
   contents: read
