@@ -621,6 +621,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | Predicates of 576 and 768 bits for skeleton and mitre-offset events; the wide integers already in code | 6, 13 | 32.29 (owner action G240) |
 | The default and the cap of `close_near_contacts` | 6, 11 | 32.30 (owner action G241) |
 | The licence of Wang et al.'s 2021 contact benchmark | 19, 29 | 32.31 (owner action G285) |
+| Which crate owns USD subdivision exchange, and how Chaikin creasing is carried | 16, 24 | 32.32 (owner action G312) |
 
 ### Answered by the pieces built so far
 
@@ -880,7 +881,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | LAS and COPC: read a scale stored as f64 as the shortest decimal that produces it | 24 | Piece "Point-cloud exchange rules" |
 | Items to check against primary sources: MBx-IF practices; DXF MESH subdivision rules and HELIX fields; Part 21 third edition; whether AP242 includes Part 42's clothoid; 3dm mesh vertex precision; E57; Pratt's rational Dupin cyclides | 24 | Each format's piece |
 | ARC_DIMENSION has no record in the public DXF reference, so its mapping is open | 14 | Piece "geom-dxf read and write" |
-| USD: which crate owns subdivision exchange, and a convention for carrying Chaikin creasing in custom data | 16 | Piece "Decision notes for formats not yet owned" |
+| USD: which crate owns subdivision exchange, and a convention for carrying Chaikin creasing in custom data | 16 | 32.32 (owner action G312): `geom-meshio`; `spareware:creaseMethod`; the terms check stays with piece "Decision notes for formats not yet owned" |
 | DWG and other reverse-engineered formats | 14, 24, 29 | Stays REJECT. Only an owner can clear it, after legal advice (README); Spare Construct's owners say whether they want it |
 | laz-rs contains unsafe code: allow it in Spare Construct's adapter, or port the codec | 24 | Spare Construct's owners |
 | Whether format crates may use std: answered by chapter 24. Readers use no_std byte sources, and point clouds stay in the program adapter | 29 | Answered |

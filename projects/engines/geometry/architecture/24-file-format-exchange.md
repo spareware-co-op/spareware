@@ -380,7 +380,7 @@ None of these crates is a kernel dependency: laz-rs uses `unsafe` (for example [
 | IGES 5.3, DGN, X3D, PRC | None | Availability and terms *unverified* |
 | IFC5 | Watched | buildingSMART's |
 
-**Subdivision exchange is a gap today**: OBJ has no creases, 3dm is blocked, DXF MESH is unverified. No crate owns USD yet. Mapping USD's Catmull-Clark scheme, with creases, corners and the options section 16.1 leaves to this chapter, onto `geom-subd` at OpenSubdiv parity ([09](../../../kit/notes/G01-evidence/09-freeform-subd-implicit.md), section 1) waits for USD's decision note and its TOST-1.0 check.
+**Subdivision exchange is a gap today**: OBJ has no creases, 3dm is blocked, DXF MESH is unverified. `geom-meshio` owns USD subdivision exchange, with Chaikin creasing in a namespaced attribute (owner action G312, 32.32). Mapping USD's Catmull-Clark scheme, with creases, corners and the options section 16.1 leaves to this chapter, onto `geom-subd` at OpenSubdiv parity ([09](../../../kit/notes/G01-evidence/09-freeform-subd-implicit.md), section 1) waits for USD's decision note and its TOST-1.0 check.
 
 ## 24.12 Testing exchange
 

@@ -40,7 +40,7 @@ struct SubdNet {                                   // geom-surface: the exact de
 - the triangle rule: Catmull–Clark or smooth;
 - creases, corners and holes.
 
-Their mapping to USD attributes belongs to section 24. USD has no attribute for the creasing method ([schema.usda L1118-L1224](https://github.com/PixarAnimationStudios/OpenUSD/blob/ee47c679abde5b467a7b6a41f3b2285564a4222e/pxr/usd/usdGeom/schema.usda#L1118-L1224)), so Chaikin travels as Spare Kit metadata.
+Their mapping to USD attributes belongs to section 24. USD has no attribute for the creasing method ([schema.usda L1118-L1224](https://github.com/PixarAnimationStudios/OpenUSD/blob/ee47c679abde5b467a7b6a41f3b2285564a4222e/pxr/usd/usdGeom/schema.usda#L1118-L1224)), so Chaikin travels as Spare Kit metadata: the attribute `uniform token spareware:creaseMethod = "chaikin"` on the Mesh prim, absent meaning uniform, written by `geom-meshio` (owner action G312, 32.32).
 
 **Other schemes are imported, not kept live.** A bilinear net becomes bilinear NURBS patches: Exact for quads; Certified by the commit rounding for other polygons, whose centre and edge midpoints are rounded to the grid. A Loop net becomes its refined limit mesh, Certified by the hull bound below, since Loop's masks are also non-negative. Both keep the original net as recipe metadata, so USD export gives it back.
 
