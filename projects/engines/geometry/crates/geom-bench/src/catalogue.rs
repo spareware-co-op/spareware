@@ -101,6 +101,8 @@ const TE: &[Class] = &[Typical, Extreme];
 /// Classes of conversions that can fail, and of a stream range's stream by index: in range, and
 /// out of range.
 const TO: &[Class] = &[Typical, Overflow];
+/// Classes of the perturbed predicates: the exact path, and an exact tie the perturbation decides.
+const TD: &[Class] = &[Typical, Degenerate];
 /// The class of operations with a single path, or whose paths one batch covers in rotation.
 const T: &[Class] = &[Typical];
 
@@ -360,10 +362,14 @@ pub static OPS: &[Op] = &[
     Op { group: "generated", name: "lpi_side_value_limbs", measures: "generated::limbs::lpi_side_value", classes: TDNE, prepare: |c| bind(inputs::generated::lpi_side_value_limbs(c), kernels::limbs::lpi_side_value) },
     Op { group: "generated", name: "ssi_weight_value_limbs", measures: "generated::limbs::ssi_weight_value", classes: TDNE, prepare: |c| bind(inputs::generated::ssi_weight_value_limbs(c), kernels::limbs::ssi_weight_value) },
     Op { group: "generated", name: "ssi_side_value_limbs", measures: "generated::limbs::ssi_side_value", classes: TDNE, prepare: |c| bind(inputs::generated::ssi_side_value_limbs(c), kernels::limbs::ssi_side_value) },
+    Op { group: "perturb", name: "orient2d", measures: "perturb::orient2d", classes: TD, prepare: |c| bind(inputs::perturb::orient2d(c), kernels::perturb::orient2d) },
+    Op { group: "perturb", name: "orient3d", measures: "perturb::orient3d", classes: TD, prepare: |c| bind(inputs::perturb::orient3d(c), kernels::perturb::orient3d) },
+    Op { group: "perturb", name: "incircle", measures: "perturb::incircle", classes: TD, prepare: |c| bind(inputs::perturb::incircle(c), kernels::perturb::incircle) },
+    Op { group: "perturb", name: "insphere", measures: "perturb::insphere", classes: TD, prepare: |c| bind(inputs::perturb::insphere(c), kernels::perturb::insphere) },
 ];
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 17] = [
+pub const GROUPS: [&str; 18] = [
     "predicate",
     "sign",
     "wide",
@@ -381,6 +387,7 @@ pub const GROUPS: [&str; 17] = [
     "dd",
     "exact_sum",
     "generated",
+    "perturb",
 ];
 
 /// The group of the growth checks.

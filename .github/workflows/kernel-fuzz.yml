@@ -16,6 +16,8 @@ name: Kernel fuzzing and proofs
 #   its domain (the target module's header says which).
 # - Kani for geom-num: each `#[kani::proof]` harness beside geom-num's code (piece G41), proven
 #   on its own.
+# - kernel-fuzz-campaign.yml runs a target for hours instead, on demand: the wide integers' 25-hour
+#   campaign (G26).
 # - ClusterFuzzLite, on pull requests: .clusterfuzzlite/build.sh builds every `<target>_fuzz` test
 #   with cargo-bolero's build-clusterfuzz command, and ClusterFuzzLite fuzzes them in turn
 #   (code-change mode, address sanitizer). OSS-Fuzz's build check cannot read the start-up
@@ -95,7 +97,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [orient2d_fuzz, predicates_fuzz, variants_fuzz]
+        target: [orient2d_fuzz, predicates_fuzz, variants_fuzz, wide_fuzz]
     defaults:
       run:
         shell: bash
@@ -130,7 +132,11 @@ jobs:
   kani:
     name: Kani (${{ matrix.harness }})
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # orient2d_proof is the slowest harness: on G37's rewritten wide integers, which its total
+    # path reaches, kissat proved it in 47 minutes (run 40291338626) and then in 75 (run
+    # 40308963161, which the old 75-minute limit then cut off) on the hosted runners; CaDiCaL ran
+    # past three hours. 120 minutes is about one and a half times the slower run.
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
@@ -163,28 +169,86 @@ jobs:
 
   # Bounded proofs beside geom-num's own code (chapter 28.7; piece G41): each harness of a module's
   # `#[cfg(kani)] mod proofs`, proven by Kani for every case of its domain, with Kani's overflow,
-  # bounds and panic checks on. A harness that cannot finish within the hour is narrowed, and its
-  # module header says what is proven and what is only tested. geom-num's tests/kani_harnesses.rs
-  # holds this list to the harnesses in the source.
+  # bounds and panic checks on. A harness that cannot finish within the budget is narrowed, and
+  # its module header says what is proven and what is only tested. geom-num's
+  # tests/kani_harnesses.rs holds this list to the harnesses in the source. The budget, two hours:
+  # in WSL on 2026-10-28, with up to thirteen proofs sharing twelve cores, the slowest took 57
+  # minutes (exact_sum's cancellation in the subnormals) and eft's
+  # two_prod_with_three_every_significand 45; 120 minutes is the margin orient2d_proof's job above
+  # keeps.
   kani-num:
     name: Kani, geom-num (${{ matrix.proof }})
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
         proof:
+          - dd::proofs::exponent_reads_the_leading_bit
+          - dd::proofs::from_i128_accepts_exactly_below_2_106
+          - dd::proofs::pow2_is_exact_over_its_range
+          - dd::proofs::scale_pow2_never_reports_a_defect
+          - dd::proofs::whole_reads_what_it_accepts_exactly
+          - eft::proofs::split_adds_back_exactly
+          - eft::proofs::two_prod_with_minus_a_tenth
+          - eft::proofs::two_prod_with_the_largest_double
+          - eft::proofs::two_prod_with_the_smallest_subnormal
+          - eft::proofs::two_prod_with_the_splitter
+          - eft::proofs::two_prod_with_three
+          - eft::proofs::two_prod_with_three_every_significand
+          - eft::proofs::two_prod_with_two_pow_996
+          - eft::proofs::two_sum_with_minus_a_tenth
+          - eft::proofs::two_sum_with_the_largest_double
+          - eft::proofs::two_sum_with_the_smallest_subnormal
+          - eft::proofs::two_sum_with_three
+          - eft::proofs::two_sum_with_two_pow_53
+          - exact_sum::proofs::a_non_finite_term_is_reported
+          - exact_sum::proofs::a_term_and_its_negation_cancel_in_binade_31
+          - exact_sum::proofs::a_term_and_its_negation_cancel_in_binade_32
+          - exact_sum::proofs::a_term_and_its_negation_cancel_in_one_s_binade
+          - exact_sum::proofs::a_term_and_its_negation_cancel_in_the_largest_binade
+          - exact_sum::proofs::a_term_and_its_negation_cancel_in_the_smallest_binade
+          - exact_sum::proofs::a_term_and_its_negation_cancel_in_the_subnormals
+          - exact_sum::proofs::one_term_rounds_back_in_binade_31
+          - exact_sum::proofs::one_term_rounds_back_in_binade_32
+          - exact_sum::proofs::one_term_rounds_back_in_one_s_binade
+          - exact_sum::proofs::one_term_rounds_back_in_the_largest_binade
+          - exact_sum::proofs::one_term_rounds_back_in_the_smallest_binade
+          - exact_sum::proofs::one_term_rounds_back_in_the_subnormals
+          - exactness::proofs::combine_keeps_the_less_exact_class
+          - exactness::proofs::within_never_panics_and_respects_the_ceiling
           - grid::proofs::coarsen_is_nearest_and_reported
           - grid::proofs::coord_from_i128_accepts_exactly_the_frame
           - grid::proofs::coord_new_accepts_exactly_the_frame
           - grid::proofs::p3_new_accepts_exactly_three_frame_coordinates
           - grid::proofs::refine_is_exact_or_refused
           - grid::proofs::steps_refine_is_exact_or_none
+          - interval::proofs::add_sub_mul_enclose_the_rounded_result
+          - interval::proofs::div_by_minus_a_tenth
+          - interval::proofs::div_by_minus_zero_is_refused
+          - interval::proofs::div_by_the_largest_double
+          - interval::proofs::div_by_the_smallest_subnormal
+          - interval::proofs::div_by_three
+          - interval::proofs::div_by_zero_is_refused
+          - interval::proofs::new_accepts_exactly_ordered_finite_bounds
+          - interval::proofs::square_is_never_negative_and_encloses
           - ladder::proofs::quarter_nm_always_answers_exactly
+          - math::proofs::abs_is_exact
+          - math::proofs::ceil_is_exact
+          - math::proofs::floor_is_exact
+          - math::proofs::round_ties_even_is_exact
+          - perturb::proofs::bit_of_covers_exactly_a_mask_of_32
+          - perturb::proofs::distinct_refuses_exactly_repeated_keys
+          - perturb::proofs::the_lift_of_every_frame_point_fits
           - real::proofs::real_new_refuses_exactly_nan_and_the_infinities
           - real::proofs::total_order_and_its_tie_rules
+          - rng::proofs::draws_never_panic
+          - rng::proofs::lemire_never_reports_a_defect
+          - rng::proofs::philox_never_panics
+          - rng::proofs::stream_ranges_cut_without_overflow
           - sign::proofs::signs_follow_the_integers
           - wide::proofs::add_and_sub_never_panic_and_invert
+          - wide::proofs::extremes_are_the_limits
           - wide::proofs::i128_conversions_and_resize_round_trip
           - wide::proofs::mul_never_panics
           - wide::proofs::neg_refuses_exactly_the_minimum

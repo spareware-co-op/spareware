@@ -13,6 +13,15 @@
 //!   name, an added statement, a changed doc comment and a removed attribute, on either side.
 //! - `the_twin_is_current`: the committed twin is what the generator writes now, from geom-num's
 //!   grid bound.
+//! - `the_wide_twin_is_the_shipped_arithmetic_token_for_token` (piece G37): every function of
+//!   `geom-num`'s wide-integer twin (`verus/wide.rs`), annotations removed, is the one in
+//!   `src/wide.rs`; `every_function_the_wide_twin_runs_is_proven_and_compared` and
+//!   `the_order_is_the_proven_comparison` leave nothing out, and
+//!   `any_change_to_the_wide_arithmetic_is_seen` shows the comparison catches a change.
+//! - `from_i128_is_the_shipped_one_in_doc_attributes_parameters_and_body` and
+//!   `product_i128_is_the_shipped_one_in_doc_attributes_parameters_and_body` (piece G38): the two
+//!   functions the twin writes inside its `verus!` block are the shipped ones but for their
+//!   specifications and proofs, and state the value they give.
 //! - `the_twin_refuses_what_it_does_not_model`: a description with rounded inputs (`plane_side`),
 //!   or with a step wider than `i128` (`incircle`, `insphere`), is refused with the reason, never
 //!   emitted as a twin that models it wrongly; `orient2d` and `orient3d` are covered.
@@ -36,7 +45,7 @@ use geom_gen::predicates::{PREDICATES, derivation, generate_verus_orient2d};
 use proc_macro2::{Group, TokenStream, TokenTree};
 
 /// The committed twin.
-const TWIN: &str = include_str!("../generated/verus-orient2d.rs");
+const TWIN: &str = include_str!("../../geom-num/verus/generated/orient2d.rs");
 
 /// The committed module the twin shadows.
 const SHIPPED: &str = include_str!("../../geom-num/src/generated/orient2d.rs");
@@ -100,7 +109,7 @@ fn strip(trees: &[TokenTree]) -> Vec<TokenTree> {
                 }
             }
         }
-        if is_ident(t, "proof")
+        if (is_ident(t, "proof") || is_ident(t, "proof_decl"))
             && trees.get(k + 1).is_some_and(|n| is_punct(n, '!'))
             && matches!(trees.get(k + 2), Some(TokenTree::Group(_)))
         {
@@ -125,9 +134,51 @@ fn strip(trees: &[TokenTree]) -> Vec<TokenTree> {
     out
 }
 
-/// The tokens as one canonical string: equal exactly when the token trees are equal.
+/// The tokens as one canonical string: equal exactly when the token trees are equal, except for
+/// the spacing of punctuation where it cannot change the program: after a `?` (no operator begins
+/// with one) and before anything that is not punctuation. So a line rustfmt breaks after a `?`
+/// still compares equal, and `&&` still differs from `& &`.
 fn canonical(trees: &[TokenTree]) -> String {
-    trees.iter().cloned().collect::<TokenStream>().to_string()
+    let mut out = String::new();
+    render(trees, &mut out);
+    out
+}
+
+fn render(trees: &[TokenTree], out: &mut String) {
+    for (k, t) in trees.iter().enumerate() {
+        match t {
+            TokenTree::Group(g) => {
+                let (open, close) = match g.delimiter() {
+                    proc_macro2::Delimiter::Parenthesis => ("(", ")"),
+                    proc_macro2::Delimiter::Brace => ("{", "}"),
+                    proc_macro2::Delimiter::Bracket => ("[", "]"),
+                    proc_macro2::Delimiter::None => ("", ""),
+                };
+                out.push_str(open);
+                out.push(' ');
+                let inner: Vec<TokenTree> = g.stream().into_iter().collect();
+                render(&inner, out);
+                out.push_str(close);
+                out.push(' ');
+            }
+            TokenTree::Ident(i) => {
+                out.push_str(&i.to_string());
+                out.push(' ');
+            }
+            TokenTree::Literal(l) => {
+                out.push_str(&l.to_string());
+                out.push(' ');
+            }
+            TokenTree::Punct(p) => {
+                out.push(p.as_char());
+                let next_is_punct = matches!(trees.get(k + 1), Some(TokenTree::Punct(_)));
+                let joint = p.spacing() == proc_macro2::Spacing::Joint;
+                if !(joint && next_is_punct && p.as_char() != '?') {
+                    out.push(' ');
+                }
+            }
+        }
+    }
 }
 
 /// `text` with the first `from` inside `value`'s item (from its doc comment on) replaced by `to`.
@@ -160,11 +211,11 @@ fn the_twin_carries_its_annotations() {
     assert!(item.contains("verus_spec"), "{item}");
     for coordinate in ["a . x", "a . y", "b . x", "b . y", "c . x", "c . y"] {
         assert!(
-            item.contains(&format!("{coordinate} . on_grid ()")),
+            item.contains(&format!("{coordinate} . on_grid ( )")),
             "{coordinate}: {item}"
         );
     }
-    assert!(item.contains("spec_value (a , b , c)"), "{item}");
+    assert!(item.contains("spec_value ( a , b , c )"), "{item}");
     assert_eq!(item.matches("proof !").count(), 2, "{item}");
     assert!(item.len() > canonical(&value_item(SHIPPED)).len());
 }
@@ -198,10 +249,64 @@ fn any_change_to_either_side_is_seen() {
 fn the_twin_is_current() {
     let fresh = String::from_utf8(generate_verus_orient2d().unwrap()).unwrap();
     assert_eq!(fresh, TWIN.replace("\r\n", "\n"));
-    assert!(TWIN.contains(&format!(
+    assert!(MODEL.contains(&format!(
         "pub const COORD_MAX: i64 = {};",
         geom_num::grid::COORD_MAX
     )));
+}
+
+/// The model of `geom_num::grid`'s types the predicate twins verify against (piece G38).
+const MODEL: &str = include_str!("../../geom-num/verus/model.rs");
+
+/// Every predicate twin of the Verus crate (pieces G36 and G38) and the module it shadows.
+const PREDICATE_TWINS: [(&str, &str, &str); 4] = [
+    (
+        "orient2d",
+        include_str!("../../geom-num/verus/generated/orient2d.rs"),
+        include_str!("../../geom-num/src/generated/orient2d.rs"),
+    ),
+    (
+        "orient3d",
+        include_str!("../../geom-num/verus/generated/orient3d.rs"),
+        include_str!("../../geom-num/src/generated/orient3d.rs"),
+    ),
+    (
+        "incircle",
+        include_str!("../../geom-num/verus/generated/incircle.rs"),
+        include_str!("../../geom-num/src/generated/incircle.rs"),
+    ),
+    (
+        "insphere",
+        include_str!("../../geom-num/verus/generated/insphere.rs"),
+        include_str!("../../geom-num/src/generated/insphere.rs"),
+    ),
+];
+
+/// The Verus crate's root, which must hold every predicate twin as a module.
+const CRATE_ROOT: &str = include_str!("../../geom-num/verus/lib.rs");
+
+#[test]
+fn every_predicate_twin_is_its_shipped_value_token_for_token() {
+    let shipped_generators = [
+        generate_verus_orient2d,
+        geom_gen::predicates::generate_verus_orient3d,
+        geom_gen::predicates::generate_verus_incircle,
+        geom_gen::predicates::generate_verus_insphere,
+    ];
+    for ((name, twin, shipped), generate) in PREDICATE_TWINS.iter().zip(shipped_generators) {
+        let t = find_fn(&tokens(twin), "value").unwrap_or_else(|| panic!("{name}: no value"));
+        let s = find_fn(&tokens(shipped), "value").unwrap_or_else(|| panic!("{name}: no value"));
+        assert_eq!(canonical(&strip(&t)), canonical(&s), "{name}");
+        assert!(canonical(&t).contains("verus_spec"), "{name}");
+        let fresh = String::from_utf8(generate().unwrap()).unwrap();
+        assert_eq!(fresh, twin.replace("\r\n", "\n"), "{name} is not current");
+        assert!(
+            CRATE_ROOT.replace("\r\n", "\n").contains(&format!(
+                "#[path = \"generated/{name}.rs\"]\npub mod {name};"
+            )),
+            "{name} is not a module of the crate"
+        );
+    }
 }
 
 #[test]
@@ -210,19 +315,260 @@ fn the_twin_refuses_what_it_does_not_model() {
         let d = derivation(p).unwrap();
         let twin = verus_twin(&d, "test", "shipped.rs");
         match p.comparison.name {
-            // ssi_weight's exact path is in i64 and i128 only (piece G29).
-            "orient2d" | "orient3d" | "ssi_weight" => {
+            // ssi_weight's exact path is in i64 and i128 only (piece G29); ssi_side's needs I256,
+            // which the twins model since piece G38.
+            "orient2d" | "orient3d" | "incircle" | "insphere" | "ssi_weight" | "ssi_side" => {
                 assert!(twin.is_ok(), "{}: {twin:?}", p.comparison.name);
             }
             "plane_side" | "tpi_weight" | "tpi_side" | "lpi_weight" | "lpi_side" => {
                 let e = twin.unwrap_err().0;
                 assert!(e.contains("rounded input"), "{e}");
             }
-            "incircle" | "insphere" | "ssi_side" => {
-                let e = twin.unwrap_err().0;
-                assert!(e.contains("wider") || e.contains("wide integers"), "{e}");
-            }
             other => panic!("a predicate this test does not know: {other}"),
         }
     }
+}
+
+// ---------------------------------------------------------------------------------------------
+// geom-num's wide-integer twin (piece G37).
+
+/// The wide-integer twin and the module it shadows.
+const WIDE_TWIN: &str = include_str!("../../geom-num/verus/wide.rs");
+const WIDE: &str = include_str!("../../geom-num/src/wide.rs");
+
+/// Every function the wide twin runs, all of them proven there.
+const WIDE_PROVEN: [&str; 14] = [
+    "fill",
+    "wrapping_add_limbs",
+    "wrapping_sub_limbs",
+    "compare_limbs",
+    "halves",
+    "wrapping_neg",
+    "magnitude",
+    "checked_add",
+    "checked_sub",
+    "checked_neg",
+    "compare",
+    "checked_mul",
+    "is_negative",
+    "from_magnitude",
+];
+
+/// Whether the token at `k` opens the `verus!` block: `verus`, `!`, then a group.
+fn is_verus_block(trees: &[TokenTree], k: usize) -> bool {
+    k >= 2 && is_punct(&trees[k - 1], '!') && is_ident(&trees[k - 2], "verus")
+}
+
+/// The item `fn name` in `trees`, at any depth outside the `verus!` block, with its attributes and
+/// visibility (`pub` or `pub(...)`).
+fn find_fn(trees: &[TokenTree], name: &str) -> Option<Vec<TokenTree>> {
+    if let Some(at) = (0..trees.len().saturating_sub(1))
+        .find(|&k| is_ident(&trees[k], "fn") && is_ident(&trees[k + 1], name))
+    {
+        let mut start = at;
+        if start > 0 && is_ident(&trees[start - 1], "const") {
+            start -= 1;
+        }
+        if start > 1
+            && is_ident(&trees[start - 2], "pub")
+            && matches!(&trees[start - 1], TokenTree::Group(g) if g.delimiter() == proc_macro2::Delimiter::Parenthesis)
+        {
+            start -= 2;
+        } else if start > 0 && is_ident(&trees[start - 1], "pub") {
+            start -= 1;
+        }
+        while start >= 2
+            && is_punct(&trees[start - 2], '#')
+            && matches!(&trees[start - 1], TokenTree::Group(g) if g.delimiter() == proc_macro2::Delimiter::Bracket)
+        {
+            start -= 2;
+        }
+        let body = (at..trees.len())
+            .find(|&k| matches!(&trees[k], TokenTree::Group(g) if g.delimiter() == proc_macro2::Delimiter::Brace))?;
+        return Some(trees[start..=body].to_vec());
+    }
+    trees.iter().enumerate().find_map(|(k, t)| match t {
+        TokenTree::Group(g) if !is_verus_block(trees, k) => {
+            let inner: Vec<TokenTree> = g.stream().into_iter().collect();
+            find_fn(&inner, name)
+        }
+        _ => None,
+    })
+}
+
+/// The names of every `fn` in `trees` outside the `verus!` block.
+fn fn_names(trees: &[TokenTree], names: &mut Vec<String>) {
+    for (k, t) in trees.iter().enumerate() {
+        if is_ident(t, "fn") {
+            if let Some(TokenTree::Ident(n)) = trees.get(k + 1) {
+                names.push(n.to_string());
+            }
+        }
+        if let TokenTree::Group(g) = t {
+            if !is_verus_block(trees, k) {
+                let inner: Vec<TokenTree> = g.stream().into_iter().collect();
+                fn_names(&inner, names);
+            }
+        }
+    }
+}
+
+/// Whether every proven function of a twin, annotations removed, is the shipped one.
+fn same_functions(twin: &str, shipped: &str) -> bool {
+    let (twin, shipped) = (tokens(twin), tokens(shipped));
+    WIDE_PROVEN.iter().all(
+        |name| match (find_fn(&twin, name), find_fn(&shipped, name)) {
+            (Some(t), Some(s)) => canonical(&strip(&t)) == canonical(&s),
+            _ => false,
+        },
+    )
+}
+
+#[test]
+fn the_wide_twin_is_the_shipped_arithmetic_token_for_token() {
+    let (twin, shipped) = (tokens(WIDE_TWIN), tokens(WIDE));
+    for name in WIDE_PROVEN {
+        let t = find_fn(&twin, name).unwrap_or_else(|| panic!("the twin has no `fn {name}`"));
+        let s = find_fn(&shipped, name).unwrap_or_else(|| panic!("wide.rs has no `fn {name}`"));
+        assert_eq!(canonical(&strip(&t)), canonical(&s), "`fn {name}` differs");
+        assert!(
+            canonical(&t).contains("verus_spec"),
+            "`fn {name}` has no specification in the twin"
+        );
+    }
+}
+
+#[test]
+fn every_function_the_wide_twin_runs_is_proven_and_compared() {
+    let mut names = Vec::new();
+    fn_names(&tokens(WIDE_TWIN), &mut names);
+    names.sort();
+    let mut proven: Vec<String> = WIDE_PROVEN.iter().map(|n| (*n).to_owned()).collect();
+    proven.sort();
+    assert_eq!(names, proven);
+}
+
+#[test]
+fn the_order_is_the_proven_comparison() {
+    let cmp = find_fn(&tokens(WIDE), "cmp").unwrap();
+    assert_eq!(
+        canonical(&cmp),
+        canonical(&tokens(
+            "fn cmp(&self, other: &Self) -> Ordering { self.compare(other) }"
+        ))
+    );
+}
+
+#[test]
+fn any_change_to_the_wide_arithmetic_is_seen() {
+    assert!(same_functions(WIDE_TWIN, WIDE));
+    for (from, to) in [
+        (
+            ".checked_add(u128::from(old))?",
+            ".wrapping_add(u128::from(old))",
+        ),
+        ("carry = c1 || c2;", "carry = c1 && c2;"),
+        ("i = i.wrapping_sub(1);", "i = i.wrapping_sub(2);"),
+        (
+            "let overflow = self.is_negative() & r.is_negative();",
+            "let overflow = false;",
+        ),
+    ] {
+        assert!(WIDE.contains(from) && WIDE_TWIN.contains(from), "{from}");
+        assert!(
+            !same_functions(&WIDE_TWIN.replacen(from, to, 1), WIDE),
+            "twin: {from}"
+        );
+        assert!(
+            !same_functions(WIDE_TWIN, &WIDE.replacen(from, to, 1)),
+            "wide.rs: {from}"
+        );
+    }
+}
+
+/// The item `fn name` inside the `verus!` block of `trees`, as written there: attributes,
+/// signature with its Verus clauses, and body.
+fn find_fn_in_verus(trees: &[TokenTree], name: &str) -> Option<Vec<TokenTree>> {
+    trees.iter().enumerate().find_map(|(k, t)| match t {
+        TokenTree::Group(g) if is_verus_block(trees, k) => {
+            let inner: Vec<TokenTree> = g.stream().into_iter().collect();
+            find_fn(&inner, name)
+        }
+        _ => None,
+    })
+}
+
+/// The parts of a function the twin must share with the shipped code when the twin writes it in
+/// Verus's own syntax: its attributes (doc comment included), its parameters and its body, with
+/// the body's `proof { ... }` blocks removed.
+fn shared_parts(item: &[TokenTree]) -> String {
+    let at = item.iter().position(|t| is_ident(t, "fn")).unwrap();
+    let mut head = item[..at].to_vec();
+    if head.last().is_some_and(|t| is_ident(t, "pub")) {
+        head.pop();
+    }
+    let params = item[at + 2..]
+        .iter()
+        .find(|t| matches!(t, TokenTree::Group(g) if g.delimiter() == proc_macro2::Delimiter::Parenthesis))
+        .cloned()
+        .unwrap();
+    let body = item.last().cloned().unwrap();
+    let body: Vec<TokenTree> = match body {
+        TokenTree::Group(g) => g.stream().into_iter().collect(),
+        _ => panic!("no body"),
+    };
+    let mut kept = Vec::new();
+    let mut k = 0;
+    while k < body.len() {
+        if is_ident(&body[k], "proof")
+            && matches!(body.get(k + 1), Some(TokenTree::Group(g)) if g.delimiter() == proc_macro2::Delimiter::Brace)
+        {
+            k += 2;
+            continue;
+        }
+        kept.push(body[k].clone());
+        k += 1;
+    }
+    format!(
+        "{} | {} | {}",
+        canonical(&head),
+        canonical(&[params]),
+        canonical(&strip(&kept))
+    )
+}
+
+#[test]
+fn from_i128_is_the_shipped_one_in_doc_attributes_parameters_and_body() {
+    let twin = find_fn_in_verus(&tokens(WIDE_TWIN), "from_i128").expect("the twin's from_i128");
+    let shipped = find_fn(&tokens(WIDE), "from_i128").expect("wide.rs's from_i128");
+    assert_eq!(shared_parts(&twin), shared_parts(&shipped));
+    let text = canonical(&twin);
+    assert!(text.contains("ensures r . value ( ) == v as int"), "{text}");
+    // A change on either side is seen.
+    let changed = WIDE.replacen("(1u128 << 127)", "(1u128 << 126)", 1);
+    let changed = find_fn(&tokens(&changed), "from_i128").unwrap();
+    assert_ne!(shared_parts(&twin), shared_parts(&changed));
+}
+
+#[test]
+fn product_i128_is_the_shipped_one_in_doc_attributes_parameters_and_body() {
+    let twin =
+        find_fn_in_verus(&tokens(WIDE_TWIN), "product_i128").expect("the twin's product_i128");
+    let shipped = find_fn(&tokens(WIDE), "product_i128").expect("wide.rs's product_i128");
+    assert_eq!(shared_parts(&twin), shared_parts(&shipped));
+    let text = canonical(&twin);
+    assert!(
+        text.contains("w . value ( ) == a as int * b as int"),
+        "{text}"
+    );
+    // A change on either side is seen.
+    let from = "let (l2, l3) = halves(upper);";
+    let to = "let (l3, l2) = halves(upper);";
+    assert!(WIDE.contains(from) && WIDE_TWIN.contains(from));
+    let changed = WIDE.replacen(from, to, 1);
+    let changed = find_fn(&tokens(&changed), "product_i128").unwrap();
+    assert_ne!(shared_parts(&twin), shared_parts(&changed));
+    let changed = WIDE_TWIN.replacen(from, to, 1);
+    let changed = find_fn_in_verus(&tokens(&changed), "product_i128").unwrap();
+    assert_ne!(shared_parts(&changed), shared_parts(&shipped));
 }

@@ -18,6 +18,17 @@
 //! - **Deterministic.** The same answer on every target: the integer paths are exact, and the
 //!   filter's `f64` operations are correctly rounded everywhere and give a sign only when it is the
 //!   exact sign.
+//! - **Bounded proofs, and what is only tested** (chapter 28.7; piece G41 collects them here).
+//!   Verus proves that the generated exact paths of [`orient2d`], [`orient3d`], [`incircle`] and
+//!   [`insphere`] compute their determinants exactly and never overflow, for every grid input
+//!   (pieces G36 and G38: the twins in `verus/generated/`, token for token the shipped modules),
+//!   and that the [`crate::wide`] arithmetic they run on is exact (G37). Kani proves that
+//!   [`orient2d`] answers with the exact sign, nothing panicking or overflowing on the way, filter
+//!   and routing included, for every coordinate within one step of 0 or of an edge of the frame
+//!   (piece G14: geom-fuzz's `orient2d_proof`). The filters' error bounds are checked against
+//!   exact arithmetic, not proven, until pieces G35 and G40 certify them; the routing and every
+//!   other input are tested against exact oracles (`tests/attack_predicate.rs`, the verification
+//!   suite).
 //!
 //! Four evaluation steps, each exact; a call returns from the first that answers:
 //!
@@ -1014,6 +1025,7 @@ mod tests {
     use proptest::prelude::*;
 
     use super::bounded::{TOTAL_BITS, declarable, product_bits, sum_bits};
+    use super::exponent_sum;
     use super::{
         Bounded, Diff, Total, fast_else_total, incircle_fast, incircle_terms, incircle_total,
         insphere_fast, insphere_terms, insphere_total, orient2d_fast, orient2d_total,
@@ -1021,6 +1033,17 @@ mod tests {
     };
     use crate::grid::COORD_MAX;
     use crate::sign::Sign;
+
+    /// `exponent_sum`, which only the budget constants call (so only the compiler ran it): the sum,
+    /// or `u32::MAX` when the sum overflows, which no budget fits.
+    #[test]
+    fn exponent_sums_add_or_saturate_to_the_impossible_budget() {
+        assert_eq!(exponent_sum(40, 1), 41);
+        assert_eq!(exponent_sum(0, 0), 0);
+        assert_eq!(exponent_sum(u32::MAX - 1, 1), u32::MAX);
+        assert_eq!(exponent_sum(u32::MAX, 1), u32::MAX);
+        assert_eq!(exponent_sum(1, u32::MAX), u32::MAX);
+    }
     use crate::wide::{I256, Wide};
 
     const M: i64 = COORD_MAX;

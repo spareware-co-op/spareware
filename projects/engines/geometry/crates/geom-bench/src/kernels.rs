@@ -1421,3 +1421,35 @@ pub mod avnaim {
         });
     }
 }
+
+/// The perturbed predicates: `geom_num::perturb` (G30).
+pub mod perturb {
+    use geom_num::grid::{P2, P3};
+    use geom_num::{NumError, Sign, perturb as p};
+
+    use super::run;
+
+    /// `perturb::orient2d` on each keyed triple.
+    #[inline(never)]
+    pub fn orient2d(batch: &[[(P2, u64); 3]], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |&[a, b, c]| p::orient2d(a, b, c));
+    }
+
+    /// `perturb::orient3d` on each keyed quadruple.
+    #[inline(never)]
+    pub fn orient3d(batch: &[[(P3, u64); 4]], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |&[a, b, c, d]| p::orient3d(a, b, c, d));
+    }
+
+    /// `perturb::incircle` on each keyed quadruple.
+    #[inline(never)]
+    pub fn incircle(batch: &[[(P2, u64); 4]], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |&[a, b, c, d]| p::incircle(a, b, c, d));
+    }
+
+    /// `perturb::insphere` on each keyed quintuple.
+    #[inline(never)]
+    pub fn insphere(batch: &[[(P3, u64); 5]], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |&[a, b, c, d, e]| p::insphere(a, b, c, d, e));
+    }
+}

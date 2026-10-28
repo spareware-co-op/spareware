@@ -31,6 +31,16 @@
 //!   2^64 terms have been added (a term at most Ω < 2^1024, counted once for every accumulator it
 //!   reaches through merges); should an internal step ever fail, the sum is marked lost and
 //!   [`ExactSum::round_ieee`] gives Neal's report for it, a NaN with every payload bit set.
+//! - **Bounded proofs, and what is only tested.** Kani proves (piece G41, chapter 28.7) that
+//!   adding one term never panics, that a finite term rounds back to itself and a non-finite one
+//!   is reported, and that a finite term and its negation cancel to +0, for every sign and every
+//!   fraction at the exponent fields 0, 1, 31, 32, 1023 and 2046 (and 2047, the non-finite
+//!   terms): the subnormals, the smallest binade, the two binades either side of the first chunk
+//!   boundary, one's binade and the largest, one harness per field with kissat as the SAT solver.
+//!   Each unwinds every loop at most 68 times (the 67 chunks, and one more for the loop's exit),
+//!   and Kani checks that bound is enough; without it the slices whose length depends on the term
+//!   unwind without end. Every other exponent field, and every sum of more than one term, is
+//!   tested bit for bit against the exact oracle.
 //!
 //! Method: R. M. Neal, "Fast exact summation using small and large superaccumulators", arXiv
 //! 1505.05571 (2015), <https://arxiv.org/abs/1505.05571>, and his C code `xsum` (MIT licence,
@@ -706,10 +716,10 @@ mod tests {
     #[test]
     fn small_sums_round_like_ieee() {
         let cases: [(f64, f64); 6] = [
-            (1.0, 2.0f64.powi(-53)),
-            (1.0, 2.0f64.powi(-53) + 2.0f64.powi(-105)),
-            (-f64::MAX, -2.0f64.powi(970)),
-            (f64::MAX, 2.0f64.powi(969)),
+            (1.0, libm::scalbn(1.0, -53)),
+            (1.0, libm::scalbn(1.0, -53) + libm::scalbn(1.0, -105)),
+            (-f64::MAX, -libm::scalbn(1.0, 970)),
+            (f64::MAX, libm::scalbn(1.0, 969)),
             (f64::from_bits(1), f64::from_bits(3)),
             (0.1, -0.1),
         ];
@@ -734,5 +744,156 @@ mod tests {
             by_one.round_ieee().to_bits(),
             by_slice.round_ieee().to_bits()
         );
+    }
+}
+
+/// Bounded proofs (chapter 28.7; piece G41): every sign and every fraction, bit for bit, at the
+/// exponent fields the module header names and says why.
+#[cfg(kani)]
+// cargo-mutants reads this attribute from the source and skips the module (its harnesses are
+// proven by Kani, and no test build compiles them); no build evaluates it, since the module
+// exists only under Kani, where `test` is off.
+#[cfg_attr(test, mutants::skip)]
+mod proofs {
+    use super::*;
+
+    /// A double with exponent field `e`, any sign and any fraction.
+    fn any_with_exponent(e: u64) -> f64 {
+        let sign: u64 = if kani::any() { 1 << 63 } else { 0 };
+        let fraction: u64 = kani::any::<u64>() & FRACTION_BITS;
+        f64::from_bits(sign | e << 52 | fraction)
+    }
+
+    /// Adding a double never panics or overflows, and one finite double, rounded back, is that
+    /// double (a zero comes back +0, the sum's one zero), for every sign and every fraction at
+    /// exponent field `e`. Proven at the fields 0, 1, 31, 32, 1023 and 2046, one harness each
+    /// (kissat as the SAT solver, every loop unwound at most 68 times: the accumulator's 67
+    /// chunks): the subnormals, the smallest normal binade, the binades either side of the first
+    /// chunk boundary (31 and 32, as E = 32·j + k), one's binade and the largest.
+    fn one_term_law(e: u64) {
+        let x = any_with_exponent(e);
+        let mut sum = ExactSum::new();
+        sum.add(x);
+        let back = sum.round().unwrap().get();
+        if x == 0.0 {
+            assert!(back.to_bits() == 0);
+        } else {
+            assert!(back.to_bits() == x.to_bits());
+        }
+    }
+
+    /// A finite double and its negation cancel exactly, to +0, for every sign and every fraction
+    /// at exponent field `e`; proven at the fields [`one_term_law`] names, one harness each.
+    fn cancel_law(e: u64) {
+        let x = any_with_exponent(e);
+        let mut sum = ExactSum::new();
+        sum.add(x);
+        sum.add(-x);
+        assert!(sum.round().unwrap().get().to_bits() == 0);
+    }
+
+    /// An infinity or a NaN, every sign and every payload (exponent field 2047), is reported.
+    #[kani::proof]
+    #[kani::unwind(68)]
+    fn a_non_finite_term_is_reported() {
+        let mut sum = ExactSum::new();
+        sum.add(any_with_exponent(2047));
+        assert!(sum.round().is_err());
+    }
+
+    /// [`one_term_law`] at exponent field 0: the subnormals.
+    #[kani::proof]
+    #[kani::unwind(68)]
+    #[kani::solver(kissat)]
+    fn one_term_rounds_back_in_the_subnormals() {
+        one_term_law(0);
+    }
+
+    /// [`one_term_law`] at exponent field 1: the smallest normal binade.
+    #[kani::proof]
+    #[kani::unwind(68)]
+    #[kani::solver(kissat)]
+    fn one_term_rounds_back_in_the_smallest_binade() {
+        one_term_law(1);
+    }
+
+    /// [`one_term_law`] at exponent field 31: the binade below the first chunk boundary.
+    #[kani::proof]
+    #[kani::unwind(68)]
+    #[kani::solver(kissat)]
+    fn one_term_rounds_back_in_binade_31() {
+        one_term_law(31);
+    }
+
+    /// [`one_term_law`] at exponent field 32: the binade above the first chunk boundary.
+    #[kani::proof]
+    #[kani::unwind(68)]
+    #[kani::solver(kissat)]
+    fn one_term_rounds_back_in_binade_32() {
+        one_term_law(32);
+    }
+
+    /// [`one_term_law`] at exponent field 1023: one's binade.
+    #[kani::proof]
+    #[kani::unwind(68)]
+    #[kani::solver(kissat)]
+    fn one_term_rounds_back_in_one_s_binade() {
+        one_term_law(1023);
+    }
+
+    /// [`one_term_law`] at exponent field 2046: the largest binade.
+    #[kani::proof]
+    #[kani::unwind(68)]
+    #[kani::solver(kissat)]
+    fn one_term_rounds_back_in_the_largest_binade() {
+        one_term_law(2046);
+    }
+
+    /// [`cancel_law`] at exponent field 0: the subnormals.
+    #[kani::proof]
+    #[kani::unwind(68)]
+    #[kani::solver(kissat)]
+    fn a_term_and_its_negation_cancel_in_the_subnormals() {
+        cancel_law(0);
+    }
+
+    /// [`cancel_law`] at exponent field 1: the smallest normal binade.
+    #[kani::proof]
+    #[kani::unwind(68)]
+    #[kani::solver(kissat)]
+    fn a_term_and_its_negation_cancel_in_the_smallest_binade() {
+        cancel_law(1);
+    }
+
+    /// [`cancel_law`] at exponent field 31: the binade below the first chunk boundary.
+    #[kani::proof]
+    #[kani::unwind(68)]
+    #[kani::solver(kissat)]
+    fn a_term_and_its_negation_cancel_in_binade_31() {
+        cancel_law(31);
+    }
+
+    /// [`cancel_law`] at exponent field 32: the binade above the first chunk boundary.
+    #[kani::proof]
+    #[kani::unwind(68)]
+    #[kani::solver(kissat)]
+    fn a_term_and_its_negation_cancel_in_binade_32() {
+        cancel_law(32);
+    }
+
+    /// [`cancel_law`] at exponent field 1023: one's binade.
+    #[kani::proof]
+    #[kani::unwind(68)]
+    #[kani::solver(kissat)]
+    fn a_term_and_its_negation_cancel_in_one_s_binade() {
+        cancel_law(1023);
+    }
+
+    /// [`cancel_law`] at exponent field 2046: the largest binade.
+    #[kani::proof]
+    #[kani::unwind(68)]
+    #[kani::solver(kissat)]
+    fn a_term_and_its_negation_cancel_in_the_largest_binade() {
+        cancel_law(2046);
     }
 }

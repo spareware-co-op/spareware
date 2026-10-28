@@ -2302,3 +2302,45 @@ pub mod growth {
         benchmarks = wide_add, wide_sub, wide_neg, wide_cmp, wide_mul
     );
 }
+
+/// The perturbed predicates (G30).
+pub mod perturb {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("perturb/orient2d/typical"))]
+    #[bench::degenerate(leak("perturb/orient2d/degenerate"))]
+    fn orient2d(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("perturb/orient3d/typical"))]
+    #[bench::degenerate(leak("perturb/orient3d/degenerate"))]
+    fn orient3d(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("perturb/incircle/typical"))]
+    #[bench::degenerate(leak("perturb/incircle/degenerate"))]
+    fn incircle(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("perturb/insphere/typical"))]
+    #[bench::degenerate(leak("perturb/insphere/degenerate"))]
+    fn insphere(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = perturb;
+        benchmarks = orient2d, orient3d, incircle, insphere
+    );
+}

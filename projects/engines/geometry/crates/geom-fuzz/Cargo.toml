@@ -13,8 +13,8 @@ geom-test = { path = "../geom-test" }
 # The variants target (G42) reads the predicates' descriptions with geom-gen's own parser (ours,
 # MPL-2.0; development only).
 geom-gen = { path = "../geom-gen" }
-# The variants target's oracle (G42): exact arbitrary-precision integers, the big-integer oracle
-# chapter 29.3 names. MIT OR Apache-2.0.
+# The oracle of the wide-integer target (G26) and of the variants target (G42): exact
+# arbitrary-precision integers, the big-integer oracle chapter 29.3 names. MIT OR Apache-2.0.
 num-bigint = "0.4.8"
 
 [dev-dependencies]

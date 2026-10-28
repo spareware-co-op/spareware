@@ -232,6 +232,30 @@ mod tests {
     use super::*;
     use crate::ladder::FIT;
 
+    /// `in_step_u128` converts exactly to a step at least as fine (factors 1, 25 and 625, the
+    /// largest count included) and refuses a coarser one, as its documentation says. Its callers
+    /// only ever ask for a finer step, so no public call reaches the refusal.
+    #[test]
+    fn a_count_converts_only_to_a_step_at_least_as_fine() {
+        let steps = [GridStep::Q0, GridStep::Q1, GridStep::Q2];
+        for (i, &from) in steps.iter().enumerate() {
+            for (j, &to) in steps.iter().enumerate() {
+                let got = in_step_u128(Steps(u64::MAX), from, to);
+                if j >= i {
+                    let factor = 25u128.pow(u32::try_from(j - i).unwrap());
+                    assert_eq!(
+                        got,
+                        Some(u128::from(u64::MAX) * factor),
+                        "{from:?} to {to:?}"
+                    );
+                    assert_eq!(in_step_u128(Steps(3), from, to), Some(3 * factor));
+                } else {
+                    assert_eq!(got, None, "{from:?} to {to:?}");
+                }
+            }
+        }
+    }
+
     fn c(b: u64, step: GridStep) -> Exactness {
         Exactness::Certified {
             bound: Steps(b),
@@ -360,5 +384,64 @@ mod tests {
             c(u64::MAX, Q0).within(Steps(u64::MAX), Q2),
             Err(NumError::ToleranceExceeded)
         );
+    }
+}
+
+/// Bounded proofs (chapter 28.7; piece G41): every class, every count and every step.
+#[cfg(kani)]
+// cargo-mutants reads this attribute from the source and skips the module (its harnesses are
+// proven by Kani, and no test build compiles them); no build evaluates it, since the module
+// exists only under Kani, where `test` is off.
+#[cfg_attr(test, mutants::skip)]
+mod proofs {
+    use super::*;
+
+    /// One of the three steps, by a symbolic byte.
+    fn step(b: u8) -> GridStep {
+        match b % 3 {
+            0 => GridStep::Q0,
+            1 => GridStep::Q1,
+            _ => GridStep::Q2,
+        }
+    }
+
+    /// A symbolic class.
+    fn any_exactness() -> Exactness {
+        match kani::any::<u8>() % 3 {
+            0 => Exactness::Exact,
+            1 => Exactness::Certified {
+                bound: Steps(kani::any()),
+                step: step(kani::any()),
+            },
+            _ => Exactness::Approximate {
+                deviation: Steps(kani::any()),
+                step: step(kani::any()),
+            },
+        }
+    }
+
+    /// `combine` never panics or overflows, and keeps the less exact class: `Exact` is the
+    /// identity, and a combined class is never more exact than either input.
+    #[kani::proof]
+    fn combine_keeps_the_less_exact_class() {
+        let (a, b) = (any_exactness(), any_exactness());
+        match a.combine(b) {
+            Some(c) => assert!(c.rank() == a.rank().max(b.rank())),
+            None => assert!(a.rank() > 0 && b.rank() > 0),
+        }
+        assert!(Exactness::Exact.combine(a) == Some(a));
+    }
+
+    /// `within` and `combine_within` never panic or overflow, and never return a class over the
+    /// ceiling.
+    #[kani::proof]
+    fn within_never_panics_and_respects_the_ceiling() {
+        let (a, b) = (any_exactness(), any_exactness());
+        let (ceiling, at) = (Steps(kani::any()), step(kani::any()));
+        if let Ok(c) = a.combine_within(b, ceiling, at) {
+            assert!(c.rank() == a.rank().max(b.rank()));
+        }
+        let _ = a.within(ceiling, at);
+        let _ = a.bound();
     }
 }
