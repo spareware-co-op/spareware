@@ -7,7 +7,7 @@
 //! piece G18), and a pool of scoped threads like the tests' (what geom-pool does for the facade).
 //! The points come from a fixed linear congruential sequence, so every run measures the same work:
 //! the ten million are spread over a cube of side 2^30 grid steps, and the million lie on a
-//! 100 × 100 × 100 lattice of spacing 16, nudged by up to 3 steps, so each has a few neighbours
+//! 100 × 100 × 100 lattice of spacing 8, nudged by up to 3 steps, so each has a few neighbours
 //! within 6 steps, as the vertices of a mesh to be welded do.
 
 #![allow(
@@ -85,9 +85,9 @@ fn lattice() -> Vec<Point> {
             Point {
                 key: i as u64,
                 at: P3::new(
-                    x * 16 + nudge(&mut rng),
-                    y * 16 + nudge(&mut rng),
-                    z * 16 + nudge(&mut rng),
+                    x * 8 + nudge(&mut rng),
+                    y * 8 + nudge(&mut rng),
+                    z * 8 + nudge(&mut rng),
                 )
                 .unwrap(),
             }

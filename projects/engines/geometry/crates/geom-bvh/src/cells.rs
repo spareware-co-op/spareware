@@ -12,9 +12,12 @@
 //! What it does:
 //!
 //! - [`CellIndex::build`] sorts the points by key (skipped when they are already in strictly
-//!   increasing key order) and refuses a repeated key, computes the codes as one `geom-run` phase,
-//!   and sorts them with `geom-run`'s stable sort, so equal codes keep key order and the order is
-//!   (code, key), the same for any pool and any input order.
+//!   increasing key order) and refuses a repeated key, then codes and sorts runs of 32,768 points
+//!   as one `geom-run` phase and merges the runs in pairs, a phase per round. What is sorted is
+//!   each point's (code, position in key order), all distinct, so the order is (code, key) and
+//!   unique: the same for any pool, any input order and any sorting algorithm. `core`'s unstable
+//!   sort sorts each run, in place: `geom-run`'s general stable sort calls a key function per
+//!   comparison and was five times slower on ten million points.
 //! - [`CellIndex::within`] answers the keys of the points at most a radius r from a grid point,
 //!   decided exactly on squared integer distances, ascending. Its search box [c − r, c + r] fits a
 //!   cell of side 2^L for the smallest L with 2^L > 2r, so it meets at most two such cells on each
@@ -40,8 +43,9 @@
 //! <https://doi.org/10.1145/358728.358741>). The bits are spread by the mask-and-shift sequence for
 //! 21-bit coordinates, applied to the low 21 and the high 20 bits of each.
 //!
-//! Cost: building is O(n log n): a sort by key when the input is not in key order, n codes and
-//! `geom-run`'s merge sort of the codes, with two buffers of n. A search is two binary searches per
+//! Cost: building is O(n log n): a sort by key when the input is not in key order, n codes, the
+//! runs' sorts and ⌈log₂(n/32,768)⌉ rounds of merges, with a copy of the points in key order and
+//! two buffers of n slots (24 bytes each) at the peak of a round. A search is two binary searches per
 //! cell (at most eight cells) and one exact test per point in those cells. The pairs are one search
 //! per point.
 
@@ -77,10 +81,21 @@ const PLAN: ChunkPlan = ChunkPlan::fixed::<4096>();
 /// Chunks of the pair phase: one search per item, so smaller chunks.
 const PAIR_PLAN: ChunkPlan = ChunkPlan::fixed::<256>();
 
+/// Points per run of the code sort: each run is coded and sorted on its own.
+const RUN: usize = 1 << 15;
+
+/// One run, or one pair of runs, per chunk.
+const ONE: ChunkPlan = ChunkPlan::fixed::<1>();
+
 const SORT: Phase = Phase::new("cell index: sort by key");
-const CODES: Phase = Phase::new("cell index: codes");
-const ORDER: Phase = Phase::new("cell index: sort by code");
+const RUNS: Phase = Phase::new("cell index: code and sort runs");
+const MERGES: Phase = Phase::new("cell index: merge runs");
 const PAIRS: Phase = Phase::new("cell index: pairs");
+
+/// A point's place in the order: its code, as its high and low 64 bits, and its position in key
+/// order. Positions are distinct, so slots are distinct, and their order is (code, key): whatever
+/// sorts them, the sorted order is the same.
+type Slot = (u64, u64, u32);
 
 /// A point and its persistent key.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -173,40 +188,124 @@ fn sorted_by_key(
     Ok(sorted)
 }
 
+/// The slots of `by_key` (at most `u32::MAX` points), sorted: runs of [`RUN`] points coded and
+/// sorted as one `geom-run` phase, then merged in pairs, a phase per round, until one run is left.
+/// A run is sorted by `core`'s unstable sort, which allocates nothing and, the slots being
+/// distinct, gives the one sorted order; the merges keep it. The meter is charged one unit per
+/// point coded.
+fn sorted_slots(
+    by_key: &[Point],
+    exec: &Exec<'_>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vec<Slot>, BvhError> {
+    let mut ranges = Vec::new();
+    ranges
+        .try_reserve_exact(by_key.len().div_ceil(RUN))
+        .map_err(|_| BvhError::OutOfMemory)?;
+    for start in (0..by_key.len()).step_by(RUN) {
+        ranges.push((start, start.saturating_add(RUN).min(by_key.len())));
+    }
+    let mut runs = exec
+        .try_map(meter, RUNS, ONE, &ranges, |_, &(start, end), m| {
+            let points = by_key.get(start..end).ok_or(BvhError::Defect)?;
+            m.charge(u64::try_from(points.len()).map_err(|_| BvhError::Defect)?)?;
+            let mut run: Vec<Slot> = Vec::new();
+            run.try_reserve_exact(points.len())
+                .map_err(|_| BvhError::OutOfMemory)?;
+            for (i, p) in (start..end).zip(points) {
+                let code = morton(p.at)?;
+                // The code is below 2^123: its high and low 64 bits.
+                #[allow(
+                    clippy::cast_possible_truncation,
+                    reason = "the low 64 bits, kept on purpose; the high 59 are the other half"
+                )]
+                let low = code as u64;
+                let high = u64::try_from(code >> 64).map_err(|_| BvhError::Defect)?;
+                run.push((high, low, u32::try_from(i).map_err(|_| BvhError::Defect)?));
+            }
+            run.sort_unstable();
+            Ok(run)
+        })
+        .map_err(|e: RunError<BvhError>| BvhError::from(e))?;
+    while runs.len() > 1 {
+        let mut firsts = Vec::new();
+        firsts
+            .try_reserve_exact(runs.len().div_ceil(2))
+            .map_err(|_| BvhError::OutOfMemory)?;
+        firsts.extend((0..runs.len()).step_by(2));
+        let merged = exec
+            .try_map(meter, MERGES, ONE, &firsts, |_, &i, _| {
+                let left = runs.get(i).ok_or(BvhError::Defect)?;
+                let right = runs.get(i.saturating_add(1)).map_or(&[][..], Vec::as_slice);
+                merge(left, right)
+            })
+            .map_err(|e: RunError<BvhError>| BvhError::from(e))?;
+        runs = merged;
+    }
+    Ok(runs.pop().unwrap_or_default())
+}
+
+/// The sorted runs `left` and `right` merged into one, left first on equal slots (which distinct
+/// slots never are).
+fn merge(left: &[Slot], right: &[Slot]) -> Result<Vec<Slot>, BvhError> {
+    let mut out = Vec::new();
+    out.try_reserve_exact(left.len().saturating_add(right.len()))
+        .map_err(|_| BvhError::OutOfMemory)?;
+    let (mut l, mut r) = (left.iter().peekable(), right.iter().peekable());
+    loop {
+        let next = match (l.peek(), r.peek()) {
+            (Some(a), Some(b)) => {
+                if b < a {
+                    r.next()
+                } else {
+                    l.next()
+                }
+            }
+            (Some(_), None) => l.next(),
+            (None, Some(_)) => r.next(),
+            (None, None) => break,
+        };
+        if let Some(s) = next {
+            out.push(*s);
+        }
+    }
+    Ok(out)
+}
+
 impl CellIndex {
     /// The index over `points` (module documentation).
     ///
     /// # Errors
     ///
-    /// [`BvhError::DuplicateKey`] for the smallest repeated key; [`BvhError::Stopped`] or
+    /// [`BvhError::TooManyEntries`] for more than `u32::MAX` points; [`BvhError::DuplicateKey`]
+    /// for the smallest repeated key; [`BvhError::Stopped`] or
     /// [`BvhError::BudgetExceeded`] if the meter stops the build; [`BvhError::OutOfMemory`].
     pub fn build(
         points: &[Point],
         exec: &Exec<'_>,
         meter: &mut WorkMeter<'_>,
     ) -> Result<CellIndex, BvhError> {
+        if u32::try_from(points.len()).is_err() {
+            return Err(BvhError::TooManyEntries);
+        }
         let by_key = sorted_by_key(points, exec, meter)?;
-        let codes = exec
-            .try_map(meter, CODES, PLAN, &by_key, |_, p: &Point, _| morton(p.at))
-            .map_err(|e: RunError<BvhError>| BvhError::from(e))?;
-        let order = exec
-            .sort_stable(meter, ORDER, PLAN, &codes, |c: &u128| *c)
-            .map_err(|e: RunError<BvhError>| BvhError::from(e))?;
-        let mut sorted_codes = Vec::new();
-        sorted_codes
-            .try_reserve_exact(order.len())
+        let slots = sorted_slots(&by_key, exec, meter)?;
+        let mut codes = Vec::new();
+        codes
+            .try_reserve_exact(slots.len())
             .map_err(|_| BvhError::OutOfMemory)?;
-        let mut sorted_points = Vec::new();
-        sorted_points
-            .try_reserve_exact(order.len())
+        let mut sorted = Vec::new();
+        sorted
+            .try_reserve_exact(slots.len())
             .map_err(|_| BvhError::OutOfMemory)?;
-        for i in order {
-            sorted_codes.push(*codes.get(i).ok_or(BvhError::Defect)?);
-            sorted_points.push(*by_key.get(i).ok_or(BvhError::Defect)?);
+        for (hi, lo, at) in slots {
+            codes.push((u128::from(hi) << 64) | u128::from(lo));
+            let i = usize::try_from(at).map_err(|_| BvhError::Defect)?;
+            sorted.push(*by_key.get(i).ok_or(BvhError::Defect)?);
         }
         Ok(CellIndex {
-            codes: sorted_codes,
-            points: sorted_points,
+            codes,
+            points: sorted,
         })
     }
 
