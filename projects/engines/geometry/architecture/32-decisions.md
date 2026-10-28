@@ -58,6 +58,7 @@ The board (30.5) also turns into a piece every narrower question that chapters 6
 | 32.38 | G408: LandXML terms | No terms found: the schema is implemented from its definitions, never copied or generated from, and fetched only to validate; LINZ's examples fetch-only until their page states terms | 17, 24, 29 | G437, LandXML 1.2 mapping |
 | 32.39 | G409: generating code from STEP and IFC schemas | Part 42 is the 2025 edition; IFC schemas generated from with attribution; ISO's STEP schemas only with a file's own grant or ISO's permission, requested in a draft the owner sends | 24, 29 | G416, EXPRESS code generation |
 | 32.40 | G447: Gerber and IPC-2581 terms | No second program needs board exchange, so G474 and G475 wait; Gerber implemented exactly as published, no extensions; IPC-2581 only after its own text or IPC's word | 24, 26, 29 | G474 and G475, board exchange |
+| 32.41 | G448: AutoCAD truth tests | 32.10's ruling stands; no seat is bought or borrowed; G464 checks drafting by 28.3's laws, the one-root reference and LibreCAD and ezdxf, and adds AutoCAD when a co-op seat and a cleared terms check exist | 14, 28, 32 | G464, drafting truth tests |
 
 ## 32.1 The grid ladder (decision 1)
 
@@ -745,3 +746,16 @@ Why: generated types are the safe way to read thousands of entities, so the perm
 Why: the two-program rule decides the timing, and both formats can be implemented faithfully without taking anything their owners reserve; nothing needs money or a commitment until a program needs boards.
 
 **Changes:** 24.11, 29.19's board row, 31.7, and pieces G474 and G475.
+
+## 32.41 AutoCAD truth tests (owner action G448)
+
+**What it is.** Piece G464 runs at least 20 co-op command sequences in AutoCAD and in Spare Kit and compares the DXF. It needs an owner's ruling that running AutoCAD for comparison is allowed under its terms, and a licensed seat (28.11, 32.10). The first Stable release, G482, needs G464.
+
+**Decided 2026-10-28 (owner action G448).** Read with 14.14, 28.3, 28.9, 28.10, 28.11, 29.20's rule 8 and 32.10.
+- **The ruling stays 32.10's:** watching AutoCAD from outside is allowed only to check our results against our own rules, on co-op command sequences, on a seat the co-op itself is licensed for, and only after AutoCAD's terms are checked for that use (the terms check 32.10 asks Spare Construct to add beside CON-A18-F2-P2). It never sets behaviour, an expected value or a tolerance (28.11).
+- **No seat is bought or borrowed now.** The co-op has no AutoCAD licence of its own, and a seat licensed to anyone else is not the co-op's to use. Buying one is a spending decision for when the terms check clears.
+- **So drafting truth does not wait for AutoCAD.** G464 checks the command sequences by what 28.11 already names as the truth for drafting: 28.3's 2D laws, 28.9's one-root arrangement reference, and LibreCAD and ezdxf out of process (28.10), each difference triaged against our own rules. The AutoCAD comparison joins G464 when a co-op seat and a cleared terms check both exist, and the first Stable release does not wait for it.
+
+Why: a comparison that can never make AutoCAD's behaviour our requirement adds least where the open checks already decide correctness, and it is not worth a licence the co-op does not hold or terms nobody has read.
+
+**Changes:** 28.11, 31.7, and G464's done-when.

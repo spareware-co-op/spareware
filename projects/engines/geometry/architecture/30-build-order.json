@@ -6165,7 +6165,7 @@
   "phase": "Phase 13",
   "crate": "geom-test",
   "size": "Medium",
-  "done_when": "At least 20 co-op command sequences run in AutoCAD and Spare Kit, DXF compared exactly or within tau; every difference triaged as fixed, AutoCAD's error, or an owner-approved design difference.",
+  "done_when": "At least 20 co-op command sequences checked by 28.3's 2D laws, the one-root arrangement reference and LibreCAD and ezdxf out of process, DXF compared exactly or within tau; every difference triaged against our own rules as fixed or an owner-approved design difference; runs in AutoCAD added when the co-op holds a seat and its terms are checked (32.41).",
   "depends_on": [
    "G433",
    "G205",

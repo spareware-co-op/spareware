@@ -630,6 +630,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | The LandXML 1.2 schema's terms, and LINZ's LandXML examples | 17, 24, 29 | 32.38 (owner action G408) |
 | Generating code from IFC and STEP EXPRESS schemas, and ISO 10303-42's current edition | 24, 29 | 32.39 (owner action G409) |
 | Gerber's and IPC-2581's terms, and whether a second program needs board exchange | 24, 26, 29 | 32.40 (owner action G447) |
+| Running AutoCAD for comparison, and its seat | 14, 28, 32 | 32.41 (owner action G448) |
 
 ### Answered by the pieces built so far
 
