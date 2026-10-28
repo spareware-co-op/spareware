@@ -616,6 +616,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | How our own hatch patterns and linetypes are authored and reviewed | 14, 29 | 32.24 (owner action G184) |
 | The ellipse as a curve kind stored by a bounded axis ratio | 7, 14, 26 | 32.25 (owner action G185) |
 | Integer 2D carriers, depth-one points and rational-centre arcs as an addition to 6.2; and 32.2, exact arcs from the start | 6, 14, 15 | 32.26 (owner action G186) |
+| `geom-thread`, `geom-stair` and `geom-civil` in the kernel now, or in Spare Construct under 26.1 | 17, 26, 27 | 32.27 (owner action G238) |
 
 ### Answered by the pieces built so far
 
@@ -892,7 +893,7 @@ Proposed in 31.5 (R23) and 32.5: one consolidated crate-list note settles all of
 | Deterministic linear algebra inside geom-num (15, 29), in a new geom-linalg (16), or in geom-math | 15, 16, 29 | 32.13: geom-linalg; nothing of linear algebra is built in geom-num |
 | geom-profile, to carry geometry between sketches and the model | 15 | Piece "geom-profile: references in, profiles out" |
 | geom-panel and geom-analysis, with chapter 16's dependency additions | 16 | 32.13: accepted; pieces "Panelisation and rationalisation" and "Class-A analysis" |
-| geom-civil in the kernel, so terrain and alignments stay independent, or inside Spare Construct under a strict reading of 26.1; and geom-landxml | 17 | geom-landxml: 32.13. geom-civil: owner action G238; piece "geom-civil compositions" |
+| geom-civil in the kernel, so terrain and alignments stay independent, or inside Spare Construct under a strict reading of 26.1; and geom-landxml | 17 | geom-landxml: 32.13. geom-civil: 32.27 (owner action G238), in Spare Construct until a second program needs it; piece "geom-civil compositions" |
 | geom-exchange, geom-p21, geom-heal and a development-only EXPRESS generator (geom-express); geom-cloudio withdrawn | 24 | 32.13: the three crates with 30.5's edges; the EXPRESS generator is a module of geom-gen; geom-cloudio withdrawn |
 | A development-only geom-proof crate for the predicate generator's proofs, or keep them in geom-num and geom-test. The cargo-verus fallback makes vstd a build dependency of geom-num | 28 | After piece "Verus twin spike" |
 | geom-2d also depends on topo, name and intersect; line and arc predicates sit where both crates reach them; conic predicates in geom-num; the 2D R-tree in geom-2d or shared | 12, 14 | 32.13: geom-2d's edges, and the R-tree becomes geom-bvh; where line, arc and conic predicates sit, piece "2D-09 Arrangement of lines, arcs and conics" |
