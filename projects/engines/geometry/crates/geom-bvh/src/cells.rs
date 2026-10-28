@@ -487,13 +487,13 @@ impl CellIndex {
             g.unsigned_abs().saturating_mul(g.unsigned_abs())
         };
         // The cells on one axis from the one holding the box's low end: three, the box being
-        // narrower than two cells, kept inside the frame (the last cell of side 2^L holds offset
-        // 2^41 − 1). A cell past the box's high end lies farther than the radius, so the ball test
-        // below skips it.
-        let top = 0x1ff_ffff_ffffu64 >> level;
+        // narrower than two cells. A cell past the box's high end lies farther than the radius,
+        // so the ball test below skips it. A cell past the frame starts at an offset coordinate
+        // in [2^41, 2^42) (L ≤ 40, as every side is below 2^41), whose bit 41 lands on bit 123 of
+        // the code: its run starts at or above 2^123, past every point's code, and is empty.
         let cells = |l: u64| -> [Option<u64>; 3] {
             let first = l >> level;
-            [0, 1, 2].map(|k| first.checked_add(k).filter(|c| *c <= top))
+            [0, 1, 2].map(|k| first.checked_add(k))
         };
         let [lx, ly, lz] = lo;
         let [ox, oy, oz] = centre;
