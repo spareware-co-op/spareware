@@ -1,4 +1,4 @@
-//! The report's fixed texts (features/report.js): the standing disclaimers, the document's CSS and script, the data pack's
+//! The report's fixed texts (packs/nz/report.js): the standing disclaimers, the document's CSS and script, the data pack's
 //! column dictionary and the Python reader. Generated from the prototype's source by the harness, not retyped.
 
 /// The version of the standing disclaimers (`DISCLAIMERS.version`).

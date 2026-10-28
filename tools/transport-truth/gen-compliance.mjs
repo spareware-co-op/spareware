@@ -1,4 +1,4 @@
-// Records the prototype's compliance checks (features/compliance.js, features/compliance-extra.js) for the Rust port's
+// Records the prototype's compliance checks (packs/nz/compliance.js, packs/nz/compliance-extra.js) for the Rust port's
 // compliance module (projects/spare-construct/crates/construct-transport/src/compliance, tests/compliance_*.rs).
 //
 //   node gen-compliance.mjs data       the rule tables (thresholds, source texts, disclaimers, checklist) written to

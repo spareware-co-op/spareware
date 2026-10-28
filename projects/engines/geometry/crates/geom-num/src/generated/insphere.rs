@@ -474,12 +474,12 @@ pub fn value(a: P3, b: P3, c: P3, d: P3, e: P3) -> Option<I256> {
     let abc_3 = abc_1.checked_add(abc_2)?;
     let abc_4 = i128::from(ae_z).checked_mul(bc_z)?;
     let abc = abc_3.checked_add(abc_4)?;
-    let det_1 = I256::from_i128(a_lift).checked_mul(&I256::from_i128(bcd))?;
-    let det_2 = I256::from_i128(b_lift).checked_mul(&I256::from_i128(acd))?;
+    let det_1 = I256::product_i128(a_lift, bcd)?;
+    let det_2 = I256::product_i128(b_lift, acd)?;
     let det_3 = det_1.checked_sub(&det_2)?;
-    let det_4 = I256::from_i128(c_lift).checked_mul(&I256::from_i128(abd))?;
+    let det_4 = I256::product_i128(c_lift, abd)?;
     let det_5 = det_3.checked_add(&det_4)?;
-    let det_6 = I256::from_i128(d_lift).checked_mul(&I256::from_i128(abc))?;
+    let det_6 = I256::product_i128(d_lift, abc)?;
     let det = det_5.checked_sub(&det_6)?;
     Some(det)
 }

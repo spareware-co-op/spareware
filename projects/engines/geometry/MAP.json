@@ -409,6 +409,26 @@
           "target": "lib"
         },
         {
+          "cost": "a batch of up to 64 inputs, built once per benchmark run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/crossing.rs",
+          "guarantees": [
+            "each class's batch is deterministic (its seed is the operation and class name) and its inputs take the path its class names, which `tests/inputs.rs` checks."
+          ],
+          "job": "Inputs for where two lines cross in the plane (G29): [`ssi_new`] (`Ssi::new`), [`ssi_homogeneous`] (`Ssi::homogeneous`), [`ssi_orient2d`] (`Ssi::orient2d`) and [`ssi_to_grid`] (`Ssi::to_grid`).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/PL00009321"
+            ],
+            "text": "the degenerate cases of a crossing as `Ssi::new` documents them, with Shewchuk's input classes (<https://doi.org/10.1007/PL00009321>, section 6) and a unimodular 2D basis (Knuth, volume 2, section 4.5.2) for the nearly degenerate ones, built from the shared draws of `inputs` as the plane inputs are."
+          },
+          "path": "geom_bench::inputs::crossing",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a few draws of [`SplitMix64`] per input, once per batch, outside every measured run.",
           "does": null,
           "family": [],
@@ -615,6 +635,26 @@
           "target": "lib"
         },
         {
+          "cost": "the exact predicates' inputs and N keys per input, once per batch.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/perturb.rs",
+          "guarantees": [
+            "every batch is full, the same on every target, and its classes are what they claim (`tests/inputs.rs`); the keys within an input are distinct and their order rotates from input to input, so every argument position holds the smallest key in turn."
+          ],
+          "job": "Inputs for the perturbed predicates (G30): [`orient2d`], [`orient3d`], [`incircle`] and [`insphere`] of `geom_num::perturb`, each point with a distinct key.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/PL00009321"
+            ],
+            "text": "the exact predicates' own input classes ([`super::predicate`], after Shewchuk, <https://doi.org/10.1007/PL00009321>, section 6), drawn with this operation's seed, with keys attached."
+          },
+          "path": "geom_bench::inputs::perturb",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a few draws of [`crate::rng::SplitMix64`] per input, once per batch, outside every measured run.",
           "does": null,
           "family": [],
@@ -622,7 +662,7 @@
           "guarantees": [
             "every batch is full, the same on every target, and its classes are what they claim (`tests/inputs.rs`); every result is checked against exact cross products, Cramer's rule and exact rounding by `tests/attack_g06.rs`."
           ],
-          "job": "Inputs for plane-based geometry: [`through`] (`Plane::through`), [`side`] (`Plane::side`), [`tpi_new`] (`Tpi::new`), [`tpi_homogeneous`] (`Tpi::homogeneous`), [`side_of_tpi`] (`Plane::side_of_tpi`) and [`to_grid`] (`Tpi::to_grid`).",
+          "job": "Inputs for plane-based geometry: [`through`] (`Plane::through`), [`side`] (`Plane::side`), [`tpi_new`] (`Tpi::new`), [`tpi_homogeneous`] (`Tpi::homogeneous`), [`side_of_tpi`] (`Plane::side_of_tpi`), [`to_grid`] (`Tpi::to_grid`), and for the point where a line meets a plane (G29) [`lpi_new`] (`Lpi::new`), [`lpi_homogeneous`] (`Lpi::homogeneous`), [`side_of_lpi`] (`Plane::side_of_lpi`) and [`lpi_to_grid`] (`Lpi::to_grid`).",
           "method": {
             "links": [
               "https://doi.org/10.1111/j.1467-8659.2009.01609.x",
@@ -1379,6 +1419,30 @@
           "provenance": [],
           "spdx": null,
           "target": "lib"
+        },
+        {
+          "cost": "one operation on `Wide` and one on `BigInt` per input, at most O(L²) for a product of L ≤ 12 limbs, plus up to seven `resize` targets; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a width, an operation and two operands of that width (and, for `resize`, a second width). [`check`] runs the operation on `geom_num::wide::Wide` and on `num-bigint`'s `BigInt`, an arbitrary-precision oracle that shares no code with it, and compares: the exact result when it fits the width and `None` exactly when it does not, for `checked_add`, `checked_sub`, `checked_neg` and `checked_mul`; the order (`Ord`, `==`); the sign (`signum`, `is_negative`, `is_zero`); `resize` to every other width; and the `i128` conversions both ways. [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/wide.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case. Each limb is read through a rule byte that makes the values at every width's limits common: 0, 1, −1, the top bit alone, all bits but the top one, a copy of the limb below, or a word read from the input. So the most negative and most positive values, their neighbours, and carries that run the whole length come up all the time, not once in 2^64.",
+            "**Every width the kernel uses, and the two reserved ones.** `I128` as `Wide<2>`, `I256`, `I320`, `I384`, `I512`, and `Wide<9>` and `Wide<12>`, the 576- and 768-bit widths chapter 6.2 reserves for later predicates (the board's G26; whether they are named is an owner's decision, G240), through the same generic code.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a disagreement is a [`Finding`]** naming the operation, the width, the operands and both answers."
+          ],
+          "job": "Fuzz target: `geom-num`'s wide integers agree with a big-integer oracle on every operation.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/29-sources-licences.md",
+              "https://docs.rs/num-bigint/0.4.8/num_bigint/struct.BigInt.html"
+            ],
+            "text": "differential testing against an independent arbitrary-precision implementation, the big-integer oracle chapter 29.3 names for the wide integers (`projects/engines/geometry/architecture/29-sources-licences.md`), here `num-bigint` 0.4.8 (<https://docs.rs/num-bigint/0.4.8/num_bigint/struct.BigInt.html>). Two's complement in `L` limbs holds exactly −2^(64L−1) ..= 2^(64L−1) − 1 (the module header of `geom_num::wide`); the oracle reads a `Wide`'s limbs with `BigInt::from_signed_bytes_le`, the same two's-complement reading, computes exactly, and writes a result that fits back with `to_signed_bytes_le`."
+          },
+          "path": "geom_fuzz::wide",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
         }
       ],
       "name": "geom-fuzz",
@@ -1646,7 +1710,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-gen/src/predicate_emit.rs",
           "guarantees": [
-            "**The code is the derivation.** `filter` performs exactly the derivation's steps, in their order, one `let` per step, so the error analysis is about the code that runs; it computes the scale by the derivation's scale expression, whose roundings the constant accounts for. `value` performs the same steps, each in the integer type the certificate gives it (the narrowest of `i64`, `i128`, `I256`, `I320`, `I384` and `I512` that holds its bound), with operands widened to that type and checked arithmetic (`checked_add`, `checked_sub`, `checked_mul`, and `resize` between `Wide`s), so a certificate that was wrong would show as `None`, never as a wrapped value. The certificate's rows name the same steps.",
+            "**The code is the derivation.** `filter` performs exactly the derivation's steps, in their order, one `let` per step, so the error analysis is about the code that runs; it computes the scale by the derivation's scale expression, whose roundings the constant accounts for. `value` performs the same steps, each in the integer type the certificate gives it (the narrowest of `i64`, `i128`, `I256`, `I320`, `I384` and `I512` that holds its bound), with operands widened to that type and checked arithmetic (`checked_add`, `checked_sub`, `checked_mul`, and `resize` between `Wide`s), so a certificate that was wrong would show as `None`, never as a wrapped value. A product in a `Wide` whose operands fit `i128` is `product_i128`, and one with one such operand `checked_mul_i128` (piece G29): the same exact product or `None`, without widening the narrow operand to every limb. The certificate's rows name the same steps.",
             "**Width-aware, as chapter 23.3 asks.** A step that fits 63 bits is computed in `i64`, so a product of two such steps is `i128::from(a).checked_mul(i128::from(b))`: two sign-extended 64-bit operands, whose product the compiler proves cannot overflow `i128` and emits as one 64 × 64 → 128-bit multiply, where a product of two general `i128`s is a long overflow-checked sequence. The value is the same either way; only the cost differs.",
             "**Only the domain the analysis assumes.** A point input is a `P2` or `P3`, whose coordinates are within the grid, so no caller can pass a value outside it. A rounded input is passed as its exact integer, an `i128` (a description's rounded input of more than 127 bits is refused here: no correctly rounded conversion of a wider integer to `f64` exists in `geom-num` yet); `filter` converts it to its nearest `f64` and both functions return `None` for one outside its declared range, before any bound is relied on.",
             "**Names that cannot collide.** Every name the module binds is checked here against every other and against the module's items, imports and Rust's keywords, so a description that slipped past the language's rules ([`crate::predicate_lang::reserved`]) is refused, never emitted as code that shadows a value or does not compile.",
@@ -1710,15 +1774,15 @@
           "target": "lib"
         },
         {
-          "cost": "each generator derives one predicate, or all five for the parent module: a few hundred exact operations each.",
-          "does": "holds the description of each predicate on explicit grid points (chapter 6.2: orientation in 2D and 3D, in-circle and in-sphere), and of the side of a plane, whose coefficients are wider integers whose `f64` copies are rounded (chapter 23.2), in the language of [`crate::predicate_lang`], and the generators that derive each one ([`crate::predicate_derive`]) and write its module into `geom-num` ([`crate::predicate_emit`]): [`OUTPUT_DIR`]`/<name>.rs` for each predicate and [`OUTPUT_DIR`]`/mod.rs` for the module that holds them. `geom-num`'s `predicate.rs` calls the four explicit-point ones; `plane.rs`, outside this generator's piece, does not call `plane_side` yet.",
+          "cost": "each generator derives one predicate, or all eleven for the parent module: a few hundred exact operations each.",
+          "does": "holds the description of each predicate on explicit grid points (chapter 6.2: orientation in 2D and 3D, in-circle and in-sphere), of the side of a plane, whose coefficients are wider integers whose `f64` copies are rounded (chapter 23.2), and of the predicates on implicit points (chapter 6.3, piece G29): the sign of the weight of a three-plane point, of a line-plane point and of a 2D crossing point, and which side of a plane (or, in 2D, of a line) each lies on, in the language of [`crate::predicate_lang`], and the generators that derive each one ([`crate::predicate_derive`]) and write its module into `geom-num` ([`crate::predicate_emit`]): [`OUTPUT_DIR`]`/<name>.rs` for each predicate and [`OUTPUT_DIR`]`/mod.rs` for the module that holds them. `geom-num`'s `predicate.rs` calls the four explicit-point ones, `plane.rs` the side of a plane and the three-plane and line-plane ones, and `crossing.rs` the 2D crossing ones.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-gen/src/predicates.rs",
           "guarantees": [
-            "**The same formulas as `predicate.rs`.** Each description evaluates the determinant that `geom-num`'s hand-written fast path evaluates, term for term and with the same signs, so the generated exact value equals the hand-written one (tested in `geom-num`), and the generated filter's sign, when it gives one, is that value's sign. In-sphere shares the three cross products its four 3 × 3 determinants need instead of recomputing them; the values are the same. `plane_side` evaluates n · p + d as `geom-num`'s `Plane::side` does, term for term.",
+            "**The same formulas as `predicate.rs`, `plane.rs` and `crossing.rs`.** Each description evaluates the determinant that `geom-num`'s hand-written fast path evaluates, term for term and with the same signs, so the generated exact value equals the hand-written one (tested in `geom-num`), and the generated filter's sign, when it gives one, is that value's sign. In-sphere shares the three cross products its four 3 × 3 determinants need instead of recomputing them; the values are the same. `plane_side` evaluates n · p + d as `geom-num`'s `Plane::side` does, term for term; `tpi_weight` and `tpi_side` evaluate the three-plane point's weight and its classification as `Tpi::homogeneous` and `Plane::side_of_tpi` do, except that the classification subtracts n · (−X) where `plane.rs` adds n · X, the same value; and the line-plane and crossing descriptions evaluate what `plane.rs` and `crossing.rs` document for them, step for step.",
             "**Pure.** No input but the descriptions and `geom-num`'s constants; the same bytes on every target."
           ],
-          "job": "Generators `predicate-module`, `predicate-orient2d`, `predicate-orient3d`, `predicate-incircle`, `predicate-insphere` and `predicate-plane-side`: the kernel's predicates, from their descriptions.",
+          "job": "Generators `predicate-module`, `predicate-orient2d`, `predicate-orient3d`, `predicate-incircle`, `predicate-insphere`, `predicate-plane-side`, `predicate-tpi-weight`, `predicate-tpi-side`, `predicate-lpi-weight`, `predicate-lpi-side`, `predicate-ssi-weight` and `predicate-ssi-side`: the kernel's predicates, from their descriptions.",
           "method": {
             "links": [
               "https://doi.org/10.1016/j.cad.2015.10.004",
@@ -2421,6 +2485,16 @@
           "pinned": false,
           "purpose": "0.2.16",
           "take": "depend"
+        },
+        {
+          "licence": "MIT",
+          "link": "https://crates.io/crates/libm/0.2.16",
+          "manifest": "projects/engines/geometry/crates/geom-num/Cargo.toml",
+          "method_note": null,
+          "name": "libm",
+          "pinned": false,
+          "purpose": "0.2.16",
+          "take": "depend"
         }
       ],
       "errors": [
@@ -2548,6 +2622,29 @@
       "kind": "kernel",
       "layer": "1",
       "modules": [
+        {
+          "cost": "constant time and no allocation: a few `i128` products for the weight and the numerators, two products in [`I256`] for a side, and one restoring long division per coordinate to commit, as in [`crate::plane`].",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
+          "guarantees": [
+            "Every result is exact, or an error. A [`Sign`] is decided by integer arithmetic alone, never by a rounded crossing point, so an arrangement built on these answers is consistent.",
+            "Nothing overflows silently. Every step is a checked operation in `i128` or a fixed-width [`Wide`] integer, and a step that did not fit would be reported as [`NumError::BudgetExceeded`], never answered; for grid points no step can fail (the budgets on [`Ssi::homogeneous`] and [`Ssi::orient2d`]).",
+            "Deterministic: integers only, except the generated `f64` filters, whose answers are proven to be the exact sign or no answer (chapter 6.2); no platform maths and no allocation."
+          ],
+          "job": "Where two lines cross in the plane, exact: the implicit point where the line through two grid points crosses the line through two others, which side of a third line it lies on, and committing it to the grid.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1111/j.1467-8659.2009.01609.x",
+              "https://doi.org/10.1016/j.cad.2020.102856"
+            ],
+            "text": "the crossing point of two lines in homogeneous integer coordinates, classified against a line by multiplying by the sign of the weight so that nothing is divided, the plane-based method of [`crate::plane`] in two dimensions (Campen and Kobbelt 2010, <https://doi.org/10.1111/j.1467-8659.2009.01609.x>; Attene 2020's indirect predicates, <https://doi.org/10.1016/j.cad.2020.102856>, method only, re-derived here). Each sign goes through its generated filter first and its generated exact path when the filter cannot decide (`ssi_weight` and `ssi_side`, chapter 6.2), then through the hand-written path."
+          },
+          "path": "geom_num::crossing",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
         {
           "cost": "constant time, no allocation, and no loops other than at most three power-of-two steps per scaling. Counting `two_sum` as 6 floating-point operations, a fused multiply-add as one call to [`crate::math::fma`] (one instruction where the processor has one, through `libm`'s runtime dispatch on x86-64; a correctly rounded integer routine on WebAssembly), and the final `two_sum` that restores the invariant: [`DD::add`] is 26 operations and [`DD::add_f64`] 13; [`DD::mul_f64`] 2 fused multiply-adds and 13 operations, [`DD::mul`] 3 and 15, [`DD::div_f64`] 1 and 18, [`DD::div`] 6 and 44, [`DD::sqrt`] one square root, one fused multiply-add and 15. The multiplicative ones add the scaling: for each operand a read of its exponent bits and two power-of-two scalings (one to three multiplications each), and two scalings of the result; [`DD::mul`] also compares its two scaled operands to order them.",
           "does": null,
@@ -2698,6 +2795,46 @@
           "target": "lib"
         },
         {
+          "cost": "the filter is 28 `f64` operations, after 8 rounded input(s) converted to `f64`, then 14 magnitudes and their maxima and the bound's 31 multiplication(s); the exact path, run only when the filter cannot decide, is 28 checked integer operations.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/generated/lpi_side.rs",
+          "guarantees": [
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign."
+          ],
+          "job": "Generated by geom-gen, generator `predicate-lpi-side` (seed: none, it uses no randomness), from the description `LPI_SIDE` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
+          "method": {
+            "links": [
+              "https://inria.hal.science/inria-00344297"
+            ],
+            "text": "Meyer and Pion's semi-static filters (FPG, <https://inria.hal.science/inria-00344297>), with the error analysis derived exactly, as [`super`] sets out, and the exact path in integers."
+          },
+          "path": "geom_num::generated::lpi_side",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the filter is 8 `f64` operations, after 3 rounded input(s) converted to `f64`, then 6 magnitudes and their maxima and the bound's 2 multiplication(s); the exact path, run only when the filter cannot decide, is 8 checked integer operations.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/generated/lpi_weight.rs",
+          "guarantees": [
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign."
+          ],
+          "job": "Generated by geom-gen, generator `predicate-lpi-weight` (seed: none, it uses no randomness), from the description `LPI_WEIGHT` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
+          "method": {
+            "links": [
+              "https://inria.hal.science/inria-00344297"
+            ],
+            "text": "Meyer and Pion's semi-static filters (FPG, <https://inria.hal.science/inria-00344297>), with the error analysis derived exactly, as [`super`] sets out, and the exact path in integers."
+          },
+          "path": "geom_num::generated::lpi_weight",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "per predicate, a few dozen `f64` operations for the filter (each module's header gives its count), then, only when it cannot certify the sign, the exact path: `i64` differences, single 64 × 64 → 128-bit products of them and `i128` sums for the orientation tests, with `I256` products of `i128` factors for in-circle and in-sphere. Chapter 23.2: on data where most answers are exactly zero, the filter mostly falls through, so whether to filter is measured; a zero scale (every point on one axis line, say) still answers at once. The benchmark is `generated_route_against_the_hand_written_fast_path` in `predicate.rs`'s tests.",
           "does": null,
           "family": [],
@@ -2779,6 +2916,86 @@
             "text": "Meyer and Pion's semi-static filters (FPG, <https://inria.hal.science/inria-00344297>), with the error analysis derived exactly, as [`super`] sets out, and the exact path in integers."
           },
           "path": "geom_num::generated::plane_side",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the filter is 27 `f64` operations, then 12 magnitudes and their maxima and the bound's 4 multiplication(s); the exact path, run only when the filter cannot decide, is 27 checked integer operations.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/generated/ssi_side.rs",
+          "guarantees": [
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign."
+          ],
+          "job": "Generated by geom-gen, generator `predicate-ssi-side` (seed: none, it uses no randomness), from the description `SSI_SIDE` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
+          "method": {
+            "links": [
+              "https://inria.hal.science/inria-00344297"
+            ],
+            "text": "Meyer and Pion's semi-static filters (FPG, <https://inria.hal.science/inria-00344297>), with the error analysis derived exactly, as [`super`] sets out, and the exact path in integers."
+          },
+          "path": "geom_num::generated::ssi_side",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the filter is 7 `f64` operations, then 4 magnitudes and their maxima and the bound's 2 multiplication(s); the exact path, run only when the filter cannot decide, is 7 checked integer operations.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/generated/ssi_weight.rs",
+          "guarantees": [
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign."
+          ],
+          "job": "Generated by geom-gen, generator `predicate-ssi-weight` (seed: none, it uses no randomness), from the description `SSI_WEIGHT` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
+          "method": {
+            "links": [
+              "https://inria.hal.science/inria-00344297"
+            ],
+            "text": "Meyer and Pion's semi-static filters (FPG, <https://inria.hal.science/inria-00344297>), with the error analysis derived exactly, as [`super`] sets out, and the exact path in integers."
+          },
+          "path": "geom_num::generated::ssi_weight",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the filter is 54 `f64` operations, after 16 rounded input(s) converted to `f64`, then 16 magnitudes and their maxima and the bound's 13 multiplication(s); the exact path, run only when the filter cannot decide, is 54 checked integer operations.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/generated/tpi_side.rs",
+          "guarantees": [
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign."
+          ],
+          "job": "Generated by geom-gen, generator `predicate-tpi-side` (seed: none, it uses no randomness), from the description `TPI_SIDE` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
+          "method": {
+            "links": [
+              "https://inria.hal.science/inria-00344297"
+            ],
+            "text": "Meyer and Pion's semi-static filters (FPG, <https://inria.hal.science/inria-00344297>), with the error analysis derived exactly, as [`super`] sets out, and the exact path in integers."
+          },
+          "path": "geom_num::generated::tpi_side",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the filter is 14 `f64` operations, after 9 rounded input(s) converted to `f64`, then 9 magnitudes and their maxima and the bound's 3 multiplication(s); the exact path, run only when the filter cannot decide, is 14 checked integer operations.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/generated/tpi_weight.rs",
+          "guarantees": [
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign."
+          ],
+          "job": "Generated by geom-gen, generator `predicate-tpi-weight` (seed: none, it uses no randomness), from the description `TPI_WEIGHT` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
+          "method": {
+            "links": [
+              "https://inria.hal.science/inria-00344297"
+            ],
+            "text": "Meyer and Pion's semi-static filters (FPG, <https://inria.hal.science/inria-00344297>), with the error analysis derived exactly, as [`super`] sets out, and the exact path in integers."
+          },
+          "path": "geom_num::generated::tpi_weight",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -3134,6 +3351,42 @@
           "target": "lib"
         },
         {
+          "cost": "on the exact path, the predicate itself. Only on an exact tie, a walk over the masks of the N·(N − 1) perturbed entries (6 for orient2d, 12 for orient3d and incircle, 20 for insphere) until a coefficient is not zero, each candidate an exact N × N determinant by cofactors (at most 120 products in [`I256`]); for points in general position but for the tie, the first few masks decide, and even five coincident points with distinct keys are decided within 2^16 masks.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/perturb.rs",
+          "guarantees": [
+            "Never zero, never a guess: every answer is `Positive` or `Negative`, decided by exact integer arithmetic, or an error. Points that share a key cannot be told apart by any perturbation, so they are refused with [`NumError::Degenerate`].",
+            "The exact sign wins: where [`crate::predicate`]'s predicate is not zero, the perturbed one returns its sign unchanged.",
+            "Consistent: the answers are the signs of one perturbed configuration of points, so every predicate agrees with every other on the same keyed points; swapping two arguments flips the sign, and every permutation multiplies it by its parity, as for the exact predicates.",
+            "Keys, never addresses: the order is the keys' order alone, so the answers are the same on every run and every target, whatever the points' places in memory (Geogram's default, ordering by address, is exactly what chapter 6.2 rules out).",
+            "Deterministic: integers only, no floating point, no allocation, no recursion."
+          ],
+          "job": "Symbolic perturbation, ordered by persistent keys: orient2d, orient3d, incircle and insphere with no zero answer, for the algorithms that need every sign to be non-zero (Delaunay and constrained triangulations, ray parity; chapter 6.2).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/77635.77639",
+              "https://doi.org/10.1016/j.comgeo.2010.09.010"
+            ],
+            "text": "Simulation of Simplicity (Edelsbrunner and Mücke 1990, <https://doi.org/10.1145/77635.77639>), entry j of point i moved by ε^(2^e) with e increasing along a global order of the points, with the lifted coordinate perturbed as an entry of its own (as Devillers and Teillaud perturb the lift for Delaunay, <https://doi.org/10.1016/j.comgeo.2010.09.010>), so the lifted predicates always reach a non-zero term. The perturbed determinant is a polynomial in ε. By multilinearity in the rows, each term chooses, in each row, either the row itself or one of its perturbed entries, so it belongs to a set S of perturbed entries in distinct rows and distinct columns, with degree Σ 2^e over S and coefficient the determinant with the rows of S replaced by the unit vectors of their columns. Degrees are sums of distinct powers of two, so they order the sets S exactly as the sets' bit masks order them: the first non-zero coefficient, walking the masks upwards from 1, decides the sign as ε goes to 0. Mask 0 is the unperturbed determinant. Consulted for the cascade's shape: Geogram's `_SOS` predicates (BSD-3-Clause), no code copied."
+          },
+          "path": "geom_num::perturb",
+          "provenance": [
+            {
+              "licence": "BSD-3-Clause",
+              "link": "https://github.com/BrunoLevy/geogram/blob/40d72165ceeeb0a61977d6fdf74d929bfdd77b7b/src/lib/geogram/numerics/PCK.h#L143-L172",
+              "method_note": null,
+              "name": "Geogram's PCK `_SOS` predicates",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for the shape of a cascade over keyed points, and its address ordering as the trap to avoid. No code copied.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "constant time and no allocation. Every function is a fixed number of products and sums in `i128` and fixed-width integers: [`Plane::side_of_tpi`] is four products in [`I384`] after the point's homogeneous coordinates, repeated in [`I512`] only on the total path; [`Tpi::to_grid`] is one restoring long division per coordinate, 40 steps when the point lies within the frame's range and at most 127 otherwise, each step a few operations on six or eight 64-bit limbs.",
           "does": null,
           "family": [],
@@ -3203,7 +3456,8 @@
           "file": "projects/engines/geometry/crates/geom-num/src/real.rs",
           "guarantees": [
             "Every `Real` is finite: [`Real::new`] is the only way to make one, and it refuses NaN and the infinities.",
-            "Equality and order are both IEEE 754's `totalOrder`, so they agree, and −0 and +0 are different values, on every target."
+            "Equality and order are both IEEE 754's `totalOrder`, so they agree, and −0 and +0 are different values, on every target.",
+            "[`Real::total_max`] and [`Real::total_min`] have named tie rules: they pick by `totalOrder`, so −0 is below +0, and on a tie, which under `totalOrder` is always the same bits, they return the first argument."
           ],
           "job": "`Real`: a floating-point number that is never NaN and never infinite.",
           "method": {
@@ -3497,8 +3751,34 @@
         27,
         29
       ],
-      "depends": [],
-      "errors": [],
+      "depends": [
+        {
+          "licence": "Apache-2.0 OR MIT",
+          "link": "https://crates.io/crates/rayon/1.12.0",
+          "manifest": "projects/engines/geometry/crates/geom-pool/Cargo.toml",
+          "method_note": null,
+          "name": "rayon",
+          "pinned": false,
+          "purpose": "1.12.0",
+          "take": "depend"
+        }
+      ],
+      "errors": [
+        {
+          "doc": "A failure to build a [`Rayon`] pool.",
+          "file": "projects/engines/geometry/crates/geom-pool/src/native.rs",
+          "kinds": [
+            {
+              "doc": "The operating system would not start the pool's threads.",
+              "name": "CannotStartThreads",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_pool::native",
+          "name": "PoolError",
+          "non_exhaustive": false
+        }
+      ],
       "family": [],
       "file": "projects/engines/geometry/crates/geom-pool/src/lib.rs",
       "folder": "projects/engines/geometry/crates/geom-pool",
@@ -3508,17 +3788,43 @@
         "It never panics, except to pass on a task's panic (23.4).",
         "In a browser it starts Web Workers only where shared memory is allowed; elsewhere the kernel runs serially, with the same answer (23.4, 29.4).",
         "It is the one `geom-*` crate that ships and may use `std`, because threads need it (the development crates use it too, and never ship); it still forbids unsafe code and carries `geom-num`'s lint posture (27).",
-        "The only published crates it may name are rayon and, for Web Workers, wasm-bindgen-rayon, each by its row of section 29.4; it names neither yet."
+        "The only published crates it may name are rayon and, for Web Workers, wasm-bindgen-rayon, each by its row of section 29.4. It names rayon, on native targets only ([`native`], piece G33); wasm-bindgen-rayon waits for piece G456, and until then WebAssembly runs serially."
       ],
       "job": "Threads for `geom-run`'s helper: rayon on native targets, Web Workers in a browser.",
       "kind": "kernel",
       "layer": "13",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "one scope and one spawned job per task, each a small heap allocation inside rayon, and the pool's threads, started once when it is built and stopped when it is dropped.",
+          "does": "[`Rayon`] owns a `rayon::ThreadPool` of a fixed number of threads and implements [`Pool`]: [`Pool::run_all`] spawns every task into one scope of that pool and returns when all of them have finished. The helper (`geom_run::Exec::with_pool`) decides everything else: the fixed chunks, the order results are read in, the lowest-numbered failure, so every answer is the serial executor's, bit for bit, whatever the pool does (23.4).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-pool/src/native.rs",
+          "guarantees": [
+            "**Every task runs exactly once**, on some thread of the pool, in any order: each is spawned once into the scope, and the scope returns only after every spawned job has finished.",
+            "**Re-entrant.** A task may call the helper again with the same pool. The nested scope runs on the worker thread that opened it, and while it waits that thread runs other jobs of the pool, rayon's work stealing, instead of blocking; so a nested call makes progress on any number of threads, one included.",
+            "**No panic of its own.** `run_all` panics only to pass on a task's panic, after every task has finished: rayon's scope catches a job's panic and resumes it when the scope ends. Building a pool reports a failure to start its threads as [`PoolError`], never a panic.",
+            "**The thread count is the caller's.** It is fixed when the pool is built and never read by the helper, whose chunks do not depend on it (23.4); rayon's own environment variable (`RAYON_NUM_THREADS`) is not consulted, because the count is set explicitly."
+          ],
+          "job": "rayon's work-stealing pool behind `geom-run`'s `Pool` trait, for native targets.",
+          "method": {
+            "links": [
+              "https://docs.rs/rayon/1.12.0/rayon/struct.ThreadPool.html#method.in_place_scope",
+              "doi:10.1145/324133.324234",
+              "projects/kit/notes/G33-rayon-audit.md"
+            ],
+            "text": "rayon's scoped spawning, `ThreadPool::in_place_scope` and `Scope::spawn`, whose documented contract is that the scope returns when every job spawned into it, and every job those spawned, has completed, and that a panic in a job is propagated when the scope ends (<https://docs.rs/rayon/1.12.0/rayon/struct.ThreadPool.html#method.in_place_scope>), over its work-stealing scheduler, after Blumofe and Leiserson, \"Scheduling Multithreaded Computations by Work Stealing\", Journal of the ACM 46(5), 1999 (`doi:10.1145/324133.324234`). rayon's audit is `projects/kit/notes/G33-rayon-audit.md`."
+          },
+          "path": "geom_pool::native",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-pool",
       "provenance": [],
       "sections": "23.4 and 29.4; open question OQ-23.4; chapters 21 and 27 (\"Proposed rule changes\"), in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G33, G456.",
+      "status": null,
       "summary": "Spare Kit geometry kernel: threads for the parallel helper."
     },
     {
@@ -4246,6 +4552,41 @@
           "target": "bin"
         },
         {
+          "cost": "one `cargo metadata`, a copy of `libm`'s crate, and one build and run of `geom-num`'s determinism test against the changed copy.",
+          "does": "`prove` finds the `libm` the workspace resolves (`cargo metadata --locked`), copies its crate into `<dir>/guard/libm-<version>`, applies [`geom_test::guard::perturb_sin`] (`sin`'s last bit flipped), and runs `cargo test --release -p geom-num --test determinism` with that copy patched in for `libm` (`--config patch.crates-io.libm.path=...`), building in `<dir>/guard/target` so the workspace's own build is untouched. It prints the run's output and then [`geom_test::guard::verdict`]'s answer: the golden `geom-num/determinism` must report a digest that differs from the store's. `<dir>` defaults to the workspace's `target` folder.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/bin/guard.rs",
+          "guarantees": [
+            "the workspace's `Cargo.lock`, which Cargo rewrites while a patch is in force, is restored byte for byte after the run, whether the run passed, failed or could not start; the copy of `libm` lives under the target folder, never in the source tree. Exit codes: 0 when the guard tripped as it must; 1 when it did not (the change moved no golden, the patch went unused, or the run failed for another reason); 2 for a usage error or a step that cannot be done."
+          ],
+          "job": "`guard`: proves the toolchain and dependency guard trips (chapter 28.13; piece G20).",
+          "method": {
+            "none": "it runs Cargo and calls [`geom_test::guard`], whose module header carries the method."
+          },
+          "path": "guard",
+          "provenance": [],
+          "spdx": null,
+          "target": "bin"
+        },
+        {
+          "cost": "what each gate costs (see its module), plus one `cargo metadata` run for `affected --changed` and `miri-packages`.",
+          "does": "one subcommand per step of the workflow, each a thin front to a module of `geom_test`; `kernel-quality --help` lists them and `kernel-quality <command> --help` gives each one's options.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/bin/kernel-quality.rs",
+          "guarantees": [
+            "**Exit status says what happened.** 0 when the gate passes, 1 when it fails, 2 when the input cannot be used (a missing or malformed file, a bad argument, which clap reports with exit status 2). Every failure is printed, one per line.",
+            "**Nothing judged twice by different rules.** The binary holds no rule of its own; the foundation set, the bars and the ledger's rules live in the library, where the tests reach them."
+          ],
+          "job": "`kernel-quality`: the CI tool behind the geometry kernel's mutation and coverage gates and its weekly Miri run (section 28.8; `.github/workflows/kernel-quality.yml`).",
+          "method": {
+            "none": "a command-line front end, parsed by clap's derive API (<https://docs.rs/clap/4.6.7/clap/_derive/index.html>), over the library's gates."
+          },
+          "path": "kernel-quality",
+          "provenance": [],
+          "spdx": null,
+          "target": "bin"
+        },
+        {
           "cost": "one build of the map ([`geom_test::map::build`]) and one read or write of `MAP.json`.",
           "does": null,
           "family": [],
@@ -4314,6 +4655,35 @@
           "target": "bin"
         },
         {
+          "cost": "linear in the size of the LCOV files and the crates' sources.",
+          "does": "[`parse_lcov`] reads the LCOV file cargo-llvm-cov writes for one crate (`cargo llvm-cov -p <crate> --branch --lcov`). [`measure`] counts, for every file under the crate's `src/`, the lines and branches outside test code (found by [`crate::rust_source`]) and how many of them the crate's tests ran. [`judge`] applies the bars of [`crate::foundation`]: in the foundation set every line run and every branch taken both ways; elsewhere at least 90% of lines. [`check_marks`] checks every `coverage(off)` mark in the kernel's crates against [`crate::quality_ledger::Ledger::coverage_off`].",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/coverage.rs",
+          "guarantees": [
+            "**Test code is not counted.** Lines of items behind `#[cfg(test)]` are left out of both the lines found and the lines run, so tests cannot pad a crate's numbers.",
+            "**A line with no code is not counted.** llvm-cov can give a line holding only a comment or an attribute (`#[must_use]` above a `const fn`) a count of 0 though the function runs ([`no_code_lines`]); such a line has nothing to run, so it is left out of both counts.",
+            "**Nothing is skipped silently.** A source file that defines a function but has no coverage data was never compiled into the measured tests, and fails; so does a crate with no LCOV file at all, and a foundation crate whose code has `if` or `while` but whose data holds no branch record (the run was made without `--branch`).",
+            "**A missing foundation module fails.** A crate of [`crate::foundation::FOUNDATION_MODULES`] with code but no file of its foundation module fails, so moving the module cannot drop it from the foundation bar.",
+            "**Every mark cites a checked proof.** A `coverage(off)` mark must have a comment right above it citing `proof: <path>::<name>`, the same proof as its ledger entry, and the cited file must define that function as a Kani harness (`#[kani::proof]`) or a Verus `proof fn`. A ledger entry with no mark is stale and fails.",
+            "**Waiting lines are named, and can only go.** A foundation line the tests do not run passes only while the ledger's `awaiting_proof` names it, with the piece that proves it unreachable or tests it ([`excuse_awaiting`]); an entry that matches more or fewer missed lines than it says fails. When every kernel branch outcome of a file with a count of 0 waits so, which of them llvm-cov folded no longer matters, and the file's folding note is not a failure.",
+            "**Exact arithmetic.** Percentages are compared as integers: hit × 100 ≥ found × bar."
+          ],
+          "job": "The coverage gate: line and branch coverage of each kernel crate by its own tests, against the bars of section 28.8, and every `coverage(off)` mark against the proof it cites.",
+          "method": {
+            "links": [
+              "https://llvm.org/docs/CommandGuide/llvm-cov.html#llvm-cov-export",
+              "https://docs.rs/lcov/0.8.2/lcov/",
+              "https://docs.rs/crate/cargo-llvm-cov/0.9.1",
+              "https://doc.rust-lang.org/rustc/instrument-coverage.html"
+            ],
+            "text": "the LCOV tracefile records (`SF`, `DA`, `BRDA`, `BRF`, `end_of_record`) that `llvm-cov export -format=lcov` writes (<https://llvm.org/docs/CommandGuide/llvm-cov.html#llvm-cov-export>), each read by the `lcov` crate 0.8 (MIT OR Apache-2.0, <https://docs.rs/lcov/0.8.2/lcov/>); cargo-llvm-cov 0.9.1 (<https://docs.rs/crate/cargo-llvm-cov/0.9.1>) runs it. Branch coverage is rustc's `-Z coverage-options=branch`, nightly only (<https://doc.rust-lang.org/rustc/instrument-coverage.html>), which cargo-llvm-cov's `--branch` turns on."
+          },
+          "path": "geom_test::coverage",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "O(K × (P + D)) for K kernel crates, P packages in the graph and D dependency entries, declared and resolved, with a logarithmic factor for the ordered maps; plus one `cargo metadata` run, which resolves the workspace from `Cargo.lock`.",
           "does": "[`check`] reads the output of `cargo metadata` (which [`cargo_metadata`] runs with every feature of every workspace member on and every platform's dependencies in) and follows every kernel crate's normal and build dependencies through the whole dependency graph, reporting every chain that reaches `geom-test`, `geom-fuzz`, `geom-gen` or `geom-bench`. It also lists every manifest of this repository the answer depends on ([`Report::manifests`]), so CI can check that a change to any of them reruns the rule.",
           "family": [],
@@ -4333,6 +4703,29 @@
             "text": "breadth-first search (Cormen, Leiserson, Rivest and Stein, *Introduction to Algorithms*, 3rd edition, section 22.2) over the union of the declared and resolved graphs from each kernel crate, on the JSON format documented at <https://doc.rust-lang.org/cargo/commands/cargo-metadata.html>. Breadth-first search finds a shortest chain to each development crate. The metadata is read into the typed model of the `cargo_metadata` crate (MIT, <https://docs.rs/cargo_metadata/0.23.1/>), which also builds the `cargo metadata` command: piece G12a put it in place of the field-by-field reading of the JSON that was written here (chapter 29.1). [`check`] takes the JSON itself, not the model, so the tests can seed a violation into real metadata as a manifest would and hand it over."
           },
           "path": "geom_test::deps",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the length of the path; [`kernel_crates`] reads one directory.",
+          "does": "[`place`] says, for a path relative to the repository root, which kernel crate it belongs to and whether it is in the foundation set, a development crate, or outside the kernel. [`kernel_crates`] lists the kernel crates in the kernel's folder. The mutation gate ([`crate::mutants`]) and the coverage gate ([`crate::coverage`]) both classify with these, so the two gates can never disagree about what the foundation set is.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/foundation.rs",
+          "guarantees": [
+            "**One classification for both gates.** The mutation gate and the coverage gate place every path with [`place`], so they cannot disagree about which code is in the foundation set.",
+            "**Nothing leaves the foundation bar silently.** A crate of [`FOUNDATION_MODULES`] with code but no file of its module is reported ([`missing_foundation_module`]), and the bars are the integers of 28.8, compared exactly by the gates.",
+            "**Development crates are never judged as kernel code**, and a path outside the kernel's crates folder is [`Place::Outside`]."
+          ],
+          "job": "The foundation set of section 28.8, the kernel crates the quality gates cover, and their bars.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/27-crates-folders.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 27's rule \"one folder per crate, folder name = crate name\" (`projects/engines/geometry/architecture/27-crates-folders.md`) makes a crate's name its folder's name, so a path classifies by its components alone; the set and the bars are 28.8's (`projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_test::foundation",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -4598,6 +4991,29 @@
             "text": "the generators of section 28.5 of the kernel architecture, \"aimed at the hard cases\" (`projects/engines/geometry/architecture/28-testing.md`), after `SolidCraft`'s fuzzer (evidence report 11, `projects/kit/notes/G01-evidence/11-vetting-suggested-projects.md`, `SolidCraft`), with Manifold's fuzzer as the counter-example whose coordinates stay between 0.1 and 10 (evidence report 01, `projects/kit/notes/G01-evidence/01-manifold-mesh-booleans.md`, section 4). Each coordinate is one of: full range (2 in 8 draws); small, in −16..=16; one of the extremes ±(2^40 − 1), ±(2^40 − 2), 0 and ±1; snapped to a coarse sub-grid (1 mm, 2.5 mm, 0.01 mm at the building step, 1 mm at the mechanical step, 2^20 steps, 625 steps) so coincident faces and shared edges are common; snapped and then moved by exactly one step, so near-coincidences are common; a repeat of an earlier coordinate; or an earlier coordinate moved by one step. Each point is fresh (half the draws), a repeat of an earlier point, an earlier point moved one step along one axis, a point on the line through the two latest points (so the next point of a triangle is often collinear with the first two), or a point on the line through two earlier points. A point on a line is exactly on it while it stays in the frame."
           },
           "path": "geom_test::grid",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the length of the source and of the run's output.",
+          "does": "the guard itself is `kernel.yml`, which runs every golden on every target and build mode whenever `rust-toolchain.toml`, `Cargo.lock`, the workspace manifest or anything under the kernel changes, so a toolchain or dependency change that moves a result fails there. This module proves that the guard trips. [`perturb_sin`] rewrites `libm`'s `sin` so that every result has its last bit flipped, a one-ulp change no test of a tolerance would see; the binary `guard` builds `geom-num`'s determinism golden against that copy of `libm` (Cargo's `[patch.crates-io]`, given with `--config`) and [`verdict`] reads the run: the golden `geom-num/determinism`, which hashes every function of `geom_num::math::unproven` and so `libm::sin`, must report a digest that differs from the store's.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/guard.rs",
+          "guarantees": [
+            "**The change is one bit, in one function.** [`perturb_sin`] renames `libm`'s one `pub fn sin(x: f64) -> f64` and puts a function of that name beside it that returns the same result with bit 0 flipped. It refuses a source with no such function or with two, so a new `libm` that moves the function fails the proof loudly instead of proving nothing.",
+            "**A trip counts only for the right reason.** [`verdict`] accepts a run only when it failed, Cargo used the patch (it warns when a patch is not used, and that warning is refused), and the golden printed its line saying its digest differs from the store's. A run that failed to build, or failed for any other reason, proves nothing and is refused.",
+            "**Deterministic.** Both functions are pure: the same text gives the same answer."
+          ],
+          "job": "The toolchain and dependency guard's proof (chapter 28.13, \"The toolchain guard\"; piece G20): a deliberate change to the numeric code the kernel depends on must fail a golden.",
+          "method": {
+            "links": [
+              "https://doc.rust-lang.org/cargo/reference/overriding-dependencies.html",
+              "https://doc.rust-lang.org/cargo/reference/config.html#command-line-overrides"
+            ],
+            "text": "Cargo's documented `[patch]` table for overriding a dependency with a local copy (<https://doc.rust-lang.org/cargo/reference/overriding-dependencies.html>), set from the command line (<https://doc.rust-lang.org/cargo/reference/config.html#command-line-overrides>), and the seeded-violation pattern of the kernel's merge gate (G12): each gate is shown to fail on a violation planted on purpose."
+          },
+          "path": "geom_test::guard",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -5057,6 +5473,65 @@
           "target": "lib"
         },
         {
+          "cost": "linear in the size of the metadata.",
+          "does": "[`packages`] reads `cargo metadata` and returns the package of every kernel crate, in name order, and [`cargo_args`] writes them as the `-p` arguments the workflow (`.github/workflows/kernel-quality.yml`) gives `cargo miri nextest run` and `cargo miri test --doc`. nextest runs each test in its own Miri process, splits the tests into partitions, one CI job each, and stops a test that reaches its budget (the `default-miri` profile in `.config/nextest.toml`): such a test passed every step Miri interpreted, and the job's report names it.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/miri.rs",
+          "guarantees": [
+            "**Every kernel test suite, with nothing to keep in step.** The scope is every kernel crate in the metadata, so a new crate or test file runs under Miri the week it lands, and no list of test names or files is kept anywhere. A test that cannot run under Miri at all (one that starts a process or reads the repository) says so where it is written, with `#[cfg_attr(miri, ignore = \"<why>\")]`.",
+            "**The development crates are left out** (`geom-test`, `geom-fuzz`, `geom-gen`, `geom-bench`): they never ship, and their tests start processes and read files, which Miri's isolation refuses.",
+            "**A plan that runs nothing does not pass.** Metadata without any kernel crate, or with a package that has no name or manifest path, is an error."
+          ],
+          "job": "The weekly Miri run's scope: every kernel crate, whose test suites Miri interprets.",
+          "method": {
+            "links": [
+              "https://doc.rust-lang.org/cargo/commands/cargo-metadata.html",
+              "https://nexte.st/docs/integrations/miri/",
+              "https://nexte.st/docs/ci-features/partitioning/"
+            ],
+            "text": "the `packages[]` of `cargo metadata --format-version 1` (<https://doc.rust-lang.org/cargo/commands/cargo-metadata.html>); a kernel crate is a package whose manifest is in the kernel's crates folder, as [`crate::deps`] defines it. nextest's Miri support and partitions are documented at <https://nexte.st/docs/integrations/miri/> and <https://nexte.st/docs/ci-features/partitioning/>."
+          },
+          "path": "geom_test::miri",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the size of the output files, plus one read of each mutated source file and of each unviable mutant's log.",
+          "does": "[`read_run`] reads one cargo-mutants output directory (`mutants.out`, or one shard's), checking that the run is whole; [`judge`] puts the runs of one gate together and decides, mutant by mutant, under the rules of section 28.8:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/mutants.rs",
+          "guarantees": [
+            "**A gate that cannot see everything fails.** A run that did not finish, a failed or missing baseline, a mutant with no outcome or two, totals that disagree with the outcomes, a shard missing from the full run or two shards that overlap are each a failure or a [`RunError`], never a smaller set of mutants judged.",
+            "**Untested is never caught.** An unviable mutant counts only when its log shows a compiler error at a source location; any other failed build fails the gate.",
+            "**28.8's rules, exactly.** In the foundation set a missed mutant passes only as `equivalent`; elsewhere also as `harmless`, or as `known` when the base branch's ledger already kept it; a timeout only as `hangs`. A ledger entry that matches more mutants than it counts, or a caught or unviable one, or (in the full run) fewer, fails as stale.",
+            "**Reasons follow the code.** Entries are keyed by the mutated line's text, so editing that line puts the mutant before the gate again."
+          ],
+          "job": "The mutation gate: judges cargo-mutants' results against the quality ledger.",
+          "method": {
+            "links": [
+              "https://mutants.rs/shards.html",
+              "https://mutants.rs/in-diff.html"
+            ],
+            "text": "the files cargo-mutants 27.1 writes, as its book documents them (`book/src/mutants-out.md`) and its source serialises them (`src/outcome.rs`, `src/mutant.rs`, `src/output.rs`), read at the commit of its v27.1.0 tag (record below), with its manual's sharding and diff options (<https://mutants.rs/shards.html>, <https://mutants.rs/in-diff.html>): an outcome's `summary` is one of `Success`, `CaughtMutant`, `MissedMutant`, `Unviable`, `Failure` and `Timeout`; a scenario is `\"Baseline\"` or `{\"Mutant\": {...}}`; a mutant's `name` is `<file>:<line>:<column>: <description>`."
+          },
+          "path": "geom_test::mutants",
+          "provenance": [
+            {
+              "licence": "MIT",
+              "link": "https://github.com/sourcefrog/cargo-mutants/tree/8ab1dc786a1f61a4e370416cc6c68b81a704e917",
+              "method_note": null,
+              "name": "cargo-mutants",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for the format of the output files this module reads (`book/src/mutants-out.md`, `src/outcome.rs`, `src/mutant.rs` and `src/output.rs` at its v27.1.0 tag). No code copied.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "one run of the property per case, plus shrinking after a failure, at most about 41 property runs per coordinate (a binary search over at most 2^40 magnitudes). One read of proptest's process-wide configuration per [`run`] or [`first_value`].",
           "does": "[`run`] runs a proptest property from a [`Seed`] resolved and printed by [`crate::seed::resolve`], so a property test has the same seed rules as every other seeded test. [`config`] builds the proptest configuration it uses. [`first_value`] draws one case from a seed. [`coord`], [`p2`] and [`p3`] are proptest strategies for grid coordinates and points.",
           "family": [],
@@ -5077,6 +5552,26 @@
             "text": "proptest (MIT OR Apache-2.0, <https://github.com/proptest-rs/proptest>), the Hypothesis-style property tester the kernel's tests use (28.2). Its runner draws each case from a `ChaCha20` stream seeded by `RngSeed::Fixed`, and shrinks a failure to a minimal case. A coordinate shrinks with proptest's own `num::i64::BinarySearch`, which halves the distance towards zero while the property still fails and backs off when it passes: bisection, as in Knuth, *The Art of Computer Programming*, volume 3, section 6.2.1 (<https://www-cs-faculty.stanford.edu/~knuth/taocp.html>)."
           },
           "path": "geom_test::prop",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the size of the file.",
+          "does": "[`Ledger::parse`] reads the ledger file (`projects/engines/geometry/quality-ledger.json`, [`LEDGER_PATH`]) strictly. The mutation gate ([`crate::mutants`]) matches every surviving mutant against [`Ledger::survivors`]; the coverage gate ([`crate::coverage`]) matches every `coverage(off)` mark against [`Ledger::coverage_off`].",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/quality_ledger.rs",
+          "guarantees": [
+            "the file is read strictly, so a typo cannot drop an entry silently. An unknown or missing field, a wrong type, an empty or short reason, an unknown kind or tool, an absolute or backslashed path, a zero occurrence count and two entries with one key are all [`LedgerError`]s, never a smaller ledger."
+          ],
+          "job": "The quality ledger: every surviving mutant the kernel keeps, with why, every `coverage(off)` mark, with the proof it cites, and every foundation line still waiting for its proof.",
+          "method": {
+            "links": [
+              "https://www.rfc-editor.org/rfc/rfc8259"
+            ],
+            "text": "JSON (RFC 8259, <https://www.rfc-editor.org/rfc/rfc8259>) read with `serde_json` into its value tree and checked field by field."
+          },
+          "path": "geom_test::quality_ledger",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -5374,22 +5869,23 @@
           "target": "lib"
         },
         {
-          "cost": "two more crates for the loader to parse, about 5 000 lines; their instances are checked only when kernel code calls them.",
-          "does": "the kernel's crates call `core`, `alloc` (and `std` in tests) and `libm` constantly, and the standard library calls kernel code back through what it is handed: closures (`Option::map`, `Iterator::fold`, `sort_by`) and trait implementations of kernel types (`sort` runs `Ord::cmp`, `Vec::clone` runs `Clone::clone`, formatting runs `Display::fmt`). Their real source is not read; instead [`CORE`] and [`LIBM`] are Rust written from their documented signatures, which [`sources`] gives the loader as two crates of role [`Role::Model`]: `core` (also answering to `alloc` and `std`, [`crate::recursion::resolve::MODEL_ALIASES`]) and `libm`. A function of the model that calls back has a body that makes exactly those calls (`Option::map` calls `f`; `Map`'s `next` calls its closure; `[T]::sort` calls `T::cmp`); one that calls nothing back has the body `loop {}`. The type checker reads the model's bodies as it reads the kernel's, instance by instance, so a callback reaches exactly the closure or implementation the call was handed.",
+          "cost": "three more crates for the loader to parse, about 5 000 lines; their instances are checked only when kernel code calls them.",
+          "does": "the kernel's crates call `core`, `alloc` (and `std` in tests) and `libm` constantly, and the standard library calls kernel code back through what it is handed: closures (`Option::map`, `Iterator::fold`, `sort_by`) and trait implementations of kernel types (`sort` runs `Ord::cmp`, `Vec::clone` runs `Clone::clone`, formatting runs `Display::fmt`). Their real source is not read; instead [`CORE`], [`LIBM`] and [`RAYON`] are Rust written from their documented signatures, which [`sources`] gives the loader as three crates of role [`Role::Model`]: `core` (also answering to `alloc` and `std`, [`crate::recursion::resolve::MODEL_ALIASES`]), `libm` and `rayon` (`geom-pool`, the one kernel crate that depends on it, runs its tasks on a rayon pool: `in_place_scope` runs its closure and `Scope::spawn` its body). A function of the model that calls back has a body that makes exactly those calls (`Option::map` calls `f`; `Map`'s `next` calls its closure; `[T]::sort` calls `T::cmp`); one that calls nothing back has the body `loop {}`. The type checker reads the model's bodies as it reads the kernel's, instance by instance, so a callback reaches exactly the closure or implementation the call was handed.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/recursion/stdlib.rs",
           "guarantees": [
             "**Never less than the library calls.** Each modelled function's body calls every closure it is handed and every trait method of its type parameters that the documented function may call; adapters that defer a call (an iterator's `map`) keep the closure in their result and call it where the library does (in `next`). By parametricity, code that does not know the kernel's types reaches kernel code only through the values and bounds it is handed (J. C. Reynolds, \"Types, abstraction and parametric polymorphism\", IFIP 1983; P. Wadler, \"Theorems for free!\", FPCA 1989, <https://doi.org/10.1145/99370.99404>), so these are all the calls it can make into the kernel.",
             "**What is not modelled is reported.** A path into the standard library that names nothing in the model resolves to nothing, and the type checker reports it as code it cannot read; the model is extended rather than guessed."
           ],
-          "job": "The recursion check's model of the standard library and of `libm`: Rust source the check reads in place of theirs, so a call into them is checked as any other call is.",
+          "job": "The recursion check's model of the standard library, of `libm` and of the part of `rayon` that `geom-pool` calls: Rust source the check reads in place of theirs, so a call into them is checked as any other call is.",
           "method": {
             "links": [
               "https://doc.rust-lang.org/std/",
               "https://doc.rust-lang.org/core/",
-              "https://docs.rs/libm/0.2.16/libm/"
+              "https://docs.rs/libm/0.2.16/libm/",
+              "https://docs.rs/rayon/1.12.0/rayon/"
             ],
-            "text": "the standard library's documented signatures and behaviour (<https://doc.rust-lang.org/std/>, <https://doc.rust-lang.org/core/>, <https://docs.rs/libm/0.2.16/libm/>), written as stubs: a library model, which the type checker reads as ordinary code, under parametricity as above."
+            "text": "the standard library's documented signatures and behaviour (<https://doc.rust-lang.org/std/>, <https://doc.rust-lang.org/core/>, <https://docs.rs/libm/0.2.16/libm/>, <https://docs.rs/rayon/1.12.0/rayon/>), written as stubs: a library model, which the type checker reads as ordinary code, under parametricity as above."
           },
           "path": "geom_test::recursion::stdlib",
           "provenance": [],
@@ -5485,6 +5981,32 @@
               "take": "port-method"
             }
           ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the file's length: one parse, one walk of the tree and one of the tokens. The span locations `proc-macro2` keeps for the file are released when the scan returns.",
+          "does": "[`scan`] parses a Rust file with `syn`, the parser Rust's procedural macros use, and reads every token's line from `proc-macro2`'s span locations. From the syntax tree and the tokens it finds:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/rust_source.rs",
+          "guarantees": [
+            "**The language's own grammar.** Comments, strings, raw strings, character literals and nested block comments are told apart by `proc-macro2`'s lexer, and items by `syn`'s parser, so a brace or a word inside a string or a comment is never read as code.",
+            "**An error, never a partial answer.** A file that does not parse as Rust is a [`ScanError`] naming the line, because a gate must not pass on a file it could not read.",
+            "**A comment is a comment.** A citation is read only from a line that starts with `//` and is not inside a string literal that spans lines; the walk up from a mark passes only over such lines and over the lines of other attributes, and stops at anything else."
+          ],
+          "job": "Rust source, read for the quality gates: which lines are test code, whether a file has code that runs, where its branches are, every `coverage(off)` mark with the proof it cites, and whether a file defines a cited proof.",
+          "method": {
+            "links": [
+              "https://docs.rs/syn/3.0.9/syn/",
+              "https://docs.rs/proc-macro2/1.0.107/proc_macro2/",
+              "https://doc.rust-lang.org/reference/attributes.html",
+              "https://doc.rust-lang.org/reference/conditional-compilation.html",
+              "https://doc.rust-lang.org/unstable-book/language-features/coverage-attribute.html"
+            ],
+            "text": "`syn` 3 (MIT OR Apache-2.0, <https://docs.rs/syn/3.0.9/syn/>) parses the file into its syntax tree, walked with `syn::visit`; `proc-macro2` 1 (MIT OR Apache-2.0, <https://docs.rs/proc-macro2/1.0.107/proc_macro2/>) with its `span-locations` feature gives each token's lines outside a procedural macro. The attribute forms are the Rust Reference's (<https://doc.rust-lang.org/reference/attributes.html>, conditional compilation at <https://doc.rust-lang.org/reference/conditional-compilation.html>); `coverage(off)` is the unstable `coverage` attribute (<https://doc.rust-lang.org/unstable-book/language-features/coverage-attribute.html>)."
+          },
+          "path": "geom_test::rust_source",
+          "provenance": [],
           "spdx": null,
           "target": "lib"
         },
@@ -5649,6 +6171,17 @@
       ]
     },
     {
+      "licence": "Apache-2.0 OR MIT",
+      "link": "https://crates.io/crates/rayon/1.12.0",
+      "method_note": null,
+      "name": "rayon",
+      "pinned": false,
+      "take": "depend",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-pool/Cargo.toml"
+      ]
+    },
+    {
       "licence": "MIT",
       "link": "https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/atan2/atan2.c",
       "method_note": null,
@@ -5734,6 +6267,17 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-gen/src/predicate_emit.rs"
+      ]
+    },
+    {
+      "licence": "BSD-3-Clause",
+      "link": "https://github.com/BrunoLevy/geogram/blob/40d72165ceeeb0a61977d6fdf74d929bfdd77b7b/src/lib/geogram/numerics/PCK.h",
+      "method_note": null,
+      "name": "Geogram's PCK `_SOS` predicates",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-num/src/perturb.rs"
       ]
     },
     {
@@ -5973,6 +6517,17 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-test/src/golden/shuffle.rs"
+      ]
+    },
+    {
+      "licence": "MIT",
+      "link": "https://github.com/sourcefrog/cargo-mutants/tree/8ab1dc786a1f61a4e370416cc6c68b81a704e917",
+      "method_note": null,
+      "name": "cargo-mutants",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-test/src/mutants.rs"
       ]
     },
     {

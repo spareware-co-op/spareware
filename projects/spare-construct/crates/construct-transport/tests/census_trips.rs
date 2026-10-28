@@ -1,4 +1,4 @@
-//! Land use truth tests: trip generation of features/landuse-plus.js (person and vehicle trips, the adjustments in order, how a zone's table reaches the
+//! Land use truth tests: trip generation of packs/nz/landuse-plus.js (person and vehicle trips, the adjustments in order, how a zone's table reaches the
 //! model, the tables, the RR 422 check and trip_generation.csv) against the prototype (tools/transport-truth/gen-census.mjs).
 
 mod census_support;
