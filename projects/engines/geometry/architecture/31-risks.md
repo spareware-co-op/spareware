@@ -628,6 +628,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | Hidden-line predicates of 576 and 640 bits | 6, 18 | 32.36 (owner action G385) |
 | openNURBS: written confirmation from McNeel before porting its reader and writer | 16, 24, 29 | 32.37 (owner action G407): request drafted for the owner to send; open until the reply |
 | The LandXML 1.2 schema's terms, and LINZ's LandXML examples | 17, 24, 29 | 32.38 (owner action G408) |
+| Generating code from IFC and STEP EXPRESS schemas, and ISO 10303-42's current edition | 24, 29 | 32.39 (owner action G409) |
 
 ### Answered by the pieces built so far
 
@@ -953,7 +954,7 @@ Proposed in 31.5 (R23) and 32.5: one consolidated crate-list note settles all of
 | Check every Clothoids and G1fitting file header for third-party provenance before any port (Fresnel.cc derives from a book) | 17 | Piece "Spiral evaluation with certified bounds" |
 | EPSG's terms of use and the LINZ grid licences (believed to be CC BY 4.0) | 17 | Before PROJ data ships (kit-ops) |
 | Standards and format terms: Gerber section 1.4 (confirm the quotes from the PDF), job files, XNC and Excellon, IPC-2581C, ODB++, IDX, IDF 3.0; IGES 5.3; USD (TOST and AOUSD terms), Alembic, FBX; Parasolid XT, ACIS, JT; OpenCascade .brep (NVIDIA's reader mirrors OpenCascade's LGPL one) | 24, 29 | Each format's piece waits for its check |
-| ISO's EXPRESS schemas: where they may be obtained, what may be generated from them, and which edition of ISO 10303-42 is current | 24, 29 | Piece "EXPRESS code generation and schema validator (development tool)" |
+| ISO's EXPRESS schemas: where they may be obtained, what may be generated from them, and which edition of ISO 10303-42 is current | 24, 29 | 32.39 (owner action G409): the 2025 edition; generation only with a file's own grant or ISO's permission; piece "EXPRESS code generation and schema validator (development tool)" |
 | Thread and gear tables are copyrighted standards, so geom-thread takes them as supplied or licensed data | 13 | Piece "Helical sweeps and geom-thread" |
 | How entries in our own pattern and linetype library are authored | 14 | 32.24 (owner action G184); piece "2D-22 Our own pattern and linetype library" builds it |
 | SMLib's .smp and .smb fixtures: the stricter reading applies, so they are not copied and the configurations are rebuilt | 12 | Answered; ledger row |

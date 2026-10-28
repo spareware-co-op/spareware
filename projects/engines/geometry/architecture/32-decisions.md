@@ -56,6 +56,7 @@ The board (30.5) also turns into a piece every narrower question that chapters 6
 | 32.36 | G385: view predicates beyond 384 bits | `I576` for grid-axis views and `I640` for any direction and perspective, accepted on 32.29's conditions (derivation, certificate, extreme tests, filter, measured) | 6, 18 | G388, exact view predicates |
 | 32.37 | G407: openNURBS licence confirmation | Ask McNeel in writing (request drafted, the owner sends it); nothing ported until the reply; open until then | 16, 24, 29 | G438, Rhino .3dm |
 | 32.38 | G408: LandXML terms | No terms found: the schema is implemented from its definitions, never copied or generated from, and fetched only to validate; LINZ's examples fetch-only until their page states terms | 17, 24, 29 | G437, LandXML 1.2 mapping |
+| 32.39 | G409: generating code from STEP and IFC schemas | Part 42 is the 2025 edition; IFC schemas generated from with attribution; ISO's STEP schemas only with a file's own grant or ISO's permission, requested in a draft the owner sends | 24, 29 | G416, EXPRESS code generation |
 
 ## 32.1 The grid ladder (decision 1)
 
@@ -715,3 +716,18 @@ This action stays open until McNeel answers.
 Why: implementing a published format from its definitions copies nothing, and data whose terms are unstated stays out of a public repository, as for every outside dataset (32.11).
 
 **Changes:** 29's LandXML and LINZ rows, 31.7, and piece G437.
+
+## 32.39 Generating code from STEP and IFC schemas (owner action G409)
+
+**What it is.** Piece G416 generates Rust types and validators from the EXPRESS schemas of IFC 4.3, IFC4, IFC2x3 and the STEP application protocols, so readers and writers never hand-type thousands of entities. 29 records that ISO's terms for generating code from its EXPRESS files are unverified, and that it is unknown which edition of ISO 10303-42, the geometry and topology resource every STEP geometry entity comes from, is current (29, question 11; 31.7).
+
+**Checked 2026-10-28.** ISO's catalogue lists [ISO 10303-42:2025](https://www.iso.org/standard/91386.html), edition 9, as published; the 2024 edition replaced the 2022 one and the 2025 edition replaces it. ISO's machine-readable EXPRESS listings (the SMRL archives under `standards.iso.org/iso/10303/`) are marked informative, and no blanket licence for them was found: ISO's default terms forbid reproduction without written permission, and only some schema files carry a grant of their own in their headers. buildingSMART's IFC 4.3 [LICENSE.md](https://github.com/buildingSMART/IFC4.3.x-development/blob/7256780bd95fcc5b3653e07b3e8ec2f8389c9f3d/LICENSE.md) is CC BY-ND 4.0 and adds that its technical documentation may be "used in software development, or translated into another computer language" with full attribution (29.14).
+
+**Decided 2026-10-28 (owner action G409).** Read with 24.6, 24.11, 29.14, 29.20 and evidence report [08](../../../kit/notes/G01-evidence/08-standards-coverage-testing.md).
+- **Part 42's current edition is ISO 10303-42:2025.** `geom-exchange`'s mapping follows its entity definitions, and still reads files written against earlier editions, whose entities it maps where they agree and reports where they do not.
+- **IFC schemas may be generated from,** under buildingSMART's software-development permission with full attribution in every generated file's header; G416 confirms the same text in IFC4's and IFC2x3's licences at pinned commits before generating from them.
+- **ISO's STEP schemas are not generated from until permission is in hand:** a schema file whose own header grants use for implementation may be used, and G416 records that header per file; otherwise the co-op asks ISO's copyright office, on a request drafted in this piece's pull request that the owner sends. Until then G416 generates the IFC types, and `geom-step`'s geometry entities are written from the standard's normative text, which is implementing a standard, not copying it (29's rule for ISO standards); whether to buy a licensed copy for that is the owner's when `geom-step`'s pieces start.
+
+Why: generated types are the safe way to read thousands of entities, so the permission matters; IFC grants it, ISO's files must be asked for, and nothing waits on ISO that IFC can serve first.
+
+**Changes:** 29's ISO and IFC rows, 31.7, and piece G416.
