@@ -402,3 +402,69 @@ fn typed_transforms_apply_in_the_plane_by_variant() {
         Err(MathError::NotInPlane)
     );
 }
+
+/// The edges the mutation gate found unchecked: a certified transform's 2D vectors in and out of
+/// the plane, the exactness flag of a 2D grid point when one coordinate rounds and the other does
+/// not, the refusal's message, and `FBox2`'s intersection, containment and overlap, touching
+/// included.
+#[test]
+fn certified_vectors_exactness_and_float_boxes_at_their_edges() {
+    let turn = Transform::rotation(Axis::Z, 0.5).unwrap();
+    let v = F2::new(3.0, -2.0).unwrap();
+    let three = turn.apply_vector(F3::new(3.0, -2.0, 0.0).unwrap()).unwrap();
+    let two = turn.apply_vector_2d(v).unwrap();
+    assert_eq!(
+        (two.x().to_bits(), two.y().to_bits()),
+        (three.x().to_bits(), three.y().to_bits())
+    );
+    let tilt = Transform::rotation(Axis::X, 0.5).unwrap();
+    assert_eq!(tilt.apply_vector_2d(v), Err(MathError::NotInPlane));
+    assert_eq!(
+        MathError::NotInPlane.to_string(),
+        "the transform changes z, so it does not act in the plane"
+    );
+    // Halving y: x stays a whole step, y = 3/2 rounds (to 2, ties to even), so the point is not
+    // exact; with y = 4 both rows are whole and it is.
+    let half_y = Transform::scale(1.0, 0.5, 1.0).unwrap();
+    let rounded = half_y.apply_grid_2d(P2::new(2, 3).unwrap()).unwrap();
+    assert_eq!(rounded.value(), P2::new(2, 2).unwrap());
+    assert!(!rounded.is_exact());
+    let whole = half_y.apply_grid_2d(P2::new(2, 4).unwrap()).unwrap();
+    assert_eq!(whole.value(), P2::new(2, 2).unwrap());
+    assert!(whole.is_exact());
+    let half_x = Transform::scale(0.5, 1.0, 1.0).unwrap();
+    assert!(
+        !half_x
+            .apply_grid_2d(P2::new(3, 2).unwrap())
+            .unwrap()
+            .is_exact()
+    );
+
+    let fbox = |x0: f64, y0: f64, x1: f64, y1: f64| {
+        FBox2::new(F2::new(x0, y0).unwrap(), F2::new(x1, y1).unwrap()).unwrap()
+    };
+    let corners = |b: FBox2| (b.lo().to_array(), b.hi().to_array());
+    let a = fbox(0.0, 0.5, 2.0, 2.5);
+    let b = fbox(1.0, 1.5, 3.0, 3.5);
+    assert_eq!(
+        a.intersection(&b).map(corners),
+        Some(([1.0, 1.5], [2.0, 2.5]))
+    );
+    // Touching at one corner: the intersection is that point.
+    let corner = fbox(2.0, 2.5, 3.0, 4.0);
+    assert_eq!(
+        a.intersection(&corner).map(corners),
+        Some(([2.0, 2.5], [2.0, 2.5]))
+    );
+    assert!(a.overlaps(&corner) && a.overlaps(&b));
+    // Apart along x only, then along y only.
+    let right = fbox(2.25, 0.5, 4.0, 2.5);
+    let above = fbox(0.0, 2.75, 2.0, 4.0);
+    assert_eq!(a.intersection(&right), None);
+    assert_eq!(a.intersection(&above), None);
+    assert!(!a.overlaps(&right) && !a.overlaps(&above));
+    assert!(a.contains(F2::new(1.0, 1.0).unwrap()));
+    assert!(a.contains(F2::new(2.0, 0.5).unwrap()));
+    assert!(!a.contains(F2::new(2.5, 1.0).unwrap()));
+    assert!(!a.contains(F2::new(1.0, 0.25).unwrap()));
+}
