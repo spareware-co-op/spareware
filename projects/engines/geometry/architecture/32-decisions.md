@@ -44,6 +44,7 @@ The board (30.5) also turns into a piece every narrower question that chapters 6
 | 32.24 | G184: the pattern and linetype library process | Authored from written rules (ISO 128, standards, textbooks) or own design, never from vendor or CADCraft files; our own names; a provenance log per entry; a kernel owner's review in each pull request | 14, 29 | G211, our own library |
 | 32.25 | G185: ellipses in 2D | A curve kind stored by centre and major axis on the grid and a reduced axis ratio p/q, q at most about 2^21; file ratios become the nearest such fraction, Certified unless exact | 7, 14, 26 | G190, exact conic predicates |
 | 32.26 | G186: depth-one 2D numbers | Integer carriers, depth-one points and rational-centre arcs accepted into 6.2, at most 337 bits; 32.2 decided A with its fallbacks | 6, 14, 15 | G187, the 2D predicates |
+| 32.27 | G238: toolkit homes before a second program | No exception: `geom-thread`, `geom-stair` and `geom-civil` start in Spare Construct on the facade, and enter the kernel under 26.1 when a second program needs them | 17, 26, 27 | G258, G281 and G378 |
 
 ## 32.1 The grid ladder (decision 1)
 
@@ -542,3 +543,17 @@ Why: one exact form for the conics drafting draws most, so snaps, offsets and cr
 Why: rounding a T-junction or a fillet centre to the grid leaves gaps that every later operation inherits (14, R3); these forms close them at a fixed, measured width inside the budget booleans already pay for.
 
 **Changes:** 6.2, 14.1, 15.10, 32.2, 31.7, and pieces G187 and 2D-04.
+
+## 32.27 Toolkit homes before a second program (owner action G238)
+
+**What it is.** Section 26.1's rule: a domain toolkit enters the kernel when a second program needs it, and until then it lives in the one program that does. Chapters 13 and 17 give three toolkits kernel crates now: `geom-thread` (threads and helical features), `geom-stair` (stairs) and `geom-civil` (corridor daylighting, ground profiles by station, mass haul and sight distance, which combine terrain with alignments). Today only Spare Construct needs any of them. 27 and OQ-17.4 ask the owner to record an exception, or move each into Spare Construct with no kernel crate changing.
+
+**Decided 2026-10-28 (owner action G238): no exception. All three follow 26.1's rule and start in Spare Construct.** Read with 13.8, 13.16, 17 (introduction, 17.5, 17.9), 26.1, 27's toolkit rule, R1 and R27.
+- **The rule's reason holds for each.** A toolkit is built only from the kernel's public operations and kinds (26.1). Everything these three compose (sweeps, helices, booleans, terrain, alignments, grading) is a kernel operation the facade exposes, so Spare Construct can build them on `engine-geometry` with nothing missing, and the kernel's scope stays where R1 says it must: finished layers, not one program's features.
+- **chapter 17's reason does not need the kernel.** It places `geom-civil` above `geom-terrain` and `geom-align` so that neither depends on the other; a toolkit in Spare Construct leaves them just as independent.
+- **What moving later costs, and how it is kept small.** When a second program needs one, it enters the kernel as a toolkit crate under 26.1, with its operations' names and versions carried over unchanged, so models that recorded them replay; until then each operation is versioned in Spare Construct under the same edition rules (26.2).
+- **What changes.** No kernel crate: the table's toolkit rows stay deferred, as G01's table already lists them ("added when two programs need them"). Board pieces G258 (`geom-thread`), G281 (`geom-stair`) and G378 (`geom-civil` compositions) are built in Spare Construct's crates first, on the facade, and return to this board when a second program needs them; they stay listed in 30.5 as not gating.
+
+Why: the two-program rule is what keeps the kernel finishable (R1), and none of the three needs anything the facade does not give a program.
+
+**Changes:** 17's introduction, 27's toolkit rule, 30.5's not-gating list and 31.7.

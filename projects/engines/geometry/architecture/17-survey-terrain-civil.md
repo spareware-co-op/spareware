@@ -15,7 +15,7 @@ Surveyors and designers work on one geometry. A surveyed kerb line is the same k
 | Alignments, stations, corridor geometry | Cross-section templates, superelevation (the cross-fall a road takes on a curve), country rule packs |
 | Point-cloud queries, snaps and fits | Reading E57 and LAS, storing COPC, classifying ground points |
 
-Each subsection names the crate that owns it. Four things combine terrain with alignments: corridor daylighting, ground profiles by station, mass haul, and sight distance along a road. They live in a small domain toolkit, `geom-civil` (section 26.1), which depends on `geom-terrain` and `geom-align` while neither depends on the other.
+Each subsection names the crate that owns it. Four things combine terrain with alignments: corridor daylighting, ground profiles by station, mass haul, and sight distance along a road. They live in a small domain toolkit, `geom-civil` (section 26.1), which depends on `geom-terrain` and `geom-align` while neither depends on the other. Under 26.1's two-program rule it starts in Spare Construct's crates, built on the facade, and enters the kernel when a second program needs it (owner action G238, 32.27).
 
 ## 17.1 Frames and map projections (`geom-math`, with `geom-num`)
 
