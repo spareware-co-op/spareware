@@ -33,7 +33,8 @@ name: Kernel quality
 #   test in its own Miri process, in partitions, and stops a test at its budget, the default-miri
 #   profile in .config/nextest.toml: such a test passed every step Miri interpreted, and the
 #   report names it. A pull request that changes how Miri runs gets one partition at a short
-#   budget, the miri-smoke profile.
+#   budget, the miri-smoke profile. geom-pool's tests run under Tree Borrows, every other
+#   crate's under Stacked Borrows, while crossbeam-epoch 0.9.21 is in the lock (the step says why).
 #
 # Only geom-test's judges decide: a cargo-mutants run that finds survivors (exit 2) or timeouts
 # (exit 3) passes its step and leaves the verdict to the ledger; any other failure of a tool fails
@@ -459,7 +460,38 @@ jobs:
           fi
           # shellcheck disable=SC2086 # PACKAGES holds several -p arguments, none with a space.
           cargo miri nextest run --locked $PACKAGES "${profile[@]}" \
+            -E 'not package(geom-pool)' \
             --partition "hash:${{ matrix.partition }}/$PARTITIONS"
+      # geom-pool, the one crate that may name rayon (29.4), under Tree Borrows instead of Stacked
+      # Borrows. crossbeam-epoch 0.9.21, which rayon's queues use, turns a reference to a list
+      # entry into one to the whole thread record around it (`IsElement::element_of`); Stacked
+      # Borrows reports that, Tree Borrows allows it. crossbeam fixed it upstream in
+      # crossbeam-rs/crossbeam#871 (commit 02fb08a6c, "epoch: Fix stacked borrows violations"),
+      # which changes a public trait, so only a 0.10 release carries it. geom-test's
+      # kernel_quality_workflow test fails once Cargo.lock moves off 0.9.21, so the exception is
+      # looked at again then. The leak check is off for this step only: rayon's `ThreadPool::drop`
+      # signals its threads to stop (`registry.terminate()`) and does not join them, so when a test
+      # ends each worker's crossbeam-epoch registration is still alive, and Miri reports it as
+      # leaked (run 40593080811). rayon's own CI runs Miri the same way, `-Zmiri-tree-borrows
+      # -Zmiri-ignore-leaks` (rayon-rs/rayon, .github/workflows/ci.yaml). Every other check of
+      # Miri stays on: data races, use-after-free, uninitialised and out-of-bounds reads, and Tree
+      # Borrows' own aliasing rules.
+      - name: geom-pool's tests under Miri with Tree Borrows
+        if: env.NEEDED == 'true' && matrix.partition == 1
+        env:
+          RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
+          MIRIFLAGS: -Zmiri-isolation-error=warn-nobacktrace -Zmiri-tree-borrows -Zmiri-ignore-leaks
+        run: |
+          profile=()
+          dir=target/nextest/default-miri
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            profile=(--profile miri-smoke)
+            dir=target/nextest/miri-smoke
+          fi
+          # The run above wrote its report to the same file: keep it beside this one.
+          if [ -f "$dir/junit.xml" ]; then mv "$dir/junit.xml" "$dir/junit-stacked-borrows.xml"; fi
+          cargo miri nextest run --locked -p geom-pool "${profile[@]}"
+          mv "$dir/junit.xml" "$dir/junit-tree-borrows.xml"
       - name: The kernel's doctests under Miri
         if: env.NEEDED == 'true' && matrix.partition == 1
         env:
@@ -473,5 +505,5 @@ jobs:
         if: ${{ !cancelled() && env.NEEDED == 'true' }}
         with:
           name: miri-${{ matrix.partition }}
-          path: target/nextest/*/junit.xml
+          path: target/nextest/*/junit*.xml
           if-no-files-found: ignore
