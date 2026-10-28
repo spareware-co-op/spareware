@@ -171,9 +171,8 @@ jobs:
   # its module header says what is proven and what is only tested. geom-num's
   # tests/kani_harnesses.rs holds this list to the harnesses in the source. The budget, two hours:
   # in WSL on 2026-10-28, with up to thirteen proofs sharing twelve cores, the slowest took 57
-  # minutes (exact_sum's cancellation in the subnormals) and eft's
-  # two_prod_with_three_every_significand 45; 120 minutes is the margin orient2d_proof's job above
-  # keeps.
+  # minutes (exact_sum's cancellation in the subnormals), eft's full-width two_prod with the
+  # splitter 54 and dd's from_i128 46; 120 minutes is the margin orient2d_proof's job above keeps.
   kani-num:
     name: Kani, geom-num (${{ matrix.proof }})
     runs-on: ubuntu-latest
@@ -193,7 +192,6 @@ jobs:
           - eft::proofs::two_prod_with_the_smallest_subnormal
           - eft::proofs::two_prod_with_the_splitter
           - eft::proofs::two_prod_with_three
-          - eft::proofs::two_prod_with_three_every_significand
           - eft::proofs::two_prod_with_two_pow_996
           - eft::proofs::two_sum_with_minus_a_tenth
           - eft::proofs::two_sum_with_the_largest_double
