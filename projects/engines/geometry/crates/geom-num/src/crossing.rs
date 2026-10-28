@@ -33,7 +33,7 @@
 use crate::error::NumError;
 use crate::generated;
 use crate::grid::{Coord, P2, Rounded};
-use crate::plane::{BUDGET_LIMBS, TOTAL_LIMBS, commit_axes};
+use crate::plane::{BUDGET_LIMBS, TOTAL_LIMBS, commit_axes, difference};
 use crate::sign::Sign;
 use crate::wide::{I256, I320, Wide};
 
@@ -98,13 +98,14 @@ impl Ssi {
     )]
     pub fn homogeneous(&self) -> Result<([i128; 2], i128), NumError> {
         let [a, b, _, _] = self.points;
-        let (oa, ob) = self.offsets().ok_or(NumError::BudgetExceeded)?;
-        let axis = |bc: Coord, ac: Coord| {
-            oa.checked_mul(i128::from(bc.get()))?
-                .checked_sub(ob.checked_mul(i128::from(ac.get()))?)
+        let Some((oa, ob)) = self.offsets() else {
+            return Err(NumError::BudgetExceeded);
         };
-        let (Some(x), Some(y), Some(w)) = (axis(b.x, a.x), axis(b.y, a.y), oa.checked_sub(ob))
-        else {
+        let (Some(x), Some(y), Some(w)) = (
+            ssi_axis(oa, ob, b.x, a.x),
+            ssi_axis(oa, ob, b.y, a.y),
+            oa.checked_sub(ob),
+        ) else {
             return Err(NumError::BudgetExceeded);
         };
         Ok(([x, y], w))
@@ -162,11 +163,17 @@ impl Ssi {
         else {
             return Err(NumError::BudgetExceeded);
         };
-        let w = oa.checked_sub(ob).ok_or(NumError::BudgetExceeded)?;
-        side::<4>(oa, ob2, ob, oa2)
-            .or_else(|| side::<5>(oa, ob2, ob, oa2))
-            .map(|s| s.mul(Sign::of_i128(w)))
-            .ok_or(NumError::BudgetExceeded)
+        let Some(w) = oa.checked_sub(ob) else {
+            return Err(NumError::BudgetExceeded);
+        };
+        let s = match side::<4>(oa, ob2, ob, oa2) {
+            Some(s) => Some(s),
+            None => side::<5>(oa, ob2, ob, oa2),
+        };
+        match s {
+            Some(s) => Ok(s.mul(Sign::of_i128(w))),
+            None => Err(NumError::BudgetExceeded),
+        }
     }
 
     /// The point committed to the grid: each coordinate `X_i` / w rounded half to even, by the same
@@ -191,9 +198,20 @@ impl Ssi {
 /// (b − a) × (c − a) = orient2d(a, b, c) for grid points, in `i128`: `None` if a step does not
 /// fit, which coordinates within the frame cannot cause.
 fn cross(a: P2, b: P2, c: P2) -> Option<i128> {
-    let d = |q: Coord, p: Coord| i128::from(q.get()).checked_sub(i128::from(p.get()));
-    let (bx, by, cx, cy) = (d(b.x, a.x)?, d(b.y, a.y)?, d(c.x, a.x)?, d(c.y, a.y)?);
+    let (bx, by, cx, cy) = (
+        difference(b.x, a.x)?,
+        difference(b.y, a.y)?,
+        difference(c.x, a.x)?,
+        difference(c.y, a.y)?,
+    );
     bx.checked_mul(cy)?.checked_sub(by.checked_mul(cx)?)
+}
+
+/// One numerator of [`Ssi::homogeneous`], oa · `b_i` − ob · `a_i`, in `i128`: `None` if a step does
+/// not fit, which grid points cannot cause.
+fn ssi_axis(oa: i128, ob: i128, bc: Coord, ac: Coord) -> Option<i128> {
+    oa.checked_mul(i128::from(bc.get()))?
+        .checked_sub(ob.checked_mul(i128::from(ac.get()))?)
 }
 
 /// The sign of oa · ob₂ − ob · oa₂ in `Wide<L>`: `None` if a step does not fit.

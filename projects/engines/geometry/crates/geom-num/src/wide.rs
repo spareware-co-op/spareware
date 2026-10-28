@@ -21,17 +21,20 @@
 //! beside each), and is split into its two 64-bit halves by a mask and a shift, each half cast to
 //! `u64` with its bound written beside it.
 //!
-//! Proven (chapter 28.7; piece G37): Verus proves, for every width `L` from 1 to 4096 limbs and so
-//! for [`I256`], [`I320`], [`I384`] and [`I512`], that `checked_add`, `checked_sub`,
-//! `checked_neg` and `checked_mul` return the exact two's-complement result whenever it fits and
-//! `None` exactly when it does not, and that the order ([`Ord`]) is the order of the values. The
+//! Proven (chapter 28.7; pieces G37 to G39): Verus proves, for every width `L` from 1 to 4096 limbs
+//! and so for [`I256`], [`I320`], [`I384`] and [`I512`], that `checked_add`, `checked_sub`,
+//! `checked_neg`, `checked_mul`, the width-aware products `product_i128` and `checked_mul_i128`,
+//! and `resize` return the exact two's-complement result whenever it fits and `None` exactly when
+//! it does not, that `from_i128` gives the value it is given, and that the order ([`Ord`]) is the
+//! order of the values. The
 //! proof is in this crate's `verus/wide.rs`, a twin of this module's arithmetic: the same
 //! functions with Verus specifications and proof steps added, which `geom-gen`'s
 //! `tests/verus_twin.rs` holds token for token to the code here, and which `kernel-dev.yml`'s
 //! `verus` job verifies. So the code is written in the part of Rust Verus reads: index loops over
 //! `get` and `get_mut`, and `match` where an `Option` combinator would do. Its trusted base is
-//! Verus, the Z3 solver it uses, and three facts it is told about the standard library, each its
-//! documented behaviour: `u64::overflowing_add`, `u64::overflowing_sub` and `u64::from(bool)`.
+//! Verus, the Z3 solver it uses, and four facts it is told about the standard library, each its
+//! documented behaviour: `u64::overflowing_add`, `u64::overflowing_sub`, `u64::from(bool)` and
+//! `i128::unsigned_abs`.
 //!
 //! Method: schoolbook addition, subtraction and multiplication on magnitudes with 128-bit
 //! intermediates (Knuth, *The Art of Computer Programming*, volume 2, section 4.3.1,
@@ -279,7 +282,16 @@ impl<const L: usize> Wide<L> {
     /// Whether the value is exactly zero.
     #[must_use]
     pub fn is_zero(&self) -> bool {
-        self.0.iter().all(|&limb| limb == 0)
+        for i in 0..L {
+            let limb = match self.0.get(i) {
+                Some(v) => *v,
+                None => 0,
+            };
+            if limb != 0 {
+                return false;
+            }
+        }
+        true
     }
 
     /// The sign of the value.
@@ -481,31 +493,42 @@ impl<const L: usize> Wide<L> {
         let a = self.magnitude();
         let (b0, b1) = halves(b.unsigned_abs());
         let mut out = [0u64; L];
-        for (shift, bj) in [b0, b1].into_iter().enumerate() {
-            if bj == 0 {
-                continue;
-            }
-            let mut carry = 0u64;
-            for (i, &ai) in a.iter().enumerate() {
-                let prod = u128::from(ai).checked_mul(u128::from(bj))?;
-                // Limb indices are below L and the shift at most 1: never fails.
-                match out.get_mut(i.checked_add(shift)?) {
-                    Some(slot) => {
-                        let t = prod
-                            .checked_add(u128::from(*slot))?
-                            .checked_add(u128::from(carry))?;
-                        (*slot, carry) = halves(t);
-                    }
-                    // A non-zero contribution at limb L makes the magnitude at least 2^(64L).
-                    None => {
-                        if prod != 0 || carry != 0 {
-                            return None;
+        for shift in 0..2 {
+            let bj = if shift == 0 { b0 } else { b1 };
+            if bj != 0 {
+                let mut carry = 0u64;
+                for i in 0..L {
+                    let ai = match a.get(i) {
+                        Some(v) => *v,
+                        None => 0,
+                    };
+                    // At most (2^64 − 1)², below 2^128: `checked_mul` never fails here.
+                    let prod = u128::from(ai).checked_mul(u128::from(bj))?;
+                    // Limb indices are below L and the shift at most 1: never fails.
+                    let k = i.checked_add(shift)?;
+                    match out.get(k) {
+                        Some(&old) => {
+                            // At most (2^64 − 1)² + 2 (2^64 − 1) = 2^128 − 1: never fails.
+                            let t = prod
+                                .checked_add(u128::from(old))?
+                                .checked_add(u128::from(carry))?;
+                            let (low, high) = halves(t);
+                            if let Some(slot) = out.get_mut(k) {
+                                *slot = low;
+                            }
+                            carry = high;
+                        }
+                        // A non-zero contribution at limb L makes the magnitude at least 2^(64L).
+                        None => {
+                            if prod != 0 || carry != 0 {
+                                return None;
+                            }
                         }
                     }
                 }
-            }
-            if carry != 0 {
-                return None;
+                if carry != 0 {
+                    return None;
+                }
             }
         }
         from_magnitude(&out, negative)
@@ -514,19 +537,38 @@ impl<const L: usize> Wide<L> {
     /// The same value in a `Wide<M>`, or `None` if it does not fit.
     #[must_use]
     pub fn resize<const M: usize>(&self) -> Option<Wide<M>> {
-        let () = Wide::<M>::AT_LEAST_TWO_LIMBS;
-        let fill = fill(self.is_negative());
-        let mut out = [fill; M];
-        for (o, &x) in out.iter_mut().zip(self.0.iter()) {
-            *o = x;
+        let negative = self.is_negative();
+        let sign = fill(negative);
+        let mut out = [sign; M];
+        // The limbs both widths hold, copied; above them, the sign fill. The loop runs over exactly
+        // those limbs, a constant for each pair of widths, so it unrolls with no bounds checks.
+        let shared = if M < L { M } else { L };
+        for i in 0..shared {
+            let x = match self.0.get(i) {
+                Some(v) => *v,
+                None => 0,
+            };
+            if let Some(slot) = out.get_mut(i) {
+                *slot = x;
+            }
+        }
+        if M < L {
+            // Narrowing: every dropped limb must be pure sign extension.
+            for i in M..L {
+                let x = match self.0.get(i) {
+                    Some(v) => *v,
+                    None => 0,
+                };
+                if x != sign {
+                    return None;
+                }
+            }
         }
         let r = Wide::<M>(out);
-        if M < L {
-            // Narrowing: the dropped limbs must be pure sign extension, and the sign must survive.
-            let dropped_ok = self.0.iter().skip(M).all(|&x| x == fill);
-            if !dropped_ok || r.is_negative() != self.is_negative() {
-                return None;
-            }
+        // Narrowing, the sign must survive. Widening keeps it always, and the test is left out
+        // there (a constant for each pair of widths), as it costs every widening a branch.
+        if M < L && r.is_negative() != negative {
+            return None;
         }
         Some(r)
     }

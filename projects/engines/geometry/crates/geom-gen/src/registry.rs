@@ -28,7 +28,7 @@ use crate::grid_steps;
 use crate::predicates;
 
 /// Every generator, in the order they run.
-pub const GENERATORS: [Generator; 21] = [
+pub const GENERATORS: [Generator; 28] = [
     Generator {
         name: grid_steps::NAME,
         output: grid_steps::OUTPUT,
@@ -130,6 +130,48 @@ pub const GENERATORS: [Generator; 21] = [
         output: "projects/engines/geometry/crates/geom-num/verus/generated/insphere.rs",
         about: "insphere's exact path as a Verus-annotated twin, which Verus verifies in CI",
         generate: Generate::Plain(predicates::generate_verus_insphere),
+    },
+    Generator {
+        name: "verus-ssi-weight",
+        output: "projects/engines/geometry/crates/geom-num/verus/generated/ssi_weight.rs",
+        about: "ssi_weight's exact path as a Verus-annotated twin, which Verus verifies in CI",
+        generate: Generate::Plain(predicates::generate_verus_ssi_weight),
+    },
+    Generator {
+        name: "verus-ssi-side",
+        output: "projects/engines/geometry/crates/geom-num/verus/generated/ssi_side.rs",
+        about: "ssi_side's exact path as a Verus-annotated twin, which Verus verifies in CI",
+        generate: Generate::Plain(predicates::generate_verus_ssi_side),
+    },
+    Generator {
+        name: "verus-plane-side",
+        output: "projects/engines/geometry/crates/geom-num/verus/generated/plane_side.rs",
+        about: "plane_side's exact path as a Verus-annotated twin, which Verus verifies in CI",
+        generate: Generate::Plain(predicates::generate_verus_plane_side),
+    },
+    Generator {
+        name: "verus-tpi-weight",
+        output: "projects/engines/geometry/crates/geom-num/verus/generated/tpi_weight.rs",
+        about: "tpi_weight's exact path as a Verus-annotated twin, which Verus verifies in CI",
+        generate: Generate::Plain(predicates::generate_verus_tpi_weight),
+    },
+    Generator {
+        name: "verus-tpi-side",
+        output: "projects/engines/geometry/crates/geom-num/verus/generated/tpi_side.rs",
+        about: "tpi_side's exact path as a Verus-annotated twin, which Verus verifies in CI",
+        generate: Generate::Plain(predicates::generate_verus_tpi_side),
+    },
+    Generator {
+        name: "verus-lpi-weight",
+        output: "projects/engines/geometry/crates/geom-num/verus/generated/lpi_weight.rs",
+        about: "lpi_weight's exact path as a Verus-annotated twin, which Verus verifies in CI",
+        generate: Generate::Plain(predicates::generate_verus_lpi_weight),
+    },
+    Generator {
+        name: "verus-lpi-side",
+        output: "projects/engines/geometry/crates/geom-num/verus/generated/lpi_side.rs",
+        about: "lpi_side's exact path as a Verus-annotated twin, which Verus verifies in CI",
+        generate: Generate::Plain(predicates::generate_verus_lpi_side),
     },
     Generator {
         name: "gappa-orient2d",

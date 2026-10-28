@@ -2,8 +2,9 @@
 //! `predicate-insphere`, `predicate-plane-side`, `predicate-tpi-weight`, `predicate-tpi-side`,
 //! `predicate-lpi-weight`, `predicate-lpi-side`, `predicate-ssi-weight` and
 //! `predicate-ssi-side`: the kernel's predicates, from their descriptions; `verus-orient2d`,
-//! `verus-orient3d`, `verus-incircle` and `verus-insphere`, the Verus twins of those four exact
-//! paths; and `gappa-orient2d`, `gappa-orient3d`, `fptaylor-orient2d` and `fptaylor-orient3d`, the
+//! `verus-orient3d`, `verus-incircle`, `verus-insphere`, `verus-plane-side`, `verus-tpi-weight`,
+//! `verus-tpi-side`, `verus-lpi-weight`, `verus-lpi-side`, `verus-ssi-weight` and
+//! `verus-ssi-side`, the Verus twins of those exact paths; and `gappa-orient2d`, `gappa-orient3d`, `fptaylor-orient2d` and `fptaylor-orient3d`, the
 //! problems that machine-check those filters' error bounds ([`crate::predicate_certificates`]).
 //!
 //! What it does: holds the description of each predicate on explicit grid points (chapter 6.2:
@@ -582,11 +583,6 @@ pub fn generate_plane_side() -> Result<Vec<u8>, GenError> {
     module_of(named("plane_side")?)
 }
 
-/// The folder of `geom-num`'s Verus crate that the predicate twins are generated into: modules of
-/// `verus/lib.rs`, outside every crate's sources, so Cargo never builds them;
-/// `kernel-dev.yml`'s `verus` job verifies the crate.
-pub const VERUS_DIR: &str = "projects/engines/geometry/crates/geom-num/verus/generated";
-
 /// Generator `predicate-tpi-weight`.
 ///
 /// # Errors
@@ -641,8 +637,25 @@ pub fn generate_ssi_side() -> Result<Vec<u8>, GenError> {
     module_of(named("ssi_side")?)
 }
 
-/// The predicates with a Verus twin (pieces G36 and G38), by name.
-pub const VERUS_TWINS: [&str; 4] = ["orient2d", "orient3d", "incircle", "insphere"];
+/// The folder of `geom-num`'s Verus crate that the predicate twins are generated into: modules of
+/// `verus/lib.rs`, outside every crate's sources, so Cargo never builds them;
+/// `kernel-dev.yml`'s `verus` job verifies the crate.
+pub const VERUS_DIR: &str = "projects/engines/geometry/crates/geom-num/verus/generated";
+
+/// The predicates with a Verus twin (pieces G36, G38 and G39), by name.
+pub const VERUS_TWINS: [&str; 11] = [
+    "orient2d",
+    "orient3d",
+    "incircle",
+    "insphere",
+    "ssi_weight",
+    "ssi_side",
+    "plane_side",
+    "tpi_weight",
+    "tpi_side",
+    "lpi_weight",
+    "lpi_side",
+];
 
 /// The twin of the predicate called `name`, as bytes.
 fn twin_of(name: &str) -> Result<Vec<u8>, GenError> {
@@ -687,6 +700,75 @@ pub fn generate_verus_incircle() -> Result<Vec<u8>, GenError> {
 /// [`GenError::Generator`] if the derivation or the emission fails.
 pub fn generate_verus_insphere() -> Result<Vec<u8>, GenError> {
     twin_of("insphere")
+}
+
+/// Generator `verus-ssi-weight`: `ssi_weight`'s exact path as a Verus-annotated twin (piece
+/// G39).
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_verus_ssi_weight() -> Result<Vec<u8>, GenError> {
+    twin_of("ssi_weight")
+}
+
+/// Generator `verus-ssi-side`: `ssi_side`'s exact path as a Verus-annotated twin (piece G39).
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_verus_ssi_side() -> Result<Vec<u8>, GenError> {
+    twin_of("ssi_side")
+}
+
+/// Generator `verus-plane-side`: `plane_side`'s exact path as a Verus-annotated twin
+/// (piece G39).
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_verus_plane_side() -> Result<Vec<u8>, GenError> {
+    twin_of("plane_side")
+}
+
+/// Generator `verus-tpi-weight`: `tpi_weight`'s exact path as a Verus-annotated twin
+/// (piece G39).
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_verus_tpi_weight() -> Result<Vec<u8>, GenError> {
+    twin_of("tpi_weight")
+}
+
+/// Generator `verus-tpi-side`: `tpi_side`'s exact path as a Verus-annotated twin
+/// (piece G39).
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_verus_tpi_side() -> Result<Vec<u8>, GenError> {
+    twin_of("tpi_side")
+}
+
+/// Generator `verus-lpi-weight`: `lpi_weight`'s exact path as a Verus-annotated twin
+/// (piece G39).
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_verus_lpi_weight() -> Result<Vec<u8>, GenError> {
+    twin_of("lpi_weight")
+}
+
+/// Generator `verus-lpi-side`: `lpi_side`'s exact path as a Verus-annotated twin
+/// (piece G39).
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_verus_lpi_side() -> Result<Vec<u8>, GenError> {
+    twin_of("lpi_side")
 }
 
 /// The folder the certificates' problems are written into: geom-gen's generated folder, outside
