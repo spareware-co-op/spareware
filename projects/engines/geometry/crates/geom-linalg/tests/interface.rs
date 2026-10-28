@@ -203,6 +203,48 @@ fn pivoted_qr_downdates_the_trailing_norms_after_each_step() {
 }
 
 #[test]
+fn pivoted_qr_recomputes_a_trailing_norm_exactly_when_the_downdate_loses_accuracy() {
+    // Which norms are downdated and which recomputed (xLAQP2's test: recompute once
+    // (1 − r²)·(v1/v2)² ≤ √u) decides ties and near ties between trailing columns, so it fixes the
+    // column order. Each matrix's order below changes under any other form of that test, of the
+    // ratio v1/v2, or of max(1 − r², 0): found with a model of the factorisation that repeats its
+    // double arithmetic operation for operation, then checked here.
+    let cases: [(usize, Vec<f64>, Vec<usize>); 4] = [
+        (
+            2,
+            vec![0.0, 0.0, 2.0, 2.0, 1.0, 3.0, 5.0, 2.0],
+            vec![2, 1, 0, 3],
+        ),
+        (
+            3,
+            vec![0.0, 2.0, 2.0, 0.0, 0.0, -1.0, -1.0, 0.0, 2.0, 0.0, 4.0, 3.0],
+            vec![2, 1, 0, 3],
+        ),
+        (
+            3,
+            vec![
+                -1.0, 1000.0, 10000.0, 0.0, 0.002, 0.002, 4.0, 0.0, 10000.0, 0.0, 0.0, 0.002, 0.0,
+                0.0, 0.0, 3e-5, 3e-5, 0.0,
+            ],
+            vec![2, 1, 4, 3, 0, 5],
+        ),
+        (
+            4,
+            vec![
+                -1.0, -1000.0, -0.001, 0.5, 4.0, 3e-5, 1000.0, 0.0, 10000.0, 0.0, -0.001, -1.0,
+                10000.0, 1e-5, 10000.0, -1.0, 0.0, 1.0, 1e-5, 0.0,
+            ],
+            vec![4, 3, 1, 2, 0],
+        ),
+    ];
+    for (m, entries, order) in cases {
+        let a = Matrix::from_rows(m, entries.len() / m, &entries).unwrap();
+        let qr = PivotedQr::factor(&a, &mut plenty()).unwrap();
+        assert_eq!(qr.permutation(), &order[..], "{a:?}");
+    }
+}
+
+#[test]
 fn pivoted_qr_never_lets_the_diagonal_grow() {
     let mut rng = Lcg(11);
     for m in 1..=9 {
