@@ -112,13 +112,13 @@
         },
         {
           "id": "geom-nurbs/operations",
-          "what": "geom-nurbs's knot operations (piece G56) on a fixed corpus of 72 curves of degrees 1 to 5 and 7 and 24 surfaces: insertion, refinement, elevation, Bezier extraction, knot removal and degree reduction at several tolerances, and derivative curves and surfaces, each result's knots, control points, weights and deviation, in the encoding of tests/operations_determinism.rs.",
+          "what": "geom-nurbs's knot operations (piece G56) on a fixed corpus of 96 curves of degrees 1 to 5, 7, 9 and 12 and 24 surfaces: insertion, refinement (by new knots, by the curve's own and by both), elevation, Bezier extraction, knot removal and degree reduction at several tolerances, and derivative curves and surfaces, each result's knots, control points, weights and deviation, in the encoding of tests/operations_determinism.rs.",
           "check": {
             "crate": "geom-nurbs",
             "test": "operations_determinism",
             "function": "operations_golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "f9f622edcd6db7933e282940b79b56280e5f569a451e4a81e00633805731545a"
+          "sha256": "50b0697e2ea65748b98ac98410ee0fd70511d6e62843feb75be01fa5e6fc5eb0"
         },
         {
           "id": "geom-run/helpers",

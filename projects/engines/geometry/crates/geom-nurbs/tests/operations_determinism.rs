@@ -2,10 +2,11 @@
 //! surfaces, its result's knots, control points, weights and deviation, hashed with SHA-256, must
 //! give the same digest on every target (chapters 21 and 28.13; the golden store of piece G19).
 //!
-//! The corpus: from a fixed sequence, curves of degrees 1 to 5 and 7, with whole, dyadic and
+//! The corpus: from a fixed sequence, curves of degrees 1 to 5, 7, 9 and 12, with whole, dyadic and
 //! arbitrary knots, some repeated up to p + 1 times, clamped and not, rational and not; and
 //! surfaces of degrees 1 to 4 in each direction. On each curve: knot insertion at every interior
-//! knot and between them, up to the degree; refinement; elevation by 1 to 3; Bezier extraction;
+//! knot and between them, up to the degree; refinement, by new knots, by the curve's own knots and
+//! by both; elevation by 1 to 3; Bezier extraction;
 //! removal of every interior knot at four tolerances; degree reduction at four tolerances, of the
 //! curve and of its elevation; and derivative curves. On each surface the same in both directions.
 //! Every result, success or error, is written in a fixed little-endian encoding, doubles as their
@@ -124,7 +125,7 @@ impl Rec {
 /// Curves of every kind the operations treat differently.
 fn curves(rng: &mut Lcg) -> Vec<Curve<3>> {
     let mut out = Vec::new();
-    for p in [1, 2, 3, 4, 5, 7] {
+    for p in [1, 2, 3, 4, 5, 7, 9, 12] {
         for kind in 0..3 {
             for clamped in [true, false] {
                 let n = p + 2 + rng.below(6);
@@ -200,6 +201,11 @@ fn on_curve(rec: &mut Rec, rng: &mut Lcg, c: &Curve<3>) {
     let mut x: Vec<f64> = (0..3).map(|_| lo + (hi - lo) * rng.unit()).collect();
     x.sort_by(f64::total_cmp);
     rec.changed_curve(&c.refine(&x, &mut meter()));
+    // Refinement by knots the curve has already, and by a mix of old and new.
+    rec.changed_curve(&c.refine(&knots_in, &mut meter()));
+    let mut mixed: Vec<f64> = knots_in.iter().copied().chain(x.iter().copied()).collect();
+    mixed.sort_by(f64::total_cmp);
+    rec.changed_curve(&c.refine(&mixed, &mut meter()));
     for t in 1..=3 {
         rec.changed_curve(&c.elevate(t, &mut meter()));
     }

@@ -47,7 +47,7 @@ use crate::basis::{Basis, WIDTH};
 use crate::budget::vec_for;
 use crate::curve::Curve;
 use crate::index::{add, get, mul, set, sub};
-use crate::ops::{Changed, charge_op, homs, rounding, split};
+use crate::ops::{Changed, charge_op, homs, larger, rounding, split};
 
 /// One Bezier piece: the span [a, b] and its p + 1 homogeneous points.
 pub(crate) type Piece<N, const D: usize> = (f64, f64, Vec<Hom<N, D>>);
@@ -81,9 +81,7 @@ impl<const D: usize> Curve<D> {
         let mut out = vec_for(meter, pieces.len())?;
         for ((a, b, pts), (_, _, enc)) in pieces.iter().zip(&enclosures) {
             let dev = rounding(pts, enc, rational, p_max)?;
-            if dev > deviation {
-                deviation = dev;
-            }
+            deviation = larger(deviation, dev);
             let mut knots = vec_for(meter, mul(order, 2)?)?;
             knots.extend(core::iter::repeat_n(*a, order));
             knots.extend(core::iter::repeat_n(*b, order));

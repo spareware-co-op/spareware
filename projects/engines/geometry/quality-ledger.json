@@ -259,6 +259,14 @@
       "reason": "With (high - low) % 2, mid stays at low whenever high - low is even, and a parameter above u_mid then sets low = mid again: Basis::span's binary search never ends."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/basis.rs",
+      "mutant": "replace > with == in Basis::span",
+      "line_text": "while sub(high, low)? > 1 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "With == 1 the binary search runs only while high - low is exactly 1, where mid = low and neither end moves, so once it starts it never ends (and a parameter whose search starts there hangs)."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-nurbs/src/index.rs",
       "mutant": "replace add -> Result<usize, NurbsError> with Ok(0)",
       "line_text": "a.checked_add(b).ok_or(NurbsError::Defect)",
@@ -321,6 +329,142 @@
       "occurrences": 1,
       "kind": "hangs",
       "reason": "The block under this test is what moves reduce_kernel to the next knot run (b and spn each plus one); with it skipped while b < mp, b stays where it is and the while loop over the runs never ends."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/ops.rs",
+      "mutant": "replace > with >= in larger",
+      "line_text": "if b > a { b } else { a }",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when b == a, where either is the same number: every caller passes an interval's upper end, a width or a weight, none NaN and none -0 (intervals keep a zero end as +0), so equal values have equal bits."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/ops.rs",
+      "mutant": "replace < with <= in smaller",
+      "line_text": "if b < a { b } else { a }",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when b == a, where either is the same number: every caller passes weights, which are positive, or the starting infinity, so equal values have equal bits."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/elevate.rs",
+      "mutant": "replace > with >= in elevate_kernel",
+      "line_text": "if r > 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "At r = 0 the block's two loops are empty: r = p - mlt = 0 makes mlt >= p, so mlt + 1..=p is empty, and 1..=r is empty. Its first line, ub - ua in the exact type, cannot fail for the finite knots Basis::new admits, so nothing changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/elevate.rs",
+      "mutant": "replace > with >= in elevate_kernel",
+      "line_text": "if oldr > 1 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "At oldr = 1 remove_shared_knot's loop over tr in 1..oldr is empty, and what it does before the loop only reads: first = kind - 2 (kind is past the first piece, so at least q + 1), den = ub - ua > 0 and bet, none of which can fail. Nothing is written."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/elevate.rs",
+      "mutant": "replace > with >= in remove_shared_knot",
+      "line_text": "while sub(j, i)? > tr {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "j - i starts at 2tr and falls by 2, so the extra step comes only for even tr, at i = kind - 1 - tr/2, j = kind - 1 + tr/2, kj = tr/2. There i >= cind = kind - q, as tr/2 < q, so Q is not written; and kj = tr/2 < lbz = oldr/2 + 1, a slot of the piece below lbz that is never copied out and that no later step reads (later steps read kj and kj + 1 above (tr+1)/2)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/elevate.rs",
+      "mutant": "replace < with <= in remove_shared_knot",
+      "line_text": "if i < cind {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only at i == cind, where the mutant writes Q[cind]: the point the copy of the elevated piece (from lbz, never above q) writes first, right after this function returns. No step here reads Q[cind] in between, as i only grows past it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/bezier.rs",
+      "mutant": "replace < with <= in decompose",
+      "line_text": "while ie < m {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Bezier extraction takes clamped bases only, whose last p + 1 knots are equal: the scan of the last run always reaches ie = m, and the step after it makes ie = m + 1. So the loop test never sees ie == m, the one value where the two differ."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/bezier.rs",
+      "mutant": "replace < with <= in decompose",
+      "line_text": "if mlt < p {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "At mlt == p, r = p - mlt = 0: the loop over mlt + 1..=p and the loop over 1..=r are both empty, and num, an exact difference of two finite knots, cannot fail. Nothing changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/bezier.rs",
+      "mutant": "replace < with <= in decompose",
+      "line_text": "if ie < m {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Inside the insertion loop the two differ only at ie == m, the last piece, where the mutant also saves a point into the next piece's buffer; the loop then ends without starting another piece, so the buffer is never read."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/net.rs",
+      "mutant": "replace > with >= in Surface<D>::derivative_surface",
+      "line_text": "if order > 0 && order >= degree {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only at order == 0, where the right operand is 0 >= degree, false for every basis: Basis::new refuses degree 0. So the test is false either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/net.rs",
+      "mutant": "replace > with >= in Surface<D>::derivative_surface",
+      "line_text": "if k > 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "At k = 0 the block rebuilds the net column by column through derivative_points with no levels, which returns the same knots and points (its loop over 1..=k is empty, its finiteness check passes on stored points); the net, rows and knots come out unchanged, and vec_for charges the meter nothing."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/net.rs",
+      "mutant": "replace > with >= in Surface<D>::derivative_surface",
+      "line_text": "if l > 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "At l = 0 the block rebuilds each row through derivative_points with no levels, which returns the same knots and points; the net and knots come out unchanged, and vec_for charges the meter nothing."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/reduce.rs",
+      "mutant": "replace || with && in Curve<D>::reduce_degree",
+      "line_text": "if back_knots.as_slice() != basis.knots() || back.len() != input.len() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A defect check that no input reaches: elevating the reduced basis and inserting the knots it lacks gives back exactly the input's knots (copies of the same doubles) and as many points. Both operands are false, so the test is false with && as with ||."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/reduce.rs",
+      "mutant": "replace > with >= in reduce_kernel",
+      "line_text": "if r > 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "At r = 0 the block's loops are empty: r = p - mlt = 0 makes mlt >= p, so mlt + 1..=p is empty, and 1..=r is empty. Its first line is ub - ua in doubles, which cannot fail. Nothing changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/remove.rs",
+      "mutant": "replace * with + in remove_once",
+      "line_text": "let mut rw = [zero; 2 * WIDTH];",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The sweeps write rw at indices 0 to last + 1 - off = p - s + 2 at most (first = r - p, last = r - s, off = first - 1, s >= 1), so at most p + 1 <= 29, and 2 + WIDTH = 31 holds them as 2 * WIDTH does. The buffer is otherwise only read where written."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/remove.rs",
+      "mutant": "replace > with >= in remove_once",
+      "line_text": "while j > i {",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "Both loops differ only when i meets j, which happens when first + last is even, at i = j = (first + last)/2 = (2r - p - s)/2 = fout: the one point remove_once drops from its output. Every extra write (the sweep's, the crossing average, the copy) is to that point, so the result is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/remove.rs",
+      "mutant": "replace || with && in certify",
+      "line_text": "if back.as_slice() != knots || pw.len() != original.len() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A defect check that no input reaches: inserting u back as many times as it was removed gives exactly the input's knots (the same doubles in the same places) and as many points. Both operands are false, so the test is false with && as with ||."
     }
   ],
   "coverage_off": [],

@@ -61,7 +61,7 @@ use crate::curve::Curve;
 use crate::elevate::{check_elevation, elevate_kernel};
 use crate::index::{add, get, mul, real, set, sub};
 use crate::insert::refine_kernel;
-use crate::ops::{Changed, charge_op, homs, split};
+use crate::ops::{Changed, charge_op, homs, smaller, split, usable_weight};
 use crate::remove::difference_bound;
 
 impl<const D: usize> Curve<D> {
@@ -99,7 +99,7 @@ impl<const D: usize> Curve<D> {
         )?;
         let input = homs::<f64, D>(meter, self.homogeneous(), self.weights())?;
         let (uq, candidate) = reduce_kernel(meter, basis, &input)?;
-        if rational && !candidate.iter().all(|h| h.w.is_finite() && h.w > 0.0) {
+        if rational && !candidate.iter().all(|h| usable_weight(h.w)) {
             return Err(NurbsError::OutsideTolerance);
         }
         let reduced = Basis::new(q, uq)?;
@@ -119,9 +119,7 @@ impl<const D: usize> Curve<D> {
         if back_knots.as_slice() != basis.knots() || back.len() != input.len() {
             return Err(NurbsError::Defect);
         }
-        let w_min = candidate
-            .iter()
-            .fold(f64::INFINITY, |m, h| if h.w < m { h.w } else { m });
+        let w_min = candidate.iter().fold(f64::INFINITY, |m, h| smaller(m, h.w));
         let deviation = difference_bound(&input, &back, rational, self.p_max_if(rational)?, w_min)?;
         if deviation > tol {
             return Err(NurbsError::OutsideTolerance);
