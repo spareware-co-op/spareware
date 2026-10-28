@@ -219,13 +219,22 @@ fn sound(seen: &[(f64, f64)], m: &Minimum, a: f64, b: f64) {
 
 #[test]
 fn minimum_survives_an_overflowing_parabola() {
-    // Values up to 1.7e308 over an interval of width 4: the parabola's products (x − v)(fx − fw)
-    // overflow, so q is infinite and the step is a golden section instead.
-    let f = |x: f64| 1.7e308 * ((x - 1.0) / 2.0) * ((x - 1.0) / 2.0);
-    let (seen, m) = trace(f, -1.0, 3.0, 1e-9);
-    let m = m.unwrap();
-    sound(&seen, &m, -1.0, 3.0);
-    assert!((m.x.get() - 1.0).abs() <= 1e-6, "{}", m.x.get());
+    // A well 1e308 deep and about 3 wide: the best three points differ in value by most of that
+    // over distances of order 1, so the parabola's products (x − v)(fx − fw) overflow, q is
+    // infinite, and the step is a golden section instead. (The inputs were found by searching with
+    // a model of the method that repeats its double arithmetic, as the pull request describes.)
+    let (c, s) = (0.491_606_779_558_807_7, 3.044_611_860_264_698_8);
+    let well = |x: f64| {
+        let t = (x - c) / s;
+        -1e308 * geom_num::math::exp(-(t * t)).unwrap().get()
+    };
+    for tol in [0.0, 1e-9] {
+        let (seen, m) = trace(well, -4.630_307_883_315_865, 5.259_378_900_455_251, tol);
+        let m = m.unwrap();
+        sound(&seen, &m, -4.630_307_883_315_865, 5.259_378_900_455_251);
+        assert!((m.x.get() - c).abs() <= 1e-6, "{}", m.x.get());
+        assert_eq!(m.fx.get(), -1e308);
+    }
 }
 
 #[test]
@@ -246,6 +255,26 @@ fn minimum_refuses_vertices_left_and_right_of_the_interval() {
         // of it: the fitted vertex is the true one, outside, and is refused.
         (Box::new(|x: f64| x * x), 0.1, 1.0, 0.1),
         (Box::new(|x: f64| x * x), -1.0, -0.1, -0.1),
+        // A cubic and its mirror image, on intervals where the fitted parabola's vertex lands right
+        // of b, and left of a (found with the same model).
+        (
+            Box::new(|x: f64| {
+                let t = x + 0.573_270_789_663_270_7;
+                t * t * t
+            }),
+            -0.937_044_652_441_112,
+            2.468_053_206_564_516,
+            -0.937_044_652_441_112,
+        ),
+        (
+            Box::new(|x: f64| {
+                let t = x - 0.573_270_789_663_270_7;
+                -(t * t * t)
+            }),
+            -2.468_053_206_564_516,
+            0.937_044_652_441_112,
+            0.937_044_652_441_112,
+        ),
     ] {
         let (seen, m) = trace(f, a, b, 1e-10);
         let m = m.unwrap();
