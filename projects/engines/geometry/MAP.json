@@ -2693,7 +2693,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/error.rs",
           "guarantees": [
-            "each variant says what was wrong in plain words, and carries the value that caused it where one value does, so an operation higher up can turn it into a structured error with remedies (chapter 22)."
+            "each variant says what was wrong in plain words, and carries the value that caused it where one value does, so an operation higher up can turn it into a structured error with remedies (chapter 22). What is proven and what is only tested (chapter 28.7; piece G41): there is no arithmetic here to prove; the messages, including the saturated coordinates', are tested."
           ],
           "job": "Errors from the numbers layer.",
           "method": {
@@ -3101,7 +3101,8 @@
           "guarantees": [
             "**A finite result or an error, never NaN or an infinity.** Each function returns a [`Real`], or: - [`NumError::NotFinite`] when an argument is NaN or infinite (checked first), or the result would be infinite: an overflow, such as `exp(1000)`, or a pole, such as `ln(0)`; - [`NumError::OutsideDomain`] when the function has no real value there: the square root or a logarithm of a negative number, the arcsine or arccosine of a number beyond ±1, or a negative number to a power that is not a whole number. The domain is checked before the function is evaluated, so no function is evaluated where its value would be NaN.",
             "**Accuracy**, as the table below says: proven for the functions here, documented but not proven for those in [`unproven`].",
-            "**Deterministic.** The same bits on every target, thread count and build: the correctly rounded results by their specification, the others because they are the same pure-Rust code everywhere."
+            "**Deterministic.** The same bits on every target, thread count and build: the correctly rounded results by their specification, the others because they are the same pure-Rust code everywhere.",
+            "**Bounded proofs, and what is only tested.** Every function here returns its value through [`Real::new`], which Kani proves refuses exactly NaN and the infinities (`real`'s proofs), so none returns a NaN or an infinity, whatever its argument. Kani also proves (piece G41, chapter 28.7) that [`abs`], [`floor`], [`ceil`] and [`round_ties_even`] are exact for every finite double: a whole number (or the magnitude) at the right place, ties to even, and `NotFinite` for exactly the non-finite arguments. The correctly rounded functions rest on CORE-MATH's proofs and on IEEE 754 (for [`sqrt`] and [`fma`]), and are tested bit for bit against a big-number oracle (`tests/math_reference.rs`); their code (argument reduction, tables, polynomials) is beyond a bounded proof."
           ],
           "job": "The only place maths functions come from, with proven error bounds.",
           "method": {
@@ -3355,7 +3356,8 @@
             "The exact sign wins: where [`crate::predicate`]'s predicate is not zero, the perturbed one returns its sign unchanged.",
             "Consistent: the answers are the signs of one perturbed configuration of points, so every predicate agrees with every other on the same keyed points; swapping two arguments flips the sign, and every permutation multiplies it by its parity, as for the exact predicates.",
             "Keys, never addresses: the order is the keys' order alone, so the answers are the same on every run and every target, whatever the points' places in memory (Geogram's default, ordering by address, is exactly what chapter 6.2 rules out).",
-            "Deterministic: integers only, no floating point, no allocation, no recursion."
+            "Deterministic: integers only, no floating point, no allocation, no recursion.",
+            "Bounded proofs, and what is only tested: Kani proves (piece G41, chapter 28.7) that `distinct` refuses exactly the keys that repeat, for every two to five `u64` keys; that the lift |p|² of every frame point, in 2D and 3D, fits an `i128` (no step overflows); and that `bit_of` gives the bit for every index below 32 and refuses the rest. The cascade over the masks (up to 2^20 of them, each an exact determinant in [`I256`]) is beyond a bounded proof: its steps are [`I256`]'s, whose arithmetic Kani and Verus prove (`wide`), its bit budget is derived below, and it is tested against exact rationals on every tie class."
           ],
           "job": "Symbolic perturbation, ordered by persistent keys: orient2d, orient3d, incircle and insphere with no zero answer, for the algorithms that need every sign to be non-zero (Delaunay and constrained triangulations, ray parity; chapter 6.2).",
           "method": {
@@ -3418,7 +3420,8 @@
           "guarantees": [
             "**Exact for every input.** No rounding ever decides a sign, and `Zero` means exactly degenerate. Each predicate documents its degenerate cases, including which sign a degenerate but non-zero answer has.",
             "**The same answer in every build profile; no overflow, no panic.** Outside its tests this module uses no native `+`, `-` or `*` on a fixed-width integer, and no cast: every operation is a checked method (`checked_sub`, `checked_mul`, `checked_add`, `checked_neg`) that returns `None` instead of wrapping. So nothing here depends on overflow checks being on, which they are not in a default release build. `tests/attack_predicate.rs` scans this file's code to keep it that way.",
-            "**Deterministic.** The same answer on every target: the integer paths are exact, and the filter's `f64` operations are correctly rounded everywhere and give a sign only when it is the exact sign."
+            "**Deterministic.** The same answer on every target: the integer paths are exact, and the filter's `f64` operations are correctly rounded everywhere and give a sign only when it is the exact sign.",
+            "**Bounded proofs, and what is only tested** (chapter 28.7; piece G41 collects them here). Verus proves that the generated exact paths of [`orient2d`], [`orient3d`], [`incircle`] and [`insphere`] compute their determinants exactly and never overflow, for every grid input (pieces G36 and G38: the twins in `verus/generated/`, token for token the shipped modules), and that the [`crate::wide`] arithmetic they run on is exact (G37). Kani proves that [`orient2d`] answers with the exact sign, nothing panicking or overflowing on the way, filter and routing included, for every coordinate within one step of 0 or of an edge of the frame (piece G14: geom-fuzz's `orient2d_proof`). The filters' error bounds are checked against exact arithmetic, not proven, until pieces G35 and G40 certify them; the routing and every other input are tested against exact oracles (`tests/attack_predicate.rs`, the verification suite)."
           ],
           "job": "Exact geometric predicates on grid points: orientation in 2D and 3D, in-circle and in-sphere.",
           "method": {

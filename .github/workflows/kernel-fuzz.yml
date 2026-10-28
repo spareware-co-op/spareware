@@ -182,6 +182,11 @@ jobs:
       fail-fast: false
       matrix:
         proof:
+          - dd::proofs::exponent_reads_the_leading_bit
+          - dd::proofs::from_i128_accepts_exactly_below_2_106
+          - dd::proofs::pow2_is_exact_over_its_range
+          - dd::proofs::scale_pow2_never_reports_a_defect
+          - dd::proofs::whole_reads_what_it_accepts_exactly
           - eft::proofs::split_adds_back_exactly
           - eft::proofs::two_prod_with_minus_a_tenth
           - eft::proofs::two_prod_with_the_largest_double
@@ -226,6 +231,13 @@ jobs:
           - interval::proofs::new_accepts_exactly_ordered_finite_bounds
           - interval::proofs::square_is_never_negative_and_encloses
           - ladder::proofs::quarter_nm_always_answers_exactly
+          - math::proofs::abs_is_exact
+          - math::proofs::ceil_is_exact
+          - math::proofs::floor_is_exact
+          - math::proofs::round_ties_even_is_exact
+          - perturb::proofs::bit_of_covers_exactly_a_mask_of_32
+          - perturb::proofs::distinct_refuses_exactly_repeated_keys
+          - perturb::proofs::the_lift_of_every_frame_point_fits
           - real::proofs::real_new_refuses_exactly_nan_and_the_infinities
           - real::proofs::total_order_and_its_tie_rules
           - rng::proofs::draws_never_panic
