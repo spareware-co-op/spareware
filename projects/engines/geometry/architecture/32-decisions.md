@@ -31,6 +31,7 @@ The board (30.5) also turns into a piece every narrower question that chapters 6
 | --- | --- | --- | --- | --- |
 | 32.13 | G08: the crate table and layers | Chapter 27's proposed crate table, thirteen layers and rules, and 30.5's four amendments, all as proposed | 5, 27, 30 | G09, the scaffold |
 | 32.14 | G44: rotations | One rational rotation type for 2D and 3D, integer quaternions; general angles the closest within ε_ang, Certified; kept as a transform where possible; applied with one rounding, planes committed, so 6.2's 384 bits stand | 6, 7, 14 | G46, rational directions and rotations |
+| 32.15 | G71: time budgets | Chapter 28's reading: only work units and logical memory are budgets; a time limit is the caller's deadline through cancellation, never a replayable outcome | 10, 23, 28 | G83, budgets in the operation contract |
 
 ## 32.1 The grid ladder (decision 1)
 
@@ -335,3 +336,21 @@ Not settled here: whether `geom-civil`, `geom-thread` and `geom-stair` enter the
 Why: exact rotations where they cost nothing, and an honest Certified label where they cannot be exact, without widening the predicates every boolean pays for. Option A throws away square corners a rational rotation keeps for free; option B makes every boolean on rotated geometry wider and slower for a precision the commit already proves within q/2.
 
 **Changes:** sections 6.2 and 7, 14.10, 31.7, and piece G46's scope (both forms, the 3D bound and the wider variant).
+
+## 32.15 Time budgets (owner action G71)
+
+**What it is.** Section 10.1 lists three budgets in `OpContext`: work units, memory and time. A budget that stops an operation decides its result, and a result decided by a clock differs from machine to machine and run to run, which would break replay and the same-answer guarantee (21, 32.4). Chapter 28 reads 10.1 this way: only work units, and memory counted in units the kernel tallies itself, may decide a replayable outcome; a time limit is the caller's deadline, turned into a cancellation through the cancellation token, so the kernel never reads a clock; and a run stopped that way is never written to the log as the operation's result (28.13). 23.10 and `geom-run` (G23) are built to that reading. The owner is asked to confirm it.
+
+| Option | What it means |
+| --- | --- |
+| A. Confirm chapter 28's reading | Time is never a budget the kernel keeps. A deadline is the caller's `Cancel`; a cancelled operation publishes nothing and logs nothing as its result |
+| B. A kernel time budget | The kernel reads a clock and fails with a budget error when time runs out. Results then depend on the machine's speed and load |
+
+**Decided 2026-10-28 (owner action G71): A, chapter 28's reading.** Read with 10.1, 21, 23.10 and 28.13, `geom-run`'s `cancel.rs` and `meter.rs`, and SolidCraft's attempt budget, which gives up after a fixed number of tries rather than on a clock ([11](../../../kit/notes/G01-evidence/11-vetting-suggested-projects.md), SolidCraft).
+- **Only work units and logical memory are budgets.** They are counted by the kernel, the same on every machine, thread count and build mode, so `BudgetExceeded` may be stored as model state and replays identically (23.10).
+- **Time belongs to the caller.** A time limit is a deadline the caller's `Cancel` checks; the kernel polls `Cancel` at the work meter's fixed steps and reads no clock itself. Cancellation is the only stop that is not deterministic, so it can never reach the model: a cancelled operation publishes nothing, writes nothing to the operation log as its result, and leaves its inputs unchanged (10.1, transactional).
+- **Callers who want a reproducible limit use work units.** A program that wants "give up on this fillet if it is too hard" sets a work budget, whose failure is the same everywhere; a person's patience is a deadline, whose stop is not recorded.
+
+Why: a result that depends on how fast a machine was is not a result the kernel can promise to replay. B would make every budgeted operation's outcome a property of the hardware.
+
+**Changes:** 10.1 (`OpContext` carries work and memory budgets, and a deadline only through its cancellation token), 28.13 and 31.7. Piece G83 builds the budgets into the operation contract to this rule.

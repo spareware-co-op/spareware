@@ -604,6 +604,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | The licence of our own fixtures; ABC, IFC4.x-IF, Thingi10K, NIST STEP files, the CC BY-ND IFC samples, and step-conformance's exported parts | 28, 29 | 32.11 |
 | The crate table, its thirteen layers and rules, `geom-make` and 30.5's three edges in layer 12 | 27, 30 | 32.13 (owner action G08) |
 | Rotations: section 7's rounding or chapter 14's rational rotations; one type for 2D and 3D; rotated planes against 6.2's budget | 7, 14 | 32.14 (owner action G44) |
+| Time budgets: a deadline only through the caller's cancellation, never a replayable outcome | 10, 23, 28 | 32.15 (owner action G71) |
 
 ### Answered by the pieces built so far
 
@@ -685,7 +686,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | --- | --- | --- |
 | Mass properties: exact rationals for flat solids and polygonal regions (whole numbers only when every vertex is a grid point), certified for arcs and curves. Big-rational totals on request? | 17, 19, 28 | Editorial fix to 10.2; pieces "Cut, fill and volumes" and "Exact mesh data model, RawMesh and the mesh checker group", and the law catalogue |
 | Line patterns use "certified arc length", not "exact arc length" | 14 | Editorial fix to 10.2 |
-| Budgets: time is enforced only by the caller's cancellation, and memory is counted in kernel units, so 32-bit and 64-bit targets agree | 28 | Note to 10.1; piece "Work meter, logical memory and cancellation" |
+| Budgets: time is enforced only by the caller's cancellation, and memory is counted in kernel units, so 32-bit and 64-bit targets agree | 28 | 32.15 (owner action G71), with its note to 10.1; piece "Work meter, logical memory and cancellation" |
 | Budget failures: persistent, deterministic model state (recommended), or never stored, like cancellation | 23 | Piece "Work meter, logical memory and cancellation" |
 | Default for batch cutting: Atomic (chosen) or SkipFailedTools | 11 | Piece "Batch cutting (geom-bool)" |
 | Blend defaults: overflow order; a batch blend all-or-nothing or per cluster; an unprovable G2 corner fails with a G1 offer or falls back with a warning; the default mitre limit; self-contact as an error or a self-union | 13 | Pieces "Blend feasibility analysis and preview query" and "Constant-radius fillets and chamfers with overflows", with Spare Construct's and the mechanical program's owners |
