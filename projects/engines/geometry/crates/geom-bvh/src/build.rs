@@ -522,6 +522,9 @@ fn split<const D: usize>(
     let Some((_, plane)) = best else {
         return median(items);
     };
+    // A stable partition: the left part's items stay in order at the front, the right part's go
+    // to the scratch buffer in order and then follow them. Reads go by iterator, so no item costs
+    // a fallible index.
     scratch.clear();
     scratch
         .try_reserve(count)
@@ -529,9 +532,11 @@ fn split<const D: usize>(
     let (mut left, mut right) = (Cover::EMPTY, Cover::EMPTY);
     let mut kept = 0usize;
     for i in 0..count {
-        let item = *items.get(i).ok_or(BvhError::Defect)?;
+        let Some(&item) = items.get(i) else { break };
         if bin(item.centre(axis).wrapping_sub(lo), scale, used) <= plane {
-            *items.get_mut(kept).ok_or(BvhError::Defect)? = item;
+            if let Some(slot) = items.get_mut(kept) {
+                *slot = item;
+            }
             kept = kept.wrapping_add(1);
             left.add(&item);
         } else {
