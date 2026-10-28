@@ -156,6 +156,12 @@ fn corpus() -> Recorder {
 
 #[test]
 fn cells_golden_hash_is_the_same_on_every_target() {
+    // A broken code would make every search scan every point: stop at once instead. The code of
+    // the frame's lowest corner is 0b111, of its highest 2^123 − 1, and of the origin 7·2^120.
+    let m = COORD_MAX;
+    assert_eq!(geom_bvh::morton(p3([-m, -m, -m])).unwrap(), 0b111);
+    assert_eq!(geom_bvh::morton(p3([m, m, m])).unwrap(), (1 << 123) - 1);
+    assert_eq!(geom_bvh::morton(p3([0, 0, 0])).unwrap(), 7 << 120);
     let checked = golden::check(GOLDEN, || {
         let rec = corpus();
         (sha256(&rec.bytes), rec)

@@ -242,6 +242,11 @@ fn codes_interleave_the_offset_bits() {
 fn searches_equal_brute_force() {
     let mut checked = 0;
     for (pts, radii) in sets("cell searches") {
+        // The codes first, so that a broken code fails here, before the searches that a broken
+        // code would make slow.
+        for p in pts.iter().take(50) {
+            assert_eq!(morton(p.at).unwrap(), naive(p.at));
+        }
         let idx = CellIndex::build(&pts, &Exec::serial(), &mut meter()).unwrap();
         assert_eq!(idx.len(), pts.len());
         assert!(!idx.is_empty());
@@ -250,7 +255,7 @@ fn searches_equal_brute_force() {
             assert!(p[0] < p[1] || w[0].key < w[1].key, "ties in key order");
         }
         for (c, p) in idx.codes().iter().zip(idx.points()) {
-            assert_eq!(*c, morton(p.at).unwrap());
+            assert_eq!(*c, naive(p.at));
         }
         let seed = resolve("cell search centres", Seed::DEFAULT).unwrap();
         let mut rng = SplitMix64::new(seed);
@@ -312,6 +317,9 @@ fn the_same_index_for_any_order_and_any_pool() {
     pts.extend(points(&mut rng, 5_000, [77, 77, 77], 3));
     for (i, p) in pts.iter_mut().enumerate() {
         p.key = (i as u64).wrapping_mul(0xD1B5_4A32_D192_ED03);
+    }
+    for p in pts.iter().take(50) {
+        assert_eq!(morton(p.at).unwrap(), naive(p.at));
     }
     let reference = CellIndex::build(&pts, &Exec::serial(), &mut meter()).unwrap();
     let bytes = reference.to_bytes().unwrap();
