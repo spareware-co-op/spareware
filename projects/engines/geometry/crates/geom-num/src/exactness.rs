@@ -232,6 +232,30 @@ mod tests {
     use super::*;
     use crate::ladder::FIT;
 
+    /// `in_step_u128` converts exactly to a step at least as fine (factors 1, 25 and 625, the
+    /// largest count included) and refuses a coarser one, as its documentation says. Its callers
+    /// only ever ask for a finer step, so no public call reaches the refusal.
+    #[test]
+    fn a_count_converts_only_to_a_step_at_least_as_fine() {
+        let steps = [GridStep::Q0, GridStep::Q1, GridStep::Q2];
+        for (i, &from) in steps.iter().enumerate() {
+            for (j, &to) in steps.iter().enumerate() {
+                let got = in_step_u128(Steps(u64::MAX), from, to);
+                if j >= i {
+                    let factor = 25u128.pow(u32::try_from(j - i).unwrap());
+                    assert_eq!(
+                        got,
+                        Some(u128::from(u64::MAX) * factor),
+                        "{from:?} to {to:?}"
+                    );
+                    assert_eq!(in_step_u128(Steps(3), from, to), Some(3 * factor));
+                } else {
+                    assert_eq!(got, None, "{from:?} to {to:?}");
+                }
+            }
+        }
+    }
+
     fn c(b: u64, step: GridStep) -> Exactness {
         Exactness::Certified {
             bound: Steps(b),

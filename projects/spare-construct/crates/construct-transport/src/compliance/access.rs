@@ -1,4 +1,4 @@
-//! Access and frontage (AUP E27.6.4), state highways and NZTA approvals, and the affected operators (features/compliance.js sections 4,
+//! Access and frontage (AUP E27.6.4), state highways and NZTA approvals, and the affected operators (packs/nz/compliance.js sections 4,
 //! 8 and 9).
 
 use super::authority::{AuthCtx, auth_ctx, level_crossing_dist, link_authority_with, pts_of, sh_of, site_info};

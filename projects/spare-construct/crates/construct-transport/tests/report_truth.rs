@@ -1,6 +1,6 @@
 //! Report truth tests: the ITA report document, its numbering, the data pack and the zip against the prototype.
 //!
-//! tools/transport-truth/gen-report.mjs ran features/report.js `Report` on the saved test projects and variants and wrote
+//! tools/transport-truth/gen-report.mjs ran packs/nz/report.js `Report` on the saved test projects and variants and wrote
 //! fixtures/data/report-*.json (project, results, what the stand-ins for the other features answer) and expected/report-*.json
 //! (the body, contents, document, pack files); these tests make the same calls on the Rust port.
 

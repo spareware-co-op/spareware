@@ -9,8 +9,8 @@ This is the record of what the geometry kernel's code takes from outside sources
 | Class (29.1) | Sources | Files that take them |
 | --- | --- | --- |
 | PORT | 11 | 18 |
-| PORT METHOD | 30 | 29 |
-| DEPEND | 1 | 1 |
+| PORT METHOD | 32 | 31 |
+| DEPEND | 2 | 2 |
 
 3 method note(s) under the method-only procedure (29.20, rule 6).
 
@@ -48,6 +48,7 @@ Each kernel file implements a published method in its own code and copied nothin
 | bolero 0.13.7 `lib/bolero/src/test/mod.rs` | MIT | allowed | <https://github.com/camshaft/bolero/blob/7642943b6c1f8a9b5e824dd1cd29b7c8e56068b8/lib/bolero/src/test/mod.rs> | none | `projects/engines/geometry/crates/geom-fuzz/src/lib.rs`: for how its test mode draws a seed per input, prints a failing input's seed and replays it, as described above. No code copied. |
 | cargo-bolero 0.13.5 `bin/cargo-bolero/src/project.rs` | MIT | allowed | <https://github.com/camshaft/bolero/blob/7642943b6c1f8a9b5e824dd1cd29b7c8e56068b8/bin/cargo-bolero/src/project.rs> | none | `projects/engines/geometry/crates/geom-fuzz/src/lib.rs`: for the options of `cargo bolero test` above: the sanitizer and its default, and the toolchain. No code copied. |
 | cargo-bolero 0.13.5 `bin/cargo-bolero/src/test.rs` | MIT | allowed | <https://github.com/camshaft/bolero/blob/7642943b6c1f8a9b5e824dd1cd29b7c8e56068b8/bin/cargo-bolero/src/test.rs> | none | `projects/engines/geometry/crates/geom-fuzz/src/lib.rs`: for its run limits above: `-T`, `--runs`, `--jobs` and `--max-input-length`. No code copied. |
+| cargo-mutants | MIT | allowed | <https://github.com/sourcefrog/cargo-mutants/tree/8ab1dc786a1f61a4e370416cc6c68b81a704e917> | none | `projects/engines/geometry/crates/geom-test/src/mutants.rs`: for the format of the output files this module reads (`book/src/mutants-out.md`, `src/outcome.rs`, `src/mutant.rs` and `src/output.rs` at its v27.1.0 tag). No code copied. |
 | CGAL `FPU.h` | LGPL-3.0-or-later OR LicenseRef-Commercial | method only | <https://github.com/CGAL/cgal/blob/cbc3b81d4607c6f3a9d1f3a47d8709a2be3e6bfa/Number_types/include/CGAL/FPU.h> | `projects/engines/geometry/methods/cgal-nextafter-widening.md` | `projects/engines/geometry/crates/geom-num/src/interval.rs`: for its widening with `nextafter` when the rounding mode cannot change, which the Method above names. |
 | Clippy's `clippy_dev` token cursor | MIT OR Apache-2.0 | allowed | <https://github.com/rust-lang/rust-clippy/blob/3583eb8a9ae1161bd7d80907acfa09b3612a93f9/clippy_dev/src/parse/cursor.rs> | none | `projects/engines/geometry/crates/geom-test/src/map/errors.rs`: for the approach of finding declarations with a token cursor. No code copied. |
 | Geogram `interval_nt.h` | BSD-3-Clause | allowed | <https://github.com/BrunoLevy/geogram/blob/40d72165ceeeb0a61977d6fdf74d929bfdd77b7b/src/lib/geogram/numerics/interval_nt.h> | none | `projects/engines/geometry/crates/geom-num/src/interval.rs`: for its round-to-nearest interval class `intervalRN`, which the Method above compares. |
@@ -55,6 +56,7 @@ Each kernel file implements a published method in its own code and copied nothin
 | Geogram PCK | BSD-3-Clause | allowed | <https://github.com/BrunoLevy/geogram/blob/16843b4804de35f14ef54667950ab4c8acdd0062/src/lib/geogram/numerics/predicates/orient3d.h> | none | `projects/engines/geometry/crates/geom-gen/src/predicate_derive.rs`: for its generated filters, a cross-check of the constants here. No code copied. |
 | Geogram PCK | BSD-3-Clause | allowed | <https://github.com/BrunoLevy/geogram/blob/16843b4804de35f14ef54667950ab4c8acdd0062/src/lib/geogram/numerics/predicates/orient3d.pck> | none | `projects/engines/geometry/crates/geom-gen/src/predicates.rs`: for its one description per predicate. No code copied. |
 | Geogram PCK | BSD-3-Clause | allowed | <https://github.com/BrunoLevy/geogram/blob/16843b4804de35f14ef54667950ab4c8acdd0062/src/lib/geogram/numerics/predicates/pck.sh> | none | `projects/engines/geometry/crates/geom-gen/src/predicate_emit.rs`: for how PCK runs FPG over one description per predicate. No code copied. |
+| Geogram's PCK `_SOS` predicates | BSD-3-Clause | allowed | <https://github.com/BrunoLevy/geogram/blob/40d72165ceeeb0a61977d6fdf74d929bfdd77b7b/src/lib/geogram/numerics/PCK.h> | none | `projects/engines/geometry/crates/geom-num/src/perturb.rs`: for the shape of a cascade over keyed points, and its address ordering as the trap to avoid. No code copied. |
 | `GeometricTools`' `BSPrecision.h` | BSL-1.0 | allowed | <https://github.com/davideberly/GeometricTools/blob/e09f5b39a33da6b4bfd0ff8dbb64ddcb7fdfc763/GTE/Mathematics/BSPrecision.h> | none | `projects/engines/geometry/crates/geom-gen/src/predicate_derive.rs`: for its compile-time bit counting, a cross-check of the certificate here. No code copied. |
 | Gitiles | Apache-2.0 | allowed | <https://github.com/google/gitiles/blob/e54582fdd2a8783a6078f3a25eb08bb622f2e497/java/com/google/gitiles/ViewFilter.java> | none | `projects/engines/geometry/crates/geom-test/src/map/links.rs`: for its `+` view commands and the revision that follows them. No code copied. |
 | Gungraun | Apache-2.0 OR MIT | allowed | <https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md> | none | `projects/engines/geometry/crates/geom-bench/src/bin/geom-bench-counts.rs`: for its library-benchmark API and its Callgrind and DHAT settings. No code copied.<br>`projects/engines/geometry/crates/geom-bench/src/callgrind.rs`: for its summary files, its default output layout and its estimated-cycles formula. No code copied; its summary model is used as a dependency.<br>`projects/engines/geometry/crates/geom-bench/src/counts.rs`: for its library-benchmark API and its Callgrind and DHAT settings. No code copied.<br>`projects/engines/geometry/crates/geom-bench/src/lib.rs`: for its library-benchmark API and its Callgrind and DHAT settings. No code copied. |
@@ -83,6 +85,8 @@ A kernel crate may depend only on `libm` (29.1); the development crates' own dep
 | Crate | Licence | Class (29.2) | Link | Manifest | Version requirement |
 | --- | --- | --- | --- | --- | --- |
 | libm | MIT | allowed | <https://crates.io/crates/libm/0.2.16> | `projects/engines/geometry/crates/geom-num/Cargo.toml` | 0.2.16 |
+| libm | MIT | allowed | <https://crates.io/crates/libm/0.2.16> | `projects/engines/geometry/crates/geom-num/Cargo.toml` | 0.2.16 |
+| rayon | Apache-2.0 OR MIT | allowed | <https://crates.io/crates/rayon/1.12.0> | `projects/engines/geometry/crates/geom-pool/Cargo.toml` | 1.12.0 |
 
 ## Method notes
 

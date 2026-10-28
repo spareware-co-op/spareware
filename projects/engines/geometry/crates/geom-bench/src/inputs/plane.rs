@@ -1,6 +1,8 @@
 //! Inputs for plane-based geometry: [`through`] (`Plane::through`), [`side`] (`Plane::side`),
 //! [`tpi_new`] (`Tpi::new`), [`tpi_homogeneous`] (`Tpi::homogeneous`), [`side_of_tpi`]
-//! (`Plane::side_of_tpi`) and [`to_grid`] (`Tpi::to_grid`).
+//! (`Plane::side_of_tpi`), [`to_grid`] (`Tpi::to_grid`), and for the point where a line meets a
+//! plane (G29) [`lpi_new`] (`Lpi::new`), [`lpi_homogeneous`] (`Lpi::homogeneous`), [`side_of_lpi`]
+//! (`Plane::side_of_lpi`) and [`lpi_to_grid`] (`Lpi::to_grid`).
 //!
 //! Classes:
 //!
@@ -38,7 +40,7 @@
 
 use geom_num::Sign;
 use geom_num::grid::P3;
-use geom_num::plane::{Plane, Tpi};
+use geom_num::plane::{Lpi, Plane, Tpi};
 
 use super::predicate::unimodular3;
 use super::{Class, M, TYPICAL_REACH, batch_of, extreme3, p3, rng, typical3, within};
@@ -277,7 +279,13 @@ pub fn tpi_homogeneous(class: Class) -> Vec<Tpi> {
 /// (plane, meeting point) pairs for [`Plane::side_of_tpi`].
 #[must_use]
 pub fn side_of_tpi(class: Class) -> Vec<(Plane, Tpi)> {
-    let mut g = rng("plane::side_of_tpi", class);
+    side_of_tpi_from("plane::side_of_tpi", class)
+}
+
+/// [`side_of_tpi`]'s classes drawn from the seed of `op`: the batch the generated `tpi_side` and
+/// `tpi_weight` benchmarks measure ([`super::generated`]), on inputs of their own.
+pub(crate) fn side_of_tpi_from(op: &str, class: Class) -> Vec<(Plane, Tpi)> {
+    let mut g = rng(op, class);
     match class {
         Class::Typical => batch_of(|_| {
             let (p, t) = (typical_plane(&mut g)?, typical_tpi(&mut g)?);
@@ -339,4 +347,131 @@ fn far_tpi(g: &mut SplitMix64) -> Option<Tpi> {
     ])?;
     let wall = plane([at(x0, 0, 0), at(x0, 1, 0), at(x0, 0, 1)])?;
     tpi([floor, ramp, wall])
+}
+
+/// The point where the line from `p` to `q` meets `plane`, if it meets it in exactly one point.
+fn lpi(p: P3, q: P3, plane: Plane) -> Option<Lpi> {
+    Lpi::new(p, q, plane).ok()
+}
+
+/// A line through the grid point `at` meeting a pseudo-random plane through `at`, so the meeting
+/// point is `at` itself.
+fn lpi_at(g: &mut SplitMix64, at: P3) -> Option<Lpi> {
+    let u = small(g);
+    lpi(offset(at, scaled(u, -1)), offset(at, u), plane_at(g, at)?)
+}
+
+/// A line between two typical points meeting a typical plane.
+fn typical_lpi(g: &mut SplitMix64) -> Option<Lpi> {
+    lpi(typical3(g), typical3(g), typical_plane(g)?)
+}
+
+/// A line between two extreme points meeting a plane that spans the frame.
+fn extreme_lpi(g: &mut SplitMix64) -> Option<Lpi> {
+    lpi(extreme3(g), extreme3(g), extreme_plane(g)?)
+}
+
+/// (p, q, plane) triples for [`Lpi::new`].
+#[must_use]
+pub fn lpi_new(class: Class) -> Vec<(P3, P3, Plane)> {
+    let mut g = rng("plane::lpi_new", class);
+    match class {
+        Class::Typical => batch_of(|_| {
+            let (p, q, pl) = (typical3(&mut g), typical3(&mut g), typical_plane(&mut g)?);
+            lpi(p, q, pl).map(|_| (p, q, pl))
+        }),
+        Class::Degenerate => batch_of(|n| {
+            // The plane through a, b, c and a line along b − a: parallel to the plane, or inside
+            // it when it starts at a, in rotation. Its weight n · (q − p) is exactly zero.
+            let [a, b, c] = [(); 3].map(|()| typical3(&mut g));
+            let pl = plane([a, b, c])?;
+            let start = if n % 2 == 0 {
+                a
+            } else {
+                offset(a, small(&mut g))
+            };
+            let ([bx, by, bz], [ax, ay, az]) = (raw(b), raw(a));
+            let along = [bx - ax, by - ay, bz - az];
+            Some((start, offset(start, along), pl))
+        }),
+        Class::Extreme => batch_of(|_| {
+            let (p, q, pl) = (extreme3(&mut g), extreme3(&mut g), extreme_plane(&mut g)?);
+            lpi(p, q, pl).map(|_| (p, q, pl))
+        }),
+        Class::NearlyDegenerate | Class::Overflow | Class::OnGrid | Class::WrongDirection => {
+            Vec::new()
+        }
+    }
+}
+
+/// Line-plane points for [`Lpi::homogeneous`].
+#[must_use]
+pub fn lpi_homogeneous(class: Class) -> Vec<Lpi> {
+    let mut g = rng("plane::lpi_homogeneous", class);
+    match class {
+        Class::Typical => batch_of(|_| typical_lpi(&mut g)),
+        Class::Extreme => batch_of(|_| extreme_lpi(&mut g)),
+        Class::Degenerate
+        | Class::NearlyDegenerate
+        | Class::Overflow
+        | Class::OnGrid
+        | Class::WrongDirection => Vec::new(),
+    }
+}
+
+/// (plane, line-plane point) pairs for [`Plane::side_of_lpi`].
+#[must_use]
+pub fn side_of_lpi(class: Class) -> Vec<(Plane, Lpi)> {
+    side_of_lpi_from("plane::side_of_lpi", class)
+}
+
+/// [`side_of_lpi`]'s classes drawn from the seed of `op`: the batch the generated `lpi_side` and
+/// `lpi_weight` benchmarks measure ([`super::generated`]), on inputs of their own.
+pub(crate) fn side_of_lpi_from(op: &str, class: Class) -> Vec<(Plane, Lpi)> {
+    let mut g = rng(op, class);
+    match class {
+        Class::Typical => batch_of(|_| {
+            let (pl, l) = (typical_plane(&mut g)?, typical_lpi(&mut g)?);
+            off_plane(pl.side_of_lpi(&l)).then_some((pl, l))
+        }),
+        Class::Degenerate => batch_of(|_| {
+            // The line meets its plane at a grid point that the classifying plane passes through.
+            let at = typical3(&mut g);
+            Some((plane_at(&mut g, at)?, lpi_at(&mut g, at)?))
+        }),
+        Class::NearlyDegenerate => batch_of(|_| {
+            // The line meets its plane at a grid point one unit from the classifying plane.
+            let at = typical3(&mut g);
+            Some((one_unit_off(&mut g, at)?, lpi_at(&mut g, at)?))
+        }),
+        Class::Extreme => batch_of(|_| Some((extreme_plane(&mut g)?, extreme_lpi(&mut g)?))),
+        Class::Overflow | Class::OnGrid | Class::WrongDirection => Vec::new(),
+    }
+}
+
+/// Line-plane points for [`Lpi::to_grid`].
+#[must_use]
+pub fn lpi_to_grid(class: Class) -> Vec<Lpi> {
+    let mut g = rng("plane::lpi_to_grid", class);
+    match class {
+        Class::Typical => batch_of(|_| typical_lpi(&mut g).filter(|l| l.to_grid().is_ok())),
+        Class::Extreme => batch_of(|_| extreme_lpi(&mut g).filter(|l| l.to_grid().is_ok())),
+        Class::OnGrid => batch_of(|_| {
+            let at = typical3(&mut g);
+            lpi_at(&mut g, at)
+        }),
+        Class::Overflow => batch_of(|_| far_lpi(&mut g)),
+        Class::Degenerate | Class::NearlyDegenerate | Class::WrongDirection => Vec::new(),
+    }
+}
+
+/// A line that meets a plane outside the frame: the plane x = 0 and the line from
+/// (−M + r, y0, z0) to (−M + r + 1, y0 + s, z0), whose weight is 1, so the point is s · (M − r)
+/// past the start in y: beyond the frame for s ≥ 4 and r ≤ 2^20.
+fn far_lpi(g: &mut SplitMix64) -> Option<Lpi> {
+    let wall = plane([p3(0, 0, 0), p3(0, 1, 0), p3(0, 0, 1)])?;
+    let r = g.range(0, 1 << 20);
+    let (y0, z0) = (within(g, TYPICAL_REACH), within(g, TYPICAL_REACH));
+    let s = g.sign() * g.range(4, 1 << 20);
+    lpi(p3(-M + r, y0, z0), p3(-M + r + 1, y0 + s, z0), wall)
 }
