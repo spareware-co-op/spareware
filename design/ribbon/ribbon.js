@@ -130,19 +130,53 @@ const ICONS = {
   alignment: '<path d="M3 19c6 0 8-14 18-14"/><path d="M8.2 15.4l1.9 1.6M12.4 10.2l2 1.3M16.8 6.6l1.4 1.8"/><circle class="f" cx="3.5" cy="19" r="1.8"/><circle class="f" cx="20.5" cy="5" r="1.8"/>',
   road: '<path class="f" d="M9 3h6l5 18H4z"/><path d="M12 5v2M12 10v3M12 16v3"/>',
   phase: '<rect x="3" y="3" width="11" height="11" rx="1" stroke-dasharray="2.5 2"/><rect class="f" x="10" y="10" width="11" height="11" rx="1"/>',
-  option: '<circle class="f" cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="19" r="2.5"/><path d="M6 8.5V10a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3V8.5M12 13v3.5"/>'
+  option: '<circle class="f" cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="19" r="2.5"/><path d="M6 8.5V10a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3V8.5M12 13v3.5"/>',
+  // documents, sheets and slides
+  bold: '<path class="f" d="M7 4.5h5.5a3.5 3.5 0 0 1 0 7H7z"/><path d="M7 11.5h6.5a3.75 3.75 0 0 1 0 7.5H7zM7 4.5V19"/>',
+  italic: '<path d="M10 4.5h8M6 19.5h8M14 4.5l-4 15"/>',
+  underline: '<path d="M7 4v7a5 5 0 0 0 10 0V4M5 20h14"/>',
+  highlight: '<path class="f" d="M14.5 4.5l5 5-8 8H6.5v-5z"/><path d="M4 20.5h16"/>',
+  alignl: '<path d="M4 6h16M4 10h10M4 14h16M4 18h10"/>',
+  alignc: '<path d="M4 6h16M7 10h10M4 14h16M7 18h10"/>',
+  bullets: '<circle class="f" cx="5.5" cy="7" r="1.5"/><circle cx="5.5" cy="12" r="1.5"/><circle cx="5.5" cy="17" r="1.5"/><path d="M10 7h10M10 12h10M10 17h10"/>',
+  numbering: '<path d="M4 5.5l1.5-1v5M4 9.5h3M4 14.5a1.5 1.5 0 0 1 3 0c0 1-3 2.5-3 4h3M10 7h10M10 12h10M10 17h10"/>',
+  comment: '<path class="f" d="M4 5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-8l-4 4v-4H5a1 1 0 0 1-1-1z"/><path d="M8 8.5h8M8 12h5"/>',
+  suggest: '<path class="f" d="M15 4l5 5-10 10H5v-5z"/><path d="M13 6l5 5"/><path d="M3 21.5h9" stroke-dasharray="2 2"/>',
+  spell: '<path d="M3.5 15l3.5-9 3.5 9M4.8 12h4.4M12.5 16l3 3 6-7.5"/>',
+  history: '<path d="M4 12a8 8 0 1 0 2.3-5.7"/><path d="M4 4v5h5M12 8v4l3 2"/>',
+  share: '<circle class="f" cx="18" cy="5.5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="18.5" r="2.5"/><path d="M8.2 10.8l7.6-4.1M8.2 13.2l7.6 4.1"/>',
+  sort: '<path d="M7 4v16M3.5 16.5L7 20l3.5-3.5M13 6h8M13 11h6M13 16h4"/>',
+  filter: '<path class="f" d="M4 5h16l-6 7.5V19l-4 2v-8.5z"/>',
+  filldown: '<rect class="f" x="5" y="3" width="14" height="5" rx="1"/><path d="M12 10v10M8 16l4 4 4-4"/>',
+  freeze: '<rect x="3" y="4" width="18" height="16" rx="1"/><path class="fo" d="M4 5h16v3H4zM4 8h4v11H4z"/><path d="M3 8h18M8 4v16"/>',
+  chart: '<path d="M4 20h16"/><rect x="5.5" y="11" width="3" height="9" rx=".5"/><rect class="f" x="10.5" y="6" width="3" height="14" rx=".5"/><rect x="15.5" y="14" width="3" height="6" rx=".5"/>',
+  pivot: '<rect x="3" y="3" width="18" height="18" rx="1"/><path class="fo" d="M4 4h16v4H4z"/><path d="M3 8h18M8 3v18M12 17h5v-5M17 17l-4-4"/>',
+  money: '<rect class="f" x="3" y="6" width="18" height="12" rx="1"/><circle cx="12" cy="12" r="2.5"/><path d="M6.5 9v.5M17.5 14.5v.5"/>',
+  percent: '<path d="M18 6L6 18"/><circle class="f" cx="7.5" cy="7.5" r="2.5"/><circle cx="16.5" cy="16.5" r="2.5"/>',
+  slide: '<rect class="f" x="3" y="4" width="18" height="12" rx="1"/><path d="M12 16v4M8 20h8M7 8h6M7 11h10"/>',
+  theme: '<path class="f" d="M12 3a9 9 0 1 0 0 18c1.2 0 1.8-.8 1.8-1.7 0-1.3-1.1-1.8-1.1-3 0-1 .8-1.8 1.9-1.8H17a4 4 0 0 0 4-4C21 6.3 17 3 12 3z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="15" cy="7.5" r="1"/>',
+  transition: '<rect class="f" x="3" y="6" width="9" height="12" rx="1"/><rect x="12" y="6" width="9" height="12" rx="1" stroke-dasharray="2.5 2"/><path d="M6 12h9M12.5 9.5L15 12l-2.5 2.5"/>',
+  present: '<rect x="3" y="4" width="18" height="12" rx="1"/><path class="f" d="M10 7.5v5l4.5-2.5z"/><path d="M12 16v4M8 20h8"/>',
+  image: '<rect x="3" y="5" width="18" height="14" rx="1"/><circle cx="8.5" cy="9.5" r="1.5"/><path class="f" d="M4 18l5.5-5.5 3.5 3.5 2.5-2.5 4.5 4.5z"/>',
+  textbox: '<rect class="f" x="3" y="5" width="18" height="14" rx="1" stroke-dasharray="3 2"/><path d="M8 9h8M12 9v7"/>',
+  shape: '<circle class="f" cx="9" cy="9" r="5"/><rect class="fp" x="11" y="11" width="9" height="9" rx="1"/>',
+  footnote: '<path d="M4 6h12M4 10h12M4 14h8M18 13.5l1.5-1v5"/>',
+  pagebreak: '<path class="f" d="M6 3h12v6H6z"/><path d="M6 15h12v6H6z"/><path d="M3 12h18" stroke-dasharray="2.5 2"/>',
+  toc: '<path d="M4 6h10M4 11h10M4 16h10M17 6h3M17 11h3M17 16h3"/>'
 };
 const EXTRA = {};
+let PFX = 'i-';   // symbol ids are PFX + name; a page that already has its own i- icons installs with another prefix
 const SVGNS = 'http://www.w3.org/2000/svg';
 function symbol(n, body) {
-  return `<symbol id="i-${n}" viewBox="0 0 24 24">${body
+  return `<symbol id="${PFX}${n}" viewBox="0 0 24 24">${body
     .replace(/class="fo"/g, 'style="fill:var(--ic-fill,none);stroke:none"')
     .replace(/class="fp"/g, 'style="fill:var(--panel)"')
     .replace(/class="f"/g, 'style="fill:var(--ic-fill,none)"')}</symbol>`;
 }
 /* Puts the family (and a page's own icons, drawn to the same rules) into the page once, as <symbol id="i-name">. */
-function install(more) {
+function install(more, opts) {
   Object.assign(EXTRA, more || {});
+  if (opts && opts.prefix) PFX = opts.prefix;
   let s = document.getElementById('rb-icons');
   if (!s) {
     s = document.createElementNS(SVGNS, 'svg');
@@ -156,7 +190,7 @@ function install(more) {
   }
   s.innerHTML = Object.entries(Object.assign({}, ICONS, EXTRA)).map(([n, b]) => symbol(n, b)).join('');
 }
-const icon = (n, cls = '') => `<svg class="rb-ic ${cls}" aria-hidden="true" focusable="false"><use href="#i-${esc(n)}"/></svg>`;
+const icon = (n, cls = '') => `<svg class="rb-ic ${cls}" aria-hidden="true" focusable="false"><use href="#${PFX}${esc(n)}"/></svg>`;
 
 /* ---------- small helpers ---------- */
 const store = {
@@ -196,6 +230,7 @@ class Ribbon {
       if (this.peek && !this.host.contains(e.target) && !(this.pop && this.pop.el.contains(e.target))) this.setPeek(false);
     }, true);
     window.addEventListener('resize', () => { this.closePop(); this.fit(); });
+    window.addEventListener('blur', () => { this.closePop(); if (this.peek) this.setPeek(false); });   // a click into a frame, such as a map
     if (global.ResizeObserver) new ResizeObserver(() => this.fit()).observe(host);
   }
 
@@ -234,7 +269,7 @@ class Ribbon {
       return `<button type="button" class="rb-tab${c ? ' ctx' : ''}" role="tab" id="${u}-t-${esc(t.id)}" data-rb-tab="${esc(t.id)}" data-rk="tab:${esc(t.id)}" aria-selected="${on}" aria-controls="${u}-b-${esc(t.id)}" tabindex="${on ? 0 : -1}">${c && t.group ? `<span class="rb-ctxg">${esc(t.group)}</span>` : ''}<span class="rb-tl">${esc(t.label)}</span></button>`;
     };
     const file = this.cfg.file, fdata = file && file.data ? dataAttrs(file.data) : ' data-rb-file="1" aria-haspopup="menu" aria-expanded="false"';
-    this.host.dataset.min = String(this.min);
+    this.host.dataset.min = String(this.isMin());
     this.host.classList.toggle('peek', this.peek);
     this.host.innerHTML = `<div class="rb-bar">${file ? `<button type="button" class="rb-file"${fdata} data-rk="file">${esc(file.label || 'File')}</button>` : ''}<div class="rb-tabs" role="tablist" aria-label="${esc(this.o.label || 'Ribbon')}">${tabs.map(tabBtn).join('')}</div><span class="rb-sp"></span>${this.cfg.end ? `<div class="rb-end">${this.cfg.end}</div>` : ''}<button type="button" class="rb-mini" data-rb-min="1" data-rk="min" aria-pressed="${this.min}" data-tl="${this.min ? 'Show the whole ribbon' : 'Show tabs only'}" aria-label="${this.min ? 'Show the whole ribbon' : 'Show tabs only'}">${icon(this.min ? 'chevd' : 'chevu')}</button></div>`
       + tabs.map(t => `<div class="rb-body${ctxIds.includes(t.id) ? ' ctx' : ''}" id="${u}-b-${esc(t.id)}" data-rb-body="${esc(t.id)}" role="tabpanel" aria-labelledby="${u}-t-${esc(t.id)}"${cur && t.id === cur.id ? '' : ' hidden'}>${(t.panels || []).map((p, i) => this.panelHTML(p, i)).join('')}</div>`).join('');
@@ -298,7 +333,7 @@ class Ribbon {
   /* Narrow windows: first the small buttons lose their words, then whole panels fold into one button, from the right. */
   fit() {
     const b = this.body;
-    if (!b || (this.min && !this.peek)) return;
+    if (!b || (this.isMin() && !this.peek)) return;
     const ps = Array.from(b.querySelectorAll(':scope>.rb-panel'));
     ps.forEach(p => p.classList.remove('s1', 's2'));
     const fits = () => b.scrollWidth <= b.clientWidth + 1;
@@ -322,10 +357,21 @@ class Ribbon {
   done() { this.closePop(); this.hideTip(); if (this.peek) this.setPeek(false); }
   tabClick(id) {
     if (!(this.ctxIds || []).includes(id)) this.lastStd = id;
-    if (this.min) { if (this.peek && id === this.active) { this.setPeek(false); return; } this.show(id); this.setPeek(true); }
+    if (this.isMin()) { if (this.peek && id === this.active) { this.setPeek(false); return; } this.show(id); this.setPeek(true); }
     else this.show(id);
   }
-  setMin(v) { this.min = v; this.peek = false; store.set('sw-ribbon-min:' + (this.o.app || ''), v ? '1' : '0'); this.render(); }
+  isMin() { return this.min || !!this.folded; }
+  fold(v) { if (!!this.folded === !!v) return; this.folded = !!v; this.applyMin(); }
+  setMin(v) { this.min = v; store.set('sw-ribbon-min:' + (this.o.app || ''), v ? '1' : '0'); this.applyMin(); }
+  /* Tabs only, or the whole ribbon: switched in place, so nothing on the ribbon is rebuilt. */
+  applyMin() {
+    this.peek = false;
+    this.host.classList.remove('peek');
+    this.host.dataset.min = String(this.isMin());
+    const b = this.host.querySelector('.rb-mini');
+    if (b) { const t = this.min ? 'Show the whole ribbon' : 'Show tabs only'; b.setAttribute('aria-pressed', String(this.min)); b.setAttribute('aria-label', t); b.dataset.tl = t; b.innerHTML = icon(this.min ? 'chevd' : 'chevu'); }
+    this.fit();
+  }
   setPeek(v) { if (this.peek === v) return; this.peek = v; this.host.classList.toggle('peek', v); this.fit(); }
 
   onKey(e) {
@@ -339,7 +385,7 @@ class Ribbon {
       L[j].focus();
       return;
     }
-    if (t.classList && t.classList.contains('rb-tab') && e.key === 'ArrowDown' && !(this.min && !this.peek)) {
+    if (t.classList && t.classList.contains('rb-tab') && e.key === 'ArrowDown' && !(this.isMin() && !this.peek)) {
       const f = focusables(this.body)[0]; if (f) { e.preventDefault(); f.focus(); }
       return;
     }

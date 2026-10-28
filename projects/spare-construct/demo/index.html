@@ -767,7 +767,7 @@ function route(){
  const m=$('#main');if(m)m.scrollTop=0;
 }
 window.addEventListener('hashchange',route);
-function refresh(){renderViewTabs();renderBrowser();renderDock();(R[S.screen]||(()=>{}))();dockSide();renderRibbon();renderVbar();setPrompt();statusBar();headerView();if(!$('#assess').hidden&&typeof renderAssess==='function')renderAssess()}
+function refresh(){RB.fold(S.screen==='plan'&&S.view==='transport');renderViewTabs();renderBrowser();renderDock();(R[S.screen]||(()=>{}))();dockSide();renderRibbon();renderVbar();setPrompt();statusBar();headerView();if(!$('#assess').hidden&&typeof renderAssess==='function')renderAssess()}
 function headerView(){const t={start:'Start',plan:VIEWS[S.view].name,'3d':'3D view','sheet':'Sheet '+S.sheet,schedule:'Schedules',clash:'Clash results',compare:'Team and versions',sharing:'Sharing timeline',files:'Project files',family:'Component: Single swing door',checks:'Checks',commands:'Commands and AI agents'}[S.screen];$('#h-view').textContent=t;document.title='Spare Construct demo: '+t}
 ACT.go=b=>go(b.dataset.a);
 /* Some commands live on their own page: open that page, then run the command there. data-a is "page|command|value". */
