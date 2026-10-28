@@ -278,7 +278,7 @@ impl<const D: usize> Surface<D> {
             });
         }
         let (p, q) = (self.u.degree(), self.v.degree());
-        let (tu, tv) = (if du < p { du } else { p }, if dv < q { dv } else { q });
+        let (tu, tv) = (du.min(p), dv.min(q));
         let su = self.u.span(u, limits.0)?;
         let sv = self.v.span(v, limits.1)?;
         let mut ndu = [0.0_f64; WIDTH * WIDTH];
@@ -385,7 +385,8 @@ fn pascal() -> Result<[f64; WIDTH * WIDTH], NurbsError> {
         for k in 1..=n {
             let above = sub(row, WIDTH)?;
             let left = get(&t, add(above, sub(k, 1)?)?)?;
-            let right = if k < n { get(&t, add(above, k)?)? } else { 0.0 };
+            // Entry n of the row above was never set: it is still 0.
+            let right = get(&t, add(above, k)?)?;
             set(&mut t, add(row, k)?, left + right)?;
         }
     }

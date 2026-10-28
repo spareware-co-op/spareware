@@ -98,7 +98,7 @@ impl<const D: usize> Curve<D> {
         let mut points = original.clone();
         let mut removed = 0;
         let mut deviation = 0.0;
-        let tries = if times < s { times } else { s };
+        let tries = times.min(s);
         for step in 1..=tries {
             charge_op(meter, points.len(), D, knots.len())?;
             let r = knots

@@ -300,7 +300,8 @@ fn reduce_kernel<const D: usize>(
         let oldr = if first_piece { 0 } else { r };
         // The end knots have p + 1 copies, r = −1, which behaves as 0 here.
         r = p.saturating_sub(mlt);
-        let lbz = if oldr > 0 { add(oldr, 2)? / 2 } else { 1 };
+        // (oldr + 2)/2 is 1 at oldr = 0.
+        let lbz = add(oldr, 2)? / 2;
         let (ua, ub) = (get(up, a)?, get(up, b)?);
         if r > 0 {
             let num = ub - ua;
