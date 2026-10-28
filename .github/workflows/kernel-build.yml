@@ -19,7 +19,10 @@ name: Kernel build
 #   Cargo.toml names exactly the table's direct dependencies, the graph has no cycle, every edge
 #   keeps the layer rule, every crate that ships carries exactly geom-num's lint settings, and
 #   rust-toolchain.toml and the kernel workflows pin one compiler
-#   (projects/engines/crates/engine-geometry/tests/scaffold, which holds the table).
+#   (projects/engines/crates/engine-geometry/tests/scaffold, which holds the table);
+# - every other test of the facade: the pieces' attack tests on the crate table, the workflows and
+#   the gates (projects/engines/crates/engine-geometry/tests/*.rs), which kernel.yml's list of the
+#   kernel's folder never reaches (piece G10).
 #
 # The list of crates to build comes from that table too, so this file holds no copy of it. The
 # development crates (geom-test, geom-fuzz, geom-bench, geom-gen) use std and never ship, so their
@@ -64,6 +67,8 @@ on:
       - "**/.rustfmt.toml"
       - ".github/workflows/kernel.yml"
       - ".github/workflows/kernel-build.yml"
+  # Run whole by kernel-release.yml on a release tag, with every other kernel workflow (28.17).
+  workflow_call:
 
 permissions:
   contents: read
@@ -78,6 +83,11 @@ env:
   # guard). Change all three together; the scaffold check fails until they agree.
   RUST_TOOLCHAIN: "1.99.0"
   CARGO_TERM_COLOR: always
+  # Equal to kernel-gate.yml's: cargo-deny 0.20.2 (MIT OR Apache-2.0), the x86_64 Linux build's
+  # archive, for G12's attack tests on the licence gate (geom-test's attack_g10 holds the two
+  # pins equal).
+  CARGO_DENY_VERSION: "0.20.2"
+  CARGO_DENY_SHA256: "9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f"
 
 jobs:
   list:
@@ -243,7 +253,7 @@ jobs:
   scaffold:
     name: Scaffold check
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -265,3 +275,25 @@ jobs:
           esac
       - name: The repository holds exactly chapter 27's crate table
         run: cargo test --locked --package engine-geometry --test scaffold
+      # attack_g12 runs cargo-deny on seeded graphs: the gate's pinned release, checked the same way.
+      - name: Install cargo-deny ${{ env.CARGO_DENY_VERSION }}, checked against its SHA-256
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          name="cargo-deny-${CARGO_DENY_VERSION}-x86_64-unknown-linux-musl"
+          curl --proto '=https' --tlsv1.2 -sSfL -o "$name.tar.gz" \
+            "https://github.com/EmbarkStudios/cargo-deny/releases/download/${CARGO_DENY_VERSION}/$name.tar.gz"
+          echo "${CARGO_DENY_SHA256}  $name.tar.gz" | sha256sum --check --strict
+          tar -xzf "$name.tar.gz"
+          echo "$RUNNER_TEMP/$name" >> "$GITHUB_PATH"
+      # Each file directly in tests/ is one test target (the scaffold is a folder), so a new
+      # piece's attack test runs here the day it lands.
+      - name: Every other test of the facade
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=(--lib)
+          for f in projects/engines/crates/engine-geometry/tests/*.rs; do args+=(--test "$(basename "$f" .rs)"); done
+          cargo test --locked --package engine-geometry --no-fail-fast "${args[@]}"

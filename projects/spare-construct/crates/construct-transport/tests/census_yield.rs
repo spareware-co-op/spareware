@@ -1,4 +1,4 @@
-//! Land use truth tests: zoned yield of features/landuse-plus.js (the land use a zoned area holds at full build-out, the capacity table and filling a zone from a
+//! Land use truth tests: zoned yield of packs/nz/landuse-plus.js (the land use a zoned area holds at full build-out, the capacity table and filling a zone from a
 //! yield) against the prototype (tools/transport-truth/gen-census.mjs).
 
 mod census_support;

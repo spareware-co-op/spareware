@@ -1,4 +1,4 @@
-//! The pre-lodgement check that reduces further-information requests (features/compliance.js section 11, the linter).
+//! The pre-lodgement check that reduces further-information requests (packs/nz/compliance.js section 11, the linter).
 //!
 //! The response template and the statutory clocks of the same section live in [`super::clocks`] (`rfi_template`, `clocks`).
 
