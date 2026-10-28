@@ -100,8 +100,14 @@ fn union(a: Option<Bounds<3>>, b: Bounds<3>) -> Result<Bounds<3>, CurveError> {
 /// Whether t lies in [a, b] from `side`, the ends included as the only side there.
 fn holds(t: f64, (a, b): (f64, f64), side: Limit, first: bool, last: bool) -> bool {
     match side {
-        Limit::FromRight => a <= t && (t < b || (last && t == b)),
-        Limit::FromLeft => (a < t || (first && t == a)) && t <= b,
+        Limit::FromRight => {
+            let at_end = last && t == b;
+            a <= t && (t < b || at_end)
+        }
+        Limit::FromLeft => {
+            let at_start = first && t == a;
+            (a < t || at_start) && t <= b
+        }
     }
 }
 

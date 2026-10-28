@@ -88,7 +88,9 @@ pub fn check<K: ParamCurve<D>, const D: usize>(
     let (a, b) = kind.domain();
     let call = |law: Law, at: f64| move |e: CurveError| broken(law, at, Some(e));
     // Refusals.
-    let outside = b + (b - a) + 1.0;
+    // One domain length and one unit past the end.
+    let beyond = b + (b - a);
+    let outside = beyond + 1.0;
     if kind.point(outside, Limit::FromRight) != Err(CurveError::ParameterOutside)
         || kind.bound((a - 1.0, b), meter) != Err(CurveError::SpanOutside)
         || kind.split(a, meter).err() != Some(CurveError::ParameterOutside)
