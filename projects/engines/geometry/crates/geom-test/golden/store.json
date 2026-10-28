@@ -165,6 +165,16 @@
             "function": "tree_golden_hash_is_the_same_on_every_target"
           },
           "sha256": "9286771316237554822844bb7bebfe4dfb2ba38b8f8f1ebdee5e23100e383ee8"
+        },
+        {
+          "id": "geom-bvh/cells",
+          "what": "The Morton-sorted cell index of geom-bvh (piece G55): indexes over seven fixed sets of 1 to 20,000 grid points (sparse over the frame, dense, clustered at the frame's edge, the eight corners and 300 equal points), each index's canonical bytes, the keys within six radii of twelve centres and the work each search charged, and every pair within two radii, in the encoding of tests/cells_determinism.rs.",
+          "check": {
+            "crate": "geom-bvh",
+            "test": "cells_determinism",
+            "function": "cells_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
         }
       ]
     }
