@@ -57,6 +57,7 @@ The board (30.5) also turns into a piece every narrower question that chapters 6
 | 32.37 | G407: openNURBS licence confirmation | Ask McNeel in writing (request drafted, the owner sends it); nothing ported until the reply; open until then | 16, 24, 29 | G438, Rhino .3dm |
 | 32.38 | G408: LandXML terms | No terms found: the schema is implemented from its definitions, never copied or generated from, and fetched only to validate; LINZ's examples fetch-only until their page states terms | 17, 24, 29 | G437, LandXML 1.2 mapping |
 | 32.39 | G409: generating code from STEP and IFC schemas | Part 42 is the 2025 edition; IFC schemas generated from with attribution; ISO's STEP schemas only with a file's own grant or ISO's permission, requested in a draft the owner sends | 24, 29 | G416, EXPRESS code generation |
+| 32.40 | G447: Gerber and IPC-2581 terms | No second program needs board exchange, so G474 and G475 wait; Gerber implemented exactly as published, no extensions; IPC-2581 only after its own text or IPC's word | 24, 26, 29 | G474 and G475, board exchange |
 
 ## 32.1 The grid ladder (decision 1)
 
@@ -731,3 +732,16 @@ Why: implementing a published format from its definitions copies nothing, and da
 Why: generated types are the safe way to read thousands of entities, so the permission matters; IFC grants it, ISO's files must be asked for, and nothing waits on ISO that IFC can serve first.
 
 **Changes:** 29's ISO and IFC rows, 31.7, and piece G416.
+
+## 32.40 Gerber and IPC-2581 terms (owner action G447)
+
+**What it is.** Circuit-board exchange (G474, G475) reads and writes Gerber X2 and X3 and IPC-2581. Ucamco publishes the Gerber specification free to download; its section 1.4 grants no licence to the document's intellectual property and asks interface developers not to make "derivative versions, modifications, or extensions" or "alternative interpretations of the data" without Ucamco's approval. IPC-2581 revision C is sold by IPC, and that the format is licence-free comes only from secondary sources (24.11). By 26.1 the crates enter the kernel only when two programs need board exchange; the owner records whether that is so (24's question 12).
+
+**Decided 2026-10-28 (owner action G447).** Read with 24.11, 26.1, 29.19, 29.20 and Spareware's STATUS.md.
+- **No second program needs board exchange today.** No Spareware program designs or draws circuit boards, so `geom-gerber` and `geom-ipc2581` stay deferred, G474 and G475 do not start, and they stay not gating (30.5). The first program that needs boards uses `geom-2d` through the facade in its own adapter, as 24.11 says; a second one brings the crates into the kernel.
+- **Gerber, when built,** is implemented exactly as the published specification defines it, with no extension, private attribute or reinterpretation of the data, which is what section 1.4 asks; our own data travels in the format's standard attributes or not at all. The revision implemented is pinned and its section numbers cited in the reader's header.
+- **IPC-2581, when built,** waits for its terms to be read in the standard itself: the co-op buys a copy then, which is the owner's spending decision at that time, or IPC confirms in writing that implementation needs no licence. Nothing is built from secondary descriptions.
+
+Why: the two-program rule decides the timing, and both formats can be implemented faithfully without taking anything their owners reserve; nothing needs money or a commitment until a program needs boards.
+
+**Changes:** 24.11, 29.19's board row, 31.7, and pieces G474 and G475.
