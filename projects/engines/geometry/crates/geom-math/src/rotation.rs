@@ -33,10 +33,13 @@
 //!   and Ressler. The rotation by θ has half-angle tangent t = tan(θ/2), and (m, 0, 0, n) turns by
 //!   2·atan(n/m), so the search is for a fraction n/m near t. The target is first turned by
 //!   quarter turns (exact on doubles) so that |θ| ≤ π/4. The tangents [tan(θ/2 − a), tan(θ/2 + a)],
-//!   a = atan(u) with u = (1 − 2^−10)·δ/2 < δ/2, are enclosed from inside, and the fraction with the
-//!   smallest denominator among them (the simplest rational, from the continued fractions of the
-//!   two ends) is taken and turned back. Those tangents span at least (1 − 2^−10)·δ > 2^−35, so a
-//!   fraction with a denominator below 2^35 lies among them, and every component stays below 2^36.
+//!   a = atan(u) with x = (1 − 2^−10)·δ/2 and u at most x + x³/3, so that a ≤ x < δ/2 (tan x ≥
+//!   x + x³/3, its Taylor coefficients being positive), are enclosed from inside, and the fraction
+//!   with the smallest denominator among them (the simplest rational, from the continued fractions
+//!   of the two ends) is taken and turned back. a falls short of x by less than x⁵/7, so those
+//!   tangents span at least (1 − 2^−9)·δ > 2^−35: a fraction with a denominator below 2^35 lies
+//!   among them, and every component stays below 2^36. No rotation with a smaller denominator is
+//!   within (1 − 2^−9)·δ.
 //! - [`RationalRotation::within`], in 3D, rounds s·u to integers, u the unit quaternion of the
 //!   target, for s = 1, 2, 4, ..., 2^34 and then 3·2^34, and takes the first that certifies within
 //!   δ. Rounding moves s·u by at most 1, so the angle is at most about 2/s: at s = 3·2^34 it is
@@ -602,8 +605,11 @@ impl RationalRotation {
         let h = iv(len.add(ex))?;
         let t = iv(ey.div(h))?;
         let one = iv(Interval::point(1.0))?;
-        let u = iv(iv(Interval::point(bound))?.mul(iv(Interval::point(AIM))?))?.lo();
-        let ui = iv(Interval::point(u))?;
+        let x = iv(iv(Interval::point(bound))?.mul(iv(Interval::point(AIM))?))?.lo();
+        let xi = iv(Interval::point(x))?;
+        // u ≤ x + x³/3, so atan(u) ≤ x: tan x ≥ x + x³/3 for 0 ≤ x < π/2.
+        let third = iv(iv(iv(xi.square())?.mul(xi))?.div(iv(Interval::point(3.0))?))?;
+        let ui = iv(Interval::point(iv(xi.add(third))?.lo()))?;
         let (th, tl) = (iv(Interval::point(t.hi()))?, iv(Interval::point(t.lo()))?);
         // tan(θ/2 − atan u) = (t − u)/(1 + tu), rising with t: its largest value over the
         // enclosure of t, from above, is an inner lower end; likewise the upper end.
