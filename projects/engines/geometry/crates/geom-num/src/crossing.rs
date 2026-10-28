@@ -17,6 +17,15 @@
 //!   on [`Ssi::homogeneous`] and [`Ssi::orient2d`]).
 //! - Deterministic: integers only, except the generated `f64` filters, whose answers are proven to
 //!   be the exact sign or no answer (chapter 6.2); no platform maths and no allocation.
+//! - **Bounded proofs, and what is only tested** (chapter 28.7; piece G41 collects them here).
+//!   Verus proves that the generated exact paths of `ssi_weight` and `ssi_side`, which every
+//!   answer here rests on, compute their values exactly and never overflow for every input in
+//!   their declared ranges (piece G39: the twins in `verus/generated/`, token for token the shipped
+//!   modules), on [`Wide`] arithmetic that is itself proven exact (G37). The routing between
+//!   filter and exact path, the homogeneous coordinates' budgets and the rounding to the grid are
+//!   tested against exact oracles, not proven (`tests/attack_g29.rs`, `tests/verification.rs`
+//!   and this module's tests), and the filters' error bounds are checked against exact
+//!   arithmetic until G40 certifies them.
 //!
 //! Method: the crossing point of two lines in homogeneous integer coordinates, classified against
 //! a line by multiplying by the sign of the weight so that nothing is divided, the plane-based

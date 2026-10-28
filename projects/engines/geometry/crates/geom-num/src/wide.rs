@@ -36,6 +36,13 @@
 //! documented behaviour: `u64::overflowing_add`, `u64::overflowing_sub`, `u64::from(bool)` and
 //! `i128::unsigned_abs`.
 //!
+//! Bounded proofs, and what is only tested: Kani proves (piece G41, chapter 28.7) that addition,
+//! subtraction, negation, the order and sign, the `i128` conversions and `resize` never panic and
+//! keep the laws their proofs state, for every four-limb value and every `i128`, and that
+//! `checked_mul` never panics for every pair of two-limb values. At four limbs the multiplication
+//! ran past CI's hour; the code is the same for every width, and products of every width are
+//! tested against big integers.
+//!
 //! Method: schoolbook addition, subtraction and multiplication on magnitudes with 128-bit
 //! intermediates (Knuth, *The Art of Computer Programming*, volume 2, section 4.3.1,
 //! <https://www-cs-faculty.stanford.edu/~knuth/taocp.html>). There is no division: predicates
@@ -801,5 +808,103 @@ mod tests {
         let big = I384::max_value();
         assert_eq!(big.resize::<4>(), None);
         assert_eq!(Wide::<6>::min_value().resize::<4>(), None);
+    }
+}
+
+/// Bounded proofs (chapter 28.7; piece G41) at four limbs (`I256`): no panic and no overflow in
+/// the checked arithmetic, for every pair of values, with each result checked against a second
+/// computation where Kani can afford one. `geom-num`'s Verus twin (`verus/wide.rs`, pieces G37 to
+/// G39, where present) proves exactness for every width; these harnesses prove the shipped
+/// machine code free of panics and overflow.
+#[cfg(kani)]
+// cargo-mutants reads this attribute from the source and skips the module (its harnesses are
+// proven by Kani, and no test build compiles them); no build evaluates it, since the module
+// exists only under Kani, where `test` is off.
+#[cfg_attr(test, mutants::skip)]
+mod proofs {
+    use super::*;
+
+    /// A symbolic `I256`.
+    fn any_i256() -> I256 {
+        Wide::from_le_limbs([kani::any(), kani::any(), kani::any(), kani::any()])
+    }
+
+    /// `checked_add` and `checked_sub` never panic, and agree with each other: a + b − b is a
+    /// whenever a + b fits.
+    #[kani::proof]
+    fn add_and_sub_never_panic_and_invert() {
+        let (a, b) = (any_i256(), any_i256());
+        if let Some(s) = a.checked_add(&b) {
+            assert!(s.checked_sub(&b) == Some(a));
+        }
+        let _ = a.checked_sub(&b);
+    }
+
+    /// `checked_neg` never panics, refuses exactly the most negative value, and is its own
+    /// inverse.
+    #[kani::proof]
+    fn neg_refuses_exactly_the_minimum() {
+        let a = any_i256();
+        match a.checked_neg() {
+            Some(n) => assert!(n.checked_neg() == Some(a)),
+            None => assert!(a == Wide::min_value()),
+        }
+    }
+
+    /// The order never panics and is antisymmetric, with the sign agreeing with the order against
+    /// zero. Unwound at most 17 times: the longest loop it reaches is `from_i128`'s 16 bytes.
+    #[kani::proof]
+    #[kani::unwind(17)]
+    fn order_and_sign_agree() {
+        let (a, b) = (any_i256(), any_i256());
+        assert!(a.cmp(&b) == b.cmp(&a).reverse());
+        let zero = Wide::from_i128(0);
+        let sign = match a.cmp(&zero) {
+            Ordering::Less => Sign::Negative,
+            Ordering::Equal => Sign::Zero,
+            Ordering::Greater => Sign::Positive,
+        };
+        assert!(a.signum() == sign && a.is_negative() == (sign == Sign::Negative));
+    }
+
+    /// `from_i128` and `to_i128` are inverse for every `i128`, and `resize` to two limbs and back
+    /// keeps every value it accepts. Unwound at most 33 times: the longest loop is `memcmp`'s over
+    /// the 32 bytes of the two four-limb values `==` compares.
+    #[kani::proof]
+    #[kani::unwind(33)]
+    fn i128_conversions_and_resize_round_trip() {
+        let v: i128 = kani::any();
+        let w = I256::from_i128(v);
+        assert!(w.to_i128() == Some(v));
+        let a = any_i256();
+        if let Some(narrow) = a.resize::<2>() {
+            assert!(narrow.resize::<4>() == Some(a));
+        }
+    }
+
+    /// The extremes are the limits: one past the largest value and the negation of the smallest
+    /// do not fit, and the largest is the negation of one above the smallest. Unwound at most 33
+    /// times, past `memcmp`'s 32 bytes: unbounded, the solver ran past CI's hour.
+    #[kani::proof]
+    #[kani::unwind(33)]
+    fn extremes_are_the_limits() {
+        let (max, min) = (I256::max_value(), I256::min_value());
+        assert!(max.checked_add(&I256::one()).is_none());
+        assert!(min.checked_sub(&I256::one()).is_none());
+        assert!(min.checked_neg().is_none());
+        assert!(min.checked_add(&I256::one()).and_then(|m| m.checked_neg()) == Some(max));
+        assert!(max.signum() == Sign::Positive && min.signum() == Sign::Negative);
+    }
+
+    /// `checked_mul` never panics or overflows, for every pair of two-limb values. At four limbs
+    /// the solver ran out of CI's hour (16 symbolic 128-bit limb products and their checks); the
+    /// code is the same for every width, and every width is proven by Verus (piece G37). Unwound
+    /// at most 17 times, past every loop it reaches.
+    #[kani::proof]
+    #[kani::unwind(17)]
+    fn mul_never_panics() {
+        let a = Wide::<2>::from_le_limbs([kani::any(), kani::any()]);
+        let b = Wide::<2>::from_le_limbs([kani::any(), kani::any()]);
+        let _ = a.checked_mul(&b);
     }
 }
