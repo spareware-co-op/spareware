@@ -159,3 +159,26 @@ mod tests {
         assert_eq!(COMMIT_PER_AXIS, HalfSteps(1));
     }
 }
+
+/// Bounded proofs (chapter 28.7; piece G41).
+#[cfg(kani)]
+// cargo-mutants reads this attribute from the source and skips the module (its harnesses are
+// proven by Kani, and no test build compiles them); no build evaluates it, since the module
+// exists only under Kani, where `test` is off.
+#[cfg_attr(test, mutants::skip)]
+mod proofs {
+    use super::*;
+
+    /// `quarter_nm` never panics and always answers: a count below 2^64 times a step of at most
+    /// 625 quarter-nanometres fits `u128`, for every count and step.
+    #[kani::proof]
+    fn quarter_nm_always_answers_exactly() {
+        let n: u64 = kani::any();
+        let step = match kani::any::<u8>() % 3 {
+            0 => GridStep::Q0,
+            1 => GridStep::Q1,
+            _ => GridStep::Q2,
+        };
+        assert!(quarter_nm(Steps(n), step) == Some(u128::from(n) * u128::from(step.quarter_nm())));
+    }
+}
