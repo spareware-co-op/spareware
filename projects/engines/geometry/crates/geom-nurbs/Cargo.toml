@@ -22,6 +22,9 @@ geom-op = { path = "../geom-op" }
 # The exact rational reference of the tests (MIT OR Apache-2.0), as geom-num's tests use it.
 dashu-int = { version = "0.6.2", default-features = false, features = ["std"] }
 dashu-ratio = { version = "0.6.1", default-features = false, features = ["std"] }
+# The golden store and its one SHA-256 (piece G19), for the operations' replay hash: the kernel's
+# development crate, a development dependency only (chapter 28.1).
+geom-test = { path = "../geom-test" }
 
 [[bench]]
 name = "nurbs"

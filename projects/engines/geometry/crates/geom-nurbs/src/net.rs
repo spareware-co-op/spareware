@@ -48,7 +48,7 @@ use crate::curve::derivative_points;
 use crate::elevate::{check_elevation, elevate_kernel};
 use crate::index::{add, get, mul, sub};
 use crate::insert::{Insertion, check_refinement, insert_kernel, refine_kernel};
-use crate::ops::{Changed, Direction, charge_op, homs, p_max, rounding, split};
+use crate::ops::{Changed, Direction, charge_op, homs, larger, p_max, rounding, split};
 use crate::surface::Surface;
 
 /// A net in `N`: its points row by row, and its numbers of rows and columns.
@@ -342,9 +342,7 @@ impl<const D: usize> Surface<D> {
         let mut out = vec_for(meter, pieces_f.len())?;
         for (patch, enc) in pieces_f.iter().zip(&pieces_i) {
             let dev = rounding(&patch.points, &enc.points, rational, pm)?;
-            if dev > deviation {
-                deviation = dev;
-            }
+            deviation = larger(deviation, dev);
             let ku = bezier_knots(meter, p, patch.u)?;
             let kv = bezier_knots(meter, q, patch.v)?;
             let (points, weights) = split(meter, &patch.points, rational)?;

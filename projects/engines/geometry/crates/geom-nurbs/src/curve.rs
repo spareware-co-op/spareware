@@ -270,7 +270,7 @@ impl<const D: usize> Curve<D> {
             return Err(NurbsError::DerivativeOrder { order });
         }
         let p = self.degree();
-        let top = if order < p { order } else { p };
+        let top = order.min(p);
         let span = self.basis.span(u, limit)?;
         let mut nders = [0.0_f64; WIDTH * WIDTH];
         self.basis.ders(span, u, top, &mut nders)?;
@@ -396,15 +396,15 @@ fn leibniz<const D: usize>(
     let mut bin = [0.0_f64; WIDTH];
     set(&mut bin, 0, 1.0)?;
     for k in 0..out.len() {
-        if k > 0 {
-            for i in (1..k).rev() {
-                let below = get(&bin, sub(i, 1)?)?;
-                *at(&mut bin, i)? += below;
-            }
-            set(&mut bin, k, 1.0)?;
+        // Row k from row k − 1, in place, right to left (for k = 0 the loop is empty and the one
+        // is already there).
+        for i in (1..k).rev() {
+            let below = get(&bin, sub(i, 1)?)?;
+            *at(&mut bin, i)? += below;
         }
+        set(&mut bin, k, 1.0)?;
         let mut v = get(out, k)?;
-        let last = if k < top { k } else { top };
+        let last = k.min(top);
         for i in 1..=last {
             let f = get(&bin, i)? * get(wders, i)?;
             let lower = get(out, sub(k, i)?)?;
