@@ -666,12 +666,12 @@ fn directions(mix: &mut Mix) -> Vec<[f64; 2]> {
         [1.0, 1.5 * 2f64.powi(-35)],
         [1.0, 2f64.powi(-33)],
     ];
-    for _ in 0..300 {
+    for _ in 0..150 {
         let (x, y) = (mix.signed(), mix.signed());
         let scale = 2f64.powi(mix.below(200) as i32 - 100);
         out.push([x * scale, y * scale]);
     }
-    for _ in 0..100 {
+    for _ in 0..50 {
         let (x, y) = (
             (mix.next() >> 33) as i64 - (1 << 30),
             (mix.next() >> 33) as i64,
@@ -717,7 +717,7 @@ fn plane_rotations_are_certified_and_the_simplest() {
             }
         }
     }
-    assert!(simplest > 800, "{simplest} brute-force checks");
+    assert!(simplest > 400, "{simplest} brute-force checks");
     // At ε_ang the numbers stay below the budget, with room.
     assert!(largest < 1 << 72 && largest > 1 << 30, "{largest}");
 

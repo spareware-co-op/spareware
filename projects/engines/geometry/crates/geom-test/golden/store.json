@@ -118,7 +118,7 @@
             "test": "rotation_determinism",
             "function": "rotation_golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+          "sha256": "330445e67c88e24daf07e62cdf53cf1ead9abb5ae80c7219b69ed38842c91589"
         },
         {
           "id": "geom-run/helpers",
