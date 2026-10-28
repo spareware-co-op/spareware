@@ -52,6 +52,7 @@ The board (30.5) also turns into a piece every narrower question that chapters 6
 | 32.32 | G312: USD exchange home | `geom-meshio` owns USD subdivision exchange; Chaikin creasing travels as `uniform token spareware:creaseMethod = "chaikin"` on the Mesh prim, absent meaning uniform | 16, 24 | G354, SubD exchange |
 | 32.33 | G357: alignment curve kinds | One transition kind with a closed set of curvature laws (Helmert, Bloss, cosine, sine, the cant-coupled transition, IFC's polynomial spirals, the cubic spiral); the cubic parabola a polynomial curve; gradient and segmented reference curves compositions in `geom-align`; descriptive names, file enumerators kept as data | 7, 17, 26 | G371, transition kinds |
 | 32.34 | G358: TIN tie order | Plan position, x then y, for a TIN's Delaunay ties, as chapter 17 asks; name order everywhere else | 6, 17, 21 | G362, the exact Delaunay core |
+| 32.35 | G384: smooth-edge marking | An explicit, logged operation marks edges Smooth below an angle θ the caller passes and the log records; no kernel default, no ladder rung | 6, 18 | G398, line classes and continuity records |
 
 ## 32.1 The grid ladder (decision 1)
 
@@ -659,3 +660,16 @@ Why: one kind with a closed set of laws keeps every transition on one proven eva
 Why: for terrain the point set is the model; a surface that depends on point names makes identical surveys disagree, which the name rule exists to prevent elsewhere.
 
 **Changes:** 6.2 (the exception), 17.3, 31.7 and piece G362.
+
+## 32.35 Smooth-edge marking (owner action G384)
+
+**What it is.** A drawing shows an edge where faces meet tangent but curvature jumps (a fillet's edge) as Smooth, from the continuity record, which says tangent only within ε_ang. Imported fillets are rarely that tangent, and a faceted IFC element's triangle edges are not coplanar, so without more information they draw Sharp, which is what the data says. Chapter 18's fourth question: mark such edges Smooth by an explicit, logged operation whose angle is its own recorded parameter, with no kernel default, or by a named import angle on 6.5's ladder (18.7; 31.7).
+
+**Decided 2026-10-28 (owner action G384): the logged operation, with no kernel default.** Read with 6.5, 18.7, 21, 24.8 and principle 10.
+- **The operation** marks edges Smooth where adjacent faces turn by less than an angle θ the caller passes. θ is recorded in the operation log like any other input, so replay marks the same edges, and the marking is an attribute edit (18.7), never a change to geometry or to its exactness class.
+- **No kernel default and no ladder rung.** The right θ depends on the source (a STEP fillet, a coarse IFC mesh, a scanned surface) and on the drawing's use, which only a program knows. A program that wants a default for its imports sets one and records it in the log, as every default is recorded (21). The kernel's only angle rung, ε_ang, stays what it is, far too tight for this.
+- **Source data first:** where an import carries its own smoothing (shared vertex normals in an IFC triangulated face set), that marks edges Smooth without the operation, as 18.7 says.
+
+Why: a hidden import angle would be a tolerance no one chose and that differs from one program's expectations to the next; a logged parameter is a decision on record, which replays and can be changed.
+
+**Changes:** 6.5's proposed rungs, 18.7, 31.7 and piece G398.
