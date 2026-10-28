@@ -1,4 +1,4 @@
-//! Census and existing land use turned into zones, trip generation and zoned yield: a port of the prototype's features/landuse-plus.js.
+//! Census and existing land use turned into zones, trip generation and zoned yield: a port of the prototype's packs/nz/landuse-plus.js.
 //!
 //! Existing land use from official data (docs/spec/existing-landuse): Stats NZ Census 2023 by SA1 (dwellings, households, vehicles, travel to work and
 //! education), Stats NZ employees by SA2, the Ministry of Education school and early learning directory and Auckland Unitary Plan base zones. Each is

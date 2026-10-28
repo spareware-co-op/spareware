@@ -84,6 +84,7 @@
 #![cfg_attr(not(test), no_std)]
 
 pub mod brent;
+pub mod crossing;
 pub mod dd;
 pub mod eft;
 pub mod error;
@@ -94,6 +95,7 @@ pub mod grid;
 pub mod interval;
 pub mod ladder;
 pub mod math;
+pub mod perturb;
 pub mod plane;
 pub mod predicate;
 pub mod quadrature;

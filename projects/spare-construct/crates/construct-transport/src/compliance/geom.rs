@@ -1,4 +1,4 @@
-//! Distances between a position, a road and the map layers (features/compliance.js "geometry"): the nearest road, rings and lines in
+//! Distances between a position, a road and the map layers (packs/nz/compliance.js "geometry"): the nearest road, rings and lines in
 //! flat coordinates, and the conflation of map lines onto model links.
 
 use super::jv::{Jx, V};

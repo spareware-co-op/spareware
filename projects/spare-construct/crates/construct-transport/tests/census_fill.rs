@@ -1,4 +1,4 @@
-//! Land use truth tests: `fillAll` of features/landuse-plus.js end to end against the prototype with the network stubbed
+//! Land use truth tests: `fillAll` of packs/nz/landuse-plus.js end to end against the prototype with the network stubbed
 //! (tools/transport-truth/gen-census.mjs): the requests, the progress messages, the report, the project afterwards (zones, results marked out of date
 //! and the saved summary), the Overpass server fallback, and the school rolls entered after the project is reopened.
 

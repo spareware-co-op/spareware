@@ -2176,7 +2176,7 @@ const Compliance = (() => {
      16. Report sections, checklist items, exports, settings, inspector sections, map layer and hooks
      ==================================================================================================== */
   /* Report sections (Registry.report). The report lane numbers sections and prints each title as the heading, so the
-     bodies carry no heading of their own. Chapters follow js/features/report.js: 'front', '1'–'6', 'A'–'H', 'P'.
+     bodies carry no heading of their own. Chapters follow js/packs/nz/report.js: 'front', '1'–'6', 'A'–'H', 'P'.
      'report-regulatory' replaces the report lane's simpler regime table (same id, the registry contract), so the
      pathway, lodgement date and regime come from one place: this tab. */
   const T = (head, rows) => `<table class="rt"><thead><tr>${head.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr>${r.map(c => `<td>${c == null ? '' : c}</td>`).join('')}</tr>`).join('')}</tbody></table>`;

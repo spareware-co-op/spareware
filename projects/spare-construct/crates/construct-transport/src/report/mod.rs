@@ -1,4 +1,4 @@
-//! The integrated transport assessment report, written from the project and its results (port of features/report.js).
+//! The integrated transport assessment report, written from the project and its results (port of packs/nz/report.js).
 //!
 //! The report is a document: [`Rep::html`] gives the same HTML the prototype prints or downloads for the same project, results and
 //! date, with every section's numbers, tables, figure captions, numbering and text, and [`Rep::pack_files`] the files of the ITA

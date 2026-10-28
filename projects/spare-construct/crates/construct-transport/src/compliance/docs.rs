@@ -1,4 +1,4 @@
-//! The standing disclaimers, the sign-off fingerprint, CSV stamping and the expert disclosure material (features/compliance.js
+//! The standing disclaimers, the sign-off fingerprint, CSV stamping and the expert disclosure material (packs/nz/compliance.js
 //! sections 12 and 13). Every export of a human-readable table carries the disclaimer D1, the DRAFT watermark while nobody has signed
 //! the inputs off, the version stamp and the model status as footer comment rows.
 

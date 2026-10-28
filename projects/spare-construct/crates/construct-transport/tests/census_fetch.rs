@@ -1,4 +1,4 @@
-//! Land use truth tests: the downloads of features/landuse-plus.js (Census, employees, schools, early learning, Unitary Plan zones) against the prototype
+//! Land use truth tests: the downloads of packs/nz/landuse-plus.js (Census, employees, schools, early learning, Unitary Plan zones) against the prototype
 //! with the network stubbed (tools/transport-truth/gen-census.mjs): the same requests in the same order, the same progress messages, the same results
 //! and the same words for every way a download can fail.
 

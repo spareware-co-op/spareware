@@ -1,4 +1,4 @@
-//! Compliance+ (port of features/compliance-extra.js): the scope and wording linter, precinct staging, mitigation and conditions,
+//! Compliance+ (port of packs/nz/compliance-extra.js): the scope and wording linter, precinct staging, mitigation and conditions,
 //! options and alternatives, the Fast-track package, plan change, speed limits, ANOP, parking, subdivision, policy alignment,
 //! time-of-use screening and the hand-over packs.
 //!

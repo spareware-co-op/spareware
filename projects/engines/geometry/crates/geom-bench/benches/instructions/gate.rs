@@ -524,9 +524,94 @@ pub mod plane {
         run
     }
 
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("plane/lpi_new/typical"))]
+    #[bench::degenerate(leak("plane/lpi_new/degenerate"))]
+    #[bench::extreme(leak("plane/lpi_new/extreme"))]
+    fn lpi_new(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("plane/lpi_homogeneous/typical"))]
+    #[bench::extreme(leak("plane/lpi_homogeneous/extreme"))]
+    fn lpi_homogeneous(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("plane/side_of_lpi/typical"))]
+    #[bench::degenerate(leak("plane/side_of_lpi/degenerate"))]
+    #[bench::nearly_degenerate(leak("plane/side_of_lpi/nearly_degenerate"))]
+    #[bench::extreme(leak("plane/side_of_lpi/extreme"))]
+    fn side_of_lpi(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("plane/lpi_to_grid/typical"))]
+    #[bench::on_grid(leak("plane/lpi_to_grid/on_grid"))]
+    #[bench::extreme(leak("plane/lpi_to_grid/extreme"))]
+    #[bench::overflow(leak("plane/lpi_to_grid/overflow"))]
+    fn lpi_to_grid(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
     library_benchmark_group!(
         name = plane;
-        benchmarks = through, side, tpi_new, tpi_homogeneous, side_of_tpi, to_grid
+        benchmarks = through, side, tpi_new, tpi_homogeneous, side_of_tpi, to_grid, lpi_new,
+            lpi_homogeneous, side_of_lpi, lpi_to_grid
+    );
+}
+
+/// Where two lines cross in the plane (G29).
+pub mod crossing {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("crossing/ssi_new/typical"))]
+    #[bench::degenerate(leak("crossing/ssi_new/degenerate"))]
+    #[bench::extreme(leak("crossing/ssi_new/extreme"))]
+    fn ssi_new(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("crossing/ssi_homogeneous/typical"))]
+    #[bench::extreme(leak("crossing/ssi_homogeneous/extreme"))]
+    fn ssi_homogeneous(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("crossing/ssi_orient2d/typical"))]
+    #[bench::degenerate(leak("crossing/ssi_orient2d/degenerate"))]
+    #[bench::nearly_degenerate(leak("crossing/ssi_orient2d/nearly_degenerate"))]
+    #[bench::extreme(leak("crossing/ssi_orient2d/extreme"))]
+    fn ssi_orient2d(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("crossing/ssi_to_grid/typical"))]
+    #[bench::on_grid(leak("crossing/ssi_to_grid/on_grid"))]
+    #[bench::extreme(leak("crossing/ssi_to_grid/extreme"))]
+    #[bench::overflow(leak("crossing/ssi_to_grid/overflow"))]
+    fn ssi_to_grid(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = crossing;
+        benchmarks = ssi_new, ssi_homogeneous, ssi_orient2d, ssi_to_grid
     );
 }
 
@@ -1482,9 +1567,130 @@ pub mod generated {
         run
     }
 
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/tpi_weight_filter/typical"))]
+    #[bench::degenerate(leak("generated/tpi_weight_filter/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/tpi_weight_filter/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/tpi_weight_filter/extreme"))]
+    fn tpi_weight_filter(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/tpi_weight_value/typical"))]
+    #[bench::degenerate(leak("generated/tpi_weight_value/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/tpi_weight_value/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/tpi_weight_value/extreme"))]
+    fn tpi_weight_value(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/tpi_side_filter/typical"))]
+    #[bench::degenerate(leak("generated/tpi_side_filter/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/tpi_side_filter/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/tpi_side_filter/extreme"))]
+    fn tpi_side_filter(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/tpi_side_value/typical"))]
+    #[bench::degenerate(leak("generated/tpi_side_value/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/tpi_side_value/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/tpi_side_value/extreme"))]
+    fn tpi_side_value(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/lpi_weight_filter/typical"))]
+    #[bench::degenerate(leak("generated/lpi_weight_filter/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/lpi_weight_filter/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/lpi_weight_filter/extreme"))]
+    fn lpi_weight_filter(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/lpi_weight_value/typical"))]
+    #[bench::degenerate(leak("generated/lpi_weight_value/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/lpi_weight_value/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/lpi_weight_value/extreme"))]
+    fn lpi_weight_value(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/lpi_side_filter/typical"))]
+    #[bench::degenerate(leak("generated/lpi_side_filter/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/lpi_side_filter/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/lpi_side_filter/extreme"))]
+    fn lpi_side_filter(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/lpi_side_value/typical"))]
+    #[bench::degenerate(leak("generated/lpi_side_value/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/lpi_side_value/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/lpi_side_value/extreme"))]
+    fn lpi_side_value(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/ssi_weight_filter/typical"))]
+    #[bench::degenerate(leak("generated/ssi_weight_filter/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/ssi_weight_filter/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/ssi_weight_filter/extreme"))]
+    fn ssi_weight_filter(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/ssi_weight_value/typical"))]
+    #[bench::degenerate(leak("generated/ssi_weight_value/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/ssi_weight_value/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/ssi_weight_value/extreme"))]
+    fn ssi_weight_value(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/ssi_side_filter/typical"))]
+    #[bench::degenerate(leak("generated/ssi_side_filter/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/ssi_side_filter/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/ssi_side_filter/extreme"))]
+    fn ssi_side_filter(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/ssi_side_value/typical"))]
+    #[bench::degenerate(leak("generated/ssi_side_value/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/ssi_side_value/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/ssi_side_value/extreme"))]
+    fn ssi_side_value(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
     library_benchmark_group!(
         name = generated;
-        benchmarks = orient2d_filter, orient2d_value, orient3d_filter, orient3d_value, incircle_filter, incircle_value, insphere_filter, insphere_value, plane_side_filter, plane_side_value
+        benchmarks = orient2d_filter, orient2d_value, orient3d_filter, orient3d_value, incircle_filter, incircle_value, insphere_filter, insphere_value, plane_side_filter, plane_side_value,
+            tpi_weight_filter, tpi_weight_value, tpi_side_filter, tpi_side_value, lpi_weight_filter, lpi_weight_value, lpi_side_filter, lpi_side_value, ssi_weight_filter, ssi_weight_value, ssi_side_filter, ssi_side_value
     );
 }
 
@@ -1540,5 +1746,47 @@ pub mod growth {
     library_benchmark_group!(
         name = growth;
         benchmarks = wide_add, wide_sub, wide_neg, wide_cmp, wide_mul
+    );
+}
+
+/// The perturbed predicates (G30).
+pub mod perturb {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("perturb/orient2d/typical"))]
+    #[bench::degenerate(leak("perturb/orient2d/degenerate"))]
+    fn orient2d(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("perturb/orient3d/typical"))]
+    #[bench::degenerate(leak("perturb/orient3d/degenerate"))]
+    fn orient3d(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("perturb/incircle/typical"))]
+    #[bench::degenerate(leak("perturb/incircle/degenerate"))]
+    fn incircle(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("perturb/insphere/typical"))]
+    #[bench::degenerate(leak("perturb/insphere/degenerate"))]
+    fn insphere(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = perturb;
+        benchmarks = orient2d, orient3d, incircle, insphere
     );
 }
