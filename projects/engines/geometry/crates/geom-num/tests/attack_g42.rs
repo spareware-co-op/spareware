@@ -362,6 +362,14 @@ fn avnaim_signs_are_exact_on_every_small_matrix() {
 /// one past them; at and near the bounds its signs are exact.
 #[test]
 fn avnaim_entries_at_and_past_their_bounds() {
+    // The bounds the module documents, 2^62 − 1 and 2^59 − 1, as numbers.
+    assert!(avnaim::sign_of_det2((1 << 62) - 1, 1, 1, 1).is_some());
+    assert_eq!(avnaim::sign_of_det2(1 << 62, 1, 1, 1), None);
+    assert!(avnaim::sign_of_det3([(1 << 59) - 1, 1, 1], [1, 2, 3], [4, 5, 7]).is_some());
+    assert_eq!(
+        avnaim::sign_of_det3([1 << 59, 1, 1], [1, 2, 3], [4, 5, 7]),
+        None
+    );
     let m = avnaim::ENTRY_MAX;
     for pos in 0..4 {
         for s in [1i64, -1] {
@@ -552,5 +560,63 @@ fn wide32_matches_i128() {
                 );
             }
         }
+    }
+}
+
+/// The exact 3 × 3 determinant in `i128`, for entries below 2^40 (products below 2^120).
+fn det3_small(u1: [i64; 3], u2: [i64; 3], u3: [i64; 3]) -> i128 {
+    let w = i128::from;
+    let minor =
+        |a: [i64; 3], b: [i64; 3], i: usize, j: usize| w(a[i]) * w(b[j]) - w(a[j]) * w(b[i]);
+    w(u1[0]) * minor(u2, u3, 1, 2) - w(u1[1]) * minor(u2, u3, 0, 2) + w(u1[2]) * minor(u2, u3, 0, 1)
+}
+
+/// `avnaim::sign_of_det3` on random rows of every size up to 2^20, and on rows near and on the
+/// plane of the first two (u3 = a·u1 + b·u2 plus a small offset, or none), where the lattice
+/// walk's and the second step's comparisons meet equality: a third row on a lattice point, at a
+/// cell's corner or on its diagonals, and at the corners' heights.
+#[test]
+fn avnaim_det3_on_random_and_near_plane_rows() {
+    let mut draw = Draw::new("avnaim_det3_on_random_and_near_plane_rows");
+    let check = |u1: [i64; 3], u2: [i64; 3], u3: [i64; 3]| {
+        assert_eq!(
+            avnaim::sign_of_det3(u1, u2, u3),
+            Some(sign_of(det3_small(u1, u2, u3))),
+            "{u1:?} {u2:?} {u3:?}"
+        );
+    };
+    for _ in 0..20_000 {
+        let bits = 1 + u32::try_from(draw.0.next_u64() % 20).unwrap();
+        let mut e = [0i64; 9];
+        for v in &mut e {
+            *v = i64::try_from(draw.value(bits)).unwrap();
+        }
+        check([e[0], e[1], e[2]], [e[3], e[4], e[5]], [e[6], e[7], e[8]]);
+    }
+    let small = |draw: &mut Draw, n: u64| {
+        i64::try_from(draw.0.next_u64() % (2 * n + 1)).unwrap() - i64::try_from(n).unwrap()
+    };
+    for _ in 0..40_000 {
+        let bits = 1 + u32::try_from(draw.0.next_u64() % 12).unwrap();
+        let mut row = || {
+            [
+                i64::try_from(draw.value(bits)).unwrap(),
+                i64::try_from(draw.value(bits)).unwrap(),
+                i64::try_from(draw.value(bits)).unwrap(),
+            ]
+        };
+        let (u1, u2) = (row(), row());
+        let (a, b) = (small(&mut draw, 6), small(&mut draw, 6));
+        let off = if draw.0.coin() {
+            [0; 3]
+        } else {
+            [
+                small(&mut draw, 2),
+                small(&mut draw, 2),
+                small(&mut draw, 2),
+            ]
+        };
+        let u3: [i64; 3] = core::array::from_fn(|k| a * u1[k] + b * u2[k] + off[k]);
+        check(u1, u2, u3);
     }
 }

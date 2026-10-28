@@ -230,8 +230,8 @@ pub const DET3_ENTRY_MAX: i64 = (1 << 59) - 1;
 /// The most passes [`sign_of_det3`] runs. Each pass answers, or replaces the third row by one
 /// whose z entry is at most half the largest (section 3.6), or zeroes it (section 3.7), so the
 /// largest z entry halves at least every three passes. From at most 2^59 − 1 it is zero after
-/// 3 · 59 passes, and the next pass answers.
-pub const DET3_PASSES: usize = 3 * 59 + 1;
+/// 3 · 59 passes, and the next pass answers: 3 · 59 + 1 = 178, written as [`ITERATIONS`] is.
+pub const DET3_PASSES: usize = 178;
 
 /// The most lattice points the doubling search keeps (substep 1.3): c(2^l) for every 2^l ≤ α, and
 /// α = |u3 q| / |p q| ≤ |u3 q| ≤ 2 · (2^59 − 1)^2 < 2^119, so l ≤ 118.
