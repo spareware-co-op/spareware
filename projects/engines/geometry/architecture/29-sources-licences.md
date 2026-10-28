@@ -600,7 +600,7 @@ These rules apply to people and AI agents alike. They add detail to AGENTS.md se
    - No code recalled from OCCT, CGAL or any other copyleft or proprietary kernel.
    - Output that looks like a known library's code is discarded and rewritten from the paper. The banned-source scanner catches the common markers; review catches the rest.
 8. **Oracles stay outside.**
-   - Copyleft, C++ and other non-Rust oracles run as separate programs, each in its own CI container, and exchange only files with our code. Kernel crates never link them and releases never contain them.
+   - Copyleft, C++ and other non-Rust oracles run as separate programs, each in its own CI container, and exchange only files with our code. Kernel crates never link them and releases never contain them. The owner confirmed this for GPL and LGPL programs (owner action G75, 32.6).
    - Oracle images are built in CI from pinned source and are never published. CI checks that no oracle image is pushed anywhere. If an owner later decides to publish one, the corresponding source of every GPL and LGPL component is published with it, and no image containing Numerical Recipes-derived code is ever distributed.
    - The SMLib and solidcore oracle builds compile Numerical Recipes-derived routines. They are built and run only after an owner's yes.
    - An oracle is used only where it is deterministic. For SMLib that means evaluation, knot operations, degree change, and fitting without random sampling. NLib's point-cloud fitting uses a hidden random generator whose sequence differs by platform, so it is excluded.
