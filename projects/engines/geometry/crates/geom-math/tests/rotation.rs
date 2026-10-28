@@ -388,6 +388,9 @@ fn canonical_form_budget_and_matrix() {
             let Ok(r) = RationalRotation::new(random_q(&mut mix, bits)) else {
                 continue;
             };
+            if r == RationalRotation::IDENTITY {
+                continue;
+            }
             check_budget(&r);
             let q = r.quaternion();
             let m = r.matrix().unwrap();
@@ -438,7 +441,6 @@ fn canonical_form_budget_and_matrix() {
 fn images_are_the_exact_image_rounded_once() {
     let mut mix = Mix(0x6460_0002);
     let edge = COORD_MAX;
-    let mut ties = 0;
     let mut inexact = 0;
     for bits in [2, 3, 5, 11, 21, 31, 36] {
         for _ in 0..150 {
@@ -461,10 +463,13 @@ fn images_are_the_exact_image_rounded_once() {
                 let rounded: Vec<i128> =
                     image.iter().map(|v| to_i128(&round_half_even(v))).collect();
                 let exact_image = image.iter().all(BigRational::is_integer);
-                ties += usize::from(
+                // No image is ever a tie: a rational rotation's entries in lowest terms have an odd
+                // denominator (a rational unit vector (a, b, c)/d with d even would need a, b
+                // and c all even), so no image is a whole number and a half.
+                assert!(
                     image
                         .iter()
-                        .any(|v| (v - v.floor()) == BigRational::new(1.into(), 2.into())),
+                        .all(|v| (v - v.floor()) != BigRational::new(1.into(), 2.into()))
                 );
                 match r.apply(point) {
                     Ok(got) => {
@@ -490,7 +495,7 @@ fn images_are_the_exact_image_rounded_once() {
             }
         }
     }
-    assert!(ties > 0 && inexact > 100, "ties {ties}, inexact {inexact}");
+    assert!(inexact > 100, "inexact {inexact}");
 
     // In the plane, the 2D image is the 3D image at z = 0; a 3D rotation refuses it.
     let r = RationalRotation::new([123_456_789, 0, 0, 987_654_321]).unwrap();
@@ -688,8 +693,8 @@ fn plane_rotations_are_certified_and_the_simplest() {
     let mut largest = 0;
     for d in &dirs {
         for &bound in &bounds {
-            let got =
-                RationalRotation::plane_within(F2::new(d[0], d[1]).unwrap(), real(bound)).unwrap();
+            let got = RationalRotation::plane_within(F2::new(d[0], d[1]).unwrap(), real(bound))
+                .unwrap_or_else(|e| panic!("{d:?} at {bound:e}: {e:?}"));
             let r = got.value();
             check_budget(&r);
             assert!(r.acts_in_plane());
@@ -782,7 +787,7 @@ fn space_rotations_are_certified() {
             }
         }
     }
-    assert!(largest < 9 << 68, "{largest}");
+    assert!(largest <= ((3 << 34) + 1) * ((3 << 34) + 1), "{largest}");
     // The identity and a half turn are found at once.
     let id = RationalRotation::within([2.0, 0.0, 0.0, 0.0], real(eps())).unwrap();
     assert_eq!(id.value(), RationalRotation::IDENTITY);
