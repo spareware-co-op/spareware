@@ -219,9 +219,9 @@ fn sound(seen: &[(f64, f64)], m: &Minimum, a: f64, b: f64) {
 
 #[test]
 fn minimum_survives_an_overflowing_parabola() {
-    // Values near 1e308 over an interval of width 4: the parabola's products (x − v)(fx − fw)
+    // Values up to 1.7e308 over an interval of width 4: the parabola's products (x − v)(fx − fw)
     // overflow, so q is infinite and the step is a golden section instead.
-    let f = |x: f64| 1e307 * (x - 1.0) * (x - 1.0);
+    let f = |x: f64| 1.7e308 * ((x - 1.0) / 2.0) * ((x - 1.0) / 2.0);
     let (seen, m) = trace(f, -1.0, 3.0, 1e-9);
     let m = m.unwrap();
     sound(&seen, &m, -1.0, 3.0);
@@ -242,6 +242,10 @@ fn minimum_refuses_vertices_left_and_right_of_the_interval() {
         ),
         (Box::new(|x: f64| -(x * x * x)), 0.0, 1.0, 1.0),
         (Box::new(|x: f64| (x - 0.5).abs()), 0.0, 2.0, 0.5),
+        // A parabola whose vertex, 0, lies left of the interval, and one whose vertex lies right
+        // of it: the fitted vertex is the true one, outside, and is refused.
+        (Box::new(|x: f64| x * x), 0.1, 1.0, 0.1),
+        (Box::new(|x: f64| x * x), -1.0, -0.1, -0.1),
     ] {
         let (seen, m) = trace(f, a, b, 1e-10);
         let m = m.unwrap();
