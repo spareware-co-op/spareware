@@ -25,7 +25,7 @@
 //! "Everything stored" in chapter 27's row is the list section 24.4 gives: each crate whose values
 //! the records hold.
 //!
-//! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
+//! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
 //! Status: scaffold only; built by pieces G91, G92, G93, G94, G95, G96, G105, G108, G112, G175,

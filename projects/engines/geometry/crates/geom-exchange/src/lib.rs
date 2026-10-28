@@ -25,10 +25,8 @@
 //! 30.5's amendment: the ISO 10303-42 mapping parses Part 21 entities and builds certified Tolerant
 //! bodies.
 //!
-//! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
+//! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
-//!
-//! Proposed in chapter 27, pending the owner's decision G08.
 //!
 //! Status: scaffold only; built by pieces G413, G414, G418, G436.
 #![cfg_attr(not(test), no_std)]

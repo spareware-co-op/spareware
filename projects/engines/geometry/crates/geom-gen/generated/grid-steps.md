@@ -47,6 +47,7 @@ Every tolerance in the kernel, in steps of the frame and in millimetres on each 
 | Commit distance in 2D, certified ceiling (`ladder::COMMIT_DISTANCE_2D`) | 1 | 0.00015625 | 0.00000625 | 0.00000025 |
 | Commit distance in 3D, certified ceiling (`ladder::COMMIT_DISTANCE_3D`) | 1 | 0.00015625 | 0.00000625 | 0.00000025 |
 | Fit bound (`ladder::FIT`) | 64 | 0.01 | 0.0004 | 0.000016 |
+| Per-operation bound (`ladder::PER_OPERATION`) | 16 | 0.0025 | 0.0001 | 0.000004 |
 | Import healing, default (`ladder::HEAL_DEFAULT`) | 640 | 0.1 | 0.004 | 0.00016 |
 | Import healing, cap (`ladder::HEAL_CAP`) | 6400 | 1 | 0.04 | 0.0016 |
 | Short-edge warning (`ladder::SHORT_EDGE_WARNING`) | 3200 | 0.5 | 0.02 | 0.0008 |

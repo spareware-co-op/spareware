@@ -26,10 +26,8 @@
 //! Sections: 10.1, 13.2, 13.14, 20, 22, 23.10 and 24.3; chapter 27 ("Who owns what"), in the
 //! kernel architecture (`projects/engines/geometry/architecture/`).
 //!
-//! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
+//! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
-//!
-//! Proposed in chapter 27, pending the owner's decision G08.
 //!
 //! Status: scaffold only; built by pieces G82, G83, G86, G87, G88, G104, G143, G144, G459.
 #![cfg_attr(not(test), no_std)]
