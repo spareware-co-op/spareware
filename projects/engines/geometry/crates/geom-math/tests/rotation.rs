@@ -1005,7 +1005,8 @@ proptest! {
     #[test]
     fn any_target_is_certified(
         bits in proptest::array::uniform4(any::<u64>()),
-        expo in -1074i32..1024,
+        // Below 1023, so that every component (at most 2.5 in magnitude, times 2^expo) is finite.
+        expo in -1074i32..1023,
         bound_bits in 0u64..(1 << 52),
         log2 in -34i32..0,
     ) {
