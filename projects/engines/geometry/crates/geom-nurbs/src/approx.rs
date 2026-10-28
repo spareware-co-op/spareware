@@ -76,7 +76,7 @@ use crate::index::{add, get, run_end, sub};
 use crate::insert::{Insertion, insert_kernel};
 use crate::interp::interpolate_points;
 use crate::lsq::fixed_ends;
-use crate::ops::{charge_op, homs};
+use crate::ops::{charge_op, homs, larger, smaller};
 use crate::point::Point;
 use crate::remove::remove_once;
 
@@ -161,8 +161,7 @@ fn remove_one<const D: usize>(
         let mut mags = [zero; D];
         for (m, (&ed, &od)) in mags.iter_mut().zip(e.c.iter().zip(&old.c)) {
             let d = ed.minus(Interval::of(od)?)?;
-            let a = if -d.lo() > d.hi() { -d.lo() } else { d.hi() };
-            *m = Interval::of(a)?;
+            *m = Interval::of(larger(d.lo().abs(), d.hi().abs()))?;
         }
         moved.push(
             Interval::norm(&mags)
@@ -227,13 +226,14 @@ struct Candidate {
     bound: Option<f64>,
 }
 
-/// The index of the last copy of `value` in `knots` and its multiplicity.
+/// The index of the last copy of `value` in `knots` and its multiplicity; a defect if `value` is
+/// not a knot (`get` refuses an index past the end, and a run that starts at a knot is not empty).
 fn last_copy(knots: &[f64], value: f64) -> Result<(usize, usize), NurbsError> {
     let first = knots.partition_point(|&k| k < value);
-    let end = run_end(knots, first)?;
-    if end == first || get(knots, first)? != value {
+    if get(knots, first)? != value {
         return Err(NurbsError::Defect);
     }
+    let end = run_end(knots, first)?;
     Ok((sub(end, 1)?, sub(end, first)?))
 }
 
@@ -313,17 +313,15 @@ fn remove_knots<const D: usize>(
     let p = w.p;
     let basis = Basis::new(p, w.knots.clone())?;
     let mut points = Points::new(meter, &basis, u)?;
-    // The distinct interior knots.
+    // The distinct knots. The ends, p + 1 copies on every basis approximation makes (clamped), are
+    // never removable: `bound_of` gives them no bound.
     let mut candidates = vec_for(meter, w.knots.len())?;
-    let (lo, hi) = basis.domain();
     let mut i = 0;
     while i < w.knots.len() {
         let end = run_end(&w.knots, i)?;
         let value = get(&w.knots, i)?;
-        if value > lo && value < hi {
-            let bound = bound_of(meter, w, value)?;
-            candidates.push(Candidate { value, bound });
-        }
+        let bound = bound_of(meter, w, value)?;
+        candidates.push(Candidate { value, bound });
         i = end;
     }
     let mut trial: Vec<(usize, f64)> = vec_for(meter, er.len())?;
@@ -331,14 +329,13 @@ fn remove_knots<const D: usize>(
         if w.pts.len() <= add(p, 1)? {
             break;
         }
-        let mut best: Option<(usize, f64)> = None;
-        for (index, c) in candidates.iter().enumerate() {
-            if let Some(b) = c.bound
-                && best.is_none_or(|(_, bb)| b < bb)
-            {
-                best = Some((index, b));
-            }
-        }
+        // The smallest bound, the first on a tie (`min_by` keeps the first of equal ones). Bounds
+        // are interval upper ends, never NaN and never −0, so `total_cmp` orders them as `<` does.
+        let best = candidates
+            .iter()
+            .enumerate()
+            .filter_map(|(index, c)| c.bound.map(|b| (index, b)))
+            .min_by(|x, y| x.1.total_cmp(&y.1));
         let Some((index, _)) = best else {
             break;
         };
@@ -411,12 +408,11 @@ fn remove_knots<const D: usize>(
 fn raised(knots: &[f64], p: usize, mode: KnotMode) -> Result<Basis, NurbsError> {
     let mut out = Vec::new();
     let mut i = 0;
-    let last = sub(knots.len(), 1)?;
     while i < knots.len() {
         let end = run_end(knots, i)?;
         let value = get(knots, i)?;
         let copies = sub(end, i)?;
-        let at_end = i == 0 || end > last;
+        let at_end = i == 0 || end == knots.len();
         let extra = match mode {
             KnotMode::Single => usize::from(at_end),
             KnotMode::Multiple => 1,
@@ -461,8 +457,10 @@ fn project<const D: usize>(
         if !(g > 0.0 && f.is_finite()) {
             break;
         }
+        // Finite: with g > 0 and f finite, u − f/g is finite or infinite, and the clamp brings an
+        // infinity to an end of the domain.
         let next = (u - f / g).clamp(a, b);
-        if !next.is_finite() || next == u {
+        if next == u {
             break;
         }
         let mut dn = [[0.0; D]; 3];
@@ -592,10 +590,10 @@ fn attempt<const D: usize>(
     }
     let curve = w.curve(meter)?;
     let direct = curve_errors(meter, &curve, q, &u)?;
-    let error = er.iter().zip(&direct).fold(0.0_f64, |m, (&a, &b)| {
-        let e = if b < a { b } else { a };
-        if e > m { e } else { m }
-    });
+    let error = er
+        .iter()
+        .zip(&direct)
+        .fold(0.0_f64, |m, (&a, &b)| larger(m, smaller(a, b)));
     if error > tol {
         return Ok(None);
     }

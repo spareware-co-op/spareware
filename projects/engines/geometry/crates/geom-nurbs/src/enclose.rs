@@ -45,6 +45,7 @@ use crate::basis::{Basis, Limit, WIDTH};
 use crate::budget::vec_for;
 use crate::curve::Curve;
 use crate::index::{add, get, mul, real, set, sub};
+use crate::ops::larger;
 use crate::surface::Surface;
 
 /// Enclosures of `N_(span−d+i)` of degree d at `u`, into `n[i]` for i from 0 to d: A2.2 in
@@ -250,7 +251,7 @@ pub(crate) fn curve_errors<const D: usize>(
 
 /// The largest of `errors`, 0 for none.
 pub(crate) fn largest(errors: &[f64]) -> f64 {
-    errors.iter().fold(0.0, |m, &e| if e > m { e } else { m })
+    errors.iter().fold(0.0, |m, &e| larger(m, e))
 }
 
 /// A certified upper bound on |`Q_kl` − S(`u_k`, `v_l`)| over a grid of `u.len()` rows of
@@ -270,10 +271,7 @@ pub(crate) fn surface_error<const D: usize>(
     for (k, &uk) in u.iter().enumerate() {
         for (l, &vl) in v.iter().enumerate() {
             let qkl = get(q, add(mul(k, v.len())?, l)?)?;
-            let e = distance_bound(qkl, surface_point(surface, uk, vl)?)?;
-            if e > worst {
-                worst = e;
-            }
+            worst = larger(worst, distance_bound(qkl, surface_point(surface, uk, vl)?)?);
         }
     }
     Ok(worst)
