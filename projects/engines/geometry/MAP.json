@@ -3445,7 +3445,7 @@
           "guarantees": [
             "every helper is total and deterministic, so the ports contain no `unsafe`, no indexing, no cast that could lose a value and no shift that could overflow; a table read out of range gives the canonical NaN, never a panic or a plausible wrong number."
           ],
-          "job": "Small total helpers shared by the correctly rounded ports: the fused multiply-add, shifts that cannot overflow, the halves and the two's complement reading of an integer without a cast, table reads that cannot panic, and the C sources' fast two-sum.",
+          "job": "Small total helpers shared by the correctly rounded ports: the fused multiply-add and the exact error of a product, shifts that cannot overflow, the halves and the two's complement reading of an integer without a cast, table reads that cannot panic, and the C sources' fast two-sum.",
           "method": {
             "links": [
               "https://doi.org/10.1109/IEEESTD.2019.8766229",
