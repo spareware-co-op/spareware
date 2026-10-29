@@ -310,6 +310,19 @@ fn entries(t: &TypedTransform) -> [[IBig; 4]; 3] {
             rational(&r)
         }
         TypedTransform::Rational(r) => rational(r),
+        // An exact rotation: M(q)/|q|², with no translation.
+        TypedTransform::Rotation(r) => {
+            let (m, d) = (r.matrix().unwrap(), IBig::from(r.norm2()));
+            core::array::from_fn(|i| {
+                core::array::from_fn(|j| {
+                    if j < 3 {
+                        (IBig::from(m[i][j]) << F) / &d
+                    } else {
+                        IBig::from(0)
+                    }
+                })
+            })
+        }
         TypedTransform::Certified(c) => c.rows().map(|row| row.map(fx)),
     }
 }
