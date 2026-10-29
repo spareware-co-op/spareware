@@ -23,6 +23,13 @@
 //!   every run and every target, whatever the points' places in memory (Geogram's default,
 //!   ordering by address, is exactly what chapter 6.2 rules out).
 //! - Deterministic: integers only, no floating point, no allocation, no recursion.
+//! - Bounded proofs, and what is only tested: Kani proves (piece G41, chapter 28.7) that
+//!   `distinct` refuses exactly the keys that repeat, for every two to five `u64` keys; that the
+//!   lift |p|² of every frame point, in 2D and 3D, fits an `i128` (no step overflows); and that
+//!   `bit_of` gives the bit for every index below 32 and refuses the rest. The cascade over the
+//!   masks (up to 2^20 of them, each an exact determinant in [`I256`]) is beyond a bounded proof:
+//!   its steps are [`I256`]'s, whose arithmetic Kani and Verus prove (`wide`), its bit budget is
+//!   derived below, and it is tested against exact rationals on every tie class.
 //!
 //! Method: Simulation of Simplicity (Edelsbrunner and Mücke 1990,
 //! <https://doi.org/10.1145/77635.77639>), entry j of point i moved by ε^(2^e) with e increasing
@@ -334,5 +341,56 @@ mod tests {
             ]),
             Some(I256::from_i128(-7))
         );
+    }
+}
+
+/// Bounded proofs (chapter 28.7; piece G41): the helpers the module header names.
+#[cfg(kani)]
+// cargo-mutants reads this attribute from the source and skips the module (its harnesses are
+// proven by Kani, and no test build compiles them); no build evaluates it, since the module
+// exists only under Kani, where `test` is off.
+#[cfg_attr(test, mutants::skip)]
+mod proofs {
+    use super::*;
+    use crate::grid::COORD_MAX;
+
+    /// A symbolic frame coordinate, as an `i128`.
+    fn frame() -> i128 {
+        let v: i64 = kani::any();
+        kani::assume(v >= -COORD_MAX && v <= COORD_MAX);
+        i128::from(v)
+    }
+
+    /// `distinct` refuses exactly the keys that repeat, for every two to five keys.
+    #[kani::proof]
+    #[kani::unwind(6)]
+    fn distinct_refuses_exactly_repeated_keys() {
+        let keys: [u64; 5] = kani::any();
+        let n: usize = kani::any();
+        kani::assume((2..=5).contains(&n));
+        let used = &keys[..n];
+        let repeated = (0..n).any(|i| (i + 1..n).any(|j| used[i] == used[j]));
+        assert!(distinct(used).is_err() == repeated);
+    }
+
+    /// The lift of every frame point fits: |p|² < 3 · 2^80 in 3D, so no step overflows, and it is
+    /// never negative; the 2D lift is the 3D one with z = 0.
+    #[kani::proof]
+    #[kani::unwind(4)]
+    fn the_lift_of_every_frame_point_fits() {
+        let (x, y, z) = (frame(), frame(), frame());
+        let l3 = lift(&[x, y, z]);
+        assert!(l3.is_some_and(|l| l >= 0 && l < 3 << 80));
+        assert!(lift(&[x, y]) == lift(&[x, y, 0]));
+    }
+
+    /// `bit_of` gives 2^i for every index below 32 and refuses the rest.
+    #[kani::proof]
+    fn bit_of_covers_exactly_a_mask_of_32() {
+        let i: usize = kani::any();
+        match bit_of(i) {
+            Ok(b) => assert!(i < 32 && b == 1u32 << i),
+            Err(e) => assert!(i >= 32 && e == NumError::BudgetExceeded),
+        }
     }
 }

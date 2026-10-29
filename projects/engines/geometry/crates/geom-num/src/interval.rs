@@ -88,6 +88,17 @@
 //! an exact zero. That operation is private, for [`Interval::norm`], which proves its radicand
 //! non-negative itself.
 //!
+//! Bounded proofs, and what is only tested: Kani proves (piece G41, chapter 28.7) that `new`,
+//! `add`, `sub` and `mul` enclose the rounded result or refuse, never panicking, for every finite
+//! double or pair of them. `square` is proven for every finite double whose significand has at
+//! most 14 bits: squaring a symbolic 53-bit significand ran past CI's hour. `div` is proven for
+//! every finite dividend over six divisors: ±0, refused; the smallest subnormal, whose quotients
+//! overflow; the largest double, whose quotients underflow; and 3 and −0.1, inexact of either sign
+//! (−0.1 for dividends whose significand has at most 14 bits); one harness per divisor,
+//! with kissat as the SAT solver. Over every divisor at once, or the six in one harness, the
+//! solver ran past CI's hour (four corner quotients, each a 53-bit division). Every other divisor
+//! is tested (`tests/attack2_interval.rs`).
+//!
 //! Method: interval arithmetic in round-to-nearest with outward widening, as in Geogram's
 //! `intervalRN` (after Harris) and in CGAL's widening with `nextafter` when it cannot change the
 //! rounding mode. Harris widens each bound by the relative factor 1 ± 2^−52, a second rounded
@@ -732,6 +743,144 @@ mod tests {
             assert_eq!(x.atan2(x), Err(NumError::UnprovenMaths));
             assert_ne!(x.exp(), Err(NumError::UnprovenMaths));
             assert_ne!(x.ln(), Err(NumError::UnprovenMaths));
+        }
+    }
+}
+
+/// Bounded proofs (chapter 28.7; piece G41): every finite double, bit for bit. The operations
+/// whose bounds need `libm` (`mul_add`, `sqrt`, `norm`) are left out: Kani cannot model the
+/// processor instructions libm calls, so those are only tested.
+#[cfg(kani)]
+// cargo-mutants reads this attribute from the source and skips the module (its harnesses are
+// proven by Kani, and no test build compiles them); no build evaluates it, since the module
+// exists only under Kani, where `test` is off.
+#[cfg_attr(test, mutants::skip)]
+mod proofs {
+    use super::*;
+
+    /// A symbolic finite double.
+    fn finite() -> f64 {
+        let x = f64::from_bits(kani::any());
+        kani::assume(x.is_finite());
+        x
+    }
+
+    /// `Interval::new` accepts exactly two finite bounds in order, for every pair of doubles.
+    #[kani::proof]
+    fn new_accepts_exactly_ordered_finite_bounds() {
+        let (lo, hi) = (f64::from_bits(kani::any()), f64::from_bits(kani::any()));
+        match Interval::new(lo, hi) {
+            Ok(i) => assert!(lo.is_finite() && hi.is_finite() && lo <= hi && i.lo() <= i.hi()),
+            Err(NumError::NotFinite) => assert!(!lo.is_finite() || !hi.is_finite()),
+            Err(NumError::EmptyInterval) => assert!(lo > hi),
+            Err(_) => assert!(false, "no other error"),
+        }
+    }
+
+    /// `add`, `sub` and `mul` of two points enclose the rounded result of the same operation,
+    /// with ordered finite bounds, or refuse; never a panic.
+    #[kani::proof]
+    fn add_sub_mul_enclose_the_rounded_result() {
+        let (x, y) = (finite(), finite());
+        let (a, b) = (Interval::point(x).unwrap(), Interval::point(y).unwrap());
+        for (got, rounded) in [(a.add(b), x + y), (a.sub(b), x - y), (a.mul(b), x * y)] {
+            if let Ok(r) = got {
+                assert!(r.lo() <= r.hi());
+                if rounded.is_finite() {
+                    assert!(r.contains(rounded));
+                }
+            }
+        }
+    }
+
+    /// `div` encloses the rounded quotient whenever the divisor does not contain zero, and
+    /// refuses when it does, for every finite dividend and the divisor `y`; proven for the six
+    /// divisors the module header names, one harness each (kissat as the SAT solver).
+    fn div_law(y: f64) {
+        let x = finite();
+        let (a, b) = (Interval::point(x).unwrap(), Interval::point(y).unwrap());
+        match a.div(b) {
+            Ok(r) => {
+                assert!(y != 0.0 && r.lo() <= r.hi());
+                let rounded = x / y;
+                if rounded.is_finite() {
+                    assert!(r.contains(rounded));
+                }
+            }
+            Err(e) => assert!(y == 0.0 || e != NumError::DivisorContainsZero),
+        }
+    }
+
+    /// [`div_law`] with +0: refused.
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn div_by_zero_is_refused() {
+        div_law(0.0);
+    }
+
+    /// [`div_law`] with −0: refused.
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn div_by_minus_zero_is_refused() {
+        div_law(-0.0);
+    }
+
+    /// [`div_law`] with the smallest subnormal, whose quotients overflow.
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn div_by_the_smallest_subnormal() {
+        div_law(f64::from_bits(1));
+    }
+
+    /// [`div_law`] with the largest double, whose quotients underflow.
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn div_by_the_largest_double() {
+        div_law(f64::MAX);
+    }
+
+    /// [`div_law`] with 3: inexact positive quotients.
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn div_by_three() {
+        div_law(3.0);
+    }
+
+    /// [`div_law`] with −0.1: inexact negative quotients.
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn div_by_minus_a_tenth() {
+        // Dividends of at most 14 significand bits: dividing a symbolic 53-bit significand by the
+        // 53-bit −0.1 ran past CI's hour (run 40323412527); 3, a two-bit divisor, proves in full.
+        let x = f64::from_bits(kani::any::<u64>() & !((1 << 39) - 1));
+        kani::assume(x.is_finite());
+        let (a, b) = (Interval::point(x).unwrap(), Interval::point(-0.1).unwrap());
+        // As in div_law: a quotient past the largest double is refused, never for a zero divisor.
+        match a.div(b) {
+            Ok(r) => {
+                assert!(r.lo() <= r.hi());
+                let rounded = x / -0.1;
+                if rounded.is_finite() {
+                    assert!(r.contains(rounded));
+                }
+            }
+            Err(e) => assert!(e != NumError::DivisorContainsZero),
+        }
+    }
+
+    /// `square` of a point is never negative and encloses the rounded square, for every finite
+    /// double whose significand has at most 14 bits (any sign and exponent field, the low 39
+    /// fraction bits zero). Over every finite double the solver ran past CI's hour: squaring a
+    /// symbolic 53-bit significand is a hard problem for it.
+    #[kani::proof]
+    fn square_is_never_negative_and_encloses() {
+        let x = f64::from_bits(kani::any::<u64>() & !((1 << 39) - 1));
+        kani::assume(x.is_finite());
+        if let Ok(r) = Interval::point(x).unwrap().square() {
+            assert!(r.lo() >= 0.0 && r.lo() <= r.hi());
+            if (x * x).is_finite() {
+                assert!(r.contains(x * x));
+            }
         }
     }
 }

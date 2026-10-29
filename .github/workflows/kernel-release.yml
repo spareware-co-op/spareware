@@ -11,8 +11,10 @@ name: Kernel release
 # parent (kernel-bench.yml); fuzzing and the bounded proofs (kernel-fuzz.yml), and five hours of
 # libFuzzer on every target (kernel-fuzz-campaign.yml); the full mutation run, coverage and Miri
 # over every partition (kernel-quality.yml, which runs its full scope on any event but a pull
-# request); and the predicates' verification suite with a fresh seed (kernel-nightly.yml). The
-# tag's run takes as long as its longest workflow, the five-hour campaign or the mutation run.
+# request); the predicates' verification suite with a fresh seed (kernel-nightly.yml); and the
+# filters' error bounds, proved by Gappa and Rocq and checked by FPTaylor and HOL Light
+# (kernel-certificates.yml). The tag's run takes as long as its longest workflow, the five-hour
+# campaign or the mutation run.
 #
 # When all of them pass, `freeze` checks the golden store once more and attaches it, with its
 # SHA-256, to a draft GitHub release for the tag: the record of every digest the release was
@@ -55,6 +57,8 @@ jobs:
     uses: ./.github/workflows/kernel-gate.yml
   dev:
     uses: ./.github/workflows/kernel-dev.yml
+  certificates:
+    uses: ./.github/workflows/kernel-certificates.yml
   golden:
     uses: ./.github/workflows/kernel-golden.yml
   bench:
@@ -70,7 +74,7 @@ jobs:
 
   freeze:
     name: The golden store, recorded with the release
-    needs: [kernel, build, gate, dev, golden, bench, fuzz, fuzz-campaign, quality, nightly]
+    needs: [kernel, build, gate, dev, certificates, golden, bench, fuzz, fuzz-campaign, quality, nightly]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:

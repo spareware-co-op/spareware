@@ -34,7 +34,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::check::{self, CRATES_IO, Dep, DepKind, Observed, Package, Rule, Violation};
 use crate::globals::{self, SourceFile, Sources};
-use crate::header::{Field, Header, MARK_27, pending_line};
+use crate::header::{Field, Header, STALE_MARKS, pending_line};
 use crate::lints::{ClippyConfig, Lints};
 use crate::manifest::{Keys, Value};
 use crate::overrides;
@@ -67,9 +67,9 @@ const fn row<'a>(
 /// and a facade with an external dependency, a pending dependency and a feature gate.
 const ROWS: &[Row<'static>] = &[
     row("geom-a", 1, Origin::Accepted, State::Here, ""),
-    row("geom-u", 1, Origin::Proposed27, State::Elsewhere("G90"), ""),
+    row("geom-u", 1, Origin::Amended27, State::Elsewhere("G90"), ""),
     row("geom-b", 2, Origin::Accepted, State::Here, "a u"),
-    row("geom-c", 2, Origin::Proposed27, State::Here, "a b"),
+    row("geom-c", 2, Origin::Amended27, State::Here, "a b"),
     row("geom-e", 3, Origin::Accepted, State::Elsewhere("G94"), "a"),
     Row {
         name: "geom-k",
@@ -93,7 +93,7 @@ const ROWS: &[Row<'static>] = &[
         name: "geom-p",
         layer: Layer::N(13),
         kind: Kind::KernelStd,
-        origin: Origin::Proposed27,
+        origin: Origin::Amended27,
         state: State::Elsewhere("G93"),
         deps: Deps::Exact("u"),
         external: "",
@@ -174,7 +174,7 @@ fn header(layer: Option<&str>, mark: bool, pending: &[(&str, &str)], status: boo
     }
     if mark {
         lines.push(String::new());
-        lines.push(MARK_27.to_owned());
+        lines.push(STALE_MARKS[0].to_owned());
     }
     if status {
         lines.push(String::new());
@@ -298,7 +298,7 @@ fn good() -> Observed {
         "geom-c".to_owned(),
         package(
             &geometry("geom-c"),
-            header(Some("2"), true, &[], true),
+            header(Some("2"), false, &[], true),
             KERNEL,
             vec![
                 normal("geom-a"),
@@ -721,12 +721,17 @@ fn pending_line_missing_and_stale() {
 }
 
 #[test]
-fn proposal_mark_must_match_the_row() {
+fn a_mark_owner_action_g08_settled_is_refused() {
+    for (krate, layer) in [("geom-c", "2"), ("geom-a", "1")] {
+        let mut observed = good();
+        package_mut(&mut observed, krate).header = header(Some(layer), true, &[], true);
+        expect_rules(&TABLE, &observed, &[Rule::OriginMark]);
+    }
     let mut observed = good();
-    package_mut(&mut observed, "geom-c").header = header(Some("2"), false, &[], true);
-    expect_rules(&TABLE, &observed, &[Rule::OriginMark]);
-    let mut observed = good();
-    package_mut(&mut observed, "geom-a").header = header(Some("1"), true, &[], true);
+    let mut header = header(Some("2"), false, &[], true);
+    header.lines.push(String::new());
+    header.lines.push(STALE_MARKS[1].to_owned());
+    package_mut(&mut observed, "geom-c").header = header;
     expect_rules(&TABLE, &observed, &[Rule::OriginMark]);
 }
 
@@ -896,7 +901,7 @@ fn pending_crate_has_merged() {
     let mut u = observed.packages["geom-a"].clone();
     u.deps.clear();
     u.dir = geometry("geom-u").iter().map(|s| (*s).to_owned()).collect();
-    u.header = header(Some("1"), true, &[], false);
+    u.header = header(Some("1"), false, &[], false);
     observed.packages.insert("geom-u".to_owned(), u);
     observed.geometry_dirs.insert("geom-u".to_owned());
     expect_rules(&TABLE, &observed, &[Rule::PendingMerged]);
@@ -937,7 +942,7 @@ fn feature_gated_dependency() {
         "crates".to_owned(),
         "geom-p".to_owned(),
     ];
-    p.header = header(Some("13"), true, &[], false);
+    p.header = header(Some("13"), false, &[], false);
     p.attributes.no_std = false;
     observed.packages.insert("geom-p".to_owned(), p);
     observed.geometry_dirs.insert("geom-p".to_owned());

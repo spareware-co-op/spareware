@@ -22,7 +22,7 @@
 //!
 //! Family: Combine.
 //!
-//! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
+//! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
 //! Status: scaffold only; built by pieces G129, G130, G131, G132, G133, G137, G138, G139, G144,
