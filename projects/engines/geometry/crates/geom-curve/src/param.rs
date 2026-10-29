@@ -35,13 +35,18 @@ use geom_num::interval::Interval;
 use geom_nurbs::{Bounds, Changed, Limit};
 use geom_run::WorkMeter;
 
+use crate::bulge::BulgePolyline;
+use crate::composite::Composite;
 use crate::conic::{Circle, Ellipse, Hyperbola, Parabola};
 use crate::error::CurveError;
 use crate::helix::Helix;
 use crate::involute::Involute;
 use crate::line::Line;
 use crate::map::NurbsForm;
+use crate::offset::Offset;
+use crate::on_surface::OnSurface;
 use crate::polynomial::Polynomial;
+use crate::trimmed::Trimmed;
 
 /// A bound on a derivative over a span: a box, or none where the derivative is not bounded there.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -150,8 +155,9 @@ pub trait ParamCurve<const D: usize> {
     ) -> Result<Changed<CurveKind<D>>, CurveError>;
 }
 
-/// Every curve kind, stored as itself (chapter 7): one variant per kind built. Later pieces add
-/// composite, trimmed, bulge, offset and pcurve kinds (G62) and spirals (G63).
+/// Every curve kind, stored as itself (chapter 7): one variant per kind built. The kinds that hold
+/// curves (trimmed, composite, offset, on a surface) hold only leaves, [`crate::basis::Basis`], so
+/// no kind contains itself. Spirals come in G63.
 #[derive(Clone, Debug, PartialEq)]
 pub enum CurveKind<const D: usize> {
     /// A NURBS curve, rational or not, clamped or not.
@@ -172,6 +178,16 @@ pub enum CurveKind<const D: usize> {
     Polynomial(Polynomial<D>),
     /// An involute of a circle, or its affine image.
     Involute(Involute<D>),
+    /// A bulge polyline (2D), with optional widths.
+    Bulge(BulgePolyline<D>),
+    /// A leaf kind on a parameter interval.
+    Trimmed(Trimmed<D>),
+    /// Trimmed curves joined end to end.
+    Composite(Composite<D>),
+    /// An offset curve, with its NURBS cache.
+    Offset(Offset<D>),
+    /// A curve on a surface: its pcurve and 3D cache.
+    OnSurface(OnSurface<D>),
 }
 
 impl<const D: usize> ParamCurve<D> for CurveKind<D> {
@@ -186,6 +202,11 @@ impl<const D: usize> ParamCurve<D> for CurveKind<D> {
             CurveKind::Helix(c) => ParamCurve::domain(c),
             CurveKind::Polynomial(c) => ParamCurve::domain(c),
             CurveKind::Involute(c) => ParamCurve::domain(c),
+            CurveKind::Bulge(c) => ParamCurve::domain(c),
+            CurveKind::Trimmed(c) => ParamCurve::domain(c),
+            CurveKind::Composite(c) => ParamCurve::domain(c),
+            CurveKind::Offset(c) => ParamCurve::domain(c),
+            CurveKind::OnSurface(c) => ParamCurve::domain(c),
         }
     }
 
@@ -200,6 +221,11 @@ impl<const D: usize> ParamCurve<D> for CurveKind<D> {
             CurveKind::Helix(c) => ParamCurve::point(c, t, side),
             CurveKind::Polynomial(c) => ParamCurve::point(c, t, side),
             CurveKind::Involute(c) => ParamCurve::point(c, t, side),
+            CurveKind::Bulge(c) => ParamCurve::point(c, t, side),
+            CurveKind::Trimmed(c) => ParamCurve::point(c, t, side),
+            CurveKind::Composite(c) => ParamCurve::point(c, t, side),
+            CurveKind::Offset(c) => ParamCurve::point(c, t, side),
+            CurveKind::OnSurface(c) => ParamCurve::point(c, t, side),
         }
     }
 
@@ -214,6 +240,11 @@ impl<const D: usize> ParamCurve<D> for CurveKind<D> {
             CurveKind::Helix(c) => ParamCurve::derivatives(c, t, side, out),
             CurveKind::Polynomial(c) => ParamCurve::derivatives(c, t, side, out),
             CurveKind::Involute(c) => ParamCurve::derivatives(c, t, side, out),
+            CurveKind::Bulge(c) => ParamCurve::derivatives(c, t, side, out),
+            CurveKind::Trimmed(c) => ParamCurve::derivatives(c, t, side, out),
+            CurveKind::Composite(c) => ParamCurve::derivatives(c, t, side, out),
+            CurveKind::Offset(c) => ParamCurve::derivatives(c, t, side, out),
+            CurveKind::OnSurface(c) => ParamCurve::derivatives(c, t, side, out),
         }
     }
 
@@ -234,6 +265,11 @@ impl<const D: usize> ParamCurve<D> for CurveKind<D> {
             CurveKind::Helix(c) => c.enclose(t, side, order, meter),
             CurveKind::Polynomial(c) => c.enclose(t, side, order, meter),
             CurveKind::Involute(c) => c.enclose(t, side, order, meter),
+            CurveKind::Bulge(c) => c.enclose(t, side, order, meter),
+            CurveKind::Trimmed(c) => c.enclose(t, side, order, meter),
+            CurveKind::Composite(c) => c.enclose(t, side, order, meter),
+            CurveKind::Offset(c) => c.enclose(t, side, order, meter),
+            CurveKind::OnSurface(c) => c.enclose(t, side, order, meter),
         }
     }
 
@@ -248,6 +284,11 @@ impl<const D: usize> ParamCurve<D> for CurveKind<D> {
             CurveKind::Helix(c) => ParamCurve::bound(c, span, meter),
             CurveKind::Polynomial(c) => ParamCurve::bound(c, span, meter),
             CurveKind::Involute(c) => ParamCurve::bound(c, span, meter),
+            CurveKind::Bulge(c) => ParamCurve::bound(c, span, meter),
+            CurveKind::Trimmed(c) => ParamCurve::bound(c, span, meter),
+            CurveKind::Composite(c) => ParamCurve::bound(c, span, meter),
+            CurveKind::Offset(c) => ParamCurve::bound(c, span, meter),
+            CurveKind::OnSurface(c) => ParamCurve::bound(c, span, meter),
         }
     }
 
@@ -267,6 +308,11 @@ impl<const D: usize> ParamCurve<D> for CurveKind<D> {
             CurveKind::Helix(c) => c.derivative_bound(span, order, meter),
             CurveKind::Polynomial(c) => c.derivative_bound(span, order, meter),
             CurveKind::Involute(c) => c.derivative_bound(span, order, meter),
+            CurveKind::Bulge(c) => c.derivative_bound(span, order, meter),
+            CurveKind::Trimmed(c) => c.derivative_bound(span, order, meter),
+            CurveKind::Composite(c) => c.derivative_bound(span, order, meter),
+            CurveKind::Offset(c) => c.derivative_bound(span, order, meter),
+            CurveKind::OnSurface(c) => c.derivative_bound(span, order, meter),
         }
     }
 
@@ -281,6 +327,11 @@ impl<const D: usize> ParamCurve<D> for CurveKind<D> {
             CurveKind::Helix(c) => c.to_nurbs(meter),
             CurveKind::Polynomial(c) => c.to_nurbs(meter),
             CurveKind::Involute(c) => c.to_nurbs(meter),
+            CurveKind::Bulge(c) => c.to_nurbs(meter),
+            CurveKind::Trimmed(c) => c.to_nurbs(meter),
+            CurveKind::Composite(c) => c.to_nurbs(meter),
+            CurveKind::Offset(c) => c.to_nurbs(meter),
+            CurveKind::OnSurface(c) => c.to_nurbs(meter),
         }
     }
 
@@ -299,6 +350,11 @@ impl<const D: usize> ParamCurve<D> for CurveKind<D> {
             CurveKind::Helix(c) => ParamCurve::split(c, t, meter),
             CurveKind::Polynomial(c) => ParamCurve::split(c, t, meter),
             CurveKind::Involute(c) => ParamCurve::split(c, t, meter),
+            CurveKind::Bulge(c) => ParamCurve::split(c, t, meter),
+            CurveKind::Trimmed(c) => ParamCurve::split(c, t, meter),
+            CurveKind::Composite(c) => ParamCurve::split(c, t, meter),
+            CurveKind::Offset(c) => ParamCurve::split(c, t, meter),
+            CurveKind::OnSurface(c) => ParamCurve::split(c, t, meter),
         }
     }
 
@@ -313,6 +369,11 @@ impl<const D: usize> ParamCurve<D> for CurveKind<D> {
             CurveKind::Helix(c) => c.reversed(meter),
             CurveKind::Polynomial(c) => c.reversed(meter),
             CurveKind::Involute(c) => c.reversed(meter),
+            CurveKind::Bulge(c) => c.reversed(meter),
+            CurveKind::Trimmed(c) => c.reversed(meter),
+            CurveKind::Composite(c) => c.reversed(meter),
+            CurveKind::Offset(c) => c.reversed(meter),
+            CurveKind::OnSurface(c) => c.reversed(meter),
         }
     }
 
@@ -331,6 +392,11 @@ impl<const D: usize> ParamCurve<D> for CurveKind<D> {
             CurveKind::Helix(c) => c.transformed(transform, meter),
             CurveKind::Polynomial(c) => c.transformed(transform, meter),
             CurveKind::Involute(c) => c.transformed(transform, meter),
+            CurveKind::Bulge(c) => c.transformed(transform, meter),
+            CurveKind::Trimmed(c) => c.transformed(transform, meter),
+            CurveKind::Composite(c) => c.transformed(transform, meter),
+            CurveKind::Offset(c) => c.transformed(transform, meter),
+            CurveKind::OnSurface(c) => c.transformed(transform, meter),
         }
     }
 }

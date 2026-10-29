@@ -222,6 +222,7 @@ fn round<const D: usize>(rec: &mut Recorder, rng: &mut Lcg, i: usize) {
             c.weights().unwrap_or(&[]).iter().for_each(|&x| s.f64(x));
             match &n.value.map {
                 ParamMap::Same => s.bytes.push(0),
+                ParamMap::Pieces(_) => s.bytes.push(2),
                 ParamMap::Circular(br) | ParamMap::Hyperbolic(br) => {
                     s.bytes.push(1);
                     for &x in br {

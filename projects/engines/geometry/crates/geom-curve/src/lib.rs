@@ -29,16 +29,22 @@
 //! that stores every kind, in [`param`]; the NURBS kind (`nurbs`); typed transforms on control
 //! points with a certified bound ([`affine`]); the kind contract any new kind must pass
 //! ([`contract`]); and [`CurveError`] in [`error`] (piece G60). The analytic kinds (piece G61):
-//! [`Line`] (segment, ray, infinite line) in [`line`]; [`Circle`], [`Ellipse`], [`Hyperbola`] and
-//! [`Parabola`] in [`conic`]; [`Helix`] in [`helix`]; [`Polynomial`] in [`polynomial`];
-//! [`Involute`] in [`involute`]; exact frames ([`frame`]) and their axes ([`axes`]); a kind's NURBS
-//! form and parameter map ([`map`]). Underneath: the shared certified evaluation (`form`),
-//! transforms for the analytic kinds (`moved`), the exact rational conics (`rational`), Taylor
-//! conversion with a certified remainder (`taylor`) and interval arithmetic that stays exact where
-//! it can (`tight`).
+//! [`Line`] (segment, ray, infinite line) in [`line`](mod@line); [`Circle`], [`Ellipse`],
+//! [`Hyperbola`] and [`Parabola`] in [`conic`]; [`Helix`] in [`helix`]; [`Polynomial`] in
+//! [`polynomial`]; [`Involute`] in [`involute`]; exact frames ([`frame`]) and their axes
+//! ([`axes`]); a kind's NURBS form and parameter map ([`map`]). Underneath: the shared certified
+//! evaluation (`form`), transforms for the analytic kinds (`moved`), the exact rational conics
+//! (`rational`), Taylor conversion with a certified remainder (`taylor`) and interval arithmetic
+//! that stays exact where it can (`tight`).
 //!
-//! Status: the traits, the enum, the NURBS kind and the contract (G60) and the analytic kinds
-//! (G61) built; the other kinds to come in G62, G63, G64, G67, G68, G175, G361 and G371.
+//! The kinds that hold curves (piece G62): [`BulgePolyline`] in [`bulge`]; [`Trimmed`] in
+//! [`trimmed`]; [`Composite`] in [`composite`]; [`Offset`] in [`offset`], with interval Taylor
+//! jets (`jet`); [`OnSurface`] in [`on_surface`]; all built on the leaves of [`Basis`] in
+//! [`basis`], so no kind contains itself.
+//!
+//! Status: the traits, the enum, the NURBS kind and the contract (G60), the analytic kinds (G61)
+//! and the bulge, trimmed, composite, offset and curve-on-surface kinds (G62) built; the other
+//! kinds to come in G63, G64, G67, G68, G175, G361 and G371.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 
@@ -46,6 +52,9 @@ extern crate alloc;
 
 pub mod affine;
 pub mod axes;
+pub mod basis;
+pub mod bulge;
+pub mod composite;
 pub mod conic;
 pub mod contract;
 pub mod error;
@@ -53,23 +62,33 @@ mod form;
 pub mod frame;
 pub mod helix;
 pub mod involute;
+mod jet;
 pub mod line;
 pub mod map;
 mod moved;
 mod nurbs;
+pub mod offset;
+pub mod on_surface;
 pub mod param;
 pub mod polynomial;
 mod rational;
 mod taylor;
 mod tight;
+pub mod trimmed;
 
 pub use axes::{Axes, HelixAxes};
+pub use basis::Basis;
+pub use bulge::BulgePolyline;
+pub use composite::Composite;
 pub use conic::{Circle, Ellipse, HYPERBOLA_REACH, Hyperbola, Parabola};
 pub use error::{ContractError, CurveError, Law};
 pub use frame::Frame;
 pub use helix::Helix;
 pub use involute::Involute;
 pub use line::{Extent, Line};
-pub use map::{NurbsForm, ParamMap};
+pub use map::{LocalMap, MapPiece, NurbsForm, ParamMap};
+pub use offset::{Offset, OffsetLaw, Station};
+pub use on_surface::{OnSurface, SurfaceRef};
 pub use param::{CurveKind, DerivativeBound, ParamCurve};
 pub use polynomial::Polynomial;
+pub use trimmed::Trimmed;

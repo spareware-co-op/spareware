@@ -97,6 +97,21 @@ pub(crate) fn count(k: usize) -> Result<f64, CurveError> {
         .map_err(|_| CurveError::Defect)
 }
 
+/// ⌊x⌋ as an index, for a finite x ≥ 0 below 2^32.
+pub(crate) fn floor_index(x: f64) -> Result<usize, CurveError> {
+    let f = math::floor(x)?.get();
+    if !(0.0..4_294_967_296.0).contains(&f) {
+        return Err(CurveError::ParameterOutside);
+    }
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "f is a whole number in [0, 2^32)"
+    )]
+    let k = f as u32;
+    usize::try_from(k).map_err(|_| CurveError::Defect)
+}
+
 /// π enclosed.
 pub(crate) fn pi() -> Result<Interval, CurveError> {
     Ok(Interval::new(PI_LO, PI_HI)?)

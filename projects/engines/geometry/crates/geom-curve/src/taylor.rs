@@ -155,10 +155,6 @@ fn derivative_norm<K: ParamCurve<D>, const D: usize>(
     Ok((tight::norm(&m)?.hi(), zero))
 }
 
-#[allow(
-    clippy::too_many_lines,
-    reason = "one construction: breaks, then each piece's coefficients, remainder and rounding"
-)]
 /// The kind as NURBS of degree `degree` on the same parameter, from pieces at most `width` long
 /// (module documentation).
 ///
@@ -177,15 +173,67 @@ pub(crate) fn same_parameter<K: ParamCurve<D>, const D: usize>(
         return Err(CurveError::Unbounded);
     }
     let n = pieces(b - a, width)?;
+    let cuts = breaks((a, b), n)?;
+    from_cuts(kind, degree, &cuts, meter)
+}
+
+/// The cuts of `domain`: each interval between consecutive `inner` breaks (sorted; those not
+/// strictly inside the domain, and repeats, skipped) cut into `per` equal pieces, the breaks kept
+/// exactly.
+pub(crate) fn cuts_between(
+    (a, b): (f64, f64),
+    inner: &[f64],
+    per: usize,
+) -> Result<Vec<f64>, CurveError> {
+    let mut ends = Vec::with_capacity(inner.len().saturating_add(2));
+    ends.push(a);
+    for &x in inner {
+        // Above the last end kept (the domain's start at first), so increasing and inside.
+        if x < b && ends.last().is_some_and(|&l| l < x) {
+            ends.push(x);
+        }
+    }
+    ends.push(b);
+    let mut out: Vec<f64> = Vec::new();
+    for w in ends.windows(2) {
+        let (Some(&x), Some(&y)) = (w.first(), w.get(1)) else {
+            return Err(CurveError::Defect);
+        };
+        let piece = breaks((x, y), per).or_else(|_| breaks((x, y), 1))?;
+        if out.is_empty() {
+            out.extend(piece);
+        } else {
+            out.extend(piece.into_iter().skip(1));
+        }
+    }
+    Ok(out)
+}
+
+/// The kind as NURBS of degree `degree` on the same parameter, cut at `cuts` (its ends included,
+/// strictly increasing), each piece a Taylor polynomial with its certified remainder.
+///
+/// # Errors
+///
+/// As [`same_parameter`].
+#[allow(
+    clippy::too_many_lines,
+    reason = "one construction: each piece's coefficients, remainder and rounding"
+)]
+pub(crate) fn from_cuts<K: ParamCurve<D>, const D: usize>(
+    kind: &K,
+    degree: usize,
+    cuts: &[f64],
+    meter: &mut WorkMeter<'_>,
+) -> Result<Changed<NurbsForm<D>>, CurveError> {
+    let n = cuts.len().checked_sub(1).ok_or(CurveError::Defect)?;
     let p = degree;
     let count_points = n.checked_mul(p).and_then(|x| x.checked_add(1));
     let Some(count_points) = count_points else {
         return Err(CurveError::NotFinite);
     };
     meter.charge(u64::try_from(count_points).map_err(|_| CurveError::Defect)?)?;
-    let cuts = breaks((a, b), n)?;
     let mut ends = Vec::with_capacity(cuts.len());
-    for &t in &cuts {
+    for &t in cuts {
         ends.push(point_at(kind, t, meter)?);
     }
     let mut points: Vec<[f64; D]> = Vec::with_capacity(count_points);
