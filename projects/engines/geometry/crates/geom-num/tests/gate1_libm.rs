@@ -97,7 +97,18 @@ const EXP_SUBNORMAL: [u64; 32] = [
     0xc087_2c65_c933_0627, 0xc087_35e1_f175_b127,
 ];
 
-/// log.wc inputs in the accurate path's table slices i = 307, 315 and 316 (C indices 179, 187, 188).
+/// exp.wc inputs whose results lie between 2^-1075 and 2^-1074, where the subnormal branch's
+/// result has one bit and its test straddles the midpoint 2^-1075.
+#[rustfmt::skip]
+const EXP_LAST_BIT: [u64; 11] = [
+    0xc087_4385_446d_71c2, 0xc087_4385_446d_71c3, 0xc087_4385_446d_71c4,
+    0xc087_43cd_b0a9_76ba, 0xc087_46f5_4d9f_be31, 0xc087_488b_75d3_c805,
+    0xc087_4910_d52d_304f, 0xc087_4910_d52d_3050, 0xc087_4910_d52d_3051,
+    0xc087_4910_d52d_3052, 0xc087_4910_d52d_3053,
+];
+
+/// log.wc inputs in the accurate path's table slices i = 307, 315 and 316 (C indices 179, 187,
+/// 188).
 #[rustfmt::skip]
 const LN_TABLE_SLICES: [u64; 12] = [
     0x0001_3378_9cb8_6cd6, 0x1d33_3b3c_4b43_b25d, 0x3cf3_35c4_c2a2_5329,
@@ -106,7 +117,8 @@ const LN_TABLE_SLICES: [u64; 12] = [
     0x2173_c8e0_6e32_a4ec, 0x3fd3_cf8f_24cf_f6d6, 0x6083_c7c2_0b39_765d,
 ];
 
-/// The log.wc inputs in [1 - 2^-8, 1) nearest 1 - 2^-8, where the accurate path's Taylor series runs at its largest |z|.
+/// The log.wc inputs in [1 - 2^-8, 1) nearest 1 - 2^-8, where the accurate path's Taylor series
+/// runs at its largest |z|.
 #[rustfmt::skip]
 const LN_NEAR_ONE: [u64; 24] = [
     0x3fef_e575_5f3a_16e2, 0x3fef_e734_51b9_c74f, 0x3fef_eaa7_d732_e9e8,
@@ -164,6 +176,34 @@ const SINPI_NEAR_ZERO: [u64; 32] = [
     0x3f37_f6c6_18d0_f10f, 0x3f3b_fadb_4d77_e1ab,
 ];
 
+/// The sinpi.wc inputs on the near-zero paths (2^-54 <= |x| <= 0x1.2p-5) whose
+/// sine lies closest to a midpoint (52 to 57 identical bits after the round bit).
+#[rustfmt::skip]
+const SINPI_NEAR_ZERO_HARDEST: [u64; 24] = [
+    0x3cdf_339a_b577_31d3, 0x3dda_d53f_8db9_2af0, 0x3daa_8851_b86f_2c07,
+    0x3e6c_6b06_98c2_8d70, 0x3ea5_f3aa_a98d_64bb, 0x3d5a_65da_b603_e8b2,
+    0x3f52_872c_d25f_2925, 0x3f57_31f6_c052_0517, 0x3db5_2f22_4a74_f956,
+    0x3eec_215e_afd4_639d, 0x3f1b_98f3_bf70_e3b6, 0x3f75_a568_87be_3f23,
+    0x3e31_e234_5136_0f11, 0x3dd6_fe50_9010_e3c6, 0x3f34_0e17_3f72_a36d,
+    0x3e86_c9f2_9f59_9930, 0x3f95_f230_fa0b_27d8, 0x3e77_fe3a_2303_8269,
+    0x3d20_9a60_6e18_8bc7, 0x3f63_b057_8ec6_eba8, 0x3deb_0bc9_cc64_068f,
+    0x3e8a_4be2_2136_3f8d, 0x3f23_2550_f04b_da91, 0x3e1b_c8ef_6c81_59e0,
+];
+
+/// The cospi.wc inputs on the near-zero path (2^-29 < |x| <= 2^-12) whose
+/// cosine lies closest to a midpoint (52 to 59 identical bits after the round bit).
+#[rustfmt::skip]
+const COSPI_NEAR_ZERO_HARDEST: [u64; 24] = [
+    0x3e78_2428_46e3_d0af, 0x3ebf_9a45_ce01_134f, 0x3e38_f346_b4c3_05bf,
+    0x3e99_d9ce_0957_f1c8, 0x3e71_92cf_274b_2b70, 0x3ed7_0c3e_3f71_bd49,
+    0x3ee5_7252_95c9_52eb, 0x3ed9_cbff_3284_a4fb, 0x3e7a_e77c_c45f_8687,
+    0x3e2c_cf64_29be_6622, 0x3eb5_95ab_6556_fa30, 0x3e43_0e5c_ded6_7caf,
+    0x3efb_0180_20fc_41c3, 0x3e54_b00c_b56d_bc65, 0x3edf_d7f6_ce68_f482,
+    0x3ef8_e05e_bd2d_ad28, 0x3e45_9b8b_1f4e_cc99, 0x3ed1_f23a_5c93_5fbb,
+    0x3ef9_5ad0_9666_9072, 0x3ece_31da_2e76_0ba6, 0x3efe_b98e_6c83_b9ba,
+    0x3e49_f816_7cdf_5123, 0x3f14_c79b_f81f_84ae, 0x3ec3_51e4_f633_4ad4,
+];
+
 /// cospi.wc inputs on the general path (2^-12 < |x| < 2^41).
 #[rustfmt::skip]
 const COSPI_GENERAL: [u64; 32] = [
@@ -193,7 +233,8 @@ const COSPI_NEAR_ZERO: [u64; 24] = [
     0x3f0f_4197_bdb1_556f, 0x3f1a_2fc4_3e6e_11f6, 0x3f25_3335_582b_aa89,
 ];
 
-/// atan2.wc pairs scaled exactly by a power of two (atan2 is scale-invariant) until both are subnormal.
+/// atan2.wc pairs scaled exactly by a power of two (atan2 is scale-invariant) until both are
+/// subnormal.
 #[rustfmt::skip]
 const ATAN2_SUBNORMAL: [(u64, u64); 21] = [
     (0x0000_0001_0000_0000, 0x0000_1000_0000_0000), (0x0000_097b_3b67_96fa, 0x0000_1011_827b_f8b6),
@@ -243,7 +284,8 @@ const ATAN2_TINY: [(u64, u64); 24] = [
     (0x049d_6911_deb5_e3bb, 0x0497_0c94_4733_6067), (0x049e_bc95_b0cd_d3ec, 0x049a_0774_75c6_6c20),
 ];
 
-/// atan2.wc pairs whose divisor is a power of two (x, or y when |y| > |x|): exact reciprocals in the accurate path.
+/// atan2.wc pairs whose divisor is a power of two (x, or y when |y| > |x|): exact reciprocals in
+/// the accurate path.
 #[rustfmt::skip]
 const ATAN2_POW2: [(u64, u64); 48] = [
     (0x0000_0000_0000_0001, 0x0000_0000_0000_0001), (0x033c_334c_56a3_18a9, 0x86c0_0000_0000_0000),
@@ -301,6 +343,18 @@ const ATAN2_OCTANTS: [(u64, u64); 48] = [
     (0xd8c6_f4d8_2517_5afc, 0xdc1e_17cc_9239_7869), (0xeb5f_ffff_ffff_ffff, 0xeeb7_2104_c2bb_f824),
 ];
 
+/// Pairs built for `accurate`'s exact-quotient shortcut (`atan2.rs`): y subnormal, q = y/x near
+/// 2^-33 just above a midpoint of the doubles with atan(q) just below it, so the correctly
+/// rounded angle is the double below while t = RN(q) is the one above, and t·x - y is below
+/// 2^-1075, so `fma(t, x, -y)` rounds to 0 although t·x != y. Only the residual scaled by 2^105
+/// shows that the quotient is inexact. Built with exact rationals off CI.
+#[rustfmt::skip]
+const ATAN2_FALSE_ZERO: [(u64, u64); 3] = [
+    (0x000a_bebe_05f0_ee77, 0x020e_eeba_a42d_d5b7),
+    (0x0007_1286_c178_ce6c, 0x0214_2bf2_2193_bcf9),
+    (0x0001_99da_0bd8_ce65, 0x01ed_afe3_3d36_d233),
+];
+
 /// Checks `atan2` on each pair (given by its bits) in all four sign combinations, and swapped
 /// when `swap` (the other octants), against the reference.
 #[track_caller]
@@ -329,6 +383,7 @@ fn check_atan2(pairs: &[(u64, u64)], swap: bool) {
 fn exp_hard_cases_and_subnormal_results() {
     check_each("exp", &EXP_DATABASE, math::exp, reference::exp);
     check_each("exp", &EXP_SUBNORMAL, math::exp, reference::exp);
+    check_each("exp", &EXP_LAST_BIT, math::exp, reference::exp);
 }
 
 /// `ln`'s accurate path: three slices of its 128-bit tables no other test reaches, the Taylor
@@ -348,11 +403,19 @@ fn ln_accurate_path_tables_taylor_and_subnormals() {
 fn sinpi_and_cospi_hard_cases_both_signs() {
     let sinpi = |x: f64| reference::sinpi(x) + 0.0;
     let cospi = |x: f64| reference::cospi(x) + 0.0;
-    for list in [&SINPI_GENERAL[..], &SINPI_NEAR_ZERO[..]] {
+    for list in [
+        &SINPI_GENERAL[..],
+        &SINPI_NEAR_ZERO[..],
+        &SINPI_NEAR_ZERO_HARDEST[..],
+    ] {
         let both: Vec<u64> = list.iter().flat_map(|&b| [b, b ^ (1 << 63)]).collect();
         check_each("sinpi", &both, math::sinpi, sinpi);
     }
-    for list in [&COSPI_GENERAL[..], &COSPI_NEAR_ZERO[..]] {
+    for list in [
+        &COSPI_GENERAL[..],
+        &COSPI_NEAR_ZERO[..],
+        &COSPI_NEAR_ZERO_HARDEST[..],
+    ] {
         let both: Vec<u64> = list.iter().flat_map(|&b| [b, b ^ (1 << 63)]).collect();
         check_each("cospi", &both, math::cospi, cospi);
     }
@@ -374,6 +437,14 @@ fn atan2_scaled_hard_cases() {
 fn atan2_hard_cases_in_every_octant() {
     check_atan2(&ATAN2_POW2, false);
     check_atan2(&ATAN2_OCTANTS, false);
+}
+
+/// `accurate`'s exact-quotient shortcut must not trust `fma(t, x, -y) == 0` for a tiny y, where
+/// an inexact residual underflows to 0: these pairs need the scaled check (or the full
+/// evaluation), and their angle is the double below t.
+#[test]
+fn atan2_tiny_quotients_whose_residual_underflows() {
+    check_atan2(&ATAN2_FALSE_ZERO, false);
 }
 
 /// The unproven `sinpi` and `cospi` special-case the quarter turns; the ledger keeps three of their

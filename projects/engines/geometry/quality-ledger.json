@@ -2353,6 +2353,598 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "sgn is used only when a listed hard case matches. At iq == 2048, the one value where > and >= differ, the folded index iq & 0x7ff is 0, and no listed case has index 0 or 2048 (they are 76 to 1235), so no case matches and sgn is never read."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace + with - in sinpi",
+      "line_text": "return sh + sl;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "For |x| >= 2^41 the result is RN(sh + sl) of sincosn(iq), which depends only on the 12-bit index iq. Replaying sincosn's plain IEEE operations for all 4096 indices (off CI) gives RN(sh + sl) = RN(sh - sl) for every one (|sl| stays below half an ulp of sh, never at it), so the mutant returns the same double for every such x."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace < with <= in sinpi",
+      "line_text": "if x.abs() < hf!(\"0x1p-54\") {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The forms differ only at |x| = 2^-54, which the mutant sends to the tiny path. There pi·x = (PH + PL)·2^-54 with PH = RN(pi) and PL below half its ulp, so the tiny path returns PH·2^-54, and sin(pi x) differs from pi x by about 2^-107 relative while pi x lies about a quarter ulp from every midpoint (pi's bits after the 53rd begin 0100...): PH·2^-54 is the correctly rounded value, which the original's proven polynomial path returns too."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace < with <= in sinpi",
+      "line_text": "if x.abs() < hf!(\"0x1p-960\") {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The forms differ only at |x| = 2^-960, which the mutant sends to the scaled tiny branch. Both branches compute pi·x with relative error below 2^-104 and round it once (the unscaled one's result is normal, about 2^-958.3), and pi·2^-960 has the bits of pi, far from a midpoint: both return RN(pi)·2^-960, the correctly rounded value."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace + with - in cospi",
+      "line_text": "return sh + sl;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "For |x| >= 2^41 the result is RN(sh + sl) of sincosn(iq), which depends only on the 12-bit index iq. Replaying sincosn's plain IEEE operations for all 4096 indices (off CI) gives RN(sh + sl) = RN(sh - sl) for every one (|sl| stays below half an ulp of sh, never at it), so the mutant returns the same double for every such x."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace ^ with & in atan2",
+      "line_text": "let dxy = aix.wrapping_sub(aiy) ^ gt.wrapping_neg();",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With &, gt = 1 leaves the wrapped difference (at least 2^63), so |x| < |y| still goes to atan2_accurate; gt = 0 gives dxy = 0, so pairs whose exponents are 53 or more apart then take the fast paths. There |z| < 2^-52 and jt = 0. With x > 0 the result is about z: the first test's eps (|z|·2^-51 + 2^-90) and the second's (at least 2^-100.7) exceed half an ulp of z, so both fail (also when z underflows) and atan2_accurate decides. With x < 0 (or |y| > |x|) the octant's offset pi or pi/2 dominates: both bounds round to its high part, which is the correctly rounded angle (the true angle is within 2^-52 + 1.3·10^-16 of it, inside half its ulp). The other pairs go to atan2_accurate, which rounds them as the fast paths would. So every result is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace >= with < in atan2",
+      "line_text": "if dxy >= 53 << 52 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant inverts the test: pairs whose exponents are less than 53 apart go to atan2_accurate, and pairs whose exponents are 53 or more apart then take the fast paths. There |z| < 2^-52 and jt = 0. With x > 0 the result is about z: the first test's eps (|z|·2^-51 + 2^-90) and the second's (at least 2^-100.7) exceed half an ulp of z, so both fail (also when z underflows) and atan2_accurate decides. With x < 0 (or |y| > |x|) the octant's offset pi or pi/2 dominates: both bounds round to its high part, which is the correctly rounded angle (the true angle is within 2^-52 + 1.3·10^-16 of it, inside half its ulp). The other pairs go to atan2_accurate, which rounds them as the fast paths would. So every result is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace << with >> in atan2",
+      "line_text": "if dxy >= 53 << 52 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "53 >> 52 is 0, so dxy >= 0 holds for every pair and all go to atan2_accurate. Where a fast path decides, its proven bound puts the angle farther than eps from every rounding boundary, so atan2_accurate, whose error is below 2^-182.6 of the angle, rounds it to the same double. Only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace / with % in atan2",
+      "line_text": "let jj = (y / x + (2.0 + 1.0 / 128.0)).to_bits();",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "1.0 % 128.0 is 1.0, so jj encodes y/x + 3 and jt = 64 + floor(64 y/x) (0 when y/x = 1): jt 65 to 127 read past F2 and T2 (the NaN poison, so both tests fail on NaN); jt 64 and jt 0 at y/x = 1 give a reduced quotient |z| > 0.9, where the first test's eps is at least 2^-51.1 and the second's at least 2^-49.9, so their bounds lie at least an ulp of any angle apart and differ. Every pair goes to atan2_accurate, which rounds it as before."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace < with <= in atan2",
+      "line_text": "if x < hf!(\"0x1p-920\") {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The forms differ only at x = 2^-920 exactly, where the mutant scales x and y by 2^920. Unscaled, every product and its exact error stays representable there (dxy < 53 << 52 keeps y above 2^-973), and scaled by a power of two the fast paths compute the same reduced quotient and the same test: both are within the paths' proven range, so each returns the correctly rounded angle or hands the pair to atan2_accurate."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace && with || in atan2",
+      "line_text": "if x > hf!(\"0x1p1022\") && jt != 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant also halves x and y when jt != 0 at any size, or when x > 2^1022 with jt = 0. Halving is exact there (after the scaling above x >= 2^-920, and jt != 0 or dxy < 53 << 52 keeps y far above the subnormals), and every product, its exact error, the quotients and the tests scale with it: z, zh, zl and both tests' outcomes are the same bits."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace > with >= in atan2",
+      "line_text": "if x > hf!(\"0x1p1022\") && jt != 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The forms differ only at x = 2^1022 exactly with jt != 0, where the mutant halves x and y. Halving is exact (y >= x/128 is normal) and nothing overflows either way at 2^1022, so every product, its exact error, the quotients and the tests scale with it: the same bits."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace * with + in atan2",
+      "line_text": "let eps = z.abs() * EPS1_REL + EPS1_ABS;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "eps = |z| + EPS1_REL + EPS1_ABS is at least 2^-51 and at least |z|, more than the original's |z|·2^-51 + 2^-90: the first test only fails more often, and those pairs go to the second path or atan2_accurate, which give the same correctly rounded angle."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace * with / in atan2",
+      "line_text": "let eps = z.abs() * EPS1_REL + EPS1_ABS;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "eps = |z|/EPS1_REL + EPS1_ABS = |z|·2^51 + 2^-90 is at least the original bound (equal at z = 0): the first test only fails more often, and those pairs go to the second path or atan2_accurate, which give the same correctly rounded angle."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace + with * in atan2",
+      "line_text": "let lb = rh + (rl - eps);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutated bound is the product of the result's high part with a term below 2^-50 in magnitude, so it is far below the other bound, which is within an ulp of that non-zero high part (the value is never 0 here): the two bounds always differ and this fast path never returns, sending every input on to the next path, which gives the same correctly rounded value. Only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace - with / in atan2",
+      "line_text": "let lb = rh + (rl - eps);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant accepts when RN(H + l/e) equals RN(H + l + e) (H the high part, l the low part, e > 0 the bound, u an ulp of H) and returns that bound, as the original does. Where the original's test fails a midpoint lies within e of H + l. If e < u/4 that needs |l| > u/4, so |l/e| > 1, many ulps: H + l/e rounds far from H + l + e. If e >= u/4 (values near 0) the low part is the series' next term, about H^2/2 or H^3/3 in size with |H| >= 2^-54, so |l/e| is again more than 2^40 ulps: the mutant refuses too. It accepts only inputs the original accepts, with the same result."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace + with * in atan2",
+      "line_text": "let ub = rh + (rl + eps);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutated bound is the product of the result's high part with a term below 2^-50 in magnitude, so it is far below the other bound, which is within an ulp of that non-zero high part (the value is never 0 here): the two bounds always differ and this fast path never returns, sending every input on to the next path, which gives the same correctly rounded value. Only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace - with + in atan2",
+      "line_text": "fast_two_sum(dt, (y - y1) - nl)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "This branch runs only when dt = y - nh is inexact. jt is the nearest multiple of 1/64 to y/x, so y/(x·t0) lies in [1/2, 3/2] and Sterbenz's lemma makes y - nh exact, except at jt = 1 with y an ulp below x/128 (y/x rounded up to 1/128). There t0 = 1/64, so nh = x/64 exactly (x >= 2^-920 after scaling) and nl = 0: (y - y1) + 0 = (y - y1) - 0."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace - with / in atan2",
+      "line_text": "fast_two_sum(dt, (y - y1) - nl)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "This branch runs only when dt = y - nh is inexact, which Sterbenz's lemma excludes except at jt = 1 with y an ulp below x/128; there nh = x/64 exactly, nl = 0, and (y - y1)/0 is infinite, so zh, zl and both bounds become NaN or infinite, the test fails, and atan2_accurate gives the correctly rounded angle, as the original's path does."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace * with + in atan2",
+      "line_text": "let eps = EPS2_REL * (zh.abs() * z2 + EPS2_ABS);",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "Both * on this line made +: EPS2_REL + (|zh|·z2 + EPS2_ABS) is at least 2^-49.7, and EPS2_REL·(|zh| + z2 + EPS2_ABS) is at least EPS2_REL·(|zh|·z2 + EPS2_ABS) since z2 <= 1: never below the original bound, so the second test only fails more often, and atan2_accurate gives those pairs the same correctly rounded angle."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace * with / in atan2",
+      "line_text": "let eps = EPS2_REL * (zh.abs() * z2 + EPS2_ABS);",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "Both * on this line made /: EPS2_REL/(|zh|·z2 + EPS2_ABS) is at least 2^-49.7/(2^-21 + 2^-51), and EPS2_REL·(|zh|/z2 + EPS2_ABS) = EPS2_REL·(1/|zh| + EPS2_ABS) is at least EPS2_REL·2^7 (|zh| <= 2^-7; NaN at zh = 0, which fails the test): far above the original bound, so the second test only fails more often, and atan2_accurate gives those pairs the same correctly rounded angle."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace + with * in atan2",
+      "line_text": "let lb = fh + (fl - eps);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutated bound is the product of the result's high part with a term below 2^-50 in magnitude, so it is far below the other bound, which is within an ulp of that non-zero high part (the value is never 0 here): the two bounds always differ and this fast path never returns, sending every input on to the next path, which gives the same correctly rounded value. Only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace + with * in atan2",
+      "line_text": "let ub = fh + (fl + eps);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutated bound is the product of the result's high part with a term below 2^-50 in magnitude, so it is far below the other bound, which is within an ulp of that non-zero high part (the value is never 0 here): the two bounds always differ and this fast path never returns, sending every input on to the next path, which gives the same correctly rounded value. Only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "delete - in accurate",
+      "line_text": "let corr = fma(t, x, -y);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "fma(t, x, y) is about 2y, never 0 for the non-zero y accurate receives, so the exact-quotient shortcut is never taken and those pairs go through the 192-bit evaluation, which rounds them correctly too (atan(t) for an exact small t = y/x is at least a sixteenth of an ulp from every midpoint): the shortcut only saves time."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/exp.rs",
+      "mutant": "replace + with - in exp",
+      "line_text": "let ub = fh + (fl + EPS);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutated bound H - (l + e) is the mirror image about the double H of the original's H + (l + e). If it rounds like H + (l - e), then (l and e far below an ulp of H, H a double) both lie within half an ulp of H, so H + (l + e), the mirror of the first, does too, ties included (both mirror ties round to H, or neither): the mutant accepts only inputs the original accepts, and returns the same lb. Otherwise exp_accurate gives the same correctly rounded value. Only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/exp.rs",
+      "mutant": "replace + with - in exp",
+      "line_text": "let ub = th + (fl + EPS);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutated bound H - (l + e) is the mirror image about the double H of the original's H + (l + e). If it rounds like H + (l - e), then (l and e far below an ulp of H, H a double) both lie within half an ulp of H, so H + (l + e), the mirror of the first, does too, ties included (both mirror ties round to H, or neither): the mutant accepts only inputs the original accepts, and returns the same lb. Otherwise exp_accurate gives the same correctly rounded value. Only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace >= with < in log_fast",
+      "line_text": "let above = m >= 0x16_a09e_667f_3bcd;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Below sqrt 2 the mutant halves v, so i = m >> 44 < 362 and i - 362 fails: the NaN pair sends x to log_accurate. From sqrt 2 up it does not halve, so i = m >> 43 >= 724, in range only at i = 724 (v below 725/512), whose entry INVERSE[362] is the one the original uses for v in [724/512, sqrt 2): the reduction ln x = e ln 2 - ln r + ln(1 + z) holds for any table entry, z stays inside the polynomial's fitted interval (|z| < 0.0008) and e·LOG2_H + l1 stays exact, so the fast path's proof covers it: it returns the correctly rounded value or defers to log_accurate."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace + with * in ln",
+      "line_text": "let left = h + (l - ERR);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutated bound is the product of the result's high part with a term below 2^-50 in magnitude, so it is far below the other bound, which is within an ulp of that non-zero high part (the value is never 0 here): the two bounds always differ and this fast path never returns, sending every input on to the accurate path, which gives the same correctly rounded value. Only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace - with / in ln",
+      "line_text": "let left = h + (l - ERR);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant accepts when RN(H + l/e) equals RN(H + l + e) (H the high part, l the low part, e > 0 the bound, u an ulp of H) and returns that bound, as the original does. Where the original's test fails a midpoint lies within e of H + l. If e < u/4 that needs |l| > u/4, so |l/e| > 1, many ulps: H + l/e rounds far from H + l + e. If e >= u/4 (values near 0) the low part is the series' next term, about H^2/2 or H^3/3 in size with |H| >= 2^-54, so |l/e| is again more than 2^40 ulps: the mutant refuses too. It accepts only inputs the original accepts, with the same result."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace * with / in sinpi",
+      "line_text": "let x2 = x * x;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x2 becomes 1, so eps = x·(2^-47 + 2^-102), and the bounds lie 2|eps| apart, at least 16 ulps of the computed value (which is near x itself): they always differ, and every input goes to sinpi_near_zero, which gives the same correctly rounded value. Only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace * with + in sinpi",
+      "line_text": "let eps = x * (x2 * hf!(\"0x1p-47\") + hf!(\"0x1p-102\"));",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "Both * on this line made +: x + (x2·2^-47 + 2^-102) is about x, and x·(x2 + 2^-47 + 2^-102) exceeds the original in magnitude. The mutated bound is never below the original one (every term it changes only grows, and all are positive), so the fast test fails at least as often; the inputs it gives up go to the accurate path. Both are correctly rounded wherever they return (the fast path by its proven bound; the accurate path unconditionally below 44 identical bits after the round bit, and every harder input on CORE-MATH's lists checked, the module's proof), so the same double. Only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace * with / in sinpi",
+      "line_text": "let eps = x * (x2 * hf!(\"0x1p-47\") + hf!(\"0x1p-102\"));",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "Both * on this line made /: x/(x2·2^-47 + 2^-102) is at least x·2^100, and x·(x2·2^47 + 2^-102) exceeds the original in magnitude (2^47 > 2^-47). The mutated bound is never below the original one (every term it changes only grows, and all are positive), so the fast test fails at least as often; the inputs it gives up go to the accurate path. Both are correctly rounded wherever they return (the fast path by its proven bound; the accurate path unconditionally below 44 identical bits after the round bit, and every harder input on CORE-MATH's lists checked, the module's proof), so the same double. Only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace + with - in sinpi",
+      "line_text": "let lb = (zl - eps) + zh;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace + with * in sinpi",
+      "line_text": "let lb = (zl - eps) + zh;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace - with / in sinpi",
+      "line_text": "let lb = (zl - eps) + zh;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant accepts when RN(H + l/e) equals RN(H + l + e) (H the high part, l the low part, e > 0 the bound, u an ulp of H) and returns that bound, as the original does. Where the original's test fails a midpoint lies within e of H + l. If e < u/4 that needs |l| > u/4, so |l/e| > 1, many ulps: H + l/e rounds far from H + l + e. If e >= u/4 (values near 0) the low part is the series' next term, about H^2/2 or H^3/3 in size with |H| >= 2^-54, so |l/e| is again more than 2^40 ulps: the mutant refuses too. It accepts only inputs the original accepts, with the same result."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace + with - in sinpi",
+      "line_text": "let ub = (zl + eps) + zh;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace + with * in sinpi",
+      "line_text": "let ub = (zl + eps) + zh;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace << with >> in sinpi",
+      "line_text": "if shl(m0, si) << 1 == 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "shl(m, si) has its lowest set bit at 2^si with si >= 7, so shl(m, si) >> 1 == 0 holds only for 0, an integer, which the inner test still catches. Half-integers then take the general path: x·2^11 is a whole number, so z = 0, and sincosn returns exact +-1 and +-0 at the quarter turns (checked by replaying it): sinpi's bounds both round to the exact +-1, and cospi's fail, so refine at z = 0 returns the coarse table's exact 0 (no listed hard case has z = 0), which the public cospi returns as +0. The same values as the special case."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace * with + in sinpi",
+      "line_text": "let er = z.abs() * hf!(\"0x1p-123\") + ER0;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutated bound is never below the original one (every term it changes only grows, and all are positive), so the fast test fails at least as often; the inputs it gives up go to the accurate path. Both are correctly rounded wherever they return (the fast path by its proven bound; the accurate path unconditionally below 44 identical bits after the round bit, and every harder input on CORE-MATH's lists checked, the module's proof), so the same double. Only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace * with / in sinpi",
+      "line_text": "let er = z.abs() * hf!(\"0x1p-123\") + ER0;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutated bound is never below the original one (every term it changes only grows, and all are positive), so the fast test fails at least as often; the inputs it gives up go to the accurate path. Both are correctly rounded wherever they return (the fast path by its proven bound; the accurate path unconditionally below 44 identical bits after the round bit, and every harder input on CORE-MATH's lists checked, the module's proof), so the same double. Only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace + with - in sinpi",
+      "line_text": "let lb = (r - er) + sh;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace + with * in sinpi",
+      "line_text": "let lb = (r - er) + sh;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace - with / in sinpi",
+      "line_text": "let lb = (r - er) + sh;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant accepts when RN(sh + r/er) equals RN(sh + r + er), returning that bound as the original would. Where the original refuses, a midpoint lies within er (at most 2^-77) of sh + r, so |r| is at least half an ulp of sh minus er, over 2^-64 (sh is 0 or at least sin(pi/2048)), or, at sh = 0, |r| >= pi·2^-75 (|z| >= 1, ch = +-1): either way |r/er| > 2^13 ulps of the value, and sh + r/er rounds far from sh + r + er. So the mutant accepts only inputs the original accepts, with the same double."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace + with - in sinpi",
+      "line_text": "let ub = (r + er) + sh;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace * with / in cospi",
+      "line_text": "let x2 = x * x;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x2 becomes 1, so eps = 0x1.ap-48 and the bounds lie 2^-46.3 apart, many ulps of a value near 1: they always differ, and every input goes to cospi_near_zero, which gives the same correctly rounded value. Only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace * with + in cospi",
+      "line_text": "let eps = x2 * hf!(\"0x1.ap-48\");",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutated bound is never below the original one (every term it changes only grows, and all are positive), so the fast test fails at least as often; the inputs it gives up go to the accurate path. Both are correctly rounded wherever they return (the fast path by its proven bound; the accurate path unconditionally below 44 identical bits after the round bit, and every harder input on CORE-MATH's lists checked, the module's proof), so the same double. Only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace * with / in cospi",
+      "line_text": "let eps = x2 * hf!(\"0x1.ap-48\");",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutated bound is never below the original one (every term it changes only grows, and all are positive), so the fast test fails at least as often; the inputs it gives up go to the accurate path. Both are correctly rounded wherever they return (the fast path by its proven bound; the accurate path unconditionally below 44 identical bits after the round bit, and every harder input on CORE-MATH's lists checked, the module's proof), so the same double. Only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace + with - in cospi",
+      "line_text": "let lb = (p - eps) + 1.0;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace + with * in cospi",
+      "line_text": "let lb = (p - eps) + 1.0;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace - with / in cospi",
+      "line_text": "let lb = (p - eps) + 1.0;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant accepts when RN(H + l/e) equals RN(H + l + e) (H the high part, l the low part, e > 0 the bound, u an ulp of H) and returns that bound, as the original does. Where the original's test fails a midpoint lies within e of H + l. If e < u/4 that needs |l| > u/4, so |l/e| > 1, many ulps: H + l/e rounds far from H + l + e. If e >= u/4 (values near 0) the low part is the series' next term, about H^2/2 or H^3/3 in size with |H| >= 2^-54, so |l/e| is again more than 2^40 ulps: the mutant refuses too. It accepts only inputs the original accepts, with the same result."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace + with - in cospi",
+      "line_text": "let ub = (p + eps) + 1.0;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace + with * in cospi",
+      "line_text": "let ub = (p + eps) + 1.0;",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "Both + on this line made *. (p + eps)·1.0 is about p, far below lb (about 1), so they never agree. (p·eps) + 1.0 rounds to 1.0 (|p·eps| < 2^-90): the mutant then accepts exactly when lb = RN(1 + p - eps) is 1.0, and since p + eps < 0 here (p is about -4.93·x^2, eps about 1.6·2^-48·x^2), the original's ub = RN(1 + p + eps) then lies between lb and 1, so it is 1.0 too and the original accepts with the same value. Otherwise both defer to cospi_near_zero."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace << with >> in cospi",
+      "line_text": "if shl(m, si) << 1 == 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "shl(m, si) has its lowest set bit at 2^si with si >= 7, so shl(m, si) >> 1 == 0 holds only for 0, an integer, which the inner test still catches. Half-integers then take the general path: x·2^11 is a whole number, so z = 0, and sincosn returns exact +-1 and +-0 at the quarter turns (checked by replaying it): sinpi's bounds both round to the exact +-1, and cospi's fail, so refine at z = 0 returns the coarse table's exact 0 (no listed hard case has z = 0), which the public cospi returns as +0. The same values as the special case."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace * with + in cospi",
+      "line_text": "let er = z.abs() * hf!(\"0x1p-123\") + ER0;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutated bound is never below the original one (every term it changes only grows, and all are positive), so the fast test fails at least as often; the inputs it gives up go to the accurate path. Both are correctly rounded wherever they return (the fast path by its proven bound; the accurate path unconditionally below 44 identical bits after the round bit, and every harder input on CORE-MATH's lists checked, the module's proof), so the same double. Only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace * with / in cospi",
+      "line_text": "let er = z.abs() * hf!(\"0x1p-123\") + ER0;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutated bound is never below the original one (every term it changes only grows, and all are positive), so the fast test fails at least as often; the inputs it gives up go to the accurate path. Both are correctly rounded wherever they return (the fast path by its proven bound; the accurate path unconditionally below 44 identical bits after the round bit, and every harder input on CORE-MATH's lists checked, the module's proof), so the same double. Only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace + with - in cospi",
+      "line_text": "let lb = (r - er) + sh;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace + with * in cospi",
+      "line_text": "let lb = (r - er) + sh;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace - with / in cospi",
+      "line_text": "let lb = (r - er) + sh;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant accepts when RN(sh + r/er) equals RN(sh + r + er), returning that bound as the original would. Where the original refuses, a midpoint lies within er (at most 2^-77) of sh + r, so |r| is at least half an ulp of sh minus er, over 2^-64 (sh is 0 or at least sin(pi/2048)), or, at sh = 0, |r| >= pi·2^-75 (|z| >= 1, ch = +-1): either way |r/er| > 2^13 ulps of the value, and sh + r/er rounds far from sh + r + er. So the mutant accepts only inputs the original accepts, with the same double."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace + with - in cospi",
+      "line_text": "let ub = (r + er) + sh;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace * with + in accurate",
+      "line_text": "let corr = fma(t * hf!(\"0x1p105\"), x, -y * hf!(\"0x1p105\"));",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "Both * on this line made + (t + 2^105, or -y + 2^105). The scaled residual is then about 2^105·x, y·2^105 or 2y·2^105, never 0 for the non-zero x and y accurate receives, so for |y| < 2^-915 the exact-quotient shortcut is never taken and those pairs go through the 192-bit evaluation, which rounds them correctly too (atan(t) for an exact small t = y/x is at least a sixteenth of an ulp from every midpoint): the shortcut only saves time."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace * with / in accurate",
+      "line_text": "let corr = fma(t * hf!(\"0x1p105\"), x, -y * hf!(\"0x1p105\"));",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "Both * on this line made / (t/2^105, or -y/2^105). The scaled residual is then about 2^105·x, y·2^105 or 2y·2^105, never 0 for the non-zero x and y accurate receives, so for |y| < 2^-915 the exact-quotient shortcut is never taken and those pairs go through the 192-bit evaluation, which rounds them correctly too (atan(t) for an exact small t = y/x is at least a sixteenth of an ulp from every midpoint): the shortcut only saves time."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "delete - in accurate",
+      "line_text": "let corr = fma(t * hf!(\"0x1p105\"), x, -y * hf!(\"0x1p105\"));",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With +y·2^105 the residual is about 2y·2^105. The scaled residual is then about 2^105·x, y·2^105 or 2y·2^105, never 0 for the non-zero x and y accurate receives, so for |y| < 2^-915 the exact-quotient shortcut is never taken and those pairs go through the 192-bit evaluation, which rounds them correctly too (atan(t) for an exact small t = y/x is at least a sixteenth of an ulp from every midpoint): the shortcut only saves time."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "delete -",
+      "line_text": "const ZERO: Tint = t(0, 0, 0, -1076, 0);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "ZERO's exponent is read only where a zero meets arithmetic: Tint::add tests is_zero (h == 0) before comparing exponents, and a product by ZERO (h = m = l = 0) stays zero whatever its exponent. So a zero with ex = 1076 behaves as one with ex = -1076."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace | with ^ in Wide192::shr",
+      "line_text": "lo: lo64(shl128(self.hi, 64u64.abs_diff(k))) | (self.lo >> k),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "For k in 1..=63 the bits brought down from hi fill the top k bits of the low word (shl128 by 64 - k leaves its low 64 - k bits zero) and self.lo >> k the bottom 64 - k: no bit in common, so | and ^ agree for every value."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace | with ^ in Wide192::shl",
+      "line_text": "hi: (self.hi << k) | u128::from(self.lo >> 64u64.abs_diff(k)),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "For k in 1..=63, self.hi << k has its low k bits zero and self.lo >> (64 - k) is below 2^k: no bit in common, so | and ^ agree for every value."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace | with ^ in Wide192::shl",
+      "line_text": "hi: shl128(self.hi, k) | shl128(u128::from(self.lo), k.abs_diff(64)),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "For k in 64..=191, shl128(self.hi, k) has its low k bits zero and the 64-bit low word shifted by k - 64 is below 2^k: no bit in common, so | and ^ agree for every value."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace Tint::is_zero -> bool with false",
+      "line_text": "self.h == 0",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "is_zero is read only by cmp_magnitude. A zero reaches it only as ZERO times something, added back: r + r·(1 - a·r) in Tint::inv when a·r is exactly 1, and r + y·(b - a·r) in Tint::div when a·r equals b; the product's exponent is the factor's minus 1077 (r's, or y's with r about b·y and b the exact value of a double, ex >= -1073), so compared by exponent first the zero still comes out smaller than r, as is_zero would make it, and the sum is r either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace | with ^ in Tint::mul",
+      "line_text": "r.h = (r.h << 1) | (r.m >> 63);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "r.h << 1 has its low bit 0 and r.m >> 63 is 0 or 1: no bit in common, so | and ^ agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace | with ^ in Tint::mul",
+      "line_text": "r.m = (r.m << 1) | (r.l >> 63);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "r.m << 1 has its low bit 0 and r.l >> 63 is 0 or 1: no bit in common, so | and ^ agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace ^ with | in Tint::add",
+      "line_text": "if self.sgn ^ b.sgn != 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Tint::add's Equal branch runs only for operands of equal magnitude, and in this file those always have opposite signs: ONE + (-(a·r)) when a·r is exactly 1 (a power-of-two divisor), and b - a·r in Tint::div when a·r equals b exactly; every other addition adds a term of another size (Horner's steps, the Newton corrections, pi or pi/2 plus an angle below pi/2). So the signs differ there, and sgn ^ b.sgn and sgn | b.sgn are both 1."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "delete field ex from struct Tint expression in Tint::add",
+      "line_text": "ex: self.ex.checked_add(1)?,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Tint::add's Equal branch runs only for operands of equal magnitude, and in this file those always have opposite signs: ONE + (-(a·r)) when a·r is exactly 1 (a power-of-two divisor), and b - a·r in Tint::div when a·r equals b exactly; every other addition adds a term of another size (Horner's steps, the Newton corrections, pi or pi/2 plus an angle below pi/2). So the doubling for equal signs never runs, and what it sets ex to is never seen."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace | with ^ in Tint::add",
+      "line_text": "let lo = (lo64(hi) << 63) | (lo >> 1);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "lo64(hi) << 63 can set only bit 63, and lo >> 1 is below 2^63: no bit in common, so | and ^ agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace | with ^ in Tint::add",
+      "line_text": "let hi = (ch << 127) | (hi >> 1);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "ch << 127 can set only bit 127 (ch is at most 1), and hi >> 1 is below 2^127: no bit in common, so | and ^ agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace < with <= in Tint::inv",
+      "line_text": "let subnormal = ad.abs() < f64::MIN_POSITIVE;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The forms differ only at |ad| = 2^-1022, where the mutant scales by 2^53, takes 1/ad = 2^969 exactly and adds 53 to the exponent: the same Tint as the exact 2^1022."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace ^= with |= in Tint::inv",
+      "line_text": "q.sgn ^= 1; // C: `1 − sgn` for a sign of 0 or 1",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "q = a·r, and r = 1/ad has a's sign, so q is positive (sgn 0) every time: 0 ^ 1 and 0 | 1 are both 1."
     }
   ],
   "coverage_off": [],
