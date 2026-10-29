@@ -311,18 +311,29 @@ pub fn sqrt(x: f64) -> Result<Real, NumError> {
 /// # Errors
 ///
 /// [`NumError::NotFinite`] for a NaN or infinite argument, or when the result overflows.
-///
-/// Always inline: `Interval::mul_add` calls it eight times and the double-double operations
-/// several times each, and left to LLVM, how many of those calls it inlined changed with unrelated
-/// code. G47's count gate on x86-64 caught `mul_add` going from five inlined calls to four, 8%
-/// more instructions, with neither function changed.
-#[allow(
-    clippy::inline_always,
-    reason = "measured: the inliner's choice moved with unrelated code; every call is a few instructions"
-)]
-#[inline(always)]
 pub fn fma(a: f64, b: f64, c: f64) -> Result<Real, NumError> {
     Real::new(libm::fma(finite(a)?, finite(b)?, finite(c)?))
+}
+
+/// [`fma`] of arguments already known to be finite, as a double: the eight fused multiply-adds of
+/// `Interval::mul_add`, whose operands are interval bounds, finite by construction, so the
+/// argument checks of [`fma`] would refuse nothing.
+///
+/// Always inline: through [`fma`], LLVM inlined some of `mul_add`'s eight calls and not others,
+/// and how many moved with unrelated code. G47's x86-64 count gate caught `mul_add` going from
+/// five inlined calls to four, 8% more instructions, with neither function changed; forcing
+/// [`fma`] itself inline instead cost the double-double two-product spills, 6.6% more cycles.
+///
+/// # Errors
+///
+/// [`NumError::NotFinite`] when the result overflows.
+#[allow(
+    clippy::inline_always,
+    reason = "measured: LLVM's choice moved with unrelated code, on x86-64"
+)]
+#[inline(always)]
+pub(crate) fn fma_of_finite(a: f64, b: f64, c: f64) -> Result<f64, NumError> {
+    Real::new(libm::fma(a, b, c)).map(Real::get)
 }
 
 /// Absolute value. Exact.

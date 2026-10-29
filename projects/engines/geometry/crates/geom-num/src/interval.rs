@@ -143,7 +143,7 @@
 
 use crate::error::NumError;
 use crate::math;
-use crate::real::{Real, zero_to_plus};
+use crate::real::zero_to_plus;
 use crate::sign::Sign;
 
 /// A closed interval `[lo, hi]` of finite doubles, `lo ≤ hi`, that contains an unknown real number.
@@ -358,8 +358,8 @@ impl Interval {
     /// bound, with the upper bound of `c` in place of the lower one, so a corner that overflows
     /// upward makes the upper bound overflow, and one that overflows downward the lower bound.
     pub fn mul_add(self, b: Interval, c: Interval) -> Result<Interval, NumError> {
-        let low = |x: f64, y: f64| math::fma(x, y, c.lo).map(Real::get);
-        let high = |x: f64, y: f64| math::fma(x, y, c.hi).map(Real::get);
+        let low = |x: f64, y: f64| math::fma_of_finite(x, y, c.lo);
+        let high = |x: f64, y: f64| math::fma_of_finite(x, y, c.hi);
         let (ll, lh, hl, hh) = (
             low(self.lo, b.lo)?,
             low(self.lo, b.hi)?,
