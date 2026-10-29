@@ -1240,6 +1240,81 @@ fn grid_points_go_to_the_nearest_doubles_in_any_unit() {
 }
 
 #[test]
+fn rational_map_values_round_at_every_edge_of_a_double() {
+    // One unit is one step and the frame has no rotation, so a Ground frame with scale k_n/k_d
+    // maps the grid point (x, 0, 0) to E = O + x·k_n/k_d units exactly, through the wide
+    // quotient: exact values, ties to even both ways, a sticky bit, a carry into the exponent,
+    // tiny and huge quotients, both signs.
+    let one_step = LinearUnit::new(1, 6_400_000).unwrap();
+    let two = |k: u32| 1u64 << k;
+    for (kn, kd, x, origin, want) in [
+        (3, 4, 1, 0, Some((0.75, true))),
+        (two(54) - 1, two(54), 1, 0, Some((1.0, false))),
+        (two(53) + 1, two(53), 1, 0, Some((1.0, false))),
+        (two(53) + 3, two(53), 1, 0, Some((1.0 + pow2f(-51), false))),
+        (
+            two(60) + two(7) + 1,
+            two(60),
+            1,
+            0,
+            Some((1.0 + pow2f(-52), false)),
+        ),
+        (two(54) - 1, two(54), -1, 0, Some((-1.0, false))),
+        (1, two(63), 1, 0, Some((pow2f(-63), true))),
+        (1, 3, 1, 0, None),
+        (u64::MAX, 1, COORD_MAX, 0, None),
+        (u64::MAX, 7, -COORD_MAX, 1 << 60, None),
+        (5, 3, 3, -(1 << 60), None),
+    ] {
+        let f = FrameRecord::new(
+            NZTM,
+            GridStep::Q0,
+            [origin, 0, 0],
+            Rotation::IDENTITY,
+            Scale::new(kn, kd).unwrap(),
+        )
+        .unwrap()
+        .with_linear_unit(one_step);
+        let p = P3::new(x, 0, 0).unwrap();
+        check_to_map(&f, p);
+        if let Some((e, exact)) = want {
+            let m = f.to_map(p).unwrap();
+            assert_eq!((m.value().easting, m.is_exact()), (e, exact), "{kn}/{kd}");
+        }
+    }
+}
+
+#[test]
+fn irrational_map_values_that_cancel_the_origin_are_still_the_nearest_doubles() {
+    // With the direction (1, 1), κ = k_n·a/(k_d·√2); taking k_n·a/k_d = x with x² − 2y² = ±1
+    // (Pell's equation) puts κ within 1/(2√2·x) of y, so an origin of −y cancels all but that.
+    // The double-double estimate's error grows with κ, so for large x its guess is wrong and the
+    // bisection decides; for small x the guess stands. Both against the exact model.
+    let (mut x, mut y) = (1i128, 1i128);
+    let mut cases = 0;
+    while y < 1 << 60 {
+        for unit in [LinearUnit::METRE, LinearUnit::US_SURVEY_FOOT] {
+            for sign in [1i64, -1] {
+                let o = -sign * y as i64;
+                let f = FrameRecord::new(
+                    NZTM,
+                    GridStep::Q0,
+                    [o, o, 0],
+                    Rotation::direction(1, 1).unwrap(),
+                    Scale::new(x as u64, 1).unwrap(),
+                )
+                .unwrap()
+                .with_linear_unit(unit);
+                check_to_map(&f, P3::new(sign, 0, 0).unwrap());
+                cases += 1;
+            }
+        }
+        (x, y) = (x + 2 * y, x + y);
+    }
+    assert!(cases > 150, "{cases}");
+}
+
+#[test]
 fn round_trips_at_nztm_extremes_and_the_frame_range() {
     // NZTM's corners (easting 1,000,000 to 2,200,000 m, northing 4,700,000 to 6,300,000 m), every
     // grid point combination at 0 and ±(2^40 − 1), at q0 and q1, in metres and in feet, in Map

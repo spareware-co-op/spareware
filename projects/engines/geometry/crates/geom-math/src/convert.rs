@@ -46,10 +46,10 @@
 //! **Frame to map** ([`FrameRecord::to_map`]) returns the nearest doubles to the exact map
 //! coordinates in the frame's linear unit, ties to even, with whether they are exact: by exact
 //! integer division when the horizontal transform is rational (in 1536-bit integers when the
-//! values outgrow `i128`), and for an irrational direction by a double-double value certified
-//! against its proven error, falling back, when the certificate fails, to a bisection over the
-//! doubles decided by exact signs of A − B·√(c² + s²). An irrational map coordinate is never exact
-//! and never a tie. At q0 in metres a Map-frame round trip frame → map → frame is the identity for
+//! values outgrow `i128`), and for an irrational direction by the leading part of a double-double
+//! estimate, kept only when two exact signs of A − B·√(c² + s²) put the exact value strictly
+//! inside its rounding interval, and otherwise by a bisection over the doubles decided by the
+//! same exact signs. An irrational map coordinate is never exact and never a tie. At q0 in metres a Map-frame round trip frame → map → frame is the identity for
 //! every coordinate below 2^29 m, because an ulp of the map value is then smaller than a step.
 //!
 //! Because each frame rounds its own coordinates to even, a map value exactly halfway between two
@@ -111,8 +111,9 @@
 //!   three correctly rounded quotients (at most 181 shift-and-subtract steps each); in a rational
 //!   Ground frame, two correctly rounded quotients of 1536-bit integers (58 shifts and 56
 //!   subtractions each). For an irrational direction, a ratio and six double-double operations per
-//!   horizontal coordinate; when the certificate fails, a bisection of at most 70 halvings and
-//!   three more exact signs, each four products of 1536-bit integers.
+//!   horizontal coordinate and three exact signs (the value's sign and the two midpoints beside the
+//!   guess), each four products of 1536-bit integers; when the guess fails, a bisection of at most
+//!   70 halvings, one exact sign each.
 
 #![allow(
     clippy::many_single_char_names,
@@ -197,19 +198,6 @@ const IRRATIONAL_MIN: f64 = const_pow2!(-300);
 
 /// The largest magnitude any map coordinate can have, 2^148 units (see [`FrameRecord::to_map`]).
 const MAP_RESULT_MAX: f64 = const_pow2!(148);
-
-/// The certificate's relative margin in [`FrameRecord::to_map`], 2^−98 = 256u².
-const CERTIFICATE_MARGIN: f64 = const_pow2!(-98);
-
-/// The relative error bound of an irrational map coordinate's double-double value: the estimate
-/// of `k_n·a/(k_d·√n)` (the ratio, a division by √n), then the addition of the origin, the product
-/// by q and the division by S·p, about 47.5u², below half the certificate's margin.
-const MAP_BOUND: f64 = (IRRATIONAL_BOUND + dd::ADD_BOUND + dd::MUL_BOUND + dd::DIV_BOUND) * SLACK;
-
-const _: () = assert!(2.0 * MAP_BOUND < CERTIFICATE_MARGIN);
-
-/// The widening of the bisection's bracket in [`FrameRecord::to_map`], 2^−50.
-const BRACKET_WIDENING: f64 = const_pow2!(-50);
 
 /// Map coordinates in the frame's linear unit (metres unless the record says otherwise): easting,
 /// northing and height above the vertical datum.
@@ -829,13 +817,14 @@ impl FrameRecord {
     /// O·q/(S·p)). Bounds: |`κ`| < 2^136, so |V| < 2^137/2^22·2^32 < 2^148 (the unit is at least
     /// 2^−32 m); and |V| > 2^−300, because V = (A − `B√n)/(k_d·S·u·√n`) with A = `k_n·a` and
     /// B = −`O·k_d`, A² − B²n is a nonzero integer, so |A − B√n| ≥ 1/(|A| + |B|√n) ≥ 2^−138,
-    /// while `k_d·S·u·√n` < 2^64·2^32·2^32·2^31.5 = 2^159.5. The double-double value (the ratio
-    /// `k_n·a/k_d` and a division by √n, then an addition, a product and a division) is within
-    /// `MAP_BOUND`·(|V| + |`κ`|·q/(S·p)) of V, about 47.5u². With a margin of 2^−98 = 256u² times that
-    /// sum, doubled, the nearest double to the double-double value is certified when the whole
-    /// uncertainty interval lies inside its rounding interval. Otherwise the nearest double is
-    /// found by bisection with exact signs (`IrrationalMap::nearest`). V is irrational, so there is
-    /// never a tie, and the coordinate is never exact.
+    /// while `k_d·S·u·√n` < 2^64·2^32·2^32·2^31.5 = 2^159.5. The double-double value of V (the ratio
+    /// `k_n·a/k_d` and a division by √n, then an addition, a product and a division, within about
+    /// 50u²·(|V| + |`κ`|·q/(S·p)) of V) gives a guess, its leading part, which is kept when two exact
+    /// signs put V strictly between the midpoints on either side of it: the usual case, unless the
+    /// origin cancels most of `κ`. Otherwise the nearest double is found by bisection over the
+    /// doubles from 2^−300 to 2^148 with exact signs (`IrrationalMap::nearest`). The guess never
+    /// decides the result. V is irrational, so there is never a tie, and the coordinate is never
+    /// exact.
     ///
     /// # Errors
     ///
@@ -927,26 +916,6 @@ impl FrameRecord {
             .add(kappa)?
             .mul(budget(DD::from_i128(qu))?)?
             .div(budget(DD::from_i128(spi))?)?;
-        let (h, l) = (units.hi(), units.lo());
-        // The parts are finite (a double-double's invariant), so `math::abs` refuses none.
-        let (h_size, k_size, l_size) = (
-            math::abs(h)?.get(),
-            math::abs(kappa.hi())?.get(),
-            math::abs(l)?.get(),
-        );
-        #[allow(
-            clippy::cast_precision_loss,
-            reason = "q and S·p only scale the certificate's margin, which has room for their \
-                      rounding (a relative 2^−52 each against a factor of two)"
-        )]
-        let (qf, spf) = (qu as f64, sp as f64);
-        // The certificate: |V − (h + l)| ≤ err, and h + l ± 2·err inside h's rounding interval.
-        let err = (h_size + k_size * qf / spf) * CERTIFICATE_MARGIN;
-        let up = h.next_up() - h;
-        let down = h - h.next_down();
-        if h != 0.0 && l + 2.0 * err < 0.5 * up && l - 2.0 * err > -0.5 * down {
-            return Ok(Rounded::new(h, false));
-        }
         let exact = IrrationalMap {
             origin,
             kn_a,
@@ -955,23 +924,9 @@ impl FrameRecord {
             q: big(qu),
             n2,
         };
-        // A bracket of |V| from the double-double value, checked exactly inside `nearest`.
-        let spread = l_size + 2.0 * err;
-        let lo = (h_size - spread) * (1.0 - BRACKET_WIDENING);
-        let lo = if lo > IRRATIONAL_MIN {
-            lo
-        } else {
-            IRRATIONAL_MIN
-        };
-        let hi = (h_size + spread) * (1.0 + BRACKET_WIDENING);
-        let hi = if hi < MAP_RESULT_MAX {
-            hi
-        } else {
-            MAP_RESULT_MAX
-        };
         // `None` would mean an exact sign overflowed its budget, which the bounds rule out: it is
         // reported, never replaced by the double-double's value.
-        let value = budget(exact.nearest(lo, hi))?;
+        let value = budget(exact.nearest(units.hi()))?;
         Ok(Rounded::new(value, false))
     }
 }
@@ -1009,9 +964,9 @@ impl IrrationalMap {
     /// A = `q·k_n·a` and B = (p·S·p·2^f − `O·q)·k_d`. The sign of A − B·√n is decided exactly by
     /// comparing squares.
     ///
-    /// Budget, for the w the conversion uses (zero, the two ends of the bracket and the midpoints
-    /// between neighbouring doubles inside it, so 2^−301 ≤ |w| ≤ 2^148 otherwise, with |p| < 2^55
-    /// and 2^−356 ≤ 2^f): for f < 0, |A| < 2^64·2^136·2^356 = 2^556 and
+    /// Budget, for the w the conversion uses (zero, and midpoints between neighbouring doubles from
+    /// 2^−300 to 2^148, so 2^−301 ≤ |w| ≤ 2^148 otherwise, with |p| < 2^55 and 2^−356 ≤ 2^f): for
+    /// f < 0, |A| < 2^64·2^136·2^356 = 2^556 and
     /// |B| < (2^55·2^96 + 2^60·2^64·2^356)·2^64 < 2^545; for f ≥ 0, |A| < 2^200 and, since
     /// |p·2^f| = |w| ≤ 2^148, |B| < (2^148·2^96 + 2^124)·2^64 < 2^309. So A² < 2^1112 and
     /// B²·n < 2^1090·2^63 = 2^1153, inside 1536 bits.
@@ -1039,52 +994,66 @@ impl IrrationalMap {
         }
     }
 
-    /// The nearest double to V, by bisection over the positive doubles in [lo, hi] (a bracket of
-    /// |V|, checked exactly, with the proven bounds as the fallback) decided by exact signs at the
-    /// midpoints between neighbouring doubles. Positive doubles are ordered like their bit
-    /// patterns, so at most 63 halvings find the double whose rounding interval holds |V|; V is
-    /// irrational, so it is never a midpoint. `None` only if a checked step failed, which the
-    /// budgets of [`IrrationalMap::sign_minus`] rule out.
-    fn nearest(&self, lo: f64, hi: f64) -> Option<f64> {
+    /// The midpoint between the positive doubles whose bit patterns are `bits` and `bits + 1`, as
+    /// p·2^f with |p| < 2^55: (d₁ + d₂)/2 = (m₁·2^(e₁ − e₀) + m₂·2^(e₂ − e₀))·2^(e₀ − 1) for
+    /// e₀ = min(e₁, e₂), each shift below 128. `None` if either pattern is not a finite double.
+    fn midpoint(bits: u64) -> Option<(i128, i32)> {
+        let (m1, e1) = dyadic(f64::from_bits(bits))?;
+        let (m2, e2) = dyadic(f64::from_bits(bits.checked_add(1)?))?;
+        let e0 = e1.min(e2);
+        let shift = |m: i64, e: i32| -> Option<i128> {
+            i128::from(m).checked_shl(u32::try_from(e.checked_sub(e0)?).ok()?)
+        };
+        Some((
+            shift(m1, e1)?.checked_add(shift(m2, e2)?)?,
+            e0.checked_sub(1)?,
+        ))
+    }
+
+    /// The nearest double to V: `guess` (the double-double estimate's leading part) when exact
+    /// signs put |V| strictly between the midpoints on either side of it, which is the usual case;
+    /// otherwise by bisection over every positive double from 2^−300 to 2^148, which holds |V|
+    /// (see [`FrameRecord::to_map`]), decided by exact signs at the midpoints between neighbours.
+    /// Positive doubles are ordered like their bit patterns, so at most 63 halvings find the double
+    /// whose rounding interval holds |V|; V is irrational, so it is never a midpoint, and the guess
+    /// only saves the bisection: it never decides the result. `None` only if a checked step
+    /// failed, which the budgets of [`IrrationalMap::sign_minus`] rule out.
+    fn nearest(&self, guess: f64) -> Option<f64> {
         let negative = self.sign_minus(0, 0)? == Sign::Negative;
-        let holds = |w: f64, want: Sign| -> Option<bool> {
-            let (m, e) = dyadic(w)?;
-            Some(self.abs_minus(negative, i128::from(m), e)? == want)
+        // Whether |V| lies above the midpoint between the doubles with patterns `bits` and
+        // `bits + 1`.
+        let above = |bits: u64| -> Option<bool> {
+            let (p, f) = IrrationalMap::midpoint(bits)?;
+            Some(self.abs_minus(negative, p, f)? == Sign::Positive)
         };
-        let lo = if holds(lo, Sign::Positive)? {
-            lo
-        } else {
-            IRRATIONAL_MIN
+        let signed = |bits: u64| {
+            let magnitude = f64::from_bits(bits);
+            if negative { -magnitude } else { magnitude }
         };
-        let hi = if holds(hi, Sign::Negative)? {
-            hi
-        } else {
-            MAP_RESULT_MAX
-        };
-        let (mut a, mut b) = (lo.to_bits(), hi.to_bits());
+        // A guess outside the proven range is no guess: its midpoints would leave the budget.
+        let magnitude = math::abs(guess).ok()?.get();
+        let g = magnitude.to_bits();
+        if (IRRATIONAL_MIN..MAP_RESULT_MAX).contains(&magnitude)
+            && let Some(below) = g.checked_sub(1)
+            && above(below)?
+            && !above(g)?
+        {
+            return Some(signed(g));
+        }
+        let (mut a, mut b) = (IRRATIONAL_MIN.to_bits(), MAP_RESULT_MAX.to_bits());
         for _ in 0..70 {
             if a >= b {
                 break;
             }
             // a < b, both bit patterns of positive finite doubles: every step below fits.
             let mid = a.checked_add(b.checked_sub(a)?.checked_div(2)?)?;
-            let next = mid.checked_add(1)?;
-            let (m1, e1) = dyadic(f64::from_bits(mid))?;
-            let (m2, e2) = dyadic(f64::from_bits(next))?;
-            let e0 = e1.min(e2);
-            // The midpoint (d₁ + d₂)/2 = p·2^(e0 − 1), |p| < 2^55: each shift is below 128.
-            let shift = |m: i64, e: i32| -> Option<i128> {
-                i128::from(m).checked_shl(u32::try_from(e.checked_sub(e0)?).ok()?)
-            };
-            let p = shift(m1, e1)?.checked_add(shift(m2, e2)?)?;
-            if self.abs_minus(negative, p, e0.checked_sub(1)?)? == Sign::Positive {
-                a = next;
+            if above(mid)? {
+                a = mid.checked_add(1)?;
             } else {
                 b = mid;
             }
         }
-        let magnitude = f64::from_bits(a);
-        Some(if negative { -magnitude } else { magnitude })
+        Some(signed(a))
     }
 }
 

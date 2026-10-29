@@ -23,9 +23,12 @@
 //!
 //! Method: exact rational arithmetic with Euclid's greatest common divisor (D. E. Knuth, *The Art
 //! of Computer Programming*, vol. 2, section 4.5.2,
-//! <https://www-cs-faculty.stanford.edu/~knuth/taocp.html>); the units as EPSG defines them,
-//! for example the US survey foot as 12/39.37 m, as in PROJ's copy of the EPSG data
-//! (<https://github.com/OSGeo/PROJ/blob/5fa31c29f0a806568ed7bc76c1a557604db4a804/data/sql/unit_of_measure.sql>).
+//! <https://www-cs-faculty.stanford.edu/~knuth/taocp.html>); the units as EPSG defines them: the
+//! international foot 0.3048 m and Clarke's foot 0.3047972654 m as PROJ's copy of the EPSG data
+//! gives them
+//! (<https://github.com/OSGeo/PROJ/blob/5fa31c29f0a806568ed7bc76c1a557604db4a804/data/sql/unit_of_measure.sql>),
+//! and the US survey foot by its definition, 1200/3937 m (EPSG's 12/39.37), which that copy
+//! stores only rounded, as 0.304800609601219241.
 //!
 //! Consulted: PROJ (its copy of the EPSG dataset, whose own terms of use cover the data), MIT,
 //!   <https://github.com/OSGeo/PROJ/blob/5fa31c29f0a806568ed7bc76c1a557604db4a804/data/sql/unit_of_measure.sql>,

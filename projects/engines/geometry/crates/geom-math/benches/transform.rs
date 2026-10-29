@@ -33,8 +33,8 @@ use geom_math::{
     RationalRotation, RationalTransform, Rotation, Scale, Transform, TypedTransform,
 };
 use geom_num::grid::{GridStep, P2, P3};
-use geom_num::{ladder, math};
 use geom_num::rng::{Philox, Seed, Stream, StreamId};
+use geom_num::{ladder, math};
 
 const POINTS: usize = 1_000_000;
 const FRAME_POINTS: usize = 200_000;
@@ -241,8 +241,16 @@ fn main() {
     );
     plane(&pts);
     searches();
+    frames(&pts[..FRAME_POINTS]);
+}
 
-    // Frames: a site near Auckland, map to frame and back.
+/// Frames: a site near Auckland, map to frame and back, from doubles and from decimal text.
+#[allow(
+    clippy::unwrap_used,
+    reason = "a benchmark is development code, like a test: a failure should stop it loudly"
+)]
+fn frames(small: &[P3]) {
+    let k = Scale::new(99_987_654, 100_000_000).unwrap();
     let s = 6_400_000i64;
     let origin = [1_757_000 * s, 5_921_000 * s, 0];
     let nztm = CrsId::Epsg(2193);
@@ -250,7 +258,7 @@ fn main() {
         let r = Rotation::direction(c, s).unwrap();
         FrameRecord::new(nztm, GridStep::Q0, origin, r, k).unwrap()
     };
-    let frames = [
+    let kinds = [
         (
             "map frame",
             FrameRecord::map(nztm, GridStep::Q0, origin).unwrap(),
@@ -271,8 +279,7 @@ fn main() {
             ground(1_000, 7).with_linear_unit(LinearUnit::US_SURVEY_FOOT),
         ),
     ];
-    let small = &pts[..FRAME_POINTS];
-    for (name, fr) in frames {
+    for (name, fr) in kinds {
         let maps: Vec<MapPoint> = small
             .iter()
             .map(|&p| fr.to_map(p).unwrap().value())
@@ -311,15 +318,21 @@ fn main() {
         let mut check = 0u64;
         let mut decimals = Vec::with_capacity(text.len());
         for t in &text {
-            let [e, n, h] = black_box(t).each_ref().map(|t| Decimal::parse(t).unwrap());
-            check = check.wrapping_add(e.significand() as u64);
+            let [easting, northing, height] =
+                black_box(t).each_ref().map(|t| Decimal::parse(t).unwrap());
+            check = check.wrapping_add(easting.significand() as u64);
             decimals.push(DecimalPoint {
-                easting: e,
-                northing: n,
-                height: h,
+                easting,
+                northing,
+                height,
             });
         }
-        report(&format!("parse decimal text, {name}"), text.len(), start, check);
+        report(
+            &format!("parse decimal text, {name}"),
+            text.len(),
+            start,
+            check,
+        );
         let start = Instant::now();
         let mut check = 0u64;
         for &d in &decimals {
