@@ -514,7 +514,7 @@ The ledger covers what the evidence examined. Programs the kernel serves need mo
 
 | Area | Who needs it | Candidate sources and likely terms (unverified) |
 | --- | --- | --- |
-| Circuit-board exchange and tools | Spare Electronics | Gerber (Ucamco's published specification), IPC-2581 (IPC standard), ODB++ (Siemens); KiCad (GPL-3.0 label: papers and documentation only) |
+| Circuit-board exchange and tools | Spare Electronics | Gerber (Ucamco's published specification: implemented exactly, no extensions), IPC-2581 (IPC standard: its own text or IPC's word first), ODB++ (Siemens); KiCad (GPL-3.0 label: papers and documentation only). Built when two programs need boards (owner action G447, 32.40) |
 | Slicing for 3D printing | Manufacturing | CuraEngine and PrusaSlicer (AGPL-3.0 labels: not read) |
 | Machining (CAM) | Manufacturing | OpenCAMLib (LGPL-2.1 label: method only) |
 | Exchange formats | Every program | glTF (Khronos specification; label NOASSERTION); 3MF (lib3mf BSD-2-Clause label; the specification's terms unknown); OpenUSD (TOST, label NOASSERTION); IGES (an old public specification, status unknown); JT (ISO 14306) |
