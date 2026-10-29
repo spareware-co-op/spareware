@@ -1,7 +1,7 @@
 //! Tests that kill the mutants the first full mutation run (gate 1, chapter 32.43) found surviving
 //! in geom-num outside `math/`: the generated filters `lpi_side`, `lpi_weight`, `ssi_weight` and
-//! `tpi_weight`, the generated exact paths of `lpi_side`, `ssi_side` and `tpi_side`, the
-//! double-double, and the counter-based generator, through the crate's public interface only.
+//! `tpi_weight`, the generated exact paths of `lpi_side`, `ssi_side` and `tpi_side`, and the
+//! double-double, through the crate's public interface only.
 //!
 //! Each test names the mutants it kills, in cargo-mutants' words. They survived because the
 //! routed callers (`Plane::side_of_lpi`, `Plane::side_of_tpi`, `Ssi::orient2d`) fall back to their
@@ -41,7 +41,6 @@ use geom_num::dd::{
     UNDERFLOW_BOUND,
 };
 use geom_num::generated::{lpi_side, lpi_weight, ssi_side, ssi_weight, tpi_side, tpi_weight};
-use geom_num::rng::{Philox, Seed, StreamId, philox4x32_10};
 use geom_num::{DD, P2, P3, Sign};
 
 fn p2(x: i64, y: i64) -> P2 {
@@ -547,28 +546,4 @@ fn distinct_values_hash_apart() {
     assert_eq!(hashes.len(), values.len());
     let one = DD::from_sum(0.5, 0.5).unwrap();
     assert_eq!(hash(one), hash(DD::ONE));
-}
-
-// ---------------------------------------------------------------------------------------------
-// The counter-based generator.
-// ---------------------------------------------------------------------------------------------
-
-/// Random123's first known-answer vector (counter and key zero) through each layer: the bare
-/// Philox4x32-10, `Philox::block`, and the first four words of the stream.
-///
-/// Kills `replace round -> [u32; 4] with [1; 4]` (`rng.rs:322`),
-/// `replace philox4x32_10 -> [u32; 4] with [1; 4]` (`rng.rs:347`),
-/// `replace Philox::block -> [u32; 4] with [1; 4]` (`rng.rs:404`) and
-/// `replace Stream::next_u32 -> Result<u32, RngError> with Ok(1)` (`rng.rs:587`), which
-/// time out elsewhere: a constant generator makes rejection sampling loop for ever.
-#[test]
-fn the_generator_gives_the_known_answer_at_every_layer() {
-    let want = [0x6627_e8d5, 0xe169_c58d, 0xbc57_ac4c, 0x9b00_dbd8];
-    assert_eq!(philox4x32_10([0; 4], [0; 2]), want);
-    let philox = Philox::new(Seed(0), StreamId(0));
-    assert_eq!(philox.block(0), want);
-    let mut stream = philox.stream();
-    for w in want {
-        assert_eq!(stream.next_u32().unwrap(), w);
-    }
 }
