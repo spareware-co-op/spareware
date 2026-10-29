@@ -20,6 +20,10 @@
 //!   sum of tiny terms that cancel is exactly zero.
 //! - A transform whose determinant is small but certain is classified by its sign, and the
 //!   identity reverses no orientation.
+//! - The exact stage's wide path breaks a tie to the even step.
+//! - A length of exactly 2^1023 is finite.
+//! - A rotation's target scaled by a power of two, down to the subnormals, gives the same
+//!   rotation within the same certified angle.
 
 #![allow(
     clippy::float_cmp,
@@ -47,11 +51,11 @@ use common::{
 };
 use geom_math::frame::steps_per_metre;
 use geom_math::{
-    CrsId, DD, F2, F3, FrameMismatch, FrameRecord, MathError, Rotation, Scale, Transform,
-    TransformKind,
+    CrsId, DD, F2, F3, FrameMismatch, FrameRecord, MathError, RationalRotation, Rotation, Scale,
+    Transform, TransformKind,
 };
-use geom_num::NumError;
 use geom_num::grid::{GridStep, P3};
+use geom_num::{NumError, Real};
 use num_bigint::BigInt;
 
 /// 2^k for a normal exponent k, from its bits.
@@ -501,4 +505,52 @@ fn a_small_but_certain_determinant_decides_the_orientation() {
     }
     let identity = Transform::IDENTITY.classify().unwrap();
     assert!(!identity.reverses_orientation());
+}
+
+#[test]
+fn a_wide_exact_rounding_breaks_a_tie_to_even() {
+    // Terms 34 binary places apart (0.5 = 2^−1 and 2^−35 times a coordinate) take the exact stage's
+    // wide path. ±(0.5 + 2) = ±2.5 is a tie, which goes to the even ±2, not away from zero; and
+    // 0.5 + 3 = 3.5 goes to 4.
+    check_row([0.5, pow2(-35), 0.0, 0.0], [1, 1 << 36, 0]);
+    check_row([-0.5, pow2(-35), 0.0, 0.0], [1, -(1 << 36), 0]);
+    check_row([0.5, pow2(-35), 0.0, 0.0], [1, 3 << 35, 0]);
+}
+
+#[test]
+fn a_length_of_2_1023_is_finite() {
+    assert_eq!(F2::new(pow2(1023), 0.0).unwrap().length(), Ok(pow2(1023)));
+    assert_eq!(F2::new(0.0, -pow2(1023)).unwrap().length(), Ok(pow2(1023)));
+    assert_eq!(
+        F3::new(0.0, pow2(1023), 0.0).unwrap().length(),
+        Ok(pow2(1023))
+    );
+}
+
+#[test]
+fn a_rotation_target_scaled_by_a_power_of_two_gives_the_same_rotation() {
+    let bound = Real::new(pow2(-20)).unwrap();
+    let tiny = f64::from_bits(1); // 2^−1074, the smallest subnormal
+    let plane = RationalRotation::plane_within(F2::new(3.0, 4.0).unwrap(), bound).unwrap();
+    for scale in [tiny, tiny * 1024.0, pow2(-1022), pow2(-500), pow2(500)] {
+        let got = RationalRotation::plane_within(F2::new(3.0 * scale, 4.0 * scale).unwrap(), bound)
+            .unwrap();
+        assert_eq!(
+            got.value().quaternion(),
+            plane.value().quaternion(),
+            "{scale:e}"
+        );
+        assert_eq!(got.angle(), plane.angle(), "{scale:e}");
+    }
+    let target = [1.0, 2.0, -3.0, 5.0];
+    let space = RationalRotation::within(target, bound).unwrap();
+    for scale in [tiny, tiny * 1024.0, pow2(-1022), pow2(-500), pow2(500)] {
+        let got = RationalRotation::within(target.map(|v| v * scale), bound).unwrap();
+        assert_eq!(
+            got.value().quaternion(),
+            space.value().quaternion(),
+            "{scale:e}"
+        );
+        assert_eq!(got.angle(), space.angle(), "{scale:e}");
+    }
 }
