@@ -52,8 +52,10 @@ use crate::recursion::index::Index;
 use crate::recursion::model::{NodeKind, Role};
 use crate::recursion::ty::{ClosureKey, NodeId, Ty};
 
-/// How many copies of one function the graph holds before it is reported.
-pub const MAX_COPIES: usize = 512;
+/// How many copies of one function the graph holds before it is reported: a bound that keeps the
+/// graph finite, not a rule of the code. With every Phase 2 piece through G66 the generic
+/// `IntoIterator::into_iter` passed 512 copies; 2048 leaves room for the kernel to grow.
+pub const MAX_COPIES: usize = 2048;
 
 /// How many times one instance's body is checked before it is reported.
 pub const MAX_RUNS: usize = 64;
