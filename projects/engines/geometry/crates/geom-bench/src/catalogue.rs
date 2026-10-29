@@ -558,8 +558,6 @@ pub static UNMEASURED: &[(&str, &str)] = &[
     ("Wide::from_i64", "one call to Wide::from_i128, which is measured"),
     ("Wide::is_negative", "one test of the top bit, inside every Wide benchmark"),
     ("Wide::is_zero", "measured inside Wide::signum, whose batch has zeros and values with only the top limb set"),
-    ("avnaim::sign_of_det2", "the whole work of avnaim::orient2d, which is measured and adds only the four translations"),
-    ("avnaim::sign_of_det3", "the whole work of avnaim::orient3d, which is measured and adds only the nine translations"),
     ("Wide32::to_le_limbs", "field accessor"),
     ("Wide32::from_le_limbs", "raw constructor"),
     ("Wide32::max_value", "a constant: every limb is fixed"),

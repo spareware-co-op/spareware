@@ -1410,14 +1410,14 @@ pub mod avnaim {
     /// `avnaim::orient2d` on each triple.
     #[inline(never)]
     pub fn orient2d(batch: &[[P2; 3]], out: &mut Vec<Option<Sign>>) {
-        run(batch, out, |&[a, b, c]| geom_num::avnaim::orient2d(a, b, c));
+        run(batch, out, |&[a, b, c]| crate::avnaim::orient2d(a, b, c));
     }
 
     /// `avnaim::orient3d` on each quadruple.
     #[inline(never)]
     pub fn orient3d(batch: &[[P3; 4]], out: &mut Vec<Option<Sign>>) {
         run(batch, out, |&[a, b, c, d]| {
-            geom_num::avnaim::orient3d(a, b, c, d)
+            crate::avnaim::orient3d(a, b, c, d)
         });
     }
 }

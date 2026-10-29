@@ -1,6 +1,9 @@
 //! The signs of 2 × 2 and 3 × 3 integer determinants in single-precision arithmetic, by Avnaim,
 //! Boissonnat, Devillers, Preparata and Yvinec's method: chapter 23.3's reference for the exact
-//! paths of orientation (piece G42).
+//! paths of orientation (piece G42). It lives here, in a development crate, because it is a
+//! reference to measure against, not a path the kernel ships: G42's report measured it and did
+//! not adopt it, so it is outside the foundation set's coverage and mutation gates (28.8), which
+//! its pass limits, never reached, could not meet by test.
 //!
 //! What it does: [`sign_of_det2`] finds the sign of x1·y2 − y1·x2 from the four entries without
 //! ever forming a product: it compares, subtracts and divides, keeping every value within the
@@ -15,10 +18,10 @@
 //!
 //! - **The exact sign.** For every four entries of magnitude at most [`ENTRY_MAX`], the result is
 //!   the sign of x1·y2 − y1·x2 (tested against 128-bit products and against the generated
-//!   `orient2d` in `tests/attack_g42.rs`, and against big integers by geom-fuzz's `variants`
+//!   `orient2d` in this crate's `tests/avnaim.rs`, and against big integers by geom-fuzz's `variants`
 //!   target). For every nine entries of magnitude at most [`DET3_ENTRY_MAX`], the result of
 //!   [`sign_of_det3`] is the determinant's sign (tested against big integers here, and against
-//!   the generated `orient3d` in `tests/attack_g42.rs` and geom-fuzz's `variants` target). An entry
+//!   the generated `orient3d` in this crate's `tests/avnaim.rs` and geom-fuzz's `variants` target). An entry
 //!   past its bound is refused with `None`, never answered.
 //! - **Checked and bounded.** Every step is a checked method. [`sign_of_det2`]'s loop runs at most
 //!   [`ITERATIONS`] times: each pass either answers or replaces the second row by one whose entries
@@ -73,8 +76,8 @@
 
 use core::cmp::Ordering;
 
-use crate::grid::{P2, P3};
-use crate::sign::Sign;
+use geom_num::Sign;
+use geom_num::grid::{P2, P3};
 
 /// The largest entry magnitude taken: 2^62 − 1. The method subtracts entries and doubles none,
 /// so 2^62 − 1 keeps every difference of two entries, and the negation of each, within `i64`.
@@ -211,7 +214,7 @@ const fn sign_of_ordering(o: Ordering) -> Sign {
 }
 
 /// `orient2d(a, b, c)` by the method: the sign of |b − a; c − a|, positive when a, b, c turn
-/// counterclockwise, as `crate::predicate::orient2d`. Grid translations are at most 2^41 − 2 in
+/// counterclockwise, as `geom_num::predicate::orient2d`. Grid translations are at most 2^41 − 2 in
 /// magnitude, so every entry is in range and the result is always `Some`.
 #[must_use]
 pub fn orient2d(a: P2, b: P2, c: P2) -> Option<Sign> {
@@ -230,8 +233,8 @@ pub const DET3_ENTRY_MAX: i64 = (1 << 59) - 1;
 /// The most passes [`sign_of_det3`] runs. Each pass answers, or replaces the third row by one
 /// whose z entry is at most half the largest (section 3.6), or zeroes it (section 3.7), so the
 /// largest z entry halves at least every three passes. From at most 2^59 − 1 it is zero after
-/// 3 · 59 passes, and the next pass answers.
-pub const DET3_PASSES: usize = 3 * 59 + 1;
+/// 3 · 59 passes, and the next pass answers: 3 · 59 + 1 = 178, written as [`ITERATIONS`] is.
+pub const DET3_PASSES: usize = 178;
 
 /// The most lattice points the doubling search keeps (substep 1.3): c(2^l) for every 2^l ≤ α, and
 /// α = |u3 q| / |p q| ≤ |u3 q| ≤ 2 · (2^59 − 1)^2 < 2^119, so l ≤ 118.
@@ -596,7 +599,7 @@ mod tests {
                 2 => (self.next() % 5) as i64,
                 _ => (self.next() >> (2 + self.next() % 62)) as i64,
             };
-            if self.next() % 2 == 0 { v } else { -v }
+            if self.next().is_multiple_of(2) { v } else { -v }
         }
     }
 
@@ -673,7 +676,7 @@ mod tests {
                 2 => (self.next() % 5) as i64,
                 _ => (self.next() >> (5 + self.next() % 59)) as i64,
             };
-            if self.next() % 2 == 0 { v } else { -v }
+            if self.next().is_multiple_of(2) { v } else { -v }
         }
     }
 
@@ -699,7 +702,7 @@ mod tests {
             let bits = 1 + mix.next() % 28;
             let mut small = || {
                 let v = (mix.next() >> (64 - bits)) as i64;
-                if mix.next() % 2 == 0 { v } else { -v }
+                if mix.next().is_multiple_of(2) { v } else { -v }
             };
             let u1 = [small(), small(), small()];
             let u2 = [small(), small(), small()];

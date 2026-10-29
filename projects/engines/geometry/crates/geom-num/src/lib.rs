@@ -82,7 +82,6 @@
 //! - MIT: `libm`.
 #![cfg_attr(not(test), no_std)]
 
-pub mod avnaim;
 pub mod crossing;
 pub mod dd;
 pub mod eft;

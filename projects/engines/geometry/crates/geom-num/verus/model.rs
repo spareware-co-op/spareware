@@ -29,13 +29,31 @@ impl Coord {
     }
 
     /// `geom_num::grid::Coord::get`: its value.
-    pub fn get(self) -> (r: i64)
+    pub const fn get(self) -> (r: i64)
         ensures
             r == self.view(),
             self.on_grid() ==> -COORD_MAX <= r <= COORD_MAX,
     {
         self.v
     }
+}
+
+/// A coordinate on the grid has magnitude at most `COORD_MAX`.
+pub proof fn lemma_on_grid(c: Coord)
+    requires
+        c.on_grid(),
+    ensures
+        -COORD_MAX <= c@ <= COORD_MAX,
+{
+}
+
+/// A model of `geom_num::error::NumError`, with the variants the twins return.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum NumError {
+    /// `NumError::Degenerate`.
+    Degenerate,
+    /// `NumError::BudgetExceeded`.
+    BudgetExceeded,
 }
 
 /// A model of `geom_num::grid::P2`.

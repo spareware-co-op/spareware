@@ -55,8 +55,10 @@ const LOCK: &str = include_str!("../../../../../../Cargo.lock");
 const KERNEL_WORKFLOW: &str = include_str!("../../../../../../.github/workflows/kernel.yml");
 
 /// The source of every module of `geom-num`, by module name.
-const GEOM_NUM: [(&str, &str); 21] = [
-    ("avnaim", include_str!("../../geom-num/src/avnaim.rs")),
+/// This crate's own reference, Avnaim et al.'s signs (chapter 23.3, piece G42): measured beside
+/// `geom-num`'s exact paths, and not a `geom-num` function.
+const AVNAIM: &str = include_str!("../src/avnaim.rs");
+const GEOM_NUM: [(&str, &str); 20] = [
     ("dd", include_str!("../../geom-num/src/dd.rs")),
     ("eft", include_str!("../../geom-num/src/eft.rs")),
     ("error", include_str!("../../geom-num/src/error.rs")),
@@ -523,6 +525,15 @@ fn every_public_function_of_geom_num_is_measured_or_says_why_not() {
         "{:?}",
         measured.intersection(&unmeasured)
     );
+    // The reference this crate measures beside geom-num's paths names its own public functions.
+    let references: BTreeSet<String> = public_functions("avnaim", AVNAIM).into_iter().collect();
+    let measured_references: BTreeSet<String> =
+        measured.intersection(&references).cloned().collect();
+    assert!(
+        !measured_references.is_empty(),
+        "the reference has no benchmark: {references:?}"
+    );
+    let measured: BTreeSet<String> = measured.difference(&references).cloned().collect();
     let covered: BTreeSet<String> = measured.union(&unmeasured).cloned().collect();
     let uncovered: Vec<_> = public.difference(&covered).collect();
     assert!(

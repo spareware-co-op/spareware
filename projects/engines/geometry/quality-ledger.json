@@ -115,6 +115,14 @@
       "reason": "The validity check only skips masks whose matrix has a zero determinant, so weakening it changes no result. A mask that picks two entries of one column sets two rows to the same unit vector, a zero determinant. A mask that picks two entries of one row builds the matrix of a smaller mask (the row keeps one unit vector), which the walk visited earlier and found zero, or which itself repeats a column. Checked by simulating the walk with and without the check on 4,000 random orient2d and incircle ties: every sign agreed."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace classify -> Option<Sign> with None",
+      "line_text": "let ([nx, ny, nz], [xx, xy, xz]) = (*n, x);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "classify runs only in side_of_tpi_hand, which Plane::side_of_tpi calls only when the generated tpi_side path returns None. That path checks its rounded inputs against their certified widths on entry, and every plane a user can make comes from Plane::through on grid points, whose coefficients lie inside those widths (G29's budget); inside them its steps cannot overflow (the certificate; G39's Verus twin of tpi_side). So no public input reaches classify, and returning None from it changes no result a user can see."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
       "mutant": "replace < with <= in Wide<L>::resize",
       "line_text": "if M < L {",
@@ -177,6 +185,38 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "This arm runs for a negative v, where d = v - i128::MIN lies in 0..2^127, so bit 127 of d is clear: setting it with | and flipping it with ^ both give d + 2^127."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
+      "mutant": "replace || with && in Wide<L>::checked_mul_i128",
+      "line_text": "if prod != 0 || carry != 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The line is the arm for a contribution at limb L, past the result's limbs: it returns None on overflow. checked_mul_i128 is pub(crate), and its only callers are the generated exact paths (tpi_side, tpi_weight and the like), which check their inputs against the certified widths on entry; inside those widths every product fits its limbs (the certificate; G39's Verus twin proves checked_mul_i128 exact), so prod and carry are both 0 whenever this arm runs, and || and && give the same answer for every public input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
+      "mutant": "replace < with == in Wide<L>::resize",
+      "line_text": "let shared = if M < L { M } else { L };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant makes shared L when M < L (and when M == L, where L is M anyway); widening is unchanged (shared is L either way). Narrowing then runs the copy loop over L indices instead of M: the extra ones, M to L − 1, read limbs of self but find no slot in out (get_mut returns None for i >= M), so they write nothing, and out is the same array. Every value resizes to the same result."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
+      "mutant": "replace < with <= in Wide<L>::resize",
+      "line_text": "let shared = if M < L { M } else { L };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two comparisons differ only when M equals L, and then both branches give the same number (M is L), so shared, the copy and the result are the same for every value and every pair of widths."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
+      "mutant": "replace < with <= in Wide<L>::resize",
+      "line_text": "if M < L && r.is_negative() != negative {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant also tests the sign when M equals L, a resize to the same width. Then r has the very limbs of self, so its sign is self's and the test is false: resize returns the same Some(r) for every value."
     }
   ],
   "coverage_off": [],
@@ -184,13 +224,13 @@
     {
       "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
       "line_text": "None => Err(NumError::BudgetExceeded),",
-      "occurrences": 1,
+      "occurrences": 2,
       "piece": "G41",
       "reason": "A crossing point's budget arm, or its fallback to the exact weight or the wider commit, which the tests' points never need: the generated filter and the narrow budget decide every one. G41 proves it unreachable, or a test with near-degenerate inputs at the edge of the budget reaches it."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
-      "line_text": "let (Some(x), Some(y), Some(w)) = (axis(b.x, a.x), axis(b.y, a.y), oa.checked_sub(ob))",
+      "line_text": "let Some((oa, ob)) = self.offsets() else {",
       "occurrences": 1,
       "piece": "G41",
       "reason": "A crossing point's budget arm, or its fallback to the exact weight or the wider commit, which the tests' points never need: the generated filter and the narrow budget decide every one. G41 proves it unreachable, or a test with near-degenerate inputs at the edge of the budget reaches it."
@@ -198,7 +238,14 @@
     {
       "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
       "line_text": "return Err(NumError::BudgetExceeded);",
-      "occurrences": 2,
+      "occurrences": 4,
+      "piece": "G41",
+      "reason": "A crossing point's budget arm, or its fallback to the exact weight or the wider commit, which the tests' points never need: the generated filter and the narrow budget decide every one. G41 proves it unreachable, or a test with near-degenerate inputs at the edge of the budget reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
+      "line_text": "let (Some(x), Some(y), Some(w)) = (",
+      "occurrences": 1,
       "piece": "G41",
       "reason": "A crossing point's budget arm, or its fallback to the exact weight or the wider commit, which the tests' points never need: the generated filter and the narrow budget decide every one. G41 proves it unreachable, or a test with near-degenerate inputs at the edge of the budget reaches it."
     },
@@ -239,35 +286,42 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
-      "line_text": "let w = oa.checked_sub(ob).ok_or(NumError::BudgetExceeded)?;",
+      "line_text": "let Some(w) = oa.checked_sub(ob) else {",
       "occurrences": 1,
       "piece": "G41",
       "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
-      "line_text": "side::<4>(oa, ob2, ob, oa2)",
+      "line_text": "let s = match side::<4>(oa, ob2, ob, oa2) {",
       "occurrences": 1,
       "piece": "G41",
       "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
-      "line_text": ".or_else(|| side::<5>(oa, ob2, ob, oa2))",
+      "line_text": "Some(s) => Some(s),",
       "occurrences": 1,
       "piece": "G41",
       "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
-      "line_text": ".map(|s| s.mul(Sign::of_i128(w)))",
+      "line_text": "None => side::<5>(oa, ob2, ob, oa2),",
       "occurrences": 1,
       "piece": "G41",
       "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
-      "line_text": ".ok_or(NumError::BudgetExceeded)",
+      "line_text": "match s {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
+      "line_text": "Some(s) => Ok(s.mul(Sign::of_i128(w))),",
       "occurrences": 1,
       "piece": "G41",
       "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
@@ -1066,7 +1120,7 @@
     {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
       "line_text": "None => Err(NumError::BudgetExceeded),",
-      "occurrences": 4,
+      "occurrences": 7,
       "piece": "G41",
       "reason": "A plane predicate's budget, degenerate-input or fallback arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal, a weight the filter cannot decide, a point the narrow commit cannot hold). G41 proves it unreachable, or a test reaches it."
     },
@@ -1086,22 +1140,22 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "classify::<BUDGET_LIMBS>(&self.n, self.d, &x, &w)",
+      "line_text": "match classify::<BUDGET_LIMBS>(&self.n, self.d, &x, &w) {",
       "occurrences": 1,
       "piece": "G41",
       "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": ".or_else(|| classify::<TOTAL_LIMBS>(&self.n, self.d, &x, &w))",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": ".ok_or(NumError::BudgetExceeded)",
+      "line_text": "Some(s) => Ok(s),",
       "occurrences": 2,
+      "piece": "G41",
+      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": "None => match classify::<TOTAL_LIMBS>(&self.n, self.d, &x, &w) {",
+      "occurrences": 1,
       "piece": "G41",
       "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
     },
@@ -1121,70 +1175,70 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "let (w1, s1p) = l",
+      "line_text": "let (Some((w1, s1p)), Some((w2, s2p))) = (",
       "occurrences": 1,
       "piece": "G41",
       "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": ".plane",
+      "line_text": "l.plane.weight_and_offset(l.p, l.q),",
       "occurrences": 1,
       "piece": "G41",
       "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": ".weight_and_offset(l.p, l.q)",
-      "occurrences": 2,
-      "piece": "G41",
-      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": ".ok_or(NumError::BudgetExceeded)?;",
-      "occurrences": 2,
-      "piece": "G41",
-      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "let (w2, s2p) = self",
+      "line_text": "self.weight_and_offset(l.p, l.q),",
       "occurrences": 1,
       "piece": "G41",
       "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "let side = |w1: i128, s2p: i128, w2: i128, s1p: i128| {",
+      "line_text": ") else {",
       "occurrences": 1,
       "piece": "G41",
       "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "lpi_classify::<4>(w1, s2p, w2, s1p).or_else(|| lpi_classify::<5>(w1, s2p, w2, s1p))",
+      "line_text": "return Err(NumError::BudgetExceeded);",
+      "occurrences": 5,
+      "piece": "G41",
+      "reason": "A plane predicate's budget, degenerate-input or fallback arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal, a weight the filter cannot decide, a point the narrow commit cannot hold). G41 proves it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": "let side = match lpi_classify::<4>(w1, s2p, w2, s1p) {",
       "occurrences": 1,
       "piece": "G41",
       "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "};",
+      "line_text": "Some(s) => Some(s),",
       "occurrences": 1,
       "piece": "G41",
       "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "side(w1, s2p, w2, s1p)",
+      "line_text": "None => lpi_classify::<5>(w1, s2p, w2, s1p),",
       "occurrences": 1,
       "piece": "G41",
       "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": ".map(|s| s.mul(Sign::of_i128(w1)))",
+      "line_text": "match side {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": "Some(s) => Ok(s.mul(Sign::of_i128(w1))),",
       "occurrences": 1,
       "piece": "G41",
       "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
@@ -1261,15 +1315,22 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "let (Some(x), Some(y), Some(z)) = (",
+      "line_text": "let Some((w, sp)) = self.plane.weight_and_offset(self.p, self.q) else {",
       "occurrences": 1,
       "piece": "G41",
       "reason": "A plane predicate's budget, degenerate-input or fallback arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal, a weight the filter cannot decide, a point the narrow commit cannot hold). G41 proves it unreachable, or a test reaches it."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "return Err(NumError::BudgetExceeded);",
-      "occurrences": 2,
+      "line_text": "let Some(sq) = sp.checked_add(w) else {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "A plane predicate's budget, degenerate-input or fallback arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal, a weight the filter cannot decide, a point the narrow commit cannot hold). G41 proves it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": "let (Some(x), Some(y), Some(z)) = (",
+      "occurrences": 1,
       "piece": "G41",
       "reason": "A plane predicate's budget, degenerate-input or fallback arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal, a weight the filter cannot decide, a point the narrow commit cannot hold). G41 proves it unreachable, or a test reaches it."
     },
@@ -1324,35 +1385,49 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "let mut acc = Wide::<L>::from_i128(d).checked_mul(&w.resize::<L>()?)?;",
+      "line_text": "let ([nx, ny, nz], [xx, xy, xz]) = (*n, x);",
       "occurrences": 1,
       "piece": "G41",
       "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "for (&ni, xi) in n.iter().zip(x.iter()) {",
+      "line_text": "let side = Wide::<L>::from_i128(d)",
       "occurrences": 1,
       "piece": "G41",
       "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "let term = Wide::<L>::from_i128(ni).checked_mul(&xi.resize::<L>()?)?;",
+      "line_text": ".checked_mul(&w.resize::<L>()?)?",
       "occurrences": 1,
       "piece": "G41",
       "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "acc = acc.checked_add(&term)?;",
+      "line_text": ".checked_add(&Wide::<L>::from_i128(nx).checked_mul(&xx.resize::<L>()?)?)?",
       "occurrences": 1,
       "piece": "G41",
       "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "Some(acc.signum().mul(w.signum()))",
+      "line_text": ".checked_add(&Wide::<L>::from_i128(ny).checked_mul(&xy.resize::<L>()?)?)?",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": ".checked_add(&Wide::<L>::from_i128(nz).checked_mul(&xz.resize::<L>()?)?)?;",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": "Some(side.signum().mul(w.signum()))",
       "occurrences": 1,
       "piece": "G41",
       "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
@@ -1514,7 +1589,7 @@
     {
       "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
       "line_text": "None => 0,",
-      "occurrences": 11,
+      "occurrences": 15,
       "piece": "G41",
       "reason": "A lookup on a limb array or slice whose index is always in range (`get` or `get_mut` with i below the length), or from_i128's v − i128::MIN for a negative v, which never overflows: its `None` side never runs. The Verus twin (verus/wide.rs, token for token this code) proves each function exact for every width, which rules these arms out; G41's wide-integer harnesses prove it again on the shipped build."
     },
@@ -1528,7 +1603,7 @@
     {
       "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
       "line_text": "}",
-      "occurrences": 8,
+      "occurrences": 10,
       "piece": "G41",
       "reason": "A lookup on a limb array or slice whose index is always in range (`get` or `get_mut` with i below the length), or from_i128's v − i128::MIN for a negative v, which never overflows: its `None` side never runs. The Verus twin (verus/wide.rs, token for token this code) proves each function exact for every width, which rules these arms out; G41's wide-integer harnesses prove it again on the shipped build."
     },
@@ -1556,16 +1631,16 @@
     {
       "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
       "line_text": "if let Some(slot) = out.get_mut(k) {",
-      "occurrences": 1,
+      "occurrences": 2,
       "piece": "G41",
       "reason": "A lookup on a limb array or slice whose index is always in range (`get` or `get_mut` with i below the length), or from_i128's v − i128::MIN for a negative v, which never overflows: its `None` side never runs. The Verus twin (verus/wide.rs, token for token this code) proves each function exact for every width, which rules these arms out; G41's wide-integer harnesses prove it again on the shipped build."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-num/src/avnaim.rs",
-      "line_text": "None",
-      "occurrences": 2,
+      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
+      "line_text": "if let Some(slot) = out.get_mut(i) {",
+      "occurrences": 1,
       "piece": "G41",
-      "reason": "sign_of_det2's and sign_of_det3's refusals after their pass limits (ITERATIONS, DET3_PASSES), which no input reaches: a sign_of_det2 pass answers or leaves a second row below half the first at least every two passes, and a sign_of_det3 pass at least halves the largest height (the module header's argument). avnaim is chapter 23.3's reference, not a shipped path; a bounded proof of the pass limits, by G41's method, removes these."
+      "reason": "A lookup on a limb array or slice whose index is always in range (`get` or `get_mut` with i below the length), or from_i128's v − i128::MIN for a negative v, which never overflows: its `None` side never runs. The Verus twin (verus/wide.rs, token for token this code) proves each function exact for every width, which rules these arms out; G41's wide-integer harnesses prove it again on the shipped build."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/wide32.rs",
