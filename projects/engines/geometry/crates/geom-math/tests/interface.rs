@@ -479,6 +479,43 @@ fn grid_images_round_rows_whose_sums_mislead() {
     for t in [-3.0 * pow2(-80), 0.5] {
         check_row([l, pow2(-80), -l, t], [x, 3, x]);
     }
+    // Rows whose products reach 2^57 to 2^62 and cancel (found by search): the double-double sum
+    // then errs by up to about 2^-46, far above the filter's slack of 2^-52, and the exact value is
+    // a whole step. Only the error bound's term in the products' sizes, 2^-98 of their sum, makes
+    // the filter refuse them; a bound that drops a product's size, or the translation's, or
+    // multiplies the slack, would call the step inexact.
+    let doubles: [([u64; 4], [i64; 3]); 3] = [
+        (
+            [
+                4_700_336_225_974_520_809,
+                4_375_069_798_198_386_052,
+                13_923_708_262_829_296_617,
+                13_598_441_835_053_161_860,
+            ],
+            [961_752_780_580, 1, 961_752_780_580],
+        ),
+        (
+            [
+                4_596_211_197_603_495_111,
+                4_706_261_610_602_168_320,
+                13_929_633_647_456_944_128,
+                13_824_785_637_060_206_906,
+            ],
+            [857_713_044_972, 562_903_781_845, 562_903_781_845],
+        ),
+        (
+            [
+                4_692_750_811_720_056_832,
+                4_454_322_972_602_302_568,
+                13_677_695_009_457_078_376,
+                4_870_369_108_304_076_800,
+            ],
+            [-791_200_041_985, -701_803_515_243, -701_803_515_243],
+        ),
+    ];
+    for (bits, v) in doubles {
+        check_row(bits.map(f64::from_bits), v);
+    }
 }
 
 #[test]
