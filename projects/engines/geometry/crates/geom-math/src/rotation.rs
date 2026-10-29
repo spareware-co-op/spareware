@@ -205,8 +205,8 @@ fn checked_bound(bound: Real) -> Result<f64, NumError> {
 }
 
 /// The doubles of a target scaled by one power of two so that the largest magnitude lies in
-/// [1, 2), and enclosures of their exact scaled values: exact, except for a component whose scaled
-/// value fell below 2^−1022, where scaling may round and the enclosure is one double either side.
+/// [1, 2), and enclosures of their exact scaled values: exact, except for a component whose scaling
+/// rounded (only one that fell below 2^−1022 can), where the enclosure is one double either side.
 /// `Degenerate` if every component is zero, `NotFinite` if one is not finite.
 fn scaled<const N: usize>(t: [f64; N]) -> Result<([f64; N], [Interval; N]), NumError> {
     if t.iter().any(|v| !v.is_finite()) {
@@ -224,10 +224,11 @@ fn scaled<const N: usize>(t: [f64; N]) -> Result<([f64; N], [Interval; N]), NumE
     for ((out, b), &v) in values.iter_mut().zip(boxes.iter_mut()).zip(t.iter()) {
         let s = budget(scale_b(v, k))?;
         *out = s;
-        *b = if v != 0.0 && s.abs() < f64::MIN_POSITIVE {
-            iv(Interval::new(s.next_down(), s.next_up()))?
-        } else {
+        // Exact when scaling back gives the double again.
+        *b = if scale_b(s, e) == Some(v) {
             iv(Interval::point(s))?
+        } else {
+            iv(Interval::new(s.next_down(), s.next_up()))?
         };
     }
     Ok((values, boxes))

@@ -148,9 +148,12 @@ impl TypedTransform {
     #[must_use]
     pub fn simplified(self) -> TypedTransform {
         match self {
-            TypedTransform::Rotation(r) => r
-                .to_rational()
-                .map_or(self, |t| TypedTransform::Rational(t).simplified()),
+            // A rotation's rational form, then that form's own simplification (below), in place:
+            // no recursive call.
+            TypedTransform::Rotation(r) => r.to_rational().map_or(self, |t| {
+                t.to_grid()
+                    .map_or(TypedTransform::Rational(t), TypedTransform::Exact)
+            }),
             TypedTransform::Rational(r) => r.to_grid().map_or(self, TypedTransform::Exact),
             TypedTransform::Certified(t) => {
                 certified_as_grid(&t).map_or(self, TypedTransform::Exact)

@@ -217,6 +217,174 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The mutant also tests the sign when M equals L, a resize to the same width. Then r has the very limbs of self, so its sign is self's and the test is false: resize returns the same Some(r) for every value."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace > with >= in certify",
+      "line_text": "if s > 0.5 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "certify's S above 1/2 means an angle above 2·asin(1/2) = π/3 > 1, and its series value is then at least 2S >= 1, above BOUND_MAX = 1/2 and so above every bound a caller compares it with: refusing at S = 1/2, or not refusing above it, gives the same answer to every caller."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace > with == in certify",
+      "line_text": "if s > 0.5 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "certify's S above 1/2 means an angle above 2·asin(1/2) = π/3 > 1, and its series value is then at least 2S >= 1, above BOUND_MAX = 1/2 and so above every bound a caller compares it with: refusing at S = 1/2, or not refusing above it, gives the same answer to every caller."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace < with <= in canonical",
+      "line_text": "let g = if lead < 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The lead is the first nonzero component, or 1 when there is none, so it is never 0: lead < 0 and lead <= 0 agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace < with <= in RationalRotation::inverse",
+      "line_text": "q: if lead < 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The lead is the first nonzero component, or 1 when there is none, so it is never 0: lead < 0 and lead <= 0 agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace < with <= in simplest",
+      "line_text": "if hi < 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "simplest returns early when lo <= 0 <= hi, and lo <= hi, so hi < 0 and hi <= 0 agree on what reaches this test (hi = 0 would need lo <= 0)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace || with && in simplest_positive",
+      "line_text": "if ln > un || ln <= 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "simplest_positive is called with 0 < lo <= hi < 1 and hi − lo > 2^−35 (the 2D search's tangents), so ln = ceil(lo·2^100) >= 1 and un = floor(hi·2^100) >= ln: the refusal is never taken, by either test."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace > with == in simplest_positive",
+      "line_text": "if ln > un || ln <= 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "simplest_positive is called with 0 < lo <= hi < 1 and hi − lo > 2^−35 (the 2D search's tangents), so ln = ceil(lo·2^100) >= 1 and un = floor(hi·2^100) >= ln: the refusal is never taken, by either test."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace > with >= in simplest_positive",
+      "line_text": "if ln > un || ln <= 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "simplest_positive is called with 0 < lo <= hi < 1 and hi − lo > 2^−35 (the 2D search's tangents), so ln = ceil(lo·2^100) >= 1 and un = floor(hi·2^100) >= ln: the refusal is never taken, by either test."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace > with >= in RationalRotation::plane_within",
+      "line_text": "let (k, ex, ey) = if x > 0.0 && x >= y.abs() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "scaled refuses the zero direction, so x >= |y| already makes x > 0 (x = 0 would make y = 0 too); likewise for y and −x: testing the sign with >= or <= instead changes nothing."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace > with >= in RationalRotation::plane_within",
+      "line_text": "} else if y > 0.0 && y >= x.abs() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "scaled refuses the zero direction, so x >= |y| already makes x > 0 (x = 0 would make y = 0 too); likewise for y and −x: testing the sign with >= or <= instead changes nothing."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace < with <= in RationalRotation::plane_within",
+      "line_text": "} else if x < 0.0 && -x >= y.abs() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "scaled refuses the zero direction, so x >= |y| already makes x > 0 (x = 0 would make y = 0 too); likewise for y and −x: testing the sign with >= or <= instead changes nothing."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace || with && in RationalRotation::plane_within",
+      "line_text": "if m >= DENOMINATOR_LIMIT || n.unsigned_abs() > m.unsigned_abs() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The simplest fraction lies within the tangents of half-angles in [−π/8, π/8] (the direction is turned into the first octant's pair), so |n| < |m| strictly and m < 2^35 (the module's search bound): the refusal is never taken, whichever operator it uses."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace > with == in RationalRotation::plane_within",
+      "line_text": "if m >= DENOMINATOR_LIMIT || n.unsigned_abs() > m.unsigned_abs() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The simplest fraction lies within the tangents of half-angles in [−π/8, π/8] (the direction is turned into the first octant's pair), so |n| < |m| strictly and m < 2^35 (the module's search bound): the refusal is never taken, whichever operator it uses."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace > with >= in RationalRotation::plane_within",
+      "line_text": "if m >= DENOMINATOR_LIMIT || n.unsigned_abs() > m.unsigned_abs() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The simplest fraction lies within the tangents of half-angles in [−π/8, π/8] (the direction is turned into the first octant's pair), so |n| < |m| strictly and m < 2^35 (the module's search bound): the refusal is never taken, whichever operator it uses."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace > with == in RationalRotation::plane_within",
+      "line_text": "if angle > bound {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The search aims the half-angle at AIM·bound (AIM = 1/2 − 2^−11), so the angle is at most (1 − 2^−10)·bound, and the certificate exceeds it by under 2^−12 of it: the certified angle is below the bound, so the refusal is never taken, whichever operator it uses."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace > with >= in RationalRotation::plane_within",
+      "line_text": "if angle > bound {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The search aims the half-angle at AIM·bound (AIM = 1/2 − 2^−11), so the angle is at most (1 − 2^−10)·bound, and the certificate exceeds it by under 2^−12 of it: the certified angle is below the bound, so the refusal is never taken, whichever operator it uses."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace > with >= in RationalRotation::to_rational",
+      "line_text": "if n > RATIONAL_NORM2 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "|q|² = 2^40 exactly needs every component even (a sum of four squares divisible by 8 has no odd term), and a canonical quaternion is in lowest terms, so its |q|² is never 2^40: > and >= agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace > with >= in RationalRotation::from_rational",
+      "line_text": "if best.is_none_or(|(_, b)| diag > b) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Each row is a multiple of the same quaternion, so a tie between two diagonals picks a row that canonical reduces to the same rotation as the other: which one wins a tie changes nothing."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace < with <= in Pythagorean::reduced",
+      "line_text": "let g = if c < 0 { g.checked_neg()? } else { g };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "For c = 0 the reduced c is 0 whatever g's sign, and the test below refuses it: the sign chosen at c = 0 never reaches a result."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/typed.rs",
+      "mutant": "delete match arm (Certified(_), _) |(_, Certified(_)) in TypedTransform::compose",
+      "line_text": "(Certified(_), _) | (_, Certified(_)) => certified(),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A certified transform has no rational or rotation form, so without this arm the pair reaches the later arms, which both fall to the certified composition: the same value."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/typed.rs",
+      "mutant": "delete match arm (Exact(a), Exact(b)) in TypedTransform::compose",
+      "line_text": "(Exact(a), Exact(b)) => Ok(Exact(a.compose(b)?)),",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Without this arm two exact transforms reach the last arm, which composes them as rational transforms and simplifies the product back to the same exact transform; past the bound both refuse with OutOfRange (the rational form's reported value may differ), since a translation is no rotation to fall back on."
     }
   ],
   "coverage_off": [],
