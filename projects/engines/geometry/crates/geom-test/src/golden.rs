@@ -22,6 +22,10 @@
 //!   file unchanged.
 //! - [`matrix`]: the runner the binary `golden` uses to run every golden of the store in one CI
 //!   leg's configuration and prove that each ran and agreed.
+//! - [`THREAD_COUNTS`]: chapter 21's thread counts, 1, 2, 3 and 8, which every test of the same
+//!   bits on every thread count runs (`geom-run`'s golden, `geom-pool`'s rayon pools, `geom-math`'s
+//!   corpus, `geom-num`'s determinism attack), so none can drop one unseen (piece G43;
+//!   `geom-test`'s `tests/attack_g43.rs` holds each test to it and it to gate 1's done-when).
 //!
 //! The binary `golden` (`cargo run -p geom-test --bin golden -- <command>`) has the commands
 //! `list`, `check`, `run` and `diff` (its own header says what each does).
@@ -56,6 +60,10 @@ pub mod repo;
 pub mod sha256;
 pub mod shuffle;
 pub mod store;
+
+/// The thread counts of chapter 21's determinism matrix: every test that promises the same bits
+/// on every number of threads runs at least these (gate 1, piece G43).
+pub const THREAD_COUNTS: [usize; 4] = [1, 2, 3, 8];
 
 pub use check::{Checked, GoldenError, check, check_in};
 pub use sha256::{Digest, Sha256, hex, sha256};
