@@ -12,7 +12,9 @@
 //!   cover everything the gates read.
 //! - **Jobs and when they run.** The mutation plan, shards and judge on every event (the plan picks
 //!   the diff or the full run), each shard job only when the plan gives it shards, the judge even
-//!   when a shard failed; coverage and the seeded gates on every event; Miri weekly and on demand, and on
+//!   when a shard failed; a full run narrowed to some files, on demand only, runs the mutation gate
+//!   alone, its plan checking the files cargo-mutants selected and its judge counting their ledger
+//!   entries; coverage and the seeded gates on every event; Miri weekly and on demand, and on
 //!   a pull request only when it changes how Miri runs.
 //! - **Least privilege.** One permission, `contents: read`, and no credentials kept by checkout.
 //! - **Pins.** Every action pinned to a full commit, the same commit as `kernel.yml` where both use
@@ -191,8 +193,11 @@ fn each_job_runs_on_the_events_its_gate_names() {
     );
     // Every job runs on every event, but each shard job only when the plan gives it shards, and
     // the judge even when a shard failed, so a lost shard is reported, not skipped.
-    for job in ["mutants-plan", "coverage", "gates-seeded", "miri"] {
-        assert!(jobs[job]["if"].is_badvalue(), "{job} has a condition");
+    assert!(jobs["mutants-plan"]["if"].is_badvalue());
+    // A narrowed mutation run (a dispatch with `files`) skips the other gates; every other run,
+    // a pull request's among them, runs them.
+    for job in ["coverage", "gates-seeded", "miri"] {
+        assert_eq!(text(&jobs[job]["if"]), "${{ !inputs.files }}", "{job}");
     }
     assert_eq!(
         text(&jobs["mutants"]["if"]),
@@ -404,6 +409,39 @@ fn keys_or_empty(y: &Yaml) -> Vec<String> {
     ignore = "reads the repository's files, which a WebAssembly test run cannot"
 )]
 #[test]
+fn only_a_dispatch_narrows_the_full_run() {
+    let w = workflow();
+    // An optional input of a dispatch, empty unless given ...
+    let files = &w["on"]["workflow_dispatch"]["inputs"]["files"];
+    assert_eq!(files["required"].as_bool(), Some(false));
+    assert_eq!(text(&files["default"]), "");
+    assert_eq!(text(&files["type"]), "string");
+    assert_eq!(keys(&w["on"]["workflow_dispatch"]["inputs"]), ["files"]);
+    // ... that no caller can set (kernel-release.yml's run is whole) ...
+    assert!(w["on"]["workflow_call"].is_null() || w["on"]["workflow_call"]["inputs"].is_badvalue());
+    // ... reaching the steps only through the environment, never pasted into a script.
+    assert_eq!(text(&w["env"]["FILES"]), "${{ inputs.files }}");
+    for (job, step) in steps(&w) {
+        if let Some(run) = step["run"].as_str() {
+            assert!(
+                !run.contains("inputs."),
+                "{job} reads an input in its script"
+            );
+        }
+    }
+    // A pull request never narrows: the plan and the judge read FILES only after the diff branch.
+    for job in ["mutants-plan", "mutants-judge"] {
+        let run = runs(&w, job);
+        let diff = run.find("= pull_request ]").unwrap();
+        assert!(run.find("$FILES").unwrap() > diff, "{job}");
+    }
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
 fn every_shard_and_partition_runs_once() {
     let w = workflow();
     // Every job that runs cargo-mutants on a shard: as many as the plan has lists.
@@ -503,8 +541,18 @@ fn every_gate_is_judged_and_tool_failures_are_not_swallowed() {
     ] {
         assert!(plan.contains(needle), "the plan does not run {needle:?}");
     }
+    // A narrowed full run: the shards' selection, every mutant, and the plan's check of the two.
+    for needle in [
+        "cargo mutants --re \"$FILES\" --list --json > \"$RUNNER_TEMP/plan/list.json\"",
+        "cargo mutants --list --json > \"$RUNNER_TEMP/plan/all.json\"",
+        "narrowed=(--files \"$FILES\" --all \"$RUNNER_TEMP/plan/all.json\")",
+        "--list \"$RUNNER_TEMP/plan/list.json\" \"${narrowed[@]}\"",
+    ] {
+        assert!(plan.contains(needle), "the plan does not run {needle:?}");
+    }
     let judge = runs(&w, "mutants-judge");
     for needle in [
+        "args+=(--files \"$FILES\")",
         "args=(--expected \"$RUNNER_TEMP/plan/list.json\")",
         "args+=(--mode diff)",
         "args+=(--mode full)",
@@ -515,6 +563,14 @@ fn every_gate_is_judged_and_tool_failures_are_not_swallowed() {
     }
     // cargo-mutants' own verdict goes to the judge only for survivors and timeouts.
     let shard = runs(&w, "mutants");
+    // Each shard selects as the plan listed: a pull request's diff, or a narrowed run's files.
+    for needle in [
+        "only=(--in-diff \"$RUNNER_TEMP/plan/pr.diff\")",
+        "elif [ -n \"$FILES\" ]; then\n  only=(--re \"$FILES\")",
+        "cargo mutants \"${only[@]}\" --shard",
+    ] {
+        assert!(shard.contains(needle), "the shards do not run {needle:?}");
+    }
     assert_eq!(shard.matches("cargo mutants ").count(), 1);
     assert!(shard.contains("case \"$code\" in 0|2|3) ;; *) exit \"$code\" ;; esac"));
     assert!(shard.contains("test -f \"$RUNNER_TEMP/out/mutants.out/mutants.json\""));

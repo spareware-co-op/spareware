@@ -32,6 +32,11 @@
 //!   the shards' mutants exactly, with no mutant in two shards, so a lost or truncated shard
 //!   fails. Every ledger entry must match exactly as many surviving mutants as it counts; one that
 //!   matches none is stale and fails, so the ledger never keeps a reason for code that changed.
+//!   A full run may be narrowed, on demand, to the files a regular expression matches
+//!   (`cargo mutants --re`): [`check_narrowed`] proves the list holds every mutant of those files,
+//!   and of other files only the struct-field deletions cargo-mutants 27.1.0 does not filter, and
+//!   the judge then counts only those files' ledger entries, since no other file was mutated
+//!   whole.
 //!
 //! In both modes every entry's file must exist and hold its `line_text` on some line, and every
 //! entry's kind must be allowed where its file is.
@@ -77,6 +82,7 @@ use core::time::Duration;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
+use regex_lite::Regex;
 use serde_json::Value;
 
 use crate::foundation::{Place, Set, place};
@@ -95,6 +101,9 @@ pub struct Mutant {
     pub line: usize,
     /// The description: the name after `<file>:<line>:<column>: `.
     pub description: String,
+    /// cargo-mutants' kind of mutation (`BinaryOperator`, `StructField`, ...), empty when the JSON
+    /// has none.
+    pub genre: String,
 }
 
 /// What happened to one mutant.
@@ -206,12 +215,18 @@ pub fn mutant_from_json(value: &Value) -> Result<Mutant, String> {
         .ok_or_else(|| {
             format!("mutant name {name:?} is not <file>:<line>:<column>: <description>")
         })?;
+    let genre = value
+        .get("genre")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned();
     Ok(Mutant {
         name,
         package,
         file,
         line,
         description,
+        genre,
     })
 }
 
@@ -746,7 +761,9 @@ fn judge_one(
 /// Judges the runs of one gate against the ledger. `repo` is the repository root the runs mutated;
 /// `expected` is required in [`Mode::Full`] and is the full list of mutants; `base` is the base
 /// branch's ledger, which [`Mode::Diff`] reads for the `known` entries it may use (none when it is
-/// `None`), and [`Mode::Full`] ignores.
+/// `None`), and [`Mode::Full`] ignores. `files` narrows a full run to the files it matches, as the
+/// run's `cargo mutants --re` did: only the ledger entries of those files are counted against
+/// their survivors, since no other file's mutants ran. [`Mode::Diff`] ignores it.
 #[must_use]
 pub fn judge(
     runs: &[Run],
@@ -755,6 +772,7 @@ pub fn judge(
     mode: Mode,
     expected: Option<&[Mutant]>,
     base: Option<&Ledger>,
+    files: Option<&Regex>,
 ) -> Verdict {
     let mut verdict = Verdict::default();
     check_entries(ledger, repo, &mut verdict.failures);
@@ -785,6 +803,10 @@ pub fn judge(
         judge_one(j, &rules, &mut matched, &mut verdict);
     }
     for s in &ledger.survivors {
+        if mode == Mode::Full && files.is_some_and(|re| !re.is_match(&s.file)) {
+            // Outside a narrowed run: none of this file's mutants ran.
+            continue;
+        }
         let n = matched.get(&s.key()).copied().unwrap_or(0);
         let wrong = match mode {
             Mode::Full => n != s.occurrences,
@@ -845,6 +867,60 @@ pub fn report(verdict: &Verdict) -> String {
     let mut out = lines.join("\n");
     out.push('\n');
     out
+}
+
+/// The genre of the mutants cargo-mutants 27.1.0 lists whatever `--re` says: it adds each
+/// struct-field deletion without asking its name filters (`visit_expr_struct` in `src/visit.rs`
+/// at the v27.1.0 commit), fixed upstream after that release by
+/// <https://github.com/sourcefrog/cargo-mutants/pull/634>.
+pub const UNFILTERED_GENRE: &str = "StructField";
+
+/// Checks the list of a full run narrowed to the files `files` matches: `list`, from
+/// `cargo mutants --list --json --re <files>`, must hold every mutant of `all` (the same listing
+/// without `--re`) whose file `files` matches, at least one, and of other files only mutants of
+/// [`UNFILTERED_GENRE`], which cargo-mutants 27.1.0 lists whatever `--re` says. The shards run the
+/// same selection, so those few are tested and judged as well; only their files' ledger entries
+/// are not counted. Returns how many there are.
+///
+/// cargo-mutants matches the regular expression against each mutant's name,
+/// `<file>:<line>:<column>: <description>`, and the judge matches it against each ledger entry's
+/// file, so the two must agree: this refuses a regular expression that selects by anything but
+/// the path (a word of a description, a line number, a `$` after the file name), before any shard
+/// runs.
+///
+/// # Errors
+///
+/// A description naming the first mutant the two selections disagree on, or saying no file
+/// matches.
+pub fn check_narrowed(list: &[Mutant], all: &[Mutant], files: &Regex) -> Result<usize, String> {
+    let re = files.as_str();
+    let want: BTreeSet<&str> = all
+        .iter()
+        .filter(|m| files.is_match(&m.file))
+        .map(|m| m.name.as_str())
+        .collect();
+    let got: BTreeSet<&str> = list.iter().map(|m| m.name.as_str()).collect();
+    let strays: Vec<&Mutant> = list
+        .iter()
+        .filter(|m| !want.contains(m.name.as_str()))
+        .collect();
+    if let Some(extra) = strays.iter().find(|m| m.genre != UNFILTERED_GENRE) {
+        return Err(format!(
+            "cargo-mutants' --re {re:?} selects {}, whose file it does not match: give a \
+             regular expression of source paths",
+            extra.name
+        ));
+    }
+    if let Some(missing) = want.difference(&got).next() {
+        return Err(format!(
+            "{missing}: its file matches {re:?}, but cargo-mutants' --re did not select it: give \
+             a regular expression of source paths"
+        ));
+    }
+    if want.is_empty() {
+        return Err(format!("no mutant's file matches {re:?}"));
+    }
+    Ok(strays.len())
 }
 
 /// The seconds one mutant of each kernel crate is planned at in CI, building and testing: twice the

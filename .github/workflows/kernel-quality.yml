@@ -19,6 +19,14 @@ name: Kernel quality
 #   many shards they need, and the judge proves the shards together tested exactly that list. A
 #   matrix holds at most 256 jobs, so two jobs run the shards, `mutants` shards 0 to 255 and
 #   `mutants-2` shards 256 to 511, each numbered in the whole run (`--shard k/n`).
+# - A narrowed full run, on demand: `gh workflow run kernel-quality.yml --ref <branch> -f
+#   files=<regex>` mutates only the files whose path the regular expression matches
+#   (`cargo mutants --re`), and the judge counts only those files' ledger entries, so an entry of
+#   another file is not reported stale. The plan checks that cargo-mutants selected every mutant
+#   of the matching files and, of other files, only the struct-field deletions cargo-mutants 27.1.0
+#   lists whatever --re says (geom_test::mutants::UNFILTERED_GENRE), which the shards then test
+#   too. A narrowed run is the mutation gate alone: coverage, the seeded gates and Miri are
+#   skipped, so its shards are not queued behind them.
 # - Coverage, on every pull request that touches the kernel and weekly and on demand: each crate
 #   measured by its own tests with cargo-llvm-cov, lines and branches, on the pinned nightly that
 #   branch coverage needs. The foundation set needs 100% of lines and branches, every other kernel
@@ -73,6 +81,12 @@ on:
     # Weekly, Saturdays at 02:17 UTC.
     - cron: "17 2 * * 6"
   workflow_dispatch:
+    inputs:
+      files:
+        description: "Only the files whose path this regular expression matches, e.g. geom-num/src/math/ (empty: every mutant)"
+        required: false
+        default: ""
+        type: string
   # Run whole by kernel-release.yml on a release tag, with every other kernel workflow (28.17).
   workflow_call:
 
@@ -99,6 +113,8 @@ env:
   # behind debug assertions is built, tested and measured.
   CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS: "true"
   CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: "true"
+  # A dispatched full run narrowed to some files (the input above); empty on every other run.
+  FILES: ${{ inputs.files }}
 
 jobs:
   mutants-plan:
@@ -143,14 +159,23 @@ jobs:
             # use (geom_test::mutants). A base without a ledger has none.
             git show "HEAD^1:projects/engines/geometry/quality-ledger.json" > "$RUNNER_TEMP/plan/base-ledger.json" \
               || rm -f "$RUNNER_TEMP/plan/base-ledger.json"
+          elif [ -n "$FILES" ]; then
+            # A narrowed full run: the mutants the shards' --re selects, and every mutant, for the
+            # plan's check that the two agree on which files are in it.
+            cargo mutants --re "$FILES" --list --json > "$RUNNER_TEMP/plan/list.json"
+            cargo mutants --list --json > "$RUNNER_TEMP/plan/all.json"
           else
             cargo mutants --list --json > "$RUNNER_TEMP/plan/list.json"
           fi
       - name: How many shards the mutants need
         id: plan
         run: |
+          narrowed=()
+          if [ "$GITHUB_EVENT_NAME" != pull_request ] && [ -n "$FILES" ]; then
+            narrowed=(--files "$FILES" --all "$RUNNER_TEMP/plan/all.json")
+          fi
           plan=$(cargo run --locked -p geom-test --bin kernel-quality -- mutants-plan \
-            --list "$RUNNER_TEMP/plan/list.json")
+            --list "$RUNNER_TEMP/plan/list.json" "${narrowed[@]}")
           echo "$plan"
           echo "count=$(jq -r .count <<<"$plan")" >> "$GITHUB_OUTPUT"
           echo "shards=$(jq -c .shards <<<"$plan")" >> "$GITHUB_OUTPUT"
@@ -210,12 +235,15 @@ jobs:
         run: |
           # rust-cache turns incremental compilation off for the whole job; turn it back on here.
           export CARGO_INCREMENTAL=1
-          diff=()
+          # The plan's selection: a pull request's diff, or a narrowed full run's files.
+          only=()
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
-            diff=(--in-diff "$RUNNER_TEMP/plan/pr.diff")
+            only=(--in-diff "$RUNNER_TEMP/plan/pr.diff")
+          elif [ -n "$FILES" ]; then
+            only=(--re "$FILES")
           fi
           set +e
-          cargo mutants "${diff[@]}" --shard "${{ matrix.shard }}/$SHARDS" --no-shuffle --in-place \
+          cargo mutants "${only[@]}" --shard "${{ matrix.shard }}/$SHARDS" --no-shuffle --in-place \
             -vV --output "$RUNNER_TEMP/out"
           code=$?
           set -e
@@ -280,12 +308,15 @@ jobs:
         run: |
           # rust-cache turns incremental compilation off for the whole job; turn it back on here.
           export CARGO_INCREMENTAL=1
-          diff=()
+          # The plan's selection: a pull request's diff, or a narrowed full run's files.
+          only=()
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
-            diff=(--in-diff "$RUNNER_TEMP/plan/pr.diff")
+            only=(--in-diff "$RUNNER_TEMP/plan/pr.diff")
+          elif [ -n "$FILES" ]; then
+            only=(--re "$FILES")
           fi
           set +e
-          cargo mutants "${diff[@]}" --shard "${{ matrix.shard }}/$SHARDS" --no-shuffle --in-place \
+          cargo mutants "${only[@]}" --shard "${{ matrix.shard }}/$SHARDS" --no-shuffle --in-place \
             -vV --output "$RUNNER_TEMP/out"
           code=$?
           set -e
@@ -352,11 +383,16 @@ jobs:
             fi
           else
             args+=(--mode full)
+            if [ -n "$FILES" ]; then
+              args+=(--files "$FILES")
+            fi
           fi
           cargo run --locked -p geom-test --bin kernel-quality -- mutants "${args[@]}" "${outs[@]}"
 
   coverage:
     name: Coverage (lines, and branches on the pinned nightly)
+    # Every run but a narrowed mutation run.
+    if: ${{ !inputs.files }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     defaults:
@@ -432,6 +468,8 @@ jobs:
 
   gates-seeded:
     name: The gates fail on seeded faults
+    # Every run but a narrowed mutation run.
+    if: ${{ !inputs.files }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     defaults:
@@ -461,6 +499,8 @@ jobs:
 
   miri:
     name: Miri (partition ${{ matrix.partition }})
+    # Every run but a narrowed mutation run.
+    if: ${{ !inputs.files }}
     runs-on: ubuntu-latest
     timeout-minutes: 345
     strategy:

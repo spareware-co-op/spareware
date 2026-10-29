@@ -284,7 +284,15 @@ fn verdict_with_base(
             .map(|m| mutants::mutant_from_json(m).unwrap())
             .collect()
     });
-    judge(&runs, ledger, &repo.root, mode, expected.as_deref(), base)
+    judge(
+        &runs,
+        ledger,
+        &repo.root,
+        mode,
+        expected.as_deref(),
+        base,
+        None,
+    )
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -651,6 +659,7 @@ fn shard_plans_fit_the_budget_and_a_matrix() {
                 file: format!("{package}/src/a.rs"),
                 line,
                 description: "x".to_owned(),
+                genre: "BinaryOperator".to_owned(),
             })
             .collect()
     };
@@ -846,6 +855,100 @@ fn stale_entries_fail() {
         &verdict(&repo, &[dir], gone, Mode::Diff, None),
         "the code changed",
     );
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads and writes files in a temporary folder, which a WebAssembly test run cannot"
+)]
+#[test]
+fn a_narrowed_full_run_counts_only_its_files_entries() {
+    let repo = mutation_repo("narrowed");
+    // geom-num's survivor ran and is kept; geom-bool's entry is of a file the run left out.
+    let l = ledger(vec![
+        entry(NUM, 3, "replace < with <= in f", 1, "equivalent"),
+        entry(BOOL, 5, "replace < with <= in f", 1, "equivalent"),
+    ]);
+    let dir = write_run(&repo, "a", &[missed(NUM, 3)]);
+    let runs = vec![read_run(&dir).unwrap()];
+    let expected =
+        [mutants::mutant_from_json(&mutant(NUM, 3, 5, "replace < with <= in f")).unwrap()];
+    let judged = |files: Option<&regex_lite::Regex>| {
+        judge(
+            &runs,
+            &l,
+            &repo.root,
+            Mode::Full,
+            Some(&expected),
+            None,
+            files,
+        )
+    };
+    // Whole, geom-bool's entry matches no survivor: stale.
+    fails_with(&judged(None), "the entry is stale");
+    // Narrowed to geom-num, geom-bool's entry is not counted.
+    let num = regex_lite::Regex::new("geom-num/src/").unwrap();
+    let v = judged(Some(&num));
+    assert!(v.passes(), "{}", mutants::report(&v));
+    // An entry of a file inside the narrowed run is still held to its count.
+    let both = regex_lite::Regex::new("geom-(num|bool)/src/").unwrap();
+    fails_with(&judged(Some(&both)), "the entry is stale");
+    // The ledger's own checks still cover every entry: a line gone fails, narrowed or not.
+    let gone = ledger(vec![
+        entry(NUM, 3, "replace < with <= in f", 1, "equivalent"),
+        json!({
+            "file": BOOL, "mutant": "replace < with <= in f", "line_text": "let gone = 0;",
+            "occurrences": 1, "kind": "equivalent", "reason": REASON,
+        }),
+    ]);
+    fails_with(
+        &judge(
+            &runs,
+            &gone,
+            &repo.root,
+            Mode::Full,
+            Some(&expected),
+            None,
+            Some(&num),
+        ),
+        "the code changed",
+    );
+}
+
+#[test]
+fn a_narrowed_list_holds_its_files_mutants_and_no_other_but_struct_fields() {
+    use geom_test::mutants::check_narrowed;
+    use regex_lite::Regex;
+    let m = |file: &str, line: usize| {
+        mutants::mutant_from_json(&mutant(file, line, 5, "replace < with <= in f")).unwrap()
+    };
+    let all = vec![m(NUM, 3), m(NUM, 4), m(BOOL, 3)];
+    let num = Regex::new("geom-num/src/").unwrap();
+    assert_eq!(check_narrowed(&all[..2], &all, &num), Ok(0));
+    // A struct-field deletion of another file comes along: cargo-mutants 27.1.0 lists those
+    // whatever --re says, and the shards run the same selection.
+    let mut field = mutant(BOOL, 9, 5, "delete field x from struct P expression");
+    field["genre"] = json!("StructField");
+    let field = mutants::mutant_from_json(&field).unwrap();
+    let mut all_and_field = all.clone();
+    all_and_field.push(field.clone());
+    let list = [all[0].clone(), all[1].clone(), field];
+    assert_eq!(check_narrowed(&list, &all_and_field, &num), Ok(1));
+    // cargo-mutants left out a mutant of a matching file ...
+    let why = check_narrowed(&all[..1], &all, &num).unwrap_err();
+    assert!(why.contains("did not select it"), "{why}");
+    // ... or selected mutants by more than their path: a word of their description,
+    let word = Regex::new("replace").unwrap();
+    let why = check_narrowed(&all, &all, &word).unwrap_err();
+    assert!(why.contains("whose file it does not match"), "{why}");
+    // or a `$` after the file name, which matches the path but not the name cargo-mutants reads.
+    let end = Regex::new(r"a\.rs$").unwrap();
+    let why = check_narrowed(&[], &all, &end).unwrap_err();
+    assert!(why.contains("did not select it"), "{why}");
+    // A regular expression no file matches is refused, not run as an empty gate.
+    let none = Regex::new("geom-none/").unwrap();
+    let why = check_narrowed(&[], &all, &none).unwrap_err();
+    assert!(why.contains("no mutant's file matches"), "{why}");
 }
 
 #[cfg_attr(
@@ -1660,6 +1763,82 @@ fn kernel_quality(repo: &Repo, args: &[&str]) -> (i32, String) {
         String::from_utf8_lossy(&out.stderr)
     );
     (out.status.code().unwrap(), text)
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "runs the binary as a child process and writes files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn a_narrowed_run_is_checked_by_the_plan_and_judged_on_its_files() {
+    let repo = mutation_repo("binary-narrowed");
+    let path = |name: &str, value: &Value| {
+        let p = repo.path(name);
+        std::fs::write(&p, value.to_string()).unwrap();
+        p.to_str().unwrap().to_owned()
+    };
+    let in_num = mutant(NUM, 3, 5, "replace < with <= in f");
+    let all = path(
+        "all.json",
+        &json!([in_num.clone(), mutant(BOOL, 3, 5, "replace < with <= in f")]),
+    );
+    let narrowed = path("narrowed.json", &json!([in_num]));
+    let plan = |args: &[&str]| kernel_quality(&repo, &[&["mutants-plan"][..], args].concat());
+    // The plan: the narrowed list must hold exactly the matching files' mutants.
+    let (code, text) = plan(&[
+        "--list",
+        &narrowed,
+        "--files",
+        "geom-num/src/",
+        "--all",
+        &all,
+    ]);
+    assert_eq!(code, 0, "{text}");
+    assert!(text.starts_with(r#"{"count":1,"#), "{text}");
+    let (code, text) = plan(&["--list", &all, "--files", "geom-num/src/", "--all", &all]);
+    assert_eq!(code, 2, "{text}");
+    assert!(text.contains("whose file it does not match"), "{text}");
+    let (code, text) = plan(&["--list", &narrowed, "--files", "(", "--all", &all]);
+    assert_eq!(code, 2, "{text}");
+    // --files and --all go together.
+    assert_eq!(
+        plan(&["--list", &narrowed, "--files", "geom-num/src/"]).0,
+        2
+    );
+    assert_eq!(plan(&["--list", &narrowed, "--all", &all]).0, 2);
+    // The judge: an entry of a file outside the run is not counted, and says so.
+    let l = path(
+        "ledger.json",
+        &json!({
+            "schema": SCHEMA,
+            "survivors": [entry(BOOL, 5, "replace < with <= in f", 1, "equivalent")],
+            "coverage_off": [],
+        }),
+    );
+    let pass = write_run(&repo, "pass", &[caught(NUM, 3)]);
+    let out = pass.to_str().unwrap();
+    let judged = |extra: &[&str]| {
+        let args = [
+            &["mutants", "--expected", &narrowed, "--ledger", &l][..],
+            extra,
+            &[out][..],
+        ]
+        .concat();
+        kernel_quality(&repo, &args)
+    };
+    let (code, text) = judged(&["--mode", "full"]);
+    assert_eq!(code, 1, "{text}");
+    assert!(text.contains("the entry is stale"), "{text}");
+    let (code, text) = judged(&["--mode", "full", "--files", "geom-num/src/"]);
+    assert_eq!(code, 0, "{text}");
+    assert!(
+        text.contains("1 ledger entry of other files not counted"),
+        "{text}"
+    );
+    // A diff is narrowed already.
+    let (code, text) = judged(&["--mode", "diff", "--files", "geom-num/src/"]);
+    assert_eq!(code, 2, "{text}");
+    assert!(text.contains("narrows a full run"), "{text}");
 }
 
 #[cfg_attr(

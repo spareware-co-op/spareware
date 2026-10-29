@@ -7,7 +7,9 @@
 //!
 //! - `mutants-plan` reads the mutants of a run from `cargo mutants --list --json` and prints how
 //!   many shards the run needs ([`geom_test::mutants::shard_count`]), with the shard lists for the
-//!   workflow's two shard jobs, one GitHub Actions matrix each.
+//!   workflow's two shard jobs, one GitHub Actions matrix each. For a full run narrowed to the
+//!   files a regular expression matches, `--files` and `--all` (the listing without `--re`) check
+//!   the list holds exactly those files' mutants ([`geom_test::mutants::check_narrowed`]).
 //! - `mutants` judges cargo-mutants output directories (`mutants.out`, one per shard) against the
 //!   ledger ([`geom_test::mutants`]); `--expected`, the same list, proves no shard is missing, and
 //!   in a pull request `--base-ledger` is the base branch's ledger, the only source of `known`
@@ -43,6 +45,7 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use geom_test::coverage::{self, CrateReport};
 use geom_test::mutants::{self, Mode};
 use geom_test::quality_ledger::{LEDGER_PATH, Ledger};
+use regex_lite::Regex;
 
 /// The geometry kernel's mutation and coverage gates (section 28.8 of the kernel architecture).
 #[derive(Parser)]
@@ -95,6 +98,13 @@ enum Command {
         /// The output of `cargo mutants --list --json` for the run (an empty file: no mutants).
         #[arg(long, value_name = "LIST.json")]
         list: PathBuf,
+        /// A full run narrowed to the files this regular expression matches: the list is
+        /// `cargo mutants --list --json --re <REGEX>`.
+        #[arg(long, value_name = "REGEX", requires = "all")]
+        files: Option<String>,
+        /// With `--files`: `cargo mutants --list --json` without `--re`, every mutant.
+        #[arg(long, value_name = "ALL.json", requires = "files")]
+        all: Option<PathBuf>,
     },
     /// Judges cargo-mutants output directories against the ledger.
     Mutants {
@@ -108,6 +118,10 @@ enum Command {
         /// The base branch's ledger, in a pull request: the `known` entries it may use.
         #[arg(long, value_name = "FILE")]
         base_ledger: Option<PathBuf>,
+        /// A full run narrowed to the files this regular expression matches, as its plan was: only
+        /// those files' ledger entries are counted.
+        #[arg(long, value_name = "REGEX")]
+        files: Option<String>,
         #[command(flatten)]
         repo: Repo,
         /// The output directories, one per shard (`mutants.out`).
@@ -236,11 +250,27 @@ fn judge_coverage(scope: &Scope, dir: &Path, repo: &Repo) -> Result<bool, String
     Ok(failures.is_empty())
 }
 
+/// A `--files` regular expression, in the syntax cargo-mutants' `--re` takes.
+fn regex(files: &str) -> Result<Regex, String> {
+    Regex::new(files).map_err(|e| format!("--files {files:?}: {e}"))
+}
+
 /// Runs the command: `Ok(true)` when the gate passes, `Ok(false)` when it fails.
 fn run(cli: Cli) -> Result<bool, String> {
     match cli.command {
-        Command::MutantsPlan { list } => {
+        Command::MutantsPlan { list, files, all } => {
             let mutants = mutants::read_mutant_list(&list).map_err(|e| e.to_string())?;
+            if let (Some(files), Some(all)) = (files, all) {
+                let all = mutants::read_mutant_list(&all).map_err(|e| e.to_string())?;
+                let strays = mutants::check_narrowed(&mutants, &all, &regex(&files)?)?;
+                if strays > 0 {
+                    eprintln!(
+                        "{strays} mutant(s) of other files come along: cargo-mutants lists every \
+                         {} mutant whatever --re says",
+                        mutants::UNFILTERED_GENRE
+                    );
+                }
+            }
             let count = mutants::shard_count(&mutants)?;
             println!("{}", mutants::shard_matrix(count));
             Ok(true)
@@ -249,6 +279,7 @@ fn run(cli: Cli) -> Result<bool, String> {
             mode,
             expected,
             base_ledger,
+            files,
             repo,
             outs,
         } => {
@@ -266,6 +297,24 @@ fn run(cli: Cli) -> Result<bool, String> {
                 ModeArg::Diff => Mode::Diff,
                 ModeArg::Full => Mode::Full,
             };
+            let files = files.map(|f| regex(&f)).transpose()?;
+            if let Some(re) = &files {
+                if mode == Mode::Diff {
+                    return Err("--files narrows a full run; a diff is narrowed already".to_owned());
+                }
+                let outside = ledger
+                    .survivors
+                    .iter()
+                    .filter(|s| !re.is_match(&s.file))
+                    .count();
+                println!(
+                    "narrowed to the files matching {:?}: {} mutant(s); {outside} ledger entr{} of \
+                     other files not counted",
+                    re.as_str(),
+                    expected.len(),
+                    if outside == 1 { "y" } else { "ies" }
+                );
+            }
             let verdict = mutants::judge(
                 &runs,
                 &ledger,
@@ -273,6 +322,7 @@ fn run(cli: Cli) -> Result<bool, String> {
                 mode,
                 Some(expected.as_slice()),
                 base.as_ref(),
+                files.as_ref(),
             );
             print!("{}", mutants::report(&verdict));
             Ok(verdict.passes())
