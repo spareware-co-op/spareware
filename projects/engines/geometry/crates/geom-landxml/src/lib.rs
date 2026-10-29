@@ -16,10 +16,8 @@
 //! Sections: 17.11, 17.13 and 24.11; open questions OQ-17.3 and OQ-24.6, in the kernel architecture
 //! (`projects/engines/geometry/architecture/`).
 //!
-//! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
+//! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
-//!
-//! Proposed in chapter 27, pending the owner's decision G08.
 //!
 //! Status: scaffold only; built by pieces G437.
 #![cfg_attr(not(test), no_std)]

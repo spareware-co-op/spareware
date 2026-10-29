@@ -21,6 +21,15 @@
 //! - **Deterministic.** The same bits on every target, thread count and build: the correctly
 //!   rounded results by their specification, the others because they are the same pure-Rust code
 //!   everywhere.
+//! - **Bounded proofs, and what is only tested.** Every function here returns its value through
+//!   [`Real::new`], which Kani proves refuses exactly NaN and the infinities (`real`'s proofs), so
+//!   none returns a NaN or an infinity, whatever its argument. Kani also proves (piece G41,
+//!   chapter 28.7) that [`abs`], [`floor`], [`ceil`] and [`round_ties_even`] are exact for every
+//!   finite double: a whole number (or the magnitude) at the right place, ties to even, and
+//!   `NotFinite` for exactly the non-finite arguments. The correctly rounded functions rest on
+//!   CORE-MATH's proofs and on IEEE 754 (for [`sqrt`] and [`fma`]), and are tested bit for bit
+//!   against a big-number oracle (`tests/math_reference.rs`); their code (argument reduction,
+//!   tables, polynomials) is beyond a bounded proof.
 //!
 //! # Use these
 //!
@@ -819,6 +828,103 @@ mod tests {
                 f64::to_bits(want),
                 "atan2({y:e}, {x:e}) = {got:e}"
             );
+        }
+    }
+}
+
+/// Bounded proofs (chapter 28.7; piece G41): the exact functions, for every double.
+#[cfg(kani)]
+// cargo-mutants reads this attribute from the source and skips the module (its harnesses are
+// proven by Kani, and no test build compiles them); no build evaluates it, since the module
+// exists only under Kani, where `test` is off.
+#[cfg_attr(test, mutants::skip)]
+mod proofs {
+    use super::*;
+
+    /// Whether a finite double is a whole number, from its bits: zero, or a value whose fraction
+    /// bits below its units bit are all zero.
+    fn is_whole(r: f64) -> bool {
+        if r == 0.0 {
+            return true;
+        }
+        let bits = r.to_bits();
+        let field = i64::try_from((bits >> 52) & 0x7ff).unwrap();
+        let e = field - 1023;
+        if e < 0 {
+            false
+        } else if e >= 52 {
+            true
+        } else {
+            bits & ((1u64 << (52 - e)) - 1) == 0
+        }
+    }
+
+    /// The result for a double with these bits: `Some(value)` when the function answered,
+    /// `None` when it reported `NotFinite`, which it must do exactly for non-finite arguments.
+    fn answer(x: f64, r: Result<Real, NumError>) -> Option<f64> {
+        match r {
+            Ok(v) => {
+                assert!(x.is_finite());
+                Some(v.get())
+            }
+            Err(e) => {
+                assert!(e == NumError::NotFinite && !x.is_finite());
+                None
+            }
+        }
+    }
+
+    /// `abs` is the magnitude, exactly.
+    #[kani::proof]
+    fn abs_is_exact() {
+        let x = f64::from_bits(kani::any());
+        if let Some(r) = answer(x, abs(x)) {
+            assert!(r >= 0.0 && (r == x || r == -x));
+        }
+    }
+
+    /// Every double of magnitude at least 2^52 is a whole number.
+    const WHOLE_FROM: f64 = 4_503_599_627_370_496.0;
+
+    /// `floor` is the largest whole number not above x: x itself from 2^52 up, else r ≤ x < r + 1
+    /// (`r + 1` is exact below 2^52; `x − r` is not, as for x = −2^−1074).
+    #[kani::proof]
+    fn floor_is_exact() {
+        let x = f64::from_bits(kani::any());
+        if let Some(r) = answer(x, floor(x)) {
+            assert!(is_whole(r) && r <= x);
+            assert!(if x >= WHOLE_FROM || x <= -WHOLE_FROM {
+                r == x
+            } else {
+                x < r + 1.0
+            });
+        }
+    }
+
+    /// `ceil` is the smallest whole number not below x, as [`floor_is_exact`] states it.
+    #[kani::proof]
+    fn ceil_is_exact() {
+        let x = f64::from_bits(kani::any());
+        if let Some(r) = answer(x, ceil(x)) {
+            assert!(is_whole(r) && r >= x);
+            assert!(if x >= WHOLE_FROM || x <= -WHOLE_FROM {
+                r == x
+            } else {
+                r - 1.0 < x
+            });
+        }
+    }
+
+    /// `round_ties_even` is the nearest whole number, a tie going to the even one.
+    #[kani::proof]
+    fn round_ties_even_is_exact() {
+        let x = f64::from_bits(kani::any());
+        if let Some(r) = answer(x, round_ties_even(x)) {
+            let d = if x > r { x - r } else { r - x };
+            assert!(is_whole(r) && d <= 0.5);
+            if d == 0.5 {
+                assert!(is_whole(r * 0.5));
+            }
         }
     }
 }

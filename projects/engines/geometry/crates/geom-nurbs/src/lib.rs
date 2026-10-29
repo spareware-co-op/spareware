@@ -20,7 +20,7 @@
 //! Sections: 7, 12.3, 12.12, 13 (introduction), 14.1 and 15.6; 29.7, in the kernel architecture
 //! (`projects/engines/geometry/architecture/`).
 //!
-//! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
+//! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
 //! Modules today (piece G56, The NURBS Book's chapters 2 to 5):

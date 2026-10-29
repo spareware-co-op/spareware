@@ -49,6 +49,22 @@
 //!   arithmetic at run time (the compiler alone evaluates the checks on the constants, where an
 //!   overflow would stop the build) and no cast, so nothing here depends on overflow checks being
 //!   on.
+//! - **Bounded proofs, and what is only tested.** Kani proves (piece G41, chapter 28.7) that
+//!   `split` adds back exactly or reports, for every finite double; that `two_sum` and
+//!   `fast_two_sum` agree and give the rounded sum and its error for every finite operand against
+//!   five others, in either order (against the largest double, for operands below 2^969, where no
+//!   step overflows; the overflow fallback is only tested, because its NaN intermediate trips
+//!   Kani's NaN check; over every pair of operands at once the solver ran past CI's hour); and
+//!   that `two_prod` gives the rounded product and its error for every finite first factor
+//!   against 3, the splitter, 2^996 and the smallest subnormal, and for every first factor whose
+//!   significand has at most 14 bits (every sign and exponent) against −0.1 and the largest
+//!   double: one factor for each of its paths. The proofs module has one harness per value, with
+//!   kissat as the SAT solver; the `two_prod` harnesses unwind `scale`'s loop at most three times
+//!   (its callers pass at most 1074, so it steps at most twice), and Kani checks that bound is
+//!   enough. In WSL (2026-10-28, sharing the machine) the full-width harnesses took 4 to 54
+//!   minutes and the 14-bit ones up to 26; with all 53 bits free, −0.1 and the largest double
+//!   ran past four hours. Every other pair, and everything through the fused multiply-add, is
+//!   tested against exact rationals.
 //!
 //! Method: Dekker 1971 (`fast_two_sum`, Veltkamp's `split`, `two_prod`) and Knuth (`two_sum`), in
 //! the form and with the proofs of Shewchuk 1997: Theorem 6 (fast two-sum), Theorem 7 (two-sum),
@@ -540,4 +556,195 @@ pub const fn two_prod(a: f64, b: f64) -> (f64, f64) {
         return (p, dekker_error(a, b, p));
     }
     (p, scaled_error(a, b, p))
+}
+
+/// Bounded proofs (chapter 28.7; piece G41), bit for bit: `split` for every finite double,
+/// `two_sum` for every finite operand over [`proofs::ADDENDS`] and `two_prod` for every finite
+/// first factor over [`proofs::FACTORS`]. The
+/// transformations through the fused multiply-add (`two_prod_fma` and what calls it) are left out:
+/// Kani cannot model the processor instruction `libm` uses for it, so those are only tested.
+#[cfg(kani)]
+// cargo-mutants reads this attribute from the source and skips the module (its harnesses are
+// proven by Kani, and no test build compiles them); no build evaluates it, since the module
+// exists only under Kani, where `test` is off.
+#[cfg_attr(test, mutants::skip)]
+mod proofs {
+    use super::*;
+
+    /// A symbolic finite double.
+    fn finite() -> f64 {
+        let x = f64::from_bits(kani::any());
+        kani::assume(x.is_finite());
+        x
+    }
+
+    /// `two_sum` and `fast_two_sum` agree bit for bit, the sum is the rounded sum, and the error
+    /// is below half a unit of it (adding it back rounds to the sum), for every finite first
+    /// operand and the second operand `y`, in either order. It is proven for five second operands,
+    /// one harness each (kissat as the SAT solver): 3 and −0.1 (inexact sums of either sign), 2^53
+    /// (sums whose error is a whole number), the smallest subnormal (errors at the bottom of the
+    /// range) and the largest double (overflow). Over every pair at once, or the five in one
+    /// harness, the solver ran past CI's hour.
+    fn two_sum_law(y: f64) {
+        let x = finite();
+        for (a, b) in [(x, y), (y, x)] {
+            let (s, e) = two_sum(a, b);
+            let (fs, fe) = fast_two_sum(a, b);
+            assert!(s.to_bits() == fs.to_bits() && e.to_bits() == fe.to_bits());
+            assert!(s.to_bits() == (a + b).to_bits());
+            if s.is_finite() {
+                assert!(e.is_finite() && s + e == s);
+            }
+        }
+    }
+
+    /// [`two_sum_law`] with 3: an inexact positive sum.
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn two_sum_with_three() {
+        two_sum_law(3.0);
+    }
+
+    /// [`two_sum_law`] with −0.1: an inexact negative sum.
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn two_sum_with_minus_a_tenth() {
+        two_sum_law(-0.1);
+    }
+
+    /// [`two_sum_law`] with 2^53: sums whose error is a whole number.
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn two_sum_with_two_pow_53() {
+        two_sum_law(9_007_199_254_740_992.0);
+    }
+
+    /// [`two_sum_law`] with the smallest subnormal: errors at the bottom of the range.
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn two_sum_with_the_smallest_subnormal() {
+        two_sum_law(f64::from_bits(1));
+    }
+
+    /// [`two_sum_law`] with the largest double, for every first operand below 2^969 in magnitude:
+    /// sums up to the edge of overflow, where no step overflows (Ω + 2^969 is below the midpoint
+    /// Ω + 2^970, so every sum and difference rounds to at most Ω). Beyond that an intermediate
+    /// overflows by design and the fallback returns [`fast_two_sum`]'s pair; Kani's NaN check
+    /// reports the NaN that intermediate makes (run 40323412527), so that path is tested against
+    /// exact rationals (`tests/attack2_eft.rs`), not proven.
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn two_sum_with_the_largest_double() {
+        let x = finite();
+        kani::assume(abs(x) < f64::from_bits(0x7c80_0000_0000_0000));
+        for (a, b) in [(x, f64::MAX), (f64::MAX, x)] {
+            let (s, e) = two_sum(a, b);
+            let (fs, fe) = fast_two_sum(a, b);
+            assert!(s.to_bits() == fs.to_bits() && e.to_bits() == fe.to_bits());
+            assert!(s.to_bits() == (a + b).to_bits());
+            assert!(s.is_finite() && e.is_finite() && s + e == s);
+        }
+    }
+
+    /// `split` cuts a double into two halves that add back to it exactly, for every finite double
+    /// below 2^1024 − 2^997 in magnitude, and reports every larger one as (±∞, ∓∞), the infinity
+    /// with the sign of `a` first (its documentation).
+    #[kani::proof]
+    fn split_adds_back_exactly() {
+        let a = finite();
+        let (hi, lo) = split(a);
+        // 2^1024 − 2^997 = (2 − 2^−26) · 2^1023: exponent field 2046, significand 2^52 − 2^26.
+        let reported = f64::from_bits(0x7fef_ffff_fc00_0000);
+        if abs(a) < reported {
+            assert!(hi + lo == a);
+        } else {
+            assert!(hi.is_infinite() && lo.is_infinite());
+            assert!(hi.is_sign_negative() == a.is_sign_negative());
+            assert!(lo.is_sign_negative() != a.is_sign_negative());
+        }
+    }
+
+    /// `two_prod` gives the rounded product, and an error that, when finite, adds back to it
+    /// without changing it, for every finite first factor `a` and the second factor `b`. It is
+    /// proven for six second factors, one for each of `two_prod`'s paths, one harness each (kissat
+    /// as the SAT solver, `scale`'s loop unwound at most three times): 3 and −0.1 (inexact
+    /// products of either sign on the direct path), [`SPLITTER`] (a factor that splits exactly),
+    /// 2^996 (the scaled path for a large factor), the smallest subnormal (the scaled path for a
+    /// tiny product, whose error can be finer than any double) and the largest double (overflow).
+    /// Against 3, the splitter, 2^996 and the smallest subnormal every finite `a` is proven (in WSL
+    /// on 2026-10-28, with up to ten proofs sharing twelve cores: 45, 54, 4 and 11 minutes);
+    /// against −0.1 and the largest double, every `a` whose significand has at most 14 bits
+    /// ([`two_prod_law_narrow`]), because with all 53 free each ran past four hours there.
+    fn two_prod_law(a: f64, b: f64) {
+        let (p, e) = two_prod(a, b);
+        assert!(p.to_bits() == (a * b).to_bits());
+        if p.is_finite() && e.is_finite() {
+            assert!(p + e == p);
+        }
+    }
+
+    /// A symbolic finite double whose significand has at most 14 bits (the low 39 fraction bits
+    /// zero), every sign and exponent, for the two factors whose 53-bit proofs do not finish.
+    fn fourteen_bits() -> f64 {
+        let a = f64::from_bits(kani::any::<u64>() & !((1 << 39) - 1));
+        kani::assume(a.is_finite());
+        a
+    }
+
+    /// [`two_prod_law`] for every 14-bit first factor ([`fourteen_bits`]) and the factor `b`.
+    fn two_prod_law_narrow(b: f64) {
+        two_prod_law(fourteen_bits(), b);
+    }
+
+    /// [`two_prod_law`] with 3, for every finite first factor: an inexact positive product on
+    /// the direct path.
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    #[kani::unwind(3)]
+    fn two_prod_with_three() {
+        two_prod_law(finite(), 3.0);
+    }
+
+    /// [`two_prod_law_narrow`] with −0.1: an inexact negative product on the direct path.
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    #[kani::unwind(3)]
+    fn two_prod_with_minus_a_tenth() {
+        two_prod_law_narrow(-0.1);
+    }
+
+    /// [`two_prod_law`] with [`SPLITTER`], for every finite first factor: a factor that splits
+    /// exactly.
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    #[kani::unwind(3)]
+    fn two_prod_with_the_splitter() {
+        two_prod_law(finite(), SPLITTER);
+    }
+
+    /// [`two_prod_law`] with 2^996, for every finite first factor: the scaled path for a large
+    /// factor.
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    #[kani::unwind(3)]
+    fn two_prod_with_two_pow_996() {
+        two_prod_law(finite(), TWO_POW_996);
+    }
+
+    /// [`two_prod_law`] with the smallest subnormal, for every finite first factor: the scaled
+    /// path for a tiny product.
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    #[kani::unwind(3)]
+    fn two_prod_with_the_smallest_subnormal() {
+        two_prod_law(finite(), f64::from_bits(1));
+    }
+
+    /// [`two_prod_law_narrow`] with the largest double: overflow.
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    #[kani::unwind(3)]
+    fn two_prod_with_the_largest_double() {
+        two_prod_law_narrow(f64::MAX);
+    }
 }
