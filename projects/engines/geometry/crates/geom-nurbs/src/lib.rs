@@ -23,7 +23,8 @@
 //! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
-//! Modules today (pieces G56 and G58, The NURBS Book's chapters 2 to 5 and 9):
+//! Modules today (pieces G56, G58 and G59, The NURBS Book's chapters 2 to 5 and 9, and chapter 12's
+//! Bernstein toolkit):
 //!
 //! - [`Basis`], in [`basis`]: a checked degree and knot vector, and its functions and their
 //!   derivatives (A2.1 to A2.5).
@@ -52,10 +53,16 @@
 //!   [`Curve::least_squares`] (section 9.4.1), [`Curve::least_squares_at`] with weights and
 //!   constraints (A9.6) and [`Surface::least_squares`] (A9.7).
 //! - Approximation to a stated error: [`Curve::approximate`] (section 9.4.4, A9.8).
+//! - The Bernstein toolkit (G59), in [`bernstein`], [`product`] and [`exact`]: Bezier pieces as
+//!   interval enclosures of their exact Bernstein coefficients ([`Curve::bernstein`],
+//!   [`Surface::bernstein`]), their boxes, hodographs and derivative boxes, slabs, fat lines and
+//!   fat planes, and Bezier clipping ([`BernsteinCurve`], [`BernsteinPatch`]); symbolic products
+//!   and the normal patch with collapsed edges divided out ([`Surface::normal_patches`]); and the
+//!   exact integer paths for grid pieces ([`exact::plane_coefficients`], [`exact::normal_patch`]).
 //! - [`NurbsError`], in [`error`].
 //!
-//! Status: basis, evaluation and knot operations (G56) and fitting (G58) built; the Bernstein
-//! toolkit (G59) and the rest (G259) to come.
+//! Status: basis, evaluation and knot operations (G56), fitting (G58) and the Bernstein toolkit
+//! (G59) built; the rest (G259) to come.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 
@@ -65,6 +72,7 @@ mod approx;
 mod arith;
 mod band;
 pub mod basis;
+pub mod bernstein;
 mod bezier;
 mod budget;
 pub mod curve;
@@ -72,6 +80,7 @@ mod deboor;
 mod elevate;
 mod enclose;
 pub mod error;
+pub mod exact;
 pub mod fit;
 mod index;
 mod insert;
@@ -80,12 +89,15 @@ mod lsq;
 mod net;
 pub mod ops;
 pub mod point;
+pub mod product;
 mod reduce;
 mod remove;
+mod restrict;
 pub mod surface;
 
 pub use approx::NEWTON_STEPS;
 pub use basis::{Basis, Limit, MAX_DEGREE};
+pub use bernstein::{BernsteinCurve, BernsteinPatch, Bounds, Slab};
 pub use curve::Curve;
 pub use error::NurbsError;
 pub use fit::{
@@ -94,4 +106,5 @@ pub use fit::{
 };
 pub use ops::{Changed, Direction};
 pub use point::Point;
+pub use product::Edge;
 pub use surface::Surface;
