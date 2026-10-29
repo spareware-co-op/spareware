@@ -164,6 +164,18 @@ impl ParamSurface for Faulty {
         }
         Ok(b)
     }
+    fn partials_over(
+        &self,
+        region: ParamBox,
+        sides: (Limit, Limit),
+        order: usize,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Vec<[Interval; 3]>, CurveError> {
+        self.inner.partials_over(region, sides, order, meter)
+    }
+    fn breaks(&self) -> (Vec<f64>, Vec<f64>) {
+        self.inner.breaks()
+    }
     fn normal_bound(
         &self,
         region: ParamBox,

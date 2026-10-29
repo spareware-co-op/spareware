@@ -55,7 +55,7 @@ use geom_num::interval::Interval;
 use geom_nurbs::{Bounds, Changed, Direction, Limit};
 use geom_run::WorkMeter;
 
-use crate::param::{ParamBox, ParamSurface, SurfaceForm, SurfaceKind};
+use crate::param::{ParamBox, ParamSurface, SurfaceForm, SurfaceKind, partial_index};
 use crate::terms::{Fun, Term, Terms};
 
 /// A plane, c + u·a + v·b (module documentation).
@@ -314,6 +314,34 @@ fn hull(
                 *l = tight::smaller(*l, x.lo());
                 *h = tight::larger(*h, x.hi());
             }
+        }
+    }
+    Ok(out)
+}
+
+/// Every partial of `t` to `order` over the region, each the hull of its pieces (`hull`), listed
+/// by `partial_index`.
+fn terms_partials(
+    t: &Terms,
+    domain: ParamBox,
+    region: ParamBox,
+    angular: (bool, bool),
+    order: usize,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vec<[Interval; 3]>, CurveError> {
+    check_box(region, domain)?;
+    let mut out = Vec::with_capacity(partial_index(order.saturating_add(1), 0)?);
+    for n in 0..=order {
+        for j in 0..=n {
+            let i = n.checked_sub(j).ok_or(CurveError::Defect)?;
+            let b = hull(region, angular, meter, |u, v| t.enclose(u, v, (i, j)))?;
+            let [l0, l1, l2] = b.lo;
+            let [h0, h1, h2] = b.hi;
+            out.push([
+                Interval::new(l0, h0)?,
+                Interval::new(l1, h1)?,
+                Interval::new(l2, h2)?,
+            ]);
         }
     }
     Ok(out)
@@ -721,6 +749,27 @@ macro_rules! round_surface {
                 )?))
             }
 
+            fn partials_over(
+                &self,
+                region: ParamBox,
+                _sides: (Limit, Limit),
+                order: usize,
+                meter: &mut WorkMeter<'_>,
+            ) -> Result<Vec<[Interval; 3]>, CurveError> {
+                terms_partials(
+                    &self.terms,
+                    self.round.domain,
+                    region,
+                    angular($which),
+                    order,
+                    meter,
+                )
+            }
+
+            fn breaks(&self) -> (Vec<f64>, Vec<f64>) {
+                (Vec::new(), Vec::new())
+            }
+
             fn normal_bound(
                 &self,
                 region: ParamBox,
@@ -926,6 +975,27 @@ impl ParamSurface for Plane {
             meter,
             |u, v| self.terms.enclose(u, v, order),
         )?))
+    }
+
+    fn partials_over(
+        &self,
+        region: ParamBox,
+        _sides: (Limit, Limit),
+        order: usize,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Vec<[Interval; 3]>, CurveError> {
+        terms_partials(
+            &self.terms,
+            self.domain,
+            region,
+            (false, false),
+            order,
+            meter,
+        )
+    }
+
+    fn breaks(&self) -> (Vec<f64>, Vec<f64>) {
+        (Vec::new(), Vec::new())
     }
 
     fn normal_bound(
@@ -1150,6 +1220,20 @@ impl ParamSurface for AffineSurface {
             meter,
             |u, v| self.terms.enclose(u, v, order),
         )?))
+    }
+
+    fn partials_over(
+        &self,
+        region: ParamBox,
+        _sides: (Limit, Limit),
+        order: usize,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Vec<[Interval; 3]>, CurveError> {
+        terms_partials(&self.terms, self.domain, region, self.angular, order, meter)
+    }
+
+    fn breaks(&self) -> (Vec<f64>, Vec<f64>) {
+        (Vec::new(), Vec::new())
     }
 
     fn normal_bound(

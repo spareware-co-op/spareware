@@ -185,6 +185,18 @@ impl ParamSurface for FlippedNormals {
     ) -> Result<DerivativeBound<3>, CurveError> {
         ParamSurface::derivative_bound(&self.0, r, d, m)
     }
+    fn partials_over(
+        &self,
+        r: ParamBox,
+        s: (Limit, Limit),
+        k: usize,
+        m: &mut WorkMeter<'_>,
+    ) -> Result<Vec<[Interval; 3]>, CurveError> {
+        self.0.partials_over(r, s, k, m)
+    }
+    fn breaks(&self) -> (Vec<f64>, Vec<f64>) {
+        self.0.breaks()
+    }
     fn normal_bound(&self, r: ParamBox, m: &mut WorkMeter<'_>) -> Result<Bounds<3>, CurveError> {
         let b = self.0.normal_bound(r, m)?;
         Ok(Bounds {

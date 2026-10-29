@@ -3,8 +3,11 @@
 //! What it does: [`ParamSurface`] is the trait chapter 12.1 names: evaluation, first partial
 //! derivatives, certified enclosures, conservative bounds on the value and the partials over any
 //! parameter box, a bound on the normals' directions (the Gauss map), conversion to NURBS with an
-//! error, split, reverse and transform. [`SurfaceKind`] is the storage enum, one variant per kind,
-//! which dispatches to it. New surfaces come back as [`SurfaceKind`] inside `geom-nurbs`'s
+//! error, split, reverse and transform; with every partial derivative of any order enclosed at a
+//! point or over a box ([`ParamSurface::partials_over`], listed by [`partial_index`]) and the
+//! parameters where a kind may not be smooth ([`ParamSurface::breaks`]), which chapter 13's
+//! offsets and Class-A blends need (piece G66). [`SurfaceKind`] is the storage enum, one variant
+//! per kind, which dispatches to it. New surfaces come back as [`SurfaceKind`] inside `geom-nurbs`'s
 //! [`Changed`], with a certified bound on their distance from the exact result. Errors are
 //! `geom-curve`'s [`CurveError`], shared by every kind (a span there is a box here).
 //!
@@ -24,6 +27,9 @@
 //!
 //! Cost: none here; each kind's implementation states its own.
 
+use alloc::vec::Vec;
+
+use geom_curve::tight;
 use geom_curve::{CurveError, DerivativeBound, ParamMap};
 use geom_math::TypedTransform;
 use geom_num::interval::Interval;
@@ -31,6 +37,7 @@ use geom_nurbs::{Bounds, Changed, Direction, Limit};
 use geom_run::WorkMeter;
 
 use crate::analytic::{AffineSurface, Cone, Cylinder, Plane, Sphere, Torus};
+use crate::offset::Offset;
 use crate::swept::{Extrusion, Revolution, Ruled};
 
 /// A surface kind as NURBS: the surface, and the maps from the kind's parameters to its own in
@@ -47,6 +54,86 @@ pub struct SurfaceForm {
 
 /// A parameter box ([u0, u1], [v0, v1]).
 pub type ParamBox = ((f64, f64), (f64, f64));
+
+/// Where ∂^{i+j}S/∂u^i∂v^j stands in a list of partials: by total order n = i + j, then by j, so
+/// at n(n + 1)/2 + j (S, `S_u`, `S_v`, `S_uu`, `S_uv`, `S_vv`, …).
+///
+/// # Errors
+///
+/// [`CurveError::Defect`] if the index overflows.
+pub fn partial_index(i: usize, j: usize) -> Result<usize, CurveError> {
+    let n = i.checked_add(j).ok_or(CurveError::Defect)?;
+    n.checked_mul(n.checked_add(1).ok_or(CurveError::Defect)?)
+        .and_then(|x| x.checked_div(2))
+        .and_then(|x| x.checked_add(j))
+        .ok_or(CurveError::Defect)
+}
+
+/// The partials to `order` over a box with centre c, each the intersection of its enclosure over
+/// the box in `wide` (which holds the partials to order + 1 there) with its centred form, the mean
+/// value theorem's P(c) + `P_u`(B)·Δu + `P_v`(B)·Δv, P(c) from `at` and Δu, Δv the box's extent
+/// from c. Both hold every value, so their intersection does; the centred form's width shrinks
+/// with the square of the box's, the direct one's only with its width (R. E. Moore,
+/// R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), section 6.4,
+/// <https://doi.org/10.1137/1.9780898717716>). The box must hold no break of the surface inside.
+#[allow(
+    clippy::many_single_char_names,
+    reason = "the mean value theorem's names: P and its partials, i and j orders, c the centre's value, a and b the slopes"
+)]
+pub(crate) fn centred(
+    at: &[[Interval; 3]],
+    wide: &[[Interval; 3]],
+    (du, dv): (Interval, Interval),
+    order: usize,
+) -> Result<Vec<[Interval; 3]>, CurveError> {
+    let get = |x: &[[Interval; 3]], i: usize, j: usize| -> Result<[Interval; 3], CurveError> {
+        x.get(partial_index(i, j)?)
+            .copied()
+            .ok_or(CurveError::Defect)
+    };
+    let mut out = Vec::with_capacity(at.len());
+    for n in 0..=order {
+        for j in 0..=n {
+            let i = n.checked_sub(j).ok_or(CurveError::Defect)?;
+            let (p, w) = (get(at, i, j)?, get(wide, i, j)?);
+            let (pu, pv) = (
+                get(wide, i.saturating_add(1), j)?,
+                get(wide, i, j.saturating_add(1))?,
+            );
+            let mut o = w;
+            for d in 0..3 {
+                let (Some(&c), Some(&a), Some(&b), Some(slot)) =
+                    (p.get(d), pu.get(d), pv.get(d), o.get_mut(d))
+                else {
+                    return Err(CurveError::Defect);
+                };
+                let step = tight::add(tight::mul(a, du)?, tight::mul(b, dv)?)?;
+                *slot = meet(*slot, tight::add(c, step)?)?;
+            }
+            out.push(o);
+        }
+    }
+    Ok(out)
+}
+
+/// The interval [lo − c, hi − c], rounded outward.
+pub(crate) fn offset_from((lo, hi): (f64, f64), c: f64) -> Result<Interval, CurveError> {
+    let l = tight::sub(tight::point(lo)?, tight::point(c)?)?.lo();
+    let h = tight::sub(tight::point(hi)?, tight::point(c)?)?.hi();
+    Ok(Interval::new(l, h)?)
+}
+
+/// The intersection of two enclosures of one value (they overlap; if rounding ever made them
+/// miss, the first is kept).
+fn meet(a: Interval, b: Interval) -> Result<Interval, CurveError> {
+    let lo = tight::larger(a.lo(), b.lo());
+    let hi = tight::smaller(a.hi(), b.hi());
+    if lo <= hi {
+        Ok(Interval::new(lo, hi)?)
+    } else {
+        Ok(a)
+    }
+}
 
 /// The behaviour of a surface kind.
 pub trait ParamSurface {
@@ -98,6 +185,30 @@ pub trait ParamSurface {
         dir: Direction,
         meter: &mut WorkMeter<'_>,
     ) -> Result<DerivativeBound<3>, CurveError>;
+
+    /// Enclosures of every partial derivative ∂^{i+j}S/∂u^i∂v^j with i + j ≤ `order`, listed by
+    /// [`partial_index`], each holding the partial at every point of `region`. A region of one
+    /// point is that point, from `sides` at a break; a region wider in a direction holds the values
+    /// from both sides of a break inside it.
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::SpanOutside`]; [`CurveError::Unbounded`] where a partial cannot be bounded
+    /// over the region (at a pole of a rational form, or a point where an offset's base normal
+    /// vanishes); [`geom_nurbs::NurbsError::DerivativeOrder`] for an order above 18 where the
+    /// partials pass through interval jets (a rational NURBS surface, an offset), whose
+    /// factorials are exact only that far; [`CurveError::NotFinite`]; [`CurveError::Stopped`].
+    fn partials_over(
+        &self,
+        region: ParamBox,
+        sides: (Limit, Limit),
+        order: usize,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Vec<[Interval; 3]>, CurveError>;
+
+    /// The parameters strictly inside the domain where the surface may not be smooth (a partial of
+    /// some order may jump there): in u, then in v, each increasing and without repeats.
+    fn breaks(&self) -> (Vec<f64>, Vec<f64>);
 
     /// A box holding a positive multiple of the normal `S_u` × `S_v` at every point of `region` (at a
     /// pole, its limit): the signs it decides are the normals' signs.
@@ -157,7 +268,7 @@ pub trait ParamSurface {
 }
 
 /// Every surface kind, stored as itself (chapter 7): one variant per kind built. Later pieces add
-/// the offset surface (G66) and the subdivision limit surface.
+/// the subdivision limit surface and the procedural sweeps and blends.
 #[derive(Clone, Debug, PartialEq)]
 pub enum SurfaceKind {
     /// A NURBS surface, rational or not.
@@ -180,6 +291,8 @@ pub enum SurfaceKind {
     Extrusion(Extrusion),
     /// A ruled surface.
     Ruled(Ruled),
+    /// An offset surface: a base kind moved along its normal (G66).
+    Offset(Offset),
 }
 
 impl ParamSurface for SurfaceKind {
@@ -195,6 +308,7 @@ impl ParamSurface for SurfaceKind {
             SurfaceKind::Revolution(s) => ParamSurface::domain(s),
             SurfaceKind::Extrusion(s) => ParamSurface::domain(s),
             SurfaceKind::Ruled(s) => ParamSurface::domain(s),
+            SurfaceKind::Offset(s) => ParamSurface::domain(s),
         }
     }
 
@@ -210,6 +324,7 @@ impl ParamSurface for SurfaceKind {
             SurfaceKind::Revolution(s) => ParamSurface::point(s, u, v, sides),
             SurfaceKind::Extrusion(s) => ParamSurface::point(s, u, v, sides),
             SurfaceKind::Ruled(s) => ParamSurface::point(s, u, v, sides),
+            SurfaceKind::Offset(s) => ParamSurface::point(s, u, v, sides),
         }
     }
 
@@ -225,6 +340,7 @@ impl ParamSurface for SurfaceKind {
             SurfaceKind::Revolution(s) => s.partials(u, v, sides),
             SurfaceKind::Extrusion(s) => s.partials(u, v, sides),
             SurfaceKind::Ruled(s) => s.partials(u, v, sides),
+            SurfaceKind::Offset(s) => s.partials(u, v, sides),
         }
     }
 
@@ -246,6 +362,7 @@ impl ParamSurface for SurfaceKind {
             SurfaceKind::Revolution(s) => s.enclose(u, v, sides, meter),
             SurfaceKind::Extrusion(s) => s.enclose(u, v, sides, meter),
             SurfaceKind::Ruled(s) => s.enclose(u, v, sides, meter),
+            SurfaceKind::Offset(s) => s.enclose(u, v, sides, meter),
         }
     }
 
@@ -261,6 +378,7 @@ impl ParamSurface for SurfaceKind {
             SurfaceKind::Revolution(s) => ParamSurface::bound(s, region, meter),
             SurfaceKind::Extrusion(s) => ParamSurface::bound(s, region, meter),
             SurfaceKind::Ruled(s) => ParamSurface::bound(s, region, meter),
+            SurfaceKind::Offset(s) => ParamSurface::bound(s, region, meter),
         }
     }
 
@@ -281,6 +399,45 @@ impl ParamSurface for SurfaceKind {
             SurfaceKind::Revolution(s) => ParamSurface::derivative_bound(s, region, dir, meter),
             SurfaceKind::Extrusion(s) => ParamSurface::derivative_bound(s, region, dir, meter),
             SurfaceKind::Ruled(s) => ParamSurface::derivative_bound(s, region, dir, meter),
+            SurfaceKind::Offset(s) => ParamSurface::derivative_bound(s, region, dir, meter),
+        }
+    }
+
+    fn partials_over(
+        &self,
+        region: ParamBox,
+        sides: (Limit, Limit),
+        order: usize,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Vec<[Interval; 3]>, CurveError> {
+        match self {
+            SurfaceKind::Nurbs(s) => s.partials_over(region, sides, order, meter),
+            SurfaceKind::Plane(s) => s.partials_over(region, sides, order, meter),
+            SurfaceKind::Cylinder(s) => s.partials_over(region, sides, order, meter),
+            SurfaceKind::Cone(s) => s.partials_over(region, sides, order, meter),
+            SurfaceKind::Sphere(s) => s.partials_over(region, sides, order, meter),
+            SurfaceKind::Torus(s) => s.partials_over(region, sides, order, meter),
+            SurfaceKind::Affine(s) => s.partials_over(region, sides, order, meter),
+            SurfaceKind::Revolution(s) => s.partials_over(region, sides, order, meter),
+            SurfaceKind::Extrusion(s) => s.partials_over(region, sides, order, meter),
+            SurfaceKind::Ruled(s) => s.partials_over(region, sides, order, meter),
+            SurfaceKind::Offset(s) => s.partials_over(region, sides, order, meter),
+        }
+    }
+
+    fn breaks(&self) -> (Vec<f64>, Vec<f64>) {
+        match self {
+            SurfaceKind::Nurbs(s) => s.breaks(),
+            SurfaceKind::Plane(s) => s.breaks(),
+            SurfaceKind::Cylinder(s) => s.breaks(),
+            SurfaceKind::Cone(s) => s.breaks(),
+            SurfaceKind::Sphere(s) => s.breaks(),
+            SurfaceKind::Torus(s) => s.breaks(),
+            SurfaceKind::Affine(s) => s.breaks(),
+            SurfaceKind::Revolution(s) => s.breaks(),
+            SurfaceKind::Extrusion(s) => s.breaks(),
+            SurfaceKind::Ruled(s) => s.breaks(),
+            SurfaceKind::Offset(s) => s.breaks(),
         }
     }
 
@@ -300,6 +457,7 @@ impl ParamSurface for SurfaceKind {
             SurfaceKind::Revolution(s) => s.normal_bound(region, meter),
             SurfaceKind::Extrusion(s) => s.normal_bound(region, meter),
             SurfaceKind::Ruled(s) => s.normal_bound(region, meter),
+            SurfaceKind::Offset(s) => s.normal_bound(region, meter),
         }
     }
 
@@ -315,6 +473,7 @@ impl ParamSurface for SurfaceKind {
             SurfaceKind::Revolution(s) => s.to_nurbs(meter),
             SurfaceKind::Extrusion(s) => s.to_nurbs(meter),
             SurfaceKind::Ruled(s) => s.to_nurbs(meter),
+            SurfaceKind::Offset(s) => s.to_nurbs(meter),
         }
     }
 
@@ -335,6 +494,7 @@ impl ParamSurface for SurfaceKind {
             SurfaceKind::Revolution(s) => ParamSurface::split(s, dir, t, meter),
             SurfaceKind::Extrusion(s) => ParamSurface::split(s, dir, t, meter),
             SurfaceKind::Ruled(s) => ParamSurface::split(s, dir, t, meter),
+            SurfaceKind::Offset(s) => ParamSurface::split(s, dir, t, meter),
         }
     }
 
@@ -354,6 +514,7 @@ impl ParamSurface for SurfaceKind {
             SurfaceKind::Revolution(s) => s.reversed(dir, meter),
             SurfaceKind::Extrusion(s) => s.reversed(dir, meter),
             SurfaceKind::Ruled(s) => s.reversed(dir, meter),
+            SurfaceKind::Offset(s) => s.reversed(dir, meter),
         }
     }
 
@@ -373,6 +534,7 @@ impl ParamSurface for SurfaceKind {
             SurfaceKind::Revolution(s) => s.transformed(transform, meter),
             SurfaceKind::Extrusion(s) => s.transformed(transform, meter),
             SurfaceKind::Ruled(s) => s.transformed(transform, meter),
+            SurfaceKind::Offset(s) => s.transformed(transform, meter),
         }
     }
 }

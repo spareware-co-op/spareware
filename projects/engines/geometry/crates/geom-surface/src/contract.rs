@@ -4,7 +4,8 @@
 //! What it does: [`check`] runs a kind through the laws of `geom-curve`'s [`Law`], read for
 //! surfaces, at the parameter pairs given, and returns the first law broken. As for curves, the
 //! laws compare certified objects: enclosures of one exact value must overlap after widening by the
-//! stated deviations; the normal bound must keep the sign of every coordinate it decides; doubles
+//! stated deviations (the partials of every order among them: [`ParamSurface::partials_over`]'s
+//! first three are the enclosure's, and its partials at a pair meet those over the box around it); the normal bound must keep the sign of every coordinate it decides; doubles
 //! must lie in the certified enclosures within a relative 2^−30 (a wrong formula, not rounding).
 //!
 //! Guarantees:
@@ -18,7 +19,8 @@
 //! chapter 7), on the inclusion property of interval arithmetic (Moore, Kearfott and Cloud,
 //! <https://doi.org/10.1137/1.9780898717716>).
 //!
-//! Cost: for each parameter pair, a few enclosures and bounds, a split, a reversal and a transform.
+//! Cost: for each parameter pair, a few enclosures and bounds (the partials to order 2 among
+//! them), a split, a reversal and a transform.
 
 #![allow(
     clippy::many_single_char_names,
@@ -96,6 +98,8 @@ pub fn check<K: ParamSurface>(
     let outside = beyond + 1.0;
     if kind.point(outside, c, sides) != Err(CurveError::ParameterOutside)
         || kind.bound(((a - 1.0, b), (c, d)), meter) != Err(CurveError::SpanOutside)
+        || kind.partials_over(((a - 1.0, b), (c, d)), sides, 1, meter)
+            != Err(CurveError::SpanOutside)
         || kind.split(Direction::U, a, meter).err() != Some(CurveError::ParameterOutside)
     {
         return Err(broken(Law::RefusesOutside, outside, None));
@@ -136,6 +140,23 @@ pub fn check<K: ParamSurface>(
             (f64::midpoint(a, u), f64::midpoint(u, b)),
             (f64::midpoint(c, v), f64::midpoint(v, d)),
         );
+        // The partials of every order: the first three are the enclosure's, and each one at the
+        // pair meets its enclosure over the box around it.
+        let pp = kind
+            .partials_over(((u, u), (v, v)), sides, 2, meter)
+            .map_err(call(Law::EvaluationIsEnclosed, u))?;
+        if pp.len() != 6 || !pp.iter().zip(&e).all(|(x, y)| overlap(x, y, 0.0)) {
+            return Err(broken(Law::EvaluationIsEnclosed, u, None));
+        }
+        match kind.partials_over(region, sides, 2, meter) {
+            Ok(pb) => {
+                if pb.len() != pp.len() || !pp.iter().zip(&pb).all(|(x, y)| overlap(x, y, 0.0)) {
+                    return Err(broken(Law::DerivativeBoundHoldsDerivatives, u, None));
+                }
+            }
+            Err(CurveError::Unbounded) => {}
+            Err(err) => return Err(broken(Law::DerivativeBoundHoldsDerivatives, u, Some(err))),
+        }
         let local = kind
             .bound(region, meter)
             .map_err(call(Law::BoundHoldsPoints, u))?;

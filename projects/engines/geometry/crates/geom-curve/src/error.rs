@@ -53,6 +53,13 @@ pub enum CurveError {
     Degenerate,
     /// The work meter stopped the operation (chapter 23.10).
     Stopped(Stopped),
+    /// A procedural kind built on itself deeper than its stated bound (an offset of an offset of
+    /// …): every operation recurses once per level, and the bound keeps that within the stack
+    /// (chapter 28.8).
+    TooDeep {
+        /// The depth asked for.
+        depth: usize,
+    },
     /// A step its own bounds rule out failed: a defect in this crate, reported, never a panic.
     Defect,
 }
@@ -85,6 +92,9 @@ impl fmt::Display for CurveError {
                 "the curve's data or the transform is degenerate (parallel or zero vectors, or a                  singular transform)",
             ),
             CurveError::Stopped(s) => write!(f, "{s}"),
+            CurveError::TooDeep { depth } => {
+                write!(f, "a procedural kind nested {depth} deep, past its bound")
+            }
             CurveError::Defect => f.write_str("an internal step failed (a defect in geom-curve)"),
         }
     }
