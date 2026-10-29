@@ -131,7 +131,10 @@ pub(crate) fn not_parallel(a: [f64; 3], b: [f64; 3]) -> bool {
                 return false;
             }
             let mut sum = ExactSum::new();
-            sum.add_slice(&[x, ex, -y, -ey]);
+            // The sum is exact, so the order of its terms does not matter.
+            sum.add_slice(&[x, ex]);
+            sum.add(-y);
+            sum.add(-ey);
             sum.round_ieee() != 0.0
         })
 }

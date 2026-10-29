@@ -453,25 +453,17 @@ fn hull<const D: usize>(
     };
     let mut start = lo;
     for i in 1..=pieces {
-        let mut end = if i == pieces {
+        let end = if i == pieces {
             hi
         } else {
             lo + width * (f64::from(i) / n)
         };
-        if end > hi {
-            end = hi;
-        }
-        if end < start {
-            end = start;
-        }
+        // Rounding may step past either end; the piece stays in [start, hi].
+        let end = tight::larger(tight::smaller(end, hi), start);
         let e = form.enclose(Interval::new(start, end)?, k)?;
         for ((l, h), x) in out.lo.iter_mut().zip(out.hi.iter_mut()).zip(&e) {
-            if x.lo() < *l {
-                *l = x.lo();
-            }
-            if x.hi() > *h {
-                *h = x.hi();
-            }
+            *l = tight::smaller(*l, x.lo());
+            *h = tight::larger(*h, x.hi());
         }
         start = end;
     }

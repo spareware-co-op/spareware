@@ -150,11 +150,7 @@ fn derivative_norm<K: ParamCurve<D>, const D: usize>(
     let zero = b.lo.iter().chain(&b.hi).all(|&x| x == 0.0);
     let mut m = Vec::with_capacity(D);
     for (&lo, &hi) in b.lo.iter().zip(&b.hi) {
-        m.push(point(if lo.abs() > hi.abs() {
-            lo.abs()
-        } else {
-            hi.abs()
-        })?);
+        m.push(point(tight::larger(lo.abs(), hi.abs()))?);
     }
     Ok((tight::norm(&m)?.hi(), zero))
 }
@@ -272,7 +268,7 @@ pub(crate) fn from_cuts<K: ParamCurve<D>, const D: usize>(
             let rho = {
                 let far = tight::add(alpha, beta)?;
                 let (x, y) = (tight::magnitude(alpha), tight::magnitude(far));
-                point(if x > y { x } else { y })?
+                point(tight::larger(x, y))?
             };
             let mut r = point(bound)?;
             for _ in 0..order {
@@ -284,16 +280,13 @@ pub(crate) fn from_cuts<K: ParamCurve<D>, const D: usize>(
             };
             let d0 = tight::distance(first, e0)?;
             let d1 = tight::distance(last, e1)?;
-            piece = tight::add(r, point(if d0 > d1 { d0 } else { d1 })?)?;
+            piece = tight::add(r, point(tight::larger(d0, d1))?)?;
         }
         // The stored coefficients: the shared ends, the middles of the interior ones.
         let s0 = e0.map(tight::middle);
         let s1 = e1.map(tight::middle);
         let mut rounding = tight::distance_to(&s0, e0)?;
-        let r1 = tight::distance_to(&s1, e1)?;
-        if r1 > rounding {
-            rounding = r1;
-        }
+        rounding = tight::larger(rounding, tight::distance_to(&s1, e1)?);
         if k == 0 {
             points.push(s0);
             knots.extend(core::iter::repeat_n(t0, order));
@@ -304,10 +297,7 @@ pub(crate) fn from_cuts<K: ParamCurve<D>, const D: usize>(
             .take(p.checked_sub(1).ok_or(CurveError::Defect)?)
         {
             let s = q.map(tight::middle);
-            let d = tight::distance_to(&s, q)?;
-            if d > rounding {
-                rounding = d;
-            }
+            rounding = tight::larger(rounding, tight::distance_to(&s, q)?);
             points.push(s);
         }
         points.push(s1);
@@ -316,9 +306,7 @@ pub(crate) fn from_cuts<K: ParamCurve<D>, const D: usize>(
             if k.saturating_add(1) == n { order } else { p },
         ));
         piece = tight::add(piece, point(rounding)?)?;
-        if piece.hi() > deviation.hi() {
-            deviation = point(piece.hi())?;
-        }
+        deviation = point(tight::larger(deviation.hi(), piece.hi()))?;
     }
     let curve = Curve::new(Basis::new(p, knots)?, &points)?;
     Ok(Changed {
