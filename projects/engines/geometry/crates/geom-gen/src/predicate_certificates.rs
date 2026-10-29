@@ -88,6 +88,18 @@ pub const PROBLEMS_DIR: &str = "projects/engines/geometry/crates/geom-gen/genera
 /// such terms needs a division by a maximum that may be zero. The issue sets out the way through.
 pub const UNPROVEN: [(&str, u32); 2] = [("tpi_side", 292), ("lpi_side", 292)];
 
+/// The filters whose `FPTaylor` problem bounds the sum of its error terms at once (`opt-exact`),
+/// by predicate name; every other bounds each error term on its own (`opt-approx`). HOL Light
+/// checks a bound on each term as one inequality per term, and the sum as one inequality over
+/// the whole box, split into cells. Term by term, eight filters checked in at most three minutes
+/// and `lpi_side` in 87 (run 40643928468), but the 150 terms of `insphere` and the 142 of
+/// `tpi_side` had reached 34 and 69 when their jobs stopped at 350 minutes; the sum for
+/// `insphere` checked in 75 minutes (run 40603306636). For these, HOL Light proves the sum at
+/// most the largest double at most K, not `FPTaylor`'s own bound: every cell that proves the
+/// smaller bound proves the larger, so the larger never needs more cells, and it is the bound
+/// the filter needs.
+pub const EXACT_OPTIMISATION: [&str; 2] = ["insphere", "tpi_side"];
+
 fn fail<T>(message: impl Into<String>) -> Result<T, EmitError> {
     Err(EmitError(message.into()))
 }
@@ -1047,6 +1059,13 @@ pub fn fptaylor_problem(d: &Derivation, generator: &str) -> Result<String, EmitE
         &mut out,
         &format!("// hol-light-bound: &{numerator} * &2 ipow (-- &{exponent})"),
     );
+    if exact_optimisation(d) {
+        line(&mut out, "// fptaylor-optimisation: exact");
+        let total = hex_float(below((numerator, exponent))?);
+        line(&mut out, &format!("// hol-light-total: {total}"));
+    } else {
+        line(&mut out, "// fptaylor-optimisation: approx");
+    }
     line(&mut out, "");
     line(&mut out, "Variables");
     for (step, g) in d.steps.iter().zip(&group_of) {
@@ -1123,10 +1142,24 @@ fn fptaylor_about(d: &Derivation, ratios: &[Ratio]) -> Vec<String> {
             .to_owned(),
         "result's scale is 1. The error model fl(t) = t(1 + e) is homogeneous, so a bound B here"
             .to_owned(),
-        "bounds the error by B * S at every scale (the method note). HOL Light checks FPTaylor's"
-            .to_owned(),
-        "certificate, and compares its bound with K below.".to_owned(),
+        "bounds the error by B * S at every scale (the method note).".to_owned(),
     ];
+    if exact_optimisation(d) {
+        about.extend([
+            "FPTaylor bounds the sum of the error terms at once (opt-exact); HOL Light proves the"
+                .to_owned(),
+            "sum at most hol-light-total below, the largest double at most K, when FPTaylor's own"
+                .to_owned(),
+            "bound is at most that, and otherwise checks FPTaylor's own bound and compares it with K."
+                .to_owned(),
+        ]);
+    } else {
+        about.extend([
+            "FPTaylor bounds each error term on its own (opt-approx); HOL Light checks each term's"
+                .to_owned(),
+            "bound, and the job compares their sum with K below.".to_owned(),
+        ]);
+    }
     if rounded_inputs(d) {
         about.extend([
             "A rounded input's exact value e_v is at most its maximum times 1 + 2^-53 (a value"
@@ -1160,6 +1193,39 @@ fn fptaylor_about(d: &Derivation, ratios: &[Ratio]) -> Vec<String> {
         }
     }
     about
+}
+
+/// Whether `d`'s `FPTaylor` problem bounds the sum of its error terms at once
+/// ([`EXACT_OPTIMISATION`]).
+fn exact_optimisation(d: &Derivation) -> bool {
+    EXACT_OPTIMISATION.contains(&d.description.name.as_str())
+}
+
+/// The bits of the largest `f64` at most the positive dyadic `numerator · 2^−exponent`: its top
+/// 53 bits, the rest cut off. Refused outside the normal range, which no error bound reaches.
+fn below((numerator, exponent): (u128, u32)) -> Result<u64, EmitError> {
+    let width = u128::BITS.saturating_sub(numerator.leading_zeros());
+    let significand = match width.checked_sub(53) {
+        Some(cut) => numerator.checked_shr(cut),
+        None => 53u32
+            .checked_sub(width)
+            .and_then(|up| numerator.checked_shl(up)),
+    };
+    // The leading bit's place is width − 1 − exponent; the field adds the bias, 1023.
+    let field = i64::from(width)
+        .checked_sub(1)
+        .and_then(|w| w.checked_sub(i64::from(exponent)))
+        .and_then(|e| e.checked_add(1023));
+    match (
+        width,
+        significand.and_then(|m| u64::try_from(m).ok()),
+        field.and_then(|f| u64::try_from(f).ok()),
+    ) {
+        (1.., Some(m), Some(f)) if (1..0x7ff).contains(&f) => {
+            Ok((f << 52) | (m & ((1u64 << 52) - 1)))
+        }
+        _ => fail("K is not a positive normal f64's size"),
+    }
 }
 
 /// 1 + 2^−53 as `FPTaylor` reads a rational constant: a rounded input's exact value is at most
@@ -1267,6 +1333,18 @@ mod tests {
             (n, e),
             (7_881_299_347_898_375 * ((1u128 << 53) - 4) / 4, 152)
         );
+        // K is C less 4u · C, 3.5 of C's units in the last place and a little more, so the
+        // largest double at most K is C less 4 of them; and a double is itself.
+        let k = dyadic_k(0x3cec_0000_0000_0007, 3).unwrap_or((0, 0));
+        assert_eq!(
+            below(k).map(hex_float),
+            Ok("0x1.c000000000003p-49".to_owned())
+        );
+        assert_eq!(
+            below((0x1c_0000_0000_0007, 101)).map(hex_float),
+            Ok("0x1.c000000000007p-49".to_owned())
+        );
+        assert!(below((0, 1)).is_err());
     }
 
     /// A filter the problems cannot state is never labelled proven: without an open issue in

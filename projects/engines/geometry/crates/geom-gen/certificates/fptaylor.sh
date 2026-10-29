@@ -4,6 +4,10 @@
 # release that records proof certificates, asks it for each problem's error bound with a
 # certificate, builds HOL Light, has HOL Light check each certificate, and reports whether the
 # bound it proves is within the one the problem names in its `// hol-light-bound:` line (K).
+# A problem's `// fptaylor-optimisation:` line says how FPTaylor bounds it: `approx`, each error
+# term on its own, whose bounds HOL Light checks term by term; or `exact`, the sum of the terms at
+# once, which HOL Light proves at most the problem's `// hol-light-total:`, the largest double at
+# most K, when FPTaylor's own bound is at most that (a larger target never needs more cells).
 # The job fails if a certificate does not check; a certificate whose bound is above K is reported,
 # not failed: FPTaylor's bound is its own, rounded up to a double, and can exceed a K that Gappa
 # proves (the method note).
@@ -65,12 +69,18 @@ for problem in "$@"; do
   expression=$(sed -n '/^Expressions/,$ s/^ *\([a-z_0-9]*\) *=.*/\1/p' "$problem" | head -n 1)
   bound=$(sed -n 's|^// hol-light-bound: ||p' "$problem")
   [ -n "$expression" ] && [ -n "$bound" ] || { echo "$problem: no expression or bound"; exit 1; }
+  total=$(sed -n 's|^// hol-light-total: ||p' "$problem")
+  case $(sed -n 's|^// fptaylor-optimisation: ||p' "$problem") in
+    approx) printf 'opt-exact = false\nopt-approx = true\n' >>"$run/fptaylor.cfg" ;;
+    exact) printf 'opt-exact = true\nopt-approx = false\n' >>"$run/fptaylor.cfg" ;;
+    *) echo "$problem: no optimisation"; exit 1 ;;
+  esac
   # The problem's absolute path, found before FPTaylor runs in its own folder.
   path="$(cd "$(dirname "$problem")" && pwd)/$(basename "$problem")"
   echo "::group::FPTaylor on $name"
   (cd "$run" && "$work/FPTaylor/fptaylor" -c fptaylor.cfg "$path")
   echo "::endgroup::"
-  checks+=("$run/proofs|$expression|$bound|$name")
+  checks+=("$run/proofs|$expression|$bound|$name|$total")
 done
 
 echo "::group::Build HOL Light"
@@ -103,9 +113,13 @@ session="$work/session.ml"
   echo 'needs "build_tform2.hl";;'
   echo 'needs "tests/utils.hl";;'
   for check in "${checks[@]}"; do
-    IFS='|' read -r proofs expression bound name <<<"$check"
+    IFS='|' read -r proofs expression bound name total <<<"$check"
     echo "path := \"$proofs\";;"
-    echo "let _, bound_th, time = validate 10 \"$expression.proof\";;"
+    if [ -n "$total" ]; then
+      echo "let _, bound_th, time = let k = float_of_string \"$total\" in if (hd (load \"$expression.proof\").proof_opts).total_bound <= k then validate_gen 10 \"$expression.proof\" k else validate 10 \"$expression.proof\";;"
+    else
+      echo "let _, bound_th, time = validate 10 \"$expression.proof\";;"
+    fi
     echo 'print_endline "CERTIFICATE:";; print_thm bound_th;; print_newline ();;'
     echo "Printf.printf \"checked $name in %.0f s\\n\" time;;"
     echo "(try let th = trans_bound bound_th \`$bound\` in print_thm th; print_newline (); print_endline \"$name: within K\" with Failure _ -> print_endline \"$name: above K\");;"
@@ -119,7 +133,7 @@ export HOLLIGHT_DIR="$work/hol-light"
 # Every problem's certificate must have checked; whether each bound is within K is reported. The
 # toplevel may print its prompt, "# ", before a line.
 for check in "${checks[@]}"; do
-  name=${check##*|}
+  IFS='|' read -r _ _ _ name _ <<<"$check"
   grep -q "^\(# \)*checked $name " "$work/hol.log" || { echo "HOL Light did not check $name"; exit 1; }
   grep -h "^\(# \)*$name: \(within\|above\) K$" "$work/hol.log" || echo "$name: K not compared"
 done

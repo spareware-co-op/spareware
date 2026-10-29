@@ -27,7 +27,9 @@
 //! - `the_bounds_are_the_constant_less_its_roundings`: the error bound K both tools check is
 //!   exactly C · (1 − (k + 1) · 2^−53) for the module's constant C and roundings k, worked out here
 //!   from the module's text, and each Gappa problem bounds the computed bound's relative error by
-//!   (k + 1) · 2^−53.
+//!   (k + 1) · 2^−53. Each `FPTaylor` problem bounds the sum of its error terms at once exactly
+//!   when `predicate_certificates::EXACT_OPTIMISATION` names its filter, and then the total HOL
+//!   Light proves is the largest double at most K; otherwise it bounds each term and names none.
 //! - `the_problems_are_current_and_registered`: the committed problems are what the registered
 //!   generators write now, the registry generates no other problem, and every generated filter is
 //!   held here.
@@ -60,7 +62,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use geom_gen::Generate;
 use geom_gen::predicate_certificates::{
-    UNPROVEN, fptaylor_problem, gappa_case_problem, gappa_cases, gappa_problem,
+    EXACT_OPTIMISATION, UNPROVEN, fptaylor_problem, gappa_case_problem, gappa_cases, gappa_problem,
 };
 use geom_gen::predicates::{PREDICATES, derivation};
 use geom_gen::registry::REGISTRY;
@@ -983,6 +985,40 @@ fn the_bounds_are_the_constant_less_its_roundings() {
             want,
             "{name}, {file}: HOL Light's K"
         );
+        // The optimisation, and for the exact one the total HOL Light proves: the largest
+        // double h = m · 2^(e − 52) at most K, so m · 2^(e + p + 1) ≤ K · 2^(p + 53) < (m + 1) ·
+        // 2^(e + p + 1).
+        let header = |key: &str| {
+            fptaylor
+                .lines()
+                .find_map(|l| l.strip_prefix(&format!("// {key}: ")))
+        };
+        let exact = EXACT_OPTIMISATION.contains(&name);
+        let mode = if exact { "exact" } else { "approx" };
+        assert_eq!(
+            header("fptaylor-optimisation"),
+            Some(mode),
+            "{name}, {file}"
+        );
+        match header("hol-light-total") {
+            Some(total) => {
+                assert!(exact, "{name}, {file}: a total without the exact problem");
+                let (fraction, e) = total
+                    .strip_prefix("0x1.")
+                    .and_then(|t| t.split_once('p'))
+                    .unwrap();
+                let digits = format!("{fraction:0<13}");
+                let m = u128::from_str_radix(&digits, 16).unwrap() | (1 << 52);
+                let shift =
+                    u32::try_from(e.parse::<i64>().unwrap() + i64::from(p_exp) + 1).unwrap();
+                assert!(m << shift <= want, "{name}, {file}: the total is above K");
+                assert!(
+                    (m + 1) << shift > want,
+                    "{name}, {file}: a larger double is at most K"
+                );
+            }
+            None => assert!(!exact, "{name}, {file}: no total for the exact problem"),
+        }
     }
 }
 

@@ -7,8 +7,9 @@
 // 28.6; pieces G35 and G40), normalised: each step divided by its scale S(v), the largest
 // of its scale's monomials at the group maxima, so every input is in [-1, 1] and the
 // result's scale is 1. The error model fl(t) = t(1 + e) is homogeneous, so a bound B here
-// bounds the error by B * S at every scale (the method note). HOL Light checks FPTaylor's
-// certificate, and compares its bound with K below.
+// bounds the error by B * S at every scale (the method note).
+// FPTaylor bounds each error term on its own (opt-approx); HOL Light checks each term's
+// bound, and the job compares their sum with K below.
 // A sum whose operand's scale is not the sum's takes the operand's normalised value
 // times S(operand) / S(sum), a ratio in [0, 1], exactly; each such ratio of two scale
 // sets is one parameter, shared by the ratios equal to it once their common factor is
@@ -16,6 +17,7 @@
 // ratio1 = x^2 / max{y^2, x^2}
 // ratio2 = y^2 / max{y^2, x^2}
 // hol-light-bound: &6338253001141152496245561884667 * &2 ipow (-- &149)
+// fptaylor-optimisation: approx
 
 Variables
   float64 ad_x in [-1, 1];

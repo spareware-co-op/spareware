@@ -7,8 +7,9 @@
 // 28.6; pieces G35 and G40), normalised: each step divided by its scale S(v), the largest
 // of its scale's monomials at the group maxima, so every input is in [-1, 1] and the
 // result's scale is 1. The error model fl(t) = t(1 + e) is homogeneous, so a bound B here
-// bounds the error by B * S at every scale (the method note). HOL Light checks FPTaylor's
-// certificate, and compares its bound with K below.
+// bounds the error by B * S at every scale (the method note).
+// FPTaylor bounds each error term on its own (opt-approx); HOL Light checks each term's
+// bound, and the job compares their sum with K below.
 // A rounded input's exact value e_v is at most its maximum times 1 + 2^-53 (a value
 // beyond m + ulp(m)/2 rounds above the f64 m), and its copy v = rnd64(e_v).
 // A sum whose operand's scale is not the sum's takes the operand's normalised value
@@ -26,6 +27,7 @@
 // ratio9 = max{z·n1·d2, z^2·n1·n2, y·n1·d2, y·z·n1·n2, y^2·n1·n2, x·n1·d2, x·z·n1·n2, x·y·n1·n2, x^2·n1·n2} / max{z·d1·n2, z·n1·d2, z^2·n1·n2, y·d1·n2, y·n1·d2, y·z·n1·n2, y^2·n1·n2, x·d1·n2, x·n1·d2, x·z·n1·n2, x·y·n1·n2, x^2·n1·n2}
 // ratio10 = max{z·d1·n2, z^2·n1·n2, y·d1·n2, y·z·n1·n2, y^2·n1·n2, x·d1·n2, x·z·n1·n2, x·y·n1·n2, x^2·n1·n2} / max{z·d1·n2, z·n1·d2, z^2·n1·n2, y·d1·n2, y·n1·d2, y·z·n1·n2, y^2·n1·n2, x·d1·n2, x·n1·d2, x·z·n1·n2, x·y·n1·n2, x^2·n1·n2}
 // hol-light-bound: &73523734813237381566527474499519 * &2 ipow (-- &151)
+// fptaylor-optimisation: approx
 
 Variables
   float64 qp_x in [-1, 1];
