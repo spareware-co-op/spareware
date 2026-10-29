@@ -38,6 +38,7 @@ use crate::affine::Entries;
 use crate::error::{ContractError, CurveError, Law};
 use crate::map::{NurbsForm, ParamMap};
 use crate::param::{DerivativeBound, ParamCurve};
+use crate::tight;
 
 /// The relative slack between a double evaluation and the certified enclosure: 2^−30.
 const SLACK: f64 = f64::from_bits(0x3E10_0000_0000_0000);
@@ -93,15 +94,18 @@ pub fn check<K: ParamCurve<D>, const D: usize>(
     // A ray's or infinite line's domain has an infinite end; the laws use finite stand-ins 1024
     // beyond the parameters given (or the finite end).
     let (first, last) = params.iter().fold((0.0_f64, 0.0_f64), |(lo, hi), &t| {
-        (if t < lo { t } else { lo }, if t > hi { t } else { hi })
+        (tight::smaller(lo, t), tight::larger(hi, t))
     });
     let lo = if a.is_finite() { a } else { first - 1024.0 };
     let hi = if b.is_finite() { b } else { last + 1024.0 };
     // Refusals.
     let outside = if b.is_finite() {
-        b + (b - lo) + 1.0
+        // One length of the domain and one unit past the end.
+        let past_end = b + (b - lo);
+        past_end + 1.0
     } else if a.is_finite() {
-        a - (hi - a) - 1.0
+        let before_start = a - (hi - a);
+        before_start - 1.0
     } else {
         f64::NAN
     };
@@ -254,9 +258,9 @@ fn nurbs_at<const D: usize>(
     }
     let u = form.map.enclose(t)?;
     let (c0, c1) = ParamCurve::domain(&form.curve);
-    let lo = if u.lo() < c0 { c0 } else { u.lo() };
-    let hi = if u.hi() > c1 { c1 } else { u.hi() };
-    let b = ParamCurve::bound(&form.curve, (lo, if hi < lo { lo } else { hi }), meter)?;
+    let lo = tight::larger(u.lo(), c0);
+    let hi = tight::smaller(u.hi(), c1);
+    let b = ParamCurve::bound(&form.curve, (lo, tight::larger(hi, lo)), meter)?;
     let mut out = [Interval::point(0.0)?; D];
     for (o, (&l, &h)) in out.iter_mut().zip(b.lo.iter().zip(&b.hi)) {
         *o = Interval::new(l, h)?;

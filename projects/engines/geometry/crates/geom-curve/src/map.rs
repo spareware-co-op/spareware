@@ -118,8 +118,8 @@ impl ParamMap {
             tight::sub(point(kf + 1.0)?, tight::div(s, sigma)?)?
         };
         // The exact u lies in the piece's span [k, k + 1].
-        let lo = if u.lo() < kf { kf } else { u.lo() };
-        let hi = if u.hi() > kf + 1.0 { kf + 1.0 } else { u.hi() };
-        Ok(Interval::new(lo, if hi < lo { lo } else { hi })?)
+        let lo = tight::larger(u.lo(), kf);
+        let hi = tight::smaller(u.hi(), kf + 1.0);
+        Ok(Interval::new(lo, tight::larger(hi, lo))?)
     }
 }

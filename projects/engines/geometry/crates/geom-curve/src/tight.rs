@@ -132,11 +132,23 @@ pub(crate) fn norm(v: &[Interval]) -> Result<Interval, CurveError> {
     sqrt(s)
 }
 
+/// The larger of `a` and `b` in IEEE totalOrder, as `geom_num::real::Real::total_max` gives it: the
+/// same bits whichever comes first, and +0 above −0.
+#[must_use]
+pub(crate) fn larger(a: f64, b: f64) -> f64 {
+    if b.total_cmp(&a).is_gt() { b } else { a }
+}
+
+/// The smaller of `a` and `b` in IEEE totalOrder, as `geom_num::real::Real::total_min` gives it.
+#[must_use]
+pub(crate) fn smaller(a: f64, b: f64) -> f64 {
+    if b.total_cmp(&a).is_lt() { b } else { a }
+}
+
 /// An upper bound on |x| for every x in `a`.
 #[must_use]
 pub(crate) fn magnitude(a: Interval) -> f64 {
-    let (lo, hi) = (a.lo().abs(), a.hi().abs());
-    if lo > hi { lo } else { hi }
+    larger(a.lo().abs(), a.hi().abs())
 }
 
 /// The double nearest the middle of `a`: the point itself for a point.

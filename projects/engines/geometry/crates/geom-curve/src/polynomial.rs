@@ -284,7 +284,7 @@ impl<const D: usize> ParamCurve<D> for Polynomial<D> {
         let m = Motion::of::<D>(transform)?;
         meter.charge(u64::try_from(self.coefficients.len()).map_err(|_| CurveError::Defect)?)?;
         let (a, b) = self.domain;
-        let reach = point(if a.abs() > b.abs() { a.abs() } else { b.abs() })?;
+        let reach = point(tight::larger(a.abs(), b.abs()))?;
         let mut coefficients = Vec::with_capacity(self.coefficients.len());
         let mut deviation = point(0.0)?;
         let mut power = point(1.0)?;
