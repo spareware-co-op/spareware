@@ -37,6 +37,7 @@
 use alloc::vec::Vec;
 
 use geom_curve::affine::Entries;
+use geom_curve::tight;
 use geom_curve::{CurveError, DerivativeBound, ParamMap};
 use geom_math::TypedTransform;
 use geom_num::interval::Interval;
@@ -187,9 +188,10 @@ fn union(a: Option<Bounds<3>>, b: Bounds<3>) -> Result<Bounds<3>, CurveError> {
 
 /// The smallest interval holding a and b.
 fn join(a: Interval, b: Interval) -> Result<Interval, CurveError> {
-    let lo = if b.lo() < a.lo() { b.lo() } else { a.lo() };
-    let hi = if b.hi() > a.hi() { b.hi() } else { a.hi() };
-    Ok(Interval::new(lo, hi)?)
+    Ok(Interval::new(
+        tight::smaller(a.lo(), b.lo()),
+        tight::larger(a.hi(), b.hi()),
+    )?)
 }
 
 /// Each partial's interval joined with the other list's.

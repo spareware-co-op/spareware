@@ -181,7 +181,8 @@ fn cuts((lo, hi): (f64, f64), breaks: &[f64], n: usize) -> Result<Vec<(f64, f64)
             } else {
                 a + (b - a) * (f64::from(i) / f64::from(count))
             };
-            let end = if end < start { start } else { end };
+            // Rounding may put a step's end a hair before its start: never a reversed piece.
+            let end = tight::larger(end, start);
             out.push((start, end));
             start = end;
         }
@@ -203,9 +204,10 @@ fn span(a: Option<ParamBox>, b: ParamBox) -> ParamBox {
         return b;
     };
     let ((x0, x1), (y0, y1)) = b;
-    let lo = |p: f64, q: f64| if q < p { q } else { p };
-    let hi = |p: f64, q: f64| if q > p { q } else { p };
-    ((lo(u0, x0), hi(u1, x1)), (lo(v0, y0), hi(v1, y1)))
+    (
+        (tight::smaller(u0, x0), tight::larger(u1, x1)),
+        (tight::smaller(v0, y0), tight::larger(v1, y1)),
+    )
 }
 
 /// The box of three intervals.

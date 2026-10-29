@@ -126,8 +126,8 @@ pub(crate) fn offset_from((lo, hi): (f64, f64), c: f64) -> Result<Interval, Curv
 /// The intersection of two enclosures of one value (they overlap; if rounding ever made them
 /// miss, the first is kept).
 fn meet(a: Interval, b: Interval) -> Result<Interval, CurveError> {
-    let lo = if b.lo() > a.lo() { b.lo() } else { a.lo() };
-    let hi = if b.hi() < a.hi() { b.hi() } else { a.hi() };
+    let lo = tight::larger(a.lo(), b.lo());
+    let hi = tight::smaller(a.hi(), b.hi());
     if lo <= hi {
         Ok(Interval::new(lo, hi)?)
     } else {

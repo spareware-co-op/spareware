@@ -132,7 +132,7 @@ impl Jet {
 
     /// The jet cut to order `k` (at most its own).
     pub(crate) fn truncate(&self, k: usize) -> Result<Jet, CurveError> {
-        let order = if k < self.order { k } else { self.order };
+        let order = k.min(self.order);
         Ok(Jet {
             order,
             c: self.c.iter().take(size(order)?).copied().collect(),

@@ -146,26 +146,29 @@ pub(crate) fn same_parameter<K: ParamSurface>(
     if !error.is_finite() {
         return Err(CurveError::Unbounded);
     }
-    let (surface, deviation) = if error <= target {
-        let budget = tight::sub(point(target)?, point(error)?)?.lo();
-        let (s, removed) = remove_knots(surface, budget, meter)?;
-        (s, tight::add(point(error)?, point(removed)?)?.hi())
-    } else {
-        (surface, error)
-    };
-    if let Some(t) = tolerance
-        && deviation > t
-    {
-        return Err(NurbsError::OutsideTolerance.into());
-    }
-    Ok(Changed {
+    let form = |surface: Surface<3>, deviation: f64| Changed {
         value: SurfaceForm {
             surface,
             u: ParamMap::Same,
             v: ParamMap::Same,
         },
         deviation,
-    })
+    };
+    if error > target {
+        // The densest sampling certified no better: refused when asked for, else reported.
+        return match tolerance {
+            Some(_) => Err(NurbsError::OutsideTolerance.into()),
+            None => Ok(form(surface, error)),
+        };
+    }
+    let budget = tight::sub(point(target)?, point(error)?)?.lo();
+    let (surface, removed) = remove_knots(surface, budget, meter)?;
+    // error + removed ≤ error + (target − error) = target, and rounding the sum up to a double
+    // cannot pass the double target: within it.
+    Ok(form(
+        surface,
+        tight::add(point(error)?, point(removed)?)?.hi(),
+    ))
 }
 
 /// The parameters of one direction (each cell between breaks cut into `n` ≥ 4 equal steps, the
@@ -174,8 +177,9 @@ pub(crate) fn same_parameter<K: ParamSurface>(
 /// themselves, so no span is a rounding's width; the cells joined with each inner break repeated
 /// `DEGREE` times.
 fn grid((lo, hi): (f64, f64), breaks: &[f64], n: usize) -> Result<(Vec<f64>, Basis), CurveError> {
+    // A kind's breaks lie strictly inside its domain (`ParamSurface::breaks`).
     let mut ends = alloc::vec![lo];
-    ends.extend(breaks.iter().copied().filter(|&x| lo < x && x < hi));
+    ends.extend_from_slice(breaks);
     ends.push(hi);
     let count = u32::try_from(n).map_err(|_| CurveError::Defect)?;
     // Averaging p = 3 equally spaced parameters gives the middle one: knot j + p is t_(j+1).
@@ -272,9 +276,7 @@ fn certify<K: ParamSurface>(
                     Err(CurveError::Unbounded) => return Ok(f64::INFINITY),
                     Err(e) => return Err(e),
                 };
-                if e > worst {
-                    worst = e;
-                }
+                worst = tight::larger(worst, e);
             }
         }
     }
@@ -449,9 +451,7 @@ fn remove_in(
     let mut least = basis.multiplicity(x);
     for c in &all {
         let (_, t) = c.remove_knot(x, least, tol, meter)?;
-        if t < least {
-            least = t;
-        }
+        least = least.min(t);
         if least == 0 {
             return Ok(None);
         }
@@ -463,9 +463,7 @@ fn remove_in(
         if t != least {
             return Ok(None);
         }
-        if r.deviation > change {
-            change = r.deviation;
-        }
+        change = tight::larger(change, r.deviation);
         removed.push(r.value);
     }
     let new_basis = removed

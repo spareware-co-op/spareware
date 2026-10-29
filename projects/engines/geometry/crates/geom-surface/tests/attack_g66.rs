@@ -524,3 +524,251 @@ fn the_contract_catches_faulty_partials() {
     let outside = law(Fault::Outside, m).unwrap();
     assert_eq!((outside.law, outside.error), (Law::RefusesOutside, None));
 }
+
+/// A gently curved bicubic patch over [0, 1]² with a knot at 1/2 in u and in v.
+fn knotted() -> Surface<3> {
+    let k = vec![0.0, 0.0, 0.0, 0.0, 0.5, 1.0, 1.0, 1.0, 1.0];
+    let (bu, bv) = (Basis::new(3, k.clone()).unwrap(), Basis::new(3, k).unwrap());
+    let mut pts = Vec::new();
+    for i in 0..5_u8 {
+        for j in 0..5_u8 {
+            let (x, y) = (f64::from(i), f64::from(j));
+            pts.push([x * 0.5, y * 0.5, 0.04 * (x - 2.0) * (y - 1.5)]);
+        }
+    }
+    Surface::new(bu, bv, &pts).unwrap()
+}
+
+/// A cubic NURBS profile over [0, 1] with a knot at 1/2, off the axis of the revolution below.
+fn profile() -> Trimmed<3> {
+    let b = Basis::new(3, vec![0.0, 0.0, 0.0, 0.0, 0.5, 1.0, 1.0, 1.0, 1.0]).unwrap();
+    let pts = [
+        [2.0, 0.0, 0.0],
+        [2.5, 0.0, 0.5],
+        [2.2, 0.0, 1.0],
+        [2.8, 0.0, 1.5],
+        [2.4, 0.0, 2.0],
+    ];
+    Trimmed::whole(Leaf::Nurbs(geom_nurbs::Curve::new(b, &pts).unwrap())).unwrap()
+}
+
+/// A creased bicubic patch: the knot at u = 1/2 three times, flat on one side and sloped on the
+/// other, scaled by `size`.
+fn creased(size: f64) -> SurfaceKind {
+    let ku = vec![0.0, 0.0, 0.0, 0.0, 0.5, 0.5, 0.5, 1.0, 1.0, 1.0, 1.0];
+    let bu = Basis::new(3, ku).unwrap();
+    let bv = Basis::new(3, vec![0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0]).unwrap();
+    let mut pts = Vec::new();
+    for i in 0..7 {
+        for j in 0..4 {
+            let x = f64::from(i) / 6.0 * 2.0;
+            let z = if i <= 3 { 0.0 } else { (x - 1.0) * 0.8 };
+            pts.push([x * size, f64::from(j) * size, z * size]);
+        }
+    }
+    SurfaceKind::Nurbs(Surface::new(bu, bv, &pts).unwrap())
+}
+
+/// Whether every enclosure of `a` meets the matching one of `b`.
+fn meet_all(a: &[[Interval; 3]], b: &[[Interval; 3]]) -> bool {
+    a.iter().zip(b).all(|(x, y)| {
+        x.iter()
+            .zip(y)
+            .all(|(p, q)| q.lo() <= p.hi() && p.lo() <= q.hi())
+    })
+}
+
+#[test]
+fn breaks_are_strictly_inside_and_follow_splits() {
+    let m = &mut meter();
+    let s = SurfaceKind::Nurbs(knotted());
+    assert_eq!(s.breaks(), (vec![0.5], vec![0.5]));
+    let line = Trimmed::whole(Leaf::Line(
+        Line::new([0.0, 1.0, 0.0], [0.0, 1.0, 2.0], (0.0, 1.0)).unwrap(),
+    ))
+    .unwrap();
+    let f = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let swept = [
+        (
+            SurfaceKind::Extrusion(Extrusion::new(profile(), [0.0, 1.0, 0.0], (0.0, 2.0)).unwrap()),
+            (vec![0.5], vec![]),
+        ),
+        (
+            SurfaceKind::Revolution(Revolution::new(profile(), [0.0; 3], f, (0.0, 1.0)).unwrap()),
+            (vec![], vec![0.5]),
+        ),
+        (
+            SurfaceKind::Ruled(Ruled::new(profile(), line, (0.0, 1.0)).unwrap()),
+            (vec![0.5], vec![]),
+        ),
+    ];
+    for (k, b) in &swept {
+        assert_eq!(k.breaks(), *b);
+    }
+    // An offset keeps the breaks strictly inside its own domain, whatever the split.
+    let off = Offset::new(s, 0.2).unwrap();
+    for (dir, t, left, right) in [
+        (Direction::U, 0.5, (vec![], vec![0.5]), (vec![], vec![0.5])),
+        (Direction::V, 0.5, (vec![0.5], vec![]), (vec![0.5], vec![])),
+        (
+            Direction::U,
+            0.3,
+            (vec![], vec![0.5]),
+            (vec![0.5], vec![0.5]),
+        ),
+        (
+            Direction::V,
+            0.7,
+            (vec![0.5], vec![0.5]),
+            (vec![0.5], vec![]),
+        ),
+    ] {
+        let (l, r) = off.split(dir, t, m).unwrap();
+        assert_eq!((l.value.breaks(), r.value.breaks()), (left, right));
+    }
+}
+
+#[test]
+fn a_split_offset_refuses_what_lies_outside_its_own_part() {
+    let m = &mut meter();
+    let off = Offset::new(SurfaceKind::Nurbs(knotted()), 0.2).unwrap();
+    let nan = f64::NAN;
+    for (dir, t, keep_right) in [
+        (Direction::U, 0.4, false),
+        (Direction::U, 0.4, true),
+        (Direction::V, 0.6, false),
+        (Direction::V, 0.6, true),
+    ] {
+        let (l, r) = off.split(dir, t, m).unwrap();
+        let part = if keep_right { r.value } else { l.value };
+        let ((a, b), (c, d)) = part.domain();
+        // Past the part's own ends (some inside the base's domain), unordered, or not finite.
+        let bad = [
+            ((a, b), (c, d + 0.05)),
+            ((a, b), (c - 0.05, d)),
+            ((a, b + 0.05), (c, d)),
+            ((a - 0.05, b), (c, d)),
+            ((b, a), (c, d)),
+            ((a, b), (d, c)),
+            ((nan, b), (c, d)),
+            ((a, nan), (c, d)),
+            ((a, b), (nan, d)),
+            ((a, b), (c, nan)),
+        ];
+        for region in bad {
+            assert_eq!(
+                part.bound(region, m),
+                Err(CurveError::SpanOutside),
+                "{region:?}"
+            );
+            assert_eq!(
+                part.partials_over(region, SIDES, 1, m),
+                Err(CurveError::SpanOutside),
+                "{region:?}"
+            );
+        }
+    }
+    // Reversal keeps a part's own domain, negated: never the base's.
+    let (_, r) = off.split(Direction::V, 0.6, m).unwrap();
+    assert_eq!(
+        r.value.reversed(Direction::V, m).unwrap().value.domain(),
+        ((0.0, 1.0), (-1.0, -0.6))
+    );
+    let (_, r) = off.split(Direction::U, 0.4, m).unwrap();
+    assert_eq!(
+        r.value.reversed(Direction::U, m).unwrap().value.domain(),
+        ((-1.0, -0.4), (0.0, 1.0))
+    );
+}
+
+#[test]
+fn a_regions_pieces_stay_inside_it() {
+    let m = &mut meter();
+    let off = Offset::new(SurfaceKind::Nurbs(knotted()), 0.2).unwrap();
+    // x grows with u, so a bound over u in [0, 0.3] stays short of the points at u = 0.45,
+    // though the base's break at 1/2 lies past the region.
+    let b = off.bound(((0.0, 0.3), (0.0, 1.0)), m).unwrap();
+    let p = off.point(0.45, 0.5, SIDES).unwrap();
+    assert!(b.hi[0] < p[0], "{} >= {}", b.hi[0], p[0]);
+}
+
+#[test]
+fn nurbs_partials_along_a_line_hold_its_points() {
+    let m = &mut meter();
+    let mut rng = Lcg(0x11e5);
+    let kinds = [
+        SurfaceKind::Nurbs(knotted()),
+        SurfaceKind::Nurbs(patch(
+            &mut rng,
+            vec![0.0, 0.0, 0.0, 0.0, 0.5, 1.0, 1.0, 1.0, 1.0],
+            true,
+        )),
+    ];
+    for s in &kinds {
+        // Lines at the start, inside a patch, at a knot and at the end, in each direction.
+        for t in [0.0, 0.25, 0.5, 1.0] {
+            for (line, at) in [
+                (((t, t), (0.1, 0.4)), [(t, 0.1), (t, 0.25), (t, 0.4)]),
+                (((0.1, 0.4), (t, t)), [(0.1, t), (0.25, t), (0.4, t)]),
+            ] {
+                // A line takes its one value from `sides`, as its points do.
+                for sides in [SIDES, (Limit::FromLeft, Limit::FromLeft)] {
+                    let over = s.partials_over(line, sides, 3, m).unwrap();
+                    for (u, v) in at {
+                        let p = s.partials_over(((u, u), (v, v)), sides, 3, m).unwrap();
+                        assert!(meet_all(&p, &over), "{line:?} at ({u}, {v}) from {sides:?}");
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn a_box_across_a_tear_holds_both_sides() {
+    let m = &mut meter();
+    let off = Offset::new(creased(1.0), 0.6).unwrap();
+    for (u0, u1) in [(0.49, 0.51), (0.4, 0.5001)] {
+        let over = off
+            .partials_over(((u0, u1), (0.3, 0.4)), SIDES, 1, m)
+            .unwrap();
+        for (u, sides) in [
+            (u0, SIDES),
+            (0.5, (Limit::FromLeft, Limit::FromRight)),
+            (0.5, SIDES),
+            (u1, SIDES),
+        ] {
+            let p = off
+                .partials_over(((u, u), (0.35, 0.35)), sides, 1, m)
+                .unwrap();
+            assert!(meet_all(&p, &over), "({u0}, {u1}) at {u}");
+        }
+    }
+    // Refining a cache whose certificate cannot fall stops at once: a tear wider than the fit
+    // bound keeps the second sampling (8 steps a cell: 2·8 + 1 points across u, 8 + 1 along v),
+    // and no knot is removed from it.
+    let wide = Offset::new(creased(100.0), 200.0).unwrap();
+    let form = wide.to_nurbs(m).unwrap();
+    let s = &form.value.surface;
+    assert!(form.deviation > 64.0, "{}", form.deviation);
+    assert_eq!((s.basis_u().count(), s.basis_v().count()), (17, 9));
+}
+
+#[test]
+fn an_offset_onto_a_cylinders_axis_decides_nothing_and_fails_nothing() {
+    let m = &mut meter();
+    let f = Frame::new([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]).unwrap();
+    let band = ((0.0, 0.4), (-1.0, 1.0));
+    let cyl = SurfaceKind::Cylinder(geom_surface::Cylinder::new([0.0; 3], 2.0, f, band).unwrap());
+    let s = away(&cyl, [0.0, 0.3, 0.0], (0.2, 0.3));
+    // Moved by the radius towards the axis, the band collapses onto it: the fold factor is 0
+    // everywhere, no piece decides a sign, and the cross product of the partials (0 across the
+    // turn) bounds the normals.
+    let flat = Offset::new(cyl, -2.0 * s).unwrap();
+    let n = flat.normal_bound(band, m).unwrap();
+    for d in 0..3 {
+        assert!(n.lo[d] <= 0.0 && 0.0 <= n.hi[d], "{n:?}");
+    }
+    let p = flat.point(0.2, 0.5, SIDES).unwrap();
+    assert!(p[0].abs() < 1e-12 && p[2].abs() < 1e-12, "{p:?}");
+}
