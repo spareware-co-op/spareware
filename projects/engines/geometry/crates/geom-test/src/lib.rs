@@ -87,8 +87,16 @@
 //! - `guard prove --golden-run <arguments>`: the toolchain guard's proof through `golden run`, so
 //!   the WebAssembly legs are shown to fail on a changed digest too.
 //!
-//! Fixtures, reference implementations, oracle clients and the other CI tools arrive with the
-//! pieces that need them. The sister development crates are `geom-fuzz` (fuzz harnesses),
+//! Piece G57 adds the first reference implementation of section 28.9:
+//!
+//! - [`nurbs_reference`]: NURBS curves in exact rationals, evaluated by de Boor's algorithm, with
+//!   knot insertion, refinement and degree elevation from their blossoms, written from the
+//!   definitions without reading `geom-nurbs`. `tests/nurbs_reference.rs` compares `geom-nurbs`
+//!   with it on every pull request: knot vectors exactly, points and changed curves within the
+//!   bounds `geom-nurbs` states.
+//!
+//! Fixtures, the other reference implementations, oracle clients and the other CI tools arrive
+//! with the pieces that need them. The sister development crates are `geom-fuzz` (fuzz harnesses),
 //! `geom-gen` (every generator whose output is committed) and `geom-bench` (benchmarks). `geom-bench` is built by
 //! piece G06 in its own worktree, so this piece leaves the benchmark to it.
 //!
@@ -154,6 +162,10 @@
 //! - `lcov` 0.8 (G21), to read the LCOV tracefiles cargo-llvm-cov writes ([`coverage`]).
 //! - `yaml-rust2` 0.13, a development dependency (G21), which reads
 //!   `.github/workflows/kernel-quality.yml` as YAML.
+//! - `dashu-int` 0.6 and `dashu-ratio` 0.6 (G57), without their default features: the exact
+//!   rationals of [`nurbs_reference`].
+//! - `geom-nurbs` and `geom-run` (MPL-2.0, ours), development dependencies (G57): the curves
+//!   `tests/nurbs_reference.rs` compares with the reference, and the work meter they take.
 //!
 //! Licences of every outside package this crate brings into a build, its own and its dependencies'
 //! on every target (`cargo tree --target all`), each record checked by `tests/licences.rs`. Where a
@@ -167,7 +179,9 @@
 //!   `thiserror-impl`, `clap`, `clap_builder`, `clap_derive`, `clap_lex`, `anstyle`, `heck`,
 //!   `yaml-rust2`, `hashlink`, `sha2`, `digest`, `block-buffer`, `crypto-common`, `hybrid-array`,
 //!   `typenum`, `petgraph`, `fixedbitset`, `hashbrown`, `indexmap`, `equivalent`, `num-rational`,
-//!   `num-bigint` and `num-integer`.
+//!   `num-bigint`, `num-integer`, `dashu-int`, `dashu-ratio`, `dashu-base` and
+//!   `static_assertions`.
+//! - Apache-2.0: `num-modular`, which `dashu-int` brings in.
 //! - MIT/Apache-2.0: `lcov` and `arraydeque` (the older spelling of MIT OR Apache-2.0).
 //! - MIT OR Apache-2.0 OR LGPL-2.1-or-later: `r-efi` (UEFI targets only).
 //! - (MIT OR Apache-2.0) AND Unicode-3.0: `unicode-ident` and `unicode-normalization`.
@@ -189,6 +203,7 @@ pub mod licence;
 pub mod map;
 pub mod miri;
 pub mod mutants;
+pub mod nurbs_reference;
 pub mod prop;
 pub mod quality_ledger;
 pub mod recursion;
