@@ -624,6 +624,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | Which crate owns USD subdivision exchange, and how Chaikin creasing is carried | 16, 24 | 32.32 (owner action G312) |
 | Alignment transitions as kinds or compositions, and their names | 7, 17, 26 | 32.33 (owner action G357) |
 | TIN ties in plan-coordinate order rather than by persistent name | 6, 17, 21 | 32.34 (owner action G358) |
+| How imported edges are marked Smooth | 6, 18 | 32.35 (owner action G384) |
 
 ### Answered by the pieces built so far
 
@@ -653,7 +654,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | A designed irrational tie (four roof planes meeting at one apex) keeps the committed sign and reports a short edge, rather than failing | 13 | Piece "Plane commit routine" |
 | Derived values to name on the ladder: a resolution floor of 1q; epsilon_step = epsilon_fit/4; the solver block (tau = q/64, sigma_ind = 2^-12, sigma_dep = 1/(64S) and the rest); h_min = 8q; a default cap for close_near_contacts | 11, 12, 13, 15, 19 | Ladder module in geom-num, after 32.3 |
 | Commit rounding is q/2 per coordinate, about 135 nm as a distance at q0. 6.5 should say so | 19 | Editorial fix to 6.5 |
-| A named import angle on the ladder for marking imported edges smooth, or no kernel default (chapter 18's choice) | 18 | Piece "Line classes, bands and continuity records" |
+| A named import angle on the ladder for marking imported edges smooth, or no kernel default (chapter 18's choice) | 18 | 32.35 (owner action G384): no kernel default, a recorded parameter; piece "Line classes, bands and continuity records" |
 | Designed tangency travels as a recorded intent, and downstream code never compares angles with epsilon_ang. Committed lines tilt by about q/L, and subdivision G1 leaves kinks of about 1e-5 rad | 15, 16, 18 | Decision note to 6.5; pieces "Local-operation driver and topology-change taxonomy" and "Line classes, bands and continuity records" |
 | Break TIN ties in plan-coordinate order (x, then y) rather than by persistent name, so identical points give identical surfaces whatever they are called | 17 | 32.34 (owner action G358): yes, for TIN ties only; piece "Exact Delaunay core" |
 | A stricter rule for local operations near tolerant edges of imported STEP models than 6.5's "work within, never raise" | 13 | Note to 6.5; piece "Local-operation driver and topology-change taxonomy" |
