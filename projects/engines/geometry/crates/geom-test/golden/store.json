@@ -240,13 +240,13 @@
         },
         {
           "id": "geom-curve/transition",
-          "what": "The transition kind of geom-curve (piece G63): 30 rounds of one transition per curvature law (clothoid, Helmert, Bloss, cosine, sine, cant-coupled, and IFC's polynomial, cosine and sine spirals), each with its panel count and remainder and, at six stations, its point and three derivatives in doubles, its enclosures to the third derivative, its turn and its curvature; and 5 refusals: 6755 results in the canonical encoding of tests/transition_determinism.rs.",
+          "what": "The transition kind of geom-curve (piece G63): 30 rounds of one transition per curvature law (clothoid, Helmert, Bloss, cosine, sine, cant-coupled, and IFC's polynomial, cosine and sine spirals), each with its panel count and remainder and, at six stations, its point and three derivatives in doubles, its enclosures to the third derivative, its turn and its curvature; and 6 refusals (the five asked for, and one random polynomial spiral past the panel cap): 6731 results in the canonical encoding of tests/transition_determinism.rs.",
           "check": {
             "crate": "geom-curve",
             "test": "transition_determinism",
             "function": "transition_golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "3925dfc8687ddf24a265af730e9c84221c6700ee314bcaa03da78a7d6c48ae5c"
+          "sha256": "3cb00aed8da0c554da8bfda0423b62ed46559d7d794394056018577c17f0c7db"
         },
         {
           "id": "geom-surface/analytic",

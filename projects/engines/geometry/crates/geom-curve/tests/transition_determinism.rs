@@ -6,7 +6,8 @@
 //! (clothoid, Helmert, Bloss, cosine, sine, cant-coupled, and IFC's polynomial, cosine and sine
 //! spirals) with random start, direction, length and terms, each with its panel count and
 //! remainder, and at six stations its point and three derivatives in doubles, its enclosures to the
-//! third derivative, its turn and its curvature; and a refusal of each kind. Every double is written
+//! third derivative, its turn and its curvature; and a refusal of each kind. One law of the corpus
+//! turns too far for the panel cap and is refused too. Every double is written
 //! as its bits and every interval as its two ends, each error as its name, so a target that rounds
 //! one step differently changes the digest.
 
@@ -253,8 +254,9 @@ fn transition_golden_hash_is_the_same_on_every_target() {
         rec.bytes.len(),
         hex(sha256(&rec.bytes))
     );
-    assert_eq!(rec.results, 6755);
-    assert_eq!(rec.refusals, 5, "only the five refusals asked for");
+    assert_eq!(rec.results, 6731);
+    // The five asked for, and one random polynomial spiral that turns past the panel cap.
+    assert_eq!(rec.refusals, 6, "only the six refusals expected");
     checked.verdict().unwrap_or_else(|e| {
         panic!(
             "{e}. A changed digest is a bug: some target computes a different point, enclosure, \
