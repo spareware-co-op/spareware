@@ -874,6 +874,42 @@ fn records_carry_units_epochs_and_models_and_never_mix_them() {
     assert_eq!(shift.apply(b.min()), Ok(b.min()));
 }
 
+#[test]
+fn every_new_refusal_says_what_went_wrong() {
+    for (m, text) in [
+        (
+            FrameMismatch::LinearUnit,
+            "the frames' map coordinates use different linear units",
+        ),
+        (
+            FrameMismatch::Epoch,
+            "the frames' coordinates hold at different epochs",
+        ),
+        (
+            FrameMismatch::DeformationModel,
+            "the frames name different deformation models",
+        ),
+    ] {
+        assert_eq!(m.to_string(), text);
+        assert_eq!(
+            MathError::FrameMismatch(m).to_string(),
+            format!("no exact shift between the frames: {text}")
+        );
+    }
+    assert_eq!(
+        DecimalError::Syntax { at: 3 }.to_string(),
+        "not a decimal number: byte 3 does not fit"
+    );
+    assert_eq!(
+        DecimalError::TooManyDigits.to_string(),
+        "the decimal number has more than 38 significant digits"
+    );
+    assert_eq!(
+        DecimalError::ExponentRange.to_string(),
+        "the decimal number's exponent is outside −340 to 340"
+    );
+}
+
 // ---------------------------------------------------------------------------------------------
 // Map to frame.
 
