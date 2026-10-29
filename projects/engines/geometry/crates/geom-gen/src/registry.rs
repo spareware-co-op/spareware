@@ -26,9 +26,10 @@ use crate::files::{Folder, Registry};
 use crate::generator::{GenError, Generate, Generator};
 use crate::grid_steps;
 use crate::predicates;
+use crate::quadrature;
 
 /// Every generator, in the order they run.
-pub const GENERATORS: [Generator; 54] = [
+pub const GENERATORS: [Generator; 55] = [
     Generator {
         name: grid_steps::NAME,
         output: grid_steps::OUTPUT,
@@ -353,11 +354,17 @@ pub const GENERATORS: [Generator; 54] = [
         about: "ssi_side's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
         generate: Generate::Plain(predicates::generate_fptaylor_ssi_side),
     },
+    Generator {
+        name: quadrature::NAME,
+        output: quadrature::OUTPUT,
+        about: "the Gauss-Legendre and Gauss-Kronrod rules on [-1, 1], every node and weight correctly rounded from an exact enclosure",
+        generate: Generate::Plain(quadrature::generate),
+    },
 ];
 
 /// Every folder only generators write into. A folder stays listed while any file in it remains,
 /// so an orphan left by a removed generator is reported, not forgotten.
-pub const FOLDERS: [Folder; 3] = [
+pub const FOLDERS: [Folder; 4] = [
     Folder {
         path: "projects/engines/geometry/crates/geom-gen/generated",
         // Turns off git's line-ending conversion for the outputs, which `check` compares byte for
@@ -372,6 +379,11 @@ pub const FOLDERS: [Folder; 3] = [
     Folder {
         path: predicates::VERUS_DIR,
         // The same, for the predicates' Verus twins in geom-num's Verus crate.
+        keep: &[".gitattributes"],
+    },
+    Folder {
+        path: quadrature::OUTPUT_DIR,
+        // The same, for geom-num's quadrature rules.
         keep: &[".gitattributes"],
     },
 ];

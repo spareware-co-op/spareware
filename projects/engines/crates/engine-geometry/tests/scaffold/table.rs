@@ -267,7 +267,7 @@ const ROWS: &[Row<'static>] = &[
     // 1. Numbers and the contract.
     kernel("geom-run",       1, Amended27, Elsewhere("G04"), ""),
     kernel("geom-num",       1, Accepted,   Elsewhere("G02"), "run"),
-    kernel("geom-linalg",    1, Amended27, Here, "num"),
+    kernel("geom-linalg",    1, Amended27, Elsewhere("G49"), "num"),
     kernel("geom-op",        1, Amended27, Here, "run num"),
     // 2. Geometry.
     kernel("geom-math",      2, Accepted,   Elsewhere("G03"), "num op"),
