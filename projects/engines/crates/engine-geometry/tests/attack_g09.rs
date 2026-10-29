@@ -1216,7 +1216,6 @@ mod repository {
             "G129 G130 G131 G132 G133 G137 G138 G139 G144 G242 G243 G244 G245 G246 G247 G248 \
              G249 G250 G324",
         ),
-        ("geom-bvh", "G54 G55"),
         ("geom-check", "G84 G85 G102 G134 G177 G322"),
         ("geom-cloud", "G350 G379 G380 G436"),
         ("geom-combine", "G336 G337"),
@@ -1247,7 +1246,6 @@ mod repository {
              G176 G292 G320 G321 G372 G390 G392 G393 G466 G467 G468",
         ),
         ("geom-landxml", "G437"),
-        ("geom-linalg", "G49 G50 G215"),
         ("geom-make", "G101"),
         (
             "geom-mesh",

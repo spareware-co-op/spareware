@@ -1,6 +1,9 @@
 //! The 1M-point transform benchmark of piece G45 (chapter 30), with the frame conversions beside
 //! it: wall-clock time per point for every transform variant, in 3D and in the plane (2D points,
-//! through the same transforms at z = 0), and every kind of frame.
+//! through the same transforms at z = 0), and every kind of frame. Piece G46 adds its rational
+//! rotation (the variant for rotations too large for a rational transform) and its searches: the
+//! closest rational rotation within the angular bound in 2D and 3D, and re-approximated
+//! compositions.
 //!
 //! Run with `cargo bench -p geom-math`. It uses the standard library's clock only, so it builds
 //! with no extra dependency; when the benchmark harness of chapter 28 (`geom-bench`, piece G06)
@@ -25,10 +28,11 @@ use std::hint::black_box;
 use std::time::Instant;
 
 use geom_math::{
-    Axis, CrsId, FrameRecord, GridTransform, MapPoint, RationalTransform, Rotation, Scale,
-    Transform, TypedTransform,
+    Axis, CrsId, F2, FrameRecord, GridTransform, MapPoint, RationalRotation, RationalTransform,
+    Rotation, Scale, Transform, TypedTransform,
 };
 use geom_num::grid::{GridStep, P2, P3};
+use geom_num::ladder;
 use geom_num::rng::{Philox, Seed, Stream, StreamId};
 
 const POINTS: usize = 1_000_000;
@@ -123,6 +127,53 @@ fn plane(pts: &[P3]) {
         &pts,
         &TypedTransform::Certified(shift.compose(&turn).unwrap()),
     );
+    // Piece G46: the rational rotation within the angular bound of 60 degrees.
+    let sixty = F2::new(0.5, 0.866_025_403_784_438_6).unwrap();
+    let r60 = RationalRotation::plane_within(sixty, ladder::ANGULAR).unwrap();
+    run_2d(
+        "2D rotation: 60 degrees within 2^-34 rad (G46)",
+        &pts,
+        &TypedTransform::from(r60.value()),
+    );
+}
+
+/// Piece G46's searches: the closest rational rotation within the angular bound, for 10,000
+/// directions in 2D and 10,000 quaternions in 3D, and the exact or re-approximated compositions.
+#[allow(
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    reason = "a benchmark is development code, like a test: a failure should stop it loudly"
+)]
+fn searches() {
+    const N: usize = 10_000;
+    let mut stream = Philox::new(Seed(0x0646_0646), StreamId(1)).stream();
+    let mut unit = || {
+        let v = stream.below(1 << 53).unwrap() as f64;
+        v / (1u64 << 52) as f64 - 1.0
+    };
+    let dirs: Vec<F2> = (0..N).map(|_| F2::new(unit(), unit()).unwrap()).collect();
+    let quats: Vec<[f64; 4]> = (0..N).map(|_| [unit(), unit(), unit(), unit()]).collect();
+    let start = Instant::now();
+    let mut check = 0u64;
+    for &d in &dirs {
+        let r = RationalRotation::plane_within(black_box(d), ladder::ANGULAR).unwrap();
+        check = check.wrapping_add(r.value().quaternion()[0] as u64);
+    }
+    report("2D search within 2^-34 rad (G46)", N, start, check);
+    let start = Instant::now();
+    let mut found = Vec::with_capacity(N);
+    for &q in &quats {
+        let r = RationalRotation::within(black_box(q), ladder::ANGULAR).unwrap();
+        check = check.wrapping_add(r.value().quaternion()[0] as u64);
+        found.push(r.value());
+    }
+    report("3D search within 2^-34 rad (G46)", N, start, check);
+    let start = Instant::now();
+    for pair in found.chunks(2) {
+        let r = pair[0].compose(&pair[1], ladder::ANGULAR).unwrap();
+        check = check.wrapping_add(r.value().quaternion()[0] as u64);
+    }
+    report("3D composition, re-approximated (G46)", N / 2, start, check);
 }
 
 #[allow(
@@ -168,6 +219,12 @@ fn main() {
     let ties = Transform::translation(geom_math::F3::new(0.25, -1.0, 0.5).unwrap());
     let ties = TypedTransform::Certified(ties.compose(&turn).unwrap());
     run("certified: the same, every z image a tie", &pts, &ties);
+    let r3 = RationalRotation::within([0.9, 0.1, -0.3, 0.2], ladder::ANGULAR).unwrap();
+    run(
+        "rotation: 3D within 2^-34 rad, |q|^2 above 2^40 (G46)",
+        &pts,
+        &TypedTransform::from(r3.value()),
+    );
     // The plain floating-point image, for comparison: no rounding to the grid.
     let start = Instant::now();
     let mut check = 0u64;
@@ -182,6 +239,7 @@ fn main() {
         check,
     );
     plane(&pts);
+    searches();
 
     // Frames: a site near Auckland, map to frame and back.
     let s = 6_400_000i64;

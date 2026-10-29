@@ -78,6 +78,15 @@
 //! - [`rust_source`]: reads Rust source for them: test code, functions, branch sites and marks.
 //! - [`miri`]: the plan of the weekly Miri run, one job per kernel test suite.
 //!
+//! Gate 1 (piece G43) adds:
+//!
+//! - [`trip`]: one planted violation for each gate whose verdict is an outside tool's (rustfmt,
+//!   Verus, Kani, libFuzzer, `ClusterFuzzLite`, Gungraun and Wasmtime's fuel). The binary `trip`
+//!   plants it, runs the gate's own command and requires the tool's report of it (`cargo run -p
+//!   geom-test --bin trip -- <violation> -- <command>`); each of those workflow jobs runs it.
+//! - `guard prove --golden-run <arguments>`: the toolchain guard's proof through `golden run`, so
+//!   the WebAssembly legs are shown to fail on a changed digest too.
+//!
 //! Fixtures, reference implementations, oracle clients and the other CI tools arrive with the
 //! pieces that need them. The sister development crates are `geom-fuzz` (fuzz harnesses),
 //! `geom-gen` (every generator whose output is committed) and `geom-bench` (benchmarks). `geom-bench` is built by
@@ -187,6 +196,7 @@ pub mod rng;
 pub mod rust_source;
 pub mod scan;
 pub mod seed;
+pub mod trip;
 
 pub use rng::{ByteSource, Entropy, SplitMix64};
 pub use seed::Seed;

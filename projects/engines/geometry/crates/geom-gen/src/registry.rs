@@ -26,9 +26,10 @@ use crate::files::{Folder, Registry};
 use crate::generator::{GenError, Generate, Generator};
 use crate::grid_steps;
 use crate::predicates;
+use crate::quadrature;
 
 /// Every generator, in the order they run.
-pub const GENERATORS: [Generator; 28] = [
+pub const GENERATORS: [Generator; 55] = [
     Generator {
         name: grid_steps::NAME,
         output: grid_steps::OUTPUT,
@@ -106,6 +107,18 @@ pub const GENERATORS: [Generator; 28] = [
         output: "projects/engines/geometry/crates/geom-num/src/generated/ssi_side.rs",
         about: "orient2d with a 2D crossing point: its f64 filter, exact path and certificate",
         generate: Generate::Plain(predicates::generate_ssi_side),
+    },
+    Generator {
+        name: predicates::PLAIN_GENERATOR,
+        output: predicates::PLAIN_OUTPUT,
+        about: "every predicate's exact path in plain i128, the baseline of chapter 23.3's variants",
+        generate: Generate::Plain(predicates::generate_plain),
+    },
+    Generator {
+        name: predicates::LIMBS_GENERATOR,
+        output: predicates::LIMBS_OUTPUT,
+        about: "every predicate's exact path in width-aware 32-bit limbs, with its limb proofs",
+        generate: Generate::Plain(predicates::generate_limbs),
     },
     Generator {
         name: "verus-orient2d",
@@ -186,6 +199,96 @@ pub const GENERATORS: [Generator; 28] = [
         generate: Generate::Plain(predicates::generate_gappa_orient3d),
     },
     Generator {
+        name: "gappa-incircle-x",
+        output: "projects/engines/geometry/crates/geom-gen/generated/gappa-incircle-x.g",
+        about: "incircle's f64 filter for Gappa where m_x is the largest maximum; Rocq checks the proof",
+        generate: Generate::Plain(predicates::generate_gappa_incircle_x),
+    },
+    Generator {
+        name: "gappa-incircle-y",
+        output: "projects/engines/geometry/crates/geom-gen/generated/gappa-incircle-y.g",
+        about: "incircle's f64 filter for Gappa where m_y is the largest maximum; Rocq checks the proof",
+        generate: Generate::Plain(predicates::generate_gappa_incircle_y),
+    },
+    Generator {
+        name: "gappa-insphere-x",
+        output: "projects/engines/geometry/crates/geom-gen/generated/gappa-insphere-x.g",
+        about: "insphere's f64 filter for Gappa where m_x is the largest maximum; Rocq checks the proof",
+        generate: Generate::Plain(predicates::generate_gappa_insphere_x),
+    },
+    Generator {
+        name: "gappa-insphere-y",
+        output: "projects/engines/geometry/crates/geom-gen/generated/gappa-insphere-y.g",
+        about: "insphere's f64 filter for Gappa where m_y is the largest maximum; Rocq checks the proof",
+        generate: Generate::Plain(predicates::generate_gappa_insphere_y),
+    },
+    Generator {
+        name: "gappa-insphere-z",
+        output: "projects/engines/geometry/crates/geom-gen/generated/gappa-insphere-z.g",
+        about: "insphere's f64 filter for Gappa where m_z is the largest maximum; Rocq checks the proof",
+        generate: Generate::Plain(predicates::generate_gappa_insphere_z),
+    },
+    Generator {
+        name: "gappa-plane-side-d",
+        output: "projects/engines/geometry/crates/geom-gen/generated/gappa-plane-side-d.g",
+        about: "plane_side's f64 filter for Gappa where m_d is the largest term; Rocq checks the proof",
+        generate: Generate::Plain(predicates::generate_gappa_plane_side_d),
+    },
+    Generator {
+        name: "gappa-plane-side-z-n",
+        output: "projects/engines/geometry/crates/geom-gen/generated/gappa-plane-side-z-n.g",
+        about: "plane_side's f64 filter for Gappa where m_z * m_n is the largest term; Rocq checks the proof",
+        generate: Generate::Plain(predicates::generate_gappa_plane_side_z_n),
+    },
+    Generator {
+        name: "gappa-plane-side-y-n",
+        output: "projects/engines/geometry/crates/geom-gen/generated/gappa-plane-side-y-n.g",
+        about: "plane_side's f64 filter for Gappa where m_y * m_n is the largest term; Rocq checks the proof",
+        generate: Generate::Plain(predicates::generate_gappa_plane_side_y_n),
+    },
+    Generator {
+        name: "gappa-plane-side-x-n",
+        output: "projects/engines/geometry/crates/geom-gen/generated/gappa-plane-side-x-n.g",
+        about: "plane_side's f64 filter for Gappa where m_x * m_n is the largest term; Rocq checks the proof",
+        generate: Generate::Plain(predicates::generate_gappa_plane_side_x_n),
+    },
+    Generator {
+        name: "gappa-tpi-weight",
+        output: "projects/engines/geometry/crates/geom-gen/generated/gappa-tpi-weight.g",
+        about: "tpi_weight's f64 filter for Gappa, whose proof of its error bound Rocq checks",
+        generate: Generate::Plain(predicates::generate_gappa_tpi_weight),
+    },
+    Generator {
+        name: "gappa-ssi-weight",
+        output: "projects/engines/geometry/crates/geom-gen/generated/gappa-ssi-weight.g",
+        about: "ssi_weight's f64 filter for Gappa, whose proof of its error bound Rocq checks",
+        generate: Generate::Plain(predicates::generate_gappa_ssi_weight),
+    },
+    Generator {
+        name: "gappa-ssi-side",
+        output: "projects/engines/geometry/crates/geom-gen/generated/gappa-ssi-side.g",
+        about: "ssi_side's f64 filter for Gappa, whose proof of its error bound Rocq checks",
+        generate: Generate::Plain(predicates::generate_gappa_ssi_side),
+    },
+    Generator {
+        name: "gappa-lpi-weight-z-n",
+        output: "projects/engines/geometry/crates/geom-gen/generated/gappa-lpi-weight-z-n.g",
+        about: "lpi_weight's f64 filter for Gappa where m_z * m_n is the largest term; Rocq checks the proof",
+        generate: Generate::Plain(predicates::generate_gappa_lpi_weight_z_n),
+    },
+    Generator {
+        name: "gappa-lpi-weight-y-n",
+        output: "projects/engines/geometry/crates/geom-gen/generated/gappa-lpi-weight-y-n.g",
+        about: "lpi_weight's f64 filter for Gappa where m_y * m_n is the largest term; Rocq checks the proof",
+        generate: Generate::Plain(predicates::generate_gappa_lpi_weight_y_n),
+    },
+    Generator {
+        name: "gappa-lpi-weight-x-n",
+        output: "projects/engines/geometry/crates/geom-gen/generated/gappa-lpi-weight-x-n.g",
+        about: "lpi_weight's f64 filter for Gappa where m_x * m_n is the largest term; Rocq checks the proof",
+        generate: Generate::Plain(predicates::generate_gappa_lpi_weight_x_n),
+    },
+    Generator {
         name: "fptaylor-orient2d",
         output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-orient2d.fpt",
         about: "orient2d's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
@@ -197,11 +300,71 @@ pub const GENERATORS: [Generator; 28] = [
         about: "orient3d's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
         generate: Generate::Plain(predicates::generate_fptaylor_orient3d),
     },
+    Generator {
+        name: "fptaylor-incircle",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-incircle.fpt",
+        about: "incircle's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_incircle),
+    },
+    Generator {
+        name: "fptaylor-insphere",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-insphere.fpt",
+        about: "insphere's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_insphere),
+    },
+    Generator {
+        name: "fptaylor-plane-side",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-plane-side.fpt",
+        about: "plane_side's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_plane_side),
+    },
+    Generator {
+        name: "fptaylor-tpi-weight",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-tpi-weight.fpt",
+        about: "tpi_weight's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_tpi_weight),
+    },
+    Generator {
+        name: "fptaylor-tpi-side",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-tpi-side.fpt",
+        about: "tpi_side's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_tpi_side),
+    },
+    Generator {
+        name: "fptaylor-lpi-weight",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-lpi-weight.fpt",
+        about: "lpi_weight's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_lpi_weight),
+    },
+    Generator {
+        name: "fptaylor-lpi-side",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-lpi-side.fpt",
+        about: "lpi_side's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_lpi_side),
+    },
+    Generator {
+        name: "fptaylor-ssi-weight",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-ssi-weight.fpt",
+        about: "ssi_weight's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_ssi_weight),
+    },
+    Generator {
+        name: "fptaylor-ssi-side",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-ssi-side.fpt",
+        about: "ssi_side's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_ssi_side),
+    },
+    Generator {
+        name: quadrature::NAME,
+        output: quadrature::OUTPUT,
+        about: "the Gauss-Legendre and Gauss-Kronrod rules on [-1, 1], every node and weight correctly rounded from an exact enclosure",
+        generate: Generate::Plain(quadrature::generate),
+    },
 ];
 
 /// Every folder only generators write into. A folder stays listed while any file in it remains,
 /// so an orphan left by a removed generator is reported, not forgotten.
-pub const FOLDERS: [Folder; 3] = [
+pub const FOLDERS: [Folder; 4] = [
     Folder {
         path: "projects/engines/geometry/crates/geom-gen/generated",
         // Turns off git's line-ending conversion for the outputs, which `check` compares byte for
@@ -216,6 +379,11 @@ pub const FOLDERS: [Folder; 3] = [
     Folder {
         path: predicates::VERUS_DIR,
         // The same, for the predicates' Verus twins in geom-num's Verus crate.
+        keep: &[".gitattributes"],
+    },
+    Folder {
+        path: quadrature::OUTPUT_DIR,
+        // The same, for geom-num's quadrature rules.
         keep: &[".gitattributes"],
     },
 ];

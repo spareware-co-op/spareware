@@ -61,14 +61,14 @@ mod common;
 use std::collections::BTreeSet;
 
 use common::{
-    Fault, Job, PHASE, Script, SplitMix, THREADS_1, THREADS_2, THREADS_3, THREADS_8, job, plan,
-    scripted,
+    Fault, Job, PHASE, Script, SplitMix, THREADS_1, THREADS_2, THREADS_3, THREADS_8, Threads, job,
+    plan, scripted,
 };
 use geom_run::{
     BatchBudget, Budget, BudgetKind, Exceeded, Exec, Interrupted, ItemError, ItemResult, Phase,
     RunError, Stop, Stopped, Usage, WorkMeter,
 };
-use geom_test::golden::{self, Sha256, Store, hex};
+use geom_test::golden::{self, Sha256, Store, THREAD_COUNTS, hex};
 
 /// The corpus's golden in the golden store: its SHA-256 digest. See the module documentation
 /// before changing it.
@@ -625,13 +625,23 @@ fn fnv1a_64_matches_its_published_test_vectors() {
 /// 1, 7 and 4,096, and on every target.
 #[test]
 fn golden_hash_is_the_same_on_every_target_thread_count_and_chunk_size() {
-    let executors: [(&str, Exec<'static>); 5] = [
-        ("serial", Exec::serial()),
-        ("threads 1", Exec::with_pool(&THREADS_1)),
-        ("threads 2", Exec::with_pool(&THREADS_2)),
-        ("threads 3", Exec::with_pool(&THREADS_3)),
-        ("threads 8", Exec::with_pool(&THREADS_8)),
-    ];
+    let pool = |n: usize| -> &'static Threads {
+        match n {
+            1 => &THREADS_1,
+            2 => &THREADS_2,
+            3 => &THREADS_3,
+            8 => &THREADS_8,
+            _ => panic!("no pool of {n} threads"),
+        }
+    };
+    let executors: Vec<(String, Exec<'static>)> =
+        std::iter::once(("serial".to_owned(), Exec::serial()))
+            .chain(
+                THREAD_COUNTS
+                    .into_iter()
+                    .map(|n| (format!("threads {n}"), Exec::with_pool(pool(n)))),
+            )
+            .collect();
     let checked = golden::check(GOLDEN, || {
         let r = corpus(Exec::serial(), 1, Recorder::new());
         (r.hash.clone().finish(), r)
@@ -648,7 +658,7 @@ fn golden_hash_is_the_same_on_every_target_thread_count_and_chunk_size() {
     );
     let hash = reference.digest();
     for size in [1, 7, 4096] {
-        for (name, exec) in executors {
+        for &(ref name, exec) in &executors {
             let got = corpus(exec, size, Recorder::new()).digest();
             println!("  {name:<10} chunk size {size:>4}: {got}");
             assert_eq!(

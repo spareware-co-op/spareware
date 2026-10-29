@@ -4,11 +4,11 @@
 # Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`.
 #
 # orient2d's f64 filter (geom_num::generated::orient2d::filter) for Gappa (chapter 28.6;
-# piece G35). Gappa proves the goal below for binary64 with rounding to nearest, on
-# whole-number coordinate differences, each at most its axis maximum in magnitude, and
-# writes a proof that Rocq checks. The goal: the computed value is within K * S of the
-# exact one, and the computed bound within a relative error R of C * S, where
-# K = C * (1 - R); so whenever the filter answers, its sign is the exact one.
+# pieces G35 and G40). Gappa proves the goal below for binary64 with rounding to
+# nearest, on whole-number coordinate differences, each at most its axis maximum in
+# magnitude, and writes a proof that Rocq checks. The goal: the computed value is within
+# K * S of the exact one, and the computed bound within a relative error R of C * S,
+# where K = C * (1 - R); so whenever the filter answers, its sign is the exact one.
 
 @rnd = float<ieee_64, ne>;
 
