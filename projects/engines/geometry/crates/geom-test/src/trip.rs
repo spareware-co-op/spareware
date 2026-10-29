@@ -5,16 +5,18 @@
 //! pattern of the kernel's merge gate (G12) and of the toolchain guard (G20, [`crate::guard`]).
 //! Most gates already meet it in their own tests (gate 1's record in chapter 32 lists each). The
 //! gates here are the ones whose verdict is an outside tool's: rustfmt, Verus, Kani, libFuzzer,
-//! `ClusterFuzzLite`, Gungraun's Callgrind comparison and Wasmtime's fuel. [`VIOLATIONS`] holds one
-//! planted violation for each: a file of the kernel, one line in it found exactly once
-//! ([`Violation::anchor`]), the line it becomes, and the text the tool prints when it catches it.
+//! `ClusterFuzzLite`, Gungraun's Callgrind comparison, Wasmtime's fuel, Gappa with Rocq, and
+//! HOL Light. [`VIOLATIONS`] holds one planted violation for each: a file of the kernel, one line
+//! in it found exactly once ([`Violation::anchor`]), the line it becomes, and the text the tool
+//! prints when it catches it.
 //! The binary `trip` writes the changed line into the working tree, runs the gate's own command,
 //! restores the file byte for byte, and asks [`verdict`] whether the run failed for that reason.
 //! Each workflow job runs it with its real check, so a job that could no longer fail (a tool that
 //! stopped checking, a command that checks nothing) fails instead. The two count gates run it
 //! last, comparing the planted run with the pull request's own run measured just before; the
 //! `ClusterFuzzLite` gate runs it in a job of its own, `clusterfuzzlite-seeded`, because its actions
-//! build a fresh clone of the pull request, which a planted line never reaches.
+//! build a fresh clone of the pull request, which a planted line never reaches; and HOL Light's
+//! runs on orient2d's leg of its matrix alone.
 //!
 //! Guarantees:
 //!
@@ -27,9 +29,12 @@
 //!   compares with big integers under cargo-bolero's libFuzzer, and which `ClusterFuzzLite`'s own
 //!   build and fuzzing must report through whichever target meets it first (each target's law
 //!   names its own break, "broken law: "; its address sanitizer reports the abort that follows);
-//!   and `Sign::of_i128` reading its argument through an opaque copy
+//!   `Sign::of_i128` reading its argument through an opaque copy
 //!   (`core::hint::black_box`), the same answer for more work, which both count gates must report
-//!   as a rise of more than 5% on its benchmark.
+//!   as a rise of more than 5% on its benchmark; the error bound orient2d's Gappa problem claims,
+//!   halved, which Gappa must fail to prove, so that its Rocq output holds no theorem and Rocq
+//!   refuses it; and the bounds of orient2d's `FPTaylor` certificate, every one halved as HOL
+//!   Light's session loads it, which HOL Light must refuse to prove.
 //! - **An anchor found once, or no run.** [`apply`] refuses a file that holds the anchor line
 //!   other than exactly once, so a refactor that moves it fails `tests/attack_g43.rs` (which
 //!   checks every anchor in the repository) and the job, loudly, instead of planting nothing.
@@ -66,7 +71,7 @@ pub struct Violation {
 }
 
 /// The planted violations, one for each gate that runs an outside tool on the kernel's code.
-pub const VIOLATIONS: [Violation; 9] = [
+pub const VIOLATIONS: [Violation; 11] = [
     Violation {
         name: "fmt",
         gate: "kernel.yml lint",
@@ -133,6 +138,37 @@ pub const VIOLATIONS: [Violation; 9] = [
             "Performance has regressed: Instructions",
             "instructions::sign::of_i128",
         ],
+    },
+    Violation {
+        name: "gappa",
+        gate: "kernel-certificates.yml gappa",
+        file: "projects/engines/geometry/crates/geom-gen/generated/gappa-orient2d.g",
+        anchor: concat!(
+            "  det - e_det // S in [-40564819207303354358693384683511b-156, ",
+            r"40564819207303354358693384683511b-156] /\ bound -/ C * S in [-3b-53, 3b-53]",
+        ),
+        planted: concat!(
+            "  det - e_det // S in [-40564819207303354358693384683511b-157, ",
+            r"40564819207303354358693384683511b-157] /\ bound -/ C * S in [-3b-53, 3b-53]",
+        ),
+        caught: &[
+            "Error: some properties were not satisfied:",
+            "LIN(det - e_det, S), best: ",
+            "The reference l1 was not found in the current environment.",
+        ],
+    },
+    Violation {
+        name: "hol-light",
+        gate: "kernel-certificates.yml fptaylor",
+        file: "projects/engines/geometry/crates/geom-gen/certificates/fptaylor.sh",
+        anchor: r#"      echo "let _, bound_th, time = validate 10 \"$expression.proof\";;""#,
+        planted: concat!(
+            r#"      echo "let _, bound_th, time = let p = load \"$expression.proof\" in "#,
+            r#"p.proof_opts <- map (fun q -> {q with opt_bounds = map (fun b -> b /. 2.0) "#,
+            r#"q.opt_bounds; total_bound = q.total_bound /. 2.0}) p.proof_opts; "#,
+            r#"let f, b = validate_proof 10 p in f, b, 0.0;;""#,
+        ),
+        caught: &["Exception:", r#"Misc_functions.Error ("prove_bound_cond","#],
     },
     Violation {
         name: "fuel",

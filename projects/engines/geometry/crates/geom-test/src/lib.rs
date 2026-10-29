@@ -81,9 +81,10 @@
 //! Gate 1 (piece G43) adds:
 //!
 //! - [`trip`]: one planted violation for each gate whose verdict is an outside tool's (rustfmt,
-//!   Verus, Kani, libFuzzer, `ClusterFuzzLite`, Gungraun and Wasmtime's fuel). The binary `trip`
-//!   plants it, runs the gate's own command and requires the tool's report of it (`cargo run -p
-//!   geom-test --bin trip -- <violation> -- <command>`); each of those workflow jobs runs it.
+//!   Verus, Kani, libFuzzer, `ClusterFuzzLite`, Gungraun, Wasmtime's fuel, Gappa with Rocq, and
+//!   HOL Light). The binary `trip` plants it, runs the gate's own command and requires the tool's
+//!   report of it (`cargo run -p geom-test --bin trip -- <violation> -- <command>`); each of those
+//!   workflow jobs runs it.
 //! - `guard prove --golden-run <arguments>`: the toolchain guard's proof through `golden run`, so
 //!   the WebAssembly legs are shown to fail on a changed digest too.
 //!
