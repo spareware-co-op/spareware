@@ -23,23 +23,32 @@
 //! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
-//! Modules today (piece G49, dense decompositions):
+//! Modules today (pieces G49 and G50, dense decompositions):
 //!
 //! - [`matrix`]: [`Matrix`], dense and finite; [`LinalgError`]; and [`Work`], the budget every
 //!   factorisation charges before it starts.
 //! - [`solve`]: LU with partial pivoting, Cholesky, triangular and tridiagonal solves.
 //! - [`qr`]: Householder QR with column pivoting, the complete orthogonal decomposition, the
 //!   least-norm least-squares solution and the canonical null space.
+//! - [`svd`]: [`Svd`], the singular value decomposition by one-sided Jacobi and by Golub–Kahan,
+//!   with ranks and chapter 15.8's three verdicts ([`Ranks`]).
+//! - [`eigen`]: [`SymmetricEigen`], the symmetric eigenproblem by Householder tridiagonalisation
+//!   and implicit QR.
 //!
-//! Status: dense decompositions built (G49); singular values and eigenvalues (G50) and the sparse
-//! parts (G215) to come.
+//! Status: dense decompositions built (G49, G50); the sparse parts (G215) to come.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 
+mod cols;
+pub mod eigen;
 pub mod matrix;
 pub mod qr;
+mod rotation;
 pub mod solve;
+pub mod svd;
 
+pub use eigen::SymmetricEigen;
 pub use matrix::{LinalgError, Matrix, Work};
 pub use qr::{Cod, PivotedQr, canonical_null_space};
 pub use solve::{Cholesky, Lu, solve_lower, solve_tridiagonal, solve_upper};
+pub use svd::{Ranks, Svd};

@@ -53,7 +53,7 @@ use geom_test::SplitMix64;
 use geom_test::seed::{Seed, resolve};
 
 /// The thread counts chapter 21 asks for.
-const THREADS: [usize; 4] = [1, 2, 3, 8];
+const THREADS: [usize; 4] = geom_test::golden::THREAD_COUNTS;
 
 /// The chunk sizes chapter 23.4 forces, 1, 7 and 4,096, and 64 between them.
 const SIZES: [usize; 4] = [1, 7, 64, 4_096];

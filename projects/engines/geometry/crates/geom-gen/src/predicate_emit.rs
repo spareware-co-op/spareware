@@ -62,6 +62,7 @@ use geom_num::grid::{COORD_BITS, COORD_MAX};
 use std::collections::BTreeSet;
 
 use crate::bignum::Nat;
+use crate::predicate_certificates::proof_sentence;
 use crate::predicate_derive::{Derivation, Monomial, ScaleExpr, StepCert, Width};
 use crate::predicate_lang::{Axis, InputKind, Op, RUST_WORDS, Step, StepKind, max_name};
 
@@ -779,11 +780,15 @@ fn header(
     doc(out, "");
     doc_para(
         out,
-        "Guarantees: when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for \
-         every input in the domain below, and it returns `None` when it cannot tell, never a guess; \
-         `value` returns the exact value for every input in the domain, each step in the type the \
-         certificate below shows holds it and every step a checked method, so a step that did not \
-         fit would give `None`, never a wrapped value; and `exact` is that value's sign.",
+        &format!(
+            "Guarantees: when `filter` returns `Some(sign)`, `sign` is the sign of the exact value \
+             for every input in the domain below, and it returns `None` when it cannot tell, never \
+             a guess; `value` returns the exact value for every input in the domain, each step in \
+             the type the certificate below shows holds it and every step a checked method, so a \
+             step that did not fit would give `None`, never a wrapped value; and `exact` is that \
+             value's sign. {}",
+            proof_sentence(d)?
+        ),
     );
     doc(out, "");
     doc_para(
@@ -2451,13 +2456,15 @@ const PARENT_HEADER_TOP: &[&str] = &[
      domain: the certificate bounds every intermediate within its type, and a step that did not \
      fit would give `None`, never a wrapped value, since every step is a checked method. Nothing \
      depends on overflow checks being on.",
-    "I:**Checked, not proven** (chapter 28.6). The bounds are derived exactly by the written \
-     proof below and re-derived by an independent checker in geom-gen's tests (its own parser, \
-     big integers and analysis), which also reads this committed code, this module's helpers \
-     included; the filters are tested against the exact paths on millions of random and \
+    "I:**Proven, or checked and labelled so** (chapter 28.6). The bounds are derived exactly by \
+     the written proof below and re-derived by an independent checker in geom-gen's tests (its \
+     own parser, big integers and analysis), which also reads this committed code, this module's \
+     helpers included; the filters are tested against the exact paths on millions of random and \
      near-degenerate inputs at the grid's extremes and on inputs placed just inside and just \
-     outside each bound. They are not yet machine-checked by `FPTaylor` or Gappa, which chapter \
-     28.6 asks before a filter is called proven.",
+     outside each bound. On top of that, each module's guarantees say whether its filter's bound \
+     is machine-checked: proven where Gappa's proofs, checked by Rocq, cover every input \
+     (`kernel-certificates.yml`, pieces G35 and G40), and \"checked, not proven\" with its open \
+     issue otherwise.",
     "I:**Deterministic.** `f64` addition, subtraction and multiplication are correctly rounded on \
      every target and Rust never fuses them (RFC 3514); the conversion of a rounded input rounds \
      to nearest, ties to even, on every target; the maxima use comparisons only. The same inputs \

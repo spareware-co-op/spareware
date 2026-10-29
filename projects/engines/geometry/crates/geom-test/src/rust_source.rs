@@ -1,6 +1,6 @@
 //! Rust source, read for the quality gates: which lines are test code, whether a file has code that
-//! runs, where its branches are, every `coverage(off)` mark with the proof it cites, and whether a
-//! file defines a cited proof.
+//! runs, where its branches are, every `coverage(off)` mark with the proof it cites, whether a file
+//! defines a cited proof, and what a test reaches in its own file.
 //!
 //! What it does: [`scan`] parses a Rust file with `syn`, the parser Rust's procedural macros use,
 //! and reads every token's line from `proc-macro2`'s span locations. From the syntax tree and the
@@ -32,6 +32,14 @@
 //! [`defines_proof`] says whether a file defines a function as a Kani harness (`#[kani::proof]` on
 //! the function) or a Verus proof function (`proof fn`, inside `verus!`).
 //!
+//! [`references`] lists what one function, constant or static of a file names in its code: every
+//! path (`predicate::orient2d`, `ORIENT2D`) and every method called (`.side`), through the file's
+//! own functions, constants and statics it names, transitively (piece G43: the predicate
+//! verification matrix asks whether a named test reaches the predicate it is cited for). Macro
+//! arguments count, since `assert_eq!(perturb::orient2d(..), ..)` calls the predicate, and so do
+//! functions a macro's arguments define (`proptest! { fn name(..) { .. } }`); string literals and
+//! comments never do, since they are not code.
+//!
 //! Guarantees:
 //!
 //! - **The language's own grammar.** Comments, strings, raw strings, character literals and nested
@@ -39,6 +47,10 @@
 //!   brace or a word inside a string or a comment is never read as code.
 //! - **An error, never a partial answer.** A file that does not parse as Rust is a [`ScanError`]
 //!   naming the line, because a gate must not pass on a file it could not read.
+//! - **What a test reaches is read from its tokens.** [`references`] walks token trees, not
+//!   expressions, so code inside any macro's arguments is read as the compiler will expand it in
+//!   the common case; it follows only the file's own items, by name, and when two items in
+//!   different modules share a name it follows both, which can only find more.
 //! - **A comment is a comment.** A citation is read only from a line that starts with `//` and is
 //!   not inside a string literal that spans lines; the walk up from a mark passes only over such
 //!   lines and over the lines of other attributes, and stops at anything else.
@@ -56,8 +68,10 @@
 
 use core::fmt;
 use core::str::FromStr;
+use std::collections::{BTreeMap, BTreeSet};
 
 use proc_macro2::{Delimiter, Span, TokenStream, TokenTree};
+use quote::ToTokens;
 use syn::spanned::Spanned;
 use syn::visit::{self, Visit};
 
@@ -597,6 +611,143 @@ pub fn defines_proof(src: &str, name: &str, tool: ProofTool) -> Result<bool, Sca
     })
 }
 
+/// The walk that collects the file's functions, constants and statics, each with its tokens.
+#[derive(Default)]
+struct Bodies {
+    items: BTreeMap<String, Vec<TokenStream>>,
+}
+
+impl Bodies {
+    fn add(&mut self, name: &syn::Ident, tokens: TokenStream) {
+        self.items.entry(name.to_string()).or_default().push(tokens);
+    }
+}
+
+impl<'ast> Visit<'ast> for Bodies {
+    fn visit_item_fn(&mut self, i: &'ast syn::ItemFn) {
+        self.add(&i.sig.ident, i.to_token_stream());
+        visit::visit_item_fn(self, i);
+    }
+
+    fn visit_item_const(&mut self, i: &'ast syn::ItemConst) {
+        self.add(&i.ident, i.to_token_stream());
+        visit::visit_item_const(self, i);
+    }
+
+    fn visit_item_static(&mut self, i: &'ast syn::ItemStatic) {
+        self.add(&i.ident, i.to_token_stream());
+        visit::visit_item_static(self, i);
+    }
+
+    fn visit_macro(&mut self, m: &'ast syn::Macro) {
+        self.functions_in(m.tokens.clone());
+        visit::visit_macro(self, m);
+    }
+}
+
+impl Bodies {
+    /// The functions a macro's arguments define (`proptest! { fn name(..) { .. } }`): from each
+    /// `fn name` to the first brace group after it, the body.
+    fn functions_in(&mut self, stream: TokenStream) {
+        let tokens: Vec<TokenTree> = stream.into_iter().collect();
+        let mut rest: &[TokenTree] = &tokens;
+        while let Some((token, after)) = rest.split_first() {
+            match token {
+                TokenTree::Group(g) => self.functions_in(g.stream()),
+                TokenTree::Ident(keyword) if keyword == "fn" => {
+                    if let [TokenTree::Ident(name), ..] = after {
+                        let body = rest.iter().position(
+                            |t| matches!(t, TokenTree::Group(g) if g.delimiter() == Delimiter::Brace),
+                        );
+                        if let Some(item) = body.and_then(|end| rest.get(..=end)) {
+                            self.add(name, item.iter().cloned().collect());
+                        }
+                    }
+                }
+                _ => {}
+            }
+            rest = after;
+        }
+    }
+}
+
+/// Whether two tokens are the colons of a `::`.
+fn is_path_separator(a: &proc_macro2::Punct, b: &proc_macro2::Punct) -> bool {
+    a.as_char() == ':' && a.spacing() == proc_macro2::Spacing::Joint && b.as_char() == ':'
+}
+
+/// Every path (its segments joined by `::`) and every method call (`.name`) in a token stream,
+/// groups included.
+fn names_in(stream: TokenStream, out: &mut BTreeSet<String>) {
+    let tokens: Vec<TokenTree> = stream.into_iter().collect();
+    let mut rest: &[TokenTree] = &tokens;
+    while let Some((token, after)) = rest.split_first() {
+        rest = after;
+        match token {
+            TokenTree::Group(g) => names_in(g.stream(), out),
+            TokenTree::Punct(p) if p.as_char() == '.' => {
+                if let [TokenTree::Ident(name), TokenTree::Group(g), ..] = after {
+                    if g.delimiter() == Delimiter::Parenthesis {
+                        out.insert(format!(".{name}"));
+                    }
+                }
+            }
+            TokenTree::Ident(first) => {
+                let mut segments = vec![first.to_string()];
+                while let [
+                    TokenTree::Punct(a),
+                    TokenTree::Punct(b),
+                    TokenTree::Ident(next),
+                    more @ ..,
+                ] = rest
+                {
+                    if !is_path_separator(a, b) {
+                        break;
+                    }
+                    segments.push(next.to_string());
+                    rest = more;
+                }
+                out.insert(segments.join("::"));
+            }
+            _ => {}
+        }
+    }
+}
+
+/// What the function, constant or static `item` of the Rust file `src` names in its code: every
+/// path, with its segments joined by `::`, and every method it calls, as `.name`, together with
+/// what each of the file's own functions, constants and statics it names by a one-segment path
+/// names in turn. `None` when the file defines no function, constant or static called `item`.
+///
+/// # Errors
+///
+/// [`ScanError`] if the file is not Rust.
+pub fn references(src: &str, item: &str) -> Result<Option<BTreeSet<String>>, ScanError> {
+    with_parsed(src, |_, file| {
+        let mut bodies = Bodies::default();
+        bodies.visit_file(file);
+        if !bodies.items.contains_key(item) {
+            return None;
+        }
+        let mut found = BTreeSet::new();
+        let mut followed = BTreeSet::from([item.to_owned()]);
+        let mut queue = vec![item.to_owned()];
+        while let Some(next) = queue.pop() {
+            let mut names = BTreeSet::new();
+            for tokens in bodies.items.get(&next).into_iter().flatten() {
+                names_in(tokens.clone(), &mut names);
+            }
+            for name in &names {
+                if bodies.items.contains_key(name) && followed.insert(name.clone()) {
+                    queue.push(name.clone());
+                }
+            }
+            found.extend(names);
+        }
+        Some(found)
+    })
+}
+
 #[cfg(test)]
 #[allow(
     clippy::arithmetic_side_effects,
@@ -732,5 +883,43 @@ mod tests {
         assert!(!defines_proof(verus, "budget", ProofTool::Kani).unwrap());
         let in_string = "pub const S: &str = \"#[kani::proof] fn rungs() {}\";\n";
         assert!(!defines_proof(in_string, "rungs", ProofTool::Kani).unwrap());
+    }
+
+    #[test]
+    fn references_follow_the_file_and_read_macros_but_not_strings() {
+        let src = "\
+use geom_num::{perturb, predicate};
+const TABLE: Case = Case { public: |p| predicate::orient2d(p) };
+fn helper(p: P) { sweep(&TABLE); }
+mod native {
+    fn uses_helper() { helper(1); assert_eq!(perturb::incircle(a, b).unwrap(), x.side(q)); }
+}
+proptest! {
+    fn in_a_macro(a in point()) { prop_assert!(predicate::insphere(a).is_ok()); }
+}
+fn only_names() { let s = \"perturb::orient3d(\"; /* predicate::insphere( */ }
+";
+        let reach = references(src, "uses_helper").unwrap().unwrap();
+        for name in [
+            "helper",
+            "TABLE",
+            "predicate::orient2d",
+            "perturb::incircle",
+            ".side",
+            ".unwrap",
+            "sweep",
+        ] {
+            assert!(reach.contains(name), "{name} in {reach:?}");
+        }
+        let names = references(src, "only_names").unwrap().unwrap();
+        assert!(
+            !names
+                .iter()
+                .any(|n| n.contains("orient3d") || n.contains("insphere"))
+        );
+        let in_macro = references(src, "in_a_macro").unwrap().unwrap();
+        assert!(in_macro.contains("predicate::insphere") && in_macro.contains("point"));
+        assert!(references(src, "missing").unwrap().is_none());
+        assert!(references("fn (", "a").is_err());
     }
 }

@@ -3,76 +3,116 @@
   "about": "The geometry kernel's quality ledger (kernel architecture 28.8). survivors: every mutant cargo-mutants makes that the kernel's tests do not catch and the kernel keeps, keyed by file, cargo-mutants' description and the trimmed text of the mutated line, with why; in the foundation set only equivalent mutants (no input through the crate's public interface can tell them from the original) may be kept. coverage_off: every coverage(off) mark in a kernel crate, with the Kani or Verus proof that the code it hides cannot run. awaiting_proof: every foundation line the tests do not run yet, by its file, its trimmed text and how many missed lines have it, with the piece that proves it unreachable or tests it (the coverage gate landed before those proofs: owner decision of 2026-10-27); the list can only shrink. geom-test's kernel-quality binary checks both in .github/workflows/kernel-quality.yml; geom_test::quality_ledger documents the format.",
   "survivors": [
     {
-      "file": "projects/engines/geometry/crates/geom-linalg/src/matrix.rs",
-      "mutant": "replace || with && in Matrix::row_pair",
-      "line_text": "if i == j || i >= self.rows || j >= self.rows {",
+      "file": "projects/engines/geometry/crates/geom-bvh/src/build.rs",
+      "mutant": "replace > with == in grow",
+      "line_text": "if f.depth > MAX_DEPTH {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A defect guard: no frame is deeper than 62. Splits from depth MEDIAN_DEPTH = 32 on are at the median, a range there holds fewer than 2^32 entries, and 30 halvings bring it to at most LEAF_MAX = 4, so leaves are at depth 62 at most and the guard's condition, depth > 64, is false for every input; depth == 64 and depth >= 64 are false for every input too."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bvh/src/build.rs",
+      "mutant": "replace > with >= in grow",
+      "line_text": "if f.depth > MAX_DEPTH {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A defect guard: no frame is deeper than 62. Splits from depth MEDIAN_DEPTH = 32 on are at the median, a range there holds fewer than 2^32 entries, and 30 halvings bring it to at most LEAF_MAX = 4, so leaves are at depth 62 at most and the guard's condition, depth > 64, is false for every input; depth == 64 and depth >= 64 are false for every input too."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bvh/src/build.rs",
+      "mutant": "replace || with && in split",
+      "line_text": "if left.n == 0 || rn == 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant also scores a plane with one side empty. Its cost is then area(all)·n (the empty side adds nothing, the other side holds every entry), and every plane with both sides non-empty costs strictly less: each side's box lies inside the whole and at least one is strictly smaller (two boxes equal to the whole would have the same centre, so the same bin). At least two bins are non-empty whenever the centres spread (the top centre falls in bin at least used/2 - 1 >= 1), so such a plane exists, and the strict comparison keeps it: the chosen plane is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bvh/src/build.rs",
+      "mutant": "replace || with && in split",
+      "line_text": "if kept == 0 || kept == count {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A defect guard: the plane comes from a sweep that skips planes with an empty side, and the partition puts each entry on the side of its bin, so both sides hold at least one entry and neither condition, alone or together, is ever true."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bvh/src/cells.rs",
+      "mutant": "replace | with ^ in spread21",
+      "line_text": "x = (x | (x << 32)) & 0x001f_0000_0000_ffff;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two operands have no set bit in common: x holds bits 0 to 20 only, and x << 32 bits 32 to 52. Where no bit is set in both, a | b and a ^ b are the same number, so the code is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bvh/src/cells.rs",
+      "mutant": "replace | with ^ in spread21",
+      "line_text": "x = (x | (x << 16)) & 0x001f_0000_ff00_00ff;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two operands have no set bit in common: after the last mask x holds bits 0 to 15 and 48 to 52, and x << 16 bits 16 to 31 (the rest leave the word). Where no bit is set in both, a | b and a ^ b are the same number, so the code is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bvh/src/cells.rs",
+      "mutant": "replace | with ^ in spread21",
+      "line_text": "x = (x | (x << 8)) & 0x100f_00f0_0f00_f00f;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two operands have no set bit in common: after the last mask x holds bits 0 to 7, 24 to 31 and 48 to 52, and x << 8 bits 8 to 15, 32 to 39 and 56 to 60. Where no bit is set in both, a | b and a ^ b are the same number, so the code is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bvh/src/cells.rs",
+      "mutant": "replace | with ^ in spread21",
+      "line_text": "x = (x | (x << 4)) & 0x10c3_0c30_c30c_30c3;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two operands have no set bit in common: after the last mask x holds bits 0 to 3, 12 to 15, 24 to 27, 36 to 39, 48 to 51 and 60, and x << 4 bits 4 to 7, 16 to 19, 28 to 31, 40 to 43 and 52 to 55. Where no bit is set in both, a | b and a ^ b are the same number, so the code is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bvh/src/cells.rs",
+      "mutant": "replace | with ^ in spread21",
+      "line_text": "(x | (x << 2)) & 0x1249_2492_4924_9249",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two operands have no set bit in common: after the last mask x holds bits 6k and 6k + 1 (and 60), and x << 2 bits 6k + 2 and 6k + 3. Where no bit is set in both, a | b and a ^ b are the same number, so the code is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bvh/src/cells.rs",
+      "mutant": "replace | with ^ in spread",
+      "line_text": "u128::from(spread21(v)) | (u128::from(spread21(v >> 21)) << 63)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two operands have no set bit in common: spread21 fills bits 0 to 62 at most, and the shift by 63 moves the other half to bits 63 and up. Where no bit is set in both, a | b and a ^ b are the same number, so the code is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bvh/src/cells.rs",
+      "mutant": "replace | with ^ in interleave",
+      "line_text": "spread(x) | (spread(y) << 1) | (spread(z) << 2)",
       "occurrences": 2,
       "kind": "equivalent",
-      "reason": "row_pair is pub(crate), and its three callers pass two different rows inside the matrix: Lu::factor rows k < i < n, canonical_null_space row and i with i != row, both below d, and swap_rows only after returning early when i == j. Every term of the guard is false for such a pair, so the guard is false with either operator in either place and no public function's result changes."
+      "reason": "The two operands have no set bit in common: spread sets only bits whose index is a multiple of three, so x's bits are 0 mod 3, y's 1 mod 3 and z's 2 mod 3. Where no bit is set in both, a | b and a ^ b are the same number, so the code is the same for every input."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-linalg/src/matrix.rs",
-      "mutant": "replace < with <= in Matrix::row_pair",
-      "line_text": "let (lo, hi) = if i < j { (i, j) } else { (j, i) };",
+      "file": "projects/engines/geometry/crates/geom-bvh/src/cells.rs",
+      "mutant": "replace | with ^ in CellIndex::build",
+      "line_text": "codes.push((u128::from(hi) << 64) | u128::from(lo));",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "row_pair is pub(crate), and its three callers pass two different rows inside the matrix: Lu::factor rows k < i < n, canonical_null_space row and i with i != row, both below d, and swap_rows only after returning early when i == j. i < j and i <= j differ only when i == j, which the guard above has already refused."
+      "reason": "The two operands have no set bit in common: lo is below 2^64 and hi << 64 has no bit below 64. Where no bit is set in both, a | b and a ^ b are the same number, so the code is the same for every input."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-linalg/src/matrix.rs",
-      "mutant": "replace < with <= in Matrix::row_pair",
-      "line_text": "Ok(if i < j {",
+      "file": "projects/engines/geometry/crates/geom-bvh/src/cells.rs",
+      "mutant": "replace < with <= in merge",
+      "line_text": "if b < a {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "row_pair is pub(crate), and its three callers pass two different rows inside the matrix: Lu::factor rows k < i < n, canonical_null_space row and i with i != row, both below d, and swap_rows only after returning early when i == j. i < j and i <= j differ only when i == j, which the guard at the top has already refused."
+      "reason": "The two differ only when b == a, and no two slots are equal: each holds its point's position in key order, and positions are distinct. So the merge takes the same slot first for every input."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-linalg/src/matrix.rs",
-      "mutant": "replace || with && in Matrix::swap_cols",
-      "line_text": "if i >= self.cols || j >= self.cols {",
+      "file": "projects/engines/geometry/crates/geom-bvh/src/cells.rs",
+      "mutant": "replace < with <= in CellIndex::search",
+      "line_text": "let g = if at < first {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "swap_cols is pub(crate), and its one caller, PivotedQr::factor, passes k and the pivot p, both below n (k < min(m, n), p found among columns k..n). Both terms of the guard are false then, so it is false with either operator and no public result changes."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-linalg/src/qr.rs",
-      "mutant": "replace > with >= in norm",
-      "line_text": ".fold(0.0f64, |m, v| if v.abs() > m { v.abs() } else { m });",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The fold keeps the largest magnitude. The mutant takes v.abs() also when it equals m, which is the same double (finite entries, never NaN, and an absolute value is never -0), so the scale, and every norm, is the same."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-linalg/src/qr.rs",
-      "mutant": "replace < with <= in PivotedQr::r_diagonal",
-      "line_text": "if k < self.tau.len() {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "tau has min(m, n) entries. The mutant also reads entry (k, k) for k = min(m, n), but the matrix has no such entry (k is at least its row or its column count), so get refuses it and .ok() gives None, as the original does."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-linalg/src/qr.rs",
-      "mutant": "replace > with >= in <impl MaxZero for f64>::max_zero",
-      "line_text": "if self > 0.0 { self } else { 0.0 }",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "max_zero's one caller passes 1.0 - r * r. The two versions differ only for self = 0 or -0, where the mutant returns self; a difference of doubles is -0 only when both are zeros of opposite sign, and 1.0 is not zero, so self is never -0 and +0 is returned either way."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-linalg/src/qr.rs",
-      "mutant": "replace < with <= in Cod::factor",
-      "line_text": "if rank < n {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The mutant also enters the block when rank == n. Each row's reflection is then on the one coordinate k: householder on a one-entry vector finds a zero tail and returns tau = 0 and beta = the entry, so R(k, k) is set to itself, z_tau keeps its zeros and no row is updated; apply_z returns early when r == n. The work was charged before."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-linalg/src/qr.rs",
-      "mutant": "replace > with >= in canonical_null_space",
-      "line_text": "if v > best {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The mutant pivots on the last of several rows of equal largest magnitude instead of the first. The reduced echelon basis over the variable order is unique (chapter 15.8, the reason it is the canonical one), so the result is the same basis either way; the elimination order changes only the rounding of its entries, which the function does not promise bit for bit."
+      "reason": "The two differ only when at == first, the cell's first coordinate. There the original's other branch gives (at - last).max(0) = 0, as last >= first, and the mutant's gives first - at = 0: the same gap, so the same cells are scanned for every input."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/eft.rs",
@@ -737,6 +777,382 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The mutant also tests the sign when M equals L, a resize to the same width. Then r has the very limbs of self, so its sign is self's and the test is false: resize returns the same Some(r) for every value."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/brent.rs",
+      "mutant": "replace > with >= in zero",
+      "line_text": "if fb != 0.0 && (fa > 0.0) == (fb > 0.0) {",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "The two comparisons differ from their mutants only at zero. fa is not zero here: zero returned already when f(a) is zero. fb is not zero wherever its comparison is evaluated: the left operand of && is fb != 0.0. So both forms give the same sign test for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/brent.rs",
+      "mutant": "replace > with >= in zero",
+      "line_text": "if (fb > 0.0) == (fc > 0.0) && fb != 0.0 {",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "At fb = 0 the whole test is false either way, by its right operand. fc is never zero: it is set only from f(a) at the start (not zero, or zero returned already), from fa (the previous fb, and a zero fb ends the search before it can become fa), or from fb in the swap, which happens only when |fc| < |fb|, so that fb is not zero. Where neither is zero, x > 0 and x >= 0 agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/brent.rs",
+      "mutant": "replace > with >= in zero",
+      "line_text": "b += if d.abs() > tol1 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The branches differ only when |d| = tol1, and then they add the same double. d is either the bisection step xm, or an accepted interpolation p/q with p >= 0, accepted only when 2p < 3*xm*q - |tol1*q|, which needs xm*q > 0: either way d has the sign of xm (or is a zero of that sign, p/q with p = +0). So |d| = tol1 makes d equal to with_sign(tol1, xm), bit for bit, the zero cases included."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/brent.rs",
+      "mutant": "replace > with >= in zero",
+      "line_text": "if e.abs() >= tol1 && fa.abs() > fb.abs() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A tie |fa| = |fb| makes both refuse the interpolation and bisect. With a != c (inverse quadratic) a and b lie on the same side of c, so fa = fb, s = 1, q = 0 and 2p < 0 is false. With a == c (secant) a tie can come only from a reset or the first step, as a swap leaves |fb| < |fa|; there e = b - a and 2xm = a - b, rounded alike, so fa = fb gives q = 0 and fa = -fb gives p = |e| = |0.5*e*q|, and p < |0.5*e*q| is false."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/brent.rs",
+      "mutant": "replace > with >= in minimum",
+      "line_text": "if q > 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when q is zero, of either sign, where the mutant negates p. Then 0.5*q*previous is zero, so |p| < |0.5*q*previous| is false whatever p's sign, the vertex is refused either way, and p is used nowhere else."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quadrature.rs",
+      "mutant": "replace > with >= in integrate",
+      "line_text": "let goal = if tol > rel * value.get().abs() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The goal is the larger of tol and rel*|value|. The mutant picks tol also when the two are equal, which is the same double, so the goal, and every result, is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/matrix.rs",
+      "mutant": "replace || with && in Matrix::row_pair",
+      "line_text": "if i == j || i >= self.rows || j >= self.rows {",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "row_pair is pub(crate), and its three callers pass two different rows inside the matrix: Lu::factor rows k < i < n, canonical_null_space row and i with i != row, both below d, and swap_rows only after returning early when i == j. Every term of the guard is false for such a pair, so the guard is false with either operator in either place and no public function's result changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/matrix.rs",
+      "mutant": "replace < with <= in Matrix::row_pair",
+      "line_text": "let (lo, hi) = if i < j { (i, j) } else { (j, i) };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "row_pair is pub(crate), and its three callers pass two different rows inside the matrix: Lu::factor rows k < i < n, canonical_null_space row and i with i != row, both below d, and swap_rows only after returning early when i == j. i < j and i <= j differ only when i == j, which the guard above has already refused."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/matrix.rs",
+      "mutant": "replace < with <= in Matrix::row_pair",
+      "line_text": "Ok(if i < j {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "row_pair is pub(crate), and its three callers pass two different rows inside the matrix: Lu::factor rows k < i < n, canonical_null_space row and i with i != row, both below d, and swap_rows only after returning early when i == j. i < j and i <= j differ only when i == j, which the guard at the top has already refused."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/matrix.rs",
+      "mutant": "replace || with && in Matrix::swap_cols",
+      "line_text": "if i >= self.cols || j >= self.cols {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "swap_cols is pub(crate), and its one caller, PivotedQr::factor, passes k and the pivot p, both below n (k < min(m, n), p found among columns k..n). Both terms of the guard are false then, so it is false with either operator and no public result changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/qr.rs",
+      "mutant": "replace > with >= in norm",
+      "line_text": ".fold(0.0f64, |m, v| if v.abs() > m { v.abs() } else { m });",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The fold keeps the largest magnitude. The mutant takes v.abs() also when it equals m, which is the same double (finite entries, never NaN, and an absolute value is never -0), so the scale, and every norm, is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/qr.rs",
+      "mutant": "replace < with <= in PivotedQr::r_diagonal",
+      "line_text": "if k < self.tau.len() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "tau has min(m, n) entries. The mutant also reads entry (k, k) for k = min(m, n), but the matrix has no such entry (k is at least its row or its column count), so get refuses it and .ok() gives None, as the original does."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/qr.rs",
+      "mutant": "replace > with >= in <impl MaxZero for f64>::max_zero",
+      "line_text": "if self > 0.0 { self } else { 0.0 }",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "max_zero's one caller passes 1.0 - r * r. The two versions differ only for self = 0 or -0, where the mutant returns self; a difference of doubles is -0 only when both are zeros of opposite sign, and 1.0 is not zero, so self is never -0 and +0 is returned either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/qr.rs",
+      "mutant": "replace < with <= in Cod::factor",
+      "line_text": "if rank < n {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant also enters the block when rank == n. Each row's reflection is then on the one coordinate k: householder on a one-entry vector finds a zero tail and returns tau = 0 and beta = the entry, so R(k, k) is set to itself, z_tau keeps its zeros and no row is updated; apply_z returns early when r == n. The work was charged before."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/qr.rs",
+      "mutant": "replace > with >= in canonical_null_space",
+      "line_text": "if v > best {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The mutant pivots on the last of several rows of equal largest magnitude instead of the first. The reduced echelon basis over the variable order is unique (chapter 15.8, the reason it is the canonical one), so the result is the same basis either way; the elimination order changes only the rounding of its entries, which the function does not promise bit for bit."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/cols.rs",
+      "mutant": "replace sub -> Result<usize, LinalgError> with Ok(1)",
+      "line_text": "a.checked_sub(b).ok_or(LinalgError::Defect)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "With sub always 1, symmetric_qr's deflation loop sets hi = sub(hi, 1) = 1 for ever once b(1) is negligible (it is then set to zero and stays so), so while hi > 0 never ends; cargo-mutants' timeout is how the tests catch it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/cols.rs",
+      "mutant": "replace < with == in Cols::identity",
+      "line_text": "let diag = if len < count { len } else { count };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Cols::identity is pub(crate), and both callers ask for a square identity: Svd::jacobi Cols::identity(n, n) and tridiagonalize Cols::identity(n, n). With len == count every form of the comparison gives the same diag, so no public result changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/cols.rs",
+      "mutant": "replace < with <= in Cols::identity",
+      "line_text": "let diag = if len < count { len } else { count };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Cols::identity is pub(crate), and both callers ask for a square identity: Svd::jacobi Cols::identity(n, n) and tridiagonalize Cols::identity(n, n). With len == count both branches give the same diag, so no public result changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/cols.rs",
+      "mutant": "replace || with && in Cols::pair_mut",
+      "line_text": "if p >= q || q >= self.count {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "pair_mut is pub(crate), and every caller passes p < q < count: jacobi_sweeps pairs p < q < n, and the eigensolver's and Golub-Kahan's rotations columns k < k + 1 <= hi < n (zero_row k < j, zero_column j < hi). Both terms of the guard are false, so it is false with either operator and no public result changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/eigen.rs",
+      "mutant": "replace > with == in symmetric_qr",
+      "line_text": "if steps > max_steps {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The step cap is a safeguard: the implicit QR iteration with Wilkinson's shift converges globally on a symmetric tridiagonal matrix (J. H. Wilkinson, Linear Algebra and its Applications 1 (1968), 409-420), each eigenvalue in a few steps, and no input in the tests comes near the cap. The mutant gives up at the cap's step instead of the one after it: it differs only on an input that needs exactly that many steps, where both report NoConvergence, one step apart; the crate promises only that the iteration stops by the cap."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/eigen.rs",
+      "mutant": "replace > with >= in symmetric_qr",
+      "line_text": "if steps > max_steps {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The step cap is a safeguard: the implicit QR iteration with Wilkinson's shift converges globally on a symmetric tridiagonal matrix (J. H. Wilkinson, Linear Algebra and its Applications 1 (1968), 409-420), each eigenvalue in a few steps, and no input in the tests comes near the cap. The mutant gives up at the cap's step instead of the one after it: it differs only on an input that needs exactly that many steps, where both report NoConvergence, one step apart; the crate promises only that the iteration stops by the cap."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/eigen.rs",
+      "mutant": "replace > with >= in qr_step",
+      "line_text": ".fold(0.0, |m, &x| if x.abs() > m { x.abs() } else { m });",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The fold keeps the largest magnitude. The mutant takes x.abs() also when it equals m, the same double (an absolute value is never -0, and every entry is finite), so the scale, and every result, is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/svd.rs",
+      "mutant": "replace > with >= in jacobi_sweeps",
+      "line_text": "let t = if zeta.abs() > 67_108_864.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The branches differ only at |zeta| = 2^26 exactly, where both give the same double: 1 / (2 zeta) = +-2^-27 exactly, and 1 + zeta^2 = 2^52 + 1 is exact, its correctly rounded square root is 2^26 (the exact root exceeds it by less than half a unit in the last place), so sign / (|zeta| + 2^26) = +-1 / 2^27 too."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/svd.rs",
+      "mutant": "replace > with >= in bidiagonal_norm",
+      "line_text": ".fold(0.0, |m, &x| if x.abs() > m { x.abs() } else { m })",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The fold keeps the largest magnitude. The mutant takes x.abs() also when it equals m, the same double (an absolute value is never -0, and every entry is finite), so the scale, and every result, is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/svd.rs",
+      "mutant": "replace > with == in bidiagonal_qr",
+      "line_text": "if steps > max_steps {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The step cap is a safeguard: Golub-Kahan's implicit QR iteration is that algorithm on the tridiagonal B^T B (Golub and Van Loan 8.6.2), converging globally, each singular value in a few steps, and no input in the tests comes near the cap. The mutant gives up at the cap's step instead of the one after it: it differs only on an input that needs exactly that many steps, where both report NoConvergence, one step apart; the crate promises only that the iteration stops by the cap."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/svd.rs",
+      "mutant": "replace > with >= in bidiagonal_qr",
+      "line_text": "if steps > max_steps {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The step cap is a safeguard: Golub-Kahan's implicit QR iteration is that algorithm on the tridiagonal B^T B (Golub and Van Loan 8.6.2), converging globally, each singular value in a few steps, and no input in the tests comes near the cap. The mutant gives up at the cap's step instead of the one after it: it differs only on an input that needs exactly that many steps, where both report NoConvergence, one step apart; the crate promises only that the iteration stops by the cap."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace > with >= in certify",
+      "line_text": "if s > 0.5 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "certify's S above 1/2 means an angle above 2·asin(1/2) = π/3 > 1, and its series value is then at least 2S >= 1, above BOUND_MAX = 1/2 and so above every bound a caller compares it with: refusing at S = 1/2, or not refusing above it, gives the same answer to every caller."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace > with == in certify",
+      "line_text": "if s > 0.5 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "certify's S above 1/2 means an angle above 2·asin(1/2) = π/3 > 1, and its series value is then at least 2S >= 1, above BOUND_MAX = 1/2 and so above every bound a caller compares it with: refusing at S = 1/2, or not refusing above it, gives the same answer to every caller."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace < with <= in canonical",
+      "line_text": "let g = if lead < 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The lead is the first nonzero component, or 1 when there is none, so it is never 0: lead < 0 and lead <= 0 agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace < with <= in RationalRotation::inverse",
+      "line_text": "q: if lead < 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The lead is the first nonzero component, or 1 when there is none, so it is never 0: lead < 0 and lead <= 0 agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace < with <= in simplest",
+      "line_text": "if hi < 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "simplest returns early when lo <= 0 <= hi, and lo <= hi, so hi < 0 and hi <= 0 agree on what reaches this test (hi = 0 would need lo <= 0)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace || with && in simplest_positive",
+      "line_text": "if ln > un || ln <= 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "simplest_positive is called with 0 < lo <= hi < 1 and hi − lo > 2^−35 (the 2D search's tangents), so ln = ceil(lo·2^100) >= 1 and un = floor(hi·2^100) >= ln: the refusal is never taken, by either test."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace > with == in simplest_positive",
+      "line_text": "if ln > un || ln <= 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "simplest_positive is called with 0 < lo <= hi < 1 and hi − lo > 2^−35 (the 2D search's tangents), so ln = ceil(lo·2^100) >= 1 and un = floor(hi·2^100) >= ln: the refusal is never taken, by either test."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace > with >= in simplest_positive",
+      "line_text": "if ln > un || ln <= 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "simplest_positive is called with 0 < lo <= hi < 1 and hi − lo > 2^−35 (the 2D search's tangents), so ln = ceil(lo·2^100) >= 1 and un = floor(hi·2^100) >= ln: the refusal is never taken, by either test."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace > with >= in RationalRotation::plane_within",
+      "line_text": "let (k, ex, ey) = if x > 0.0 && x >= y.abs() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "scaled refuses the zero direction, so x >= |y| already makes x > 0 (x = 0 would make y = 0 too); likewise for y and −x: testing the sign with >= or <= instead changes nothing."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace > with >= in RationalRotation::plane_within",
+      "line_text": "} else if y > 0.0 && y >= x.abs() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "scaled refuses the zero direction, so x >= |y| already makes x > 0 (x = 0 would make y = 0 too); likewise for y and −x: testing the sign with >= or <= instead changes nothing."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace < with <= in RationalRotation::plane_within",
+      "line_text": "} else if x < 0.0 && -x >= y.abs() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "scaled refuses the zero direction, so x >= |y| already makes x > 0 (x = 0 would make y = 0 too); likewise for y and −x: testing the sign with >= or <= instead changes nothing."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace || with && in RationalRotation::plane_within",
+      "line_text": "if m >= DENOMINATOR_LIMIT || n.unsigned_abs() > m.unsigned_abs() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The simplest fraction lies within the tangents of half-angles in [−π/8, π/8] (the direction is turned into the first octant's pair), so |n| < |m| strictly and m < 2^35 (the module's search bound): the refusal is never taken, whichever operator it uses."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace > with == in RationalRotation::plane_within",
+      "line_text": "if m >= DENOMINATOR_LIMIT || n.unsigned_abs() > m.unsigned_abs() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The simplest fraction lies within the tangents of half-angles in [−π/8, π/8] (the direction is turned into the first octant's pair), so |n| < |m| strictly and m < 2^35 (the module's search bound): the refusal is never taken, whichever operator it uses."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace > with >= in RationalRotation::plane_within",
+      "line_text": "if m >= DENOMINATOR_LIMIT || n.unsigned_abs() > m.unsigned_abs() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The simplest fraction lies within the tangents of half-angles in [−π/8, π/8] (the direction is turned into the first octant's pair), so |n| < |m| strictly and m < 2^35 (the module's search bound): the refusal is never taken, whichever operator it uses."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace > with == in RationalRotation::plane_within",
+      "line_text": "if angle > bound {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The search aims the half-angle at AIM·bound (AIM = 1/2 − 2^−11), so the angle is at most (1 − 2^−10)·bound, and the certificate exceeds it by under 2^−12 of it: the certified angle is below the bound, so the refusal is never taken, whichever operator it uses."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace > with >= in RationalRotation::plane_within",
+      "line_text": "if angle > bound {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The search aims the half-angle at AIM·bound (AIM = 1/2 − 2^−11), so the angle is at most (1 − 2^−10)·bound, and the certificate exceeds it by under 2^−12 of it: the certified angle is below the bound, so the refusal is never taken, whichever operator it uses."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace > with >= in RationalRotation::to_rational",
+      "line_text": "if n > RATIONAL_NORM2 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "|q|² = 2^40 exactly needs every component even (a sum of four squares divisible by 8 has no odd term), and a canonical quaternion is in lowest terms, so its |q|² is never 2^40: > and >= agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace > with >= in RationalRotation::from_rational",
+      "line_text": "if best.is_none_or(|(_, b)| diag > b) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Each row is a multiple of the same quaternion, so a tie between two diagonals picks a row that canonical reduces to the same rotation as the other: which one wins a tie changes nothing."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace < with <= in Pythagorean::reduced",
+      "line_text": "let g = if c < 0 { g.checked_neg()? } else { g };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "For c = 0 the reduced c is 0 whatever g's sign, and the test below refuses it: the sign chosen at c = 0 never reaches a result."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/typed.rs",
+      "mutant": "delete match arm (Certified(_), _) |(_, Certified(_)) in TypedTransform::compose",
+      "line_text": "(Certified(_), _) | (_, Certified(_)) => certified(),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A certified transform has no rational or rotation form, so without this arm the pair reaches the later arms, which both fall to the certified composition: the same value."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/typed.rs",
+      "mutant": "delete match arm (Exact(a), Exact(b)) in TypedTransform::compose",
+      "line_text": "(Exact(a), Exact(b)) => Ok(Exact(a.compose(b)?)),",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Without this arm two exact transforms reach the last arm, which composes them as rational transforms and simplifies the product back to the same exact transform; past the bound both refuse with OutOfRange (the rational form's reported value may differ), since a translation is no rotation to fall back on."
     }
   ],
   "coverage_off": [],
