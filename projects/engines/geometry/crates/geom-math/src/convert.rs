@@ -32,7 +32,7 @@
 //!   it is irrational (then no tie can occur, and a coordinate is exact only when it is zero).
 //! - *Out of range.* A coordinate beyond ±(2^40 − 1) steps is refused with
 //!   [`NumError::OutOfRange`] carrying the exact rounded coordinate, found by bisection with exact
-//!   signs over the estimate's proven bracket, and saturated at the ends of `i128` as the numbers
+//!   signs over the whole of `i128`, and saturated at the ends of `i128` as the numbers
 //!   layer documents (`i128::MAX` for 2^127 − 1 or more). An input whose image is beyond 2^200
 //!   steps is outside every exact budget; then some coordinate is beyond 2^135 steps, and the error
 //!   reports the larger horizontal one (or the height) saturated, with the sign of the exact
@@ -129,7 +129,7 @@ use crate::decimal::Decimal;
 use crate::error::budget;
 use crate::exact::{
     Big, Square, const_pow2, divrem_u128, dyadic, leading_106, pow2, pow2_big, pow5_big,
-    quotient_to_f64, rational_to_f64, scale_b, sign_minus_sqrt,
+    quotient_to_f64, rational_to_f64, sign_minus_sqrt,
 };
 use crate::frame::{FrameRecord, steps_per_metre};
 use crate::rounded::Rounded;
@@ -149,11 +149,6 @@ const FILTER: f64 = const_pow2!(-40);
 /// An input whose image is beyond 2^200 steps is outside the exact budgets (see the module
 /// documentation).
 const INPUT_BITS: u32 = 200;
-
-/// The relative half-width of the bracket around an out-of-range estimate, as a power of two:
-/// 2^−50, more than the estimate's proven 2^−101 plus its trailing part and the rounding of the
-/// `f64` subtractions that form the bracket's ends (half an ulp, 2^−53 relative, each).
-const FAR_SHIFT: i32 = -50;
 
 /// The integer below `i128::MAX`: X > MAX − 1/2 = (MAX − 1) + 1/2 saturates.
 const BELOW_MAX: i128 = i128::MAX - 1;
@@ -511,7 +506,7 @@ impl Axis {
     fn round(&self) -> Result<Rounded<i128>, NumError> {
         let d = self.estimate()?;
         if d.hi() > RANGE_FILTER || d.hi() < -RANGE_FILTER {
-            return self.far(d);
+            return self.far();
         }
         // |d| ≤ 2^41, inside round_shifted's range, so it answers.
         let r = budget(d.round_shifted(0))?;
@@ -520,39 +515,19 @@ impl Axis {
         })
     }
 
-    /// The exact rounding of an X whose estimate `d` is beyond 2^41: `i128::MAX` if X > MAX − 1/2
-    /// and `i128::MIN` if X ≤ MIN + 1/2 (the numbers layer's saturated values; MAX − 1/2 itself
-    /// rounds to the even MAX − 1), otherwise by bisection for ⌊X⌋ over the integers of the
-    /// estimate's bracket, d ± (2^−50·|d.hi| + |d.lo| + 2), which holds X because the estimate is
-    /// within 2^−101·|X| + 2^−900 of it and the bracket's ends are rounded by half an ulp at most;
-    /// the ends are checked exactly, and a bracket that failed would be a defect, reported. At
-    /// most 128 halvings close a bracket within `i128`.
-    fn far(&self, d: DD) -> Result<Rounded<i128>, NumError> {
+    /// The exact rounding of an X whose estimate is beyond 2^41: `i128::MAX` if X > MAX − 1/2 and
+    /// `i128::MIN` if X ≤ MIN + 1/2 (the numbers layer's saturated values; MAX − 1/2 itself rounds
+    /// to the even MAX − 1), otherwise by bisection for ⌊X⌋ over the whole of `i128`, which then
+    /// holds X strictly, each step one exact sign: at most 128 halvings. This path serves only
+    /// out-of-range coordinates, so it spends signs rather than trust the estimate's bracket.
+    fn far(&self) -> Result<Rounded<i128>, NumError> {
         if self.sign_at(BELOW_MAX, true)? == Sign::Positive {
             return Ok(Rounded::new(i128::MAX, false));
         }
         if self.sign_at(i128::MIN, true)? != Sign::Positive {
             return Ok(Rounded::new(i128::MIN, false));
         }
-        // |d.hi − X| ≤ |d.lo| + |d − X| ≤ 2^−53·|d.hi| + 2^−101·|X| + 2^−1070 < 2^−52·|d.hi|, and the
-        // f64 subtraction and addition below round by at most 2^−53·|d.hi|: a half-width of
-        // 2^−50·|d.hi| holds X with room to spare.
-        let width = budget(scale_b(math::abs(d.hi())?.get(), FAR_SHIFT))?;
-        #[allow(
-            clippy::cast_possible_truncation,
-            reason = "a saturating conversion on purpose: X lies strictly inside i128 here, so a \
-                      bracket end beyond it is replaced by the end of i128"
-        )]
-        let (mut lo, mut hi) = (
-            math::floor(d.hi() - width)?.get() as i128,
-            (math::ceil(d.hi() + width)?.get() as i128).saturating_add(1),
-        );
-        if self.sign_at(lo, false)? == Sign::Negative {
-            return Err(NumError::BudgetExceeded);
-        }
-        if self.sign_at(hi, false)? != Sign::Negative {
-            return Err(NumError::BudgetExceeded);
-        }
+        let (mut lo, mut hi) = (i128::MIN, i128::MAX);
         // X ≥ lo and X < hi throughout; the gap is below 2^128 and halves every step.
         for _ in 0..130 {
             let gap = hi.abs_diff(lo);

@@ -499,9 +499,9 @@ pub(crate) fn rational_to_f64(num: i128, den: u128) -> Option<Rounded<f64>> {
 /// 2. q is formed by long division: from n·2^s (or from n, against den·2^−s when s < 0), den·2^i
 ///    is subtracted for i from 55 down to 0 whenever it fits, setting bit i of q. What remains is
 ///    the sticky part.
-/// 3. q is rounded to 53 bits, to nearest, ties to even, carrying into the exponent when the
-///    significand overflows to 2^53. The result m·2^(k − s), for the k bits dropped, is a normal
-///    double whenever the quotient is in range, so [`scale_b`] makes it exactly.
+/// 3. q is rounded to 53 bits, to nearest, ties to even; a carry may make the significand 2^53,
+///    still a double exactly. The result m·2^(k − s), for the k bits dropped, is a normal double
+///    whenever the quotient is in range, so [`scale_b`] makes it exactly.
 pub(crate) fn quotient_to_f64<const L: usize>(
     num: &Wide<L>,
     den: &Wide<L>,
@@ -541,17 +541,14 @@ pub(crate) fn quotient_to_f64<const L: usize>(
     let round = (q >> below) & 1 == 1;
     let sticky = q & !(u64::MAX << below) != 0 || !rest.is_zero();
     let mut m = q >> drop;
-    let mut k = i32::try_from(drop).ok()?;
+    let k = i32::try_from(drop).ok()?;
     if round && (sticky || m & 1 == 1) {
+        // A carry to 2^53 needs no renormalising: 2^53 is a double exactly, as m·2^(k − s) is.
         m = m.checked_add(1)?;
-        if m == 1u64 << 53 {
-            m >>= 1;
-            k = k.checked_add(1)?;
-        }
     }
     #[allow(
         clippy::cast_precision_loss,
-        reason = "m < 2^53, so the conversion to f64 is exact"
+        reason = "m ≤ 2^53, so the conversion to f64 is exact"
     )]
     let mf = m as f64;
     let magnitude = scale_b(mf, k.checked_sub(s)?)?;

@@ -316,12 +316,11 @@ fn unit(rng: &mut Rng) -> LinearUnit {
         1 => LinearUnit::INTERNATIONAL_FOOT,
         2 => LinearUnit::US_SURVEY_FOOT,
         3 => clarkes_foot(),
-        _ => loop {
-            let (n, d) = (1 + rng.below(1 << 40), 1 + rng.below(1 << 40));
-            if let Ok(u) = LinearUnit::new(n, d) {
-                break u;
-            }
-        },
+        // Ratios of 40-bit parts are within range about half the time: a hundred refusals in a
+        // row would mean the constructor refuses what it should accept.
+        _ => (0..100)
+            .find_map(|_| LinearUnit::new(1 + rng.below(1 << 40), 1 + rng.below(1 << 40)).ok())
+            .expect("a unit of 40-bit parts within 2^-32 to 2^32 m"),
     }
 }
 
@@ -1362,6 +1361,8 @@ fn rational_map_values_round_at_every_edge_of_a_double() {
         (two(54) - 1, two(54), 1, 0, Some((1.0, false))),
         (two(53) + 1, two(53), 1, 0, Some((1.0, false))),
         (two(53) + 3, two(53), 1, 0, Some((1.0 + pow2f(-51), false))),
+        // Exact, with set bits below the round bit and nothing left over: up, not to even.
+        (two(55) + 5, two(55), 1, 0, Some((1.0 + pow2f(-52), false))),
         (
             two(60) + two(7) + 1,
             two(60),
