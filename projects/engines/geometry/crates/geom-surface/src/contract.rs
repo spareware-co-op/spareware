@@ -26,6 +26,7 @@
 )]
 
 use geom_curve::affine::Entries;
+use geom_curve::tight;
 use geom_curve::{ContractError, CurveError, DerivativeBound, Law, ParamMap};
 use geom_math::TypedTransform;
 use geom_num::interval::Interval;
@@ -228,9 +229,8 @@ fn nurbs_at(
     }
     let ((a, b), (c, d)) = ParamSurface::domain(&form.surface);
     let cut = |x: Interval, (lo, hi): (f64, f64)| -> (f64, f64) {
-        let l = if x.lo() < lo { lo } else { x.lo() };
-        let h = if x.hi() > hi { hi } else { x.hi() };
-        (l, if h < l { l } else { h })
+        let l = tight::larger(x.lo(), lo);
+        (l, tight::larger(tight::smaller(x.hi(), hi), l))
     };
     let (iu, iv) = (form.u.enclose(u)?, form.v.enclose(v)?);
     let bx = ParamSurface::bound(&form.surface, (cut(iu, (a, b)), cut(iv, (c, d))), meter)?;

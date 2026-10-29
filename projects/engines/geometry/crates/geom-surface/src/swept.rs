@@ -46,11 +46,12 @@ use geom_curve::moved::Motion;
 use geom_curve::tight::{self, point};
 use geom_curve::{CurveError, CurveKind, DerivativeBound, Frame, ParamCurve, ParamMap, Trimmed};
 use geom_math::TypedTransform;
-use geom_num::eft::two_sum;
+
 use geom_num::interval::Interval;
 use geom_nurbs::{Basis, Bounds, Changed, Curve, Direction, Limit, Surface};
 use geom_run::WorkMeter;
 
+use crate::analytic::{check_finite, check_turn, cuts};
 use crate::param::{ParamBox, ParamSurface, SurfaceForm, SurfaceKind};
 
 /// π enclosed.
@@ -156,10 +157,7 @@ impl Placement {
                 dl = tight::add(dl, tight::square(d)?)?;
             }
         }
-        if dl.lo() < 0.0 {
-            dl = Interval::new(0.0, dl.hi())?;
-        }
-        let norm = tight::sqrt(dl)?;
+        let norm = tight::sqrt(Interval::new(tight::larger(dl.lo(), 0.0), dl.hi())?)?;
         let dev = tight::add(
             point(tight::distance_to(&c, &ce)?)?,
             tight::mul(norm, point(reach)?)?,
@@ -284,16 +282,15 @@ fn check_box(((u0, u1), (v0, v1)): ParamBox, ((a, b), (c, d)): ParamBox) -> Resu
 impl Swept {
     fn check(&self) -> Result<(), CurveError> {
         let ((u0, u1), (v0, v1)) = self.domain;
-        if ![u0, u1, v0, v1].iter().all(|x| x.is_finite()) || u0 >= u1 || v0 >= v1 {
-            return Err(CurveError::SpanOutside);
-        }
+        check_finite((u0, u1))?;
+        check_finite((v0, v1))?;
         match &self.shape {
             Shape::Revolution { profile, axis, .. } => {
                 if !axis.iter().all(|x| x.is_finite()) {
                     return Err(CurveError::NotFinite);
                 }
-                let (s, e) = two_sum(u1, -u0);
-                if !(s < 2.0 || (s == 2.0 && e <= 0.0)) || profile.interval() != (v0, v1) {
+                check_turn((u0, u1))?;
+                if profile.interval() != (v0, v1) {
                     return Err(CurveError::SpanOutside);
                 }
             }
@@ -309,7 +306,7 @@ impl Swept {
                 }
             }
             Shape::Ruled { first, second, .. } => {
-                if first.interval() != (u0, u1) || second.interval() != (u0, u1) {
+                if (first.interval(), second.interval()) != ((u0, u1), (u0, u1)) {
                     return Err(CurveError::SpanOutside);
                 }
             }
@@ -407,43 +404,9 @@ impl Swept {
 
     /// The pieces of a box: eighths of a turn in a revolution's u, else whole.
     fn pieces(&self, region: ParamBox) -> Result<Vec<ParamBox>, CurveError> {
-        let ((u0, u1), v) = region;
-        let n: u32 = if matches!(self.shape, Shape::Revolution { .. }) {
-            let x = geom_num::math::ceil((u1 - u0) * 4.0)?.get();
-            if x >= 8.0 {
-                8
-            } else if x >= 1.0 {
-                #[allow(
-                    clippy::cast_possible_truncation,
-                    clippy::cast_sign_loss,
-                    reason = "x is a whole number in [1, 8)"
-                )]
-                let k = x as u32;
-                k
-            } else {
-                1
-            }
-        } else {
-            1
-        };
-        let mut out = Vec::with_capacity(8);
-        let mut start = u0;
-        for i in 1..=n {
-            let mut end = if i == n {
-                u1
-            } else {
-                u0 + (u1 - u0) * (f64::from(i) / f64::from(n))
-            };
-            if end > u1 {
-                end = u1;
-            }
-            if end < start {
-                end = start;
-            }
-            out.push(((start, end), v));
-            start = end;
-        }
-        Ok(out)
+        let (u, v) = region;
+        let revolution = matches!(self.shape, Shape::Revolution { .. });
+        Ok(cuts(u, revolution)?.into_iter().map(|s| (s, v)).collect())
     }
 
     fn hull(
@@ -461,12 +424,8 @@ impl Swept {
             meter.charge(1)?;
             let e = f(self, Interval::new(u0, u1)?, Interval::new(v0, v1)?, meter)?;
             for ((l, h), x) in out.lo.iter_mut().zip(out.hi.iter_mut()).zip(&e) {
-                if x.lo() < *l {
-                    *l = x.lo();
-                }
-                if x.hi() > *h {
-                    *h = x.hi();
-                }
+                *l = tight::smaller(*l, x.lo());
+                *h = tight::larger(*h, x.hi());
             }
         }
         Ok(out)
@@ -486,9 +445,7 @@ impl Swept {
                 meter,
             )?;
             let m = tight::norm(&x)?.hi();
-            if m > r {
-                r = m;
-            }
+            r = tight::larger(r, m);
         }
         Ok(r)
     }
@@ -675,7 +632,7 @@ impl Swept {
                         second: s,
                         sigma: *sigma,
                     },
-                    if d1 > d2 { d1 } else { d2 },
+                    tight::larger(d1, d2),
                 )
             }
             (
@@ -694,12 +651,9 @@ impl Swept {
                 0.0,
             ),
         };
-        // A profile's reversal moves the surface by at most ‖L‖ times its own deviation.
-        let dev = if dev == 0.0 {
-            0.0
-        } else {
-            tight::mul(point(dev)?, point(self.place.norm()?)?)?.hi()
-        };
+        // A profile's reversal moves the surface by at most ‖L‖ times its own deviation (0 for an
+        // exact one).
+        let dev = tight::mul(point(dev)?, point(self.place.norm()?)?)?.hi();
         Ok((self.with_shape(shape, domain), dev))
     }
 }
@@ -753,29 +707,22 @@ fn net(
         let pd = p.map(tight::middle);
         let wd = tight::middle(w);
         let d = tight::distance_to(&pd, p)?;
-        if d > moved {
-            moved = d;
-        }
+        moved = tight::larger(moved, d);
         let r = tight::magnitude(tight::sub(tight::div(point(wd)?, w)?, one)?);
-        if r > eps {
-            eps = r;
-        }
+        eps = tight::larger(eps, r);
         let rr = tight::distance(p, &origin)?;
-        if rr > reach {
-            reach = rr;
-        }
+        reach = tight::larger(reach, rr);
         homs.push(pd.map(|x| x * wd));
         ws.push(wd);
     }
     let mut dev = point(moved)?;
-    if eps > 0.0 {
-        if eps.is_nan() || eps >= 0.5 {
-            return Err(CurveError::NotFinite);
-        }
-        let e = point(eps)?;
-        let f = tight::div(tight::mul(point(2.0)?, e)?, tight::sub(one, e)?)?;
-        dev = tight::add(dev, tight::mul(f, point(reach)?)?)?;
+    // The weights' term is exactly 0 when every stored weight is exact.
+    if eps.is_nan() || eps >= 0.5 {
+        return Err(CurveError::NotFinite);
     }
+    let e = point(eps)?;
+    let f = tight::div(tight::mul(point(2.0)?, e)?, tight::sub(one, e)?)?;
+    dev = tight::add(dev, tight::mul(f, point(reach)?)?)?;
     Ok((Surface::from_homogeneous(u, v, homs, Some(ws))?, dev.hi()))
 }
 
@@ -840,9 +787,7 @@ impl Swept {
                         let bv = sub3(&w, &av)?;
                         let cvv = cross3(&n, &w)?;
                         let r = tight::norm(&bv)?.hi();
-                        if r > radial {
-                            radial = r;
-                        }
+                        radial = tight::larger(radial, r);
                         let x = add3(&add3(&av, &scale3(ca, &bv)?)?, &scale3(sa, &cvv)?)?;
                         points.push(self.place.apply(&x, true)?);
                         weights.push(tight::mul(point(cw)?, point(pw)?)?);
@@ -939,11 +884,7 @@ impl Swept {
                 let (surface, round) = net(a.basis.clone(), line, &points, &weights)?;
                 // Each profile's deviation reaches the surface weighted by at most
                 // max(|1 − σv|, |σv|) ≤ 1 + max|v|.
-                let vmax = if v0.abs() > v1.abs() {
-                    v0.abs()
-                } else {
-                    v1.abs()
-                };
+                let vmax = tight::larger(v0.abs(), v1.abs());
                 let reach = tight::add(point(1.0)?, point(vmax)?)?;
                 let inner = tight::mul(
                     tight::add(tight::add(point(d1)?, point(d2)?)?, point(extra)?)?,
@@ -970,12 +911,7 @@ fn compatible_pair(
     b: Curve<3>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<(Curve<3>, Curve<3>, f64), CurveError> {
-    let p = if a.degree() > b.degree() {
-        a.degree()
-    } else {
-        b.degree()
-    };
-    let mut dev = 0.0;
+    let p = a.degree().max(b.degree());
     let raise = |c: Curve<3>, meter: &mut WorkMeter<'_>| -> Result<(Curve<3>, f64), CurveError> {
         if c.degree() < p {
             let e = c.elevate(p.saturating_sub(c.degree()), meter)?;
@@ -986,7 +922,7 @@ fn compatible_pair(
     };
     let (a, da) = raise(a, meter)?;
     let (b, db) = raise(b, meter)?;
-    dev += da + db;
+    let mut parts = alloc::vec![da, db];
     // The knots each lacks, interior only, with multiplicity.
     let missing = |x: &Curve<3>, y: &Curve<3>| -> Vec<f64> {
         let (kx, ky) = (x.basis().knots(), y.basis().knots());
@@ -1009,20 +945,25 @@ fn compatible_pair(
         a
     } else {
         let r = a.refine(&ma, meter)?;
-        dev += r.deviation;
+        parts.push(r.deviation);
         r.value
     };
     let b = if mb.is_empty() {
         b
     } else {
         let r = b.refine(&mb, meter)?;
-        dev += r.deviation;
+        parts.push(r.deviation);
         r.value
     };
     if a.basis().knots() != b.basis().knots() {
         return Err(CurveError::Defect);
     }
-    Ok((a, b, dev))
+    // Their sum, rounded up.
+    let mut dev = point(0.0)?;
+    for d in parts {
+        dev = tight::add(dev, point(d)?)?;
+    }
+    Ok((a, b, dev.hi()))
 }
 
 /// The `ParamSurface` implementation of a swept kind, written once for the three.

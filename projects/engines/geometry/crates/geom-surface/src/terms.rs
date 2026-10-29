@@ -219,7 +219,7 @@ impl Terms {
         let (u, v) = (Interval::new(a, b)?, Interval::new(c, d)?);
         let mut total = point(tight::distance(&self.ce, &other.ce)?)?;
         for (s, o) in self.terms.iter().zip(&other.terms) {
-            if s.u != o.u || s.v != o.v {
+            if (s.u, s.v) != (o.u, o.v) {
                 return Err(CurveError::Defect);
             }
             let dw = tight::distance(&s.we, &o.we)?;
@@ -262,18 +262,12 @@ impl Terms {
                 let w = tight::mul(du.weight(i)?, dv.weight(j)?)?;
                 let (pd, wd) = (p.map(tight::middle), tight::middle(w));
                 let d = tight::distance_to(&pd, &p)?;
-                if d > moved {
-                    moved = d;
-                }
+                moved = tight::larger(moved, d);
                 let r = tight::magnitude(tight::sub(tight::div(point(wd)?, w)?, one)?);
-                if r > eps {
-                    eps = r;
-                }
+                eps = tight::larger(eps, r);
                 let o = *origin.get_or_insert(p);
                 let rr = tight::distance(&p, &o)?;
-                if rr > reach {
-                    reach = rr;
-                }
+                reach = tight::larger(reach, rr);
                 homs.push(pd.map(|x| x * wd));
                 weights.push(wd);
             }
@@ -281,14 +275,13 @@ impl Terms {
         // The stored net against the exact one (`geom-curve`'s rational bound), plus the direction
         // curves' own deviations multiplied out over the terms.
         let mut dev = point(moved)?;
-        if eps > 0.0 {
-            if eps.is_nan() || eps >= 0.5 {
-                return Err(CurveError::NotFinite);
-            }
-            let e = point(eps)?;
-            let factor = tight::div(tight::mul(point(2.0)?, e)?, tight::sub(one, e)?)?;
-            dev = tight::add(dev, tight::mul(factor, point(reach)?)?)?;
+        // The weights' term is exactly 0 when every stored weight is exact.
+        if eps.is_nan() || eps >= 0.5 {
+            return Err(CurveError::NotFinite);
         }
+        let e = point(eps)?;
+        let factor = tight::div(tight::mul(point(2.0)?, e)?, tight::sub(one, e)?)?;
+        dev = tight::add(dev, tight::mul(factor, point(reach)?)?)?;
         if du.deviation != 0.0 || dv.deviation != 0.0 {
             let (uu, vv) = (Interval::new(a, b)?, Interval::new(c, d)?);
             for t in &self.terms {
