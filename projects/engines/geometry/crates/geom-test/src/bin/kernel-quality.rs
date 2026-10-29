@@ -5,9 +5,9 @@
 //! `geom_test`; `kernel-quality --help` lists them and `kernel-quality <command> --help` gives each
 //! one's options.
 //!
-//! - `mutants-plan` counts the mutants of a run from `cargo mutants --list --json` and prints how
-//!   many shards the run needs ([`geom_test::mutants::shard_count`]), with the shard list for a
-//!   GitHub Actions matrix.
+//! - `mutants-plan` reads the mutants of a run from `cargo mutants --list --json` and prints how
+//!   many shards the run needs ([`geom_test::mutants::shard_count`]), with the shard lists for the
+//!   workflow's two shard jobs, one GitHub Actions matrix each.
 //! - `mutants` judges cargo-mutants output directories (`mutants.out`, one per shard) against the
 //!   ledger ([`geom_test::mutants`]); `--expected`, the same list, proves no shard is missing, and
 //!   in a pull request `--base-ledger` is the base branch's ledger, the only source of `known`
@@ -90,7 +90,7 @@ enum ModeArg {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Prints the number of shards a mutation run needs, and their list as JSON.
+    /// Prints the number of shards a mutation run needs, and each shard job's list, as JSON.
     MutantsPlan {
         /// The output of `cargo mutants --list --json` for the run (an empty file: no mutants).
         #[arg(long, value_name = "LIST.json")]
@@ -241,7 +241,7 @@ fn run(cli: Cli) -> Result<bool, String> {
     match cli.command {
         Command::MutantsPlan { list } => {
             let mutants = mutants::read_mutant_list(&list).map_err(|e| e.to_string())?;
-            let count = mutants::shard_count(mutants.len())?;
+            let count = mutants::shard_count(&mutants)?;
             println!("{}", mutants::shard_matrix(count));
             Ok(true)
         }

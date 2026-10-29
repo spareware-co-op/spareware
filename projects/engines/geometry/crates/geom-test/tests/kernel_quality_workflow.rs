@@ -11,16 +11,17 @@
 //!   kernel-release.yml calls it on a release tag, never an ordinary push; and the path filters
 //!   cover everything the gates read.
 //! - **Jobs and when they run.** The mutation plan, shards and judge on every event (the plan picks
-//!   the diff or the full run), the shards only when the plan has mutants, the judge even when a
-//!   shard failed; coverage and the seeded gates on every event; Miri weekly and on demand, and on
+//!   the diff or the full run), each shard job only when the plan gives it shards, the judge even
+//!   when a shard failed; coverage and the seeded gates on every event; Miri weekly and on demand, and on
 //!   a pull request only when it changes how Miri runs.
 //! - **Least privilege.** One permission, `contents: read`, and no credentials kept by checkout.
 //! - **Pins.** Every action pinned to a full commit, the same commit as `kernel.yml` where both use
 //!   an action; one `RUST_TOOLCHAIN`, equal to `rust-toolchain.toml`; the nightly pinned by its
 //!   date; cargo-mutants, cargo-llvm-cov and cargo-nextest installed at exact versions with
 //!   `--locked`, and nothing installed another way.
-//! - **Shards and partitions.** The mutation shards come from the plan, and each shard runs
-//!   `--shard k/n` with the plan's count; Miri's partitions are 1 to n for its `PARTITIONS: n`.
+//! - **Shards and partitions.** The mutation shards come from the plan, in as many jobs as
+//!   `geom_test::mutants::SHARD_JOBS`, each with the same steps, and each shard runs `--shard k/n`
+//!   with the plan's count of the whole run; Miri's partitions are 1 to n for its `PARTITIONS: n`.
 //! - **Every gate is judged.** The judge reads the plan's list; cargo-mutants' exit status is passed
 //!   on unless it is one the judge decides (2, survivors; 3, timeouts); coverage keeps each run's
 //!   log for the judge.
@@ -181,20 +182,25 @@ fn each_job_runs_on_the_events_its_gate_names() {
         [
             "mutants-plan",
             "mutants",
+            "mutants-2",
             "mutants-judge",
             "coverage",
             "gates-seeded",
             "miri",
         ]
     );
-    // Every job runs on every event, but the shards only when the plan found mutants, and the
-    // judge even when a shard failed, so a lost shard is reported, not skipped.
+    // Every job runs on every event, but each shard job only when the plan gives it shards, and
+    // the judge even when a shard failed, so a lost shard is reported, not skipped.
     for job in ["mutants-plan", "coverage", "gates-seeded", "miri"] {
         assert!(jobs[job]["if"].is_badvalue(), "{job} has a condition");
     }
     assert_eq!(
         text(&jobs["mutants"]["if"]),
         "needs.mutants-plan.outputs.count != '0'"
+    );
+    assert_eq!(
+        text(&jobs["mutants-2"]["if"]),
+        "needs.mutants-plan.outputs.count_2 != '0'"
     );
     assert_eq!(text(&jobs["mutants-judge"]["if"]), "${{ !cancelled() }}");
     let needs: Vec<&str> = jobs["mutants-judge"]["needs"]
@@ -203,11 +209,20 @@ fn each_job_runs_on_the_events_its_gate_names() {
         .iter()
         .map(text)
         .collect();
-    assert_eq!(needs, ["mutants-plan", "mutants"]);
-    // The judge checks the jobs it reads before it judges.
+    assert_eq!(needs, ["mutants-plan", "mutants", "mutants-2"]);
+    // The judge checks the jobs it reads before it judges: a shard job may be skipped only when
+    // the plan gave it no shard.
     let first = text(&jobs["mutants-judge"]["steps"][0]["run"]);
     assert!(first.contains("needs.mutants-plan.result"), "{first}");
-    assert!(first.contains("needs.mutants.result"), "{first}");
+    for (job, count) in [("mutants", "count"), ("mutants-2", "count_2")] {
+        assert!(
+            first.contains(&format!(
+                "case \"${{{{ needs.{job}.result }}}}\" in success) ;; skipped) test \
+                 \"${{{{ needs.mutants-plan.outputs.{count} }}}}\" = 0 ;; *) exit 1 ;; esac"
+            )),
+            "{first}"
+        );
+    }
     // The plan decides between the diff and the full run by the event.
     let plan = runs(&w, "mutants-plan");
     assert!(plan.contains("if [ \"$GITHUB_EVENT_NAME\" = pull_request ]; then"));
@@ -391,25 +406,64 @@ fn keys_or_empty(y: &Yaml) -> Vec<String> {
 #[test]
 fn every_shard_and_partition_runs_once() {
     let w = workflow();
-    let shards = &w["jobs"]["mutants"];
+    // Every job that runs cargo-mutants on a shard: as many as the plan has lists.
+    let shard_jobs: Vec<String> = keys(&w["jobs"])
+        .into_iter()
+        .filter(|job| runs(&w, job).contains("--shard "))
+        .collect();
+    assert_eq!(shard_jobs, ["mutants", "mutants-2"]);
     assert_eq!(
-        text(&shards["strategy"]["matrix"]["shard"]),
-        "${{ fromJSON(needs.mutants-plan.outputs.shards) }}"
+        u64::try_from(shard_jobs.len()).unwrap(),
+        geom_test::mutants::SHARD_JOBS,
+        "one shard job for each of the plan's lists"
     );
-    assert_eq!(
-        text(&shards["env"]["SHARDS"]),
-        "${{ needs.mutants-plan.outputs.count }}"
-    );
-    assert_eq!(shards["strategy"]["fail-fast"].as_bool(), Some(false));
-    let run = runs(&w, "mutants");
-    assert!(
-        run.contains("--shard \"${{ matrix.shard }}/$SHARDS\""),
-        "{run}"
-    );
-    assert!(run.contains("--no-shuffle"), "{run}");
     let plan = &w["jobs"]["mutants-plan"]["outputs"];
-    assert_eq!(text(&plan["count"]), "${{ steps.plan.outputs.count }}");
-    assert_eq!(text(&plan["shards"]), "${{ steps.plan.outputs.shards }}");
+    let plan_run = runs(&w, "mutants-plan");
+    for (job, list) in [("mutants", "shards"), ("mutants-2", "shards_2")] {
+        let shards = &w["jobs"][job];
+        assert_eq!(
+            text(&shards["strategy"]["matrix"]["shard"]),
+            format!("${{{{ fromJSON(needs.mutants-plan.outputs.{list}) }}}}")
+        );
+        // Shards are numbered in the whole run: every job divides by the plan's full count.
+        assert_eq!(
+            text(&shards["env"]["SHARDS"]),
+            "${{ needs.mutants-plan.outputs.count }}"
+        );
+        assert_eq!(shards["strategy"]["fail-fast"].as_bool(), Some(false));
+        let run = runs(&w, job);
+        assert!(
+            run.contains("--shard \"${{ matrix.shard }}/$SHARDS\""),
+            "{run}"
+        );
+        assert!(run.contains("--no-shuffle"), "{run}");
+        // The second job is the first, word for word, but for its matrix and condition.
+        for key in ["runs-on", "timeout-minutes", "env", "defaults", "steps"] {
+            assert_eq!(shards[key], w["jobs"]["mutants"][key], "{job} {key}");
+        }
+        assert_eq!(
+            text(&plan[list]),
+            format!("${{{{ steps.plan.outputs.{list} }}}}")
+        );
+        assert!(
+            plan_run.contains(&format!(
+                "echo \"{list}=$(jq -c .{list} <<<\"$plan\")\" >> \"$GITHUB_OUTPUT\""
+            )),
+            "{plan_run}"
+        );
+    }
+    for count in ["count", "count_2"] {
+        assert_eq!(
+            text(&plan[count]),
+            format!("${{{{ steps.plan.outputs.{count} }}}}")
+        );
+        assert!(
+            plan_run.contains(&format!(
+                "echo \"{count}=$(jq -r .{count} <<<\"$plan\")\" >> \"$GITHUB_OUTPUT\""
+            )),
+            "{plan_run}"
+        );
+    }
     // Miri: the weekly matrix lists partitions 1 to PARTITIONS, and each runs its own.
     let miri = &w["jobs"]["miri"];
     let n = miri["env"]["PARTITIONS"].as_i64().unwrap();

@@ -501,9 +501,9 @@ pub struct Tally {
 pub struct Verdict {
     /// Totals by (crate, set name).
     pub tallies: BTreeMap<(String, &'static str), Tally>,
-    /// How many mutants the runs tested, and how long they took in all, build and test: what
-    /// [`MINUTES_PER_MUTANT`] is measured from.
-    pub time: (u64, Duration),
+    /// How many mutants of each crate the runs tested, and how long they took in all, build and
+    /// test: what [`SECONDS_PER_MUTANT`] is measured from.
+    pub time: BTreeMap<String, (u64, Duration)>,
     /// Every reason the gate fails, one line each. Empty means it passes.
     pub failures: Vec<String>,
 }
@@ -760,9 +760,10 @@ pub fn judge(
     check_entries(ledger, repo, &mut verdict.failures);
     let (judged, seen) = collect(runs, repo, &mut verdict.failures);
     for run in runs {
-        for d in &run.durations {
-            verdict.time.0 = verdict.time.0.saturating_add(1);
-            verdict.time.1 = verdict.time.1.saturating_add(*d);
+        for (m, d) in run.mutants.iter().zip(&run.durations) {
+            let (n, total) = verdict.time.entry(m.package.clone()).or_default();
+            bump(n);
+            *total = total.saturating_add(*d);
         }
     }
     check_expected(mode, expected, &seen, &mut verdict.failures);
@@ -825,14 +826,15 @@ pub fn report(verdict: &Verdict) -> String {
     if verdict.tallies.is_empty() {
         lines.push("(no mutants)".to_owned());
     }
-    let (n, total) = verdict.time;
-    if let Some(mean) = total.checked_div(u32::try_from(n).unwrap_or(u32::MAX)) {
-        lines.push(format!(
-            "time: {n} mutant(s), {} min in all, {} s each on average (MINUTES_PER_MUTANT is {})",
-            total.as_secs().checked_div(60).unwrap_or(0),
-            mean.as_secs(),
-            MINUTES_PER_MUTANT
-        ));
+    for (krate, &(n, total)) in &verdict.time {
+        if let Some(mean) = total.checked_div(u32::try_from(n).unwrap_or(u32::MAX)) {
+            lines.push(format!(
+                "time: {krate}, {n} mutant(s), {} min in all, {:.1} s each on average                  (planned at {} s, SECONDS_PER_MUTANT)",
+                total.as_secs().checked_div(60).unwrap_or(0),
+                mean.as_secs_f64(),
+                seconds_per_mutant(krate)
+            ));
+        }
     }
     if verdict.passes() {
         lines.push("PASS: no unexplained survivor".to_owned());
@@ -845,48 +847,123 @@ pub fn report(verdict: &Verdict) -> String {
     out
 }
 
-/// The minutes one mutant takes in CI, building and testing, on average over the weekly run: the
-/// report of every run prints the measured mean beside it, so it can be kept true. A GitHub-hosted
-/// `ubuntu-latest` runner rebuilds geom-num incrementally, links its integration-test binaries
-/// and runs them until one fails (all of them for a survivor).
-pub const MINUTES_PER_MUTANT: u64 = 4;
+/// The seconds one mutant of each kernel crate is planned at in CI, building and testing: twice the
+/// largest mean any measured run found for the crate, rounded up to a whole second. Each run's
+/// report prints every crate's measured mean beside its planned time, so the table can be kept
+/// true. A GitHub-hosted `ubuntu-latest` runner rebuilds the mutated crate incrementally, links its
+/// integration-test binaries and runs them until one fails (all of them for a survivor), so the
+/// crates differ by their test suites: geom-num's mean is about twenty times geom-curve's.
+///
+/// Measured: each mutant's build and test time (the `phase_results` of `outcomes.json`) in the
+/// shards of the full run 40859780064 (6954 mutants of geom-math, geom-num, geom-pool and
+/// geom-run) and of the diff runs of pieces G54, G55, G60, G61, G62, G65 and G66 (40859433175,
+/// 40859444605, 40866610641, 40866622419, 40882301597, 40882313615 and 40898596532), which
+/// mutated every crate. The largest mean of each crate, in seconds, with the run that found it:
+/// geom-bvh 1.9 (40882313615), geom-curve 1.4 (40882301597), geom-linalg 0.8 (40866622419),
+/// geom-math 22.1 (40866622419; 9.3 over the whole crate in 40859780064), geom-num 33.2
+/// (40866610641; 25.4 over the whole crate in 40859780064), geom-nurbs 5.8 (40882313615),
+/// geom-pool 6.0 and geom-run 5.5 (40859780064), geom-surface 2.2 (40898596532).
+///
+/// The margin covers a shard of mutants slower than their crate's mean: cargo-mutants gives each
+/// shard a run of consecutive mutants (its default `--sharding slice`), so a shard can hold one
+/// stretch of one crate. In those runs, the slowest stretch of each crate as long as a shard of it
+/// took at most 0.69 of its planned time: 214 geom-num mutants in 164 minutes of the full run.
+pub const SECONDS_PER_MUTANT: [(&str, u64); 9] = [
+    ("geom-bvh", 4),
+    ("geom-curve", 3),
+    ("geom-linalg", 2),
+    ("geom-math", 45),
+    ("geom-num", 67),
+    ("geom-nurbs", 12),
+    ("geom-pool", 13),
+    ("geom-run", 11),
+    ("geom-surface", 5),
+];
+
+/// The seconds a mutant of `package` is planned at: its row of [`SECONDS_PER_MUTANT`], or, for a
+/// crate no run has measured yet, the slowest row's.
+#[must_use]
+pub fn seconds_per_mutant(package: &str) -> u64 {
+    SECONDS_PER_MUTANT
+        .iter()
+        .find(|(p, _)| *p == package)
+        .or_else(|| SECONDS_PER_MUTANT.iter().max_by_key(|(_, s)| *s))
+        .map_or(0, |(_, s)| *s)
+}
 
 /// The minutes of mutation one shard may plan for: the shard job's timeout (345 minutes, under
 /// GitHub's six-hour limit for a job) less its setup and a margin for runs slower than the mean.
 pub const SHARD_MINUTES: u64 = 240;
 
-/// The most jobs one GitHub Actions matrix may hold.
-pub const MAX_SHARDS: u64 = 256;
+/// The most jobs one GitHub Actions matrix may hold
+/// (<https://docs.github.com/en/actions/reference/limits>).
+pub const MATRIX_JOBS: u64 = 256;
 
-/// How many shards a run of `mutants` mutants needs so each shard plans for at most
-/// [`SHARD_MINUTES`] at [`MINUTES_PER_MUTANT`], and no fewer: none for no mutant (a diff that
-/// touches none), whose judge then has nothing to wait for.
+/// The shard jobs of `kernel-quality.yml`, one matrix each: `mutants` runs shards 0 to 255 and
+/// `mutants-2` shards 256 to 511.
+pub const SHARD_JOBS: u64 = 2;
+
+/// The most shards a run may have: [`MATRIX_JOBS`] in each of the [`SHARD_JOBS`].
+pub const MAX_SHARDS: u64 = MATRIX_JOBS.saturating_mul(SHARD_JOBS);
+
+/// How many shards a run of `mutants` needs so each shard plans for at most [`SHARD_MINUTES`], and
+/// no more: none for no mutant (a diff that touches none), whose judge then has nothing to wait
+/// for.
+///
+/// cargo-mutants gives each shard a run of consecutive mutants, as many as it can share out evenly
+/// (`--sharding slice`), and one run can lie inside a single crate, so every shard is sized at the
+/// slowest crate in the list: it takes at most `SHARD_MINUTES × 60 / s` mutants for the largest
+/// [`seconds_per_mutant`] `s`. With n shards of at most that many each, every shard has at least
+/// one mutant, so none runs empty.
 ///
 /// # Errors
 ///
-/// A description, when the run would need more than [`MAX_SHARDS`] shards: raise the shard budget
-/// or split the run before the gate silently loses mutants.
-pub fn shard_count(mutants: usize) -> Result<u64, String> {
-    let work = u64::try_from(mutants)
-        .unwrap_or(u64::MAX)
-        .saturating_mul(MINUTES_PER_MUTANT);
-    let shards = work.div_ceil(SHARD_MINUTES);
+/// A description, when the run would need more than [`MAX_SHARDS`] shards, or one mutant is
+/// planned at more than a shard's time: raise the shard budget or split the run before the gate
+/// silently loses mutants.
+pub fn shard_count(mutants: &[Mutant]) -> Result<u64, String> {
+    let Some((slowest, seconds)) = mutants
+        .iter()
+        .map(|m| (m.package.as_str(), seconds_per_mutant(&m.package)))
+        .max_by_key(|(_, s)| *s)
+    else {
+        return Ok(0);
+    };
+    let per_shard = SHARD_MINUTES
+        .saturating_mul(60)
+        .checked_div(seconds)
+        .unwrap_or(u64::MAX);
+    if per_shard == 0 {
+        return Err(format!(
+            "a {slowest} mutant is planned at {seconds} s, more than a shard's {SHARD_MINUTES} min"
+        ));
+    }
+    let n = mutants.len();
+    let shards = u64::try_from(n).unwrap_or(u64::MAX).div_ceil(per_shard);
     if shards > MAX_SHARDS {
         return Err(format!(
-            "{mutants} mutants at {MINUTES_PER_MUTANT} min each need {shards} shards of \
-             {SHARD_MINUTES} min, more than the {MAX_SHARDS} jobs a matrix may hold"
+            "{n} mutants, {per_shard} to a shard of {SHARD_MINUTES} min at {seconds} s each \
+             ({slowest}'s), need {shards} shards, more than the {MAX_SHARDS} the workflow's \
+             {SHARD_JOBS} shard jobs of {MATRIX_JOBS} may hold"
         ));
     }
     Ok(shards)
 }
 
-/// The shard plan as JSON for the workflow: `{"count": n, "shards": [0, ..., n - 1]}`. A GitHub
-/// Actions matrix may not be empty, so a plan of no shard lists shard 0 all the same; the workflow
-/// runs the shard job only when the count is not 0.
+/// The shard plan as JSON for the workflow: `{"count": n, "shards": [...], "count_2": m,
+/// "shards_2": [...]}`. `count` is every shard of the run, the `n` of each shard's `--shard k/n`;
+/// `shards` lists the first job's, 0 to `min(n, 256) - 1`, and `shards_2` the second job's, 256 to
+/// `n - 1`, `count_2` of them. A GitHub Actions matrix may not be empty, so a job with no shard
+/// still lists its first (0 or 256); the workflow runs a job only when its count is not 0.
+/// [`shard_count`] gives at most [`MAX_SHARDS`] shards, so neither list holds more than
+/// [`MATRIX_JOBS`].
 #[must_use]
 pub fn shard_matrix(count: u64) -> String {
-    let shards: Vec<u64> = (0..count.max(1)).collect();
-    serde_json::json!({"count": count, "shards": shards}).to_string()
+    let first: Vec<u64> = (0..count.clamp(1, MATRIX_JOBS)).collect();
+    let count_2 = count.saturating_sub(MATRIX_JOBS);
+    let second: Vec<u64> = (MATRIX_JOBS..MATRIX_JOBS.saturating_add(count_2.max(1))).collect();
+    serde_json::json!({"count": count, "shards": first, "count_2": count_2, "shards_2": second})
+        .to_string()
 }
 
 #[cfg(test)]
