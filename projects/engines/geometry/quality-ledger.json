@@ -1059,6 +1059,30 @@
       "reason": "The goal is the larger of tol and rel*|value|. The mutant picks tol also when the two are equal, which is the same double, so the goal, and every result, is the same."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-num/src/dual.rs",
+      "mutant": "replace <impl Sealed for Dual<T, N>>::atan2_smooth -> Result<(), NumError> with Ok(())",
+      "line_text": "T::atan2_smooth(y.value, x.value)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "This check runs only for a dual over a dual, from Dual<Dual<U, N>, M>::atan2, which next computes its value with Dual<U, N>::atan2 on the same values, and that runs U's check on the same pair first. So when this check would refuse, the next line refuses with the same OutsideDomain before anything else is computed, and when it passes nothing changes: every result and error is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/newton.rs",
+      "mutant": "replace < with <= in midpoint",
+      "line_text": "if m < x.lo() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when m == lo, where the mutant returns lo and the original m. These are the same bits: a nonzero lo equal to m is the same double, and a zero lo is +0 (a box stores a zero bound as +0) with hi >= 0, so m = +0 + 0.5*hi is +0 too. Every step's midpoint, and so every result, is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/newton.rs",
+      "mutant": "replace > with >= in midpoint",
+      "line_text": "} else if m > x.hi() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when m == hi, where the mutant returns hi and the original m. These are the same bits: a nonzero hi equal to m is the same double, and a zero hi is +0 with lo <= 0, so m = 0.5*lo + +0 equals zero only as -0 + +0 or +0 + +0, both +0. Every step's midpoint, and so every result, is the same."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-linalg/src/cols.rs",
       "mutant": "replace sub -> Result<usize, LinalgError> with Ok(1)",
       "line_text": "a.checked_sub(b).ok_or(LinalgError::Defect)",
@@ -1313,6 +1337,694 @@
       "occurrences": 1,
       "kind": "harmless",
       "reason": "Without this arm two exact transforms reach the last arm, which composes them as rational transforms and simplifies the product back to the same exact transform; past the bound both refuse with OutOfRange (the rational form's reported value may differ), since a translation is no rotation to fall back on."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
+      "mutant": "replace Ssi::routed -> Option<Sign> with None",
+      "line_text": "let [a, b, c, d] = self.points;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "On None, Ssi::orient2d takes orient2d_hand, which computes the same sign exactly: oa . ob2 - ob . oa2 in I256 (then I320) times the sign of w, the expression the generated ssi_side and ssi_weight evaluate. Both paths are exact, so the answer is the same for every input; only the time taken changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
+      "mutant": "replace side -> Option<Sign> with None",
+      "line_text": "let left = Wide::<L>::product_i128(oa, ob2)?;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "side runs only in orient2d_hand, which Ssi::orient2d calls only when the generated ssi_weight or ssi_side path returns None. Those take grid points, whose every step fits the certified types (the certificate: no step overflows inside the grid's range), so they never return None, no public input reaches side, and returning None from it changes no result."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/dd.rs",
+      "mutant": "replace < with <= in magnitude",
+      "line_text": "if x < 0.0 { -x } else { x }",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "magnitude is private. The mutant changes its result only at x = +0 or -0 (it returns the other zero), and every caller uses the result only in a comparison with a positive power of two (two_prod_fma's >= 2^-968, unit_scaled's < 2^-400, round_shifted's > 2^100), where the two zeros compare alike, so no public function's result changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/dd.rs",
+      "mutant": "replace & with | in exponent",
+      "line_text": "let zeros = i32::try_from((bits & FRACTION_BITS).leading_zeros()).map_err(|_| defect())?;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant gives a subnormal x (exponent field 0) a wrong exponent k (from -1075 to -1011, as the sign bit or the flipped fraction sets a different leading bit). k is used only as a power-of-two scaling that is undone exactly: unit_scaled scales hi and lo by 2^-k, and mul_f64, mul, div_f64 and div scale the result back by 2^(kx + ky) (sqrt by 2^(k/2), k even). A subnormal leading part has a zero trailing part, so the 2^-400 floor never applies, and the scaled operand lies in [2^-63, 2^54) instead of [1, 2): every step of the algorithms (two_prod_fma, fma, two_sum, division, root) stays in the normal range and is the same rounding scaled by a power of two, and scale_pow2 rounds the same exact value once. So every result has the same bits (tests/gate1_core.rs's subnormal_operands_give_exact_results holds under both)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/dd.rs",
+      "mutant": "replace & with ^ in exponent",
+      "line_text": "let zeros = i32::try_from((bits & FRACTION_BITS).leading_zeros()).map_err(|_| defect())?;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant gives a subnormal x (exponent field 0) a wrong exponent k (from -1075 to -1011, as the sign bit or the flipped fraction sets a different leading bit). k is used only as a power-of-two scaling that is undone exactly: unit_scaled scales hi and lo by 2^-k, and mul_f64, mul, div_f64 and div scale the result back by 2^(kx + ky) (sqrt by 2^(k/2), k even). A subnormal leading part has a zero trailing part, so the 2^-400 floor never applies, and the scaled operand lies in [2^-63, 2^54) instead of [1, 2): every step of the algorithms (two_prod_fma, fma, two_sum, division, root) stays in the normal range and is the same rounding scaled by a power of two, and scale_pow2 rounds the same exact value once. So every result has the same bits (tests/gate1_core.rs's subnormal_operands_give_exact_results holds under both)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/dd.rs",
+      "mutant": "replace > with == in pow2",
+      "line_text": "if field > 2046 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "pow2 is private and its callers pass k <= 1000 (scale_pow2's rest after its 2^1000 steps, and exponents from -1074 to -1), so field = k + 1023 <= 2023: `field > 2046` is false on every call, and so are `field >= 2046` and `field == 2046`."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/dd.rs",
+      "mutant": "replace > with >= in pow2",
+      "line_text": "if field > 2046 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "pow2 is private and its callers pass k <= 1000 (scale_pow2's rest after its 2^1000 steps, and exponents from -1074 to -1), so field = k + 1023 <= 2023: `field > 2046` is false on every call, and so are `field >= 2046` and `field == 2046`."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/dd.rs",
+      "mutant": "replace > with >= in scale_pow2",
+      "line_text": "while rest > 1000 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant also takes a 2^1000 step at rest = 1000 and then multiplies by 2^0 = 1. Multiplying by a power of two of at least 1 is exact unless it overflows, to an infinity that stays one, so both orders give v * 2^m exactly (or the same infinity)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/dd.rs",
+      "mutant": "replace < with == in scale_pow2",
+      "line_text": "while rest < -1000 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The loop then runs only at rest = -1000 (one step, as above). For rest below -1000, which needs m < -2074, the mutant multiplies by pow2(rest) at once. Callers reach m < -2074 only in scaled_back, with m >= -2148 (two exponents of at least -1074 each; a quotient's kx - ky is at least -2097), so rest >= -1074 and pow2(rest) is a double; and the scaled parts there are below 4 in magnitude (products and quotients of operands in [1, 2)), so v * 2^m is below 2^-2072 and rounds to a zero both ways (the mutant's v * 2^rest is at most 2^-999, and times 2^-1074 it underflows to zero), which normalized makes +0."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/dd.rs",
+      "mutant": "replace < with <= in scale_pow2",
+      "line_text": "while rest < -1000 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "At rest = -1000 the mutant multiplies by 2^-1000 in the loop and then by 2^0, where the original multiplies by pow2(-1000) once: the same double times the same power of two, one rounding, so the same result."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/dd.rs",
+      "mutant": "replace && with || in DD::normalized",
+      "line_text": "if hi.is_finite() && lo.is_finite() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "two_sum's error is finite exactly when its sum is (eft::two_sum: exact for every finite input whose rounded sum is finite; otherwise the error is an infinity or NaN), so hi and lo are finite together and `&&` and `||` agree on every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/dd.rs",
+      "mutant": "replace || with && in DD::from_sum",
+      "line_text": "if !a.is_finite() || !b.is_finite() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With one operand not finite the mutant goes on to DD::normalized, where two_sum's sum is then an infinity or NaN, so normalized returns the same Err(NotFinite) the original returns first."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/dd.rs",
+      "mutant": "replace || with && in DD::exact_product",
+      "line_text": "if !a.is_finite() || !b.is_finite() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With one factor not finite the mutant calls two_prod_fma, whose product p is then an infinity or NaN (0 * infinity), so `p.is_finite()` fails and it returns None, as the original does first."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/dd.rs",
+      "mutant": "replace < with <= in DD::abs",
+      "line_text": "if self.hi < 0.0 { self.negate() } else { self }",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant also negates when hi = 0, which by the invariant is DD::ZERO (hi is the value rounded, so lo = 0 too), and negate keeps zeros +0 (zero_to_plus), so it returns the same (+0, +0)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/dd.rs",
+      "mutant": "replace || with && in DD::mul_f64",
+      "line_text": "if self.hi == 0.0 || y == 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant takes the shortcut only when both are zero; with one zero it runs the general path, which gives DD::ZERO too: exponent(0) is -1075 (the subnormal branch with no bit set), scaling a zero keeps it zero, two_prod_fma of a zero factor is (+-0, +0) through two_prod, the fused multiply-adds and two_sum of zeros are zeros, scale_pow2 keeps them zero (|kx + ky| stays within 2400), and normalized makes them +0. So the result is (+0, +0) either way; only the time taken changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/dd.rs",
+      "mutant": "replace || with && in DD::mul",
+      "line_text": "if self.hi == 0.0 || other.hi == 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant takes the shortcut only when both are zero; with one zero it runs the general path, which gives DD::ZERO too: exponent(0) is -1075 (the subnormal branch with no bit set), scaling a zero keeps it zero, two_prod_fma of a zero factor is (+-0, +0) through two_prod, the fused multiply-adds and two_sum of zeros are zeros, scale_pow2 keeps them zero (|kx + ky| stays within 2400), and normalized makes them +0. So the result is (+0, +0) either way; only the time taken changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/dd.rs",
+      "mutant": "replace ^ with | in DD::round_shifted",
+      "line_text": "let n_odd = (s ^ offset) & 1 == 1;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "n_odd matters only at a tie, F = +-1/2, and there s = r_h + r_l is even: if |hi| < 2^52, |lo| <= ulp(hi)/2 <= 1/4, so r_l = 0, and F = +-1/2 forces lo = 0 (otherwise hi + lo would be the double n + 1/2 and hi would equal it), so r_h = rint(hi) of a half-integer, the even neighbour; if |hi| >= 2^52, d_h = 0 and F = lo - rint(lo) = +-1/2 makes rint(lo) the even neighbour, and hi is even (from 2^53 every double is; between 2^52 and 2^53 lo = +-1/2 is a tie that rounds hi + lo to the even hi). So the lowest bit of s is 0, and (s ^ offset) & 1 and (s | offset) & 1 are both offset's lowest bit."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/dd.rs",
+      "mutant": "delete - in DD::round_shifted",
+      "line_text": "let exact = te == 0.0 && (t == 0.0 || t == 1.0 || t == -1.0);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "F = d_h + d_l is never +-1 for a pair in the invariant: if |hi| < 2^52 then |lo| <= ulp(hi)/2 <= 1/4, so |F| <= 1/2 + 1/4; if |hi| >= 2^52 then d_h = 0 and |F| = |d_l| <= 1/2. So t (F rounded) is never 1 or -1, both clauses are false whatever their sign, and exact is te == 0 && t == 0 under the mutant as under the original."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/dd.rs",
+      "mutant": "replace | with ^ in whole",
+      "line_text": "let significand = i128::from((bits & FRACTION_BITS) | (1 << 52));",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "bits & FRACTION_BITS keeps bits 0 to 51 only, so bit 52 is clear and `| (1 << 52)` and `^ (1 << 52)` both set it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/dd.rs",
+      "mutant": "replace < with <= in whole",
+      "line_text": "if v < 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "whole returns Some(0) for v = 0 (either sign) on its first line, so this test runs only for v != 0, where < 0 and <= 0 agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/eft.rs",
+      "mutant": "replace < with <= in split",
+      "line_text": "if abs(a) < TWO_POW_996 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant sends |a| = 2^996 exactly to veltkamp unscaled instead of through the scaled path. At 2^996 Veltkamp's steps do not overflow (SPLITTER * a = 2^1023 + 2^996, a double below 2^1024 - 2^970) and a power of two splits as (a, +0) either way: veltkamp(2^996) gives c - (c - a) = a and a - a = +0, and veltkamp(2^932) scaled back by 2^64 gives the same, for either sign. So the halves have the same bits."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/eft.rs",
+      "mutant": "replace > with >= in split",
+      "line_text": "let h = if a > 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "These lines run only when the scaled split overflowed, which needs |a| > 2^1023 or a not finite, so a is never zero there; a NaN compares false under both operators. So > and >=, and < and <=, agree on every input that reaches them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/eft.rs",
+      "mutant": "replace < with <= in split",
+      "line_text": "} else if a < 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "These lines run only when the scaled split overflowed, which needs |a| > 2^1023 or a not finite, so a is never zero there; a NaN compares false under both operators. So > and >=, and < and <=, agree on every input that reaches them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/eft.rs",
+      "mutant": "replace < with <= in Binade::of",
+      "line_text": "below_one: field < 1023,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The flags differ only for exponent field 1023 (1 <= |x| < 2), whose magnitude is 0. scaled_error then scales by 2^0 for this factor whichever way it goes (scale(x, 0, up) multiplies or divides by 1.0), and the other factor's exponent keeps its direction: if the other is below one both versions scale up by its magnitude, if above one both scale down, and two factors of field 1023 scale by 2^0. So p_s, e and the result are the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/eft.rs",
+      "mutant": "replace > with >= in scaled_error",
+      "line_text": "if direction > 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "direction is never zero. If p_s = p_m it is e_m, and e_m = 0 (either sign) returns earlier: e = 0 scales to 0 and back to 0 = e_m. If p_s != p_m it is p_m - p_s, a difference of two distinct doubles, which is never zero (gradual underflow: x - y = 0 only when x = y). So > and >= agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/eft.rs",
+      "mutant": "replace < with == in two_prod",
+      "line_text": "let direct = size >= TWO_POW_NEG_968 && size < TWO_POW_1022;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The comparison only chooses between Dekker's direct method and the scaled path, and both return the unique exact pair (p, e) whenever one exists (two_prod's proof: the scaled path for every finite product, the direct one inside its range). The `<=` mutants add only the boundary |p| = 2^1022 or |a|, |b| = 2^996 to the direct method, where none of Dekker's steps overflows (|a_hi b_hi| <= |p|(1 + 2^-25) < 2^1023, veltkamp(2^996) is exact), so it is exact there too; the `==` mutants send the rest of the direct range to the scaled path. Without an exact pair (|a b| < 2^-969) both take the scaled path. So every result has the same bits; only the time taken changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/eft.rs",
+      "mutant": "replace < with <= in two_prod",
+      "line_text": "let direct = size >= TWO_POW_NEG_968 && size < TWO_POW_1022;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The comparison only chooses between Dekker's direct method and the scaled path, and both return the unique exact pair (p, e) whenever one exists (two_prod's proof: the scaled path for every finite product, the direct one inside its range). The `<=` mutants add only the boundary |p| = 2^1022 or |a|, |b| = 2^996 to the direct method, where none of Dekker's steps overflows (|a_hi b_hi| <= |p|(1 + 2^-25) < 2^1023, veltkamp(2^996) is exact), so it is exact there too; the `==` mutants send the rest of the direct range to the scaled path. Without an exact pair (|a b| < 2^-969) both take the scaled path. So every result has the same bits; only the time taken changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/eft.rs",
+      "mutant": "replace < with == in two_prod",
+      "line_text": "if direct && abs(a) < TWO_POW_996 && abs(b) < TWO_POW_996 {",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "The comparison only chooses between Dekker's direct method and the scaled path, and both return the unique exact pair (p, e) whenever one exists (two_prod's proof: the scaled path for every finite product, the direct one inside its range). The `<=` mutants add only the boundary |p| = 2^1022 or |a|, |b| = 2^996 to the direct method, where none of Dekker's steps overflows (|a_hi b_hi| <= |p|(1 + 2^-25) < 2^1023, veltkamp(2^996) is exact), so it is exact there too; the `==` mutants send the rest of the direct range to the scaled path. Without an exact pair (|a b| < 2^-969) both take the scaled path. So every result has the same bits; only the time taken changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/eft.rs",
+      "mutant": "replace < with <= in two_prod",
+      "line_text": "if direct && abs(a) < TWO_POW_996 && abs(b) < TWO_POW_996 {",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "The comparison only chooses between Dekker's direct method and the scaled path, and both return the unique exact pair (p, e) whenever one exists (two_prod's proof: the scaled path for every finite product, the direct one inside its range). The `<=` mutants add only the boundary |p| = 2^1022 or |a|, |b| = 2^996 to the direct method, where none of Dekker's steps overflows (|a_hi b_hi| <= |p|(1 + 2^-25) < 2^1023, veltkamp(2^996) is exact), so it is exact there too; the `==` mutants send the rest of the direct range to the scaled path. Without an exact pair (|a b| < 2^-969) both take the scaled path. So every result has the same bits; only the time taken changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "mutant": "replace < with == in ExactSum::add_slice",
+      "line_text": "if terms.len() < LARGE_SLICE {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The comparison only chooses between adding each term to the small superaccumulator and Neal's large one emptied into it at the end, and both add every term exactly, so the sum's value, its special values and its lost flag are the same (add_slice and add_iter's contract: 'the same result as calling add on each'; tests/exact_sum.rs checks the two paths against each other and against dashu). No public result (round, round_ieee, merge) can tell them apart; only the time taken changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "mutant": "replace < with > in ExactSum::add_slice",
+      "line_text": "if terms.len() < LARGE_SLICE {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The comparison only chooses between adding each term to the small superaccumulator and Neal's large one emptied into it at the end, and both add every term exactly, so the sum's value, its special values and its lost flag are the same (add_slice and add_iter's contract: 'the same result as calling add on each'; tests/exact_sum.rs checks the two paths against each other and against dashu). No public result (round, round_ieee, merge) can tell them apart; only the time taken changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "mutant": "replace < with <= in ExactSum::add_slice",
+      "line_text": "if terms.len() < LARGE_SLICE {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The comparison only chooses between adding each term to the small superaccumulator and Neal's large one emptied into it at the end, and both add every term exactly, so the sum's value, its special values and its lost flag are the same (add_slice and add_iter's contract: 'the same result as calling add on each'; tests/exact_sum.rs checks the two paths against each other and against dashu). No public result (round, round_ieee, merge) can tell them apart; only the time taken changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "mutant": "replace < with == in ExactSum::add_iter",
+      "line_text": "if terms.size_hint().0 < LARGE_SLICE {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The comparison only chooses between adding each term to the small superaccumulator and Neal's large one emptied into it at the end, and both add every term exactly, so the sum's value, its special values and its lost flag are the same (add_slice and add_iter's contract: 'the same result as calling add on each'; tests/exact_sum.rs checks the two paths against each other and against dashu). No public result (round, round_ieee, merge) can tell them apart; only the time taken changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "mutant": "replace < with > in ExactSum::add_iter",
+      "line_text": "if terms.size_hint().0 < LARGE_SLICE {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The comparison only chooses between adding each term to the small superaccumulator and Neal's large one emptied into it at the end, and both add every term exactly, so the sum's value, its special values and its lost flag are the same (add_slice and add_iter's contract: 'the same result as calling add on each'; tests/exact_sum.rs checks the two paths against each other and against dashu). No public result (round, round_ieee, merge) can tell them apart; only the time taken changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "mutant": "replace < with <= in ExactSum::add_iter",
+      "line_text": "if terms.size_hint().0 < LARGE_SLICE {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The comparison only chooses between adding each term to the small superaccumulator and Neal's large one emptied into it at the end, and both add every term exactly, so the sum's value, its special values and its lost flag are the same (add_slice and add_iter's contract: 'the same result as calling add on each'; tests/exact_sum.rs checks the two paths against each other and against dashu). No public result (round, round_ieee, merge) can tell them apart; only the time taken changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "mutant": "replace > with >= in ExactSum::merge",
+      "line_text": "if other.nan_payload > self.nan_payload {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "On equal payloads the mutant assigns the value the field already holds, so nothing changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "mutant": "replace | with ^ in ExactSum::round_ieee",
+      "line_text": "return f64::from_bits((SPECIAL_FIELD << 52) | self.nan_payload);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "SPECIAL_FIELD << 52 sets only bits 52 to 62, and the other operand has none of them (a NaN payload, bits & FRACTION_BITS, in bits 0 to 51; or the sign, bit 63 alone), so `|` and `^` give the same bits."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "mutant": "replace > with >= in ExactSum::add_special",
+      "line_text": "} else if payload > self.nan_payload {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "On equal payloads the mutant assigns the value the field already holds, so nothing changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "mutant": "replace | with ^ in ExactSum::add_bits",
+      "line_text": "(field, fraction | (1 << 52))",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "fraction = bits & FRACTION_BITS keeps bits 0 to 51 only, so bit 52 is clear and `| (1 << 52)` and `^ (1 << 52)` both set it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "mutant": "replace < with <= in ExactSum::add_significands",
+      "line_text": ".is_ok_and(|part| part < (1 << 32) && bump(chunk, small(part), negative));",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Each part is already below 2^32: the first two are masked with 0xffff_ffff, and the third is shifted >> 64 with shifted = S * 2^k < 2^96 (S < 2^65 and k <= 31, as the function's documentation derives). So part = 2^32 never occurs and < and <= agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "mutant": "replace | with ^ in round_finite",
+      "line_text": "return Some(f64::from_bits(sign | (SPECIAL_FIELD << 52)));",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "SPECIAL_FIELD << 52 sets only bits 52 to 62, and the other operand has none of them (a NaN payload, bits & FRACTION_BITS, in bits 0 to 51; or the sign, bit 63 alone), so `|` and `^` give the same bits."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "mutant": "replace | with ^ in round_finite",
+      "line_text": "Some(f64::from_bits(sign | bits))",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "sign is 0 or bit 63 alone, and bits = (F - 1) * 2^52 + kept is below 2^63 (F <= 2046 for a finite result, kept <= 2^53), so the two share no bit and `|` and `^` agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "mutant": "replace < with <= in window3",
+      "line_text": "let part = |c: i64| u128::try_from(c).ok().filter(|&c| c < (1 << 32));",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "window3 is called only from round_finite, with chunks below the top after propagate, which leaves each in [0, 2^32) (propagate's documentation; absent chunks are 0), so c = 2^32 never occurs and < and <= agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "mutant": "replace | with ^ in window3",
+      "line_text": "Some((part(c0)? << 64) | (part(c1)? << 32) | part(c2)?)",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "Each part is below 2^32 (the filter), so part(c0) << 64, part(c1) << 32 and part(c2) occupy bits 64 to 95, 32 to 63 and 0 to 31: no bit is shared, and `|` and `^` agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "mutant": "replace &= with |= in Large::empty_into",
+      "line_text": "left &= !(1_u64 << position);",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "left &= !(1 << position) clears the bit just handled. Each mutant fails to clear it (|= sets every other bit; deleting ! keeps only that bit; >> gives !0 for position > 0), so `while left != 0` never ends: every add_slice or add_iter that reaches the large superaccumulator spins for ever, and the tests stop it by their timeout. It hangs; it never returns a wrong sum."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "mutant": "delete ! in Large::empty_into",
+      "line_text": "left &= !(1_u64 << position);",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "left &= !(1 << position) clears the bit just handled. Each mutant fails to clear it (|= sets every other bit; deleting ! keeps only that bit; >> gives !0 for position > 0), so `while left != 0` never ends: every add_slice or add_iter that reaches the large superaccumulator spins for ever, and the tests stop it by their timeout. It hangs; it never returns a wrong sum."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "mutant": "replace << with >> in Large::empty_into",
+      "line_text": "left &= !(1_u64 << position);",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "left &= !(1 << position) clears the bit just handled. Each mutant fails to clear it (|= sets every other bit; deleting ! keeps only that bit; >> gives !0 for position > 0), so `while left != 0` never ends: every add_slice or add_iter that reaches the large superaccumulator spins for ever, and the tests stop it by their timeout. It hangs; it never returns a wrong sum."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
+      "mutant": "replace | with ^ in Large::empty_into",
+      "line_text": "self.transfer((word << 6) | position, sum);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "position is the trailing-zero count of a nonzero u64, below 64, so it fits the six low bits word << 6 leaves clear: `|` and `^` agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/generated/mod.rs",
+      "mutant": "replace < with <= in larger",
+      "line_text": "if a < b { b } else { a }",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when a = b, where the mutant returns b instead of a: the same value. Every argument is a group maximum or a product of them, absolute values of finite whole numbers, so never -0 (abs gives +0) and never NaN, and equal values are the same bits: every scale is unchanged."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/generated/mod.rs",
+      "mutant": "replace | with ^ in decide",
+      "line_text": "(above | below | (scale == 0.0)).then_some(sign)",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "`^` binds tighter than `|`, so the mutant is (above ^ below) | (scale == 0). The bound, error * scale, is not negative (error > 0, scale >= 0, and a NaN bound makes both comparisons false), so value > bound and value < -bound never hold together, and above ^ below equals above | below. For the other `|`: the mutant is above | (below ^ (scale == 0)), which differs only when below and a zero scale hold together. They never do: every filter's certified bound |computed - exact| <= error * scale (this module's proof) makes the computed value equal the exact value when the scale is zero, and the exact value is then zero (the module documentation), so value < -0 is false."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace - with +",
+      "line_text": "const I128_BITS: usize = i128::BITS as usize - 1;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "This constant is read only by the compile-time assertions of plane.rs's `const _` block; no function uses it. Both mutants raise it by one or two (64L - 1 becomes 64L + 1, or 64L for `/ 1`), and every assertion it is in still holds with that margin (each compares bit budgets that are several bits apart: SIDE_BITS 126 <= 127, I128_BITS + W_BITS = 379 <= 383, sums below TOTAL_BITS 511 by 60 or more), so the crate compiles to the same code and no input can tell the mutant from the original."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace - with /",
+      "line_text": "const I128_BITS: usize = i128::BITS as usize - 1;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "This constant is read only by the compile-time assertions of plane.rs's `const _` block; no function uses it. Both mutants raise it by one or two (64L - 1 becomes 64L + 1, or 64L for `/ 1`), and every assertion it is in still holds with that margin (each compares bit budgets that are several bits apart: SIDE_BITS 126 <= 127, I128_BITS + W_BITS = 379 <= 383, sums below TOTAL_BITS 511 by 60 or more), so the crate compiles to the same code and no input can tell the mutant from the original."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace - with +",
+      "line_text": "const I256_BITS: usize = 64 * limbs(&I256::ZERO) - 1;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "This constant is read only by the compile-time assertions of plane.rs's `const _` block; no function uses it. Both mutants raise it by one or two (64L - 1 becomes 64L + 1, or 64L for `/ 1`), and every assertion it is in still holds with that margin (each compares bit budgets that are several bits apart: SIDE_BITS 126 <= 127, I128_BITS + W_BITS = 379 <= 383, sums below TOTAL_BITS 511 by 60 or more), so the crate compiles to the same code and no input can tell the mutant from the original."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace - with /",
+      "line_text": "const I256_BITS: usize = 64 * limbs(&I256::ZERO) - 1;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "This constant is read only by the compile-time assertions of plane.rs's `const _` block; no function uses it. Both mutants raise it by one or two (64L - 1 becomes 64L + 1, or 64L for `/ 1`), and every assertion it is in still holds with that margin (each compares bit budgets that are several bits apart: SIDE_BITS 126 <= 127, I128_BITS + W_BITS = 379 <= 383, sums below TOTAL_BITS 511 by 60 or more), so the crate compiles to the same code and no input can tell the mutant from the original."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace - with +",
+      "line_text": "const I320_BITS: usize = 64 * limbs(&I320::ZERO) - 1;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "This constant is read only by the compile-time assertions of plane.rs's `const _` block; no function uses it. Both mutants raise it by one or two (64L - 1 becomes 64L + 1, or 64L for `/ 1`), and every assertion it is in still holds with that margin (each compares bit budgets that are several bits apart: SIDE_BITS 126 <= 127, I128_BITS + W_BITS = 379 <= 383, sums below TOTAL_BITS 511 by 60 or more), so the crate compiles to the same code and no input can tell the mutant from the original."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace - with /",
+      "line_text": "const I320_BITS: usize = 64 * limbs(&I320::ZERO) - 1;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "This constant is read only by the compile-time assertions of plane.rs's `const _` block; no function uses it. Both mutants raise it by one or two (64L - 1 becomes 64L + 1, or 64L for `/ 1`), and every assertion it is in still holds with that margin (each compares bit budgets that are several bits apart: SIDE_BITS 126 <= 127, I128_BITS + W_BITS = 379 <= 383, sums below TOTAL_BITS 511 by 60 or more), so the crate compiles to the same code and no input can tell the mutant from the original."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace - with +",
+      "line_text": "const BUDGET_BITS: usize = 64 * BUDGET_LIMBS - 1;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "This constant is read only by the compile-time assertions of plane.rs's `const _` block; no function uses it. Both mutants raise it by one or two (64L - 1 becomes 64L + 1, or 64L for `/ 1`), and every assertion it is in still holds with that margin (each compares bit budgets that are several bits apart: SIDE_BITS 126 <= 127, I128_BITS + W_BITS = 379 <= 383, sums below TOTAL_BITS 511 by 60 or more), so the crate compiles to the same code and no input can tell the mutant from the original."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace - with /",
+      "line_text": "const BUDGET_BITS: usize = 64 * BUDGET_LIMBS - 1;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "This constant is read only by the compile-time assertions of plane.rs's `const _` block; no function uses it. Both mutants raise it by one or two (64L - 1 becomes 64L + 1, or 64L for `/ 1`), and every assertion it is in still holds with that margin (each compares bit budgets that are several bits apart: SIDE_BITS 126 <= 127, I128_BITS + W_BITS = 379 <= 383, sums below TOTAL_BITS 511 by 60 or more), so the crate compiles to the same code and no input can tell the mutant from the original."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace - with +",
+      "line_text": "const TOTAL_BITS: usize = 64 * TOTAL_LIMBS - 1;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "This constant is read only by the compile-time assertions of plane.rs's `const _` block; no function uses it. Both mutants raise it by one or two (64L - 1 becomes 64L + 1, or 64L for `/ 1`), and every assertion it is in still holds with that margin (each compares bit budgets that are several bits apart: SIDE_BITS 126 <= 127, I128_BITS + W_BITS = 379 <= 383, sums below TOTAL_BITS 511 by 60 or more), so the crate compiles to the same code and no input can tell the mutant from the original."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace - with /",
+      "line_text": "const TOTAL_BITS: usize = 64 * TOTAL_LIMBS - 1;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "This constant is read only by the compile-time assertions of plane.rs's `const _` block; no function uses it. Both mutants raise it by one or two (64L - 1 becomes 64L + 1, or 64L for `/ 1`), and every assertion it is in still holds with that margin (each compares bit budgets that are several bits apart: SIDE_BITS 126 <= 127, I128_BITS + W_BITS = 379 <= 383, sums below TOTAL_BITS 511 by 60 or more), so the crate compiles to the same code and no input can tell the mutant from the original."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace + with -",
+      "line_text": "const ROUNDS_INSIDE: i64 = 2 * COORD_MAX + 1;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "ROUNDS_INSIDE is read only by round_axis, where `2|X| < ROUNDS_INSIDE * w` picks the bit count of divide_half_even: COORD_BITS (40) inside it, else 127. Every mutant makes the constant smaller (2^41 - 3, 2^41 - 2, 2^40 + 2 or 1; the compile-time assertion ROUNDS_INSIDE < 2^41 still holds), so only coordinates that already took the 40-bit division move to the 127-bit one. divide_half_even returns num / den rounded half to even for any bit count whose quotient fits (it verifies that), and a quotient below 2^40 fits 127 bits, so every coordinate, its exactness and its OutOfRange are the same; only the division's length changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace + with *",
+      "line_text": "const ROUNDS_INSIDE: i64 = 2 * COORD_MAX + 1;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "ROUNDS_INSIDE is read only by round_axis, where `2|X| < ROUNDS_INSIDE * w` picks the bit count of divide_half_even: COORD_BITS (40) inside it, else 127. Every mutant makes the constant smaller (2^41 - 3, 2^41 - 2, 2^40 + 2 or 1; the compile-time assertion ROUNDS_INSIDE < 2^41 still holds), so only coordinates that already took the 40-bit division move to the 127-bit one. divide_half_even returns num / den rounded half to even for any bit count whose quotient fits (it verifies that), and a quotient below 2^40 fits 127 bits, so every coordinate, its exactness and its OutOfRange are the same; only the division's length changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace * with +",
+      "line_text": "const ROUNDS_INSIDE: i64 = 2 * COORD_MAX + 1;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "ROUNDS_INSIDE is read only by round_axis, where `2|X| < ROUNDS_INSIDE * w` picks the bit count of divide_half_even: COORD_BITS (40) inside it, else 127. Every mutant makes the constant smaller (2^41 - 3, 2^41 - 2, 2^40 + 2 or 1; the compile-time assertion ROUNDS_INSIDE < 2^41 still holds), so only coordinates that already took the 40-bit division move to the 127-bit one. divide_half_even returns num / den rounded half to even for any bit count whose quotient fits (it verifies that), and a quotient below 2^40 fits 127 bits, so every coordinate, its exactness and its OutOfRange are the same; only the division's length changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace * with /",
+      "line_text": "const ROUNDS_INSIDE: i64 = 2 * COORD_MAX + 1;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "ROUNDS_INSIDE is read only by round_axis, where `2|X| < ROUNDS_INSIDE * w` picks the bit count of divide_half_even: COORD_BITS (40) inside it, else 127. Every mutant makes the constant smaller (2^41 - 3, 2^41 - 2, 2^40 + 2 or 1; the compile-time assertion ROUNDS_INSIDE < 2^41 still holds), so only coordinates that already took the 40-bit division move to the 127-bit one. divide_half_even returns num / den rounded half to even for any bit count whose quotient fits (it verifies that), and a quotient below 2^40 fits 127 bits, so every coordinate, its exactness and its OutOfRange are the same; only the division's length changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace match guard within_budget(&n, d) with true in Plane::through",
+      "line_text": "Some((n, d)) if within_budget(&n, d) => Ok(Plane { n, d }),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "within_budget's only caller is Plane::through, the only maker of a Plane (its fields are private). For grid points (|coordinate| <= M = 2^40 - 1) each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude (the derivation on Plane::through; both reached in tests), below the budget's 2^83 and 2^125, so every clause is true for every input: the check never fails, and a weaker one (`||`, `<=`, or true) changes no result. It is kept because chapter 6.2 requires the plane type to check its budget at construction."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace within_budget -> bool with true",
+      "line_text": "let [nx, ny, nz] = *n;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "within_budget's only caller is Plane::through, the only maker of a Plane (its fields are private). For grid points (|coordinate| <= M = 2^40 - 1) each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude (the derivation on Plane::through; both reached in tests), below the budget's 2^83 and 2^125, so every clause is true for every input: the check never fails, and a weaker one (`||`, `<=`, or true) changes no result. It is kept because chapter 6.2 requires the plane type to check its budget at construction."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace && with || in within_budget",
+      "line_text": "&& d.unsigned_abs() < OFFSET_LIMIT",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "within_budget's only caller is Plane::through, the only maker of a Plane (its fields are private). For grid points (|coordinate| <= M = 2^40 - 1) each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude (the derivation on Plane::through; both reached in tests), below the budget's 2^83 and 2^125, so every clause is true for every input: the check never fails, and a weaker one (`||`, `<=`, or true) changes no result. It is kept because chapter 6.2 requires the plane type to check its budget at construction."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace && with || in within_budget",
+      "line_text": "&& nz.unsigned_abs() < NORMAL_LIMIT",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "within_budget's only caller is Plane::through, the only maker of a Plane (its fields are private). For grid points (|coordinate| <= M = 2^40 - 1) each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude (the derivation on Plane::through; both reached in tests), below the budget's 2^83 and 2^125, so every clause is true for every input: the check never fails, and a weaker one (`||`, `<=`, or true) changes no result. It is kept because chapter 6.2 requires the plane type to check its budget at construction."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace && with || in within_budget",
+      "line_text": "&& ny.unsigned_abs() < NORMAL_LIMIT",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "within_budget's only caller is Plane::through, the only maker of a Plane (its fields are private). For grid points (|coordinate| <= M = 2^40 - 1) each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude (the derivation on Plane::through; both reached in tests), below the budget's 2^83 and 2^125, so every clause is true for every input: the check never fails, and a weaker one (`||`, `<=`, or true) changes no result. It is kept because chapter 6.2 requires the plane type to check its budget at construction."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace < with <= in within_budget",
+      "line_text": "nx.unsigned_abs() < NORMAL_LIMIT",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "within_budget's only caller is Plane::through, the only maker of a Plane (its fields are private). For grid points (|coordinate| <= M = 2^40 - 1) each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude (the derivation on Plane::through; both reached in tests), below the budget's 2^83 and 2^125, so every clause is true for every input: the check never fails, and a weaker one (`||`, `<=`, or true) changes no result. It is kept because chapter 6.2 requires the plane type to check its budget at construction."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace < with <= in within_budget",
+      "line_text": "&& ny.unsigned_abs() < NORMAL_LIMIT",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "within_budget's only caller is Plane::through, the only maker of a Plane (its fields are private). For grid points (|coordinate| <= M = 2^40 - 1) each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude (the derivation on Plane::through; both reached in tests), below the budget's 2^83 and 2^125, so every clause is true for every input: the check never fails, and a weaker one (`||`, `<=`, or true) changes no result. It is kept because chapter 6.2 requires the plane type to check its budget at construction."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace < with <= in within_budget",
+      "line_text": "&& nz.unsigned_abs() < NORMAL_LIMIT",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "within_budget's only caller is Plane::through, the only maker of a Plane (its fields are private). For grid points (|coordinate| <= M = 2^40 - 1) each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude (the derivation on Plane::through; both reached in tests), below the budget's 2^83 and 2^125, so every clause is true for every input: the check never fails, and a weaker one (`||`, `<=`, or true) changes no result. It is kept because chapter 6.2 requires the plane type to check its budget at construction."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace < with <= in within_budget",
+      "line_text": "&& d.unsigned_abs() < OFFSET_LIMIT",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "within_budget's only caller is Plane::through, the only maker of a Plane (its fields are private). For grid points (|coordinate| <= M = 2^40 - 1) each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude (the derivation on Plane::through; both reached in tests), below the budget's 2^83 and 2^125, so every clause is true for every input: the check never fails, and a weaker one (`||`, `<=`, or true) changes no result. It is kept because chapter 6.2 requires the plane type to check its budget at construction."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace lpi_routed -> Option<Sign> with None",
+      "line_text": "let ([ax, ay, az], ad) = (l.plane.n, l.plane.d);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "On None, Plane::side_of_lpi takes side_of_lpi_hand, which computes the same sign exactly: w1 s2p - w2 s1p in I256 (then I320) times the sign of w1, from the same planes and points, the very expression the generated lpi_side and lpi_weight evaluate. Both paths are exact, so the answer is the same for every input; only the time taken changes. (tests/gate1_core.rs calls the generated predicates directly.)"
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace lpi_classify -> Option<Sign> with None",
+      "line_text": "let a = Wide::<L>::product_i128(w1, s2p)?;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "lpi_classify runs only in side_of_lpi_hand, which Plane::side_of_lpi calls only when the generated lpi_weight or lpi_side path returns None. Those paths check their rounded inputs against their certified widths (83 and 125 bits) on entry, and every plane a user can make comes from Plane::through on grid points, whose coefficients lie inside them (G29's budget); inside them no step overflows (the certificate). So no public input reaches lpi_classify, and returning None from it changes no result a user can see."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace tpi_routed -> Option<Sign> with None",
+      "line_text": "let [p, q, r] = t.planes;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "On None, Plane::side_of_tpi takes side_of_tpi_hand, which computes the same sign exactly: n . X + d . w from Tpi::homogeneous in I384 (then I512) times the sign of w, the 4 x 4 determinant the generated tpi_side evaluates. Both paths are exact, so the answer is the same for every input; only the time taken changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace < with == in round_axis",
+      "line_text": "let bits = if twice < frame {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The comparison only picks divide_half_even's bit count, 40 (COORD_BITS) or 127. For `<=` the boundary 2|X| = (2^41 - 1)w, a quotient of 2^40 - 1/2, also takes 40 bits: its floor 2^40 - 1 fits, and the tie rounds up to the even 2^40 as the 127-bit division rounds it (the fit is checked before the rounding step, which may reach 2^bits). For `==` every other coordinate takes 127 bits, which hold every quotient below 2^40 too. divide_half_even returns the same rounded value and exactness for any bit count whose quotient fits, so every coordinate and its OutOfRange are the same; only the division's length changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace < with <= in round_axis",
+      "line_text": "let bits = if twice < frame {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The comparison only picks divide_half_even's bit count, 40 (COORD_BITS) or 127. For `<=` the boundary 2|X| = (2^41 - 1)w, a quotient of 2^40 - 1/2, also takes 40 bits: its floor 2^40 - 1 fits, and the tie rounds up to the even 2^40 as the 127-bit division rounds it (the fit is checked before the rounding step, which may reach 2^bits). For `==` every other coordinate takes 127 bits, which hold every quotient below 2^40 too. divide_half_even returns the same rounded value and exactness for any bit count whose quotient fits, so every coordinate and its OutOfRange are the same; only the division's length changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace || with && in divide_half_even",
+      "line_text": "if num.is_negative() || den.is_negative() || den.is_zero() {",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "divide_half_even is private and its only caller, round_axis, passes the magnitude of X_i (negated when negative, by a checked negation) and w's magnitude (commit_axes returns None for w = 0 and negates a negative w first), so num < 0, den < 0 and den = 0 are each false on every call from the public interface: the guard never fires, and weakening it changes no result. The unit tests call divide_half_even directly with every input it refuses."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/rng.rs",
+      "mutant": "replace < with <= in lemire",
+      "line_text": "if low < bound {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant also checks low = bound against the threshold, 2^64 mod bound, which is below bound, so low = bound is never below it and the word is accepted, as the original accepts it without the check; the threshold is only computed and cached once sooner. No draw changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
+      "mutant": "replace < with <= in Wide<L>::product_i128",
+      "line_text": "let negative = (a < 0) != (b < 0);",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "The sign flag differs only when the operand compared is 0, and then the product's magnitude is 0: from_magnitude of a zero magnitude returns zero whichever the flag (the negation of zero is zero, and its top bit is clear), so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
+      "mutant": "replace < with <= in Wide<L>::checked_mul_i128",
+      "line_text": "let negative = self.is_negative() != (b < 0);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The sign flag differs only when the operand compared is 0, and then the product's magnitude is 0: from_magnitude of a zero magnitude returns zero whichever the flag (the negation of zero is zero, and its top bit is clear), so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/rng.rs",
+      "mutant": "replace round -> [u32; 4] with [1; 4]",
+      "line_text": "let [c0, c1, c2, c3] = counter;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Under the mutant every word the stream gives is the same, so every 64-bit draw is 2^32 + 1. Stream::below's Lemire loop rejects a word while the low half of word * n is below 2^64 mod n; for this word that holds for about a sixth of all bounds n, and the next word is the same again, so the draw never returns (a stream holds 2^66 words). tests/attack_g32.rs draws such bounds from its stream model and runs before every other test that reaches the generator; libtest waits for the hung test, so the gate sees a timeout (its known-answer tests, and tests/rng_kat.rs, would fail it, but never get to report). It hangs the gate's run; it is never a quiet survivor."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/rng.rs",
+      "mutant": "replace philox4x32_10 -> [u32; 4] with [1; 4]",
+      "line_text": "let mut block = round(counter, key);",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Under the mutant every word the stream gives is the same, so every 64-bit draw is 2^32 + 1. Stream::below's Lemire loop rejects a word while the low half of word * n is below 2^64 mod n; for this word that holds for about a sixth of all bounds n, and the next word is the same again, so the draw never returns (a stream holds 2^66 words). tests/attack_g32.rs draws such bounds from its stream model and runs before every other test that reaches the generator; libtest waits for the hung test, so the gate sees a timeout (its known-answer tests, and tests/rng_kat.rs, would fail it, but never get to report). It hangs the gate's run; it is never a quiet survivor."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/rng.rs",
+      "mutant": "replace Philox::block -> [u32; 4] with [1; 4]",
+      "line_text": "philox4x32_10(self.counter(block), self.key())",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Under the mutant every word the stream gives is the same, so every 64-bit draw is 2^32 + 1. Stream::below's Lemire loop rejects a word while the low half of word * n is below 2^64 mod n; for this word that holds for about a sixth of all bounds n, and the next word is the same again, so the draw never returns (a stream holds 2^66 words). tests/attack_g32.rs draws such bounds from its stream model and runs before every other test that reaches the generator; libtest waits for the hung test, so the gate sees a timeout (its known-answer tests, and tests/rng_kat.rs, would fail it, but never get to report). It hangs the gate's run; it is never a quiet survivor."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/rng.rs",
+      "mutant": "replace Stream::next_u32 -> Result<u32, RngError> with Ok(1)",
+      "line_text": "let next = match self.drawn.checked_add(1) {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Under the mutant every word the stream gives is the same, so every 64-bit draw is 2^32 + 1. Stream::below's Lemire loop rejects a word while the low half of word * n is below 2^64 mod n; for this word that holds for about a sixth of all bounds n, and the next word is the same again, so the draw never returns (a stream holds 2^66 words). tests/attack_g32.rs draws such bounds from its stream model and runs before every other test that reaches the generator; libtest waits for the hung test, so the gate sees a timeout (its known-answer tests, and tests/rng_kat.rs, would fail it, but never get to report). It hangs the gate's run; it is never a quiet survivor."
     }
   ],
   "coverage_off": [],
