@@ -3,6 +3,78 @@
   "about": "The geometry kernel's quality ledger (kernel architecture 28.8). survivors: every mutant cargo-mutants makes that the kernel's tests do not catch and the kernel keeps, keyed by file, cargo-mutants' description and the trimmed text of the mutated line, with why; in the foundation set only equivalent mutants (no input through the crate's public interface can tell them from the original) may be kept. coverage_off: every coverage(off) mark in a kernel crate, with the Kani or Verus proof that the code it hides cannot run. awaiting_proof: every foundation line the tests do not run yet, by its file, its trimmed text and how many missed lines have it, with the piece that proves it unreachable or tests it (the coverage gate landed before those proofs: owner decision of 2026-10-27); the list can only shrink. geom-test's kernel-quality binary checks both in .github/workflows/kernel-quality.yml; geom_test::quality_ledger documents the format.",
   "survivors": [
     {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/matrix.rs",
+      "mutant": "replace || with && in Matrix::row_pair",
+      "line_text": "if i == j || i >= self.rows || j >= self.rows {",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "row_pair is pub(crate), and its three callers pass two different rows inside the matrix: Lu::factor rows k < i < n, canonical_null_space row and i with i != row, both below d, and swap_rows only after returning early when i == j. Every term of the guard is false for such a pair, so the guard is false with either operator in either place and no public function's result changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/matrix.rs",
+      "mutant": "replace < with <= in Matrix::row_pair",
+      "line_text": "let (lo, hi) = if i < j { (i, j) } else { (j, i) };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "row_pair is pub(crate), and its three callers pass two different rows inside the matrix: Lu::factor rows k < i < n, canonical_null_space row and i with i != row, both below d, and swap_rows only after returning early when i == j. i < j and i <= j differ only when i == j, which the guard above has already refused."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/matrix.rs",
+      "mutant": "replace < with <= in Matrix::row_pair",
+      "line_text": "Ok(if i < j {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "row_pair is pub(crate), and its three callers pass two different rows inside the matrix: Lu::factor rows k < i < n, canonical_null_space row and i with i != row, both below d, and swap_rows only after returning early when i == j. i < j and i <= j differ only when i == j, which the guard at the top has already refused."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/matrix.rs",
+      "mutant": "replace || with && in Matrix::swap_cols",
+      "line_text": "if i >= self.cols || j >= self.cols {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "swap_cols is pub(crate), and its one caller, PivotedQr::factor, passes k and the pivot p, both below n (k < min(m, n), p found among columns k..n). Both terms of the guard are false then, so it is false with either operator and no public result changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/qr.rs",
+      "mutant": "replace > with >= in norm",
+      "line_text": ".fold(0.0f64, |m, v| if v.abs() > m { v.abs() } else { m });",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The fold keeps the largest magnitude. The mutant takes v.abs() also when it equals m, which is the same double (finite entries, never NaN, and an absolute value is never -0), so the scale, and every norm, is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/qr.rs",
+      "mutant": "replace < with <= in PivotedQr::r_diagonal",
+      "line_text": "if k < self.tau.len() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "tau has min(m, n) entries. The mutant also reads entry (k, k) for k = min(m, n), but the matrix has no such entry (k is at least its row or its column count), so get refuses it and .ok() gives None, as the original does."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/qr.rs",
+      "mutant": "replace > with >= in <impl MaxZero for f64>::max_zero",
+      "line_text": "if self > 0.0 { self } else { 0.0 }",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "max_zero's one caller passes 1.0 - r * r. The two versions differ only for self = 0 or -0, where the mutant returns self; a difference of doubles is -0 only when both are zeros of opposite sign, and 1.0 is not zero, so self is never -0 and +0 is returned either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/qr.rs",
+      "mutant": "replace < with <= in Cod::factor",
+      "line_text": "if rank < n {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant also enters the block when rank == n. Each row's reflection is then on the one coordinate k: householder on a one-entry vector finds a zero tail and returns tau = 0 and beta = the entry, so R(k, k) is set to itself, z_tau keeps its zeros and no row is updated; apply_z returns early when r == n. The work was charged before."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/qr.rs",
+      "mutant": "replace > with >= in canonical_null_space",
+      "line_text": "if v > best {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The mutant pivots on the last of several rows of equal largest magnitude instead of the first. The reduced echelon basis over the variable order is unique (chapter 15.8, the reason it is the canonical one), so the result is the same basis either way; the elimination order changes only the rounding of its entries, which the function does not promise bit for bit."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-num/src/eft.rs",
       "mutant": "replace < with <= in abs",
       "line_text": "if x < 0.0 { -x } else { x }",
