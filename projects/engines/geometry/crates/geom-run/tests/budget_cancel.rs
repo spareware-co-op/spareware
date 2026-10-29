@@ -323,7 +323,9 @@ fn the_meter_reads_the_cancellation_every_poll_every_charges() {
     let source = Countdown::new(2);
     let mut meter = WorkMeter::new(Budget::UNLIMITED).with_cancel(&source);
     let mut charges = 0;
-    while meter.charge(1).is_ok() {
+    // Capped, so a meter that never reads its cancellation fails the count below instead of
+    // charging for ever.
+    while charges < 4 * POLL_EVERY && meter.charge(1).is_ok() {
         charges += 1;
     }
     // Questions at charges 64 and 128 say "not yet"; the third, at charge 192, says stop. The
@@ -479,9 +481,12 @@ fn a_long_item_that_charges_stops_soon_after_a_cancellation() {
     let token = CancelToken::new();
     let items = [()];
     let started = AtomicBool::new(false);
+    // Neither side waits for ever: a helper that never starts the item, or a meter that never sees
+    // the cancellation, fails the test after this long instead of hanging it.
+    let deadline = Instant::now() + Duration::from_secs(10);
     let (got, latency) = std::thread::scope(|scope| {
         let canceller = scope.spawn(|| {
-            while !started.load(Ordering::SeqCst) {
+            while !started.load(Ordering::SeqCst) && Instant::now() < deadline {
                 std::thread::yield_now();
             }
             std::thread::sleep(Duration::from_millis(20));
@@ -492,9 +497,15 @@ fn a_long_item_that_charges_stops_soon_after_a_cancellation() {
         let got: Result<Vec<()>, RunError> =
             Exec::serial().map(&mut meter, PHASE, plan(1), &items, |_, (), meter| {
                 started.store(true, Ordering::SeqCst);
-                // Endless work, charged one unit at a time: only the meter can stop it.
+                // Endless work, charged one unit at a time: only the meter can stop it (or the
+                // deadline, as out of memory, which the assertion below refuses).
+                let mut charges = 0u64;
                 loop {
                     meter.charge(1)?;
+                    charges += 1;
+                    if charges % 4096 == 0 && Instant::now() > deadline {
+                        return Err(meter.out_of_memory());
+                    }
                 }
             });
         let returned = Instant::now();
