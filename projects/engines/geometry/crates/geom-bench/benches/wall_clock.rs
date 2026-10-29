@@ -73,6 +73,12 @@ fn wide(bencher: Bencher, case: Case) {
     time_case(bencher, case);
 }
 
+/// Fixed-width integers in 32-bit limbs, at the same bit widths (piece G42).
+#[divan::bench(args = cases_in("wide32"))]
+fn wide32(bencher: Bencher, case: Case) {
+    time_case(bencher, case);
+}
+
 /// Planes and the points where three planes meet.
 #[divan::bench(args = cases_in("plane"))]
 fn plane(bencher: Bencher, case: Case) {

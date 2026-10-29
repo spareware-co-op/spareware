@@ -57,6 +57,9 @@ default = ["judge"]
 judge = ["dep:gungraun-runner", "dep:serde_json"]
 
 [dev-dependencies]
+geom-test = { path = "../geom-test" }
+# The big-integer oracle of avnaim's own tests, as in geom-num (MIT OR Apache-2.0).
+num-bigint = "0.4.8"
 # Wall-clock timings for people, on every platform. MIT OR Apache-2.0.
 divan = "0.1.21"
 # The coverage test's readers, in place of a line scanner and text searches (piece G12a; chapter

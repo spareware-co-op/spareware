@@ -10,8 +10,13 @@ description = "Spare Kit geometry kernel, development only: fuzz harnesses and b
 [dependencies]
 geom-num = { path = "../geom-num" }
 geom-test = { path = "../geom-test" }
-# The wide-integer target's oracle (G26): exact arbitrary-precision integers, the big-integer
-# oracle chapter 29.3 names. MIT OR Apache-2.0.
+# Avnaim et al.'s reference signs (piece G42), without the bench judge's dependencies.
+geom-bench = { path = "../geom-bench", default-features = false }
+# The variants target (G42) reads the predicates' descriptions with geom-gen's own parser (ours,
+# MPL-2.0; development only).
+geom-gen = { path = "../geom-gen" }
+# The oracle of the wide-integer target (G26) and of the variants target (G42): exact
+# arbitrary-precision integers, the big-integer oracle chapter 29.3 names. MIT OR Apache-2.0.
 num-bigint = "0.4.8"
 
 [dev-dependencies]
