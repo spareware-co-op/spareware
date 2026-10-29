@@ -228,6 +228,7 @@ pub static OPS: &[Op] = &[
     Op { group: "interval", name: "cospi", measures: "Interval::cospi", classes: TE, prepare: |c| bind(inputs::interval::cospi(c), kernels::interval::cospi) },
     Op { group: "interval", name: "exp", measures: "Interval::exp", classes: TE, prepare: |c| bind(inputs::interval::exp(c), kernels::interval::exp) },
     Op { group: "interval", name: "ln", measures: "Interval::ln", classes: TE, prepare: |c| bind(inputs::interval::ln(c), kernels::interval::ln) },
+    Op { group: "interval", name: "atan2", measures: "Interval::atan2", classes: TE, prepare: |c| bind(inputs::interval::atan2(c), kernels::interval::atan2) },
     Op { group: "interval", name: "certain_sign", measures: "Interval::certain_sign", classes: T, prepare: |c| bind(inputs::interval::certain_sign(c), kernels::interval::certain_sign) },
     // Grid coordinates and grid steps.
     Op { group: "grid", name: "coord_new", measures: "Coord::new", classes: TO, prepare: |c| bind(inputs::grid::coord_new(c), kernels::grid::coord_new) },
@@ -569,7 +570,6 @@ pub static UNMEASURED: &[(&str, &str)] = &[
     ("Interval::point", "one call to Interval::new, which is measured"),
     ("Interval::sin", "a constant: always Err(UnprovenMaths): no radian sine is proven; Interval::sinpi, which is certified, is measured"),
     ("Interval::cos", "a constant: always Err(UnprovenMaths): no radian cosine is proven; Interval::cospi, which is certified, is measured"),
-    ("Interval::atan2", "a constant: always Err(UnprovenMaths) until its enclosure is built, which adds its benchmark"),
     ("Real::new", "one finiteness test, the same test Interval::new's benchmark measures"),
     ("Sign::of_i64", "one call to Sign::of_i128, which is measured"),
     ("Sign::negate", "one match on a three-valued enum"),

@@ -483,6 +483,12 @@ pub mod interval {
         run(batch, out, |&x| x.ln());
     }
 
+    /// `Interval::atan2` of each box `(y, x)`: `y.atan2(x)`.
+    #[inline(never)]
+    pub fn atan2(batch: &[(Interval, Interval)], out: &mut Vec<Result<Interval, NumError>>) {
+        run(batch, out, |&(y, x)| y.atan2(x));
+    }
+
     /// `Interval::certain_sign` on each interval.
     #[inline(never)]
     pub fn certain_sign(batch: &[Interval], out: &mut Vec<Option<Sign>>) {

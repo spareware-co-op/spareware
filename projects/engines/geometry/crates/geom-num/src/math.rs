@@ -46,9 +46,11 @@
 //! Their interval versions, for certified enclosures, are
 //! [`Interval::sinpi`](crate::interval::Interval::sinpi),
 //! [`Interval::cospi`](crate::interval::Interval::cospi),
-//! [`Interval::exp`](crate::interval::Interval::exp) and
-//! [`Interval::ln`](crate::interval::Interval::ln): the peaks of `sinpi` and `cospi` are found by
-//! exact comparisons, never missed or invented.
+//! [`Interval::exp`](crate::interval::Interval::exp),
+//! [`Interval::ln`](crate::interval::Interval::ln) and
+//! [`Interval::atan2`](crate::interval::Interval::atan2): the peaks of `sinpi` and `cospi` are
+//! found by exact comparisons, never missed or invented, and `atan2`'s branch cut and the origin
+//! are decided exactly.
 //!
 //! "Correctly rounded" means the result is the binary64 number nearest the exact mathematical
 //! value, ties to even: an error of at most half an ulp, and a result fixed bit for bit by the
@@ -311,6 +313,27 @@ pub fn sqrt(x: f64) -> Result<Real, NumError> {
 /// [`NumError::NotFinite`] for a NaN or infinite argument, or when the result overflows.
 pub fn fma(a: f64, b: f64, c: f64) -> Result<Real, NumError> {
     Real::new(libm::fma(finite(a)?, finite(b)?, finite(c)?))
+}
+
+/// [`fma`] of arguments already known to be finite, as a double: the eight fused multiply-adds of
+/// `Interval::mul_add`, whose operands are interval bounds, finite by construction, so the
+/// argument checks of [`fma`] would refuse nothing.
+///
+/// Always inline: through [`fma`], LLVM inlined some of `mul_add`'s eight calls and not others,
+/// and how many moved with unrelated code. G47's x86-64 count gate caught `mul_add` going from
+/// five inlined calls to four, 8% more instructions, with neither function changed; forcing
+/// [`fma`] itself inline instead cost the double-double two-product spills, 6.6% more cycles.
+///
+/// # Errors
+///
+/// [`NumError::NotFinite`] when the result overflows.
+#[allow(
+    clippy::inline_always,
+    reason = "measured: LLVM's choice moved with unrelated code, on x86-64"
+)]
+#[inline(always)]
+pub(crate) fn fma_of_finite(a: f64, b: f64, c: f64) -> Result<f64, NumError> {
+    Real::new(libm::fma(a, b, c)).map(Real::get)
 }
 
 /// Absolute value. Exact.

@@ -3,7 +3,7 @@
 //!
 //! The kernel promises the same bits on every machine (chapter 21): one model, one geometry, on
 //! Windows, Linux, macOS and in the browser. This test holds the numbers layer to that promise. It
-//! makes a fixed corpus of 87,618 calls (the test prints the count per section, and fails, naming
+//! makes a fixed corpus of 88,218 calls (the test prints the count per section, and fails, naming
 //! the section, if one shrinks):
 //!
 //! - every exact predicate (`orient2d`, `orient3d`, `incircle`, `insphere`), on random points at
@@ -19,12 +19,12 @@
 //! - wide-integer arithmetic in `I256`, `I320`, `I384` and `I512`, at the edges of each range;
 //! - the error-free transformations, on doubles of every exponent, with subnormals, the overflow
 //!   edge, the special values and fixed pairs for their rare routes; and every interval operation,
-//!   the length `norm` and the refusals of the enclosures that are not certified (`sin`, `cos`
-//!   and `atan2`);
+//!   the length `norm` and the refusals of the enclosures that are not certified (`sin` and
+//!   `cos`);
 //! - every function in `geom_num::math` and `geom_num::math::unproven`, over its domain, and
 //!   outside it, at its poles, past its overflow and with arguments that are not finite, each of
 //!   which must be reported; and the interval versions of the proven ones (`Interval::sinpi`,
-//!   `cospi`, `exp` and `ln`), inside and outside their domains;
+//!   `cospi`, `exp`, `ln` and `atan2`), inside and outside their domains;
 //! - the scalars and small types: `Real` and its total order (both orders of ±0 included),
 //!   `Coord` and `P3` at and beyond the frame's edges, `Sign`, `GridStep` and its units, `Steps`,
 //!   `Exactness`, the ladder's constants and `Wide`'s sign tests.
@@ -118,7 +118,10 @@ use geom_test::golden::{self, Sha256, hex};
 /// `exp(1)`, from 2.7182818284590455 to 2.718281828459045, the double nearest e). No error
 /// changed, and no other function's result. 2,700 records were added, from a generator of their
 /// own (`SEED_G05`): the `libm` twins of the five, now in `math::unproven` (indices 23 to 27), and
-/// the interval versions `Interval::sinpi`, `cospi`, `exp` and `ln` (28 to 31).
+/// the interval versions `Interval::sinpi`, `cospi`, `exp` and `ln` (28 to 31). It changed again
+/// when piece G47 built `Interval::atan2`: `interval` no longer records its refusal (index 2), and
+/// `math` gains 601 records of it (index 32) from a third generator (`SEED_G47`), after every
+/// earlier record, so nothing else in either section moved.
 const GOLDEN: &str = "geom-num/determinism";
 
 /// The calls each section makes, in order: the corpus is fixed, so these are its exact counts,
@@ -130,8 +133,8 @@ const SECTION_CALLS: [(&str, u64); 9] = [
     ("grid", 4_000),
     ("wide", 15_616),
     ("eft", 6_044),
-    ("interval", 19_149),
-    ("math", 10_377),
+    ("interval", 19_148),
+    ("math", 10_978),
     ("scalars", 4_209),
 ];
 
@@ -153,6 +156,10 @@ const CANONICAL_NAN: u64 = 0x7ff8_0000_0000_0000;
 /// generator of their own, so that the calls before them and the sections after them see the
 /// same inputs as before they were added.
 const SEED_G05: u64 = 0x4730_355f_4d41_5448;
+
+/// The seed of the maths corpus's third generator, for `Interval::atan2`'s records (piece G47):
+/// `G47_MATH` in ASCII, a generator of its own for the same reason as [`SEED_G05`].
+const SEED_G47: u64 = 0x4734_375f_4d41_5448;
 
 /// The sign bit of a double.
 const SIGN_BIT: u64 = 1 << 63;
@@ -1414,10 +1421,10 @@ fn intervals(g: &mut Gen, r: &mut Recorder) {
     norm_call(r, &[Interval::point(f64::MAX).unwrap()]);
     // The enclosures that are not certified refuse every interval: one call each, the function's
     // index before the result. Indices 3 and 4 were `exp` and `ln`, refused until piece G05 made
-    // them certified; they are recorded with the maths functions now (`maths`), and their indices
-    // here are not reused.
+    // them certified, and index 2 `atan2`, refused until piece G47 did; they are recorded with the
+    // maths functions now (`maths`), and their indices here are not reused.
     let unit = Interval::new(-1.0, 1.0).unwrap();
-    let refusals = [unit.sin(), unit.cos(), unit.atan2(unit)];
+    let refusals = [unit.sin(), unit.cos()];
     for (index, refused) in (0u8..).zip(refusals) {
         r.call(Op::IntervalUnproven);
         r.put_u8(index);
@@ -1691,6 +1698,15 @@ fn proven_twins_and_intervals(r: &mut Recorder) {
         let x = math_interval(g, domain);
         interval_math_call(r, 31, x.ln());
     }
+    // `Interval::atan2` (index 32), from a generator of its own: boxes of any finite doubles, which
+    // meet the axes, the branch cut and the origin, and the origin alone, which it refuses.
+    let g = &mut Gen(SEED_G47);
+    for _ in 0..600 {
+        let (y, x) = (math_interval(g, Domain::Any), math_interval(g, Domain::Any));
+        interval_math_call(r, 32, y.atan2(x));
+    }
+    let origin = Interval::point(0.0).unwrap();
+    interval_math_call(r, 32, origin.atan2(origin));
 }
 
 /// One call outside a function's domain, at a pole, past an overflow or with an argument that is

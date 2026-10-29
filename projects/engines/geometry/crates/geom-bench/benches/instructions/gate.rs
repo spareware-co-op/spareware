@@ -1098,10 +1098,18 @@ pub mod interval {
         run
     }
 
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("interval/atan2/typical"))]
+    #[bench::extreme(leak("interval/atan2/extreme"))]
+    fn atan2(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
     library_benchmark_group!(
         name = interval;
         benchmarks = new, contains, add, sub, mul, div, mul_add, square, sqrt, norm, neg, sinpi,
-            cospi, exp, ln, certain_sign
+            cospi, exp, ln, atan2, certain_sign
     );
 }
 

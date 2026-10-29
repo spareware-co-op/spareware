@@ -1,6 +1,6 @@
 //! Inputs for interval arithmetic: [`new`], [`contains`], [`add`], [`sub`], [`mul`], [`div`],
 //! [`mul_add`], [`square`], [`sqrt`], [`norm`], [`neg`] and [`certain_sign`]; and for the certified
-//! enclosures of the proven maths functions, [`sinpi`], [`cospi`], [`exp`] and [`ln`].
+//! enclosures of the proven maths functions, [`sinpi`], [`cospi`], [`exp`], [`ln`] and [`atan2`].
 //!
 //! The enclosures' classes: `typical`, narrow intervals of half-turns around a peak, strictly
 //! between peaks, and anywhere, within 2^10 half-turns; exponents within ±32; logarithms of
@@ -10,7 +10,13 @@
 //! ending one double short of a peak; for `exp`, upper ends either side of overflow (past it,
 //! `NotFinite`), the deep underflow (the lower bound held at +0), an end at exactly 0, and subnormal
 //! ends; for `ln`, intervals reaching below zero (`OutsideDomain`), a lower end of zero
-//! (`NotFinite`), an end at exactly 1, subnormal lower ends and the top of the range.
+//! (`NotFinite`), an end at exactly 1, subnormal lower ends and the top of the range. For `atan2`,
+//! typical boxes `y × x` are narrow ones around points of ordinary size in every direction, boxes
+//! across the positive x-axis and boxes across the y-axis (four corners evaluated, no branch
+//! cut); extreme ones are, in rotation, boxes across the branch cut on the negative x-axis (the
+//! whole range, no corner evaluated), with the origin at a corner (an exact zero bound), the
+//! origin alone (`OutsideDomain`), subnormal boxes, huge boxes, and boxes whose lower edge lies
+//! on the negative x-axis (angles up to π).
 //!
 //! Classes:
 //!
@@ -537,6 +543,43 @@ pub fn ln(class: Class) -> Vec<Interval> {
                 2 => between(1.0, positive(g, 0, 10)),
                 3 => between(subnormal(g).abs(), positive(g, -10, 10)),
                 _ => huge(g),
+            }
+        }),
+        _ => Vec::new(),
+    }
+}
+
+/// Boxes `(y, x)` for [`Interval::atan2`] (`y.atan2(x)`): typical ones, in rotation, narrow
+/// around a point of ordinary size in any direction, across the positive x-axis, and across the
+/// y-axis; or the extreme ones of the module documentation.
+#[must_use]
+pub fn atan2(class: Class) -> Vec<(Interval, Interval)> {
+    let mut g = rng("interval::atan2", class);
+    match class {
+        Class::Typical => batch_of(|n| {
+            let g = &mut g;
+            match n % 3 {
+                0 => Some((away_from_zero(g, n / 3)?, away_from_zero(g, n / 6)?)),
+                1 => Some((around_zero(g)?, narrow_positive(g)?)),
+                _ => Some((away_from_zero(g, n / 3)?, around_zero(g)?)),
+            }
+        }),
+        Class::Extreme => batch_of(|n| {
+            let g = &mut g;
+            match n % 6 {
+                // Across the branch cut: the whole range.
+                0 => Some((around_zero(g)?, narrow_negative(g)?)),
+                // The origin at a corner: one bound is the exact zero angle.
+                1 => Some((
+                    between(0.0, positive(g, -10, 10))?,
+                    between(0.0, positive(g, -10, 10))?,
+                )),
+                // The origin alone: no angle, OutsideDomain.
+                2 => Some((between(0.0, 0.0)?, between(0.0, 0.0)?)),
+                3 => Some((tiny(g)?, between(-subnormal(g).abs(), subnormal(g).abs())?)),
+                4 => Some((huge(g)?, huge(g)?.neg())),
+                // The lower edge on the negative x-axis: angles up to π.
+                _ => Some((between(0.0, positive(g, -10, 10))?, narrow_negative(g)?)),
             }
         }),
         _ => Vec::new(),
