@@ -6910,6 +6910,29 @@
           "target": "lib"
         },
         {
+          "cost": "a blossom is O(p²·d) rational operations for dimension d; a point one blossom; insertion and refinement one blossom per new control point; elevation C(p + t, p) blossoms per new control point, which this reference accepts because it runs on small cases only. The rationals grow with the knots' and points' binary expansions; no recursion.",
+          "does": "a [`Spline`] holds a degree, a knot vector and control points as exact rationals, in homogeneous form for a rational curve (w·P and then w), converted exactly from the doubles a kernel curve holds: every finite double is a binary fraction, so nothing rounds. Everything else comes from one function, the blossom of a polynomial piece: the symmetric, multi-affine function of p arguments whose value at (u, …, u) is the piece at u. De Boor's algorithm computes it, taking its r-th argument at its r-th level. [`Spline::homogeneous_point`] is the blossom at (u, …, u); [`Spline::point`] divides by the weight. A new knot vector over the same domain, finer or of higher degree, gets its control points from the dual functional property: control point i of a spline of degree q is the blossom of any of its pieces in that point's support, at the q knots that follow knot i. [`Spline::insert`] and [`Spline::refine`] read the original pieces' blossoms that way. [`Spline::elevate`] reads the blossom of each piece seen as a polynomial of degree p + t, which is the mean of the original blossom over every choice of p of its p + t arguments, on the knot vector with each distinct knot repeated t more times.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/nurbs_reference.rs",
+          "guarantees": [
+            "**Exact.** Every value is an exact rational; nothing rounds, so each result is the exact result of the operation on the doubles given.",
+            "**Independent of the kernel.** Written from the definitions below, without reading `geom-nurbs`'s code (chapter 28.9: a different author, a different agent session), and by a different method: blossoms, where the kernel follows The NURBS Book's algorithms as `NLib` implements them. It shares no code with the kernel and calls none.",
+            "**Refused, never guessed.** Malformed input (knots out of order, counts that do not match, a weight that is not positive, a value that is not finite), a parameter outside the domain, a knot that cannot be inserted and a curve that cannot be elevated are typed [`ReferenceError`]s."
+          ],
+          "job": "The reference implementation of NURBS curves (chapter 28.9): evaluation, knot insertion, refinement and degree elevation in exact rationals, to check `geom-nurbs` against.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1016/0021-9045(72",
+              "https://doi.org/10.1016/0167-8396(89"
+            ],
+            "text": "C. de Boor, \"On calculating with B-splines\", *Journal of Approximation Theory* 6 (1972), 50–62, <https://doi.org/10.1016/0021-9045(72)90080-9>, for the recurrence; L. Ramshaw, \"Blossoms are polar forms\", *Computer Aided Geometric Design* 6 (1989), 323–358, <https://doi.org/10.1016/0167-8396(89)90032-0>, for the blossom, the dual functional property and degree elevation as the mean of the blossom over the choices of its arguments; and H.-P. Seidel, \"A new multiaffine approach to B-splines\", *Computer Aided Geometric Design* 6 (1989), 23–32, <https://doi.org/10.1016/0167-8396(89)90003-4>, for de Boor's algorithm as the blossom with one argument per level."
+          },
+          "path": "geom_test::nurbs_reference",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "one run of the property per case, plus shrinking after a failure, at most about 41 property runs per coordinate (a binary search over at most 2^40 magnitudes). One read of proptest's process-wide configuration per [`run`] or [`first_value`].",
           "does": "[`run`] runs a proptest property from a [`Seed`] resolved and printed by [`crate::seed::resolve`], so a property test has the same seed rules as every other seeded test. [`config`] builds the proptest configuration it uses. [`first_value`] draws one case from a seed. [`coord`], [`p2`] and [`p3`] are proptest strategies for grid coordinates and points.",
           "family": [],
