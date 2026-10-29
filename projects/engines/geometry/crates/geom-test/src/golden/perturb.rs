@@ -17,8 +17,8 @@
 //!    128 bytes, it does the same with boxes of that many uninitialised bytes, made by `Box::new`
 //!    as any value is boxed, one or two from each of [`BOX_SITES`] call sites. Where an allocator
 //!    keeps one list per size class whatever code allocates, this only adds to step 2; macOS's
-//!    allocator on arm64 keeps four lists per size and picks one from the call site (the
-//!    guarantees say how).
+//!    allocator on arm64 keeps four lists per size and, in release builds, picks one by call site
+//!    (the guarantees say how).
 //!
 //! Chapter 28.13 asks for "a test allocator that shifts and fragments memory, so any ordering by
 //! address shows up", and chapter 21 for "tests that shuffle allocation" behind its rule that ties
@@ -76,21 +76,20 @@
 //!   of the in-process repeat).
 //! - **Every box up to 128 bytes, on macOS on arm64.** macOS 26's allocator there, libmalloc's xzone
 //!   malloc, keeps four pools for each 16-byte size class and puts each block in the one a keyed
-//!   hash picks from the address `malloc` was called from (`_xzm_type_choose_ptr_bucket`, hashing
-//!   `malloc_callsite_fallback_type_descriptor`'s return address, since plain `malloc` has no type
-//!   to hash). In release builds that address is the allocating code's own, and the pools it picks
-//!   change from process to process (inferred from the measurements: Rust reaching `malloc` by tail
-//!   calls and the load address moving, not read from the binary). With step 3's boxes from one
-//!   call site per size, about one release process in eight, quiet or busy, put
-//!   [`address_order_digest`]'s boxes in a pool nothing perturbed, and every seed then saw their own
-//!   two orders, ascending and descending (issue #377, runs 40871785914 and 40886703835; #370 was
-//!   the same before step 3). From [`BOX_SITES`] call sites for each of the two sizes in a class,
-//!   64 sites draw pools in each class. Measured (run 40890282881, four runners, each with keys of
-//!   its own): in release, sweeps of sixteen seeds gave 14 to 16 orders (16 in 718 of 760) and of
-//!   eight seeds 6 to 8 (8 in 716 of 760), quiet and busy; in debug, every order in all 80
-//!   processes. A golden case that orders blocks over 128 bytes by address may still pass the
-//!   repeat on that runner in release, since step 2 allocates each class from one call site and
-//!   reaches one of its four pools; the other runners still catch it.
+//!   hash of the block's type picks (`_xzm_type_choose_ptr_bucket`). Rust's allocations carry no
+//!   type, and in release builds the pool followed the allocating call site and changed from
+//!   process to process (measured; the part of libmalloc that stands in a type for plain `malloc` is
+//!   under the APSL and is not relied on here). With step 3's boxes from one call site per size,
+//!   about one release process in eight, quiet or busy, put [`address_order_digest`]'s boxes in a
+//!   pool nothing perturbed, and every seed then saw their own two orders, ascending and descending
+//!   (issue #377, runs 40871785914 and 40886703835; #370 was the same before step 3). From
+//!   [`BOX_SITES`] call sites for each of the two sizes in a class, 64 sites draw pools in each
+//!   class. Measured (run 40890282881, four runners, each a fresh boot with keys of its own): in
+//!   release, sweeps of sixteen seeds gave 14 to 16 orders (16 in 718 of 760) and of eight seeds 6
+//!   to 8 (8 in 716 of 760), quiet and busy; in debug, every order in all 80 processes. A golden
+//!   case that orders blocks over 128 bytes by address may still pass the repeat on that runner in
+//!   release, since step 2 allocates each class from one call site and reaches one of its four
+//!   pools; the other runners still catch it.
 //!
 //! Method: heap-layout randomisation as in Stabilizer (C. Curtsinger and E. D. Berger, "Stabilizer:
 //! Statistically Sound Performance Evaluation", ASPLOS 2013,
@@ -112,10 +111,9 @@
 //!   the reasons above. No code copied.
 //! Consulted: libmalloc's xzone malloc, MIT,
 //!   <https://github.com/apple-oss-distributions/libmalloc/blob/c49dafa25f1efe8607701ae6014a663ad2ee437f/src/xzone_malloc/xzone_malloc.c>,
-//!   with its `src/malloc_type_internal.h` and `src/xzone_malloc/xzone_malloc.h` at the same commit,
-//!   for how macOS on arm64 pools and reuses small blocks (its last-freed-first chunk lists, its
-//!   four pools per size class and its choice of pool from the call site), to explain what CI
-//!   measured. No code copied.
+//!   with `src/xzone_malloc/xzone_malloc.h` (MIT) at the same commit, for how macOS on arm64 pools
+//!   and reuses small blocks (its last-freed-first chunk lists, its four pools per size class and
+//!   its keyed choice of pool), to explain what CI measured. No code copied.
 
 use core::any::Any;
 use core::mem::MaybeUninit;
