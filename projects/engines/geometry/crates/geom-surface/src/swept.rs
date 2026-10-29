@@ -844,9 +844,13 @@ impl Swept {
                 sigma,
             } => {
                 let (f1, f2) = (first.to_nurbs(meter)?, second.to_nurbs(meter)?);
+                // The forms as they are when they share a map and are polynomial and clamped (their
+                // control points are then the ruling's); else Taylor forms on the same parameter.
                 let compatible = f1.value.map == f2.value.map
                     && !f1.value.curve.is_rational()
-                    && !f2.value.curve.is_rational();
+                    && !f2.value.curve.is_rational()
+                    && f1.value.curve.basis().is_clamped()
+                    && f2.value.curve.basis().is_clamped();
                 let (c1, c2, map, d1, d2) = if compatible {
                     (
                         f1.value.curve,

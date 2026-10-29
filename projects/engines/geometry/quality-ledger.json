@@ -635,6 +635,30 @@
       "reason": "eps is the largest relative error of the stored weights, each the middle double of its own enclosure: a few units in the last place, never NaN and never near 0.5, so both operands are false and && gives false as || does."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-surface/src/swept.rs",
+      "mutant": "replace > with >= in compatible_pair",
+      "line_text": "if t > lo && t < hi {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "compatible_pair takes only clamped curves (the ruled surface's own forms when both are clamped, else its Taylor forms, which are), raised to one degree p first, so each has its end knots p + 1 times: an end knot is never missing, and counting the ends in too (>= or <=), or every knot (||), adds nothing."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/swept.rs",
+      "mutant": "replace < with <= in compatible_pair",
+      "line_text": "if t > lo && t < hi {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "compatible_pair takes only clamped curves (the ruled surface's own forms when both are clamped, else its Taylor forms, which are), raised to one degree p first, so each has its end knots p + 1 times: an end knot is never missing, and counting the ends in too (>= or <=), or every knot (||), adds nothing."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/swept.rs",
+      "mutant": "replace && with || in compatible_pair",
+      "line_text": "if t > lo && t < hi {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "compatible_pair takes only clamped curves (the ruled surface's own forms when both are clamped, else its Taylor forms, which are), raised to one degree p first, so each has its end knots p + 1 times: an end knot is never missing, and counting the ends in too (>= or <=), or every knot (||), adds nothing."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-curve/src/affine.rs",
       "mutant": "replace && with || in Entries::of",
       "line_text": ".all(|(&d, e)| e.lo() == d && e.hi() == d);",

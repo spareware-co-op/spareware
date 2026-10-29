@@ -17,7 +17,7 @@
 
 use geom_curve::{Basis as Leaf, CurveError, Frame, Line, Trimmed};
 use geom_math::{Axis, GridTransform, RationalTransform, Rotation, Transform, TypedTransform};
-use geom_nurbs::{Basis, Curve, Direction, Limit};
+use geom_nurbs::{Basis, Curve, Direction, Limit, NurbsError};
 use geom_run::{Budget, WorkMeter};
 use geom_surface::contract::check;
 use geom_surface::{
@@ -111,61 +111,86 @@ fn kinds() -> Vec<SurfaceKind> {
             Extrusion::new(spline.clone(), [1.0, -1.0, 0.5], (0.5, 3.0)).unwrap(),
         ),
         SurfaceKind::Ruled(
-            Ruled::new(line([2.0, 0.0, 0.0], [-2.0, 2.0, 0.0]), spline, (0.0, 1.0)).unwrap(),
+            Ruled::new(
+                line([2.0, 0.0, 0.0], [-2.0, 2.0, 0.0]),
+                spline.clone(),
+                (0.0, 1.0),
+            )
+            .unwrap(),
+        ),
+        // A rational first curve against a polynomial second one.
+        SurfaceKind::Ruled(
+            Ruled::new(spline, line([2.0, 0.0, 5.0], [-2.0, 2.0, 0.0]), (0.0, 1.0)).unwrap(),
         ),
     ]
 }
 
-/// Claim: a reversal in either direction is the same surface on the negated parameter, a split in
-/// either direction is the same surface on each side, and neither direction splits at an end.
+/// Checks that a reversal in either direction is the same surface on the negated parameter (its
+/// domain negated in that direction), that a split in either direction is the same surface on
+/// each side, and that neither direction splits at an end.
+fn reverses_and_splits(k: &SurfaceKind, m: &mut WorkMeter<'_>) {
+    let ((a, b), (c, d)) = k.domain();
+    for dir in [Direction::U, Direction::V] {
+        let r = k.reversed(dir, m).unwrap();
+        let want = match dir {
+            Direction::U => ((-b, -a), (c, d)),
+            Direction::V => ((a, b), (-d, -c)),
+        };
+        assert_eq!(r.value.domain(), want, "{k:?}, {dir:?}");
+        let tol = r.deviation + 1e-12;
+        for (u, v) in params(k.domain()) {
+            let p = k.point(u, v, SIDES).unwrap();
+            let (ru, rv) = match dir {
+                Direction::U => (-u, v),
+                Direction::V => (u, -v),
+            };
+            let q = r.value.point(ru, rv, SIDES).unwrap();
+            assert!(near(p, q, tol), "{k:?}, {dir:?} at ({u}, {v}): {p:?} {q:?}");
+        }
+        let (lo, hi) = match dir {
+            Direction::U => (a, b),
+            Direction::V => (c, d),
+        };
+        for end in [lo, hi] {
+            assert_eq!(
+                k.split(dir, end, m).err(),
+                Some(CurveError::ParameterOutside),
+                "{k:?}, {dir:?}"
+            );
+        }
+        let mid = f64::midpoint(lo, hi);
+        let (l, h) = k.split(dir, mid, m).unwrap();
+        let (dl, dh) = match dir {
+            Direction::U => (((a, mid), (c, d)), ((mid, b), (c, d))),
+            Direction::V => (((a, b), (c, mid)), ((a, b), (mid, d))),
+        };
+        assert_eq!(
+            (l.value.domain(), h.value.domain()),
+            (dl, dh),
+            "{k:?}, {dir:?}"
+        );
+        let tol = l.deviation + h.deviation + 1e-12;
+        for (u, v) in params(k.domain()) {
+            let t = match dir {
+                Direction::U => u,
+                Direction::V => v,
+            };
+            let part = if t <= mid { &l.value } else { &h.value };
+            let q = part.point(u, v, SIDES).unwrap();
+            let p = k.point(u, v, SIDES).unwrap();
+            assert!(near(p, q, tol), "{k:?}, split {dir:?} at ({u}, {v})");
+        }
+    }
+}
+
+/// Claim: every kind reverses and splits in both directions, and keeps the contract.
 #[test]
 fn every_kind_reverses_and_splits_in_both_directions() {
     let m = &mut meter();
-    for (i, k) in kinds().into_iter().enumerate() {
-        let ((a, b), (c, d)) = k.domain();
-        for dir in [Direction::U, Direction::V] {
-            let r = k.reversed(dir, m).unwrap();
-            let tol = r.deviation + 1e-12;
-            for (u, v) in params(k.domain()) {
-                let p = k.point(u, v, SIDES).unwrap();
-                let (ru, rv) = match dir {
-                    Direction::U => (-u, v),
-                    Direction::V => (u, -v),
-                };
-                let q = r.value.point(ru, rv, SIDES).unwrap();
-                assert!(
-                    near(p, q, tol),
-                    "kind {i}, {dir:?} at ({u}, {v}): {p:?} {q:?}"
-                );
-            }
-            let (lo, hi) = match dir {
-                Direction::U => (a, b),
-                Direction::V => (c, d),
-            };
-            assert_eq!(
-                k.split(dir, lo, m).err(),
-                Some(CurveError::ParameterOutside),
-                "kind {i}, {dir:?}"
-            );
-            assert_eq!(
-                k.split(dir, hi, m).err(),
-                Some(CurveError::ParameterOutside),
-                "kind {i}, {dir:?}"
-            );
-            let mid = f64::midpoint(lo, hi);
-            let (l, h) = k.split(dir, mid, m).unwrap();
-            let tol = l.deviation + h.deviation + 1e-12;
-            for (u, v) in params(k.domain()) {
-                let t = match dir {
-                    Direction::U => u,
-                    Direction::V => v,
-                };
-                let part = if t <= mid { &l.value } else { &h.value };
-                let q = part.point(u, v, SIDES).unwrap();
-                let p = k.point(u, v, SIDES).unwrap();
-                assert!(near(p, q, tol), "kind {i}, split {dir:?} at ({u}, {v})");
-            }
-        }
+    let turn = TypedTransform::from(Transform::rotation(Axis::Z, 0.3).unwrap());
+    for k in kinds() {
+        reverses_and_splits(&k, m);
+        check(&k, &params(k.domain()), &turn, m).unwrap_or_else(|e| panic!("{k:?}: {e}"));
     }
 }
 
@@ -189,6 +214,7 @@ fn affine_images_keep_the_contract() {
             check(&image, &params(image.domain()), &t, m)
                 .unwrap_or_else(|e| panic!("{image:?} under {t:?}: {e}"));
         }
+        reverses_and_splits(&image, m);
         // Its points are the source's, moved.
         for (u, v) in params(s.domain()) {
             let p = s.point(u, v, SIDES).unwrap();
@@ -215,6 +241,10 @@ fn analytic_kinds_refuse_what_they_cannot_be() {
     );
     assert_eq!(
         cyl([0.0; 3], f64::INFINITY, ok),
+        Some(CurveError::NotFinite)
+    );
+    assert_eq!(
+        Plane::new([0.0; 3], [f64::NAN, 0.0, 0.0], [0.0, 1.0, 0.0], ok).err(),
         Some(CurveError::NotFinite)
     );
     // −10⁻¹⁷ to 2 is a rounding more than a turn: 2 + 10⁻¹⁷ rounds to 2.
@@ -408,4 +438,54 @@ fn translations_move_points_not_derivatives() {
             "({u}, {v})"
         );
     }
+}
+
+fn quadratic(knots: Vec<f64>, pts: &[[f64; 3]]) -> Trimmed<3> {
+    let basis = Basis::new(2, knots).unwrap();
+    Trimmed::whole(Leaf::Nurbs(Curve::new(basis, pts).unwrap())).unwrap()
+}
+
+/// Claim: a ruled surface with an unclamped profile is refused as such (the NURBS bounds its
+/// Taylor forms need take clamped curves), not as a defect; one between two curves broken at the
+/// same parameter converts exactly, as they are.
+#[test]
+fn ruled_surfaces_convert_unclamped_and_broken_curves() {
+    let m = &mut meter();
+    let unclamped = quadratic(
+        vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
+        &[[0.0, 0.0, 0.0], [1.0, 1.0, 0.0], [2.0, 0.0, 0.0]],
+    );
+    assert_eq!(unclamped.interval(), (2.0, 3.0));
+    let other = Trimmed::new(
+        Leaf::Line(
+            Line::new(
+                [0.0, 0.0, 1.0],
+                [1.0, 0.0, 0.0],
+                (f64::NEG_INFINITY, f64::INFINITY),
+            )
+            .unwrap(),
+        ),
+        (2.0, 3.0),
+    )
+    .unwrap();
+    let r = SurfaceKind::Ruled(Ruled::new(unclamped, other, (0.0, 1.0)).unwrap());
+    assert_eq!(
+        r.to_nurbs(m).err(),
+        Some(CurveError::Nurbs(NurbsError::NotClamped))
+    );
+    let broken = |z: f64| {
+        quadratic(
+            vec![0.0, 0.0, 0.0, 0.5, 0.5, 0.5, 1.0, 1.0, 1.0],
+            &[
+                [0.0, 0.0, z],
+                [1.0, 1.0, z],
+                [2.0, 0.0, z],
+                [2.0, 0.5, z],
+                [3.0, 1.0, z],
+                [4.0, 0.0, z],
+            ],
+        )
+    };
+    let r = Ruled::new(broken(0.0), broken(2.0), (0.0, 1.0)).unwrap();
+    assert_eq!(r.to_nurbs(m).unwrap().deviation, 0.0);
 }

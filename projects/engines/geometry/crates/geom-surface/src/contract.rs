@@ -222,7 +222,7 @@ fn nurbs_at(
     v: f64,
     meter: &mut WorkMeter<'_>,
 ) -> Result<[Interval; 3], CurveError> {
-    if form.u == ParamMap::Same && form.v == ParamMap::Same {
+    if (&form.u, &form.v) == (&ParamMap::Same, &ParamMap::Same) {
         let sides = (Limit::FromRight, Limit::FromRight);
         let [p, _, _] = ParamSurface::enclose(&form.surface, u, v, sides, meter)?;
         return Ok(p);
