@@ -1899,6 +1899,30 @@
           "target": "lib"
         },
         {
+          "cost": "a few seconds natively: for every node, a few hundred halvings, each an exact evaluation of a polynomial of degree at most 2n + 1 ≤ 61 at a dyadic point.",
+          "does": "writes `geom-num`'s `src/quadrature_rules/mod.rs`, the tables `geom_num::quadrature` integrates with: the Gauss–Legendre rules of 1 to [`GAUSS_MAX`] points, and the Gauss–Kronrod rules of 2n + 1 points that extend the n-point Gauss rule for each n of [`KRONROD_N`] (QUADPACK's six). Every number is computed in exact rational arithmetic and rounded to the nearest `f64`, ties to even, only once an exact enclosure of it lies inside one rounding cell, so each entry is the correctly rounded value of the true node or weight.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-gen/src/quadrature.rs",
+          "guarantees": [
+            "**Correctly rounded.** Every node and weight is the `f64` nearest to the exact value, ties to even (dashu-ratio's `to_f64`, which its documentation guarantees correctly rounded, and the unit tests check against both neighbours), decided from an exact enclosure, never from an approximation.",
+            "**Exact or nothing.** Every step is exact rational arithmetic; a bracket that does not round to one value within [`MAX_HALVINGS`] halvings, or an isolation that fails, is an error, never an approximate table.",
+            "**Pure.** No input but the constants here; the same bytes on every target."
+          ],
+          "job": "Generator `quadrature-rules`: the Gauss–Legendre and Gauss–Kronrod rules on [−1, 1], computed exactly and each node and weight rounded once to the nearest `f64` (piece G51; chapters 12 and 29.4).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1090/S0025-5718-69-99647-1",
+              "https://doi.org/10.1007/BF01448041",
+              "https://doi.org/10.1007/978-3-642-61786-7"
+            ],
+            "text": "G. H. Golub and J. H. Welsch, *Calculation of Gauss quadrature rules*, Mathematics of Computation 23 (1969), <https://doi.org/10.1090/S0025-5718-69-99647-1>; G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins (2013), section 8.4.1 (bisection by Sturm count); A. S. Kronrod, *Nodes and Weights of Quadrature Formulas*, Consultants Bureau (1965); G. Szegő, *Über gewisse orthogonale Polynome, die zu einer oszillierenden Belegungsfunktion gehören*, Mathematische Annalen 110 (1935), <https://doi.org/10.1007/BF01448041> (the interlacing); the rule set is QUADPACK's (R. Piessens et al., *QUADPACK*, Springer (1983), <https://doi.org/10.1007/978-3-642-61786-7>)."
+          },
+          "path": "geom_gen::quadrature",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "none at run time beyond the generators themselves.",
           "does": "[`REGISTRY`] lists every generator ([`GENERATORS`]) and every generated folder ([`FOLDERS`]). Adding a generator means adding its module and one entry here, with the one file it owns, inside a generated folder, and, if it uses randomness, its fixed seed; CI then checks its output on every pull request. Removing or renaming one leaves its old output an orphan, which `check` reports until it is deleted. [`workspace_root`] finds the workspace this crate was built in, the default root for writing and checking.",
           "family": [],
@@ -2826,6 +2850,35 @@
       ],
       "errors": [
         {
+          "doc": "Why a search could not give its result.",
+          "file": "projects/engines/geometry/crates/geom-num/src/brent.rs",
+          "kinds": [
+            {
+              "doc": "`f(a)` and `f(b)` have the same sign and neither is zero: `[a, b]` is not a bracket.",
+              "name": "SameSign",
+              "shape": "unit"
+            },
+            {
+              "doc": "`a` is not below `b`, or the tolerance is negative.",
+              "name": "BadInterval",
+              "shape": "unit"
+            },
+            {
+              "doc": "`f` was evaluated `cap` times without meeting the tolerance.",
+              "name": "CapReached",
+              "shape": "unit"
+            },
+            {
+              "doc": "The function, or a value it returned, failed.",
+              "name": "Num",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_num::brent",
+          "name": "BrentError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "Why a number could not be made or an exact computation could not proceed.",
           "file": "projects/engines/geometry/crates/geom-num/src/error.rs",
           "kinds": [
@@ -2890,6 +2943,40 @@
           "non_exhaustive": false
         },
         {
+          "doc": "Why an integral could not be given.",
+          "file": "projects/engines/geometry/crates/geom-num/src/quadrature.rs",
+          "kinds": [
+            {
+              "doc": "`a` is not below `b`, or a tolerance is negative.",
+              "name": "BadInterval",
+              "shape": "unit"
+            },
+            {
+              "doc": "No rule of that size: Gauss–Legendre has 1 to 20 points, and there are six Kronrod rules.",
+              "name": "NoSuchRule",
+              "shape": "unit"
+            },
+            {
+              "doc": "The tolerance was not met within `cap` bisections or [`MAX_PANELS`] panels.",
+              "name": "CapReached",
+              "shape": "unit"
+            },
+            {
+              "doc": "A panel became too narrow to split in `f64`.",
+              "name": "TooNarrow",
+              "shape": "unit"
+            },
+            {
+              "doc": "The function, or a sum, failed.",
+              "name": "Num",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_num::quadrature",
+          "name": "QuadError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "Why a draw or a stream range could not be made. A failed draw leaves its stream exactly as it was.",
           "file": "projects/engines/geometry/crates/geom-num/src/rng.rs",
           "kinds": [
@@ -2938,7 +3025,7 @@
         "A [`plane::Plane`] and a [`plane::Tpi`] check their bit budgets when they are made, so every computation on them fits its type.",
         "Committing a three-plane point to the grid ([`plane::Tpi::to_grid`]) rounds each coordinate to the nearest step, ties to even, moving it by at most half a step ([`ladder::COMMIT_PER_AXIS`]), and says whether it moved.",
         "Integer arithmetic on fixed-width values in kernel code is a checked method (`checked_*`, or in [`wide`] and [`wide32`] the `overflowing_*` limb steps, whose carry or borrow is kept), so nothing depends on overflow checks being on: a result that does not fit is `None` or an error, never a silently wrapped value. Three kinds of step compute modulo a power of two on purpose, and each cites what defines it so. In [`rng`], Philox's multiplications and key schedule, modulo 2^32 (its 32 × 32-bit product is formed modulo 2^64, as its reference does, and never reaches 2^64), and Lemire's threshold, a negation modulo 2^64. In the large accumulator inside [`exact_sum::ExactSum::add_slice`] and [`exact_sum::ExactSum::add_iter`], the sum of a double's whole bit pattern modulo 2^64, as Neal's method specifies, from which the exact sum of the significands is recovered. In those two a `wrapping_*` method is the specified operation, not a result that failed to fit. And in the CORE-MATH ports of [`math`], a `wrapping_*` method where the C source computes modulo 2^64 or 2^128 on purpose, each with a comment saying why the C does it (a two's complement negation, a sum of which only the low bits are read, or a limb sum whose carry is kept by comparison as [`wide`] keeps its own), so a wrap there is the computation the proof describes, never a lost value. Every other integer step in the ports is checked too: its `None`, which each step proves cannot come, ends the computation with the canonical NaN, which the public functions report as `NotFinite`. Only the compiler's evaluation of constants uses native operators, where an overflow stops the build. Counts of steps never saturate: a saturated bound would understate the truth.",
-        "No floating-point value produced here from finite inputs is NaN. [`math`] returns a [`real::Real`] or an error; an [`interval::Interval`] has finite bounds or is refused as `NotFinite`; [`eft`] reports a pair that is not exact with an infinite second part; a [`dd::DD`] is finite by construction; [`exact_sum::ExactSum`] gives a `Real` or `NotFinite`; [`rng`] draws its doubles as `Real`s in [0, 1). Inside [`math`], where the ports compute on raw doubles, any NaN is the canonical `0x7ff8_0000_0000_0000`, and no public function returns one.",
+        "No floating-point value produced here from finite inputs is NaN. [`math`] returns a [`real::Real`] or an error; an [`interval::Interval`] has finite bounds or is refused as `NotFinite`; [`eft`] reports a pair that is not exact with an infinite second part; a [`dd::DD`] is finite by construction; [`exact_sum::ExactSum`] gives a `Real` or `NotFinite`; [`rng`] draws its doubles as `Real`s in [0, 1); [`brent`]'s searches and [`quadrature`]'s integrals return `Real`s, and stop at a caller's cap with an error, never a best guess. Inside [`math`], where the ports compute on raw doubles, any NaN is the canonical `0x7ff8_0000_0000_0000`, and no public function returns one.",
         "Every interval operation encloses the exact result of its operation on any reals in its operands, and an enclosure that needs a maths function without a proven error is refused ([`NumError::UnprovenMaths`]).",
         "A bound carries its grid step, and bounds add exactly in the finer step ([`exactness::Exactness`]).",
         "Every double-double operation ([`dd::DD`]) is within its stated error bound of the exact result: the published, machine-checked bound of its algorithm (the theorem is named on each operation), plus, from the range of binary64, 2^−398 relative for products, quotients and roots and 2^−1074 absolute for products and quotients. A `DD` is never NaN or infinite: an overflow is [`NumError::NotFinite`].",
@@ -2949,6 +3036,29 @@
       "kind": "kernel",
       "layer": "1",
       "modules": [
+        {
+          "cost": "each step is a few dozen floating-point operations and one evaluation of `f`; the number of steps is at most about (log₂((b − a)/δ))² for [`zero`] and of the order of log((b − a)/δ)/log(1/0.618) golden-section steps for [`minimum`] (δ the tolerance), and in any case at most `cap`. No allocation, no recursion.",
+          "does": "[`zero`] narrows a bracket `[a, b]` across which `f` changes sign, by bisection, the secant step and inverse quadratic interpolation, taking an interpolated step only while it stays well inside the bracket and keeps shrinking it fast enough, so it converges as surely as bisection and usually much faster. [`minimum`] narrows an interval holding a minimum of `f` by golden-section steps and successive parabolic interpolation, under the same safeguards. Chapter 12.4 asks for exactly this in one unknown (\"bracketing in the manner of Brent (1973)\"); a caller that has a derivative takes a Newton step only inside the bracket this returns.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/brent.rs",
+          "guarantees": [
+            "**The bracket is kept.** [`zero`] returns `x` with `f(x) = 0` exactly, or `x` and `other` with `f(x)` and `f(other)` of opposite signs and |x − other| at most 4u|x| + `tol` (u = 2^−53): a sign change of `f` as computed lies between them, whatever the rounding inside `f`.",
+            "**The interval is kept.** [`minimum`] evaluates `f` only inside `(a, b)`, never closer than its tolerance to either end, and returns the point with the least value it evaluated; on a function unimodal on `[a, b]` that point is within 2(√u|x| + `tol`/3) of the minimum.",
+            "**A cap, never a guess.** Each call evaluates `f` at most `cap` times; reaching the cap is [`BrentError::CapReached`], never the best point so far. A function error is returned as it is ([`BrentError::Num`]).",
+            "**Never NaN, deterministic.** Every value is a finite [`Real`]; the steps use only IEEE 754 basic operations in a fixed order, so every target computes the same points. An interpolation whose arithmetic would overflow is replaced by the bisection or golden-section step, as an unacceptable interpolation is."
+          ],
+          "job": "Brent's methods for one unknown: a zero of a function in a bracket, and a minimum of a function on an interval, with function values only.",
+          "method": {
+            "links": [
+              "https://maths-people.anu.edu.au/~brent/pub/pub011.html"
+            ],
+            "text": "R. P. Brent, *Algorithms for Minimization without Derivatives*, Prentice-Hall (1973), chapter 4 (procedure `zero`) and chapter 5 (procedure `localmin`), <https://maths-people.anu.edu.au/~brent/pub/pub011.html>, written in our own words from the algorithms as G. E. Forsythe, M. A. Malcolm and C. B. Moler give them in *Computer Methods for Mathematical Computations*, Prentice-Hall (1977), routines `zeroin` and `fmin`. Netlib's copies of those two routines carry no licence file, so they were read only as a description of the method, as chapter 29.4's \"Brent 1973\" row allows for such sources, for the order of Brent's tests and his stopping rules; no code was taken."
+          },
+          "path": "geom_num::brent",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
         {
           "cost": "constant time and no allocation: a few `i128` products for the weight and the numerators, two products in [`I256`] for a side, and one restoring long division per coordinate to commit, as in [`crate::plane`].",
           "does": null,
@@ -3820,6 +3930,50 @@
               "take": "port-method"
             }
           ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "[`gauss_legendre`] is n evaluations of f and an exact sum; [`integrate`] is 2n + 1 evaluations per panel, at most `cap` + 1 panels, and a search of at most [`MAX_PANELS`] panels per bisection. No allocation (the panels live in a fixed array on the stack, 40 bytes each), no recursion.",
+          "does": "[`gauss_legendre`] applies an n-point Gauss–Legendre rule (n from 1 to 20) on `[a, b]`. [`integrate`] estimates ∫ₐᵇ f by one of the six Gauss–Kronrod rules ([`crate::quadrature_rules::GAUSS_KRONROD`]), splitting the panel with the largest error estimate in two until the summed estimate meets the tolerance: QUADPACK's QAG strategy. The rules are generated by geom-gen, every node and weight correctly rounded (`quadrature_rules`'s header). Chapter 12's transcendental enclosures (the Fresnel integrals of clothoids) integrate with the Gauss–Legendre rules and bound the remainder themselves; [`integrate`]'s estimate is for measures that need no proof (an arc length to report, a mass property).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/quadrature.rs",
+          "guarantees": [
+            "**Exact to the rules' degrees.** The n-point Gauss rule integrates every polynomial of degree at most 2n − 1, and a Kronrod rule of 2n + 1 points every one of degree at most 3n + 1, up to the rounding of the rule's entries and of the sum (`tests/quadrature.rs` checks every rule against exact rational integrals).",
+            "**An estimate, labelled as one.** [`Integral::error`] is the sum over panels of |Kronrod − Gauss|, Kronrod's classic estimate of the Gauss result's error, which for smooth functions far exceeds the Kronrod result's. It is not a bound: a caller that needs a proven bound encloses the remainder from a derivative bound instead (chapter 12.10).",
+            "**A cap, never a guess.** At most `cap` bisections, and at most [`MAX_PANELS`] panels; reaching either without meeting the tolerance is [`QuadError::CapReached`], never the best value so far.",
+            "**Deterministic and order-free.** Panels are evaluated and split in a fixed order (the first panel with the largest estimate is split, left half in its place, right half last), every sum is taken exactly with [`ExactSum`] and rounded once, and the result is a finite [`Real`]; the same bits on every target."
+          ],
+          "job": "Numerical integration in one variable: fixed Gauss–Legendre rules, and an adaptive integrator on Gauss–Kronrod rules with an error estimate.",
+          "method": {
+            "links": [
+              "doi:10.1007/978-3-642-61786-7"
+            ],
+            "text": "the Gauss–Kronrod pair and the adaptive bisection of R. Piessens, E. de Doncker-Kapenga, C. W. Überhuber and D. K. Kahaner, *QUADPACK: A Subroutine Package for Automatic Integration*, Springer (1983), doi:10.1007/978-3-642-61786-7, routines QK and QAG; the error estimate |K − G| is Kronrod's (A. S. Kronrod, *Nodes and Weights of Quadrature Formulas*, Consultants Bureau (1965)), without QUADPACK's empirical rescaling."
+          },
+          "path": "geom_num::quadrature",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "none at run time: constant tables.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/quadrature_rules/mod.rs",
+          "guarantees": [
+            "every node and weight is the `f64` nearest to its exact value, ties to even, decided by geom-gen from an exact rational enclosure; nodes are ascending and symmetric about 0; in a Kronrod rule the Gauss nodes are the odd positions, the same bits as the Gauss rule's own. The n-point Gauss rule integrates every polynomial of degree at most 2n − 1 exactly, and a Kronrod rule every one of degree at most 3n + 1 (n even) or 3n + 2 (n odd), up to the rounding of its entries (`tests/quadrature.rs`)."
+          ],
+          "job": "Generated by geom-gen, generator `quadrature-rules` (seed: none, it uses no randomness), by `projects/engines/geometry/crates/geom-gen/src/quadrature.rs`. Do not edit: change the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
+          "method": {
+            "links": [
+              "doi:10.1090/S0025-5718-69-99647-1",
+              "doi:10.1007/BF01448041"
+            ],
+            "text": "Golub and Welsch's eigenvalue method for the Gauss rules, with Sturm-count bisection (G. H. Golub and J. H. Welsch, Mathematics of Computation 23 (1969), doi:10.1090/S0025-5718-69-99647-1), and Kronrod's extension from its definition, the zeros of the Stieltjes polynomial with interpolatory weights (A. S. Kronrod 1965; G. Szegő 1935, doi:10.1007/BF01448041); the generator's header gives the details."
+          },
+          "path": "geom_num::quadrature_rules",
+          "provenance": [],
           "spdx": null,
           "target": "lib"
         },

@@ -10,6 +10,11 @@ description = "Spare Kit geometry kernel, development only: every generator whos
 [dependencies]
 geom-num = { path = "../geom-num" }
 geom-test = { path = "../geom-test" }
+# Exact big integers and rationals for the quadrature-rules generator (piece G51): every node and
+# weight is computed exactly and rounded once. MIT OR Apache-2.0; the versions geom-num's tests
+# already use, without their default features, which the generator does not use.
+dashu-int = { version = "0.6.2", default-features = false, features = ["std"] }
+dashu-ratio = { version = "0.6.1", default-features = false, features = ["std"] }
 
 [dev-dependencies]
 # Rust's tokens, so tests/verus_twin.rs compares the Verus twin's `value` with the shipped one
