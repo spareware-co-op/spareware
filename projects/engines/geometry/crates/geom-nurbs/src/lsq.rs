@@ -78,13 +78,18 @@ use crate::point::Point;
 use crate::surface::Surface;
 
 /// A `geom-linalg` failure as the fit's error. The work for every call is charged to the meter
-/// and handed over in full, so running out of it is a defect.
+/// and handed over in full, so running out of it is a defect; so are the iterative solvers'
+/// failures, since the fit only factors (no SVD or eigensolver).
 pub(crate) fn linalg(meter: &mut WorkMeter<'_>, e: LinalgError) -> NurbsError {
     match e {
         LinalgError::Singular | LinalgError::NotPositiveDefinite => NurbsError::Undetermined,
         LinalgError::NotFinite => NurbsError::NotFinite,
         LinalgError::OutOfMemory => NurbsError::Stopped(meter.out_of_memory()),
-        LinalgError::Shape | LinalgError::OutOfWork | LinalgError::Defect => NurbsError::Defect,
+        LinalgError::Shape
+        | LinalgError::OutOfWork
+        | LinalgError::NoConvergence
+        | LinalgError::NotSymmetric
+        | LinalgError::Defect => NurbsError::Defect,
     }
 }
 
