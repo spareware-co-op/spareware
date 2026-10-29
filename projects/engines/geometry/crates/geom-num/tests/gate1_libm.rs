@@ -117,6 +117,18 @@ const LN_TABLE_SLICES: [u64; 12] = [
     0x2173_c8e0_6e32_a4ec, 0x3fd3_cf8f_24cf_f6d6, 0x6083_c7c2_0b39_765d,
 ];
 
+/// log.wc inputs on which a mutant of the accurate path changes the result, found by replaying
+/// that path exactly (128-bit integers) over the whole list off CI: subnormal arguments (the
+/// significand's normalising shift), one just below 1 where the Taylor terms of degree 13 and
+/// 14 matter, and the first ones in the table slices of entries 179, 187 and 188.
+#[rustfmt::skip]
+const LN_REPLAY: [u64; 11] = [
+    0x0000_0b77_51df_aafa, 0x0000_87b5_0e3c_0a7f, 0x0001_104d_89f0_2a00,
+    0x0001_1b74_c68c_438e, 0x3fef_e575_5f3a_16e2, 0x0001_3378_9cb8_6cd6,
+    0x0093_3c33_6dad_ad4c, 0x0113_b756_15ba_5196, 0x0173_b12c_5de9_2c06,
+    0x0053_cda6_e6bd_78d0, 0x0073_cc6b_3500_2c2d,
+];
+
 /// The log.wc inputs in [1 - 2^-8, 1) nearest 1 - 2^-8, where the accurate path's Taylor series
 /// runs at its largest |z|.
 #[rustfmt::skip]
@@ -202,6 +214,21 @@ const COSPI_NEAR_ZERO_HARDEST: [u64; 24] = [
     0x3ef8_e05e_bd2d_ad28, 0x3e45_9b8b_1f4e_cc99, 0x3ed1_f23a_5c93_5fbb,
     0x3ef9_5ad0_9666_9072, 0x3ece_31da_2e76_0ba6, 0x3efe_b98e_6c83_b9ba,
     0x3e49_f816_7cdf_5123, 0x3f14_c79b_f81f_84ae, 0x3ec3_51e4_f633_4ad4,
+];
+
+/// Near-zero hard cases on which `sticky`'s nudge of the low part decides the rounding (sinpi's
+/// and cospi's near-zero accurate paths), found by replaying those paths exactly over every
+/// listed near-zero input of sinpi.wc (with set (b)'s images) and cospi.wc, off CI.
+#[rustfmt::skip]
+const SINPI_STICKY: [u64; 5] = [
+    0x3d0e_cced_b62e_c785, 0x3d5a_65da_b603_e8b2, 0x3cdf_339a_b577_31d3,
+    0xbdda_d53f_8db9_2af0, 0x3dd6_fe50_9010_e3c6,
+];
+
+/// See [`SINPI_STICKY`].
+#[rustfmt::skip]
+const COSPI_STICKY: [u64; 4] = [
+    0x3e43_0e5c_ded6_7caf, 0xbe99_d9ce_0957_f1c8, 0x3e78_2428_46e3_d0af, 0xbebf_9a45_ce01_134f,
 ];
 
 /// cospi.wc inputs on the general path (2^-12 < |x| < 2^41).
@@ -394,6 +421,7 @@ fn ln_accurate_path_tables_taylor_and_subnormals() {
     check_each("ln", &LN_TABLE_SLICES, math::ln, reference::ln);
     check_each("ln", &LN_NEAR_ONE, math::ln, reference::ln);
     check_each("ln", &LN_SUBNORMAL, math::ln, reference::ln);
+    check_each("ln", &LN_REPLAY, math::ln, reference::ln);
 }
 
 /// `sinpi` and `cospi` on hard cases of their general and near-zero paths, both signs: the fast
@@ -407,6 +435,7 @@ fn sinpi_and_cospi_hard_cases_both_signs() {
         &SINPI_GENERAL[..],
         &SINPI_NEAR_ZERO[..],
         &SINPI_NEAR_ZERO_HARDEST[..],
+        &SINPI_STICKY[..],
     ] {
         let both: Vec<u64> = list.iter().flat_map(|&b| [b, b ^ (1 << 63)]).collect();
         check_each("sinpi", &both, math::sinpi, sinpi);
@@ -415,6 +444,7 @@ fn sinpi_and_cospi_hard_cases_both_signs() {
         &COSPI_GENERAL[..],
         &COSPI_NEAR_ZERO[..],
         &COSPI_NEAR_ZERO_HARDEST[..],
+        &COSPI_STICKY[..],
     ] {
         let both: Vec<u64> = list.iter().flat_map(|&b| [b, b ^ (1 << 63)]).collect();
         check_each("cospi", &both, math::cospi, cospi);

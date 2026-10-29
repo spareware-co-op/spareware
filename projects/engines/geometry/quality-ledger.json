@@ -2977,6 +2977,214 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The forms differ only at |y| = |x|, which never reaches accurate: there gt = 0 and dxy = 0, jt = 64 (t0 = 1), so zn = fma(-1, x, y) = 0 and z = 0, and the first fast path's bounds are F2[64] (pi/4) times the sign plus the octant offset, plus or minus 2^-90: pi/4, 3pi/4 and their negatives lie far from every midpoint, so both bounds round alike and the fast path returns."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace + with - in sinpi",
+      "line_text": "let r = zh + zl;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "r only seeds rs, the value rounded at the subnormal precision, and rt = rs·2^106. The final fma rounds ((zh - rt) + zl)·2^-106 + rs once, that is (zh + zl + d)·2^-106 with d the rounding of (zh - rt) + zl, whatever rt is. With zh - zl, rs moves by at most one subnormal unit, zh - rt stays exact (Sterbenz) and |d|·2^-106 stays below 2^-1124, a 2^-50 part of the subnormal unit: only an input within that of a midpoint could change, which sinpi.wc lists (set (a)). Replaying sinpi's near-zero paths exactly off CI (Python: IEEE binary64 and an exact fma; the unmutated replay matches the exact correctly rounded value on every input checked) over all 129 160 listed inputs below 2^-960 (sinpi.wc and set (b)'s images, both signs) changes none."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace + with - in sinpi",
+      "line_text": "let eps = x * (x2 * hf!(\"0x1p-47\") + hf!(\"0x1p-102\"));",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "|eps| becomes smaller by at most 2^-101·|x|. The fast path can then accept a misrounded value only if the true one lies on the other side of a midpoint, within that difference of it (the proven error is below the original |eps|): about 2^-50 ulp, an input with 43 or more identical bits, which sinpi.wc lists. Only inputs the original's test refuses can change. Replaying sinpi's near-zero paths exactly off CI (Python: IEEE binary64 and an exact fma; the unmutated replay matches the exact correctly rounded value on every input checked) over every listed input that reaches the code (sinpi.wc and set (b)'s images, both signs) changes none."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace != with == in Dint::add",
+      "line_text": "if self.sgn ^ b.sgn != 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Dint::add's equal-magnitude branch is never reached in ln's accurate path. Horner's steps add r·z, below 2^-7.4, to a coefficient of at least 2^-5 (P2) or 1/16 (Taylor). lz + LOG_INV_2[k] approximates ln y (y = x/2^E) within 2^-120, so equal magnitudes there need ln y = 0 or ln(1 + z) = ln(inv), both only at y = 1; r + p approximates ln x (0 only at x = 1, returned before; |E ln 2| >= 0.69 > |p| otherwise). x·inv + M_ONE meets equal magnitudes only at x·inv = 1: inverse 1 and x a power of two, and no power of two reaches the accurate path (all 2098 checked off CI: the fast path decides each). So this test never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace ^ with | in Dint::add",
+      "line_text": "if self.sgn ^ b.sgn != 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Dint::add's equal-magnitude branch is never reached in ln's accurate path. Horner's steps add r·z, below 2^-7.4, to a coefficient of at least 2^-5 (P2) or 1/16 (Taylor). lz + LOG_INV_2[k] approximates ln y (y = x/2^E) within 2^-120, so equal magnitudes there need ln y = 0 or ln(1 + z) = ln(inv), both only at y = 1; r + p approximates ln x (0 only at x = 1, returned before; |E ln 2| >= 0.69 > |p| otherwise). x·inv + M_ONE meets equal magnitudes only at x·inv = 1: inverse 1 and x a power of two, and no power of two reaches the accurate path (all 2098 checked off CI: the fast path decides each). So this test never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace ^ with & in Dint::add",
+      "line_text": "if self.sgn ^ b.sgn != 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Dint::add's equal-magnitude branch is never reached in ln's accurate path. Horner's steps add r·z, below 2^-7.4, to a coefficient of at least 2^-5 (P2) or 1/16 (Taylor). lz + LOG_INV_2[k] approximates ln y (y = x/2^E) within 2^-120, so equal magnitudes there need ln y = 0 or ln(1 + z) = ln(inv), both only at y = 1; r + p approximates ln x (0 only at x = 1, returned before; |E ln 2| >= 0.69 > |p| otherwise). x·inv + M_ONE meets equal magnitudes only at x·inv = 1: inverse 1 and x a power of two, and no power of two reaches the accurate path (all 2098 checked off CI: the fast path decides each). So this test never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "delete field ex from struct Dint expression in Dint::add",
+      "line_text": "ex: self.ex.checked_add(1)?,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Dint::add's equal-magnitude branch is never reached in ln's accurate path. Horner's steps add r·z, below 2^-7.4, to a coefficient of at least 2^-5 (P2) or 1/16 (Taylor). lz + LOG_INV_2[k] approximates ln y (y = x/2^E) within 2^-120, so equal magnitudes there need ln y = 0 or ln(1 + z) = ln(inv), both only at y = 1; r + p approximates ln x (0 only at x = 1, returned before; |E ln 2| >= 0.69 > |p| otherwise). x·inv + M_ONE meets equal magnitudes only at x·inv = 1: inverse 1 and x a power of two, and no power of two reaches the accurate path (all 2098 checked off CI: the fast path decides each). So this doubling never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace > with >= in Dint::add",
+      "line_text": "if a.ex > b.ex {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The forms differ only at a.ex == b.ex, where the mutant shifts by 0 and adds bit 1 of b's significand to it. It changes b's 128-bit significand by at most one unit, 2^-127 relative, against the accurate path's own 2^-109.67, well under the 2^-101 that Lemma 2 needs with log.wc's threshold, so every unlisted input still rounds correctly. Replaying ln exactly off CI (Python: IEEE binary64 for the fast path, integers for the 128-bit path; unmutated, it gives the correctly rounded ln, from 90-digit decimals, on all of them) over the 69 034 log.wc inputs that reach the accurate path changes none."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace < with <= in Dint::add",
+      "line_text": "if sh < 128 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The forms differ only at sh = 128, where the mutant leaves b as 0 or 1 unit instead of 0. It changes b's 128-bit significand by at most one unit, 2^-127 relative, against the accurate path's own 2^-109.67, well under the 2^-101 that Lemma 2 needs with log.wc's threshold, so every unlisted input still rounds correctly. Replaying ln exactly off CI (Python: IEEE binary64 for the fast path, integers for the 128-bit path; unmutated, it gives the correctly rounded ln, from 90-digit decimals, on all of them) over the 69 034 log.wc inputs that reach the accurate path changes none."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace | with ^ in Dint::add",
+      "line_text": "(1u128 << 127) | (sum.checked_add(sum & 1)? >> 1)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The rounded sum shifted right by one is below 2^127, so it shares no bit with 1 << 127: | and ^ give the same significand."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace < with <= in Dint::mul_int",
+      "line_text": "let sgn = if b < 0 { u64::from(a.sgn == 0) } else { a.sgn };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The forms differ only at b = 0, which mul_int returns ZERO for on its first line, before this test."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace & with | in Dint::mul_int",
+      "line_text": "t = t.checked_add(t & 1)?;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "mul_int's carry branch is never taken: its only call is mul_int(E, LOG2) with E the input's binary exponent (-1076 to 1025), and computing t + l exactly for every such E (off CI) gives no carry out of 128 bits. So this line never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace & with ^ in Dint::mul_int",
+      "line_text": "t = t.checked_add(t & 1)?;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "mul_int's carry branch is never taken: its only call is mul_int(E, LOG2) with E the input's binary exponent (-1076 to 1025), and computing t + l exactly for every such E (off CI) gives no carry out of 128 bits. So this line never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace | with & in Dint::mul_int",
+      "line_text": "t = (1u128 << 127) | (t >> 1);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "mul_int's carry branch is never taken: its only call is mul_int(E, LOG2) with E the input's binary exponent (-1076 to 1025), and computing t + l exactly for every such E (off CI) gives no carry out of 128 bits. So this line never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace | with ^ in Dint::mul_int",
+      "line_text": "t = (1u128 << 127) | (t >> 1);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "mul_int's carry branch is never taken: its only call is mul_int(E, LOG2) with E the input's binary exponent (-1076 to 1025), and computing t + l exactly for every such E (off CI) gives no carry out of 128 bits. So this line never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace << with >> in Dint::mul_int",
+      "line_text": "t = (1u128 << 127) | (t >> 1);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "mul_int's carry branch is never taken: its only call is mul_int(E, LOG2) with E the input's binary exponent (-1076 to 1025), and computing t + l exactly for every such E (off CI) gives no carry out of 128 bits. So this line never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace >> with << in Dint::mul_int",
+      "line_text": "t = (1u128 << 127) | (t >> 1);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "mul_int's carry branch is never taken: its only call is mul_int(E, LOG2) with E the input's binary exponent (-1076 to 1025), and computing t + l exactly for every such E (off CI) gives no carry out of 128 bits. So this line never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "delete -",
+      "line_text": "d(0x8000_0000_0000_0000, 0x0000_0000_0000_0000, -4, 1), // n = 16",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Dropping the minus makes the coefficient 2^8 times too large. Its term changes ln(1 + z) at k = 74 (|z| <= 2^-8) by at most 2^8·|z|^n/n, below 2^-107.9 of |ln x| for n = 15 and 2^-116 for n = 16; with the accurate path's 2^-109.67 that stays under the 2^-101 Lemma 2 needs with log.wc's threshold, so unlisted inputs still round correctly. Replaying ln exactly off CI (Python: IEEE binary64 for the fast path, integers for the 128-bit path; unmutated, it gives the correctly rounded ln, from 90-digit decimals, on all of them) over the 69 034 log.wc inputs that reach the accurate path changes none."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "delete -",
+      "line_text": "d(0x8888_8888_8888_8888, 0x8888_8888_8888_8889, -4, 0), // n = 15",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Dropping the minus makes the coefficient 2^8 times too large. Its term changes ln(1 + z) at k = 74 (|z| <= 2^-8) by at most 2^8·|z|^n/n, below 2^-107.9 of |ln x| for n = 15 and 2^-116 for n = 16; with the accurate path's 2^-109.67 that stays under the 2^-101 Lemma 2 needs with log.wc's threshold, so unlisted inputs still round correctly. Replaying ln exactly off CI (Python: IEEE binary64 for the fast path, integers for the 128-bit path; unmutated, it gives the correctly rounded ln, from 90-digit decimals, on all of them) over the 69 034 log.wc inputs that reach the accurate path changes none."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace << with >> in sticky",
+      "line_text": "if t & MANTISSA == 0 && (t << 1) != 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "(t << 1) != 0 and (t >> 1) != 0 differ only at t = 2^63 (y1 = -0.0) and t = 1. At t = 1 the first test (significand 0) fails anyway. y1 is never -0.0: it is the rounded sum of the last fast_two_sum, -0 only if both terms are -0, and back along the chain that needs PI1·x = -0 (sinpi) or a zero x^2·P(x^2) (cospi), i.e. x = 0, which never reaches here."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace & with | in sinpi_near_zero",
+      "line_text": "let b = from_checked_bits((y0.to_bits() & MANTISSA).checked_add(85u64 << 51));",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "b then carries y0's exponent (it is about y0·2^42.5), so (y0 + b) - b keeps only y0's top 10 or so bits; y0l = fma(PI0, x, -y0) is the rest of PI0·x, still exact (PI0 has 8 bits, PI0·x at most 61, and their difference from a 10-bit rounding at most 52), so y0 + y0l = PI0·x as before. The later double-double steps add the same terms grouped differently, each rounding below 2^-104 of the result, so only inputs within about 2^-100 of a midpoint could change: those have 43 or more identical bits and are listed. Replaying sinpi's near-zero paths exactly off CI (Python: IEEE binary64 and an exact fma; the unmutated replay matches the exact correctly rounded value on every input checked) over every listed input that reaches the code (sinpi.wc and set (b)'s images, both signs) changes none."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace & with ^ in sinpi_near_zero",
+      "line_text": "let b = from_checked_bits((y0.to_bits() & MANTISSA).checked_add(85u64 << 51));",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "b then carries y0's exponent (it is about y0·2^42.5), so (y0 + b) - b keeps only y0's top 10 or so bits; y0l = fma(PI0, x, -y0) is the rest of PI0·x, still exact (PI0 has 8 bits, PI0·x at most 61, and their difference from a 10-bit rounding at most 52), so y0 + y0l = PI0·x as before. The later double-double steps add the same terms grouped differently, each rounding below 2^-104 of the result, so only inputs within about 2^-100 of a midpoint could change: those have 43 or more identical bits and are listed. Replaying sinpi's near-zero paths exactly off CI (Python: IEEE binary64 and an exact fma; the unmutated replay matches the exact correctly rounded value on every input checked) over every listed input that reaches the code (sinpi.wc and set (b)'s images, both signs) changes none."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace << with >> in sinpi_near_zero",
+      "line_text": "let b = from_checked_bits((y0.to_bits() & MANTISSA).checked_add(85u64 << 51));",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "85 >> 51 is 0, so b is y0's significand bits read as a subnormal, below 2^-1022, while |y0| >= PI0·2^-54: (y0 + b) - b is y0 exactly, as the original's b (about 2^-981) leaves it. The same y0, so the same result."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace - with + in sinpi_near_zero",
+      "line_text": "y0 = (y0 + b) - b;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "b is about 2^-981 and |y0| >= PI0·2^-54, whose half ulp is above 2^-107: y0 + b + b rounds to y0 exactly, as y0 + b - b does. The same y0, so the same result."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace + with - in sinpi_near_zero",
+      "line_text": "y0 = (y0 + b) - b;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "b is about 2^-981 and |y0| >= PI0·2^-54, whose half ulp is above 2^-107: y0 - b - b rounds to y0 exactly, as y0 + b - b does. The same y0, so the same result."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace + with - in cospi",
+      "line_text": "let p = x2 * ((C[0] + x2 * C[1]) + x4 * (C[2] + x2 * C[3]));",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "cospi's near-zero fast path is proven with slack: its total error is at most 2^-47.56·x^2 and its test uses eps·(1 - u) = 2^-47.30·x^2, a margin of 2^-49.9·x^2. C[2] - x2·C[3] changes p by 2·C[3]·x^8 (C[3] < 0.24), at most 2^-23 of that margin for |x| <= 2^-12: the mutant's value stays within its test's bound of cos(pi x), so whenever it accepts it returns the correctly rounded value, and otherwise cospi_near_zero does, as the original."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace * with + in cospi",
+      "line_text": "let p = x2 * ((C[0] + x2 * C[1]) + x4 * (C[2] + x2 * C[3]));",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "cospi's near-zero fast path is proven with slack: its total error is at most 2^-47.56·x^2 and its test uses eps·(1 - u) = 2^-47.30·x^2, a margin of 2^-49.9·x^2. C[2] + (x2 + C[3]) changes p by x^6·(x2 + C[3] - x2·C[3]), at most 0.2354·x^6 + x^8, which for |x| <= 2^-12 is below 0.88 of that margin (0.2354·2^-48·x^2 against 2^-49.9·x^2): the mutant's value stays within its test's bound of cos(pi x), so whenever it accepts it returns the correctly rounded value, and otherwise cospi_near_zero does, as the original."
     }
   ],
   "coverage_off": [],
