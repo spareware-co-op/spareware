@@ -59,6 +59,7 @@ The board (30.5) also turns into a piece every narrower question that chapters 6
 | 32.39 | G409: generating code from STEP and IFC schemas | Part 42 is the 2025 edition; IFC schemas generated from with attribution; ISO's STEP schemas only with a file's own grant or ISO's permission, requested in a draft the owner sends | 24, 29 | G416, EXPRESS code generation |
 | 32.40 | G447: Gerber and IPC-2581 terms | No second program needs board exchange, so G474 and G475 wait; Gerber implemented exactly as published, no extensions; IPC-2581 only after its own text or IPC's word | 24, 26, 29 | G474 and G475, board exchange |
 | 32.41 | G448: AutoCAD truth tests | 32.10's ruling stands; no seat is bought or borrowed; G464 checks drafting by 28.3's laws, the one-root reference and LibreCAD and ezdxf, and adds AutoCAD when a co-op seat and a cleared terms check exist | 14, 28, 32 | G464, drafting truth tests |
+| 32.42 | G449: the wall-clock merge rule | Accepted: a nightly miss confirmed by a same-night rerun blocks merges to `main` except the fix or a revert; deliberate rises recorded as 32.12 says; no run, no block | 23, 28 | G452, wall-clock and scaling gates |
 
 ## 32.1 The grid ladder (decision 1)
 
@@ -759,3 +760,17 @@ Why: the two-program rule decides the timing, and both formats can be implemente
 Why: a comparison that can never make AutoCAD's behaviour our requirement adds least where the open checks already decide correctness, and it is not worth a licence the co-op does not hold or terms nobody has read.
 
 **Changes:** 28.11, 31.7, and G464's done-when.
+
+## 32.42 The wall-clock merge rule (owner action G449)
+
+**What it is.** Principle 12 blocks any speed regression over 5%, but wall-clock time on shared CI machines varies by more than that, so pull requests are gated on instruction, cache, heap and fuel counts, which do not vary (23.13). Wall-clock time and scaling are measured nightly on the reference machine against 23.1's shares. Spare Construct says a target miss blocks any change that misses it; per pull request that is impossible to measure, so 23.13 proposes that a nightly miss blocks further merges to `main`, except the fix or a revert, until the target is met again.
+
+**Decided 2026-10-28 (owner action G449): accepted, with a confirmation run.** Read with 23.1, 23.13, 28.17, 32.12 and 32.16.
+- **A miss is a confirmed miss:** a nightly result over a share is rerun the same night on the reference machine (32.16); only if the rerun also misses does the block start, so one noisy run never stops the co-op.
+- **While blocked,** only a pull request that fixes the miss, or reverts the change bisection names as its cause, may merge to `main`, and its own nightly run must meet the share again. G452 enforces it with a required status that the nightly job sets and clears.
+- **A deliberate rise is not a miss.** A correctness change that costs time is accepted the way 32.12 accepts a count rise: recorded by a kernel owner with the shares it moves, and the share itself updated by a decision note (32.16), never by lifting the block.
+- **If the reference machine is unavailable** (it is lent, 19:00 to 08:00), no run means no block; the count gates still hold every pull request.
+
+Why: a target that only warns is not a target, and blocking the next merges rather than the guilty one is the only way to enforce a nightly measurement; the confirmation run keeps noise from blocking work.
+
+**Changes:** 23.13, 31.7, and piece G452.

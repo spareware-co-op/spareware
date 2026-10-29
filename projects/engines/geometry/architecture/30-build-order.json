@@ -5990,7 +5990,7 @@
   "phase": "Phase 13",
   "crate": "geom-bench, CI",
   "size": "Medium",
-  "done_when": "The reference runner's timings become a gate: a statistical test on every kernel pull request blocks confident regressions over 5%; a scaling gate at 1, 2 and 8 threads; a nightly miss against 23.1's shares blocks merges to main except the fix or a revert; a weekly full run.",
+  "done_when": "The reference runner's timings become a gate: a statistical test on every kernel pull request blocks confident regressions over 5%; a scaling gate at 1, 2 and 8 threads; a nightly miss against 23.1's shares, confirmed by a same-night rerun, blocks merges to main except the fix or a revert (32.42); a weekly full run.",
   "depends_on": [
    "G451",
    "G10",
