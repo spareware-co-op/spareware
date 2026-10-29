@@ -70,7 +70,7 @@ fn unlimited() -> WorkMeter<'static> {
 /// f·x, coordinate by coordinate; x itself when f is exactly 1 (a segment as long as its share of
 /// the composite's parameter), so nothing widens.
 fn scaled<const D: usize>(f: Interval, x: &[Interval; D]) -> Result<[Interval; D], CurveError> {
-    if f.lo() == 1.0 && f.hi() == 1.0 {
+    if f == point(1.0)? {
         return Ok(*x);
     }
     let mut out = [point(0.0)?; D];
@@ -701,14 +701,13 @@ fn join<const D: usize>(
             knots.extend(core::iter::repeat_n(g_end, p));
             g_start = g_end;
         }
-        if eps > 0.0 {
-            if eps.is_nan() || eps >= 0.5 {
-                return Err(CurveError::NotFinite);
-            }
-            let e = point(eps)?;
-            let factor = tight::div(tight::mul(point(2.0)?, e)?, tight::sub(point(1.0)?, e)?)?;
-            moved = tight::add(point(moved)?, tight::mul(factor, point(reach)?)?)?.hi();
+        // The weights' term is exactly 0 when every stored weight is exact.
+        if eps.is_nan() || eps >= 0.5 {
+            return Err(CurveError::NotFinite);
         }
+        let e = point(eps)?;
+        let factor = tight::div(tight::mul(point(2.0)?, e)?, tight::sub(point(1.0)?, e)?)?;
+        moved = tight::add(point(moved)?, tight::mul(factor, point(reach)?)?)?.hi();
         dev = tight::add(dev, point(moved)?)?;
         dev = tight::add(dev, point(reparam)?)?;
         deviation = tight::larger(deviation, dev.hi());
