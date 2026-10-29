@@ -33,6 +33,9 @@ name: Kernel benchmarks
 # Both check every benchmark's golden digests (inputs and results, SHA-256), the fuel job on wasm32,
 # both list every change over 1% in the job summary and as an annotation, and both fail if a
 # benchmark of the merge base disappears without being named in geom-bench/retired.txt.
+# Each ends by showing it can fail (gate 1, piece G43): geom-test's `trip` slows one benchmark by
+# more than 5% on purpose, and the job's own comparison of that run with the pull request's must
+# fail.
 #
 # How noise is handled:
 #  - Nothing is timed. Callgrind simulates a fixed processor and cache (Gungraun pins 32 KiB L1s and
@@ -649,6 +652,21 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           exit 0
 
+      # Gate 1 (piece G43): the gate is shown to fail on a planted rise. `trip gungraun` makes
+      # `Sign::of_i128` read its argument through `core::hint::black_box` (the same answer for more
+      # instructions) and runs the gate's own command on that one benchmark, compared with the pull
+      # request's run saved as `head` above, under the gate's limits; Gungraun must report the
+      # regression. It saves nothing (the gate's --save options are left out), and it runs last,
+      # after the reports, so its rebuild of the planted code changes no measurement of the change.
+      - name: A benchmark slowed on purpose fails the comparison
+        working-directory: head
+        env:
+          GUNGRAUN_RUNNER: ${{ env.HEAD_RUNNER }}
+        run: |
+          set -euo pipefail
+          compare=(--baseline=head 'instructions::sign::*')
+          cargo "+$HEAD_TOOLCHAIN" run --locked -q -p geom-test --bin trip -- gungraun -- cargo "+$HEAD_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench instructions -- "${compare[@]}" --callgrind-limits="$CALLGRIND_LIMITS" --dhat-limits="$DHAT_LIMITS"
+
   fuel:
     name: WebAssembly fuel and growth (5% gate)
     needs: scope
@@ -816,3 +834,22 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
           exit 0
+
+      # Gate 1 (piece G43): the gate is shown to fail on a planted rise. `trip fuel` slows
+      # `Sign::of_i128` as the instructions job's seed does, and runs this job's own commands on the
+      # planted tree: the pull request's fuel measured above becomes base-fuel.txt, the planted
+      # guest is built and measured into head-fuel.txt, and the gate's comparison must report the
+      # rise on sign/of_i128/typical. It runs last, after the summary, so the files it replaces are
+      # read by nothing else.
+      - name: A benchmark slowed on purpose fails the fuel comparison
+        working-directory: head
+        run: >-
+          cargo "+$HEAD_TOOLCHAIN" run --locked -q -p geom-test --bin trip -- fuel --
+          bash -euo pipefail -c 'cd "$GITHUB_WORKSPACE"
+          && cp "$RUNNER_TEMP/head-fuel.txt" "$RUNNER_TEMP/base-fuel.txt"
+          && (cd head && cargo "+$HEAD_TOOLCHAIN" build --locked --release -p geom-bench
+          --bin geom-bench-guest --target wasm32-wasip1 --target-dir "$CARGO_TARGET_DIR/guest-head")
+          && cp "$CARGO_TARGET_DIR/guest-head/wasm32-wasip1/release/geom-bench-guest.wasm" "$RUNNER_TEMP/head.wasm"
+          && "$FUEL_HOST" "$RUNNER_TEMP/head.wasm" > "$RUNNER_TEMP/head-fuel.txt"
+          && "$COUNTS" compare "$RUNNER_TEMP/base-fuel.txt" "$RUNNER_TEMP/head-fuel.txt"
+          "$GATE_PERCENT" "$LIST_PERCENT" "head/$BENCH/retired.txt" "WebAssembly fuel"'
