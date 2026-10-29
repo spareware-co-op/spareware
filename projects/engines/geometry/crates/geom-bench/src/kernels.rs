@@ -163,6 +163,92 @@ pub mod wide {
     }
 }
 
+/// `Wide32` kernels (piece G42): the same operations as [`wide`] on 32-bit limbs.
+pub mod wide32 {
+    use core::cmp::Ordering;
+
+    use geom_num::Sign;
+    use geom_num::wide::Wide;
+    use geom_num::wide32::Wide32;
+
+    use super::run;
+
+    /// `checked_add` on each pair.
+    #[inline(never)]
+    pub fn add<const L: usize>(batch: &[(Wide32<L>, Wide32<L>)], out: &mut Vec<Option<Wide32<L>>>) {
+        run(batch, out, |(x, y)| x.checked_add(y));
+    }
+
+    /// `checked_sub` on each pair.
+    #[inline(never)]
+    pub fn sub<const L: usize>(batch: &[(Wide32<L>, Wide32<L>)], out: &mut Vec<Option<Wide32<L>>>) {
+        run(batch, out, |(x, y)| x.checked_sub(y));
+    }
+
+    /// `product` at one width on each pair.
+    #[inline(never)]
+    pub fn product<const L: usize>(
+        batch: &[(Wide32<L>, Wide32<L>)],
+        out: &mut Vec<Option<Wide32<L>>>,
+    ) {
+        run(batch, out, |(x, y)| Wide32::<L>::product(x, y));
+    }
+
+    /// `checked_neg` on each value.
+    #[inline(never)]
+    pub fn neg<const L: usize>(batch: &[Wide32<L>], out: &mut Vec<Option<Wide32<L>>>) {
+        run(batch, out, Wide32::checked_neg);
+    }
+
+    /// `Ord::cmp` on each pair.
+    #[inline(never)]
+    pub fn cmp<const L: usize>(batch: &[(Wide32<L>, Wide32<L>)], out: &mut Vec<Ordering>) {
+        run(batch, out, |(x, y)| x.cmp(y));
+    }
+
+    /// `signum` on each value.
+    #[inline(never)]
+    pub fn signum<const L: usize>(batch: &[Wide32<L>], out: &mut Vec<Sign>) {
+        run(batch, out, Wide32::signum);
+    }
+
+    /// `to_i128` on each value.
+    #[inline(never)]
+    pub fn to_i128<const L: usize>(batch: &[Wide32<L>], out: &mut Vec<Option<i128>>) {
+        run(batch, out, Wide32::to_i128);
+    }
+
+    /// `from_i128` on each value.
+    #[inline(never)]
+    pub fn from_i128<const L: usize>(batch: &[i128], out: &mut Vec<Option<Wide32<L>>>) {
+        run(batch, out, |&v| Wide32::<L>::from_i128(v));
+    }
+
+    /// `resize` from `L` to `M` limbs on each value.
+    #[inline(never)]
+    pub fn resize<const L: usize, const M: usize>(
+        batch: &[Wide32<L>],
+        out: &mut Vec<Option<Wide32<M>>>,
+    ) {
+        run(batch, out, Wide32::resize::<M>);
+    }
+
+    /// `to_wide` into `M` 64-bit limbs on each value.
+    #[inline(never)]
+    pub fn to_wide<const L: usize, const M: usize>(
+        batch: &[Wide32<L>],
+        out: &mut Vec<Option<Wide<M>>>,
+    ) {
+        run(batch, out, Wide32::to_wide::<M>);
+    }
+
+    /// `product_i64` into `L` limbs on each pair.
+    #[inline(never)]
+    pub fn product_i64<const L: usize>(batch: &[(i64, i64)], out: &mut Vec<Option<Wide32<L>>>) {
+        run(batch, out, |&(a, b)| Wide32::<L>::product_i64(a, b));
+    }
+}
+
 /// Plane-based geometry: `geom_num::plane`.
 pub mod plane {
     use geom_num::grid::{P3, Rounded};
@@ -1075,6 +1161,263 @@ pub mod generated {
     pub fn ssi_side_value(batch: &[([P2; 4], P2, P2)], out: &mut Vec<Option<I256>>) {
         run(batch, out, |&([a, b, c, d], p, q)| {
             ssi_side::value(a, b, c, d, p, q)
+        });
+    }
+}
+
+/// The plain-`i128` variant of the generated exact paths (chapter 23.3; piece G42), on the same
+/// inputs as the shipped `value` kernels of [`generated`], so the two compare directly.
+pub mod plain {
+    use geom_num::generated::plain;
+    use geom_num::grid::{P2, P3};
+    use geom_num::wide::{I256, I384};
+
+    use super::run;
+
+    /// A plane's normal and offset.
+    type Coefficients = ([i128; 3], i128);
+
+    /// `generated::plain::orient2d_value` on each triple.
+    #[inline(never)]
+    pub fn orient2d_value(batch: &[[P2; 3]], out: &mut Vec<Option<i128>>) {
+        run(batch, out, |&[a, b, c]| plain::orient2d_value(a, b, c));
+    }
+
+    /// `generated::plain::orient3d_value` on each quadruple.
+    #[inline(never)]
+    pub fn orient3d_value(batch: &[[P3; 4]], out: &mut Vec<Option<i128>>) {
+        run(batch, out, |&[a, b, c, d]| {
+            plain::orient3d_value(a, b, c, d)
+        });
+    }
+
+    /// `generated::plain::incircle_value` on each quadruple.
+    #[inline(never)]
+    pub fn incircle_value(batch: &[[P2; 4]], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&[a, b, c, d]| {
+            plain::incircle_value(a, b, c, d)
+        });
+    }
+
+    /// `generated::plain::insphere_value` on each quintuple.
+    #[inline(never)]
+    pub fn insphere_value(batch: &[[P3; 5]], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&[a, b, c, d, e]| {
+            plain::insphere_value(a, b, c, d, e)
+        });
+    }
+
+    /// `generated::plain::plane_side_value` on each (normal, offset, point).
+    #[inline(never)]
+    pub fn plane_side_value(batch: &[([i128; 3], i128, P3)], out: &mut Vec<Option<i128>>) {
+        run(batch, out, |&([nx, ny, nz], d, p)| {
+            plain::plane_side_value(nx, ny, nz, d, p)
+        });
+    }
+
+    /// `generated::plain::tpi_weight_value` on each normal triple.
+    #[inline(never)]
+    pub fn tpi_weight_value(batch: &[[[i128; 3]; 3]], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&[[ax, ay, az], [bx, by, bz], [cx, cy, cz]]| {
+            plain::tpi_weight_value(ax, ay, az, bx, by, bz, cx, cy, cz)
+        });
+    }
+
+    /// `generated::plain::tpi_side_value` on each plane quadruple.
+    #[inline(never)]
+    pub fn tpi_side_value(batch: &[[Coefficients; 4]], out: &mut Vec<Option<I384>>) {
+        run(
+            batch,
+            out,
+            |&[
+                ([ax, ay, az], ad),
+                ([bx, by, bz], bd),
+                ([cx, cy, cz], cd),
+                ([sx, sy, sz], sd),
+            ]| {
+                plain::tpi_side_value(
+                    ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
+                )
+            },
+        );
+    }
+
+    /// `generated::plain::lpi_weight_value` on each (normal, p, q).
+    #[inline(never)]
+    pub fn lpi_weight_value(batch: &[([i128; 3], P3, P3)], out: &mut Vec<Option<i128>>) {
+        run(batch, out, |&([nx, ny, nz], p, q)| {
+            plain::lpi_weight_value(nx, ny, nz, p, q)
+        });
+    }
+
+    /// `generated::plain::lpi_side_value` on each (plane, plane, p, q).
+    #[inline(never)]
+    pub fn lpi_side_value(
+        batch: &[(Coefficients, Coefficients, P3, P3)],
+        out: &mut Vec<Option<I256>>,
+    ) {
+        run(
+            batch,
+            out,
+            |&(([ax, ay, az], ad), ([bx, by, bz], bd), p, q)| {
+                plain::lpi_side_value(ax, ay, az, ad, bx, by, bz, bd, p, q)
+            },
+        );
+    }
+
+    /// `generated::plain::ssi_weight_value` on each point quadruple.
+    #[inline(never)]
+    pub fn ssi_weight_value(batch: &[[P2; 4]], out: &mut Vec<Option<i128>>) {
+        run(batch, out, |&[a, b, c, d]| {
+            plain::ssi_weight_value(a, b, c, d)
+        });
+    }
+
+    /// `generated::plain::ssi_side_value` on each (lines, p, q).
+    #[inline(never)]
+    pub fn ssi_side_value(batch: &[([P2; 4], P2, P2)], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&([a, b, c, d], p, q)| {
+            plain::ssi_side_value(a, b, c, d, p, q)
+        });
+    }
+}
+
+/// The width-aware limb variant of the generated exact paths (chapter 23.3; piece G42), on its own
+/// inputs of the same classes as the shipped `value` kernels of [`generated`].
+pub mod limbs {
+    use geom_num::generated::limbs;
+    use geom_num::grid::{P2, P3};
+    use geom_num::wide::{I256, I384};
+
+    use super::run;
+
+    /// A plane's normal and offset.
+    type Coefficients = ([i128; 3], i128);
+
+    /// `generated::limbs::orient2d_value` on each triple.
+    #[inline(never)]
+    pub fn orient2d_value(batch: &[[P2; 3]], out: &mut Vec<Option<i128>>) {
+        run(batch, out, |&[a, b, c]| limbs::orient2d_value(a, b, c));
+    }
+
+    /// `generated::limbs::orient3d_value` on each quadruple.
+    #[inline(never)]
+    pub fn orient3d_value(batch: &[[P3; 4]], out: &mut Vec<Option<i128>>) {
+        run(batch, out, |&[a, b, c, d]| {
+            limbs::orient3d_value(a, b, c, d)
+        });
+    }
+
+    /// `generated::limbs::incircle_value` on each quadruple.
+    #[inline(never)]
+    pub fn incircle_value(batch: &[[P2; 4]], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&[a, b, c, d]| {
+            limbs::incircle_value(a, b, c, d)
+        });
+    }
+
+    /// `generated::limbs::insphere_value` on each quintuple.
+    #[inline(never)]
+    pub fn insphere_value(batch: &[[P3; 5]], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&[a, b, c, d, e]| {
+            limbs::insphere_value(a, b, c, d, e)
+        });
+    }
+
+    /// `generated::limbs::plane_side_value` on each (normal, offset, point).
+    #[inline(never)]
+    pub fn plane_side_value(batch: &[([i128; 3], i128, P3)], out: &mut Vec<Option<i128>>) {
+        run(batch, out, |&([nx, ny, nz], d, p)| {
+            limbs::plane_side_value(nx, ny, nz, d, p)
+        });
+    }
+
+    /// `generated::limbs::tpi_weight_value` on each normal triple.
+    #[inline(never)]
+    pub fn tpi_weight_value(batch: &[[[i128; 3]; 3]], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&[[ax, ay, az], [bx, by, bz], [cx, cy, cz]]| {
+            limbs::tpi_weight_value(ax, ay, az, bx, by, bz, cx, cy, cz)
+        });
+    }
+
+    /// `generated::limbs::tpi_side_value` on each plane quadruple.
+    #[inline(never)]
+    pub fn tpi_side_value(batch: &[[Coefficients; 4]], out: &mut Vec<Option<I384>>) {
+        run(
+            batch,
+            out,
+            |&[
+                ([ax, ay, az], ad),
+                ([bx, by, bz], bd),
+                ([cx, cy, cz], cd),
+                ([sx, sy, sz], sd),
+            ]| {
+                limbs::tpi_side_value(
+                    ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
+                )
+            },
+        );
+    }
+
+    /// `generated::limbs::lpi_weight_value` on each (normal, p, q).
+    #[inline(never)]
+    pub fn lpi_weight_value(batch: &[([i128; 3], P3, P3)], out: &mut Vec<Option<i128>>) {
+        run(batch, out, |&([nx, ny, nz], p, q)| {
+            limbs::lpi_weight_value(nx, ny, nz, p, q)
+        });
+    }
+
+    /// `generated::limbs::lpi_side_value` on each (plane, plane, p, q).
+    #[inline(never)]
+    pub fn lpi_side_value(
+        batch: &[(Coefficients, Coefficients, P3, P3)],
+        out: &mut Vec<Option<I256>>,
+    ) {
+        run(
+            batch,
+            out,
+            |&(([ax, ay, az], ad), ([bx, by, bz], bd), p, q)| {
+                limbs::lpi_side_value(ax, ay, az, ad, bx, by, bz, bd, p, q)
+            },
+        );
+    }
+
+    /// `generated::limbs::ssi_weight_value` on each point quadruple.
+    #[inline(never)]
+    pub fn ssi_weight_value(batch: &[[P2; 4]], out: &mut Vec<Option<i128>>) {
+        run(batch, out, |&[a, b, c, d]| {
+            limbs::ssi_weight_value(a, b, c, d)
+        });
+    }
+
+    /// `generated::limbs::ssi_side_value` on each (lines, p, q).
+    #[inline(never)]
+    pub fn ssi_side_value(batch: &[([P2; 4], P2, P2)], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&([a, b, c, d], p, q)| {
+            limbs::ssi_side_value(a, b, c, d, p, q)
+        });
+    }
+}
+
+/// Avnaim et al.'s signs of orient2d and orient3d (piece G42), the reference chapter 23.3 names, on
+/// inputs of the classes of the generated predicates'.
+pub mod avnaim {
+    use geom_num::Sign;
+    use geom_num::grid::{P2, P3};
+
+    use super::run;
+
+    /// `avnaim::orient2d` on each triple.
+    #[inline(never)]
+    pub fn orient2d(batch: &[[P2; 3]], out: &mut Vec<Option<Sign>>) {
+        run(batch, out, |&[a, b, c]| crate::avnaim::orient2d(a, b, c));
+    }
+
+    /// `avnaim::orient3d` on each quadruple.
+    #[inline(never)]
+    pub fn orient3d(batch: &[[P3; 4]], out: &mut Vec<Option<Sign>>) {
+        run(batch, out, |&[a, b, c, d]| {
+            crate::avnaim::orient3d(a, b, c, d)
         });
     }
 }

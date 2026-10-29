@@ -4,12 +4,13 @@
 //! section 28.5): every operation, every reader and the operation-sequence generator get a fuzz
 //! target here. Fuzzing feeds a program huge numbers of machine-made inputs, steered towards code
 //! not yet reached, and watches for anything wrong: a panic, a broken law, an invalid result, a
-//! changed input. It has three targets so far: [`predicates`] (G11), `geom-num`'s exact
+//! changed input. It has four targets so far: [`predicates`] (G11), `geom-num`'s exact
 //! predicates never panic and swapping two points flips their sign, on arbitrary grid points;
 //! [`orient2d`] (G14), orient2d, its exact path and its `f64` filter agree with the exact
 //! determinant of orient2d's definition, computed from scratch, which is also proven by Kani on a
-//! bounded domain; and [`wide`] (G26), the wide integers agree with `num-bigint` on every
-//! operation at every width. The layout every target follows, and how each engine runs it locally and in CI,
+//! bounded domain; [`wide`] (G26), the wide integers agree with `num-bigint` on every
+//! operation at every width; and [`variants`] (G42), every variant of every generated exact path
+//! returns the exact value of its description, evaluated in big integers. The layout every target follows, and how each engine runs it locally and in CI,
 //! is in this crate's `README.md`.
 //!
 //! Layer: Development, in chapter 27's crate table: a development crate, outside the
@@ -109,13 +110,15 @@
 //! - `bolero` 0.13.7, a development dependency only: the `check!` front end, with its test-mode
 //!   engine and, under cargo-bolero, the engine chosen (`bolero-libfuzzer`, `bolero-afl`,
 //!   `bolero-honggfuzz` or `bolero-kani`).
-//! - `num-bigint` 0.4.8 (MIT OR Apache-2.0), the [`wide`] target's oracle: exact arbitrary-
-//!   precision integers, the big-integer oracle chapter 29.3 names, sharing no code with
-//!   `geom-num`.
+//! - `geom-gen` (MPL-2.0, ours, development only), whose description parser the [`variants`]
+//!   target reads the predicates with.
+//! - `num-bigint` 0.4.8 (MIT OR Apache-2.0), the oracle of the [`wide`] and [`variants`] targets:
+//!   exact arbitrary-precision integers, the big-integer oracle chapter 29.3 names, sharing no
+//!   code with `geom-num`.
 //!
 //! Licences of every outside package this crate brings into a build, through `bolero` and
-//! `num-bigint`, on every
-//! target (`cargo tree --target all`), each record checked by `geom-test`'s `tests/licences.rs`.
+//! `num-bigint`, on every target (`cargo tree --target all`), each record checked by `geom-test`'s
+//! `tests/licences.rs`.
 //! Where a package offers a choice, it is taken under the permissive licences offered (MIT or
 //! Apache-2.0):
 //!
@@ -154,6 +157,7 @@ use core::fmt;
 pub mod orient2d;
 pub mod predicates;
 pub mod seeded;
+pub mod variants;
 pub mod wide;
 
 /// A law a harness found broken, with the input that broke it.

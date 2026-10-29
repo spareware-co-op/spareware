@@ -73,6 +73,7 @@ use geom_num::plane::{Lpi, Plane, Tpi};
 use geom_num::real::Real;
 use geom_num::rng::{self as rng, Philox, RngError, Seed, Stream, StreamId, StreamRange};
 use geom_num::wide::Wide;
+use geom_num::wide32::Wide32;
 use geom_num::{Exactness, NumError, Sign, eft, math, predicate};
 
 const GATE: &str = include_str!("../benches/instructions/gate.rs");
@@ -884,6 +885,75 @@ fn wide_digest(name: &str, class: Class) -> Option<Digest> {
     }
 }
 
+/// The output digest of a `Wide32` benchmark at `M` limbs (piece G42), by calling `geom-num`
+/// directly on the benchmark's inputs.
+fn wide32_digest_at<const L: usize, const M: usize>(kind: &str, class: Class) -> Option<Digest> {
+    use inputs::wide32 as w;
+    Some(match kind {
+        "add" => fold(w::add::<L, M>(class).iter().map(|(x, y)| x.checked_add(y))),
+        "sub" => fold(w::sub::<L, M>(class).iter().map(|(x, y)| x.checked_sub(y))),
+        "product" => fold(
+            w::product::<L, M>(class)
+                .iter()
+                .map(|(x, y)| Wide32::<M>::product(x, y)),
+        ),
+        "neg" => fold(w::neg::<L, M>(class).iter().map(Wide32::checked_neg)),
+        "cmp" => fold(w::cmp::<L, M>(class).iter().map(|(x, y)| x.cmp(y))),
+        "signum" => fold(w::signum::<L, M>(class).iter().map(Wide32::signum)),
+        "to_i128" => fold(w::to_i128::<L, M>(class).iter().map(Wide32::to_i128)),
+        "from_i128" => fold(
+            w::from_i128::<M>(class)
+                .into_iter()
+                .map(Wide32::<M>::from_i128),
+        ),
+        _ => return None,
+    })
+}
+
+fn wide32_digest(name: &str, class: Class) -> Option<Digest> {
+    use inputs::wide32 as w;
+    match name {
+        "w8_to_w12" => {
+            return Some(fold(
+                w::resize::<4, 6, 8>(class).iter().map(Wide32::resize::<12>),
+            ));
+        }
+        "w10_to_w12" => {
+            return Some(fold(
+                w::resize::<5, 6, 10>(class)
+                    .iter()
+                    .map(Wide32::resize::<12>),
+            ));
+        }
+        "w12_to_w8" => {
+            return Some(fold(
+                w::resize::<6, 4, 12>(class).iter().map(Wide32::resize::<8>),
+            ));
+        }
+        "w12_to_wide" => {
+            return Some(fold(
+                w::to_wide::<6, 12>(class).iter().map(Wide32::to_wide::<6>),
+            ));
+        }
+        "w3_product_i64" => {
+            return Some(fold(
+                w::product_i64(class)
+                    .into_iter()
+                    .map(|(a, b)| Wide32::<3>::product_i64(a, b)),
+            ));
+        }
+        _ => {}
+    }
+    let (width, kind) = name.split_once('_')?;
+    match width {
+        "w8" => wide32_digest_at::<4, 8>(kind, class),
+        "w10" => wide32_digest_at::<5, 10>(kind, class),
+        "w12" => wide32_digest_at::<6, 12>(kind, class),
+        "w16" => wide32_digest_at::<8, 16>(kind, class),
+        _ => None,
+    }
+}
+
 /// The output digest of the growth benchmark `name` at `limbs`, by calling `geom-num` directly.
 fn growth_digest(name: &str, limbs: usize) -> Option<Digest> {
     use inputs::growth as g;
@@ -933,6 +1003,7 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
         ),
         ("sign", "of_i128") => fold(is::of_i128(class).into_iter().map(Sign::of_i128)),
         ("wide", _) => wide_digest(name, class)?,
+        ("wide32", _) => wide32_digest(name, class)?,
         ("plane", "through") => fold(
             ip::through(class)
                 .into_iter()
@@ -1326,6 +1397,145 @@ fn generated_digest(name: &str, class: Class) -> Option<Digest> {
         ),
         "ssi_side_value" => fold(
             i::ssi_side_value(class)
+                .into_iter()
+                .map(|([a, b, c, d], p, q)| gp::ssi_side::value(a, b, c, d, p, q)),
+        ),
+        // The plain-i128 variant (piece G42): the shipped value on the variant's inputs, so a
+        // variant that returned anything else fails its digest.
+        "orient2d_value_plain" => fold(
+            i::orient2d_value_plain(class)
+                .into_iter()
+                .map(|[a, b, c]| gp::orient2d::value(a, b, c)),
+        ),
+        "orient3d_value_plain" => fold(
+            i::orient3d_value_plain(class)
+                .into_iter()
+                .map(|[a, b, c, d]| gp::orient3d::value(a, b, c, d)),
+        ),
+        "incircle_value_plain" => fold(
+            i::incircle_value_plain(class)
+                .into_iter()
+                .map(|[a, b, c, d]| gp::incircle::value(a, b, c, d)),
+        ),
+        "insphere_value_plain" => fold(
+            i::insphere_value_plain(class)
+                .into_iter()
+                .map(|[a, b, c, d, e]| gp::insphere::value(a, b, c, d, e)),
+        ),
+        "plane_side_value_plain" => fold(
+            i::plane_side_value_plain(class)
+                .into_iter()
+                .map(|([x, y, z], d, p)| gp::plane_side::value(x, y, z, d, p)),
+        ),
+        "tpi_weight_value_plain" => fold(i::tpi_weight_value_plain(class).into_iter().map(
+            |[[ax, ay, az], [bx, by, bz], [cx, cy, cz]]| {
+                gp::tpi_weight::value(ax, ay, az, bx, by, bz, cx, cy, cz)
+            },
+        )),
+        "tpi_side_value_plain" => fold(i::tpi_side_value_plain(class).into_iter().map(
+            |[
+                ([ax, ay, az], ad),
+                ([bx, by, bz], bd),
+                ([cx, cy, cz], cd),
+                ([sx, sy, sz], sd),
+            ]| {
+                gp::tpi_side::value(
+                    ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
+                )
+            },
+        )),
+        "lpi_weight_value_plain" => fold(
+            i::lpi_weight_value_plain(class)
+                .into_iter()
+                .map(|([nx, ny, nz], p, q)| gp::lpi_weight::value(nx, ny, nz, p, q)),
+        ),
+        "lpi_side_value_plain" => fold(i::lpi_side_value_plain(class).into_iter().map(
+            |(([ax, ay, az], ad), ([bx, by, bz], bd), p, q)| {
+                gp::lpi_side::value(ax, ay, az, ad, bx, by, bz, bd, p, q)
+            },
+        )),
+        "ssi_weight_value_plain" => fold(
+            i::ssi_weight_value_plain(class)
+                .into_iter()
+                .map(|[a, b, c, d]| gp::ssi_weight::value(a, b, c, d)),
+        ),
+        "ssi_side_value_plain" => fold(
+            i::ssi_side_value_plain(class)
+                .into_iter()
+                .map(|([a, b, c, d], p, q)| gp::ssi_side::value(a, b, c, d, p, q)),
+        ),
+        // Avnaim et al.'s sign of orient2d (piece G42): the shipped exact sign on its inputs.
+        "orient2d_avnaim" => fold(
+            i::orient2d_avnaim(class)
+                .into_iter()
+                .map(|[a, b, c]| gp::orient2d::exact(a, b, c)),
+        ),
+        "orient3d_avnaim" => fold(
+            i::orient3d_avnaim(class)
+                .into_iter()
+                .map(|[a, b, c, d]| gp::orient3d::exact(a, b, c, d)),
+        ),
+        // The width-aware limb variant (piece G42): the shipped value on the variant's inputs,
+        // so a variant that returned anything else fails its digest.
+        "orient2d_value_limbs" => fold(
+            i::orient2d_value_limbs(class)
+                .into_iter()
+                .map(|[a, b, c]| gp::orient2d::value(a, b, c)),
+        ),
+        "orient3d_value_limbs" => fold(
+            i::orient3d_value_limbs(class)
+                .into_iter()
+                .map(|[a, b, c, d]| gp::orient3d::value(a, b, c, d)),
+        ),
+        "incircle_value_limbs" => fold(
+            i::incircle_value_limbs(class)
+                .into_iter()
+                .map(|[a, b, c, d]| gp::incircle::value(a, b, c, d)),
+        ),
+        "insphere_value_limbs" => fold(
+            i::insphere_value_limbs(class)
+                .into_iter()
+                .map(|[a, b, c, d, e]| gp::insphere::value(a, b, c, d, e)),
+        ),
+        "plane_side_value_limbs" => fold(
+            i::plane_side_value_limbs(class)
+                .into_iter()
+                .map(|([x, y, z], d, p)| gp::plane_side::value(x, y, z, d, p)),
+        ),
+        "tpi_weight_value_limbs" => fold(i::tpi_weight_value_limbs(class).into_iter().map(
+            |[[ax, ay, az], [bx, by, bz], [cx, cy, cz]]| {
+                gp::tpi_weight::value(ax, ay, az, bx, by, bz, cx, cy, cz)
+            },
+        )),
+        "tpi_side_value_limbs" => fold(i::tpi_side_value_limbs(class).into_iter().map(
+            |[
+                ([ax, ay, az], ad),
+                ([bx, by, bz], bd),
+                ([cx, cy, cz], cd),
+                ([sx, sy, sz], sd),
+            ]| {
+                gp::tpi_side::value(
+                    ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
+                )
+            },
+        )),
+        "lpi_weight_value_limbs" => fold(
+            i::lpi_weight_value_limbs(class)
+                .into_iter()
+                .map(|([nx, ny, nz], p, q)| gp::lpi_weight::value(nx, ny, nz, p, q)),
+        ),
+        "lpi_side_value_limbs" => fold(i::lpi_side_value_limbs(class).into_iter().map(
+            |(([ax, ay, az], ad), ([bx, by, bz], bd), p, q)| {
+                gp::lpi_side::value(ax, ay, az, ad, bx, by, bz, bd, p, q)
+            },
+        )),
+        "ssi_weight_value_limbs" => fold(
+            i::ssi_weight_value_limbs(class)
+                .into_iter()
+                .map(|[a, b, c, d]| gp::ssi_weight::value(a, b, c, d)),
+        ),
+        "ssi_side_value_limbs" => fold(
+            i::ssi_side_value_limbs(class)
                 .into_iter()
                 .map(|([a, b, c, d], p, q)| gp::ssi_side::value(a, b, c, d, p, q)),
         ),

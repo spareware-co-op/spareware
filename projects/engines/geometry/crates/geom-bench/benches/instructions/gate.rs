@@ -464,6 +464,318 @@ pub mod wide {
     );
 }
 
+/// Fixed-width integers in 32-bit limbs (piece G42), at the bit widths of [`wide`].
+pub mod wide32 {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("wide32/w8_add/typical"))]
+    #[bench::extreme(leak("wide32/w8_add/extreme"))]
+    #[bench::overflow(leak("wide32/w8_add/overflow"))]
+    fn w8_add(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("wide32/w8_sub/typical"))]
+    #[bench::extreme(leak("wide32/w8_sub/extreme"))]
+    #[bench::overflow(leak("wide32/w8_sub/overflow"))]
+    fn w8_sub(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("wide32/w8_product/typical"))]
+    #[bench::extreme(leak("wide32/w8_product/extreme"))]
+    #[bench::overflow(leak("wide32/w8_product/overflow"))]
+    fn w8_product(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("wide32/w8_neg/typical"))]
+    #[bench::extreme(leak("wide32/w8_neg/extreme"))]
+    #[bench::overflow(leak("wide32/w8_neg/overflow"))]
+    fn w8_neg(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("wide32/w8_cmp/typical"))]
+    #[bench::extreme(leak("wide32/w8_cmp/extreme"))]
+    fn w8_cmp(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("wide32/w8_signum/typical"))]
+    fn w8_signum(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("wide32/w8_to_i128/typical"))]
+    #[bench::overflow(leak("wide32/w8_to_i128/overflow"))]
+    fn w8_to_i128(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("wide32/w8_from_i128/typical"))]
+    fn w8_from_i128(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("wide32/w10_add/typical"))]
+    #[bench::extreme(leak("wide32/w10_add/extreme"))]
+    #[bench::overflow(leak("wide32/w10_add/overflow"))]
+    fn w10_add(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("wide32/w10_sub/typical"))]
+    #[bench::extreme(leak("wide32/w10_sub/extreme"))]
+    #[bench::overflow(leak("wide32/w10_sub/overflow"))]
+    fn w10_sub(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("wide32/w10_product/typical"))]
+    #[bench::extreme(leak("wide32/w10_product/extreme"))]
+    #[bench::overflow(leak("wide32/w10_product/overflow"))]
+    fn w10_product(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("wide32/w10_neg/typical"))]
+    #[bench::extreme(leak("wide32/w10_neg/extreme"))]
+    #[bench::overflow(leak("wide32/w10_neg/overflow"))]
+    fn w10_neg(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("wide32/w10_cmp/typical"))]
+    #[bench::extreme(leak("wide32/w10_cmp/extreme"))]
+    fn w10_cmp(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("wide32/w10_signum/typical"))]
+    fn w10_signum(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("wide32/w10_to_i128/typical"))]
+    #[bench::overflow(leak("wide32/w10_to_i128/overflow"))]
+    fn w10_to_i128(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("wide32/w10_from_i128/typical"))]
+    fn w10_from_i128(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("wide32/w12_add/typical"))]
+    #[bench::extreme(leak("wide32/w12_add/extreme"))]
+    #[bench::overflow(leak("wide32/w12_add/overflow"))]
+    fn w12_add(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("wide32/w12_sub/typical"))]
+    #[bench::extreme(leak("wide32/w12_sub/extreme"))]
+    #[bench::overflow(leak("wide32/w12_sub/overflow"))]
+    fn w12_sub(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("wide32/w12_product/typical"))]
+    #[bench::extreme(leak("wide32/w12_product/extreme"))]
+    #[bench::overflow(leak("wide32/w12_product/overflow"))]
+    fn w12_product(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("wide32/w12_neg/typical"))]
+    #[bench::extreme(leak("wide32/w12_neg/extreme"))]
+    #[bench::overflow(leak("wide32/w12_neg/overflow"))]
+    fn w12_neg(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("wide32/w12_cmp/typical"))]
+    #[bench::extreme(leak("wide32/w12_cmp/extreme"))]
+    fn w12_cmp(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("wide32/w12_signum/typical"))]
+    fn w12_signum(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("wide32/w12_to_i128/typical"))]
+    #[bench::overflow(leak("wide32/w12_to_i128/overflow"))]
+    fn w12_to_i128(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("wide32/w12_from_i128/typical"))]
+    fn w12_from_i128(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("wide32/w16_add/typical"))]
+    #[bench::extreme(leak("wide32/w16_add/extreme"))]
+    #[bench::overflow(leak("wide32/w16_add/overflow"))]
+    fn w16_add(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("wide32/w16_sub/typical"))]
+    #[bench::extreme(leak("wide32/w16_sub/extreme"))]
+    #[bench::overflow(leak("wide32/w16_sub/overflow"))]
+    fn w16_sub(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("wide32/w16_product/typical"))]
+    #[bench::extreme(leak("wide32/w16_product/extreme"))]
+    #[bench::overflow(leak("wide32/w16_product/overflow"))]
+    fn w16_product(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("wide32/w16_neg/typical"))]
+    #[bench::extreme(leak("wide32/w16_neg/extreme"))]
+    #[bench::overflow(leak("wide32/w16_neg/overflow"))]
+    fn w16_neg(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("wide32/w16_cmp/typical"))]
+    #[bench::extreme(leak("wide32/w16_cmp/extreme"))]
+    fn w16_cmp(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("wide32/w16_signum/typical"))]
+    fn w16_signum(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("wide32/w16_to_i128/typical"))]
+    #[bench::overflow(leak("wide32/w16_to_i128/overflow"))]
+    fn w16_to_i128(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("wide32/w16_from_i128/typical"))]
+    fn w16_from_i128(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("wide32/w8_to_w12/typical"))]
+    fn w8_to_w12(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("wide32/w10_to_w12/typical"))]
+    fn w10_to_w12(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("wide32/w12_to_w8/typical"))]
+    #[bench::overflow(leak("wide32/w12_to_w8/overflow"))]
+    fn w12_to_w8(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("wide32/w12_to_wide/typical"))]
+    fn w12_to_wide(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("wide32/w3_product_i64/typical"))]
+    #[bench::extreme(leak("wide32/w3_product_i64/extreme"))]
+    #[bench::overflow(leak("wide32/w3_product_i64/overflow"))]
+    fn w3_product_i64(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = wide32;
+        benchmarks = w8_add, w8_sub, w8_product, w8_neg, w8_cmp, w8_signum, w8_to_i128, w8_from_i128, w10_add, w10_sub, w10_product, w10_neg, w10_cmp, w10_signum, w10_to_i128, w10_from_i128, w12_add, w12_sub, w12_product, w12_neg, w12_cmp, w12_signum, w12_to_i128, w12_from_i128, w16_add, w16_sub, w16_product, w16_neg, w16_cmp, w16_signum, w16_to_i128, w16_from_i128, w8_to_w12, w10_to_w12, w12_to_w8, w12_to_wide, w3_product_i64
+    );
+}
+
 /// Planes and the points where three planes meet.
 pub mod plane {
     use super::*;
@@ -1687,10 +1999,252 @@ pub mod generated {
         run
     }
 
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/orient2d_value_plain/typical"))]
+    #[bench::degenerate(leak("generated/orient2d_value_plain/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/orient2d_value_plain/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/orient2d_value_plain/extreme"))]
+    fn orient2d_value_plain(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/orient3d_value_plain/typical"))]
+    #[bench::degenerate(leak("generated/orient3d_value_plain/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/orient3d_value_plain/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/orient3d_value_plain/extreme"))]
+    fn orient3d_value_plain(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/incircle_value_plain/typical"))]
+    #[bench::degenerate(leak("generated/incircle_value_plain/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/incircle_value_plain/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/incircle_value_plain/extreme"))]
+    fn incircle_value_plain(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/insphere_value_plain/typical"))]
+    #[bench::degenerate(leak("generated/insphere_value_plain/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/insphere_value_plain/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/insphere_value_plain/extreme"))]
+    fn insphere_value_plain(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/plane_side_value_plain/typical"))]
+    #[bench::degenerate(leak("generated/plane_side_value_plain/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/plane_side_value_plain/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/plane_side_value_plain/extreme"))]
+    fn plane_side_value_plain(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/tpi_weight_value_plain/typical"))]
+    #[bench::degenerate(leak("generated/tpi_weight_value_plain/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/tpi_weight_value_plain/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/tpi_weight_value_plain/extreme"))]
+    fn tpi_weight_value_plain(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/tpi_side_value_plain/typical"))]
+    #[bench::degenerate(leak("generated/tpi_side_value_plain/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/tpi_side_value_plain/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/tpi_side_value_plain/extreme"))]
+    fn tpi_side_value_plain(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/lpi_weight_value_plain/typical"))]
+    #[bench::degenerate(leak("generated/lpi_weight_value_plain/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/lpi_weight_value_plain/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/lpi_weight_value_plain/extreme"))]
+    fn lpi_weight_value_plain(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/lpi_side_value_plain/typical"))]
+    #[bench::degenerate(leak("generated/lpi_side_value_plain/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/lpi_side_value_plain/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/lpi_side_value_plain/extreme"))]
+    fn lpi_side_value_plain(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/ssi_weight_value_plain/typical"))]
+    #[bench::degenerate(leak("generated/ssi_weight_value_plain/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/ssi_weight_value_plain/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/ssi_weight_value_plain/extreme"))]
+    fn ssi_weight_value_plain(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/ssi_side_value_plain/typical"))]
+    #[bench::degenerate(leak("generated/ssi_side_value_plain/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/ssi_side_value_plain/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/ssi_side_value_plain/extreme"))]
+    fn ssi_side_value_plain(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/orient2d_avnaim/typical"))]
+    #[bench::degenerate(leak("generated/orient2d_avnaim/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/orient2d_avnaim/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/orient2d_avnaim/extreme"))]
+    fn orient2d_avnaim(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/orient3d_avnaim/typical"))]
+    #[bench::degenerate(leak("generated/orient3d_avnaim/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/orient3d_avnaim/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/orient3d_avnaim/extreme"))]
+    fn orient3d_avnaim(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/orient2d_value_limbs/typical"))]
+    #[bench::degenerate(leak("generated/orient2d_value_limbs/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/orient2d_value_limbs/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/orient2d_value_limbs/extreme"))]
+    fn orient2d_value_limbs(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/orient3d_value_limbs/typical"))]
+    #[bench::degenerate(leak("generated/orient3d_value_limbs/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/orient3d_value_limbs/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/orient3d_value_limbs/extreme"))]
+    fn orient3d_value_limbs(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/incircle_value_limbs/typical"))]
+    #[bench::degenerate(leak("generated/incircle_value_limbs/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/incircle_value_limbs/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/incircle_value_limbs/extreme"))]
+    fn incircle_value_limbs(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/insphere_value_limbs/typical"))]
+    #[bench::degenerate(leak("generated/insphere_value_limbs/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/insphere_value_limbs/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/insphere_value_limbs/extreme"))]
+    fn insphere_value_limbs(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/plane_side_value_limbs/typical"))]
+    #[bench::degenerate(leak("generated/plane_side_value_limbs/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/plane_side_value_limbs/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/plane_side_value_limbs/extreme"))]
+    fn plane_side_value_limbs(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/tpi_weight_value_limbs/typical"))]
+    #[bench::degenerate(leak("generated/tpi_weight_value_limbs/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/tpi_weight_value_limbs/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/tpi_weight_value_limbs/extreme"))]
+    fn tpi_weight_value_limbs(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/tpi_side_value_limbs/typical"))]
+    #[bench::degenerate(leak("generated/tpi_side_value_limbs/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/tpi_side_value_limbs/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/tpi_side_value_limbs/extreme"))]
+    fn tpi_side_value_limbs(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/lpi_weight_value_limbs/typical"))]
+    #[bench::degenerate(leak("generated/lpi_weight_value_limbs/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/lpi_weight_value_limbs/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/lpi_weight_value_limbs/extreme"))]
+    fn lpi_weight_value_limbs(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/lpi_side_value_limbs/typical"))]
+    #[bench::degenerate(leak("generated/lpi_side_value_limbs/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/lpi_side_value_limbs/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/lpi_side_value_limbs/extreme"))]
+    fn lpi_side_value_limbs(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/ssi_weight_value_limbs/typical"))]
+    #[bench::degenerate(leak("generated/ssi_weight_value_limbs/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/ssi_weight_value_limbs/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/ssi_weight_value_limbs/extreme"))]
+    fn ssi_weight_value_limbs(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/ssi_side_value_limbs/typical"))]
+    #[bench::degenerate(leak("generated/ssi_side_value_limbs/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/ssi_side_value_limbs/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/ssi_side_value_limbs/extreme"))]
+    fn ssi_side_value_limbs(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
     library_benchmark_group!(
         name = generated;
         benchmarks = orient2d_filter, orient2d_value, orient3d_filter, orient3d_value, incircle_filter, incircle_value, insphere_filter, insphere_value, plane_side_filter, plane_side_value,
-            tpi_weight_filter, tpi_weight_value, tpi_side_filter, tpi_side_value, lpi_weight_filter, lpi_weight_value, lpi_side_filter, lpi_side_value, ssi_weight_filter, ssi_weight_value, ssi_side_filter, ssi_side_value
+            tpi_weight_filter, tpi_weight_value, tpi_side_filter, tpi_side_value, lpi_weight_filter, lpi_weight_value, lpi_side_filter, lpi_side_value, ssi_weight_filter, ssi_weight_value, ssi_side_filter, ssi_side_value,
+            orient2d_value_plain, orient3d_value_plain, incircle_value_plain, insphere_value_plain, plane_side_value_plain, tpi_weight_value_plain, tpi_side_value_plain, lpi_weight_value_plain, lpi_side_value_plain, ssi_weight_value_plain, ssi_side_value_plain,
+            orient2d_avnaim, orient3d_avnaim, orient2d_value_limbs, orient3d_value_limbs, incircle_value_limbs, insphere_value_limbs, plane_side_value_limbs, tpi_weight_value_limbs, tpi_side_value_limbs, lpi_weight_value_limbs, lpi_side_value_limbs, ssi_weight_value_limbs, ssi_side_value_limbs
     );
 }
 
