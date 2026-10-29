@@ -460,7 +460,7 @@ fn oracle_decimal(text: &str) -> Result<BigRational, DecimalError> {
     // The exponent in lowest terms: value = m·10^e with m not divisible by 10.
     let mut e = 0i64;
     let mut v = value.clone();
-    while v.is_integer() && (v.to_integer() % 10).is_zero() {
+    while v.is_integer() && (v.to_integer() % BigInt::from(10)).is_zero() {
         v /= int(10);
         e += 1;
     }
@@ -696,7 +696,7 @@ fn linear_units_are_exact_reduced_ratios_in_range() {
     assert_eq!(d("0.33333333333333333333"), Err(NumError::OutsideDomain));
     // Exponents below −38: the shared factors of 2 and 5 cancel before the denominator is formed.
     let five40 = BigInt::from(5).pow(40);
-    let m = (five40 * 301).to_i128().unwrap();
+    let m = (five40 * BigInt::from(301)).to_i128().unwrap();
     let tiny = Decimal::new(m, -40).unwrap();
     assert_eq!(LinearUnit::from_decimal(tiny), r(301, 1 << 40));
     let two100 = 1i128 << 100;
@@ -1434,7 +1434,7 @@ struct Digest(Sha256);
 
 impl Digest {
     fn eat(&mut self, v: u64) {
-        self.0.update(&v.to_le_bytes());
+        self.0.write(&v.to_le_bytes());
     }
 
     fn rounded(&mut self, r: Result<geom_math::Rounded<P3>, NumError>) {
@@ -1478,7 +1478,7 @@ fn workload(seed: u64) -> String {
         };
         h.rounded(f.to_frame_decimal(d));
         let text = d.easting.to_string();
-        h.0.update(text.as_bytes());
+        h.0.write(text.as_bytes());
         if let Ok(p) = f.to_frame(m).map(|r| r.value()) {
             if let Ok(back) = f.to_map(p) {
                 h.eat(back.value().easting.to_bits());
