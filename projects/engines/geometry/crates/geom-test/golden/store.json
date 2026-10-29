@@ -215,6 +215,56 @@
           "sha256": "a0bff06b629c6e61aa07b26cae5dbe28f2fbb5ce84876a53e38010321c2eb878"
         },
         {
+          "id": "geom-nurbs/bernstein",
+          "what": "The Bernstein toolkit of geom-nurbs (piece G59): 200 surfaces (degrees 1 to 3, one to three spans each way, rational half the time) with every patch's interval coefficients, box, derivative boxes, fat plane and normal patch; 200 pairs of plane curves with every piece's box, derivative box, fat line and clips; 50 scalar, dot and cross products; 20 exact normal patches and plane coefficients of grid patches; and 4 refusals: 5960 results in the canonical encoding of tests/bernstein_determinism.rs.",
+          "check": {
+            "crate": "geom-nurbs",
+            "test": "bernstein_determinism",
+            "function": "bernstein_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "e036ec6fc907153e3ff1960bfac8b52a646e091e9c2e23f4a364efd0ea9e2c12"
+        },
+        {
+          "id": "geom-curve/analytic",
+          "what": "The analytic curve kinds of geom-curve (piece G61): 40 rounds of a line, circle, ellipse, hyperbola, parabola, polynomial and involute in 2D and the same with a helix in 3D, each evaluated in doubles and enclosed at five parameters, bounded with three derivative bounds over a span, converted to NURBS (knots, control points, weights, parameter map and deviation), split, reversed and transformed (each evaluated, with its deviation); and 6 refusals: 30606 results in the canonical encoding of tests/analytic_determinism.rs.",
+          "check": {
+            "crate": "geom-curve",
+            "test": "analytic_determinism",
+            "function": "analytic_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "e30b4c2d63bb616f99ed5093cf9116cf50ba6a6382a34ff74890e62272069342"
+        },
+        {
+          "id": "geom-curve/compound",
+          "what": "The bulge polyline, trimmed, composite, offset and curve-on-surface kinds of geom-curve (piece G62): 30 rounds of a bulge polyline (straight segments, semicircles and major arcs, widths half the time), a trimmed NURBS curve, a composite of a line, an arc and a NURBS curve, three offsets (of a circle in 2D, of a helix against a reference direction, of a helix by distances) and a curve on a surface, each evaluated in doubles and enclosed at five parameters, bounded with two derivative bounds over a span, converted to NURBS (knots, control points, weights, parameter map and deviation), split, reversed and transformed (each evaluated, with its deviation); and 6 refusals: 10506 results in the canonical encoding of tests/compound_determinism.rs.",
+          "check": {
+            "crate": "geom-curve",
+            "test": "compound_determinism",
+            "function": "compound_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "3aadba80ffd582ba2a5f6ab55a12a59c7306e6eaa7dc2a884a5ecc6089d804b2"
+        },
+        {
+          "id": "geom-surface/analytic",
+          "what": "The analytic and swept surface kinds of geom-surface (piece G65): 12 rounds of a plane, cylinder, cone, sphere and torus on random frames and a surface of revolution, an extrusion and a ruled surface on fixed profiles, each enclosed at nine parameter pairs, bounded with both derivative bounds and the normal bound over a box, converted to NURBS (knots, net, weights, both parameter maps and deviation), split and reversed in each direction and transformed (each enclosed, with its deviation); and 5 refusals: 2693 results in the canonical encoding of tests/surface_determinism.rs.",
+          "check": {
+            "crate": "geom-surface",
+            "test": "surface_determinism",
+            "function": "surface_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "2bd33237d0660e08df18570457cf4fd866770a5f14153d34e65e2a0e2864c0bd"
+        },
+        {
+          "id": "geom-surface/offset",
+          "what": "The offset surface kind of geom-surface (piece G66): 3 rounds of offsets of a bicubic NURBS patch with an interior knot each way (rational in the second round), of a cylinder and of a torus on random frames, and in the first an offset of an offset, each enclosed at nine parameter pairs, with its partials to order 3 at three, bounded with both derivative bounds and the normal bound over a box, converted to NURBS by default and the first patch's offset within 1e-1 (knots, net, weights, both parameter maps and deviation), split and reversed in each direction and transformed (each enclosed, with its deviation; the offset of an offset is not converted and moves by a grid mirror); and 4 refusals: 314 results in the canonical encoding of tests/offset_determinism.rs.",
+          "check": {
+            "crate": "geom-surface",
+            "test": "offset_determinism",
+            "function": "offset_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "63b11a13ca70c0fef43c5e6e03a53dca5e7f7cc8b7792900f1853aabeaa71a00"
+        },
+        {
           "id": "geom-bvh/tree",
           "what": "The box tree of geom-bvh (piece G54): 2D and 3D trees over 22 fixed sets of 1 to 9,000 boxes (sparse, dense, nested and all equal, the largest built with the parallel subtree phase), each tree's canonical bytes, the keys meeting eight query boxes, its pairs and its pairs with another tree both ways, the work each of those walks charged, and one refit of each, 3,970,021 bytes in the encoding of tests/tree_determinism.rs.",
           "check": {
