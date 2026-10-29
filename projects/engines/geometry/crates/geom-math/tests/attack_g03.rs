@@ -2264,7 +2264,9 @@ fn workload(seed: u64) -> String {
 /// `c1c5d1b6…747c9` when piece G05 made `geom_num::math::sinpi` and `cospi`, which the workload's
 /// rotations call, correctly rounded (ports of CORE-MATH in place of an msun-method
 /// approximation): of the maths functions geom-math calls, only those two changed, so every
-/// rotation now uses the correctly rounded sine and cosine.
+/// rotation now uses the correctly rounded sine and cosine. It replaced `97782873…2cfda25` when
+/// piece G48 moved geom-math onto `geom-num`'s double-double type: only the workload's
+/// double-double arithmetic changed.
 const WORKLOAD: &str = "geom-math/workload";
 
 /// Principle 5 and chapter 21: bit-identical results on every target. The workload covers map

@@ -88,13 +88,19 @@
             "test": "determinism",
             "function": "golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "dd9daf8861292fda5cd2de1d789a6f9739a4672145c9756cdc5299a6fe772ab6",
+          "sha256": "d46b124ed75682f9718101362b4a9a858fb17170e264db37fc68ac037fb8edac",
           "history": [
             {
               "sha256": "d79932a18468bf79d55bdb204597c001ad9b512c5000fae5e87d7db01a72f126",
               "kind": "improvement",
               "piece": "G05",
               "why": "The correctly rounded sinpi and cospi of piece G05 (CORE-MATH ports in place of an msun-method approximation), which geom-math's rotations call: only the two sections that build rotations from them changed, transform (6773dadd...852b18 before) and boxes (2e8f3297...bc7e3e before); every other section's digest is the same. Recorded on main in G03's pull request (commit bbbc379), before the store existed."
+            },
+            {
+              "sha256": "dd9daf8861292fda5cd2de1d789a6f9739a4672145c9756cdc5299a6fe772ab6",
+              "kind": "improvement",
+              "piece": "G48",
+              "why": "Piece G48 moved geom-math onto geom-num's double-double type (piece G25) and made out-of-range conversions report the exact coordinate. Only two sections changed: dd (a675b95c...61b257 before), which now exercises geom-num's DD, the one geom-math's frames use, with its own algorithms, tighter proven bounds and errors (division by zero NotFinite, the root of a negative OutsideDomain); and frames (ae980551...e555d700 before), whose OutOfRange values are now the exact rounded coordinate, saturated only beyond i128, in the order height, x, y, where G03 reported estimates. Every successful conversion is unchanged: both pieces round correctly, and the rounding is unique. The other eight sections' digests are the same."
             }
           ]
         },
@@ -106,15 +112,31 @@
             "test": "attack_g03",
             "function": "results_identical_across_targets"
           },
-          "sha256": "977828731c890a725eae9d2f6eb79b9d04a69f927ffcf20525228c93f2cfda25",
+          "sha256": "629014b5a4dbadaf75b8d24b6aa1224580df998a43a9139fc762001196816e27",
           "history": [
             {
               "sha256": "c1c5d1b624f95d7ce6b6640acef43dda0a90ae2c4beb6c30483fa87a234747c9",
               "kind": "improvement",
               "piece": "G05",
               "why": "The correctly rounded sinpi and cospi of piece G05 (CORE-MATH ports in place of an msun-method approximation), which the workload's rotations call; sqrt, abs, floor, ceil and round_ties_even, the only other maths functions geom-math calls, are unchanged. Recorded on main in G03's pull request (commit c19cca4), before the store existed."
+            },
+            {
+              "sha256": "977828731c890a725eae9d2f6eb79b9d04a69f927ffcf20525228c93f2cfda25",
+              "kind": "improvement",
+              "piece": "G48",
+              "why": "Piece G48 moved geom-math onto geom-num's double-double type (piece G25): the workload's double-double arithmetic (add, mul, div and sqrt of random operands) now runs geom-num's DD, with its own algorithms and tighter proven bounds, so some results differ in their last bits and its errors differ (division by zero NotFinite, the root of a negative OutsideDomain). The workload's map conversions hash only successful results, which are correctly rounded in both pieces and so unchanged, and its transforms are untouched."
             }
           ]
+        },
+        {
+          "id": "geom-math/frames",
+          "what": "geom-math's frame workload (piece G48): map to frame from doubles and from exact decimal text, frame to map, in metres, feet, Clarke's foot and random linear units, Map and Ground frames with 64-bit scale factors, out-of-range values, decimal text forms, units from decimals and exact shifts, as tests/attack_g48.rs records it.",
+          "check": {
+            "crate": "geom-math",
+            "test": "attack_g48",
+            "function": "frame_results_identical_across_targets"
+          },
+          "sha256": "8a315871b62b2c0f1065d7092766e9033c0329f127a43a9fea2b89955577b574"
         },
         {
           "id": "geom-run/helpers",

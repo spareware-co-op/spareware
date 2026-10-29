@@ -12,7 +12,8 @@
 //!   subnormals, both zeros and the overflow edge included;
 //! - double-double arithmetic: every operation on operands of every exponent, the integer and
 //!   exact-product constructors at their limits, and exact rounding to integers with offsets, on
-//!   whole numbers, ties and near-ties;
+//!   whole numbers, ties and near-ties (since piece G48, of `geom-num`'s type, which the frame
+//!   conversions use: the section stays, so the sections after it draw the same inputs);
 //! - grid transforms: all 48 signed permutations with translations up to and beyond their limit,
 //!   applied to points and vectors at the frame's edges, composed, inverted and moving boxes;
 //! - rational transforms: Pythagorean rotations, rational scales, fractional translations and
@@ -116,7 +117,11 @@ use geom_test::golden::{self, Sha256, hex};
 /// replaced `d79932a1…72f126` (the store's history keeps the whole digest) when piece G05 made `geom_num::math::sinpi` and `cospi` correctly rounded
 /// (ports of CORE-MATH in place of an msun-method approximation): only the two sections that build
 /// rotations from them changed, `transform` (`6773dadd…852b18` before) and `boxes`
-/// (`2e8f3297…bc7e3e` before); every other section's digest is the same.
+/// (`2e8f3297…bc7e3e` before); every other section's digest is the same. It replaced
+/// `dd9daf88…772ab6` when piece G48 moved the crate onto `geom-num`'s double-double type and made
+/// out-of-range conversions report the exact coordinate: only `dd` (`a675b95c…61b257` before),
+/// which now exercises `geom-num`'s type, and `frames` (`ae980551…e555d700` before), whose
+/// `OutOfRange` values changed, moved; every successful conversion is the same.
 const GOLDEN: &str = "geom-math/determinism";
 
 /// The corpus makes at least this many calls into the crate.
