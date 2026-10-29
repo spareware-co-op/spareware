@@ -870,11 +870,14 @@ dependencies = [
 name = "geom-curve"
 version = "0.0.0"
 dependencies = [
+ "dashu-int",
+ "dashu-ratio",
  "geom-math",
  "geom-num",
  "geom-nurbs",
  "geom-op",
  "geom-run",
+ "geom-test",
 ]
 
 [[package]]
@@ -1342,6 +1345,7 @@ dependencies = [
  "geom-nurbs",
  "geom-op",
  "geom-run",
+ "geom-test",
 ]
 
 [[package]]

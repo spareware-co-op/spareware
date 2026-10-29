@@ -307,6 +307,29 @@ impl<const D: usize> Surface<D> {
         self.rebuild(meter, dir, Basis::new(q, uq)?, &result, &enclosure)
     }
 
+    /// The Bezier patches of a clamped surface as interval enclosures of their exact homogeneous
+    /// control points, row by row, with their spans: A5.7 run in intervals only (piece G59's
+    /// Bernstein forms).
+    pub(crate) fn interval_patches(
+        &self,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Vec<IntervalPatch<D>>, NurbsError> {
+        let (bu, bv) = (self.basis_u(), self.basis_v());
+        if !(bu.is_clamped() && bv.is_clamped()) {
+            return Err(NurbsError::NotClamped);
+        }
+        let (p, q) = (bu.degree(), bv.degree());
+        let patches = mul(span_count(bu), span_count(bv))?;
+        charge_op(meter, mul(patches, mul(add(p, 1)?, add(q, 1)?)?)?, D, 0)?;
+        let net = self.net::<Interval>(meter)?;
+        let pieces = patches_of(meter, &net, bu, bv)?;
+        let mut out = vec_for(meter, pieces.len())?;
+        for patch in pieces {
+            out.push((patch.u, patch.v, patch.points));
+        }
+        Ok(out)
+    }
+
     /// The surface as Bezier patches, row by row: patch (i, j) covers the i-th span in u and the
     /// j-th in v (A5.7).
     ///
@@ -441,6 +464,10 @@ impl<const D: usize> Surface<D> {
 }
 
 /// One Bezier patch: its spans in u and v, and its (p + 1) × (q + 1) points row by row.
+/// A Bezier patch's spans in u and v and the interval enclosures of its homogeneous control points,
+/// row by row.
+pub(crate) type IntervalPatch<const D: usize> = ((f64, f64), (f64, f64), Vec<Hom<Interval, D>>);
+
 struct Patch<N, const D: usize> {
     u: (f64, f64),
     v: (f64, f64),
