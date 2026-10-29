@@ -775,6 +775,11 @@ fn malformed_kinds_are_refused_by_kind() {
         Circle::new([f64::NAN, 0.0, 0.0], 1.0, std3(), (0.0, 1.0)).err(),
         Some(CurveError::NotFinite)
     );
+    // The point is checked first: a bad point with a bad domain is refused for the point.
+    assert_eq!(
+        Circle::new([f64::NAN, 0.0, 0.0], 1.0, std3(), (2.0, 1.0)).err(),
+        Some(CurveError::NotFinite)
+    );
     for (pitch, e) in [
         (0.0, CurveError::Degenerate),
         (f64::NAN, CurveError::NotFinite),
@@ -877,13 +882,23 @@ fn similarities_move_circles_to_circles() {
         panic!("not a circle");
     };
     assert_eq!(d.center(), [8.0, -1.0, 5.0]);
-    // A scale that underflows its own column is refused, not taken for zero.
-    assert!(
-        c.transformed(
-            &TypedTransform::from(Transform::uniform_scale(1e-200).unwrap()),
-            m
-        )
-        .is_err()
+    // A scale by 3 from an integer matrix with every entry of its first column nonzero: the
+    // radius triples exactly.
+    let rows = [
+        [2.0, -2.0, 1.0, 0.0],
+        [2.0, 1.0, -2.0, 0.0],
+        [1.0, 2.0, 2.0, 0.0],
+    ];
+    let three = TypedTransform::from(Transform::from_rows(rows).unwrap());
+    let CurveKind::Circle(d) = c.transformed(&three, m).unwrap().value else {
+        panic!("not a circle");
+    };
+    assert_eq!(d.radius(), 4.5);
+    // A scale whose column length underflows is refused as not finite, not taken for zero.
+    let tiny = TypedTransform::from(Transform::uniform_scale(1e-170).unwrap());
+    assert_eq!(
+        c.transformed(&tiny, m).err(),
+        Some(geom_curve::CurveError::NotFinite)
     );
 }
 
@@ -896,7 +911,11 @@ fn a_frame_refuses_a_reference_along_its_normal() {
     let n = [0.1, 0.3, 0.7];
     let x = [0.2, 0.6, 1.4];
     assert_eq!(Frame::<3>::new(x, n).err(), Some(CurveError::Degenerate));
-    assert!(Frame::<3>::new([1e200, 0.0, 0.0], [0.0, 1e200, 0.0]).is_err());
+    // The overflowing cross product leaves the decision open, which counts as parallel.
+    assert_eq!(
+        Frame::<3>::new([1e200, 0.0, 0.0], [0.0, 1e200, 0.0]).err(),
+        Some(CurveError::Degenerate)
+    );
     assert!(Frame::<3>::new([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]).is_ok());
 }
 
@@ -943,8 +962,16 @@ fn parameter_maps_stay_in_their_pieces() {
 fn conversions_too_fine_or_too_long_are_refused() {
     use geom_curve::CurveError;
     let m = &mut meter();
-    let far = Circle::new([0.0; 3], 1.0, std3(), (1e16, 1e16 + 2.0)).unwrap();
-    assert_eq!(far.to_nurbs(m).err(), Some(CurveError::Degenerate));
+    // Breaks that round onto the one before, or onto the end (parameters near 2^52, where the
+    // spacing of doubles is 1).
+    for d in [
+        (1e16, 1e16 + 2.0),
+        (4_503_599_627_370_496.0, 4_503_599_627_370_497.0),
+        (4_503_599_627_370_497.0, 4_503_599_627_370_498.0),
+    ] {
+        let far = Circle::new([0.0; 3], 1.0, std3(), d).unwrap();
+        assert_eq!(far.to_nurbs(m).err(), Some(CurveError::Degenerate), "{d:?}");
+    }
     let helix = HelixAxes::Frame {
         frame: std3(),
         radius: 1.0,
@@ -1055,4 +1082,39 @@ fn a_bounded_kind_without_a_nurbs_form_is_caught() {
     let c = Circle::new([0.0; 3], 1.0, std3(), (0.0, 1.0)).unwrap();
     let e = check(&NoForm(c), &[0.0, 0.5, 1.0], &t, &mut meter()).unwrap_err();
     assert_eq!(e.law, Law::NurbsWithinItsError, "{e}");
+}
+
+/// Claim: an involute's derivatives are its formula's: c + r(cos θ + θ sin θ, sin θ − θ cos θ),
+/// θ = πt.
+#[test]
+fn an_involute_has_its_formula_derivatives() {
+    let r = 2.0;
+    let inv = Involute::new([1.0, -1.0, 0.0], r, std3(), (-1.0, 1.5)).unwrap();
+    let p = std::f64::consts::PI;
+    for k in 0..=10 {
+        let t = -1.0 + f64::from(k) / 4.0;
+        let mut d = [[0.0; 3]; 4];
+        inv.derivatives(t, Limit::FromRight, &mut d).unwrap();
+        let th = p * t;
+        let (s, c) = (sinpi(t), cospi(t));
+        let want = [
+            [1.0 + r * (c + th * s), -1.0 + r * (s - th * c)],
+            [r * p * th * c, r * p * th * s],
+            [r * p * p * (c - th * s), r * p * p * (s + th * c)],
+            [
+                r * p * p * p * (-2.0 * s - th * c),
+                r * p * p * p * (2.0 * c - th * s),
+            ],
+        ];
+        for (order, w) in want.iter().enumerate() {
+            for i in 0..2 {
+                assert!(
+                    (d[order][i] - w[i]).abs() <= 1e-9 * (1.0 + w[i].abs()),
+                    "t {t} order {order}: {} against {}",
+                    d[order][i],
+                    w[i]
+                );
+            }
+        }
+    }
 }

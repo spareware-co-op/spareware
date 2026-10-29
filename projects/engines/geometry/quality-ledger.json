@@ -691,6 +691,14 @@
       "reason": "At s.lo() == 0 the mutant replaces s by Interval::new(0, s.hi()), which is s itself: its lower end is already 0 (intervals keep a zero end as +0)."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-curve/src/frame.rs",
+      "mutant": "delete - in not_parallel",
+      "line_text": "sum.add_slice(&[x, ex, -y, -ey]);",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The mutant sums x + ex - y + ey for the cross product's coordinate. Where the exact coordinate is zero the two products are equal, so they round alike and the doubles' cross product is zero too: Frame::unit refuses it as Degenerate either way. Where it is not zero, the mutant can only call it zero (refusing a frame that is nearly degenerate), never accept a parallel one."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
       "mutant": "replace classify -> Option<Sign> with None",
       "line_text": "let ([nx, ny, nz], [xx, xy, xz]) = (*n, x);",
