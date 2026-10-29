@@ -398,7 +398,7 @@ fn check_row(row: [f64; 4], v: [i64; 3]) {
 }
 
 #[test]
-fn grid_images_round_rows_whose_sums_mislead() {
+fn grid_images_round_rows_whose_float_sums_mislead() {
     // Rows (as bits) and points whose plain double sum lands within its error bound of a whole step
     // or a midpoint, on the far side from the exact value (found by search): the filter must refuse
     // them, whichever terms of its error bound are large and whichever small.
@@ -470,6 +470,10 @@ fn grid_images_round_rows_whose_sums_mislead() {
     for (bits, v) in floats {
         check_row(bits.map(f64::from_bits), v);
     }
+}
+
+#[test]
+fn grid_images_round_rows_whose_double_double_sums_mislead() {
     // Rows whose double-double sum loses a term of 3·2^−80: l₀x is about 2^39, so the double-double
     // sum of it and l₁y keeps nothing below about 2^−66, and l₂z then cancels l₀x exactly. The
     // exact value is then 0 exactly (an exact step the double-double sum puts 3·2^−80 away), and
