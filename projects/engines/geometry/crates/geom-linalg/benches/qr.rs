@@ -1,5 +1,6 @@
-//! The benchmark of piece G49 (chapter 30): a column-pivoted QR of 256 unknowns, the board's
-//! "under 20 ms", with LU and the complete orthogonal decomposition of the same matrix beside it.
+//! The benchmark of pieces G49 and G50 (chapter 30): a column-pivoted QR of 256 unknowns, the
+//! board's "under 20 ms", with LU and the complete orthogonal decomposition of the same matrix
+//! beside it; and both SVDs and the symmetric eigensolver on 64 × 64.
 //!
 //! Run with `cargo bench -p geom-linalg`. It uses the standard library's clock only (wall-clock
 //! time on this machine; the reference machine and instruction counts are geom-bench's, piece
@@ -12,13 +13,14 @@
     clippy::cast_possible_wrap,
     clippy::unwrap_used,
     clippy::disallowed_methods,
+    clippy::indexing_slicing,
     reason = "a benchmark is development code, like a test; it measures wall-clock time by design"
 )]
 
 use std::hint::black_box;
 use std::time::Instant;
 
-use geom_linalg::{Cod, Lu, Matrix, PivotedQr, Work};
+use geom_linalg::{Cod, Lu, Matrix, PivotedQr, Svd, SymmetricEigen, Work};
 use geom_num::real::Real;
 
 fn matrix(n: usize) -> Matrix {
@@ -61,5 +63,23 @@ fn main() {
     });
     time("LU with partial pivoting, 256 × 256", 10, || {
         black_box(Lu::factor(black_box(&a), &mut Work::new(u64::MAX)).unwrap());
+    });
+    // Piece G50: the SVDs and the symmetric eigensolver on 64 × 64.
+    let b = matrix(64);
+    time("SVD by one-sided Jacobi, 64 × 64", 5, || {
+        black_box(Svd::jacobi(black_box(&b), &mut Work::new(u64::MAX)).unwrap());
+    });
+    time("SVD by Golub–Kahan, 64 × 64", 5, || {
+        black_box(Svd::golub_kahan(black_box(&b), &mut Work::new(u64::MAX)).unwrap());
+    });
+    let mut sym = vec![0.0; 64 * 64];
+    for i in 0..64 {
+        for j in 0..64 {
+            sym[i * 64 + j] = b.get(i, j).unwrap() + b.get(j, i).unwrap();
+        }
+    }
+    let s = Matrix::from_rows(64, 64, &sym).unwrap();
+    time("symmetric eigensolver, 64 × 64", 5, || {
+        black_box(SymmetricEigen::factor(black_box(&s), &mut Work::new(u64::MAX)).unwrap());
     });
 }
