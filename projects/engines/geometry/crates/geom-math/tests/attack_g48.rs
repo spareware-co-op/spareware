@@ -1532,6 +1532,7 @@ fn frame_results_identical_across_targets() {
         let digest = golden::Digest::from_hex(&one).unwrap();
         (digest.0, one)
     });
+    println!("geom-math frame workload digest: {}", checked.value);
     checked
         .verdict()
         .unwrap_or_else(|e| panic!("the frame workload's digest differs: {e}"));
