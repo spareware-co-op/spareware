@@ -38,11 +38,11 @@
 //! further, which only helps).
 //!
 //! What the perturbation reaches depends on the allocator. The last three guarantees give each of
-//! CI's, with what CI measured for issue #370 (run 40823425292 measured this module; the runs on the
-//! branch `scratch/370-measure` before it, the ways tried and set aside). The measure is a sweep:
-//! sixteen seeds, each perturbing the heap before 64 values are boxed and sorted by address
-//! ([`address_order_digest`]), on one thread alone and among busy tests; a sweep counts the
-//! different orders it sees.
+//! CI's, with what CI measured for issue #370 (run 40823425292 measured this module; runs
+//! 40807005781, 40813238936, 40816535727 and 40819713151 measured the module before step 3 and the
+//! ways tried and set aside). The measure is a sweep: sixteen seeds, each perturbing the heap
+//! before 64 values are boxed and sorted by address ([`address_order_digest`]), on one thread alone
+//! and among busy tests; a sweep counts the different orders it sees.
 //!
 //! Guarantees:
 //!
