@@ -75,6 +75,94 @@
       "reason": "The mutant pivots on the last of several rows of equal largest magnitude instead of the first. The reduced echelon basis over the variable order is unique (chapter 15.8, the reason it is the canonical one), so the result is the same basis either way; the elimination order changes only the rounding of its entries, which the function does not promise bit for bit."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/cols.rs",
+      "mutant": "replace sub -> Result<usize, LinalgError> with Ok(1)",
+      "line_text": "a.checked_sub(b).ok_or(LinalgError::Defect)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "With sub always 1, symmetric_qr's deflation loop sets hi = sub(hi, 1) = 1 for ever once b(1) is negligible (it is then set to zero and stays so), so while hi > 0 never ends; cargo-mutants' timeout is how the tests catch it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/cols.rs",
+      "mutant": "replace < with == in Cols::identity",
+      "line_text": "let diag = if len < count { len } else { count };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Cols::identity is pub(crate), and both callers ask for a square identity: Svd::jacobi Cols::identity(n, n) and tridiagonalize Cols::identity(n, n). With len == count every form of the comparison gives the same diag, so no public result changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/cols.rs",
+      "mutant": "replace < with <= in Cols::identity",
+      "line_text": "let diag = if len < count { len } else { count };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Cols::identity is pub(crate), and both callers ask for a square identity: Svd::jacobi Cols::identity(n, n) and tridiagonalize Cols::identity(n, n). With len == count both branches give the same diag, so no public result changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/cols.rs",
+      "mutant": "replace || with && in Cols::pair_mut",
+      "line_text": "if p >= q || q >= self.count {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "pair_mut is pub(crate), and every caller passes p < q < count: jacobi_sweeps pairs p < q < n, and the eigensolver's and Golub-Kahan's rotations columns k < k + 1 <= hi < n (zero_row k < j, zero_column j < hi). Both terms of the guard are false, so it is false with either operator and no public result changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/eigen.rs",
+      "mutant": "replace > with == in symmetric_qr",
+      "line_text": "if steps > max_steps {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The step cap is a safeguard: the implicit QR iteration with Wilkinson's shift converges globally on a symmetric tridiagonal matrix (J. H. Wilkinson, Linear Algebra and its Applications 1 (1968), 409-420), each eigenvalue in a few steps, and no input in the tests comes near the cap. The mutant gives up at the cap's step instead of the one after it: it differs only on an input that needs exactly that many steps, where both report NoConvergence, one step apart; the crate promises only that the iteration stops by the cap."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/eigen.rs",
+      "mutant": "replace > with >= in symmetric_qr",
+      "line_text": "if steps > max_steps {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The step cap is a safeguard: the implicit QR iteration with Wilkinson's shift converges globally on a symmetric tridiagonal matrix (J. H. Wilkinson, Linear Algebra and its Applications 1 (1968), 409-420), each eigenvalue in a few steps, and no input in the tests comes near the cap. The mutant gives up at the cap's step instead of the one after it: it differs only on an input that needs exactly that many steps, where both report NoConvergence, one step apart; the crate promises only that the iteration stops by the cap."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/eigen.rs",
+      "mutant": "replace > with >= in qr_step",
+      "line_text": ".fold(0.0, |m, &x| if x.abs() > m { x.abs() } else { m });",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The fold keeps the largest magnitude. The mutant takes x.abs() also when it equals m, the same double (an absolute value is never -0, and every entry is finite), so the scale, and every result, is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/svd.rs",
+      "mutant": "replace > with >= in jacobi_sweeps",
+      "line_text": "let t = if zeta.abs() > 67_108_864.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The branches differ only at |zeta| = 2^26 exactly, where both give the same double: 1 / (2 zeta) = +-2^-27 exactly, and 1 + zeta^2 = 2^52 + 1 is exact, its correctly rounded square root is 2^26 (the exact root exceeds it by less than half a unit in the last place), so sign / (|zeta| + 2^26) = +-1 / 2^27 too."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/svd.rs",
+      "mutant": "replace > with >= in bidiagonal_norm",
+      "line_text": ".fold(0.0, |m, &x| if x.abs() > m { x.abs() } else { m })",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The fold keeps the largest magnitude. The mutant takes x.abs() also when it equals m, the same double (an absolute value is never -0, and every entry is finite), so the scale, and every result, is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/svd.rs",
+      "mutant": "replace > with == in bidiagonal_qr",
+      "line_text": "if steps > max_steps {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The step cap is a safeguard: Golub-Kahan's implicit QR iteration is that algorithm on the tridiagonal B^T B (Golub and Van Loan 8.6.2), converging globally, each singular value in a few steps, and no input in the tests comes near the cap. The mutant gives up at the cap's step instead of the one after it: it differs only on an input that needs exactly that many steps, where both report NoConvergence, one step apart; the crate promises only that the iteration stops by the cap."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/svd.rs",
+      "mutant": "replace > with >= in bidiagonal_qr",
+      "line_text": "if steps > max_steps {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The step cap is a safeguard: Golub-Kahan's implicit QR iteration is that algorithm on the tridiagonal B^T B (Golub and Van Loan 8.6.2), converging globally, each singular value in a few steps, and no input in the tests comes near the cap. The mutant gives up at the cap's step instead of the one after it: it differs only on an input that needs exactly that many steps, where both report NoConvergence, one step apart; the crate promises only that the iteration stops by the cap."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-num/src/eft.rs",
       "mutant": "replace < with <= in abs",
       "line_text": "if x < 0.0 { -x } else { x }",

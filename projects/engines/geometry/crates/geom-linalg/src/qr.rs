@@ -57,7 +57,7 @@ use crate::matrix::{LinalgError, Matrix, Work, cost3, finite, wide, zeros};
 const SQRT_U: f64 = f64::from_bits(0x3E46_A09E_667F_3BCD);
 
 /// The Euclidean norm of `x`, scaled by its largest magnitude so that it never overflows.
-fn norm(x: impl Iterator<Item = f64> + Clone) -> Result<f64, LinalgError> {
+pub(crate) fn norm(x: impl Iterator<Item = f64> + Clone) -> Result<f64, LinalgError> {
     let scale = x
         .clone()
         .fold(0.0f64, |m, v| if v.abs() > m { v.abs() } else { m });
@@ -74,7 +74,7 @@ fn norm(x: impl Iterator<Item = f64> + Clone) -> Result<f64, LinalgError> {
 /// A Householder reflection H = I − τ·v·vᵀ with v(0) = 1, mapping x to (β, 0, …, 0): LAPACK's
 /// `xLARFG` convention, β = −sign(x₀)·‖x‖. Returns (τ, β) and leaves v(1..) in `x[1..]`; τ = 0
 /// (H = I) when x(1..) is zero.
-fn householder(x: &mut [f64]) -> Result<(f64, f64), LinalgError> {
+pub(crate) fn householder(x: &mut [f64]) -> Result<(f64, f64), LinalgError> {
     let (alpha, tail) = x.split_first_mut().ok_or(LinalgError::Defect)?;
     let xnorm = norm(tail.iter().copied())?;
     if xnorm == 0.0 {
