@@ -716,6 +716,14 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-curve/src/rational.rs",
+      "mutant": "replace < with == in pieces",
+      "line_text": "if n < 1.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "pieces is called with b - a of a kind's domain (a < b, so positive, never 0 in doubles) over a positive width, so its ceiling n is at least 1: n < 1 is never true, and at n == 1 the early return gives the 1 that the cast gives."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-curve/src/rational.rs",
       "mutant": "replace && with || in conic",
       "line_text": "if !(s1 > 0.0 && s2w > 0.0 && s1.is_finite() && s2w.is_finite()) {",
       "occurrences": 3,
