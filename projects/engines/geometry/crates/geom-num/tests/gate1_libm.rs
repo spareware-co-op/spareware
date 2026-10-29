@@ -225,10 +225,12 @@ const SINPI_STICKY: [u64; 5] = [
     0xbdda_d53f_8db9_2af0, 0x3dd6_fe50_9010_e3c6,
 ];
 
-/// See [`SINPI_STICKY`].
+/// See [`SINPI_STICKY`]. The last one is a general-path cospi input that `refine`'s hard-case
+/// lookup must not match by its table index alone (found by replaying `refine` the same way).
 #[rustfmt::skip]
-const COSPI_STICKY: [u64; 4] = [
+const COSPI_STICKY: [u64; 5] = [
     0x3e43_0e5c_ded6_7caf, 0xbe99_d9ce_0957_f1c8, 0x3e78_2428_46e3_d0af, 0xbebf_9a45_ce01_134f,
+    0x3f65_bbef_584e_580d,
 ];
 
 /// cospi.wc inputs on the general path (2^-12 < |x| < 2^41).
