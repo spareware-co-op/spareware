@@ -96,11 +96,12 @@ use geom_math::frame::{CELL_HALF, ORIGIN_MAX, steps_per_metre};
 use geom_math::grid_transform::TRANSLATION_MAX;
 use geom_math::vector::VEC_MAX;
 use geom_math::{
-    Axis, Box2, Box3, Classification, CrsId, DD, F2, F3, FBox3, FrameKind, FrameMismatch,
-    FrameRecord, FrameShift, GridTransform, MapPoint, MathError, RationalTransform, Rotation,
-    Rounded, Scale, Transform, TransformKind, TypedTransform, V2, V3, W3,
+    Axis, Box2, Box3, Classification, CrsId, F2, F3, FBox3, FrameKind, FrameMismatch, FrameRecord,
+    FrameShift, GridTransform, MapPoint, MathError, RationalTransform, Rotation, Rounded, Scale,
+    Transform, TransformKind, TypedTransform, V2, V3, W3,
 };
 use geom_num::NumError;
+use geom_num::dd::DD;
 use geom_num::grid::{COORD_MAX, GridStep, P2, P3};
 use geom_test::golden::{self, Sha256, hex};
 
@@ -175,14 +176,14 @@ const IRRATIONAL: [(i32, i32); 6] = [
 ];
 
 /// Scale factors as numerator and denominator, including the largest and smallest.
-const SCALES: [(u32, u32); 7] = [
+const SCALES: [(u64, u64); 7] = [
     (1, 1),
     (1, 2),
     (9_996, 10_000),
     (99_987_654, 100_000_000),
     (3, 7),
-    (u32::MAX, 1),
-    (1, u32::MAX),
+    (4_294_967_295, 1),
+    (1, 4_294_967_295),
 ];
 
 /// Finite doubles where floating-point code goes wrong: both zeros, ones, a half and halfway
@@ -463,6 +464,10 @@ impl Recorder {
                     FrameMismatch::Rotation => (3, "Rotation"),
                     FrameMismatch::Scale => (4, "Scale"),
                     FrameMismatch::NotOnLattice => (5, "NotOnLattice"),
+                    // Piece G48's: this corpus's frames all share their unit, epoch and model.
+                    FrameMismatch::LinearUnit => (6, "LinearUnit"),
+                    FrameMismatch::Epoch => (7, "Epoch"),
+                    FrameMismatch::DeformationModel => (8, "DeformationModel"),
                 };
                 self.put_u8(12);
                 self.put_u8(byte);
@@ -700,8 +705,9 @@ impl Recorder {
                 self.note("Ground");
                 self.put_i64(i64::from(rotation.cos()));
                 self.put_i64(i64::from(rotation.sin()));
-                self.put_u32(scale.num());
-                self.put_u32(scale.den());
+                // The corpus's scales are 32-bit ratios, written as G03 wrote them.
+                self.put_u32(u32::try_from(scale.num()).unwrap());
+                self.put_u32(u32::try_from(scale.den()).unwrap());
             }
         }
         self.option(f.lattice_cell(), |r, cell| {
@@ -1783,8 +1789,8 @@ fn required() -> Vec<(Op, &'static str)> {
         (Op::FloatNormalized, "Degenerate"),
         (Op::FloatNew, "NotFinite"),
         (Op::DdMul, "NotFinite"),
-        (Op::DdDiv, "Degenerate"),
-        (Op::DdSqrt, "NegativeSqrt"),
+        (Op::DdDiv, "NotFinite"),
+        (Op::DdSqrt, "OutsideDomain"),
         (Op::DdNew, "NotFinite"),
         (Op::DdFromInt, "None"),
         (Op::DdExactProduct, "None"),
