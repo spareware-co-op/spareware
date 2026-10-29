@@ -253,6 +253,7 @@ jobs:
           - interval::proofs::new_accepts_exactly_ordered_finite_bounds
           - interval::proofs::square_is_never_negative_and_encloses
           - ladder::proofs::quarter_nm_always_answers_exactly
+          - math::atan2::proofs::shl_moves_every_bit_up
           - math::atan2::proofs::to_f64_rounds_to_nearest
           - math::log::proofs::is_zero_reads_both_words
           - math::proofs::abs_is_exact

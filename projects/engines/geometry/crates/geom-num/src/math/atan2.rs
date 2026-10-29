@@ -1799,7 +1799,8 @@ mod tests {
     }
 }
 
-/// Bounded proofs (chapter 28.7): [`Tint::to_f64`]'s own contract, for every 192-bit value.
+/// Bounded proofs (chapter 28.7): the own contracts of [`Tint::to_f64`] and [`Wide192::shl`], for
+/// every 192-bit value.
 #[cfg(kani)]
 // cargo-mutants reads this attribute from the source and skips the module (its harnesses are
 // proven by Kani, and no test build compiles them); no build evaluates it, since the module
@@ -1860,5 +1861,28 @@ mod proofs {
         kani::assume(err != 0);
         let got = a.to_f64(err).unwrap();
         assert_eq!(got.to_bits(), nearest(a.h, a.m, a.l, a.ex, a.sgn));
+    }
+
+    /// Bit `i` (0 to 191) of a 192-bit value.
+    fn bit(w: Wide192, i: u64) -> bool {
+        if i < 64 {
+            (w.lo >> i) & 1 == 1
+        } else {
+            (w.hi >> (i - 64)) & 1 == 1
+        }
+    }
+
+    /// `shl(k)` moves every bit up by `k` places and drops those past bit 191, for every value
+    /// and every shift.
+    #[kani::proof]
+    fn shl_moves_every_bit_up() {
+        let w = Wide192 {
+            hi: kani::any(),
+            lo: kani::any(),
+        };
+        let k: u64 = kani::any();
+        let i: u64 = kani::any();
+        kani::assume(i < 192);
+        assert_eq!(bit(w.shl(k), i), i >= k && bit(w, i - k));
     }
 }
