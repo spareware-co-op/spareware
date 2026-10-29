@@ -1178,3 +1178,38 @@ fn errors_pass_through_and_read_as_documented() {
         NewtonError::Num(NumError::Degenerate)
     );
 }
+
+/// Dual numbers nest: a dual over dual reals carries second derivatives, and a nested dual over
+/// intervals refuses `atan2` across its cut, as the inner type does.
+#[test]
+fn nested_duals_give_second_derivatives() {
+    let seed = resolve("attack_g52 nested duals", Seed(0x6752_0000_0000_0008)).unwrap();
+    let mut rng = SplitMix64::new(seed);
+    for _ in 0..200 {
+        let x = uniform(&mut rng, -3.0, 3.0);
+        let inner = Dual::<Real, 1>::variables([r(x)])[0];
+        let [outer] = Dual::<Dual<Real, 1>, 1>::variables([inner]);
+        // atan(x) = atan2(x, 1): f′ = 1/(1 + x²), f″ = −2x/(1 + x²)².
+        let y = outer.atan2(Scalar::constant(r(1.0))).unwrap();
+        let [d] = y.partials();
+        let s = 1.0 + x * x;
+        assert_eq!(y.value().value(), math::atan2(x, 1.0).unwrap(), "{x}");
+        assert!((d.value().get() - 1.0 / s).abs() <= 1e-15, "f′ at {x}");
+        assert!(
+            (d.partials()[0].get() + 2.0 * x / (s * s)).abs() <= 1e-15,
+            "f″ at {x}"
+        );
+        // exp: every derivative is the function.
+        let e = outer.exp().unwrap();
+        let ex = math::exp(x).unwrap();
+        assert_eq!(e.value().value(), ex);
+        assert_eq!(e.partials()[0].value(), ex);
+        assert_eq!(e.partials()[0].partials()[0], ex);
+    }
+    let [yi, xi] = Dual::<Interval, 2>::variables([iv(-1.0, 1.0), iv(-2.0, -1.0)]);
+    let [y, xx] = Dual::<Dual<Interval, 2>, 2>::variables([yi, xi]);
+    assert_eq!(y.atan2(xx), Err(NumError::OutsideDomain));
+    let [yi, xi] = Dual::<Interval, 2>::variables([iv(0.5, 1.0), iv(-2.0, -1.0)]);
+    let [y, xx] = Dual::<Dual<Interval, 2>, 2>::variables([yi, xi]);
+    assert!(y.atan2(xx).is_ok());
+}
