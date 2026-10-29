@@ -59,7 +59,7 @@ enum Pt2 {
 
 - **Lines** have whole-number coefficients. For a line through two grid points |a| and |b| are below 2^41 and |c| below 2^82; constructed lines are larger, within 14.3's construction budget.
 - **Circles** have an exact squared radius, a fraction. A drawn or imported circle has its centre on the grid; a circle made by a construction keeps an implicit rational centre (14.3). This is the model of CGAL's circle-segment traits, as its authors describe it ([Fogel, Halperin and Wein 2012](https://doi.org/10.1007/978-3-642-17283-0); for conic arcs, [Wein 2002](https://doi.org/10.1007/3-540-45749-6_76)). CGAL is GPL: papers and public documentation only; source not read (29.2).
-- **Ellipses** have their centre and major-axis vector on the grid and an axis ratio p/q of bounded size, so their equations have whole-number coefficients.
+- **Ellipses** have their centre and major-axis vector on the grid and an axis ratio p/q of bounded size, so their equations have whole-number coefficients. The owner accepted this as the ellipse kind (owner action G185, 32.25); a ratio read from a file becomes the nearest such fraction, Certified unless it already is one.
 - **Splines, spirals and procedural offsets** are section 7's kinds, evaluated with certified bounds.
 
 | Point class | Made by | Coordinates |
@@ -169,7 +169,7 @@ Shapes with islands offset outer loops and holes, then combine them by a boolean
 - **The picture is derived.** Each family line meets the boundary at exact crossings, the island rule picks the inside intervals, and dashes are placed by certified arc length. Lines are generated on demand, deterministically, and never stored as model truth. Linetypes along any curve work the same way; `engine-draw2d` draws both at true weights.
 - **No silent caps.** Lines are counted exactly before any are made. Over the operation's budget the hatch returns `BudgetExceeded` with remedies: a scale that fits, or a solid fill. CADCraft silently skips any family over 20,000 lines in full builds, 100,000 in view-limited ones ([12](../../../kit/notes/G01-evidence/12-vetting-cadcraft.md)).
 - **Patterns that are made, not drawn** (hatched copper, perforated sheet, paving) produce committed, named regions: each stripe is a region intersected with the boundary.
-- **The pattern and linetype library is our own**, authored with a provenance log for every entry, and never reproduces Autodesk's files. CADCraft's library, labelled its own, has names, descriptions and values the vetting found to match them ([12](../../../kit/notes/G01-evidence/12-vetting-cadcraft.md), formats-legal). An imported DXF hatch carries its own pattern lines, so reading one needs no library.
+- **The pattern and linetype library is our own**, authored with a provenance log for every entry by the process the owner set in 32.24 (owner action G184), and never reproduces Autodesk's files. CADCraft's library, labelled its own, has names, descriptions and values the vetting found to match them ([12](../../../kit/notes/G01-evidence/12-vetting-cadcraft.md), formats-legal). An imported DXF hatch carries its own pattern lines, so reading one needs no library.
 
 ## 14.7 Edits in parameter space
 

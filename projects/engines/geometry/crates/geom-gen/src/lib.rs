@@ -46,6 +46,11 @@
 //!   exact path and the certificate into `geom-num`'s `src/generated/` ([`predicate_emit`]). An
 //!   independent checker in `tests/predicate_checker.rs` re-derives the certificate and the
 //!   constant and reads every line of the committed code.
+//! - [`predicate_certificates`], the problems that machine-check the filters' error bounds
+//!   (chapter 28.6; piece G35): Gappa's (`generated/gappa-<name>.g`, whose proofs Rocq checks) and
+//!   `FPTaylor`'s (`generated/fptaylor-<name>.fpt`, whose certificates HOL Light checks), for
+//!   orient2d and orient3d. `kernel-certificates.yml` runs the tools with the scripts in
+//!   `certificates/`, and `tests/certificate_problems.rs` holds each problem to the shipped filter.
 //!
 //! Invariants this crate keeps:
 //!
@@ -89,6 +94,7 @@ pub mod exact;
 pub mod files;
 pub mod generator;
 pub mod grid_steps;
+pub mod predicate_certificates;
 pub mod predicate_derive;
 pub mod predicate_emit;
 pub mod predicate_lang;

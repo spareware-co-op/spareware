@@ -104,3 +104,25 @@ mod tests {
         }
     }
 }
+
+/// Bounded proofs (chapter 28.7; piece G41).
+#[cfg(kani)]
+// cargo-mutants reads this attribute from the source and skips the module (its harnesses are
+// proven by Kani, and no test build compiles them); no build evaluates it, since the module
+// exists only under Kani, where `test` is off.
+#[cfg_attr(test, mutants::skip)]
+mod proofs {
+    use super::*;
+
+    /// `of_i128` gives the sign of every `i128`, and `as_i8`, `negate` and `mul` keep the sign
+    /// rules of the integers, for every pair.
+    #[kani::proof]
+    fn signs_follow_the_integers() {
+        let (a, b): (i128, i128) = (kani::any(), kani::any());
+        let (s, t) = (Sign::of_i128(a), Sign::of_i128(b));
+        assert!(i128::from(s.as_i8()) == a.signum());
+        assert!(i128::from(s.negate().as_i8()) == -a.signum());
+        assert!(i128::from(s.mul(t).as_i8()) == a.signum() * b.signum());
+        assert!(s.is_zero() == (a == 0));
+    }
+}

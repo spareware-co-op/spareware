@@ -114,10 +114,12 @@
 
 pub mod incircle;
 pub mod insphere;
+pub mod limbs;
 pub mod lpi_side;
 pub mod lpi_weight;
 pub mod orient2d;
 pub mod orient3d;
+pub mod plain;
 pub mod plane_side;
 pub mod ssi_side;
 pub mod ssi_weight;
@@ -181,7 +183,11 @@ fn decide(value: f64, error: f64, scale: f64) -> Option<Sign> {
 #[inline]
 fn within(v: i128, bits: u32) -> Option<i128> {
     let limit = 1u128.checked_shl(bits)?.checked_sub(1)?;
-    (v.unsigned_abs() <= limit).then_some(v)
+    if v.unsigned_abs() <= limit {
+        Some(v)
+    } else {
+        None
+    }
 }
 
 /// A rounded input's nearest `f64`, ties to even, the same on every target (the Rust

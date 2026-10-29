@@ -9,6 +9,7 @@
 //! | --- | --- | --- | --- | --- |
 //! | Commit rounding | 1/2 per axis, ties to even; under 1 in 2D and 3D | 78.125 nm; 110 nm 2D, 135 nm 3D | 3.125 nm; 4.4 nm 2D, 5.4 nm 3D | Making an implicit point explicit |
 //! | Fit bound | 64 | 0.01 mm | 0.4 µm | The largest certified error of a curved construction that feeds topology |
+//! | Per-operation bound | 16 | 2.5 µm | 0.1 µm | The most one operation's own commits and fits add to an entity's bound |
 //! | Angular bound | 2^-34 rad | about 5.8 × 10^-11 rad | the same | Angles in curved code; equals the fit bound over the frame's range |
 //! | Import healing | 640, capped at 6,400 | 0.1 mm, cap 1 mm | 4 µm, cap 40 µm | Closing gaps in imported data, once |
 //! | Short-edge warning | 3,200 | 0.5 mm | 20 µm | A warning only; the true minimum edge is one step |
@@ -23,6 +24,10 @@
 //!   `Q0`. Both are below one step, so one whole step is a certified ceiling for each:
 //!   n · (1/2)² ≤ 1² for n ≤ 4, checked when the crate compiles.
 //! - **Fit bound** ([`FIT`]): 64q is 10 µm = 0.01 mm at `Q0` (64 × 156.25 nm) and 0.4 µm at `Q1`.
+//! - **Per-operation bound** ([`PER_OPERATION`]): `ε_step` = `ε_fit`/4 = 16q, 2.5 µm at `Q0` and
+//!   0.1 µm at `Q1`, so about four fitting steps at full budget fit on one entity's history
+//!   (chapter 13.2; accepted by owner action G120, chapter 32.21); checked when the crate compiles
+//!   to be exactly a quarter of the fit bound.
 //! - **Angular bound** ([`ANGULAR`], and its exponent [`ANGULAR_LOG2`]): the fit bound over the
 //!   frame's range, 64q / 2^40 q = 2^6 / 2^40 = 2^−34 rad, the same at every step; checked when
 //!   the crate compiles.
@@ -30,9 +35,9 @@
 //!   (6,400 steps of `Q0` are one millimetre, [`crate::grid`]).
 //! - **Short-edge warning** ([`SHORT_EDGE_WARNING`]): 3,200q = 0.5 mm at `Q0`.
 //!
-//! The rungs chapter 6.5 proposes but an owner has not accepted (the per-operation bound, the
-//! resolution floor, solver convergence, the smallest triangle altitude and the others) are not
-//! here; each joins this module when accepted.
+//! The rungs chapter 6.5 proposes but an owner has not accepted (the resolution floor, solver
+//! convergence, the smallest triangle altitude and the others) are not here; each joins this module
+//! when accepted.
 //!
 //! Method: the tolerance ladder of chapter 6.5
 //! (`projects/engines/geometry/architecture/06-numbers.md`). Each constant's derivation is above,
@@ -50,6 +55,10 @@ pub struct HalfSteps(pub u64);
 
 /// The largest certified error of any curved construction that feeds topology: 64 steps.
 pub const FIT: Steps = Steps(64);
+
+/// The most one operation's own commits and fits may add to an entity's bound: 16 steps, a quarter
+/// of the fit bound (chapter 13.2, `ε_step`).
+pub const PER_OPERATION: Steps = Steps(16);
 
 /// The default distance import healing may close: 640 steps.
 pub const HEAL_DEFAULT: Steps = Steps(640);
@@ -95,7 +104,8 @@ pub const fn quarter_nm(steps: Steps, step: GridStep) -> Option<u128> {
 
 /// Checks, at compile time, the derivations in the module documentation: the angular bound is the
 /// fit bound over the frame's range, 64 / 2^40 = 2^6 / 2^40 = 2^-34, and is that power of two;
-/// healing's default is within its cap; and one whole step bounds the commit distance in 2D and
+/// the per-operation bound is exactly a quarter of the fit bound; healing's default is within its
+/// cap; and one whole step bounds the commit distance in 2D and
 /// 3D: n half steps squared, n · h² / 4 steps², is at most c² for the ceiling c.
 const _: () = {
     assert!(FIT.0 == 1 << 6);
@@ -106,6 +116,7 @@ const _: () = {
     let bits = ANGULAR.get().to_bits();
     assert!(bits >> 52 == 1023 - 34 && bits & ((1 << 52) - 1) == 0);
     assert!(ANGULAR_LOG2.unsigned_abs() == 34);
+    assert!(PER_OPERATION.0 * 4 == FIT.0);
     assert!(HEAL_DEFAULT.0 <= HEAL_CAP.0);
     let h = COMMIT_PER_AXIS.0;
     assert!(2 * h * h <= 4 * COMMIT_DISTANCE_2D.0 * COMMIT_DISTANCE_2D.0);
@@ -130,6 +141,8 @@ mod tests {
         // 1 mm = 4,000,000 quarter-nm.
         assert_eq!(quarter_nm(FIT, GridStep::Q0), Some(40_000)); // 0.01 mm
         assert_eq!(quarter_nm(FIT, GridStep::Q1), Some(1_600)); // 0.4 µm
+        assert_eq!(quarter_nm(PER_OPERATION, GridStep::Q0), Some(10_000)); // 2.5 µm
+        assert_eq!(quarter_nm(PER_OPERATION, GridStep::Q1), Some(400)); // 0.1 µm
         assert_eq!(quarter_nm(HEAL_DEFAULT, GridStep::Q0), Some(400_000)); // 0.1 mm
         assert_eq!(quarter_nm(HEAL_CAP, GridStep::Q0), Some(4_000_000)); // 1 mm
         assert_eq!(
@@ -157,5 +170,28 @@ mod tests {
         assert!((d2 * q0_nm - 110.485).abs() < 1e-3);
         assert!((d3 * q0_nm - 135.316).abs() < 1e-3);
         assert_eq!(COMMIT_PER_AXIS, HalfSteps(1));
+    }
+}
+
+/// Bounded proofs (chapter 28.7; piece G41).
+#[cfg(kani)]
+// cargo-mutants reads this attribute from the source and skips the module (its harnesses are
+// proven by Kani, and no test build compiles them); no build evaluates it, since the module
+// exists only under Kani, where `test` is off.
+#[cfg_attr(test, mutants::skip)]
+mod proofs {
+    use super::*;
+
+    /// `quarter_nm` never panics and always answers: a count below 2^64 times a step of at most
+    /// 625 quarter-nanometres fits `u128`, for every count and step.
+    #[kani::proof]
+    fn quarter_nm_always_answers_exactly() {
+        let n: u64 = kani::any();
+        let step = match kani::any::<u8>() % 3 {
+            0 => GridStep::Q0,
+            1 => GridStep::Q1,
+            _ => GridStep::Q2,
+        };
+        assert!(quarter_nm(Steps(n), step) == Some(u128::from(n) * u128::from(step.quarter_nm())));
     }
 }
