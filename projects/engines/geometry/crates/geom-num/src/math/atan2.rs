@@ -1798,3 +1798,67 @@ mod tests {
         }
     }
 }
+
+/// Bounded proofs (chapter 28.7): [`Tint::to_f64`]'s own contract, for every 192-bit value.
+#[cfg(kani)]
+// cargo-mutants reads this attribute from the source and skips the module (its harnesses are
+// proven by Kani, and no test build compiles them); no build evaluates it, since the module
+// exists only under Kani, where `test` is off.
+#[cfg_attr(test, mutants::skip)]
+mod proofs {
+    use super::*;
+
+    /// The bits of the double nearest `(−1)^s·(h·2^128 + m·2^64 + l)·2^(ex − 192)` (`s` = 1 when
+    /// `sgn ≠ 0`), for `h ≥ 2^63`: rounded to nearest with ties to even, overflowing to infinity
+    /// and underflowing to zero. Integers only: the 53 (or, for a subnormal result, fewer) bits
+    /// kept, the round bit after them and a sticky bit for everything below, independent of
+    /// `to_f64`'s floating-point steps.
+    fn nearest(h: u64, m: u64, l: u64, ex: i64, sgn: u64) -> u64 {
+        let sign = u64::from(sgn != 0) << 63;
+        if ex >= 1025 {
+            return sign | 0x7ff0_0000_0000_0000; // the value is at least 2^1024
+        }
+        if ex < -1074 {
+            return sign; // below 2^−1075
+        }
+        // The value lies in [2^(ex − 1), 2^ex); its last place is 2^(ex − 53) for a normal
+        // result and 2^−1074 below, so the low `drop` bits of h (12 to 64 for a subnormal
+        // result) and all of m and l fall below it.
+        let drop: u32 = if ex >= -1021 {
+            11
+        } else {
+            u32::try_from(-1010 - ex).unwrap()
+        };
+        let kept = if drop == 64 { 0 } else { h >> drop };
+        let round = (h >> (drop - 1)) & 1 == 1;
+        let sticky = h & ((1u64 << (drop - 1)) - 1) != 0 || m != 0 || l != 0;
+        let q = kept + u64::from(round && (sticky || kept & 1 == 1));
+        if ex >= -1021 {
+            // q is 2^52 to 2^53; 2^53 carries into the exponent, past 2^1023 to infinity.
+            let field = u64::try_from(ex + 1022).unwrap();
+            sign | ((field << 52) + q - (1 << 52))
+        } else {
+            // A subnormal, or the smallest normal when q rounds up to 2^52: q is the bits.
+            sign | q
+        }
+    }
+
+    /// `to_f64` with a non-zero error bound returns the double nearest the value, ties to even,
+    /// for every normalised `Tint`: any three significand words with the top bit set, any
+    /// exponent and either sign.
+    #[kani::proof]
+    fn to_f64_rounds_to_nearest() {
+        let a = Tint {
+            h: kani::any(),
+            m: kani::any(),
+            l: kani::any(),
+            ex: kani::any(),
+            sgn: kani::any(),
+        };
+        kani::assume(a.h >> 63 == 1);
+        let err: u64 = kani::any();
+        kani::assume(err != 0);
+        let got = a.to_f64(err).unwrap();
+        assert_eq!(got.to_bits(), nearest(a.h, a.m, a.l, a.ex, a.sgn));
+    }
+}

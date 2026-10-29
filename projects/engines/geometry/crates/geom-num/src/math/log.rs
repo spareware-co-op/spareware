@@ -1911,3 +1911,26 @@ mod tests {
         assert!(le(&worst, &p2(-101)));
     }
 }
+
+/// Bounded proofs (chapter 28.7): [`Dint::is_zero`]'s own contract, for every bit pattern.
+#[cfg(kani)]
+// cargo-mutants reads this attribute from the source and skips the module (its harnesses are
+// proven by Kani, and no test build compiles them); no build evaluates it, since the module
+// exists only under Kani, where `test` is off.
+#[cfg_attr(test, mutants::skip)]
+mod proofs {
+    use super::*;
+
+    /// `is_zero` holds exactly when both significand words are zero, whatever the exponent and
+    /// sign.
+    #[kani::proof]
+    fn is_zero_reads_both_words() {
+        let a = Dint {
+            hi: kani::any(),
+            lo: kani::any(),
+            ex: kani::any(),
+            sgn: kani::any(),
+        };
+        assert_eq!(a.is_zero(), a.hi == 0 && a.lo == 0);
+    }
+}

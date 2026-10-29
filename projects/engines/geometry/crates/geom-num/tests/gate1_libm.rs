@@ -384,6 +384,23 @@ const ATAN2_FALSE_ZERO: [(u64, u64); 3] = [
     (0x0001_99da_0bd8_ce65, 0x01ed_afe3_3d36_d233),
 ];
 
+/// A pair of subnormals that reaches `accurate` and divides by a subnormal: `Tint::inv` must
+/// scale its starting reciprocal by 2^53 there (found by the mutation search off CI; with the
+/// scaling broken the angle comes out near pi/2).
+#[rustfmt::skip]
+const ATAN2_SUBNORMAL_DIVISOR: [(u64, u64); 1] = [(0x0009_24db_c8a3_3650, 0x0006_1097_e30d_7d55)];
+
+/// Worst cases on which the second fast path's bound, with its absolute term subtracted instead
+/// of added (`atan2.rs`, `eps`), would accept a wrongly rounded angle: found by replaying the fast
+/// paths exactly off CI over atan2.wc (each pair in all eight sign and order variants, and moved
+/// by powers of two).
+#[rustfmt::skip]
+const ATAN2_FAST_BOUND: [(u64, u64); 3] = [
+    (0x049c_4d0e_b6bb_d566, 0x0499_a5bb_ee32_07e2),
+    (0x433c_4d0e_b6bb_d566, 0x4339_a5bb_ee32_07e2),
+    (0x7fdd_4773_a21e_7d7b, 0x7fe9_52ad_15eb_77b0),
+];
+
 /// Checks `atan2` on each pair (given by its bits) in all four sign combinations, and swapped
 /// when `swap` (the other octants), against the reference.
 #[track_caller]
@@ -461,6 +478,7 @@ fn atan2_scaled_hard_cases() {
     check_atan2(&ATAN2_SUBNORMAL, true);
     check_atan2(&ATAN2_HUGE, true);
     check_atan2(&ATAN2_TINY, true);
+    check_atan2(&ATAN2_SUBNORMAL_DIVISOR, true);
 }
 
 /// `atan2` on hard cases whose divisor is a power of two (an exact reciprocal in the accurate
@@ -477,6 +495,13 @@ fn atan2_hard_cases_in_every_octant() {
 #[test]
 fn atan2_tiny_quotients_whose_residual_underflows() {
     check_atan2(&ATAN2_FALSE_ZERO, false);
+}
+
+/// `atan2` where its second fast path's error bound is only just wide enough: a smaller bound
+/// accepts a wrongly rounded angle on these pairs.
+#[test]
+fn atan2_hard_cases_at_the_fast_path_bound() {
+    check_atan2(&ATAN2_FAST_BOUND, true);
 }
 
 /// The unproven `sinpi` and `cospi` special-case the quarter turns; the ledger keeps three of their
