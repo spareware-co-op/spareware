@@ -226,7 +226,7 @@ A predicate whose filter has not been proven by FPTaylor or Gappa says "checked,
 
 ## 7. How to add a crate
 
-Crates come from chapter 27's crate table, which an owner settles (owner action G08), so a new crate needs the owner's change to that table first. Once it is agreed, the mechanical steps are:
+Crates come from chapter 27's crate table, which the owner settled in owner action G08 (section 32.13 of the architecture), so a new crate needs the owner's change to that table first. Once it is agreed, the mechanical steps are:
 
 1. The folder `crates/<name>/`, with the package named as the folder and no `path =` in `[lib]` or `[[bin]]`.
 2. A crate header in `crates/<name>/src/lib.rs` in HEADERS.md's crate grammar: the summary (`Spare Kit geometry kernel: <topic>.`), `One job: `, `Layer: <n>`, an `Invariants` list, `Sections: ` naming its chapters, and `Family: ` if its job is a catalogue family.

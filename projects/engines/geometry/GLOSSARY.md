@@ -645,7 +645,7 @@ How to read an entry:
 
 **NaN-free scalar** (also: `Real`): `geom_num::real::Real`, a double that refuses NaN and the infinities at construction (21; piece G24).
 
-**Native format** (also: SKG): The kernel's own file format: deterministic CBOR records with checksums, content IDs, chunks and versions, readable forever (24). SKG, Spare Kit Geometry, is its proposed name, with the extension `.skg` (24.1; owner action G77).
+**Native format** (also: SKG): The kernel's own file format: deterministic CBOR records with checksums, content IDs, chunks and versions, readable forever (24). SKG, Spare Kit Geometry, is its name; a standalone file ends `.skgf`, matching the "SKGF" tag in its first bytes (24.1; owner action G77, 32.18).
 
 **`next_up`** (also: `next_down`): The next representable double above or below a value; outward rounding uses them (6.4).
 

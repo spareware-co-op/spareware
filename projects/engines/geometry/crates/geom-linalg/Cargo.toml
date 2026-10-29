@@ -7,7 +7,7 @@ license.workspace = true
 description = "Spare Kit geometry kernel: deterministic dense and sparse linear algebra."
 
 [dependencies]
-# Exactly this crate's row of chapter 27's proposed crate table, checked by the scaffold test
+# Exactly this crate's row of chapter 27's crate table, checked by the scaffold test
 # in engine-geometry (tests/scaffold).
 geom-num = { path = "../geom-num" }
 

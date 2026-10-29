@@ -21,7 +21,7 @@
 //! Sections: 8, 10.2, 13.2, 18.7, 19.12, 22 and 23.9, in the kernel architecture
 //! (`projects/engines/geometry/architecture/`).
 //!
-//! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
+//! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
 //! Status: scaffold only; built by pieces G80, G81, G90, G102, G111, G112, G143, G145, G247, G398.
